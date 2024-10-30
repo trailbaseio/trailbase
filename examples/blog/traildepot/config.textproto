@@ -1,0 +1,60 @@
+# Auto-generated config.Config textproto
+email {}
+server {
+  application_name: "TrailBase"
+  site_url: "http://localhost:4000"
+}
+auth {}
+record_apis: [
+  {
+    name: "_user_avatar"
+    table_name: "_user_avatar"
+    conflict_resolution: REPLACE
+    autofill_missing_user_id_columns: true
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    create_access_rule: "_REQ_.user IS NULL OR _REQ_.user = _USER_.id"
+    update_access_rule: "_ROW_.user = _USER_.id"
+    delete_access_rule: "_ROW_.user = _USER_.id"
+  },
+  {
+    name: "profiles"
+    table_name: "profiles"
+    conflict_resolution: REPLACE
+    acl_authenticated: [CREATE]
+    create_access_rule: "_REQ_.user = _USER_.id"
+  },
+  {
+    name: "profiles_view"
+    table_name: "profiles_view"
+    acl_authenticated: [READ]
+    read_access_rule: "_ROW_.user = _USER_.id"
+  },
+  {
+    name: "articles"
+    table_name: "articles"
+    autofill_missing_user_id_columns: true
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    create_access_rule: "(_REQ_.author IS NULL OR _REQ_.author = _USER_.id) AND EXISTS(SELECT * FROM editors WHERE user = _USER_.id)"
+    update_access_rule: "_ROW_.author = _USER_.id AND EXISTS(SELECT * FROM editors WHERE user = _USER_.id)"
+    delete_access_rule: "_ROW_.author = _USER_.id AND EXISTS(SELECT * FROM editors WHERE user = _USER_.id)"
+  },
+  {
+    name: "articles_view"
+    table_name: "articles_view"
+    acl_world: [READ]
+  }
+]
+query_apis: [
+  {
+    name: "is_editor"
+    virtual_table_name: "_is_editor"
+    params: [
+      {
+        name: "user"
+        type: BLOB
+      }
+    ]
+    acl: WORLD
+  }
+]

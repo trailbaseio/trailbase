@@ -1,0 +1,14 @@
+{
+  "extends": "../../ui/common/tsconfig.base.json",
+  "compilerOptions": {
+    "declaration": true,
+    "outDir": "./dist",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@bindings/*": ["../../trailbase-core/bindings/*"]
+    }
+  },
+  "include": [
+    "./src/**/*"
+  ]
+}

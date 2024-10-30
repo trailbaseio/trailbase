@@ -1,0 +1,16 @@
+syntax = "proto2";
+
+import "config.proto";
+
+package config;
+
+
+message GetConfigResponse {
+  optional Config config = 1;
+  optional string hash = 2;
+}
+
+message UpdateConfigRequest {
+  optional Config config = 1;
+  optional string hash = 2;
+}

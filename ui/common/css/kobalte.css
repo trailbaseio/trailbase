@@ -1,0 +1,24 @@
+.collapsible__content {
+  overflow: hidden;
+  animation: slideUp 300ms ease-out;
+}
+.collapsible__content[data-expanded] {
+  animation: slideDown 300ms ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--kb-collapsible-content-height);
+  }
+}
+@keyframes slideUp {
+  from {
+    height: var(--kb-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}

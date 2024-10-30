@@ -1,0 +1,85 @@
+---
+import Form from "@/components/Form.astro";
+import { ConfiguredOAuthProviders } from "@/components/ListOauthProviders";
+
+import { AUTH_API, INPUT_STYLE, BUTTON_STYLE } from "@/lib/constants";
+
+const formBaseAction = `${AUTH_API}/login`;
+---
+
+<Form title="Login">
+  <div>
+    <form
+      id="login-form"
+      class="flex flex-col gap-2"
+      action={formBaseAction}
+      data-base_action={formBaseAction}
+      method="post"
+      enctype="application/x-www-form-urlencoded"
+    >
+      <div class="hidden">
+        {"{{ state }}"}
+      </div>
+
+      <div
+        class="grid grid-cols-2 items-center gap-4 my-4"
+        style="grid-template-columns: auto 1fr"
+      >
+        <label>User:</label>
+        <input
+          required
+          class={INPUT_STYLE}
+          type="email"
+          name="email"
+          placeholder="E-mail"
+        />
+
+        <label>Password:</label>
+        <input
+          required
+          class={INPUT_STYLE}
+          type="password"
+          name="password"
+          placeholder="Password"
+        />
+      </div>
+
+      <div class="flex justify-between">
+        <a type="button" href={`${import.meta.env.BASE_URL}/register`} class:list={BUTTON_STYLE}>
+          Register
+        </a>
+
+        <button class:list={BUTTON_STYLE} type="submit">
+          Sign In
+        </button>
+      </div>
+    </form>
+
+    <div class="mt-4">
+      <ConfiguredOAuthProviders client:only="solid-js" />
+    </div>
+
+    <div class="flex justify-center mt-4">
+      <a href={`${import.meta.env.BASE_URL}/reset_password/request`}>reset password</a>
+    </div>
+  </div>
+</Form>
+
+{
+  import.meta.env.DEV && (
+    <script is:inline>
+      const urlParams = new URLSearchParams(window.location.search);
+      // In source order
+      const form = document.forms[0];
+      const baseAction = form.dataset.base_action;
+
+      const redirect = urlParams.get("redirect_to");
+      if (redirect) {
+        form.action = `${baseAction}?redirect_to=${redirect}`;
+      } else {
+        const devRedirect = `http://${window.location.host}${import.meta.env.BASE_URL}/profile`;
+        form.action = `${baseAction}?redirect_to=${devRedirect}`;
+      }
+    </script>
+  )
+}

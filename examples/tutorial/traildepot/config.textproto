@@ -1,0 +1,30 @@
+# Auto-generated config.Config textproto
+email {}
+server {
+  application_name: "TrailBase-Tutorial"
+  site_url: "http://localhost:4000"
+  logs_retention_sec: 604800
+}
+auth {
+  auth_token_ttl_sec: 86400
+  refresh_token_ttl_sec: 2592000
+}
+record_apis: [
+  {
+    name: "_user_avatar"
+    table_name: "_user_avatar"
+    conflict_resolution: REPLACE
+    autofill_missing_user_id_columns: true
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    create_access_rule: "_REQ_.user IS NULL OR _REQ_.user = _USER_.id"
+    update_access_rule: "_ROW_.user = _USER_.id"
+    delete_access_rule: "_ROW_.user = _USER_.id"
+  },
+  {
+    name: "movies"
+    table_name: "movies"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+  }
+]

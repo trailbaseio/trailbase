@@ -1,0 +1,103 @@
+exclude: '(trailbase-core/bindings|bindings)/.*'
+
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+    -   id: check-byte-order-marker
+    -   id: check-case-conflict
+    -   id: check-merge-conflict
+    -   id: check-symlinks
+    -   id: check-yaml
+    -   id: end-of-file-fixer
+    -   id: mixed-line-ending
+    -   id: trailing-whitespace
+
+# Self-validation for pre-commit manifest.
+-   repo: https://github.com/pre-commit/pre-commit
+    rev: v3.8.0
+    hooks:
+    -   id: validate_manifest
+
+-   repo: local
+    hooks:
+    ### Rust ###
+    - id: cargofmt
+      name: Cargo Format
+      entry: cargo fmt -- --check
+      pass_filenames: false
+      # NOTE: language refers to the language in which the hook is implemented
+      # in, rather than the inputs. In this case we rely on cargo being
+      # installed on the system
+      language: system
+      # NOTE: types/files/exclude narrow the inputs the hook should run on.
+      types: [rust]
+      exclude: '^vendor/'
+
+    - id: cargoclippy
+      name: Cargo Clippy
+      # Be verbose to at least still see warnings scroll by.
+      verbose: true
+      entry: cargo clippy --workspace --no-deps
+      language: system
+      types: [rust]
+      exclude: '^vendor/'
+      pass_filenames: false
+
+    - id: cargotest
+      name: Cargo Test
+      entry: cargo test --workspace -- --show-output
+      language: system
+      types: [rust]
+      exclude: '^(vendor|bindings)/'
+      pass_filenames: false
+
+    ### Auth, Admin, Docs UI ###
+    - id: prettier
+      name: Prettier
+      entry: pnpm -r format --check
+      language: system
+      types: [file]
+      files: .*\.(js|mjs|cjs|ts|jsx|tsx|astro|md|mdx)$
+      pass_filenames: false
+
+    - id: typescript_check
+      name: Typescript Check
+      entry: pnpm -r check
+      language: system
+      types: [file]
+      files: .*\.(js|mjs|cjs|ts|jsx|tsx|astro|mdx)$
+      pass_filenames: false
+
+    - id: javascript_test
+      name: JavaScript Test
+      entry: pnpm -r test
+      language: system
+      types: [file]
+      files: .*\.(js|mjs|cjs|ts|jsx|tsx|astro)$
+      pass_filenames: false
+
+    ### Dart client and example
+    - id: dart_format
+      name: Dart format
+      entry: dart format -o none --set-exit-if-changed client/trailbase-dart examples/blog/flutter
+      language: system
+      types: [file]
+      files: .*\.dart$
+      pass_filenames: false
+
+    - id: dart_analyze
+      name: Dart analyze
+      entry: sh -c 'dart pub -C client/trailbase-dart get && dart pub -C examples/blog/flutter get && dart analyze -- client/trailbase-dart examples/blog/flutter'
+      language: system
+      types: [file]
+      files: .*\.dart$
+      pass_filenames: false
+
+    - id: dart_test
+      name: Dart test
+      entry: sh -c 'cd client/trailbase-dart && dart pub get && dart test'
+      language: system
+      types: [file]
+      files: .*\.dart$
+      pass_filenames: false

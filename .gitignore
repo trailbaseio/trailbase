@@ -1,0 +1,13 @@
+# Build artifacts
+target/
+node_modules/
+
+# macOS-specific files
+.DS_Store
+
+# jetbrains setting folder
+.idea/
+
+# Dev artifacts
+public/
+traildepot/

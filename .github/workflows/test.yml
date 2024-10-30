@@ -1,0 +1,39 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update && \
+            sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev libsqlite3-dev
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: PNPM install
+        run: |
+          pnpm i
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.24.3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          default: true
+      - uses: actions/setup-python@v3
+      - uses: pre-commit/action@v3.0.1
+      # - name: Rust tests
+      #   run: |
+      #     cargo test -p trailbase-core -p trailbase-extension -p trailbase-sqlite -p trailbase-cli

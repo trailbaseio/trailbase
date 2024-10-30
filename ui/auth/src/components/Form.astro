@@ -1,0 +1,27 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import Card from "@/components/Card.astro";
+import AlertBox from "@/components/AlertBox.astro";
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<BaseLayout title={title}>
+  <div class="h-dvh w-screen flex flex-col items-center justify-center mx-auto">
+    <Card>
+      <div class="w-full">
+        <h1 class="font-strong text-3xl">{title}</h1>
+      </div>
+
+      <slot />
+    </Card>
+
+    {"{% if alert %}"}
+    <AlertBox message="{{ alert }}" />
+    {"{% endif %}"}
+  </div>
+</BaseLayout>

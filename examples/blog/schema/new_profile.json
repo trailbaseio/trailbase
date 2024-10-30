@@ -1,0 +1,23 @@
+{
+  "$defs": {},
+  "properties": {
+    "created": {
+      "type": "integer"
+    },
+    "updated": {
+      "type": "integer"
+    },
+    "user": {
+      "type": "string"
+    },
+    "username": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "user",
+    "username"
+  ],
+  "title": "profiles",
+  "type": "object"
+}

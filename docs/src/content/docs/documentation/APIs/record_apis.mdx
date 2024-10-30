@@ -1,0 +1,299 @@
+---
+title: Record APIs
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+The easiest and most type-safe path to access you `TABLE`s and `VIEW`s is to use
+TrailBase's restful CRUD _Record APIs_.
+The only requirements are:
+
+- Tables and views need to be `STRICT`ly[^1] typed to guarantee type-safety all the
+  way from your records, via JSON schema, to your client-side language bindings [^2].
+- They need to have a sequential primary key column to allow for stable sorting
+  and thus efficient cursor-based pagination. Either an explicit `INTEGER` or
+  UUIDv7 `PRIMARY KEY` will do, including `FOREIGN KEY` columns.
+
+## Configuring APIs
+
+Record APIs can be configured through the admin dashboard or immediately in
+TrailBase's configuration file.
+Note that there are certain features that aren't yet exposed in the dashboard,
+like supporting multiple APIs based on the same table or view.
+In this case you can drop down to the configuration to set up as many as you
+like allowing for a lot of extra flexibility around permissions and visibility.
+
+An example API setup for managing user avatars:
+
+```json
+record_apis: [
+  {
+    name: "_user_avatar"
+    table_name: "_user_avatar"
+    conflict_resolution: REPLACE
+    autofill_missing_user_id_columns: true
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    create_access_rule: "_REQ_.user IS NULL OR _REQ_.user = _USER_.id"
+    update_access_rule: "_ROW_.user = _USER_.id"
+    delete_access_rule: "_ROW_.user = _USER_.id"
+  }
+]
+```
+
+A quick explanation:
+
+* The `name` needs to be unique. It's what is used to access the API via
+  `<https://myhost>/api/v1/records/<name>/`.
+* `table_name` references the table or view that is being exposed.
+* `conflict_resolution` declares what should happen if a newly created record is
+  conflicting with an existing one.
+* `autofill_missing_user_id_column` lets you omit fields for columns with a foreign
+  key relationship to `_user(id)`. The field will then be filled with the
+  credentials of the authenticated user. In most cases, this should probably be off, this
+  only useful if you cannot explicitly provide the user id yourself, e.g. in a
+  static HTML form.
+* `acl_world` and `acl_authenticated` define that anyone can read avatars but
+  only authenticated users can modify them. The following `access_rules` further narrow
+  mutations to records where the `user` column (or request field for insertions)
+  match. In other words, user X cannot modify user Y's avatar.
+
+
+### Access Control
+
+Access can be controlled through combination of a simple ACL-based system (a
+matrix of who and what) and custom SQL access rules of the nature:
+`f(req, user, row) -> bool`.
+Generally, the ACLs are checked first and then the access rules are evaluated
+when present.
+
+For example, to validate that the requestor provided a secret key and is member
+of a group "mygroup":
+
+```sql
+(_REQ_.secret = 'foo' AND EXISTS(
+  SELECT 1 FROM groups
+  WHERE
+    groups.member = _USER_.id
+    AND groups.name = 'mygroup'
+  ))
+```
+
+* `_REQ_` is an injected sub-query containing the request fields. It is
+  available in access rules for `CREATE` and `UPDATE` operations.
+* Similarly, `_ROW_` is a sub-query of the target record. It is available in
+  access rules for `READ`, `UPDATE`, and `DELETE` operations.
+* Lastly, `_USER_.id` references the id of the currently authenticated user and
+  `NULL` otherwise.
+
+Independently, you can use `VIEW`s to filter which rows and columns of
+your `TABLE`s should be accessible.
+
+#### Building access groups and capabilities
+
+As hinted at by the example above, the SQL access rules can be used to
+build higher-level access protection such as group ACLs or capabilities.
+What makes the most sense in your case, is very application dependent.
+The `<repo>/examples/blog` has an "editor" group to control who can write blog
+posts.
+
+Somewhat on a tangent and pretty meta, group and capability tables can
+themselves be exposed via Record APIs.
+This can be used to programmatically manage permissions, e.g. for building a
+moderation dashboard.
+When exposing authorization primitives, make sure the permissions are
+appropriately tight to avoid permission escalations.
+
+### Write-only columns
+
+Columns with names starting with an underscore can be written on insert or
+update but are hidden on reads. This is meant as a convenient convention to
+allow for internal data fields, e.g hiding the record owner in an otherwise public
+data set or hiding a user's internal credit rating from their profile. A
+similar effect could otherwise be achieved by exposing a table for inserts and
+updates only while poxying reads through a VIEW.
+
+<Aside type="note" title="Unhiding">
+  Note that views can also be used to rename columns and thus expose hidden columns
+  in a read-only fashion.
+</Aside>
+
+## Accessing Record APIs
+
+After configuring the APIs and setting up permissions, record APIs expose six
+main endpoints[^3]:
+
+* **C**reate: endpoint for for inserting new and potentially overriding records
+  depending on conflict resolution strategy.<br/>
+  `POST /api/v1/records/<record_api_name>`
+* **R**ead: endpoint for reading specific records given the record id.<br/>
+  `GET /api/v1/records/<record_api_name>/<url_safe_b64_record_id>`
+* **U**pdate: partial updates to existing records given a record id and subset of fields <br/>
+  `PATCH /api/v1/records/<record_api_name>/<url_safe_b64_record_id>`
+* **D**elete: endpoints for deleting record given a record id. <br/>
+  `DELETE /api/v1/records/<record_api_name>/<url_safe_b64_record_id>`
+* List: endpoint for listing, filtering and sorting records based on the
+  configured read access rule and provided filters.<br/>
+  `GET /api/v1/records/<record_api_name>?<params>`
+* Schema: endpoint for reading the APIs JSON schema definition. Can be used for
+  introspection and to drive code generation.<br/>
+  `GET /api/v1/records/<record_api_name>/schema`
+
+All of the above endpoints can be interacted with through requests that are
+either JSON encoded, url-encoded, or `multipart/form-data` encoded, which makes
+them accessible via rich client-side applications, progressive web apps, and
+static HTML forms alike.
+
+### Listing, filtering & sorting records
+
+Using the `GET /api/v1/records/<record_api_name>?<params>` endpoint and given
+sufficient permissions one can query records based the given `read_access_rule`
+and query parameters.
+
+Parameters:
+
+* Pagination can be controlled with two parameters: `limit=N` (with a hard
+  limit of 1024) and `cursor=<primary key>`.
+* Ordering can be controlled via `order=[[+-]?<column_name>]+`, e.g.
+  `order=created,-rank`, which would sort records first by their `created`
+  column in ascending order (same as "+") and then by the `rank` column in
+  descending order due to the "-".
+* Lastly, one can filter records by matching against one or more columns like
+  `<column_name>[op]=<value>`, e.g. `revenue[gt]=0` to request only records
+  with revenue values "greater than" 0. The supported operators are:
+  * equal, is the empty operator, e.g. `?success=TRUE`.
+  * **not**|**ne**: not equal
+  * **gte**: greater-than-equal
+  * **gt**: greater-than
+  * **lte**: less-than-equal
+  * **lt**: less-than
+  * **like**: SQL `LIKE` operator
+  * **re**: SQL `REGEXP` operator
+
+For example, to query the 10 highest grossing movies with a watch time less
+than 2 hours and an actor called John, one could query:
+
+```bash
+curl -g '<address>/api/recrods/v1/movies?limit=10&order=grossing&watch_time_min[lt]=120&actors[like]=%John%'
+```
+
+## File Upload
+
+Record APIs can also support file uploads and downloads. There's some special
+handling in place so that only metadata is stored in the underlying table while
+the actual files are kept in an object store.
+
+By adding a `TEXT` column with a `CHECK(jsonschema('std.FileUpload'))`
+constrained to your TABLE, you instruct TrailBase to store file metadata as
+defined by the "std.FileUpload" JSON schema and write the contents off to
+object storage.
+Files can then be upload by sending the contents as part your JSON or
+`multipart/form-data` POST request.
+Downloading files is slightly different, since reading the column through
+record APIs will only yield the metadata. There's a dedicated GET API endpoint
+for file downloads:
+`/api/v1/records/<record_api_name>/<record_id>/file/<column_name>`
+
+
+<Aside type="note" title="S3">
+  In principle, TrailBase can also S3 object storage, however the settings
+  aren't yet wired through. Currently uploads are stored under
+  `--data-dir/uploads` in the local file system.
+</Aside>
+
+## Custom JSON Schemas
+
+Akin to `std.FileUpload` above, you can register your own nested JSON schemas
+to be used with column `CHECK`s.
+For now, the dashboard only allows viewing all registered JSON schemas, however
+you can register schemas using the configuration:
+
+```json
+schemas: [
+  {
+    name: "simple_schema"
+    schema:
+      '{'
+      '  "type": "object",'
+      '  "properties": {'
+      '    "name": { "type": "string" },'
+      '    "obj": { "type": "object" }'
+      '  },'
+      '  "required": ["name"]'
+      '}'
+  }
+]
+```
+
+Once registered, schemas can be added as column constraints:
+
+```sql
+CREATE TALE test (
+    simple    TEXT CHECK(jsonschema('simple_schema')),
+
+    -- ...
+) STRICT;
+```
+
+When generating new client-side bindings for a table or view with such nested
+schemas, they will be included ensuring type-safety all the way to the
+client-side APIs.
+
+### Tangent: Querying JSON
+
+Independent of type-safety and Record APIs,
+[SQLite](https://www.sqlite.org/json1.html) has first-class support for
+querying nested properties of columns containing JSON in textual or binary
+format [^4].
+For example, given a table:
+
+```sql
+CREATE TABLE items (json TEXT NOT NULL);
+
+INSERT INTO items (json) VALUES ('{"name": "House", "color": "blue"}');
+INSERT INTO items (json) VALUES ('{"name": "Tent", "color": "red"}');
+```
+
+You can query the names of red items:
+
+```sql
+SELECT
+  json->>'name' AS name
+FROM
+  items
+WHERE
+  json->>'color' = 'red';
+```
+
+Note that this requires SQLite to scan all rows and deserialize the JSON.
+Instead, storing the color of items in a separate, indexed column and filter
+on it would be a lot more efficient.
+Yet, using JSON for complex structured or denormalized data can be powerful
+addition to your toolbox.
+
+
+<div class="h-[50px]" />
+
+---
+
+[^1]:
+    By default, SQLite are not strictly typed. Column types merely express
+    type-affinities. Unless tables are explicitly created as `STRICT` columns can
+    store any data type.
+
+[^2]:
+    Views are more tricky to strictly type, since they're the result of an
+    arbitrary `SELECT` statement. TrailBase parses the `CREATE VIEW` statement
+    and will allow record APIs only on top of a conservative subset, where it
+    can infer the column types. Over time, TrailBase will be able to support
+    larger subsets. Let us know if you have provably strictly typed queries
+    that you think should be supported but aren't.
+
+[^3]:
+   There's also a few other endpoints, e.g. for downloading files as described
+   later in the document.
+
+[^4]:
+    Record APIs only support textual JSON. Binary JSON is more compact and more
+    efficient to parse, however its actual encoding is internal to SQLite and
+    thus opaque to TrailBase.

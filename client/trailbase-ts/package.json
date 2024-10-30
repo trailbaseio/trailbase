@@ -1,0 +1,53 @@
+{
+  "name": "trailbase",
+  "version": "0.1.0",
+  "description": "Official TrailBase client",
+  "type": "module",
+  "main": "./src/index.ts",
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/client/trailbase-ts/src/index.js",
+    "types": "./dist/client/trailbase-ts/src/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/client/trailbase-ts/src/index.d.ts",
+        "default": "./dist/client/trailbase-ts/src/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/trailbaseio/trailbae.git",
+    "directory": "client/trailbase-ts"
+  },
+  "homepage": "https://trailbase.io",
+  "scripts": {
+    "start": "tsc && node dist/client/trailbase-ts/src/index.js",
+    "build": "tsc",
+    "test": "vitest run && vite-node tests/integration_test_runner.ts",
+    "format": "prettier -w src tests",
+    "check": "tsc --noEmit --skipLibCheck && eslint"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "eslint": "^9.13.0",
+    "execa": "^9.5.1",
+    "globals": "^15.11.0",
+    "http-status": "^2.0.0",
+    "jsdom": "^25.0.1",
+    "prettier": "^3.3.3",
+    "tinybench": "^3.0.0",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.12.1",
+    "vite-node": "^2.1.4",
+    "vitest": "^2.1.4"
+  },
+  "dependencies": {
+    "jwt-decode": "^4.0.0",
+    "uuid": "^11.0.2"
+  }
+}

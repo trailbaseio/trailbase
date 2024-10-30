@@ -1,0 +1,121 @@
+---
+title: Extending
+description: Collocating your logic
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+This article explores different ways to extend TrailBase and integrate your own
+custom logic.
+
+## The Elephant in the Room
+
+The question on where your code should run is as old as the modern internets
+becoming ever present since moving away from a static mainframe model and
+hermetic desktop applications.
+With pushing more interactive applications to slow platforms, such as early
+browsers or mobile phone, there was an increased need to distribute
+applications with interactivity happening in the front-end and heavy lifting
+happening in a back-end.
+That's not to say that there aren't other good reasons to not just run all your
+code in an untrusted, potentially slow client-side sandbox.
+
+In any case, having a rich client-side application like a mobile, desktop or
+progressive web apps will reduce your need for server-side integrations.
+They're often a good place to start [^1], even if over time you decide to move more
+logic to a backend to address issues like high fan-out, initial load
+times, and SEO for web applications.
+
+Inversely, if you have an existing application that is mostly running
+server-side, you probably already have a database, auth, and are hosting your
+own APIs, ... .
+If so, there's intrinsically less any application base can help you with.
+Remaining use-cases might be piece-meal adoption to speed up existing APIs or
+delegate authentication.
+One advantage of lightweight, self-hosted solutions is that they can be
+co-locate with your existing stack to reduce costs and latency.
+
+## Bring your own Backend
+
+The most flexible and likewise de-coupled way of running your own code is to
+deploy a separate service alongside TrailBase. This gives you full control over
+your destiny: runtime, scaling, deployment, etc.
+
+TrailBase is designed with the explicit goal of running along a sea of other
+services.
+Its stateless tokens using asymmetric crypto make it easy for other resource
+servers to hermetically authenticate your users.
+TrailBase's APIs can be accessed transitively, simply by forwarding user
+tokens.
+Alternatively, you can fall back to raw SQLite for reads, writes and even
+schema alterations[^2].
+
+<Aside type="note" title="Service Accounts">
+  We would like to add service accounts in the future to authorize privileged
+  services independent from user-provided tokens or using fake user-accounts
+  for services.
+</Aside>
+
+## Custom APIs in TrailBase
+
+TrailBase provides three main ways to embed your code and expose custom APIs:
+
+1. Rust/Axum handlers.
+2. Stored procedures & [Query APIs](/documentation/apis/query_apis/)
+3. SQLite extensions, virtual table modules & [Query APIs](/documentation/apis/query_apis/)
+
+Beware that the Rust APIs and [Query APIs](/documentation/apis/query_apis/) are
+likely subject to change. We rely on semantic versioning to explicitly signal
+breaking changes.
+Eventually, we would like to lower the barrier of entry by providing stable
+bindings to a higher-level runtime within TrailBase, likely a
+TypeScript/ES6/JavaScript runtime.
+
+### Using Rust
+
+The Rust APIs aren't yet stable and fairly undocumented.
+That said, similar to using PocketBase as a Go framework, you can build your
+own TrailBase binary and register custom Axum handlers written in rust with the
+main application router, see `/examples/custom-binary`.
+
+### Stored Procedures & Query APIs
+
+Unlike Postgres or MySQL, SQLite does not supported stored procedures out of
+the box.
+TrailBase has adopted sqlean's
+[user-defined functions](https://github.com/nalgeon/sqlean/blob/main/docs/define.md)
+to provide similar functionality and minimize lock-in over vanilla SQLite.
+Check out [Query APIs](/documentation/apis/query_apis/), to see how stored
+procedures can be hooked up.
+
+### SQLite extensions, virtual table modules  & Query APIs
+
+Likely the most bespoke approach is to expose your functionality as a custom
+SQLite extension or module similar to how TrailBase extends SQLite itself.
+
+This approach can be somewhat limiting in terms of dependencies you have
+access to and things you can do especially for extensions. Modules are quite a bit
+more flexible but also involved.
+Take a look at [SQLite's list](https://www.sqlite.org/vtablist.html) and
+[osquery](https://osquery.readthedocs.io/en/stable/) to get a sense of what's
+possible.
+
+Besides their limitations, major advantages of using extensions or
+modules are:
+* you have extremely low-overhead access to your data,
+* extensions and modules can also be used by services accessing the
+  underlying SQLite databases.
+
+<div class="h-[30px]" />
+
+---
+[^1]:
+    There are genuinely good properties in terms of latency, interactivity, offline
+    capabilities and privacy when processing your users' data locally on their
+    device.
+
+[^2]:
+    SQLite is running in WAL mode, which allows for parallel reads and
+    concurrent writes. That said, when possible you should probably use the APIs
+    since falling back to raw database access is a priviledge practically reserved
+    to processes with access to a shared file-system.

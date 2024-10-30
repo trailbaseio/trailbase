@@ -1,0 +1,32 @@
+[package]
+name = "trailbase-extension"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type=["cdylib", "rlib"]
+
+[dependencies]
+argon2 = "0.5.3"
+base64 = "0.22.1"
+jsonschema = { version = "0.26.0", default-features = false }
+lru = { version = "0.12.3", default-features = false }
+parking_lot = { version = "0.12.3", default-features = false }
+rand = "0.8.5"
+regex = "1.11.0"
+serde_json = "1.0.121"
+sqlean = { path = "../vendor/sqlean" }
+sqlite-loadable = { workspace = true }
+uuid = { version = "1.7.0", default-features = false, features = ["std", "v7"] }
+validator = "0.18.1"
+
+[dev-dependencies]
+libsql = { workspace = true }
+tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread"] }
+uuid = { version = "1.7.0", default-features = false, features = ["std", "v4", "v7"] }
+
+[profile.release]
+strip = "debuginfo"
+opt-level = "s"
+panic = "unwind"
+lto = true

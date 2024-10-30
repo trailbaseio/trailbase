@@ -1,0 +1,185 @@
+syntax = "proto2";
+
+import "google/protobuf/descriptor.proto";
+
+package config;
+
+extend google.protobuf.FieldOptions { optional bool secret = 50000; }
+
+message EmailTemplate {
+  optional string subject = 1;
+  optional string body = 2;
+}
+
+message EmailConfig {
+  optional string smtp_host = 1;
+  optional uint32 smtp_port = 2;
+  optional string smtp_username = 3;
+  optional string smtp_password = 4 [ (secret) = true ];
+
+  optional string sender_name = 11;
+  optional string sender_address = 12;
+
+  optional EmailTemplate user_verification_template = 21;
+  optional EmailTemplate password_reset_template = 22;
+  optional EmailTemplate change_email_template = 23;
+}
+
+enum OAuthProviderId {
+  OAUTH_PROVIDER_ID_UNDEFINED = 0;
+  CUSTOM = 1;
+  DISCORD = 10;
+  GITLAB = 11;
+  GOOGLE = 12;
+}
+
+message OAuthProviderConfig {
+  optional string client_id = 1;
+  optional string client_secret = 2 [ (secret) = true ];
+  optional OAuthProviderId provider_id = 3;
+
+  optional string display_name = 11;
+  optional string auth_url = 12;
+  optional string token_url = 13;
+  optional string user_api_url = 14;
+  optional bool pkce = 15;
+}
+
+message AuthConfig {
+  optional int64 auth_token_ttl_sec = 1;
+  optional int64 refresh_token_ttl_sec = 2;
+
+  map<string, OAuthProviderConfig> oauth_providers = 11;
+}
+
+message ServerConfig {
+  /// Application name presented to users, e.g. when sending emails. Default:
+  /// "TrailBase".
+  optional string application_name = 1;
+
+  /// Your final, deployed URL. This url is used to build canonical urls
+  /// for emails, OAuth redirects, ... . Default: "http://localhost:4000".
+  optional string site_url = 2;
+
+  ///  Max age of logs that will be retained during period logs cleanup. Note
+  ///  that this implies that some older logs may persist until the cleanup job
+  ///  reruns. Default: 7 days.
+  optional int64 logs_retention_sec = 11;
+
+  /// Interval at which backups are persisted. Setting it to 0 will disable
+  /// backups. Default: 0.
+  optional int64 backup_interval_sec = 12;
+}
+
+/// Sqlite specific (as opposed to standard SQL) constrained-violation
+/// resolution strategy upon insert.
+enum ConflictResolutionStrategy {
+  CONFLICT_RESOLUTION_STRATEGY_UNDEFINED = 0;
+  /// SQL default: Keep transaction open and abort the current statement.
+  ABORT = 1;
+  /// Abort entire transaction.
+  ROLLBACK = 2;
+  /// Similar to Abort but doesn't roll back the current statement, i.e. if the
+  /// current statement affects multiple rows, changes by that statement prior
+  /// to the failure are not rolled back.
+  FAIL = 3;
+  /// Skip the statement and continue.
+  IGNORE = 4;
+  /// Replaces the conflicting row in case of a collision (e.g. unique
+  /// constraint).
+  REPLACE = 5;
+}
+
+enum PermissionFlag {
+  PERMISSION_FLAG_UNDEFINED = 0;
+
+  // Database record insert.
+  CREATE = 1;
+  // Database record read/list, i.e. select.
+  READ = 2;
+  // Database record update.
+  UPDATE = 4;
+  // Database record delete.
+  DELETE = 8;
+  /// Lookup JSON schema for the given record api .
+  SCHEMA = 16;
+}
+
+message RecordApiConfig {
+  optional string name = 1;
+  optional string table_name = 2;
+
+  optional ConflictResolutionStrategy conflict_resolution = 5;
+  optional bool autofill_missing_user_id_columns = 6;
+
+  // Access control lists.
+  repeated PermissionFlag acl_world = 7;
+  repeated PermissionFlag acl_authenticated = 8;
+
+  optional string create_access_rule = 11;
+  optional string read_access_rule = 12;
+  optional string update_access_rule = 13;
+  optional string delete_access_rule = 14;
+  optional string schema_access_rule = 15;
+}
+
+enum QueryApiParameterType {
+  TEXT = 1;
+  BLOB = 2;
+  INTEGER = 3;
+  REAL = 4;
+}
+
+message QueryApiParameter {
+  optional string name = 1;
+  optional QueryApiParameterType type = 2;
+}
+
+enum QueryApiAcl {
+  QUERY_API_ACL_UNDEFINED = 0;
+  WORLD = 1;
+  AUTHENTICATED = 2;
+}
+
+/// Configuration schema for Query APIs.
+///
+/// Note that unlike record APIs, query APIs are read-only,
+/// which simplifies authorization.
+/// That said, query APIs are backed by virtual tables, thus in theory, they
+/// could allow writes (unlike views) in the future for module implementations
+/// that allow it such as SQLite's R*-tree.
+message QueryApiConfig {
+  optional string name = 1;
+  optional string virtual_table_name = 2;
+
+  /// Query parameters the Query API will accept and forward to the virtual
+  /// table (function) as argument expressions.
+  repeated QueryApiParameter params = 3;
+
+
+  // Read access control.
+  optional QueryApiAcl acl = 8;
+  optional string access_rule = 9;
+
+  // TODO: We might want to consider requiring or allowing to specify an
+  // optional JSON schema for query APIs to allow generating client bindings.
+}
+
+message JsonSchemaConfig {
+  optional string name = 1;
+  optional string schema = 2;
+}
+
+message Config {
+  // NOTE: These top-level fields currently have to be `required` due to the
+  // overly simple approach on how we do config merging (from env vars and
+  // vault).
+  required EmailConfig email = 2;
+  required ServerConfig server = 3;
+  required AuthConfig auth = 4;
+
+  repeated RecordApiConfig record_apis = 11;
+  repeated QueryApiConfig query_apis = 12;
+
+  repeated JsonSchemaConfig schemas = 21;
+}

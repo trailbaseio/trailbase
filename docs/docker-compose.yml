@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  trailbase-docs:
+    container_name: trailbase-docs
+    build: .
+    ports:
+      - "127.0.0.1:3036:80/tcp"
+    restart: unless-stopped
+
+    # By default containers get 1024 cpu shares. Setting it to 512 means half
+    # the resources compared to a default container. And 2048 double,
+    # respectively.
+    cpu_shares: 1024
+    mem_limit: 128m
+    oom_score_adj: -200

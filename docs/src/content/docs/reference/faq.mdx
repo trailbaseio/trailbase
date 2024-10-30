@@ -1,0 +1,107 @@
+---
+title: FAQ
+description: Frequently Asked Questions
+---
+
+## How is TrailBase different from PocketBase, SupaBase or other application bases?
+
+Naturally there's a lot of overlap but let's start by saying that
+we're also huge fans of SupaBase and PocketBase.
+The former is incredibly versatile, while the latter is incredibly easy and
+cheap to use.
+As far as we can tell, PocketBase pioneered the notion of a single-file,
+SQLite-based, FireBase-like server.
+
+TrailBase is an attempt at combining the flexibility and principled
+architecture of SupaBase with the ease and low-overhead of PocketBase.
+We owe a great debt of gratitude to both ❤️.
+
+Let's address the elephant in the room: other more established solutions are
+more polished, may have more extensive feature sets in many areas, and have
+seen a lot more mileage.
+TrailBase is committed to catch up and challenge the status quo following our
+[principles](/getting-started/philosophy) and in many ways, TrailBase is
+already incredibly easy to deploy and [blazingly fast](/reference/benchmarks).
+
+We also offer some slightly more detailed comparisons to both
+[PocketBase](/comparison/pocketbase) and [SupaBase](/comparison/supabase).
+
+## Is TrailBase ready for production use?
+
+TrailBase has not seen a lot of mileage yet and there's probably plenty of
+sharp edges, which will take some time to smooth over.
+That said, it's also incredibly simple, easy to get on, and easy to get off.
+We're welcoming any brave soul who would like to be an early adopter.
+If you're curious and patient, we're ready to help you get off the ground in
+return for your honest feedback 🙏.
+You can take a look at the preliminary
+[productionization](/documentation/production).
+
+## Scale, performance and reliability
+
+As my product grows, will TrailBase scale with me or will I hit a wall?
+Firstly, congratulations! The "success"-problem is a great problem to have 🎉.
+
+Short, hand-wavy answer: you'll face all the same issues as with other
+solutions but you probably will be fine 😶‍🌫️ .
+
+Long answer: TrailBase currently only scales vertically, however it's incredibly
+fast. Besides, there's an inherent beauty to vertical scaling [^1] and modern
+servers can get you very very far.
+You can absolutely support tens of thousands or even hundreds thousands of
+concurrent users with a single database.
+With TrailBase simple deployment, it may also be an option to shard your users
+or tenants across multiple databases. In the future, TrailBase would also like
+to support multi-database setups out-of-the-box to further improve concurrency.
+
+Keep in mind that other databases, like MySQL or Postgres, aren't a silver bullet either.
+If you're reaching massive levels of scale, more specialized solutions will
+become more and more attractive such as non-relational document stores,
+columnar OLAP stores for analytic workloads, ...
+
+TrailBase explicitly tries to avoid tight coupling locking you in. At the end
+of the day, you're using very plain SQLite, letting you adopt and drop
+TrailBase when it makes sense.
+Similarly, the stateless auth flow makes it easy to split out your logic and
+data while continuing to use TrailBase.
+
+Besides pure scale and performance, many more horizontal solutions provide
+additional benefits such as disaster-recovery/fail-over or improved edge read
+latency.
+Fortunately, both can be achieved with SQLite as well using solutions like
+[LiteStream](https://litestream.io/) keeping eventually consistent copies of
+your data.
+
+## Can we add Features to TrailBase?
+
+Yes! First take a look at our coarse [roadmap](/reference/roadmap), maybe we're
+already working on it?
+Otherwise, don't hesitate, just open an issue and ask away. We love to hear
+your thoughts.
+Contributions are also very welcome, let's just talk upfront to avoid any
+surprises.
+Especially, in the early days we'll have to see how "things" fit into the
+roadmap.
+For example, having a dark mode for the dashboard would be nice but it's also
+extra work to maintain while the dashboard is still rapidly changing, so it
+becomes a question of when.
+
+## Data Import & Export
+
+Few requirements: `STRICT` table and an auto-incrementing primary key for
+collections but the dashboard will work for any table, view, etc.
+You can simply import and export data with standard SQLite tooling, e.g.:
+
+```shell
+sqlite3 main.db < import.sql
+```
+
+Also check out the [getting started](/getting-started/first-app) guide.
+
+<div class="h-[50px]" />
+
+---
+
+[^1]:
+    Adopting more complex multi-tiered database solutions comes with its own
+    challenges for operations, testing, and developer setups.

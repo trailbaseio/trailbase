@@ -1,0 +1,10 @@
+packages:
+  - 'client/trailbase-ts'
+  - 'docs'
+  - 'ui/admin'
+  - 'ui/auth'
+  - 'examples/blog/web'
+  - 'examples/tutorial/scripts'
+options:
+  prefer-workspace-packages: true
+  strict-peer-dependencies: true

@@ -1,0 +1,122 @@
+---
+title: Auth
+description: Managing Users and Access
+---
+
+import { Image } from "astro:assets";
+import { Aside } from "@astrojs/starlight/components";
+
+import implementation from "./_auth.svg";
+
+TrailBase provides core authentication flows and a basic UI out of the box[^1].
+These primitives let you establish the identity of your users in order to
+authorize or deny access to your data, let users change their email address,
+reset their password, etc.
+
+<Aside type="danger" title="HTTPs">
+  The safety of any authentication flow hinges on TLS/HTTPS, both for your users
+  to trust that the server they're talking to is yours and for credentials to be
+  transferred encrypted. Otherwise, credentials will be transmitted in plain
+  text. In production, use a reverse proxy like nginx, caddy, or similar for TLS
+  termination, see [here](/documentation/production).
+</Aside>
+
+## Implementation
+
+TrailBase tries to offer a standard, safe and versatile auth implementation out
+of the box. It combines:
+
+- Asymmetric cryptography based on elliptic curves (ed25519)
+- Stateless, short-lived auth tokens (JWT)
+- Stateful, long-lived, opaque refresh tokens.
+
+Breaking this apart, __asymmetric cryptography__ means that tokens signed with a
+private key by the TrailBase "auth server", which can then be validated by
+others ("resource servers") using only the corresponding public key.
+The __Statelesss JWTs__ contain metadata that identities the user w/o having to
+talk to the auth server.
+Combining the two, other back-ends can authenticate, validate & identify, users
+hermetically.
+This is very easy and efficient, however means that hermetic auth tokens cannot
+be invalidated.
+A hermetic auth token released into the wild is valid until it expires.
+To balance the risks and benefits, TrailBase uses short-lived auth tokens
+expiring frequently[^2].
+To avoid burdening users by constantly re-authenticating, TrailBase issues an
+additional __opaque, stateful refresh token__.
+Refresh tokens are simply a unique identifier the server keeps track of as
+sessions.
+Only refresh tokens that have not been revoked can be exchanged for a new auth
+token.
+
+<div class="flex justify-center">
+  <Image
+    class="w-[80%] "
+    src={implementation}
+    alt="Screenshot of TrailBase's admin dashboard"
+  />
+</div>
+
+## Flows & UI
+
+TrailBase currently implements the following auth flows:
+
+- Email + password based user registration and email verification.
+- User registration using social OAuth providers (Google, ...)
+- Login & logout.
+- Change & reset password.
+- Change email.
+- User deletion.
+- Avatar management.
+
+Besides the flows above, TrailBase also ships with a set of simple UIs to
+support the above flows. By default it's accessible via the route:
+`<url>/_/auth/login`. Check out the [demo](https://demo.trailbase.io/_/auth/login).
+The built-in auth UIs can be disabled with `--disable-auth-ui` in case you
+prefer rolling your own or have no need web-based authentication.
+
+## Usernames and other metadata
+
+Strictly speaking, authentication is merely responsible for uniquely
+identifying who's on the other side.
+This only requires a __unique identifier__ and one or more __secrets__
+(e.g.  a password, hardware token, ...) for the peer to proof they're them.
+
+Any unique identifier will do: a random string (painful to remember), a phone
+number, a username, or an email address.
+Email addresses are a popular choice, since they do double duty as a
+communication channel letting you reach out to your users, e.g. to reset their
+password.
+
+Even from a product angle, building an online shop for example, email addresses
+are the natural choice.
+Asking your customers to think up and remember a globally unique username adds
+extra friction especially since you need their email address anyway to send
+receipts.
+Additional profile data, like a shipment address, is something you can ask for
+at a later time and is independent from auth.
+In contrast, when building a social network, chat app or messaging board, you
+typically don't want to leak everyone's email address.
+You will likely want an additional, more opaque identifier such as a username
+or handle.
+
+Long story short, modeling __profile__ data is very product dependent.
+It's for you to figure out.
+That said, it is straight forward to join auth data, such as the user's email
+address, and custom custom profile data in TrailBase.
+We suggest creating a separate profile table with a `_user.id` `FOREIGN KEY`
+primary key column. You can then freely expose profiles as dedicated record API
+endpoints or join them with other data `_user.id`.
+The blog example in `<repo>/examples/blog` demonstrates this, joining blog
+posts with user profiles on the author id to get an author's name.
+
+<div class="h-[50px]" />
+
+---
+
+[^1]:
+    Which can be disabled using `--disable-auth-ui`, if you prefer rolling your
+    own or have no need for a web-based authentication UI.
+
+[^2]:
+    A one hour TTL by default.

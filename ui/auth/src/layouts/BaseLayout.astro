@@ -1,0 +1,87 @@
+---
+import "@common/css/global.css";
+import "@common/css/kobalte.css";
+
+import favicon from "@assets/favicon.svg";
+
+interface Props {
+  title?: string;
+}
+
+const { title } = Astro.props;
+
+const DEV = import.meta.env.DEV;
+const CspFragments = new Map<string, string>([
+  // default-src is fallback for all other policies that are not explicitly defined below.
+  ["default-src", "'none'"],
+  ["object-src", "'none'"],
+  ["style-src", ["'self'", "'unsafe-inline'"].join(" ")],
+  ["media-src", "'none'"],
+  ["frame-src", "'self'"],
+  // NOTE: frame-ancestors cannot be set via the meta tag
+  // ["frame-ancestors", "'none'"],
+  ["img-src", ["'self'", ...(DEV ? ["localhost:*"] : [])].join(" ")],
+  ["font-src", ["'self'", "data:"].join(" ")],
+  // We have some inline scripts.
+  ["script-src", ["'self'", "'unsafe-inline'", "blob:"].join(" ")],
+  ["manifest-src", "'self'"],
+  // Needed for client-side oidc auth to work.
+  // Needed for redirect
+  // ["form-action", ["'self'", ...(DEV ? ["http://localhost:4000"] : [])].join(" ")],
+  ["connect-src", ["'self'", ...(DEV ? ["localhost:*"] : [])].join(" ")],
+]);
+
+const CSP: string = Array.from(CspFragments)
+  .map(([v, k]) => `${v} ${k}`)
+  .join("; ");
+---
+
+<!doctype html>
+<html lang="en" class="hide-scrollbars">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content="Astro description" />
+    <meta name="viewport" content="width=device-width" />
+    <meta http-equiv="Content-Security-Policy" content={CSP} />
+
+    <link rel="icon" type="image/svg+xml" href={favicon.src} />
+
+    <slot name="head" />
+
+    <title>{title ?? "TrailBase"}</title>
+  </head>
+
+  <body>
+    <slot />
+
+    <style is:global>
+      :root {
+        --accent: 136, 58, 234;
+        --accent-light: 224, 204, 250;
+        --accent-dark: 49, 10, 101;
+        --accent-gradient: linear-gradient(
+          45deg,
+          rgb(var(--accent)),
+          rgb(var(--accent-light)) 30%,
+          white 60%
+        );
+      }
+      html {
+        font-family: system-ui, sans-serif;
+        background: #13151a;
+        background-size: 224px;
+      }
+      code {
+        font-family:
+          Menlo,
+          Monaco,
+          Lucida Console,
+          Liberation Mono,
+          DejaVu Sans Mono,
+          Bitstream Vera Sans Mono,
+          Courier New,
+          monospace;
+      }
+    </style>
+  </body>
+</html>

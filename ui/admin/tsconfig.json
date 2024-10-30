@@ -1,0 +1,24 @@
+{
+  "extends": "../common/tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "types": [
+      "@types/wicg-file-system-access",
+      "vite/client"
+    ],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@proto/*": ["./proto/*"],
+      "@assets/*": ["../../assets/*"],
+      "@bindings/*": ["../../trailbase-core/bindings/*"],
+      "@common/*": ["../common/*"]
+    }
+  },
+  "exclude": [
+    "tailwind.config.ts",
+    "dist/",
+    "node_modules/",
+    "public/"
+  ]
+}

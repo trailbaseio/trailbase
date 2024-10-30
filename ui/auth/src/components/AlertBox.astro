@@ -1,0 +1,58 @@
+---
+interface Props {
+  message?: string;
+}
+
+const { message } = Astro.props;
+---
+
+<div
+  id="alert-box"
+  class:list={[
+    "rounded-xl",
+    "outline",
+    "outline-1",
+    "bg-error",
+    "text-error-foreground",
+    "p-4",
+    "m-4",
+  ]}
+>
+  {message}
+</div>
+
+{
+  import.meta.env.DEV && (
+    <script is:inline>
+      function updateAlert() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const message = urlParams.get("alert");
+        if (message) {
+          const alertBox = document.getElementById("alert-box");
+
+          alertBox.textContent = message;
+          alertBox.classList.remove("invisible");
+        }
+      }
+
+      // Redirecting from the login page back to the login page, e.g. when the login
+      // fails doesn't trigger a "window.onload". Weirdly, subscribing to loacation
+      // changes also doesn't seem to work.
+      let previousUrl = "";
+      const observer = new MutationObserver(() => {
+        if (window.location.href !== previousUrl) {
+          previousUrl = window.location.href;
+          updateAlert();
+        }
+      });
+
+      const config = { subtree: true, childList: true };
+      observer.observe(document, config);
+
+      // NOTE: There is a newer window.navgation API but it's so new that Astro
+      // doesn't have type definitions breaking the build (requiring is:inline to
+      // skip processing).
+      // window.navigation.addEventListener("navigate", (_e) => updateAlert());
+    </script>
+  )
+}

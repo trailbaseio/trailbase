@@ -1,0 +1,19 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@assets/*": ["../../assets/*"],
+      "@bindings/*": ["../../trailbase-core/bindings/*"],
+      "@common/*": ["../common/*"]
+    }
+  },
+  "exclude": [
+    "dist",
+    "node_modules",
+    "public"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "extends": "../../../ui/common/tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@schema/*": ["./types/*"],
+      "@bindings/*": ["../../../trailbase-core/bindings/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "dist",
+    "node_modules"
+  ]
+}

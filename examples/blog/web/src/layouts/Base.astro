@@ -1,0 +1,58 @@
+---
+import { ViewTransitions } from "astro:transitions";
+import Header from "../components/general/Header.astro";
+import Footer from "../components/general/Footer.astro";
+
+import "@/css/style.css";
+
+const titleSuffix = " | TrailBase 🚀";
+const title = "Homepage" + titleSuffix;
+const description = "TrailBase Example Blog Application";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <script is:inline>
+      const setDarkMode = () => {
+        if (
+          localStorage.darkMode === "true" ||
+          (!("darkMode" in localStorage) &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches)
+        ) {
+          document.documentElement.classList.add("dark");
+          localStorage.darkMode = "true";
+        } else {
+          document.documentElement.classList.remove("dark");
+          localStorage.darkMode = "false";
+        }
+      };
+
+      setDarkMode();
+      // Runs on view transitions navigation
+      document.addEventListener("astro:after-swap", setDarkMode);
+    </script>
+
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="view-transition" content="same-origin" />
+    <meta name="title" content={title} />
+    <meta name="description" content={description} />
+
+    <title>{title}</title>
+
+    <ViewTransitions />
+  </head>
+
+  <body
+    class="min-h-dvh flex flex-col font-pacamara-inter transition-all duration-300 bg-white dark:bg-pacamara-dark"
+  >
+    <Header />
+
+    <div class="grow">
+      <slot />
+    </div>
+
+    <Footer />
+  </body>
+</html>

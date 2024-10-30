@@ -1,0 +1,60 @@
+---
+import Form from "@/components/Form.astro";
+
+import { AUTH_API, INPUT_STYLE, BUTTON_STYLE } from "@/lib/constants";
+---
+
+<Form title="Register">
+  <form
+    id="register-form"
+    class="flex flex-col gap-2"
+    action={`${AUTH_API}/register`}
+    method="post"
+    ,
+    enctype="application/x-www-form-urlencoded"
+  >
+    <div class="hidden">
+      {"{{ state }}"}
+    </div>
+
+    <div
+      class="grid grid-cols-2 items-center gap-4 my-4"
+      style="grid-template-columns: auto 1fr"
+    >
+      <label>E-mail:</label>
+      <input
+        required
+        class={INPUT_STYLE}
+        type="text"
+        name="email"
+        placeholder="E-mail"
+      />
+
+      <label>Password:</label>
+      <input
+        required
+        class={INPUT_STYLE}
+        type="password"
+        name="password"
+        placeholder="Password"
+      />
+
+      <label>Confirm Password:</label>
+      <input
+        required
+        class={INPUT_STYLE}
+        type="password"
+        name="password_repeat"
+        placeholder="Password Confirm"
+      />
+    </div>
+
+    <div class="w-full flex justify-between">
+      <a class:list={BUTTON_STYLE} href={`${import.meta.env.BASE_URL}/login`}>
+        Back
+      </a>
+
+      <button class:list={BUTTON_STYLE} type="submit"> Register </button>
+    </div>
+  </form>
+</Form>

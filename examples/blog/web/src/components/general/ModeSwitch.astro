@@ -1,0 +1,29 @@
+---
+import { Icon } from "astro-icon/components";
+
+const style =
+  "size-8 h-auto text-pacamara-secondary transition-all duration-300 hover:text-pacamara-accent dark:text-white dark:hover:text-pacamara-accent";
+---
+
+<button id="mode_switcher" class="group" title="Switch mode">
+  <Icon name="tabler:brightness" class={style} />
+</button>
+
+<script>
+  const setDarkModeButton = () => {
+    const button = document.querySelector("#mode_switcher");
+    button?.addEventListener("click", function () {
+      document.documentElement.classList.toggle("dark");
+
+      if (document.documentElement.classList.contains("dark")) {
+        localStorage.darkMode = "true";
+      } else {
+        localStorage.darkMode = "false";
+      }
+    });
+  };
+
+  setDarkModeButton();
+  // Runs on view transitions navigation
+  document.addEventListener("astro:after-swap", setDarkModeButton);
+</script>

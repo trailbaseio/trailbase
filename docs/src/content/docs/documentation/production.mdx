@@ -1,0 +1,85 @@
+---
+title: Productionize
+description: Going to production.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+<Aside type="caution" title="Production">
+  TrailBase is still young and hasn't gotten a lot of mileage yet. We're looking
+  for feedback and are happy to help early adopters to get to production.
+</Aside>
+
+Going to production and depending on your requirements things to think about
+could be:
+
+- HTTPS/TLS termination
+- locking down access
+- setting up Email
+- deployment
+- introspection
+- disaster recovery
+
+## TLS termination
+
+The most important thing alongside ensuring proper access protection is to set
+up TLS termination ensuring that all traffic from your users to your
+termination point is encrypted.
+In practice, this means putting TrailBase behind a reverse proxy such as NGinx,
+Caddy, ... . The main benefit of using an established reverse proxy is the
+availability of auto-renewal of self-signed certificates with SSL authorities
+Let's encrypt.
+
+## Access
+
+### API access
+
+Make sure to use record API's authorization primitives to tighten access to
+data as much as possible. It's a good idea to check `_REQ_.<user_id> ==
+_USER_.id` on record creations and updates to avoid users can impersonate or
+touch on other users records.
+
+### Admin access
+
+You can expose TrailBase's admin APIs and UIs on a separate private port as an
+extra precaution and to simply expose a smaller surface.
+
+### Protect Configuration
+
+You can prevent TrailBase configuration from being accidentally changed in
+prod, e.g. when you think you're actually configuring a dev instances. To do
+so, you can read-only mount the configuration directory. However, make sure the
+data directory remains writable.
+
+## Email
+
+By default TrailBase will be using your machine's sendmail setup. This can lead
+to messages not being sent at all and likely getting stuck in spam filters not
+coming from a well-known Email server.
+
+You should likely set up TrailBase with an SMTP server that can send Email
+coming from your domain. If you don't have an Email provider yet, an option
+could be Brevo, Mailchimp, SendGrid, ... .
+
+## Deployment
+
+We recommend containerization (e.g. Docker) for convenience. You can also
+consider to mount certain directories and files such as `<data_dir>/secrets`
+and `<data_dir>/config.textproto` as read only.
+
+## Introspection
+
+TrailBase's introspection is fairly non-existent at this point. There is a
+`/api/healthcheck` endpoint for container orchestration systems to probe.
+You could also consider setting up probers probing other endpoints.
+
+## Disaster Recovery
+
+The simplest option is to mount anothjer local or remote drive and use
+TrailBase's periodic backups.
+However, this may lead to significant data loss in case of a disaster, which
+may be acceptable for first party content but likely not for user-generated
+content.
+
+A more comprehensive approach may be to use [Litestream](https://litestream.io/)
+to continuously replicate your database.

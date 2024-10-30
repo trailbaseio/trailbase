@@ -1,0 +1,10 @@
+---
+import Base from "@/layouts/Base.astro";
+import { ArticleList } from "@/components/Articles";
+---
+
+<Base>
+  <section class="container mx-auto max-w-screen-lg px-7 py-10">
+    <ArticleList client:only="solid-js" />
+  </section>
+</Base>

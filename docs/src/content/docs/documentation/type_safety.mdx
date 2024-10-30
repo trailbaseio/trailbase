@@ -1,0 +1,82 @@
+---
+title: Type-Safety
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+TrailBase provides end-to-end type-safety from the database level, through the
+HTTP APIs, all the way up to the client bindings relying on JSON schemas.
+It's worth noting that the JSON schema is derived directly from the database
+schema as the source of truth meaning that any schema change will be reflected
+independent of whether they were applied via the admin dashboard, `sqlite3` or
+other means.
+This also means that you should regenerate your type definitions
+after changing the schema. We therefore recommend to integrate type generation
+into your build process or check the generated types in following your database
+migrations.
+
+Using JSON schema and relying on off-the-shelf code generation tools, allows to
+keep the client-libraries very thin making it easy to integrate virtually any
+language in a type-safe fashion.
+`/examples/blog` provides a glimpse at using [quicktype](https://quicktype.io/)
+to generate type-safe TypeScript and Dart APIs.
+
+Type-safety is the main reason why TrailBase APIs require `STRICT`ly typed
+tables. By default SQLite only has a notion of "type affinity" on
+inserts and updates, generally allowing any data in any column.
+
+## Generating Types from JSON Schemas
+
+The generated JSON schemas depend on two aspects:
+
+1. The actual database schema mapping columns and column types to fields and
+   data types in a data structure of your target language.
+2. The specific API operation: `CREATE`, `UPDATE`, `READ`.
+
+Expanding on 2., the notion of default values for columns means that data for
+`NOT NULL` columns is optional when creating a new record but guaranteed to be
+present on record read.
+`UPDATE`s are point updates of existing records, thus only requiring specific
+column values to be overridden.
+
+Concretely, looking at `/examples/blog`, the data structure for inserting a new
+blog article is less strict than the equivalent for retrieving an existing
+article:
+
+```typescript
+// Input data type when creating a new article record.
+export interface NewArticle {
+  author: string;
+  body: string;
+  created?: number;
+  id?: string;
+  image?: FileUpload;
+  // ...
+}
+
+// Result data type when reading an article record.
+export interface Article {
+  author: string;
+  body: string;
+  created: number;
+  id: string;
+  image?: FileUpload;
+  // ...
+}
+```
+
+## Nested JSON Columns
+
+TrailBase also supports generating type-safe bindings for columns containing
+JSON data and enforcing a specific JSON schema, see
+[here](/documentation/apis/record_apis/#custom-json-schemas).
+
+
+
+<div class="h-[50px]" />
+
+---
+
+[^1]:
+    We do not support binary JSON, i.e. SQLite's internal JSONB
+    representation at this point.

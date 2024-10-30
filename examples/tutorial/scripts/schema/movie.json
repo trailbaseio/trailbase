@@ -1,0 +1,63 @@
+{
+  "$defs": {},
+  "properties": {
+    "description": {
+      "type": "string"
+    },
+    "gross": {
+      "type": [
+        "number",
+        "string",
+        "boolean",
+        "object",
+        "array",
+        "null"
+      ]
+    },
+    "metascore": {
+      "type": [
+        "number",
+        "string",
+        "boolean",
+        "object",
+        "array",
+        "null"
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "rank": {
+      "type": "integer"
+    },
+    "rating": {
+      "type": "number"
+    },
+    "votes": {
+      "type": "string"
+    },
+    "watch_time": {
+      "type": "integer"
+    },
+    "year": {
+      "type": [
+        "number",
+        "string",
+        "boolean",
+        "object",
+        "array",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "name",
+    "year",
+    "watch_time",
+    "rating",
+    "votes",
+    "description"
+  ],
+  "title": "movies",
+  "type": "object"
+}

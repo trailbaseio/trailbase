@@ -1,0 +1,74 @@
+---
+title: SQL
+description: A short intro to SQL.
+---
+
+SQL is a functional general-purpose query language for relational databases. It
+is as old as relational databases themselves.
+It allows to define arbitrary data look-ups and computations w/o hard-coding a
+specific database implementation or storage structure (presence of indexes,
+storage layout, ...).
+Yet many foster a love-hate relationship with it, which has given rise to an
+entire cottage industry of ORMs: higher-level, often type-safe abstractions
+with bindings for your favorite programming language.
+They tend to work great until you need to break glass. In recent years, there
+has been a push to thinner and thinner abstractions.
+
+Instead of hiding or working around SQL, TrailBase embraces it as an evergreen,
+transferable skill.
+There's no denying that SQL can get tricky but it's
+also its greatest strength. SQL is a general purpose functional (sometimes
+imperative) programming language that lets you solve arbitrary problems in a
+high-level, portable fashion. In other words, learning SQL is a lot more useful
+than learning a specific ORM or similar abstractions.
+
+One thing that's pretty sweet about SQL is that, almost any relational database
+(Postgres, MySQL, MS SQL, sqlite, ...) supports some dialect of SQL, which
+makes this a pretty transferable skill. This is only possible because SQL is
+pretty abstract. Given a lookup or transformation, different databases might
+execute them quite differently depending on their capabilities, how the data
+structures are set up, and how the look is expressed. All of this is facilitate
+through the magic of the query-planner, which takes your query and turns it
+into a physical execution plan.
+
+## A gentle introduction
+
+At first glance, SQL may look just like some antiquated filter language but in
+practice it's a high-level, functional programming language that is optimized
+for table transformations. All that SQLs does is:
+
+1. inserting rows (INSERT),
+2. removing rows (DELETE),
+3. updating rows (UPDATE),
+4. and transforming NxM tables into PxQ tables (SELECT).
+
+5. to 3. are pretty simple, they operate on rows.
+
+SELECT is by far the most complex tool, think of it as writing a function that
+takes in one or more table, even combined tables, filters them, and them
+transforms them into a new table. They might look overwhelming at first:
+
+```sql
+SELECT
+  Output: outcol0, outcol1, ..
+FROM
+  Input: incol0, incol1,
+WHERE Filter: e.g. where incol0 > 10
+ORDER BY outcol0 ASC
+GROUP BY aggregation
+;
+```
+
+but most of it is optional. The simplest statement is `SELECT 1;`, it creates a
+new table with one row and one column containing the value of `1` (a scalar)
+from nothing.
+
+Now that we can create a new column from thin air, let's transform it:
+
+```sql
+SELECT col*2 FROM (SELECT 1 as col);
+```
+
+Now we created two nested SELECTs, inner one creates the table we already know
+but names the column `col` and the outer SELECT transforms that table into a
+new 1x1 table with the values doubled.

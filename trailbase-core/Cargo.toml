@@ -1,0 +1,85 @@
+[package]
+name = "trailbase-core"
+version = "0.1.0"
+edition = "2021"
+
+[[bench]]
+name = "benchmark"
+harness = false
+
+[features]
+default = []
+
+[dependencies]
+arc-swap = "1.7.1"
+argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
+async-trait = "0.1.80"
+axum = { version = "^0.7.5", features=["multipart"] }
+axum-client-ip = "0.6.0"
+axum-extra = { version = "^0.9.3", default-features = false, features=["protobuf"] }
+base64 = { version = "0.22.1", default-features = false }
+chrono = "^0.4.38"
+cookie = "0.18.1"
+ed25519-dalek = { version = "2.1.1", features=["pkcs8", "pem", "rand_core"] }
+env_logger = "^0.11.3"
+fallible-iterator = "0.3.0"
+form_urlencoded = "1.2.1"
+futures = "0.3.30"
+indexmap = "2.6.0"
+indoc = "2.0.5"
+itertools = "0.13.0"
+jsonschema = { version = "0.26.0", default-features = false }
+jsonwebtoken = { version = "^9.3.0", default-features = false, features = ["use_pem"] }
+lazy_static = "1.4.0"
+lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
+libsql = { workspace = true }
+log = "^0.4.21"
+minijinja = "2.1.2"
+oauth2 = { version = "5.0.0-alpha.4", default-features = false, features = ["reqwest", "rustls-tls"] }
+object_store = { version = "0.11.0", default-features = false }
+parking_lot = "0.12.3"
+prost = "^0.12.6"
+prost-reflect = { version = "^0.13.0", features = ["derive", "text-format"] }
+rand = "0.8.5"
+refinery = { workspace = true }
+refinery-libsql = { workspace = true }
+regex = "1.11.0"
+reqwest = { version = "0.12.5", default-features = false, features = ["rustls-tls", "json"] }
+rusqlite = { workspace = true }
+rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
+serde = { version = "^1.0.203", features = ["derive"] }
+serde_json = "^1.0.117"
+serde_path_to_error = "0.1.16"
+serde_urlencoded = "0.7.1"
+sha2 = "0.10.8"
+sqlformat = "0.2.4"
+sqlite3-parser = "0.13.0"
+thiserror = "1.0.61"
+tokio = { version = "^1.38.0", features=["macros", "rt-multi-thread", "fs", "signal"] }
+tower-cookies = { version = "0.10.0" }
+tower-http = { version = "^0.6.0", features=["cors", "trace", "fs", "limit"] }
+tower-service = "0.3.3"
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+trailbase-sqlite = { path = "../trailbase-sqlite" }
+ts-rs = { version = "10", features=["uuid-impl", "serde-json-impl"] }
+url = "2.5.2"
+utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
+uuid = { version = "^1.8.0", features = ["v4", "serde"] }
+validator = { version = "0.18.1", default-features = false }
+
+[build-dependencies]
+env_logger = "^0.11.3"
+log = "^0.4.21"
+prost-build = "0.13.1"
+prost-reflect-build = "0.14.0"
+
+[dev-dependencies]
+anyhow = "^1.0.86"
+axum-test = "16.0.0"
+criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+trailbase-extension = { path = "../trailbase-extension" }
+quoted_printable = "0.5.1"
+schemars = "0.8.21"
+temp-dir = "0.1.13"
+tower = { version = "0.5.0", features = ["util"] }

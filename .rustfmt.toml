@@ -1,0 +1,8 @@
+# Docs: https://rust-lang.github.io/rustfmt/
+edition = "2021"
+brace_style = "SameLineWhere"
+empty_item_single_line = true
+max_width = 100
+comment_width = 100
+wrap_comments = true
+tab_spaces = 2

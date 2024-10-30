@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --overlay-accent: #92d1fe30;
+}
+
+:root[data-theme="dark"] {
+  --overlay-accent: #92d1fe70;
+}
+
+[data-has-hero] .page {
+  background:
+    linear-gradient(215deg, var(--overlay-accent), transparent 40%),
+    radial-gradient(var(--overlay-accent), transparent 40%) no-repeat -60vw -40vh /
+      105vw 200vh,
+    radial-gradient(var(--overlay-accent), transparent 65%) no-repeat 50%
+      calc(100% + 20rem) / 60rem 30rem;
+}
+
+.card {
+  border-radius: 0.75rem;
+}
+
+[data-has-hero] header {
+  border-bottom: 1px solid transparent;
+  background-color: #ffffffc0;
+  -webkit-backdrop-filter: blur(32px);
+  backdrop-filter: blur(32px);
+}
+
+[data-has-hero][data-theme="dark"] header {
+  border-bottom: 1px solid transparent;
+  background-color: transparent;
+  -webkit-backdrop-filter: blur(32px);
+  backdrop-filter: blur(32px);
+}

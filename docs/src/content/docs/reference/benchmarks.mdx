@@ -1,0 +1,207 @@
+---
+title: Benchmarks
+description: Performance comparison with similar products.
+---
+
+import {
+  Duration100kInsertsChart,
+  PocketBaseAndTrailBaseReadLatencies,
+  PocketBaseAndTrailBaseInsertLatencies,
+  SupaBaseMemoryUsageChart,
+  SupaBaseCpuUsageChart,
+  PocketBaseAndTrailBaseUsageChart,
+} from "./_benchmarks/benchmarks.tsx";
+
+TrailBase is merely the sum of its parts. It's the result of marrying one of
+the lowest-overhead languages, one of the fastest HTTP servers, and one of the
+lightest relational SQL databases, while merely avoiding extra expenditures.
+We did expect it to go fast but how fast exactly? Let's take a brief look at
+how TrailBase performs compared to a few amazing, and more weathered
+alternatives such as SupaBase, PocketBase, and vanilla SQLite.
+
+## Disclaimer
+
+In general, benchmarks are tricky, both to do well and to interpret.
+Benchmarks never show how fast something can theoretically go but merely how
+fast the author managed to make it go.
+Micro-benchmarks, especially, offer a selective key-hole insights, which may be
+biased and may or may not apply to your workload.
+
+Performance also doesn't exist in a vacuum. If something is super fast but
+doesn't do what you need it to do, performance is an illusive luxury.
+Doing less makes it naturally easier to go fast, which is not a bad thing,
+however means that comparing a highly specialized solution to a more general
+one on a specific aspect can be misleading or "unfair".
+Specifically, PocketBase and SupaBase have both been around for longer offering
+a different and in many cases more comprehensive features.
+
+We tried our hardest to give all contenders the best chance to go fast [^1].
+We were surprised by the performance gap ourselves and thus went back and
+forth. We suspect that any overhead weighs so heavily because of how quick
+SQLite itself is.
+If you spot any issues or have ideas to make anyone go faster,
+[we want to know](https://github.com/trailbaseio/trailbase-benchmark).
+We hope to improve the methodology over time, make the numbers more broadly
+applicable, and as fair as an apples-to-oranges comparison can be.
+With that said, we hope that the results can provide at least some insights
+into what to expect when taken with a grain of salt.
+Ultimately, nothing beats benchmarking your own workload and setup.
+
+## Insertion Benchmarks
+
+_Total Time for 100k Insertions_
+
+<div class="flex justify-center">
+  <div class="h-[300px] w-[90%]">
+    <Duration100kInsertsChart client:only="solid-js" />
+  </div>
+</div>
+
+The graph shows the overall time it takes to insert 100k messages into a mock
+"chat-room" table setup. Less time is better.
+
+Unsurprisingly, in-process SQLite is the quickest [^2].
+All other setups add additional table look-ups for access checking, IPC
+overhead[^3], and layers of features on top.
+Maybe think of this data point as an upper bound to how fast SQLite could go
+and the cost a project would pay by adopting any of the systems over in-process
+SQLite.
+
+The data suggests that depending on your setup (client, data, hardware)
+TrailBase can insert 100k records 9 to 16 times faster than SupaBase[^4] and
+roughly 6 to 7 times faster than PocketBase [^1].
+The fact that our TS/node.js benchmark is slower than the Dart one, suggests a
+client-side bottleneck that could be overcome by tuning the setup or trying
+other JS runtimes with lower overhead HTTP clients.
+
+Total time of inserting a large batch of data tells only part of the story,
+let's have a quick look at resource consumption to get an intuition for
+provisioning or footprint requirements:
+
+_TrailBase & PocketBase Utilization_
+
+<div class="flex justify-center">
+  <div class="h-[300px] w-[90%]">
+    <PocketBaseAndTrailBaseUsageChart client:only="solid-js" />
+  </div>
+</div>
+
+The graph shows the CPU utilization and memory consumption (RSS) of both
+PocketBase and TrailBase. They look fairly similar apart from TrailBase
+finishing earlier. They both load roughly 3 CPUs with PocketBase's CPU
+consumption being slightly more variable [^5].
+The little bump after the TrailBase run is likely due to SQLite check-pointing.
+
+Both only consume about 140MB of memory at full tilt, which makes them a great
+choice for running on a tiny VPS or a toaster.
+
+SupaBase is a bit more involved due to it's
+[layered architecture](https://supabase.com/docs/guides/getting-started/architecture)
+including a dozen separate services that provide a ton of extra functionality:
+
+_SupaBase Memory Usage_
+
+<div class="flex justify-center">
+  <div class="h-[340px] w-[90%]">
+    <SupaBaseMemoryUsageChart client:only="solid-js" />
+  </div>
+</div>
+
+Looking at SupaBase's memory usage, it increased from from roughly 6GB at rest to
+7GB fully loaded.
+This means that out of the box, SupaBase has roughly 50 times the memory
+footprint of either PocketBase or TrailBase.
+In all fairness, there's a lot of extra functionality and it might be possible
+to further optimize the setup by shedding some less critical services, e.g.
+removing "supabase-analytics" may safe ~40% of memory. That said, we don't know
+how feasible this is in practice.
+
+_SupaBase CPU utilization_
+
+<div class="flex justify-center">
+  <div class="h-[340px] w-[90%]">
+    <SupaBaseCpuUsageChart client:only="solid-js" />
+  </div>
+</div>
+
+Looking at the CPU usage You can see how the CPU usage jumps up to roughly 9
+cores (the benchmark ran on a machine with 8 physical cores and 16 threads:
+7840U). Most of the CPUs seem to be consumed by "supabase-rest" with postgres
+itself hovering at only ~0.7.
+
+## Latency and Read Performance
+
+In this chapter we'll take a closer look at latency distributions. To keep
+things manageable we'll focus on PocketBase and TrailBase, which are
+architecturally simpler and more comparable.
+
+Reads were on average 3.5 faster with TrailBase and insertions 6x as discussed
+above.
+
+<div class="flex justify-center h-[340px] w-[90%]">
+  <div class="w-[50%]">
+    <PocketBaseAndTrailBaseReadLatencies client:only="solid-js" />
+  </div>
+
+  <div class="w-[50%]">
+    <PocketBaseAndTrailBaseInsertLatencies client:only="solid-js" />
+  </div>
+</div>
+
+Looking at the latency distributions we can see that the spread is well
+contained for TrailBase. For PocketBase, read latencies are also generally well
+contained and predictable.
+However, insert latencies show a more significant "long tail" with their p90
+being roughly 5x longer than therr p50.
+Slower insertions can take north of 100ms. There may or may not be a connection
+to the variability in CPU utilization we've seen above.
+
+## Final Words
+
+We're very happy to confirm that TrailBase is quick. The significant
+performance gap we observed might just be a consequence of how much overhead
+matters given how quick SQLite itself is.
+Yet, it challenges our intuition. With the numbers fresh of the press, prudence is
+of the essence. We'd like to re-emphasize how important it is to run your own
+tests with your specific setup and workloads.
+In any case, we hope this was interesting nonetheless and let us know if you
+see anything that can or should be improved.
+The benchmarks are available on [GitHub](https://github.com/trailbaseio/trailbase-benchmark).
+
+<div class="h-[50px]" />
+
+---
+
+[^1]:
+    Trying to give PocketBase the best chance, the binary was built with the
+    latest go compiler (v1.23.1 at the time of writing), `CGO_ENABLED=1` (which
+    according to PB's own documentation will use a faster C-based SQLite
+    driver) and `GOAMD64=v4` (for less portable but more aggressive CPU
+    optimizations).
+    We found this setup to be roughly 20% faster than the static, pre-built
+    binary release.
+
+[^2]:
+    Our setup with drizzle and node.js is certainly not the fastest possible.
+    For example, we could drop down to using raw SQLite in C or another
+    low-level language.
+    That said, drizzle is a great popular choice which mostly serves as a
+    point-of-reference and sanity check.
+
+[^3]:
+    The actual magnitude on IPC overhead will depend on the communication cost.
+    For the benchmarks at hand we're using a loopback network device.
+
+[^4]:
+    The SupaBase benchmark setup skips row-level access checks. Technically,
+    this is in its favor from a performance standpoint, however looking at the
+    overall load on its constituents with PG being only a sliver, it probably
+    would not make much of an overall difference nor would PG17's vectorization,
+    which has been released since the benchmarks were run. That said, these
+    claims deserve re-validation.
+
+[^5]:
+    We're unsure as to what causes these 1-core swings.
+    Runtime-effects, such as garbage collection, may have an effect, however we
+    would have expected these to show on shorter time-scales.
+    This could also indicate a contention or thrashing issue 🤷.

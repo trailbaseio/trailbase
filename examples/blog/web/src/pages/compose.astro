@@ -1,0 +1,50 @@
+---
+import Base from "@/layouts/Base.astro";
+import { HOST } from "@/lib/client";
+
+const RECORD_API = `${HOST}/api/records/v1`;
+
+const inputStyle = "outline outline-1 outline-black rounded p-1 col-span-4";
+const redirect = "/";
+---
+
+<Base>
+  <div class="prose mx-auto mb-8">
+    <h1>Compose</h1>
+
+    <form
+      method="post"
+      action={`${RECORD_API}/articles?redirect_to=${redirect}`}
+      enctype="multipart/form-data"
+      target="_self"
+    >
+      <div class="w-full grid grid-cols-5 gap-4">
+        <label for="title">Title:</label>
+        <input class={inputStyle} type="text" name="title" />
+
+        <label for="intro">Intro:</label>
+        <input class={inputStyle} type="text" name="intro" />
+
+        <label for="tag">Tag:</label>
+        <input class={inputStyle} type="text" name="tag" />
+
+        <label for="body">Body:</label>
+        <textarea class={inputStyle} rows="10" name="body"></textarea>
+
+        <label for="file">Pick image:</label>
+        <input
+          class="col-span-4"
+          type="file"
+          name="image"
+          accept="image/png, image/jpeg"
+        />
+      </div>
+
+      <div class="flex justify-end">
+        <button class="outline outline-1 rounded p-2 bg-pacamara-accent">
+          Submit
+        </button>
+      </div>
+    </form>
+  </div>
+</Base>

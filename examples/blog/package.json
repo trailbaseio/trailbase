@@ -1,0 +1,11 @@
+{
+  "name": "trailbase-example-blog-typegen",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "types": "make --always-make types"
+  },
+  "devDependencies": {
+    "quicktype": "^23.0.170"
+  }
+}

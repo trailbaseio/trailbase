@@ -1,0 +1,32 @@
+---
+import { Icon } from "astro-icon/components";
+
+const style =
+  "size-8 h-auto text-pacamara-secondary transition-all duration-300 hover:text-pacamara-accent dark:text-white dark:hover:text-pacamara-accent";
+---
+
+<button
+  id="menu_toggle"
+  class="block md:hidden text-white"
+  type="button"
+  aria-controls="navbar-main"
+  aria-expanded="false"
+  aria-label="Toggle navigation"
+>
+  <Icon name="tabler:menu-2" class={style} />
+</button>
+
+<script>
+  const menuToggle = () => {
+    const button = document.querySelector("#menu_toggle");
+    const nav = document.querySelector("#navigation_wrapper");
+    button?.addEventListener("click", function () {
+      nav?.classList.toggle("hidden");
+      document.documentElement.classList.toggle("overflow-hidden");
+    });
+  };
+
+  menuToggle();
+  // Runs on view transitions navigation
+  document.addEventListener("astro:after-swap", menuToggle);
+</script>

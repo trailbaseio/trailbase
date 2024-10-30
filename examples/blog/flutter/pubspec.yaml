@@ -1,0 +1,26 @@
+name: trailbase_blog
+description: "TrailBase Example Blog Reader"
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+version: 0.0.1+1
+
+environment:
+  sdk: ^3.5.3
+
+dependencies:
+  cupertino_icons: ^1.0.8
+  flutter:
+    sdk: flutter
+  flutter_web_auth_2: ^4.0.0
+  logging: ^1.2.0
+  shared_preferences: ^2.3.2
+  trailbase:
+    path: ../../../client/trailbase-dart
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

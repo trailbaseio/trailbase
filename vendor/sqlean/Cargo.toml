@@ -1,0 +1,11 @@
+[package]
+name = "sqlean"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+libsql-ffi = "0.5.0"
+
+[build-dependencies]
+bindgen = "0.70.1"
+cc = "1.1.28"

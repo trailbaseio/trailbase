@@ -1,0 +1,167 @@
+---
+title: Welcome to TrailBase
+description: Blazingly fast, single-file, open-source server for your Applications
+template: splash
+hero:
+  tagline: A blazingly fast, single-file, and open-source server for your application with APIs, auth, admin dashboard, ...
+  image:
+    file: ../../assets/logo_512.webp
+  actions:
+    - text: Documentation
+      link: /getting-started/starting-up
+      icon: right-arrow
+    - text: FAQ
+      link: /reference/faq/
+      icon: external
+      variant: secondary
+---
+
+import { Image } from "astro:assets";
+import { Aside, Card, CardGrid } from "@astrojs/starlight/components";
+
+import screenshot from "@/assets/screenshot.webp";
+import flutterLogo from "@/assets/flutter_logo.svg";
+import tsLogo from "@/assets/ts_logo.svg";
+
+import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx";
+
+<div class="flex justify-center">
+  <div class="md:w-[80%] flex flex-col gap-4">
+
+    <div>
+      <h3>Total time for 100k insertions</h3>
+
+      <a href="/reference/benchmarks">
+        TrailBase adds minimal overhead compared to in-process SQLite and
+        beats other excellent choices:
+      </a>
+
+      <div class="w-full h-[260px] mt-4">
+        <Duration100kInsertsChart client:only="solid-js" />
+      </div>
+    </div>
+
+    #### Live Demo
+
+    <div class="relative">
+      <Image class="z-0 rounded-xl" src={screenshot} alt="Screenshot of TrailBase's admin dashboard" />
+
+      <div class="z-1 w-full h-full absolute top-0 flex justify-center items-center">
+        <a class="no-underline flex flex-col items-center bg-gray-200 dark:bg-accent-900 px-4 py-2 rounded" href="https://demo.trailbase.io/_/admin">
+          <span>login: admin@localhost</span>
+          <span>password: secret</span>
+        </a>
+      </div>
+    </div>
+
+    <Aside type="caution" title="Early Days">
+      TrailBase is very young.
+      You can expect many new features but also moving APIs until things settle.
+      We'll make sure to follow semantic versioning and welcome brave, early
+      adopters.
+    </Aside>
+
+  </div>
+</div>
+
+<div class="w-full py-8">
+
+  <CardGrid stagger>
+
+    <Card title="Performance" icon="rocket">
+      Blazingly fast thanks to its constituents:
+
+      * Rust: one of the lowest overhead languages,
+      * Axum: one of the fastest HTTP servers,
+      * SQLite/Libsql: one of the fastest full-SQL databases.
+
+      TrailBase is [6-7x faster than PocketBase and 15x faster than SupaBase
+      needing only a fraction of the footprint](/reference/benchmarks), allowing
+      you to serve millions of customers from a tiny box.
+    </Card>
+
+    <Card title="Simple" icon="heart">
+      TrailBase is a small, single file, static binary that is incredibly easy
+      to deploy **consistently** across integration testing, development, pre-prod,
+      and production environments including edge.
+      Architecturally, TrailBase aims to be a simple, thin abstraction around
+      standards helping full or piece-meal adoption and avoiding lock-in.
+
+      A simple architecture, both in your dependencies and your own App, will
+      let you move faster, more confidently and pivot when necessary.
+    </Card>
+
+    <Card title="Admin Dashboard" icon="setting">
+      TrailBase ships with a builtin admin dashboard UI, see demo above, that
+      lets you quickly configure your instance and visually explore your data.
+      Following TrailBase's mantra of not getting in your way, the UI is
+      entirely optional letting you fall back to a purely config &
+      migration-based setup for integration tests or managing an entire fleet
+      of deployments.
+    </Card>
+
+    <Card title="Authentication" icon="open-book">
+      TrailBase comes with an authentication system and UI built-in supporting
+      both password-based and Social/OAuth (Google, Discord, ...) sign-ups.
+
+      TrailBase authentication system follows standards and best-practices
+      combining short-lived, stateless JSON web tokens with long-lived stateful
+      refresh tokens letting you easily and efficiently authenticate your users
+      from any of your other back-ends relying on safe, asymmetric cryptography.
+    </Card>
+
+    <Card title="APIs & File Storage" icon="random">
+      Provide access to your tables and views through fast, flexible and
+      **type-safe** restful CRUD APIs.
+      Authorize users based on ACLs and SQL access rules letting you
+      easily build higher-level access management or moderation facilities
+      like groups or capabilities.
+    </Card>
+
+    <Card title="Integration" icon="puzzle">
+      Straightforward integration with any stack thanks to thin abstractions,
+      reliance on standards, and JSON Schema for type-safety allowing type-safe
+      bindings for virtually any language.
+
+      Clients as well as code-generation examples for TypeScript and
+      Dart/Flutter are provided out of the box.
+
+      <div class="m-0 flex justify-center items-start gap-8">
+        <span>
+          <Image class="p-0 m-0" height={52} src={tsLogo} alt="TypeScript" />
+        </span>
+        <span>
+          <Image margin={0} class="p-0 m-0" width={42} height={52} src={flutterLogo} alt="Flutter" />
+        </span>
+      </div>
+    </Card>
+
+  </CardGrid>
+</div>
+
+import Roadmap from "./_roadmap.md";
+
+<div class="flex justify-center">
+  <div class="md:w-[80%] flex flex-col items-center gap-4">
+    <Aside type="tip" title="Roadmap">
+      <Roadmap />
+    </Aside>
+
+  </div>
+</div>
+
+{/* Hero page footer */}
+
+<div class="h-[30px]" />
+<div class="w-full mt-[28px] h-[1px] bg-accent-200" />
+
+<div class="w-full flex justify-end">
+  <div class="flex flex-col items-end mr-4">
+    <a class="no-underline" href="/contact">
+      Contact
+    </a>
+    <a class="no-underline" href="/license">
+      License
+    </a>
+  </div>
+</div>

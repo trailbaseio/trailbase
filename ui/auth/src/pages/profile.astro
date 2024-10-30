@@ -1,0 +1,12 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { Profile as ProfileTsx } from "@/components/Profile";
+---
+
+<BaseLayout>
+  <div
+    class="h-dvh w-screen flex flex-col items-center justify-center gap-4 mx-auto"
+  >
+    <ProfileTsx client:only="solid-js" />
+  </div>
+</BaseLayout>

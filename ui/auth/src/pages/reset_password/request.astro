@@ -1,0 +1,42 @@
+---
+import Form from "@/components/Form.astro";
+
+import { AUTH_API, INPUT_STYLE, BUTTON_STYLE } from "@/lib/constants";
+
+const base = import.meta.env.BASE_URL;
+const loginPageUrl = `${base}/login`;
+---
+
+<Form title="Reset Password">
+  <form
+    id="reset-request-form"
+    class="flex flex-col gap-2"
+    action={`${AUTH_API}/reset_password/request`}
+    method="post"
+    enctype="application/x-www-form-urlencoded"
+  >
+    <div class="hidden">
+      {"{{ state }}"}
+    </div>
+
+    <div
+      class="grid grid-cols-2 items-center gap-4 my-4"
+      style="grid-template-columns: auto 1fr"
+    >
+      <label>E-mail:</label>
+      <input
+        required
+        class={INPUT_STYLE}
+        type="email"
+        name="email"
+        placeholder="Password"
+      />
+    </div>
+
+    <div class="w-full flex justify-between">
+      <a class:list={BUTTON_STYLE} href={loginPageUrl}>Back</a>
+
+      <button class:list={BUTTON_STYLE} type="submit"> Send E-mail </button>
+    </div>
+  </form>
+</Form>

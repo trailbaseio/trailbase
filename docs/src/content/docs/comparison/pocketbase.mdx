@@ -1,0 +1,96 @@
+---
+title: PocketBase
+description: Comparing TrailBase & PocketBase.
+---
+
+Firstly, PocketBase is amazing! It based the trail for single-file, SQLite
+application bases, is incredibly easy-to-use, and a polished experience. Gani,
+the person behind it, is a mad scientist.
+
+At the surface-level there are a lot of similarities between PocketBase and
+TrailBase. In this comparison, we'll dive a little deeper and have a closer
+look at the technical as well as philosophical differences between the two.
+
+### Goals & Aspirations
+
+TrailBase was born out of admiration for PocketBase trying to move the needle
+in a few areas:
+
+- Less abstraction, embracing standards (SQL[^1], JWT, UUID), and untethered access
+  to SQLite/libsql[^2] including features such as recursive CTEs, virtual tables
+  and vector search.
+  The goal is to not get in your way and avoid lock-in by bespoke solutions
+  making it easier adopt TrailBase either fully or as piece-meal as well as
+  getting rid of it based on your product needs.
+- Be just as easy to self-host and be even easier to manage a fleet of
+  deployments across integration tests, development, and production by separating
+  data, configuration, and secrets.
+- Super-powers through SQLite extensions (regex, GIS, ...) including your own [^3].
+- Be lightweight enough to rival plain SQLite performance at least for
+  higher-level languages.
+- Be simple and flexible enough to be an attractive alternative to plain SQLite
+  for serving **and** data analysis use-cases.
+
+### Differences
+
+It's worth noting that PocketBase and TrailBase have a lot in common: they are
+both single-file, static binaries providing data APIs, authentication and file
+storage on top of SQLite.
+That said and for the sake of this article, let's look at some of the
+differences and extra features that PocketBase provides:
+
+- TrailBase does not yet provide realtime APIs allowing clients to subscribe to
+  data changes.
+- PocketBase lets you register custom endpoints in
+  [ES5 JavaScript](https://pocketbase.io/docs/js-overview/).
+- PocketBase can also be used as a Go framework, i.e. instead of using the
+  binary release one can build a custom binary with custom endpoints.
+
+Likewise, TrailBase has a few nifty tricks up its sleeve:
+
+- Language independent type-safety via JSON Schemas with strict typing
+  being enforced all the way down to the database level[^4].
+- First-class access to all of SQLite/libsql's features and capabilities.
+- A simple auth UI.
+- Stateless JWT auth-tokens for simple, hermetic authentication in other
+  backends.
+- Efficient and stable cursor-based pagination.
+- An admin UI that "works" on small screens and mobile :)
+
+### Language & Performance
+
+Another difference is that PocketBase and TrailBase are written in Go and Rust,
+respectively, which may matter to you especially when modifying either or using
+them as "frameworks".
+
+Beyond personal preferences, both languages are speedy options in practice.
+That said, Rust's lack of a runtime and lower FFI overhead should make it the
+more performant choice.
+To our own surprise, we found a significant gap. TrailBase is roughly 3.5x to
+7x faster, in our [simplistic micro-benchmarks](/reference/benchmarks)
+depending on the use-case.
+Not to toot our own horn, this is mostly thanks to combining a very low
+overhead language, one of the fastest HTTP servers, and incredibly quick
+SQLite/libsql.
+
+<div class="h-[30px]" />
+
+---
+
+[^1]: Maybe more in line with SupaBase's philosophy. We suspect that PocketBase
+  relies on schema metadata by construction requiring alterations to be
+  mediated through PocketBase APIs to stay in sync.
+
+[^2]: We believe that SQL a ubiquitous evergreen technology, which in of itself
+  is already a high-level abstraction for efficient, unified cross-database
+  access.
+  Even higher-level abstractions, such as ORMs, often look nice for simple
+  examples but quickly fall flat for more complex ones. They're certainly
+  bespoke, non-transferable knowledge, and increase vendor lock-in.
+
+[^3]:
+    All extensions can be built into a small, standalone shared library and
+    imported by vanilla SQLite avoiding vendor lock-in.
+
+[^4]: SQLite is not strictly typed by default. Instead column types merely a
+    type affinity for value conversions.
