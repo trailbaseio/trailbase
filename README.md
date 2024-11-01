@@ -58,3 +58,9 @@ $ docker build . -t trailbase
 
 Contributions are very welcome 🙏. Let's talk to see how a proposal fits into
 the overall roadmap and avoid surprises.
+
+## License
+
+TrailBase is free software under the terms of the [AGPLv3](LICENSE.md). If you
+require an [exception](https://www.gnu.org/philosophy/selling-exceptions.html),
+reach out to contact@trailbase.io.
