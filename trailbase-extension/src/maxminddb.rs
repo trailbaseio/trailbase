@@ -8,11 +8,14 @@ use std::sync::LazyLock;
 
 static READER: LazyLock<Mutex<Option<Reader<Vec<u8>>>>> = LazyLock::new(|| Mutex::new(None));
 
-#[allow(unused)]
 pub fn load_geoip_db(path: impl AsRef<Path>) -> Result<(), MaxMindDBError> {
   let reader = Reader::open_readfile(path)?;
   *READER.lock() = Some(reader);
   return Ok(());
+}
+
+pub fn has_geoip_db() -> bool {
+  return READER.lock().is_some();
 }
 
 pub(crate) fn geoip_country(

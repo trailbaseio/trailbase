@@ -7,6 +7,7 @@ use lazy_static::lazy_static;
 use libsql::{de, params::Params, Connection};
 use log::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use trailbase_sqlite::query_one_row;
 use ts_rs::TS;
 use uuid::Uuid;
@@ -94,7 +95,6 @@ pub struct ListLogsResponse {
   stats: Option<Stats>,
 }
 
-// FIXME: should be an admin-only api.
 pub async fn list_logs_handler(
   State(state): State<AppState>,
   RawQuery(raw_url_query): RawQuery,
@@ -243,6 +243,8 @@ async fn fetch_logs(
 pub struct Stats {
   // List of (timestamp, value).
   rate: Vec<(i64, f64)>,
+  // Country codes.
+  country_codes: HashMap<String, usize>,
 }
 
 #[derive(Debug)]
@@ -323,7 +325,36 @@ async fn fetch_aggregate_stats(
     ));
   }
 
-  return Ok(Stats { rate });
+  let mut country_codes = HashMap::<String, usize>::new();
+  if trailbase_sqlite::has_geoip_db() {
+    let cc_query = format!(
+      r#"
+    SELECT
+      country_code,
+      SUM(cnt) as count
+    FROM
+      (SELECT client_ip, COUNT(*) AS cnt, geoip_country(client_ip) as country_code FROM {LOGS_TABLE_NAME} GROUP BY client_ip)
+    GROUP BY
+      country_code
+  "#
+    );
+
+    let mut rows = conn.query(&cc_query, ()).await?;
+    while let Ok(Some(row)) = rows.next().await {
+      let cc: Option<String> = row.get(0)?;
+      let count: i64 = row.get(1)?;
+
+      country_codes.insert(
+        cc.unwrap_or_else(|| "unattributed".to_string()),
+        count as usize,
+      );
+    }
+  }
+
+  return Ok(Stats {
+    rate,
+    country_codes,
+  });
 }
 
 #[cfg(test)]
