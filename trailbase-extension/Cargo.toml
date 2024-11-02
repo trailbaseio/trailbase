@@ -12,6 +12,7 @@ argon2 = "0.5.3"
 base64 = "0.22.1"
 jsonschema = { version = "0.26.0", default-features = false }
 lru = { version = "0.12.3", default-features = false }
+maxminddb = "0.24.0"
 parking_lot = { version = "0.12.3", default-features = false }
 rand = "0.8.5"
 regex = "1.11.0"

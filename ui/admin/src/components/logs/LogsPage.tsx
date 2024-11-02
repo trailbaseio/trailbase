@@ -76,6 +76,10 @@ const columns: ColumnDef<LogJson>[] = [
     header: "Latency (ms)",
   },
   { accessorKey: "client_ip" },
+  {
+    accessorKey: "client_cc",
+    header: "Country Code",
+  },
   { accessorKey: "referer" },
   {
     accessorKey: "user_agent",

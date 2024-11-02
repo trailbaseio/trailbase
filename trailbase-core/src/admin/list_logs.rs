@@ -17,7 +17,6 @@ use crate::constants::{LOGS_RETENTION_DEFAULT, LOGS_TABLE_ID_COLUMN};
 use crate::listing::{
   build_filter_where_clause, limit_or_default, parse_query, Order, WhereClause,
 };
-use crate::logging::Log;
 use crate::table_metadata::{lookup_and_parse_table_schema, TableMetadata};
 use crate::util::id_to_b64;
 
@@ -35,6 +34,7 @@ pub struct LogJson {
 
   pub latency_ms: f64,
   pub client_ip: String,
+  pub client_cc: Option<String>,
   pub referer: String,
   pub user_agent: String,
 
@@ -42,8 +42,30 @@ pub struct LogJson {
   pub data: Option<serde_json::Value>,
 }
 
-impl From<Log> for LogJson {
-  fn from(value: Log) -> Self {
+#[derive(Debug, Clone, Deserialize)]
+struct LogQuery {
+  id: Option<[u8; 16]>,
+  created: Option<f64>,
+  r#type: i32,
+
+  level: i32,
+  status: u16,
+  method: String,
+  url: String,
+
+  // milliseconds
+  latency: f64,
+  client_ip: String,
+  client_cc: Option<String>,
+
+  referer: String,
+  user_agent: String,
+
+  data: Option<serde_json::Value>,
+}
+
+impl From<LogQuery> for LogJson {
+  fn from(value: LogQuery) -> Self {
     return LogJson {
       id: Uuid::from_bytes(value.id.unwrap()),
       created: value.created.unwrap_or(0.0),
@@ -54,6 +76,7 @@ impl From<Log> for LogJson {
       url: value.url,
       latency_ms: value.latency,
       client_ip: value.client_ip,
+      client_cc: value.client_cc,
       referer: value.referer,
       user_agent: value.user_agent,
       data: value.data,
@@ -166,21 +189,21 @@ async fn fetch_logs(
   cursor: Option<[u8; 16]>,
   order: Vec<(String, Order)>,
   limit: usize,
-) -> Result<Vec<Log>, Error> {
+) -> Result<Vec<LogQuery>, Error> {
   let mut params = filter_where_clause.params;
   let mut where_clause = filter_where_clause.clause;
   params.push((":limit".to_string(), libsql::Value::Integer(limit as i64)));
 
   if let Some(cursor) = cursor {
     params.push((":cursor".to_string(), libsql::Value::Blob(cursor.to_vec())));
-    where_clause = format!("{where_clause} AND _row_.id < :cursor",);
+    where_clause = format!("{where_clause} AND log.id < :cursor",);
   }
 
   let order_clause = order
     .iter()
     .map(|(col, ord)| {
       format!(
-        "_row_.{col} {}",
+        "log.{col} {}",
         match ord {
           Order::Descending => "DESC",
           Order::Ascending => "ASC",
@@ -192,9 +215,9 @@ async fn fetch_logs(
 
   let sql_query = format!(
     r#"
-      SELECT _row_.*
+      SELECT log.*, geoip_country(log.client_ip) AS client_cc
       FROM
-        (SELECT * FROM {LOGS_TABLE_NAME}) as _row_
+        (SELECT * FROM {LOGS_TABLE_NAME}) AS log
       WHERE
         {where_clause}
       ORDER BY
@@ -205,13 +228,14 @@ async fn fetch_logs(
 
   let mut rows = conn.query(&sql_query, Params::Named(params)).await?;
 
-  let mut logs: Vec<Log> = vec![];
+  let mut logs: Vec<LogQuery> = vec![];
   while let Ok(Some(row)) = rows.next().await {
     match de::from_row(&row) {
       Ok(log) => logs.push(log),
       Err(err) => warn!("failed: {err}"),
     };
   }
+
   return Ok(logs);
 }
 
