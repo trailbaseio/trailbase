@@ -14,11 +14,25 @@ import {
 } from "@tanstack/solid-table";
 import { Chart } from "chart.js/auto";
 import type {
+  ChartConfiguration,
   ChartData,
   ScriptableLineSegmentContext,
   TooltipItem,
 } from "chart.js/auto";
-import { TbRefresh } from "solid-icons/tb";
+import {
+  ChoroplethChart,
+  ChoroplethController,
+  ProjectionScale,
+  ColorScale,
+  GeoFeature,
+  topojson,
+} from "chartjs-chart-geo";
+import type { Feature } from "chartjs-chart-geo";
+import { TbRefresh, TbWorld } from "solid-icons/tb";
+import type { FeatureCollection, GeoJsonProperties } from "geojson";
+import countries50m from "world-atlas/countries-50m.json";
+import type { GeometryCollection, Topology } from "topojson-specification";
+import { numericToAlpha2 } from "i18n-iso-countries";
 
 import { Separator } from "@/components/ui/separator";
 import {
@@ -31,6 +45,14 @@ import { DataTable, defaultPaginationState } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 import type { LogJson, ListLogsResponse, Stats } from "@/lib/bindings";
 import { adminFetch } from "@/lib/fetch";
+
+Chart.register(
+  ChoroplethChart,
+  ChoroplethController,
+  ProjectionScale,
+  ColorScale,
+  GeoFeature,
+);
 
 const columnHelper = createColumnHelper<LogJson>();
 
@@ -179,14 +201,24 @@ export function LogsPage() {
     };
   };
   const [logsFetch, { refetch }] = createResource(getLogsProps, getLogs);
+  const [showMap, setShowMap] = createSignal(false);
 
   return (
     <>
-      <div class="m-4 flex items-center gap-2">
-        <h1 class="text-accent-600 m-0">Logs</h1>
+      <div class="m-4 flex justify-between items-center gap-2">
+        <div class="flex items-center gap-2">
+          <h1 class="text-accent-600 m-0">Logs</h1>
 
-        <button class="p-1 rounded hover:bg-gray-200" onClick={refetch}>
-          <TbRefresh size={20} />
+          <button class="p-1 rounded hover:bg-gray-200" onClick={refetch}>
+            <TbRefresh size={20} />
+          </button>
+        </div>
+
+        <button
+          class="p-1 rounded hover:bg-gray-200"
+          onClick={() => setShowMap(!showMap())}
+        >
+          <TbWorld size={20} />
         </button>
       </div>
 
@@ -212,8 +244,10 @@ export function LogsPage() {
           <Match when={logsFetch.error}>Error {`${logsFetch.error}`}</Match>
 
           <Match when={!logsFetch.error}>
+            {showMap() && <WorldChart stats={logsFetch()!.stats} />}
+
             {pagination().pageIndex === 0 && (
-              <LogsChart stats={logsFetch()!.stats!} />
+              <LogsChart stats={logsFetch()!.stats} />
             )}
 
             <DataTable
@@ -240,7 +274,90 @@ function changeDistantPointLineColorToTransparent(
   return undefined;
 }
 
-function LogsChart(props: { stats?: Stats }) {
+const x = countries50m.objects
+  .countries as GeometryCollection<GeoJsonProperties>;
+const collection: FeatureCollection = topojson.feature(
+  countries50m as unknown as Topology,
+  x,
+) as unknown as FeatureCollection;
+const countries: Feature = collection.features;
+
+function WorldChart(props: { stats: Stats | null }) {
+  const stats = props.stats;
+  if (!stats) {
+    return null;
+  }
+
+  const codes = stats.country_codes;
+  // if (Object.keys(codes).length <= 1) {
+  //   return null;
+  // }
+
+  let ref: HTMLCanvasElement | undefined;
+  let chart: Chart | undefined;
+
+  onCleanup(() => chart?.destroy());
+  createEffect(() => {
+    if (chart) {
+      chart.destroy();
+    }
+
+    const data: ChartConfiguration<"choropleth">["data"] = {
+      labels: countries.map((d: any) => d.properties.name),
+      datasets: [
+        {
+          label: "Countries",
+          data: countries.map((d: any) => {
+            let value = 0;
+            const id: string | undefined = d.id;
+            if (id) {
+              const cc = numericToAlpha2(id);
+              if (cc) {
+                value = codes[cc] ?? 0;
+              }
+            }
+
+            return {
+              feature: d,
+              value,
+            };
+          }),
+        },
+      ],
+    };
+
+    chart = new Chart<"choropleth">(ref!, {
+      type: "choropleth",
+      data,
+      options: {
+        showOutline: true,
+        showGraticule: true,
+        scales: {
+          projection: {
+            axis: "x",
+            projection: "equalEarth",
+          },
+        },
+        plugins: {
+          legend: {
+            display: false,
+          },
+        },
+        onClick: (_evt, _elems) => {
+          // console.log(elems.map((elem) => elem.element.feature.properties.name));
+        },
+      },
+    });
+  });
+
+  return (
+    <div class="h-[300px] w-[600px]">
+      <canvas ref={ref}></canvas>
+    </div>
+  );
+}
+
+function LogsChart(props: { stats: Stats | null }) {
   const stats = props.stats;
   if (!stats) {
     return null;

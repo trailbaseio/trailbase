@@ -31,8 +31,11 @@
     "@tanstack/solid-table": "^8.20.5",
     "@tanstack/table-core": "^8.20.5",
     "chart.js": "^4.4.6",
+    "chartjs-chart-geo": "^4.3.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "geojson": "^0.5.0",
+    "i18n-iso-countries": "^7.12.0",
     "long": "^5.2.3",
     "nanostores": "^0.11.3",
     "protobufjs": "^7.4.0",
@@ -42,12 +45,15 @@
     "tailwindcss": "^3.4.14",
     "tailwindcss-animate": "^1.0.7",
     "trailbase": "workspace:*",
-    "uuid": "^11.0.2"
+    "uuid": "^11.0.2",
+    "world-atlas": "^2.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
     "@iconify-json/tabler": "^1.2.6",
     "@tailwindcss/typography": "^0.5.15",
+    "@types/geojson": "^7946.0.14",
+    "@types/topojson-specification": "^1.0.5",
     "@types/wicg-file-system-access": "^2023.10.5",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.13.0",
