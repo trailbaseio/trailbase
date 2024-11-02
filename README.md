@@ -57,10 +57,26 @@ $ docker build . -t trailbase
 ## Contributing
 
 Contributions are very welcome 🙏. Let's talk to see how a proposal fits into
-the overall roadmap and avoid surprises.
+the overall roadmap and avoid surprises. You'll also have to sign a CLA that
+retains your copyright, ensures that TrailBase will continue to be freely
+available under an OSI-approved copyleft license, and allow the TrailBase
+project to sub-license your contributions in line with more prominent projects
+such as Grafana or Element.
+This may sound presumptuous but we ain't lawyers and try to follow precedent.
 
 ## License
 
-TrailBase is free software under the terms of the [AGPLv3](LICENSE.md). If you
-require an [exception](https://www.gnu.org/philosophy/selling-exceptions.html),
-reach out to contact@trailbase.io.
+TrailBase is free software under the terms of the [OSL-3.0](LICENSE).
+
+We chose this license over more popular, similar copyleft licenses such as
+AGPLv3 due to its narrower definition of derivative work that only covers
+modifications to TrailBase itself. This is akin to "GPL + classpath exception"
+and allows the use of TrailBase as a framework without inflicting licensing
+requirements on original work layered on top.
+That said, we ain't lawyers. The author of the license provides a more
+thorough [explanation](https://rosenlaw.com/OSL3.0-explained.htm).
+If you have any concerns or advice for us, please reach out.
+
+If you require an
+[exception](https://www.gnu.org/philosophy/selling-exceptions.html), reach out
+to contact@trailbase.io.

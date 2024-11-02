@@ -2,6 +2,7 @@
 name = "trailbase-sqlite"
 version = "0.1.0"
 edition = "2021"
+license = "OSL-3.0"
 
 [dependencies]
 trailbase-extension = { path = "../trailbase-extension" }
