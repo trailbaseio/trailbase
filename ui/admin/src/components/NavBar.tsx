@@ -21,6 +21,12 @@ const options = [
   [`${BASE}/settings`, TbSettings],
 ];
 
+export const navBarIconSize = 22;
+export const navBarIconStyle =
+  "rounded-full hover:bg-accent-200 hover:bg-opacity-50 transition-all p-[10px]";
+export const navBarIconActiveStyle =
+  "rounded-full transition-all p-[10px] bg-accent-600 text-white hover:bg-opacity-70";
+
 export function NavBar(props: { location: Location }) {
   return (
     <div class="grow flex flex-col justify-between items-center bg-gray-100 py-2 gap-4">
@@ -30,16 +36,12 @@ export function NavBar(props: { location: Location }) {
         </a>
 
         {options.map(([pathname, icon]) => {
-          const active = props.location.pathname === pathname;
-
-          const style =
-            "rounded-full hover:bg-accent-600 hover:text-white transition-all p-[10px]";
-          const activeStyle = `${style} outline outline-3 outline-accent-600 text-accent-600`;
+          const active = () => props.location.pathname === pathname;
 
           return (
             <a href={pathname as string}>
-              <div class={active ? activeStyle : style}>
-                {(icon as IconTypes)({ size: 22 })}
+              <div class={active() ? navBarIconActiveStyle : navBarIconStyle}>
+                {(icon as IconTypes)({ size: navBarIconSize })}
               </div>
             </a>
           );

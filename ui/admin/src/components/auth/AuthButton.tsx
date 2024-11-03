@@ -14,10 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-const navBarIconSize = 22;
-const style =
-  "rounded-full hover:bg-accent-600 hover:text-white transition-all p-[10px]";
+import { navBarIconSize, navBarIconStyle } from "@/components/NavBar";
 
 function Profile(props: { user: User }) {
   const profile = props.user;
@@ -44,7 +41,7 @@ export function AuthButton() {
 
   return (
     <Dialog open={open()} onOpenChange={setOpen}>
-      <button class={style} onClick={() => setOpen(true)}>
+      <button class={navBarIconStyle} onClick={() => setOpen(true)}>
         <TbUser size={navBarIconSize} />
       </button>
 
