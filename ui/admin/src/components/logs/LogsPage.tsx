@@ -201,7 +201,7 @@ export function LogsPage() {
         </div>
 
         <button
-          class="p-1 rounded hover:bg-gray-200"
+          class={`p-1 rounded hover:bg-gray-200 ${showMap() && "bg-gray-200"}`}
           onClick={() => setShowMap(!showMap())}
         >
           <TbWorld size={20} />
@@ -210,20 +210,22 @@ export function LogsPage() {
 
       <Separator />
 
-      <div class="p-4 flex flex-col gap-8">
+      <div class="p-4 flex flex-col gap-4">
         <Switch fallback={<p>Loading...</p>}>
           <Match when={logsFetch.error}>Error {`${logsFetch.error}`}</Match>
 
           <Match when={logsFetch.state === "ready"}>
             {pagination().pageIndex === 0 && logsFetch()!.stats && (
-              <div class="flex w-full h-[300px]">
-                <div class={showMap() ? "w-1/2" : "w-full"}>
+              <div class="flex w-full h-[300px] gap-4 mb-4">
+                <div class={showMap() ? "w-1/2 grow" : "w-full"}>
                   <LogsChart stats={logsFetch()!.stats!} />
                 </div>
 
-                {showMap() && (
-                  <div class="w-1/2 flex items-center">
-                    <WorldMap stats={logsFetch()!.stats!} />
+                {showMap() && logsFetch()!.stats?.country_codes && (
+                  <div class="w-1/2 max-w-[500px] flex items-center">
+                    <WorldMap
+                      country_codes={logsFetch()!.stats!.country_codes!}
+                    />
                   </div>
                 )}
               </div>
@@ -265,21 +267,25 @@ function changeDistantPointLineColorToTransparent(
 }
 
 function getColor(d: number) {
-  return d > 1000
-    ? "#800026"
-    : d > 500
-      ? "#BD0026"
-      : d > 200
-        ? "#E31A1C"
-        : d > 100
-          ? "#FC4E2A"
-          : d > 50
-            ? "#FD8D3C"
-            : d > 20
-              ? "#FEB24C"
-              : d > 10
-                ? "#FED976"
-                : "#FFEDA0";
+  if (d > 1000) {
+    return "#800026";
+  } else if (d > 500) {
+    return "#BD0026";
+  } else if (d > 200) {
+    return "#E31A1C";
+  } else if (d > 100) {
+    return "#FC4E2A";
+  } else if (d > 50) {
+    return "#FD8D3C";
+  } else if (d > 20) {
+    return "#FEB24C";
+  } else if (d > 10) {
+    return "#FED976";
+  } else if (d > 0) {
+    return "#FFEDA0";
+  } else {
+    return "#FFFFFF";
+  }
 }
 
 function mapStyle(
@@ -296,7 +302,7 @@ function mapStyle(
     opacity: 1,
     color: "white",
     dashArray: "3",
-    fillOpacity: 0.7,
+    fillOpacity: 0.6,
   };
 }
 
@@ -305,7 +311,7 @@ const Legend = L.Control.extend({
     position: "bottomright",
   },
   onAdd: (_map: L.Map) => {
-    const grades = [0, 10, 20, 50, 100, 200, 500, 1000];
+    const grades = [1, 20, 50, 100, 200, 500, 1000];
     return (
       <div class="flex flex-col bg-white bg-opacity-70 rounded p-1">
         <For each={grades}>
@@ -327,12 +333,8 @@ const Legend = L.Control.extend({
   },
 });
 
-function WorldMap(props: { stats: Stats }) {
-  const stats = props.stats;
-  const codes = stats.country_codes;
-  // if (Object.keys(codes).length <= 1) {
-  //   return null;
-  // }
+function WorldMap(props: { country_codes: { [key in string]?: number } }) {
+  const codes = props.country_codes;
 
   let ref: HTMLDivElement | undefined;
   let map: L.Map | undefined;
@@ -424,7 +426,13 @@ function WorldMap(props: { stats: Stats }) {
     ).addTo(m);
   });
 
-  return <div class="rounded w-full h-[280px]" ref={ref} />;
+  return (
+    <div
+      class="rounded w-full h-[280px]"
+      style={{ "background-color": "transparent" }}
+      ref={ref}
+    />
+  );
 }
 
 function LogsChart(props: { stats: Stats }) {

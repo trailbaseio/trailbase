@@ -244,7 +244,7 @@ pub struct Stats {
   // List of (timestamp, value).
   rate: Vec<(i64, f64)>,
   // Country codes.
-  country_codes: HashMap<String, usize>,
+  country_codes: Option<HashMap<String, usize>>,
 }
 
 #[derive(Debug)]
@@ -325,7 +325,6 @@ async fn fetch_aggregate_stats(
     ));
   }
 
-  let mut country_codes = HashMap::<String, usize>::new();
   if trailbase_sqlite::has_geoip_db() {
     let cc_query = format!(
       r#"
@@ -340,6 +339,8 @@ async fn fetch_aggregate_stats(
     );
 
     let mut rows = conn.query(&cc_query, ()).await?;
+
+    let mut country_codes = HashMap::<String, usize>::new();
     while let Ok(Some(row)) = rows.next().await {
       let cc: Option<String> = row.get(0)?;
       let count: i64 = row.get(1)?;
@@ -349,11 +350,16 @@ async fn fetch_aggregate_stats(
         count as usize,
       );
     }
+
+    return Ok(Stats {
+      rate,
+      country_codes: Some(country_codes),
+    });
   }
 
   return Ok(Stats {
     rate,
-    country_codes,
+    country_codes: None,
   });
 }
 
