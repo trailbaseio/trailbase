@@ -5,6 +5,7 @@ import {
   createResource,
   createSignal,
   onCleanup,
+  onMount,
 } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import {
@@ -14,25 +15,15 @@ import {
 } from "@tanstack/solid-table";
 import { Chart } from "chart.js/auto";
 import type {
-  ChartConfiguration,
   ChartData,
   ScriptableLineSegmentContext,
   TooltipItem,
 } from "chart.js/auto";
-import {
-  ChoroplethChart,
-  ChoroplethController,
-  ProjectionScale,
-  ColorScale,
-  GeoFeature,
-  topojson,
-} from "chartjs-chart-geo";
-import type { Feature } from "chartjs-chart-geo";
 import { TbRefresh, TbWorld } from "solid-icons/tb";
-import type { FeatureCollection, GeoJsonProperties } from "geojson";
-import countries50m from "world-atlas/countries-50m.json";
-import type { GeometryCollection, Topology } from "topojson-specification";
 import { numericToAlpha2 } from "i18n-iso-countries";
+import type { FeatureCollection, Feature } from "geojson";
+import "leaflet/dist/leaflet.css";
+import * as L from "leaflet";
 
 import { Separator } from "@/components/ui/separator";
 import {
@@ -46,13 +37,7 @@ import { FilterBar } from "@/components/FilterBar";
 import type { LogJson, ListLogsResponse, Stats } from "@/lib/bindings";
 import { adminFetch } from "@/lib/fetch";
 
-Chart.register(
-  ChoroplethChart,
-  ChoroplethController,
-  ProjectionScale,
-  ColorScale,
-  GeoFeature,
-);
+import countriesGeoJSON from "@/assets/countries-110m.json";
 
 const columnHelper = createColumnHelper<LogJson>();
 
@@ -201,7 +186,7 @@ export function LogsPage() {
     };
   };
   const [logsFetch, { refetch }] = createResource(getLogsProps, getLogs);
-  const [showMap, setShowMap] = createSignal(false);
+  const [showMap, setShowMap] = createSignal(true);
 
   return (
     <>
@@ -225,30 +210,38 @@ export function LogsPage() {
       <Separator />
 
       <div class="p-4 flex flex-col gap-8">
-        <FilterBar
-          onSubmit={(value: string) => {
-            if (value === filter()) {
-              refetch();
-            } else {
-              setFilter(value);
-            }
-          }}
-          example='e.g. "latency[lt]=2 AND status=200"'
-        />
-
-        <Switch>
-          <Match when={logsFetch.loading}>
-            <p>Loading...</p>
-          </Match>
-
+        <Switch fallback={<p>Loading...</p>}>
           <Match when={logsFetch.error}>Error {`${logsFetch.error}`}</Match>
 
-          <Match when={!logsFetch.error}>
-            {showMap() && <WorldChart stats={logsFetch()!.stats} />}
+          <Match when={!logsFetch.loading}>
+            {/*
+              {showMap() && }
+            */}
 
             {pagination().pageIndex === 0 && (
-              <LogsChart stats={logsFetch()!.stats} />
+              <div class="flex w-full h-[300px]">
+                <div class={showMap() ? "w-1/2" : "w-full"}>
+                  <LogsChart stats={logsFetch()!.stats} />
+                </div>
+
+                {showMap() && (
+                  <div class="w-1/2">
+                    <WorldChart stats={logsFetch()!.stats} />
+                  </div>
+                )}
+              </div>
             )}
+
+            <FilterBar
+              onSubmit={(value: string) => {
+                if (value === filter()) {
+                  refetch();
+                } else {
+                  setFilter(value);
+                }
+              }}
+              example='e.g. "latency[lt]=2 AND status=200"'
+            />
 
             <DataTable
               columns={() => columns}
@@ -274,14 +267,6 @@ function changeDistantPointLineColorToTransparent(
   return undefined;
 }
 
-const x = countries50m.objects
-  .countries as GeometryCollection<GeoJsonProperties>;
-const collection: FeatureCollection = topojson.feature(
-  countries50m as unknown as Topology,
-  x,
-) as unknown as FeatureCollection;
-const countries: Feature = collection.features;
-
 function WorldChart(props: { stats: Stats | null }) {
   const stats = props.stats;
   if (!stats) {
@@ -289,72 +274,74 @@ function WorldChart(props: { stats: Stats | null }) {
   }
 
   const codes = stats.country_codes;
+
   // if (Object.keys(codes).length <= 1) {
   //   return null;
   // }
 
-  let ref: HTMLCanvasElement | undefined;
-  let chart: Chart | undefined;
+  let ref: HTMLDivElement | undefined;
+  let map: L.Map | undefined;
 
-  onCleanup(() => chart?.destroy());
-  createEffect(() => {
-    if (chart) {
-      chart.destroy();
+  const destroy = () => {
+    if (map) {
+      map.off();
+      map.remove();
     }
+  };
 
-    const data: ChartConfiguration<"choropleth">["data"] = {
-      labels: countries.map((d: any) => d.properties.name),
-      datasets: [
-        {
-          label: "Countries",
-          data: countries.map((d: any) => {
-            let value = 0;
-            const id: string | undefined = d.id;
-            if (id) {
-              const cc = numericToAlpha2(id);
-              if (cc) {
-                value = codes[cc] ?? 0;
-              }
-            }
+  function getColor(d: number) {
+    return d > 1000
+      ? "#800026"
+      : d > 500
+        ? "#BD0026"
+        : d > 200
+          ? "#E31A1C"
+          : d > 100
+            ? "#FC4E2A"
+            : d > 50
+              ? "#FD8D3C"
+              : d > 20
+                ? "#FEB24C"
+                : d > 10
+                  ? "#FED976"
+                  : "#FFEDA0";
+  }
 
-            return {
-              feature: d,
-              value,
-            };
-          }),
-        },
-      ],
+  function mapStyle(feature: Feature | undefined) {
+    if (!feature) return {};
+
+    return {
+      fillColor: getColor(
+        codes[numericToAlpha2(feature.id as string) ?? ""] ?? 0,
+      ),
+      weight: 2,
+      opacity: 1,
+      color: "white",
+      dashArray: "3",
+      fillOpacity: 0.7,
     };
+  }
 
-    chart = new Chart<"choropleth">(ref!, {
-      type: "choropleth",
-      data,
-      options: {
-        showOutline: true,
-        showGraticule: true,
-        scales: {
-          projection: {
-            axis: "x",
-            projection: "equalEarth",
-          },
-        },
-        plugins: {
-          legend: {
-            display: false,
-          },
-        },
-        onClick: (_evt, _elems) => {
-          // console.log(elems.map((elem) => elem.element.feature.properties.name));
-        },
-      },
-    });
+  onCleanup(destroy);
+  onMount(() => {
+    destroy();
+
+    map = L.map(ref!, {}).setView([30, 0], 1.4);
+
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      noWrap: true,
+      maxZoom: 19,
+      attribution:
+        '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+
+    const collection = countriesGeoJSON as FeatureCollection;
+    L.geoJson(collection.features, {
+      style: mapStyle,
+    }).addTo(map);
   });
 
-  return (
-    <div class="h-[300px] w-[600px]">
-      <canvas ref={ref}></canvas>
-    </div>
-  );
+  return <div class="w-full h-[300px]" ref={ref} />;
 }
 
 function LogsChart(props: { stats: Stats | null }) {
