@@ -1,4 +1,5 @@
 import {
+  For,
   Match,
   Switch,
   createEffect,
@@ -213,20 +214,16 @@ export function LogsPage() {
         <Switch fallback={<p>Loading...</p>}>
           <Match when={logsFetch.error}>Error {`${logsFetch.error}`}</Match>
 
-          <Match when={!logsFetch.loading}>
-            {/*
-              {showMap() && }
-            */}
-
-            {pagination().pageIndex === 0 && (
+          <Match when={logsFetch.state === "ready"}>
+            {pagination().pageIndex === 0 && logsFetch()!.stats && (
               <div class="flex w-full h-[300px]">
                 <div class={showMap() ? "w-1/2" : "w-full"}>
-                  <LogsChart stats={logsFetch()!.stats} />
+                  <LogsChart stats={logsFetch()!.stats!} />
                 </div>
 
                 {showMap() && (
                   <div class="w-1/2 flex items-center">
-                    <WorldChart stats={logsFetch()!.stats} />
+                    <WorldMap stats={logsFetch()!.stats!} />
                   </div>
                 )}
               </div>
@@ -267,12 +264,71 @@ function changeDistantPointLineColorToTransparent(
   return undefined;
 }
 
-function WorldChart(props: { stats: Stats | null }) {
-  const stats = props.stats;
-  if (!stats) {
-    return null;
-  }
+function getColor(d: number) {
+  return d > 1000
+    ? "#800026"
+    : d > 500
+      ? "#BD0026"
+      : d > 200
+        ? "#E31A1C"
+        : d > 100
+          ? "#FC4E2A"
+          : d > 50
+            ? "#FD8D3C"
+            : d > 20
+              ? "#FEB24C"
+              : d > 10
+                ? "#FED976"
+                : "#FFEDA0";
+}
 
+function mapStyle(
+  codes: { [key in string]?: number },
+  feature: Feature | undefined,
+) {
+  if (!feature) return {};
+
+  return {
+    fillColor: getColor(
+      codes[numericToAlpha2(feature.id as string) ?? ""] ?? 0,
+    ),
+    weight: 2,
+    opacity: 1,
+    color: "white",
+    dashArray: "3",
+    fillOpacity: 0.7,
+  };
+}
+
+const Legend = L.Control.extend({
+  options: {
+    position: "bottomright",
+  },
+  onAdd: (_map: L.Map) => {
+    const grades = [0, 10, 20, 50, 100, 200, 500, 1000];
+    return (
+      <div class="flex flex-col bg-white bg-opacity-70 rounded p-1">
+        <For each={grades}>
+          {(grade: number, index: () => number) => {
+            const i = index();
+            return (
+              <div class="flex">
+                <div
+                  class="px-2 py-1 mr-1"
+                  style={{ background: getColor(grade) }}
+                />{" "}
+                {grade} {i + 1 < grades.length ? `- ${grades[i + 1]}` : "+"}
+              </div>
+            );
+          }}
+        </For>
+      </div>
+    );
+  },
+});
+
+function WorldMap(props: { stats: Stats }) {
+  const stats = props.stats;
   const codes = stats.country_codes;
   // if (Object.keys(codes).length <= 1) {
   //   return null;
@@ -288,44 +344,12 @@ function WorldChart(props: { stats: Stats | null }) {
     }
   };
 
-  function getColor(d: number) {
-    return d > 1000
-      ? "#800026"
-      : d > 500
-        ? "#BD0026"
-        : d > 200
-          ? "#E31A1C"
-          : d > 100
-            ? "#FC4E2A"
-            : d > 50
-              ? "#FD8D3C"
-              : d > 20
-                ? "#FEB24C"
-                : d > 10
-                  ? "#FED976"
-                  : "#FFEDA0";
-  }
-
-  function mapStyle(feature: Feature | undefined) {
-    if (!feature) return {};
-
-    return {
-      fillColor: getColor(
-        codes[numericToAlpha2(feature.id as string) ?? ""] ?? 0,
-      ),
-      weight: 2,
-      opacity: 1,
-      color: "white",
-      dashArray: "3",
-      fillOpacity: 0.7,
-    };
-  }
-
   onCleanup(destroy);
   onMount(() => {
     destroy();
 
-    const m = (map = L.map(ref!, {}).setView([30, 0], 1.4));
+    const m = (map = L.map(ref!).setView([30, 0], 1.4));
+    m.attributionControl.setPrefix("");
 
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       noWrap: true,
@@ -337,7 +361,11 @@ function WorldChart(props: { stats: Stats | null }) {
     // control that shows state info on hover
     const CustomControl = L.Control.extend({
       onAdd: (_map: L.Map) => {
-        return L.DomUtil.create("div", "info");
+        return (
+          <div class="bg-white bg-opacity-70 p-2 rounded">
+            Hover over a country
+          </div>
+        );
       },
       update: function (props?: Props) {
         const id = props?.id;
@@ -346,18 +374,17 @@ function WorldChart(props: { stats: Stats | null }) {
           ? `<b>${props.name}</b><br />${requests} req`
           : "Hover over a country";
 
-        (this as any)._container.innerHTML = `<h4>Requests</h4>${contents}`;
+        (this as any)._container.innerHTML = contents;
       },
     });
 
-    const info = new CustomControl();
+    const info = new CustomControl().addTo(m);
+    new Legend().addTo(m);
 
     type Props = {
       id: string;
       name: string;
     };
-
-    info.addTo(m);
 
     const highlightFeature = (e: L.LeafletMouseEvent) => {
       const layer = e.target;
@@ -391,20 +418,17 @@ function WorldChart(props: { stats: Stats | null }) {
     const geojson = L.geoJson(
       (countriesGeoJSON as FeatureCollection).features,
       {
-        style: mapStyle,
+        style: (map) => mapStyle(codes, map),
         onEachFeature,
       },
     ).addTo(m);
   });
 
-  return <div class="rounded-xl w-full h-[280px]" ref={ref} />;
+  return <div class="rounded w-full h-[280px]" ref={ref} />;
 }
 
-function LogsChart(props: { stats: Stats | null }) {
+function LogsChart(props: { stats: Stats }) {
   const stats = props.stats;
-  if (!stats) {
-    return null;
-  }
 
   const data = (): ChartData | undefined => {
     const s = stats;
