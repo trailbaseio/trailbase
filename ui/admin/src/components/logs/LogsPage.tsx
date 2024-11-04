@@ -225,7 +225,7 @@ export function LogsPage() {
                 </div>
 
                 {showMap() && (
-                  <div class="w-1/2">
+                  <div class="w-1/2 flex items-center">
                     <WorldChart stats={logsFetch()!.stats} />
                   </div>
                 )}
@@ -274,7 +274,6 @@ function WorldChart(props: { stats: Stats | null }) {
   }
 
   const codes = stats.country_codes;
-
   // if (Object.keys(codes).length <= 1) {
   //   return null;
   // }
@@ -326,22 +325,79 @@ function WorldChart(props: { stats: Stats | null }) {
   onMount(() => {
     destroy();
 
-    map = L.map(ref!, {}).setView([30, 0], 1.4);
+    const m = (map = L.map(ref!, {}).setView([30, 0], 1.4));
 
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       noWrap: true,
       maxZoom: 19,
       attribution:
         '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
+    }).addTo(m);
 
-    const collection = countriesGeoJSON as FeatureCollection;
-    L.geoJson(collection.features, {
-      style: mapStyle,
-    }).addTo(map);
+    // control that shows state info on hover
+    const CustomControl = L.Control.extend({
+      onAdd: (_map: L.Map) => {
+        return L.DomUtil.create("div", "info");
+      },
+      update: function (props?: Props) {
+        const id = props?.id;
+        const requests = codes[numericToAlpha2(id ?? "") ?? ""] ?? 0;
+        const contents = props
+          ? `<b>${props.name}</b><br />${requests} req`
+          : "Hover over a country";
+
+        (this as any)._container.innerHTML = `<h4>Requests</h4>${contents}`;
+      },
+    });
+
+    const info = new CustomControl();
+
+    type Props = {
+      id: string;
+      name: string;
+    };
+
+    info.addTo(m);
+
+    const highlightFeature = (e: L.LeafletMouseEvent) => {
+      const layer = e.target;
+
+      layer.setStyle({
+        weight: 2,
+        color: "#666",
+        dashArray: "",
+        fillOpacity: 0.7,
+      });
+
+      layer.bringToFront();
+
+      info.update({
+        id: layer.feature.id,
+        name: layer.feature.properties.name,
+      } as Props);
+    };
+
+    function onEachFeature(_feature: Feature, layer: L.Layer) {
+      layer.on({
+        mouseover: highlightFeature,
+        mouseout: (e: L.LeafletMouseEvent) => {
+          geojson.resetStyle(e.target);
+          info.update();
+        },
+        click: (e: L.LeafletMouseEvent) => m.fitBounds(e.target.getBounds()),
+      });
+    }
+
+    const geojson = L.geoJson(
+      (countriesGeoJSON as FeatureCollection).features,
+      {
+        style: mapStyle,
+        onEachFeature,
+      },
+    ).addTo(m);
   });
 
-  return <div class="w-full h-[300px]" ref={ref} />;
+  return <div class="rounded-xl w-full h-[280px]" ref={ref} />;
 }
 
 function LogsChart(props: { stats: Stats | null }) {
