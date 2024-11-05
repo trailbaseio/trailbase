@@ -5,6 +5,7 @@ use sqlite_loadable::{define_scalar_function, define_scalar_void_function};
 use uuid::*;
 
 pub mod jsonschema;
+pub mod maxminddb;
 pub mod password;
 
 mod uuid;
@@ -113,6 +114,13 @@ pub fn sqlite3_extension_init(db: *mut sqlite3) -> Result<(), sqlite_loadable::E
     1,
     validators::is_json,
     FunctionFlags::UTF8 | FunctionFlags::DETERMINISTIC | FunctionFlags::INNOCUOUS,
+  )?;
+  define_scalar_function(
+    db,
+    "geoip_country",
+    1,
+    maxminddb::geoip_country,
+    FunctionFlags::UTF8 | FunctionFlags::INNOCUOUS,
   )?;
 
   // Lastly init sqlean's "define" for application-defined functions defined in pure SQL.

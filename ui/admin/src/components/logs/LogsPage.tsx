@@ -1,10 +1,12 @@
 import {
+  For,
   Match,
   Switch,
   createEffect,
   createResource,
   createSignal,
   onCleanup,
+  onMount,
 } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import {
@@ -18,7 +20,11 @@ import type {
   ScriptableLineSegmentContext,
   TooltipItem,
 } from "chart.js/auto";
-import { TbRefresh } from "solid-icons/tb";
+import { TbRefresh, TbWorld } from "solid-icons/tb";
+import { numericToAlpha2 } from "i18n-iso-countries";
+import type { FeatureCollection, Feature } from "geojson";
+import "leaflet/dist/leaflet.css";
+import * as L from "leaflet";
 
 import { Separator } from "@/components/ui/separator";
 import {
@@ -31,6 +37,8 @@ import { DataTable, defaultPaginationState } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 import type { LogJson, ListLogsResponse, Stats } from "@/lib/bindings";
 import { adminFetch } from "@/lib/fetch";
+
+import countriesGeoJSON from "@/assets/countries-110m.json";
 
 const columnHelper = createColumnHelper<LogJson>();
 
@@ -76,6 +84,10 @@ const columns: ColumnDef<LogJson>[] = [
     header: "Latency (ms)",
   },
   { accessorKey: "client_ip" },
+  {
+    accessorKey: "client_cc",
+    header: "Country Code",
+  },
   { accessorKey: "referer" },
   {
     accessorKey: "user_agent",
@@ -175,42 +187,60 @@ export function LogsPage() {
     };
   };
   const [logsFetch, { refetch }] = createResource(getLogsProps, getLogs);
+  const [showMap, setShowMap] = createSignal(true);
 
   return (
     <>
-      <div class="m-4 flex items-center gap-2">
-        <h1 class="text-accent-600 m-0">Logs</h1>
+      <div class="m-4 flex justify-between items-center gap-2">
+        <div class="flex items-center gap-2">
+          <h1 class="text-accent-600 m-0">Logs</h1>
 
-        <button class="p-1 rounded hover:bg-gray-200" onClick={refetch}>
-          <TbRefresh size={20} />
+          <button class="p-1 rounded hover:bg-gray-200" onClick={refetch}>
+            <TbRefresh size={20} />
+          </button>
+        </div>
+
+        <button
+          class={`p-1 rounded hover:bg-gray-200 ${showMap() && "bg-gray-200"}`}
+          onClick={() => setShowMap(!showMap())}
+        >
+          <TbWorld size={20} />
         </button>
       </div>
 
       <Separator />
 
-      <div class="p-4 flex flex-col gap-8">
-        <FilterBar
-          onSubmit={(value: string) => {
-            if (value === filter()) {
-              refetch();
-            } else {
-              setFilter(value);
-            }
-          }}
-          example='e.g. "latency[lt]=2 AND status=200"'
-        />
-
-        <Switch>
-          <Match when={logsFetch.loading}>
-            <p>Loading...</p>
-          </Match>
-
+      <div class="p-4 flex flex-col gap-4">
+        <Switch fallback={<p>Loading...</p>}>
           <Match when={logsFetch.error}>Error {`${logsFetch.error}`}</Match>
 
-          <Match when={!logsFetch.error}>
-            {pagination().pageIndex === 0 && (
-              <LogsChart stats={logsFetch()!.stats!} />
+          <Match when={logsFetch.state === "ready"}>
+            {pagination().pageIndex === 0 && logsFetch()!.stats && (
+              <div class="flex w-full h-[300px] gap-4 mb-4">
+                <div class={showMap() ? "w-1/2 grow" : "w-full"}>
+                  <LogsChart stats={logsFetch()!.stats!} />
+                </div>
+
+                {showMap() && logsFetch()!.stats?.country_codes && (
+                  <div class="w-1/2 max-w-[500px] flex items-center">
+                    <WorldMap
+                      country_codes={logsFetch()!.stats!.country_codes!}
+                    />
+                  </div>
+                )}
+              </div>
             )}
+
+            <FilterBar
+              onSubmit={(value: string) => {
+                if (value === filter()) {
+                  refetch();
+                } else {
+                  setFilter(value);
+                }
+              }}
+              example='e.g. "latency[lt]=2 AND status=200"'
+            />
 
             <DataTable
               columns={() => columns}
@@ -236,11 +266,177 @@ function changeDistantPointLineColorToTransparent(
   return undefined;
 }
 
-function LogsChart(props: { stats?: Stats }) {
-  const stats = props.stats;
-  if (!stats) {
-    return null;
+function getColor(d: number) {
+  if (d > 1000) {
+    return "#800026";
+  } else if (d > 500) {
+    return "#BD0026";
+  } else if (d > 200) {
+    return "#E31A1C";
+  } else if (d > 100) {
+    return "#FC4E2A";
+  } else if (d > 50) {
+    return "#FD8D3C";
+  } else if (d > 20) {
+    return "#FEB24C";
+  } else if (d > 10) {
+    return "#FED976";
+  } else if (d > 0) {
+    return "#FFEDA0";
+  } else {
+    return "#FFFFFF";
   }
+}
+
+function mapStyle(
+  codes: { [key in string]?: number },
+  feature: Feature | undefined,
+) {
+  if (!feature) return {};
+
+  return {
+    fillColor: getColor(
+      codes[numericToAlpha2(feature.id as string) ?? ""] ?? 0,
+    ),
+    weight: 2,
+    opacity: 1,
+    color: "white",
+    dashArray: "3",
+    fillOpacity: 0.6,
+  };
+}
+
+const Legend = L.Control.extend({
+  options: {
+    position: "bottomright",
+  },
+  onAdd: (_map: L.Map) => {
+    const grades = [1, 20, 50, 100, 200, 500, 1000];
+    return (
+      <div class="flex flex-col bg-white bg-opacity-70 rounded p-1">
+        <For each={grades}>
+          {(grade: number, index: () => number) => {
+            const i = index();
+            return (
+              <div class="flex">
+                <div
+                  class="px-2 py-1 mr-1"
+                  style={{ background: getColor(grade) }}
+                />{" "}
+                {grade} {i + 1 < grades.length ? `- ${grades[i + 1]}` : "+"}
+              </div>
+            );
+          }}
+        </For>
+      </div>
+    );
+  },
+});
+
+function WorldMap(props: { country_codes: { [key in string]?: number } }) {
+  const codes = props.country_codes;
+
+  let ref: HTMLDivElement | undefined;
+  let map: L.Map | undefined;
+
+  const destroy = () => {
+    if (map) {
+      map.off();
+      map.remove();
+    }
+  };
+
+  onCleanup(destroy);
+  onMount(() => {
+    destroy();
+
+    const m = (map = L.map(ref!).setView([30, 0], 1.4));
+    m.attributionControl.setPrefix("");
+
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      noWrap: true,
+      maxZoom: 19,
+      attribution:
+        '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(m);
+
+    // control that shows state info on hover
+    const CustomControl = L.Control.extend({
+      onAdd: (_map: L.Map) => {
+        return (
+          <div class="bg-white bg-opacity-70 p-2 rounded">
+            Hover over a country
+          </div>
+        );
+      },
+      update: function (props?: Props) {
+        const id = props?.id;
+        const requests = codes[numericToAlpha2(id ?? "") ?? ""] ?? 0;
+        const contents = props
+          ? `<b>${props.name}</b><br />${requests} req`
+          : "Hover over a country";
+
+        (this as any)._container.innerHTML = contents;
+      },
+    });
+
+    const info = new CustomControl().addTo(m);
+    new Legend().addTo(m);
+
+    type Props = {
+      id: string;
+      name: string;
+    };
+
+    const highlightFeature = (e: L.LeafletMouseEvent) => {
+      const layer = e.target;
+
+      layer.setStyle({
+        weight: 2,
+        color: "#666",
+        dashArray: "",
+        fillOpacity: 0.7,
+      });
+
+      layer.bringToFront();
+
+      info.update({
+        id: layer.feature.id,
+        name: layer.feature.properties.name,
+      } as Props);
+    };
+
+    function onEachFeature(_feature: Feature, layer: L.Layer) {
+      layer.on({
+        mouseover: highlightFeature,
+        mouseout: (e: L.LeafletMouseEvent) => {
+          geojson.resetStyle(e.target);
+          info.update();
+        },
+        click: (e: L.LeafletMouseEvent) => m.fitBounds(e.target.getBounds()),
+      });
+    }
+
+    const geojson = L.geoJson(
+      (countriesGeoJSON as FeatureCollection).features,
+      {
+        style: (map) => mapStyle(codes, map),
+        onEachFeature,
+      },
+    ).addTo(m);
+  });
+
+  return (
+    <div
+      class="rounded w-full h-[280px]"
+      style={{ "background-color": "transparent" }}
+      ref={ref}
+    />
+  );
+}
+
+function LogsChart(props: { stats: Stats }) {
+  const stats = props.stats;
 
   const data = (): ChartData | undefined => {
     const s = stats;
