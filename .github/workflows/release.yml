@@ -1,0 +1,125 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Get release notes from changelog
+        id: release_notes
+        run: |
+          export VERSION=$(echo ${{  github.ref_name }} | sed 's/^v//')
+          echo "VERSION = ${VERSION}"
+          awk "/## v${VERSION}.*/{include=1; next} /## v.*/{include=0} include && NF" CHANGELOG.md > ./CHANGELOG-release.md
+          cat ./CHANGELOG-release.md
+
+      - name: Release Change log
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body_path: ./CHANGELOG-release.md
+
+  release-linux:
+    needs: changelog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update && \
+            sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev libsqlite3-dev zip
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: PNPM install
+        run: |
+          pnpm i
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
+          default: true
+      - name: Rust Build
+        run: |
+          RUSTFLAGS="-C target-feature=+crt-static" cargo build --target x86_64-unknown-linux-gnu --release --bin trail && \
+            zip -r -j trailbase_${{  github.ref_name }}_x86_64_linux.zip target/x86_64-unknown-linux-gnu/release/trail CHANGELOG.md LICENSE
+
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: trailbase_${{  github.ref_name }}_x86_64_linux.zip
+
+  release-aarch64-apple-darwin:
+    needs: changelog
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+      - name: Install Dependencies
+        run: |
+            brew update && brew install pkg-config protobuf sqlite
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: PNPM install
+        run: |
+          pnpm i
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: aarch64-apple-darwin
+          default: true
+      - name: Rust Build
+        run: |
+          cargo build --target aarch64-apple-darwin --release --bin trail && \
+            zip -r -j trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip target/aarch64-apple-darwin/release/trail CHANGELOG.md LICENSE
+
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip
+
+  release-x86_64-apple-darwin:
+    needs: changelog
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+      - name: Install Dependencies
+        run: |
+            brew update && brew install pkg-config protobuf sqlite
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: PNPM install
+        run: |
+          pnpm i
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-apple-darwin
+          default: true
+      - name: Rust Build
+        run: |
+          cargo build --target x86_64-apple-darwin --release --bin trail && \
+            zip -r -j trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip target/x86_64-apple-darwin/release/trail CHANGELOG.md LICENSE
+
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip

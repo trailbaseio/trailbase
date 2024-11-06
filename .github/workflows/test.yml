@@ -34,6 +34,3 @@ jobs:
           default: true
       - uses: actions/setup-python@v3
       - uses: pre-commit/action@v3.0.1
-      # - name: Rust tests
-      #   run: |
-      #     cargo test -p trailbase-core -p trailbase-extension -p trailbase-sqlite -p trailbase-cli

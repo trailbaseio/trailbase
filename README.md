@@ -25,10 +25,6 @@ Packages and pre-built binaries are available via:
 
 Pre-built static binaries are also available as
 [GitHub releases](https://github.com/trailbaseio/trailbase/releases/).
-At the moment that is builds for `Linux x86_64` only until we get our
-cross-platform build infrastructure set up.
-In the meantime, you can use docker or try building it yourself. We have built
-TrailBase successfully on Mac and Apple silicone, see instructions below.
 
 ## Building
 
