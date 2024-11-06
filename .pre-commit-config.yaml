@@ -77,6 +77,14 @@ repos:
       files: .*\.(js|mjs|cjs|ts|jsx|tsx|astro)$
       pass_filenames: false
 
+    - id: build_website
+      name: Build Website
+      entry: sh -c 'cd docs && pnpm i && pnpm build'
+      language: system
+      types: [file]
+      files: .*\.(js|mjs|cjs|ts|jsx|tsx|astro)$
+      pass_filenames: false
+
     ### Dart client and example
     - id: dart_format
       name: Dart format
