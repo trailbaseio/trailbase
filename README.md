@@ -9,6 +9,7 @@ For more context, documentation, and an online live demo, check out our website
 [trailbase.io](https://trailbase.io).
 Questions? Thoughts? Check out the [FAQ](https://trailbase.io/reference/faq/)
 on our website or reach out.
+If you like TrailBase or its prospect, consider leaving a ⭐🙏.
 
 ## Project Structure & Releases
 
@@ -17,14 +18,35 @@ libraries, tests, documentation and examples.
 Only the [benchmarks](https://github.com/trailbaseio/trailbase-benchmark) are
 kept separately due to their external dependencies.
 
-Packages and pre-built binaries are available via:
+Pre-built static binaries are available as [GitHub
+releases](https://github.com/trailbaseio/trailbase/releases/) for Linux an
+MacOS.
+
+Moreover, client packages and containers are available via:
 
 - [Docker](https://hub.docker.com/r/trailbase/trailbase)
 - [JavaScript/Typescript client](https://www.npmjs.com/package/trailbase)
 - [Dart/Flutter client](https://pub.dev/packages/trailbase)
 
-Pre-built static binaries are also available as
-[GitHub releases](https://github.com/trailbaseio/trailbase/releases/).
+## Running
+
+You can run pre-built TrailBase either by downloading the latest
+[release](https://github.com/trailbaseio/trailbase/releases/) and running
+
+```bash
+$ ./trail run
+```
+
+or using docker:
+
+```bash
+$ mkdir traildepot
+$ alias trail="docker run -p 4000:4000 --mount type=bind,source=$PWD/traildepot,target=/app/traildepot trailbase/trailbase /app/trail"
+$ trail run
+```
+
+. Run `trail --help` to get a full list of commands. If you don't want to rely
+on pre-built binaries, TrailBase is easy to build yourself, see below.
 
 ## Building
 
