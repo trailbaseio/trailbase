@@ -20,7 +20,7 @@ serde_json = "1.0.121"
 sqlean = { path = "../vendor/sqlean" }
 sqlite-loadable = { workspace = true }
 uuid = { version = "1.7.0", default-features = false, features = ["std", "v7"] }
-validator = "0.18.1"
+validator = "0.19.0"
 
 [dev-dependencies]
 libsql = { workspace = true }

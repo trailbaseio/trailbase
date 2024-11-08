@@ -48,9 +48,10 @@ pub async fn create_index_handler(
     sql: sqlformat::format(
       &format!("{create_index_query};"),
       &sqlformat::QueryParams::None,
-      sqlformat::FormatOptions {
+      &sqlformat::FormatOptions {
+        ignore_case_convert: None,
         indent: sqlformat::Indent::Spaces(2),
-        uppercase: true,
+        uppercase: Some(true),
         lines_between_queries: 1,
       },
     ),

@@ -56,9 +56,10 @@ pub async fn create_table_handler(
     sql: sqlformat::format(
       format!("{query};").as_str(),
       &sqlformat::QueryParams::None,
-      sqlformat::FormatOptions {
+      &sqlformat::FormatOptions {
+        ignore_case_convert: None,
         indent: sqlformat::Indent::Spaces(2),
-        uppercase: true,
+        uppercase: Some(true),
         lines_between_queries: 1,
       },
     ),

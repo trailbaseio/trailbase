@@ -53,9 +53,9 @@ serde_json = "^1.0.117"
 serde_path_to_error = "0.1.16"
 serde_urlencoded = "0.7.1"
 sha2 = "0.10.8"
-sqlformat = "0.2.4"
+sqlformat = "0.3.1"
 sqlite3-parser = "0.13.0"
-thiserror = "1.0.61"
+thiserror = "2.0.1"
 tokio = { version = "^1.38.0", features=["macros", "rt-multi-thread", "fs", "signal"] }
 tower-cookies = { version = "0.10.0" }
 tower-http = { version = "^0.6.0", features=["cors", "trace", "fs", "limit"] }
@@ -67,7 +67,7 @@ ts-rs = { version = "10", features=["uuid-impl", "serde-json-impl"] }
 url = "2.5.2"
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 uuid = { version = "^1.8.0", features = ["v4", "serde"] }
-validator = { version = "0.18.1", default-features = false }
+validator = { version = "0.19.0", default-features = false }
 
 [build-dependencies]
 env_logger = "^0.11.3"

@@ -95,9 +95,10 @@ impl TransactionRecorder {
     sql = sqlformat::format(
       sql.as_str(),
       &sqlformat::QueryParams::None,
-      sqlformat::FormatOptions {
+      &sqlformat::FormatOptions {
+        ignore_case_convert: None,
         indent: sqlformat::Indent::Spaces(4),
-        uppercase: true,
+        uppercase: Some(true),
         lines_between_queries: 2,
       },
     );

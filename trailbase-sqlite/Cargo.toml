@@ -13,7 +13,7 @@ libsql = { workspace = true }
 schemars = "0.8.21"
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "1.0.122"
-thiserror = "1.0.61"
+thiserror = "2.0.1"
 tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs"] }
 uuid = { version = "^1.8.0", features = ["v4", "serde"] }
 log = "0.4.22"
