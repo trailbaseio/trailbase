@@ -17,8 +17,8 @@
     "@astrojs/solid-js": "^4.4.2",
     "@astrojs/tailwind": "^5.1.2",
     "@kobalte/core": "^0.13.7",
-    "astro": "^4.16.7",
-    "astro-icon": "^1.1.1",
+    "astro": "^4.16.10",
+    "astro-icon": "^1.1.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "solid-icons": "^1.1.0",
@@ -29,7 +29,7 @@
     "trailbase": "workspace:*"
   },
   "devDependencies": {
-    "@iconify-json/tabler": "^1.2.6",
+    "@iconify-json/tabler": "^1.2.7",
     "@tailwindcss/typography": "^0.5.15",
     "prettier": "^3.3.3",
     "prettier-plugin-astro": "^0.14.1",
