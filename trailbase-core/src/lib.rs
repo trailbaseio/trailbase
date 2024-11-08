@@ -13,6 +13,7 @@ mod auth;
 mod data_dir;
 mod email;
 mod extract;
+mod js;
 mod listing;
 mod migrations;
 mod query;

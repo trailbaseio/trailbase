@@ -1,7 +1,9 @@
 use libsql::Connection;
 use log::*;
 use object_store::ObjectStore;
+use std::collections::HashSet;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::auth::jwt::JwtHelper;
@@ -11,10 +13,16 @@ use crate::config::{validate_config, write_config_and_vault_textproto};
 use crate::constants::SITE_URL_DEFAULT;
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
+use crate::js::MemoryCache;
 use crate::query::QueryApi;
 use crate::records::RecordApi;
 use crate::table_metadata::TableMetadataCache;
 use crate::value_notifier::{Computed, ValueNotifier};
+
+enum Message {
+  Close,
+  Run(Box<dyn FnOnce(&mut rustyscript::Runtime) + Send + Sync>),
+}
 
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.
@@ -36,14 +44,12 @@ struct InternalState {
 
   table_metadata: TableMetadataCache,
 
+  sender: crossbeam_channel::Sender<Message>,
+  join: Box<dyn Fn() + Send + Sync>,
+
   #[cfg(test)]
   #[allow(unused)]
   cleanup: Vec<Box<dyn std::any::Any + Send + Sync>>,
-}
-
-#[derive(Clone)]
-pub struct AppState {
-  state: Arc<InternalState>,
 }
 
 pub(crate) struct AppStateArgs {
@@ -55,17 +61,82 @@ pub(crate) struct AppStateArgs {
   pub conn: Connection,
   pub logs_conn: Connection,
   pub jwt: JwtHelper,
+
+  #[allow(unused)]
+  pub tokio_runtime: Rc<tokio::runtime::Runtime>,
+}
+
+#[derive(Clone)]
+pub struct AppState {
+  state: Arc<InternalState>,
+}
+
+impl Drop for AppState {
+  fn drop(&mut self) {
+    let _ = self.state.sender.send(Message::Close);
+    let join = &self.state.join;
+    join();
+  }
 }
 
 impl AppState {
-  #[allow(clippy::too_many_arguments)]
   pub(crate) fn new(args: AppStateArgs) -> Self {
-    // let mailer = mailer.or_else(|| new_mailer(&config).ok());
     let config = ValueNotifier::new(args.config);
 
     let table_metadata_clone = args.table_metadata.clone();
     let conn_clone0 = args.conn.clone();
     let conn_clone1 = args.conn.clone();
+
+    let (sender, receiver) = crossbeam_channel::unbounded::<Message>();
+    // let runtime = rustyscript::Runtime::with_tokio_runtime(Default::default(), args.tokio_runtime.clone()).unwrap();
+
+    let handle = parking_lot::Mutex::new(Some(std::thread::spawn(move || {
+      let mut cache = MemoryCache::default();
+      cache.set(
+        "trailbase:main",
+        "
+          export const fun = async () => {
+            console.log('fun0.log');
+            resolve_after(1000);
+          };
+        "
+        .to_string(),
+      );
+
+      let mut runtime = rustyscript::Runtime::new(rustyscript::RuntimeOptions {
+        import_provider: Some(Box::new(cache)),
+        schema_whlist: HashSet::from(["trailbase".to_string()]),
+        ..Default::default()
+      })
+      .unwrap();
+
+      #[allow(clippy::never_loop)]
+      while let Ok(message) = receiver.recv() {
+        match message {
+          Message::Close => break,
+          Message::Run(fun) => {
+            fun(&mut runtime);
+          }
+        }
+      }
+    })));
+
+    let _ = sender.send(Message::Run(Box::new(
+      |runtime: &mut rustyscript::Runtime| {
+        let module = rustyscript::Module::new(
+          "trailbase:main",
+          r#"
+            //import { fun } from "http://trailbase/test.js";
+            import { fun } from "trailbase:main";
+            export const fun0 = fun;
+          "#,
+        );
+        let handle = runtime.load_module(&module).unwrap();
+        let _foo: rustyscript::js_value::Promise<String> = runtime
+          .call_function_immediate(Some(&handle), "fun0", rustyscript::json_args!())
+          .unwrap();
+      },
+    )));
 
     AppState {
       state: Arc::new(InternalState {
@@ -117,6 +188,14 @@ impl AppState {
         logs_conn: args.logs_conn,
         jwt: args.jwt,
         table_metadata: args.table_metadata,
+
+        sender,
+        join: Box::new(move || {
+          if let Some(handle) = handle.lock().take() {
+            let _ = handle.join();
+          }
+        }),
+
         #[cfg(test)]
         cleanup: vec![],
       }),
@@ -357,6 +436,8 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let main_conn_clone1 = main_conn.clone();
   let table_metadata_clone = table_metadata.clone();
 
+  let (sender, _receiver) = crossbeam_channel::unbounded::<Message>();
+
   return Ok(AppState {
     state: Arc::new(InternalState {
       data_dir: DataDir(temp_dir.path().to_path_buf()),
@@ -398,6 +479,8 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       logs_conn,
       jwt: jwt::test_jwt_helper(),
       table_metadata,
+      sender,
+      join: Box::new(|| {}),
       cleanup: vec![Box::new(temp_dir)],
     }),
   });

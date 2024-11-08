@@ -2,7 +2,6 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use trailbase_core::api::JsonSchemaMode;
 use trailbase_core::DataDir;
-use trailbase_core::ServerOptions;
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
 pub enum JsonSchemaModeArg {
@@ -75,14 +74,14 @@ pub enum SubCommands {
 pub struct ServerArgs {
   /// Address the HTTP server binds to (Default: localhost:4000).
   #[arg(short, long, env, default_value = "127.0.0.1:4000")]
-  address: String,
+  pub address: String,
 
   #[arg(long, env)]
-  admin_address: Option<String>,
+  pub admin_address: Option<String>,
 
   /// Optional path to static assets that will be served at the HTTP root.
   #[arg(long, env)]
-  public_dir: Option<String>,
+  pub public_dir: Option<String>,
 
   /// Sets CORS policies to permissive in order to allow cross-origin requests
   /// when developing the UI using a separate dev server.
@@ -94,11 +93,11 @@ pub struct ServerArgs {
 
   /// Disable the built-in public authentication (login, logout, ...) UI.
   #[arg(long, default_value_t = false)]
-  disable_auth_ui: bool,
+  pub disable_auth_ui: bool,
 
   /// Limit the set of allowed origins the HTTP server will answer to.
   #[arg(long, default_value = "*")]
-  cors_allowed_origins: Vec<String>,
+  pub cors_allowed_origins: Vec<String>,
 }
 
 #[derive(Args, Clone, Debug)]
@@ -165,24 +164,4 @@ pub enum UserSubCommands {
   },
   /// Mint auth tokens for the given user.
   MintToken { email: String },
-}
-
-impl TryFrom<DefaultCommandLineArgs> for ServerOptions {
-  type Error = &'static str;
-
-  fn try_from(value: DefaultCommandLineArgs) -> Result<Self, Self::Error> {
-    let Some(SubCommands::Run(args)) = value.cmd else {
-      return Err("Trying to initialize server w/o the \"run\" sub command being passed.");
-    };
-
-    return Ok(ServerOptions {
-      data_dir: DataDir(value.data_dir),
-      address: args.address,
-      admin_address: args.admin_address,
-      public_dir: args.public_dir.map(|p| p.into()),
-      dev: args.dev,
-      disable_auth_ui: args.disable_auth_ui,
-      cors_allowed_origins: args.cors_allowed_origins,
-    });
-  }
 }

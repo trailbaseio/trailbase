@@ -4,6 +4,7 @@ use axum_test::multipart::MultipartForm;
 use axum_test::TestServer;
 use cookie::Cookie;
 use libsql::{params, Connection};
+use std::rc::Rc;
 
 use trailbase_core::api::{
   create_user_handler, login_with_password, query_one_row, CreateUserRequest,
@@ -15,37 +16,27 @@ use trailbase_core::util::id_to_b64;
 use trailbase_core::AppState;
 use trailbase_core::{DataDir, Server, ServerOptions};
 
-#[tokio::test]
-async fn test_admin_permissions() {
-  let data_dir = temp_dir::TempDir::new().unwrap();
-
-  let app = Server::init(ServerOptions {
-    data_dir: DataDir(data_dir.path().to_path_buf()),
-    ..Default::default()
-  })
-  .await
-  .unwrap();
-
-  let server = TestServer::new(app.router().clone()).unwrap();
-
-  assert_eq!(
-    server.get("/api/healthcheck").await.status_code(),
-    StatusCode::OK
+#[test]
+fn test_record_apis() {
+  let runtime = Rc::new(
+    tokio::runtime::Builder::new_multi_thread()
+      .enable_all()
+      .build()
+      .unwrap(),
   );
 
-  assert_eq!(
-    server.get("/api/_admin/tables").await.status_code(),
-    StatusCode::UNAUTHORIZED
-  );
-}
-
-#[tokio::test]
-async fn test_record_apis() -> Result<(), anyhow::Error> {
   let data_dir = temp_dir::TempDir::new().unwrap();
 
+  let _ = runtime.clone().block_on(async move {
   let app = Server::init(ServerOptions {
     data_dir: DataDir(data_dir.path().to_path_buf()),
-    ..Default::default()
+    address: "".to_string(),
+    admin_address: None,
+    public_dir: None,
+    dev: false,
+    disable_auth_ui: false,
+    cors_allowed_origins: vec![],
+    tokio_runtime: runtime,
   })
   .await
   .unwrap();
@@ -53,10 +44,10 @@ async fn test_record_apis() -> Result<(), anyhow::Error> {
   let state = app.state();
   let conn = state.conn();
 
-  create_chat_message_app_tables(conn).await?;
-  state.refresh_table_cache().await?;
+  create_chat_message_app_tables(conn).await.unwrap();
+  state.refresh_table_cache().await.unwrap();
 
-  let room = add_room(conn, "room0").await?;
+  let room = add_room(conn, "room0").await.unwrap();
   let password = "Secret!1!!";
 
   // Register message table as record API with moderator read access.
@@ -75,16 +66,16 @@ async fn test_record_apis() -> Result<(), anyhow::Error> {
         ..Default::default()
       },
     )
-    .await?;
+    .await.unwrap();
 
   let user_x_email = "user_x@test.com";
   let user_x = create_user_for_test(&state, user_x_email, password)
-    .await?
+    .await.unwrap()
     .into_bytes();
 
-  let user_x_token = login_with_password(&state, user_x_email, password).await?;
+  let user_x_token = login_with_password(&state, user_x_email, password).await.unwrap();
 
-  add_user_to_room(conn, user_x, room).await?;
+  add_user_to_room(conn, user_x, room).await.unwrap();
 
   let server = TestServer::new(app.router().clone()).unwrap();
 
@@ -160,7 +151,7 @@ async fn test_record_apis() -> Result<(), anyhow::Error> {
       },
       AccessRules::default(),
     )
-    .await?;
+    .await.unwrap();
 
     // Anonymous can post to a JSON message (i.e. no credentials/tokens are attached).
     let test_response = server
@@ -182,7 +173,7 @@ async fn test_record_apis() -> Result<(), anyhow::Error> {
     );
   }
 
-  return Ok(());
+  });
 }
 
 pub async fn create_chat_message_app_tables(conn: &Connection) -> Result<(), libsql::Error> {

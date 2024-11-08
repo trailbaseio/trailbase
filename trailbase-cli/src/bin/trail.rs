@@ -8,12 +8,13 @@ use clap::{CommandFactory, Parser};
 use libsql::{de, params};
 use log::*;
 use serde::Deserialize;
+use std::rc::Rc;
 use tokio::{fs, io::AsyncWriteExt};
 use tracing_subscriber::{filter, prelude::*};
 use trailbase_core::{
   api::{self, init_app_state, query_one_row, Email, TokenClaims},
   constants::USER_TABLE,
-  DataDir, Server,
+  DataDir, Server, ServerOptions,
 };
 
 use trailbase_cli::{
@@ -56,17 +57,27 @@ async fn get_user_by_email(conn: &libsql::Connection, email: &str) -> Result<DbU
   )?);
 }
 
-#[tokio::main]
-async fn main() -> Result<(), BoxError> {
+async fn async_main(runtime: Rc<tokio::runtime::Runtime>) -> Result<(), BoxError> {
   let args = DefaultCommandLineArgs::parse();
+  let data_dir = DataDir(args.data_dir.clone());
 
   match args.cmd {
-    Some(SubCommands::Run(ref cmd)) => {
+    Some(SubCommands::Run(cmd)) => {
       init_logger(cmd.dev);
 
       let stderr_logging = cmd.dev || cmd.stderr_logging;
 
-      let app = Server::init(args.try_into()?).await?;
+      let app = Server::init(ServerOptions {
+        data_dir,
+        address: cmd.address,
+        admin_address: cmd.admin_address,
+        public_dir: cmd.public_dir.map(|p| p.into()),
+        dev: cmd.dev,
+        disable_auth_ui: cmd.disable_auth_ui,
+        cors_allowed_origins: cmd.cors_allowed_origins,
+        tokio_runtime: runtime,
+      })
+      .await?;
 
       let filter = || {
         filter::Targets::new()
@@ -132,10 +143,9 @@ async fn main() -> Result<(), BoxError> {
         }
       }
     }
-    Some(SubCommands::Schema(ref cmd)) => {
+    Some(SubCommands::Schema(cmd)) => {
       init_logger(false);
 
-      let data_dir = DataDir(args.data_dir);
       let conn = api::connect_sqlite(Some(data_dir.main_db_path()), None).await?;
       let table_metadata = api::TableMetadataCache::new(conn.clone()).await?;
 
@@ -163,7 +173,6 @@ async fn main() -> Result<(), BoxError> {
     Some(SubCommands::Migration { suffix }) => {
       init_logger(false);
 
-      let data_dir = DataDir(args.data_dir);
       let filename = api::new_unique_migration_filename(suffix.as_deref().unwrap_or("update"));
       let path = data_dir.migrations_path().join(filename);
 
@@ -177,7 +186,6 @@ async fn main() -> Result<(), BoxError> {
     Some(SubCommands::Admin { cmd }) => {
       init_logger(false);
 
-      let data_dir = DataDir(args.data_dir);
       let conn = api::connect_sqlite(Some(data_dir.main_db_path()), None).await?;
 
       match cmd {
@@ -266,12 +274,12 @@ async fn main() -> Result<(), BoxError> {
         }
       };
     }
-    Some(SubCommands::Email(ref cmd)) => {
+    Some(SubCommands::Email(cmd)) => {
       init_logger(false);
 
       let (to, subject, body) = (cmd.to.clone(), cmd.subject.clone(), cmd.body.clone());
 
-      let (_new_db, state) = init_app_state(DataDir(args.data_dir), None, false).await?;
+      let (_new_db, state) = init_app_state(DataDir(args.data_dir), None, false, runtime).await?;
       let email = Email::new(&state, to, subject, body)?;
       email.send().await?;
 
@@ -291,4 +299,13 @@ async fn main() -> Result<(), BoxError> {
   }
 
   Ok(())
+}
+
+fn main() -> Result<(), BoxError> {
+  let runtime = Rc::new(
+    tokio::runtime::Builder::new_multi_thread()
+      .enable_all()
+      .build()?,
+  );
+  return runtime.block_on(async_main(runtime.clone()));
 }

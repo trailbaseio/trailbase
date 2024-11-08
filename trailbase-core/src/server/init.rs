@@ -1,6 +1,7 @@
 use libsql::Connection;
 use log::*;
 use std::path::PathBuf;
+use std::rc::Rc;
 use thiserror::Error;
 use trailbase_sqlite::{connect_sqlite, query_one_row};
 
@@ -39,6 +40,7 @@ pub async fn init_app_state(
   data_dir: DataDir,
   public_dir: Option<PathBuf>,
   dev: bool,
+  tokio_runtime: Rc<tokio::runtime::Runtime>,
 ) -> Result<(bool, AppState), InitError> {
   // First create directory structure.
   data_dir.ensure_directory_structure().await?;
@@ -106,6 +108,7 @@ pub async fn init_app_state(
     conn: main_conn.clone(),
     logs_conn,
     jwt,
+    tokio_runtime,
   });
 
   if new_db {

@@ -3,8 +3,9 @@ use axum::{
   response::{Html, IntoResponse, Response},
   routing::{get, Router},
 };
+use std::rc::Rc;
 use tracing_subscriber::{filter, prelude::*};
-use trailbase_core::{AppState, Server, ServerOptions, User};
+use trailbase_core::{AppState, DataDir, Server, ServerOptions, User};
 
 type BoxError = Box<dyn std::error::Error>;
 
@@ -16,8 +17,7 @@ pub async fn handler(State(_state): State<AppState>, user: Option<User>) -> Resp
   .into_response()
 }
 
-#[tokio::main]
-async fn main() -> Result<(), BoxError> {
+async fn async_main(runtime: Rc<tokio::runtime::Runtime>) -> Result<(), BoxError> {
   env_logger::init_from_env(
     env_logger::Env::new().default_filter_or("info,trailbase_core=debug,refinery_core=warn"),
   );
@@ -26,8 +26,14 @@ async fn main() -> Result<(), BoxError> {
 
   let app = Server::init_with_custom_routes_and_initializer(
     ServerOptions {
+      data_dir: DataDir::default(),
       address: "localhost:4004".to_string(),
-      ..Default::default()
+      admin_address: None,
+      public_dir: None,
+      dev: false,
+      disable_auth_ui: false,
+      cors_allowed_origins: vec![],
+      tokio_runtime: runtime,
     },
     Some(custom_routes),
     |state: AppState| async move {
@@ -59,5 +65,15 @@ async fn main() -> Result<(), BoxError> {
 
   app.serve().await?;
 
-  return Ok(());
+  Ok(())
+}
+
+fn main() -> Result<(), BoxError> {
+  let runtime = Rc::new(
+    tokio::runtime::Builder::new_multi_thread()
+      .enable_all()
+      .build()?,
+  );
+
+  runtime.block_on(async_main(runtime.clone()))
 }

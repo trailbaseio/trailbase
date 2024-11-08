@@ -9,6 +9,7 @@ use axum::routing::get;
 use axum::{RequestExt, Router};
 use rust_embed::RustEmbed;
 use std::path::PathBuf;
+use std::rc::Rc;
 use tokio::signal;
 use tokio::task::JoinSet;
 use tower_cookies::CookieManagerLayer;
@@ -30,7 +31,7 @@ pub use init::{init_app_state, InitError};
 /// A set of options to configure serving behaviors. Changing any of these options
 /// requires a server restart, which makes them a natural fit for being exposed as command line
 /// arguments.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ServerOptions {
   /// Optional path to static assets that will be served at the HTTP root.
   pub data_dir: DataDir,
@@ -56,6 +57,9 @@ pub struct ServerOptions {
 
   /// Limit the set of allowed origins the HTTP server will answer to.
   pub cors_allowed_origins: Vec<String>,
+
+  /// Tokio runtime.
+  pub tokio_runtime: Rc<tokio::runtime::Runtime>,
 }
 
 pub struct Server {
@@ -69,8 +73,13 @@ pub struct Server {
 impl Server {
   /// Initializes the server. Will create a new data directory on first start.
   pub async fn init(opts: ServerOptions) -> Result<Self, InitError> {
-    let (_, state) =
-      init::init_app_state(opts.data_dir.clone(), opts.public_dir.clone(), opts.dev).await?;
+    let (_, state) = init::init_app_state(
+      opts.data_dir.clone(),
+      opts.public_dir.clone(),
+      opts.dev,
+      opts.tokio_runtime.clone(),
+    )
+    .await?;
 
     let main_router = Self::build_main_router(&state, &opts, None).await;
     let admin_router = Self::build_independent_admin_router(&state, &opts);
@@ -99,8 +108,13 @@ impl Server {
   where
     O: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Sync + Send>>>,
   {
-    let (new_data_dir, state) =
-      init::init_app_state(opts.data_dir.clone(), opts.public_dir.clone(), opts.dev).await?;
+    let (new_data_dir, state) = init::init_app_state(
+      opts.data_dir.clone(),
+      opts.public_dir.clone(),
+      opts.dev,
+      opts.tokio_runtime.clone(),
+    )
+    .await?;
     if new_data_dir {
       on_first_init(state.clone())
         .await
