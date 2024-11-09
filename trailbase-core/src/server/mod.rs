@@ -73,22 +73,7 @@ pub struct Server {
 impl Server {
   /// Initializes the server. Will create a new data directory on first start.
   pub async fn init(opts: ServerOptions) -> Result<Self, InitError> {
-    let (_, state) = init::init_app_state(
-      opts.data_dir.clone(),
-      opts.public_dir.clone(),
-      opts.dev,
-      opts.tokio_runtime.clone(),
-    )
-    .await?;
-
-    let main_router = Self::build_main_router(&state, &opts, None).await;
-    let admin_router = Self::build_independent_admin_router(&state, &opts);
-
-    Ok(Self {
-      state,
-      main_router,
-      admin_router,
-    })
+    return Self::init_with_custom_routes_and_initializer(opts, None, |_| async { Ok(()) }).await;
   }
 
   /// Initializes the server in a more customizable manner. Will create a new data directory on
@@ -115,11 +100,18 @@ impl Server {
       opts.tokio_runtime.clone(),
     )
     .await?;
+
     if new_data_dir {
       on_first_init(state.clone())
         .await
         .map_err(|err| InitError::CustomInit(err.to_string()))?;
     }
+
+    // let mut custom_routes = custom_routes.unwrap_or(Router::new());
+    //
+    // state.script_runtime(Box::new(|_rt| {
+    //   custom_routes.nest(&format!("/{AUTH_API_PATH}"), auth::router());
+    // }));
 
     let main_router = Self::build_main_router(&state, &opts, custom_routes).await;
     let admin_router = Self::build_independent_admin_router(&state, &opts);

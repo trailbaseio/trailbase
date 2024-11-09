@@ -1264,7 +1264,7 @@ dependencies = [
  "swc_visit",
  "swc_visit_macros",
  "text_lines",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "unicode-width",
  "url",
 ]
@@ -1349,7 +1349,7 @@ dependencies = [
  "sha2",
  "signature",
  "spki",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "tokio",
  "uuid",
  "x25519-dalek",
@@ -1378,7 +1378,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "syn 2.0.87",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1388,7 +1388,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff25f6e08e7a0214bbacdd6f7195c7f1ebcd850c87a624e4ff06326b68b42d99"
 dependencies = [
  "percent-encoding",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "url",
 ]
 
@@ -1448,7 +1448,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "220c990d75b709957dbf04454b26576fce50e22d50486ca2a438216d8e61fbf0"
 dependencies = [
  "deno_core",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "urlpattern",
 ]
 
@@ -1467,7 +1467,7 @@ dependencies = [
  "flate2",
  "futures",
  "serde",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "tokio",
  "uuid",
 ]
@@ -4261,7 +4261,7 @@ dependencies = [
  "deno_webidl",
  "paste",
  "serde",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-util",
 ]
@@ -4442,7 +4442,7 @@ dependencies = [
  "num-bigint",
  "serde",
  "smallvec",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "v8",
 ]
 
