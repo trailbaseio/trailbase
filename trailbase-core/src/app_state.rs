@@ -46,30 +46,32 @@ pub struct AppState {
   state: Arc<InternalState>,
 }
 
+pub(crate) struct AppStateArgs {
+  pub data_dir: DataDir,
+  pub public_dir: Option<PathBuf>,
+  pub dev: bool,
+  pub table_metadata: TableMetadataCache,
+  pub config: Config,
+  pub conn: Connection,
+  pub logs_conn: Connection,
+  pub jwt: JwtHelper,
+}
+
 impl AppState {
   #[allow(clippy::too_many_arguments)]
-  pub(crate) fn new(
-    data_dir: DataDir,
-    public_dir: Option<PathBuf>,
-    dev: bool,
-    table_metadata: TableMetadataCache,
-    config: Config,
-    conn: Connection,
-    logs_conn: Connection,
-    jwt: JwtHelper,
-  ) -> Self {
+  pub(crate) fn new(args: AppStateArgs) -> Self {
     // let mailer = mailer.or_else(|| new_mailer(&config).ok());
-    let config = ValueNotifier::new(config);
+    let config = ValueNotifier::new(args.config);
 
-    let table_metadata_clone = table_metadata.clone();
-    let conn_clone0 = conn.clone();
-    let conn_clone1 = conn.clone();
+    let table_metadata_clone = args.table_metadata.clone();
+    let conn_clone0 = args.conn.clone();
+    let conn_clone1 = args.conn.clone();
 
     AppState {
       state: Arc::new(InternalState {
-        data_dir,
-        public_dir,
-        dev,
+        data_dir: args.data_dir,
+        public_dir: args.public_dir,
+        dev: args.dev,
         oauth: Computed::new(&config, |c| {
           match ConfiguredOAuthProviders::from_config(c.auth.clone()) {
             Ok(providers) => providers,
@@ -111,10 +113,10 @@ impl AppState {
             .collect::<Vec<_>>();
         }),
         config,
-        conn: conn.clone(),
-        logs_conn,
-        jwt,
-        table_metadata,
+        conn: args.conn.clone(),
+        logs_conn: args.logs_conn,
+        jwt: args.jwt,
+        table_metadata: args.table_metadata,
         #[cfg(test)]
         cleanup: vec![],
       }),

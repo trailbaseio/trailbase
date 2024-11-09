@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 use trailbase_sqlite::{connect_sqlite, query_one_row};
 
-use crate::app_state::AppState;
+use crate::app_state::{AppState, AppStateArgs};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;
@@ -97,16 +97,16 @@ pub async fn init_app_state(
     debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
   }
 
-  let app_state = AppState::new(
-    data_dir.clone(),
+  let app_state = AppState::new(AppStateArgs {
+    data_dir: data_dir.clone(),
     public_dir,
     dev,
     table_metadata,
     config,
-    main_conn.clone(),
+    conn: main_conn.clone(),
     logs_conn,
     jwt,
-  );
+  });
 
   if new_db {
     let num_admins: i64 = query_one_row(

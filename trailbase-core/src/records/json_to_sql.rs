@@ -1071,8 +1071,12 @@ mod tests {
 
       // Test encoded nested json against golden.
       assert_eq!(
-        text,
-        r#"{"array":["some text :)",1,2,3,4,"foo"],"blob":[65,66,67,68],"text":"test"}"#
+        serde_json::from_str::<serde_json::Value>(text).unwrap(),
+        serde_json::json!({
+          "array": Vec::<serde_json::Value>::from(["some text :)".into(),1.into(),2.into(),3.into(),4.into(),"foo".into()]),
+          "blob": [65,66,67,68],
+          "text": "test",
+        }),
       );
 
       assert_params(params);
