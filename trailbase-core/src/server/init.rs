@@ -34,6 +34,8 @@ pub enum InitError {
   TableError(#[from] crate::table_metadata::TableLookupError),
   #[error("Schema error: {0}")]
   SchemaError(#[from] trailbase_sqlite::schema::SchemaError),
+  #[error("Script error: {0}")]
+  ScriptError(String),
 }
 
 pub async fn init_app_state(

@@ -10,6 +10,7 @@ use axum::{RequestExt, Router};
 use rust_embed::RustEmbed;
 use std::path::PathBuf;
 use std::rc::Rc;
+use tokio::fs::read_to_string;
 use tokio::signal;
 use tokio::task::JoinSet;
 use tower_cookies::CookieManagerLayer;
@@ -23,6 +24,7 @@ use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
 use crate::constants::{AUTH_API_PATH, HEADER_CSRF_TOKEN, QUERY_API_PATH, RECORD_API_PATH};
 use crate::data_dir::DataDir;
+use crate::js::install_routes;
 use crate::logging;
 use crate::scheduler;
 
@@ -107,11 +109,29 @@ impl Server {
         .map_err(|err| InitError::CustomInit(err.to_string()))?;
     }
 
-    // let mut custom_routes = custom_routes.unwrap_or(Router::new());
-    //
-    // state.script_runtime(Box::new(|_rt| {
-    //   custom_routes.nest(&format!("/{AUTH_API_PATH}"), auth::router());
-    // }));
+    let js_module = {
+      if let Ok(contents) = read_to_string(opts.data_dir.root().join("index.js")).await {
+        Some(rustyscript::Module::new("index.js", &contents))
+      } else if let Ok(contents) = read_to_string(opts.data_dir.root().join("index.ts")).await {
+        Some(rustyscript::Module::new("index.ts", &contents))
+      } else {
+        None
+      }
+    };
+
+    let custom_routes = if let Some(js_module) = js_module {
+      let js_router = install_routes(state.clone(), js_module)
+        .await
+        .map_err(|err| InitError::ScriptError(err.to_string()))?;
+
+      if let Some(router) = js_router {
+        Some(custom_routes.unwrap_or_default().nest("/", router))
+      } else {
+        custom_routes
+      }
+    } else {
+      custom_routes
+    };
 
     let main_router = Self::build_main_router(&state, &opts, custom_routes).await;
     let admin_router = Self::build_independent_admin_router(&state, &opts);

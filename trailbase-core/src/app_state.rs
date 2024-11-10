@@ -271,6 +271,10 @@ impl AppState {
     )
     .await;
   }
+
+  pub(crate) fn script_runtime(&self) -> &RuntimeHandle {
+    return &self.state.runtime;
+  }
 }
 
 fn build_mailer(
