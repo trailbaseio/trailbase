@@ -1,5 +1,8 @@
 # TrailBase
 
+[![Build Status](https://github.com/trailbaseio/trailbase/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/trailbaseio/trailbase/actions?query=branch%3Amain)
+[![License](https://img.shields.io/badge/license-OSL_3.0-blue.svg)](https://raw.githubusercontent.com/trailbaseio/trailbase/master/LICENSE)
+
 A [blazingly](https://trailbase.io/reference/benchmarks/) fast, single-file,
 and open-source application-base built on top of Rust and SQLite (libsql).
 It ships with type-safe restful APIs, an authentication system, an admin

@@ -17,7 +17,7 @@
     "prettier": "^3.3.3",
     "quicktype": "^23.0.170",
     "typescript": "^5.6.3",
-    "typescript-eslint": "^8.13.0"
+    "typescript-eslint": "^8.14.0"
   },
   "dependencies": {
     "csv-parse": "^5.5.6",

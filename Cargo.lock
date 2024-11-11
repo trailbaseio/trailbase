@@ -42,9 +42,9 @@ dependencies = [
 
 [[package]]
 name = "allocator-api2"
-version = "0.2.18"
+version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c6cb57a04249c6480766f7f7cef5467412af1490f8d1e243141daddada3264f"
+checksum = "45862d1c77f2228b9e10bc609d5bc203d86ebc9b87ad8d5d5167a6c9abf739d9"
 
 [[package]]
 name = "android-tzdata"
@@ -827,9 +827,9 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "cpufeatures"
-version = "0.2.14"
+version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "608697df725056feaccfa42cffdaeeec3fccc4ffc38358ecd19b243e716a78e0"
+checksum = "0ca741a962e1b0bff6d724a1a0958b686406e853bb14061f218562e1896f95e6"
 dependencies = [
  "libc",
 ]
@@ -1240,7 +1240,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8835f84f38484cc86f110a805655697908257fb9a7af005234060891557198e9"
 dependencies = [
  "nonempty",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1981,7 +1981,7 @@ dependencies = [
  "futures",
  "libsql-sys",
  "serde",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "tracing",
 ]
 
@@ -2159,9 +2159,9 @@ dependencies = [
 
 [[package]]
 name = "minijinja"
-version = "2.4.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9ca8daf4b0b4029777f1bc6e1aedd1aec7b74c276a43bc6f620a8e1a1c0a90e"
+checksum = "2c37e1b517d1dcd0e51dc36c4567b9d5a29262b3ec8da6cb5d35e27a8fb529b5"
 dependencies = [
  "serde",
 ]
@@ -2343,7 +2343,7 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "sha2",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "url",
 ]
 
@@ -2805,7 +2805,7 @@ dependencies = [
  "rustc-hash 2.0.0",
  "rustls",
  "socket2",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
 ]
@@ -2822,7 +2822,7 @@ dependencies = [
  "rustc-hash 2.0.0",
  "rustls",
  "slab",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "tinyvec",
  "tracing",
 ]
@@ -2965,7 +2965,7 @@ dependencies = [
  "log",
  "regex",
  "siphasher 1.0.1",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "time",
  "url",
  "walkdir",
@@ -3011,9 +3011,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.4.8"
+version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "368758f23274712b504848e9d5a6f010445cc8b87a7cdb4d7cbee666c1288da3"
+checksum = "809e8dc61f6de73b46c85f4c96486310fe304c434cfa43669d7b40f711150908"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -3075,7 +3075,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9838134a2bfaa8e1f40738fcc972ac799de6e0e06b5157acb95fc2b05a0ea283"
 dependencies = [
  "lazy_static",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3141,7 +3141,7 @@ dependencies = [
  "mime",
  "mime_guess",
  "rand",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3173,9 +3173,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.39"
+version = "0.38.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "375116bee2be9ed569afe2154ea6a99dfdffd257f533f187498c2a8f5feaf4ee"
+checksum = "99e4ea3e1cdc4b559b8e5650f9c8e5998e3e5c1343b4eaf034565f32318d63c0"
 dependencies = [
  "bitflags",
  "errno",
@@ -3405,7 +3405,7 @@ checksum = "adc4e5204eb1910f40f9cfa375f6f05b68c3abac4b6fd879c8ff5e7ae8a0a085"
 dependencies = [
  "num-bigint",
  "num-traits",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "time",
 ]
 
@@ -3640,27 +3640,27 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.68"
+version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02dd99dc800bbb97186339685293e1cc5d9df1f8fae2d0aecd9ff1c77efea892"
+checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
 dependencies = [
- "thiserror-impl 1.0.68",
+ "thiserror-impl 1.0.69",
 ]
 
 [[package]]
 name = "thiserror"
-version = "2.0.1"
+version = "2.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07c1e40dd48a282ae8edc36c732cbc219144b87fb6a4c7316d611c6b1f06ec0c"
+checksum = "c006c85c7651b3cf2ada4584faa36773bd07bac24acfb39f3c431b36d7e667aa"
 dependencies = [
- "thiserror-impl 2.0.1",
+ "thiserror-impl 2.0.3",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.68"
+version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7c61ec9a6f64d2793d8a45faba21efbe3ced62a886d44c36a009b2b519b4c7e"
+checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3669,9 +3669,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.1"
+version = "2.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "874aa7e446f1da8d9c3a5c95b1c5eb41d800045252121dc7f8e0ba370cee55f5"
+checksum = "f077553d607adc1caf65430528a576c757a71ed73944b66ebb58ef2bbd243568"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4010,7 +4010,7 @@ dependencies = [
  "sqlformat",
  "sqlite3-parser",
  "temp-dir",
- "thiserror 2.0.1",
+ "thiserror 2.0.3",
  "tokio",
  "tower",
  "tower-cookies",
@@ -4060,7 +4060,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "thiserror 2.0.1",
+ "thiserror 2.0.3",
  "tokio",
  "trailbase-extension",
  "uuid",
@@ -4080,7 +4080,7 @@ checksum = "3a2f31991cee3dce1ca4f929a8a04fdd11fd8801aac0f2030b0fa8a0a3fef6b9"
 dependencies = [
  "lazy_static",
  "serde_json",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "ts-rs-macros",
  "uuid",
 ]
@@ -4667,7 +4667,7 @@ dependencies = [
  "flate2",
  "indexmap",
  "memchr",
- "thiserror 1.0.68",
+ "thiserror 1.0.69",
  "zopfli",
 ]
 
