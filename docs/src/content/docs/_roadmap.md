@@ -15,7 +15,6 @@ For context, some larger features we have on our Roadmap:
 - Maybe integrate an ES6 JavaScript runtime or similar.
 - Streamline code-generation, the bindings life-cycle, and first-party
   support for more languages.
-- Geo-spatial extensions and Geo-Ip for logs.
 - Maybe TLS termination and proxy capabilities.
 - Consider a GraphQL layer to address fan-out and integrate external
   resources.
