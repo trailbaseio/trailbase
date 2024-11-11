@@ -1,11 +1,15 @@
+use axum::body::Body;
 use axum::extract::Request;
-use axum::http::request::Parts;
-use axum::response::IntoResponse;
+use axum::http::{header::CONTENT_TYPE, request::Parts, HeaderName, HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::Router;
 use parking_lot::Mutex;
-use rustyscript::{json_args, Runtime};
+use rustyscript::{json_args, Module, Runtime};
+use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
+use thiserror::Error;
 
 use crate::AppState;
 
@@ -14,33 +18,63 @@ mod import_provider;
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
 const TRAILBASE_MAIN: &str = r#"
-export const test = "test0";
+type Headers = { [key: string]: string };
+type Request = {
+  uri: string;
+  headers: Headers;
+  body: string;
+};
+type Response = {
+  headers?: Headers;
+  status?: number;
+  body?: string;
+};
+type CbType = (req: Request) => Response | undefined;
 
-const callbacks = new Map();
+const callbacks = new Map<string, CbType>();
 
-export function addRoute(method, route, callback) {
+export function addRoute(method: string, route: string, callback: CbType) {
   rustyscript.functions.route(method, route);
   callbacks.set(`${method}:${route}`, callback);
 
   console.log("JS: Added route:", method, route);
 }
 
-globalThis.dispatch = (method, route, uri, headers, body) => {
+export function dispatch(
+  method: string,
+  route: string,
+  uri: string,
+  headers: Headers,
+  body: string,
+) : Response | undefined {
   console.log("JS: Dispatching:", method, route, body);
 
   const key = `${method}:${route}`;
   const cb = callbacks.get(key);
-  if (cb) {
-    return cb({
-      uri,
-      headers,
-      body,
-    });
+  if (!cb) {
+    throw Error(`Missing callback: ${key}`);
   }
 
-  return `Missing callback: ${key}`;
+  return cb({
+    uri,
+    headers,
+    body,
+  });
+};
+
+globalThis.__dispatch = dispatch;
+globalThis.__trailbase = {
+  addRoute,
+  dispatch,
 };
 "#;
+
+#[derive(Default, Deserialize)]
+struct JsResponse {
+  headers: Option<HashMap<String, String>>,
+  status: Option<u16>,
+  body: Option<String>,
+}
 
 enum Message {
   Close,
@@ -55,24 +89,11 @@ struct RuntimeSingleton {
 impl Drop for RuntimeSingleton {
   fn drop(&mut self) {
     if let Some(handle) = self.handle.take() {
-      self.sender.send(Message::Close).unwrap();
-      handle.join().unwrap();
+      if self.sender.send(Message::Close).is_ok() {
+        handle.join().unwrap();
+      }
     }
   }
-}
-
-fn init_runtime() -> Result<Runtime, AnyError> {
-  let mut cache = import_provider::MemoryCache::default();
-
-  cache.set("trailbase:main", TRAILBASE_MAIN.to_string());
-
-  let runtime = rustyscript::Runtime::new(rustyscript::RuntimeOptions {
-    import_provider: Some(Box::new(cache)),
-    schema_whlist: HashSet::from(["trailbase".to_string()]),
-    ..Default::default()
-  })?;
-
-  return Ok(runtime);
 }
 
 impl RuntimeSingleton {
@@ -80,7 +101,10 @@ impl RuntimeSingleton {
     let (sender, receiver) = crossbeam_channel::unbounded::<Message>();
 
     let handle = std::thread::spawn(move || {
-      let mut runtime = init_runtime().unwrap();
+      let mut runtime = Self::init_runtime().unwrap();
+
+      let module = Module::new("__index.ts", TRAILBASE_MAIN);
+      let _handle = runtime.load_module(&module).unwrap();
 
       #[allow(clippy::never_loop)]
       while let Ok(message) = receiver.recv() {
@@ -93,24 +117,31 @@ impl RuntimeSingleton {
       }
     });
 
-    // TODO: remove.
-    let _ = sender.send(Message::Run(Box::new(
-      |runtime: &mut rustyscript::Runtime| {
-        let module = rustyscript::Module::new(
-          "trailbase:main",
-          r#"
-            import { test } from "trailbase:main";
-            export const fun0 = test;
-          "#,
-        );
-        let _handle = runtime.load_module(&module).unwrap();
-      },
-    )));
-
     return RuntimeSingleton {
       sender,
       handle: Some(handle),
     };
+  }
+
+  fn init_runtime() -> Result<Runtime, AnyError> {
+    let mut cache = import_provider::MemoryCache::default();
+
+    cache.set(
+      "trailbase:main",
+      r#"
+        export const _test = "test0";
+        export const addRoute = globalThis.__trailbase.addRoute;
+      "#
+      .to_string(),
+    );
+
+    let runtime = rustyscript::Runtime::new(rustyscript::RuntimeOptions {
+      import_provider: Some(Box::new(cache)),
+      schema_whlist: HashSet::from(["trailbase".to_string()]),
+      ..Default::default()
+    })?;
+
+    return Ok(runtime);
   }
 }
 
@@ -146,20 +177,66 @@ impl RuntimeHandle {
   }
 }
 
+#[derive(Debug, Error)]
+pub enum JsResponseError {
+  #[error("Precondition: {0}")]
+  Precondition(String),
+  #[error("Internal: {0}")]
+  Internal(Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl IntoResponse for JsResponseError {
+  fn into_response(self) -> Response {
+    let (status, body): (StatusCode, Option<String>) = match self {
+      Self::Precondition(err) => (StatusCode::PRECONDITION_FAILED, Some(err.to_string())),
+      Self::Internal(err) => (StatusCode::INTERNAL_SERVER_ERROR, Some(err.to_string())),
+    };
+
+    if let Some(body) = body {
+      return Response::builder()
+        .status(status)
+        .header(CONTENT_TYPE, "text/plain")
+        .body(Body::new(body))
+        .unwrap();
+    }
+
+    return Response::builder()
+      .status(status)
+      .body(Body::empty())
+      .unwrap();
+  }
+}
+
+/// Get's called from JS to `addRoute`.
 fn route_callback(
   state: AppState,
   router: Arc<Mutex<Option<Router<AppState>>>>,
   args: &[serde_json::Value],
-) -> Result<(), rustyscript::Error> {
-  let method: String = serde_json::from_value(args.first().unwrap().clone()).unwrap();
+) -> Result<(), AnyError> {
+  let Some(method) = args
+    .first()
+    .and_then(|v| serde_json::from_value::<String>(v.clone()).ok())
+  else {
+    return Err("Missing method argument".into());
+  };
   let method_uppercase = method.to_uppercase();
-  let route: String = serde_json::from_value(args.get(1).unwrap().clone()).unwrap();
+
+  let Some(route) = args
+    .get(1)
+    .and_then(|v| serde_json::from_value::<String>(v.clone()).ok())
+  else {
+    return Err("Missing route argument".into());
+  };
 
   let route_path = route.clone();
   let handler = move |req: Request| async move {
     let (parts, body) = req.into_parts();
 
-    let body_bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+    let Ok(body_bytes) = axum::body::to_bytes(body, usize::MAX).await else {
+      return Err(JsResponseError::Precondition(
+        "request deserialization failed".to_string(),
+      ));
+    };
     let Parts {
       method: _,
       uri,
@@ -179,22 +256,43 @@ fn route_callback(
       })
       .collect();
 
-    let response = state
+    let js_response = state
       .script_runtime()
-      .apply(move |runtime| {
-        let response: String = runtime
-          .call_function(
-            None,
-            "dispatch",
-            json_args!(method, route_path, uri.to_string(), headers, body_bytes),
-          )
-          .unwrap();
-        return response;
+      .apply(move |runtime| -> Result<JsResponse, rustyscript::Error> {
+        let response: JsResponse = runtime.call_function(
+          None,
+          "__dispatch",
+          json_args!(
+            method,
+            route_path,
+            uri.to_string(),
+            headers,
+            String::from_utf8_lossy(&body_bytes)
+          ),
+        )?;
+        return Ok(response);
       })
       .await
-      .unwrap();
+      .map_err(JsResponseError::Internal)?
+      .map_err(|err| JsResponseError::Internal(err.into()))?;
 
-    return response.into_response();
+    let mut http_response = Response::builder()
+      .status(js_response.status.unwrap_or(200))
+      .body(Body::from(js_response.body.unwrap_or_default()))
+      .map_err(|err| JsResponseError::Internal(err.into()))?;
+
+    if let Some(headers) = js_response.headers {
+      for (key, value) in headers {
+        http_response.headers_mut().insert(
+          HeaderName::from_str(key.as_str())
+            .map_err(|err| JsResponseError::Internal(err.into()))?,
+          HeaderValue::from_str(value.as_str())
+            .map_err(|err| JsResponseError::Internal(err.into()))?,
+        );
+      }
+    }
+
+    return Ok(http_response);
   };
 
   let mut router = router.lock();
@@ -210,9 +308,7 @@ fn route_callback(
       "PUT" => axum::routing::put(handler),
       "TRACE" => axum::routing::trace(handler),
       _ => {
-        return Err(rustyscript::Error::ValueNotFound(format!(
-          "method: {method_uppercase}"
-        )));
+        return Err(format!("method: {method_uppercase}").into());
       }
     },
   ));
@@ -222,7 +318,7 @@ fn route_callback(
 
 pub(crate) async fn install_routes(
   state: AppState,
-  script: rustyscript::Module,
+  script: Module,
 ) -> Result<Option<Router<AppState>>, AnyError> {
   return Ok(
     *state
@@ -235,7 +331,9 @@ pub(crate) async fn install_routes(
         let router_clone = router.clone();
         runtime
           .register_function("route", move |args| {
-            route_callback(state.clone(), router_clone.clone(), args)?;
+            route_callback(state.clone(), router_clone.clone(), args)
+              .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
+
             Ok(serde_json::Value::Null)
           })
           .unwrap();
@@ -280,10 +378,11 @@ mod tests {
           .load_module(&Module::new(
             "module.js",
             r#"
-              import { test } from "trailbase:main";
+              import { _test } from "trailbase:main";
+              import { dispatch } from "./__index.ts";
 
               export function test_fun() {
-                return test;
+                return _test;
               }
             "#,
           ))
