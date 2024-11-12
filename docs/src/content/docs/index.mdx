@@ -24,6 +24,7 @@ import { Image } from "astro:assets";
 import { Aside, Card, CardGrid } from "@astrojs/starlight/components";
 
 import screenshot from "@/assets/screenshot.webp";
+import dotnetLogo from "@/assets/dotnet_logo.svg";
 import flutterLogo from "@/assets/flutter_logo.svg";
 import tsLogo from "@/assets/ts_logo.svg";
 
@@ -129,8 +130,8 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
       reliance on standards, and JSON Schema for type-safety allowing type-safe
       bindings for virtually any language.
 
-      Clients as well as code-generation examples for TypeScript and
-      Dart/Flutter are provided out of the box.
+      Clients as well as code-generation examples for TypeScript,
+      Dart/Flutter, and C#/.NET are provided out of the box.
 
       <div class="m-0 flex justify-center items-start gap-8">
         <span>
@@ -138,6 +139,9 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
         </span>
         <span>
           <Image margin={0} class="p-0 m-0" width={42} height={52} src={flutterLogo} alt="Flutter" />
+        </span>
+        <span>
+          <Image margin={0} class="p-0 m-0" width={52} height={52} src={dotnetLogo} alt="Dotnet" />
         </span>
       </div>
     </Card>
