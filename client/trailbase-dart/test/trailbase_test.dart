@@ -79,13 +79,26 @@ Future<void> main() async {
 
       final oldTokens = client.tokens();
       expect(oldTokens, isNotNull);
+      expect(oldTokens!.valid, isTrue);
+
+      final user = client.user()!;
+      expect(user.id, isNot(equals('')));
+      expect(user.email, equals('admin@localhost'));
+
+      await client.logout();
+      expect(client.tokens(), isNull);
 
       // We need to wait a little to push the expiry time in seconds to avoid just getting the same token minted again.
       await Future.delayed(Duration(milliseconds: 1500));
 
+      final newTokens = await client.login('admin@localhost', 'secret');
+      expect(newTokens, isNotNull);
+      expect(newTokens.valid, isTrue);
+
+      expect(newTokens, isNot(equals(oldTokens)));
+
       await client.refreshAuthToken();
-      final newTokens = client.tokens();
-      expect(newTokens, isNot(equals(oldTokens!.auth)));
+      expect(newTokens, equals(client.tokens()));
     });
 
     test('records', () async {

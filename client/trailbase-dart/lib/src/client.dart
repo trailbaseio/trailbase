@@ -15,7 +15,7 @@ class User {
   });
 
   User.fromJson(Map<String, dynamic> json)
-      : id = json['id'],
+      : id = json['sub'],
         email = json['email'];
 
   @override
@@ -39,6 +39,19 @@ class Tokens {
         'refresh_token': refresh,
         'csrf_token': csrf,
       };
+
+  bool get valid => JwtDecoder.decode(auth).isNotEmpty;
+
+  @override
+  bool operator ==(Object other) {
+    return other is Tokens &&
+        auth == other.auth &&
+        refresh == other.refresh &&
+        csrf == other.csrf;
+  }
+
+  @override
+  int get hashCode => Object.hash(auth, refresh, csrf);
 
   @override
   String toString() => 'Tokens(${auth}, ${refresh}, ${csrf})';
@@ -352,7 +365,7 @@ class Client {
   User? user() {
     final authToken = tokens()?.auth;
     if (authToken != null) {
-      return User.fromJson(JwtDecoder.decode(authToken)['user']);
+      return User.fromJson(JwtDecoder.decode(authToken));
     }
     return null;
   }
