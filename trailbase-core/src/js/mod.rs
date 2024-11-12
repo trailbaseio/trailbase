@@ -3,14 +3,17 @@ use axum::extract::Request;
 use axum::http::{header::CONTENT_TYPE, request::Parts, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Router;
+use libsql::Connection;
 use parking_lot::Mutex;
 use rustyscript::{json_args, Module, Runtime};
 use serde::Deserialize;
+use serde_json::from_value;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 use thiserror::Error;
 
+use crate::records::sql_to_json::rows_to_json_arrays;
 use crate::AppState;
 
 mod import_provider;
@@ -40,6 +43,14 @@ export function addRoute(method: string, route: string, callback: CbType) {
   console.log("JS: Added route:", method, route);
 }
 
+export async function query(queryStr: string, params: unknown[]) : unknown[][] {
+  return await rustyscript.async_functions.query(queryStr, params);
+}
+
+export async function execute(queryStr: string, params: unknown[]) : number {
+  return await rustyscript.async_functions.execute(queryStr, params);
+}
+
 export function dispatch(
   method: string,
   route: string,
@@ -66,6 +77,8 @@ globalThis.__dispatch = dispatch;
 globalThis.__trailbase = {
   addRoute,
   dispatch,
+  query,
+  execute,
 };
 "#;
 
@@ -131,6 +144,8 @@ impl RuntimeSingleton {
       r#"
         export const _test = "test0";
         export const addRoute = globalThis.__trailbase.addRoute;
+        export const query = globalThis.__trailbase.query;
+        export const execute = globalThis.__trailbase.execute;
       "#
       .to_string(),
     );
@@ -152,8 +167,94 @@ static RUNTIME: LazyLock<RuntimeSingleton> = LazyLock::new(RuntimeSingleton::new
 
 pub(crate) struct RuntimeHandle;
 
+pub fn json_value_to_param(value: serde_json::Value) -> Result<libsql::Value, rustyscript::Error> {
+  use rustyscript::Error;
+  return Ok(match value {
+    serde_json::Value::Object(ref _map) => {
+      return Err(Error::Runtime(format!("Object unsupported")));
+    }
+    serde_json::Value::Array(ref _arr) => {
+      return Err(Error::Runtime(format!("Array unsupported")));
+    }
+    serde_json::Value::Null => libsql::Value::Null,
+    serde_json::Value::Bool(b) => libsql::Value::Integer(b as i64),
+    serde_json::Value::String(str) => libsql::Value::Text(str),
+    serde_json::Value::Number(number) => {
+      if let Some(n) = number.as_i64() {
+        libsql::Value::Integer(n)
+      } else if let Some(n) = number.as_u64() {
+        libsql::Value::Integer(n as i64)
+      } else if let Some(n) = number.as_f64() {
+        libsql::Value::Real(n)
+      } else {
+        return Err(Error::Runtime(format!("invalid number: {number:?}")));
+      }
+    }
+  });
+}
+
 impl RuntimeHandle {
-  pub(crate) fn new() -> Self {
+  pub(crate) fn new(conn: Connection) -> Self {
+    RUNTIME
+      .sender
+      .send(Message::Run(Box::new(move |runtime: &mut Runtime| {
+        let conn_clone = conn.clone();
+
+        runtime
+          .register_async_function("query", move |args: Vec<serde_json::Value>| {
+            let conn = conn_clone.clone();
+            Box::pin(async move {
+              let query: String = get_arg(&args, 0)?;
+              let json_params: Vec<serde_json::Value> = get_arg(&args, 1)?;
+
+              let mut params: Vec<libsql::Value> = vec![];
+              for value in json_params {
+                params.push(json_value_to_param(value)?);
+              }
+
+              let rows = conn
+                .query(&query, libsql::params::Params::Positional(params))
+                .await
+                .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
+
+              let (values, _columns) = rows_to_json_arrays(rows, usize::MAX)
+                .await
+                .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
+
+              return Ok(
+                serde_json::to_value(values)
+                  .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?,
+              );
+            })
+          })
+          .unwrap();
+
+        runtime
+          .register_async_function("execute", move |args: Vec<serde_json::Value>| {
+            let conn = conn.clone();
+            Box::pin(async move {
+              let query: String = get_arg(&args, 0)?;
+              let json_params: Vec<serde_json::Value> = get_arg(&args, 1)?;
+
+              let mut params: Vec<libsql::Value> = vec![];
+              for value in json_params {
+                params.push(json_value_to_param(value)?);
+              }
+
+              let rows_affected = conn
+                .execute(&query, libsql::params::Params::Positional(params))
+                .await
+                .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
+
+              log::error!("ROWS AFF {rows_affected}");
+
+              return Ok(serde_json::Value::Number(rows_affected.into()));
+            })
+          })
+          .unwrap();
+      })))
+      .unwrap();
+
     return Self {};
   }
 
@@ -211,23 +312,10 @@ impl IntoResponse for JsResponseError {
 fn route_callback(
   state: AppState,
   router: Arc<Mutex<Option<Router<AppState>>>>,
-  args: &[serde_json::Value],
+  method: String,
+  route: String,
 ) -> Result<(), AnyError> {
-  let Some(method) = args
-    .first()
-    .and_then(|v| serde_json::from_value::<String>(v.clone()).ok())
-  else {
-    return Err("Missing method argument".into());
-  };
   let method_uppercase = method.to_uppercase();
-
-  let Some(route) = args
-    .get(1)
-    .and_then(|v| serde_json::from_value::<String>(v.clone()).ok())
-  else {
-    return Err("Missing route argument".into());
-  };
-
   let route_path = route.clone();
   let handler = move |req: Request| async move {
     let (parts, body) = req.into_parts();
@@ -316,6 +404,17 @@ fn route_callback(
   return Ok(());
 }
 
+fn get_arg<T>(args: &[serde_json::Value], i: usize) -> Result<T, rustyscript::Error>
+where
+  T: serde::de::DeserializeOwned,
+{
+  use rustyscript::Error;
+  let arg = args
+    .get(i)
+    .ok_or_else(|| Error::Runtime(format!("Range err {i} > {}", args.len())))?;
+  return from_value::<T>(arg.clone()).map_err(|err| Error::Runtime(err.to_string()));
+}
+
 pub(crate) async fn install_routes(
   state: AppState,
   script: Module,
@@ -330,8 +429,11 @@ pub(crate) async fn install_routes(
         // First install a native callback that builds an axum router.
         let router_clone = router.clone();
         runtime
-          .register_function("route", move |args| {
-            route_callback(state.clone(), router_clone.clone(), args)
+          .register_function("route", move |args: &[serde_json::Value]| {
+            let method: String = get_arg(args, 0)?;
+            let route: String = get_arg(args, 1)?;
+
+            route_callback(state.clone(), router_clone.clone(), method, route)
               .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
             Ok(serde_json::Value::Null)
@@ -355,10 +457,29 @@ pub(crate) async fn install_routes(
 mod tests {
   use super::*;
   use rustyscript::{json_args, Module};
+  use trailbase_sqlite::query_one_row;
+
+  async fn new_mem_conn() -> libsql::Connection {
+    return libsql::Builder::new_local(":memory:")
+      .build()
+      .await
+      .unwrap()
+      .connect()
+      .unwrap();
+  }
 
   #[tokio::test]
+  async fn test_serial_tests() {
+    // NOTE: needs to run serially since registration of libsql connection with singleton v8 runtime
+    // is racy.
+    test_runtime_apply().await;
+    test_runtime_javascript().await;
+    test_javascript_query().await;
+    test_javascript_execute().await;
+  }
+
   async fn test_runtime_apply() {
-    let handle = RuntimeHandle::new();
+    let handle = RuntimeHandle::new(new_mem_conn().await);
     let number = handle
       .apply::<i64>(|_runtime| {
         return 42;
@@ -369,9 +490,8 @@ mod tests {
     assert_eq!(42, *number);
   }
 
-  #[tokio::test]
   async fn test_runtime_javascript() {
-    let handle = RuntimeHandle::new();
+    let handle = RuntimeHandle::new(new_mem_conn().await);
     let result = handle
       .apply::<String>(|runtime| {
         let context = runtime
@@ -404,5 +524,127 @@ mod tests {
       .unwrap();
 
     assert_eq!("test0", *result);
+  }
+
+  async fn test_javascript_query() {
+    let conn = new_mem_conn().await;
+    conn
+      .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
+      .await
+      .unwrap();
+    conn
+      .execute("INSERT INTO test (v0, v1) VALUES ('0', 0), ('1', 1);", ())
+      .await
+      .unwrap();
+
+    let handle = RuntimeHandle::new(conn);
+
+    let result = handle
+      .apply::<Vec<Vec<serde_json::Value>>>(|runtime| {
+        let context = runtime
+          .load_module(&Module::new(
+            "module.ts",
+            r#"
+              import { query } from "trailbase:main";
+
+              export async function test_query(queryStr: string) : unknown[][] {
+                return await query(queryStr, []);
+              }
+            "#,
+          ))
+          .map_err(|err| {
+            log::error!("Failed to load module: {err}");
+            return err;
+          })
+          .unwrap();
+
+        let tokio_runtime = runtime.tokio_runtime();
+        return tokio_runtime
+          .block_on(async {
+            runtime
+              .call_function_async(
+                Some(&context),
+                "test_query",
+                json_args!("SELECT * FROM test"),
+              )
+              .await
+          })
+          .map_err(|err| {
+            log::error!("Failed to load call fun: {err}");
+            return err;
+          })
+          .unwrap();
+      })
+      .await
+      .unwrap();
+
+    assert_eq!(
+      vec![
+        vec![
+          serde_json::Value::String("0".to_string()),
+          serde_json::Value::Number(0.into())
+        ],
+        vec![
+          serde_json::Value::String("1".to_string()),
+          serde_json::Value::Number(1.into())
+        ],
+      ],
+      *result
+    );
+  }
+
+  async fn test_javascript_execute() {
+    let conn = new_mem_conn().await;
+    conn
+      .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
+      .await
+      .unwrap();
+
+    let handle = RuntimeHandle::new(conn.clone());
+
+    let _result = handle
+      .apply::<i64>(|runtime| {
+        let context = runtime
+          .load_module(&Module::new(
+            "module.ts",
+            r#"
+              import { execute } from "trailbase:main";
+
+              export async function test_execute(queryStr: string) : number {
+                return await execute(queryStr, []);
+              }
+            "#,
+          ))
+          .map_err(|err| {
+            log::error!("Failed to load module: {err}");
+            return err;
+          })
+          .unwrap();
+
+        let tokio_runtime = runtime.tokio_runtime();
+        return tokio_runtime
+          .block_on(async {
+            runtime
+              .call_function_async(
+                Some(&context),
+                "test_execute",
+                json_args!("DELETE FROM test"),
+              )
+              .await
+          })
+          .map_err(|err| {
+            log::error!("Failed to load call fun: {err}");
+            return err;
+          })
+          .unwrap();
+      })
+      .await
+      .unwrap();
+
+    let row = query_one_row(&conn, "SELECT COUNT(*) FROM test", ())
+      .await
+      .unwrap();
+    let count: i64 = row.get(0).unwrap();
+    assert_eq!(0, count);
   }
 }

@@ -49,7 +49,7 @@ regex = "1.11.0"
 reqwest = { version = "0.12.5", default-features = false, features = ["rustls-tls", "json"] }
 rusqlite = { workspace = true }
 rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
-rustyscript = "0.9.0"
+rustyscript = "^0.9.0"
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "^1.0.117"
 serde_path_to_error = "0.1.16"
@@ -66,7 +66,7 @@ tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 trailbase-sqlite = { path = "../trailbase-sqlite" }
 ts-rs = { version = "10", features=["uuid-impl", "serde-json-impl"] }
-url = "2.5.2"
+url = "^2.4.1"
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 uuid = { version = "^1.8.0", features = ["v4", "serde"] }
 validator = { version = "0.19.0", default-features = false }
@@ -79,7 +79,7 @@ prost-reflect-build = "0.14.0"
 
 [dev-dependencies]
 anyhow = "^1.0.86"
-axum-test = "16.0.0"
+axum-test = "16.3.0"
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 trailbase-extension = { path = "../trailbase-extension" }
 quoted_printable = "0.5.1"

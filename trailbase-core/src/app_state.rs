@@ -124,7 +124,7 @@ impl AppState {
         jwt: args.jwt,
         table_metadata: args.table_metadata,
 
-        runtime: RuntimeHandle::new(),
+        runtime: RuntimeHandle::new(args.conn.clone()),
 
         #[cfg(test)]
         cleanup: vec![],
@@ -411,7 +411,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       logs_conn,
       jwt: jwt::test_jwt_helper(),
       table_metadata,
-      runtime: RuntimeHandle::new(),
+      runtime: RuntimeHandle::new(main_conn.clone()),
       cleanup: vec![Box::new(temp_dir)],
     }),
   });
