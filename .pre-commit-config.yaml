@@ -109,3 +109,20 @@ repos:
       types: [file]
       files: .*\.dart$
       pass_filenames: false
+
+    ### Dotnet client
+    - id: dotnet_format
+      name: Dotnet format
+      entry: dotnet format client/trailbase-dotnet --verify-no-changes
+      language: system
+      types: [file]
+      files: .*\.(cs|csproj)$
+      pass_filenames: false
+
+    - id: dotnet_test
+      name: Dotnet test
+      entry: dotnet test client/trailbase-dotnet
+      language: system
+      types: [file]
+      files: .*\.(cs|csproj)$
+      pass_filenames: false

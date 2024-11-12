@@ -28,6 +28,10 @@ jobs:
         with:
           channel: stable
           flutter-version: 3.24.3
+      - name: Setup .NET 8.x
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.x'
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
