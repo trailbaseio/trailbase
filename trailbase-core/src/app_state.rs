@@ -73,6 +73,8 @@ impl AppState {
     let conn_clone0 = args.conn.clone();
     let conn_clone1 = args.conn.clone();
 
+    RuntimeHandle::set_connection(args.conn.clone());
+
     AppState {
       state: Arc::new(InternalState {
         data_dir: args.data_dir,
@@ -124,7 +126,7 @@ impl AppState {
         jwt: args.jwt,
         table_metadata: args.table_metadata,
 
-        runtime: RuntimeHandle::new(args.conn.clone()),
+        runtime: RuntimeHandle::new(),
 
         #[cfg(test)]
         cleanup: vec![],
@@ -370,6 +372,8 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let main_conn_clone1 = main_conn.clone();
   let table_metadata_clone = table_metadata.clone();
 
+  RuntimeHandle::set_connection(main_conn.clone());
+
   return Ok(AppState {
     state: Arc::new(InternalState {
       data_dir: DataDir(temp_dir.path().to_path_buf()),
@@ -411,7 +415,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       logs_conn,
       jwt: jwt::test_jwt_helper(),
       table_metadata,
-      runtime: RuntimeHandle::new(main_conn.clone()),
+      runtime: RuntimeHandle::new(),
       cleanup: vec![Box::new(temp_dir)],
     }),
   });

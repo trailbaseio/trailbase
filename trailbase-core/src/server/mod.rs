@@ -113,7 +113,7 @@ impl Server {
       let mut js_router = Some(Router::new());
       for module in modules {
         let fname = module.filename().to_owned();
-        let router = install_routes(state.clone(), module)
+        let router = install_routes(module)
           .await
           .map_err(|err| InitError::ScriptError(err.to_string()))?;
 
