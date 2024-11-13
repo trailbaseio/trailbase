@@ -1,12 +1,45 @@
+<p align="center">
+  <a href="https://trailbase.io" target="_blank">
+    <picture>
+      <img alt="TrailBase logo" width="150" src="https://raw.githubusercontent.com/trailbaseio/trailbase/refs/heads/main/assets/logo.svg" />
+    </picture>
+  </a>
+</p>
+
+<p align="center">
+  A <a href="https://trailbase.io/reference/benchmarks/">blazingly</a> fast,
+  single-file, open-source application server with type-safe APIs, Auth, and
+  Admin UI built on Rust+SQLite.
+<p>
+
+<p align="center">
+  <a href="https://github.com/trailbaseio/trailbase/stargazers/">
+    <img src="https://img.shields.io/github/stars/trailbaseio/trailbase?style=social&label=Star" />
+  </a>
+  <a href="https://github.com/trailbaseio/trailbase/actions?query=branch%3Amain">
+    <img src="https://github.com/trailbaseio/trailbase/actions/workflows/test.yml/badge.svg?branch=main" alt="Build Status">
+  </a>
+  <a href="https://github.com/trailbaseio/trailbase/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-OSL_3.0-blue" alt="License - OSL 3.0">
+  </a>
+  <a href="https://trailbase.io/reference/roadmap/">
+    <img src="https://img.shields.io/badge/status-alpha-orange" alt="Status - Alpha">
+  </a>
+</p>
+
 # TrailBase
 
-[![Build Status](https://github.com/trailbaseio/trailbase/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/trailbaseio/trailbase/actions?query=branch%3Amain)
-[![License](https://img.shields.io/badge/license-OSL_3.0-blue.svg)](https://raw.githubusercontent.com/trailbaseio/trailbase/master/LICENSE)
+<p align="center">
+  <a href="https://demo.trailbase.io/_/admin" target="_blank">
+    <picture>
+      <img alt="Admin UI" width="512" src="https://raw.githubusercontent.com/trailbaseio/trailbase/refs/heads/main/docs/src/assets/screenshot.webp" />
+    </picture>
+  </a>
+</p>
 
-A [blazingly](https://trailbase.io/reference/benchmarks/) fast, single-file,
-and open-source application-base built on top of Rust and SQLite (libsql).
-It ships with type-safe restful APIs, an authentication system, an admin
-dashboard and more out of the box.
+<p align="center">
+  Try the <a href="https://demo.trailbase.io/_/admin" target="_blank">demo</a> online - Email: <em>admin@localhost</em>, password: <em>secret</em>.
+</p>
 
 For more context, documentation, and an online live demo, check out our website
 [trailbase.io](https://trailbase.io).
@@ -82,12 +115,12 @@ Contributions are very much appreciated 🙏. For anything beyond bug fixes,
 let's quickly chat to see how a proposal fits into the overall roadmap and
 avoid any surprises.
 
-Since we're not sure yet what the best setup or exact license is, e.g.
-compatibility between OSL-3.0 and more popular licenses, we'd ask you to sign a
-simple CLA that retains your copyright, ensures that TrailBase will continue to
-be freely available under an OSI-approved copyleft license, while allowing for
-some flexibility and sub-licensing as established by large, successful projects
-such as Grafana or Element.
+We're not sure yet what the best setup or exact license is for compatibility
+between OSL-3.0 and more popular licenses or use as a framework.
+So we'd ask you to sign a simple CLA that retains your copyright, ensures that
+TrailBase will continue to forever be freely available under an OSI-approved
+copyleft license, while allowing for some flexibility and sub-licensing as
+established by much larger, successful projects such as Grafana or Element.
 
 ## License
 
