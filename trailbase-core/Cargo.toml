@@ -19,6 +19,7 @@ axum = { version = "^0.7.5", features=["multipart"] }
 axum-client-ip = "0.6.0"
 axum-extra = { version = "^0.9.3", default-features = false, features=["protobuf"] }
 base64 = { version = "0.22.1", default-features = false }
+bytes = "1.8.0"
 chrono = "^0.4.38"
 cookie = "0.18.1"
 crossbeam-channel = "0.5.13"

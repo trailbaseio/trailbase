@@ -22,7 +22,7 @@ async function initTrailBase(): Promise<{ subprocess: Subprocess }> {
 
   const subprocess = execa`cargo run -- --data-dir ../testfixture run --dev -a 127.0.0.1:${port}`;
 
-  for (let i = 0; i < 50; ++i) {
+  for (let i = 0; i < 100; ++i) {
     if ((subprocess.exitCode ?? 0) > 0) {
       break;
     }

@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::extract::Request;
+use axum::extract::{RawPathParams, Request};
 use axum::http::{header::CONTENT_TYPE, request::Parts, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Router;
@@ -9,7 +9,7 @@ use rust_embed::RustEmbed;
 use rustyscript::{init_platform, json_args, Module, Runtime};
 use serde::Deserialize;
 use serde_json::from_value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 use thiserror::Error;
@@ -21,13 +21,6 @@ use crate::AppState;
 mod import_provider;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
-
-#[derive(Default, Deserialize)]
-struct JsResponse {
-  headers: Option<HashMap<String, String>>,
-  status: Option<u16>,
-  body: Option<String>,
-}
 
 enum Message {
   Run(Box<dyn (FnOnce(&mut Runtime)) + Send + Sync>),
@@ -355,7 +348,7 @@ fn route_callback(
 ) -> Result<(), AnyError> {
   let method_uppercase = method.to_uppercase();
   let route_path = route.clone();
-  let handler = move |req: Request| async move {
+  let handler = move |params: RawPathParams, req: Request| async move {
     let (parts, body) = req.into_parts();
 
     let Ok(body_bytes) = axum::body::to_bytes(body, usize::MAX).await else {
@@ -370,7 +363,11 @@ fn route_callback(
       ..
     } = parts;
 
-    let headers: HashMap<String, String> = headers
+    let path_params: Vec<(String, String)> = params
+      .iter()
+      .map(|(k, v)| (k.to_string(), v.to_string()))
+      .collect();
+    let headers: Vec<(String, String)> = headers
       .into_iter()
       .filter_map(|(key, value)| {
         if let Some(key) = key {
@@ -382,20 +379,32 @@ fn route_callback(
       })
       .collect();
 
+    #[derive(Deserialize)]
+    struct JsResponse {
+      headers: Option<Vec<(String, String)>>,
+      status: Option<u16>,
+      body: Option<bytes::Bytes>,
+    }
+
     let js_response = RuntimeHandle::new()
       .apply(move |runtime| -> Result<JsResponse, rustyscript::Error> {
-        let response: JsResponse = runtime.call_function(
-          None,
-          "__dispatch",
-          json_args!(
-            method,
-            route_path,
-            uri.to_string(),
-            headers,
-            String::from_utf8_lossy(&body_bytes)
-          ),
-        )?;
-        return Ok(response);
+        let tokio_runtime = runtime.tokio_runtime();
+        return tokio_runtime.block_on(async {
+          return runtime
+            .call_function_async::<JsResponse>(
+              None,
+              "__dispatch",
+              json_args!(
+                method,
+                route_path,
+                uri.to_string(),
+                path_params,
+                headers,
+                body_bytes
+              ),
+            )
+            .await;
+        });
       })
       .await
       .map_err(JsResponseError::Internal)?

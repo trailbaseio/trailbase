@@ -44,7 +44,7 @@ Future<Process> initTrailBase() async {
   ]);
 
   final dio = Dio();
-  for (int i = 0; i < 50; ++i) {
+  for (int i = 0; i < 100; ++i) {
     try {
       final response = await dio.fetch(
           RequestOptions(path: 'http://127.0.0.1:${port}/api/healthcheck'));

@@ -53,7 +53,7 @@ public class ClientTestFixture : IDisposable {
 
     var client = new HttpClient();
     Task.Run(async () => {
-      for (int i = 0; i < 50; ++i) {
+      for (int i = 0; i < 100; ++i) {
         try {
           var response = await client.GetAsync($"http://{address}/api/healthcheck");
           if (response.StatusCode == System.Net.HttpStatusCode.OK) {
@@ -61,7 +61,7 @@ public class ClientTestFixture : IDisposable {
           }
         }
         catch (Exception e) {
-          Console.WriteLine($"Caught exception: {e}");
+          Console.WriteLine($"Caught exception: {e.Message}");
         }
 
         await Task.Delay(500);
