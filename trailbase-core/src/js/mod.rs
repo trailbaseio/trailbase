@@ -81,11 +81,21 @@ impl RuntimeSingleton {
       cow_to_string(JsRuntimeAssets::get("index.js").unwrap().data),
     );
 
-    let runtime = rustyscript::Runtime::new(rustyscript::RuntimeOptions {
-      import_provider: Some(Box::new(cache)),
-      schema_whlist: HashSet::from(["trailbase".to_string()]),
-      ..Default::default()
-    })?;
+    let tokio_runtime = tokio::runtime::Builder::new_multi_thread()
+      .enable_time()
+      .enable_io()
+      .thread_name("v8-runtime")
+      .thread_stack_size(4 * 1024 * 1024)
+      .build()?;
+
+    let runtime = rustyscript::Runtime::with_tokio_runtime(
+      rustyscript::RuntimeOptions {
+        import_provider: Some(Box::new(cache)),
+        schema_whlist: HashSet::from(["trailbase".to_string()]),
+        ..Default::default()
+      },
+      std::rc::Rc::new(tokio_runtime),
+    )?;
 
     return Ok(runtime);
   }
@@ -185,15 +195,14 @@ impl RuntimeHandle {
     return Self {};
   }
 
-  #[allow(unused)]
-  pub(crate) async fn apply<T>(
+  async fn apply<T>(
     &self,
     f: impl (FnOnce(&mut rustyscript::Runtime) -> T) + Send + Sync + 'static,
   ) -> Result<Box<T>, AnyError>
   where
     T: Send + Sync + 'static,
   {
-    let (sender, mut receiver) = tokio::sync::oneshot::channel::<Box<T>>();
+    let (sender, receiver) = tokio::sync::oneshot::channel::<Box<T>>();
 
     RUNTIME.sender.send(Message::Run(Box::new(move |rt| {
       if let Err(_err) = sender.send(Box::new(f(rt))) {
@@ -344,7 +353,7 @@ where
 
 pub(crate) async fn install_routes(
   state: AppState,
-  script: Module,
+  module: Module,
 ) -> Result<Option<Router<AppState>>, AnyError> {
   return Ok(
     *state
@@ -367,8 +376,8 @@ pub(crate) async fn install_routes(
           })
           .unwrap();
 
-        // Then execute the script, i.e. statements in the file scope.
-        runtime.load_module(&script).unwrap();
+        // Then execute the script/module, i.e. statements in the file scope.
+        runtime.load_module(&module).unwrap();
 
         let router: Router<AppState> = router.lock().take().unwrap();
         if router.has_routes() {

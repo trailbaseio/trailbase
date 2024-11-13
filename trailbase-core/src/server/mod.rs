@@ -10,7 +10,6 @@ use axum::{RequestExt, Router};
 use rust_embed::RustEmbed;
 use std::path::PathBuf;
 use std::rc::Rc;
-use tokio::fs::read_to_string;
 use tokio::signal;
 use tokio::task::JoinSet;
 use tower_cookies::CookieManagerLayer;
@@ -109,22 +108,24 @@ impl Server {
         .map_err(|err| InitError::CustomInit(err.to_string()))?;
     }
 
-    let js_module = {
-      if let Ok(contents) = read_to_string(opts.data_dir.root().join("index.js")).await {
-        Some(rustyscript::Module::new("index.js", &contents))
-      } else if let Ok(contents) = read_to_string(opts.data_dir.root().join("index.ts")).await {
-        Some(rustyscript::Module::new("index.ts", &contents))
-      } else {
-        None
+    let js_modules = rustyscript::Module::load_dir(opts.data_dir.root().join("scripts"));
+    let custom_routes = if let Ok(modules) = js_modules {
+      let mut js_router = Some(Router::new());
+      for module in modules {
+        let fname = module.filename().to_owned();
+        let router = install_routes(state.clone(), module)
+          .await
+          .map_err(|err| InitError::ScriptError(err.to_string()))?;
+
+        if let Some(router) = router {
+          js_router = Some(js_router.take().unwrap().nest("/", router));
+        } else {
+          log::debug!("Skipping js module '{fname:?}': no routes");
+        }
       }
-    };
 
-    let custom_routes = if let Some(js_module) = js_module {
-      let js_router = install_routes(state.clone(), js_module)
-        .await
-        .map_err(|err| InitError::ScriptError(err.to_string()))?;
-
-      if let Some(router) = js_router {
+      let router = js_router.take().unwrap();
+      if router.has_routes() {
         Some(custom_routes.unwrap_or_default().nest("/", router))
       } else {
         custom_routes
