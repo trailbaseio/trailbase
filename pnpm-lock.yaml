@@ -208,6 +208,15 @@ importers:
         specifier: ^8.14.0
         version: 8.14.0(eslint@9.14.0(jiti@2.4.0))(typescript@5.6.3)
 
+  trailbase-core/js:
+    devDependencies:
+      prettier:
+        specifier: ^3.3.3
+        version: 3.3.3
+      typescript:
+        specifier: ^5.6.3
+        version: 5.6.3
+
   ui/admin:
     dependencies:
       '@bufbuild/protobuf':

@@ -25,7 +25,7 @@ fn copy_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
   return Ok(());
 }
 
-fn build_ui(path: &str) -> Result<()> {
+fn build_js(path: &str) -> Result<()> {
   let pnpm_run = |args: &[&str]| -> Result<std::process::Output> {
     let output = std::process::Command::new("pnpm")
       .current_dir("..")
@@ -45,12 +45,12 @@ fn build_ui(path: &str) -> Result<()> {
     // NOTE: We don't want to break backend-builds on frontend errors, at least for dev builds.
     if Ok("release") == env::var("PROFILE").as_deref() {
       panic!(
-        "Failed to build ui '{path}': {}",
+        "Failed to build js '{path}': {}",
         String::from_utf8_lossy(&output.stderr)
       );
     }
     warn!(
-      "Failed to build ui '{path}': {}",
+      "Failed to build js '{path}': {}",
       String::from_utf8_lossy(&output.stderr)
     );
   }
@@ -97,7 +97,7 @@ fn main() -> Result<()> {
     let path = "ui/admin";
     println!("cargo::rerun-if-changed=../{path}/src/components/");
     println!("cargo::rerun-if-changed=../{path}/src/lib/");
-    let _ = build_ui(path);
+    let _ = build_js(path);
   }
 
   {
@@ -106,7 +106,12 @@ fn main() -> Result<()> {
     println!("cargo::rerun-if-changed=../{path}/src/lib/");
     println!("cargo::rerun-if-changed=../{path}/src/pages/");
     println!("cargo::rerun-if-changed=../{path}/src/layouts/");
-    let _ = build_ui("ui/auth");
+    let _ = build_js(path);
+  }
+
+  {
+    println!("cargo::rerun-if-changed=js/src/");
+    let _ = build_js("trailbase-core/js");
   }
 
   return Ok(());

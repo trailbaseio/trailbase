@@ -1,0 +1,16 @@
+{
+  "name": "trailbase-js-runtime",
+  "description": "Runtime for JS/TS execution within TrailBase",
+  "version": "0.1.0",
+  "license": "OSL-3.0",
+  "type": "module",
+  "homepage": "https://trailbase.io",
+  "scripts": {
+    "build": "tsc",
+    "format": "prettier -w src"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3"
+  }
+}

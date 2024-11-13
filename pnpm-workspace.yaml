@@ -5,6 +5,7 @@ packages:
   - 'ui/auth'
   - 'examples/blog/web'
   - 'examples/tutorial/scripts'
+  - 'trailbase-core/js'
 options:
   prefer-workspace-packages: true
   strict-peer-dependencies: true

@@ -5,6 +5,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Router;
 use libsql::Connection;
 use parking_lot::Mutex;
+use rust_embed::RustEmbed;
 use rustyscript::{json_args, Module, Runtime};
 use serde::Deserialize;
 use serde_json::from_value;
@@ -13,74 +14,13 @@ use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 use thiserror::Error;
 
+use crate::assets::cow_to_string;
 use crate::records::sql_to_json::rows_to_json_arrays;
 use crate::AppState;
 
 mod import_provider;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
-
-const TRAILBASE_MAIN: &str = r#"
-type Headers = { [key: string]: string };
-type Request = {
-  uri: string;
-  headers: Headers;
-  body: string;
-};
-type Response = {
-  headers?: Headers;
-  status?: number;
-  body?: string;
-};
-type CbType = (req: Request) => Response | undefined;
-
-const callbacks = new Map<string, CbType>();
-
-export function addRoute(method: string, route: string, callback: CbType) {
-  rustyscript.functions.route(method, route);
-  callbacks.set(`${method}:${route}`, callback);
-
-  console.log("JS: Added route:", method, route);
-}
-
-export async function query(queryStr: string, params: unknown[]) : unknown[][] {
-  return await rustyscript.async_functions.query(queryStr, params);
-}
-
-export async function execute(queryStr: string, params: unknown[]) : number {
-  return await rustyscript.async_functions.execute(queryStr, params);
-}
-
-export function dispatch(
-  method: string,
-  route: string,
-  uri: string,
-  headers: Headers,
-  body: string,
-) : Response | undefined {
-  console.log("JS: Dispatching:", method, route, body);
-
-  const key = `${method}:${route}`;
-  const cb = callbacks.get(key);
-  if (!cb) {
-    throw Error(`Missing callback: ${key}`);
-  }
-
-  return cb({
-    uri,
-    headers,
-    body,
-  });
-};
-
-globalThis.__dispatch = dispatch;
-globalThis.__trailbase = {
-  addRoute,
-  dispatch,
-  query,
-  execute,
-};
-"#;
 
 #[derive(Default, Deserialize)]
 struct JsResponse {
@@ -116,9 +56,6 @@ impl RuntimeSingleton {
     let handle = std::thread::spawn(move || {
       let mut runtime = Self::init_runtime().unwrap();
 
-      let module = Module::new("__index.ts", TRAILBASE_MAIN);
-      let _handle = runtime.load_module(&module).unwrap();
-
       #[allow(clippy::never_loop)]
       while let Ok(message) = receiver.recv() {
         match message {
@@ -141,13 +78,7 @@ impl RuntimeSingleton {
 
     cache.set(
       "trailbase:main",
-      r#"
-        export const _test = "test0";
-        export const addRoute = globalThis.__trailbase.addRoute;
-        export const query = globalThis.__trailbase.query;
-        export const execute = globalThis.__trailbase.execute;
-      "#
-      .to_string(),
+      cow_to_string(JsRuntimeAssets::get("index.js").unwrap().data),
     );
 
     let runtime = rustyscript::Runtime::new(rustyscript::RuntimeOptions {
@@ -171,10 +102,10 @@ pub fn json_value_to_param(value: serde_json::Value) -> Result<libsql::Value, ru
   use rustyscript::Error;
   return Ok(match value {
     serde_json::Value::Object(ref _map) => {
-      return Err(Error::Runtime(format!("Object unsupported")));
+      return Err(Error::Runtime("Object unsupported".to_string()));
     }
     serde_json::Value::Array(ref _arr) => {
-      return Err(Error::Runtime(format!("Array unsupported")));
+      return Err(Error::Runtime("Array unsupported".to_string()));
     }
     serde_json::Value::Null => libsql::Value::Null,
     serde_json::Value::Bool(b) => libsql::Value::Integer(b as i64),
@@ -221,10 +152,8 @@ impl RuntimeHandle {
                 .await
                 .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
-              return Ok(
-                serde_json::to_value(values)
-                  .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?,
-              );
+              return serde_json::to_value(values)
+                .map_err(|err| rustyscript::Error::Runtime(err.to_string()));
             })
           })
           .unwrap();
@@ -245,8 +174,6 @@ impl RuntimeHandle {
                 .execute(&query, libsql::params::Params::Positional(params))
                 .await
                 .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
-
-              log::error!("ROWS AFF {rows_affected}");
 
               return Ok(serde_json::Value::Number(rows_affected.into()));
             })
@@ -498,11 +425,8 @@ mod tests {
           .load_module(&Module::new(
             "module.js",
             r#"
-              import { _test } from "trailbase:main";
-              import { dispatch } from "./__index.ts";
-
               export function test_fun() {
-                return _test;
+                return "test0";
               }
             "#,
           ))
@@ -547,7 +471,7 @@ mod tests {
             r#"
               import { query } from "trailbase:main";
 
-              export async function test_query(queryStr: string) : unknown[][] {
+              export async function test_query(queryStr: string) : Promise<unknown[][]> {
                 return await query(queryStr, []);
               }
             "#,
@@ -610,7 +534,7 @@ mod tests {
             r#"
               import { execute } from "trailbase:main";
 
-              export async function test_execute(queryStr: string) : number {
+              export async function test_execute(queryStr: string) : Promise<number> {
                 return await execute(queryStr, []);
               }
             "#,
@@ -648,3 +572,7 @@ mod tests {
     assert_eq!(0, count);
   }
 }
+
+#[derive(RustEmbed, Clone)]
+#[folder = "js/dist/"]
+struct JsRuntimeAssets;
