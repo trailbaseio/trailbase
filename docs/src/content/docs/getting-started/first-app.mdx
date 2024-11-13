@@ -112,10 +112,11 @@ sqlite> SELECT COUNT(*) FROM movies;
 
 With TrailBase up and running (`trail run`), the easiest way to explore your
 data is go to the admin dashboard under
-[http://localhost:4000](http://localhost:4000)
-and log in with the admin credentials provided to you in the terminal upon
-first start (you can also use the `trail` CLI to reset the password `trail user
-reset-password admin@localhost`).
+[http://localhost:4000/_/admin](http://localhost:4000/_/admin)
+and log in with the credentials provided to you in the terminal upon
+first start.
+You can also run `trail user reset-password admin@localhost <new>` to reset the
+password.
 
 In this tutorial we want to explore more programmatic access and using
 TrailBase record APIs.

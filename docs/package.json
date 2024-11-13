@@ -24,6 +24,7 @@
     "chartjs-plugin-deferred": "^2.0.0",
     "sharp": "^0.33.5",
     "solid-js": "^1.9.3",
+    "starlight-links-validator": "^0.13.2",
     "tailwindcss": "^3.4.14",
     "typescript": "^5.6.3"
   },

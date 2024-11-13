@@ -5,6 +5,7 @@ import robotsTxt from "astro-robots-txt";
 import sitemap from "@astrojs/sitemap";
 import solid from "@astrojs/solid-js";
 import starlight from "@astrojs/starlight";
+import starlightLinksValidator from "starlight-links-validator";
 import tailwind from "@astrojs/tailwind";
 
 // https://astro.build/config
@@ -12,6 +13,8 @@ export default defineConfig({
   site: "https://trailbase.io",
   integrations: [
     icon(),
+    robotsTxt(),
+    sitemap(),
     solid(),
     starlight({
       title: "TrailBase",
@@ -20,6 +23,11 @@ export default defineConfig({
         github: "https://github.com/trailbaseio/trailbase",
         discord: "https://discord.gg/X8cWs7YC22",
       },
+      plugins: [
+        starlightLinksValidator({
+          exclude: ["http://localhost:4000/**/*"],
+        }),
+      ],
       sidebar: [
         {
           label: "Getting Started",
@@ -58,8 +66,6 @@ export default defineConfig({
         },
       ],
     }),
-    sitemap(),
-    robotsTxt(),
     tailwind({
       // Disable the default base styles:
       applyBaseStyles: false,
