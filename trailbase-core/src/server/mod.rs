@@ -94,13 +94,8 @@ impl Server {
   where
     O: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Sync + Send>>>,
   {
-    let (new_data_dir, state) = init::init_app_state(
-      opts.data_dir.clone(),
-      opts.public_dir.clone(),
-      opts.dev,
-      opts.tokio_runtime.clone(),
-    )
-    .await?;
+    let (new_data_dir, state) =
+      init::init_app_state(opts.data_dir.clone(), opts.public_dir.clone(), opts.dev).await?;
 
     if new_data_dir {
       on_first_init(state.clone())
@@ -113,7 +108,7 @@ impl Server {
       let mut js_router = Some(Router::new());
       for module in modules {
         let fname = module.filename().to_owned();
-        let router = install_routes(module)
+        let router = install_routes(state.script_runtime(), module)
           .await
           .map_err(|err| InitError::ScriptError(err.to_string()))?;
 

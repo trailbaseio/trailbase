@@ -606,20 +606,15 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
         tbl_name,
         args: _args,
         ..
-      } => {
-        #[cfg(debug_assertions)]
-        debug!("vTable args: {_args:?}");
-
-        Ok(Table {
-          name: tbl_name.name.to_string(),
-          strict: false,
-          columns: vec![],
-          foreign_keys: vec![],
-          unique: vec![],
-          virtual_table: true,
-          temporary: false,
-        })
-      }
+      } => Ok(Table {
+        name: tbl_name.name.to_string(),
+        strict: false,
+        columns: vec![],
+        foreign_keys: vec![],
+        unique: vec![],
+        virtual_table: true,
+        temporary: false,
+      }),
       _ => Err(SchemaError::Precondition(
         format!("expected 'CREATE TABLE', got: {value:?}").into(),
       )),

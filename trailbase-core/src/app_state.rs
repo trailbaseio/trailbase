@@ -2,7 +2,6 @@ use libsql::Connection;
 use log::*;
 use object_store::ObjectStore;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::auth::jwt::JwtHelper;
@@ -55,9 +54,6 @@ pub(crate) struct AppStateArgs {
   pub conn: Connection,
   pub logs_conn: Connection,
   pub jwt: JwtHelper,
-
-  #[allow(unused)]
-  pub tokio_runtime: Rc<tokio::runtime::Runtime>,
 }
 
 #[derive(Clone)]
@@ -274,8 +270,8 @@ impl AppState {
     .await;
   }
 
-  pub(crate) fn script_runtime(&self) -> &RuntimeHandle {
-    return &self.state.runtime;
+  pub(crate) fn script_runtime(&self) -> RuntimeHandle {
+    return self.state.runtime.clone();
   }
 }
 

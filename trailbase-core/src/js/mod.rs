@@ -5,7 +5,6 @@ use axum::response::{IntoResponse, Response};
 use axum::Router;
 use libsql::Connection;
 use parking_lot::Mutex;
-use rust_embed::RustEmbed;
 use rustyscript::{init_platform, json_args, Module, Runtime};
 use serde::Deserialize;
 use serde_json::from_value;
@@ -15,8 +14,9 @@ use std::sync::{Arc, LazyLock};
 use thiserror::Error;
 
 use crate::assets::cow_to_string;
+use crate::js::import_provider::JsRuntimeAssets;
 use crate::records::sql_to_json::rows_to_json_arrays;
-use crate::AppState;
+use crate::{AppState, DataDir};
 
 mod import_provider;
 
@@ -63,6 +63,8 @@ impl RuntimeSingleton {
       |x| x.get(),
     );
 
+    log::info!("Starting v8 JavaScript runtime with {n_threads} workers.");
+
     let (shared_sender, shared_receiver) = crossbeam_channel::unbounded::<Message>();
 
     let (state, receivers): (Vec<State>, Vec<crossbeam_channel::Receiver<Message>>) = (0
@@ -89,7 +91,12 @@ impl RuntimeSingleton {
           let shared_receiver = shared_receiver.clone();
 
           return std::thread::spawn(move || {
-            let mut runtime = Self::init_runtime(index).unwrap();
+            let mut runtime = match Self::init_runtime(index) {
+              Ok(runtime) => runtime,
+              Err(err) => {
+                panic!("Failed to init v8 runtime on thread {index}: {err}");
+              }
+            };
 
             loop {
               crossbeam_channel::select! {
@@ -140,18 +147,11 @@ impl RuntimeSingleton {
       .enable_time()
       .enable_io()
       .thread_name("v8-runtime")
-      .thread_stack_size(4 * 1024 * 1024)
       .build()?;
-
-    let mut cache = import_provider::MemoryCache::default();
-    cache.set(
-      "trailbase:main",
-      cow_to_string(JsRuntimeAssets::get("index.js").unwrap().data),
-    );
 
     let mut runtime = rustyscript::Runtime::with_tokio_runtime(
       rustyscript::RuntimeOptions {
-        import_provider: Some(Box::new(cache)),
+        import_provider: Some(Box::new(import_provider::ImportProviderImpl)),
         schema_whlist: HashSet::from(["trailbase".to_string()]),
         ..Default::default()
       },
@@ -224,6 +224,7 @@ impl RuntimeSingleton {
 // make it work. Thus, we're making the V8 VM a singleton (like Dart's).
 static RUNTIME: LazyLock<RuntimeSingleton> = LazyLock::new(RuntimeSingleton::new);
 
+#[derive(Clone)]
 pub(crate) struct RuntimeHandle;
 
 impl RuntimeHandle {
@@ -263,6 +264,10 @@ impl RuntimeHandle {
 
   pub(crate) fn new() -> Self {
     return Self {};
+  }
+
+  fn state(&self) -> &'static Vec<State> {
+    return &RUNTIME.state;
   }
 
   async fn apply<T>(
@@ -340,13 +345,17 @@ impl IntoResponse for JsResponseError {
   }
 }
 
-/// Get's called from JS to `addRoute`.
-fn route_callback(
+/// Get's called from JS during `addRoute` and installs an axum HTTP handler.
+///
+/// The axum HTTP handler will then call back into the registered callback in JS.
+fn add_route_to_router(
+  runtime_handle: RuntimeHandle,
   router: Arc<Mutex<Option<Router<AppState>>>>,
   method: String,
   route: String,
 ) -> Result<(), AnyError> {
   let method_uppercase = method.to_uppercase();
+
   let route_path = route.clone();
   let handler = move |params: RawPathParams, req: Request| async move {
     let (parts, body) = req.into_parts();
@@ -356,12 +365,7 @@ fn route_callback(
         "request deserialization failed".to_string(),
       ));
     };
-    let Parts {
-      method: _,
-      uri,
-      headers,
-      ..
-    } = parts;
+    let Parts { uri, headers, .. } = parts;
 
     let path_params: Vec<(String, String)> = params
       .iter()
@@ -386,7 +390,7 @@ fn route_callback(
       body: Option<bytes::Bytes>,
     }
 
-    let js_response = RuntimeHandle::new()
+    let js_response = runtime_handle
       .apply(move |runtime| -> Result<JsResponse, rustyscript::Error> {
         let tokio_runtime = runtime.tokio_runtime();
         return tokio_runtime.block_on(async {
@@ -461,47 +465,68 @@ where
   return from_value::<T>(arg.clone()).map_err(|err| Error::Runtime(err.to_string()));
 }
 
-pub(crate) async fn install_routes(module: Module) -> Result<Option<Router<AppState>>, AnyError> {
+pub(crate) async fn install_routes(
+  runtime_handle: RuntimeHandle,
+  module: Module,
+) -> Result<Option<Router<AppState>>, AnyError> {
   use tokio::sync::oneshot;
 
-  let receivers: Vec<_> = RUNTIME
-    .state
+  let receivers: Vec<_> = runtime_handle
+    .state()
     .iter()
-    .map(move |s| -> oneshot::Receiver<Option<Router<AppState>>> {
-      let module = module.clone();
-      let (sender, receiver) = oneshot::channel::<Option<Router<AppState>>>();
-      s.sender
-        .send(Message::Run(Box::new(move |runtime: &mut Runtime| {
-          let router = Arc::new(Mutex::new(Some(Router::<AppState>::new())));
+    .enumerate()
+    .map(
+      move |(index, state)| -> oneshot::Receiver<Option<Router<AppState>>> {
+        let (sender, receiver) = oneshot::channel::<Option<Router<AppState>>>();
 
-          // First install a native callback that builds an axum router.
-          let router_clone = router.clone();
-          runtime
-            .register_function("route", move |args: &[serde_json::Value]| {
-              let method: String = get_arg(args, 0)?;
-              let route: String = get_arg(args, 1)?;
+        let module = module.clone();
+        let runtime_handle = runtime_handle.clone();
 
-              route_callback(router_clone.clone(), method, route)
-                .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
+        if let Err(err) = state
+          .sender
+          .send(Message::Run(Box::new(move |runtime: &mut Runtime| {
+            let router = Arc::new(Mutex::new(Some(Router::<AppState>::new())));
 
-              Ok(serde_json::Value::Null)
-            })
-            .unwrap();
+            // First install a native callback that builds an axum router.
+            let router_clone = router.clone();
+            runtime
+              .register_function("route", move |args: &[serde_json::Value]| {
+                let method: String = get_arg(args, 0)?;
+                let route: String = get_arg(args, 1)?;
 
-          // Then execute the script/module, i.e. statements in the file scope.
-          runtime.load_module(&module).unwrap();
+                add_route_to_router(runtime_handle.clone(), router_clone.clone(), method, route)
+                  .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
-          let router: Router<AppState> = router.lock().take().unwrap();
-          if router.has_routes() {
-            sender.send(Some(router)).unwrap();
-          } else {
-            sender.send(None).unwrap();
-          }
-        })))
-        .unwrap();
+                Ok(serde_json::Value::Null)
+              })
+              .expect("Failed to register 'route' function");
 
-      return receiver;
-    })
+            // Then execute the script/module, i.e. statements in the file scope.
+            //
+            // TODO: SWC is very spammy (at least in debug builds). Ideally, we'd lower the tracing
+            // filter level within this scope. Haven't found a good way, thus filtering it
+            // env-filter at the CLI level. We could try to use a dedicated reload layer:
+            //   https://docs.rs/tracing-subscriber/latest/tracing_subscriber/reload/index.html
+            if let Err(err) = runtime.load_module(&module) {
+              panic!("Failed to load '{:?}': {err}", module.filename());
+            }
+
+            let router: Router<AppState> = router.lock().take().unwrap();
+            sender
+              .send(if router.has_routes() {
+                Some(router)
+              } else {
+                None
+              })
+              .expect("Failed to comm with parent");
+          })))
+        {
+          panic!("Failed to comm with v8 rt'{index}': {err}");
+        }
+
+        return receiver;
+      },
+    )
     .collect();
 
   let mut receivers = futures::future::join_all(receivers).await;
@@ -510,9 +535,35 @@ pub(crate) async fn install_routes(module: Module) -> Result<Option<Router<AppSt
   return Ok(receivers.swap_remove(0)?);
 }
 
-#[derive(RustEmbed, Clone)]
-#[folder = "js/dist/"]
-struct JsRuntimeAssets;
+pub(crate) async fn write_js_runtime_files(data_dir: &DataDir) {
+  if let Err(err) = tokio::fs::write(
+    data_dir.root().join("trailbase.js"),
+    cow_to_string(
+      JsRuntimeAssets::get("index.js")
+        .expect("Failed to read rt/index.js")
+        .data,
+    )
+    .as_str(),
+  )
+  .await
+  {
+    log::warn!("Failed to write 'trailbase.js': {err}");
+  }
+
+  if let Err(err) = tokio::fs::write(
+    data_dir.root().join("trailbase.d.ts"),
+    cow_to_string(
+      JsRuntimeAssets::get("index.d.ts")
+        .expect("Failed to read rt/index.d.ts")
+        .data,
+    )
+    .as_str(),
+  )
+  .await
+  {
+    log::warn!("Failed to write 'trailbase.d.ts': {err}");
+  }
+}
 
 #[cfg(test)]
 mod tests {

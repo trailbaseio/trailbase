@@ -1,41 +1,33 @@
+use rust_embed::RustEmbed;
 use rustyscript::deno_core::{
-  anyhow::Error, ModuleSource, ModuleSourceCode, ModuleSpecifier, RequestedModuleType,
-  ResolutionKind,
+  anyhow::{anyhow, Error},
+  ModuleSpecifier, RequestedModuleType, ResolutionKind,
 };
 use rustyscript::module_loader::ImportProvider;
-use std::collections::HashMap;
+
+use crate::assets::cow_to_string;
 
 #[derive(Default)]
-pub(crate) struct MemoryCache {
-  cache: HashMap<String, String>,
-}
+pub(crate) struct ImportProviderImpl;
 
-impl MemoryCache {
-  /// Set a module in the cache
-  pub fn set(&mut self, specifier: &str, source: String) {
-    self.cache.insert(specifier.to_string(), source);
-  }
-
-  /// Get a module from the cache
-  pub fn get(&self, specifier: &ModuleSpecifier) -> Option<String> {
-    self.cache.get(specifier.as_str()).cloned()
-  }
-
-  pub fn has(&self, specifier: &ModuleSpecifier) -> bool {
-    self.cache.contains_key(specifier.as_str())
-  }
-}
-
-impl ImportProvider for MemoryCache {
+impl ImportProvider for ImportProviderImpl {
   fn resolve(
     &mut self,
     specifier: &ModuleSpecifier,
     _referrer: &str,
     _kind: ResolutionKind,
   ) -> Option<Result<ModuleSpecifier, Error>> {
-    // println!("resolve: {specifier:?}");
-    // Tell the loader to allow the import if the module is in the cache
-    self.get(specifier).map(|_| Ok(specifier.clone()))
+    log::trace!("resolve: {specifier:?}");
+
+    // Specifier is just a URL.
+    match specifier.scheme() {
+      "file" | "trailbase" => {
+        return Some(Ok(specifier.clone()));
+      }
+      scheme => {
+        return Some(Err(anyhow!("Unsupported schema: '{scheme}'")));
+      }
+    };
   }
 
   fn import(
@@ -45,27 +37,23 @@ impl ImportProvider for MemoryCache {
     _is_dyn_import: bool,
     _requested_module_type: RequestedModuleType,
   ) -> Option<Result<String, Error>> {
-    // println!("import : {specifier:?}");
-    // Return the source code if the module is in the cache
-    self.get(specifier).map(Ok)
-  }
+    log::trace!("import: {specifier:?}");
 
-  fn post_process(
-    &mut self,
-    specifier: &ModuleSpecifier,
-    source: ModuleSource,
-  ) -> Result<ModuleSource, Error> {
-    log::debug!("post_process: {specifier:?}");
-    // Cache the source code
-    if !self.has(specifier) {
-      match &source.code {
-        ModuleSourceCode::String(s) => {
-          self.set(specifier.as_str(), s.to_string());
-        }
-        ModuleSourceCode::Bytes(_) => {}
+    match specifier.scheme() {
+      "trailbase" => {
+        return Some(Ok(cow_to_string(
+          JsRuntimeAssets::get("index.js")
+            .expect("Failed to read rt/index.js")
+            .data,
+        )));
+      }
+      _ => {
+        return None;
       }
     }
-
-    Ok(source)
   }
 }
+
+#[derive(RustEmbed, Clone)]
+#[folder = "js/dist/"]
+pub(crate) struct JsRuntimeAssets;

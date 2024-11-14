@@ -1,8 +1,8 @@
-import { addRoute, parsePath, query, htmlHandler, jsonHandler, stringHandler } from "trailbase:main";
-import type { JsonRequestType, ParsedPath, StringRequestType } from "../../../trailbase-core/js/src/index.ts";
+import { addRoute, parsePath, query, htmlHandler, jsonHandler, stringHandler } from "../trailbase.js";
+import type { JsonRequestType, ParsedPath, StringRequestType } from "../trailbase.d.ts";
 
 addRoute("GET", "/test", stringHandler(async (req: StringRequestType) => {
-  const uri : ParsedPath = parsePath(req.uri);
+  const uri: ParsedPath = parsePath(req.uri);
 
   const table = uri.query.get("table");
   if (table) {

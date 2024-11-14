@@ -24,10 +24,18 @@ use trailbase_cli::{
 type BoxError = Box<dyn std::error::Error>;
 
 fn init_logger(dev: bool) {
+  // SWC is very spammy in in debug builds and complaints about source maps when compiling
+  // typescript to javascript. Since we don't care about source maps and didn't find a better
+  // option to mute the errors, turn it off in debug builds.
+  #[cfg(debug_assertions)]
+  const DEFAULT: &str = "info,refinery_core=warn,tracing::span=warn,swc_ecma_codegen=off";
+  #[cfg(not(debug_assertions))]
+  const DEFAULT: &str = "info,refinery_core=warn,tracing::span=warn";
+
   env_logger::init_from_env(if dev {
-    env_logger::Env::new().default_filter_or("info,trailbase_core=debug,refinery_core=warn")
+    env_logger::Env::new().default_filter_or(format!("{DEFAULT},trailbase_core=debug"))
   } else {
-    env_logger::Env::new().default_filter_or("info,refinery_core=warn")
+    env_logger::Env::new().default_filter_or(DEFAULT)
   });
 }
 
@@ -279,7 +287,7 @@ async fn async_main(runtime: Rc<tokio::runtime::Runtime>) -> Result<(), BoxError
 
       let (to, subject, body) = (cmd.to.clone(), cmd.subject.clone(), cmd.body.clone());
 
-      let (_new_db, state) = init_app_state(DataDir(args.data_dir), None, false, runtime).await?;
+      let (_new_db, state) = init_app_state(DataDir(args.data_dir), None, false).await?;
       let email = Email::new(&state, to, subject, body)?;
       email.send().await?;
 

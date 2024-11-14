@@ -1,7 +1,6 @@
 use libsql::Connection;
 use log::*;
 use std::path::PathBuf;
-use std::rc::Rc;
 use thiserror::Error;
 use trailbase_sqlite::{connect_sqlite, query_one_row};
 
@@ -9,6 +8,7 @@ use crate::app_state::{AppState, AppStateArgs};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;
+use crate::js::write_js_runtime_files;
 use crate::migrations::{apply_logs_migrations, apply_main_migrations};
 use crate::rand::generate_random_string;
 use crate::server::DataDir;
@@ -42,7 +42,6 @@ pub async fn init_app_state(
   data_dir: DataDir,
   public_dir: Option<PathBuf>,
   dev: bool,
-  tokio_runtime: Rc<tokio::runtime::Runtime>,
 ) -> Result<(bool, AppState), InitError> {
   // First create directory structure.
   data_dir.ensure_directory_structure().await?;
@@ -101,6 +100,9 @@ pub async fn init_app_state(
     debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
   }
 
+  // Write out the latest .js/.d.ts runtime files.
+  write_js_runtime_files(&data_dir).await;
+
   let app_state = AppState::new(AppStateArgs {
     data_dir: data_dir.clone(),
     public_dir,
@@ -110,7 +112,6 @@ pub async fn init_app_state(
     conn: main_conn.clone(),
     logs_conn,
     jwt,
-    tokio_runtime,
   });
 
   if new_db {

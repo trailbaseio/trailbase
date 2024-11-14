@@ -7,12 +7,14 @@ format:
 	pnpm -r format; \
 		cargo +nightly fmt; \
 		dart format client/trailbase-dart/ examples/blog/flutter/; \
-		txtpbfmt `find . -regex ".*.textproto"`
+		txtpbfmt `find . -regex ".*.textproto"`; \
+		dotnet format client/trailbase-dotnet
 
 check:
 	pnpm -r check; \
 		cargo clippy --workspace --no-deps; \
-		dart analyze client/trailbase-dart examples/blog/flutter
+		dart analyze client/trailbase-dart examples/blog/flutter; \
+		dotnet format client/trailbase-dotnet --verify-no-changes
 
 docker:
 	docker build . -t trailbase/trailbase
