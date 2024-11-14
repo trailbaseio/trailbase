@@ -12,7 +12,6 @@ For context, some larger features we have on our Roadmap:
 - Service-accounts for authenticating and authorizing backends not end-users.
 - Custom scheduled operations. Also enabling more time series use-cases.
 - Many SQLite databases: imagine a separate database by tenant or user.
-- Maybe integrate an ES6 JavaScript runtime or similar.
 - Streamline code-generation, the bindings life-cycle, and first-party
   support for more languages.
 - Maybe TLS termination and proxy capabilities.

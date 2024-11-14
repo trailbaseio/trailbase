@@ -1,9 +1,9 @@
 ---
 title: Welcome to TrailBase
-description: Blazingly fast, single-file, open-source server for your Applications
+description: A blazingly fast, single-file, open-source application server with type-safe APIs, built-in JS/ES6/TS Runtime, Auth, and Admin UI built on Rust+SQLite+V8
 template: splash
 hero:
-  tagline: A blazingly fast, single-file, open-source application server with type-safe APIs, Auth, and Admin UI built on Rust+SQLite
+  tagline: A blazingly fast, single-file, open-source application server with type-safe APIs, built-in JS/ES6/TS Runtime, Auth, and Admin UI built on Rust+SQLite+V8
   image:
     file: ../../assets/logo_512.webp
   actions:
@@ -81,10 +81,12 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
       * Rust: one of the lowest overhead languages,
       * Axum: one of the fastest HTTP servers,
       * SQLite/Libsql: one of the fastest full-SQL databases.
+      * V8: one of the fastest JS runtimes
 
-      TrailBase is [6-7x faster than PocketBase and 15x faster than SupaBase
+      TrailBase APIs are [6-7x faster than PocketBase and 15x faster than SupaBase
       needing only a fraction of the footprint](/reference/benchmarks), allowing
       you to serve millions of customers from a tiny box.
+      TrailBase JS runtime is ~45x faster than PocketBase's.
     </Card>
 
     <Card title="Simple" icon="heart">
@@ -108,7 +110,7 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
     </Card>
 
     <Card title="Authentication" icon="open-book">
-      TrailBase comes with an authentication system and UI built-in supporting
+      TrailBase comes with an authentication system and UI built in supporting
       both password-based and Social/OAuth (Google, Discord, ...) sign-ups.
 
       TrailBase authentication system follows standards and best-practices
@@ -119,7 +121,9 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
 
     <Card title="APIs & File Storage" icon="random">
       Provide access to your tables and views through fast, flexible and
-      **type-safe** restful CRUD APIs.
+      **type-safe** restful CRUD APIs. Extend functionality using a fast V8
+      JS/ES6 runtime with built-in support for TypeScript.
+
       Authorize users based on ACLs and SQL access rules letting you
       easily build higher-level access management or moderation facilities
       like groups or capabilities.

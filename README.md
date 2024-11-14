@@ -8,8 +8,8 @@
 
 <p align="center">
   A <a href="https://trailbase.io/reference/benchmarks/">blazingly</a> fast,
-  single-file, open-source application server with type-safe APIs, Auth, and
-  Admin UI built on Rust+SQLite.
+  single-file, open-source application server with type-safe APIs, built-in
+  JS/ES6/TS Runtime, Auth, and Admin UI built on Rust+SQLite+V8.
 <p>
 
 <p align="center">

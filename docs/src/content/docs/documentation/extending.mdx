@@ -67,9 +67,13 @@ TrailBase provides three main ways to embed your code and expose custom APIs:
 Beware that the Rust APIs and [Query APIs](/documentation/apis/query_apis/) are
 likely subject to change. We rely on semantic versioning to explicitly signal
 breaking changes.
-Eventually, we would like to lower the barrier of entry by providing stable
-bindings to a higher-level runtime within TrailBase, likely a
-TypeScript/ES6/JavaScript runtime.
+
+### Using ES6 JavaScript & TypeScript
+
+You can write custom HTTP endpoints using both full ES6 JavaScript and/or
+TypeScript. TrailBase will transpile your code on the fly and execute it on a
+speedy V8-engine, the same engine found across Chrome, node.js and deno.
+More information can be found in the [API docs](/documentation/apis/js_apis/).
 
 ### Using Rust
 

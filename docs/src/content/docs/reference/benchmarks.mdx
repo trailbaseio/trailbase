@@ -156,6 +156,20 @@ being roughly 5x longer than therr p50.
 Slower insertions can take north of 100ms. There may or may not be a connection
 to the variability in CPU utilization we've seen above.
 
+## JavaScript-Runtime Benchmarks
+
+The [benchmarks](https://github.com/trailbaseio/trailbase-benchmark)
+implement a custom HTTP endpoint `/fibonacci?n=<N>` to calculate Fibonacci
+numbers, both for PocketBase and TrailBase.
+We use Fibonacci numbers as a proxy for computationally heavy workloads to
+primarily benchmark the performance of the underlying JavaScript engines:
+[goja](https://github.com/dop251/goja) for PocketBase and V8 for TrailBase.
+In other words, any difference in performance is dominated by the engines'
+performance rather than PocketBase or TrailBase themselves.
+
+We found that for `fib(40)` V8 (TrailBase) is around *45x faster* than
+goja (PocketBase).
+
 ## Final Words
 
 We're very happy to confirm that TrailBase is quick. The significant
