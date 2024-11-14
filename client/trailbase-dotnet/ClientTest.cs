@@ -1,4 +1,4 @@
-using Xunit;
+using System.Diagnostics;
 
 namespace TrailBase;
 
@@ -22,14 +22,28 @@ class SimpleStrict {
 }
 
 public class ClientTestFixture : IDisposable {
-  System.Diagnostics.Process process;
+  Process process;
 
   public ClientTestFixture() {
-    var address = $"127.0.0.1:{Constants.Port}";
     string projectDirectory = Directory.GetParent(Environment.CurrentDirectory)!.Parent!.Parent!.FullName;
+
+    Console.WriteLine($"Building TrailBase: {projectDirectory}");
+    var buildProcess = new Process();
+    buildProcess.StartInfo.WorkingDirectory = projectDirectory;
+    buildProcess.StartInfo.FileName = "cargo";
+    buildProcess.StartInfo.Arguments = "build";
+    buildProcess.StartInfo.UseShellExecute = false;
+    buildProcess.StartInfo.RedirectStandardOutput = true;
+    buildProcess.Start();
+    var exited = buildProcess.WaitForExit(TimeSpan.FromMinutes(10));
+    if (!exited) {
+      buildProcess.Kill();
+    }
+
+    var address = $"127.0.0.1:{Constants.Port}";
     Console.WriteLine($"Starting TrailBase: {address}: {projectDirectory}");
 
-    process = new System.Diagnostics.Process();
+    process = new Process();
     process.StartInfo.WorkingDirectory = projectDirectory;
     process.StartInfo.FileName = "cargo";
     process.StartInfo.Arguments = $"run -- --data-dir ../testfixture run --dev -a {address}";
@@ -74,7 +88,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
   }
 
   [Fact]
-  public async void AuthTest() {
+  public async Task AuthTest() {
     var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
     var oldTokens = await client.Login("admin@localhost", "secret");
     Assert.NotNull(oldTokens?.auth_token);
@@ -92,7 +106,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
   }
 
   [Fact]
-  public async void RecordsTest() {
+  public async Task RecordsTest() {
     var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
     await client.Login("admin@localhost", "secret");
 
