@@ -4,10 +4,16 @@ export type HeaderMapType = {
 export type PathParamsType = {
     [key: string]: string;
 };
+export type UserType = {
+    id: string;
+    email: string;
+    csrf: string;
+};
 export type RequestType = {
     uri: string;
     params: PathParamsType;
     headers: HeaderMapType;
+    user?: UserType;
     body?: Uint8Array;
 };
 export type ResponseType = {
@@ -88,6 +94,7 @@ export type StringRequestType = {
     uri: string;
     params: PathParamsType;
     headers: HeaderMapType;
+    user?: UserType;
     body?: string;
 };
 export type StringResponseType = {
@@ -106,6 +113,7 @@ export type JsonRequestType = {
     uri: string;
     params: PathParamsType;
     headers: HeaderMapType;
+    user?: UserType;
     body?: object | string;
 };
 export interface JsonResponseType {
@@ -115,7 +123,7 @@ export interface JsonResponseType {
 }
 export declare function jsonHandler(f: (req: JsonRequestType) => MaybeResponse<JsonRequestType | object>): CallbackType;
 export declare function addRoute(method: string, route: string, callback: CallbackType): void;
-export declare function dispatch(method: string, route: string, uri: string, pathParams: [string, string][], headers: [string, string][], body: Uint8Array): Promise<ResponseType>;
+export declare function dispatch(method: string, route: string, uri: string, pathParams: [string, string][], headers: [string, string][], user: UserType | undefined, body: Uint8Array): Promise<ResponseType>;
 export declare function query(queryStr: string, params: unknown[]): Promise<unknown[][]>;
 export declare function execute(queryStr: string, params: unknown[]): Promise<number>;
 export type ParsedPath = {

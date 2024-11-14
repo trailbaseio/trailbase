@@ -3,10 +3,19 @@ declare var globalThis: any;
 
 export type HeaderMapType = { [key: string]: string };
 export type PathParamsType = { [key: string]: string };
+export type UserType = {
+  /// Base64 encoded UUIDv7 user id.
+  id: string;
+  /// The user's email address.
+  email: string;
+  /// The user's CSRF token.
+  csrf: string;
+};
 export type RequestType = {
   uri: string;
   params: PathParamsType;
   headers: HeaderMapType;
+  user?: UserType;
   body?: Uint8Array;
 };
 export type ResponseType = {
@@ -397,6 +406,7 @@ export type StringRequestType = {
   uri: string;
   params: PathParamsType;
   headers: HeaderMapType;
+  user?: UserType;
   body?: string;
 };
 export type StringResponseType = {
@@ -415,6 +425,7 @@ export function stringHandler(
         uri: req.uri,
         params: req.params,
         headers: req.headers,
+        user: req.user,
         body: body && decodeFallback(body),
       });
 
@@ -463,6 +474,7 @@ export function htmlHandler(
         uri: req.uri,
         params: req.params,
         headers: req.headers,
+        user: req.user,
         body: body && decodeFallback(body),
       });
 
@@ -500,6 +512,7 @@ export type JsonRequestType = {
   uri: string;
   params: PathParamsType;
   headers: HeaderMapType;
+  user?: UserType;
   body?: object | string;
 };
 export interface JsonResponseType {
@@ -518,6 +531,7 @@ export function jsonHandler(
         uri: req.uri,
         params: req.params,
         headers: req.headers,
+        user: req.user,
         body: body && decodeFallback(body),
       });
 
@@ -571,6 +585,7 @@ export async function dispatch(
   uri: string,
   pathParams: [string, string][],
   headers: [string, string][],
+  user: UserType | undefined,
   body: Uint8Array,
 ): Promise<ResponseType> {
   const key = `${method}:${route}`;
@@ -584,10 +599,13 @@ export async function dispatch(
       uri,
       params: Object.fromEntries(pathParams),
       headers: Object.fromEntries(headers),
+      user: user,
       body,
     })) ?? { status: StatusCodes.OK }
   );
 }
+
+globalThis.__dispatch = dispatch;
 
 export async function query(
   queryStr: string,
@@ -771,5 +789,3 @@ export function encodeFallback(string: string): Uint8Array {
   // because the original array still exists.
   return target.slice ? target.slice(0, at) : target.subarray(0, at);
 }
-
-globalThis.__dispatch = dispatch;

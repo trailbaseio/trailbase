@@ -6,7 +6,7 @@ use axum::Router;
 use libsql::Connection;
 use parking_lot::Mutex;
 use rustyscript::{init_platform, json_args, Module, Runtime};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::from_value;
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -14,6 +14,7 @@ use std::sync::{Arc, LazyLock};
 use thiserror::Error;
 
 use crate::assets::cow_to_string;
+use crate::auth::user::User;
 use crate::js::import_provider::JsRuntimeAssets;
 use crate::records::sql_to_json::rows_to_json_arrays;
 use crate::{AppState, DataDir};
@@ -357,7 +358,7 @@ fn add_route_to_router(
   let method_uppercase = method.to_uppercase();
 
   let route_path = route.clone();
-  let handler = move |params: RawPathParams, req: Request| async move {
+  let handler = move |params: RawPathParams, user: Option<User>, req: Request| async move {
     let (parts, body) = req.into_parts();
 
     let Ok(body_bytes) = axum::body::to_bytes(body, usize::MAX).await else {
@@ -383,6 +384,20 @@ fn add_route_to_router(
       })
       .collect();
 
+    #[derive(Serialize)]
+    struct JsUser {
+      // Base64 encoded user id.
+      id: String,
+      email: String,
+      csrf: String,
+    }
+
+    let js_user: Option<JsUser> = user.map(|u| JsUser {
+      id: u.id,
+      email: u.email,
+      csrf: u.csrf_token,
+    });
+
     #[derive(Deserialize)]
     struct JsResponse {
       headers: Option<Vec<(String, String)>>,
@@ -404,6 +419,7 @@ fn add_route_to_router(
                 uri.to_string(),
                 path_params,
                 headers,
+                js_user,
                 body_bytes
               ),
             )
