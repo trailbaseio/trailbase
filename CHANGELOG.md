@@ -1,3 +1,15 @@
+## v0.2.0
+
+* Add JS/ES6/TS scripting support based on speedy V8-engine and rustyscript runtime.
+  * Enables the registration of custom HTML end-points
+  * Provides database access.
+  * In the future we'd like to add more life-cycles (e.g. scheduled
+    operations).
+  * In our [micro-benchmarks](https://trailbase.io/reference/benchmarks/) V8
+    was about 45x faster than goja.
+* Added official C#/.NET client. Can be used with MAUI for cross-platform
+  mobile and desktop development.
+
 ## v0.1.1
 
 * Changed license to OSI-approved weak-copyleft OSL-3.0.
