@@ -77,6 +77,13 @@ export declare enum StatusCodes {
     INSUFFICIENT_STORAGE = 507,
     NETWORK_AUTHENTICATION_REQUIRED = 511
 }
+export declare class HttpError extends Error {
+    readonly statusCode: number;
+    readonly headers: [string, string][] | undefined;
+    constructor(statusCode: number, message?: string, headers?: [string, string][]);
+    toString(): string;
+    toResponse(): ResponseType;
+}
 export type StringRequestType = {
     uri: string;
     params: PathParamsType;

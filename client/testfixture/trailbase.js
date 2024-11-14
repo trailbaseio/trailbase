@@ -346,6 +346,26 @@ export var StatusCodes;
     /// gain network access.
     StatusCodes[StatusCodes["NETWORK_AUTHENTICATION_REQUIRED"] = 511] = "NETWORK_AUTHENTICATION_REQUIRED";
 })(StatusCodes || (StatusCodes = {}));
+export class HttpError extends Error {
+    statusCode;
+    headers;
+    constructor(statusCode, message, headers) {
+        super(message);
+        this.statusCode = statusCode;
+        this.headers = headers;
+    }
+    toString() {
+        return `HttpError(${this.statusCode}, ${this.message})`;
+    }
+    toResponse() {
+        const m = this.message;
+        return {
+            headers: this.headers,
+            status: this.statusCode,
+            body: m !== "" ? encodeFallback(m) : undefined,
+        };
+    }
+}
 export function stringHandler(f) {
     return async (req) => {
         try {
@@ -373,6 +393,9 @@ export function stringHandler(f) {
             };
         }
         catch (err) {
+            if (err instanceof HttpError) {
+                return err.toResponse();
+            }
             return {
                 status: StatusCodes.INTERNAL_SERVER_ERROR,
                 body: encodeFallback(`Uncaught error: ${err}`),
@@ -408,6 +431,9 @@ export function htmlHandler(f) {
             };
         }
         catch (err) {
+            if (err instanceof HttpError) {
+                return err.toResponse();
+            }
             return {
                 status: StatusCodes.INTERNAL_SERVER_ERROR,
                 body: encodeFallback(`Uncaught error: ${err}`),
@@ -444,6 +470,9 @@ export function jsonHandler(f) {
             };
         }
         catch (err) {
+            if (err instanceof HttpError) {
+                return err.toResponse();
+            }
             return {
                 headers: [["content-type", "application/json"]],
                 status: StatusCodes.INTERNAL_SERVER_ERROR,

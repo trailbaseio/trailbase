@@ -365,6 +365,34 @@ export enum StatusCodes {
   NETWORK_AUTHENTICATION_REQUIRED = 511,
 }
 
+export class HttpError extends Error {
+  readonly statusCode: number;
+  readonly headers: [string, string][] | undefined;
+
+  constructor(
+    statusCode: number,
+    message?: string,
+    headers?: [string, string][],
+  ) {
+    super(message);
+    this.statusCode = statusCode;
+    this.headers = headers;
+  }
+
+  public override toString(): string {
+    return `HttpError(${this.statusCode}, ${this.message})`;
+  }
+
+  toResponse(): ResponseType {
+    const m = this.message;
+    return {
+      headers: this.headers,
+      status: this.statusCode,
+      body: m !== "" ? encodeFallback(m) : undefined,
+    };
+  }
+}
+
 export type StringRequestType = {
   uri: string;
   params: PathParamsType;
@@ -408,6 +436,9 @@ export function stringHandler(
         body: respBody ? encodeFallback(respBody) : undefined,
       };
     } catch (err) {
+      if (err instanceof HttpError) {
+        return err.toResponse();
+      }
       return {
         status: StatusCodes.INTERNAL_SERVER_ERROR,
         body: encodeFallback(`Uncaught error: ${err}`),
@@ -454,6 +485,9 @@ export function htmlHandler(
         body: respBody ? encodeFallback(respBody) : undefined,
       };
     } catch (err) {
+      if (err instanceof HttpError) {
+        return err.toResponse();
+      }
       return {
         status: StatusCodes.INTERNAL_SERVER_ERROR,
         body: encodeFallback(`Uncaught error: ${err}`),
@@ -507,6 +541,9 @@ export function jsonHandler(
         body: encodeFallback(JSON.stringify(resp)),
       };
     } catch (err) {
+      if (err instanceof HttpError) {
+        return err.toResponse();
+      }
       return {
         headers: [["content-type", "application/json"]],
         status: StatusCodes.INTERNAL_SERVER_ERROR,

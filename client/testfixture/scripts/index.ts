@@ -1,4 +1,4 @@
-import { addRoute, parsePath, query, htmlHandler, jsonHandler, stringHandler } from "../trailbase.js";
+import { addRoute, parsePath, query, htmlHandler, jsonHandler, stringHandler, HttpError } from "../trailbase.js";
 import type { JsonRequestType, ParsedPath, StringRequestType } from "../trailbase.d.ts";
 
 addRoute("GET", "/test", stringHandler(async (req: StringRequestType) => {
@@ -42,4 +42,8 @@ addRoute("GET", "/json", jsonHandler((_req: JsonRequestType) => {
       nested: true,
     }
   };
+}));
+
+addRoute("GET", "/error", jsonHandler((_req: JsonRequestType) => {
+  throw new HttpError(418, "I'm a teapot");
 }));
