@@ -38,10 +38,16 @@ pub enum InitError {
   ScriptError(String),
 }
 
+#[derive(Default)]
+pub struct InitArgs {
+  pub dev: bool,
+  pub js_runtime_threads: Option<usize>,
+}
+
 pub async fn init_app_state(
   data_dir: DataDir,
   public_dir: Option<PathBuf>,
-  dev: bool,
+  args: InitArgs,
 ) -> Result<(bool, AppState), InitError> {
   // First create directory structure.
   data_dir.ensure_directory_structure().await?;
@@ -106,12 +112,13 @@ pub async fn init_app_state(
   let app_state = AppState::new(AppStateArgs {
     data_dir: data_dir.clone(),
     public_dir,
-    dev,
+    dev: args.dev,
     table_metadata,
     config,
     conn: main_conn.clone(),
     logs_conn,
     jwt,
+    js_runtime_threads: args.js_runtime_threads,
   });
 
   if new_db {

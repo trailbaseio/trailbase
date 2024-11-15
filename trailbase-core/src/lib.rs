@@ -65,7 +65,7 @@ pub mod api {
   pub use crate::auth::{force_password_reset, JwtHelper, TokenClaims};
   pub use crate::email::{Email, EmailError};
   pub use crate::migrations::new_unique_migration_filename;
-  pub use crate::server::init_app_state;
+  pub use crate::server::{init_app_state, InitArgs};
   pub use crate::table_metadata::{build_json_schema, JsonSchemaMode, TableMetadataCache};
 }
 

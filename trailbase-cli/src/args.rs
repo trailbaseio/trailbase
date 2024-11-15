@@ -98,6 +98,10 @@ pub struct ServerArgs {
   /// Limit the set of allowed origins the HTTP server will answer to.
   #[arg(long, default_value = "*")]
   pub cors_allowed_origins: Vec<String>,
+
+  /// Number of JavaScript isolates/workers to start (Default: #cpus).
+  #[arg(long, env)]
+  pub js_runtime_threads: Option<usize>,
 }
 
 #[derive(Args, Clone, Debug)]

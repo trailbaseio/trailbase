@@ -25,6 +25,7 @@ fn test_admin_permissions() {
       disable_auth_ui: false,
       cors_allowed_origins: vec![],
       tokio_runtime: runtime,
+      js_runtime_threads: None,
     })
     .await
     .unwrap();

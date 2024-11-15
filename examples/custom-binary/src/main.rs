@@ -34,6 +34,7 @@ async fn async_main(runtime: Rc<tokio::runtime::Runtime>) -> Result<(), BoxError
       disable_auth_ui: false,
       cors_allowed_origins: vec![],
       tokio_runtime: runtime,
+      js_runtime_threads: None,
     },
     Some(custom_routes),
     |state: AppState| async move {

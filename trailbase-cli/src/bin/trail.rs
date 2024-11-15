@@ -12,7 +12,7 @@ use std::rc::Rc;
 use tokio::{fs, io::AsyncWriteExt};
 use tracing_subscriber::{filter, prelude::*};
 use trailbase_core::{
-  api::{self, init_app_state, query_one_row, Email, TokenClaims},
+  api::{self, init_app_state, query_one_row, Email, InitArgs, TokenClaims},
   constants::USER_TABLE,
   DataDir, Server, ServerOptions,
 };
@@ -84,6 +84,7 @@ async fn async_main(runtime: Rc<tokio::runtime::Runtime>) -> Result<(), BoxError
         disable_auth_ui: cmd.disable_auth_ui,
         cors_allowed_origins: cmd.cors_allowed_origins,
         tokio_runtime: runtime,
+        js_runtime_threads: cmd.js_runtime_threads,
       })
       .await?;
 
@@ -287,7 +288,8 @@ async fn async_main(runtime: Rc<tokio::runtime::Runtime>) -> Result<(), BoxError
 
       let (to, subject, body) = (cmd.to.clone(), cmd.subject.clone(), cmd.body.clone());
 
-      let (_new_db, state) = init_app_state(DataDir(args.data_dir), None, false).await?;
+      let (_new_db, state) =
+        init_app_state(DataDir(args.data_dir), None, InitArgs::default()).await?;
       let email = Email::new(&state, to, subject, body)?;
       email.send().await?;
 

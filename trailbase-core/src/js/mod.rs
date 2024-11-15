@@ -10,8 +10,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::from_value;
 use std::collections::HashSet;
 use std::str::FromStr;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, OnceLock};
 use thiserror::Error;
+use tokio::sync::oneshot;
 
 use crate::assets::cow_to_string;
 use crate::auth::user::User;
@@ -33,6 +34,8 @@ struct State {
 }
 
 struct RuntimeSingleton {
+  n_threads: usize,
+
   // Thread handle
   handle: Option<std::thread::JoinHandle<()>>,
 
@@ -55,14 +58,17 @@ impl Drop for RuntimeSingleton {
 }
 
 impl RuntimeSingleton {
-  fn new() -> Self {
-    let n_threads: usize = std::thread::available_parallelism().map_or_else(
-      |err| {
-        log::error!("Failed to get number of threads: {err}");
-        return 1;
-      },
-      |x| x.get(),
-    );
+  fn new_with_threads(threads: Option<usize>) -> Self {
+    let n_threads = match threads {
+      Some(n) => n,
+      None => std::thread::available_parallelism().map_or_else(
+        |err| {
+          log::error!("Failed to get number of threads: {err}");
+          return 1;
+        },
+        |x| x.get(),
+      ),
+    };
 
     log::info!("Starting v8 JavaScript runtime with {n_threads} workers.");
 
@@ -137,6 +143,7 @@ impl RuntimeSingleton {
     });
 
     return RuntimeSingleton {
+      n_threads,
       sender: shared_sender,
       handle: Some(handle),
       state,
@@ -170,7 +177,7 @@ impl RuntimeSingleton {
           params.push(json_value_to_param(value)?);
         }
 
-        let Some(conn) = RUNTIME.state[idx].connection.lock().clone() else {
+        let Some(conn) = get_runtime(None).state[idx].connection.lock().clone() else {
           return Err(rustyscript::Error::Runtime(
             "missing db connection".to_string(),
           ));
@@ -201,7 +208,7 @@ impl RuntimeSingleton {
           params.push(json_value_to_param(value)?);
         }
 
-        let Some(conn) = RUNTIME.state[idx].connection.lock().clone() else {
+        let Some(conn) = get_runtime(None).state[idx].connection.lock().clone() else {
           return Err(rustyscript::Error::Runtime(
             "missing db connection".to_string(),
           ));
@@ -223,15 +230,20 @@ impl RuntimeSingleton {
 // NOTE: Repeated runtime initialization, e.g. in a multi-threaded context, leads to segfaults.
 // rustyscript::init_platform is supposed to help with this but we haven't found a way to
 // make it work. Thus, we're making the V8 VM a singleton (like Dart's).
-static RUNTIME: LazyLock<RuntimeSingleton> = LazyLock::new(RuntimeSingleton::new);
+fn get_runtime(n_threads: Option<usize>) -> &'static RuntimeSingleton {
+  static RUNTIME: OnceLock<RuntimeSingleton> = OnceLock::new();
+  return RUNTIME.get_or_init(move || RuntimeSingleton::new_with_threads(n_threads));
+}
 
 #[derive(Clone)]
-pub(crate) struct RuntimeHandle;
+pub(crate) struct RuntimeHandle {
+  runtime: &'static RuntimeSingleton,
+}
 
 impl RuntimeHandle {
   #[cfg(not(test))]
-  pub(crate) fn set_connection(conn: Connection) {
-    for s in &RUNTIME.state {
+  pub(crate) fn set_connection(&self, conn: Connection) {
+    for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
         panic!("connection already set");
@@ -241,8 +253,8 @@ impl RuntimeHandle {
   }
 
   #[cfg(test)]
-  pub(crate) fn set_connection(conn: Connection) {
-    for s in &RUNTIME.state {
+  pub(crate) fn set_connection(&self, conn: Connection) {
+    for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
         log::debug!("connection already set");
@@ -253,8 +265,8 @@ impl RuntimeHandle {
   }
 
   #[cfg(test)]
-  pub(crate) fn override_connection(conn: Connection) {
-    for s in &RUNTIME.state {
+  pub(crate) fn override_connection(&self, conn: Connection) {
+    for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
         log::debug!("connection already set");
@@ -264,11 +276,19 @@ impl RuntimeHandle {
   }
 
   pub(crate) fn new() -> Self {
-    return Self {};
+    return Self {
+      runtime: get_runtime(None),
+    };
+  }
+
+  pub(crate) fn new_with_threads(n_threads: usize) -> Self {
+    return Self {
+      runtime: get_runtime(Some(n_threads)),
+    };
   }
 
   fn state(&self) -> &'static Vec<State> {
-    return &RUNTIME.state;
+    return &self.runtime.state;
   }
 
   async fn apply<T>(
@@ -280,7 +300,7 @@ impl RuntimeHandle {
   {
     let (sender, receiver) = tokio::sync::oneshot::channel::<Box<T>>();
 
-    RUNTIME.sender.send(Message::Run(Box::new(move |rt| {
+    self.runtime.sender.send(Message::Run(Box::new(move |rt| {
       if let Err(_err) = sender.send(Box::new(f(rt))) {
         log::warn!("Failed to send");
       }
@@ -485,7 +505,13 @@ pub(crate) async fn install_routes(
   runtime_handle: RuntimeHandle,
   module: Module,
 ) -> Result<Option<Router<AppState>>, AnyError> {
-  use tokio::sync::oneshot;
+  if runtime_handle.runtime.n_threads == 0 {
+    log::error!(
+      "JS threads set to zero. Skipping initialization for JS module: {:?}",
+      module.filename()
+    );
+    return Ok(None);
+  }
 
   let receivers: Vec<_> = runtime_handle
     .state()
@@ -662,8 +688,8 @@ mod tests {
       .await
       .unwrap();
 
-    RuntimeHandle::override_connection(conn);
     let handle = RuntimeHandle::new();
+    handle.override_connection(conn);
 
     let result = handle
       .apply::<Vec<Vec<serde_json::Value>>>(|runtime| {
@@ -726,8 +752,8 @@ mod tests {
       .await
       .unwrap();
 
-    RuntimeHandle::override_connection(conn.clone());
     let handle = RuntimeHandle::new();
+    handle.override_connection(conn.clone());
 
     let _result = handle
       .apply::<i64>(|runtime| {

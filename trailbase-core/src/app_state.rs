@@ -54,6 +54,7 @@ pub(crate) struct AppStateArgs {
   pub conn: Connection,
   pub logs_conn: Connection,
   pub jwt: JwtHelper,
+  pub js_runtime_threads: Option<usize>,
 }
 
 #[derive(Clone)]
@@ -69,7 +70,10 @@ impl AppState {
     let conn_clone0 = args.conn.clone();
     let conn_clone1 = args.conn.clone();
 
-    RuntimeHandle::set_connection(args.conn.clone());
+    let runtime = args
+      .js_runtime_threads
+      .map_or_else(RuntimeHandle::new, RuntimeHandle::new_with_threads);
+    runtime.set_connection(args.conn.clone());
 
     AppState {
       state: Arc::new(InternalState {
@@ -121,9 +125,7 @@ impl AppState {
         logs_conn: args.logs_conn,
         jwt: args.jwt,
         table_metadata: args.table_metadata,
-
-        runtime: RuntimeHandle::new(),
-
+        runtime,
         #[cfg(test)]
         cleanup: vec![],
       }),
@@ -368,7 +370,8 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let main_conn_clone1 = main_conn.clone();
   let table_metadata_clone = table_metadata.clone();
 
-  RuntimeHandle::set_connection(main_conn.clone());
+  let runtime = RuntimeHandle::new();
+  runtime.set_connection(main_conn.clone());
 
   return Ok(AppState {
     state: Arc::new(InternalState {
@@ -411,7 +414,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       logs_conn,
       jwt: jwt::test_jwt_helper(),
       table_metadata,
-      runtime: RuntimeHandle::new(),
+      runtime,
       cleanup: vec![Box::new(temp_dir)],
     }),
   });

@@ -27,7 +27,7 @@ use crate::js::install_routes;
 use crate::logging;
 use crate::scheduler;
 
-pub use init::{init_app_state, InitError};
+pub use init::{init_app_state, InitArgs, InitError};
 
 /// A set of options to configure serving behaviors. Changing any of these options
 /// requires a server restart, which makes them a natural fit for being exposed as command line
@@ -61,6 +61,9 @@ pub struct ServerOptions {
 
   /// Tokio runtime.
   pub tokio_runtime: Rc<tokio::runtime::Runtime>,
+
+  /// Number of V8 worker threads. If set to None, default of num available cores will be used.
+  pub js_runtime_threads: Option<usize>,
 }
 
 pub struct Server {
@@ -94,8 +97,15 @@ impl Server {
   where
     O: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Sync + Send>>>,
   {
-    let (new_data_dir, state) =
-      init::init_app_state(opts.data_dir.clone(), opts.public_dir.clone(), opts.dev).await?;
+    let (new_data_dir, state) = init::init_app_state(
+      opts.data_dir.clone(),
+      opts.public_dir.clone(),
+      InitArgs {
+        dev: opts.dev,
+        js_runtime_threads: opts.js_runtime_threads,
+      },
+    )
+    .await?;
 
     if new_data_dir {
       on_first_init(state.clone())
