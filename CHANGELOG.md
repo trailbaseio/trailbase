@@ -1,3 +1,8 @@
+## v0.2.1
+
+* Allow setting the number V8 isolates (i.e. JS runtime threads) via
+  `--js-runtime-threads`.
+
 ## v0.2.0
 
 * Add JS/ES6/TS scripting support based on speedy V8-engine and rustyscript runtime.
