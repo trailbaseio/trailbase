@@ -5,10 +5,17 @@ import { LineChart } from "@/components/LineChart.tsx";
 import { ScatterChart } from "@/components/ScatterChart.tsx";
 
 import { data as supabaseUtilization } from "./supabase_utilization";
-import { data as pocketbaseUtilization } from "./pocketbase_utilization";
-import { data as trailbaseUtilization } from "./trailbase_utilization";
+import insertTrailBase from "./insert_tb.json";
+import insertPocketBase from "./insert_pb.json";
 import fibTrailBase from "./fib_tb.json";
 import fibPocketBase from "./fib_pb.json";
+
+type Datum = {
+  cpu: number;
+  rss: number;
+  // Milliseconds
+  elapsed: number;
+};
 
 const colors = {
   supabase: "rgb(62, 207, 142)",
@@ -308,57 +315,64 @@ export function SupaBaseCpuUsageChart() {
 }
 
 export function PocketBaseAndTrailBaseUsageChart() {
-  // To roughly align start of benchmark on the time axis.
-  const xOffset = 3;
+  // specific run:
+  //   PB: Inserted 100000 messages, took 0:01:02.549495 (limit=64)
+  //   TB: Inserted 100000 messages, took 0:00:09.946495 (limit=64)
 
-  const data: ChartData<"line"> = {
-    labels: [...Array(134).keys()],
+  const trailbaseUtilization = insertTrailBase as Datum[];
+  const pocketbaseUtilization = insertPocketBase as Datum[];
+
+  const data: ChartData<"scatter"> = {
     datasets: [
       {
         yAxisID: "yLeft",
-        label: "PocketBase CPU",
-        data: pocketbaseUtilization.slice(xOffset).map((datum, index) => ({
-          x: index,
-          y: datum.cpu,
-        })),
-        borderColor: colors.pocketbase0,
-        backgroundColor: colors.pocketbase0,
-      },
-      {
-        yAxisID: "yRight",
-        label: "PocketBase RSS",
-        data: pocketbaseUtilization.slice(xOffset).map((datum, index) => ({
-          x: index,
-          y: datum.rss,
-        })),
-        borderColor: colors.pocketbase1,
-        backgroundColor: colors.pocketbase1,
-      },
-      {
-        yAxisID: "yLeft",
         label: "TrailBase CPU",
-        data: trailbaseUtilization.map((datum, index) => ({
-          x: index,
+        data: trailbaseUtilization.map((datum) => ({
+          x: datum.elapsed,
           y: datum.cpu,
         })),
         borderColor: colors.trailbase0,
         backgroundColor: colors.trailbase0,
+        showLine: true,
       },
       {
         yAxisID: "yRight",
         label: "TrailBase RSS",
-        data: trailbaseUtilization.map((datum, index) => ({
-          x: index,
+        data: trailbaseUtilization.map((datum) => ({
+          x: datum.elapsed,
           y: datum.rss,
         })),
         borderColor: colors.trailbase1,
         backgroundColor: colors.trailbase1,
+        showLine: true,
+      },
+      {
+        yAxisID: "yLeft",
+        label: "PocketBase CPU",
+        data: pocketbaseUtilization.map((datum) => ({
+          x: datum.elapsed,
+          y: datum.cpu,
+        })),
+        borderColor: colors.pocketbase0,
+        backgroundColor: colors.pocketbase0,
+        showLine: true,
+      },
+      {
+        yAxisID: "yRight",
+        label: "PocketBase RSS",
+        data: pocketbaseUtilization.map((datum) => ({
+          x: datum.elapsed,
+          y: datum.rss,
+        })),
+        borderColor: colors.pocketbase1,
+        backgroundColor: colors.pocketbase1,
+        showLine: true,
       },
     ],
   };
 
   return (
-    <LineChart
+    <ScatterChart
       data={data}
       scales={{
         yLeft: {
@@ -388,7 +402,7 @@ export function PocketBaseAndTrailBaseUsageChart() {
         x: {
           ticks: {
             display: true,
-            callback: transformTimeTicks(0.6),
+            callback: transformMillisecondTicks,
           },
         },
       }}
@@ -397,41 +411,11 @@ export function PocketBaseAndTrailBaseUsageChart() {
 }
 
 export function FibonacciPocketBaseAndTrailBaseUsageChart() {
-  type Datum = {
-    cpu: number;
-    rss: number;
-    // Milliseconds
-    elapsed: number;
-  };
-
   const fibTrailBaseUtilization = fibTrailBase as Datum[];
   const fibPocketBaseUtilization = fibPocketBase as Datum[];
 
   const data: ChartData<"scatter"> = {
-    // labels: [...Array(134).keys()],
     datasets: [
-      {
-        yAxisID: "yLeft",
-        label: "PocketBase CPU",
-        data: fibPocketBaseUtilization.map((datum) => ({
-          x: datum.elapsed,
-          y: datum.cpu,
-        })),
-        showLine: true,
-        borderColor: colors.pocketbase0,
-        backgroundColor: colors.pocketbase0,
-      },
-      {
-        yAxisID: "yRight",
-        label: "PocketBase RSS",
-        data: fibPocketBaseUtilization.map((datum) => ({
-          x: datum.elapsed,
-          y: datum.rss,
-        })),
-        showLine: true,
-        borderColor: colors.pocketbase1,
-        backgroundColor: colors.pocketbase1,
-      },
       {
         yAxisID: "yLeft",
         label: "TrailBase CPU",
@@ -453,6 +437,28 @@ export function FibonacciPocketBaseAndTrailBaseUsageChart() {
         showLine: true,
         borderColor: colors.trailbase1,
         backgroundColor: colors.trailbase1,
+      },
+      {
+        yAxisID: "yLeft",
+        label: "PocketBase CPU",
+        data: fibPocketBaseUtilization.map((datum) => ({
+          x: datum.elapsed,
+          y: datum.cpu,
+        })),
+        showLine: true,
+        borderColor: colors.pocketbase0,
+        backgroundColor: colors.pocketbase0,
+      },
+      {
+        yAxisID: "yRight",
+        label: "PocketBase RSS",
+        data: fibPocketBaseUtilization.map((datum) => ({
+          x: datum.elapsed,
+          y: datum.rss,
+        })),
+        showLine: true,
+        borderColor: colors.pocketbase1,
+        backgroundColor: colors.pocketbase1,
       },
     ],
   };
