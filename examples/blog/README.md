@@ -1,4 +1,22 @@
-# TrailBase Example: A Blog with Web and Mobile clients
+# TrailBase Example: A Blog with Web and Flutter UIs
+
+<p align="center">
+  <picture align="center">
+    <img
+      height="420"
+      src="https://raw.githubusercontent.com/ignatz/trailbase/refs/heads/main/examples/blog/assets/screenshot_web.png"
+      alt="Screenshot Web"
+    />
+  </picture>
+
+  <picture align="center">
+    <img
+      height="420"
+      src="https://raw.githubusercontent.com/ignatz/trailbase/refs/heads/main/examples/blog/assets/screenshot_flutter.png"
+      alt="Screenshot Flutter"
+    />
+  </picture>
+</p>
 
 The main goal of this example is to be easily digestible while show-casing many
 of TrailBase's capabilities both for web and cross-platform Flutter:
@@ -13,9 +31,14 @@ of TrailBase's capabilities both for web and cross-platform Flutter:
  * Table and View-based APIs for custom user profiles associating users with a
    username and keep their email addresses private as well as associating
    articles with usernames.
- * Virtual-table-based query API to expose "is_editor" authorization.
+ * Virtual-table-based query API to expose `is_editor` authorization.
 * The web client illustrates two different styles: a consumer SPA and an
   HTML-only form-based authoring UI.
+
+Default users:
+
+ * (email: `admin@localhost`, password: `secret`) - access to admin dash.
+ * (email: `editor@localhost`, password: `secret`) - permission to write and alter blog posts.
 
 ## Directory Structure
 

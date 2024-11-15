@@ -3,7 +3,7 @@ INSERT INTO _user (email, password_hash, verified) VALUES ('editor@localhost', (
 
 -- Set a username for the editor user.
 INSERT INTO profiles (user, username)
-  SELECT user.id, 'Eddy Editor'
+  SELECT user.id, 'EddyEditor'
   FROM _user AS user WHERE email = 'editor@localhost';
 
 -- Add an avatar image for the editor user.
