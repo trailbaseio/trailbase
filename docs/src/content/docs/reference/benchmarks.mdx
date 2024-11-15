@@ -10,6 +10,7 @@ import {
   SupaBaseMemoryUsageChart,
   SupaBaseCpuUsageChart,
   PocketBaseAndTrailBaseUsageChart,
+  FibonacciPocketBaseAndTrailBaseUsageChart,
 } from "./_benchmarks/benchmarks.tsx";
 
 TrailBase is merely the sum of its parts. It's the result of marrying one of
@@ -159,16 +160,36 @@ to the variability in CPU utilization we've seen above.
 ## JavaScript-Runtime Benchmarks
 
 The [benchmarks](https://github.com/trailbaseio/trailbase-benchmark)
-implement a custom HTTP endpoint `/fibonacci?n=<N>` to calculate Fibonacci
-numbers, both for PocketBase and TrailBase.
-We use Fibonacci numbers as a proxy for computationally heavy workloads to
+implement a custom HTTP endpoint `/fibonacci?n=<N>` calculating Fibonacci
+numbers, both within PocketBase and TrailBase.
+We use Fibonacci numbers as a proxy for a computationally heavy workload to
 primarily benchmark the performance of the underlying JavaScript engines:
 [goja](https://github.com/dop251/goja) for PocketBase and V8 for TrailBase.
 In other words, any difference in performance is dominated by the engines'
 performance rather than PocketBase or TrailBase themselves.
 
-We found that for `fib(40)` V8 (TrailBase) is around *45x faster* than
-goja (PocketBase).
+{/*
+    Output:
+      TB: Called "/fibonacci" for fib(40) 100 times, took 0:00:14.988703 (limit=64)
+      PB: Called "/fibonacci" for fib(40) 100 times, took 0:10:01.096053 (limit=64)
+*/}
+
+We found that for `fib(40)` V8 (TrailBase) is around *40x faster* than
+goja (PocketBase):
+
+<div class="flex justify-center">
+  <div class="h-[300px] w-[90%]">
+    <FibonacciPocketBaseAndTrailBaseUsageChart client:only="solid-js" />
+  </div>
+</div>
+
+Interestingly, PocketBase seems to have an initial warm-up of ~30s where it
+doesn't parallelize. That said, even after starting to use all available cores
+finishing the overall task takes significantly longer.
+Note further that with the addition of V8 to TrailBase we've experienced a
+significant increase in baseline memory dominating the overall footprint.
+If memory footprint is your main concern, reducing the number of V8 workers
+will be very effective.
 
 ## Final Words
 

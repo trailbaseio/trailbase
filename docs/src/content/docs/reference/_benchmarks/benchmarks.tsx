@@ -2,10 +2,13 @@ import { type ChartData, type ChartDataset, type Tick } from "chart.js/auto";
 
 import { BarChart } from "@/components/BarChart.tsx";
 import { LineChart } from "@/components/LineChart.tsx";
+import { ScatterChart } from "@/components/ScatterChart.tsx";
 
 import { data as supabaseUtilization } from "./supabase_utilization";
 import { data as pocketbaseUtilization } from "./pocketbase_utilization";
 import { data as trailbaseUtilization } from "./trailbase_utilization";
+import fibTrailBase from "./fib_tb.json";
+import fibPocketBase from "./fib_pb.json";
 
 const colors = {
   supabase: "rgb(62, 207, 142)",
@@ -29,6 +32,22 @@ function transformTimeTicks(factor: number = 0.5) {
       return `~${index * factor}s`;
     }
   };
+}
+
+function transformMillisecondTicks(
+  value: number | string,
+  _index: number,
+): string | undefined {
+  const v = +value;
+  if (v % 1000 === 0) {
+    // WARN: These are estimate time due to how we measure: periodic
+    // polling every 0.5s using `top` or `docker stats`, which themselves
+    // have sampling intervals. The actual value shouldn't matter that
+    // much, since we measure the actual duration in-situ. We do this
+    // transformation only to make the time scale more intuitive than
+    // just "time at sample X".
+    return `${v / 1000}s`;
+  }
 }
 
 const durations100k = [
@@ -370,6 +389,107 @@ export function PocketBaseAndTrailBaseUsageChart() {
           ticks: {
             display: true,
             callback: transformTimeTicks(0.6),
+          },
+        },
+      }}
+    />
+  );
+}
+
+export function FibonacciPocketBaseAndTrailBaseUsageChart() {
+  type Datum = {
+    cpu: number;
+    rss: number;
+    // Milliseconds
+    elapsed: number;
+  };
+
+  const fibTrailBaseUtilization = fibTrailBase as Datum[];
+  const fibPocketBaseUtilization = fibPocketBase as Datum[];
+
+  const data: ChartData<"scatter"> = {
+    // labels: [...Array(134).keys()],
+    datasets: [
+      {
+        yAxisID: "yLeft",
+        label: "PocketBase CPU",
+        data: fibPocketBaseUtilization.map((datum) => ({
+          x: datum.elapsed,
+          y: datum.cpu,
+        })),
+        showLine: true,
+        borderColor: colors.pocketbase0,
+        backgroundColor: colors.pocketbase0,
+      },
+      {
+        yAxisID: "yRight",
+        label: "PocketBase RSS",
+        data: fibPocketBaseUtilization.map((datum) => ({
+          x: datum.elapsed,
+          y: datum.rss,
+        })),
+        showLine: true,
+        borderColor: colors.pocketbase1,
+        backgroundColor: colors.pocketbase1,
+      },
+      {
+        yAxisID: "yLeft",
+        label: "TrailBase CPU",
+        data: fibTrailBaseUtilization.map((datum) => ({
+          x: datum.elapsed,
+          y: datum.cpu,
+        })),
+        showLine: true,
+        borderColor: colors.trailbase0,
+        backgroundColor: colors.trailbase0,
+      },
+      {
+        yAxisID: "yRight",
+        label: "TrailBase RSS",
+        data: fibTrailBaseUtilization.map((datum) => ({
+          x: datum.elapsed,
+          y: datum.rss,
+        })),
+        showLine: true,
+        borderColor: colors.trailbase1,
+        backgroundColor: colors.trailbase1,
+      },
+    ],
+  };
+
+  return (
+    <ScatterChart
+      data={data}
+      scales={{
+        yLeft: {
+          position: "left",
+          title: {
+            display: true,
+            text: "CPU Cores",
+          },
+        },
+        yRight: {
+          position: "right",
+          title: {
+            display: true,
+            text: "Resident Memory Size [MB]",
+          },
+          ticks: {
+            callback: (
+              value: number | string,
+              _index: number,
+              _ticks: Tick[],
+            ): string | undefined => {
+              const v = value as number;
+              return `${(v / 1024).toFixed(0)}`;
+            },
+          },
+        },
+        x: {
+          max: 650 * 1000,
+          ticks: {
+            display: true,
+            callback: transformMillisecondTicks,
           },
         },
       }}

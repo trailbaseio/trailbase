@@ -1,4 +1,4 @@
-type Datum = {
+export type Datum = {
   cpu: number;
   rss: number;
 };
