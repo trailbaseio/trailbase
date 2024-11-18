@@ -26,15 +26,3 @@ export const $client = computed([], () =>
     });
   }),
 );
-
-// Alternatively, one could use the "is_editor" query API to determine a user's capabilities.
-//
-// async function isEditor(userId: string): Promise<boolean> {
-//   const response = await fetch(`${HOST}/api/query/v1/is_editor?user=${userId}`);
-//   if (!response.ok) {
-//     return false;
-//   }
-//
-//   const json = await response.json();
-//   return json[0]["is_editor"] > 0;
-// }

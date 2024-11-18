@@ -45,16 +45,3 @@ record_apis: [
     acl_world: [READ]
   }
 ]
-query_apis: [
-  {
-    name: "is_editor"
-    virtual_table_name: "_is_editor"
-    params: [
-      {
-        name: "user"
-        type: BLOB
-      }
-    ]
-    acl: WORLD
-  }
-]
