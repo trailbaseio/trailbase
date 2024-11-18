@@ -501,7 +501,7 @@ where
   return from_value::<T>(arg.clone()).map_err(|err| Error::Runtime(err.to_string()));
 }
 
-pub(crate) async fn install_routes(
+async fn install_routes(
   runtime_handle: RuntimeHandle,
   module: Module,
 ) -> Result<Option<Router<AppState>>, AnyError> {
@@ -575,6 +575,39 @@ pub(crate) async fn install_routes(
 
   // Note: We only return the first router assuming that js route registration is deterministic.
   return Ok(receivers.swap_remove(0)?);
+}
+
+pub(crate) async fn load_routes_from_js_modules(
+  state: &AppState,
+) -> Result<Option<Router<AppState>>, AnyError> {
+  let scripts_dir = state.data_dir().root().join("scripts");
+
+  let modules = match rustyscript::Module::load_dir(scripts_dir) {
+    Ok(modules) => modules,
+    Err(err) => {
+      log::debug!("Skip loading js modules: {err}");
+      return Ok(None);
+    }
+  };
+
+  let mut js_router = Some(Router::new());
+  for module in modules {
+    let fname = module.filename().to_owned();
+    let router = install_routes(state.script_runtime(), module).await?;
+
+    if let Some(router) = router {
+      js_router = Some(js_router.take().unwrap().nest("/", router));
+    } else {
+      log::debug!("Skipping js module '{fname:?}': no routes");
+    }
+  }
+
+  let router = js_router.take().unwrap();
+  if router.has_routes() {
+    return Ok(Some(router));
+  }
+
+  return Ok(None);
 }
 
 pub(crate) async fn write_js_runtime_files(data_dir: &DataDir) {

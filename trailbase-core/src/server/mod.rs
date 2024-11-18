@@ -23,7 +23,7 @@ use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
 use crate::constants::{AUTH_API_PATH, HEADER_CSRF_TOKEN, QUERY_API_PATH, RECORD_API_PATH};
 use crate::data_dir::DataDir;
-use crate::js::install_routes;
+use crate::js::load_routes_from_js_modules;
 use crate::logging;
 use crate::scheduler;
 
@@ -113,28 +113,11 @@ impl Server {
         .map_err(|err| InitError::CustomInit(err.to_string()))?;
     }
 
-    let js_modules = rustyscript::Module::load_dir(opts.data_dir.root().join("scripts"));
-    let custom_routes = if let Ok(modules) = js_modules {
-      let mut js_router = Some(Router::new());
-      for module in modules {
-        let fname = module.filename().to_owned();
-        let router = install_routes(state.script_runtime(), module)
-          .await
-          .map_err(|err| InitError::ScriptError(err.to_string()))?;
-
-        if let Some(router) = router {
-          js_router = Some(js_router.take().unwrap().nest("/", router));
-        } else {
-          log::debug!("Skipping js module '{fname:?}': no routes");
-        }
-      }
-
-      let router = js_router.take().unwrap();
-      if router.has_routes() {
-        Some(custom_routes.unwrap_or_default().nest("/", router))
-      } else {
-        custom_routes
-      }
+    let js_routes = load_routes_from_js_modules(&state)
+      .await
+      .map_err(|err| InitError::ScriptError(err.to_string()))?;
+    let custom_routes = if let Some(js_routes) = js_routes {
+      Some(custom_routes.unwrap_or_default().nest("/", js_routes))
     } else {
       custom_routes
     };
