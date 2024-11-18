@@ -27,7 +27,7 @@ fn test_record_apis() {
 
   let data_dir = temp_dir::TempDir::new().unwrap();
 
-  let _ = runtime.clone().block_on(async move {
+  let _ = runtime.block_on(async move {
   let app = Server::init(ServerOptions {
     data_dir: DataDir(data_dir.path().to_path_buf()),
     address: "".to_string(),
@@ -36,7 +36,6 @@ fn test_record_apis() {
     dev: false,
     disable_auth_ui: false,
     cors_allowed_origins: vec![],
-    tokio_runtime: runtime,
     js_runtime_threads: None,
   })
   .await

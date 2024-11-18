@@ -65,7 +65,7 @@ async fn get_user_by_email(conn: &libsql::Connection, email: &str) -> Result<DbU
   )?);
 }
 
-async fn async_main(runtime: Rc<tokio::runtime::Runtime>) -> Result<(), BoxError> {
+async fn async_main() -> Result<(), BoxError> {
   let args = DefaultCommandLineArgs::parse();
   let data_dir = DataDir(args.data_dir.clone());
 
@@ -83,7 +83,6 @@ async fn async_main(runtime: Rc<tokio::runtime::Runtime>) -> Result<(), BoxError
         dev: cmd.dev,
         disable_auth_ui: cmd.disable_auth_ui,
         cors_allowed_origins: cmd.cors_allowed_origins,
-        tokio_runtime: runtime,
         js_runtime_threads: cmd.js_runtime_threads,
       })
       .await?;
@@ -317,5 +316,5 @@ fn main() -> Result<(), BoxError> {
       .enable_all()
       .build()?,
   );
-  return runtime.block_on(async_main(runtime.clone()));
+  return runtime.block_on(async_main());
 }

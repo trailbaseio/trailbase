@@ -9,7 +9,6 @@ use axum::routing::get;
 use axum::{RequestExt, Router};
 use rust_embed::RustEmbed;
 use std::path::PathBuf;
-use std::rc::Rc;
 use tokio::signal;
 use tokio::task::JoinSet;
 use tower_cookies::CookieManagerLayer;
@@ -32,7 +31,7 @@ pub use init::{init_app_state, InitArgs, InitError};
 /// A set of options to configure serving behaviors. Changing any of these options
 /// requires a server restart, which makes them a natural fit for being exposed as command line
 /// arguments.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct ServerOptions {
   /// Optional path to static assets that will be served at the HTTP root.
   pub data_dir: DataDir,
@@ -58,9 +57,6 @@ pub struct ServerOptions {
 
   /// Limit the set of allowed origins the HTTP server will answer to.
   pub cors_allowed_origins: Vec<String>,
-
-  /// Tokio runtime.
-  pub tokio_runtime: Rc<tokio::runtime::Runtime>,
 
   /// Number of V8 worker threads. If set to None, default of num available cores will be used.
   pub js_runtime_threads: Option<usize>,

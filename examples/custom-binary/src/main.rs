@@ -3,7 +3,6 @@ use axum::{
   response::{Html, IntoResponse, Response},
   routing::{get, Router},
 };
-use std::rc::Rc;
 use tracing_subscriber::{filter, prelude::*};
 use trailbase_core::{AppState, DataDir, Server, ServerOptions, User};
 
@@ -17,7 +16,8 @@ pub async fn handler(State(_state): State<AppState>, user: Option<User>) -> Resp
   .into_response()
 }
 
-async fn async_main(runtime: Rc<tokio::runtime::Runtime>) -> Result<(), BoxError> {
+#[tokio::main]
+async fn main() -> Result<(), BoxError> {
   env_logger::init_from_env(
     env_logger::Env::new().default_filter_or("info,trailbase_core=debug,refinery_core=warn"),
   );
@@ -33,7 +33,6 @@ async fn async_main(runtime: Rc<tokio::runtime::Runtime>) -> Result<(), BoxError
       dev: false,
       disable_auth_ui: false,
       cors_allowed_origins: vec![],
-      tokio_runtime: runtime,
       js_runtime_threads: None,
     },
     Some(custom_routes),
@@ -67,14 +66,4 @@ async fn async_main(runtime: Rc<tokio::runtime::Runtime>) -> Result<(), BoxError
   app.serve().await?;
 
   Ok(())
-}
-
-fn main() -> Result<(), BoxError> {
-  let runtime = Rc::new(
-    tokio::runtime::Builder::new_multi_thread()
-      .enable_all()
-      .build()?,
-  );
-
-  runtime.block_on(async_main(runtime.clone()))
 }
