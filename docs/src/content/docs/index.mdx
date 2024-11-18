@@ -47,7 +47,9 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
       TrailBase APIs are [6-7x faster than PocketBase's and 15x faster than SupaBase's
       needing only a fraction of the footprint](/reference/benchmarks), allowing
       you to serve millions of customers from a tiny box.
-      TrailBase JS runtime is ~40x faster than PocketBase's.
+
+      In terms of JS/TS performance, V8 is roughly 40x faster than goja used by
+      PocketBase.
     </div>
 
     <div slot="second">
@@ -60,14 +62,13 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
   </SplitCard>
 
   <Card title="Admin Dashboard" icon="setting">
-    TrailBase ships with a builtin admin dashboard UI, see demo above, that
-    lets you quickly configure your instance and visually explore your data.
+    TrailBase ships with a builtin admin dashboard UI that lets you quickly
+    configure your instance and visually explore your data.
+    Check out the **live demo** below.
     Following TrailBase's mantra of not getting in your way, the UI is
-    entirely optional letting you fall back to a purely config &
-    migration-based setup for integration tests or managing an entire fleet
-    of deployments.
-
-    Check out the **live demo**:
+    entirely optional letting you fall back to a purely config and
+    migration-based setup for integration tests or managing a fleet of
+    deployments.
 
     <div class="flex justify-center">
       <div class="max-w-[680px] relative" >
@@ -128,12 +129,14 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
       Dart/Flutter, and C#/.NET are provided out of the box.
 
       <div class="m-0 flex justify-center items-start gap-8">
-        <span>
+        <a href="https://www.npmjs.com/package/trailbase">
           <Image class="p-0 m-0" height={52} src={tsLogo} alt="TypeScript" />
-        </span>
-        <span>
+        </a>
+
+        <a href="https://pub.dev/packages/trailbase">
           <Image margin={0} class="p-0 m-0" width={42} height={52} src={flutterLogo} alt="Flutter" />
-        </span>
+        </a>
+
         <span>
           <Image margin={0} class="p-0 m-0" width={52} height={52} src={dotnetLogo} alt="Dotnet" />
         </span>
