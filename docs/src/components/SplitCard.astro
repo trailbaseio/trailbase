@@ -1,0 +1,31 @@
+---
+import { Card } from "@astrojs/starlight/components";
+
+export interface Props {
+  title: string;
+  icon?: any;
+  reverse?: boolean;
+}
+
+const { title, icon, reverse } = Astro.props as Props;
+---
+
+<Card title={title} icon={icon}>
+  <div
+    class:list={[
+      "flex",
+      "flex-col",
+      reverse ? "md:flex-row-reverse" : "md:flex-row",
+      "gap-2",
+      "md:gap-8",
+    ]}
+  >
+    <div class="md:w-[45%]">
+      <slot name="first" />
+    </div>
+
+    <div class="md:w-[55%]">
+      <slot name="second" />
+    </div>
+  </div>
+</Card>

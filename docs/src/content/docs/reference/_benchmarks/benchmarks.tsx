@@ -18,6 +18,7 @@ type Datum = {
 };
 
 const colors = {
+  payload: "rgb(0, 101, 101)",
   supabase: "rgb(62, 207, 142)",
   pocketbase0: "rgb(230, 128, 30)",
   pocketbase1: "rgb(238, 175, 72)",
@@ -57,37 +58,41 @@ function transformMillisecondTicks(
   }
 }
 
-const durations100k = [
-  {
+const durations100k = {
+  payload: {
+    label: "Payload v3+SQLite",
+    data: [656.09],
+    backgroundColor: colors.payload,
+  },
+  supabase: {
     label: "SupaBase",
     data: [151],
     backgroundColor: colors.supabase,
   },
-  {
+  pocketbase_ts: {
     label: "PocketBase TS",
     data: [67.721],
     backgroundColor: colors.pocketbase0,
   },
-  // {
-  //   label: "PocketBase Dart (AOT)",
-  //   data: [62.8136],
-  // },
-  {
+  pocketbase_dart_aot: {
+    label: "PocketBase Dart (AOT)",
+    data: [62.8136],
+  },
+  pocketbase_dart_jit: {
     label: "PocketBase Dart (JIT)",
     data: [61.687],
     backgroundColor: colors.pocketbase1,
   },
-  {
+  trailbase_ts: {
     label: "TrailBase TS",
     data: [16.742],
     backgroundColor: colors.trailbase0,
   },
-  // {
-  //   label: "TrailBase Dart (AOT)",
-  //   data: [11.1],
-  // },
-  {
-    // label: "TrailBase Dart (JIT)",
+  trailbase_dart_aot: {
+    label: "TrailBase Dart (AOT)",
+    data: [11.1],
+  },
+  trailbase_dart_jit: {
     label: "TrailBase Dart",
     data: [9.4247],
     backgroundColor: colors.trailbase1,
@@ -96,22 +101,46 @@ const durations100k = [
   //   label: "TrailBase Dart (JIT + PGO)",
   //   data: [10.05],
   // },
-  // {
-  //   label: "TrailBase Dart (INT PK)",
-  //   data: [8.5249],
-  //   backgroundColor: colors.trailbase2,
-  // },
-  {
+  trailbase_dart_jit_int_pk: {
+    label: "TrailBase Dart (INT PK)",
+    data: [8.5249],
+    backgroundColor: colors.trailbase2,
+  },
+  drizzle: {
     label: "In-process SQLite (Drizzle)",
     data: [8.803],
     backgroundColor: colors.drizzle,
   },
-];
+};
 
 export function Duration100kInsertsChart() {
   const data: ChartData<"bar"> = {
-    labels: ["Time [s] (lower is better)"],
-    datasets: durations100k as ChartDataset<"bar">[],
+    labels: ["Time in seconds (lower is faster)"],
+    datasets: [
+      durations100k.supabase,
+      durations100k.pocketbase_ts,
+      durations100k.pocketbase_dart_jit,
+      durations100k.trailbase_ts,
+      durations100k.trailbase_dart_jit,
+      durations100k.drizzle,
+    ] as ChartDataset<"bar">[],
+  };
+
+  return <BarChart data={data} />;
+}
+
+export function Duration100kInsertsChartMoreResults() {
+  const data: ChartData<"bar"> = {
+    labels: ["Time in seconds (lower is faster)"],
+    datasets: [
+      durations100k.payload,
+      durations100k.supabase,
+      durations100k.pocketbase_ts,
+      durations100k.pocketbase_dart_jit,
+      durations100k.trailbase_ts,
+      durations100k.trailbase_dart_jit,
+      durations100k.drizzle,
+    ] as ChartDataset<"bar">[],
   };
 
   return <BarChart data={data} />;

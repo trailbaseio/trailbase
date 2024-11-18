@@ -4,7 +4,7 @@ description: Performance comparison with similar products.
 ---
 
 import {
-  Duration100kInsertsChart,
+  Duration100kInsertsChartMoreResults,
   PocketBaseAndTrailBaseReadLatencies,
   PocketBaseAndTrailBaseInsertLatencies,
   SupaBaseMemoryUsageChart,
@@ -53,13 +53,13 @@ Ultimately, nothing beats benchmarking your own workload and setup.
 _Total Time for 100k Insertions_
 
 <div class="flex justify-center">
-  <div class="h-[300px] w-[90%]">
-    <Duration100kInsertsChart client:only="solid-js" />
+  <div class="h-[400px] w-[90%]">
+    <Duration100kInsertsChartMoreResults client:only="solid-js" />
   </div>
 </div>
 
 The graph shows the overall time it takes to insert 100k messages into a mock
-"chat-room" table setup. Less time is better.
+*chat-room* table setup. Less time is better.
 
 Unsurprisingly, in-process SQLite is the quickest [^2].
 All other setups add additional table look-ups for access checking, IPC
@@ -69,11 +69,15 @@ and the cost a project would pay by adopting any of the systems over in-process
 SQLite.
 
 The data suggests that depending on your setup (client, data, hardware)
-TrailBase can insert 100k records 9 to 16 times faster than SupaBase[^4] and
-roughly 6 to 7 times faster than PocketBase [^1].
+TrailBase can insert 100k records almost 70 times faster than Payload[^4], 9 to
+16 times faster than SupaBase[^5], and roughly 6 to 7 times faster than
+PocketBase [^1].
+
+{/*
 The fact that our TS/node.js benchmark is slower than the Dart one, suggests a
 client-side bottleneck that could be overcome by tuning the setup or trying
 other JS runtimes with lower overhead HTTP clients.
+*/}
 
 Total time of inserting a large batch of data tells only part of the story,
 let's have a quick look at resource consumption to get an intuition for
@@ -90,7 +94,7 @@ _TrailBase & PocketBase Utilization_
 The graph shows the CPU utilization and memory consumption (RSS) of both
 PocketBase and TrailBase. They look fairly similar apart from TrailBase
 finishing earlier. They both load roughly 3 CPUs with PocketBase's CPU
-consumption being slightly more variable [^5].
+consumption being slightly more variable [^6].
 The little bump after the TrailBase run is likely due to SQLite check-pointing.
 
 Both only consume about 140MB of memory at full tilt, which makes them a great
@@ -218,8 +222,8 @@ The benchmarks are available on [GitHub](https://github.com/trailbaseio/trailbas
 
 [^2]:
     Our setup with drizzle and node.js is certainly not the fastest possible.
-    For example, we could drop down to using raw SQLite in C or another
-    low-level language.
+    For example, we could drop down to SQLite in C or another low-level
+    language with less FFI overhead.
     That said, drizzle is a great popular choice which mostly serves as a
     point-of-reference and sanity check.
 
@@ -228,6 +232,15 @@ The benchmarks are available on [GitHub](https://github.com/trailbaseio/trailbas
     For the benchmarks at hand we're using a loopback network device.
 
 [^4]:
+    We picked Payload as representative of popular Node.js CMS, which
+    [itself claims](https://payloadcms.com/blog/performance-benchmarks)
+    to be many times faster than popular options like Strapi or Directus.
+    We were using a v3 pre-release, as recommended, also using the
+    SQLite/drizzle database adapter marked as beta.
+    We manually turned on WAL mode and filed an issue with payload, otherwise
+    stock payload was ~210x times slower.
+
+[^5]:
     The SupaBase benchmark setup skips row-level access checks. Technically,
     this is in its favor from a performance standpoint, however looking at the
     overall load on its constituents with PG being only a sliver, it probably
@@ -235,7 +248,7 @@ The benchmarks are available on [GitHub](https://github.com/trailbaseio/trailbas
     which has been released since the benchmarks were run. That said, these
     claims deserve re-validation.
 
-[^5]:
+[^6]:
     We're unsure as to what causes these 1-core swings.
     Runtime-effects, such as garbage collection, may have an effect, however we
     would have expected these to show on shorter time-scales.
