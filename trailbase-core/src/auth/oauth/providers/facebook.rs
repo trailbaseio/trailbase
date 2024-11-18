@@ -8,26 +8,47 @@ use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::auth::AuthError;
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
-pub(crate) struct GitlabOAuthProvider {
+#[derive(Default, Deserialize, Debug)]
+struct FacebookUserPictureData {
+  url: String,
+}
+
+#[derive(Default, Deserialize, Debug)]
+struct FacebookUserPicture {
+  data: FacebookUserPictureData,
+}
+
+#[derive(Default, Deserialize, Debug)]
+struct FacebookUser {
+  id: String,
+  email: String,
+  // name: Option<String>,
+  picture: Option<FacebookUserPicture>,
+}
+
+pub(crate) struct FacebookOAuthProvider {
   client_id: String,
   client_secret: String,
 }
 
-impl GitlabOAuthProvider {
-  const NAME: &'static str = "gitlab";
-  const DISPLAY_NAME: &'static str = "GitLab";
+impl FacebookOAuthProvider {
+  const NAME: &'static str = "facebook";
+  const DISPLAY_NAME: &'static str = "Facebook";
 
-  const AUTH_URL: &'static str = "https://gitlab.com/oauth/authorize";
-  const TOKEN_URL: &'static str = "https://gitlab.com/oauth/token";
-  const USER_API_URL: &'static str = "https://gitlab.com/api/v4/user";
+  const AUTH_URL: &'static str = "https://www.facebook.com/v3.2/dialog/oauth";
+  const TOKEN_URL: &'static str = "https://graph.facebook.com/v3.2/oauth/access_token";
+  const USER_API_URL: &'static str =
+    "https://graph.facebook.com/me?fields=name,email,picture.type(large)";
 
   fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
-      return Err(OAuthProviderError::Missing("Discord client id".to_string()));
+      return Err(OAuthProviderError::Missing(
+        "Facebook client id".to_string(),
+      ));
     };
     let Some(client_secret) = config.client_secret.clone() else {
       return Err(OAuthProviderError::Missing(
-        "Discord client secret".to_string(),
+        "Facebook client secret".to_string(),
       ));
     };
 
@@ -39,7 +60,7 @@ impl GitlabOAuthProvider {
 
   pub fn factory() -> OAuthProviderFactory {
     OAuthProviderFactory {
-      id: OAuthProviderId::Gitlab,
+      id: OAuthProviderId::Facebook,
       name: Self::NAME,
       display_name: Self::DISPLAY_NAME,
       factory: Box::new(|config: &OAuthProviderConfig| Ok(Box::new(Self::new(config)?))),
@@ -48,12 +69,12 @@ impl GitlabOAuthProvider {
 }
 
 #[async_trait]
-impl OAuthProvider for GitlabOAuthProvider {
+impl OAuthProvider for FacebookOAuthProvider {
   fn name(&self) -> &'static str {
     Self::NAME
   }
   fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Gitlab
+    OAuthProviderId::Facebook
   }
   fn display_name(&self) -> &'static str {
     Self::DISPLAY_NAME
@@ -61,8 +82,8 @@ impl OAuthProvider for GitlabOAuthProvider {
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
     lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(GitlabOAuthProvider::AUTH_URL).unwrap();
-      static ref TOKEN_URL: Url = Url::parse(GitlabOAuthProvider::TOKEN_URL).unwrap();
+      static ref AUTH_URL: Url = Url::parse(FacebookOAuthProvider::AUTH_URL).unwrap();
+      static ref TOKEN_URL: Url = Url::parse(FacebookOAuthProvider::TOKEN_URL).unwrap();
     }
 
     return Ok(OAuthClientSettings {
@@ -74,7 +95,7 @@ impl OAuthProvider for GitlabOAuthProvider {
   }
 
   fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["identify", "email"];
+    return vec!["email"];
   }
 
   async fn get_user(&self, access_token: String) -> Result<OAuthUser, AuthError> {
@@ -85,31 +106,17 @@ impl OAuthProvider for GitlabOAuthProvider {
       .await
       .map_err(|err| AuthError::FailedDependency(err.into()))?;
 
-    // https://docs.gitlab.com/ee/api/users.html#for-user
-    #[derive(Default, Deserialize, Debug)]
-    struct GitlabUser {
-      id: i64,
-      // name: String,
-      // username: String,
-      email: String,
-      avatar_url: Option<String>,
-      active: bool,
-    }
-
     let user = response
-      .json::<GitlabUser>()
+      .json::<FacebookUser>()
       .await
       .map_err(|err| AuthError::FailedDependency(err.into()))?;
-    if !user.active {
-      return Err(AuthError::Unauthorized);
-    }
 
     return Ok(OAuthUser {
-      provider_user_id: user.id.to_string(),
-      provider_id: OAuthProviderId::Gitlab,
+      provider_user_id: user.id,
+      provider_id: OAuthProviderId::Facebook,
       email: user.email,
-      verified: user.active,
-      avatar: user.avatar_url,
+      verified: true,
+      avatar: user.picture.map(|p| p.data.url),
     });
   }
 }

@@ -8,26 +8,34 @@ use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::auth::AuthError;
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
-pub(crate) struct GitlabOAuthProvider {
+#[derive(Default, Deserialize, Debug)]
+struct MicrosoftUser {
+  id: String,
+  mail: String,
+}
+
+pub(crate) struct MicrosoftOAuthProvider {
   client_id: String,
   client_secret: String,
 }
 
-impl GitlabOAuthProvider {
-  const NAME: &'static str = "gitlab";
-  const DISPLAY_NAME: &'static str = "GitLab";
+impl MicrosoftOAuthProvider {
+  const NAME: &'static str = "microsoft";
+  const DISPLAY_NAME: &'static str = "Microsoft";
 
-  const AUTH_URL: &'static str = "https://gitlab.com/oauth/authorize";
-  const TOKEN_URL: &'static str = "https://gitlab.com/oauth/token";
-  const USER_API_URL: &'static str = "https://gitlab.com/api/v4/user";
+  const AUTH_URL: &'static str = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
+  const TOKEN_URL: &'static str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
+  const USER_API_URL: &'static str = "https://graph.microsoft.com/v1.0/me";
 
   fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
-      return Err(OAuthProviderError::Missing("Discord client id".to_string()));
+      return Err(OAuthProviderError::Missing(
+        "Microsoft client id".to_string(),
+      ));
     };
     let Some(client_secret) = config.client_secret.clone() else {
       return Err(OAuthProviderError::Missing(
-        "Discord client secret".to_string(),
+        "Microsoft client secret".to_string(),
       ));
     };
 
@@ -39,7 +47,7 @@ impl GitlabOAuthProvider {
 
   pub fn factory() -> OAuthProviderFactory {
     OAuthProviderFactory {
-      id: OAuthProviderId::Gitlab,
+      id: OAuthProviderId::Microsoft,
       name: Self::NAME,
       display_name: Self::DISPLAY_NAME,
       factory: Box::new(|config: &OAuthProviderConfig| Ok(Box::new(Self::new(config)?))),
@@ -48,12 +56,12 @@ impl GitlabOAuthProvider {
 }
 
 #[async_trait]
-impl OAuthProvider for GitlabOAuthProvider {
+impl OAuthProvider for MicrosoftOAuthProvider {
   fn name(&self) -> &'static str {
     Self::NAME
   }
   fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Gitlab
+    OAuthProviderId::Microsoft
   }
   fn display_name(&self) -> &'static str {
     Self::DISPLAY_NAME
@@ -61,8 +69,8 @@ impl OAuthProvider for GitlabOAuthProvider {
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
     lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(GitlabOAuthProvider::AUTH_URL).unwrap();
-      static ref TOKEN_URL: Url = Url::parse(GitlabOAuthProvider::TOKEN_URL).unwrap();
+      static ref AUTH_URL: Url = Url::parse(MicrosoftOAuthProvider::AUTH_URL).unwrap();
+      static ref TOKEN_URL: Url = Url::parse(MicrosoftOAuthProvider::TOKEN_URL).unwrap();
     }
 
     return Ok(OAuthClientSettings {
@@ -74,7 +82,7 @@ impl OAuthProvider for GitlabOAuthProvider {
   }
 
   fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["identify", "email"];
+    return vec!["User.Read"];
   }
 
   async fn get_user(&self, access_token: String) -> Result<OAuthUser, AuthError> {
@@ -85,31 +93,17 @@ impl OAuthProvider for GitlabOAuthProvider {
       .await
       .map_err(|err| AuthError::FailedDependency(err.into()))?;
 
-    // https://docs.gitlab.com/ee/api/users.html#for-user
-    #[derive(Default, Deserialize, Debug)]
-    struct GitlabUser {
-      id: i64,
-      // name: String,
-      // username: String,
-      email: String,
-      avatar_url: Option<String>,
-      active: bool,
-    }
-
     let user = response
-      .json::<GitlabUser>()
+      .json::<MicrosoftUser>()
       .await
       .map_err(|err| AuthError::FailedDependency(err.into()))?;
-    if !user.active {
-      return Err(AuthError::Unauthorized);
-    }
 
     return Ok(OAuthUser {
-      provider_user_id: user.id.to_string(),
-      provider_id: OAuthProviderId::Gitlab,
-      email: user.email,
-      verified: user.active,
-      avatar: user.avatar_url,
+      provider_user_id: user.id,
+      provider_id: OAuthProviderId::Microsoft,
+      email: user.mail,
+      verified: true,
+      avatar: None,
     });
   }
 }

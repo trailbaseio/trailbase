@@ -1,6 +1,8 @@
 mod discord;
+mod facebook;
 mod gitlab;
 mod google;
+mod microsoft;
 
 #[cfg(test)]
 pub(crate) mod test;
@@ -54,6 +56,8 @@ lazy_static! {
     discord::DiscordOAuthProvider::factory(),
     gitlab::GitlabOAuthProvider::factory(),
     google::GoogleOAuthProvider::factory(),
+    facebook::FacebookOAuthProvider::factory(),
+    microsoft::MicrosoftOAuthProvider::factory(),
     #[cfg(test)]
     test::TestOAuthProvider::factory(),
   ];

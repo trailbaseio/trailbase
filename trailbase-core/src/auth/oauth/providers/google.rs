@@ -15,7 +15,7 @@ pub(crate) struct GoogleOAuthProvider {
 
 impl GoogleOAuthProvider {
   const NAME: &'static str = "google";
-  const DISPLAY_NAME: &'static str = "google";
+  const DISPLAY_NAME: &'static str = "Google";
 
   const AUTH_URL: &'static str = "https://accounts.google.com/o/oauth2/auth";
   const TOKEN_URL: &'static str = "https://accounts.google.com/o/oauth2/token";
@@ -31,7 +31,7 @@ impl GoogleOAuthProvider {
       ));
     };
 
-    return Ok(GoogleOAuthProvider {
+    return Ok(Self {
       client_id,
       client_secret,
     });

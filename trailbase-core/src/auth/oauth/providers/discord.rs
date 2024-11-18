@@ -31,7 +31,7 @@ impl DiscordOAuthProvider {
       ));
     };
 
-    return Ok(DiscordOAuthProvider {
+    return Ok(Self {
       client_id,
       client_secret,
     });

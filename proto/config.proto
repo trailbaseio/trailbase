@@ -31,6 +31,8 @@ enum OAuthProviderId {
   DISCORD = 10;
   GITLAB = 11;
   GOOGLE = 12;
+  FACEBOOK = 13;
+  MICROSOFT = 14;
 }
 
 message OAuthProviderConfig {
