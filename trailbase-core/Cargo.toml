@@ -48,10 +48,10 @@ rand = "0.8.5"
 refinery = { workspace = true }
 refinery-libsql = { workspace = true }
 regex = "1.11.0"
-reqwest = { version = "0.12.5", default-features = false, features = ["rustls-tls", "json"] }
+reqwest = { version = "0.12.8", default-features = false, features = ["rustls-tls", "json"] }
 rusqlite = { workspace = true }
 rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
-rustyscript = { version = "^0.9.0", optional = true }
+rustyscript = { version = "^0.9.0", optional = true, features = ["web"] }
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "^1.0.117"
 serde_path_to_error = "0.1.16"

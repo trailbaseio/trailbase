@@ -47,3 +47,15 @@ addRoute("GET", "/json", jsonHandler((_req: JsonRequestType) => {
 addRoute("GET", "/error", jsonHandler((_req: JsonRequestType) => {
   throw new HttpError(StatusCodes.IM_A_TEAPOT, "I'm a teapot");
 }));
+
+addRoute("GET", "/fetch", stringHandler(async (req: StringRequestType) => {
+  const query = parsePath(req.uri).query;
+  const url = query.get("url");
+
+  if (url) {
+    const response = await fetch(url);
+    return await response.text()
+  }
+
+  throw new HttpError(StatusCodes.BAD_REQUEST, "Missing ?url param");
+}));

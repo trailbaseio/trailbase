@@ -40,9 +40,10 @@ type SimpleSubsetView = {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const port: number = 4005;
+const address: string = `http://127.0.0.1:${port}`;
 
 async function connect(): Promise<Client> {
-  const client = Client.init(`http://127.0.0.1:${port}`);
+  const client = Client.init(address);
   await client.login("admin@localhost", "secret");
   return client;
 }
@@ -179,4 +180,22 @@ test("record error tests", async () => {
       status: status.NOT_FOUND,
     }),
   );
+});
+
+test("JS runtime", async () => {
+  const expected = {
+    int: 5,
+    real: 4.2,
+    msg: "foo",
+    obj: {
+      nested: true,
+    },
+  };
+
+  const json = await (await fetch(`${address}/json`)).json();
+  expect(json).toMatchObject(expected);
+
+  const fetchUrl = `${address}/json`;
+  const response = await fetch(`${address}/fetch?url=${encodeURI(fetchUrl)}`);
+  expect(await response.json()).toMatchObject(expected);
 });
