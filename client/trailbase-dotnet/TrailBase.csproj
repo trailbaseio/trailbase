@@ -1,10 +1,25 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <PackageId>TrailBase</PackageId>
+    <Version>0.1.1</Version>
+    <Authors>TrailBase authors</Authors>
+    <PackageReadmeFile>./README.md</PackageReadmeFile>
+    <PackageLicenseExpression>OSL-3.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://trailbase.io</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/trailbaseio/trailbase</RepositoryUrl>
+
+    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+
+    <IsPackable>true</IsPackable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.2">
@@ -20,10 +35,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Using Include="Xunit" />
   </ItemGroup>
 
 </Project>

@@ -1,9 +1,10 @@
+using Xunit;
 using System.Diagnostics;
 
 namespace TrailBase;
 
 public static class Constants {
-  public const int Port = 4007;
+  public static int Port = 4010 + System.Environment.Version.Major;
 }
 
 class SimpleStrict {
@@ -113,9 +114,16 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     var api = client.Records("simple_strict_table");
 
     var now = DateTimeOffset.Now.ToUnixTimeSeconds();
+
+    // Dotnet runs tests for multiple target framework versions in parallel.
+    // Each test currently brings up its own server but pointing at the same
+    // underlying database file. We include the runtime version in the filter
+    // query to avoid a race between both tests. This feels a bit hacky.
+    // Ideally, we'd run the tests sequentially or with better isolation :/.
+    var suffix = $"{now} {System.Environment.Version}";
     List<string> messages = [
-      $"C# client test 0: {now}",
-      $"C# client test 1: {now}",
+      $"C# client test 0: {suffix}",
+      $"C# client test 1: {suffix}",
     ];
 
     List<RecordId> ids = [];
@@ -136,7 +144,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       var recordsAsc = await api.List<SimpleStrict>(
           null,
         ["+text_not_null"],
-        [$"text_not_null[like]=%{now}"]
+        [$"text_not_null[like]=%{suffix}"]
       )!;
       Assert.Equal(messages.Count, recordsAsc.Count);
       Assert.Equal(messages, recordsAsc.ConvertAll((e) => e.text_not_null));
@@ -144,7 +152,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       var recordsDesc = await api.List<SimpleStrict>(
           null,
         ["-text_not_null"],
-        [$"text_not_null[like]=%{now}"]
+        [$"text_not_null[like]=%{suffix}"]
       )!;
       Assert.Equal(messages.Count, recordsDesc.Count);
       recordsDesc.Reverse();
@@ -179,7 +187,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       var records = await api.List<SimpleStrict>(
           null,
           null,
-        [$"text_not_null[like]=%{now}"]
+        [$"text_not_null[like]=%{suffix}"]
       )!;
 
       Assert.Single(records);

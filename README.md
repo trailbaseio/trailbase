@@ -63,7 +63,7 @@ Moreover, client packages and containers are available via:
 - [Docker](https://hub.docker.com/r/trailbase/trailbase)
 - [JavaScript/Typescript client](https://www.npmjs.com/package/trailbase)
 - [Dart/Flutter client](https://pub.dev/packages/trailbase)
-- [C#/.Net](https://github.com/trailbaseio/trailbase/tree/main/client/trailbase-dotnet)
+- [C#/.Net](https://www.nuget.org/packages/TrailBase/)
 
 ## Running
 
