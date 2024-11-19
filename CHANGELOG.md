@@ -1,3 +1,8 @@
+## v0.2.2
+
+* Enable "web" APIs in JS runtime.
+* Add "Facebook" and "Microsoft" OAuth providers.
+
 ## v0.2.1
 
 * Allow setting the number V8 isolates (i.e. JS runtime threads) via

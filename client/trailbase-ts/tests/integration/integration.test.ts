@@ -192,10 +192,13 @@ test("JS runtime", async () => {
     },
   };
 
-  const json = await (await fetch(`${address}/json`)).json();
+  const jsonUrl = `${address}/json`;
+  const json = await (await fetch(jsonUrl)).json();
   expect(json).toMatchObject(expected);
 
-  const fetchUrl = `${address}/json`;
-  const response = await fetch(`${address}/fetch?url=${encodeURI(fetchUrl)}`);
+  const response = await fetch(`${address}/fetch?url=${encodeURI(jsonUrl)}`);
   expect(await response.json()).toMatchObject(expected);
+
+  const errResp = await fetch(`${address}/error`);
+  expect(errResp.status).equals(status.IM_A_TEAPOT);
 });
