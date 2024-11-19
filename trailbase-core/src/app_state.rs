@@ -272,6 +272,7 @@ impl AppState {
     .await;
   }
 
+  #[cfg(feature = "v8")]
   pub(crate) fn script_runtime(&self) -> RuntimeHandle {
     return self.state.runtime.clone();
   }

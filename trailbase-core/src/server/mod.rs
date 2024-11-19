@@ -22,7 +22,6 @@ use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
 use crate::constants::{AUTH_API_PATH, HEADER_CSRF_TOKEN, QUERY_API_PATH, RECORD_API_PATH};
 use crate::data_dir::DataDir;
-use crate::js::load_routes_from_js_modules;
 use crate::logging;
 use crate::scheduler;
 
@@ -109,13 +108,17 @@ impl Server {
         .map_err(|err| InitError::CustomInit(err.to_string()))?;
     }
 
-    let js_routes = load_routes_from_js_modules(&state)
-      .await
-      .map_err(|err| InitError::ScriptError(err.to_string()))?;
-    let custom_routes = if let Some(js_routes) = js_routes {
-      Some(custom_routes.unwrap_or_default().nest("/", js_routes))
-    } else {
-      custom_routes
+    #[cfg(feature = "v8")]
+    let custom_routes = {
+      let js_routes = crate::js::load_routes_from_js_modules(&state)
+        .await
+        .map_err(|err| InitError::ScriptError(err.to_string()))?;
+
+      if let Some(js_routes) = js_routes {
+        Some(custom_routes.unwrap_or_default().nest("/", js_routes))
+      } else {
+        custom_routes
+      }
     };
 
     let main_router = Self::build_main_router(&state, &opts, custom_routes).await;

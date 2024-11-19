@@ -8,7 +8,6 @@ use crate::app_state::{AppState, AppStateArgs};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;
-use crate::js::write_js_runtime_files;
 use crate::migrations::{apply_logs_migrations, apply_main_migrations};
 use crate::rand::generate_random_string;
 use crate::server::DataDir;
@@ -107,7 +106,8 @@ pub async fn init_app_state(
   }
 
   // Write out the latest .js/.d.ts runtime files.
-  write_js_runtime_files(&data_dir).await;
+  #[cfg(feature = "v8")]
+  crate::js::write_js_runtime_files(&data_dir).await;
 
   let app_state = AppState::new(AppStateArgs {
     data_dir: data_dir.clone(),
