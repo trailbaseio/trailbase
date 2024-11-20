@@ -32,6 +32,7 @@ COPY . .
 
 RUN RUSTFLAGS="-C target-feature=+crt-static" cargo build --target x86_64-unknown-linux-gnu --release --bin trail
 
+
 FROM alpine:3.20 AS runtime
 RUN apk add --no-cache tini curl
 
@@ -39,6 +40,9 @@ COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/trail /app/
 
 # When `docker run` is executed, launch the binary as unprivileged user.
 RUN adduser -D trailbase
+
+RUN mkdir -p /app/traildepot
+RUN chown trailbase /app/traildepot
 USER trailbase
 
 WORKDIR /app
