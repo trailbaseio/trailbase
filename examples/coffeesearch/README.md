@@ -6,8 +6,21 @@ search to build a coffee search.
 To import the coffee data from CSV, run:
 
 ```bash
-  mkdir -p traildepot/data
-  cat import.sql | sqlite3 traildepot/data/main.db -
+$ mkdir -p traildepot/data
+$ cat import.sql | sqlite3 traildepot/data/main.db -
+```
+
+To build the web app
+
+```bash
+$ pnpm i
+$ pnpm build
+```
+
+Finally, to build the docker container:
+
+```
+$ docker build . -t coffee && docker run -p 4001:4000 coffee
 ```
 
 ## Reference

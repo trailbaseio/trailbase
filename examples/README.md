@@ -22,6 +22,10 @@ A simple styled Blog example with UIs both for web and Flutter:
   </picture>
 </p>
 
+#### Coffee Search
+
+A very small web app demonstrating vector search and custom JS/TS endpoints.
+
 #### First App Tutorial
 
 The code for the [tutorial](https://trailbase.io/getting-started/first-app).

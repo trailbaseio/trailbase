@@ -19,7 +19,7 @@ addRoute(
     FROM
       coffee
     WHERE
-      Aroma IS NOT NULL
+      embedding IS NOT NULL
     ORDER BY
       vector_distance_cos(embedding, '[${aroma}, ${flavor}, ${acidity}, ${sweetness}]')
     LIMIT 100

@@ -1,15 +1,24 @@
-FROM trailbase/trailbase:0.2.1 AS base
-
-COPY traildepot /app/traildepot
-COPY dist /app/public
+FROM trailbase/trailbase:0.2.2 AS base
 
 USER root
 
+RUN apk add --no-cache sqlite
+
+# TODO: Add a dedicated build step, both for (re)building the database and
+# building the web app.
+
+COPY dist /app/public
+COPY traildepot /app/traildepot
+COPY arabica_data_cleaned.csv /app/
+COPY import.sql /app/
+
+# Rebuild the database.
+WORKDIR /app
 RUN mkdir -p /app/traildepot/data
+RUN rm -rf /app/traildepot/data/*
+RUN cat import.sql | sqlite3 traildepot/data/main.db
+
 RUN chown -R trailbase /app/traildepot/data
-RUN chmod +w /app/traildepot/data
-
-
 USER trailbase
 
 EXPOSE 4000
