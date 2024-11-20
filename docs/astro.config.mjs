@@ -25,7 +25,7 @@ export default defineConfig({
       },
       plugins: [
         starlightLinksValidator({
-          exclude: ["http://localhost:4000/**/*"],
+          exclude: ["http://localhost:4000/", "http://localhost:4000/**/*"],
         }),
       ],
       sidebar: [
@@ -37,8 +37,12 @@ export default defineConfig({
               slug: "getting-started/starting-up",
             },
             {
-              label: "First App",
-              slug: "getting-started/first-app",
+              label: "First UI+TS App",
+              slug: "getting-started/first-ui-app",
+            },
+            {
+              label: "First CLI App",
+              slug: "getting-started/first-cli-app",
             },
             {
               label: "Philosophy",

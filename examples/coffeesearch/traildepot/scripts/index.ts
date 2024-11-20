@@ -15,13 +15,18 @@ addRoute(
     return await query(
       `
     SELECT
-      Owner, Aroma, Flavor, Acidity, Sweetness
+      Owner,
+      Aroma,
+      Flavor,
+      Acidity,
+      Sweetness,
+      vector_distance_cos(embedding, '[${aroma}, ${flavor}, ${acidity}, ${sweetness}]') AS distance
     FROM
       coffee
     WHERE
-      embedding IS NOT NULL
+      embedding IS NOT NULL AND distance < 0.2
     ORDER BY
-      vector_distance_cos(embedding, '[${aroma}, ${flavor}, ${acidity}, ${sweetness}]')
+      distance
     LIMIT 100
   `,
       [],

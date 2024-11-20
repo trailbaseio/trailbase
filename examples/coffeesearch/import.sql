@@ -11,9 +11,6 @@ CREATE TABLE IF NOT EXISTS coffee (
   embedding BLOB
 ) STRICT;
 
--- Empty table for clean import.
-DELETE FROM coffee;
-
 -- Go on to import data.
 DROP TABLE IF EXISTS temporary;
 

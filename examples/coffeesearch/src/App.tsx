@@ -3,7 +3,7 @@ import "./App.css";
 
 type Data = Array<Array<object>>;
 
-async function getData(v: {
+async function fetchData(v: {
   aroma: number;
   flavor: number;
   acidity: number;
@@ -17,23 +17,29 @@ async function getData(v: {
   return await response.json();
 }
 
-function Input(props: {
+const Input = (props: {
   label: string;
   value: number;
   update: (v: number) => void;
-}) {
-  return (
-    <>
-      <label>{props.label}:</label>
-      <input
-        type="number"
-        step="0.1"
-        value={props.value}
-        onChange={(el) => props.update(el.target.valueAsNumber)}
-      />
-    </>
-  );
-}
+}) => (
+  <>
+    <label>{props.label}:</label>
+    <input
+      type="number"
+      step="0.1"
+      value={props.value}
+      onChange={(el) => props.update(el.target.valueAsNumber)}
+    />
+  </>
+);
+
+const Row = (props: { row: Array<object> }) => (
+  <tr>
+    {props.row.map((d) => (
+      <td>{`${typeof d === "number" ? (d as number).toPrecision(3) : d}`}</td>
+    ))}
+  </tr>
+);
 
 function Table() {
   const [aroma, setAroma] = useState(8);
@@ -44,18 +50,8 @@ function Table() {
   const [data, setData] = useState<Data | undefined>();
   useEffect(() => {
     setData(undefined);
-    getData({ aroma, flavor, acidity, sweetness }).then((data) =>
-      setData(data),
-    );
+    fetchData({ aroma, flavor, acidity, sweetness }).then(setData);
   }, [aroma, flavor, acidity, sweetness]);
-
-  const Row = (props: { row: Array<object> }) => (
-    <tr>
-      {props.row.map((d) => (
-        <td>{`${d}`}</td>
-      ))}
-    </tr>
-  );
 
   return (
     <>

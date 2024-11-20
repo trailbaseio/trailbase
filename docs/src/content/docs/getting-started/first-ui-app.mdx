@@ -1,0 +1,285 @@
+---
+title: First UI + TypeScript App
+---
+
+import screenshot from "../../../../../examples/coffeesearch/assets/screenshot.png";
+
+In this tutorial, we'll set up a database with coffee data, implement a custom
+handler for vector search in TypeScript, and a simple web UI all in ~100 lines
+of code.
+
+
+<div class="flex justify-center">
+  <div class="w-[80%] shadow-lg	 ">
+    ![screenshot](../../../../../examples/coffeesearch/assets/screenshot.png)
+  </div>
+</div>
+
+{/*
+<div class="flex justify-center">
+  <Image
+    class="w-[80%] "
+    src={screenshot}
+    alt="Screenshot of Coffee Vector Search App"
+  />
+</div>
+*/}
+
+## Importing the Data
+
+The dataset live under `/examples/coffeesearch/arabica_data_cleaned.csv`. We'll
+use the `sqlite3` CLI and the following SQL script to import the initial data:
+
+```sql
+-- First create the strictly typed "coffee" table.
+CREATE TABLE IF NOT EXISTS coffee (
+  Species TEXT,
+  Owner TEXT,
+
+  Aroma REAL,
+  Flavor REAL,
+  Acidity REAL,
+  Sweetness REAL,
+
+  embedding BLOB
+) STRICT;
+
+-- Then import the data into a "temporary" table.
+.mode csv
+.import arabica_data_cleaned.csv temporary
+
+-- Then import the temporary data into the "coffee" table.
+INSERT INTO coffee (Species, Owner, Aroma, Flavor, Acidity, Sweetness)
+SELECT
+  Species,
+  Owner,
+
+  CAST(Aroma AS REAL) AS Aroma,
+  CAST(Flavor AS REAL) AS Flavor,
+  CAST(Acidity AS REAL) AS Acidity,
+  CAST(Sweetness AS REAL) AS Sweetness
+FROM temporary;
+
+-- And clean up.
+DROP TABLE temporary;
+```
+
+Note that we didn't initialize the vector `embedding`. This is because the
+`sqlite3` CLI doesn't have the necessary extension functions built-in.
+We'll update the entries to add the embedding later as part of a TrailBase
+migration.
+
+With this script as `import.sql` and assuming `/example/coffeesearch` is your
+current working directory, you can run:
+
+```bash
+$ cat import.sql | sqlite3 traildepot/data/main.db -
+```
+
+Now with the initial import, let's start TrailBase for the first time. This
+will will apply the following migration under
+`/examples/coffeesearch/traildepot/migrations`, which is basically:
+
+```sql
+UPDATE coffee SET embedding = VECTOR(FORMAT("[%f, %f, %f, %f]", Aroma, Flavor, Acidity, Sweetness))
+```
+
+to initialize the vector embeddings from our different coffee notes. So we run:
+
+```bash
+$ trail run --dev
+```
+
+If the server comes up successfully you've done everything correctly.
+
+# A JS/TS Vector Search Handler
+
+Now we need a custom API endpoint our UI can call later to look up with coffee
+most closely resembles our requested combination of notes.
+For that we place the following definition into
+`/examples/coffeesearch/traildepot/scripts/index.ts`:
+
+```ts
+import {
+  addRoute,
+  jsonHandler,
+  parsePath,
+  query
+} from "../trailbase.js";
+
+addRoute(
+  "GET",
+  "/search",
+  jsonHandler(async (req) => {
+    const searchParams = parsePath(req.uri).query;
+
+    const aroma = searchParams?.get("aroma") ?? 8;
+    const flavor = searchParams?.get("flavor") ?? 8;
+    const acidity = searchParams?.get("acidity") ?? 8;
+    const sweetness = searchParams?.get("sweetness") ?? 8;
+
+    return await query(`
+      SELECT
+        Owner,
+        Aroma,
+        Flavor,
+        Acidity,
+        Sweetness,
+        vector_distance_cos(
+          embedding,
+          '[${aroma}, ${flavor}, ${acidity}, ${sweetness}]'
+        ) AS distance
+      FROM
+        coffee
+      WHERE
+        embedding IS NOT NULL AND distance < 0.2
+      ORDER BY
+        distance
+      LIMIT 100`, []);
+  }),
+);
+```
+
+This custom handler will let us query the coffees that most closely resemble
+our desired combination of notes, e.g.:
+
+```bash
+$ curl "http://localhost:4000/search?aroma=8&flavor=8&acidity=8&sweetness=8"
+[
+  ["juan luis alvarado romero",7.92,7.58,7.58,8,0.0003054438275285065],
+  ["eileen koyanagi",7.5,7.33,7.58,8,0.000525727984495461],
+  ...
+]
+```
+
+If we're only interested in the API, we're basically done. Otherwise, the
+following section will implement a simple React web App.
+
+## A simple Web UI
+
+We recommend [vite](https://vite.dev/guide/) for setting up a simple SPA, e.g.:
+
+```bash
+$ pnpm create vite@latest my-project -- --template react
+```
+
+We can then swap out the template with `my-project/src/App.tsx`:
+
+```tsx
+import { useState, useEffect } from "react";
+import "./App.css";
+
+type Data = Array<Array<object>>;
+
+async function fetchData(v: {
+  aroma: number;
+  flavor: number;
+  acidity: number;
+  sweetness: number;
+}): Promise<Data> {
+  const URL = import.meta.env.DEV ? "http://localhost:4000" : "";
+  const params = Object.entries(v).map(([k, v]) => `${k}=${v}`).join("&");
+  const response = await fetch(`${URL}/search?${params}`);
+  return await response.json();
+}
+
+const Input = (props: {
+  label: string;
+  value: number;
+  update: (v: number) => void;
+}) => (
+  <>
+    <label>{props.label}:</label>
+    <input
+      type="number"
+      step="0.1"
+      value={props.value}
+      onChange={(el) => props.update(el.target.valueAsNumber)}
+    />
+  </>
+);
+
+const Row = (props: { row: Array<object> }) => (
+  <tr>
+    {props.row.map((d) => (
+      <td>{`${d}`}</td>
+    ))}
+  </tr>
+);
+
+function Table() {
+  const [aroma, setAroma] = useState(8);
+  const [flavor, setFlavor] = useState(8);
+  const [acidity, setAcidity] = useState(8);
+  const [sweetness, setSweetness] = useState(8);
+
+  const [data, setData] = useState<Data | undefined>();
+  useEffect(() => {
+    setData(undefined);
+    fetchData({ aroma, flavor, acidity, sweetness }).then(setData);
+  }, [aroma, flavor, acidity, sweetness]);
+
+  return (
+    <>
+      <div className="inputs">
+        <Input label="Aroma" value={aroma} update={setAroma} />
+        <Input label="Flavor" value={flavor} update={setFlavor} />
+        <Input label="Acidity" value={acidity} update={setAcidity} />
+        <Input label="Sweetness" value={sweetness} update={setSweetness} />
+      </div>
+
+      <div className="table">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Owner</th>
+              <th scope="col">Aroma</th>
+              <th scope="col">Flavor</th>
+              <th scope="col">Acidity</th>
+              <th scope="col">Sweetness</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {(data ?? []).map((row) => (
+              <Row row={row} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+export const App = () => (
+  <>
+    <h1>Coffee Search</h1>
+    <Table />
+  </>
+);
+```
+
+Lastly we need to compile our `JSX/TSX` down into pure HTML, JS, and CSS our
+browser can understand. Running
+
+```bash
+pnpm build
+```
+
+the resulting built artifacts can be found under `my-project/dist/`.
+
+### Putting Everything Together
+
+Whether you've followed along or skipped to here, you can now start TrailBase:
+
+* Pointing out our prepared database
+* Providing our custom `/search` endpoint
+* And serving our web artifacts in `dist/` (if you haven't built the website yet
+  run `pnpm build`)
+
+```bash
+trail run --public-dir <path-to-ui>/dist
+```
+
+You can now browse to [new custom UI](http://localhost:4000/) check out the
+[admin dashboard](http://localhost:4000/_/admin).

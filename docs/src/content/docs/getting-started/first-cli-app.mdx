@@ -1,22 +1,17 @@
 ---
-title: First App
-description: A guide in my new Starlight docs site.
+title: First CLI App
 ---
 
 import { Code } from "@astrojs/starlight/components";
 import { Aside } from "@astrojs/starlight/components";
 
-{/*
-import Readme from "../../../../../examples/tutorial/README.md";
-<Readme />
-*/}
-
 In this tutorial, we'll set up a database with an IMDB test dataset, spin up
-TrailBase and write a small program to access the data.
+TrailBase and write a simple client CLI application to access the data using
+*Record APIs*.
 
 In an effort to demonstrate TrailBase's loose coupling and the possibility of
 simply trying out TrailBase with an existing SQLite-based data analysis
-project, we will also offer a alternative path to bootstrapping the database
+project, we will also offer an alternative path to bootstrapping the database
 using the vanilla `sqlite3` CLI.
 
 <Aside type="note" title="Running TrailBase">
@@ -108,7 +103,7 @@ sqlite> SELECT COUNT(*) FROM movies;
 1000
 ```
 
-## Accessing the Data
+## Reading the Data
 
 With TrailBase up and running (`trail run`), the easiest way to explore your
 data is go to the admin dashboard under
@@ -150,10 +145,10 @@ curl -g 'localhost:4000/api/records/v1/movies?limit=3&order=rank&watch_time[lt]=
 You can also use your browser. Either way, you should see some JSON output with
 the respective movies.
 
-## Type-Safe APIs and Mutations
+## Writing Data with a Custom CLI
 
 Finally, let's authenticate and use privileged APIs to first delete all movies
-and then add them pack using type-safe APIs rather than `sqlite3`.
+and then add them back using type-safe APIs rather than `sqlite3`.
 
 Let's first create the JSON Schema type definitions from the database schema we
 added above. Note, that the type definition for creation, reading, and updating
