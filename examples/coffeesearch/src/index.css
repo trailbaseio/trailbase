@@ -1,0 +1,31 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #213547;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+.inputs {
+  margin: 1em;
+  display: grid;
+  gap: 1rem 0px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.table {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}

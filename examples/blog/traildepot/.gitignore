@@ -5,3 +5,6 @@ secrets/
 uploads/
 
 !migrations/
+
+trailbase.js
+trailbase.d.ts

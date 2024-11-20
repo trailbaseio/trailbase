@@ -4,6 +4,7 @@ packages:
   - 'ui/admin'
   - 'ui/auth'
   - 'examples/blog/web'
+  - 'examples/coffeesearch'
   - 'examples/tutorial/scripts'
   - 'trailbase-core/js'
 options:
