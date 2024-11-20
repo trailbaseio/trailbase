@@ -23,6 +23,7 @@ export type ResponseType = {
 };
 export type MaybeResponse<T> = Promise<T | undefined> | T | undefined;
 export type CallbackType = (req: RequestType) => MaybeResponse<ResponseType>;
+export type Method = "DELETE" | "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT" | "TRACE";
 export declare enum StatusCodes {
     CONTINUE = 100,
     SWITCHING_PROTOCOLS = 101,
@@ -122,8 +123,8 @@ export interface JsonResponseType {
     body: object;
 }
 export declare function jsonHandler(f: (req: JsonRequestType) => MaybeResponse<JsonRequestType | object>): CallbackType;
-export declare function addRoute(method: string, route: string, callback: CallbackType): void;
-export declare function dispatch(method: string, route: string, uri: string, pathParams: [string, string][], headers: [string, string][], user: UserType | undefined, body: Uint8Array): Promise<ResponseType>;
+export declare function addRoute(method: Method, route: string, callback: CallbackType): void;
+export declare function dispatch(method: Method, route: string, uri: string, pathParams: [string, string][], headers: [string, string][], user: UserType | undefined, body: Uint8Array): Promise<ResponseType>;
 export declare function query(queryStr: string, params: unknown[]): Promise<unknown[][]>;
 export declare function execute(queryStr: string, params: unknown[]): Promise<number>;
 export type ParsedPath = {

@@ -25,6 +25,15 @@ export type ResponseType = {
 };
 export type MaybeResponse<T> = Promise<T | undefined> | T | undefined;
 export type CallbackType = (req: RequestType) => MaybeResponse<ResponseType>;
+export type Method =
+  | "DELETE"
+  | "GET"
+  | "HEAD"
+  | "OPTIONS"
+  | "PATCH"
+  | "POST"
+  | "PUT"
+  | "TRACE";
 
 /// HTTP status codes.
 ///
@@ -570,7 +579,7 @@ export function jsonHandler(
 const callbacks = new Map<string, CallbackType>();
 
 export function addRoute(
-  method: string,
+  method: Method,
   route: string,
   callback: CallbackType,
 ) {
@@ -580,7 +589,7 @@ export function addRoute(
 }
 
 export async function dispatch(
-  method: string,
+  method: Method,
   route: string,
   uri: string,
   pathParams: [string, string][],
