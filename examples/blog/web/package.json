@@ -23,7 +23,7 @@
     "solid-icons": "^1.1.0",
     "solid-js": "^1.9.3",
     "tailwindcss": "^3.4.14",
-    "trailbase": "workspace:*"
+    "trailbase": "^0.1.2"
   },
   "devDependencies": {
     "@astrojs/solid-js": "^4.4.2",

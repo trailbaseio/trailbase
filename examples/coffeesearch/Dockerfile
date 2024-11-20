@@ -1,25 +1,32 @@
+FROM node:20-slim AS builder
+
+RUN npm install -g pnpm
+RUN pnpm --version
+
+COPY . /app
+WORKDIR /app
+
+RUN pnpm install --no-frozen-lockfile
+RUN pnpm build
+
+
 FROM trailbase/trailbase:0.2.2 AS base
-
 USER root
-
 RUN apk add --no-cache sqlite
 
-# TODO: Add a dedicated build step, both for (re)building the database and
-# building the web app.
+WORKDIR /app
 
-COPY dist /app/public
-COPY traildepot /app/traildepot
-COPY arabica_data_cleaned.csv /app/
-COPY import.sql /app/
+COPY --from=builder /app/dist /app/public
+COPY --chown=trailbase traildepot /app/traildepot
+
+USER trailbase
 
 # Rebuild the database.
-WORKDIR /app
+COPY arabica_data_cleaned.csv /app/
+COPY import.sql /app/
 RUN mkdir -p /app/traildepot/data
 RUN rm -rf /app/traildepot/data/*
 RUN cat import.sql | sqlite3 traildepot/data/main.db
-
-RUN chown -R trailbase /app/traildepot/data
-USER trailbase
 
 EXPOSE 4000
 ENTRYPOINT ["tini", "--"]

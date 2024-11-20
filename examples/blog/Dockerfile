@@ -1,39 +1,26 @@
-# syntax = edrevo/dockerfile-plus
+FROM node:20-slim AS builder
 
-# NOTE: paths are relative to build context, which is trailbase's root otherwise we
-# cannot build the trailbase server as well.
+RUN npm install -g pnpm
+RUN pnpm --version
 
-INCLUDE+ Dockerfile
-
-FROM chef AS webapp_builder
-
-COPY examples/blog/web /app
+COPY web /app
 WORKDIR /app
 
 RUN pnpm install --no-frozen-lockfile
-RUN pnpm run build
+RUN pnpm build
 
-FROM debian:bookworm-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends tini curl
 
-COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/trail /app/
-COPY --from=webapp_builder /app/dist /app/public
-
-# When `docker run` is executed, launch the binary as unprivileged user.
-ENV USERNAME=trailbase
-RUN adduser \
-    --disabled-password \
-    --gecos "" \
-    --home "$(pwd)" \
-    --no-create-home \
-    ${USERNAME}
-USER ${USERNAME}
+FROM trailbase/trailbase:0.2.2 AS base
 
 WORKDIR /app
 
+COPY --from=builder /app/dist /app/public
+COPY --chown=trailbase traildepot /app/traildepot
+
+USER trailbase
+
 EXPOSE 4000
 ENTRYPOINT ["tini", "--"]
-
-CMD ["/app/trail", "run"]
+CMD ["/app/trail", "--data-dir", "/app/traildepot", "run", "--address", "0.0.0.0:4000", "--public-dir", "/app/public"]
 
 HEALTHCHECK CMD curl --fail http://localhost:4000/api/healthcheck || exit 1

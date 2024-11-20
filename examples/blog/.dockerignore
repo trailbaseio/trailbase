@@ -1,0 +1,11 @@
+**/node_modules/
+**/dist/
+
+Dockerfile*
+.docker*
+
+.git/
+.git*
+
+*.image
+.env
