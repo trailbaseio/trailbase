@@ -15,6 +15,7 @@ v8 = ["dep:rustyscript", ]
 [dependencies]
 arc-swap = "1.7.1"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
+async-channel = "2.3.1"
 async-trait = "0.1.80"
 axum = { version = "^0.7.5", features=["multipart"] }
 axum-client-ip = "0.6.0"
@@ -23,7 +24,6 @@ base64 = { version = "0.22.1", default-features = false }
 bytes = "1.8.0"
 chrono = "^0.4.38"
 cookie = "0.18.1"
-crossbeam-channel = "0.5.13"
 ed25519-dalek = { version = "2.1.1", features=["pkcs8", "pem", "rand_core"] }
 env_logger = "^0.11.3"
 fallible-iterator = "0.3.0"
@@ -60,7 +60,7 @@ sha2 = "0.10.8"
 sqlformat = "0.3.1"
 sqlite3-parser = "0.13.0"
 thiserror = "2.0.1"
-tokio = { version = "^1.38.0", features=["macros", "rt-multi-thread", "fs", "signal"] }
+tokio = { version = "^1.38.0", features=["macros", "rt-multi-thread", "fs", "signal", "time"] }
 tower-cookies = { version = "0.10.0" }
 tower-http = { version = "^0.6.0", features=["cors", "trace", "fs", "limit"] }
 tower-service = "0.3.3"

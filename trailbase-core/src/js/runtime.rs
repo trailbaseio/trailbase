@@ -5,7 +5,9 @@ use axum::response::{IntoResponse, Response};
 use axum::Router;
 use libsql::Connection;
 use parking_lot::Mutex;
-use rustyscript::{init_platform, json_args, Module, Runtime};
+use rustyscript::{
+  deno_core::PollEventLoopOptions, init_platform, js_value::Promise, json_args, Module, Runtime,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::from_value;
 use std::collections::HashSet;
@@ -22,12 +24,55 @@ use crate::{AppState, DataDir};
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
+#[derive(Deserialize, Default, Debug)]
+struct JsResponse {
+  headers: Option<Vec<(String, String)>>,
+  status: Option<u16>,
+  body: Option<bytes::Bytes>,
+}
+
+#[derive(Debug, Error)]
+pub enum JsResponseError {
+  #[error("Precondition: {0}")]
+  Precondition(String),
+  #[error("Internal: {0}")]
+  Internal(Box<dyn std::error::Error + Send + Sync>),
+}
+
+#[derive(Serialize)]
+struct JsUser {
+  // Base64 encoded user id.
+  id: String,
+  email: String,
+  csrf: String,
+}
+
+struct DispatchArgs {
+  method: String,
+  route_path: String,
+  uri: String,
+  path_params: Vec<(String, String)>,
+  headers: Vec<(String, String)>,
+  user: Option<JsUser>,
+  body: bytes::Bytes,
+
+  reply: tokio::sync::oneshot::Sender<Result<JsResponse, JsResponseError>>,
+}
+
 enum Message {
   Run(Box<dyn (FnOnce(&mut Runtime)) + Send + Sync>),
+  Dispatch(DispatchArgs),
+  CallFunction(
+    Option<Module>,
+    &'static str,
+    Vec<serde_json::Value>,
+    tokio::sync::oneshot::Sender<Result<serde_json::Value, AnyError>>,
+  ),
+  LoadModule(Module, tokio::sync::oneshot::Sender<Result<(), AnyError>>),
 }
 
 struct State {
-  sender: crossbeam_channel::Sender<Message>,
+  sender: async_channel::Sender<Message>,
   connection: Mutex<Option<libsql::Connection>>,
 }
 
@@ -38,7 +83,7 @@ struct RuntimeSingleton {
   handle: Option<std::thread::JoinHandle<()>>,
 
   // Shared sender.
-  sender: crossbeam_channel::Sender<Message>,
+  sender: async_channel::Sender<Message>,
 
   // Isolate state.
   state: Vec<State>,
@@ -55,7 +100,149 @@ impl Drop for RuntimeSingleton {
   }
 }
 
+struct Completer {
+  name: String,
+  promise: Promise<JsResponse>,
+  reply: tokio::sync::oneshot::Sender<Result<JsResponse, JsResponseError>>,
+}
+
+impl Completer {
+  fn is_ready(&self, runtime: &mut Runtime) -> bool {
+    return !self.promise.is_pending(runtime);
+  }
+
+  async fn resolve(self, runtime: &mut Runtime) {
+    let value = self
+      .promise
+      .into_future(runtime)
+      .await
+      .map_err(|err| JsResponseError::Internal(err.into()));
+
+    if self.reply.send(value).is_err() {
+      log::error!("Completer send failed for : {}", self.name);
+    }
+  }
+}
+
 impl RuntimeSingleton {
+  async fn handle_message(
+    runtime: &mut Runtime,
+    msg: Message,
+    completers: &mut Vec<Completer>,
+  ) -> Result<(), AnyError> {
+    match msg {
+      Message::Run(f) => {
+        f(runtime);
+      }
+      Message::Dispatch(args) => {
+        let channel = args.reply;
+        let uri = args.uri.clone();
+        let promise = match runtime.call_function_immediate::<Promise<JsResponse>>(
+          None,
+          "__dispatch",
+          json_args!(
+            args.method,
+            args.route_path,
+            args.uri,
+            args.path_params,
+            args.headers,
+            args.user,
+            args.body
+          ),
+        ) {
+          Ok(promise) => promise,
+          Err(err) => {
+            if channel
+              .send(Err(JsResponseError::Internal(err.into())))
+              .is_err()
+            {
+              log::error!("dispatch sending error failed");
+            }
+            return Ok(());
+          }
+        };
+
+        completers.push(Completer {
+          name: uri,
+          promise,
+          reply: channel,
+        });
+      }
+      Message::CallFunction(module, name, args, sender) => {
+        let module_handle = if let Some(module) = module {
+          runtime.load_module_async(&module).await.ok()
+        } else {
+          None
+        };
+
+        let result: Result<serde_json::Value, AnyError> = runtime
+          .call_function_async::<serde_json::Value>(module_handle.as_ref(), name, &args)
+          .await
+          .map_err(|err| err.into());
+
+        if sender.send(result).is_err() {
+          log::error!("Sending of js function call reply failed");
+        }
+      }
+      Message::LoadModule(module, sender) => {
+        runtime.load_module_async(&module).await?;
+        if sender.send(Ok(())).is_err() {
+          log::error!("Load module send failed");
+        }
+      }
+    }
+
+    return Ok(());
+  }
+
+  fn event_loop(
+    runtime: &mut Runtime,
+    private_recv: async_channel::Receiver<Message>,
+    shared_recv: async_channel::Receiver<Message>,
+  ) {
+    runtime.tokio_runtime().block_on(async {
+      let mut completers: Vec<Completer> = vec![];
+
+      loop {
+        let mut completed = vec![];
+        for (index, completer) in completers.iter().enumerate() {
+          if completer.is_ready(runtime) {
+            completed.push(index);
+          }
+        }
+
+        for index in completed.iter().rev() {
+          let completer = completers.swap_remove(*index);
+          completer.resolve(runtime).await;
+        }
+
+        tokio::select! {
+          result = runtime.await_event_loop(PollEventLoopOptions::default(), Some(std::time::Duration::from_millis(25))), if !completed.is_empty() => {
+            if let Err(err) = result{
+              log::error!("JS event loop: {err}");
+            }
+          },
+          msg = private_recv.recv() => {
+            let Ok(msg) = msg else {
+              panic!("private channel closed");
+            };
+            if let Err(err) = Self::handle_message(runtime, msg, &mut completers).await {
+              log::error!("Handle private message: {err}");
+            }
+          },
+          msg = shared_recv.recv() => {
+            let Ok(msg) = msg else {
+              panic!("private channel closed");
+            };
+            if let Err(err) = Self::handle_message(runtime, msg, &mut completers).await {
+              log::error!("Handle shared message: {err}");
+            }
+          },
+        }
+      }
+    });
+  }
+
   fn new_with_threads(threads: Option<usize>) -> Self {
     let n_threads = match threads {
       Some(n) => n,
@@ -70,12 +257,12 @@ impl RuntimeSingleton {
 
     log::info!("Starting v8 JavaScript runtime with {n_threads} workers.");
 
-    let (shared_sender, shared_receiver) = crossbeam_channel::unbounded::<Message>();
+    let (shared_sender, shared_receiver) = async_channel::unbounded::<Message>();
 
-    let (state, receivers): (Vec<State>, Vec<crossbeam_channel::Receiver<Message>>) = (0
-      ..n_threads)
+    let (state, receivers): (Vec<State>, Vec<async_channel::Receiver<Message>>) = (0..n_threads)
       .map(|_index| {
-        let (sender, receiver) = crossbeam_channel::unbounded::<Message>();
+        let (sender, receiver) = async_channel::unbounded::<Message>();
+
         return (
           State {
             sender,
@@ -86,7 +273,7 @@ impl RuntimeSingleton {
       })
       .unzip();
 
-    let handle = std::thread::spawn(move || {
+    let root_thread = std::thread::spawn(move || {
       init_platform(n_threads as u32, true);
 
       let threads: Vec<_> = receivers
@@ -96,39 +283,23 @@ impl RuntimeSingleton {
           let shared_receiver = shared_receiver.clone();
 
           return std::thread::spawn(move || {
-            let mut runtime = match Self::init_runtime(index) {
-              Ok(runtime) => runtime,
+            let tokio_runtime = std::rc::Rc::new(
+              tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .enable_io()
+                .thread_name("v8-runtime")
+                .build()
+                .unwrap(),
+            );
+
+            let mut js_runtime = match Self::init_runtime(index, tokio_runtime.clone()) {
+              Ok(js_runtime) => js_runtime,
               Err(err) => {
                 panic!("Failed to init v8 runtime on thread {index}: {err}");
               }
             };
 
-            loop {
-              crossbeam_channel::select! {
-                recv(receiver) -> msg => {
-                  match msg {
-                    Ok(Message::Run(f)) => {
-                      f(&mut runtime);
-                    }
-                    _ => {
-                      log::info!("channel closed");
-                      break;
-                    }
-                  }
-                },
-                recv(shared_receiver) -> msg => {
-                  match msg {
-                    Ok(Message::Run(f)) => {
-                      f(&mut runtime);
-                    }
-                    _ => {
-                      log::info!("shared channel closed");
-                      break;
-                    }
-                  }
-                },
-              }
-            }
+            Self::event_loop(&mut js_runtime, receiver, shared_receiver);
           });
         })
         .collect();
@@ -143,31 +314,28 @@ impl RuntimeSingleton {
     return RuntimeSingleton {
       n_threads,
       sender: shared_sender,
-      handle: Some(handle),
+      handle: Some(root_thread),
       state,
     };
   }
 
-  fn init_runtime(index: usize) -> Result<Runtime, AnyError> {
-    let tokio_runtime = tokio::runtime::Builder::new_current_thread()
-      .enable_time()
-      .enable_io()
-      .thread_name("v8-runtime")
-      .build()?;
-
+  fn init_runtime(
+    index: usize,
+    tokio_runtime: std::rc::Rc<tokio::runtime::Runtime>,
+  ) -> Result<Runtime, AnyError> {
     let mut runtime = rustyscript::Runtime::with_tokio_runtime(
       rustyscript::RuntimeOptions {
         import_provider: Some(Box::new(crate::js::import_provider::ImportProviderImpl)),
         schema_whlist: HashSet::from(["trailbase".to_string()]),
         ..Default::default()
       },
-      std::rc::Rc::new(tokio_runtime),
+      tokio_runtime,
     )?;
 
     let idx = index;
     runtime
       .register_function("isolate_id", move |_args: &[serde_json::Value]| {
-        return Ok(serde_json::to_value(idx)?);
+        return Ok(serde_json::json!(idx));
       })
       .expect("Failed to register 'isolate_id' function");
 
@@ -197,8 +365,7 @@ impl RuntimeSingleton {
           .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
-        return serde_json::to_value(values)
-          .map_err(|err| rustyscript::Error::Runtime(err.to_string()));
+        return Ok(serde_json::json!(values));
       })
     })?;
 
@@ -296,22 +463,24 @@ impl RuntimeHandle {
     return &self.runtime.state;
   }
 
-  async fn apply<T>(
+  #[allow(unused)]
+  async fn call_function<T>(
     &self,
-    f: impl (FnOnce(&mut rustyscript::Runtime) -> T) + Send + Sync + 'static,
-  ) -> Result<Box<T>, AnyError>
+    module: Option<Module>,
+    name: &'static str,
+    args: Vec<serde_json::Value>,
+  ) -> Result<T, AnyError>
   where
-    T: Send + Sync + 'static,
+    T: serde::de::DeserializeOwned,
   {
-    let (sender, receiver) = tokio::sync::oneshot::channel::<Box<T>>();
+    let (sender, receiver) = tokio::sync::oneshot::channel::<Result<serde_json::Value, AnyError>>();
+    self
+      .runtime
+      .sender
+      .send(Message::CallFunction(module, name, args, sender))
+      .await?;
 
-    self.runtime.sender.send(Message::Run(Box::new(move |rt| {
-      if let Err(_err) = sender.send(Box::new(f(rt))) {
-        log::error!("Failed to send");
-      }
-    })))?;
-
-    return Ok(receiver.await?);
+    return Ok(serde_json::from_value::<T>(receiver.await??)?);
   }
 }
 
@@ -339,14 +508,6 @@ pub fn json_value_to_param(value: serde_json::Value) -> Result<libsql::Value, ru
       }
     }
   });
-}
-
-#[derive(Debug, Error)]
-pub enum JsResponseError {
-  #[error("Precondition: {0}")]
-  Precondition(String),
-  #[error("Internal: {0}")]
-  Internal(Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl IntoResponse for JsResponseError {
@@ -409,51 +570,32 @@ fn add_route_to_router(
       })
       .collect();
 
-    #[derive(Serialize)]
-    struct JsUser {
-      // Base64 encoded user id.
-      id: String,
-      email: String,
-      csrf: String,
-    }
-
     let js_user: Option<JsUser> = user.map(|u| JsUser {
       id: u.id,
       email: u.email,
       csrf: u.csrf_token,
     });
 
-    #[derive(Deserialize)]
-    struct JsResponse {
-      headers: Option<Vec<(String, String)>>,
-      status: Option<u16>,
-      body: Option<bytes::Bytes>,
-    }
+    let (sender, receiver) = tokio::sync::oneshot::channel::<Result<JsResponse, JsResponseError>>();
 
-    let js_response = runtime_handle
-      .apply(move |runtime| -> Result<JsResponse, rustyscript::Error> {
-        let tokio_runtime = runtime.tokio_runtime();
-        return tokio_runtime.block_on(async {
-          return runtime
-            .call_function_async::<JsResponse>(
-              None,
-              "__dispatch",
-              json_args!(
-                method,
-                route_path,
-                uri.to_string(),
-                path_params,
-                headers,
-                js_user,
-                body_bytes
-              ),
-            )
-            .await;
-        });
-      })
+    log::debug!("dispatch {method} {uri}");
+    runtime_handle
+      .runtime
+      .sender
+      .send(Message::Dispatch(DispatchArgs {
+        method,
+        route_path,
+        uri: uri.to_string(),
+        path_params,
+        headers,
+        user: js_user,
+        body: body_bytes,
+        reply: sender,
+      }))
       .await
-      .map_err(JsResponseError::Internal)?
-      .map_err(|err| JsResponseError::Internal(err.into()))?;
+      .unwrap();
+
+    let js_response = receiver.await.unwrap()?;
 
     let mut http_response = Response::builder()
       .status(js_response.status.unwrap_or(200))
@@ -517,25 +659,27 @@ async fn install_routes(
     );
     return Ok(None);
   }
+  let module = module.clone();
 
+  let runtime_handle_clone = runtime_handle.clone();
   let receivers: Vec<_> = runtime_handle
     .state()
     .iter()
     .enumerate()
-    .map(
-      move |(index, state)| -> oneshot::Receiver<Option<Router<AppState>>> {
-        let (sender, receiver) = oneshot::channel::<Option<Router<AppState>>>();
+    .map(move |(index, state)| {
+      let module = module.clone();
+      let runtime_handle = runtime_handle_clone.clone();
+      async move {
+        // let (sender, receiver) = oneshot::channel::<Option<Router<AppState>>>();
 
-        let module = module.clone();
-        let runtime_handle = runtime_handle.clone();
+        let router = Arc::new(Mutex::new(Some(Router::<AppState>::new())));
 
+        let router_clone = router.clone();
         if let Err(err) = state
           .sender
           .send(Message::Run(Box::new(move |runtime: &mut Runtime| {
-            let router = Arc::new(Mutex::new(Some(Router::<AppState>::new())));
-
             // First install a native callback that builds an axum router.
-            let router_clone = router.clone();
+            let router_clone = router_clone.clone();
             runtime
               .register_function("install_route", move |args: &[serde_json::Value]| {
                 let method: String = get_arg(args, 0)?;
@@ -547,39 +691,41 @@ async fn install_routes(
                 Ok(serde_json::Value::Null)
               })
               .expect("Failed to register 'route' function");
-
-            // Then execute the script/module, i.e. statements in the file scope.
-            //
-            // TODO: SWC is very spammy (at least in debug builds). Ideally, we'd lower the tracing
-            // filter level within this scope. Haven't found a good way, thus filtering it
-            // env-filter at the CLI level. We could try to use a dedicated reload layer:
-            //   https://docs.rs/tracing-subscriber/latest/tracing_subscriber/reload/index.html
-            if let Err(err) = runtime.load_module(&module) {
-              panic!("Failed to load '{:?}': {err}", module.filename());
-            }
-
-            let router: Router<AppState> = router.lock().take().unwrap();
-            sender
-              .send(if router.has_routes() {
-                Some(router)
-              } else {
-                None
-              })
-              .expect("Failed to comm with parent");
           })))
+          .await
         {
           panic!("Failed to comm with v8 rt'{index}': {err}");
         }
 
-        return receiver;
-      },
-    )
+        // Then execute the script/module, i.e. statements in the file scope.
+        //
+        // TODO: SWC is very spammy (at least in debug builds). Ideally, we'd lower the tracing
+        // filter level within this scope. Haven't found a good way, thus filtering it
+        // env-filter at the CLI level. We could try to use a dedicated reload layer:
+        //   https://docs.rs/tracing-subscriber/latest/tracing_subscriber/reload/index.html
+
+        let (sender, receiver) = oneshot::channel::<Result<(), AnyError>>();
+        state
+          .sender
+          .send(Message::LoadModule(module, sender))
+          .await
+          .unwrap();
+        let _ = receiver.await.unwrap();
+
+        let router: Router<AppState> = router.lock().take().unwrap();
+        if router.has_routes() {
+          Some(router)
+        } else {
+          None
+        }
+      }
+    })
     .collect();
 
   let mut receivers = futures::future::join_all(receivers).await;
 
   // Note: We only return the first router assuming that js route registration is deterministic.
-  return Ok(receivers.swap_remove(0)?);
+  return Ok(receivers.swap_remove(0));
 }
 
 pub(crate) async fn load_routes_from_js_modules(
@@ -587,10 +733,10 @@ pub(crate) async fn load_routes_from_js_modules(
 ) -> Result<Option<Router<AppState>>, AnyError> {
   let scripts_dir = state.data_dir().root().join("scripts");
 
-  let modules = match rustyscript::Module::load_dir(scripts_dir) {
+  let modules = match rustyscript::Module::load_dir(scripts_dir.clone()) {
     Ok(modules) => modules,
     Err(err) => {
-      log::debug!("Skip loading js modules: {err}");
+      log::debug!("Skip loading js modules from '{scripts_dir:?}': {err}");
       return Ok(None);
     }
   };
@@ -648,7 +794,7 @@ pub(crate) async fn write_js_runtime_files(data_dir: &DataDir) {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use rustyscript::{json_args, Module};
+  use rustyscript::Module;
   use trailbase_sqlite::query_one_row;
 
   async fn new_mem_conn() -> libsql::Connection {
@@ -671,48 +817,38 @@ mod tests {
   }
 
   async fn test_runtime_apply() {
+    let (sender, receiver) = tokio::sync::oneshot::channel::<i64>();
+
     let handle = RuntimeHandle::new();
-    let number = handle
-      .apply::<i64>(|_runtime| {
-        return 42;
-      })
+    handle
+      .runtime
+      .sender
+      .send(Message::Run(Box::new(|_rt| {
+        sender.send(5).unwrap();
+      })))
       .await
       .unwrap();
 
-    assert_eq!(42, *number);
+    assert_eq!(5, receiver.await.unwrap());
   }
 
   async fn test_runtime_javascript() {
     let handle = RuntimeHandle::new();
-    let result = handle
-      .apply::<String>(|runtime| {
-        let context = runtime
-          .load_module(&Module::new(
-            "module.js",
-            r#"
+
+    let module = Module::new(
+      "module.js",
+      r#"
               export function test_fun() {
                 return "test0";
               }
             "#,
-          ))
-          .map_err(|err| {
-            log::error!("Failed to load module: {err}");
-            return err;
-          })
-          .unwrap();
+    );
 
-        return runtime
-          .call_function(Some(&context), "test_fun", json_args!())
-          .map_err(|err| {
-            log::error!("Failed to load call test_fun: {err}");
-            return err;
-          })
-          .unwrap();
-      })
+    let result = handle
+      .call_function::<String>(Some(module), "test_fun", vec![])
       .await
       .unwrap();
-
-    assert_eq!("test0", *result);
+    assert_eq!("test0", result);
   }
 
   async fn test_javascript_query() {
@@ -729,42 +865,23 @@ mod tests {
     let handle = RuntimeHandle::new();
     handle.override_connection(conn);
 
+    let module = Module::new(
+      "module.ts",
+      r#"
+        import { query } from "trailbase:main";
+
+        export async function test_query(queryStr: string) : Promise<unknown[][]> {
+          return await query(queryStr, []);
+        }
+      "#,
+    );
+
     let result = handle
-      .apply::<Vec<Vec<serde_json::Value>>>(|runtime| {
-        let context = runtime
-          .load_module(&Module::new(
-            "module.ts",
-            r#"
-              import { query } from "trailbase:main";
-
-              export async function test_query(queryStr: string) : Promise<unknown[][]> {
-                return await query(queryStr, []);
-              }
-            "#,
-          ))
-          .map_err(|err| {
-            log::error!("Failed to load module: {err}");
-            return err;
-          })
-          .unwrap();
-
-        let tokio_runtime = runtime.tokio_runtime();
-        return tokio_runtime
-          .block_on(async {
-            runtime
-              .call_function_async(
-                Some(&context),
-                "test_query",
-                json_args!("SELECT * FROM test"),
-              )
-              .await
-          })
-          .map_err(|err| {
-            log::error!("Failed to load call test_query: {err}");
-            return err;
-          })
-          .unwrap();
-      })
+      .call_function::<Vec<Vec<serde_json::Value>>>(
+        Some(module),
+        "test_query",
+        vec![serde_json::json!("SELECT * FROM test")],
+      )
       .await
       .unwrap();
 
@@ -779,7 +896,7 @@ mod tests {
           serde_json::Value::Number(1.into())
         ],
       ],
-      *result
+      result
     );
   }
 
@@ -793,42 +910,23 @@ mod tests {
     let handle = RuntimeHandle::new();
     handle.override_connection(conn.clone());
 
-    let _result = handle
-      .apply::<i64>(|runtime| {
-        let context = runtime
-          .load_module(&Module::new(
-            "module.ts",
-            r#"
+    let module = Module::new(
+      "module.ts",
+      r#"
               import { execute } from "trailbase:main";
 
               export async function test_execute(queryStr: string) : Promise<number> {
                 return await execute(queryStr, []);
               }
             "#,
-          ))
-          .map_err(|err| {
-            log::error!("Failed to load module: {err}");
-            return err;
-          })
-          .unwrap();
+    );
 
-        let tokio_runtime = runtime.tokio_runtime();
-        return tokio_runtime
-          .block_on(async {
-            runtime
-              .call_function_async(
-                Some(&context),
-                "test_execute",
-                json_args!("DELETE FROM test"),
-              )
-              .await
-          })
-          .map_err(|err| {
-            log::error!("Failed to load call test_execute: {err}");
-            return err;
-          })
-          .unwrap();
-      })
+    let _result = handle
+      .call_function::<i64>(
+        Some(module),
+        "test_execute",
+        vec![serde_json::json!("DELETE FROM test")],
+      )
       .await
       .unwrap();
 
