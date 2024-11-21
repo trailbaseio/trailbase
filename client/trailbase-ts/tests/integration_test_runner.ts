@@ -20,7 +20,7 @@ async function initTrailBase(): Promise<{ subprocess: Subprocess }> {
     throw Error("cargo build failed");
   }
 
-  const subprocess = execa`cargo run -- --data-dir ../testfixture run --dev -a 127.0.0.1:${port}`;
+  const subprocess = execa`cargo run -- --data-dir ../testfixture run -a 127.0.0.1:${port} --js-runtime-threads 2`;
 
   for (let i = 0; i < 100; ++i) {
     if ((subprocess.exitCode ?? 0) > 0) {

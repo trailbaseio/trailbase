@@ -201,4 +201,7 @@ test("JS runtime", async () => {
 
   const errResp = await fetch(`${address}/error`);
   expect(errResp.status).equals(status.IM_A_TEAPOT);
+
+  // Test that the periodic callback was called.
+  expect((await fetch(`${address}/await`)).status).equals(status.OK);
 });

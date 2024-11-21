@@ -38,9 +38,10 @@ Future<Process> initTrailBase() async {
     '--data-dir',
     '../testfixture',
     'run',
-    '--dev',
     '-a',
     '127.0.0.1:${port}',
+    '--js-runtime-threads',
+    '2',
   ]);
 
   final dio = Dio();

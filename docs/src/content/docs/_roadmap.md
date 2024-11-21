@@ -7,13 +7,9 @@ For context, some larger features we have on our Roadmap:
 
 - Realtime/notification APIs for subscribing to data changes.
 - S3 buckets and other cloud storage. The backend already supports it but it isn't wired up.
-- Support more Social/OAuth providers.
-- More configurable authentication, more customizable auth UI, and multi-factor.
-- Service-accounts for authenticating and authorizing backends not end-users.
-- Custom scheduled operations. Also enabling more time series use-cases.
+- Auth: more customizable settings, more customizable UI, and multi-factor.
+  Also, service-accounts to auth other backends as opposed to end-users.
 - Many SQLite databases: imagine a separate database by tenant or user.
-- Streamline code-generation, the bindings life-cycle, and first-party
-  support for more languages.
-- Maybe TLS termination and proxy capabilities.
+- TLS termination and proxy capabilities.
 - Consider a GraphQL layer to address fan-out and integrate external
   resources.

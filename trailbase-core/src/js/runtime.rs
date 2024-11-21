@@ -165,6 +165,13 @@ impl RuntimeSingleton {
     )?;
 
     let idx = index;
+    runtime
+      .register_function("isolate_id", move |_args: &[serde_json::Value]| {
+        return Ok(serde_json::to_value(idx)?);
+      })
+      .expect("Failed to register 'isolate_id' function");
+
+    let idx = index;
     runtime.register_async_function("query", move |args: Vec<serde_json::Value>| {
       Box::pin(async move {
         let query: String = get_arg(&args, 0)?;
@@ -300,7 +307,7 @@ impl RuntimeHandle {
 
     self.runtime.sender.send(Message::Run(Box::new(move |rt| {
       if let Err(_err) = sender.send(Box::new(f(rt))) {
-        log::warn!("Failed to send");
+        log::error!("Failed to send");
       }
     })))?;
 
@@ -530,7 +537,7 @@ async fn install_routes(
             // First install a native callback that builds an axum router.
             let router_clone = router.clone();
             runtime
-              .register_function("route", move |args: &[serde_json::Value]| {
+              .register_function("install_route", move |args: &[serde_json::Value]| {
                 let method: String = get_arg(args, 0)?;
                 let route: String = get_arg(args, 1)?;
 

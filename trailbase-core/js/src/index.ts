@@ -578,14 +578,22 @@ export function jsonHandler(
 
 const callbacks = new Map<string, CallbackType>();
 
+function isolateId(): number {
+  return rustyscript.functions.isolate_id();
+}
+
 export function addRoute(
   method: Method,
   route: string,
   callback: CallbackType,
 ) {
-  rustyscript.functions.route(method, route);
+  const id = isolateId();
+  if (id === 0) {
+    rustyscript.functions.install_route(method, route);
+    console.debug("JS: Added route:", method, route);
+  }
+
   callbacks.set(`${method}:${route}`, callback);
-  console.debug("JS: Added route:", method, route);
 }
 
 export async function dispatch(
@@ -615,6 +623,26 @@ export async function dispatch(
 }
 
 globalThis.__dispatch = dispatch;
+
+export function addPeriodicCallback(
+  milliseconds: number,
+  cb: (cancel: () => void) => void,
+): () => void {
+  // Note: right now we run periodic tasks only on the first isolate. This is
+  // very simple but doesn't use other workers. This has nice properties in
+  // terms of state management and hopefully work-stealing will alleviate the
+  // issue, i.e. workers will pick up the slack in terms of incoming requests.
+  const id = isolateId();
+  if (id !== 0) {
+    return () => {};
+  }
+
+  const handle: number = setInterval(() => {
+    cb(() => clearInterval(handle));
+  }, milliseconds);
+
+  return () => clearInterval(handle);
+}
 
 export async function query(
   queryStr: string,

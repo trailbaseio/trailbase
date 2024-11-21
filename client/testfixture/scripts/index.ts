@@ -1,61 +1,123 @@
-import { addRoute, parsePath, query, htmlHandler, jsonHandler, stringHandler, HttpError, StatusCodes } from "../trailbase.js";
-import type { JsonRequestType, ParsedPath, StringRequestType } from "../trailbase.d.ts";
+import {
+  addRoute,
+  addPeriodicCallback,
+  parsePath,
+  query,
+  htmlHandler,
+  jsonHandler,
+  stringHandler,
+  HttpError,
+  StatusCodes,
+} from "../trailbase.js";
+import type {
+  JsonRequestType,
+  ParsedPath,
+  StringRequestType,
+} from "../trailbase.d.ts";
 
-addRoute("GET", "/test", stringHandler(async (req: StringRequestType) => {
-  const uri: ParsedPath = parsePath(req.uri);
+addRoute(
+  "GET",
+  "/test",
+  stringHandler(async (req: StringRequestType) => {
+    const uri: ParsedPath = parsePath(req.uri);
 
-  const table = uri.query.get("table");
-  if (table) {
-    const rows = await query(`SELECT COUNT(*) FROM ${table}`, [])
-    return `entries: ${rows[0][0]}`;
-  }
+    const table = uri.query.get("table");
+    if (table) {
+      const rows = await query(`SELECT COUNT(*) FROM ${table}`, []);
+      return `entries: ${rows[0][0]}`;
+    }
 
-  return `test: ${req.uri}`;
-}));
+    return `test: ${req.uri}`;
+  }),
+);
 
-addRoute("GET", "/test/:table", stringHandler(async (req: StringRequestType) => {
-  const table = req.params["table"];
-  if (table) {
-    const rows = await query(`SELECT COUNT(*) FROM ${table}`, [])
-    return `entries: ${rows[0][0]}`;
-  }
+addRoute(
+  "GET",
+  "/test/:table",
+  stringHandler(async (req: StringRequestType) => {
+    const table = req.params["table"];
+    if (table) {
+      const rows = await query(`SELECT COUNT(*) FROM ${table}`, []);
+      return `entries: ${rows[0][0]}`;
+    }
 
-  return `test: ${req.uri}`;
-}));
+    return `test: ${req.uri}`;
+  }),
+);
 
-addRoute("GET", "/html", htmlHandler((_req: StringRequestType) => {
-  return `
+addRoute(
+  "GET",
+  "/html",
+  htmlHandler((_req: StringRequestType) => {
+    return `
     <html>
       <body>
         <h1>Html Handler</h1>
       </body>
     </html>
   `;
-}));
+  }),
+);
 
-addRoute("GET", "/json", jsonHandler((_req: JsonRequestType) => {
-  return {
-    int: 5,
-    real: 4.2,
-    msg: "foo",
-    obj: {
-      nested: true,
+addRoute(
+  "GET",
+  "/json",
+  jsonHandler((_req: JsonRequestType) => {
+    return {
+      int: 5,
+      real: 4.2,
+      msg: "foo",
+      obj: {
+        nested: true,
+      },
+    };
+  }),
+);
+
+addRoute(
+  "GET",
+  "/error",
+  jsonHandler((_req: JsonRequestType) => {
+    throw new HttpError(StatusCodes.IM_A_TEAPOT, "I'm a teapot");
+  }),
+);
+
+addRoute(
+  "GET",
+  "/fetch",
+  stringHandler(async (req: StringRequestType) => {
+    const query = parsePath(req.uri).query;
+    const url = query.get("url");
+
+    if (url) {
+      const response = await fetch(url);
+      return await response.text();
     }
-  };
-}));
 
-addRoute("GET", "/error", jsonHandler((_req: JsonRequestType) => {
-  throw new HttpError(StatusCodes.IM_A_TEAPOT, "I'm a teapot");
-}));
+    throw new HttpError(StatusCodes.BAD_REQUEST, "Missing ?url param");
+  }),
+);
 
-addRoute("GET", "/fetch", stringHandler(async (req: StringRequestType) => {
-  const query = parsePath(req.uri).query;
-  const url = query.get("url");
+class Completer<T> {
+  public readonly promise: Promise<T>;
+  public complete: (value: PromiseLike<T> | T) => void;
 
-  if (url) {
-    const response = await fetch(url);
-    return await response.text()
+  public constructor() {
+    this.promise = new Promise<T>((resolve, _reject) => {
+      this.complete = resolve;
+    });
   }
+}
 
-  throw new HttpError(StatusCodes.BAD_REQUEST, "Missing ?url param");
-}));
+const completer = new Completer<string>();
+
+addPeriodicCallback(100, (cancel) => {
+  completer.complete("resolved");
+  cancel();
+});
+
+addRoute(
+  "GET",
+  "/await",
+  stringHandler(async (_req) => await completer.promise),
+);
