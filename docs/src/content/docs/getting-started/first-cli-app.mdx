@@ -14,24 +14,10 @@ simply trying out TrailBase with an existing SQLite-based data analysis
 project, we will also offer an alternative path to bootstrapping the database
 using the vanilla `sqlite3` CLI.
 
-<Aside type="note" title="Running TrailBase">
-  You can either downloaded the latest pre-built
-  [release](https://github.com/trailbaseio/trailbase/releases/)
-  or use docker, like in the previous section, to run arbitrary TrailBase
-  commands:
+import GettingTrailBase from "./_getting_trailbase.md";
 
-```bash
-  mkdir traildepot
-  alias trail="docker run -p 4000:4000 --mount type=bind,source=$PWD/traildepot,target=/app/traildepot trailbase/trailbase /app/trail"
-  trail --help
-```
-
-The above alias mounts `$PWD/traildepot` into the ephemeral container to store
-TrailBase's runtime files like configuration, database, etc. You can set this
-to be anywhere you like.
-Alternatively, you can build or download the `trail` binary and make it
-available via the `$PATH` variable.
-
+<Aside type="note" title="Getting TrailBase">
+  <GettingTrailBase/>
 </Aside>
 
 ## Create the Schema
