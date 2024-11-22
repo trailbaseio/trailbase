@@ -39,39 +39,14 @@ We'll use the `sqlite3` CLI[^1] directly to import
 `examples/coffeesearch/arabica_data_cleaned.csv` with the following SQL
 script:
 
-```sql
--- First create the strictly typed "coffee" table.
-CREATE TABLE IF NOT EXISTS coffee (
-  Species TEXT,
-  Owner TEXT,
+import importScript from "../../../../../examples/coffeesearch/import.sql?raw";
 
-  Aroma REAL,
-  Flavor REAL,
-  Acidity REAL,
-  Sweetness REAL,
-
-  embedding BLOB
-) STRICT;
-
--- Then import the data into a "temporary" table.
-.mode csv
-.import arabica_data_cleaned.csv temporary
-
--- Then import the temporary data into the "coffee" table.
-INSERT INTO coffee (Species, Owner, Aroma, Flavor, Acidity, Sweetness)
-SELECT
-  Species,
-  Owner,
-
-  CAST(Aroma AS REAL) AS Aroma,
-  CAST(Flavor AS REAL) AS Flavor,
-  CAST(Acidity AS REAL) AS Acidity,
-  CAST(Sweetness AS REAL) AS Sweetness
-FROM temporary;
-
--- And clean up.
-DROP TABLE temporary;
-```
+<Code
+  code={importScript}
+  lang="sql"
+  title={"examples/coffeesearch/import.sql"}
+  mark={[]}
+/>
 
 Note that we didn't initialize the vector `embedding`. This is merely because
 `sqlite3` doesn't have the necessary extensions built-in.
@@ -82,6 +57,7 @@ From within the `example/coffeesearch` directory, you can execute the script
 above and import the coffee data by running:
 
 ```bash
+$ mkdir -p traildepot/data
 $ cat import.sql | sqlite3 traildepot/data/main.db -
 ```
 

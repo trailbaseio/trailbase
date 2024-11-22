@@ -1,5 +1,5 @@
--- Create table if it doesn't exist.
-CREATE TABLE IF NOT EXISTS coffee (
+-- First create the strictly typed "coffee" table.
+CREATE TABLE coffee (
   Species TEXT,
   Owner TEXT,
 
@@ -11,22 +11,21 @@ CREATE TABLE IF NOT EXISTS coffee (
   embedding BLOB
 ) STRICT;
 
--- Go on to import data.
-DROP TABLE IF EXISTS temporary;
-
+-- Then import the data into a "temporary" table.
 .mode csv
 .import arabica_data_cleaned.csv temporary
 
+-- Then import the un-typed temporary data into the typed "coffee" table.
 INSERT INTO coffee (Species, Owner, Aroma, Flavor, Acidity, Sweetness)
-SELECT
-  Species,
-  Owner,
+  SELECT
+    Species,
+    Owner,
 
-  CAST(Aroma AS REAL) AS Aroma,
-  CAST(Flavor AS REAL) AS Flavor,
-  CAST(Acidity AS REAL) AS Acidity,
-  CAST(Sweetness AS REAL) AS Sweetness
-FROM temporary;
+    CAST(Aroma AS REAL) AS Aroma,
+    CAST(Flavor AS REAL) AS Flavor,
+    CAST(Acidity AS REAL) AS Acidity,
+    CAST(Sweetness AS REAL) AS Sweetness
+  FROM temporary;
 
--- Clean up.
+-- And clean up.
 DROP TABLE temporary;
