@@ -6,10 +6,10 @@ title: >
 import { Code } from "@astrojs/starlight/components";
 import { Aside } from "@astrojs/starlight/components";
 
-In this tutorial, we'll set up a coffee database, implement a custom TypeScript
-HTTP handler for performing vector searches, and a simple production-ready web app
-all in ~100 lines of code.
-
+This tutorial is a short introduction to TrailBase and some of its features.
+We'll bootstrap a database with coffee data, implement a custom TypeScript HTTP
+handler for finding the best coffee matches using vector search, and deploy a
+simple production-ready web app all in ~100 lines of code.
 
 <div class="flex justify-center">
   <div class="w-[80%] shadow-lg	 ">
@@ -19,8 +19,8 @@ all in ~100 lines of code.
 
 <div class="h-[24px]" />
 
-This introductory tutorial is part of the main TrailBase code repository, which
-you can download to follow along running:
+This introductory tutorial is part of TrailBase's main code repository, which
+can be downloaded to follow along by running:
 
 ```bash
 $ git clone https://github.com/trailbaseio/trailbase.git
@@ -35,8 +35,9 @@ import GettingTrailBase from "./_getting_trailbase.md";
 
 ## Importing Data
 
-We'll use the `sqlite3` CLI directly to import
-`examples/coffeesearch/arabica_data_cleaned.csv` with the following SQL script[^1]:
+We'll use the `sqlite3` CLI[^1] directly to import
+`examples/coffeesearch/arabica_data_cleaned.csv` with the following SQL
+script:
 
 ```sql
 -- First create the strictly typed "coffee" table.
@@ -72,39 +73,39 @@ FROM temporary;
 DROP TABLE temporary;
 ```
 
-Note that we didn't initialize the vector `embedding`. This is because the
-`sqlite3` CLI doesn't have the necessary extensions built-in.
-We'll update the entries to add the embedding later as part of a TrailBase
-migration.
+Note that we didn't initialize the vector `embedding`. This is merely because
+`sqlite3` doesn't have the necessary extensions built-in.
+We'll update the entries to add the embedding later as part of our initial
+database migrations shortly[^2].
 
-While in `example/coffeesearch`, you can run
+From within the `example/coffeesearch` directory, you can execute the script
+above and import the coffee data by running:
 
 ```bash
 $ cat import.sql | sqlite3 traildepot/data/main.db -
 ```
 
-to execute above script.
-
-After the initial data import and still in the same directory, let's start the
-`trail` binary for the first time:
+After importing the data while still in the same directory, we can start the
+`trail` server:
 
 ```bash
 $ trail run
 ```
 
-This will apply the migrations under `examples/coffeesearch/traildepot/migrations`, basically
+Because `trail` starts for the first time the migrations in
+`traildepot/migrations` will be applied, which are essentially:
 
 ```sql
 UPDATE coffee SET embedding = VECTOR(FORMAT("[%f, %f, %f, %f]", Aroma, Flavor, Acidity, Sweetness));
 ```
 
-to initialize the previously missing `coffee.embedding` for all records.
+initializing the previously skipped `coffee.embedding` for all records.
 
 
 ## Custom TypeScript Endpoint
 
-Starting `trail` also executes JavaScript and TypeScript files under
-`traildepot/scripts`.
+Any time you start `trail run`[^3], JavaScript and TypeScript files under
+`traildepot/scripts` will be executed.
 
 <Aside type="note">
   TrailBase will automatically transpile TypeScript to JavaScript which can
@@ -112,7 +113,7 @@ Starting `trail` also executes JavaScript and TypeScript files under
   step.
 </Aside>
 
-We can use this to register custom HTTP endpoints among other things.
+We can use this to register custom HTTP API routes among other things.
 Let's have a quick look at `examples/coffeesearch/traildepot/scripts/main.ts`,
 which defines a `/search` API route we'll later use in our application to
 find coffees most closely matching our desired coffee notes:
@@ -200,7 +201,7 @@ You can now check out your fuly self-contained app under
 [http://localhost:4000/](http://localhost:4000/) or browse the coffee data in
 the [admin dashboard](http://localhost:4000/_/admin).
 
-All we need to serve our application in production is[^2]:
+All[^4] we need to serve our application in production is:
 
 - the static `trail` binary,
 - the `traildepot` folder containing the data and endpoints,
@@ -221,9 +222,11 @@ $ docker build -t coffee . && docker run -p 4000:4000 coffee
 will speed-run this entire tutorial by building and starting the app listening
 at [http://localhost:4000/](http://localhost:4000/).
 
-That's it. We hope this was a fun little introduction showcasing some of
-TrailBase's features. If you have any feedback, don't hesitate and reach
-out on [GitHub](https://github.com/trailbaseio/trailbase).
+That's it. We hope this was a fun little intro to some of TrailBase's features.
+There's more we haven't touched on: CRUD APIs, auth, admin dash, file uploads,
+just to name a few.
+If you have any feedback, don't hesitate and reach out on
+[GitHub](https://github.com/trailbaseio/trailbase).
 
 <div class="h-[50px]" />
 
@@ -235,6 +238,17 @@ out on [GitHub](https://github.com/trailbaseio/trailbase).
     [download](https://www.sqlite.org/download.html) pre-built binaries
 
 [^2]:
+    Migrations are versioned SQL scripts that will be executed by the database
+    on first encounter to programmatically and consistently evolve your database
+    schema and data along with your code.
+    For example, when you add a new column you'll likely want all your
+    integration tests, development setups, and production deployments to add
+    the column so your application logic has a consistent schema to target.
+
+[^3]:
+    Unless explicitly disabled.
+
+[^4]:
     To serve HTTPS you'll either need a reverse proxy in front to terminate TLS
     or if you don't require end-to-end encryption (e.g. you're not using auth
     or handling sensitive data) you can fall back to TLS termination via a CDN
