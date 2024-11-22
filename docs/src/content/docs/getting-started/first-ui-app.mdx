@@ -1,8 +1,9 @@
 ---
-title: First UI + TypeScript App
+title: >
+  First App: UI & Custom Endpoints
 ---
 
-import screenshot from "../../../../../examples/coffeesearch/assets/screenshot.png";
+import { Code } from "@astrojs/starlight/components";
 
 In this tutorial, we'll set up a database with coffee data, implement a custom
 handler for vector search in TypeScript, and a simple web UI all in ~100 lines
@@ -77,71 +78,41 @@ $ cat import.sql | sqlite3 traildepot/data/main.db -
 ```
 
 Now with the initial import, let's start TrailBase for the first time. This
-will will apply the following migration under
-`/examples/coffeesearch/traildepot/migrations`, which is basically:
+will apply the migrations under `/examples/coffeesearch/traildepot/migrations`,
+basically:
 
 ```sql
-UPDATE coffee SET embedding = VECTOR(FORMAT("[%f, %f, %f, %f]", Aroma, Flavor, Acidity, Sweetness))
+UPDATE coffee SET embedding = VECTOR(FORMAT("[%f, %f, %f, %f]", Aroma, Flavor, Acidity, Sweetness));
 ```
 
-to initialize the vector embeddings from our different coffee notes. So we run:
+late-initializing `coffee.embedding`s for all records. So we run:
 
 ```bash
-$ trail run --dev
+$ trail run
 ```
 
-If the server comes up successfully you've done everything correctly.
+If the server comes up successfully, you've done everything right.
 
 # A JS/TS Vector Search Handler
 
-Now we need a custom API endpoint our UI can call later to look up with coffee
-most closely resembles our requested combination of notes.
-For that we place the following definition into
-`/examples/coffeesearch/traildepot/scripts/index.ts`:
+Let's have a quick look at the custom TS/JS HTTP endpoint defined in
+`/examples/coffeesearch/traildepot/scripts/main.ts` that our UI will use to
+find the coffee that most closely matches our desired notes:
 
-```ts
-import {
-  addRoute,
-  jsonHandler,
-  parsePath,
-  query
-} from "../trailbase.js";
+import handlerCode from "../../../../../examples/coffeesearch/traildepot/scripts/main.ts?raw";
 
-addRoute(
-  "GET",
-  "/search",
-  jsonHandler(async (req) => {
-    const searchParams = parsePath(req.uri).query;
+<Code
+  code={handlerCode}
+  lang="ts"
+  title={"examples/coffeesearch/traildepot/scripts/main.ts"}
+  mark={[]}
+/>
 
-    const aroma = searchParams?.get("aroma") ?? 8;
-    const flavor = searchParams?.get("flavor") ?? 8;
-    const acidity = searchParams?.get("acidity") ?? 8;
-    const sweetness = searchParams?.get("sweetness") ?? 8;
+The above script installs an `get('/search')` HTTP endpoint that reads notes
+from the query parameters and looks up coffees in the database ordered by
+vector distance, i.e. how well they match.
 
-    return await query(`
-      SELECT
-        Owner,
-        Aroma,
-        Flavor,
-        Acidity,
-        Sweetness,
-        vector_distance_cos(
-          embedding,
-          '[${aroma}, ${flavor}, ${acidity}, ${sweetness}]'
-        ) AS distance
-      FROM
-        coffee
-      WHERE
-        embedding IS NOT NULL AND distance < 0.2
-      ORDER BY
-        distance
-      LIMIT 100`, []);
-  }),
-);
-```
-
-This custom handler will let us query the coffees that most closely resemble
-our desired combination of notes, e.g.:
+This is a public API. While `trail` is up, we can simply test it by running:
 
 ```bash
 $ curl "http://localhost:4000/search?aroma=8&flavor=8&acidity=8&sweetness=8"
@@ -152,134 +123,86 @@ $ curl "http://localhost:4000/search?aroma=8&flavor=8&acidity=8&sweetness=8"
 ]
 ```
 
-If we're only interested in the API, we're basically done. Otherwise, the
-following section will implement a simple React web App.
+We're done with the server side. This is already enough to build a simple UI.
+With a few simple commands we've ingested CSV data and built a custom HTTP
+endpoint using vector search.
+If you're not interested in a UI, the same approach setup could also be used to
+identify relevant documents for AI applications.
 
 ## A simple Web UI
 
-We recommend [vite](https://vite.dev/guide/) for setting up a simple SPA, e.g.:
+After setting up our database, vector search and APIs, we should probably use
+them for good measure. We could build a mobile app, have an LLM answer coffee
+prompts, or to keep it simple: build a small web UI.
+Moreover, a web UI also lets us touch more generally on bundling and deploying
+web applications with TrailBase.
+
+The specifics of the UI are not the focus of this tutorial that's why we
+chose React as the most well-known option and kept the implementation to less
+than 80 lines of code. In case you want to build your own, we recommend
+[vite](https://vite.dev/guide/) to quickly set up an SPA with your favorite JS
+framework, e.g.: `pnpm create vite@latest my-project -- --template react`.
+
+Our reference implementation, renders 4 numeric input fields to search for
+coffee with a given aroma, flavor, acidity and sweetness score:
+
+import uiCode from "../../../../../examples/coffeesearch/src/App.tsx?raw";
+
+<Code
+  code={uiCode}
+  lang="ts"
+  title={"examples/coffeesearch/src/App.tsx"}
+  mark={[]}
+/>
+
+We can run the UI in a vite dev-server by running:
 
 ```bash
-$ pnpm create vite@latest my-project -- --template react
+pnpm install && pnpm dev
 ```
 
-We can then swap out the template with `my-project/src/App.tsx`:
+## Deployment: Putting Everything Together
 
-```tsx
-import { useState, useEffect } from "react";
-import "./App.css";
-
-type Data = Array<Array<object>>;
-
-async function fetchData(v: {
-  aroma: number;
-  flavor: number;
-  acidity: number;
-  sweetness: number;
-}): Promise<Data> {
-  const URL = import.meta.env.DEV ? "http://localhost:4000" : "";
-  const params = Object.entries(v).map(([k, v]) => `${k}=${v}`).join("&");
-  const response = await fetch(`${URL}/search?${params}`);
-  return await response.json();
-}
-
-const Input = (props: {
-  label: string;
-  value: number;
-  update: (v: number) => void;
-}) => (
-  <>
-    <label>{props.label}:</label>
-    <input
-      type="number"
-      step="0.1"
-      value={props.value}
-      onChange={(el) => props.update(el.target.valueAsNumber)}
-    />
-  </>
-);
-
-const Row = (props: { row: Array<object> }) => (
-  <tr>
-    {props.row.map((d) => (
-      <td>{`${d}`}</td>
-    ))}
-  </tr>
-);
-
-function Table() {
-  const [aroma, setAroma] = useState(8);
-  const [flavor, setFlavor] = useState(8);
-  const [acidity, setAcidity] = useState(8);
-  const [sweetness, setSweetness] = useState(8);
-
-  const [data, setData] = useState<Data | undefined>();
-  useEffect(() => {
-    setData(undefined);
-    fetchData({ aroma, flavor, acidity, sweetness }).then(setData);
-  }, [aroma, flavor, acidity, sweetness]);
-
-  return (
-    <>
-      <div className="inputs">
-        <Input label="Aroma" value={aroma} update={setAroma} />
-        <Input label="Flavor" value={flavor} update={setFlavor} />
-        <Input label="Acidity" value={acidity} update={setAcidity} />
-        <Input label="Sweetness" value={sweetness} update={setSweetness} />
-      </div>
-
-      <div className="table">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Owner</th>
-              <th scope="col">Aroma</th>
-              <th scope="col">Flavor</th>
-              <th scope="col">Acidity</th>
-              <th scope="col">Sweetness</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {(data ?? []).map((row) => (
-              <Row row={row} />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}
-
-export const App = () => (
-  <>
-    <h1>Coffee Search</h1>
-    <Table />
-  </>
-);
-```
-
-Lastly we need to compile our `JSX/TSX` down into pure HTML, JS, and CSS our
-browser can understand. Running
+Whether you've followed along or skipped to here, we can now put everything
+together.
+Let's start by compiling our `JSX/TSX` web UI down to pure HTML, JS, and CSS
+artifacts the browser can understand by running:
 
 ```bash
-pnpm build
+pnpm install && pnpm build
 ```
 
-the resulting built artifacts can be found under `my-project/dist/`.
-
-### Putting Everything Together
-
-Whether you've followed along or skipped to here, you can now start TrailBase:
-
-* Pointing out our prepared database
-* Providing our custom `/search` endpoint
-* And serving our web artifacts in `dist/` (if you haven't built the website yet
-  run `pnpm build`)
+These artifacts, found in `./dist`, can then be served alongside our data and
+custom API simply by running:
 
 ```bash
-trail run --public-dir <path-to-ui>/dist
+trail run --public-dir dist
 ```
 
-You can now browse to [new custom UI](http://localhost:4000/) check out the
-[admin dashboard](http://localhost:4000/_/admin).
+You can now check out your fuly self-contained app under
+[http://localhost:4000/](http://localhost:4000/) or browse the coffee data in
+the [admin dashboard](http://localhost:4000/_/admin).
+
+All we need to serve our application in production is[^1]:
+
+- the static `trail` binary,
+- the `traildepot` folder containing the data and endpoints,
+- the `dist` folder containing our web app.
+
+At the end of the day it's just a bunch of hermetic files without transitively
+depending on a pyramid of shared libraries or other services including
+databases.
+This makes it very easy to just copy the files over to your server or bundle
+everything in a single container.
+`examples/coffeesearch/Dockerfile` is an example of how you can both build and
+bundle using Docker.
+
+<div class="h-[50px]" />
+
+----
+
+[^1]:
+    To serve HTTPS you'll either need a reverse proxy in front to terminate TLS
+    or if you don't require end-to-end encryption (e.g. you're not using auth
+    or handling sensitive data) you can fall back to TLS termination via a CDN
+    like cloudflare.

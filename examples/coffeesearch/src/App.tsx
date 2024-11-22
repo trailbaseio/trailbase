@@ -1,22 +1,6 @@
 import { useState, useEffect } from "react";
 import "./App.css";
 
-type Data = Array<Array<object>>;
-
-async function fetchData(v: {
-  aroma: number;
-  flavor: number;
-  acidity: number;
-  sweetness: number;
-}): Promise<Data> {
-  const URL = import.meta.env.DEV ? "http://localhost:4000" : "";
-  const params = Object.entries(v)
-    .map(([k, v]) => `${k}=${v}`)
-    .join("&");
-  const response = await fetch(`${URL}/search?${params}`);
-  return await response.json();
-}
-
 const Input = (props: {
   label: string;
   value: number;
@@ -26,19 +10,13 @@ const Input = (props: {
     <label>{props.label}:</label>
     <input
       type="number"
-      step="0.1"
+      step={0.1}
+      max={10}
+      min={0}
       value={props.value}
-      onChange={(el) => props.update(el.target.valueAsNumber)}
+      onChange={(e) => props.update(e.target.valueAsNumber)}
     />
   </>
-);
-
-const Row = (props: { row: Array<object> }) => (
-  <tr>
-    {props.row.map((d) => (
-      <td>{`${typeof d === "number" ? (d as number).toPrecision(3) : d}`}</td>
-    ))}
-  </tr>
 );
 
 function Table() {
@@ -47,10 +25,14 @@ function Table() {
   const [acidity, setAcidity] = useState(8);
   const [sweetness, setSweetness] = useState(8);
 
-  const [data, setData] = useState<Data | undefined>();
+  const [data, setData] = useState<Array<Array<object>> | undefined>();
   useEffect(() => {
-    setData(undefined);
-    fetchData({ aroma, flavor, acidity, sweetness }).then(setData);
+    const URL = import.meta.env.DEV ? "http://localhost:4000" : "";
+    const params = Object.entries({ aroma, flavor, acidity, sweetness })
+      .map(([k, v]) => `${k}=${v}`)
+      .join("&");
+
+    fetch(`${URL}/search?${params}`).then(async (r) => setData(await r.json()));
   }, [aroma, flavor, acidity, sweetness]);
 
   return (
@@ -66,17 +48,21 @@ function Table() {
         <table>
           <thead>
             <tr>
-              <th scope="col">Owner</th>
-              <th scope="col">Aroma</th>
-              <th scope="col">Flavor</th>
-              <th scope="col">Acidity</th>
-              <th scope="col">Sweetness</th>
+              <th>Owner</th>
+              <th>Aroma</th>
+              <th>Flavor</th>
+              <th>Acidity</th>
+              <th>Sweetness</th>
             </tr>
           </thead>
 
           <tbody>
             {(data ?? []).map((row) => (
-              <Row row={row} />
+              <tr>
+                {row.map((d) => (
+                  <td>{d.toString()}</td>
+                ))}
+              </tr>
             ))}
           </tbody>
         </table>

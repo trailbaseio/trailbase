@@ -125,6 +125,7 @@ export interface JsonResponseType {
 export declare function jsonHandler(f: (req: JsonRequestType) => MaybeResponse<JsonRequestType | object>): CallbackType;
 export declare function addRoute(method: Method, route: string, callback: CallbackType): void;
 export declare function dispatch(method: Method, route: string, uri: string, pathParams: [string, string][], headers: [string, string][], user: UserType | undefined, body: Uint8Array): Promise<ResponseType>;
+export declare function addPeriodicCallback(milliseconds: number, cb: (cancel: () => void) => void): () => void;
 export declare function query(queryStr: string, params: unknown[]): Promise<unknown[][]>;
 export declare function execute(queryStr: string, params: unknown[]): Promise<number>;
 export type ParsedPath = {

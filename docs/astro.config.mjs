@@ -37,11 +37,11 @@ export default defineConfig({
               slug: "getting-started/starting-up",
             },
             {
-              label: "First UI+TS App",
+              label: "First App",
               slug: "getting-started/first-ui-app",
             },
             {
-              label: "First CLI App",
+              label: "A CRUD App",
               slug: "getting-started/first-cli-app",
             },
             {
