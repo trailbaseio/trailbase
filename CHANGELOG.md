@@ -1,3 +1,11 @@
+## v0.2.3
+
+* Interleaving of multiple HTTP requests into busy v8 isolates/workers.
+* JS runtime:
+  *  add `addPeriodicCallback` function to register periodic tasks that
+     executes on a single worker/isolate.
+  *  Constrain method TS argument type (`MethodType`).
+
 ## v0.2.2
 
 * Enable "web" APIs in JS runtime.
