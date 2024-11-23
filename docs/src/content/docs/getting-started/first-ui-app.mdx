@@ -6,10 +6,10 @@ title: >
 import { Code } from "@astrojs/starlight/components";
 import { Aside } from "@astrojs/starlight/components";
 
-This tutorial is a short introduction to TrailBase and some of its features.
+This article is a short introduction to TrailBase and some of its features.
 We'll bootstrap a database with coffee data, implement a custom TypeScript HTTP
-handler for finding the best coffee matches using vector search, and deploy a
-simple production-ready web app all in ~100 lines of code.
+handler for finding the best matches using vector search, and deploy a simple
+production-ready web app all in ~100 lines of code.
 
 <div class="flex justify-center">
   <div class="w-[80%] shadow-lg	 ">
@@ -35,7 +35,8 @@ import GettingTrailBase from "./_getting_trailbase.md";
 
 ## Importing Data
 
-We'll use the `sqlite3` CLI[^1] directly to import
+Before building the app, let's import some data. Keeping it simple,
+we'll use the `sqlite3` CLI[^1] directly to import
 `examples/coffeesearch/arabica_data_cleaned.csv` with the following SQL
 script:
 
@@ -50,8 +51,8 @@ import importScript from "../../../../../examples/coffeesearch/import.sql?raw";
 
 Note that we didn't initialize the vector `embedding`. This is merely because
 `sqlite3` doesn't have the necessary extensions built-in.
-We'll update the entries to add the embedding later as part of our initial
-database migrations shortly[^2].
+We'll update the entries later on, adding the embedding as part of our initial
+database migrations[^2].
 
 From within the `example/coffeesearch` directory, you can execute the script
 above and import the coffee data by running:
@@ -138,7 +139,7 @@ In case you want to build your own, we recommend
 framework, e.g.: `npm create vite@latest my-project -- --template react`.
 
 Our provided reference implementation, renders 4 numeric input fields to search
-for coffee with a given aroma, flavor, acidity and sweetness score:
+for coffee with a certain aroma, flavor, acidity and sweetness score:
 
 import uiCode from "../../../../../examples/coffeesearch/src/App.tsx?raw";
 
@@ -173,9 +174,10 @@ as well as custom API by running:
 $ trail run --public-dir dist
 ```
 
-You can now check out your fuly self-contained app under
-[http://localhost:4000/](http://localhost:4000/) or browse the coffee data in
-the [admin dashboard](http://localhost:4000/_/admin).
+You can now check out your fully self-contained app under
+[http://localhost:4000/](http://localhost:4000/) or browse the coffee data and
+access logs in the [admin dashboard](http://localhost:4000/_/admin).
+The admin credentials are logged to the terminal on first start.
 
 All[^4] we need to serve our application in production is:
 
