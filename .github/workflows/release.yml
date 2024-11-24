@@ -67,7 +67,7 @@ jobs:
           submodules: 'true'
       - name: Install Dependencies
         run: |
-            brew update && brew install pkg-config protobuf sqlite
+            brew update && brew install protobuf sqlite
 
       - uses: pnpm/action-setup@v4
         with:
@@ -100,7 +100,7 @@ jobs:
           submodules: 'true'
       - name: Install Dependencies
         run: |
-            brew update && brew install pkg-config protobuf sqlite
+            brew update && brew install protobuf sqlite
 
       - uses: pnpm/action-setup@v4
         with:
