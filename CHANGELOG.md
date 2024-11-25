@@ -1,3 +1,7 @@
+## v0.2.4
+
+* Allow configuring S3 compatible storage backend for file uploads.
+
 ## v0.2.3
 
 * Interleaving of multiple HTTP requests into busy v8 isolates/workers.
