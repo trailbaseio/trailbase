@@ -1,4 +1,4 @@
-# TrailBase Client Library for .NET and MAUI
+# TrailBase Client for Python
 
 TrailBase is a [blazingly](https://trailbase.io/reference/benchmarks/) fast,
 single-file, open-source application server with type-safe APIs, built-in

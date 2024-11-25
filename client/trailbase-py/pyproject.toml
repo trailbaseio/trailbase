@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "trailbase"
+version = "0.1.0"
+description = ""
+authors = ["TrailBase <contact@trailbase.io>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+httpx = "^0.27.2"
+pyjwt = "^2.10.0"
+cryptography = "^43.0.3"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.3"
+black = "^24.10.0"
+pyright = "^1.1.389"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 108
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"

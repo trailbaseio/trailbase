@@ -1,4 +1,4 @@
-# JS/TS client for TrailBase
+# JS/TS Client for TrailBase
 
 TrailBase is a [blazingly](https://trailbase.io/reference/benchmarks/) fast,
 single-file, open-source application server with type-safe APIs, built-in

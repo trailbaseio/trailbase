@@ -79,7 +79,7 @@ repos:
 
     - id: build_website
       name: Build Website
-      entry: sh -c 'cd docs && pnpm i && pnpm build'
+      entry: sh -c 'cd docs && pnpm build'
       language: system
       types: [file]
       files: .*\.(js|mjs|cjs|ts|jsx|tsx|astro)$
@@ -125,4 +125,29 @@ repos:
       language: system
       types: [file]
       files: .*\.(cs|csproj)$
+      pass_filenames: false
+
+    ### Python client
+    - id: python_format
+      name: Python format
+      entry: poetry -C client/trailbase-py run black client/trailbase-py --check
+      language: system
+      types: [file]
+      files: .*\.(py)$
+      pass_filenames: false
+
+    - id: python_check
+      name: Python check
+      entry: poetry -C client/trailbase-py run pyright client/trailbase-py
+      language: system
+      types: [file]
+      files: .*\.(py)$
+      pass_filenames: false
+
+    - id: python_test
+      name: Python test
+      entry: poetry -C client/trailbase-py run pytest
+      language: system
+      types: [file]
+      files: .*\.(py)$
       pass_filenames: false

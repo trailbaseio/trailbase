@@ -36,5 +36,10 @@ jobs:
         with:
           toolchain: stable
           default: true
-      - uses: actions/setup-python@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Poetry install
+        run: |
+          pipx install poetry && poetry -C client/trailbase-py install
       - uses: pre-commit/action@v3.0.1

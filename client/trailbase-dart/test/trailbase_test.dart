@@ -149,6 +149,14 @@ Future<void> main() async {
       expect(RecordId.uuid(record.id) == ids[0], isTrue);
 
       expect(record.textNotNull, messages[0]);
+
+      final updatedMessage = 'dart client updated test 0: ${now}';
+      await api.update(ids[0], {'text_not_null': updatedMessage});
+      final updatedRecord = SimpleStrict.fromJson(await api.read(ids[0]));
+      expect(updatedRecord.textNotNull, updatedMessage);
+
+      await api.delete(ids[0]);
+      expect(() async => await api.read(ids[0]), throwsException);
     });
   });
 }

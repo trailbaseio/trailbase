@@ -27,8 +27,10 @@ import SplitCard from "@/components/SplitCard.astro";
 import Roadmap from "./_roadmap.md";
 
 import screenshot from "@/assets/screenshot.webp";
+
 import dotnetLogo from "@/assets/dotnet_logo.svg";
 import flutterLogo from "@/assets/flutter_logo.svg";
+import pythonLogo from "@/assets/python_logo.svg";
 import tsLogo from "@/assets/ts_logo.svg";
 
 import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx";
@@ -126,7 +128,7 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
       bindings for virtually any language.
 
       Clients as well as code-generation examples for TypeScript,
-      Dart/Flutter, and C#/.NET are provided out of the box.
+      Dart/Flutter, Python, and C#/.NET are provided out of the box.
 
       <div class="m-0 flex justify-center items-start gap-8">
         <a href="https://www.npmjs.com/package/trailbase">
@@ -135,6 +137,10 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
 
         <a href="https://pub.dev/packages/trailbase">
           <Image margin={0} class="p-0 m-0" width={42} height={52} src={flutterLogo} alt="Flutter" />
+        </a>
+
+        <a href="https://github.com/trailbaseio/trailbase/tree/main/client/trailbase-py">
+          <Image margin={0} class="p-0 m-0" width={52} height={52} src={pythonLogo} alt="Dotnet" />
         </a>
 
         <a href="https://www.nuget.org/packages/TrailBase/">
