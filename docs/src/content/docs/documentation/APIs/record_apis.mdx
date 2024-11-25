@@ -4,7 +4,7 @@ title: Record APIs
 
 import { Aside } from "@astrojs/starlight/components";
 
-The easiest and most type-safe path to access you `TABLE`s and `VIEW`s is to use
+The easiest and most type-safe path to access your `TABLE`s and `VIEW`s is to use
 TrailBase's restful CRUD _Record APIs_.
 The only requirements are:
 
@@ -111,7 +111,7 @@ update but are hidden on reads. This is meant as a convenient convention to
 allow for internal data fields, e.g hiding the record owner in an otherwise public
 data set or hiding a user's internal credit rating from their profile. A
 similar effect could otherwise be achieved by exposing a table for inserts and
-updates only while poxying reads through a VIEW.
+updates only while proxying reads through a VIEW.
 
 <Aside type="note" title="Unhiding">
   Note that views can also be used to rename columns and thus expose hidden columns
@@ -174,7 +174,7 @@ For example, to query the 10 highest grossing movies with a watch time less
 than 2 hours and an actor called John, one could query:
 
 ```bash
-curl -g '<address>/api/recrods/v1/movies?limit=10&order=grossing&watch_time_min[lt]=120&actors[like]=%John%'
+curl -g '<address>/api/records/v1/movies?limit=10&order=grossing&watch_time_min[lt]=120&actors[like]=%John%'
 ```
 
 ## File Upload
