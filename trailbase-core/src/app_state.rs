@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::oauth::providers::{ConfiguredOAuthProviders, OAuthProviderType};
-use crate::config::proto::{Config, QueryApiConfig, RecordApiConfig};
+use crate::config::proto::{Config, QueryApiConfig, RecordApiConfig, S3StorageConfig};
 use crate::config::{validate_config, write_config_and_vault_textproto};
 use crate::constants::SITE_URL_DEFAULT;
 use crate::data_dir::DataDir;
@@ -36,8 +36,8 @@ struct InternalState {
   jwt: JwtHelper,
 
   table_metadata: TableMetadataCache,
+  object_store: Box<dyn ObjectStore + Send + Sync>,
 
-  #[allow(unused)]
   runtime: RuntimeHandle,
 
   #[cfg(test)]
@@ -54,6 +54,7 @@ pub(crate) struct AppStateArgs {
   pub conn: Connection,
   pub logs_conn: Connection,
   pub jwt: JwtHelper,
+  pub object_store: Box<dyn ObjectStore + Send + Sync>,
   pub js_runtime_threads: Option<usize>,
 }
 
@@ -125,6 +126,7 @@ impl AppState {
         logs_conn: args.logs_conn,
         jwt: args.jwt,
         table_metadata: args.table_metadata,
+        object_store: args.object_store,
         runtime,
         #[cfg(test)]
         cleanup: vec![],
@@ -166,13 +168,8 @@ impl AppState {
     self.table_metadata().invalidate_all().await
   }
 
-  pub(crate) fn objectstore(
-    &self,
-  ) -> Result<Box<dyn ObjectStore + Send + Sync>, object_store::Error> {
-    // FIXME: We should probably have a long-lived store on AppState.
-    return Ok(Box::new(
-      object_store::local::LocalFileSystem::new_with_prefix(self.data_dir().uploads_path())?,
-    ));
+  pub(crate) fn objectstore(&self) -> &(dyn ObjectStore + Send + Sync) {
+    return &*self.state.object_store;
   }
 
   pub(crate) fn get_oauth_provider(&self, name: &str) -> Option<Arc<OAuthProviderType>> {
@@ -371,12 +368,32 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let main_conn_clone1 = main_conn.clone();
   let table_metadata_clone = table_metadata.clone();
 
+  let data_dir = DataDir(temp_dir.path().to_path_buf());
+
+  let object_store = if std::env::var("TEST_S3_OBJECT_STORE").map_or(false, |v| v == "TRUE") {
+    info!("Use S3 Storage for tests");
+
+    build_objectstore(
+      &data_dir,
+      Some(&S3StorageConfig {
+        endpoint: Some("http://127.0.0.1:9000".to_string()),
+        region: None,
+        bucket_name: Some("test".to_string()),
+        access_key: Some("minioadmin".to_string()),
+        secret_access_key: Some("minioadmin".to_string()),
+      }),
+    )
+    .unwrap()
+  } else {
+    build_objectstore(&data_dir, None).unwrap()
+  };
+
   let runtime = RuntimeHandle::new();
   runtime.set_connection(main_conn.clone());
 
   return Ok(AppState {
     state: Arc::new(InternalState {
-      data_dir: DataDir(temp_dir.path().to_path_buf()),
+      data_dir,
       public_dir: None,
       dev: true,
       oauth: Computed::new(&config, |c| {
@@ -415,6 +432,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       logs_conn,
       jwt: jwt::test_jwt_helper(),
       table_metadata,
+      object_store,
       runtime,
       cleanup: vec![Box::new(temp_dir)],
     }),
@@ -444,4 +462,45 @@ fn build_record_api(
 fn build_query_api(conn: libsql::Connection, config: QueryApiConfig) -> Result<QueryApi, String> {
   // TODO: Check virtual table exists
   return QueryApi::from(conn, config);
+}
+
+pub(crate) fn build_objectstore(
+  data_dir: &DataDir,
+  config: Option<&S3StorageConfig>,
+) -> Result<Box<dyn ObjectStore + Send + Sync>, object_store::Error> {
+  if let Some(config) = config {
+    let mut builder = object_store::aws::AmazonS3Builder::from_env();
+
+    if let Some(ref endpoint) = config.endpoint {
+      builder = builder.with_endpoint(endpoint);
+
+      if endpoint.starts_with("http://") {
+        builder =
+          builder.with_client_options(object_store::ClientOptions::default().with_allow_http(true))
+      }
+    }
+
+    if let Some(ref region) = config.region {
+      builder = builder.with_region(region);
+    }
+
+    let Some(ref bucket_name) = config.bucket_name else {
+      panic!("S3StorageConfig missing 'bucket_name'.");
+    };
+    builder = builder.with_bucket_name(bucket_name);
+
+    if let Some(ref access_key) = config.access_key {
+      builder = builder.with_access_key_id(access_key);
+    }
+
+    if let Some(ref secret_access_key) = config.secret_access_key {
+      builder = builder.with_secret_access_key(secret_access_key);
+    }
+
+    return Ok(Box::new(builder.build()?));
+  }
+
+  return Ok(Box::new(
+    object_store::local::LocalFileSystem::new_with_prefix(data_dir.uploads_path())?,
+  ));
 }

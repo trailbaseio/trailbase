@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 use trailbase_sqlite::{connect_sqlite, query_one_row};
 
-use crate::app_state::{AppState, AppStateArgs};
+use crate::app_state::{build_objectstore, AppState, AppStateArgs};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;
@@ -35,6 +35,8 @@ pub enum InitError {
   SchemaError(#[from] trailbase_sqlite::schema::SchemaError),
   #[error("Script error: {0}")]
   ScriptError(String),
+  #[error("ObjectStore error: {0}")]
+  ObjectStore(#[from] object_store::Error),
 }
 
 #[derive(Default)]
@@ -105,6 +107,8 @@ pub async fn init_app_state(
     debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
   }
 
+  let object_store = build_objectstore(&data_dir, config.server.s3_storage_config.as_ref())?;
+
   // Write out the latest .js/.d.ts runtime files.
   #[cfg(feature = "v8")]
   crate::js::write_js_runtime_files(&data_dir).await;
@@ -118,6 +122,7 @@ pub async fn init_app_state(
     conn: main_conn.clone(),
     logs_conn,
     jwt,
+    object_store,
     js_runtime_threads: args.js_runtime_threads,
   });
 

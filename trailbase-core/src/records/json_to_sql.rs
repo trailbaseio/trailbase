@@ -417,9 +417,9 @@ impl InsertQueryBuilder {
     // We're storing any files to the object store first to make sure the DB entry is valid right
     // after commit and not racily pointing to soon-to-be-written files.
     if !files.is_empty() {
-      let objectstore = state.objectstore()?;
+      let objectstore = state.objectstore();
       for (metadata, content) in &mut files {
-        write_file(&*objectstore, metadata, content).await?;
+        write_file(objectstore, metadata, content).await?;
       }
     }
 
@@ -427,7 +427,7 @@ impl InsertQueryBuilder {
       Ok(row) => row,
       Err(err) => {
         if !files.is_empty() {
-          let objectstore = state.objectstore()?;
+          let objectstore = state.objectstore();
 
           for (metadata, _files) in &files {
             let path = object_store::path::Path::from(metadata.path());
@@ -504,9 +504,9 @@ impl UpdateQueryBuilder {
     // We're storing to object store before writing the entry to the DB.
     let mut files = std::mem::take(&mut params.files);
     if !files.is_empty() {
-      let store = state.objectstore()?;
+      let objectstore = state.objectstore();
       for (metadata, content) in &mut files {
-        write_file(&*store, metadata, content).await?;
+        write_file(objectstore, metadata, content).await?;
       }
     }
 
@@ -560,7 +560,7 @@ impl UpdateQueryBuilder {
       Ok(files_row) => files_row,
       Err(err) => {
         if !files.is_empty() {
-          let store = state.objectstore()?;
+          let store = state.objectstore();
           for (metadata, _content) in &files {
             let path = object_store::path::Path::from(metadata.path());
             if let Err(err) = store.delete(&path).await {

@@ -25,7 +25,7 @@ pub(crate) async fn read_file_into_response(
   state: &AppState,
   file_upload: FileUpload,
 ) -> Result<Response, FileError> {
-  let store = state.objectstore()?;
+  let store = state.objectstore();
   let path = object_store::path::Path::from(file_upload.path());
   let result = store.get(&path).await?;
 
@@ -69,19 +69,19 @@ pub(crate) async fn delete_files_in_row(
     };
 
     if let Some(json) = &column_metadata.json {
-      let store = state.objectstore()?;
+      let store = state.objectstore();
       match json {
         JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
           if let Ok(json) = row.get_str(i) {
             let file: FileUpload = serde_json::from_str(json)?;
-            delete_file(&*store, file).await?;
+            delete_file(store, file).await?;
           }
         }
         JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
           if let Ok(json) = row.get_str(i) {
             let file_uploads: FileUploads = serde_json::from_str(json)?;
             for file in file_uploads.0 {
-              delete_file(&*store, file).await?;
+              delete_file(store, file).await?;
             }
           }
         }

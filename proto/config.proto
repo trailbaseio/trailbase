@@ -54,6 +54,18 @@ message AuthConfig {
   map<string, OAuthProviderConfig> oauth_providers = 11;
 }
 
+message S3StorageConfig {
+  optional string endpoint = 1;
+  optional string region = 2;
+
+  optional string bucket_name = 5;
+
+  /// S3 access key, a.k.a. username.
+  optional string access_key = 8;
+  /// S3 secret access key, a.k.a. password.
+  optional string secret_access_key = 9 [ (secret) = true ];
+}
+
 message ServerConfig {
   /// Application name presented to users, e.g. when sending emails. Default:
   /// "TrailBase".
@@ -71,6 +83,9 @@ message ServerConfig {
   /// Interval at which backups are persisted. Setting it to 0 will disable
   /// backups. Default: 0.
   optional int64 backup_interval_sec = 12;
+
+  /// If present will use S3 setup over local file-system based storage.
+  optional S3StorageConfig s3_storage_config = 13;
 }
 
 /// Sqlite specific (as opposed to standard SQL) constrained-violation

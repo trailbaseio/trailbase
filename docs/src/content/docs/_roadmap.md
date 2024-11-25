@@ -6,7 +6,6 @@ friction.
 For context, some larger features we have on our Roadmap:
 
 - Realtime/notification APIs for subscribing to data changes.
-- S3 buckets and other cloud storage. The backend already supports it but it isn't wired up.
 - Auth: more customizable settings, more customizable UI, and multi-factor.
   Also, service-accounts to auth other backends as opposed to end-users.
 - Many SQLite databases: imagine a separate database by tenant or user.
