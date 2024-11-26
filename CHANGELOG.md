@@ -1,3 +1,11 @@
+## v0.2.5
+
+* Addresses issues reported by reddit user *qwacko* 🙏
+  * Fix serialization of foreign key column options.
+  * Fix deserialization of TableIndex.
+  * Admin UI: Show all tables, including hidden ones, in create-table-form's
+    drop down for column foreign-keys.
+
 ## v0.2.4
 
 * Allow configuring S3 compatible storage backend for file uploads.
