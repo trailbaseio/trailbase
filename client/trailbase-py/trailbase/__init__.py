@@ -2,12 +2,30 @@ __title__ = "trailbase"
 __description__ = "TrailBase client SDK for python."
 __version__ = "0.1.0"
 
-from time import time
-from typing import TypeAlias, Any
 import httpx
 import jwt
+import logging
+
+from time import time
+from typing import TypeAlias, Any
 
 JSON: TypeAlias = dict[str, "JSON"] | list["JSON"] | str | int | float | bool | None
+
+
+class RecordId:
+    id: str | int
+
+    def __init__(self, id: str | int):
+        self.id = id
+
+    @staticmethod
+    def fromJson(json: dict[str, "JSON"]) -> "RecordId":
+        id = json["id"]
+        assert isinstance(id, str) or isinstance(id, int)
+        return RecordId(id)
+
+    def __repr__(self) -> str:
+        return f"{id}"
 
 
 class User:
@@ -108,8 +126,13 @@ class TokenState:
             if tokens != None
             else None
         )
+
+        if decoded == None or tokens == None:
+            return TokenState(None, TokenState.buildHeaders(tokens))
+
         return TokenState(
-            (tokens, JwtToken.fromJson(decoded)) if tokens != None else None, TokenState.buildHeaders(tokens)
+            (tokens, JwtToken.fromJson(decoded)),
+            TokenState.buildHeaders(tokens),
         )
 
     @staticmethod
@@ -150,7 +173,7 @@ class ThinClient:
     ) -> httpx.Response:
         assert not path.startswith("/")
 
-        print(f"headers: {data} {tokenState.headers}")
+        logger.debug(f"headers: {data} {tokenState.headers}")
 
         return self.http_client.request(
             method=method or "GET",
@@ -185,22 +208,12 @@ class Client:
     def user(self) -> User | None:
         tokens = self.tokens()
         if tokens != None:
-            return User.fromJson(jwt.decode(tokens.auth, algorithms=["EdDSA"], options={"verify_signature": False}))
+            return User.fromJson(
+                jwt.decode(tokens.auth, algorithms=["EdDSA"], options={"verify_signature": False})
+            )
 
     def site(self) -> str:
         return self._site
-
-    def _updateTokens(self, tokens: Tokens | None):
-        state = TokenState.build(tokens)
-
-        self._tokenState = state
-        # TODO: call authChange
-
-        state = state.state
-        if state != None:
-            claims = state[1]
-
-        return state
 
     def login(self, email: str, password: str) -> Tokens:
         response = self.fetch(
@@ -221,6 +234,42 @@ class Client:
 
         self._updateTokens(tokens)
         return tokens
+
+    def logout(self) -> None:
+        state = self._tokenState.state
+        refreshToken = state[0].refresh if state else None
+        try:
+            if refreshToken != None:
+                self.fetch(
+                    f"{self._authApi}/logout",
+                    method="POST",
+                    data={
+                        "refresh_token": refreshToken,
+                    },
+                )
+            else:
+                self.fetch(f"{self._authApi}/logout")
+        except:
+            pass
+
+        self._updateTokens(None)
+
+    def records(self, name: str) -> "RecordApi":
+        return RecordApi(name, self)
+
+    def _updateTokens(self, tokens: Tokens | None):
+        state = TokenState.build(tokens)
+
+        self._tokenState = state
+
+        state = state.state
+        if state != None:
+            claims = state[1]
+            now = int(time())
+            if claims.exp < now:
+                logger.warn("Token expired")
+
+        return state
 
     @staticmethod
     def _shouldRefresh(tokenState: TokenState) -> str | None:
@@ -264,3 +313,61 @@ class Client:
         response = self._client.fetch(path, tokenState, method=method, data=data, queryParams=queryParams)
 
         return response
+
+
+class RecordApi:
+    _recordApi: str = "api/records/v1"
+
+    _name: str
+    _client: Client
+
+    def __init__(self, name: str, client: Client) -> None:
+        self._name = name
+        self._client = client
+
+    def list(
+        self,
+        order: list[str] | None = None,
+        filters: list[str] | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, object]]:
+        params: dict[str, str] = {}
+
+        if cursor != None:
+            params["cursor"] = cursor
+
+        if limit != None:
+            params["limit"] = str(limit)
+
+        if order != None:
+            params["order"] = ",".join(order)
+
+        if filters != None:
+            for filter in filters:
+                (nameOp, value) = filter.split("=", 1)
+                if value == None:
+                    raise Exception(f"Filter '{filter}' does not match: 'name[op]=value'")
+
+                params[nameOp] = value
+
+        response = self._client.fetch(f"{self._recordApi}/{self._name}", queryParams=params)
+        return response.json()
+
+    def read(self, recordId) -> dict[str, object]:
+        response = self._client.fetch(f"{self._recordApi}/{self._name}/{recordId}")
+        return response.json()
+
+    def create(self, record: dict[str, object]) -> RecordId:
+        response = self._client.fetch(
+            f"{RecordApi._recordApi}/{self._name}",
+            method="POST",
+            data=record,
+        )
+        if response.status_code > 200:
+            raise Exception(f"{response}")
+
+        return RecordId.fromJson(response.json())
+
+
+logger = logging.getLogger(__name__)
