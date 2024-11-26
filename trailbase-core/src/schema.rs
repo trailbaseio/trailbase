@@ -157,7 +157,7 @@ pub enum ColumnOption {
 }
 
 impl ColumnOption {
-  fn to_fragment(&self, col_name: &str) -> String {
+  fn to_fragment(&self) -> String {
     return match self {
       Self::Null => "NULL".to_string(),
       Self::NotNull => "NOT NULL".to_string(),
@@ -176,7 +176,7 @@ impl ColumnOption {
         on_update,
       } => {
         format!(
-          "FOREIGN KEY({col_name}) REFERENCES {foreign_table}({ref_col}) {on_delete} {on_update}",
+          "REFERENCES {foreign_table}({ref_col}) {on_delete} {on_update}",
           ref_col = referred_columns.first().unwrap(),
           on_delete = on_delete.as_ref().map_or_else(
             || "".to_string(),
@@ -326,7 +326,7 @@ impl Column {
       options = self
         .options
         .iter()
-        .map(|o| o.to_fragment(&self.name))
+        .map(|o| o.to_fragment())
         .collect::<Vec<_>>()
         .join(" "),
     );
@@ -403,7 +403,7 @@ impl Table {
   }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize, TS, PartialEq)]
 pub struct TableIndex {
   pub name: String,
   pub table_name: String,
@@ -412,6 +412,7 @@ pub struct TableIndex {
   pub predicate: Option<String>,
 
   #[ts(skip)]
+  #[serde(default)]
   pub if_not_exists: bool,
 }
 
@@ -1024,13 +1025,24 @@ mod tests {
   use super::*;
   use crate::constants::USER_TABLE;
 
-  #[test]
-  fn test_statement_to_table_schema_and_back() -> Result<(), Error> {
+  async fn new_mem_conn() -> libsql::Connection {
+    return libsql::Builder::new_local(":memory:")
+      .build()
+      .await
+      .unwrap()
+      .connect()
+      .unwrap();
+  }
+
+  #[tokio::test]
+  async fn test_statement_to_table_schema_and_back() {
     lazy_static! {
       static ref SQL: String = format!(
         r#"
       CREATE TABLE test (
           id                           BLOB PRIMARY KEY DEFAULT (uuid_v7()) NOT NULL,
+          user                         BLOB DEFAULT '' REFERENCES _user(id),
+          user_id                      BLOB,
           email                        TEXT NOT NULL,
           email_visibility             INTEGER DEFAULT FALSE NOT NULL,
           username                     TEXT,
@@ -1045,22 +1057,32 @@ mod tests {
       );
     }
 
+    {
+      // First Make sure the query is actually valid, as opposed to "only" parsable.
+      let conn = new_mem_conn().await;
+      conn.execute(&SQL, ()).await.unwrap();
+    }
+
     let statement1 = crate::table_metadata::sqlite3_parse_into_statement(&SQL)
       .unwrap()
       .unwrap();
-    let table1: Table = statement1.clone().try_into()?;
+    let table1: Table = statement1.clone().try_into().unwrap();
 
     let sql = table1.create_table_statement();
+    {
+      // Same as above, make sure the constructed query is valid as opposed to "only" parsable.
+      let conn = new_mem_conn().await;
+      conn.execute(&sql, ()).await.unwrap();
+    }
+
     let statement2 = crate::table_metadata::sqlite3_parse_into_statement(&sql)
       .unwrap()
       .unwrap();
 
-    let table2: Table = statement2.clone().try_into()?;
+    let table2: Table = statement2.clone().try_into().unwrap();
 
     assert_eq!(statement1, statement2);
     assert_eq!(table1, table2);
-
-    Ok(())
   }
 
   #[test]
