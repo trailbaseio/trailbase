@@ -376,6 +376,7 @@ function WorldMap(props: { country_codes: { [key in string]?: number } }) {
           ? `<b>${props.name}</b><br />${requests} req`
           : "Hover over a country";
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (this as any)._container.innerHTML = contents;
       },
     });

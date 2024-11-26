@@ -1081,13 +1081,14 @@ function pickInitiallySelectedTable(
 function TablePickerPane(props: {
   horizontal: boolean;
   tablesAndViews: (Table | View)[];
+  allTables: Table[];
   selectedTableName: Signal<string | undefined>;
   schemaRefetch: () => Promise<void>;
 }) {
   const tablesAndViews = createMemo(() =>
     props.tablesAndViews.toSorted((a, b) => {
-      const aHidden = a.name.startsWith("_");
-      const bHidden = b.name.startsWith("_");
+      const aHidden = hiddenTable(a);
+      const bHidden = hiddenTable(b);
 
       if (aHidden == bHidden) {
         return a.name.localeCompare(b.name);
@@ -1096,10 +1097,6 @@ function TablePickerPane(props: {
       return aHidden ? 1 : -1;
     }),
   );
-  const tables = () =>
-    tablesAndViews().filter(
-      (either) => (either as Table) !== undefined,
-    ) as Table[];
 
   const showHidden = useStore($showHiddenTables);
 
@@ -1169,7 +1166,7 @@ function TablePickerPane(props: {
                 <SheetContent class={sheetMaxWidth}>
                   <CreateAlterTableForm
                     schemaRefetch={props.schemaRefetch}
-                    allTables={tables()}
+                    allTables={props.allTables}
                     setSelected={setSelectedTableName}
                     {...sheet}
                   />
@@ -1219,11 +1216,11 @@ function TableSplitView(props: {
   ): (Table | View)[] {
     return schemas.filter((s) => showHidden || !s.name.startsWith("_"));
   }
-  const tablesAndViews = () =>
-    filterHidden(
-      [...props.schemas.tables, ...props.schemas.views],
-      showHidden(),
-    );
+  const allTablesAndViews = () => [
+    ...props.schemas.tables,
+    ...props.schemas.views,
+  ];
+  const tablesAndViews = () => filterHidden(allTablesAndViews(), showHidden());
 
   const [searchParams] = useSearchParams<{ table: string }>();
   const selectedTableNameSignal = createSignal<string | undefined>(
@@ -1245,6 +1242,7 @@ function TableSplitView(props: {
     <TablePickerPane
       horizontal={p.horizontal}
       tablesAndViews={tablesAndViews()}
+      allTables={props.schemas.tables}
       selectedTableName={selectedTableNameSignal}
       schemaRefetch={props.schemaRefetch}
     />
