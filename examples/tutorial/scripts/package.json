@@ -11,16 +11,16 @@
     "check": "tsc --noEmit --skipLibCheck && eslint"
   },
   "devDependencies": {
-    "@eslint/js": "^9.14.0",
-    "@types/node": "^22.9.0",
-    "eslint": "^9.14.0",
-    "prettier": "^3.3.3",
+    "@eslint/js": "^9.15.0",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.15.0",
+    "prettier": "^3.4.1",
     "quicktype": "^23.0.170",
-    "typescript": "^5.6.3",
-    "typescript-eslint": "^8.14.0"
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.16.0"
   },
   "dependencies": {
-    "csv-parse": "^5.5.6",
+    "csv-parse": "^5.6.0",
     "trailbase": "workspace:*"
   }
 }

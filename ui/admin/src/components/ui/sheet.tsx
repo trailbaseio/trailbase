@@ -83,7 +83,11 @@ const SheetContent = <T extends ValidComponent = "div">(
     <SheetPortal position={local.position}>
       <SheetOverlay />
       <SheetPrimitive.Content
-        class={cn(sheetVariants({ position: local.position }), local.class)}
+        class={cn(
+          sheetVariants({ position: local.position }),
+          local.class,
+          "max-h-screen overflow-y-auto"
+        )}
         {...others}
       >
         {local.children}
