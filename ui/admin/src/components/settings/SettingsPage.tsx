@@ -106,7 +106,7 @@ function ServerSettings(props: CommonProps) {
                   ),
                   info: (
                     <p>
-                      A background ask periodically cleans up logs older than
+                      A background task periodically cleans up logs older than
                       above retention period. Setting the retention to zero turn
                       off the cleanup and logs will be retained indefinitely.
                     </p>
