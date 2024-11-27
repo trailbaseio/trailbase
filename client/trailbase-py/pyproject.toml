@@ -13,8 +13,8 @@ cryptography = "^43.0.3"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
-mypy = "^1.13.0"
 black = "^24.10.0"
+pyright = "^1.1.389"
 
 [build-system]
 requires = ["poetry-core"]

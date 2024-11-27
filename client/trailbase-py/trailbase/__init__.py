@@ -25,7 +25,7 @@ class RecordId:
         return RecordId(id)
 
     def __repr__(self) -> str:
-        return f"{id}"
+        return f"{self.id}"
 
 
 class User:
@@ -79,6 +79,9 @@ class Tokens:
             "refresh_token": self.refresh,
             "csrf_token": self.csrf,
         }
+
+    def isValid(self) -> bool:
+        return jwt.decode(self.auth, algorithms=["EdDSA"], options={"verify_signature": False}) != None
 
 
 class JwtToken:
@@ -354,8 +357,8 @@ class RecordApi:
         response = self._client.fetch(f"{self._recordApi}/{self._name}", queryParams=params)
         return response.json()
 
-    def read(self, recordId) -> dict[str, object]:
-        response = self._client.fetch(f"{self._recordApi}/{self._name}/{recordId}")
+    def read(self, recordId: RecordId | str | int) -> dict[str, object]:
+        response = self._client.fetch(f"{self._recordApi}/{self._name}/{repr(recordId)}")
         return response.json()
 
     def create(self, record: dict[str, object]) -> RecordId:
@@ -368,6 +371,23 @@ class RecordApi:
             raise Exception(f"{response}")
 
         return RecordId.fromJson(response.json())
+
+    def update(self, recordId: RecordId | str | int, record: dict[str, object]) -> None:
+        response = self._client.fetch(
+            f"{RecordApi._recordApi}/{self._name}/{repr(recordId)}",
+            method="PATCH",
+            data=record,
+        )
+        if response.status_code > 200:
+            raise Exception(f"{response}")
+
+    def delete(self, recordId: RecordId | str | int) -> None:
+        response = self._client.fetch(
+            f"{RecordApi._recordApi}/{self._name}/{repr(recordId)}",
+            method="DELETE",
+        )
+        if response.status_code > 200:
+            raise Exception(f"{response}")
 
 
 logger = logging.getLogger(__name__)
