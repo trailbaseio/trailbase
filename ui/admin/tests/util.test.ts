@@ -1,16 +1,16 @@
 import { expect, test } from "vitest"
-import { copyAndConvert } from "@/components/tables/InsertAlterRow";
+import { copyAndConvertRow } from "@/lib/convert";
 
-type UnkownRow = { [key: string]: unknown };
+type UnknownRow = { [key: string]: unknown };
 // eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
 type ObjectRow = { [key: string]: Object | undefined };
 
 test("utils", () => {
-  const x: UnkownRow = {
+  const x: UnknownRow = {
     "foo": "test",
     "bar": "test",
   };
-  const y: ObjectRow = copyAndConvert(x);
+  const y: ObjectRow = copyAndConvertRow(x);
   for (const key of Object.keys(x)) {
     expect(x[key]).toBe(y[key]);
   }

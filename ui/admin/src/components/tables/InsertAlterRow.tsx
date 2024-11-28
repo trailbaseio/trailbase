@@ -5,6 +5,7 @@ import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 
 import type { Column, Table, UpdateRowRequest } from "@/lib/bindings";
+
 import { formFieldBuilder } from "@/components/FormFields";
 import {
   findPrimaryKeyColumnIndex,
@@ -15,19 +16,7 @@ import {
 import { adminFetch } from "@/lib/fetch";
 import { SheetContainer } from "@/components/SafeSheet";
 import { showToast } from "@/components/ui/toast";
-
-// NOTE: We use `unknown` here over `Object` to prevent forms from doing infinite-recursion type gymnastics.
-type Row = { [key: string]: unknown };
-
-export function copyAndConvert(row: Row): {
-  // eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
-  [key: string]: Object | undefined;
-} {
-  return Object.fromEntries(
-    // eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
-    Object.entries(row).map(([k, v]) => [k, v as Object | undefined]),
-  );
-}
+import { copyAndConvertRow, type Row } from "@/lib/convert";
 
 async function insertRow(tableName: string, row: Row) {
   const response = await adminFetch(`/table/${tableName}`, {
@@ -62,7 +51,7 @@ async function updateRow(table: Table, row: Row) {
     primary_key_column: pkColName,
     // eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
     primary_key_value: pkValue as Object,
-    row: copyAndConvert(copy),
+    row: copyAndConvertRow(copy),
   };
 
   const response = await adminFetch(`/table/${tableName}`, {
