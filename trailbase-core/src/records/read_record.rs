@@ -177,6 +177,7 @@ mod test {
     create_record_handler, CreateRecordQuery, CreateRecordResponse,
   };
   use crate::records::delete_record::delete_record_handler;
+  use crate::records::json_to_sql::JsonRow;
   use crate::records::test_utils::*;
   use crate::records::*;
   use crate::test::unpack_json_response;
@@ -361,7 +362,7 @@ mod test {
       Path(API_NAME.to_string()),
       Query(CreateRecordQuery::default()),
       None,
-      Either::Json(serde_json::json!({})),
+      Either::Json(JsonRow::new()),
     )
     .await
     .unwrap();
@@ -383,14 +384,17 @@ mod test {
         Path(API_NAME.to_string()),
         Query(CreateRecordQuery::default()),
         None,
-        Either::Json(serde_json::json!({
-          file_column: FileUploadInput {
-            name: Some("foo".to_string()),
-            filename: Some("bar".to_string()),
-            content_type: Some("baz".to_string()),
-            data: bytes.clone(),
-          },
-        })),
+        Either::Json(
+          json_row_from_value(serde_json::json!({
+            file_column: FileUploadInput {
+              name: Some("foo".to_string()),
+              filename: Some("bar".to_string()),
+              content_type: Some("baz".to_string()),
+              data: bytes.clone(),
+            },
+          }))
+          .unwrap(),
+        ),
       )
       .await?,
     )
@@ -464,22 +468,25 @@ mod test {
         Path(API_NAME.to_string()),
         Query(CreateRecordQuery::default()),
         None,
-        Either::Json(serde_json::json!({
-          files_column: vec![
-          FileUploadInput {
-            name: Some("foo0".to_string()),
-            filename: Some("bar0".to_string()),
-            content_type: Some("baz0".to_string()),
-            data: bytes1.clone(),
-          },
-          FileUploadInput {
-            name: Some("foo1".to_string()),
-            filename: Some("bar1".to_string()),
-            content_type: Some("baz1".to_string()),
-            data: bytes2.clone(),
-          },
-          ],
-        })),
+        Either::Json(
+          json_row_from_value(serde_json::json!({
+            files_column: vec![
+            FileUploadInput {
+              name: Some("foo0".to_string()),
+              filename: Some("bar0".to_string()),
+              content_type: Some("baz0".to_string()),
+              data: bytes1.clone(),
+            },
+            FileUploadInput {
+              name: Some("foo1".to_string()),
+              filename: Some("bar1".to_string()),
+              content_type: Some("baz1".to_string()),
+              data: bytes2.clone(),
+            },
+            ],
+          }))
+          .unwrap(),
+        ),
       )
       .await?,
     )

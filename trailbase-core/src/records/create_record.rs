@@ -7,7 +7,7 @@ use utoipa::{IntoParams, ToSchema};
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::json_to_sql::{InsertQueryBuilder, LazyParams};
+use crate::records::json_to_sql::{InsertQueryBuilder, JsonRow, LazyParams};
 use crate::records::{Permission, RecordError};
 use crate::schema::ColumnDataType;
 
@@ -27,6 +27,7 @@ pub struct CreateRecordResponse {
   post,
   path = "/:name",
   params(CreateRecordQuery),
+  request_body = serde_json::Value,
   responses(
     (status = 200, description = "Record id of successful insertion.", body = CreateRecordResponse),
   )
@@ -36,7 +37,7 @@ pub async fn create_record_handler(
   Path(api_name): Path<String>,
   Query(create_record_query): Query<CreateRecordQuery>,
   user: Option<User>,
-  either_request: Either<serde_json::Value>,
+  either_request: Either<JsonRow>,
 ) -> Result<Response, RecordError> {
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
@@ -184,7 +185,7 @@ mod test {
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
         User::from_auth_token(&state, &user_x_token.auth_token),
-        Either::Json(json),
+        Either::Json(json_row_from_value(json).unwrap()),
       )
       .await;
       assert!(response.is_ok(), "{response:?}");
@@ -202,7 +203,7 @@ mod test {
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
         User::from_auth_token(&state, &user_x_token.auth_token),
-        Either::Json(json),
+        Either::Json(json_row_from_value(json).unwrap()),
       )
       .await;
       assert!(response.is_err(), "{response:?}");
@@ -219,7 +220,7 @@ mod test {
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
         User::from_auth_token(&state, &user_y_token.auth_token),
-        Either::Json(json),
+        Either::Json(json_row_from_value(json).unwrap()),
       )
       .await;
       assert!(response.is_err(), "{response:?}");
@@ -275,7 +276,7 @@ mod test {
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
         User::from_auth_token(&state, &user_x_token.auth_token),
-        Either::Json(json),
+        Either::Json(json_row_from_value(json).unwrap()),
       )
       .await;
       assert!(response.is_ok(), "{response:?}");

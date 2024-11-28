@@ -1,12 +1,13 @@
-// NOTE: We use `unknown` here over `Object` to prevent forms from doing infinite-recursion type gymnastics.
-export type Row = { [key: string]: unknown };
+import type { JsonValue } from "@bindings/serde_json/JsonValue";
 
-export function copyAndConvertRow(row: Row): {
-  // eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
-  [key: string]: Object | undefined;
-} {
+// NOTE: We use `unknown` here over `Object`, `JsonValue` or other recursive
+// type definitions to prevent forms from doing infinite-recursion type
+// gymnastics.
+export type FormRow = { [key: string]: unknown };
+type JsonRow = { [key in string]?: JsonValue };
+
+export function copyAndConvertRow(row: FormRow): JsonRow {
   return Object.fromEntries(
-    // eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
-    Object.entries(row).map(([k, v]) => [k, v as Object | undefined]),
+    Object.entries(row).map(([k, v]) => [k, v as JsonValue | undefined]),
   );
 }

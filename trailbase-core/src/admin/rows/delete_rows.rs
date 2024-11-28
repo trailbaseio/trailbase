@@ -102,11 +102,12 @@ mod tests {
   use trailbase_sqlite::query_one_row;
 
   use super::*;
-  use crate::admin::rows::insert_row::insert_row_handler;
+  use crate::admin::rows::insert_row::insert_row;
   use crate::admin::rows::list_rows::list_rows_handler;
   use crate::admin::rows::update_row::{update_row_handler, UpdateRowRequest};
   use crate::admin::table::{create_table_handler, CreateTableRequest};
   use crate::app_state::*;
+  use crate::records::test_utils::json_row_from_value;
   use crate::schema::{Column, ColumnDataType, ColumnOption, Table};
   use crate::util::{b64_to_uuid, uuid_to_b64};
 
@@ -152,12 +153,13 @@ mod tests {
     .unwrap();
 
     let insert = |value: &str| {
-      insert_row_handler(
-        State(state.clone()),
-        Path(table_name.clone()),
-        Json(serde_json::json!({
+      insert_row(
+        &state,
+        table_name.clone(),
+        json_row_from_value(serde_json::json!({
           "col0": value,
-        })),
+        }))
+        .unwrap(),
       )
     };
 
@@ -171,12 +173,12 @@ mod tests {
     };
 
     let id0 = {
-      let Json(row) = insert("row0").await.unwrap();
+      let row = insert("row0").await.unwrap();
       assert_eq!(&row[1], "row0");
       get_id(row)
     };
     let id1 = {
-      let Json(row) = insert("row1").await.unwrap();
+      let row = insert("row1").await.unwrap();
       assert_eq!(&row[1], "row1");
       get_id(row)
     };
@@ -198,9 +200,10 @@ mod tests {
       Json(UpdateRowRequest {
         primary_key_column: pk_col.clone(),
         primary_key_value: serde_json::Value::String(uuid_to_b64(&id0)),
-        row: serde_json::json!({
+        row: json_row_from_value(serde_json::json!({
           "col0": updated_value.to_string(),
-        }),
+        }))
+        .unwrap(),
       }),
     )
     .await

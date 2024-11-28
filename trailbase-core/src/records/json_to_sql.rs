@@ -107,6 +107,9 @@ impl From<crate::records::files::FileError> for QueryError {
 
 type FileMetadataContents = Vec<(FileUpload, Vec<u8>)>;
 
+// JSON type use to represent rows. Note that we use a map to represent rows sparsely.
+pub type JsonRow = serde_json::Map<String, serde_json::Value>;
+
 #[derive(Default)]
 pub struct Params {
   table_name: String,
@@ -149,19 +152,15 @@ impl Params {
   /// value itself in contrast to when the original request was an actual JSON request.
   pub fn from(
     metadata: &TableMetadata,
-    json: serde_json::Value,
+    json: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Result<Self, ParamsError> {
-    let serde_json::Value::Object(map) = json else {
-      return Err(ParamsError::NotAnObject);
-    };
-
     let mut params = Params {
       table_name: metadata.name().to_string(),
       ..Default::default()
     };
 
-    for (key, value) in map {
+    for (key, value) in json {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
       let Some((col, col_meta)) = Self::column_by_name(metadata, &key) else {
@@ -836,7 +835,7 @@ fn extract_params_and_files_from_json(
 /// streams at all.
 pub struct LazyParams<'a> {
   // Input
-  request: serde_json::Value,
+  json_row: JsonRow,
   metadata: &'a TableMetadata,
   multipart_files: Option<Vec<FileUploadInput>>,
 
@@ -847,11 +846,11 @@ pub struct LazyParams<'a> {
 impl<'a> LazyParams<'a> {
   pub fn new(
     metadata: &'a TableMetadata,
-    request: serde_json::Value,
+    json_row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Self {
     LazyParams {
-      request,
+      json_row,
       metadata,
       multipart_files,
       params: None,
@@ -863,12 +862,12 @@ impl<'a> LazyParams<'a> {
       return params.as_ref().map_err(|err| err.clone());
     }
 
-    let request = std::mem::take(&mut self.request);
+    let json_row = std::mem::take(&mut self.json_row);
     let multipart_files = std::mem::take(&mut self.multipart_files);
 
     let params = self
       .params
-      .insert(Params::from(self.metadata, request, multipart_files));
+      .insert(Params::from(self.metadata, json_row, multipart_files));
     return params.as_ref().map_err(|err| err.clone());
   }
 
@@ -876,7 +875,7 @@ impl<'a> LazyParams<'a> {
     if let Some(params) = self.params {
       return params;
     }
-    return Params::from(self.metadata, self.request, self.multipart_files);
+    return Params::from(self.metadata, self.json_row, self.multipart_files);
   }
 }
 
@@ -887,6 +886,7 @@ mod tests {
   use serde_json::json;
 
   use super::*;
+  use crate::records::test_utils::json_row_from_value;
   use crate::schema::Table;
   use crate::table_metadata::{sqlite3_parse_into_statement, TableMetadata};
   use crate::util::id_to_b64;
@@ -980,7 +980,11 @@ mod tests {
         "real": real,
       });
 
-      assert_params(Params::from(&metadata, value, None)?);
+      assert_params(Params::from(
+        &metadata,
+        json_row_from_value(value).unwrap(),
+        None,
+      )?);
     }
 
     {
@@ -993,7 +997,11 @@ mod tests {
         "real": "3",
       });
 
-      assert_params(Params::from(&metadata, value, None)?);
+      assert_params(Params::from(
+        &metadata,
+        json_row_from_value(value).unwrap(),
+        None,
+      )?);
     }
 
     {
@@ -1007,7 +1015,7 @@ mod tests {
         "real": "3",
       });
 
-      assert!(Params::from(&metadata, value, None).is_err());
+      assert!(Params::from(&metadata, json_row_from_value(value).unwrap(), None).is_err());
 
       // Test that nested JSON object can be passed.
       let value = json!({
@@ -1021,7 +1029,7 @@ mod tests {
         "real": "3",
       });
 
-      let params = Params::from(&metadata, value, None).unwrap();
+      let params = Params::from(&metadata, json_row_from_value(value).unwrap(), None).unwrap();
       assert_params(params);
     }
 
@@ -1034,7 +1042,7 @@ mod tests {
         "real": "3",
       });
 
-      assert!(Params::from(&metadata, value, None).is_err());
+      assert!(Params::from(&metadata, json_row_from_value(value).unwrap(), None).is_err());
 
       // Test that nested JSON array can be passed.
       let nested_json_blob: Vec<u8> = vec![65, 66, 67, 68];
@@ -1051,7 +1059,7 @@ mod tests {
         "real": "3",
       });
 
-      let params = Params::from(&metadata, value, None).unwrap();
+      let params = Params::from(&metadata, json_row_from_value(value).unwrap(), None).unwrap();
 
       let json_col: Vec<libsql::Value> = params
         .params

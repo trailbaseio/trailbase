@@ -1,8 +1,10 @@
 #[cfg(test)]
 mod tests {
-  use crate::AppState;
   use libsql::{params, Connection};
   use trailbase_sqlite::query_one_row;
+
+  use crate::records::json_to_sql::JsonRow;
+  use crate::AppState;
 
   pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), libsql::Error> {
     // Create a messages, chat room and members tables.
@@ -123,6 +125,13 @@ mod tests {
     )
     .await?
     .get(0);
+  }
+
+  pub fn json_row_from_value(value: serde_json::Value) -> Result<JsonRow, anyhow::Error> {
+    return match value {
+      serde_json::Value::Object(map) => Ok(map),
+      _ => Err(anyhow::anyhow!("Not an object: {value:?}")),
+    };
   }
 }
 

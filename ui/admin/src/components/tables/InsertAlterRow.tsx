@@ -4,7 +4,9 @@ import { createForm } from "@tanstack/solid-form";
 import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 
-import type { Column, Table, UpdateRowRequest } from "@/lib/bindings";
+import type { Column, Table } from "@/lib/bindings";
+import type { InsertRowRequest } from "@bindings/InsertRowRequest";
+import type { UpdateRowRequest } from "@bindings/UpdateRowRequest";
 
 import { formFieldBuilder } from "@/components/FormFields";
 import {
@@ -16,21 +18,25 @@ import {
 import { adminFetch } from "@/lib/fetch";
 import { SheetContainer } from "@/components/SafeSheet";
 import { showToast } from "@/components/ui/toast";
-import { copyAndConvertRow, type Row } from "@/lib/convert";
+import { copyAndConvertRow, type FormRow } from "@/lib/convert";
 
-async function insertRow(tableName: string, row: Row) {
+async function insertRow(tableName: string, row: FormRow) {
+  const request: InsertRowRequest = {
+    row: copyAndConvertRow(row),
+  };
+
   const response = await adminFetch(`/table/${tableName}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(row),
+    body: JSON.stringify(request),
   });
 
   return await response.text();
 }
 
-async function updateRow(table: Table, row: Row) {
+async function updateRow(table: Table, row: FormRow) {
   const tableName = table.name;
   const primaryKeyColumIndex = findPrimaryKeyColumnIndex(table.columns);
   if (primaryKeyColumIndex < 0) {
@@ -42,6 +48,8 @@ async function updateRow(table: Table, row: Row) {
   if (pkValue === undefined) {
     throw Error("Row is missing primary key.");
   }
+
+  // Update cannot change the PK value.
   const copy = {
     ...row,
   };
@@ -65,8 +73,8 @@ async function updateRow(table: Table, row: Row) {
   return await response.text();
 }
 
-function buildDefault(schema: Table): Row {
-  const obj: Row = {};
+function buildDefault(schema: Table): FormRow {
+  const obj: FormRow = {};
   for (const col of schema.columns) {
     const optional = isOptional(col.options);
     if (optional) {
@@ -99,13 +107,13 @@ export function InsertAlterRowForm(props: {
   markDirty: () => void;
   rowsRefetch: () => void;
   schema: Table;
-  row?: Row;
+  row?: FormRow;
 }) {
   const original = props.row
     ? JSON.parse(JSON.stringify(props.row))
     : undefined;
 
-  const form = createForm<Row>(() => ({
+  const form = createForm<FormRow>(() => ({
     defaultValues: props.row ?? buildDefault(props.schema),
     onSubmit: async ({ value }) => {
       console.debug("Submitting:", value);

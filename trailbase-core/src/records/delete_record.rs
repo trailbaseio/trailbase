@@ -165,7 +165,7 @@ mod test {
       Path("messages_api".to_string()),
       Query(CreateRecordQuery::default()),
       User::from_auth_token(state, auth_token),
-      Either::Json(create_json),
+      Either::Json(json_row_from_value(create_json).unwrap()),
     )
     .await;
 

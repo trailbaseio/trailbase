@@ -3,7 +3,7 @@ use axum::extract::{Path, State};
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::json_to_sql::{LazyParams, UpdateQueryBuilder};
+use crate::records::json_to_sql::{JsonRow, LazyParams, UpdateQueryBuilder};
 use crate::records::{Permission, RecordError};
 
 /// Update existing record.
@@ -19,7 +19,7 @@ pub async fn update_record_handler(
   State(state): State<AppState>,
   Path((api_name, record)): Path<(String, String)>,
   user: Option<User>,
-  either_request: Either<serde_json::Value>,
+  either_request: Either<JsonRow>,
 ) -> Result<(), RecordError> {
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
@@ -146,7 +146,7 @@ mod test {
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
         User::from_auth_token(&state, &user_x_token.auth_token),
-        Either::Json(create_json),
+        Either::Json(json_row_from_value(create_json).unwrap()),
       )
       .await?,
     )
@@ -164,7 +164,7 @@ mod test {
         State(state.clone()),
         Path(("messages_api".to_string(), b64_id.clone())),
         User::from_auth_token(&state, &user_x_token.auth_token),
-        Either::Json(update_json),
+        Either::Json(json_row_from_value(update_json).unwrap()),
       )
       .await;
 
@@ -189,7 +189,7 @@ mod test {
         State(state.clone()),
         Path(("messages_api".to_string(), b64_id.clone())),
         User::from_auth_token(&state, &user_y_token.auth_token),
-        Either::Json(update_json),
+        Either::Json(json_row_from_value(update_json).unwrap()),
       )
       .await;
 
