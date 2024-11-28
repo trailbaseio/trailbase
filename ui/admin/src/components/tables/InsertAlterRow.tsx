@@ -116,14 +116,12 @@ export function InsertAlterRowForm(props: {
   const form = createForm<FormRow>(() => ({
     defaultValues: props.row ?? buildDefault(props.schema),
     onSubmit: async ({ value }) => {
-      console.debug("Submitting:", value);
+      console.debug(`Submitting {original ? "update" : "insert"}:`, value);
       try {
         if (original) {
-          const response = await updateRow(props.schema, value);
-          console.debug("UpdateRowResponse:", response);
+          await updateRow(props.schema, value);
         } else {
-          const response = await insertRow(props.schema.name, value);
-          console.debug("InsertRowResponse:", response);
+          await insertRow(props.schema.name, value);
         }
 
         props.rowsRefetch();
@@ -170,11 +168,21 @@ export function InsertAlterRowForm(props: {
                   name={col.name}
                   validators={{
                     onChange: ({ value }: { value: string | undefined }) => {
+                      if (value !== undefined) {
+                        // TODO: Better input validation
+                        if (value === "" && col.data_type !== "Text") {
+                          return `Invalid value for: ${col.data_type}`;
+                        }
+                        return undefined;
+                      }
+
                       const defaultValue = getDefaultValue(col.options);
                       if (defaultValue !== undefined) {
                         return undefined;
                       }
-                      return value !== undefined ? undefined : "Missing value";
+                      if (isNotNull(col.options)) {
+                        return `Missing value for ${col.name}`;
+                      }
                     },
                   }}
                   children={formFieldBuilder(
