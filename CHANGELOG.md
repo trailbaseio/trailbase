@@ -1,3 +1,8 @@
+## v0.2.6
+
+* Type JSON more strictly.
+* Fix input validation for nullable columns in the insert/edit row Admin UI form.
+
 ## v0.2.5
 
 * Addresses issues reported by reddit user *qwacko* 🙏
