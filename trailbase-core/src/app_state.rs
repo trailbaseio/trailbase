@@ -148,6 +148,17 @@ impl AppState {
     return self.state.dev;
   }
 
+  pub fn foo(&self) -> &'static rusqlite::Connection {
+    lazy_static::lazy_static! {
+      static ref BAR: thread_local::ThreadLocal<rusqlite::Connection> = thread_local::ThreadLocal::<rusqlite::Connection>::new();
+    }
+
+    #[cfg(not(test))]
+    return BAR.get_or(|| rusqlite::Connection::open(self.data_dir().main_db_path()).unwrap());
+    #[cfg(test)]
+    return BAR.get_or(|| rusqlite::Connection::open_in_memory().unwrap());
+  }
+
   pub fn conn(&self) -> &Connection {
     return &self.state.conn;
   }

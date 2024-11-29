@@ -3002,16 +3002,6 @@ dependencies = [
 
 [[package]]
 name = "libsql-ffi"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5919d202c2d296b4c44b6877d1b67fe6ad8f18520ce74bd70a29c383e44ccbee"
-dependencies = [
- "bindgen 0.66.1",
- "cc",
-]
-
-[[package]]
-name = "libsql-ffi"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f2a50a585a1184a43621a9133b7702ba5cb7a87ca5e704056b19d8005de6faf"
@@ -3022,15 +3012,15 @@ dependencies = [
 
 [[package]]
 name = "libsql-rusqlite"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b811f72e13b9864601197d234621ffe89a490b2cb034cf28753b111334cf1db3"
+checksum = "ae65c66088dcd309abbd5617ae046abac2a2ee0a7fdada5127353bd68e0a27ea"
 dependencies = [
  "bitflags",
  "fallible-iterator 0.2.0",
  "fallible-streaming-iterator",
  "hashlink",
- "libsql-ffi 0.4.1",
+ "libsql-ffi",
  "smallvec",
 ]
 
@@ -3041,7 +3031,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c05b61c226781d6f5e26e3e7364617f19c0c1d5332035802e9229d6024cec05"
 dependencies = [
  "bytes",
- "libsql-ffi 0.5.0",
+ "libsql-ffi",
  "once_cell",
  "tracing",
  "zerocopy",
@@ -5104,7 +5094,7 @@ version = "0.0.1"
 dependencies = [
  "bindgen 0.70.1",
  "cc",
- "libsql-ffi 0.5.0",
+ "libsql-ffi",
 ]
 
 [[package]]
@@ -5124,7 +5114,7 @@ name = "sqlite-loadable"
 version = "0.0.6-alpha.6"
 dependencies = [
  "bitflags",
- "libsql-ffi 0.5.0",
+ "libsql-ffi",
  "serde",
  "serde_json",
  "sqlite-loadable-macros",
@@ -6098,6 +6088,7 @@ dependencies = [
  "sqlite3-parser",
  "temp-dir",
  "thiserror 2.0.3",
+ "thread_local",
  "tokio",
  "tower 0.5.1",
  "tower-cookies",

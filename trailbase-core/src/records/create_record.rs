@@ -7,7 +7,7 @@ use utoipa::{IntoParams, ToSchema};
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::json_to_sql::{InsertQueryBuilder, JsonRow, LazyParams};
+use crate::records::json_to_sql::{InsertQueryBuilder, InsertQueryBuilder2, JsonRow, LazyParams};
 use crate::records::{Permission, RecordError};
 use crate::schema::ColumnDataType;
 
@@ -91,33 +91,47 @@ pub async fn create_record_handler(
   }
 
   let pk_column = api.record_pk_column();
-  let row = InsertQueryBuilder::run(
+  // let row = InsertQueryBuilder::run(
+  //   &state,
+  //   params,
+  //   api.insert_conflict_resolution_strategy(),
+  //   Some(&pk_column.name),
+  // )
+  // .await
+  // .map_err(|err| RecordError::Internal(err.into()))?;
+  //
+  // if let Some(redirect_to) = create_record_query.redirect_to {
+  //   return Ok(Redirect::to(&redirect_to).into_response());
+  // }
+  //
+  // return Ok(
+  //   Json(CreateRecordResponse {
+  //     id: match pk_column.data_type {
+  //       ColumnDataType::Blob => BASE64_URL_SAFE.encode(row.get::<[u8; 16]>(0)?),
+  //       ColumnDataType::Integer => row.get::<i64>(0)?.to_string(),
+  //       _ => {
+  //         return Err(RecordError::Internal(
+  //           format!("Unexpected data type: {:?}", pk_column.data_type).into(),
+  //         ));
+  //       }
+  //     },
+  //   })
+  //   .into_response(),
+  // );
+
+  let id = InsertQueryBuilder2::run(
     &state,
     params,
     api.insert_conflict_resolution_strategy(),
-    Some(&pk_column.name),
+    pk_column.clone(),
   )
   .await
   .map_err(|err| RecordError::Internal(err.into()))?;
-
   if let Some(redirect_to) = create_record_query.redirect_to {
     return Ok(Redirect::to(&redirect_to).into_response());
   }
 
-  return Ok(
-    Json(CreateRecordResponse {
-      id: match pk_column.data_type {
-        ColumnDataType::Blob => BASE64_URL_SAFE.encode(row.get::<[u8; 16]>(0)?),
-        ColumnDataType::Integer => row.get::<i64>(0)?.to_string(),
-        _ => {
-          return Err(RecordError::Internal(
-            format!("Unexpected data type: {:?}", pk_column.data_type).into(),
-          ));
-        }
-      },
-    })
-    .into_response(),
-  );
+  return Ok(Json(CreateRecordResponse { id }).into_response());
 }
 
 #[cfg(test)]
