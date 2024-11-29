@@ -1,8 +1,7 @@
 use axum::extract::{Json, State};
 use lazy_static::lazy_static;
-use libsql::{de, params};
 use serde::{Deserialize, Serialize};
-use trailbase_sqlite::query_one_row;
+use tokio_rusqlite::params;
 use ts_rs::TS;
 use utoipa::ToSchema;
 
@@ -74,15 +73,16 @@ pub(crate) async fn auth_code_to_token_handler(
     );
   }
 
-  let db_user: DbUser = de::from_row(
-    &query_one_row(
-      state.user_conn(),
+  let Some(db_user) = state
+    .user_conn()
+    .query_value::<DbUser>(
       &UPDATE_QUERY,
       params!(authorization_code, pkce_code_challenge),
     )
-    .await?,
-  )
-  .map_err(|err| AuthError::Internal(err.into()))?;
+    .await?
+  else {
+    return Err(AuthError::NotFound);
+  };
 
   let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   let user_id = db_user.uuid();

@@ -24,7 +24,6 @@ pub async fn create_table_handler(
   State(state): State<AppState>,
   Json(request): Json<CreateTableRequest>,
 ) -> Result<Json<CreateTableResponse>, Error> {
-  let conn = state.conn();
   if request.schema.columns.is_empty() {
     return Err(Error::Precondition(
       "Tables need to have at least one column".to_string(),
@@ -34,27 +33,36 @@ pub async fn create_table_handler(
   let table_name = request.schema.name.clone();
 
   // This contains the create table statement and may also contain indexes and triggers.
-  let query = request.schema.create_table_statement();
+  let create_table_query = request.schema.create_table_statement();
 
   if !dry_run {
-    let mut tx = TransactionRecorder::new(
-      conn.clone(),
-      state.data_dir().migrations_path(),
-      format!("create_table_{table_name}"),
-    )
-    .await?;
+    let create_table_query = create_table_query.clone();
+    let migration_path = state.data_dir().migrations_path();
+    let conn = state.conn();
+    let writer = conn
+      .call(move |conn| {
+        let mut tx =
+          TransactionRecorder::new(conn, migration_path, format!("create_table_{table_name}"))?;
 
-    tx.query(&query).await?;
+        tx.execute(&create_table_query)?;
+
+        return tx
+          .rollback_and_create_migration()
+          .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
+      })
+      .await?;
 
     // Write to migration file.
-    tx.commit_and_create_migration().await?;
+    if let Some(writer) = writer {
+      let _report = writer.write(conn).await?;
+    }
 
     state.table_metadata().invalidate_all().await?;
   }
 
   return Ok(Json(CreateTableResponse {
     sql: sqlformat::format(
-      format!("{query};").as_str(),
+      format!("{create_table_query};").as_str(),
       &sqlformat::QueryParams::None,
       &sqlformat::FormatOptions {
         ignore_case_convert: None,

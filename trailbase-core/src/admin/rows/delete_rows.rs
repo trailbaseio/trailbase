@@ -99,7 +99,6 @@ pub async fn delete_rows_handler(
 #[cfg(test)]
 mod tests {
   use axum::extract::{Json, Path, RawQuery, State};
-  use trailbase_sqlite::query_one_row;
 
   use super::*;
   use crate::admin::rows::insert_row::insert_row;
@@ -184,8 +183,10 @@ mod tests {
     };
 
     let count = || async {
-      query_one_row(conn, &format!("SELECT COUNT(*) FROM '{table_name}'"), ())
+      conn
+        .query_row(&format!("SELECT COUNT(*) FROM '{table_name}'"), ())
         .await
+        .unwrap()
         .unwrap()
         .get::<i64>(0)
         .unwrap()

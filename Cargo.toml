@@ -6,8 +6,8 @@ members = [
   "trailbase-core",
   "trailbase-extension",
   "trailbase-sqlite",
-  "vendor/refinery-libsql",
   "vendor/sqlean",
+  "vendor/tokio-rusqlite",
 ]
 default-members = [
   "trailbase-cli",
@@ -30,12 +30,10 @@ lto = true
 codegen-units = 1
 
 [workspace.dependencies]
-libsql = { package = "libsql", version = "^0.6.0", default-features = false, features = ["core", "serde"] }
-refinery = { package = "refinery", path = "vendor/refinery/refinery", default-features = false }
+refinery = { package = "refinery", path = "vendor/refinery/refinery", default-features = false, features = ["rusqlite"] }
 refinery-core = { package = "refinery-core", path = "vendor/refinery/refinery_core" }
-refinery-libsql = { package = "refinery-libsql", path = "vendor/refinery-libsql" }
-rusqlite = { package = "libsql-rusqlite", version = "^0.32", default-features = false, features = [
-    "libsql-experimental",
+rusqlite = { version = "^0.32.1", default-features = false, features = [
+    "bundled",
     "column_decltype",
     "load_extension",
     "modern_sqlite",
@@ -43,4 +41,6 @@ rusqlite = { package = "libsql-rusqlite", version = "^0.32", default-features = 
     "limits",
     "backup",
 ] }
-sqlite-loadable = { package = "sqlite-loadable", path = "./vendor/sqlite-loadable", features=["static"] }
+serde_rusqlite = { package = "serde_rusqlite", path = "./vendor/serde_rusqlite" }
+sqlite-loadable = { package = "sqlite-loadable", path = "./vendor/sqlite-loadable", features=["static"]  }
+tokio-rusqlite = { package = "tokio-rusqlite", path = "./vendor/tokio-rusqlite" }

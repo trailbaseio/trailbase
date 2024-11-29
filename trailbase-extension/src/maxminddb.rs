@@ -61,38 +61,33 @@ pub(crate) fn geoip_country(
 mod tests {
   use super::*;
 
-  use crate::query_row;
-
-  #[tokio::test]
-  async fn test_explicit_jsonschema() {
+  #[test]
+  fn test_explicit_jsonschema() {
     let ip = "89.160.20.112";
-    let conn = crate::connect().await.unwrap();
+    let conn = crate::connect().unwrap();
 
-    let cc: Option<String> = query_row(&conn, &format!("SELECT geoip_country('{ip}')"), ())
-      .await
-      .unwrap()
-      .unwrap()
-      .get(0)
+    let cc: Option<String> = conn
+      .query_row(&format!("SELECT geoip_country('{ip}')"), (), |row| {
+        row.get(0)
+      })
       .unwrap();
 
     assert_eq!(cc, None);
 
     load_geoip_db("testdata/GeoIP2-Country-Test.mmdb").unwrap();
 
-    let cc: String = query_row(&conn, &format!("SELECT geoip_country('{ip}')"), ())
-      .await
-      .unwrap()
-      .unwrap()
-      .get(0)
+    let cc: String = conn
+      .query_row(&format!("SELECT geoip_country('{ip}')"), (), |row| {
+        row.get(0)
+      })
       .unwrap();
 
     assert_eq!(cc, "SE");
 
-    let cc: Option<String> = query_row(&conn, &format!("SELECT geoip_country('127.0.0.1')"), ())
-      .await
-      .unwrap()
-      .unwrap()
-      .get(0)
+    let cc: Option<String> = conn
+      .query_row(&format!("SELECT geoip_country('127.0.0.1')"), (), |row| {
+        row.get(0)
+      })
       .unwrap();
 
     assert_eq!(cc, None);

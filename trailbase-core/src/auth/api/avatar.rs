@@ -1,9 +1,8 @@
 use axum::extract::{Json, Path, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
-use libsql::params;
 use serde::{Deserialize, Serialize};
-use trailbase_sqlite::query_one_row;
+use tokio_rusqlite::params;
 use trailbase_sqlite::schema::FileUpload;
 use uuid::Uuid;
 
@@ -15,7 +14,7 @@ use crate::constants::{AVATAR_TABLE, RECORD_API_PATH};
 use crate::util::{assert_uuidv7_version, id_to_b64};
 
 async fn get_avatar_url(state: &AppState, user: &DbUser) -> Option<String> {
-  if let Ok(row) = query_one_row(
+  if let Ok(row) = crate::util::query_one_row(
     state.user_conn(),
     &format!("SELECT EXISTS(SELECT user FROM '{AVATAR_TABLE}' WHERE user = $1)"),
     params!(user.id),
@@ -101,8 +100,6 @@ mod tests {
   use axum::http;
   use axum::response::Response;
   use axum_test::multipart::{MultipartForm, Part};
-  use libsql::de;
-  use trailbase_sqlite::query_one_row;
 
   use super::*;
   use crate::admin::user::create_user_for_test;
@@ -197,16 +194,15 @@ mod tests {
 
     let user_x_token = login_with_password(&state, email, password).await.unwrap();
 
-    let db_user: DbUser = de::from_row(
-      &query_one_row(
-        state.user_conn(),
+    let db_user = state
+      .user_conn()
+      .query_value::<DbUser>(
         &format!("SELECT * FROM '{USER_TABLE}' WHERE email = $1"),
-        [email],
+        (email,),
       )
       .await
-      .unwrap(),
-    )
-    .unwrap();
+      .unwrap()
+      .unwrap();
 
     let missing_profile_response = get_avatar_url_handler(
       State(state.clone()),

@@ -2,13 +2,11 @@ use axum::body::Body;
 use axum::http::{header::HeaderMap, Request};
 use axum::response::Response;
 use axum_client_ip::InsecureClientIp;
-use libsql::{params, Connection};
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::time::Duration;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tracing::field::Field;
 use tracing::span::{Attributes, Id, Record, Span};
 use tracing_subscriber::layer::{Context, Layer};
@@ -55,41 +53,6 @@ pub(crate) struct Log {
   pub user_agent: String,
 
   pub data: Option<serde_json::Value>,
-}
-
-// The writer runs in a separate Task in the background and receives Logs via a channel, which it
-// then writes to Sqlite.
-//
-// TODO: should we use a bound receiver to create back pressure?
-// TODO: use recv_many() and batch insert.
-async fn logs_writer(logs_conn: Connection, mut receiver: UnboundedReceiver<Log>) {
-  while let Some(log) = receiver.recv().await {
-    let result = logs_conn
-      .execute(
-        r#"
-        INSERT INTO
-          _logs (type, level, status, method, url, latency, client_ip, referer, user_agent)
-        VALUES
-          ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      "#,
-        params!(
-          log.r#type,
-          log.level,
-          log.status,
-          log.method,
-          log.url,
-          log.latency,
-          log.client_ip,
-          log.referer,
-          log.user_agent
-        ),
-      )
-      .await;
-
-    if let Err(err) = result {
-      warn!("logs writing failed: {err}");
-    }
-  }
 }
 
 pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
@@ -143,28 +106,47 @@ pub(super) fn sqlite_logger_on_response(
 }
 
 pub struct SqliteLogLayer {
-  sender: UnboundedSender<Log>,
-  handle: tokio::task::AbortHandle,
+  conn: tokio_rusqlite::Connection,
 }
 
 impl SqliteLogLayer {
   pub fn new(state: &AppState) -> Self {
-    let (sender, abort_handle) = {
-      let (sender, receiver) = tokio::sync::mpsc::unbounded_channel::<Log>();
-      let writer = tokio::spawn(logs_writer(state.logs_conn().clone(), receiver));
-      (sender, writer.abort_handle())
-    };
-
     return SqliteLogLayer {
-      sender,
-      handle: abort_handle,
+      conn: state.logs_conn().clone(),
     };
   }
-}
 
-impl Drop for SqliteLogLayer {
-  fn drop(&mut self) {
-    self.handle.abort();
+  // The writer runs in a separate Task in the background and receives Logs via a channel, which it
+  // then writes to Sqlite.
+  //
+  // TODO: should we use a bound receiver to create back pressure?
+  // TODO: use recv_many() and batch insert.
+  fn write_log(&self, log: Log) -> Result<(), tokio_rusqlite::Error> {
+    return self.conn.call_and_forget(move |conn| {
+      let result = conn.execute(
+        r#"
+        INSERT INTO
+          _logs (type, level, status, method, url, latency, client_ip, referer, user_agent)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      "#,
+        rusqlite::params!(
+          log.r#type,
+          log.level,
+          log.status,
+          log.method,
+          log.url,
+          log.latency,
+          log.client_ip,
+          log.referer,
+          log.user_agent
+        ),
+      );
+
+      if let Err(err) = result {
+        warn!("logs writing failed: {err}");
+      }
+    });
   }
 }
 
@@ -243,7 +225,7 @@ where
         data: Some(json!(storage.fields)),
       };
 
-      if let Err(err) = self.sender.send(log) {
+      if let Err(err) = self.write_log(log) {
         warn!("Failed to send to logs to writer: {err}");
       }
     }

@@ -1,27 +1,13 @@
-use libsql::{params, Value::Text};
+/// This is a very simple binary demonstrating how TrailBase's SQLite extensions (e.g. uuid_v7)
+/// can be used outside of TrailBase, thus avoiding lock-in.
 use trailbase_sqlite::connect_sqlite;
 
-// NOTE: This binary demonstrates calling statically linked extensions, i.e. uuid_v7().
-// NOTE: It also shows that libsql and sqlite_loadable can both be linked into the same binary
-// despite both pulling in sqlite3 symbols through libsql-ffi and sqlite3ext-sys, respectively.
-// Wasn't able to reproduce this in a larger binary :shrug:.
+fn main() {
+  let conn = connect_sqlite(None, None).unwrap();
 
-#[tokio::main]
-async fn main() {
-  let conn = connect_sqlite(None, None).await.unwrap();
+  let mut stmt = conn.prepare("SELECT (uuid_v7_text())").unwrap();
 
-  conn
-    .query("SELECT 1", params!(Text("FOO".to_string())))
-    .await
-    .unwrap();
-
-  let uuid = conn
-    .prepare("SELECT (uuid_v7_text())")
-    .await
-    .unwrap()
-    .query_row(())
-    .await
-    .unwrap();
+  let uuid: String = stmt.query_row((), |row| row.get(0)).unwrap();
 
   println!("Done! {uuid:?}");
 }

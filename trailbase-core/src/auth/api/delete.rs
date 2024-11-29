@@ -28,7 +28,7 @@ pub(crate) async fn delete_handler(
     .user_conn()
     .execute(
       &format!("DELETE FROM '{USER_TABLE}' WHERE id = $1"),
-      [user.uuid.into_bytes().to_vec()],
+      [tokio_rusqlite::Value::Blob(user.uuid.into_bytes().to_vec())],
     )
     .await?;
 

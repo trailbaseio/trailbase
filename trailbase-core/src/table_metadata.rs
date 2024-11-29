@@ -1,7 +1,6 @@
 use fallible_iterator::FallibleIterator;
 use jsonschema::Validator;
 use lazy_static::lazy_static;
-use libsql::{params, Connection};
 use log::*;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -10,7 +9,7 @@ use sqlite3_parser::ast::Stmt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use trailbase_sqlite::query_one_row;
+use tokio_rusqlite::params;
 
 use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
 use crate::schema::{Column, ColumnDataType, ColumnOption, ForeignKey, SchemaError, Table, View};
@@ -439,7 +438,7 @@ fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<u
 }
 
 struct TableMetadataCacheState {
-  conn: libsql::Connection,
+  conn: tokio_rusqlite::Connection,
   tables: parking_lot::RwLock<HashMap<String, Arc<TableMetadata>>>,
   views: parking_lot::RwLock<HashMap<String, Arc<ViewMetadata>>>,
 }
@@ -450,7 +449,7 @@ pub struct TableMetadataCache {
 }
 
 impl TableMetadataCache {
-  pub async fn new(conn: libsql::Connection) -> Result<Self, TableLookupError> {
+  pub async fn new(conn: tokio_rusqlite::Connection) -> Result<Self, TableLookupError> {
     let (table_map, tables) = Self::build_tables(&conn).await?;
     let views = Self::build_views(&conn, &tables).await?;
 
@@ -464,7 +463,7 @@ impl TableMetadataCache {
   }
 
   async fn build_tables(
-    conn: &libsql::Connection,
+    conn: &tokio_rusqlite::Connection,
   ) -> Result<(HashMap<String, Arc<TableMetadata>>, Vec<Table>), TableLookupError> {
     let tables = lookup_and_parse_all_table_schemas(conn).await?;
     let build = |table: &Table| {
@@ -478,7 +477,7 @@ impl TableMetadataCache {
   }
 
   async fn build_views(
-    conn: &libsql::Connection,
+    conn: &tokio_rusqlite::Connection,
     tables: &[Table],
   ) -> Result<HashMap<String, Arc<ViewMetadata>>, TableLookupError> {
     let views = lookup_and_parse_all_view_schemas(conn, tables).await?;
@@ -522,8 +521,10 @@ impl std::fmt::Debug for TableMetadataCache {
 
 #[derive(Debug, Error)]
 pub enum TableLookupError {
-  #[error("SQL error: {0}")]
-  Sql(#[from] libsql::Error),
+  #[error("SQL2 error: {0}")]
+  Sql(#[from] tokio_rusqlite::Error),
+  #[error("SQL3 error: {0}")]
+  FromSql(#[from] rusqlite::types::FromSqlError),
   #[error("Schema error: {0}")]
   Schema(#[from] SchemaError),
   #[error("Missing")]
@@ -533,14 +534,14 @@ pub enum TableLookupError {
 }
 
 pub async fn lookup_and_parse_table_schema(
-  conn: &Connection,
+  conn: &tokio_rusqlite::Connection,
   table_name: &str,
 ) -> Result<Table, TableLookupError> {
   // Then get the actual table.
-  let sql: String = query_one_row(
+  let sql: String = crate::util::query_one_row(
     conn,
     &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1"),
-    params!(table_name),
+    params!(table_name.to_string()),
   )
   .await?
   .get(0)?;
@@ -614,10 +615,10 @@ pub(crate) fn sqlite3_parse_into_statement(
 }
 
 pub async fn lookup_and_parse_all_table_schemas(
-  conn: &Connection,
+  conn: &tokio_rusqlite::Connection,
 ) -> Result<Vec<Table>, TableLookupError> {
   // Then get the actual table.
-  let mut rows = conn
+  let rows = conn
     .query(
       &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table'"),
       (),
@@ -625,7 +626,7 @@ pub async fn lookup_and_parse_all_table_schemas(
     .await?;
 
   let mut tables: Vec<Table> = vec![];
-  while let Some(row) = rows.next().await? {
+  for row in rows.iter() {
     let sql: String = row.get(0)?;
     let Some(stmt) = sqlite3_parse_into_statement(&sql)? else {
       return Err(TableLookupError::Missing);
@@ -651,11 +652,11 @@ fn sqlite3_parse_view(sql: &str, tables: &[Table]) -> Result<View, TableLookupEr
 }
 
 pub async fn lookup_and_parse_all_view_schemas(
-  conn: &Connection,
+  conn: &tokio_rusqlite::Connection,
   tables: &[Table],
 ) -> Result<Vec<View>, TableLookupError> {
   // Then get the actual table.
-  let mut rows = conn
+  let rows = conn
     .query(
       &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'view'"),
       (),
@@ -663,7 +664,7 @@ pub async fn lookup_and_parse_all_view_schemas(
     .await?;
 
   let mut views: Vec<View> = vec![];
-  while let Some(row) = rows.next().await? {
+  for row in rows.iter() {
     let sql: String = row.get(0)?;
     views.push(sqlite3_parse_view(&sql, tables)?);
   }
@@ -964,8 +965,10 @@ mod tests {
     .await
     .is_ok());
 
-    let cnt: i64 = query_one_row(conn, "SELECT COUNT(*) FROM test_table", ())
+    let cnt: i64 = conn
+      .query_row("SELECT COUNT(*) FROM test_table", ())
       .await
+      .unwrap()
       .unwrap()
       .get(0)
       .unwrap();

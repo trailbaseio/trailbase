@@ -4,14 +4,13 @@ use axum::{
 };
 use chrono::Duration;
 use lazy_static::lazy_static;
-use libsql::{de, named_params, params, Connection};
 use oauth2::PkceCodeVerifier;
 use oauth2::{AsyncHttpClient, HttpClientError, HttpRequest, HttpResponse};
 use oauth2::{AuthorizationCode, StandardTokenResponse, TokenResponse};
 use serde::Deserialize;
 use thiserror::Error;
+use tokio_rusqlite::{named_params, params};
 use tower_cookies::Cookies;
-use trailbase_sqlite::query_one_row;
 
 use crate::auth::oauth::state::{OAuthState, ResponseType};
 use crate::auth::oauth::OAuthUser;
@@ -254,7 +253,7 @@ pub(crate) async fn callback_from_external_auth_provider(
 }
 
 async fn create_user_for_external_provider(
-  conn: &Connection,
+  conn: &tokio_rusqlite::Connection,
   user: &OAuthUser,
 ) -> Result<uuid::Uuid, AuthError> {
   if !user.verified {
@@ -273,7 +272,7 @@ async fn create_user_for_external_provider(
     );
   }
 
-  let row = query_one_row(
+  let row = crate::util::query_one_row(
     conn,
     &QUERY,
     named_params! {
@@ -286,11 +285,15 @@ async fn create_user_for_external_provider(
   )
   .await?;
 
-  return Ok(uuid::Uuid::from_bytes(row.get::<[u8; 16]>(0)?));
+  return Ok(uuid::Uuid::from_bytes(
+    row
+      .get::<[u8; 16]>(0)
+      .map_err(|err| AuthError::Internal(err.into()))?,
+  ));
 }
 
 async fn user_by_provider_id(
-  conn: &Connection,
+  conn: &tokio_rusqlite::Connection,
   provider_id: OAuthProviderId,
   provider_user_id: &str,
 ) -> Result<DbUser, AuthError> {
@@ -299,8 +302,12 @@ async fn user_by_provider_id(
       format!("SELECT * FROM '{USER_TABLE}' WHERE provider_id = $1 AND provider_user_id = $2");
   };
 
-  return de::from_row(
-    &query_one_row(conn, &QUERY, params!(provider_id as i64, provider_user_id)).await?,
-  )
-  .map_err(|err| AuthError::Internal(err.into()));
+  return conn
+    .query_value::<DbUser>(
+      &QUERY,
+      params!(provider_id as i64, provider_user_id.to_string()),
+    )
+    .await
+    .map_err(|err| AuthError::Internal(err.into()))?
+    .ok_or_else(|| AuthError::NotFound);
 }

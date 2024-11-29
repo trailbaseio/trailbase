@@ -3,10 +3,8 @@ use axum::{
   Json,
 };
 use lazy_static::lazy_static;
-use libsql::{de, params::Params, Connection};
 use log::*;
 use serde::Serialize;
-use trailbase_sqlite::query_one_row;
 use ts_rs::TS;
 use uuid::Uuid;
 
@@ -78,10 +76,10 @@ pub async fn list_users_handler(
 
   let total_row_count = {
     let where_clause = &filter_where_clause.clause;
-    let row = query_one_row(
+    let row = crate::util::query_one_row(
       conn,
       &format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE {where_clause}"),
-      Params::Named(filter_where_clause.params.clone()),
+      filter_where_clause.params.clone(),
     )
     .await?;
 
@@ -112,7 +110,7 @@ pub async fn list_users_handler(
 }
 
 async fn fetch_users(
-  conn: &Connection,
+  conn: &tokio_rusqlite::Connection,
   filter_where_clause: WhereClause,
   cursor: Option<[u8; 16]>,
   order: Vec<(String, Order)>,
@@ -120,10 +118,16 @@ async fn fetch_users(
 ) -> Result<Vec<DbUser>, Error> {
   let mut params = filter_where_clause.params;
   let mut where_clause = filter_where_clause.clause;
-  params.push((":limit".to_string(), libsql::Value::Integer(limit as i64)));
+  params.push((
+    ":limit".to_string(),
+    tokio_rusqlite::Value::Integer(limit as i64),
+  ));
 
   if let Some(cursor) = cursor {
-    params.push((":cursor".to_string(), libsql::Value::Blob(cursor.to_vec())));
+    params.push((
+      ":cursor".to_string(),
+      tokio_rusqlite::Value::Blob(cursor.to_vec()),
+    ));
     where_clause = format!("{where_clause} AND _row_.id < :cursor",);
   }
 
@@ -156,15 +160,6 @@ async fn fetch_users(
 
   info!("PARAMS: {params:?}\nQUERY: {sql_query}");
 
-  let mut rows = conn.query(&sql_query, Params::Named(params)).await?;
-
-  let mut users: Vec<DbUser> = vec![];
-  while let Ok(Some(row)) = rows.next().await {
-    match de::from_row(&row) {
-      Ok(user) => users.push(user),
-      Err(err) => warn!("failed: {err}"),
-    };
-  }
-
+  let users = conn.query_values::<DbUser>(&sql_query, params).await?;
   return Ok(users);
 }

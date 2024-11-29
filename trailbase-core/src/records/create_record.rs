@@ -84,7 +84,7 @@ pub async fn create_record_handler(
     if !missing_columns.is_empty() {
       if let Some(user) = user {
         for col in missing_columns {
-          params.push_param(col, libsql::Value::Blob(user.uuid.into()));
+          params.push_param(col, tokio_rusqlite::Value::Blob(user.uuid.into()));
         }
       }
     }
@@ -107,8 +107,15 @@ pub async fn create_record_handler(
   return Ok(
     Json(CreateRecordResponse {
       id: match pk_column.data_type {
-        ColumnDataType::Blob => BASE64_URL_SAFE.encode(row.get::<[u8; 16]>(0)?),
-        ColumnDataType::Integer => row.get::<i64>(0)?.to_string(),
+        ColumnDataType::Blob => BASE64_URL_SAFE.encode(
+          row
+            .get::<[u8; 16]>(0)
+            .map_err(|err| RecordError::Internal(err.into()))?,
+        ),
+        ColumnDataType::Integer => row
+          .get::<i64>(0)
+          .map_err(|err| RecordError::Internal(err.into()))?
+          .to_string(),
         _ => {
           return Err(RecordError::Internal(
             format!("Unexpected data type: {:?}", pk_column.data_type).into(),

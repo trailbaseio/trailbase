@@ -29,9 +29,6 @@ fn build_object() {
 
   let mut cfg = cc::Build::new();
 
-  // Try to be consistent with:
-  //   https://github.com/tursodatabase/libsql/blob/7521bc0d91f34a8a3b8776efe32aa0d20f20bf55/libsql-ffi/build.rs#L111
-  //
   // Most importantly, define SQLITE_CORE to avoid dyn sqlite3_api symbol dep.
   cfg
     .flag("-std=c11")
@@ -68,8 +65,8 @@ fn build_object() {
   println!("cargo:rustc-link-search={PATH}/define");
   println!("cargo:rustc-link-lib=define");
 
-  // Link sqlite lib from libsql-ffi.
-  println!("cargo:rustc-link-lib=libsql");
+  // Link sqlite.
+  println!("cargo:rustc-link-lib=sqlite3");
 }
 
 fn main() {

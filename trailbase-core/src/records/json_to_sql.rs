@@ -5,12 +5,12 @@ use object_store::ObjectStore;
 use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Arc;
 use trailbase_sqlite::schema::{FileUpload, FileUploadInput, FileUploads};
-use trailbase_sqlite::{query_one_row, query_row};
 
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::files::delete_files_in_row;
 use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{self, ColumnMetadata, JsonColumnMetadata, TableMetadata};
+use crate::util::query_one_row;
 use crate::AppState;
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -41,16 +41,8 @@ pub enum ParamsError {
   JsonSerialization(Arc<serde_json::Error>),
   #[error("Json schema error: {0}")]
   Schema(#[from] trailbase_sqlite::schema::SchemaError),
-  #[error("Sql error: {0}")]
-  Sql(Arc<libsql::Error>),
   #[error("ObjectStore error: {0}")]
   Storage(Arc<object_store::Error>),
-}
-
-impl From<libsql::Error> for ParamsError {
-  fn from(err: libsql::Error) -> Self {
-    return Self::Sql(Arc::new(err));
-  }
 }
 
 impl From<serde_json::Error> for ParamsError {
@@ -70,7 +62,11 @@ pub enum QueryError {
   #[error("Precondition error: {0}")]
   Precondition(&'static str),
   #[error("Sql error: {0}")]
-  Sql(Arc<libsql::Error>),
+  Sql(Arc<rusqlite::Error>),
+  #[error("FromSql error: {0}")]
+  FromSql(Arc<rusqlite::types::FromSqlError>),
+  #[error("Tokio Rusqlite error: {0}")]
+  TokioRusqlite(Arc<tokio_rusqlite::Error>),
   #[error("Json serialization error: {0}")]
   JsonSerialization(Arc<serde_json::Error>),
   #[error("ObjectStore error: {0}")]
@@ -81,27 +77,33 @@ pub enum QueryError {
   NotFound,
 }
 
-impl From<libsql::Error> for QueryError {
-  fn from(err: libsql::Error) -> Self {
-    return Self::Sql(Arc::new(err));
+impl From<serde_json::Error> for QueryError {
+  fn from(err: serde_json::Error) -> Self {
+    return Self::JsonSerialization(err.into());
   }
 }
 
-impl From<serde_json::Error> for QueryError {
-  fn from(err: serde_json::Error) -> Self {
-    return Self::JsonSerialization(Arc::new(err));
+impl From<tokio_rusqlite::Error> for QueryError {
+  fn from(err: tokio_rusqlite::Error) -> Self {
+    return Self::TokioRusqlite(err.into());
+  }
+}
+
+impl From<rusqlite::types::FromSqlError> for QueryError {
+  fn from(err: rusqlite::types::FromSqlError) -> Self {
+    return Self::FromSql(err.into());
   }
 }
 
 impl From<object_store::Error> for QueryError {
   fn from(err: object_store::Error) -> Self {
-    return Self::Storage(Arc::new(err));
+    return Self::Storage(err.into());
   }
 }
 
 impl From<crate::records::files::FileError> for QueryError {
   fn from(err: crate::records::files::FileError) -> Self {
-    return Self::File(Arc::new(err));
+    return Self::File(err.into());
   }
 }
 
@@ -116,7 +118,7 @@ pub struct Params {
 
   /// List of named params with their respective placeholders, e.g.:
   ///   '(":col_name": Value::Text("hi"))'.
-  params: Vec<(String, libsql::Value)>,
+  params: Vec<(String, tokio_rusqlite::Value)>,
 
   /// List of columns that are targeted by the params. Useful for building Insert/Update queries.
   ///
@@ -132,7 +134,7 @@ pub struct Params {
 }
 
 impl Params {
-  /// Converts a top-level Json object into libsql::Values and extract files.
+  /// Converts a top-level Json object into tokio_rusqlite::Values and extract files.
   ///
   /// Note: that this function by design is non-recursive, since we're mapping to a flat hierarchy
   /// in sqlite, since even JSON/JSONB is simply text/blob that is lazily parsed.
@@ -208,7 +210,7 @@ impl Params {
     return metadata.column_by_name(field_name);
   }
 
-  pub fn push_param(&mut self, col: String, value: libsql::Value) {
+  pub fn push_param(&mut self, col: String, value: tokio_rusqlite::Value) {
     self.params.push((format!(":{col}"), value));
     self.col_names.push(col);
   }
@@ -217,7 +219,7 @@ impl Params {
     return &self.col_names;
   }
 
-  pub(crate) fn named_params(&self) -> &Vec<(String, libsql::Value)> {
+  pub(crate) fn named_params(&self) -> &Vec<(String, tokio_rusqlite::Value)> {
     &self.params
   }
 
@@ -287,7 +289,7 @@ impl Params {
     for (col_name, file_upload) in file_upload_map {
       self.params.push((
         format!(":{col_name}"),
-        libsql::Value::Text(serde_json::to_string(&file_upload)?),
+        tokio_rusqlite::Value::Text(serde_json::to_string(&file_upload)?),
       ));
       self.col_names.push(col_name.clone());
       self.file_col_names.push(col_name);
@@ -296,7 +298,7 @@ impl Params {
     for (col_name, file_uploads) in file_uploads_map {
       self.params.push((
         format!(":{col_name}"),
-        libsql::Value::Text(serde_json::to_string(&FileUploads(file_uploads))?),
+        tokio_rusqlite::Value::Text(serde_json::to_string(&FileUploads(file_uploads))?),
       ));
       self.col_names.push(col_name.clone());
       self.file_col_names.push(col_name);
@@ -320,14 +322,15 @@ impl SelectQueryBuilder {
     state: &AppState,
     table_name: &str,
     pk_column: &str,
-    pk_value: libsql::Value,
-  ) -> Result<Option<libsql::Row>, libsql::Error> {
-    return query_row(
-      state.conn(),
-      &format!("SELECT * FROM '{table_name}' WHERE {pk_column} = $1"),
-      [pk_value],
-    )
-    .await;
+    pk_value: tokio_rusqlite::Value,
+  ) -> Result<Option<tokio_rusqlite::Row>, tokio_rusqlite::Error> {
+    return state
+      .conn()
+      .query_row(
+        &format!("SELECT * FROM '{table_name}' WHERE {pk_column} = $1"),
+        [pk_value],
+      )
+      .await;
   }
 }
 
@@ -339,18 +342,19 @@ impl GetFileQueryBuilder {
     table_name: &str,
     file_column: (&Column, &ColumnMetadata),
     pk_column: &str,
-    pk_value: libsql::Value,
+    pk_value: tokio_rusqlite::Value,
   ) -> Result<FileUpload, QueryError> {
     return match &file_column.1.json {
       Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUpload" => {
         let column_name = &file_column.0.name;
 
-        let Some(row) = query_row(
-          state.conn(),
-          &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
-          [pk_value],
-        )
-        .await?
+        let Some(row) = state
+          .conn()
+          .query_row(
+            &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
+            [pk_value],
+          )
+          .await?
         else {
           return Err(QueryError::NotFound);
         };
@@ -372,18 +376,19 @@ impl GetFilesQueryBuilder {
     table_name: &str,
     file_column: (&Column, &ColumnMetadata),
     pk_column: &str,
-    pk_value: libsql::Value,
+    pk_value: tokio_rusqlite::Value,
   ) -> Result<FileUploads, QueryError> {
     return match &file_column.1.json {
       Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUploads" => {
         let column_name = &file_column.0.name;
 
-        let Some(row) = query_row(
-          state.conn(),
-          &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
-          [pk_value],
-        )
-        .await?
+        let Some(row) = state
+          .conn()
+          .query_row(
+            &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
+            [pk_value],
+          )
+          .await?
         else {
           return Err(QueryError::NotFound);
         };
@@ -405,7 +410,7 @@ impl InsertQueryBuilder {
     params: Params,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: Option<&str>,
-  ) -> Result<libsql::Row, QueryError> {
+  ) -> Result<tokio_rusqlite::Row, QueryError> {
     let (query_fragment, named_params, mut files) =
       Self::build_insert_query(params, conflict_resolution)?;
     let query = match return_column_name {
@@ -445,7 +450,14 @@ impl InsertQueryBuilder {
   fn build_insert_query(
     params: Params,
     conflict_resolution: Option<ConflictResolutionStrategy>,
-  ) -> Result<(String, libsql::params::Params, FileMetadataContents), QueryError> {
+  ) -> Result<
+    (
+      String,
+      Vec<(String, tokio_rusqlite::Value)>,
+      FileMetadataContents,
+    ),
+    QueryError,
+  > {
     let table_name = &params.table_name;
 
     let conflict_clause = Self::conflict_resolution_clause(
@@ -462,11 +474,7 @@ impl InsertQueryBuilder {
       ),
     };
 
-    return Ok((
-      query,
-      libsql::params::Params::Named(params.params),
-      params.files,
-    ));
+    return Ok((query, params.params, params.files));
   }
 
   fn conflict_resolution_clause(config: ConflictResolutionStrategy) -> &'static str {
@@ -490,7 +498,7 @@ impl UpdateQueryBuilder {
     metadata: &TableMetadata,
     mut params: Params,
     pk_column: &str,
-    pk_value: libsql::Value,
+    pk_value: tokio_rusqlite::Value,
   ) -> Result<(), QueryError> {
     let table_name = metadata.name();
     assert_eq!(params.table_name, *table_name);
@@ -510,12 +518,12 @@ impl UpdateQueryBuilder {
     }
 
     async fn row_update(
-      conn: &libsql::Connection,
+      conn: &tokio_rusqlite::Connection,
       table_name: &str,
       params: Params,
       pk_column: &str,
-      pk_value: libsql::Value,
-    ) -> Result<Option<libsql::Row>, QueryError> {
+      pk_value: tokio_rusqlite::Value,
+    ) -> Result<Option<tokio_rusqlite::Row>, QueryError> {
       let build_setters = || -> String {
         assert_eq!(params.col_names.len(), params.params.len());
         return std::iter::zip(&params.col_names, &params.params)
@@ -524,33 +532,51 @@ impl UpdateQueryBuilder {
       };
 
       let setters = build_setters();
-      let named_params = libsql::params::Params::Named(params.params);
 
-      let tx = conn.transaction().await?;
+      let pk_column = pk_column.to_string();
+      let table_name = table_name.to_string();
+      let files_row = conn
+        .call(move |conn| {
+          let tx = conn.transaction()?;
 
-      // First, fetch updated file column contents so we can delete the files after updating the
-      // column.
-      let files_row = if params.file_col_names.is_empty() {
-        None
-      } else {
-        let file_columns = params.file_col_names.join(", ");
-        query_row(
-          &tx,
-          &format!("SELECT {file_columns} FROM '{table_name}' WHERE {pk_column} = ${pk_column}"),
-          libsql::params::Params::Named(vec![(":pk_column".to_string(), pk_value)]),
-        )
-        .await?
-      };
+          // First, fetch updated file column contents so we can delete the files after updating the
+          // column.
+          let files_row = if params.file_col_names.is_empty() {
+            None
+          } else {
+            let file_columns = params.file_col_names.join(", ");
 
-      // Update the column.
-      let _ = tx
-        .execute(
-          &format!("UPDATE '{table_name}' SET {setters} WHERE {pk_column} = :{pk_column}"),
-          named_params,
-        )
+            let mut stmt = tx.prepare(&format!(
+              "SELECT {file_columns} FROM '{table_name}' WHERE {pk_column} = ${pk_column}"
+            ))?;
+
+            use tokio_rusqlite::Params;
+            [(":pk_column", pk_value)].bind(&mut stmt)?;
+
+            let mut rows = stmt.raw_query();
+            if let Some(row) = rows.next()? {
+              Some(tokio_rusqlite::Row::from_row(row, None)?)
+            } else {
+              None
+            }
+          };
+
+          // Update the column.
+          {
+            let mut stmt = tx.prepare(&format!(
+              "UPDATE '{table_name}' SET {setters} WHERE {pk_column} = :{pk_column}"
+            ))?;
+            use tokio_rusqlite::Params;
+            params.params.bind(&mut stmt)?;
+
+            stmt.raw_execute()?;
+          }
+
+          tx.commit()?;
+
+          return Ok(files_row);
+        })
         .await?;
-
-      tx.commit().await?;
 
       return Ok(files_row);
     }
@@ -589,7 +615,7 @@ impl DeleteQueryBuilder {
     state: &AppState,
     metadata: &TableMetadata,
     pk_column: &str,
-    pk_value: libsql::Value,
+    pk_value: tokio_rusqlite::Value,
   ) -> Result<(), QueryError> {
     let table_name = metadata.name();
 
@@ -621,7 +647,9 @@ async fn write_file(
   return Ok(());
 }
 
-fn try_json_array_to_blob(arr: &Vec<serde_json::Value>) -> Result<libsql::Value, ParamsError> {
+fn try_json_array_to_blob(
+  arr: &Vec<serde_json::Value>,
+) -> Result<tokio_rusqlite::Value, ParamsError> {
   let mut byte_array: Vec<u8> = vec![];
   for el in arr {
     match el {
@@ -650,25 +678,25 @@ fn try_json_array_to_blob(arr: &Vec<serde_json::Value>) -> Result<libsql::Value,
     };
   }
 
-  return Ok(libsql::Value::Blob(byte_array));
+  return Ok(tokio_rusqlite::Value::Blob(byte_array));
 }
 
 fn json_string_to_value(
   data_type: ColumnDataType,
   value: String,
-) -> Result<libsql::Value, ParamsError> {
+) -> Result<tokio_rusqlite::Value, ParamsError> {
   return Ok(match data_type {
-    ColumnDataType::Null => libsql::Value::Null,
+    ColumnDataType::Null => tokio_rusqlite::Value::Null,
     // Strict/storage types
-    ColumnDataType::Any => libsql::Value::Text(value),
-    ColumnDataType::Text => libsql::Value::Text(value),
-    ColumnDataType::Blob => libsql::Value::Blob(BASE64_URL_SAFE.decode(value)?),
-    ColumnDataType::Integer => libsql::Value::Integer(value.parse::<i64>()?),
-    ColumnDataType::Real => libsql::Value::Real(value.parse::<f64>()?),
-    ColumnDataType::Numeric => libsql::Value::Integer(value.parse::<i64>()?),
+    ColumnDataType::Any => tokio_rusqlite::Value::Text(value),
+    ColumnDataType::Text => tokio_rusqlite::Value::Text(value),
+    ColumnDataType::Blob => tokio_rusqlite::Value::Blob(BASE64_URL_SAFE.decode(value)?),
+    ColumnDataType::Integer => tokio_rusqlite::Value::Integer(value.parse::<i64>()?),
+    ColumnDataType::Real => tokio_rusqlite::Value::Real(value.parse::<f64>()?),
+    ColumnDataType::Numeric => tokio_rusqlite::Value::Integer(value.parse::<i64>()?),
     // JSON types.
-    ColumnDataType::JSONB => libsql::Value::Blob(value.into_bytes().to_vec()),
-    ColumnDataType::JSON => libsql::Value::Text(value),
+    ColumnDataType::JSONB => tokio_rusqlite::Value::Blob(value.into_bytes().to_vec()),
+    ColumnDataType::JSON => tokio_rusqlite::Value::Text(value),
     // Affine types
     //
     // Integers:
@@ -680,7 +708,7 @@ fn json_string_to_value(
     | ColumnDataType::UnignedBigInt
     | ColumnDataType::Int2
     | ColumnDataType::Int4
-    | ColumnDataType::Int8 => libsql::Value::Integer(value.parse::<i64>()?),
+    | ColumnDataType::Int8 => tokio_rusqlite::Value::Integer(value.parse::<i64>()?),
     // Text:
     ColumnDataType::Character
     | ColumnDataType::Varchar
@@ -688,23 +716,23 @@ fn json_string_to_value(
     | ColumnDataType::NChar
     | ColumnDataType::NativeCharacter
     | ColumnDataType::NVarChar
-    | ColumnDataType::Clob => libsql::Value::Text(value),
+    | ColumnDataType::Clob => tokio_rusqlite::Value::Text(value),
     // Real:
     ColumnDataType::Double | ColumnDataType::DoublePrecision | ColumnDataType::Float => {
-      libsql::Value::Real(value.parse::<f64>()?)
+      tokio_rusqlite::Value::Real(value.parse::<f64>()?)
     }
     // Numeric
     ColumnDataType::Boolean
     | ColumnDataType::Decimal
     | ColumnDataType::Date
-    | ColumnDataType::DateTime => libsql::Value::Integer(value.parse::<i64>()?),
+    | ColumnDataType::DateTime => tokio_rusqlite::Value::Integer(value.parse::<i64>()?),
   });
 }
 
 pub fn simple_json_value_to_param(
   col_type: ColumnDataType,
   value: serde_json::Value,
-) -> Result<libsql::Value, ParamsError> {
+) -> Result<tokio_rusqlite::Value, ParamsError> {
   let param = match value {
     serde_json::Value::Object(ref _map) => {
       return Err(ParamsError::UnexpectedType(
@@ -724,16 +752,16 @@ pub fn simple_json_value_to_param(
 
       try_json_array_to_blob(arr)?
     }
-    serde_json::Value::Null => libsql::Value::Null,
-    serde_json::Value::Bool(b) => libsql::Value::Integer(b as i64),
+    serde_json::Value::Null => tokio_rusqlite::Value::Null,
+    serde_json::Value::Bool(b) => tokio_rusqlite::Value::Integer(b as i64),
     serde_json::Value::String(str) => json_string_to_value(col_type, str)?,
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
-        libsql::Value::Integer(n)
+        tokio_rusqlite::Value::Integer(n)
       } else if let Some(n) = number.as_u64() {
-        libsql::Value::Integer(n as i64)
+        tokio_rusqlite::Value::Integer(n as i64)
       } else if let Some(n) = number.as_f64() {
-        libsql::Value::Real(n)
+        tokio_rusqlite::Value::Real(n)
       } else {
         warn!("Not a valid number: {number:?}");
         return Err(ParamsError::NotANumber);
@@ -748,7 +776,7 @@ fn extract_params_and_files_from_json(
   col: &Column,
   col_meta: &ColumnMetadata,
   value: serde_json::Value,
-) -> Result<(libsql::Value, Option<FileMetadataContents>), ParamsError> {
+) -> Result<(tokio_rusqlite::Value, Option<FileMetadataContents>), ParamsError> {
   let col_name = &col.name;
   match value {
     serde_json::Value::Object(ref _map) => {
@@ -773,13 +801,13 @@ fn extract_params_and_files_from_json(
           let file_upload: FileUploadInput = serde_json::from_value(value)?;
 
           let (_col_name, metadata, content) = file_upload.consume()?;
-          let param = libsql::Value::Text(serde_json::to_string(&metadata)?);
+          let param = tokio_rusqlite::Value::Text(serde_json::to_string(&metadata)?);
 
           return Ok((param, Some(vec![(metadata, content)])));
         }
         _ => {
           json.validate(&value)?;
-          return Ok((libsql::Value::Text(value.to_string()), None));
+          return Ok((tokio_rusqlite::Value::Text(value.to_string()), None));
         }
       }
     }
@@ -803,13 +831,13 @@ fn extract_params_and_files_from_json(
                   uploads.push((metadata, content));
                 }
 
-                let param = libsql::Value::Text(serde_json::to_string(&FileUploads(temp))?);
+                let param = tokio_rusqlite::Value::Text(serde_json::to_string(&FileUploads(temp))?);
 
                 return Ok((param, Some(uploads)));
               }
               schema => {
                 schema.validate(&value)?;
-                return Ok((libsql::Value::Text(value.to_string()), None));
+                return Ok((tokio_rusqlite::Value::Text(value.to_string()), None));
               }
             }
           }
@@ -946,24 +974,24 @@ mod tests {
         match param.as_str() {
           ID_COL_PLACEHOLDER => {
             assert!(
-              matches!(value, libsql::Value::Blob(x) if *x == id),
+              matches!(value, tokio_rusqlite::Value::Blob(x) if *x == id),
               "VALUE: {value:?}"
             );
           }
           ":blob" => {
-            assert!(matches!(value, libsql::Value::Blob(x) if *x == blob));
+            assert!(matches!(value, tokio_rusqlite::Value::Blob(x) if *x == blob));
           }
           ":text" => {
-            assert!(matches!(value, libsql::Value::Text(x) if x.contains("some text :)")));
+            assert!(matches!(value, tokio_rusqlite::Value::Text(x) if x.contains("some text :)")));
           }
           ":num" => {
-            assert!(matches!(value, libsql::Value::Integer(x) if *x == 5));
+            assert!(matches!(value, tokio_rusqlite::Value::Integer(x) if *x == 5));
           }
           ":real" => {
-            assert!(matches!(value, libsql::Value::Real(x) if *x == 3.0));
+            assert!(matches!(value, tokio_rusqlite::Value::Real(x) if *x == 3.0));
           }
           ":json_col" => {
-            assert!(matches!(value, libsql::Value::Text(_x)));
+            assert!(matches!(value, tokio_rusqlite::Value::Text(_x)));
           }
           x => assert!(false, "{x}"),
         }
@@ -1061,7 +1089,7 @@ mod tests {
 
       let params = Params::from(&metadata, json_row_from_value(value).unwrap(), None).unwrap();
 
-      let json_col: Vec<libsql::Value> = params
+      let json_col: Vec<tokio_rusqlite::Value> = params
         .params
         .iter()
         .filter_map(|(name, value)| {
@@ -1073,7 +1101,7 @@ mod tests {
         .collect();
 
       assert_eq!(json_col.len(), 1);
-      let libsql::Value::Text(ref text) = json_col[0] else {
+      let tokio_rusqlite::Value::Text(ref text) = json_col[0] else {
         panic!("Unexpected param type: {:?}", json_col[0]);
       };
 

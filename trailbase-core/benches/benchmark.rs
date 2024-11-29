@@ -6,20 +6,20 @@ use axum::body::Body;
 use axum::extract::{Json, State};
 use axum::http::{self, Request};
 use base64::prelude::*;
-use libsql::{params, Connection};
 use std::sync::{Arc, Mutex};
+use tokio_rusqlite::params;
 use tower::{Service, ServiceExt};
 use trailbase_core::config::proto::PermissionFlag;
 use trailbase_core::records::Acls;
 
-use trailbase_core::api::{
-  create_user_handler, login_with_password, query_one_row, CreateUserRequest,
-};
+use trailbase_core::api::{create_user_handler, login_with_password, CreateUserRequest};
 use trailbase_core::constants::RECORD_API_PATH;
 use trailbase_core::records::{add_record_api, AccessRules};
 use trailbase_core::{DataDir, Server, ServerOptions};
 
-async fn create_chat_message_app_tables(conn: &Connection) -> Result<(), libsql::Error> {
+async fn create_chat_message_app_tables(
+  conn: &tokio_rusqlite::Connection,
+) -> Result<(), tokio_rusqlite::Error> {
   // Create a messages, chat room and members tables.
   conn
     .execute_batch(
@@ -55,23 +55,27 @@ async fn create_chat_message_app_tables(conn: &Connection) -> Result<(), libsql:
   return Ok(());
 }
 
-async fn add_room(conn: &Connection, name: &str) -> Result<[u8; 16], libsql::Error> {
-  let room: [u8; 16] = query_one_row(
-    conn,
-    "INSERT INTO room (name) VALUES ($1) RETURNING id",
-    params!(name),
-  )
-  .await?
-  .get(0)?;
+async fn add_room(
+  conn: &tokio_rusqlite::Connection,
+  name: &str,
+) -> Result<[u8; 16], anyhow::Error> {
+  let room: [u8; 16] = conn
+    .query_row(
+      "INSERT INTO room (name) VALUES ($1) RETURNING id",
+      params!(name.to_string()),
+    )
+    .await?
+    .unwrap()
+    .get(0)?;
 
   return Ok(room);
 }
 
 async fn add_user_to_room(
-  conn: &Connection,
+  conn: &tokio_rusqlite::Connection,
   user: [u8; 16],
   room: [u8; 16],
-) -> Result<(), libsql::Error> {
+) -> Result<(), tokio_rusqlite::Error> {
   conn
     .execute(
       "INSERT INTO room_members (user, room) VALUES ($1, $2)",

@@ -4,11 +4,9 @@ use axum::{
 };
 use chrono::{DateTime, Duration, Utc};
 use lazy_static::lazy_static;
-use libsql::{de, params::Params, Connection};
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use trailbase_sqlite::query_one_row;
 use ts_rs::TS;
 use uuid::Uuid;
 
@@ -116,13 +114,13 @@ pub async fn list_logs_handler(
   let filter_where_clause = build_filter_where_clause(&table_metadata, filter_params)?;
 
   let total_row_count = {
-    let row = query_one_row(
+    let row = crate::util::query_one_row(
       conn,
       &format!(
         "SELECT COUNT(*) FROM {LOGS_TABLE_NAME} WHERE {clause}",
         clause = filter_where_clause.clause
       ),
-      Params::Named(filter_where_clause.params.clone()),
+      filter_where_clause.params.clone(),
     )
     .await?;
 
@@ -184,7 +182,7 @@ pub async fn list_logs_handler(
 }
 
 async fn fetch_logs(
-  conn: &Connection,
+  conn: &tokio_rusqlite::Connection,
   filter_where_clause: WhereClause,
   cursor: Option<[u8; 16]>,
   order: Vec<(String, Order)>,
@@ -192,10 +190,16 @@ async fn fetch_logs(
 ) -> Result<Vec<LogQuery>, Error> {
   let mut params = filter_where_clause.params;
   let mut where_clause = filter_where_clause.clause;
-  params.push((":limit".to_string(), libsql::Value::Integer(limit as i64)));
+  params.push((
+    ":limit".to_string(),
+    tokio_rusqlite::Value::Integer(limit as i64),
+  ));
 
   if let Some(cursor) = cursor {
-    params.push((":cursor".to_string(), libsql::Value::Blob(cursor.to_vec())));
+    params.push((
+      ":cursor".to_string(),
+      tokio_rusqlite::Value::Blob(cursor.to_vec()),
+    ));
     where_clause = format!("{where_clause} AND log.id < :cursor",);
   }
 
@@ -226,17 +230,7 @@ async fn fetch_logs(
     "#,
   );
 
-  let mut rows = conn.query(&sql_query, Params::Named(params)).await?;
-
-  let mut logs: Vec<LogQuery> = vec![];
-  while let Ok(Some(row)) = rows.next().await {
-    match de::from_row(&row) {
-      Ok(log) => logs.push(log),
-      Err(err) => warn!("failed: {err}"),
-    };
-  }
-
-  return Ok(logs);
+  return Ok(conn.query_values::<LogQuery>(&sql_query, params).await?);
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -256,7 +250,7 @@ struct FetchAggregateArgs {
 }
 
 async fn fetch_aggregate_stats(
-  conn: &Connection,
+  conn: &tokio_rusqlite::Connection,
   args: &FetchAggregateArgs,
 ) -> Result<Stats, Error> {
   let filter_clause = args
@@ -290,10 +284,10 @@ async fn fetch_aggregate_stats(
   "#
   );
 
-  use libsql::Value::Integer;
+  use tokio_rusqlite::Value::Integer;
   let from_seconds = args.from.timestamp();
   let interval_seconds = args.interval.num_seconds();
-  let mut params: Vec<(String, libsql::Value)> = vec![
+  let mut params: Vec<(String, tokio_rusqlite::Value)> = vec![
     (":interval_seconds".to_string(), Integer(interval_seconds)),
     (":from_seconds".to_string(), Integer(from_seconds)),
     (":to_seconds".to_string(), Integer(args.to.timestamp())),
@@ -303,12 +297,10 @@ async fn fetch_aggregate_stats(
     params.extend(filter.params.clone())
   }
 
-  let mut rows = conn.query(&qps_query, Params::Named(params)).await?;
+  let rows = conn.query_values::<AggRow>(&qps_query, params).await?;
 
   let mut rate: Vec<(i64, f64)> = vec![];
-  while let Ok(Some(row)) = rows.next().await {
-    let r: AggRow = de::from_row(&row)?;
-
+  for r in rows.iter() {
     // The oldest interval may be clipped if "(to-from)/interval" isn't integer. In this case
     // dividide by a shorter interval length to reduce artifacting. Otherwise, the clipped
     // interval would appear to have a lower rater.
@@ -338,10 +330,10 @@ async fn fetch_aggregate_stats(
   "#
     );
 
-    let mut rows = conn.query(&cc_query, ()).await?;
+    let rows = conn.query(&cc_query, ()).await?;
 
     let mut country_codes = HashMap::<String, usize>::new();
-    while let Ok(Some(row)) = rows.next().await {
+    for row in rows.iter() {
       let cc: Option<String> = row.get(0)?;
       let count: i64 = row.get(1)?;
 
@@ -372,8 +364,11 @@ mod tests {
 
   #[tokio::test]
   async fn test_aggregate_rate_computation() {
-    let conn = trailbase_sqlite::connect_sqlite(None, None).await.unwrap();
-    apply_logs_migrations(conn.clone()).await.unwrap();
+    let mut conn_sync = trailbase_sqlite::connect_sqlite(None, None).unwrap();
+    apply_logs_migrations(&mut conn_sync).unwrap();
+    let conn = tokio_rusqlite::Connection::from_conn(conn_sync)
+      .await
+      .unwrap();
 
     let interval_seconds = 600;
     let to = DateTime::parse_from_rfc3339("1996-12-22T12:00:00Z").unwrap();

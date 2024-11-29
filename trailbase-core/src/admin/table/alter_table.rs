@@ -10,10 +10,10 @@ use log::*;
 use serde::Deserialize;
 use ts_rs::TS;
 
-use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::schema::Table;
 use crate::transaction::TransactionRecorder;
+use crate::{admin::AdminError as Error, transaction::MigrationWriter};
 
 #[derive(Clone, Debug, Deserialize, TS)]
 #[ts(export)]
@@ -30,16 +30,16 @@ pub async fn alter_table_handler(
   Json(request): Json<AlterTableRequest>,
 ) -> Result<Response, Error> {
   let source_schema = request.source_schema;
-  let source_table_name = &source_schema.name;
+  let source_table_name = source_schema.name.clone();
 
-  let Some(_metadata) = state.table_metadata().get(source_table_name) else {
+  let Some(_metadata) = state.table_metadata().get(&source_table_name) else {
     return Err(Error::Precondition(format!(
       "Cannot alter '{source_table_name}'. Only tables are supported.",
     )));
   };
 
   let target_schema = request.target_schema;
-  let target_table_name = &target_schema.name;
+  let target_table_name = target_schema.name.clone();
 
   debug!("Alter table:\nsource: {source_schema:?}\ntarget: {target_schema:?}",);
 
@@ -71,46 +71,59 @@ pub async fn alter_table_handler(
   let mut target_schema_copy = target_schema.clone();
   target_schema_copy.name = temp_table_name.to_string();
 
-  let mut tx = TransactionRecorder::new(
-    state.conn().clone(),
-    state.data_dir().migrations_path(),
-    format!("alter_table_{source_table_name}"),
-  )
-  .await?;
-  tx.execute("PRAGMA foreign_keys = OFF").await?;
+  let migration_path = state.data_dir().migrations_path();
+  let conn = state.conn();
+  let writer = conn
+    .call(
+      move |conn| -> Result<Option<MigrationWriter>, tokio_rusqlite::Error> {
+        let mut tx = TransactionRecorder::new(
+          conn,
+          migration_path,
+          format!("alter_table_{source_table_name}"),
+        )
+        .map_err(|err| tokio_rusqlite::Error::Other(err.into()))?;
 
-  // Create new table
-  let sql = target_schema_copy.create_table_statement();
-  tx.query(&sql).await?;
+        tx.execute("PRAGMA foreign_keys = OFF")?;
 
-  // Copy
-  tx.query(&format!(
-    r#"
-    INSERT INTO
-      {temp_table_name} ({column_list})
-    SELECT
-      {column_list}
-    FROM
-      {source_table_name}
-  "#,
-    column_list = copy_columns.join(", "),
-  ))
-  .await?;
+        // Create new table
+        let sql = target_schema_copy.create_table_statement();
+        tx.execute(&sql)?;
 
-  tx.query(&format!("DROP TABLE {source_table_name}")).await?;
+        // Copy
+        tx.execute(&format!(
+          r#"
+            INSERT INTO
+              {temp_table_name} ({column_list})
+            SELECT
+              {column_list}
+            FROM
+              {source_table_name}
+          "#,
+          column_list = copy_columns.join(", "),
+        ))?;
 
-  if *target_table_name != temp_table_name {
-    tx.query(&format!(
-      "ALTER TABLE '{temp_table_name}' RENAME TO '{target_table_name}'"
-    ))
+        tx.execute(&format!("DROP TABLE {source_table_name}"))?;
+
+        if *target_table_name != temp_table_name {
+          tx.execute(&format!(
+            "ALTER TABLE '{temp_table_name}' RENAME TO '{target_table_name}'"
+          ))?;
+        }
+
+        tx.execute("PRAGMA foreign_keys = ON")?;
+
+        return tx
+          .rollback_and_create_migration()
+          .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
+      },
+    )
     .await?;
-  }
-
-  tx.execute("PRAGMA foreign_keys = ON").await?;
 
   // Write to migration file.
-  let report = tx.commit_and_create_migration().await?;
-  debug!("Migration report: {report:?}");
+  if let Some(writer) = writer {
+    let report = writer.write(conn).await?;
+    debug!("Migration report: {report:?}");
+  }
 
   state.table_metadata().invalidate_all().await?;
 

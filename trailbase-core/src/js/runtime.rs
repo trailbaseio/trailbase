@@ -3,7 +3,6 @@ use axum::extract::{RawPathParams, Request};
 use axum::http::{header::CONTENT_TYPE, request::Parts, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Router;
-use libsql::Connection;
 use parking_lot::Mutex;
 use rustyscript::{
   deno_core::PollEventLoopOptions, init_platform, js_value::Promise, json_args, Module, Runtime,
@@ -73,7 +72,7 @@ enum Message {
 
 struct State {
   sender: async_channel::Sender<Message>,
-  connection: Mutex<Option<libsql::Connection>>,
+  connection: Mutex<Option<tokio_rusqlite::Connection>>,
 }
 
 struct RuntimeSingleton {
@@ -345,7 +344,7 @@ impl RuntimeSingleton {
         let query: String = get_arg(&args, 0)?;
         let json_params: Vec<serde_json::Value> = get_arg(&args, 1)?;
 
-        let mut params: Vec<libsql::Value> = vec![];
+        let mut params: Vec<tokio_rusqlite::Value> = vec![];
         for value in json_params {
           params.push(json_value_to_param(value)?);
         }
@@ -357,12 +356,11 @@ impl RuntimeSingleton {
         };
 
         let rows = conn
-          .query(&query, libsql::params::Params::Positional(params))
+          .query(&query, params)
           .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
         let (values, _columns) = rows_to_json_arrays(rows, usize::MAX)
-          .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
         return Ok(serde_json::json!(values));
@@ -375,7 +373,7 @@ impl RuntimeSingleton {
         let query: String = get_arg(&args, 0)?;
         let json_params: Vec<serde_json::Value> = get_arg(&args, 1)?;
 
-        let mut params: Vec<libsql::Value> = vec![];
+        let mut params: Vec<tokio_rusqlite::Value> = vec![];
         for value in json_params {
           params.push(json_value_to_param(value)?);
         }
@@ -387,7 +385,7 @@ impl RuntimeSingleton {
         };
 
         let rows_affected = conn
-          .execute(&query, libsql::params::Params::Positional(params))
+          .execute(&query, params)
           .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
@@ -414,7 +412,7 @@ pub(crate) struct RuntimeHandle {
 
 impl RuntimeHandle {
   #[cfg(not(test))]
-  pub(crate) fn set_connection(&self, conn: Connection) {
+  pub(crate) fn set_connection(&self, conn: tokio_rusqlite::Connection) {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
@@ -425,7 +423,7 @@ impl RuntimeHandle {
   }
 
   #[cfg(test)]
-  pub(crate) fn set_connection(&self, conn: Connection) {
+  pub(crate) fn set_connection(&self, conn: tokio_rusqlite::Connection) {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
@@ -437,7 +435,7 @@ impl RuntimeHandle {
   }
 
   #[cfg(test)]
-  pub(crate) fn override_connection(&self, conn: Connection) {
+  pub(crate) fn override_connection(&self, conn: tokio_rusqlite::Connection) {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
@@ -484,7 +482,9 @@ impl RuntimeHandle {
   }
 }
 
-pub fn json_value_to_param(value: serde_json::Value) -> Result<libsql::Value, rustyscript::Error> {
+pub fn json_value_to_param(
+  value: serde_json::Value,
+) -> Result<tokio_rusqlite::Value, rustyscript::Error> {
   use rustyscript::Error;
   return Ok(match value {
     serde_json::Value::Object(ref _map) => {
@@ -493,16 +493,16 @@ pub fn json_value_to_param(value: serde_json::Value) -> Result<libsql::Value, ru
     serde_json::Value::Array(ref _arr) => {
       return Err(Error::Runtime("Array unsupported".to_string()));
     }
-    serde_json::Value::Null => libsql::Value::Null,
-    serde_json::Value::Bool(b) => libsql::Value::Integer(b as i64),
-    serde_json::Value::String(str) => libsql::Value::Text(str),
+    serde_json::Value::Null => tokio_rusqlite::Value::Null,
+    serde_json::Value::Bool(b) => tokio_rusqlite::Value::Integer(b as i64),
+    serde_json::Value::String(str) => tokio_rusqlite::Value::Text(str),
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
-        libsql::Value::Integer(n)
+        tokio_rusqlite::Value::Integer(n)
       } else if let Some(n) = number.as_u64() {
-        libsql::Value::Integer(n as i64)
+        tokio_rusqlite::Value::Integer(n as i64)
       } else if let Some(n) = number.as_f64() {
-        libsql::Value::Real(n)
+        tokio_rusqlite::Value::Real(n)
       } else {
         return Err(Error::Runtime(format!("invalid number: {number:?}")));
       }
@@ -795,21 +795,11 @@ pub(crate) async fn write_js_runtime_files(data_dir: &DataDir) {
 mod tests {
   use super::*;
   use rustyscript::Module;
-  use trailbase_sqlite::query_one_row;
-
-  async fn new_mem_conn() -> libsql::Connection {
-    return libsql::Builder::new_local(":memory:")
-      .build()
-      .await
-      .unwrap()
-      .connect()
-      .unwrap();
-  }
 
   #[tokio::test]
   async fn test_serial_tests() {
-    // NOTE: needs to run serially since registration of libsql connection with singleton v8 runtime
-    // is racy.
+    // NOTE: needs to run serially since registration of SQLite connection with singleton v8
+    // runtime is racy.
     test_runtime_apply().await;
     test_runtime_javascript().await;
     test_javascript_query().await;
@@ -852,7 +842,7 @@ mod tests {
   }
 
   async fn test_javascript_query() {
-    let conn = new_mem_conn().await;
+    let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
     conn
       .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
       .await
@@ -901,7 +891,7 @@ mod tests {
   }
 
   async fn test_javascript_execute() {
-    let conn = new_mem_conn().await;
+    let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
     conn
       .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
       .await
@@ -930,8 +920,10 @@ mod tests {
       .await
       .unwrap();
 
-    let row = query_one_row(&conn, "SELECT COUNT(*) FROM test", ())
+    let row = conn
+      .query_row("SELECT COUNT(*) FROM test", ())
       .await
+      .unwrap()
       .unwrap();
     let count: i64 = row.get(0).unwrap();
     assert_eq!(0, count);

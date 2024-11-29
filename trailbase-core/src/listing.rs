@@ -9,8 +9,6 @@ use crate::util::b64_to_id;
 
 #[derive(Debug, Error)]
 pub enum WhereClauseError {
-  #[error("Libsql error: {0}")]
-  Libsql(#[from] libsql::Error),
   #[error("Parse error: {0}")]
   Parse(String),
   #[error("Base64 decoding error: {0}")]
@@ -166,7 +164,7 @@ pub fn parse_query(query: Option<String>) -> Option<QueryParseResult> {
 #[derive(Debug, Clone)]
 pub struct WhereClause {
   pub clause: String,
-  pub params: Vec<(String, libsql::Value)>,
+  pub params: Vec<(String, tokio_rusqlite::Value)>,
 }
 
 pub fn build_filter_where_clause(
@@ -174,7 +172,7 @@ pub fn build_filter_where_clause(
   filter_params: Option<HashMap<String, Vec<QueryParam>>>,
 ) -> Result<WhereClause, WhereClauseError> {
   let mut where_clauses: Vec<String> = vec![];
-  let mut params: Vec<(String, libsql::Value)> = vec![];
+  let mut params: Vec<(String, tokio_rusqlite::Value)> = vec![];
 
   if let Some(filter_params) = filter_params {
     for (column_name, query_params) in filter_params {

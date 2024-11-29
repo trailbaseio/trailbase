@@ -4,8 +4,8 @@ use axum::{
   response::Redirect,
 };
 use lazy_static::lazy_static;
-use libsql::named_params;
 use serde::Deserialize;
+use tokio_rusqlite::named_params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
@@ -91,7 +91,7 @@ pub async fn change_password_handler(
     .execute(
       &QUERY,
       named_params! {
-        ":user_id": user.uuid.into_bytes(),
+        ":user_id": user.uuid.into_bytes().to_vec(),
         ":new_password_hash": new_password_hash,
         ":old_password_hash": old_password_hash,
       },

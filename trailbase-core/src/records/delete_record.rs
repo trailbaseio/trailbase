@@ -51,8 +51,7 @@ pub async fn delete_record_handler(
 #[cfg(test)]
 mod test {
   use axum::extract::Query;
-  use libsql::{params, Connection};
-  use trailbase_sqlite::query_one_row;
+  use tokio_rusqlite::params;
 
   use super::*;
   use crate::admin::user::*;
@@ -137,11 +136,14 @@ mod test {
     return Ok(());
   }
 
-  async fn message_exists(conn: &Connection, id: &[u8; 16]) -> Result<bool, anyhow::Error> {
-    let count: i64 = query_one_row(
+  async fn message_exists(
+    conn: &tokio_rusqlite::Connection,
+    id: &[u8; 16],
+  ) -> Result<bool, anyhow::Error> {
+    let count: i64 = crate::util::query_one_row(
       conn,
       "SELECT COUNT(*) FROM message WHERE id = $1",
-      params!(id),
+      params!(*id),
     )
     .await?
     .get(0)?;

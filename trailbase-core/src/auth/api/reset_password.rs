@@ -4,9 +4,8 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use lazy_static::lazy_static;
-use libsql::params;
 use serde::Deserialize;
-use trailbase_sqlite::query_one_row;
+use tokio_rusqlite::params;
 use ts_rs::TS;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -170,7 +169,7 @@ pub async fn reset_password_update_handler(
 }
 
 pub async fn force_password_reset(
-  user_conn: &libsql::Connection,
+  user_conn: &tokio_rusqlite::Connection,
   email: String,
   password: String,
 ) -> Result<Uuid, AuthError> {
@@ -181,13 +180,14 @@ pub async fn force_password_reset(
       format!("UPDATE '{USER_TABLE}' SET password_hash = $1 WHERE email = $2 RETURNING id");
   }
 
-  let id: [u8; 16] = query_one_row(
+  let id: [u8; 16] = crate::util::query_one_row(
     user_conn,
     &UPDATE_PASSWORD_QUERY,
     params!(hashed_password, email),
   )
   .await?
-  .get(0)?;
+  .get(0)
+  .map_err(|_err| AuthError::NotFound)?;
 
   return Ok(Uuid::from_bytes(id));
 }

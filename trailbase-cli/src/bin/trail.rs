@@ -5,14 +5,13 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
-use libsql::{de, params};
 use log::*;
 use serde::Deserialize;
 use std::rc::Rc;
 use tokio::{fs, io::AsyncWriteExt};
 use tracing_subscriber::{filter, prelude::*};
 use trailbase_core::{
-  api::{self, init_app_state, query_one_row, Email, InitArgs, TokenClaims},
+  api::{self, init_app_state, Email, InitArgs, TokenClaims},
   constants::USER_TABLE,
   DataDir, Server, ServerOptions,
 };
@@ -54,15 +53,20 @@ impl DbUser {
   }
 }
 
-async fn get_user_by_email(conn: &libsql::Connection, email: &str) -> Result<DbUser, BoxError> {
-  return Ok(de::from_row(
-    &query_one_row(
-      conn,
+async fn get_user_by_email(
+  conn: &tokio_rusqlite::Connection,
+  email: &str,
+) -> Result<DbUser, BoxError> {
+  if let Some(user) = conn
+    .query_value::<DbUser>(
       &format!("SELECT * FROM {USER_TABLE} WHERE email = $1"),
-      params!(email),
+      (email.to_string(),),
     )
-    .await?,
-  )?);
+    .await?
+  {
+    return Ok(user);
+  }
+  return Err("not found".into());
 }
 
 async fn async_main() -> Result<(), BoxError> {
@@ -154,7 +158,11 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Schema(cmd)) => {
       init_logger(false);
 
-      let conn = api::connect_sqlite(Some(data_dir.main_db_path()), None).await?;
+      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
+        Some(data_dir.main_db_path()),
+        None,
+      )?)
+      .await?;
       let table_metadata = api::TableMetadataCache::new(conn.clone()).await?;
 
       let table_name = &cmd.table;
@@ -194,17 +202,20 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Admin { cmd }) => {
       init_logger(false);
 
-      let conn = api::connect_sqlite(Some(data_dir.main_db_path()), None).await?;
+      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
+        Some(data_dir.main_db_path()),
+        None,
+      )?)
+      .await?;
 
       match cmd {
         Some(AdminSubCommands::List) => {
-          let mut rows = conn
-            .query(&format!("SELECT * FROM {USER_TABLE} WHERE admin > 0"), ())
+          let users = conn
+            .query_values::<DbUser>(&format!("SELECT * FROM {USER_TABLE} WHERE admin > 0"), ())
             .await?;
 
           println!("{: >36}\temail\tcreated\tupdated", "id");
-          while let Some(row) = rows.next().await? {
-            let user: DbUser = de::from_row(&row)?;
+          for user in users {
             let id = user.uuid();
 
             println!(
@@ -219,7 +230,7 @@ async fn async_main() -> Result<(), BoxError> {
           conn
             .execute(
               &format!("UPDATE {USER_TABLE} SET admin = FALSE WHERE email = $1"),
-              params!(email.clone()),
+              (email.clone(),),
             )
             .await?;
 
@@ -229,7 +240,7 @@ async fn async_main() -> Result<(), BoxError> {
           conn
             .execute(
               &format!("UPDATE {USER_TABLE} SET admin = TRUE WHERE email = $1"),
-              params!(email.clone()),
+              (email.clone(),),
             )
             .await?;
 
@@ -246,7 +257,11 @@ async fn async_main() -> Result<(), BoxError> {
       init_logger(false);
 
       let data_dir = DataDir(args.data_dir);
-      let conn = api::connect_sqlite(Some(data_dir.main_db_path()), None).await?;
+      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
+        Some(data_dir.main_db_path()),
+        None,
+      )?)
+      .await?;
 
       match cmd {
         Some(UserSubCommands::ResetPassword { email, password }) => {

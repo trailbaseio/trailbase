@@ -41,17 +41,20 @@ pub async fn query_handler(
     None => HashMap::new(),
   };
 
-  let mut params: Vec<(String, libsql::Value)> = vec![];
+  let mut params: Vec<(String, tokio_rusqlite::Value)> = vec![];
   for (name, typ) in api.params() {
     match query_params.remove(name) {
       Some(value) => match *typ {
         QueryApiParameterType::Text => {
-          params.push((format!(":{name}"), libsql::Value::Text(value.clone())));
+          params.push((
+            format!(":{name}"),
+            tokio_rusqlite::Value::Text(value.clone()),
+          ));
         }
         QueryApiParameterType::Blob => {
           params.push((
             format!(":{name}"),
-            libsql::Value::Blob(
+            tokio_rusqlite::Value::Blob(
               BASE64_URL_SAFE
                 .decode(value)
                 .map_err(|_err| E::BadRequest("not b64"))?,
@@ -61,7 +64,7 @@ pub async fn query_handler(
         QueryApiParameterType::Real => {
           params.push((
             format!(":{name}"),
-            libsql::Value::Real(
+            tokio_rusqlite::Value::Real(
               value
                 .parse::<f64>()
                 .map_err(|_err| E::BadRequest("expected f64"))?,
@@ -71,7 +74,7 @@ pub async fn query_handler(
         QueryApiParameterType::Integer => {
           params.push((
             format!(":{name}"),
-            libsql::Value::Integer(
+            tokio_rusqlite::Value::Integer(
               value
                 .parse::<i64>()
                 .map_err(|_err| E::BadRequest("expected i64"))?,
@@ -80,7 +83,7 @@ pub async fn query_handler(
         }
       },
       None => {
-        params.push((format!(":{name}"), libsql::Value::Null));
+        params.push((format!(":{name}"), tokio_rusqlite::Value::Null));
       }
     };
   }
@@ -103,13 +106,12 @@ pub async fn query_handler(
           .collect::<Vec<_>>()
           .join(", ")
       ),
-      libsql::params::Params::Named(params),
+      params,
     )
     .await?;
 
-  let (json_rows, columns) = rows_to_json_arrays(response_rows, LIMIT)
-    .await
-    .map_err(|err| E::Internal(err.into()))?;
+  let (json_rows, columns) =
+    rows_to_json_arrays(response_rows, LIMIT).map_err(|err| E::Internal(err.into()))?;
 
   let Some(columns) = columns else {
     return Err(E::Internal("Missing column mapping".into()));

@@ -47,12 +47,15 @@ pub async fn list_records_handler(
   } = build_filter_where_clause(metadata, filter_params)
     .map_err(|_err| RecordError::BadRequest("Invalid filter params"))?;
   if let Some(cursor) = cursor {
-    params.push((":cursor".to_string(), libsql::Value::Blob(cursor.to_vec())));
+    params.push((
+      ":cursor".to_string(),
+      tokio_rusqlite::Value::Blob(cursor.to_vec()),
+    ));
     clause = format!("{clause} AND _ROW_.id < :cursor");
   }
   params.push((
     ":limit".to_string(),
-    libsql::Value::Integer(limit_or_default(limit) as i64),
+    tokio_rusqlite::Value::Integer(limit_or_default(limit) as i64),
   ));
 
   // User properties
@@ -102,10 +105,7 @@ pub async fn list_records_handler(
     table_name = api.table_name()
   );
 
-  let rows = state
-    .conn()
-    .query(&query, libsql::params::Params::Named(params))
-    .await?;
+  let rows = state.conn().query(&query, params).await?;
 
   return Ok(Json(serde_json::Value::Array(
     rows_to_json(metadata, rows, |col_name| !col_name.starts_with("_"))

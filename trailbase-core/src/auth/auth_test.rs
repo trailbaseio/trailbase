@@ -1,8 +1,7 @@
 use axum::extract::{Form, Json, Path, Query, State};
-use libsql::{de, params};
 use std::sync::Arc;
+use tokio_rusqlite::params;
 use tower_cookies::Cookies;
-use trailbase_sqlite::query_one_row;
 
 use crate::api::TokenClaims;
 use crate::app_state::{test_state, TestStateOptions};
@@ -25,6 +24,7 @@ use crate::auth::user::{DbUser, User};
 use crate::constants::*;
 use crate::email::{testing::TestAsyncSmtpTransport, Mailer};
 use crate::extract::Either;
+use crate::util::query_one_row;
 
 #[tokio::test]
 async fn test_auth_registration_reset_and_change_email() {
@@ -65,16 +65,14 @@ async fn test_auth_registration_reset_and_change_email() {
 
     // Then steal the verification code from the DB and verify.
     let email_verification_code = {
-      let db_user: DbUser = de::from_row(
-        &query_one_row(
-          conn,
+      let db_user = conn
+        .query_value::<DbUser>(
           &format!("SELECT * FROM '{USER_TABLE}' WHERE email = $1"),
-          [email.clone()],
+          (email.clone(),),
         )
         .await
-        .unwrap(),
-      )
-      .unwrap();
+        .unwrap()
+        .unwrap();
 
       db_user.email_verification_code.unwrap()
     };
@@ -106,16 +104,14 @@ async fn test_auth_registration_reset_and_change_email() {
     .unwrap();
 
     let (verified, user) = {
-      let db_user: DbUser = de::from_row(
-        &query_one_row(
-          conn,
+      let db_user = conn
+        .query_value::<DbUser>(
           &format!("SELECT * FROM '{USER_TABLE}' WHERE email = $1"),
-          [email.clone()],
+          (email.clone(),),
         )
         .await
-        .unwrap(),
-      )
-      .unwrap();
+        .unwrap()
+        .unwrap();
 
       (
         db_user.verified.clone(),
@@ -151,7 +147,7 @@ async fn test_auth_registration_reset_and_change_email() {
     let session_exists: bool = query_one_row(
       conn,
       &session_exists_query,
-      [user.uuid.into_bytes().to_vec()],
+      (user.uuid.into_bytes().to_vec(),),
     )
     .await
     .unwrap()
@@ -220,7 +216,7 @@ async fn test_auth_registration_reset_and_change_email() {
     let reset_code: String = query_one_row(
       conn,
       &format!("SELECT password_reset_code FROM '{USER_TABLE}' WHERE id = $1"),
-      [user.uuid.into_bytes().to_vec()],
+      (user.uuid.into_bytes().to_vec(),),
     )
     .await
     .unwrap()
@@ -279,7 +275,7 @@ async fn test_auth_registration_reset_and_change_email() {
     let session_exists: bool = query_one_row(
       conn,
       &session_exists_query,
-      [user.uuid.into_bytes().to_vec()],
+      (user.uuid.into_bytes().to_vec(),),
     )
     .await
     .unwrap()

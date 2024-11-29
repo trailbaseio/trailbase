@@ -22,22 +22,29 @@ pub async fn drop_index_handler(
   State(state): State<AppState>,
   Json(request): Json<DropIndexRequest>,
 ) -> Result<Response, Error> {
-  let conn = state.conn();
   let index_name = request.name;
 
-  let mut tx = TransactionRecorder::new(
-    conn.clone(),
-    state.data_dir().migrations_path(),
-    format!("drop_index_{index_name}"),
-  )
-  .await?;
+  let migration_path = state.data_dir().migrations_path();
+  let conn = state.conn();
+  let writer = conn
+    .call(move |conn| {
+      let mut tx =
+        TransactionRecorder::new(conn, migration_path, format!("drop_index_{index_name}"))?;
 
-  let query = format!("DROP INDEX IF EXISTS {}", index_name);
-  info!("dropping index: {query}");
-  tx.execute(&query).await?;
+      let query = format!("DROP INDEX IF EXISTS {}", index_name);
+      info!("dropping index: {query}");
+      tx.execute(&query)?;
+
+      return tx
+        .rollback_and_create_migration()
+        .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
+    })
+    .await?;
 
   // Write to migration file.
-  tx.commit_and_create_migration().await?;
+  if let Some(writer) = writer {
+    let _report = writer.write(conn).await?;
+  }
 
   return Ok((StatusCode::OK, "").into_response());
 }

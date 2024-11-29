@@ -1,8 +1,7 @@
 use chrono::{Duration, Utc};
-use libsql::params;
 use log::*;
-use rusqlite::{Connection, DatabaseName};
 use std::future::Future;
+use tokio_rusqlite::params;
 
 use crate::app_state::AppState;
 use crate::constants::{DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT, SESSION_TABLE};
@@ -47,28 +46,31 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
   });
 
   // Backup job.
-  let db_path = app_state.data_dir().main_db_path();
+  let conn = app_state.conn().clone();
   let backup_file = app_state.data_dir().backup_path().join("backup.db");
   let backup_interval = app_state
     .access_config(|c| c.server.backup_interval_sec)
     .map_or(Duration::zero(), Duration::seconds);
   if !backup_interval.is_zero() {
     tasks.add_periodic_task(backup_interval, move || {
-      let db_path = db_path.clone();
+      let conn = conn.clone();
       let backup_file = backup_file.clone();
 
       async move {
-        // NOTE: We need to "re-open" the database with rusqlite since libsql doesn't support
-        // backups (yet).
-        match Connection::open(&db_path) {
-          Ok(conn) => {
-            match conn.backup(DatabaseName::Main, backup_file, /* progress= */ None) {
-              Ok(_) => info!("Backup complete"),
-              Err(err) => error!("Backup failed: {err}"),
-            };
-          }
-          Err(err) => warn!("Backup process failed to open DB: {err}"),
-        }
+        let result = conn
+          .call(|conn| {
+            return Ok(conn.backup(
+              rusqlite::DatabaseName::Main,
+              backup_file,
+              /* progress= */ None,
+            )?);
+          })
+          .await;
+
+        match result {
+          Ok(_) => info!("Backup complete"),
+          Err(err) => error!("Backup failed: {err}"),
+        };
       }
     });
   }

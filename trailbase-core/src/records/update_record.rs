@@ -65,8 +65,7 @@ pub async fn update_record_handler(
 #[cfg(test)]
 mod test {
   use axum::extract::Query;
-  use libsql::params;
-  use trailbase_sqlite::query_one_row;
+  use tokio_rusqlite::params;
 
   use super::*;
   use crate::admin::user::*;
@@ -81,7 +80,7 @@ mod test {
   use crate::records::test_utils::*;
   use crate::records::*;
   use crate::test::unpack_json_response;
-  use crate::util::{b64_to_id, id_to_b64};
+  use crate::util::{b64_to_id, id_to_b64, query_one_row};
 
   #[tokio::test]
   async fn test_record_api_update() -> Result<(), anyhow::Error> {

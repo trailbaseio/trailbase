@@ -36,7 +36,7 @@ pub async fn query_handler(
   //
   // In the end we really want to allow executing all constructs as valid to sqlite. As such we
   // best effort parse the statements to see if need to invalidate the table cache and otherwise
-  // fall back to libsql's execute batch which materializes all rows and invalidate anyway.
+  // fall back to execute batch which materializes all rows and invalidate anyway.
 
   // Check the statements are correct before executing anything, just to be sure.
   let statements = sqlite3_parse_into_statements(&request.query)?;
@@ -66,15 +66,8 @@ pub async fn query_handler(
     state.table_metadata().invalidate_all().await?;
   }
 
-  let mut batched_rows = batched_rows_result?;
-
-  let mut prev: Option<libsql::Rows> = None;
-  while let Some(maybe_rows) = batched_rows.next_stmt_row() {
-    prev = maybe_rows;
-  }
-
-  if let Some(result_rows) = prev {
-    let (rows, columns) = rows_to_json_arrays(result_rows, 1024).await?;
+  if let Some(rows) = batched_rows_result? {
+    let (rows, columns) = rows_to_json_arrays(rows, 1024)?;
 
     return Ok(Json(QueryResponse { columns, rows }));
   }

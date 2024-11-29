@@ -12,7 +12,6 @@ pub(crate) use create_user::create_user_for_test;
 #[cfg(test)]
 mod tests {
   use axum::{extract::State, Json};
-  use libsql::params;
   use std::sync::Arc;
   use uuid::Uuid;
 
@@ -58,7 +57,7 @@ mod tests {
       .user_conn()
       .execute(
         &format!("DELETE FROM '{USER_TABLE}' WHERE id = $1"),
-        params!(user.get_id().as_bytes()),
+        (user.get_id().as_bytes().to_vec(),),
       )
       .await
       .unwrap();

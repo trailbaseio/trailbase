@@ -5,7 +5,7 @@ use axum::{
   Json,
 };
 use lazy_static::lazy_static;
-use libsql::params;
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -48,22 +48,27 @@ pub async fn update_user_handler(
     static ref UPDATE_VERIFIED_QUERY: String = update_query("verified");
   }
 
-  let tx = conn.transaction().await?;
+  let email = request.email.clone();
+  let verified = request.verified;
+  conn
+    .call(move |conn| {
+      let tx = conn.transaction()?;
 
-  if let Some(ref email) = request.email {
-    tx.execute(&UPDATE_EMAIL_QUERY, params![email.clone(), user_id_bytes])
-      .await?;
-  }
-  if let Some(password_hash) = hashed_password {
-    tx.execute(&UPDATE_PW_HASH_QUERY, params!(password_hash, user_id_bytes))
-      .await?;
-  }
-  if let Some(verified) = request.verified {
-    tx.execute(&UPDATE_VERIFIED_QUERY, params!(verified, user_id_bytes))
-      .await?;
-  }
+      if let Some(email) = email {
+        tx.execute(&UPDATE_EMAIL_QUERY, params![email, user_id_bytes])?;
+      }
+      if let Some(password_hash) = hashed_password {
+        tx.execute(&UPDATE_PW_HASH_QUERY, params!(password_hash, user_id_bytes))?;
+      }
+      if let Some(verified) = verified {
+        tx.execute(&UPDATE_VERIFIED_QUERY, params!(verified, user_id_bytes))?;
+      }
 
-  tx.commit().await?;
+      tx.commit()?;
+
+      return Ok(());
+    })
+    .await?;
 
   return Ok((StatusCode::OK, format!("Updated user: {request:?}")).into_response());
 }

@@ -1,9 +1,7 @@
 use lazy_static::lazy_static;
-use libsql::Connection;
 use log::*;
 use parking_lot::Mutex;
 use refinery::Migration;
-use refinery_libsql::LibsqlConnection;
 use std::path::PathBuf;
 
 mod main {
@@ -47,12 +45,8 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> refinery::Runner
   return runner;
 }
 
-// The main migrations are bit tricky because they maybe a mix of user-provided and builtin
-// migrations. They might event come out of order, e.g.: someone does a schema migration on an old
-// version of the binary and then updates. Yet, they need to be applied in one go. We therefore
-// rely on refinery's non-strictly versioned migrations prefixed with the "U" name.
-pub(crate) async fn apply_main_migrations(
-  conn: Connection,
+pub(crate) fn apply_main_migrations(
+  conn: &mut rusqlite::Connection,
   user_migrations_path: Option<PathBuf>,
 ) -> Result<bool, refinery::Error> {
   let all_migrations = {
@@ -64,7 +58,7 @@ pub(crate) async fn apply_main_migrations(
     if let Some(path) = user_migrations_path {
       // NOTE: refinery has a bug where it will name-check the directory and write a warning... :/.
       let user_migrations = refinery::load_sql_migrations(path)?;
-      migrations.extend(user_migrations.into_iter());
+      migrations.extend(user_migrations);
     }
 
     // Interleave the system and user migrations based on their version prefixes.
@@ -73,10 +67,8 @@ pub(crate) async fn apply_main_migrations(
     migrations
   };
 
-  let mut conn = LibsqlConnection::from_connection(conn);
-
   let runner = new_migration_runner(&all_migrations);
-  let report = match runner.run_async(&mut conn).await {
+  let report = match runner.run(conn) {
     Ok(report) => report,
     Err(err) => {
       error!("Main migrations: {err}");
@@ -99,13 +91,13 @@ pub(crate) async fn apply_main_migrations(
 }
 
 #[cfg(test)]
-pub(crate) async fn apply_user_migrations(user_conn: Connection) -> Result<(), refinery::Error> {
-  let mut user_conn = LibsqlConnection::from_connection(user_conn);
-
+pub(crate) fn apply_user_migrations(
+  user_conn: &mut rusqlite::Connection,
+) -> Result<(), refinery::Error> {
   let mut runner = main::migrations::runner();
   runner.set_migration_table_name(MIGRATION_TABLE_NAME);
 
-  let report = runner.run_async(&mut user_conn).await.map_err(|err| {
+  let report = runner.run(user_conn).map_err(|err| {
     error!("User migrations: {err}");
     return err;
   })?;
@@ -119,13 +111,13 @@ pub(crate) async fn apply_user_migrations(user_conn: Connection) -> Result<(), r
   return Ok(());
 }
 
-pub(crate) async fn apply_logs_migrations(logs_conn: Connection) -> Result<(), refinery::Error> {
-  let mut logs_conn = LibsqlConnection::from_connection(logs_conn);
-
+pub(crate) fn apply_logs_migrations(
+  logs_conn: &mut rusqlite::Connection,
+) -> Result<(), refinery::Error> {
   let mut runner = logs::migrations::runner();
   runner.set_migration_table_name(MIGRATION_TABLE_NAME);
 
-  let report = runner.run_async(&mut logs_conn).await.map_err(|err| {
+  let report = runner.run(logs_conn).map_err(|err| {
     error!("Logs migrations: {err}");
     return err;
   })?;

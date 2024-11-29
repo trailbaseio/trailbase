@@ -137,59 +137,46 @@ pub fn sqlite3_extension_init(db: *mut sqlite3) -> Result<(), sqlite_loadable::E
 
 #[cfg(test)]
 unsafe extern "C" fn init_extension(
-  db: *mut libsql::ffi::sqlite3,
-  pz_err_msg: *mut *const ::std::os::raw::c_char,
-  p_thunk: *const libsql::ffi::sqlite3_api_routines,
+  db: *mut rusqlite::ffi::sqlite3,
+  pz_err_msg: *mut *mut ::std::os::raw::c_char,
+  p_thunk: *const rusqlite::ffi::sqlite3_api_routines,
 ) -> ::std::os::raw::c_int {
   return sqlite3_extension_init(
     db,
-    pz_err_msg as *mut *mut ::std::os::raw::c_char,
-    p_thunk as *mut libsql::ffi::sqlite3_api_routines,
+    pz_err_msg,
+    p_thunk as *mut rusqlite::ffi::sqlite3_api_routines,
   ) as ::std::os::raw::c_int;
 }
 
 #[cfg(test)]
-pub(crate) async fn connect() -> Result<libsql::Connection, libsql::Error> {
-  let builder = libsql::Builder::new_local(":memory:")
-    .build()
-    .await
-    .unwrap();
+pub(crate) fn connect() -> Result<rusqlite::Connection, rusqlite::Error> {
+  unsafe {
+    rusqlite::ffi::sqlite3_auto_extension(Some(init_extension));
+  }
 
-  unsafe { libsql::ffi::sqlite3_auto_extension(Some(init_extension)) };
-
-  Ok(builder.connect().unwrap())
-}
-
-#[cfg(test)]
-pub(crate) async fn query_row(
-  conn: &libsql::Connection,
-  sql: &str,
-  params: impl libsql::params::IntoParams,
-) -> Result<Option<libsql::Row>, libsql::Error> {
-  let mut rows = conn.query(sql, params).await?;
-  return rows.next().await;
+  return Ok(rusqlite::Connection::open_in_memory()?);
 }
 
 #[cfg(test)]
 mod tests {
-  #[tokio::test]
-  async fn test_sqlean_define() {
-    let conn = crate::connect().await.unwrap();
+  #[test]
+  fn test_sqlean_define() {
+    let conn = crate::connect().unwrap();
 
     // Define an application defined function in SQL and test it below.
     conn
-      .query("SELECT define('sumn', ':n * (:n + 1) / 2')", ())
-      .await
+      .query_row("SELECT define('sumn', ':n * (:n + 1) / 2')", (), |_row| {
+        Ok(())
+      })
       .unwrap();
 
-    let value: i64 = crate::query_row(&conn, "SELECT sumn(5)", ())
-      .await
-      .unwrap()
-      .unwrap()
-      .get(0)
+    let value: i64 = conn
+      .query_row("SELECT sumn(5)", (), |row| row.get(0))
       .unwrap();
     assert_eq!(value, 15);
 
-    conn.query("SELECT undefine('sumn')", ()).await.unwrap();
+    conn
+      .query_row("SELECT undefine('sumn')", (), |_row| Ok(()))
+      .unwrap();
   }
 }

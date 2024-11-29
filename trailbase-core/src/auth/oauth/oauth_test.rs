@@ -6,7 +6,6 @@ use axum_test::{TestServer, TestServerConfig};
 use serde::{Deserialize, Serialize};
 use tower_cookies::Cookies;
 
-use crate::api::query_one_row;
 use crate::app_state::{test_state, TestStateOptions};
 use crate::auth::oauth::providers::test::{TestOAuthProvider, TestUser};
 use crate::auth::oauth::state::OAuthState;
@@ -183,13 +182,15 @@ async fn test_oauth() {
   let location = unpack_redirect(internal_redirect);
   assert_eq!(location, "/_/auth/profile");
 
-  let row = query_one_row(
-    state.user_conn(),
-    &format!("SELECT email FROM {USER_TABLE} WHERE provider_user_id = $1"),
-    [external_user_id],
-  )
-  .await
-  .unwrap();
+  let row = state
+    .user_conn()
+    .query_row(
+      &format!("SELECT email FROM {USER_TABLE} WHERE provider_user_id = $1"),
+      (external_user_id,),
+    )
+    .await
+    .unwrap()
+    .unwrap();
 
   assert_eq!(row.get::<String>(0).unwrap(), external_user_email);
 }

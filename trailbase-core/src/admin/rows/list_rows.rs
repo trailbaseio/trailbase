@@ -1,12 +1,10 @@
 use axum::extract::{Json, Path, RawQuery, State};
-use libsql::{params::Params, Connection};
 use log::*;
 use serde::Serialize;
 use std::sync::Arc;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
-use crate::api::query_one_row;
 use crate::app_state::AppState;
 use crate::listing::{
   build_filter_where_clause, limit_or_default, parse_query, Order, WhereClause,
@@ -57,12 +55,13 @@ pub async fn list_rows_handler(
   let total_row_count = {
     let where_clause = &filter_where_clause.clause;
     let count_query = format!("SELECT COUNT(*) FROM '{table_name}' WHERE {where_clause}");
-    let row = query_one_row(
+    let row = crate::util::query_one_row(
       state.conn(),
       &count_query,
-      Params::Named(filter_where_clause.params.clone()),
+      filter_where_clause.params.clone(),
     )
     .await?;
+
     row.get::<i64>(0)?
   };
 
@@ -117,7 +116,7 @@ struct Pagination<'a> {
 }
 
 async fn fetch_rows(
-  conn: &Connection,
+  conn: &tokio_rusqlite::Connection,
   table_or_view_name: &str,
   filter_where_clause: WhereClause,
   order: Option<Vec<(String, Order)>>,
@@ -129,15 +128,18 @@ async fn fetch_rows(
   } = filter_where_clause;
   params.push((
     ":limit".to_string(),
-    libsql::Value::Integer(pagination.limit as i64),
+    tokio_rusqlite::Value::Integer(pagination.limit as i64),
   ));
   params.push((
     ":offset".to_string(),
-    libsql::Value::Integer(pagination.offset.unwrap_or(0) as i64),
+    tokio_rusqlite::Value::Integer(pagination.offset.unwrap_or(0) as i64),
   ));
 
   if let Some(cursor) = pagination.cursor {
-    params.push((":cursor".to_string(), libsql::Value::Blob(cursor.to_vec())));
+    params.push((
+      ":cursor".to_string(),
+      tokio_rusqlite::Value::Blob(cursor.to_vec()),
+    ));
     clause = format!("{clause} AND _row_.id < :cursor",);
   }
 
@@ -175,15 +177,12 @@ async fn fetch_rows(
     "#,
   );
 
-  let result_rows = conn
-    .query(&query, libsql::params::Params::Named(params))
-    .await
-    .map_err(|err| {
-      #[cfg(debug_assertions)]
-      error!("QUERY: {query}\n\t=> {err}");
+  let result_rows = conn.query(&query, params).await.map_err(|err| {
+    #[cfg(debug_assertions)]
+    error!("QUERY: {query}\n\t=> {err}");
 
-      return err;
-    })?;
+    return err;
+  })?;
 
-  return Ok(rows_to_json_arrays(result_rows, 1024).await?);
+  return Ok(rows_to_json_arrays(result_rows, 1024)?);
 }

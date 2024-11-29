@@ -4,8 +4,8 @@ use axum::{
   response::{IntoResponse, Redirect, Response},
 };
 use lazy_static::lazy_static;
-use libsql::named_params;
 use serde::Deserialize;
+use tokio_rusqlite::named_params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 

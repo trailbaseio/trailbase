@@ -11,8 +11,6 @@ use crate::table_metadata::{JsonColumnMetadata, TableOrViewMetadata};
 
 #[derive(Debug, Error)]
 pub enum FileError {
-  #[error("Libsql error: {0}")]
-  Libsql(#[from] libsql::Error),
   #[error("Storage error: {0}")]
   Storage(#[from] object_store::Error),
   #[error("IO error: {0}")]
@@ -56,7 +54,7 @@ pub(crate) async fn read_file_into_response(
 pub(crate) async fn delete_files_in_row(
   state: &AppState,
   metadata: &(dyn TableOrViewMetadata + Send + Sync),
-  row: libsql::Row,
+  row: tokio_rusqlite::Row,
 ) -> Result<(), FileError> {
   for i in 0..row.column_count() {
     let Some(col_name) = row.column_name(i) else {
@@ -72,14 +70,14 @@ pub(crate) async fn delete_files_in_row(
       let store = state.objectstore();
       match json {
         JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
-          if let Ok(json) = row.get_str(i) {
-            let file: FileUpload = serde_json::from_str(json)?;
+          if let Ok(json) = row.get::<String>(i) {
+            let file: FileUpload = serde_json::from_str(&json)?;
             delete_file(store, file).await?;
           }
         }
         JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
-          if let Ok(json) = row.get_str(i) {
-            let file_uploads: FileUploads = serde_json::from_str(json)?;
+          if let Ok(json) = row.get::<String>(i) {
+            let file_uploads: FileUploads = serde_json::from_str(&json)?;
             for file in file_uploads.0 {
               delete_file(store, file).await?;
             }

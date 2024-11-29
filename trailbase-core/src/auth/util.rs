@@ -3,10 +3,9 @@ use base64::prelude::*;
 use chrono::Duration;
 use cookie::SameSite;
 use lazy_static::lazy_static;
-use libsql::{de, params, Connection};
 use sha2::{Digest, Sha256};
+use tokio_rusqlite::params;
 use tower_cookies::{Cookie, Cookies};
-use trailbase_sqlite::{query_one_row, query_row};
 
 use crate::auth::user::{DbUser, User};
 use crate::auth::AuthError;
@@ -132,51 +131,61 @@ pub async fn user_by_email(state: &AppState, email: &str) -> Result<DbUser, Auth
   return get_user_by_email(state.user_conn(), email).await;
 }
 
-pub async fn get_user_by_email(user_conn: &Connection, email: &str) -> Result<DbUser, AuthError> {
+pub async fn get_user_by_email(
+  user_conn: &tokio_rusqlite::Connection,
+  email: &str,
+) -> Result<DbUser, AuthError> {
   lazy_static! {
     static ref QUERY: String = format!("SELECT * FROM {USER_TABLE} WHERE email = $1");
   };
-  let row = query_one_row(user_conn, &QUERY, params!(email))
+  let db_user = user_conn
+    .query_value::<DbUser>(&QUERY, params!(email.to_string()))
     .await
     .map_err(|_err| AuthError::UnauthorizedExt("user not found by email".into()))?;
 
-  return de::from_row(&row).map_err(|_err| AuthError::UnauthorizedExt("invalid user".into()));
+  return db_user.ok_or_else(|| AuthError::UnauthorizedExt("invalid user".into()));
 }
 
 pub async fn user_by_id(state: &AppState, id: &uuid::Uuid) -> Result<DbUser, AuthError> {
   return get_user_by_id(state.user_conn(), id).await;
 }
 
-pub(crate) async fn get_user_by_id(
-  user_conn: &Connection,
+async fn get_user_by_id(
+  user_conn: &tokio_rusqlite::Connection,
   id: &uuid::Uuid,
 ) -> Result<DbUser, AuthError> {
   lazy_static! {
     static ref QUERY: String = format!("SELECT * FROM {USER_TABLE} WHERE id = $1");
   };
-  let row = query_one_row(user_conn, &QUERY, params!(id.into_bytes()))
+  let db_user = user_conn
+    .query_value::<DbUser>(&QUERY, params!(id.into_bytes()))
     .await
     .map_err(|_err| AuthError::UnauthorizedExt("User not found by id".into()))?;
 
-  return de::from_row(&row).map_err(|_err| AuthError::UnauthorizedExt("Invalid user".into()));
+  return db_user.ok_or_else(|| AuthError::UnauthorizedExt("invalid user".into()));
 }
 
-pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, libsql::Error> {
+pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, AuthError> {
   lazy_static! {
     static ref EXISTS_QUERY: String =
       format!("SELECT EXISTS(SELECT 1 FROM '{USER_TABLE}' WHERE email = $1)");
   };
-  let row = query_one_row(state.user_conn(), &EXISTS_QUERY, params!(email)).await?;
-  return row.get::<bool>(0);
+  let row =
+    crate::util::query_one_row(state.user_conn(), &EXISTS_QUERY, params!(email.to_string()))
+      .await?;
+  return row
+    .get::<bool>(0)
+    .map_err(|err| AuthError::Internal(err.into()));
 }
 
 pub(crate) async fn is_admin(state: &AppState, user: &User) -> bool {
-  let Ok(Some(row)) = query_row(
-    state.user_conn(),
-    &format!("SELECT admin FROM {USER_TABLE} WHERE id = $1"),
-    params!(user.uuid.as_bytes().to_vec()),
-  )
-  .await
+  let Ok(Some(row)) = state
+    .user_conn()
+    .query_row(
+      &format!("SELECT admin FROM {USER_TABLE} WHERE id = $1"),
+      params!(user.uuid.as_bytes().to_vec()),
+    )
+    .await
   else {
     return false;
   };
@@ -187,29 +196,36 @@ pub(crate) async fn is_admin(state: &AppState, user: &User) -> bool {
 pub(crate) async fn delete_all_sessions_for_user(
   state: &AppState,
   user_id: uuid::Uuid,
-) -> Result<u64, libsql::Error> {
+) -> Result<usize, AuthError> {
   lazy_static! {
     static ref QUERY: String = format!("DELETE FROM '{SESSION_TABLE}' WHERE user = $1");
   };
 
-  return state
-    .user_conn()
-    .execute(&QUERY, [user_id.into_bytes().to_vec()])
-    .await;
+  return Ok(
+    state
+      .user_conn()
+      .execute(
+        &QUERY,
+        [tokio_rusqlite::Value::Blob(user_id.into_bytes().to_vec())],
+      )
+      .await?,
+  );
 }
 
 pub(crate) async fn delete_session(
   state: &AppState,
   refresh_token: String,
-) -> Result<u64, libsql::Error> {
+) -> Result<usize, AuthError> {
   lazy_static! {
     static ref QUERY: String = format!("DELETE FROM '{SESSION_TABLE}' WHERE refresh_token = $1");
   };
 
-  return state
-    .user_conn()
-    .execute(&QUERY, params!(refresh_token))
-    .await;
+  return Ok(
+    state
+      .user_conn()
+      .execute(&QUERY, params!(refresh_token))
+      .await?,
+  );
 }
 
 /// Derives the code challenge given the verifier as base64UrlNoPad(sha256([codeVerifier])).

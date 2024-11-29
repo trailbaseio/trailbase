@@ -24,24 +24,32 @@ pub async fn create_index_handler(
   State(state): State<AppState>,
   Json(request): Json<CreateIndexRequest>,
 ) -> Result<Json<CreateIndexResponse>, Error> {
-  let conn = state.conn();
   let dry_run = request.dry_run.unwrap_or(false);
   let index_name = request.schema.name.clone();
 
   let create_index_query = request.schema.create_index_statement();
 
   if !dry_run {
-    let mut tx = TransactionRecorder::new(
-      conn.clone(),
-      state.data_dir().migrations_path(),
-      format!("create_index_{index_name}"),
-    )
-    .await?;
+    let create_index_query = create_index_query.clone();
+    let migration_path = state.data_dir().migrations_path();
+    let conn = state.conn();
+    let writer = conn
+      .call(move |conn| {
+        let mut tx =
+          TransactionRecorder::new(conn, migration_path, format!("create_index_{index_name}"))?;
 
-    tx.query(&create_index_query).await?;
+        tx.execute(&create_index_query)?;
+
+        return tx
+          .rollback_and_create_migration()
+          .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
+      })
+      .await?;
 
     // Write to migration file.
-    tx.commit_and_create_migration().await?;
+    if let Some(writer) = writer {
+      writer.write(conn).await?;
+    }
   }
 
   return Ok(Json(CreateIndexResponse {
