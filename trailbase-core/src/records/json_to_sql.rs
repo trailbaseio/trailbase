@@ -11,6 +11,7 @@ use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::files::delete_files_in_row;
 use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{self, ColumnMetadata, JsonColumnMetadata, TableMetadata};
+use crate::util::query_one_row2;
 use crate::AppState;
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -71,6 +72,8 @@ pub enum QueryError {
   Precondition(&'static str),
   #[error("Sql error: {0}")]
   Sql(Arc<libsql::Error>),
+  #[error("TRusqlite error: {0}")]
+  Sql3(Arc<tokio_rusqlite::Error>),
   #[error("Rusqlite error: {0}")]
   Sql2(Arc<rusqlite::Error>),
   #[error("Json serialization error: {0}")]
@@ -323,13 +326,14 @@ impl SelectQueryBuilder {
     table_name: &str,
     pk_column: &str,
     pk_value: libsql::Value,
-  ) -> Result<Option<libsql::Row>, libsql::Error> {
-    return query_row(
-      state.conn(),
-      &format!("SELECT * FROM '{table_name}' WHERE {pk_column} = $1"),
-      [pk_value],
-    )
-    .await;
+  ) -> Result<Option<tokio_rusqlite::Row>, tokio_rusqlite::Error> {
+    return state
+      .conn2()
+      .query_row(
+        &format!("SELECT * FROM '{table_name}' WHERE {pk_column} = $1"),
+        [pk_value],
+      )
+      .await;
   }
 }
 
@@ -407,7 +411,7 @@ impl InsertQueryBuilder {
     params: Params,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: Option<&str>,
-  ) -> Result<libsql::Row, QueryError> {
+  ) -> Result<tokio_rusqlite::Row, QueryError> {
     let (query_fragment, named_params, mut files) =
       Self::build_insert_query(params, conflict_resolution)?;
     let query = match return_column_name {
@@ -424,7 +428,7 @@ impl InsertQueryBuilder {
       }
     }
 
-    let row = match query_one_row(state.conn(), &query, named_params).await {
+    let row = match query_one_row2(state.conn2(), &query, named_params).await {
       Ok(row) => row,
       Err(err) => {
         if !files.is_empty() {
@@ -437,7 +441,7 @@ impl InsertQueryBuilder {
             }
           }
         }
-        return Err(err.into());
+        return Err(QueryError::Sql3(err.into()));
       }
     };
 
@@ -469,128 +473,6 @@ impl InsertQueryBuilder {
       libsql::params::Params::Named(params.params),
       params.files,
     ));
-  }
-
-  fn conflict_resolution_clause(config: ConflictResolutionStrategy) -> &'static str {
-    type C = ConflictResolutionStrategy;
-    return match config {
-      C::Undefined => "",
-      C::Abort => "OR ABORT",
-      C::Rollback => "OR ROLLBACK",
-      C::Fail => "OR FAIL",
-      C::Ignore => "OR IGNORE",
-      C::Replace => "OR REPLACE",
-    };
-  }
-}
-
-#[allow(unused)]
-pub(crate) struct InsertQueryBuilder2;
-
-#[allow(unused)]
-impl InsertQueryBuilder2 {
-  pub(crate) async fn run(
-    state: &AppState,
-    params: Params,
-    conflict_resolution: Option<ConflictResolutionStrategy>,
-    pk_column: Column,
-  ) -> Result<String, QueryError> {
-    let (query_fragment, named_params, mut files) =
-      Self::build_insert_query(params, conflict_resolution)?;
-    let return_column_name = &pk_column.name;
-    let query = format!("{query_fragment} RETURNING {return_column_name}");
-
-    // We're storing any files to the object store first to make sure the DB entry is valid right
-    // after commit and not racily pointing to soon-to-be-written files.
-    if !files.is_empty() {
-      let objectstore = state.objectstore();
-      for (metadata, content) in &mut files {
-        write_file(objectstore, metadata, content).await?;
-      }
-    }
-
-    let y = named_params
-      .iter()
-      .map(|(ref name, ref value)| {
-        return (name.as_str(), value as &dyn rusqlite::ToSql);
-      })
-      .collect_vec();
-    // let x : &[(&str, &dyn rusqlite::types::ToSql)] = &[];
-
-    let id: String = state
-      .foo()
-      .query_row_and_then(&query, y.as_slice(), |row| {
-        return match pk_column.data_type {
-          ColumnDataType::Blob => Ok(BASE64_URL_SAFE.encode(row.get::<_, [u8; 16]>(0)?)),
-          ColumnDataType::Integer => Ok(row.get::<_, i64>(0)?.to_string()),
-          _ => Ok("FOO".to_string()),
-        };
-      })
-      .map_err(|err: rusqlite::Error| QueryError::Sql2(err.into()))?;
-
-    // let row = match query_one_row(state.conn(), &query, named_params).await {
-    //   Ok(row) => row,
-    //   Err(err) => {
-    //     if !files.is_empty() {
-    //       let objectstore = state.objectstore();
-    //
-    //       for (metadata, _files) in &files {
-    //         let path = object_store::path::Path::from(metadata.path());
-    //         if let Err(err) = objectstore.delete(&path).await {
-    //           warn!("Failed to cleanup file after failed insertion (leak): {err}");
-    //         }
-    //       }
-    //     }
-    //     return Err(err.into());
-    //   }
-    // };
-
-    return Ok(id);
-  }
-
-  fn build_insert_query(
-    params: Params,
-    conflict_resolution: Option<ConflictResolutionStrategy>,
-  ) -> Result<
-    (
-      String,
-      Vec<(String, rusqlite::types::Value)>,
-      FileMetadataContents,
-    ),
-    QueryError,
-  > {
-    let table_name = &params.table_name;
-
-    let conflict_clause = Self::conflict_resolution_clause(
-      conflict_resolution.unwrap_or(ConflictResolutionStrategy::Undefined),
-    );
-
-    let column_names = params.column_names();
-    let query = match column_names.is_empty() {
-      true => format!("INSERT {conflict_clause} INTO '{table_name}' DEFAULT VALUES"),
-      false => format!(
-        "INSERT {conflict_clause} INTO '{table_name}' ({col_names}) VALUES ({placeholders})",
-        col_names = column_names.join(", "),
-        placeholders = params.placeholders(),
-      ),
-    };
-
-    let p = params
-      .params
-      .into_iter()
-      .map(|(name, value)| {
-        let v = match value {
-          libsql::Value::Null => rusqlite::types::Value::Null,
-          libsql::Value::Real(r) => rusqlite::types::Value::Real(r),
-          libsql::Value::Text(t) => rusqlite::types::Value::Text(t),
-          libsql::Value::Integer(i) => rusqlite::types::Value::Integer(i),
-          libsql::Value::Blob(b) => rusqlite::types::Value::Blob(b),
-        };
-        return (name, v);
-      })
-      .collect::<Vec<_>>();
-
-    return Ok((query, p, params.files));
   }
 
   fn conflict_resolution_clause(config: ConflictResolutionStrategy) -> &'static str {

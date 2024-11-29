@@ -64,6 +64,9 @@ pub async fn init_app_state(
 
     (conn, new_db)
   };
+  let conn2 = tokio_rusqlite::Connection::open(data_dir.main_db_path())
+    .await
+    .unwrap();
 
   let table_metadata = TableMetadataCache::new(main_conn.clone()).await?;
 
@@ -120,6 +123,7 @@ pub async fn init_app_state(
     table_metadata,
     config,
     conn: main_conn.clone(),
+    conn2,
     logs_conn,
     jwt,
     object_store,

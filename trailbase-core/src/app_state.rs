@@ -33,6 +33,8 @@ struct InternalState {
   logs_conn: Connection,
   conn: Connection,
 
+  conn2: tokio_rusqlite::Connection,
+
   jwt: JwtHelper,
 
   table_metadata: TableMetadataCache,
@@ -52,6 +54,7 @@ pub(crate) struct AppStateArgs {
   pub table_metadata: TableMetadataCache,
   pub config: Config,
   pub conn: Connection,
+  pub conn2: tokio_rusqlite::Connection,
   pub logs_conn: Connection,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore + Send + Sync>,
@@ -123,6 +126,7 @@ impl AppState {
         }),
         config,
         conn: args.conn.clone(),
+        conn2: args.conn2.clone(),
         logs_conn: args.logs_conn,
         jwt: args.jwt,
         table_metadata: args.table_metadata,
@@ -148,15 +152,8 @@ impl AppState {
     return self.state.dev;
   }
 
-  pub fn foo(&self) -> &'static rusqlite::Connection {
-    lazy_static::lazy_static! {
-      static ref BAR: thread_local::ThreadLocal<rusqlite::Connection> = thread_local::ThreadLocal::<rusqlite::Connection>::new();
-    }
-
-    #[cfg(not(test))]
-    return BAR.get_or(|| rusqlite::Connection::open(self.data_dir().main_db_path()).unwrap());
-    #[cfg(test)]
-    return BAR.get_or(|| rusqlite::Connection::open_in_memory().unwrap());
+  pub fn conn2(&self) -> &tokio_rusqlite::Connection {
+    return &self.state.conn2;
   }
 
   pub fn conn(&self) -> &Connection {
@@ -165,6 +162,10 @@ impl AppState {
 
   pub(crate) fn user_conn(&self) -> &Connection {
     return &self.state.conn;
+  }
+
+  pub fn user_conn2(&self) -> &tokio_rusqlite::Connection {
+    return &self.state.conn2;
   }
 
   pub(crate) fn logs_conn(&self) -> &Connection {
@@ -440,6 +441,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       }),
       config,
       conn: main_conn.clone(),
+      conn2: tokio_rusqlite::Connection::open_in_memory().await.unwrap(),
       logs_conn,
       jwt: jwt::test_jwt_helper(),
       table_metadata,

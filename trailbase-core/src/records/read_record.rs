@@ -8,7 +8,7 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::records::files::read_file_into_response;
 use crate::records::json_to_sql::{GetFileQueryBuilder, GetFilesQueryBuilder, SelectQueryBuilder};
-use crate::records::sql_to_json::row_to_json;
+use crate::records::sql_to_json::row_to_json2;
 use crate::records::{Permission, RecordError};
 
 /// Read record.
@@ -46,7 +46,7 @@ pub async fn read_record_handler(
   };
 
   return Ok(Json(
-    row_to_json(api.metadata(), row, |col_name| !col_name.starts_with("_"))
+    row_to_json2(api.metadata(), row, |col_name| !col_name.starts_with("_"))
       .map_err(|err| RecordError::Internal(err.into()))?,
   ));
 }

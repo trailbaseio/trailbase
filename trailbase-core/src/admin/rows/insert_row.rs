@@ -6,7 +6,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::records::json_to_sql::{InsertQueryBuilder, JsonRow, Params};
-use crate::records::sql_to_json::row_to_json_array;
+use crate::records::sql_to_json::row_to_json_array2;
 
 #[derive(Debug, Serialize, Deserialize, Default, TS)]
 #[ts(export)]
@@ -41,5 +41,5 @@ pub(crate) async fn insert_row(
   )
   .await?;
 
-  return Ok(row_to_json_array(row)?);
+  return Ok(row_to_json_array2(row)?);
 }

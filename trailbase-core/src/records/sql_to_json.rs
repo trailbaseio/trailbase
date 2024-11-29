@@ -34,7 +34,24 @@ fn value_to_json(value: libsql::Value) -> Result<serde_json::Value, JsonError> {
   });
 }
 
-// Serialize libsql row to json.
+fn value_to_json2(value: rusqlite::types::Value) -> Result<serde_json::Value, JsonError> {
+  return Ok(match value {
+    rusqlite::types::Value::Null => serde_json::Value::Null,
+    rusqlite::types::Value::Real(real) => {
+      let Some(number) = serde_json::Number::from_f64(real) else {
+        return Err(JsonError::Finite);
+      };
+      serde_json::Value::Number(number)
+    }
+    rusqlite::types::Value::Integer(integer) => {
+      serde_json::Value::Number(serde_json::Number::from(integer))
+    }
+    rusqlite::types::Value::Blob(blob) => serde_json::Value::String(BASE64_URL_SAFE.encode(blob)),
+    rusqlite::types::Value::Text(text) => serde_json::Value::String(text),
+  });
+}
+
+/// Serialize libsql row to json.
 pub fn row_to_json(
   metadata: &(dyn TableOrViewMetadata + Send + Sync),
   row: libsql::Row,
@@ -69,7 +86,42 @@ pub fn row_to_json(
   return Ok(serde_json::Value::Object(map));
 }
 
-// Turns rows into a list of json objects.
+/// Serialize libsql row to json.
+pub fn row_to_json2(
+  metadata: &(dyn TableOrViewMetadata + Send + Sync),
+  row: tokio_rusqlite::Row,
+  column_filter: fn(&str) -> bool,
+) -> Result<serde_json::Value, JsonError> {
+  let mut map = serde_json::Map::<String, serde_json::Value>::default();
+
+  for i in 0..(row.column_count()) {
+    let Some(col_name) = row.column_name(i) else {
+      error!("Missing column name for {i} in  {row:?}");
+      continue;
+    };
+    if !column_filter(col_name) {
+      continue;
+    }
+
+    let value = row.get_value(i).map_err(|_err| JsonError::ValueNotFound)?;
+    if let rusqlite::types::Value::Text(str) = &value {
+      if let Some((_col, col_meta)) = metadata.column_by_name(col_name) {
+        if col_meta.json.is_some() {
+          map.insert(col_name.to_string(), serde_json::from_str(str)?);
+          continue;
+        }
+      } else {
+        warn!("Missing col: {col_name}");
+      }
+    }
+
+    map.insert(col_name.to_string(), value_to_json2(value)?);
+  }
+
+  return Ok(serde_json::Value::Object(map));
+}
+
+/// Turns rows into a list of json objects.
 pub async fn rows_to_json(
   metadata: &(dyn TableOrViewMetadata + Send + Sync),
   mut rows: libsql::Rows,
@@ -92,6 +144,18 @@ pub fn row_to_json_array(row: libsql::Row) -> Result<Vec<serde_json::Value>, Jso
   for i in 0..cols {
     let value = row.get_value(i).map_err(|_err| JsonError::ValueNotFound)?;
     json_row.push(value_to_json(value)?);
+  }
+
+  return Ok(json_row);
+}
+
+pub fn row_to_json_array2(row: tokio_rusqlite::Row) -> Result<Vec<serde_json::Value>, JsonError> {
+  let cols = row.column_count();
+  let mut json_row = Vec::<serde_json::Value>::with_capacity(cols as usize);
+
+  for i in 0..cols {
+    let value = row.get_value(i).map_err(|_err| JsonError::ValueNotFound)?;
+    json_row.push(value_to_json2(value)?);
   }
 
   return Ok(json_row);

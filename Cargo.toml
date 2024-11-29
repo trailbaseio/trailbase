@@ -8,6 +8,7 @@ members = [
   "trailbase-sqlite",
   "vendor/refinery-libsql",
   "vendor/sqlean",
+  "vendor/tokio-rusqlite",
 ]
 default-members = [
   "trailbase-cli",
@@ -44,3 +45,4 @@ rusqlite = { package = "libsql-rusqlite", version = "^0.33", default-features = 
     "backup",
 ] }
 sqlite-loadable = { package = "sqlite-loadable", path = "./vendor/sqlite-loadable", features=["static"] }
+tokio-rusqlite = { package = "tokio-rusqlite", path = "./vendor/tokio-rusqlite" }
