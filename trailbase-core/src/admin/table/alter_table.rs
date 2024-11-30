@@ -71,21 +71,23 @@ pub async fn alter_table_handler(
   let mut target_schema_copy = target_schema.clone();
   target_schema_copy.name = temp_table_name.to_string();
 
-  let mut tx = TransactionRecorder::new(
-    state.conn().clone(),
-    state.data_dir().migrations_path(),
-    format!("alter_table_{source_table_name}"),
-  )
-  .await?;
-  tx.execute("PRAGMA foreign_keys = OFF").await?;
+  {
+    let mut conn = state.rusqlite()?;
+    let mut tx = TransactionRecorder::new(
+      &mut conn,
+      state.data_dir().migrations_path(),
+      format!("alter_table_{source_table_name}"),
+    )?;
 
-  // Create new table
-  let sql = target_schema_copy.create_table_statement();
-  tx.query(&sql).await?;
+    tx.execute("PRAGMA foreign_keys = OFF")?;
 
-  // Copy
-  tx.query(&format!(
-    r#"
+    // Create new table
+    let sql = target_schema_copy.create_table_statement();
+    tx.query(&sql)?;
+
+    // Copy
+    tx.query(&format!(
+      r#"
     INSERT INTO
       {temp_table_name} ({column_list})
     SELECT
@@ -93,24 +95,25 @@ pub async fn alter_table_handler(
     FROM
       {source_table_name}
   "#,
-    column_list = copy_columns.join(", "),
-  ))
-  .await?;
+      column_list = copy_columns.join(", "),
+    ))?;
 
-  tx.query(&format!("DROP TABLE {source_table_name}")).await?;
+    tx.query(&format!("DROP TABLE {source_table_name}"))?;
 
-  if *target_table_name != temp_table_name {
-    tx.query(&format!(
-      "ALTER TABLE '{temp_table_name}' RENAME TO '{target_table_name}'"
-    ))
-    .await?;
+    if *target_table_name != temp_table_name {
+      tx.query(&format!(
+        "ALTER TABLE '{temp_table_name}' RENAME TO '{target_table_name}'"
+      ))?;
+    }
+
+    tx.execute("PRAGMA foreign_keys = ON")?;
+
+    // Write to migration file.
+    if let Some(writer) = tx.commit_and_create_migration()? {
+      let report = writer.write(&mut conn)?;
+      debug!("Migration report: {report:?}");
+    }
   }
-
-  tx.execute("PRAGMA foreign_keys = ON").await?;
-
-  // Write to migration file.
-  let report = tx.commit_and_create_migration().await?;
-  debug!("Migration report: {report:?}");
 
   state.table_metadata().invalidate_all().await?;
 
@@ -127,7 +130,7 @@ mod tests {
   #[tokio::test]
   async fn test_alter_table() -> Result<(), anyhow::Error> {
     let state = test_state(None).await?;
-    let conn = state.conn();
+    let conn = state.conn2();
     let pk_col = "my_pk".to_string();
 
     let create_table_request = CreateTableRequest {

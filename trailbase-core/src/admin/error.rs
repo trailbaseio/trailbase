@@ -9,7 +9,11 @@ pub enum AdminError {
   #[error("Libsql error: {0}")]
   Libsql(#[from] libsql::Error),
   #[error("TRusqlite error: {0}")]
-  Rusqlite(#[from] tokio_rusqlite::Error),
+  TRusqlite(#[from] tokio_rusqlite::Error),
+  #[error("Rusqlite error: {0}")]
+  Rusqlite(#[from] rusqlite::Error),
+  #[error("Rusqlite FromSql error: {0}")]
+  RusqliteFromsql(#[from] rusqlite::types::FromSqlError),
   #[error("Deserialization error: {0}")]
   Deserialization(#[from] serde::de::value::Error),
   #[error("JsonSerialization error: {0}")]

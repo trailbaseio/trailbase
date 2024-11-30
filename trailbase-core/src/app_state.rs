@@ -156,6 +156,10 @@ impl AppState {
     return &self.state.conn2;
   }
 
+  pub fn rusqlite(&self) -> Result<rusqlite::Connection, rusqlite::Error> {
+    return rusqlite::Connection::open(self.data_dir().main_db_path());
+  }
+
   pub fn conn(&self) -> &Connection {
     return &self.state.conn;
   }

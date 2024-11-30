@@ -24,7 +24,6 @@ pub async fn create_table_handler(
   State(state): State<AppState>,
   Json(request): Json<CreateTableRequest>,
 ) -> Result<Json<CreateTableResponse>, Error> {
-  let conn = state.conn();
   if request.schema.columns.is_empty() {
     return Err(Error::Precondition(
       "Tables need to have at least one column".to_string(),
@@ -37,17 +36,21 @@ pub async fn create_table_handler(
   let query = request.schema.create_table_statement();
 
   if !dry_run {
-    let mut tx = TransactionRecorder::new(
-      conn.clone(),
-      state.data_dir().migrations_path(),
-      format!("create_table_{table_name}"),
-    )
-    .await?;
+    {
+      let mut conn = state.rusqlite()?;
+      let mut tx = TransactionRecorder::new(
+        &mut conn,
+        state.data_dir().migrations_path(),
+        format!("create_table_{table_name}"),
+      )?;
 
-    tx.query(&query).await?;
+      tx.query(&query)?;
 
-    // Write to migration file.
-    tx.commit_and_create_migration().await?;
+      // Write to migration file.
+      if let Some(writer) = tx.commit_and_create_migration()? {
+        let _report = writer.write(&mut conn)?;
+      }
+    }
 
     state.table_metadata().invalidate_all().await?;
   }

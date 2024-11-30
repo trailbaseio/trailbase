@@ -22,22 +22,23 @@ pub async fn drop_index_handler(
   State(state): State<AppState>,
   Json(request): Json<DropIndexRequest>,
 ) -> Result<Response, Error> {
-  let conn = state.conn();
   let index_name = request.name;
 
+  let mut conn = state.rusqlite()?;
   let mut tx = TransactionRecorder::new(
-    conn.clone(),
+    &mut conn,
     state.data_dir().migrations_path(),
     format!("drop_index_{index_name}"),
-  )
-  .await?;
+  )?;
 
   let query = format!("DROP INDEX IF EXISTS {}", index_name);
   info!("dropping index: {query}");
-  tx.execute(&query).await?;
+  tx.execute(&query)?;
 
   // Write to migration file.
-  tx.commit_and_create_migration().await?;
+  if let Some(writer) = tx.commit_and_create_migration()? {
+    let _report = writer.write(&mut conn)?;
+  }
 
   return Ok((StatusCode::OK, "").into_response());
 }

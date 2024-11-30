@@ -24,24 +24,25 @@ pub async fn create_index_handler(
   State(state): State<AppState>,
   Json(request): Json<CreateIndexRequest>,
 ) -> Result<Json<CreateIndexResponse>, Error> {
-  let conn = state.conn();
   let dry_run = request.dry_run.unwrap_or(false);
   let index_name = request.schema.name.clone();
 
   let create_index_query = request.schema.create_index_statement();
 
   if !dry_run {
+    let mut conn = state.rusqlite()?;
     let mut tx = TransactionRecorder::new(
-      conn.clone(),
+      &mut conn,
       state.data_dir().migrations_path(),
       format!("create_index_{index_name}"),
-    )
-    .await?;
+    )?;
 
-    tx.query(&create_index_query).await?;
+    tx.query(&create_index_query)?;
 
     // Write to migration file.
-    tx.commit_and_create_migration().await?;
+    if let Some(writer) = tx.commit_and_create_migration()? {
+      writer.write(&mut conn)?;
+    }
   }
 
   return Ok(Json(CreateIndexResponse {

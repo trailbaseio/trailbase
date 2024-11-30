@@ -35,19 +35,23 @@ pub async fn drop_table_handler(
     )));
   }
 
-  let mut tx = TransactionRecorder::new(
-    state.conn().clone(),
-    state.data_dir().migrations_path(),
-    format!("drop_{}_{table_name}", entity_type.to_lowercase()),
-  )
-  .await?;
+  {
+    let mut conn = state.rusqlite()?;
+    let mut tx = TransactionRecorder::new(
+      &mut conn,
+      state.data_dir().migrations_path(),
+      format!("drop_{}_{table_name}", entity_type.to_lowercase()),
+    )?;
 
-  let query = format!("DROP {entity_type} IF EXISTS {table_name}");
-  info!("dropping table: {query}");
-  tx.execute(&query).await?;
+    let query = format!("DROP {entity_type} IF EXISTS {table_name}");
+    info!("dropping table: {query}");
+    tx.execute(&query)?;
 
-  // Write to migration file.
-  tx.commit_and_create_migration().await?;
+    // Write to migration file.
+    if let Some(writer) = tx.commit_and_create_migration()? {
+      let _report = writer.write(&mut conn)?;
+    }
+  }
   state.table_metadata().invalidate_all().await?;
 
   return Ok((StatusCode::OK, "").into_response());

@@ -31,32 +31,34 @@ pub struct ListSchemasResponse {
 pub async fn list_tables_handler(
   State(state): State<AppState>,
 ) -> Result<Json<ListSchemasResponse>, Error> {
-  let conn = state.conn();
+  let conn = state.conn2();
 
   // NOTE: the "ORDER BY" is a bit sneaky, it ensures that we parse all "table"s before we parse
   // "view"s.
-  let mut rows = conn
+  let rows = conn
     .query(
-      &format!("SELECT * FROM {SQLITE_SCHEMA_TABLE} ORDER BY type"),
+      &format!("SELECT type, name, tbl_name, sql FROM {SQLITE_SCHEMA_TABLE} ORDER BY type"),
       (),
     )
     .await?;
 
   let mut schemas = ListSchemasResponse::default();
 
-  while let Some(row) = rows.next().await? {
-    #[derive(Deserialize, Debug)]
+  for row in rows.iter() {
+    #[derive(Debug)]
     pub struct SqliteSchema {
       pub r#type: String,
       pub name: String,
       pub tbl_name: String,
-      #[allow(unused)]
-      pub rootpage: i64,
-
       pub sql: Option<String>,
     }
 
-    let schema: SqliteSchema = de::from_row(&row)?;
+    let schema = SqliteSchema {
+      r#type: row.get(0)?,
+      name: row.get(1)?,
+      tbl_name: row.get(3)?,
+      sql: row.get(4)?,
+    };
     let name = &schema.name;
 
     match schema.r#type.as_str() {

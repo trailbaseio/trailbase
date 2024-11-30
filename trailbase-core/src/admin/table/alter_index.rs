@@ -27,32 +27,31 @@ pub async fn alter_index_handler(
   State(state): State<AppState>,
   Json(request): Json<AlterIndexRequest>,
 ) -> Result<Response, Error> {
-  let conn = state.conn();
-
   let source_schema = request.source_schema;
   let source_index_name = &source_schema.name;
   let target_schema = request.target_schema;
 
   debug!("Alter index:\nsource: {source_schema:?}\ntarget: {target_schema:?}",);
 
+  let mut conn = state.rusqlite()?;
   let mut tx = TransactionRecorder::new(
-    conn.clone(),
+    &mut conn,
     state.data_dir().migrations_path(),
     format!("alter_index_{source_index_name}"),
-  )
-  .await?;
+  )?;
 
   // Drop old index
-  tx.execute(&format!("DROP INDEX {source_index_name}"))
-    .await?;
+  tx.execute(&format!("DROP INDEX {source_index_name}"))?;
 
   // Create new index
   let create_index_query = target_schema.create_index_statement();
-  tx.query(&create_index_query).await?;
+  tx.query(&create_index_query)?;
 
   // Write to migration file.
-  let report = tx.commit_and_create_migration().await?;
-  debug!("Migration report: {report:?}");
+  if let Some(writer) = tx.commit_and_create_migration()? {
+    let report = writer.write(&mut conn)?;
+    debug!("Migration report: {report:?}");
+  }
 
   return Ok((StatusCode::OK, "altered index").into_response());
 }

@@ -115,7 +115,7 @@ mod tests {
   #[tokio::test]
   async fn test_insert_update_delete_rows() {
     let state = test_state(None).await.unwrap();
-    let conn = state.conn();
+    let conn = state.conn2();
 
     let table_name = "test_table".to_string();
     let pk_col = "myid".to_string();
@@ -184,8 +184,10 @@ mod tests {
     };
 
     let count = || async {
-      query_one_row(conn, &format!("SELECT COUNT(*) FROM '{table_name}'"), ())
+      conn
+        .query_row(&format!("SELECT COUNT(*) FROM '{table_name}'"), ())
         .await
+        .unwrap()
         .unwrap()
         .get::<i64>(0)
         .unwrap()
