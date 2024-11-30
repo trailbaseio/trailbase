@@ -100,7 +100,7 @@ pub async fn change_email_request_handler(
   }
 
   let rows_affected = state
-    .user_conn()
+    .user_conn2()
     .execute(
       &QUERY,
       named_params! {
@@ -185,7 +185,7 @@ pub async fn change_email_confirm_handler(
   }
 
   let rows_affected = state
-    .user_conn()
+    .user_conn2()
     .execute(
       &QUERY,
       named_params! {

@@ -44,5 +44,6 @@ rusqlite = { package = "libsql-rusqlite", version = "^0.33", default-features = 
     "limits",
     "backup",
 ] }
+serde_rusqlite = { package = "serde_rusqlite", path = "./vendor/serde_rusqlite" }
 sqlite-loadable = { package = "sqlite-loadable", path = "./vendor/sqlite-loadable", features=["static"] }
 tokio-rusqlite = { package = "tokio-rusqlite", path = "./vendor/tokio-rusqlite" }

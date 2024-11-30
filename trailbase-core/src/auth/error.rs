@@ -48,6 +48,31 @@ impl From<libsql::Error> for AuthError {
   }
 }
 
+impl From<tokio_rusqlite::Error> for AuthError {
+  fn from(err: tokio_rusqlite::Error) -> Self {
+    // FIXME
+    return Self::Internal(err.into());
+    // return match err {
+    //   libsql::Error::QueryReturnedNoRows => Self::NotFound,
+    //   // List of error codes: https://www.sqlite.org/rescode.html
+    //   libsql::Error::SqliteFailure(275, _msg) => Self::BadRequest("sqlite constraint: check"),
+    //   libsql::Error::SqliteFailure(531, _msg) => Self::BadRequest("sqlite constraint: commit
+    // hook"),   libsql::Error::SqliteFailure(3091, _msg) => Self::BadRequest("sqlite
+    // constraint: data type"),   libsql::Error::SqliteFailure(787, _msg) =>
+    // Self::BadRequest("sqlite constraint: fk"),   libsql::Error::SqliteFailure(1043, _msg) =>
+    // Self::BadRequest("sqlite constraint: function"),   libsql::Error::SqliteFailure(1299,
+    // _msg) => Self::BadRequest("sqlite constraint: not null"),
+    //   libsql::Error::SqliteFailure(2835, _msg) => Self::BadRequest("sqlite constraint: pinned"),
+    //   libsql::Error::SqliteFailure(1555, _msg) => Self::BadRequest("sqlite constraint: pk"),
+    //   libsql::Error::SqliteFailure(2579, _msg) => Self::BadRequest("sqlite constraint: row id"),
+    //   libsql::Error::SqliteFailure(1811, _msg) => Self::BadRequest("sqlite constraint: trigger"),
+    //   libsql::Error::SqliteFailure(2067, _msg) => Self::BadRequest("sqlite constraint: unique"),
+    //   libsql::Error::SqliteFailure(2323, _msg) => Self::BadRequest("sqlite constraint: vtab"),
+    //   err => Self::Internal(err.into()),
+    // };
+  }
+}
+
 impl IntoResponse for AuthError {
   fn into_response(self) -> Response {
     let (status, body) = match self {

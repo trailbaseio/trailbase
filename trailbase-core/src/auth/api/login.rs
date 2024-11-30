@@ -126,7 +126,7 @@ pub(crate) async fn login_handler(
     }
 
     let rows_affected = state
-      .user_conn()
+      .user_conn2()
       .execute(
         &QUERY,
         named_params! {

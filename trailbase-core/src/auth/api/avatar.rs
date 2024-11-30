@@ -15,8 +15,8 @@ use crate::constants::{AVATAR_TABLE, RECORD_API_PATH};
 use crate::util::{assert_uuidv7_version, id_to_b64};
 
 async fn get_avatar_url(state: &AppState, user: &DbUser) -> Option<String> {
-  if let Ok(row) = query_one_row(
-    state.user_conn(),
+  if let Ok(row) = crate::util::query_one_row2(
+    state.user_conn2(),
     &format!("SELECT EXISTS(SELECT user FROM '{AVATAR_TABLE}' WHERE user = $1)"),
     params!(user.id),
   )
@@ -197,16 +197,15 @@ mod tests {
 
     let user_x_token = login_with_password(&state, email, password).await.unwrap();
 
-    let db_user: DbUser = de::from_row(
-      &query_one_row(
-        state.user_conn(),
+    let db_user = state
+      .user_conn2()
+      .query_value::<DbUser>(
         &format!("SELECT * FROM '{USER_TABLE}' WHERE email = $1"),
         [email],
       )
       .await
-      .unwrap(),
-    )
-    .unwrap();
+      .unwrap()
+      .unwrap();
 
     let missing_profile_response = get_avatar_url_handler(
       State(state.clone()),

@@ -165,7 +165,7 @@ pub(crate) async fn mint_new_tokens(
   }
 
   state
-    .user_conn()
+    .user_conn2()
     .execute(
       &QUERY,
       params!(user_id.into_bytes(), refresh_token.clone(),),
@@ -197,13 +197,13 @@ pub(crate) async fn reauth_with_refresh_token(
     );
   }
 
-  let Some(row) = query_row(
-    state.user_conn(),
-    &QUERY,
-    params!(refresh_token, refresh_token_ttl.num_seconds()),
-  )
-  .await
-  .map_err(|err| AuthError::Internal(err.into()))?
+  let Some(db_user) = state
+    .user_conn2()
+    .query_value::<DbUser>(
+      &QUERY,
+      params!(refresh_token, refresh_token_ttl.num_seconds()),
+    )
+    .await?
   else {
     // Row not found case, typically expected in one of 4 cases:
     //  1. Above where clause doesn't match, e.g. refresh token expired.
@@ -215,8 +215,6 @@ pub(crate) async fn reauth_with_refresh_token(
 
     return Err(AuthError::Unauthorized);
   };
-
-  let db_user: DbUser = de::from_row(&row).map_err(|err| AuthError::Internal(err.into()))?;
 
   assert!(
     db_user.verified,

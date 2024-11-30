@@ -4867,6 +4867,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_rusqlite"
+version = "0.36.0"
+dependencies = [
+ "libsql-rusqlite",
+ "serde",
+ "serde_bytes",
+ "serde_derive",
+]
+
+[[package]]
 name = "serde_urlencoded"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5843,6 +5853,8 @@ dependencies = [
  "crossbeam-channel",
  "libsql",
  "libsql-rusqlite",
+ "serde",
+ "serde_rusqlite",
  "tokio",
 ]
 

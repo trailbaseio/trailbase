@@ -87,9 +87,9 @@ pub async fn register_user_handler(
     );
   }
 
-  let user: DbUser = de::from_row(
-    &query_one_row(
-      state.user_conn(),
+  let Some(user) = state
+    .user_conn2()
+    .query_value::<DbUser>(
       &INSERT_USER_QUERY,
       named_params! {
         ":email": normalized_email.clone(),
@@ -97,14 +97,16 @@ pub async fn register_user_handler(
         ":email_verification_code": email_verification_code.clone(),
       },
     )
-    .await?,
-  )
-  .map_err(|_err| {
-    #[cfg(debug_assertions)]
-    log::debug!("Failed to create user {normalized_email}: {_err}");
-    // The insert will fail if the user is already registered
-    AuthError::Conflict
-  })?;
+    .await
+    .map_err(|_err| {
+      #[cfg(debug_assertions)]
+      log::debug!("Failed to create user {normalized_email}: {_err}");
+      // The insert will fail if the user is already registered
+      AuthError::Conflict
+    })?
+  else {
+    return Err(AuthError::Internal("Failed to get user".into()));
+  };
 
   let email = Email::verification_email(&state, &user, &email_verification_code)
     .map_err(|err| AuthError::Internal(err.into()))?;

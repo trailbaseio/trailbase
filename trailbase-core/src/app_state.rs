@@ -325,6 +325,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 
     conn
   };
+  let conn2 = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
 
   let logs_conn = {
     let conn = trailbase_sqlite::connect_sqlite(None, None).await?;
@@ -332,7 +333,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     conn
   };
 
-  let table_metadata = TableMetadataCache::new(main_conn.clone()).await?;
+  let table_metadata = TableMetadataCache::new(conn2.clone()).await?;
 
   let build_default_config = || {
     // Construct a fabricated config for tests and make sure it's valid.
@@ -441,7 +442,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       }),
       config,
       conn: main_conn.clone(),
-      conn2: tokio_rusqlite::Connection::open_in_memory().await.unwrap(),
+      conn2,
       logs_conn,
       jwt: jwt::test_jwt_helper(),
       table_metadata,

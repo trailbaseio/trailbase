@@ -10,3 +10,6 @@
 [submodule "vendor/tokio-rusqlite"]
 	path = vendor/tokio-rusqlite
 	url = https://github.com/trailbaseio/tokio-rusqlite.git
+[submodule "vendor/serde_rusqlite"]
+	path = vendor/serde_rusqlite
+	url = https://github.com/trailbaseio/serde_rusqlite.git

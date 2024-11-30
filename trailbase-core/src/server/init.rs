@@ -68,7 +68,7 @@ pub async fn init_app_state(
     .await
     .unwrap();
 
-  let table_metadata = TableMetadataCache::new(main_conn.clone()).await?;
+  let table_metadata = TableMetadataCache::new(conn2.clone()).await?;
 
   // Read config or write default one.
   let config = load_or_init_config_textproto(&data_dir, &table_metadata).await?;

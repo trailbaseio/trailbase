@@ -80,7 +80,7 @@ pub async fn reset_password_request_handler(
   }
 
   let rows_affected = state
-    .user_conn()
+    .user_conn2()
     .execute(
       &UPDATE_CODE_QUERY,
       params!(password_reset_code.clone(), user.id),
@@ -153,7 +153,7 @@ pub async fn reset_password_update_handler(
   }
 
   let rows_affected = state
-    .user_conn()
+    .user_conn2()
     .execute(
       &UPDATE_PASSWORD_QUERY,
       params!(hashed_password, password_reset_code),

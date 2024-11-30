@@ -598,7 +598,9 @@ mod test {
 
   async fn test_default_config_is_valid() {
     let state = test_state(None).await.unwrap();
-    let table_metadata = TableMetadataCache::new(state.conn().clone()).await.unwrap();
+    let table_metadata = TableMetadataCache::new(state.conn2().clone())
+      .await
+      .unwrap();
 
     let config = Config::new_with_custom_defaults();
     validate_config(&table_metadata, &config).unwrap();
