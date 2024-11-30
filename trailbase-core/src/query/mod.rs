@@ -14,7 +14,7 @@ pub use query_api::QueryApi;
 
 use crate::auth::User;
 use crate::config::proto::QueryApiParameterType;
-use crate::records::sql_to_json::rows_to_json_arrays;
+use crate::records::sql_to_json::rows_to_json_arrays2;
 use crate::AppState;
 
 pub(crate) fn router() -> Router<AppState> {
@@ -93,7 +93,7 @@ pub async fn query_handler(
 
   const LIMIT: usize = 128;
   let response_rows = state
-    .conn()
+    .conn2()
     .query(
       &format!(
         "SELECT * FROM {virtual_table_name}({placeholders}) WHERE TRUE LIMIT {LIMIT}",
@@ -107,9 +107,8 @@ pub async fn query_handler(
     )
     .await?;
 
-  let (json_rows, columns) = rows_to_json_arrays(response_rows, LIMIT)
-    .await
-    .map_err(|err| E::Internal(err.into()))?;
+  let (json_rows, columns) =
+    rows_to_json_arrays2(response_rows, LIMIT).map_err(|err| E::Internal(err.into()))?;
 
   let Some(columns) = columns else {
     return Err(E::Internal("Missing column mapping".into()));
@@ -148,7 +147,7 @@ mod test {
   async fn test_query_api() {
     let state = test_state(None).await.unwrap();
 
-    let conn = state.conn();
+    let conn = state.conn2();
     conn
       .execute(
         "CREATE VIRTUAL TABLE test_vtable USING define((SELECT $1 AS value))",

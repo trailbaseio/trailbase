@@ -48,6 +48,41 @@ impl From<libsql::Error> for QueryError {
   }
 }
 
+impl From<tokio_rusqlite::Error> for QueryError {
+  fn from(err: tokio_rusqlite::Error) -> Self {
+    return match err {
+      tokio_rusqlite::Error::Rusqlite(err) => match err {
+        // rusqlite::Error::QueryReturnedNoRows => {
+        //   #[cfg(debug_assertions)]
+        //   info!("libsql returned empty rows error");
+        //
+        //   Self::RecordNotFound
+        // }
+        rusqlite::Error::SqliteFailure(err, _msg) => {
+          match err.extended_code {
+            // List of error codes: https://www.sqlite.org/rescode.html
+            275 => Self::BadRequest("sqlite constraint: check"),
+            531 => Self::BadRequest("sqlite constraint: commit hook"),
+            3091 => Self::BadRequest("sqlite constraint: data type"),
+            787 => Self::BadRequest("sqlite constraint: fk"),
+            1043 => Self::BadRequest("sqlite constraint: function"),
+            1299 => Self::BadRequest("sqlite constraint: not null"),
+            2835 => Self::BadRequest("sqlite constraint: pinned"),
+            1555 => Self::BadRequest("sqlite constraint: pk"),
+            2579 => Self::BadRequest("sqlite constraint: row id"),
+            1811 => Self::BadRequest("sqlite constraint: trigger"),
+            2067 => Self::BadRequest("sqlite constraint: unique"),
+            2323 => Self::BadRequest("sqlite constraint: vtab"),
+            _ => Self::Internal(err.into()),
+          }
+        }
+        _ => Self::Internal(err.into()),
+      },
+      err => Self::Internal(err.into()),
+    };
+  }
+}
+
 impl IntoResponse for QueryError {
   fn into_response(self) -> Response {
     let (status, body) = match self {

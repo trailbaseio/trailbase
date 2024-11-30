@@ -3,7 +3,7 @@ use axum::{
   Json,
 };
 use lazy_static::lazy_static;
-use libsql::{de, params::Params, Connection};
+use libsql::{de, params::Params};
 use log::*;
 use serde::Serialize;
 use trailbase_sqlite::query_one_row;
@@ -60,7 +60,7 @@ pub async fn list_users_handler(
   State(state): State<AppState>,
   RawQuery(raw_url_query): RawQuery,
 ) -> Result<Json<ListUsersResponse>, Error> {
-  let conn = state.user_conn();
+  let conn = state.user_conn2();
 
   let url_query = parse_query(raw_url_query);
   info!("query: {url_query:?}");
@@ -78,7 +78,7 @@ pub async fn list_users_handler(
 
   let total_row_count = {
     let where_clause = &filter_where_clause.clause;
-    let row = query_one_row(
+    let row = crate::util::query_one_row2(
       conn,
       &format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE {where_clause}"),
       Params::Named(filter_where_clause.params.clone()),
@@ -112,7 +112,7 @@ pub async fn list_users_handler(
 }
 
 async fn fetch_users(
-  conn: &Connection,
+  conn: &tokio_rusqlite::Connection,
   filter_where_clause: WhereClause,
   cursor: Option<[u8; 16]>,
   order: Vec<(String, Order)>,
@@ -156,15 +156,8 @@ async fn fetch_users(
 
   info!("PARAMS: {params:?}\nQUERY: {sql_query}");
 
-  let mut rows = conn.query(&sql_query, Params::Named(params)).await?;
-
-  let mut users: Vec<DbUser> = vec![];
-  while let Ok(Some(row)) = rows.next().await {
-    match de::from_row(&row) {
-      Ok(user) => users.push(user),
-      Err(err) => warn!("failed: {err}"),
-    };
-  }
-
+  let users = conn
+    .query_values::<DbUser>(&sql_query, Params::Named(params))
+    .await?;
   return Ok(users);
 }

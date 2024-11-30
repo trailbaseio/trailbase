@@ -213,7 +213,7 @@ fn rows_to_columns2(rows: &tokio_rusqlite::Rows) -> Result<Vec<Column>, libsql::
   for i in 0..rows.column_count() {
     columns.push(Column {
       name: rows.column_name(i).unwrap_or("<missing>").to_string(),
-      data_type: match rows.column_type(i)? {
+      data_type: match rows.column_type(i).unwrap_or(T::Null) {
         T::Real => ColumnDataType::Real,
         T::Text => ColumnDataType::Text,
         T::Integer => ColumnDataType::Integer,
@@ -251,12 +251,18 @@ pub async fn rows_to_json_arrays(
 }
 
 pub fn rows_to_json_arrays2(
-  mut rows: tokio_rusqlite::Rows,
+  rows: tokio_rusqlite::Rows,
   limit: usize,
 ) -> Result<(Vec<Vec<serde_json::Value>>, Option<Vec<Column>>), JsonError> {
   let mut cnt = 0_usize;
 
-  let columns = rows_to_columns2(&rows).ok();
+  let columns = match rows_to_columns2(&rows) {
+    Ok(columns) => Some(columns),
+    Err(err) => {
+      debug!("Failed to get column def: {err}");
+      None
+    }
+  };
 
   let mut json_rows: Vec<Vec<serde_json::Value>> = vec![];
   for row in rows.iter() {

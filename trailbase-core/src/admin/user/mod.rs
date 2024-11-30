@@ -55,7 +55,7 @@ mod tests {
     assert_eq!(Uuid::from_bytes(user.id), user_id);
 
     state
-      .user_conn()
+      .user_conn2()
       .execute(
         &format!("DELETE FROM '{USER_TABLE}' WHERE id = $1"),
         params!(user.get_id().as_bytes()),
