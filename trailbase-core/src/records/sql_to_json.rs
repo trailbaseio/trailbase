@@ -164,7 +164,7 @@ pub fn row_to_json_array(row: libsql::Row) -> Result<Vec<serde_json::Value>, Jso
   return Ok(json_row);
 }
 
-pub fn row_to_json_array2(row: tokio_rusqlite::Row) -> Result<Vec<serde_json::Value>, JsonError> {
+pub fn row_to_json_array2(row: &tokio_rusqlite::Row) -> Result<Vec<serde_json::Value>, JsonError> {
   let cols = row.column_count();
   let mut json_row = Vec::<serde_json::Value>::with_capacity(cols as usize);
 
@@ -181,6 +181,32 @@ pub fn row_to_json_array2(row: tokio_rusqlite::Row) -> Result<Vec<serde_json::Va
 /// WARN: This is lossy and whenever possible we should rely on parsed "CREATE TABLE" statement for
 /// the respective column.
 fn rows_to_columns(rows: &libsql::Rows) -> Result<Vec<Column>, libsql::Error> {
+  use libsql::ValueType as T;
+
+  let mut columns: Vec<Column> = vec![];
+  for i in 0..rows.column_count() {
+    columns.push(Column {
+      name: rows.column_name(i).unwrap_or("<missing>").to_string(),
+      data_type: match rows.column_type(i)? {
+        T::Real => ColumnDataType::Real,
+        T::Text => ColumnDataType::Text,
+        T::Integer => ColumnDataType::Integer,
+        T::Null => ColumnDataType::Null,
+        T::Blob => ColumnDataType::Blob,
+      },
+      // We cannot derive the options from a row of data.
+      options: vec![],
+    });
+  }
+
+  return Ok(columns);
+}
+
+/// Best-effort conversion from row values to column definition.
+///
+/// WARN: This is lossy and whenever possible we should rely on parsed "CREATE TABLE" statement for
+/// the respective column.
+fn rows_to_columns2(rows: &tokio_rusqlite::Rows) -> Result<Vec<Column>, libsql::Error> {
   use libsql::ValueType as T;
 
   let mut columns: Vec<Column> = vec![];
@@ -219,6 +245,27 @@ pub async fn rows_to_json_arrays(
     cnt += 1;
 
     json_rows.push(row_to_json_array(row)?);
+  }
+
+  return Ok((json_rows, columns));
+}
+
+pub fn rows_to_json_arrays2(
+  mut rows: tokio_rusqlite::Rows,
+  limit: usize,
+) -> Result<(Vec<Vec<serde_json::Value>>, Option<Vec<Column>>), JsonError> {
+  let mut cnt = 0_usize;
+
+  let columns = rows_to_columns2(&rows).ok();
+
+  let mut json_rows: Vec<Vec<serde_json::Value>> = vec![];
+  for row in rows.iter() {
+    if cnt >= limit {
+      break;
+    }
+    cnt += 1;
+
+    json_rows.push(row_to_json_array2(row)?);
   }
 
   return Ok((json_rows, columns));

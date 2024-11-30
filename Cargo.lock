@@ -4272,6 +4272,7 @@ version = "0.8.14"
 dependencies = [
  "async-trait",
  "cfg-if",
+ "libsql-rusqlite",
  "log",
  "regex",
  "siphasher 1.0.1",

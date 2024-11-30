@@ -8,6 +8,8 @@ use thiserror::Error;
 pub enum AdminError {
   #[error("Libsql error: {0}")]
   Libsql(#[from] libsql::Error),
+  #[error("TRusqlite error: {0}")]
+  Rusqlite(#[from] tokio_rusqlite::Error),
   #[error("Deserialization error: {0}")]
   Deserialization(#[from] serde::de::value::Error),
   #[error("JsonSerialization error: {0}")]

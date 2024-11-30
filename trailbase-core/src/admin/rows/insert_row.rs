@@ -41,5 +41,5 @@ pub(crate) async fn insert_row(
   )
   .await?;
 
-  return Ok(row_to_json_array2(row)?);
+  return Ok(row_to_json_array2(&row)?);
 }

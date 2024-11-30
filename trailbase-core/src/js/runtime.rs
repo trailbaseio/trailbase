@@ -3,7 +3,6 @@ use axum::extract::{RawPathParams, Request};
 use axum::http::{header::CONTENT_TYPE, request::Parts, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Router;
-use libsql::Connection;
 use parking_lot::Mutex;
 use rustyscript::{
   deno_core::PollEventLoopOptions, init_platform, js_value::Promise, json_args, Module, Runtime,
@@ -19,7 +18,7 @@ use tokio::sync::oneshot;
 use crate::assets::cow_to_string;
 use crate::auth::user::User;
 use crate::js::import_provider::JsRuntimeAssets;
-use crate::records::sql_to_json::rows_to_json_arrays;
+use crate::records::sql_to_json::rows_to_json_arrays2;
 use crate::{AppState, DataDir};
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
@@ -73,7 +72,7 @@ enum Message {
 
 struct State {
   sender: async_channel::Sender<Message>,
-  connection: Mutex<Option<libsql::Connection>>,
+  connection: Mutex<Option<tokio_rusqlite::Connection>>,
 }
 
 struct RuntimeSingleton {
@@ -361,8 +360,7 @@ impl RuntimeSingleton {
           .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
-        let (values, _columns) = rows_to_json_arrays(rows, usize::MAX)
-          .await
+        let (values, _columns) = rows_to_json_arrays2(rows, usize::MAX)
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
         return Ok(serde_json::json!(values));
@@ -414,7 +412,7 @@ pub(crate) struct RuntimeHandle {
 
 impl RuntimeHandle {
   #[cfg(not(test))]
-  pub(crate) fn set_connection(&self, conn: Connection) {
+  pub(crate) fn set_connection(&self, conn: tokio_rusqlite::Connection) {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
@@ -425,7 +423,7 @@ impl RuntimeHandle {
   }
 
   #[cfg(test)]
-  pub(crate) fn set_connection(&self, conn: Connection) {
+  pub(crate) fn set_connection(&self, conn: tokio_rusqlite::Connection) {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
@@ -437,7 +435,7 @@ impl RuntimeHandle {
   }
 
   #[cfg(test)]
-  pub(crate) fn override_connection(&self, conn: Connection) {
+  pub(crate) fn override_connection(&self, conn: tokio_rusqlite::Connection) {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
@@ -797,15 +795,6 @@ mod tests {
   use rustyscript::Module;
   use trailbase_sqlite::query_one_row;
 
-  async fn new_mem_conn() -> libsql::Connection {
-    return libsql::Builder::new_local(":memory:")
-      .build()
-      .await
-      .unwrap()
-      .connect()
-      .unwrap();
-  }
-
   #[tokio::test]
   async fn test_serial_tests() {
     // NOTE: needs to run serially since registration of libsql connection with singleton v8 runtime
@@ -852,7 +841,7 @@ mod tests {
   }
 
   async fn test_javascript_query() {
-    let conn = new_mem_conn().await;
+    let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
     conn
       .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
       .await
@@ -901,7 +890,7 @@ mod tests {
   }
 
   async fn test_javascript_execute() {
-    let conn = new_mem_conn().await;
+    let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
     conn
       .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
       .await
@@ -930,8 +919,10 @@ mod tests {
       .await
       .unwrap();
 
-    let row = query_one_row(&conn, "SELECT COUNT(*) FROM test", ())
+    let row = conn
+      .query_row("SELECT COUNT(*) FROM test", ())
       .await
+      .unwrap()
       .unwrap();
     let count: i64 = row.get(0).unwrap();
     assert_eq!(0, count);

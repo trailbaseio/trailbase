@@ -32,7 +32,7 @@ enum RecordApiMetadata {
 }
 
 struct RecordApiState {
-  conn: libsql::Connection,
+  conn: tokio_rusqlite::Connection,
   metadata: RecordApiMetadata,
   record_pk_column: Column,
 
@@ -51,7 +51,7 @@ struct RecordApiState {
 
 impl RecordApi {
   pub fn from_table(
-    conn: libsql::Connection,
+    conn: tokio_rusqlite::Connection,
     table_metadata: TableMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
@@ -82,7 +82,7 @@ impl RecordApi {
   }
 
   pub fn from_view(
-    conn: libsql::Connection,
+    conn: tokio_rusqlite::Connection,
     view_metadata: ViewMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
@@ -119,7 +119,7 @@ impl RecordApi {
   }
 
   fn from_impl(
-    conn: libsql::Connection,
+    conn: tokio_rusqlite::Connection,
     record_pk_column: Column,
     metadata: RecordApiMetadata,
     config: RecordApiConfig,
@@ -255,7 +255,7 @@ impl RecordApi {
         )
         .await?;
 
-      let row = match query_one_row(&self.state.conn, &access_query, params).await {
+      let row = match crate::util::query_one_row2(&self.state.conn, &access_query, params).await {
         Ok(row) => row,
         Err(err) => {
           error!("RLA query '{access_query}' failed: {err}");

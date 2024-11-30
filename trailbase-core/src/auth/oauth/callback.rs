@@ -135,7 +135,7 @@ pub(crate) async fn callback_from_external_auth_provider(
     return Err(AuthError::BadRequest("remote oauth user not verified"));
   }
 
-  let conn = state.user_conn();
+  let conn = state.user_conn2();
   let existing_user =
     user_by_provider_id(conn, oauth_user.provider_id, &oauth_user.provider_user_id)
       .await
@@ -223,7 +223,7 @@ pub(crate) async fn callback_from_external_auth_provider(
       }
 
       let rows_affected = state
-        .user_conn()
+        .user_conn2()
         .execute(
           &QUERY,
           named_params! {
@@ -254,7 +254,7 @@ pub(crate) async fn callback_from_external_auth_provider(
 }
 
 async fn create_user_for_external_provider(
-  conn: &Connection,
+  conn: &tokio_rusqlite::Connection,
   user: &OAuthUser,
 ) -> Result<uuid::Uuid, AuthError> {
   if !user.verified {
@@ -273,7 +273,7 @@ async fn create_user_for_external_provider(
     );
   }
 
-  let row = query_one_row(
+  let row = crate::util::query_one_row2(
     conn,
     &QUERY,
     named_params! {
@@ -286,11 +286,15 @@ async fn create_user_for_external_provider(
   )
   .await?;
 
-  return Ok(uuid::Uuid::from_bytes(row.get::<[u8; 16]>(0)?));
+  return Ok(uuid::Uuid::from_bytes(
+    row
+      .get::<[u8; 16]>(0)
+      .map_err(|err| AuthError::Internal(err.into()))?,
+  ));
 }
 
 async fn user_by_provider_id(
-  conn: &Connection,
+  conn: &tokio_rusqlite::Connection,
   provider_id: OAuthProviderId,
   provider_user_id: &str,
 ) -> Result<DbUser, AuthError> {
@@ -299,8 +303,9 @@ async fn user_by_provider_id(
       format!("SELECT * FROM '{USER_TABLE}' WHERE provider_id = $1 AND provider_user_id = $2");
   };
 
-  return de::from_row(
-    &query_one_row(conn, &QUERY, params!(provider_id as i64, provider_user_id)).await?,
-  )
-  .map_err(|err| AuthError::Internal(err.into()));
+  return conn
+    .query_value::<DbUser>(&QUERY, params!(provider_id as i64, provider_user_id))
+    .await
+    .map_err(|err| AuthError::Internal(err.into()))?
+    .ok_or_else(|| AuthError::NotFound);
 }

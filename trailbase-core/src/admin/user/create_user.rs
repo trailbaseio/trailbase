@@ -64,9 +64,9 @@ pub async fn create_user_handler(
     );
   }
 
-  let user: DbUser = de::from_row(
-    &query_one_row(
-      state.user_conn(),
+  let Some(user) = state
+    .user_conn2()
+    .query_value::<DbUser>(
       &INSERT_USER_QUERY,
       named_params! {
         ":email": normalized_email,
@@ -76,8 +76,10 @@ pub async fn create_user_handler(
         ":email_verification_code": email_verification_code.clone(),
       },
     )
-    .await?,
-  )?;
+    .await?
+  else {
+    return Err(Error::Precondition("Internal".into()));
+  };
 
   if let Some(email_verification_code) = email_verification_code {
     Email::verification_email(&state, &user, &email_verification_code)?

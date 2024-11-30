@@ -109,7 +109,7 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
       let timestamp = (Utc::now() - refresh_token_ttl).timestamp();
 
       match state
-        .user_conn()
+        .user_conn2()
         .execute(
           &format!("DELETE FROM '{SESSION_TABLE}' WHERE updated < $1"),
           params!(timestamp),
@@ -123,7 +123,7 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
   });
 
   // Optimizer
-  let conn = app_state.conn().clone();
+  let conn = app_state.conn2().clone();
   tasks.add_periodic_task(Duration::hours(24), move || {
     let conn = conn.clone();
 

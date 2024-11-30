@@ -17,6 +17,10 @@ use crate::table_metadata::TableMetadataCache;
 pub enum InitError {
   #[error("Libsql error: {0}")]
   Libsql(#[from] libsql::Error),
+  #[error("TRusqlite error: {0}")]
+  TRusqlite(#[from] tokio_rusqlite::Error),
+  #[error("Rusqlite error: {0}")]
+  Rusqlite(#[from] rusqlite::types::FromSqlError),
   #[error("DB Migration error: {0}")]
   Migration(#[from] refinery::Error),
   #[error("IO error: {0}")]
@@ -131,8 +135,8 @@ pub async fn init_app_state(
   });
 
   if new_db {
-    let num_admins: i64 = query_one_row(
-      app_state.user_conn(),
+    let num_admins: i64 = crate::util::query_one_row2(
+      app_state.user_conn2(),
       &format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE admin = TRUE"),
       (),
     )
@@ -144,7 +148,7 @@ pub async fn init_app_state(
       let password = generate_random_string(20);
 
       app_state
-        .user_conn()
+        .user_conn2()
         .execute(
           &format!(
             r#"

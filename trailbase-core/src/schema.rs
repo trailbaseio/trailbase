@@ -1025,15 +1025,6 @@ mod tests {
   use super::*;
   use crate::constants::USER_TABLE;
 
-  async fn new_mem_conn() -> libsql::Connection {
-    return libsql::Builder::new_local(":memory:")
-      .build()
-      .await
-      .unwrap()
-      .connect()
-      .unwrap();
-  }
-
   #[tokio::test]
   async fn test_statement_to_table_schema_and_back() {
     lazy_static! {
@@ -1059,7 +1050,7 @@ mod tests {
 
     {
       // First Make sure the query is actually valid, as opposed to "only" parsable.
-      let conn = new_mem_conn().await;
+      let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
       conn.execute(&SQL, ()).await.unwrap();
     }
 
@@ -1071,7 +1062,7 @@ mod tests {
     let sql = table1.create_table_statement();
     {
       // Same as above, make sure the constructed query is valid as opposed to "only" parsable.
-      let conn = new_mem_conn().await;
+      let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
       conn.execute(&sql, ()).await.unwrap();
     }
 

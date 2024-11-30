@@ -32,7 +32,7 @@ codegen-units = 1
 
 [workspace.dependencies]
 libsql = { package = "libsql", version = "^0.6.0", default-features = false, features = ["core", "serde"] }
-refinery = { package = "refinery", path = "vendor/refinery/refinery", default-features = false }
+refinery = { package = "refinery", path = "vendor/refinery/refinery", default-features = false, features = ["rusqlite"] }
 refinery-core = { package = "refinery-core", path = "vendor/refinery/refinery_core" }
 refinery-libsql = { package = "refinery-libsql", path = "vendor/refinery-libsql" }
 rusqlite = { package = "libsql-rusqlite", version = "^0.33", default-features = false, features = [

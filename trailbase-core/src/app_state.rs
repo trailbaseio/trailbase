@@ -71,13 +71,13 @@ impl AppState {
     let config = ValueNotifier::new(args.config);
 
     let table_metadata_clone = args.table_metadata.clone();
-    let conn_clone0 = args.conn.clone();
+    let conn_clone0 = args.conn2.clone();
     let conn_clone1 = args.conn.clone();
 
     let runtime = args
       .js_runtime_threads
       .map_or_else(RuntimeHandle::new, RuntimeHandle::new_with_threads);
-    runtime.set_connection(args.conn.clone());
+    runtime.set_connection(args.conn2.clone());
 
     AppState {
       state: Arc::new(InternalState {
@@ -314,6 +314,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
   use crate::config::validate_config;
   use crate::migrations::{apply_logs_migrations, apply_main_migrations, apply_user_migrations};
+  use crate::migrations::{apply_main_migrations2, apply_user_migrations2};
 
   let temp_dir = temp_dir::TempDir::new()?;
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
@@ -325,7 +326,13 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 
     conn
   };
-  let conn2 = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
+  let conn2 = {
+    let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+    apply_user_migrations2(&mut conn)?;
+    let _new_db = apply_main_migrations2(&mut conn, None)?;
+
+    tokio_rusqlite::Connection::from_conn(conn).await.unwrap()
+  };
 
   let logs_conn = {
     let conn = trailbase_sqlite::connect_sqlite(None, None).await?;
@@ -377,7 +384,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   validate_config(&table_metadata, &config).unwrap();
   let config = ValueNotifier::new(config);
 
-  let main_conn_clone0 = main_conn.clone();
+  let main_conn_clone0 = conn2.clone();
   let main_conn_clone1 = main_conn.clone();
   let table_metadata_clone = table_metadata.clone();
 
@@ -402,7 +409,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   };
 
   let runtime = RuntimeHandle::new();
-  runtime.set_connection(main_conn.clone());
+  runtime.set_connection(conn2.clone());
 
   return Ok(AppState {
     state: Arc::new(InternalState {
@@ -454,7 +461,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 }
 
 fn build_record_api(
-  conn: libsql::Connection,
+  conn: tokio_rusqlite::Connection,
   table_metadata_cache: &TableMetadataCache,
   config: RecordApiConfig,
 ) -> Result<RecordApi, String> {
