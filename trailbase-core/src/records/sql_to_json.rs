@@ -89,7 +89,7 @@ pub fn row_to_json(
 /// Serialize libsql row to json.
 pub fn row_to_json2(
   metadata: &(dyn TableOrViewMetadata + Send + Sync),
-  row: tokio_rusqlite::Row,
+  row: &tokio_rusqlite::Row,
   column_filter: fn(&str) -> bool,
 ) -> Result<serde_json::Value, JsonError> {
   let mut map = serde_json::Map::<String, serde_json::Value>::default();
@@ -131,6 +131,21 @@ pub async fn rows_to_json(
 
   while let Some(row) = rows.next().await.map_err(|_err| JsonError::RowNotFound)? {
     objects.push(row_to_json(metadata, row, column_filter)?);
+  }
+
+  return Ok(objects);
+}
+
+/// Turns rows into a list of json objects.
+pub async fn rows_to_json2(
+  metadata: &(dyn TableOrViewMetadata + Send + Sync),
+  rows: tokio_rusqlite::Rows,
+  column_filter: fn(&str) -> bool,
+) -> Result<Vec<serde_json::Value>, JsonError> {
+  let mut objects: Vec<serde_json::Value> = vec![];
+
+  for row in rows.iter() {
+    objects.push(row_to_json2(metadata, row, column_filter)?);
   }
 
   return Ok(objects);
@@ -216,12 +231,12 @@ mod tests {
 
   use super::*;
   use crate::app_state::*;
-  use crate::table_metadata::{lookup_and_parse_table_schema, TableMetadata};
+  use crate::table_metadata::{lookup_and_parse_table_schema2, TableMetadata};
 
   #[tokio::test]
   async fn test_read_rows() {
     let state = test_state(None).await.unwrap();
-    let conn = state.conn();
+    let conn = state.conn2();
 
     let pattern = serde_json::from_str(
       r#"{
@@ -253,7 +268,7 @@ mod tests {
       .await
       .unwrap();
 
-    let table = lookup_and_parse_table_schema(conn, "test_table")
+    let table = lookup_and_parse_table_schema2(conn, "test_table")
       .await
       .unwrap();
     let metadata = TableMetadata::new(table.clone(), &[table]);
@@ -277,7 +292,7 @@ mod tests {
     insert(object.clone()).await.unwrap();
 
     let rows = conn.query("SELECT * FROM test_table", ()).await.unwrap();
-    let parsed = rows_to_json(&metadata, rows, |_| true).await.unwrap();
+    let parsed = rows_to_json2(&metadata, rows, |_| true).await.unwrap();
 
     assert_eq!(parsed.len(), 1);
     let serde_json::Value::Object(map) = parsed.first().unwrap() else {

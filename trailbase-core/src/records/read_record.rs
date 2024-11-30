@@ -46,7 +46,7 @@ pub async fn read_record_handler(
   };
 
   return Ok(Json(
-    row_to_json2(api.metadata(), row, |col_name| !col_name.starts_with("_"))
+    row_to_json2(api.metadata(), &row, |col_name| !col_name.starts_with("_"))
       .map_err(|err| RecordError::Internal(err.into()))?,
   ));
 }
@@ -163,7 +163,7 @@ pub async fn get_uploaded_files_from_record_handler(
 mod test {
   use axum::extract::{Path, Query, State};
   use axum::Json;
-  use trailbase_sqlite::{query_one_row, schema::FileUpload, schema::FileUploadInput};
+  use trailbase_sqlite::{schema::FileUpload, schema::FileUploadInput};
 
   use super::*;
   use crate::admin::user::*;
@@ -181,7 +181,7 @@ mod test {
   use crate::records::test_utils::*;
   use crate::records::*;
   use crate::test::unpack_json_response;
-  use crate::util::id_to_b64;
+  use crate::util::{id_to_b64, query_one_row2};
 
   #[tokio::test]
   async fn libsql_ignores_extra_parameters_test() -> Result<(), anyhow::Error> {
@@ -189,7 +189,7 @@ mod test {
     // arguments. Specifically, we want to provide :user and :id arguments even if they're not
     // consumed by a user-provided access query.
     let state = test_state(None).await?;
-    let conn = state.user_conn();
+    let conn = state.user_conn2();
 
     const EMAIL: &str = "foo@bar.baz";
     conn
@@ -199,7 +199,7 @@ mod test {
       )
       .await?;
 
-    query_one_row(
+    query_one_row2(
       conn,
       &format!("SELECT * from '{USER_TABLE}' WHERE email = :email"),
       libsql::named_params! {
@@ -216,12 +216,12 @@ mod test {
   #[tokio::test]
   async fn test_record_api_read() -> Result<(), anyhow::Error> {
     let state = test_state(None).await?;
-    let conn = state.conn();
+    let conn = state.conn2();
 
     // Add tables and record api before inserting data.
     create_chat_message_app_tables(&state).await?;
-    let room0 = add_room(conn, "room0").await?;
-    let room1 = add_room(conn, "room1").await?;
+    let room0 = add_room2(conn, "room0").await?;
+    let room1 = add_room2(conn, "room1").await?;
     let password = "Secret!1!!";
 
     // Register message table as record api with moderator read access.
@@ -245,8 +245,8 @@ mod test {
       .await?
       .into_bytes();
 
-    add_user_to_room(conn, user_x, room0).await?;
-    add_user_to_room(conn, user_x, room1).await?;
+    add_user_to_room2(conn, user_x, room0).await?;
+    add_user_to_room2(conn, user_x, room1).await?;
 
     let user_x_token = login_with_password(&state, user_x_email, password).await?;
 
@@ -255,14 +255,14 @@ mod test {
       .await?
       .into_bytes();
 
-    add_user_to_room(conn, user_y, room0).await?;
+    add_user_to_room2(conn, user_y, room0).await?;
 
     let user_y_token = login_with_password(&state, user_y_email, password).await?;
 
     // Finally, create some messages and try to access them.
     {
       // Post to room0. X, Y, and mod should be able to read it.
-      let message_id = send_message(conn, user_x, room0, "from user_x to room0").await?;
+      let message_id = send_message2(conn, user_x, room0, "from user_x to room0").await?;
 
       // No creds, no read
       assert!(read_record_handler(
@@ -298,7 +298,7 @@ mod test {
 
     {
       // Post to room1. Only X, and mod should be able to read it. User Y is not a member
-      let message_id = send_message(conn, user_x, room1, "from user_x to room1").await?;
+      let message_id = send_message2(conn, user_x, room1, "from user_x to room1").await?;
 
       // User Y
       let response = read_record_handler(
@@ -314,7 +314,7 @@ mod test {
   }
 
   async fn create_test_record_api(state: &AppState, api_name: &str) -> Result<(), anyhow::Error> {
-    let conn = state.conn();
+    let conn = state.conn2();
     conn
       .execute(
         &format!(
@@ -528,7 +528,7 @@ mod test {
   #[tokio::test]
   async fn test_read_record_from_view() -> Result<(), anyhow::Error> {
     let state = test_state(None).await?;
-    let conn = state.conn();
+    let conn = state.conn2();
 
     // Add tables and record api before inserting data.
     create_chat_message_app_tables(&state).await?;
@@ -545,8 +545,8 @@ mod test {
 
     state.table_metadata().invalidate_all().await?;
 
-    let room0 = add_room(conn, "room0").await?;
-    let room1 = add_room(conn, "room1").await?;
+    let room0 = add_room2(conn, "room0").await?;
+    let room1 = add_room2(conn, "room1").await?;
     let password = "Secret!1!!";
 
     add_record_api(
@@ -569,13 +569,13 @@ mod test {
       .await?
       .into_bytes();
 
-    add_user_to_room(conn, user_x, room0).await?;
-    add_user_to_room(conn, user_x, room1).await?;
+    add_user_to_room2(conn, user_x, room0).await?;
+    add_user_to_room2(conn, user_x, room1).await?;
 
     let user_x_token = login_with_password(&state, user_x_email, password).await?;
 
     // Post to room0. X, Y, and mod should be able to read it.
-    let message_id = send_message(conn, user_x, room0, "from user_x to room0").await?;
+    let message_id = send_message2(conn, user_x, room0, "from user_x to room0").await?;
 
     // User X
     let response = read_record_handler(

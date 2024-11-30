@@ -8,7 +8,7 @@ use trailbase_sqlite::schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{query_one_row, query_row};
 
 use crate::config::proto::ConflictResolutionStrategy;
-use crate::records::files::delete_files_in_row;
+use crate::records::files::delete_files_in_row2;
 use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{self, ColumnMetadata, JsonColumnMetadata, TableMetadata};
 use crate::util::query_one_row2;
@@ -72,10 +72,12 @@ pub enum QueryError {
   Precondition(&'static str),
   #[error("Sql error: {0}")]
   Sql(Arc<libsql::Error>),
-  #[error("TRusqlite error: {0}")]
-  Sql3(Arc<tokio_rusqlite::Error>),
   #[error("Rusqlite error: {0}")]
   Sql2(Arc<rusqlite::Error>),
+  #[error("TRusqlite error: {0}")]
+  Sql3(Arc<tokio_rusqlite::Error>),
+  #[error("TRusqlite error: {0}")]
+  Sql4(Arc<rusqlite::types::FromSqlError>),
   #[error("Json serialization error: {0}")]
   JsonSerialization(Arc<serde_json::Error>),
   #[error("ObjectStore error: {0}")]
@@ -95,6 +97,18 @@ impl From<libsql::Error> for QueryError {
 impl From<serde_json::Error> for QueryError {
   fn from(err: serde_json::Error) -> Self {
     return Self::JsonSerialization(Arc::new(err));
+  }
+}
+
+impl From<tokio_rusqlite::Error> for QueryError {
+  fn from(err: tokio_rusqlite::Error) -> Self {
+    return Self::Sql3(Arc::new(err));
+  }
+}
+
+impl From<rusqlite::types::FromSqlError> for QueryError {
+  fn from(err: rusqlite::types::FromSqlError) -> Self {
+    return Self::Sql4(Arc::new(err));
   }
 }
 
@@ -351,12 +365,13 @@ impl GetFileQueryBuilder {
       Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUpload" => {
         let column_name = &file_column.0.name;
 
-        let Some(row) = query_row(
-          state.conn(),
-          &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
-          [pk_value],
-        )
-        .await?
+        let Some(row) = state
+          .conn2()
+          .query_row(
+            &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
+            [pk_value],
+          )
+          .await?
         else {
           return Err(QueryError::NotFound);
         };
@@ -384,12 +399,13 @@ impl GetFilesQueryBuilder {
       Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUploads" => {
         let column_name = &file_column.0.name;
 
-        let Some(row) = query_row(
-          state.conn(),
-          &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
-          [pk_value],
-        )
-        .await?
+        let Some(row) = state
+          .conn2()
+          .query_row(
+            &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
+            [pk_value],
+          )
+          .await?
         else {
           return Err(QueryError::NotFound);
         };
@@ -441,7 +457,7 @@ impl InsertQueryBuilder {
             }
           }
         }
-        return Err(QueryError::Sql3(err.into()));
+        return Err(err.into());
       }
     };
 
@@ -516,12 +532,12 @@ impl UpdateQueryBuilder {
     }
 
     async fn row_update(
-      conn: &libsql::Connection,
+      conn: &tokio_rusqlite::Connection,
       table_name: &str,
       params: Params,
       pk_column: &str,
       pk_value: libsql::Value,
-    ) -> Result<Option<libsql::Row>, QueryError> {
+    ) -> Result<Option<tokio_rusqlite::Row>, QueryError> {
       let build_setters = || -> String {
         assert_eq!(params.col_names.len(), params.params.len());
         return std::iter::zip(&params.col_names, &params.params)
@@ -530,38 +546,54 @@ impl UpdateQueryBuilder {
       };
 
       let setters = build_setters();
-      let named_params = libsql::params::Params::Named(params.params);
 
-      let tx = conn.transaction().await?;
+      let pk_column = pk_column.to_string();
+      let table_name = table_name.to_string();
+      let files_row = conn
+        .call(move |conn| {
+          let tx = conn.transaction()?;
 
-      // First, fetch updated file column contents so we can delete the files after updating the
-      // column.
-      let files_row = if params.file_col_names.is_empty() {
-        None
-      } else {
-        let file_columns = params.file_col_names.join(", ");
-        query_row(
-          &tx,
-          &format!("SELECT {file_columns} FROM '{table_name}' WHERE {pk_column} = ${pk_column}"),
-          libsql::params::Params::Named(vec![(":pk_column".to_string(), pk_value)]),
-        )
-        .await?
-      };
+          // First, fetch updated file column contents so we can delete the files after updating the
+          // column.
+          let files_row = if params.file_col_names.is_empty() {
+            None
+          } else {
+            let file_columns = params.file_col_names.join(", ");
 
-      // Update the column.
-      let _ = tx
-        .execute(
-          &format!("UPDATE '{table_name}' SET {setters} WHERE {pk_column} = :{pk_column}"),
-          named_params,
-        )
+            let mut stmt = tx.prepare(&format!(
+              "SELECT {file_columns} FROM '{table_name}' WHERE {pk_column} = ${pk_column}"
+            ))?;
+            tokio_rusqlite::bind_params(
+              &mut stmt,
+              libsql::params::Params::Named(vec![(":pk_column".to_string(), pk_value)]),
+            )?;
+            let mut rows = stmt.raw_query();
+            if let Some(row) = rows.next()? {
+              Some(tokio_rusqlite::Row::from_row(row, None)?)
+            } else {
+              None
+            }
+          };
+
+          // Update the column.
+          {
+            let mut stmt = tx.prepare(&format!(
+              "UPDATE '{table_name}' SET {setters} WHERE {pk_column} = :{pk_column}"
+            ))?;
+            tokio_rusqlite::bind_params(&mut stmt, libsql::params::Params::Named(params.params))?;
+            stmt.raw_execute()?;
+          }
+
+          tx.commit()?;
+
+          return Ok(files_row);
+        })
         .await?;
-
-      tx.commit().await?;
 
       return Ok(files_row);
     }
 
-    let files_row = match row_update(state.conn(), table_name, params, pk_column, pk_value).await {
+    let files_row = match row_update(state.conn2(), table_name, params, pk_column, pk_value).await {
       Ok(files_row) => files_row,
       Err(err) => {
         if !files.is_empty() {
@@ -581,7 +613,7 @@ impl UpdateQueryBuilder {
     // Finally, if everything else went well delete files from columns that were updated and are no
     // longer referenced.
     if let Some(files_row) = files_row {
-      delete_files_in_row(state, metadata, files_row).await?;
+      delete_files_in_row2(state, metadata, files_row).await?;
     }
 
     return Ok(());
@@ -599,15 +631,15 @@ impl DeleteQueryBuilder {
   ) -> Result<(), QueryError> {
     let table_name = metadata.name();
 
-    let row = query_one_row(
-      state.conn(),
+    let row = query_one_row2(
+      state.conn2(),
       &format!("DELETE FROM '{table_name}' WHERE {pk_column} = $1 RETURNING *"),
       [pk_value],
     )
     .await?;
 
     // Finally, delete files.
-    delete_files_in_row(state, metadata, row).await?;
+    delete_files_in_row2(state, metadata, row).await?;
 
     return Ok(());
   }

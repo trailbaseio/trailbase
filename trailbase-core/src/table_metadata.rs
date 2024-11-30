@@ -524,6 +524,10 @@ impl std::fmt::Debug for TableMetadataCache {
 pub enum TableLookupError {
   #[error("SQL error: {0}")]
   Sql(#[from] libsql::Error),
+  #[error("SQL2 error: {0}")]
+  Sql2(#[from] tokio_rusqlite::Error),
+  #[error("SQL3 error: {0}")]
+  Sql3(#[from] rusqlite::types::FromSqlError),
   #[error("Schema error: {0}")]
   Schema(#[from] SchemaError),
   #[error("Missing")]
@@ -538,6 +542,26 @@ pub async fn lookup_and_parse_table_schema(
 ) -> Result<Table, TableLookupError> {
   // Then get the actual table.
   let sql: String = query_one_row(
+    conn,
+    &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1"),
+    params!(table_name),
+  )
+  .await?
+  .get(0)?;
+
+  let Some(stmt) = sqlite3_parse_into_statement(&sql)? else {
+    return Err(TableLookupError::Missing);
+  };
+
+  return Ok(stmt.try_into()?);
+}
+
+pub async fn lookup_and_parse_table_schema2(
+  conn: &tokio_rusqlite::Connection,
+  table_name: &str,
+) -> Result<Table, TableLookupError> {
+  // Then get the actual table.
+  let sql: String = crate::util::query_one_row2(
     conn,
     &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1"),
     params!(table_name),

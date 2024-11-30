@@ -141,10 +141,10 @@ mod test {
   #[tokio::test]
   async fn test_record_api_create() -> Result<(), anyhow::Error> {
     let state = test_state(None).await?;
-    let conn = state.conn();
+    let conn = state.conn2();
 
     create_chat_message_app_tables(&state).await?;
-    let room = add_room(conn, "room0").await?;
+    let room = add_room2(conn, "room0").await?;
     let password = "Secret!1!!";
 
     // Register message table as api with moderator read access.
@@ -171,7 +171,7 @@ mod test {
       .into_bytes();
     let user_x_token = login_with_password(&state, user_x_email, password).await?;
 
-    add_user_to_room(conn, user_x, room).await?;
+    add_user_to_room2(conn, user_x, room).await?;
 
     let user_y_email = "user_y@test.com";
     let user_y = create_user_for_test(&state, user_y_email, password)
@@ -239,10 +239,10 @@ mod test {
   #[tokio::test]
   async fn test_record_api_create_integer_id() -> Result<(), anyhow::Error> {
     let state = test_state(None).await?;
-    let conn = state.conn();
+    let conn = state.conn2();
 
     create_chat_message_app_tables_integer(&state).await?;
-    let room = add_room(conn, "room0").await?;
+    let room = add_room2(conn, "room0").await?;
     let password = "Secret!1!!";
 
     // Register message table as api with moderator read access.
@@ -269,7 +269,7 @@ mod test {
       .into_bytes();
     let user_x_token = login_with_password(&state, user_x_email, password).await?;
 
-    add_user_to_room(conn, user_x, room).await?;
+    add_user_to_room2(conn, user_x, room).await?;
 
     {
       // User X can post to the room, they're a member of

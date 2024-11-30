@@ -4,12 +4,13 @@ mod tests {
   use trailbase_sqlite::query_one_row;
 
   use crate::records::json_to_sql::JsonRow;
+  use crate::util::query_one_row2;
   use crate::AppState;
 
-  pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), libsql::Error> {
+  pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), anyhow::Error> {
     // Create a messages, chat room and members tables.
     state
-      .conn()
+      .conn2()
       .execute_batch(
         r#"
           CREATE TABLE room (
@@ -47,10 +48,10 @@ mod tests {
 
   pub async fn create_chat_message_app_tables_integer(
     state: &AppState,
-  ) -> Result<(), libsql::Error> {
+  ) -> Result<(), anyhow::Error> {
     // Create a messages, chat room and members tables.
     state
-      .conn()
+      .conn2()
       .execute_batch(
         r#"
           CREATE TABLE room (
@@ -98,11 +99,40 @@ mod tests {
     return Ok(room);
   }
 
+  pub async fn add_room2(
+    conn: &tokio_rusqlite::Connection,
+    name: &str,
+  ) -> Result<[u8; 16], anyhow::Error> {
+    let room: [u8; 16] = query_one_row2(
+      conn,
+      "INSERT INTO room (name) VALUES ($1) RETURNING id",
+      params!(name),
+    )
+    .await?
+    .get(0)?;
+
+    return Ok(room);
+  }
+
   pub async fn add_user_to_room(
     conn: &Connection,
     user: [u8; 16],
     room: [u8; 16],
   ) -> Result<(), libsql::Error> {
+    conn
+      .execute(
+        "INSERT INTO room_members (user, room) VALUES ($1, $2)",
+        params!(user, room),
+      )
+      .await?;
+    return Ok(());
+  }
+
+  pub async fn add_user_to_room2(
+    conn: &tokio_rusqlite::Connection,
+    user: [u8; 16],
+    room: [u8; 16],
+  ) -> Result<(), tokio_rusqlite::Error> {
     conn
       .execute(
         "INSERT INTO room_members (user, room) VALUES ($1, $2)",
@@ -125,6 +155,23 @@ mod tests {
     )
     .await?
     .get(0);
+  }
+
+  pub async fn send_message2(
+    conn: &tokio_rusqlite::Connection,
+    user: [u8; 16],
+    room: [u8; 16],
+    message: &str,
+  ) -> Result<[u8; 16], anyhow::Error> {
+    return Ok(
+      query_one_row2(
+        conn,
+        "INSERT INTO message (_owner, room, data) VALUES ($1, $2, $3) RETURNING id",
+        params!(user, room, message),
+      )
+      .await?
+      .get(0)?,
+    );
   }
 
   pub fn json_row_from_value(value: serde_json::Value) -> Result<JsonRow, anyhow::Error> {

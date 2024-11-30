@@ -9,7 +9,7 @@ use crate::listing::{
   build_filter_where_clause, limit_or_default, parse_query, Order, WhereClause,
 };
 use crate::records::record_api::build_user_sub_select;
-use crate::records::sql_to_json::rows_to_json;
+use crate::records::sql_to_json::rows_to_json2;
 use crate::records::{Permission, RecordError};
 
 /// Lists records matching the given filters
@@ -103,12 +103,12 @@ pub async fn list_records_handler(
   );
 
   let rows = state
-    .conn()
+    .conn2()
     .query(&query, libsql::params::Params::Named(params))
     .await?;
 
   return Ok(Json(serde_json::Value::Array(
-    rows_to_json(metadata, rows, |col_name| !col_name.starts_with("_"))
+    rows_to_json2(metadata, rows, |col_name| !col_name.starts_with("_"))
       .await
       .map_err(|err| RecordError::Internal(err.into()))?,
   )));
@@ -137,11 +137,11 @@ mod tests {
   #[tokio::test]
   async fn test_record_api_list() -> Result<(), anyhow::Error> {
     let state = test_state(None).await?;
-    let conn = state.conn();
+    let conn = state.conn2();
 
     create_chat_message_app_tables(&state).await?;
-    let room0 = add_room(conn, "room0").await?;
-    let room1 = add_room(conn, "room1").await?;
+    let room0 = add_room2(conn, "room0").await?;
+    let room1 = add_room2(conn, "room1").await?;
     let password = "Secret!1!!";
 
     add_record_api(
@@ -174,19 +174,19 @@ mod tests {
       .into_bytes();
     let user_x_token = login_with_password(&state, user_x_email, password).await?;
 
-    add_user_to_room(conn, user_x, room0).await?;
-    send_message(conn, user_x, room0, "user_x to room0").await?;
+    add_user_to_room2(conn, user_x, room0).await?;
+    send_message2(conn, user_x, room0, "user_x to room0").await?;
 
     let user_y_email = "user_y@foo.baz";
     let user_y = create_user_for_test(&state, user_y_email, password)
       .await?
       .into_bytes();
 
-    add_user_to_room(conn, user_y, room0).await?;
-    send_message(conn, user_y, room0, "user_y to room0").await?;
+    add_user_to_room2(conn, user_y, room0).await?;
+    send_message2(conn, user_y, room0, "user_y to room0").await?;
 
-    add_user_to_room(conn, user_y, room1).await?;
-    send_message(conn, user_y, room1, "user_y to room1").await?;
+    add_user_to_room2(conn, user_y, room1).await?;
+    send_message2(conn, user_y, room1, "user_y to room1").await?;
 
     let user_y_token = login_with_password(&state, user_y_email, password).await?;
 
