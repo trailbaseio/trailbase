@@ -9,8 +9,6 @@ use crate::util::b64_to_id;
 
 #[derive(Debug, Error)]
 pub enum WhereClauseError {
-  #[error("Libsql error: {0}")]
-  Libsql(#[from] libsql::Error),
   #[error("Parse error: {0}")]
   Parse(String),
   #[error("Base64 decoding error: {0}")]

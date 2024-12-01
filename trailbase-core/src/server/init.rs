@@ -13,14 +13,12 @@ use crate::table_metadata::TableMetadataCache;
 
 #[derive(Debug, Error)]
 pub enum InitError {
-  #[error("Libsql error: {0}")]
-  Libsql(#[from] libsql::Error),
   #[error("TRusqlite error: {0}")]
-  TRusqlite(#[from] tokio_rusqlite::Error),
+  TokioRusqlite(#[from] tokio_rusqlite::Error),
   #[error("Rusqlite error: {0}")]
   Rusqlite(#[from] rusqlite::Error),
   #[error("RusqliteFromSql error: {0}")]
-  RusqliteFromSql(#[from] rusqlite::types::FromSqlError),
+  FromSql(#[from] rusqlite::types::FromSqlError),
   #[error("DB Migration error: {0}")]
   Migration(#[from] refinery::Error),
   #[error("IO error: {0}")]

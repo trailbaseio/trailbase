@@ -6,12 +6,10 @@ use crate::migrations;
 
 #[derive(Debug, Error)]
 pub enum TransactionError {
-  #[error("Libsql error: {0}")]
-  Libsql(#[from] libsql::Error),
   #[error("Rusqlite error: {0}")]
   Rusqlite(#[from] rusqlite::Error),
-  #[error("TRusqlite error: {0}")]
-  TRusqlite(#[from] tokio_rusqlite::Error),
+  #[error("Tokio Rusqlite error: {0}")]
+  TokioRusqlite(#[from] tokio_rusqlite::Error),
   #[error("IO error: {0}")]
   IO(#[from] std::io::Error),
   #[error("Migration error: {0}")]

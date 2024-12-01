@@ -41,16 +41,8 @@ pub enum ParamsError {
   JsonSerialization(Arc<serde_json::Error>),
   #[error("Json schema error: {0}")]
   Schema(#[from] trailbase_sqlite::schema::SchemaError),
-  #[error("Sql error: {0}")]
-  Sql(Arc<libsql::Error>),
   #[error("ObjectStore error: {0}")]
   Storage(Arc<object_store::Error>),
-}
-
-impl From<libsql::Error> for ParamsError {
-  fn from(err: libsql::Error) -> Self {
-    return Self::Sql(Arc::new(err));
-  }
 }
 
 impl From<serde_json::Error> for ParamsError {
@@ -70,13 +62,11 @@ pub enum QueryError {
   #[error("Precondition error: {0}")]
   Precondition(&'static str),
   #[error("Sql error: {0}")]
-  Sql(Arc<libsql::Error>),
-  #[error("Rusqlite error: {0}")]
-  Sql2(Arc<rusqlite::Error>),
-  #[error("TRusqlite error: {0}")]
-  Sql3(Arc<tokio_rusqlite::Error>),
-  #[error("TRusqlite error: {0}")]
-  Sql4(Arc<rusqlite::types::FromSqlError>),
+  Sql(Arc<rusqlite::Error>),
+  #[error("FromSql error: {0}")]
+  FromSql(Arc<rusqlite::types::FromSqlError>),
+  #[error("Tokio Rusqlite error: {0}")]
+  TokioRusqlite(Arc<tokio_rusqlite::Error>),
   #[error("Json serialization error: {0}")]
   JsonSerialization(Arc<serde_json::Error>),
   #[error("ObjectStore error: {0}")]
@@ -87,39 +77,33 @@ pub enum QueryError {
   NotFound,
 }
 
-impl From<libsql::Error> for QueryError {
-  fn from(err: libsql::Error) -> Self {
-    return Self::Sql(Arc::new(err));
-  }
-}
-
 impl From<serde_json::Error> for QueryError {
   fn from(err: serde_json::Error) -> Self {
-    return Self::JsonSerialization(Arc::new(err));
+    return Self::JsonSerialization(err.into());
   }
 }
 
 impl From<tokio_rusqlite::Error> for QueryError {
   fn from(err: tokio_rusqlite::Error) -> Self {
-    return Self::Sql3(Arc::new(err));
+    return Self::TokioRusqlite(err.into());
   }
 }
 
 impl From<rusqlite::types::FromSqlError> for QueryError {
   fn from(err: rusqlite::types::FromSqlError) -> Self {
-    return Self::Sql4(Arc::new(err));
+    return Self::FromSql(err.into());
   }
 }
 
 impl From<object_store::Error> for QueryError {
   fn from(err: object_store::Error) -> Self {
-    return Self::Storage(Arc::new(err));
+    return Self::Storage(err.into());
   }
 }
 
 impl From<crate::records::files::FileError> for QueryError {
   fn from(err: crate::records::files::FileError) -> Self {
-    return Self::File(Arc::new(err));
+    return Self::File(err.into());
   }
 }
 

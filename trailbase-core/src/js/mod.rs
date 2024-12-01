@@ -10,7 +10,7 @@ mod fallback {
   pub(crate) struct RuntimeHandle {}
 
   impl RuntimeHandle {
-    pub(crate) fn set_connection(&self, _conn: libsql::Connection) {}
+    pub(crate) fn set_connection(&self, _conn: tokio_rusqlite::Connection) {}
 
     pub(crate) fn new() -> Self {
       return Self {};

@@ -521,12 +521,10 @@ impl std::fmt::Debug for TableMetadataCache {
 
 #[derive(Debug, Error)]
 pub enum TableLookupError {
-  #[error("SQL error: {0}")]
-  Sql(#[from] libsql::Error),
   #[error("SQL2 error: {0}")]
-  Sql2(#[from] tokio_rusqlite::Error),
+  Sql(#[from] tokio_rusqlite::Error),
   #[error("SQL3 error: {0}")]
-  Sql3(#[from] rusqlite::types::FromSqlError),
+  FromSql(#[from] rusqlite::types::FromSqlError),
   #[error("Schema error: {0}")]
   Schema(#[from] SchemaError),
   #[error("Missing")]
