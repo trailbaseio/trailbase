@@ -4,7 +4,6 @@ use std::sync::Arc;
 use crate::auth::User;
 use crate::config::proto::{QueryApiAcl, QueryApiConfig, QueryApiParameterType};
 use crate::query::QueryError;
-use trailbase_sqlite::query_one_row;
 
 #[derive(Clone)]
 pub struct QueryApi {
@@ -12,7 +11,7 @@ pub struct QueryApi {
 }
 
 struct QueryApiState {
-  conn: libsql::Connection,
+  conn: tokio_rusqlite::Connection,
 
   api_name: String,
   virtual_table_name: String,
@@ -23,7 +22,7 @@ struct QueryApiState {
 }
 
 impl QueryApi {
-  pub fn from(conn: libsql::Connection, config: QueryApiConfig) -> Result<Self, String> {
+  pub fn from(conn: tokio_rusqlite::Connection, config: QueryApiConfig) -> Result<Self, String> {
     return Ok(QueryApi {
       state: Arc::new(QueryApiState {
         conn,
@@ -119,7 +118,7 @@ impl QueryApi {
             user.map_or(libsql::Value::Null, |u| libsql::Value::Blob(u.uuid.into())),
           ));
 
-          let row = match query_one_row(
+          let row = match crate::util::query_one_row2(
             &self.state.conn,
             &access_query,
             libsql::params::Params::Named(params),

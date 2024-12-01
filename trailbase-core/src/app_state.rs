@@ -31,8 +31,6 @@ struct InternalState {
   config: ValueNotifier<Config>,
 
   logs_conn: Connection,
-  conn: Connection,
-
   conn2: tokio_rusqlite::Connection,
 
   jwt: JwtHelper,
@@ -53,7 +51,6 @@ pub(crate) struct AppStateArgs {
   pub dev: bool,
   pub table_metadata: TableMetadataCache,
   pub config: Config,
-  pub conn: Connection,
   pub conn2: tokio_rusqlite::Connection,
   pub logs_conn: Connection,
   pub jwt: JwtHelper,
@@ -72,7 +69,7 @@ impl AppState {
 
     let table_metadata_clone = args.table_metadata.clone();
     let conn_clone0 = args.conn2.clone();
-    let conn_clone1 = args.conn.clone();
+    let conn_clone1 = args.conn2.clone();
 
     let runtime = args
       .js_runtime_threads
@@ -125,7 +122,6 @@ impl AppState {
             .collect::<Vec<_>>();
         }),
         config,
-        conn: args.conn.clone(),
         conn2: args.conn2.clone(),
         logs_conn: args.logs_conn,
         jwt: args.jwt,
@@ -311,15 +307,15 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let temp_dir = temp_dir::TempDir::new()?;
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
 
-  let main_conn = {
-    let conn = trailbase_sqlite::connect_sqlite(None, None).await?;
-    apply_user_migrations(conn.clone()).await?;
-    let _new_db = apply_main_migrations(conn.clone(), None).await?;
-
-    conn
-  };
+  // let main_conn = {
+  //   let conn = trailbase_sqlite::connect_sqlite(None, None).await?;
+  //   apply_user_migrations(conn.clone()).await?;
+  //   let _new_db = apply_main_migrations(conn.clone(), None).await?;
+  //
+  //   conn
+  // };
   let conn2 = {
-    let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+    let mut conn = trailbase_sqlite::connect_sqlite2(None, None)?;
     apply_user_migrations2(&mut conn)?;
     let _new_db = apply_main_migrations2(&mut conn, None)?;
 
@@ -377,7 +373,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let config = ValueNotifier::new(config);
 
   let main_conn_clone0 = conn2.clone();
-  let main_conn_clone1 = main_conn.clone();
+  let main_conn_clone1 = conn2.clone();
   let table_metadata_clone = table_metadata.clone();
 
   let data_dir = DataDir(temp_dir.path().to_path_buf());
@@ -440,7 +436,6 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
           .collect::<Vec<_>>();
       }),
       config,
-      conn: main_conn.clone(),
       conn2,
       logs_conn,
       jwt: jwt::test_jwt_helper(),
@@ -472,7 +467,10 @@ fn build_record_api(
   return Err(format!("RecordApi references missing table: {config:?}"));
 }
 
-fn build_query_api(conn: libsql::Connection, config: QueryApiConfig) -> Result<QueryApi, String> {
+fn build_query_api(
+  conn: tokio_rusqlite::Connection,
+  config: QueryApiConfig,
+) -> Result<QueryApi, String> {
   // TODO: Check virtual table exists
   return QueryApi::from(conn, config);
 }

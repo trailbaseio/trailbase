@@ -1,5 +1,5 @@
 use axum::extract::{Form, Json, Path, Query, State};
-use libsql::{de, params};
+use libsql::params;
 use std::sync::Arc;
 use tower_cookies::Cookies;
 

@@ -641,7 +641,7 @@ pub async fn lookup_and_parse_all_table_schemas(
   conn: &tokio_rusqlite::Connection,
 ) -> Result<Vec<Table>, TableLookupError> {
   // Then get the actual table.
-  let mut rows = conn
+  let rows = conn
     .query(
       &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table'"),
       (),

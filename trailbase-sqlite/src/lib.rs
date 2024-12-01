@@ -33,6 +33,63 @@ async fn initial_optimize(conn: &libsql::Connection) -> Result<(), libsql::Error
   return Ok(());
 }
 
+fn initial_optimize2(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
+  conn.execute("PRAGMA optimize = 0x10002", ())?;
+  return Ok(());
+}
+
+pub fn connect_sqlite2(
+  path: Option<PathBuf>,
+  extensions: Option<Vec<PathBuf>>,
+) -> Result<rusqlite::Connection, rusqlite::Error> {
+  schema::try_init_schemas();
+
+  unsafe { libsql::ffi::sqlite3_auto_extension(Some(init_extension)) };
+
+  let conn = if let Some(p) = path {
+    rusqlite::Connection::open_with_flags(p, rusqlite::OpenFlags::SQLITE_OPEN_CREATE)?
+  } else {
+    rusqlite::Connection::open_in_memory()?
+  };
+
+  const CONFIG: &[&str] = &[
+    "PRAGMA busy_timeout       = 10000",
+    "PRAGMA journal_mode       = WAL",
+    "PRAGMA journal_size_limit = 200000000",
+    // Sync the file system less often.
+    "PRAGMA synchronous        = NORMAL",
+    "PRAGMA foreign_keys       = ON",
+    "PRAGMA temp_store         = MEMORY",
+    "PRAGMA cache_size         = -16000",
+    // TODO: Maybe worth exploring once we have a benchmark, based on
+    // https://phiresky.github.io/blog/2020/sqlite-performance-tuning/.
+    // "PRAGMA mmap_size          = 30000000000",
+    // "PRAGMA page_size          = 32768",
+
+    // Safety feature around application-defined functions recommended by
+    // https://sqlite.org/appfunc.html
+    "PRAGMA trusted_schema     = OFF",
+  ];
+
+  // NOTE: we're querying here since some pragmas return data. However, libsql doesn't like
+  // executed statements to return rows.
+  for pragma in CONFIG {
+    let mut stmt = conn.prepare(pragma)?;
+    let mut rows = stmt.query([])?;
+    rows.next()?;
+  }
+
+  if let Some(extensions) = extensions {
+    for path in extensions {
+      unsafe { conn.load_extension(path, None)? }
+    }
+  }
+
+  initial_optimize2(&conn)?;
+
+  return Ok(conn);
+}
+
 pub async fn connect_sqlite(
   path: Option<PathBuf>,
   extensions: Option<Vec<PathBuf>>,

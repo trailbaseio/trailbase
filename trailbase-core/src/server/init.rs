@@ -2,7 +2,7 @@ use libsql::Connection;
 use log::*;
 use std::path::PathBuf;
 use thiserror::Error;
-use trailbase_sqlite::{connect_sqlite, query_one_row};
+use trailbase_sqlite::connect_sqlite;
 
 use crate::app_state::{build_objectstore, AppState, AppStateArgs};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
@@ -126,7 +126,6 @@ pub async fn init_app_state(
     dev: args.dev,
     table_metadata,
     config,
-    conn: main_conn.clone(),
     conn2,
     logs_conn,
     jwt,

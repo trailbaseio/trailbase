@@ -154,7 +154,11 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Schema(cmd)) => {
       init_logger(false);
 
-      let conn = api::connect_sqlite(Some(data_dir.main_db_path()), None).await?;
+      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite2(
+        Some(data_dir.main_db_path()),
+        None,
+      )?)
+      .await?;
       let table_metadata = api::TableMetadataCache::new(conn.clone()).await?;
 
       let table_name = &cmd.table;
