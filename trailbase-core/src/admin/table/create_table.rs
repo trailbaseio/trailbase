@@ -33,23 +33,29 @@ pub async fn create_table_handler(
   let table_name = request.schema.name.clone();
 
   // This contains the create table statement and may also contain indexes and triggers.
-  let query = request.schema.create_table_statement();
+  let create_table_query = request.schema.create_table_statement();
 
   if !dry_run {
-    {
-      let mut conn = state.rusqlite()?;
-      let mut tx = TransactionRecorder::new(
-        &mut conn,
-        state.data_dir().migrations_path(),
-        format!("create_table_{table_name}"),
-      )?;
+    let create_table_query = create_table_query.clone();
+    let migration_path = state.data_dir().migrations_path();
+    let conn = state.conn2();
+    let writer = conn
+      .call(move |conn| {
+        let mut tx =
+          TransactionRecorder::new(conn, migration_path, format!("create_table_{table_name}"))?;
 
-      tx.query(&query)?;
+        tx.execute(&create_table_query)?;
 
-      // Write to migration file.
-      if let Some(writer) = tx.commit_and_create_migration()? {
-        let _report = writer.write(&mut conn)?;
-      }
+        return Ok(
+          tx.rollback_and_create_migration()
+            .map_err(|err| tokio_rusqlite::Error::Other(err.into()))?,
+        );
+      })
+      .await?;
+
+    // Write to migration file.
+    if let Some(writer) = writer {
+      let _report = writer.write(conn).await?;
     }
 
     state.table_metadata().invalidate_all().await?;
@@ -57,7 +63,7 @@ pub async fn create_table_handler(
 
   return Ok(Json(CreateTableResponse {
     sql: sqlformat::format(
-      format!("{query};").as_str(),
+      format!("{create_table_query};").as_str(),
       &sqlformat::QueryParams::None,
       &sqlformat::FormatOptions {
         ignore_case_convert: None,

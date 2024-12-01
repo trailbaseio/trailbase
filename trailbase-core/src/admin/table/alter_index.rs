@@ -28,28 +28,38 @@ pub async fn alter_index_handler(
   Json(request): Json<AlterIndexRequest>,
 ) -> Result<Response, Error> {
   let source_schema = request.source_schema;
-  let source_index_name = &source_schema.name;
+  let source_index_name = source_schema.name.clone();
   let target_schema = request.target_schema;
 
   debug!("Alter index:\nsource: {source_schema:?}\ntarget: {target_schema:?}",);
 
-  let mut conn = state.rusqlite()?;
-  let mut tx = TransactionRecorder::new(
-    &mut conn,
-    state.data_dir().migrations_path(),
-    format!("alter_index_{source_index_name}"),
-  )?;
+  let migration_path = state.data_dir().migrations_path();
+  let conn = state.conn2();
+  let writer = conn
+    .call(move |conn| {
+      let mut tx = TransactionRecorder::new(
+        conn,
+        migration_path,
+        format!("alter_index_{source_index_name}"),
+      )?;
 
-  // Drop old index
-  tx.execute(&format!("DROP INDEX {source_index_name}"))?;
+      // Drop old index
+      tx.execute(&format!("DROP INDEX {source_index_name}"))?;
 
-  // Create new index
-  let create_index_query = target_schema.create_index_statement();
-  tx.query(&create_index_query)?;
+      // Create new index
+      let create_index_query = target_schema.create_index_statement();
+      tx.execute(&create_index_query)?;
+
+      return Ok(
+        tx.rollback_and_create_migration()
+          .map_err(|err| tokio_rusqlite::Error::Other(err.into()))?,
+      );
+    })
+    .await?;
 
   // Write to migration file.
-  if let Some(writer) = tx.commit_and_create_migration()? {
-    let report = writer.write(&mut conn)?;
+  if let Some(writer) = writer {
+    let report = writer.write(conn).await?;
     debug!("Migration report: {report:?}");
   }
 

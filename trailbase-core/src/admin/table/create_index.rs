@@ -30,18 +30,26 @@ pub async fn create_index_handler(
   let create_index_query = request.schema.create_index_statement();
 
   if !dry_run {
-    let mut conn = state.rusqlite()?;
-    let mut tx = TransactionRecorder::new(
-      &mut conn,
-      state.data_dir().migrations_path(),
-      format!("create_index_{index_name}"),
-    )?;
+    let create_index_query = create_index_query.clone();
+    let migration_path = state.data_dir().migrations_path();
+    let conn = state.conn2();
+    let writer = conn
+      .call(move |conn| {
+        let mut tx =
+          TransactionRecorder::new(conn, migration_path, format!("create_index_{index_name}"))?;
 
-    tx.query(&create_index_query)?;
+        tx.execute(&create_index_query)?;
+
+        return Ok(
+          tx.rollback_and_create_migration()
+            .map_err(|err| tokio_rusqlite::Error::Other(err.into()))?,
+        );
+      })
+      .await?;
 
     // Write to migration file.
-    if let Some(writer) = tx.commit_and_create_migration()? {
-      writer.write(&mut conn)?;
+    if let Some(writer) = writer {
+      writer.write(conn).await?;
     }
   }
 

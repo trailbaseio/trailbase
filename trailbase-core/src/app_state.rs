@@ -156,10 +156,6 @@ impl AppState {
     return &self.state.conn2;
   }
 
-  pub fn rusqlite(&self) -> Result<rusqlite::Connection, rusqlite::Error> {
-    return rusqlite::Connection::open(self.data_dir().main_db_path());
-  }
-
   pub fn user_conn2(&self) -> &tokio_rusqlite::Connection {
     return &self.state.conn2;
   }

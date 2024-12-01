@@ -14,6 +14,8 @@ pub enum TransactionError {
   Libsql(#[from] libsql::Error),
   #[error("Rusqlite error: {0}")]
   Rusqlite(#[from] rusqlite::Error),
+  #[error("TRusqlite error: {0}")]
+  TRusqlite(#[from] tokio_rusqlite::Error),
   #[error("IO error: {0}")]
   IO(#[from] std::io::Error),
   #[error("Migration error: {0}")]
@@ -29,19 +31,28 @@ pub struct MigrationWriter {
 }
 
 impl MigrationWriter {
-  pub(crate) fn write(
+  pub(crate) async fn write(
     &self,
-    conn: &mut rusqlite::Connection,
+    conn: &tokio_rusqlite::Connection,
   ) -> Result<refinery::Report, TransactionError> {
     let migrations = vec![refinery::Migration::unapplied(&self.stem, &self.sql)?];
+    let runner = migrations::new_migration_runner(&migrations).set_abort_missing(false);
 
-    let mut runner = migrations::new_migration_runner(&migrations).set_abort_missing(false);
-    let report = runner.run(conn).map_err(|err| {
-      error!("Migration aborted with: {err} for {}", self.sql);
-      err
-    })?;
+    let report = conn
+      .call(move |conn| {
+        let report = runner
+          .run(conn)
+          .map_err(|err| tokio_rusqlite::Error::Other(err.into()))?;
 
-    write_migration_file(self.path.clone(), &self.sql)?;
+        return Ok(report);
+      })
+      .await
+      .map_err(|err| {
+        error!("Migration aborted with: {err} for {}", self.sql);
+        err
+      })?;
+
+    write_migration_file(self.path.clone(), &self.sql).await?;
 
     return Ok(report);
   }
@@ -63,7 +74,7 @@ impl<'a> TransactionRecorder<'a> {
     conn: &'a mut rusqlite::Connection,
     migration_path: PathBuf,
     migration_suffix: String,
-  ) -> Result<Self, TransactionError> {
+  ) -> Result<Self, rusqlite::Error> {
     let recorder = TransactionRecorder {
       tx: conn.transaction()?,
       log: vec![],
@@ -75,22 +86,23 @@ impl<'a> TransactionRecorder<'a> {
   }
 
   // Note that we cannot take any sql params for recording purposes.
-  pub fn query(&mut self, sql: &str) -> Result<(), TransactionError> {
+  pub fn query(&mut self, sql: &str) -> Result<(), rusqlite::Error> {
     let mut stmt = self.tx.prepare(sql)?;
-    stmt.query([])?;
+    let mut rows = stmt.query([])?;
+    rows.next()?;
     self.log.push(sql.to_string());
 
     return Ok(());
   }
 
-  pub fn execute(&mut self, sql: &str) -> Result<usize, TransactionError> {
+  pub fn execute(&mut self, sql: &str) -> Result<usize, rusqlite::Error> {
     let rows_affected = self.tx.execute(sql, ())?;
     self.log.push(sql.to_string());
     return Ok(rows_affected);
   }
 
   /// Consume this transaction and commit.
-  pub fn commit_and_create_migration(
+  pub fn rollback_and_create_migration(
     mut self,
   ) -> Result<Option<MigrationWriter>, TransactionError> {
     if self.log.is_empty() {
@@ -144,19 +156,15 @@ impl<'a> TransactionRecorder<'a> {
 }
 
 #[cfg(not(test))]
-fn write_migration_file(path: PathBuf, sql: &str) -> std::io::Result<()> {
-  use std::io::Write;
+async fn write_migration_file(path: PathBuf, sql: &str) -> std::io::Result<()> {
+  use tokio::io::AsyncWriteExt;
 
-  let mut migration_file = std::fs::File::create_new(path)?;
-  migration_file.write_all(sql.as_bytes())?;
-
-  // use tokio::io::AsyncWriteExt;
-  // let mut migration_file = tokio::fs::File::create_new(path).await?;
-  // migration_file.write_all(sql.as_bytes()).await?;
+  let mut migration_file = tokio::fs::File::create_new(path).await?;
+  migration_file.write_all(sql.as_bytes()).await?;
   return Ok(());
 }
 
 #[cfg(test)]
-fn write_migration_file(_path: PathBuf, _sql: &str) -> std::io::Result<()> {
+async fn write_migration_file(_path: PathBuf, _sql: &str) -> std::io::Result<()> {
   return Ok(());
 }
