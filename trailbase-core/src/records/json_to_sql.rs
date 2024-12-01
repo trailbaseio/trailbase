@@ -5,7 +5,6 @@ use object_store::ObjectStore;
 use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Arc;
 use trailbase_sqlite::schema::{FileUpload, FileUploadInput, FileUploads};
-use trailbase_sqlite::{query_one_row, query_row};
 
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::files::delete_files_in_row2;

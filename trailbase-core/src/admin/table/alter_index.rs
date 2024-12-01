@@ -50,10 +50,9 @@ pub async fn alter_index_handler(
       let create_index_query = target_schema.create_index_statement();
       tx.execute(&create_index_query)?;
 
-      return Ok(
-        tx.rollback_and_create_migration()
-          .map_err(|err| tokio_rusqlite::Error::Other(err.into()))?,
-      );
+      return tx
+        .rollback_and_create_migration()
+        .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
     })
     .await?;
 

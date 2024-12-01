@@ -3,10 +3,9 @@ use axum::{
   Json,
 };
 use lazy_static::lazy_static;
-use libsql::{de, params::Params};
+use libsql::params::Params;
 use log::*;
 use serde::Serialize;
-use trailbase_sqlite::query_one_row;
 use ts_rs::TS;
 use uuid::Uuid;
 

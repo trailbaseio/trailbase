@@ -4,14 +4,13 @@ use axum::{
 };
 use chrono::Duration;
 use lazy_static::lazy_static;
-use libsql::{de, named_params, params, Connection};
+use libsql::{named_params, params};
 use oauth2::PkceCodeVerifier;
 use oauth2::{AsyncHttpClient, HttpClientError, HttpRequest, HttpResponse};
 use oauth2::{AuthorizationCode, StandardTokenResponse, TokenResponse};
 use serde::Deserialize;
 use thiserror::Error;
 use tower_cookies::Cookies;
-use trailbase_sqlite::query_one_row;
 
 use crate::auth::oauth::state::{OAuthState, ResponseType};
 use crate::auth::oauth::OAuthUser;

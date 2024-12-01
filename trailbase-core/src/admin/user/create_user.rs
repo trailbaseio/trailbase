@@ -1,8 +1,7 @@
 use axum::{extract::State, Json};
 use lazy_static::lazy_static;
-use libsql::{de, named_params};
+use libsql::named_params;
 use serde::{Deserialize, Serialize};
-use trailbase_sqlite::query_one_row;
 use ts_rs::TS;
 use uuid::Uuid;
 

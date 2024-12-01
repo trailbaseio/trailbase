@@ -49,7 +49,7 @@ pub async fn update_user_handler(
   }
 
   let email = request.email.clone();
-  let verified = request.verified.clone();
+  let verified = request.verified;
   conn
     .call(move |conn| {
       let tx = conn.transaction()?;

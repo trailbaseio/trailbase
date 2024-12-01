@@ -112,10 +112,9 @@ pub async fn alter_table_handler(
 
         tx.execute("PRAGMA foreign_keys = ON")?;
 
-        return Ok(
-          tx.rollback_and_create_migration()
-            .map_err(|err| tokio_rusqlite::Error::Other(err.into()))?,
-        );
+        return tx
+          .rollback_and_create_migration()
+          .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
       },
     )
     .await?;

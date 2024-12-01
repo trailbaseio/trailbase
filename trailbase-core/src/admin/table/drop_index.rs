@@ -35,10 +35,9 @@ pub async fn drop_index_handler(
       info!("dropping index: {query}");
       tx.execute(&query)?;
 
-      return Ok(
-        tx.rollback_and_create_migration()
-          .map_err(|err| tokio_rusqlite::Error::Other(err.into()))?,
-      );
+      return tx
+        .rollback_and_create_migration()
+        .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
     })
     .await?;
 

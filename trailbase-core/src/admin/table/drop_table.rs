@@ -49,10 +49,9 @@ pub async fn drop_table_handler(
       info!("dropping table: {query}");
       tx.execute(&query)?;
 
-      return Ok(
-        tx.rollback_and_create_migration()
-          .map_err(|err| tokio_rusqlite::Error::Other(err.into()))?,
-      );
+      return tx
+        .rollback_and_create_migration()
+        .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
     })
     .await?;
 

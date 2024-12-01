@@ -3,10 +3,9 @@ use base64::prelude::*;
 use chrono::Duration;
 use cookie::SameSite;
 use lazy_static::lazy_static;
-use libsql::{de, params, Connection};
+use libsql::params;
 use sha2::{Digest, Sha256};
 use tower_cookies::{Cookie, Cookies};
-use trailbase_sqlite::{query_one_row, query_row};
 
 use crate::auth::user::{DbUser, User};
 use crate::auth::AuthError;
@@ -147,17 +146,6 @@ pub async fn get_user_by_email2(
   return db_user.ok_or_else(|| AuthError::UnauthorizedExt("invalid user".into()));
 }
 
-pub async fn get_user_by_email(user_conn: &Connection, email: &str) -> Result<DbUser, AuthError> {
-  lazy_static! {
-    static ref QUERY: String = format!("SELECT * FROM {USER_TABLE} WHERE email = $1");
-  };
-  let row = query_one_row(user_conn, &QUERY, params!(email))
-    .await
-    .map_err(|_err| AuthError::UnauthorizedExt("user not found by email".into()))?;
-
-  return de::from_row(&row).map_err(|_err| AuthError::UnauthorizedExt("invalid user".into()));
-}
-
 pub async fn user_by_id(state: &AppState, id: &uuid::Uuid) -> Result<DbUser, AuthError> {
   return get_user_by_id(state.user_conn2(), id).await;
 }
@@ -183,11 +171,9 @@ pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, AuthErro
       format!("SELECT EXISTS(SELECT 1 FROM '{USER_TABLE}' WHERE email = $1)");
   };
   let row = crate::util::query_one_row2(state.user_conn2(), &EXISTS_QUERY, params!(email)).await?;
-  return Ok(
-    row
-      .get::<bool>(0)
-      .map_err(|err| AuthError::Internal(err.into()))?,
-  );
+  return row
+    .get::<bool>(0)
+    .map_err(|err| AuthError::Internal(err.into()));
 }
 
 pub(crate) async fn is_admin(state: &AppState, user: &User) -> bool {

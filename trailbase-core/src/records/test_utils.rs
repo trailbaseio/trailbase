@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
-  use libsql::{params, Connection};
-  use trailbase_sqlite::query_one_row;
+  use libsql::params;
 
   use crate::records::json_to_sql::JsonRow;
   use crate::util::query_one_row2;

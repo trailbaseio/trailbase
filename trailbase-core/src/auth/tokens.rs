@@ -5,9 +5,8 @@ use axum::{
 };
 use chrono::Duration;
 use lazy_static::lazy_static;
-use libsql::{de, params};
+use libsql::params;
 use tower_cookies::Cookies;
-use trailbase_sqlite::query_row;
 
 use crate::app_state::AppState;
 use crate::auth::jwt::TokenClaims;

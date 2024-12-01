@@ -301,19 +301,11 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   use crate::auth::oauth::providers::test::TestOAuthProvider;
   use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
   use crate::config::validate_config;
-  use crate::migrations::{apply_logs_migrations, apply_main_migrations, apply_user_migrations};
-  use crate::migrations::{apply_main_migrations2, apply_user_migrations2};
+  use crate::migrations::{apply_logs_migrations, apply_main_migrations2, apply_user_migrations2};
 
   let temp_dir = temp_dir::TempDir::new()?;
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
 
-  // let main_conn = {
-  //   let conn = trailbase_sqlite::connect_sqlite(None, None).await?;
-  //   apply_user_migrations(conn.clone()).await?;
-  //   let _new_db = apply_main_migrations(conn.clone(), None).await?;
-  //
-  //   conn
-  // };
   let conn2 = {
     let mut conn = trailbase_sqlite::connect_sqlite2(None, None)?;
     apply_user_migrations2(&mut conn)?;

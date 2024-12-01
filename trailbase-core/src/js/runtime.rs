@@ -793,7 +793,6 @@ pub(crate) async fn write_js_runtime_files(data_dir: &DataDir) {
 mod tests {
   use super::*;
   use rustyscript::Module;
-  use trailbase_sqlite::query_one_row;
 
   #[tokio::test]
   async fn test_serial_tests() {

@@ -166,7 +166,7 @@ pub fn row_to_json_array(row: libsql::Row) -> Result<Vec<serde_json::Value>, Jso
 
 pub fn row_to_json_array2(row: &tokio_rusqlite::Row) -> Result<Vec<serde_json::Value>, JsonError> {
   let cols = row.column_count();
-  let mut json_row = Vec::<serde_json::Value>::with_capacity(cols as usize);
+  let mut json_row = Vec::<serde_json::Value>::with_capacity(cols);
 
   for i in 0..cols {
     let value = row.get_value(i).map_err(|_err| JsonError::ValueNotFound)?;

@@ -6,7 +6,6 @@ use axum_test::{TestServer, TestServerConfig};
 use serde::{Deserialize, Serialize};
 use tower_cookies::Cookies;
 
-use crate::api::query_one_row;
 use crate::app_state::{test_state, TestStateOptions};
 use crate::auth::oauth::providers::test::{TestOAuthProvider, TestUser};
 use crate::auth::oauth::state::OAuthState;

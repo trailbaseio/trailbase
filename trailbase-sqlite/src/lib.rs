@@ -47,7 +47,9 @@ pub fn connect_sqlite2(
   unsafe { libsql::ffi::sqlite3_auto_extension(Some(init_extension)) };
 
   let conn = if let Some(p) = path {
-    rusqlite::Connection::open_with_flags(p, rusqlite::OpenFlags::SQLITE_OPEN_CREATE)?
+    use rusqlite::OpenFlags;
+    let flags = OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE;
+    rusqlite::Connection::open_with_flags(p, flags)?
   } else {
     rusqlite::Connection::open_in_memory()?
   };

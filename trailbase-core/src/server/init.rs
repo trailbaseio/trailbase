@@ -8,7 +8,7 @@ use crate::app_state::{build_objectstore, AppState, AppStateArgs};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;
-use crate::migrations::{apply_logs_migrations, apply_main_migrations};
+use crate::migrations::{apply_logs_migrations, apply_main_migrations2};
 use crate::rand::generate_random_string;
 use crate::server::DataDir;
 use crate::table_metadata::TableMetadataCache;
@@ -20,7 +20,9 @@ pub enum InitError {
   #[error("TRusqlite error: {0}")]
   TRusqlite(#[from] tokio_rusqlite::Error),
   #[error("Rusqlite error: {0}")]
-  Rusqlite(#[from] rusqlite::types::FromSqlError),
+  Rusqlite(#[from] rusqlite::Error),
+  #[error("RusqliteFromSql error: {0}")]
+  RusqliteFromSql(#[from] rusqlite::types::FromSqlError),
   #[error("DB Migration error: {0}")]
   Migration(#[from] refinery::Error),
   #[error("IO error: {0}")]
@@ -62,15 +64,13 @@ pub async fn init_app_state(
 
   // Open or init the main db. Note that we derive whether a new DB was initialized based on
   // whether the V1 migration had to be applied. Should be fairly robust.
-  let (main_conn, new_db) = {
-    let conn = connect_sqlite(Some(data_dir.main_db_path()), None).await?;
-    let new_db = apply_main_migrations(conn.clone(), Some(data_dir.migrations_path())).await?;
+  let (conn2, new_db) = {
+    let mut sync_conn = trailbase_sqlite::connect_sqlite2(Some(data_dir.main_db_path()), None)?;
+    let new_db = apply_main_migrations2(&mut sync_conn, None)?;
 
+    let conn = tokio_rusqlite::Connection::from_conn(sync_conn).await?;
     (conn, new_db)
   };
-  let conn2 = tokio_rusqlite::Connection::open(data_dir.main_db_path())
-    .await
-    .unwrap();
 
   let table_metadata = TableMetadataCache::new(conn2.clone()).await?;
 

@@ -4,9 +4,8 @@ use axum::{
   response::{IntoResponse, Redirect, Response},
 };
 use lazy_static::lazy_static;
-use libsql::{de, named_params};
+use libsql::named_params;
 use serde::Deserialize;
-use trailbase_sqlite::query_one_row;
 use utoipa::ToSchema;
 use validator::ValidateEmail;
 

@@ -1,12 +1,11 @@
 use axum::extract::{Json, Path, RawQuery, State};
-use libsql::{params::Params, Connection};
+use libsql::params::Params;
 use log::*;
 use serde::Serialize;
 use std::sync::Arc;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
-use crate::api::query_one_row;
 use crate::app_state::AppState;
 use crate::listing::{
   build_filter_where_clause, limit_or_default, parse_query, Order, WhereClause,

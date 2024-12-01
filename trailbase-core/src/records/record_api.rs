@@ -1,7 +1,6 @@
 use itertools::Itertools;
 use log::*;
 use std::sync::Arc;
-use trailbase_sqlite::query_one_row;
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};

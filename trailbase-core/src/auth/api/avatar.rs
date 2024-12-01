@@ -3,7 +3,6 @@ use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use libsql::params;
 use serde::{Deserialize, Serialize};
-use trailbase_sqlite::query_one_row;
 use trailbase_sqlite::schema::FileUpload;
 use uuid::Uuid;
 
@@ -101,8 +100,6 @@ mod tests {
   use axum::http;
   use axum::response::Response;
   use axum_test::multipart::{MultipartForm, Part};
-  use libsql::de;
-  use trailbase_sqlite::query_one_row;
 
   use super::*;
   use crate::admin::user::create_user_for_test;

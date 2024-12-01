@@ -47,57 +47,6 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> refinery::Runner
   return runner;
 }
 
-// The main migrations are bit tricky because they maybe a mix of user-provided and builtin
-// migrations. They might event come out of order, e.g.: someone does a schema migration on an old
-// version of the binary and then updates. Yet, they need to be applied in one go. We therefore
-// rely on refinery's non-strictly versioned migrations prefixed with the "U" name.
-pub(crate) async fn apply_main_migrations(
-  conn: Connection,
-  user_migrations_path: Option<PathBuf>,
-) -> Result<bool, refinery::Error> {
-  let all_migrations = {
-    let mut migrations: Vec<Migration> = vec![];
-
-    let system_migrations_runner = main::migrations::runner();
-    migrations.extend(system_migrations_runner.get_migrations().iter().cloned());
-
-    if let Some(path) = user_migrations_path {
-      // NOTE: refinery has a bug where it will name-check the directory and write a warning... :/.
-      let user_migrations = refinery::load_sql_migrations(path)?;
-      migrations.extend(user_migrations.into_iter());
-    }
-
-    // Interleave the system and user migrations based on their version prefixes.
-    migrations.sort();
-
-    migrations
-  };
-
-  let mut conn = LibsqlConnection::from_connection(conn);
-
-  let runner = new_migration_runner(&all_migrations);
-  let report = match runner.run_async(&mut conn).await {
-    Ok(report) => report,
-    Err(err) => {
-      error!("Main migrations: {err}");
-      return Err(err);
-    }
-  };
-
-  for applied_migration in report.applied_migrations() {
-    if cfg!(test) {
-      debug!("applied migration: {applied_migration:?}");
-    } else {
-      info!("applied migration: {applied_migration:?}");
-    }
-  }
-
-  // If we applied migration v1 we can be sure this is a fresh database.
-  let new_db = report.applied_migrations().iter().any(|m| m.version() == 1);
-
-  return Ok(new_db);
-}
-
 pub(crate) fn apply_main_migrations2(
   conn: &mut rusqlite::Connection,
   user_migrations_path: Option<PathBuf>,
@@ -111,7 +60,7 @@ pub(crate) fn apply_main_migrations2(
     if let Some(path) = user_migrations_path {
       // NOTE: refinery has a bug where it will name-check the directory and write a warning... :/.
       let user_migrations = refinery::load_sql_migrations(path)?;
-      migrations.extend(user_migrations.into_iter());
+      migrations.extend(user_migrations);
     }
 
     // Interleave the system and user migrations based on their version prefixes.
@@ -143,27 +92,6 @@ pub(crate) fn apply_main_migrations2(
   let new_db = report.applied_migrations().iter().any(|m| m.version() == 1);
 
   return Ok(new_db);
-}
-
-#[cfg(test)]
-pub(crate) async fn apply_user_migrations(user_conn: Connection) -> Result<(), refinery::Error> {
-  let mut user_conn = LibsqlConnection::from_connection(user_conn);
-
-  let mut runner = main::migrations::runner();
-  runner.set_migration_table_name(MIGRATION_TABLE_NAME);
-
-  let report = runner.run_async(&mut user_conn).await.map_err(|err| {
-    error!("User migrations: {err}");
-    return err;
-  })?;
-
-  if cfg!(test) {
-    debug!("user migrations: {report:?}");
-  } else {
-    info!("user migrations: {report:?}");
-  }
-
-  return Ok(());
 }
 
 #[cfg(test)]

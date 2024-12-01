@@ -51,8 +51,7 @@ pub async fn delete_record_handler(
 #[cfg(test)]
 mod test {
   use axum::extract::Query;
-  use libsql::{params, Connection};
-  use trailbase_sqlite::query_one_row;
+  use libsql::params;
 
   use super::*;
   use crate::admin::user::*;

@@ -556,6 +556,7 @@ pub async fn lookup_and_parse_table_schema(
   return Ok(stmt.try_into()?);
 }
 
+#[cfg(test)]
 pub async fn lookup_and_parse_table_schema2(
   conn: &tokio_rusqlite::Connection,
   table_name: &str,

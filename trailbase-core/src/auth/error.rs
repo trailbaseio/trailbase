@@ -26,28 +26,6 @@ pub enum AuthError {
   Internal(Box<dyn std::error::Error + Send + Sync>),
 }
 
-impl From<libsql::Error> for AuthError {
-  fn from(err: libsql::Error) -> Self {
-    return match err {
-      libsql::Error::QueryReturnedNoRows => Self::NotFound,
-      // List of error codes: https://www.sqlite.org/rescode.html
-      libsql::Error::SqliteFailure(275, _msg) => Self::BadRequest("sqlite constraint: check"),
-      libsql::Error::SqliteFailure(531, _msg) => Self::BadRequest("sqlite constraint: commit hook"),
-      libsql::Error::SqliteFailure(3091, _msg) => Self::BadRequest("sqlite constraint: data type"),
-      libsql::Error::SqliteFailure(787, _msg) => Self::BadRequest("sqlite constraint: fk"),
-      libsql::Error::SqliteFailure(1043, _msg) => Self::BadRequest("sqlite constraint: function"),
-      libsql::Error::SqliteFailure(1299, _msg) => Self::BadRequest("sqlite constraint: not null"),
-      libsql::Error::SqliteFailure(2835, _msg) => Self::BadRequest("sqlite constraint: pinned"),
-      libsql::Error::SqliteFailure(1555, _msg) => Self::BadRequest("sqlite constraint: pk"),
-      libsql::Error::SqliteFailure(2579, _msg) => Self::BadRequest("sqlite constraint: row id"),
-      libsql::Error::SqliteFailure(1811, _msg) => Self::BadRequest("sqlite constraint: trigger"),
-      libsql::Error::SqliteFailure(2067, _msg) => Self::BadRequest("sqlite constraint: unique"),
-      libsql::Error::SqliteFailure(2323, _msg) => Self::BadRequest("sqlite constraint: vtab"),
-      err => Self::Internal(err.into()),
-    };
-  }
-}
-
 impl From<tokio_rusqlite::Error> for AuthError {
   fn from(err: tokio_rusqlite::Error) -> Self {
     return match err {
@@ -128,7 +106,10 @@ mod tests {
 
   #[tokio::test]
   async fn test_some_sqlite_errors_yield_client_errors() {
-    let conn = trailbase_sqlite::connect_sqlite(None, None).await.unwrap();
+    let conn =
+      tokio_rusqlite::Connection::from_conn(trailbase_sqlite::connect_sqlite2(None, None).unwrap())
+        .await
+        .unwrap();
 
     conn
       .execute(
@@ -155,7 +136,12 @@ mod tests {
       .err()
       .unwrap();
 
-    assert!(matches!(sqlite_err, libsql::Error::SqliteFailure(1555, _)));
+    match sqlite_err {
+      tokio_rusqlite::Error::Rusqlite(rusqlite::Error::SqliteFailure(err, _)) => {
+        assert_eq!(err.extended_code, 1555);
+      }
+      _ => panic!("{sqlite_err}"),
+    };
 
     let err: AuthError = sqlite_err.into();
     assert_eq!(err.into_response().status(), StatusCode::BAD_REQUEST);
