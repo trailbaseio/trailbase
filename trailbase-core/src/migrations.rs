@@ -67,8 +67,6 @@ pub(crate) fn apply_main_migrations2(
     migrations
   };
 
-  // let mut conn = LibsqlConnection::from_connection(conn);
-
   let runner = new_migration_runner(&all_migrations);
   let report = match runner.run(conn) {
     Ok(report) => report,

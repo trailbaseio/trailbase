@@ -66,7 +66,7 @@ pub async fn init_app_state(
   // whether the V1 migration had to be applied. Should be fairly robust.
   let (conn2, new_db) = {
     let mut conn = trailbase_sqlite::connect_sqlite2(Some(data_dir.main_db_path()), None)?;
-    let new_db = apply_main_migrations2(&mut conn, None)?;
+    let new_db = apply_main_migrations2(&mut conn, Some(data_dir.migrations_path()))?;
 
     (tokio_rusqlite::Connection::from_conn(conn).await?, new_db)
   };
