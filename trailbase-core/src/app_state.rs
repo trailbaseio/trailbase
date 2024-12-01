@@ -1,4 +1,3 @@
-use libsql::Connection;
 use log::*;
 use object_store::ObjectStore;
 use std::path::PathBuf;
@@ -30,7 +29,7 @@ struct InternalState {
   query_apis: Computed<Vec<(String, QueryApi)>, Config>,
   config: ValueNotifier<Config>,
 
-  logs_conn: Connection,
+  logs_conn: tokio_rusqlite::Connection,
   conn2: tokio_rusqlite::Connection,
 
   jwt: JwtHelper,
@@ -52,7 +51,7 @@ pub(crate) struct AppStateArgs {
   pub table_metadata: TableMetadataCache,
   pub config: Config,
   pub conn2: tokio_rusqlite::Connection,
-  pub logs_conn: Connection,
+  pub logs_conn: tokio_rusqlite::Connection,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore + Send + Sync>,
   pub js_runtime_threads: Option<usize>,
@@ -156,7 +155,7 @@ impl AppState {
     return &self.state.conn2;
   }
 
-  pub(crate) fn logs_conn(&self) -> &Connection {
+  pub(crate) fn logs_conn(&self) -> &tokio_rusqlite::Connection {
     return &self.state.logs_conn;
   }
 
@@ -301,7 +300,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   use crate::auth::oauth::providers::test::TestOAuthProvider;
   use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
   use crate::config::validate_config;
-  use crate::migrations::{apply_logs_migrations, apply_main_migrations2, apply_user_migrations2};
+  use crate::migrations::{apply_logs_migrations2, apply_main_migrations2, apply_user_migrations2};
 
   let temp_dir = temp_dir::TempDir::new()?;
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
@@ -311,13 +310,14 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     apply_user_migrations2(&mut conn)?;
     let _new_db = apply_main_migrations2(&mut conn, None)?;
 
-    tokio_rusqlite::Connection::from_conn(conn).await.unwrap()
+    tokio_rusqlite::Connection::from_conn(conn).await?
   };
 
   let logs_conn = {
-    let conn = trailbase_sqlite::connect_sqlite(None, None).await?;
-    apply_logs_migrations(conn.clone()).await?;
-    conn
+    let mut conn = trailbase_sqlite::connect_sqlite2(None, None)?;
+    apply_logs_migrations2(&mut conn)?;
+
+    tokio_rusqlite::Connection::from_conn(conn).await?
   };
 
   let table_metadata = TableMetadataCache::new(conn2.clone()).await?;

@@ -1,7 +1,7 @@
 use fallible_iterator::FallibleIterator;
 use jsonschema::Validator;
 use lazy_static::lazy_static;
-use libsql::{params, Connection};
+use libsql::params;
 use log::*;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,6 @@ use sqlite3_parser::ast::Stmt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use trailbase_sqlite::query_one_row;
 
 use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
 use crate::schema::{Column, ColumnDataType, ColumnOption, ForeignKey, SchemaError, Table, View};
@@ -536,27 +535,6 @@ pub enum TableLookupError {
   SqlParse(#[from] sqlite3_parser::lexer::sql::Error),
 }
 
-pub async fn lookup_and_parse_table_schema(
-  conn: &Connection,
-  table_name: &str,
-) -> Result<Table, TableLookupError> {
-  // Then get the actual table.
-  let sql: String = query_one_row(
-    conn,
-    &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1"),
-    params!(table_name),
-  )
-  .await?
-  .get(0)?;
-
-  let Some(stmt) = sqlite3_parse_into_statement(&sql)? else {
-    return Err(TableLookupError::Missing);
-  };
-
-  return Ok(stmt.try_into()?);
-}
-
-#[cfg(test)]
 pub async fn lookup_and_parse_table_schema2(
   conn: &tokio_rusqlite::Connection,
   table_name: &str,

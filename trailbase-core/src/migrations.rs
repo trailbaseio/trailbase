@@ -1,9 +1,7 @@
 use lazy_static::lazy_static;
-use libsql::Connection;
 use log::*;
 use parking_lot::Mutex;
 use refinery::Migration;
-use refinery_libsql::LibsqlConnection;
 use std::path::PathBuf;
 
 mod main {
@@ -115,13 +113,13 @@ pub(crate) fn apply_user_migrations2(
   return Ok(());
 }
 
-pub(crate) async fn apply_logs_migrations(logs_conn: Connection) -> Result<(), refinery::Error> {
-  let mut logs_conn = LibsqlConnection::from_connection(logs_conn);
-
+pub(crate) fn apply_logs_migrations2(
+  logs_conn: &mut rusqlite::Connection,
+) -> Result<(), refinery::Error> {
   let mut runner = logs::migrations::runner();
   runner.set_migration_table_name(MIGRATION_TABLE_NAME);
 
-  let report = runner.run_async(&mut logs_conn).await.map_err(|err| {
+  let report = runner.run(logs_conn).map_err(|err| {
     error!("Logs migrations: {err}");
     return err;
   })?;

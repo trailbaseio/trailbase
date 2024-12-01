@@ -1,14 +1,12 @@
-use libsql::Connection;
 use log::*;
 use std::path::PathBuf;
 use thiserror::Error;
-use trailbase_sqlite::connect_sqlite;
 
 use crate::app_state::{build_objectstore, AppState, AppStateArgs};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;
-use crate::migrations::{apply_logs_migrations, apply_main_migrations2};
+use crate::migrations::{apply_logs_migrations2, apply_main_migrations2};
 use crate::rand::generate_random_string;
 use crate::server::DataDir;
 use crate::table_metadata::TableMetadataCache;
@@ -60,16 +58,19 @@ pub async fn init_app_state(
   data_dir.ensure_directory_structure().await?;
 
   // Then open or init new databases.
-  let logs_conn = init_logs_db(&data_dir).await?;
+  let logs_conn = {
+    let mut conn = init_logs_db(&data_dir)?;
+    apply_logs_migrations2(&mut conn)?;
+    tokio_rusqlite::Connection::from_conn(conn).await?
+  };
 
   // Open or init the main db. Note that we derive whether a new DB was initialized based on
   // whether the V1 migration had to be applied. Should be fairly robust.
   let (conn2, new_db) = {
-    let mut sync_conn = trailbase_sqlite::connect_sqlite2(Some(data_dir.main_db_path()), None)?;
-    let new_db = apply_main_migrations2(&mut sync_conn, None)?;
+    let mut conn = trailbase_sqlite::connect_sqlite2(Some(data_dir.main_db_path()), None)?;
+    let new_db = apply_main_migrations2(&mut conn, None)?;
 
-    let conn = tokio_rusqlite::Connection::from_conn(sync_conn).await?;
-    (conn, new_db)
+    (tokio_rusqlite::Connection::from_conn(conn).await?, new_db)
   };
 
   let table_metadata = TableMetadataCache::new(conn2.clone()).await?;
@@ -183,18 +184,16 @@ pub async fn init_app_state(
   return Ok((new_db, app_state));
 }
 
-async fn init_logs_db(data_dir: &DataDir) -> Result<Connection, InitError> {
-  let conn = connect_sqlite(data_dir.logs_db_path().into(), None).await?;
+fn init_logs_db(data_dir: &DataDir) -> Result<rusqlite::Connection, InitError> {
+  let conn = trailbase_sqlite::connect_sqlite2(data_dir.logs_db_path().into(), None)?;
 
   // Turn off secure_deletions, i.e. don't wipe the memory with zeros.
   conn
-    .query("PRAGMA secure_delete = FALSE", ())
-    .await
+    .query_row("PRAGMA secure_delete = FALSE", (), |_row| Ok(()))
     .unwrap();
 
   // Sync less often
-  conn.execute("PRAGMA synchronous = 1", ()).await.unwrap();
+  conn.execute("PRAGMA synchronous = 1", ()).unwrap();
 
-  apply_logs_migrations(conn.clone()).await?;
   return Ok(conn);
 }
