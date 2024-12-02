@@ -202,7 +202,10 @@ pub(crate) async fn delete_all_sessions_for_user(
   return Ok(
     state
       .user_conn2()
-      .execute(&QUERY, [user_id.into_bytes().to_vec()])
+      .execute(
+        &QUERY,
+        [tokio_rusqlite::Value::Blob(user_id.into_bytes().to_vec())],
+      )
       .await?,
   );
 }

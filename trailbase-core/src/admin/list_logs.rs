@@ -4,7 +4,6 @@ use axum::{
 };
 use chrono::{DateTime, Duration, Utc};
 use lazy_static::lazy_static;
-use libsql::params::Params;
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -121,7 +120,7 @@ pub async fn list_logs_handler(
         "SELECT COUNT(*) FROM {LOGS_TABLE_NAME} WHERE {clause}",
         clause = filter_where_clause.clause
       ),
-      Params::Named(filter_where_clause.params.clone()),
+      filter_where_clause.params.clone(),
     )
     .await?;
 
@@ -191,10 +190,16 @@ async fn fetch_logs(
 ) -> Result<Vec<LogQuery>, Error> {
   let mut params = filter_where_clause.params;
   let mut where_clause = filter_where_clause.clause;
-  params.push((":limit".to_string(), libsql::Value::Integer(limit as i64)));
+  params.push((
+    ":limit".to_string(),
+    tokio_rusqlite::Value::Integer(limit as i64),
+  ));
 
   if let Some(cursor) = cursor {
-    params.push((":cursor".to_string(), libsql::Value::Blob(cursor.to_vec())));
+    params.push((
+      ":cursor".to_string(),
+      tokio_rusqlite::Value::Blob(cursor.to_vec()),
+    ));
     where_clause = format!("{where_clause} AND log.id < :cursor",);
   }
 
@@ -225,11 +230,7 @@ async fn fetch_logs(
     "#,
   );
 
-  return Ok(
-    conn
-      .query_values::<LogQuery>(&sql_query, Params::Named(params))
-      .await?,
-  );
+  return Ok(conn.query_values::<LogQuery>(&sql_query, params).await?);
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -283,10 +284,10 @@ async fn fetch_aggregate_stats(
   "#
   );
 
-  use libsql::Value::Integer;
+  use tokio_rusqlite::Value::Integer;
   let from_seconds = args.from.timestamp();
   let interval_seconds = args.interval.num_seconds();
-  let mut params: Vec<(String, libsql::Value)> = vec![
+  let mut params: Vec<(String, tokio_rusqlite::Value)> = vec![
     (":interval_seconds".to_string(), Integer(interval_seconds)),
     (":from_seconds".to_string(), Integer(from_seconds)),
     (":to_seconds".to_string(), Integer(args.to.timestamp())),
@@ -296,9 +297,7 @@ async fn fetch_aggregate_stats(
     params.extend(filter.params.clone())
   }
 
-  let rows = conn
-    .query_values::<AggRow>(&qps_query, Params::Named(params))
-    .await?;
+  let rows = conn.query_values::<AggRow>(&qps_query, params).await?;
 
   let mut rate: Vec<(i64, f64)> = vec![];
   for r in rows.iter() {

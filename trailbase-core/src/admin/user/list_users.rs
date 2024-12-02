@@ -3,7 +3,6 @@ use axum::{
   Json,
 };
 use lazy_static::lazy_static;
-use libsql::params::Params;
 use log::*;
 use serde::Serialize;
 use ts_rs::TS;
@@ -80,7 +79,7 @@ pub async fn list_users_handler(
     let row = crate::util::query_one_row2(
       conn,
       &format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE {where_clause}"),
-      Params::Named(filter_where_clause.params.clone()),
+      filter_where_clause.params.clone(),
     )
     .await?;
 
@@ -119,10 +118,16 @@ async fn fetch_users(
 ) -> Result<Vec<DbUser>, Error> {
   let mut params = filter_where_clause.params;
   let mut where_clause = filter_where_clause.clause;
-  params.push((":limit".to_string(), libsql::Value::Integer(limit as i64)));
+  params.push((
+    ":limit".to_string(),
+    tokio_rusqlite::Value::Integer(limit as i64),
+  ));
 
   if let Some(cursor) = cursor {
-    params.push((":cursor".to_string(), libsql::Value::Blob(cursor.to_vec())));
+    params.push((
+      ":cursor".to_string(),
+      tokio_rusqlite::Value::Blob(cursor.to_vec()),
+    ));
     where_clause = format!("{where_clause} AND _row_.id < :cursor",);
   }
 
@@ -155,8 +160,6 @@ async fn fetch_users(
 
   info!("PARAMS: {params:?}\nQUERY: {sql_query}");
 
-  let users = conn
-    .query_values::<DbUser>(&sql_query, Params::Named(params))
-    .await?;
+  let users = conn.query_values::<DbUser>(&sql_query, params).await?;
   return Ok(users);
 }

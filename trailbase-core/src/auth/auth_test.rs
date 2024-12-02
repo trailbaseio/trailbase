@@ -68,7 +68,7 @@ async fn test_auth_registration_reset_and_change_email() {
       let db_user = conn
         .query_value::<DbUser>(
           &format!("SELECT * FROM '{USER_TABLE}' WHERE email = $1"),
-          [email.clone()],
+          (email.clone(),),
         )
         .await
         .unwrap()
@@ -107,7 +107,7 @@ async fn test_auth_registration_reset_and_change_email() {
       let db_user = conn
         .query_value::<DbUser>(
           &format!("SELECT * FROM '{USER_TABLE}' WHERE email = $1"),
-          [email.clone()],
+          (email.clone(),),
         )
         .await
         .unwrap()
@@ -147,7 +147,7 @@ async fn test_auth_registration_reset_and_change_email() {
     let session_exists: bool = query_one_row2(
       conn,
       &session_exists_query,
-      [user.uuid.into_bytes().to_vec()],
+      (user.uuid.into_bytes().to_vec(),),
     )
     .await
     .unwrap()
@@ -216,7 +216,7 @@ async fn test_auth_registration_reset_and_change_email() {
     let reset_code: String = query_one_row2(
       conn,
       &format!("SELECT password_reset_code FROM '{USER_TABLE}' WHERE id = $1"),
-      [user.uuid.into_bytes().to_vec()],
+      (user.uuid.into_bytes().to_vec(),),
     )
     .await
     .unwrap()
@@ -275,7 +275,7 @@ async fn test_auth_registration_reset_and_change_email() {
     let session_exists: bool = query_one_row2(
       conn,
       &session_exists_query,
-      [user.uuid.into_bytes().to_vec()],
+      (user.uuid.into_bytes().to_vec(),),
     )
     .await
     .unwrap()

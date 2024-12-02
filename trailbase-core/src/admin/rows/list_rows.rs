@@ -1,5 +1,4 @@
 use axum::extract::{Json, Path, RawQuery, State};
-use libsql::params::Params;
 use log::*;
 use serde::Serialize;
 use std::sync::Arc;
@@ -59,7 +58,7 @@ pub async fn list_rows_handler(
     let row = crate::util::query_one_row2(
       state.conn2(),
       &count_query,
-      Params::Named(filter_where_clause.params.clone()),
+      filter_where_clause.params.clone(),
     )
     .await?;
 
@@ -129,15 +128,18 @@ async fn fetch_rows(
   } = filter_where_clause;
   params.push((
     ":limit".to_string(),
-    libsql::Value::Integer(pagination.limit as i64),
+    tokio_rusqlite::Value::Integer(pagination.limit as i64),
   ));
   params.push((
     ":offset".to_string(),
-    libsql::Value::Integer(pagination.offset.unwrap_or(0) as i64),
+    tokio_rusqlite::Value::Integer(pagination.offset.unwrap_or(0) as i64),
   ));
 
   if let Some(cursor) = pagination.cursor {
-    params.push((":cursor".to_string(), libsql::Value::Blob(cursor.to_vec())));
+    params.push((
+      ":cursor".to_string(),
+      tokio_rusqlite::Value::Blob(cursor.to_vec()),
+    ));
     clause = format!("{clause} AND _row_.id < :cursor",);
   }
 
@@ -175,15 +177,12 @@ async fn fetch_rows(
     "#,
   );
 
-  let result_rows = conn
-    .query(&query, libsql::params::Params::Named(params))
-    .await
-    .map_err(|err| {
-      #[cfg(debug_assertions)]
-      error!("QUERY: {query}\n\t=> {err}");
+  let result_rows = conn.query(&query, params).await.map_err(|err| {
+    #[cfg(debug_assertions)]
+    error!("QUERY: {query}\n\t=> {err}");
 
-      return err;
-    })?;
+    return err;
+  })?;
 
   return Ok(rows_to_json_arrays2(result_rows, 1024)?);
 }

@@ -198,7 +198,7 @@ mod tests {
       .user_conn2()
       .query_value::<DbUser>(
         &format!("SELECT * FROM '{USER_TABLE}' WHERE email = $1"),
-        [email],
+        (email,),
       )
       .await
       .unwrap()

@@ -69,7 +69,7 @@ impl QueryApi {
 
   pub(crate) async fn check_api_access(
     &self,
-    query_params: &[(String, libsql::Value)],
+    query_params: &[(String, tokio_rusqlite::Value)],
     user: Option<&User>,
   ) -> Result<(), QueryError> {
     let Some(acl) = self.state.acl else {
@@ -115,15 +115,12 @@ impl QueryApi {
           let mut params = query_params.to_vec();
           params.push((
             ":__user_id".to_string(),
-            user.map_or(libsql::Value::Null, |u| libsql::Value::Blob(u.uuid.into())),
+            user.map_or(tokio_rusqlite::Value::Null, |u| {
+              tokio_rusqlite::Value::Blob(u.uuid.into())
+            }),
           ));
 
-          let row = match crate::util::query_one_row2(
-            &self.state.conn,
-            &access_query,
-            libsql::params::Params::Named(params),
-          )
-          .await
+          let row = match crate::util::query_one_row2(&self.state.conn, &access_query, params).await
           {
             Ok(row) => row,
             Err(err) => {

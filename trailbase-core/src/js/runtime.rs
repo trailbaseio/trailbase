@@ -344,7 +344,7 @@ impl RuntimeSingleton {
         let query: String = get_arg(&args, 0)?;
         let json_params: Vec<serde_json::Value> = get_arg(&args, 1)?;
 
-        let mut params: Vec<libsql::Value> = vec![];
+        let mut params: Vec<tokio_rusqlite::Value> = vec![];
         for value in json_params {
           params.push(json_value_to_param(value)?);
         }
@@ -356,7 +356,7 @@ impl RuntimeSingleton {
         };
 
         let rows = conn
-          .query(&query, libsql::params::Params::Positional(params))
+          .query(&query, params)
           .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
@@ -373,7 +373,7 @@ impl RuntimeSingleton {
         let query: String = get_arg(&args, 0)?;
         let json_params: Vec<serde_json::Value> = get_arg(&args, 1)?;
 
-        let mut params: Vec<libsql::Value> = vec![];
+        let mut params: Vec<tokio_rusqlite::Value> = vec![];
         for value in json_params {
           params.push(json_value_to_param(value)?);
         }
@@ -385,7 +385,7 @@ impl RuntimeSingleton {
         };
 
         let rows_affected = conn
-          .execute(&query, libsql::params::Params::Positional(params))
+          .execute(&query, params)
           .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
@@ -482,7 +482,9 @@ impl RuntimeHandle {
   }
 }
 
-pub fn json_value_to_param(value: serde_json::Value) -> Result<libsql::Value, rustyscript::Error> {
+pub fn json_value_to_param(
+  value: serde_json::Value,
+) -> Result<tokio_rusqlite::Value, rustyscript::Error> {
   use rustyscript::Error;
   return Ok(match value {
     serde_json::Value::Object(ref _map) => {
@@ -491,16 +493,16 @@ pub fn json_value_to_param(value: serde_json::Value) -> Result<libsql::Value, ru
     serde_json::Value::Array(ref _arr) => {
       return Err(Error::Runtime("Array unsupported".to_string()));
     }
-    serde_json::Value::Null => libsql::Value::Null,
-    serde_json::Value::Bool(b) => libsql::Value::Integer(b as i64),
-    serde_json::Value::String(str) => libsql::Value::Text(str),
+    serde_json::Value::Null => tokio_rusqlite::Value::Null,
+    serde_json::Value::Bool(b) => tokio_rusqlite::Value::Integer(b as i64),
+    serde_json::Value::String(str) => tokio_rusqlite::Value::Text(str),
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
-        libsql::Value::Integer(n)
+        tokio_rusqlite::Value::Integer(n)
       } else if let Some(n) = number.as_u64() {
-        libsql::Value::Integer(n as i64)
+        tokio_rusqlite::Value::Integer(n as i64)
       } else if let Some(n) = number.as_f64() {
-        libsql::Value::Real(n)
+        tokio_rusqlite::Value::Real(n)
       } else {
         return Err(Error::Runtime(format!("invalid number: {number:?}")));
       }

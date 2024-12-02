@@ -56,18 +56,10 @@ pub(crate) fn assert_uuidv7_version(uuid: &Uuid) {
 #[cfg(not(debug_assertions))]
 pub(crate) fn assert_uuidv7_version(_uuid: &Uuid) {}
 
-pub async fn query_row2(
-  conn: &tokio_rusqlite::Connection,
-  sql: &str,
-  params: impl libsql::params::IntoParams,
-) -> Result<Option<tokio_rusqlite::Row>, tokio_rusqlite::Error> {
-  return conn.query_row(sql, params).await;
-}
-
 pub async fn query_one_row2(
   conn: &tokio_rusqlite::Connection,
   sql: &str,
-  params: impl libsql::params::IntoParams,
+  params: impl tokio_rusqlite::Params + Send + 'static,
 ) -> Result<tokio_rusqlite::Row, tokio_rusqlite::Error> {
   if let Some(row) = conn.query_row(sql, params).await? {
     return Ok(row);

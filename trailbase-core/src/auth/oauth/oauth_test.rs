@@ -186,7 +186,7 @@ async fn test_oauth() {
     .user_conn2()
     .query_row(
       &format!("SELECT email FROM {USER_TABLE} WHERE provider_user_id = $1"),
-      [external_user_id],
+      (external_user_id,),
     )
     .await
     .unwrap()
