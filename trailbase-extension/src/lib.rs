@@ -138,12 +138,12 @@ pub fn sqlite3_extension_init(db: *mut sqlite3) -> Result<(), sqlite_loadable::E
 #[cfg(test)]
 unsafe extern "C" fn init_extension(
   db: *mut rusqlite::ffi::sqlite3,
-  pz_err_msg: *mut *const ::std::os::raw::c_char,
+  pz_err_msg: *mut *mut ::std::os::raw::c_char,
   p_thunk: *const rusqlite::ffi::sqlite3_api_routines,
 ) -> ::std::os::raw::c_int {
   return sqlite3_extension_init(
     db,
-    pz_err_msg as *mut *mut ::std::os::raw::c_char,
+    pz_err_msg,
     p_thunk as *mut rusqlite::ffi::sqlite3_api_routines,
   ) as ::std::os::raw::c_int;
 }
