@@ -5852,7 +5852,6 @@ name = "tokio-rusqlite"
 version = "0.6.0"
 dependencies = [
  "crossbeam-channel",
- "libsql",
  "libsql-rusqlite",
  "serde",
  "serde_rusqlite",
@@ -6048,7 +6047,6 @@ dependencies = [
  "chrono",
  "clap",
  "env_logger",
- "libsql",
  "log",
  "mimalloc",
  "serde",
@@ -6092,7 +6090,6 @@ dependencies = [
  "jsonwebtoken",
  "lazy_static",
  "lettre",
- "libsql",
  "libsql-rusqlite",
  "log",
  "minijinja",
@@ -6146,7 +6143,7 @@ dependencies = [
  "argon2",
  "base64 0.22.1",
  "jsonschema",
- "libsql",
+ "libsql-rusqlite",
  "lru",
  "maxminddb",
  "parking_lot",
@@ -6155,7 +6152,6 @@ dependencies = [
  "serde_json",
  "sqlean",
  "sqlite-loadable",
- "tokio",
  "uuid",
  "validator",
 ]
@@ -6167,7 +6163,6 @@ dependencies = [
  "infer",
  "jsonschema",
  "lazy_static",
- "libsql",
  "libsql-rusqlite",
  "log",
  "schemars",

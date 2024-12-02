@@ -59,7 +59,7 @@ pub mod openapi {
 }
 
 pub mod api {
-  pub use trailbase_sqlite::{connect_sqlite, connect_sqlite2, query_one_row};
+  pub use trailbase_sqlite::connect_sqlite2;
 
   pub use crate::admin::user::{create_user_handler, CreateUserRequest};
   pub use crate::auth::api::login::login_with_password;

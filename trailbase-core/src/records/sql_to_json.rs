@@ -103,7 +103,7 @@ pub fn row_to_json_array2(row: &tokio_rusqlite::Row) -> Result<Vec<serde_json::V
 /// WARN: This is lossy and whenever possible we should rely on parsed "CREATE TABLE" statement for
 /// the respective column.
 fn rows_to_columns2(rows: &tokio_rusqlite::Rows) -> Result<Vec<Column>, rusqlite::Error> {
-  use libsql::ValueType as T;
+  use tokio_rusqlite::ValueType as T;
 
   let mut columns: Vec<Column> = vec![];
   for i in 0..rows.column_count() {

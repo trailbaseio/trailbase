@@ -78,20 +78,12 @@ pub(super) fn parse_uuid(
 
 #[cfg(test)]
 mod tests {
-  use libsql::{params, Connection};
+  use rusqlite::params;
   use uuid::Uuid;
 
-  async fn query_row(
-    conn: &Connection,
-    sql: &str,
-    params: impl libsql::params::IntoParams,
-  ) -> Result<libsql::Row, libsql::Error> {
-    conn.prepare(sql).await?.query_row(params).await
-  }
-
-  #[tokio::test]
-  async fn test_uuid() {
-    let conn = crate::connect().await.unwrap();
+  #[test]
+  fn test_uuid() {
+    let conn = crate::connect().unwrap();
 
     let create_table = r#"
         CREATE TABLE test (
@@ -100,18 +92,18 @@ mod tests {
           uuid_v7                      BLOB CHECK(is_uuid_v7(uuid_v7))
         ) STRICT;
       "#;
-    conn.query(create_table, ()).await.unwrap();
+    conn.execute(create_table, ()).unwrap();
 
     {
-      let row = query_row(
-        &conn,
-        "INSERT INTO test (uuid, uuid_v7) VALUES (NULL, NULL) RETURNING id",
-        (),
-      )
-      .await
-      .unwrap();
+      let row = conn
+        .query_row(
+          "INSERT INTO test (uuid, uuid_v7) VALUES (NULL, NULL) RETURNING id",
+          (),
+          |row| -> rusqlite::Result<[u8; 16]> { Ok(row.get(0)?) },
+        )
+        .unwrap();
 
-      Uuid::from_slice(&row.get::<[u8; 16]>(0).unwrap()).unwrap();
+      Uuid::from_slice(&row).unwrap();
     }
 
     {
@@ -120,7 +112,6 @@ mod tests {
           "INSERT INTO test (uuid, uuid_v7) VALUES ($1, NULL)",
           params!(b"")
         )
-        .await
         .is_err());
     }
 
@@ -131,24 +122,20 @@ mod tests {
           "INSERT INTO test (uuid, uuid_v7) VALUES (NULL, $1)",
           params!(uuidv4.into_bytes().to_vec())
         )
-        .await
         .is_err());
     }
 
     {
       let uuid = Uuid::now_v7();
-      let row = query_row(
-        &conn,
-        "INSERT INTO test (uuid, uuid_v7) VALUES (parse_uuid($1), parse_uuid($1)) RETURNING uuid",
-        [uuid.to_string()],
-      )
-      .await
-      .unwrap();
+      let row = conn
+        .query_row(
+          "INSERT INTO test (uuid, uuid_v7) VALUES (parse_uuid($1), parse_uuid($1)) RETURNING uuid",
+          [uuid.to_string()],
+          |row| -> rusqlite::Result<[u8; 16]> { Ok(row.get(0)?) },
+        )
+        .unwrap();
 
-      assert_eq!(
-        Uuid::from_slice(&row.get::<[u8; 16]>(0).unwrap()).unwrap(),
-        uuid
-      );
+      assert_eq!(Uuid::from_slice(&row).unwrap(), uuid);
     }
   }
 }

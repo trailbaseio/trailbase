@@ -239,11 +239,11 @@ pub(crate) fn jsonschema_matches(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use libsql::params;
+  use rusqlite::params;
 
-  #[tokio::test]
-  async fn test_explicit_jsonschema() {
-    let conn = crate::connect().await.unwrap();
+  #[test]
+  fn test_explicit_jsonschema() {
+    let conn = crate::connect().unwrap();
 
     let text0_schema = r#"
         {
@@ -266,7 +266,7 @@ mod tests {
         ) STRICT;
       "#
     );
-    conn.query(&create_table, ()).await.unwrap();
+    conn.execute(&create_table, ()).unwrap();
 
     {
       conn
@@ -274,7 +274,6 @@ mod tests {
           r#"INSERT INTO test (text0, text1) VALUES ('{"name": "foo"}', '"text"')"#,
           params!(),
         )
-        .await
         .unwrap();
     }
 
@@ -284,14 +283,13 @@ mod tests {
           r#"INSERT INTO test (text0, text1) VALUES ('{"name": "foo", "age": -5}', '"text"')"#,
           params!(),
         )
-        .await
         .is_err());
     }
   }
 
-  #[tokio::test]
-  async fn test_registerd_jsonschema() {
-    let conn = crate::connect().await.unwrap();
+  #[test]
+  fn test_registerd_jsonschema() {
+    let conn = crate::connect().unwrap();
 
     let text0_schema = r#"
         {
@@ -335,14 +333,13 @@ mod tests {
         ) STRICT;
       "#
     );
-    conn.query(&create_table, ()).await.unwrap();
+    conn.execute(&create_table, ()).unwrap();
 
     conn
       .execute(
         r#"INSERT INTO test (text0) VALUES ('{"name": "prefix_foo"}')"#,
         params!(),
       )
-      .await
       .unwrap();
 
     assert!(conn
@@ -350,7 +347,6 @@ mod tests {
         r#"INSERT INTO test (text0) VALUES ('{"name": "WRONG_PREFIX_foo"}')"#,
         params!(),
       )
-      .await
       .is_err());
   }
 }

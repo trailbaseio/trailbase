@@ -101,105 +101,94 @@ pub(super) fn is_json(
 
 #[cfg(test)]
 mod tests {
-  use libsql::{params, Connection};
+  use rusqlite::params;
 
-  async fn query_row(
-    conn: &Connection,
-    sql: &str,
-    params: impl libsql::params::IntoParams,
-  ) -> Result<libsql::Row, libsql::Error> {
-    conn.prepare(sql).await?.query_row(params).await
-  }
-
-  #[tokio::test]
-  async fn test_is_email() {
-    let conn = crate::connect().await.unwrap();
+  #[test]
+  fn test_is_email() {
+    let conn = crate::connect().unwrap();
     let create_table = r#"
         CREATE TABLE test (
           email                  TEXT CHECK(is_email(email))
         ) STRICT;
       "#;
-    conn.query(create_table, ()).await.unwrap();
+    conn.execute(create_table, ()).unwrap();
 
     const QUERY: &str = "INSERT INTO test (email) VALUES ($1) RETURNING *";
     assert_eq!(
-      query_row(&conn, QUERY, ["test@test.com"])
-        .await
-        .unwrap()
-        .get::<String>(0)
+      conn
+        .query_row(QUERY, ["test@test.com"], |row| Ok(row.get::<_, String>(0)?))
         .unwrap(),
       "test@test.com"
     );
 
-    query_row(&conn, QUERY, [libsql::Value::Null])
-      .await
+    conn
+      .query_row(QUERY, [rusqlite::types::Value::Null], |_row| Ok(()))
       .unwrap();
 
-    assert!(conn.execute(QUERY, params!("not an email")).await.is_err());
+    assert!(conn.execute(QUERY, params!("not an email")).is_err());
   }
 
-  #[tokio::test]
-  async fn test_is_json() {
-    let conn = crate::connect().await.unwrap();
+  #[test]
+  fn test_is_json() {
+    let conn = crate::connect().unwrap();
     let create_table = r#"
         CREATE TABLE test (
           json                   TEXT CHECK(is_json(json))
         ) STRICT;
       "#;
-    conn.query(create_table, ()).await.unwrap();
+    conn.execute(create_table, ()).unwrap();
 
     const QUERY: &str = "INSERT INTO test (json) VALUES ($1)";
-    conn.execute(QUERY, ["{}"]).await.unwrap();
+    conn.execute(QUERY, ["{}"]).unwrap();
     conn
       .execute(QUERY, ["{\"foo\": 42, \"bar\": {}, \"baz\": []}"])
-      .await
       .unwrap();
-    assert!(conn.execute(QUERY, [""]).await.is_err());
+    assert!(conn.execute(QUERY, [""]).is_err());
   }
 
-  #[tokio::test]
-  async fn test_regexp() {
-    let conn = crate::connect().await.unwrap();
+  #[test]
+  fn test_regexp() {
+    let conn = crate::connect().unwrap();
     let create_table = "CREATE TABLE test (text0  TEXT, text1  TEXT) STRICT";
-    conn.query(create_table, ()).await.unwrap();
+    conn.execute(create_table, ()).unwrap();
 
     const QUERY: &str = "INSERT INTO test (text0, text1) VALUES ($1, $2)";
-    conn.execute(QUERY, ["abc123", "abc"]).await.unwrap();
-    conn.execute(QUERY, ["def123", "def"]).await.unwrap();
+    conn.execute(QUERY, ["abc123", "abc"]).unwrap();
+    conn.execute(QUERY, ["def123", "def"]).unwrap();
 
     {
-      let mut rows = conn
-        .query("SELECT * FROM test WHERE text1 REGEXP '^abc$'", ())
-        .await
+      let mut stmt = conn
+        .prepare("SELECT * FROM test WHERE text1 REGEXP '^abc$'")
         .unwrap();
+      let mut rows = stmt.query(()).unwrap();
       let mut cnt = 0;
-      while let Some(row) = rows.next().await.unwrap() {
-        assert_eq!("abc123", row.get::<String>(0).unwrap());
+      while let Some(row) = rows.next().unwrap() {
+        assert_eq!("abc123", row.get::<_, String>(0).unwrap());
         cnt += 1;
       }
       assert_eq!(cnt, 1);
     }
 
     {
-      let mut rows = conn
-        .query("SELECT * FROM test WHERE text1 REGEXP $1", params!(".*bc$"))
-        .await
+      let mut stmt = conn
+        .prepare("SELECT * FROM test WHERE text1 REGEXP $1")
         .unwrap();
+      let mut rows = stmt.query(params!(".*bc$")).unwrap();
       let mut cnt = 0;
-      while let Some(row) = rows.next().await.unwrap() {
-        assert_eq!("abc123", row.get::<String>(0).unwrap());
+      while let Some(row) = rows.next().unwrap() {
+        assert_eq!("abc123", row.get::<_, String>(0).unwrap());
         cnt += 1;
       }
       assert_eq!(cnt, 1);
     }
 
     {
-      let mut rows = conn
-        .query(r#"SELECT * FROM test WHERE text0 REGEXP '12\d'"#, ())
-        .await
+      let mut stmt = conn
+        .prepare(r#"SELECT * FROM test WHERE text0 REGEXP '12\d'"#)
         .unwrap();
+      let mut rows = stmt.query(()).unwrap();
       let mut cnt = 0;
-      while let Some(_row) = rows.next().await.unwrap() {
+      while let Some(_row) = rows.next().unwrap() {
         cnt += 1;
       }
       assert_eq!(cnt, 2);

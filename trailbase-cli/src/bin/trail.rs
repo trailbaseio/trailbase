@@ -5,7 +5,6 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
-use libsql::params;
 use log::*;
 use serde::Deserialize;
 use std::rc::Rc;
@@ -61,7 +60,7 @@ async fn get_user_by_email(
   if let Some(user) = conn
     .query_value::<DbUser>(
       &format!("SELECT * FROM {USER_TABLE} WHERE email = $1"),
-      params!(email),
+      (email.to_string(),),
     )
     .await?
   {
@@ -231,7 +230,7 @@ async fn async_main() -> Result<(), BoxError> {
           conn
             .execute(
               &format!("UPDATE {USER_TABLE} SET admin = FALSE WHERE email = $1"),
-              params!(email.clone()),
+              (email.clone(),),
             )
             .await?;
 
@@ -241,7 +240,7 @@ async fn async_main() -> Result<(), BoxError> {
           conn
             .execute(
               &format!("UPDATE {USER_TABLE} SET admin = TRUE WHERE email = $1"),
-              params!(email.clone()),
+              (email.clone(),),
             )
             .await?;
 

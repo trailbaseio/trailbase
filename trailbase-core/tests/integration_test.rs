@@ -3,8 +3,8 @@ use axum::http::StatusCode;
 use axum_test::multipart::MultipartForm;
 use axum_test::TestServer;
 use cookie::Cookie;
-use libsql::params;
 use std::rc::Rc;
+use tokio_rusqlite::params;
 
 use trailbase_core::api::{create_user_handler, login_with_password, CreateUserRequest};
 use trailbase_core::config::proto::PermissionFlag;
@@ -219,7 +219,7 @@ pub async fn add_room(
   let room: [u8; 16] = conn
     .query_row(
       "INSERT INTO room (name) VALUES ($1) RETURNING id",
-      params!(name),
+      params!(name.to_string()),
     )
     .await?
     .unwrap()

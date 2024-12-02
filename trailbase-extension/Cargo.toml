@@ -23,8 +23,7 @@ uuid = { version = "1.7.0", default-features = false, features = ["std", "v7"] }
 validator = "0.19.0"
 
 [dev-dependencies]
-libsql = { workspace = true }
-tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread"] }
+rusqlite = { workspace = true }
 uuid = { version = "1.7.0", default-features = false, features = ["std", "v4", "v7"] }
 
 [profile.release]
