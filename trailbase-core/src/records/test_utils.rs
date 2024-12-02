@@ -3,13 +3,13 @@ mod tests {
   use tokio_rusqlite::params;
 
   use crate::records::json_to_sql::JsonRow;
-  use crate::util::query_one_row2;
+  use crate::util::query_one_row;
   use crate::AppState;
 
   pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), anyhow::Error> {
     // Create a messages, chat room and members tables.
     state
-      .conn2()
+      .conn()
       .execute_batch(
         r#"
           CREATE TABLE room (
@@ -50,7 +50,7 @@ mod tests {
   ) -> Result<(), anyhow::Error> {
     // Create a messages, chat room and members tables.
     state
-      .conn2()
+      .conn()
       .execute_batch(
         r#"
           CREATE TABLE room (
@@ -86,11 +86,11 @@ mod tests {
     return Ok(());
   }
 
-  pub async fn add_room2(
+  pub async fn add_room(
     conn: &tokio_rusqlite::Connection,
     name: &str,
   ) -> Result<[u8; 16], anyhow::Error> {
-    let room: [u8; 16] = query_one_row2(
+    let room: [u8; 16] = query_one_row(
       conn,
       "INSERT INTO room (name) VALUES ($1) RETURNING id",
       params!(name.to_string()),
@@ -101,7 +101,7 @@ mod tests {
     return Ok(room);
   }
 
-  pub async fn add_user_to_room2(
+  pub async fn add_user_to_room(
     conn: &tokio_rusqlite::Connection,
     user: [u8; 16],
     room: [u8; 16],
@@ -115,14 +115,14 @@ mod tests {
     return Ok(());
   }
 
-  pub async fn send_message2(
+  pub async fn send_message(
     conn: &tokio_rusqlite::Connection,
     user: [u8; 16],
     room: [u8; 16],
     message: &str,
   ) -> Result<[u8; 16], anyhow::Error> {
     return Ok(
-      query_one_row2(
+      query_one_row(
         conn,
         "INSERT INTO message (_owner, room, data) VALUES ($1, $2, $3) RETURNING id",
         params!(user, room, message.to_string()),

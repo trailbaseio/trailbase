@@ -147,11 +147,11 @@ impl AppState {
     return self.state.dev;
   }
 
-  pub fn conn2(&self) -> &tokio_rusqlite::Connection {
+  pub fn conn(&self) -> &tokio_rusqlite::Connection {
     return &self.state.conn2;
   }
 
-  pub fn user_conn2(&self) -> &tokio_rusqlite::Connection {
+  pub fn user_conn(&self) -> &tokio_rusqlite::Connection {
     return &self.state.conn2;
   }
 
@@ -300,22 +300,22 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   use crate::auth::oauth::providers::test::TestOAuthProvider;
   use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
   use crate::config::validate_config;
-  use crate::migrations::{apply_logs_migrations2, apply_main_migrations2, apply_user_migrations2};
+  use crate::migrations::{apply_logs_migrations, apply_main_migrations, apply_user_migrations};
 
   let temp_dir = temp_dir::TempDir::new()?;
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
 
   let conn2 = {
-    let mut conn = trailbase_sqlite::connect_sqlite2(None, None)?;
-    apply_user_migrations2(&mut conn)?;
-    let _new_db = apply_main_migrations2(&mut conn, None)?;
+    let mut conn = trailbase_sqlite::connect_sqlite(None, None)?;
+    apply_user_migrations(&mut conn)?;
+    let _new_db = apply_main_migrations(&mut conn, None)?;
 
     tokio_rusqlite::Connection::from_conn(conn).await?
   };
 
   let logs_conn = {
-    let mut conn = trailbase_sqlite::connect_sqlite2(None, None)?;
-    apply_logs_migrations2(&mut conn)?;
+    let mut conn = trailbase_sqlite::connect_sqlite(None, None)?;
+    apply_logs_migrations(&mut conn)?;
 
     tokio_rusqlite::Connection::from_conn(conn).await?
   };

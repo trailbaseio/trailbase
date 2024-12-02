@@ -18,7 +18,7 @@ use tokio::sync::oneshot;
 use crate::assets::cow_to_string;
 use crate::auth::user::User;
 use crate::js::import_provider::JsRuntimeAssets;
-use crate::records::sql_to_json::rows_to_json_arrays2;
+use crate::records::sql_to_json::rows_to_json_arrays;
 use crate::{AppState, DataDir};
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
@@ -360,7 +360,7 @@ impl RuntimeSingleton {
           .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
-        let (values, _columns) = rows_to_json_arrays2(rows, usize::MAX)
+        let (values, _columns) = rows_to_json_arrays(rows, usize::MAX)
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
         return Ok(serde_json::json!(values));

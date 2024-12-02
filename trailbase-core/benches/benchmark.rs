@@ -103,7 +103,7 @@ async fn setup_app() -> Result<SetupResult, anyhow::Error> {
   .await?;
 
   let state = app.state();
-  let conn = state.conn2();
+  let conn = state.conn();
 
   create_chat_message_app_tables(conn).await?;
   state.refresh_table_cache().await?;

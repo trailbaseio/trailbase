@@ -158,7 +158,7 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Schema(cmd)) => {
       init_logger(false);
 
-      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite2(
+      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
         Some(data_dir.main_db_path()),
         None,
       )?)
@@ -202,7 +202,7 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Admin { cmd }) => {
       init_logger(false);
 
-      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite2(
+      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
         Some(data_dir.main_db_path()),
         None,
       )?)
@@ -257,7 +257,7 @@ async fn async_main() -> Result<(), BoxError> {
       init_logger(false);
 
       let data_dir = DataDir(args.data_dir);
-      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite2(
+      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
         Some(data_dir.main_db_path()),
         None,
       )?)

@@ -28,7 +28,7 @@ pub async fn update_user_handler(
   State(state): State<AppState>,
   Json(request): Json<UpdateUserRequest>,
 ) -> Result<Response, Error> {
-  let conn = state.user_conn2();
+  let conn = state.user_conn();
   let user_id_bytes = request.id.into_bytes();
 
   let hashed_password = match &request.password {

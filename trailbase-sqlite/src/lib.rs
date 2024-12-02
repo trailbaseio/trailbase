@@ -27,12 +27,7 @@ unsafe extern "C" fn init_extension(
   ) as ::std::os::raw::c_int;
 }
 
-fn initial_optimize2(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
-  conn.execute("PRAGMA optimize = 0x10002", ())?;
-  return Ok(());
-}
-
-pub fn connect_sqlite2(
+pub fn connect_sqlite(
   path: Option<PathBuf>,
   extensions: Option<Vec<PathBuf>>,
 ) -> Result<rusqlite::Connection, rusqlite::Error> {
@@ -42,7 +37,9 @@ pub fn connect_sqlite2(
 
   let conn = if let Some(p) = path {
     use rusqlite::OpenFlags;
-    let flags = OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE;
+    let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
+      | OpenFlags::SQLITE_OPEN_CREATE
+      | OpenFlags::SQLITE_OPEN_NO_MUTEX;
     rusqlite::Connection::open_with_flags(p, flags)?
   } else {
     rusqlite::Connection::open_in_memory()?
@@ -80,7 +77,8 @@ pub fn connect_sqlite2(
     }
   }
 
-  initial_optimize2(&conn)?;
+  // Initial optimize.
+  conn.execute("PRAGMA optimize = 0x10002", ())?;
 
   return Ok(conn);
 }
@@ -92,7 +90,7 @@ mod test {
 
   #[test]
   fn test_connect() {
-    let conn = connect_sqlite2(None, None).unwrap();
+    let conn = connect_sqlite(None, None).unwrap();
 
     let row = conn
       .query_row(

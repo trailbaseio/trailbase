@@ -7,10 +7,10 @@ use std::sync::Arc;
 use trailbase_sqlite::schema::{FileUpload, FileUploadInput, FileUploads};
 
 use crate::config::proto::ConflictResolutionStrategy;
-use crate::records::files::delete_files_in_row2;
+use crate::records::files::delete_files_in_row;
 use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{self, ColumnMetadata, JsonColumnMetadata, TableMetadata};
-use crate::util::query_one_row2;
+use crate::util::query_one_row;
 use crate::AppState;
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -325,7 +325,7 @@ impl SelectQueryBuilder {
     pk_value: tokio_rusqlite::Value,
   ) -> Result<Option<tokio_rusqlite::Row>, tokio_rusqlite::Error> {
     return state
-      .conn2()
+      .conn()
       .query_row(
         &format!("SELECT * FROM '{table_name}' WHERE {pk_column} = $1"),
         [pk_value],
@@ -349,7 +349,7 @@ impl GetFileQueryBuilder {
         let column_name = &file_column.0.name;
 
         let Some(row) = state
-          .conn2()
+          .conn()
           .query_row(
             &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
             [pk_value],
@@ -383,7 +383,7 @@ impl GetFilesQueryBuilder {
         let column_name = &file_column.0.name;
 
         let Some(row) = state
-          .conn2()
+          .conn()
           .query_row(
             &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
             [pk_value],
@@ -427,7 +427,7 @@ impl InsertQueryBuilder {
       }
     }
 
-    let row = match query_one_row2(state.conn2(), &query, named_params).await {
+    let row = match query_one_row(state.conn(), &query, named_params).await {
       Ok(row) => row,
       Err(err) => {
         if !files.is_empty() {
@@ -581,7 +581,7 @@ impl UpdateQueryBuilder {
       return Ok(files_row);
     }
 
-    let files_row = match row_update(state.conn2(), table_name, params, pk_column, pk_value).await {
+    let files_row = match row_update(state.conn(), table_name, params, pk_column, pk_value).await {
       Ok(files_row) => files_row,
       Err(err) => {
         if !files.is_empty() {
@@ -601,7 +601,7 @@ impl UpdateQueryBuilder {
     // Finally, if everything else went well delete files from columns that were updated and are no
     // longer referenced.
     if let Some(files_row) = files_row {
-      delete_files_in_row2(state, metadata, files_row).await?;
+      delete_files_in_row(state, metadata, files_row).await?;
     }
 
     return Ok(());
@@ -619,15 +619,15 @@ impl DeleteQueryBuilder {
   ) -> Result<(), QueryError> {
     let table_name = metadata.name();
 
-    let row = query_one_row2(
-      state.conn2(),
+    let row = query_one_row(
+      state.conn(),
       &format!("DELETE FROM '{table_name}' WHERE {pk_column} = $1 RETURNING *"),
       [pk_value],
     )
     .await?;
 
     // Finally, delete files.
-    delete_files_in_row2(state, metadata, row).await?;
+    delete_files_in_row(state, metadata, row).await?;
 
     return Ok(());
   }

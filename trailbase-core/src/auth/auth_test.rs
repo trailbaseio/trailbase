@@ -24,7 +24,7 @@ use crate::auth::user::{DbUser, User};
 use crate::constants::*;
 use crate::email::{testing::TestAsyncSmtpTransport, Mailer};
 use crate::extract::Either;
-use crate::util::query_one_row2;
+use crate::util::query_one_row;
 
 #[tokio::test]
 async fn test_auth_registration_reset_and_change_email() {
@@ -40,7 +40,7 @@ async fn test_auth_registration_reset_and_change_email() {
   .await
   .unwrap();
 
-  let conn = state.user_conn2();
+  let conn = state.user_conn();
 
   let email = "user@test.org".to_string();
   let password = "secret123".to_string();
@@ -144,7 +144,7 @@ async fn test_auth_registration_reset_and_change_email() {
       .decode::<TokenClaims>(&tokens.auth_token)
       .unwrap();
 
-    let session_exists: bool = query_one_row2(
+    let session_exists: bool = query_one_row(
       conn,
       &session_exists_query,
       (user.uuid.into_bytes().to_vec(),),
@@ -213,7 +213,7 @@ async fn test_auth_registration_reset_and_change_email() {
     assert_eq!(mailer.get_logs().len(), 2);
 
     // Steal the reset code.
-    let reset_code: String = query_one_row2(
+    let reset_code: String = query_one_row(
       conn,
       &format!("SELECT password_reset_code FROM '{USER_TABLE}' WHERE id = $1"),
       (user.uuid.into_bytes().to_vec(),),
@@ -272,7 +272,7 @@ async fn test_auth_registration_reset_and_change_email() {
     .await
     .unwrap();
 
-    let session_exists: bool = query_one_row2(
+    let session_exists: bool = query_one_row(
       conn,
       &session_exists_query,
       (user.uuid.into_bytes().to_vec(),),
@@ -326,7 +326,7 @@ async fn test_auth_registration_reset_and_change_email() {
     assert_eq!(mailer.get_logs().len(), 3);
 
     // Steal the verification code.
-    let email_verification_code: String = query_one_row2(
+    let email_verification_code: String = query_one_row(
       conn,
       &format!("SELECT email_verification_code FROM '{USER_TABLE}' WHERE id = $1"),
       params!(user.uuid.into_bytes()),
@@ -359,7 +359,7 @@ async fn test_auth_registration_reset_and_change_email() {
     .await
     .expect(&format!("CODE: '{email_verification_code}'"));
 
-    let db_email: String = query_one_row2(
+    let db_email: String = query_one_row(
       conn,
       &format!("SELECT email FROM '{USER_TABLE}' WHERE id = $1"),
       params!(user.uuid.into_bytes()),
@@ -415,7 +415,7 @@ async fn test_auth_registration_reset_and_change_email() {
       .await
       .unwrap();
 
-    let user_exists: bool = query_one_row2(
+    let user_exists: bool = query_one_row(
       conn,
       &format!("SELECT EXISTS(SELECT * FROM '{USER_TABLE}' WHERE id = $1)"),
       params!(user.uuid.into_bytes()),

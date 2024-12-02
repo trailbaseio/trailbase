@@ -65,7 +65,7 @@ pub async fn request_email_verification_handler(
   }
 
   let rows_affected = state
-    .user_conn2()
+    .user_conn()
     .execute(
       &UPDATE_VERIFICATION_CODE_QUERY,
       params!(email_verification_code.clone(), user.id),
@@ -125,7 +125,7 @@ pub async fn verify_email_handler(
   }
 
   let rows_affected = state
-    .user_conn2()
+    .user_conn()
     .execute(&UPDATE_CODE_QUERY, params!(email_verification_code))
     .await?;
 

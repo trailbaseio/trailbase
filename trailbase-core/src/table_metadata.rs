@@ -533,12 +533,12 @@ pub enum TableLookupError {
   SqlParse(#[from] sqlite3_parser::lexer::sql::Error),
 }
 
-pub async fn lookup_and_parse_table_schema2(
+pub async fn lookup_and_parse_table_schema(
   conn: &tokio_rusqlite::Connection,
   table_name: &str,
 ) -> Result<Table, TableLookupError> {
   // Then get the actual table.
-  let sql: String = crate::util::query_one_row2(
+  let sql: String = crate::util::query_one_row(
     conn,
     &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1"),
     params!(table_name.to_string()),
@@ -864,7 +864,7 @@ mod tests {
   #[tokio::test]
   async fn test_parse_table_schema() {
     let state = test_state(None).await.unwrap();
-    let conn = state.conn2();
+    let conn = state.conn();
 
     let check = indoc! {r#"
         jsonschema_matches ('{
@@ -975,7 +975,7 @@ mod tests {
 
     assert_eq!(cnt, 4);
 
-    let table = lookup_and_parse_table_schema2(conn, "test_table")
+    let table = lookup_and_parse_table_schema(conn, "test_table")
       .await
       .unwrap();
     let col = table.columns.first().unwrap();

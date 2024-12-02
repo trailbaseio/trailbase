@@ -58,7 +58,7 @@ pub async fn list_users_handler(
   State(state): State<AppState>,
   RawQuery(raw_url_query): RawQuery,
 ) -> Result<Json<ListUsersResponse>, Error> {
-  let conn = state.user_conn2();
+  let conn = state.user_conn();
 
   let url_query = parse_query(raw_url_query);
   info!("query: {url_query:?}");
@@ -76,7 +76,7 @@ pub async fn list_users_handler(
 
   let total_row_count = {
     let where_clause = &filter_where_clause.clause;
-    let row = crate::util::query_one_row2(
+    let row = crate::util::query_one_row(
       conn,
       &format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE {where_clause}"),
       filter_where_clause.params.clone(),

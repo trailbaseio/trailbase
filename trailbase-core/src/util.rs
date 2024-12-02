@@ -56,7 +56,7 @@ pub(crate) fn assert_uuidv7_version(uuid: &Uuid) {
 #[cfg(not(debug_assertions))]
 pub(crate) fn assert_uuidv7_version(_uuid: &Uuid) {}
 
-pub async fn query_one_row2(
+pub async fn query_one_row(
   conn: &tokio_rusqlite::Connection,
   sql: &str,
   params: impl tokio_rusqlite::Params + Send + 'static,

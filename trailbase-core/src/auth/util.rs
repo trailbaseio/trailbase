@@ -128,10 +128,10 @@ pub(crate) fn extract_cookies_from_parts(parts: &mut Parts) -> Result<Cookies, A
 }
 
 pub async fn user_by_email(state: &AppState, email: &str) -> Result<DbUser, AuthError> {
-  return get_user_by_email2(state.user_conn2(), email).await;
+  return get_user_by_email(state.user_conn(), email).await;
 }
 
-pub async fn get_user_by_email2(
+pub async fn get_user_by_email(
   user_conn: &tokio_rusqlite::Connection,
   email: &str,
 ) -> Result<DbUser, AuthError> {
@@ -147,7 +147,7 @@ pub async fn get_user_by_email2(
 }
 
 pub async fn user_by_id(state: &AppState, id: &uuid::Uuid) -> Result<DbUser, AuthError> {
-  return get_user_by_id(state.user_conn2(), id).await;
+  return get_user_by_id(state.user_conn(), id).await;
 }
 
 async fn get_user_by_id(
@@ -170,12 +170,9 @@ pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, AuthErro
     static ref EXISTS_QUERY: String =
       format!("SELECT EXISTS(SELECT 1 FROM '{USER_TABLE}' WHERE email = $1)");
   };
-  let row = crate::util::query_one_row2(
-    state.user_conn2(),
-    &EXISTS_QUERY,
-    params!(email.to_string()),
-  )
-  .await?;
+  let row =
+    crate::util::query_one_row(state.user_conn(), &EXISTS_QUERY, params!(email.to_string()))
+      .await?;
   return row
     .get::<bool>(0)
     .map_err(|err| AuthError::Internal(err.into()));
@@ -183,7 +180,7 @@ pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, AuthErro
 
 pub(crate) async fn is_admin(state: &AppState, user: &User) -> bool {
   let Ok(Some(row)) = state
-    .user_conn2()
+    .user_conn()
     .query_row(
       &format!("SELECT admin FROM {USER_TABLE} WHERE id = $1"),
       params!(user.uuid.as_bytes().to_vec()),
@@ -206,7 +203,7 @@ pub(crate) async fn delete_all_sessions_for_user(
 
   return Ok(
     state
-      .user_conn2()
+      .user_conn()
       .execute(
         &QUERY,
         [tokio_rusqlite::Value::Blob(user_id.into_bytes().to_vec())],
@@ -225,7 +222,7 @@ pub(crate) async fn delete_session(
 
   return Ok(
     state
-      .user_conn2()
+      .user_conn()
       .execute(&QUERY, params!(refresh_token))
       .await?,
   );

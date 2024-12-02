@@ -16,7 +16,7 @@ use crate::constants::{LOGS_RETENTION_DEFAULT, LOGS_TABLE_ID_COLUMN};
 use crate::listing::{
   build_filter_where_clause, limit_or_default, parse_query, Order, WhereClause,
 };
-use crate::table_metadata::{lookup_and_parse_table_schema2, TableMetadata};
+use crate::table_metadata::{lookup_and_parse_table_schema, TableMetadata};
 use crate::util::id_to_b64;
 
 #[derive(Debug, Serialize, TS)]
@@ -109,12 +109,12 @@ pub async fn list_logs_handler(
 
   // NOTE: We cannot use state.table_metadata() here, since we're working on the logs database.
   // We could cache, however this is just the admin logs handler.
-  let table = lookup_and_parse_table_schema2(conn, LOGS_TABLE_NAME).await?;
+  let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME).await?;
   let table_metadata = TableMetadata::new(table.clone(), &[table]);
   let filter_where_clause = build_filter_where_clause(&table_metadata, filter_params)?;
 
   let total_row_count = {
-    let row = crate::util::query_one_row2(
+    let row = crate::util::query_one_row(
       conn,
       &format!(
         "SELECT COUNT(*) FROM {LOGS_TABLE_NAME} WHERE {clause}",
@@ -360,12 +360,12 @@ mod tests {
   use chrono::{DateTime, Duration};
 
   use super::*;
-  use crate::migrations::apply_logs_migrations2;
+  use crate::migrations::apply_logs_migrations;
 
   #[tokio::test]
   async fn test_aggregate_rate_computation() {
-    let mut conn_sync = trailbase_sqlite::connect_sqlite2(None, None).unwrap();
-    apply_logs_migrations2(&mut conn_sync).unwrap();
+    let mut conn_sync = trailbase_sqlite::connect_sqlite(None, None).unwrap();
+    apply_logs_migrations(&mut conn_sync).unwrap();
     let conn = tokio_rusqlite::Connection::from_conn(conn_sync)
       .await
       .unwrap();

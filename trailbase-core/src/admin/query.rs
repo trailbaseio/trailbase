@@ -4,7 +4,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::records::sql_to_json::rows_to_json_arrays2;
+use crate::records::sql_to_json::rows_to_json_arrays;
 use crate::schema::Column;
 use crate::table_metadata::sqlite3_parse_into_statements;
 
@@ -59,7 +59,7 @@ pub async fn query_handler(
     }
   }
 
-  let batched_rows_result = state.conn2().execute_batch(&request.query).await;
+  let batched_rows_result = state.conn().execute_batch(&request.query).await;
 
   // In the fallback case we always need to invalidate the cache.
   if must_invalidate_table_cache {
@@ -67,7 +67,7 @@ pub async fn query_handler(
   }
 
   if let Some(rows) = batched_rows_result? {
-    let (rows, columns) = rows_to_json_arrays2(rows, 1024)?;
+    let (rows, columns) = rows_to_json_arrays(rows, 1024)?;
 
     return Ok(Json(QueryResponse { columns, rows }));
   }

@@ -34,7 +34,7 @@ pub async fn alter_index_handler(
   debug!("Alter index:\nsource: {source_schema:?}\ntarget: {target_schema:?}",);
 
   let migration_path = state.data_dir().migrations_path();
-  let conn = state.conn2();
+  let conn = state.conn();
   let writer = conn
     .call(move |conn| {
       let mut tx = TransactionRecorder::new(

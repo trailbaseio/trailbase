@@ -25,7 +25,7 @@ pub async fn drop_index_handler(
   let index_name = request.name;
 
   let migration_path = state.data_dir().migrations_path();
-  let conn = state.conn2();
+  let conn = state.conn();
   let writer = conn
     .call(move |conn| {
       let mut tx =

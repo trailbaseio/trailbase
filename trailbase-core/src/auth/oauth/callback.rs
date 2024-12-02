@@ -134,7 +134,7 @@ pub(crate) async fn callback_from_external_auth_provider(
     return Err(AuthError::BadRequest("remote oauth user not verified"));
   }
 
-  let conn = state.user_conn2();
+  let conn = state.user_conn();
   let existing_user =
     user_by_provider_id(conn, oauth_user.provider_id, &oauth_user.provider_user_id)
       .await
@@ -222,7 +222,7 @@ pub(crate) async fn callback_from_external_auth_provider(
       }
 
       let rows_affected = state
-        .user_conn2()
+        .user_conn()
         .execute(
           &QUERY,
           named_params! {
@@ -272,7 +272,7 @@ async fn create_user_for_external_provider(
     );
   }
 
-  let row = crate::util::query_one_row2(
+  let row = crate::util::query_one_row(
     conn,
     &QUERY,
     named_params! {

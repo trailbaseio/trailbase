@@ -30,7 +30,7 @@ pub struct ListSchemasResponse {
 pub async fn list_tables_handler(
   State(state): State<AppState>,
 ) -> Result<Json<ListSchemasResponse>, Error> {
-  let conn = state.conn2();
+  let conn = state.conn();
 
   // NOTE: the "ORDER BY" is a bit sneaky, it ensures that we parse all "table"s before we parse
   // "view"s.

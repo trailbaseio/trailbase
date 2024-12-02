@@ -25,7 +25,7 @@ pub(crate) async fn delete_handler(
   let _ = delete_all_sessions_for_user(&state, user.uuid).await;
 
   state
-    .user_conn2()
+    .user_conn()
     .execute(
       &format!("DELETE FROM '{USER_TABLE}' WHERE id = $1"),
       [tokio_rusqlite::Value::Blob(user.uuid.into_bytes().to_vec())],

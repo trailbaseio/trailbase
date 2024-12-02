@@ -51,7 +51,7 @@ pub(crate) async fn read_file_into_response(
   };
 }
 
-pub(crate) async fn delete_files_in_row2(
+pub(crate) async fn delete_files_in_row(
   state: &AppState,
   metadata: &(dyn TableOrViewMetadata + Send + Sync),
   row: tokio_rusqlite::Row,

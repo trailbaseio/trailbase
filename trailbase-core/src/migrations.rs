@@ -45,7 +45,7 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> refinery::Runner
   return runner;
 }
 
-pub(crate) fn apply_main_migrations2(
+pub(crate) fn apply_main_migrations(
   conn: &mut rusqlite::Connection,
   user_migrations_path: Option<PathBuf>,
 ) -> Result<bool, refinery::Error> {
@@ -91,7 +91,7 @@ pub(crate) fn apply_main_migrations2(
 }
 
 #[cfg(test)]
-pub(crate) fn apply_user_migrations2(
+pub(crate) fn apply_user_migrations(
   user_conn: &mut rusqlite::Connection,
 ) -> Result<(), refinery::Error> {
   let mut runner = main::migrations::runner();
@@ -111,7 +111,7 @@ pub(crate) fn apply_user_migrations2(
   return Ok(());
 }
 
-pub(crate) fn apply_logs_migrations2(
+pub(crate) fn apply_logs_migrations(
   logs_conn: &mut rusqlite::Connection,
 ) -> Result<(), refinery::Error> {
   let mut runner = logs::migrations::runner();

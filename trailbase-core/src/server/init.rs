@@ -6,7 +6,7 @@ use crate::app_state::{build_objectstore, AppState, AppStateArgs};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;
-use crate::migrations::{apply_logs_migrations2, apply_main_migrations2};
+use crate::migrations::{apply_logs_migrations, apply_main_migrations};
 use crate::rand::generate_random_string;
 use crate::server::DataDir;
 use crate::table_metadata::TableMetadataCache;
@@ -58,15 +58,15 @@ pub async fn init_app_state(
   // Then open or init new databases.
   let logs_conn = {
     let mut conn = init_logs_db(&data_dir)?;
-    apply_logs_migrations2(&mut conn)?;
+    apply_logs_migrations(&mut conn)?;
     tokio_rusqlite::Connection::from_conn(conn).await?
   };
 
   // Open or init the main db. Note that we derive whether a new DB was initialized based on
   // whether the V1 migration had to be applied. Should be fairly robust.
   let (conn2, new_db) = {
-    let mut conn = trailbase_sqlite::connect_sqlite2(Some(data_dir.main_db_path()), None)?;
-    let new_db = apply_main_migrations2(&mut conn, Some(data_dir.migrations_path()))?;
+    let mut conn = trailbase_sqlite::connect_sqlite(Some(data_dir.main_db_path()), None)?;
+    let new_db = apply_main_migrations(&mut conn, Some(data_dir.migrations_path()))?;
 
     (tokio_rusqlite::Connection::from_conn(conn).await?, new_db)
   };
@@ -133,8 +133,8 @@ pub async fn init_app_state(
   });
 
   if new_db {
-    let num_admins: i64 = crate::util::query_one_row2(
-      app_state.user_conn2(),
+    let num_admins: i64 = crate::util::query_one_row(
+      app_state.user_conn(),
       &format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE admin = TRUE"),
       (),
     )
@@ -146,7 +146,7 @@ pub async fn init_app_state(
       let password = generate_random_string(20);
 
       app_state
-        .user_conn2()
+        .user_conn()
         .execute(
           &format!(
             r#"
@@ -183,7 +183,7 @@ pub async fn init_app_state(
 }
 
 fn init_logs_db(data_dir: &DataDir) -> Result<rusqlite::Connection, InitError> {
-  let conn = trailbase_sqlite::connect_sqlite2(data_dir.logs_db_path().into(), None)?;
+  let conn = trailbase_sqlite::connect_sqlite(data_dir.logs_db_path().into(), None)?;
 
   // Turn off secure_deletions, i.e. don't wipe the memory with zeros.
   conn

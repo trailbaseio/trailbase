@@ -46,7 +46,7 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
   });
 
   // Backup job.
-  let conn = app_state.conn2().clone();
+  let conn = app_state.conn().clone();
   let backup_file = app_state.data_dir().backup_path().join("backup.db");
   let backup_interval = app_state
     .access_config(|c| c.server.backup_interval_sec)
@@ -111,7 +111,7 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
       let timestamp = (Utc::now() - refresh_token_ttl).timestamp();
 
       match state
-        .user_conn2()
+        .user_conn()
         .execute(
           &format!("DELETE FROM '{SESSION_TABLE}' WHERE updated < $1"),
           params!(timestamp),
@@ -125,7 +125,7 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
   });
 
   // Optimizer
-  let conn = app_state.conn2().clone();
+  let conn = app_state.conn().clone();
   tasks.add_periodic_task(Duration::hours(24), move || {
     let conn = conn.clone();
 

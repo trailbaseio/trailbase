@@ -107,7 +107,7 @@ mod tests {
   #[tokio::test]
   async fn test_some_sqlite_errors_yield_client_errors() {
     let conn =
-      tokio_rusqlite::Connection::from_conn(trailbase_sqlite::connect_sqlite2(None, None).unwrap())
+      tokio_rusqlite::Connection::from_conn(trailbase_sqlite::connect_sqlite(None, None).unwrap())
         .await
         .unwrap();
 

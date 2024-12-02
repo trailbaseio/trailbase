@@ -87,7 +87,7 @@ pub async fn change_password_handler(
   }
 
   let rows_affected = state
-    .user_conn2()
+    .user_conn()
     .execute(
       &QUERY,
       named_params! {

@@ -40,7 +40,7 @@ fn test_record_apis() {
   .unwrap();
 
   let state = app.state();
-  let conn = state.conn2();
+  let conn = state.conn();
 
   create_chat_message_app_tables(conn).await.unwrap();
   state.refresh_table_cache().await.unwrap();

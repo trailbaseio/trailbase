@@ -9,7 +9,7 @@ use crate::app_state::AppState;
 use crate::listing::{
   build_filter_where_clause, limit_or_default, parse_query, Order, WhereClause,
 };
-use crate::records::sql_to_json::rows_to_json_arrays2;
+use crate::records::sql_to_json::rows_to_json_arrays;
 use crate::schema::Column;
 use crate::table_metadata::TableOrViewMetadata;
 
@@ -55,8 +55,8 @@ pub async fn list_rows_handler(
   let total_row_count = {
     let where_clause = &filter_where_clause.clause;
     let count_query = format!("SELECT COUNT(*) FROM '{table_name}' WHERE {where_clause}");
-    let row = crate::util::query_one_row2(
-      state.conn2(),
+    let row = crate::util::query_one_row(
+      state.conn(),
       &count_query,
       filter_where_clause.params.clone(),
     )
@@ -67,7 +67,7 @@ pub async fn list_rows_handler(
 
   let cursor_column = table_or_view_metadata.record_pk_column();
   let (rows, columns) = fetch_rows(
-    state.conn2(),
+    state.conn(),
     &table_name,
     filter_where_clause,
     order,
@@ -184,5 +184,5 @@ async fn fetch_rows(
     return err;
   })?;
 
-  return Ok(rows_to_json_arrays2(result_rows, 1024)?);
+  return Ok(rows_to_json_arrays(result_rows, 1024)?);
 }

@@ -183,7 +183,7 @@ async fn test_oauth() {
   assert_eq!(location, "/_/auth/profile");
 
   let row = state
-    .user_conn2()
+    .user_conn()
     .query_row(
       &format!("SELECT email FROM {USER_TABLE} WHERE provider_user_id = $1"),
       (external_user_id,),

@@ -36,7 +36,7 @@ pub async fn drop_table_handler(
   }
 
   let migration_path = state.data_dir().migrations_path();
-  let conn = state.conn2();
+  let conn = state.conn();
   let writer = conn
     .call(move |conn| {
       let mut tx = TransactionRecorder::new(

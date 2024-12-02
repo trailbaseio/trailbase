@@ -64,7 +64,7 @@ pub async fn create_user_handler(
   }
 
   let Some(user) = state
-    .user_conn2()
+    .user_conn()
     .query_value::<DbUser>(
       &INSERT_USER_QUERY,
       named_params! {

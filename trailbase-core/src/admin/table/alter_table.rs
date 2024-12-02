@@ -72,7 +72,7 @@ pub async fn alter_table_handler(
   target_schema_copy.name = temp_table_name.to_string();
 
   let migration_path = state.data_dir().migrations_path();
-  let conn = state.conn2();
+  let conn = state.conn();
   let writer = conn
     .call(
       move |conn| -> Result<Option<MigrationWriter>, tokio_rusqlite::Error> {
@@ -140,7 +140,7 @@ mod tests {
   #[tokio::test]
   async fn test_alter_table() -> Result<(), anyhow::Error> {
     let state = test_state(None).await?;
-    let conn = state.conn2();
+    let conn = state.conn();
     let pk_col = "my_pk".to_string();
 
     let create_table_request = CreateTableRequest {

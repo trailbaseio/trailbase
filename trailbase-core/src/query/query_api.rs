@@ -120,7 +120,7 @@ impl QueryApi {
             }),
           ));
 
-          let row = match crate::util::query_one_row2(&self.state.conn, &access_query, params).await
+          let row = match crate::util::query_one_row(&self.state.conn, &access_query, params).await
           {
             Ok(row) => row,
             Err(err) => {

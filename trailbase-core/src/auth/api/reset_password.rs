@@ -79,7 +79,7 @@ pub async fn reset_password_request_handler(
   }
 
   let rows_affected = state
-    .user_conn2()
+    .user_conn()
     .execute(
       &UPDATE_CODE_QUERY,
       params!(password_reset_code.clone(), user.id),
@@ -152,7 +152,7 @@ pub async fn reset_password_update_handler(
   }
 
   let rows_affected = state
-    .user_conn2()
+    .user_conn()
     .execute(
       &UPDATE_PASSWORD_QUERY,
       params!(hashed_password, password_reset_code),
@@ -180,7 +180,7 @@ pub async fn force_password_reset(
       format!("UPDATE '{USER_TABLE}' SET password_hash = $1 WHERE email = $2 RETURNING id");
   }
 
-  let id: [u8; 16] = crate::util::query_one_row2(
+  let id: [u8; 16] = crate::util::query_one_row(
     user_conn,
     &UPDATE_PASSWORD_QUERY,
     params!(hashed_password, email),
