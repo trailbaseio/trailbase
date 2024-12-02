@@ -3,8 +3,8 @@ use base64::prelude::*;
 use chrono::Duration;
 use cookie::SameSite;
 use lazy_static::lazy_static;
-use libsql::params;
 use sha2::{Digest, Sha256};
+use tokio_rusqlite::params;
 use tower_cookies::{Cookie, Cookies};
 
 use crate::auth::user::{DbUser, User};
@@ -139,7 +139,7 @@ pub async fn get_user_by_email2(
     static ref QUERY: String = format!("SELECT * FROM {USER_TABLE} WHERE email = $1");
   };
   let db_user = user_conn
-    .query_value::<DbUser>(&QUERY, params!(email))
+    .query_value::<DbUser>(&QUERY, params!(email.to_string()))
     .await
     .map_err(|_err| AuthError::UnauthorizedExt("user not found by email".into()))?;
 
@@ -170,7 +170,12 @@ pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, AuthErro
     static ref EXISTS_QUERY: String =
       format!("SELECT EXISTS(SELECT 1 FROM '{USER_TABLE}' WHERE email = $1)");
   };
-  let row = crate::util::query_one_row2(state.user_conn2(), &EXISTS_QUERY, params!(email)).await?;
+  let row = crate::util::query_one_row2(
+    state.user_conn2(),
+    &EXISTS_QUERY,
+    params!(email.to_string()),
+  )
+  .await?;
   return row
     .get::<bool>(0)
     .map_err(|err| AuthError::Internal(err.into()));

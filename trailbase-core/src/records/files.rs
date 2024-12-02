@@ -11,8 +11,6 @@ use crate::table_metadata::{JsonColumnMetadata, TableOrViewMetadata};
 
 #[derive(Debug, Error)]
 pub enum FileError {
-  #[error("Libsql error: {0}")]
-  Libsql(#[from] libsql::Error),
   #[error("Storage error: {0}")]
   Storage(#[from] object_store::Error),
   #[error("IO error: {0}")]

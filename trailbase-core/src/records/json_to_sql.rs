@@ -553,11 +553,6 @@ impl UpdateQueryBuilder {
             use tokio_rusqlite::Params;
             [(":pk_column", pk_value)].bind(&mut stmt)?;
 
-            // tokio_rusqlite::bind_params(
-            //   &mut stmt,
-            //   libsql::params::Params::Named(vec![(":pk_column".to_string(), pk_value)]),
-            // )?;
-
             let mut rows = stmt.raw_query();
             if let Some(row) = rows.next()? {
               Some(tokio_rusqlite::Row::from_row(row, None)?)
@@ -573,8 +568,7 @@ impl UpdateQueryBuilder {
             ))?;
             use tokio_rusqlite::Params;
             params.params.bind(&mut stmt)?;
-            // tokio_rusqlite::bind_params(&mut stmt,
-            // libsql::params::Params::Named(params.params))?;
+
             stmt.raw_execute()?;
           }
 

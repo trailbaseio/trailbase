@@ -4,12 +4,12 @@ use axum::{
 };
 use chrono::Duration;
 use lazy_static::lazy_static;
-use libsql::{named_params, params};
 use oauth2::PkceCodeVerifier;
 use oauth2::{AsyncHttpClient, HttpClientError, HttpRequest, HttpResponse};
 use oauth2::{AuthorizationCode, StandardTokenResponse, TokenResponse};
 use serde::Deserialize;
 use thiserror::Error;
+use tokio_rusqlite::{named_params, params};
 use tower_cookies::Cookies;
 
 use crate::auth::oauth::state::{OAuthState, ResponseType};
@@ -303,7 +303,10 @@ async fn user_by_provider_id(
   };
 
   return conn
-    .query_value::<DbUser>(&QUERY, params!(provider_id as i64, provider_user_id))
+    .query_value::<DbUser>(
+      &QUERY,
+      params!(provider_id as i64, provider_user_id.to_string()),
+    )
     .await
     .map_err(|err| AuthError::Internal(err.into()))?
     .ok_or_else(|| AuthError::NotFound);

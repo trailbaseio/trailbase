@@ -157,7 +157,7 @@ pub async fn init_app_state(
         INSERT INTO
         "#
           ),
-          libsql::params!(),
+          (),
         )
         .await?;
 

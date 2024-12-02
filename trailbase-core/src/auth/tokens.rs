@@ -5,7 +5,7 @@ use axum::{
 };
 use chrono::Duration;
 use lazy_static::lazy_static;
-use libsql::params;
+use tokio_rusqlite::params;
 use tower_cookies::Cookies;
 
 use crate::app_state::AppState;
@@ -167,7 +167,7 @@ pub(crate) async fn mint_new_tokens(
     .user_conn2()
     .execute(
       &QUERY,
-      params!(user_id.into_bytes(), refresh_token.clone(),),
+      params!(user_id.into_bytes().to_vec(), refresh_token.clone(),),
     )
     .await?;
 

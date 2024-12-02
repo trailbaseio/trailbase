@@ -5,8 +5,8 @@ use axum::{
   Json,
 };
 use lazy_static::lazy_static;
-use libsql::named_params;
 use serde::{Deserialize, Serialize};
+use tokio_rusqlite::named_params;
 use tower_cookies::Cookies;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};

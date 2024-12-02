@@ -51,7 +51,7 @@ pub async fn delete_record_handler(
 #[cfg(test)]
 mod test {
   use axum::extract::Query;
-  use libsql::params;
+  use tokio_rusqlite::params;
 
   use super::*;
   use crate::admin::user::*;
@@ -143,7 +143,7 @@ mod test {
     let count: i64 = crate::util::query_one_row2(
       conn,
       "SELECT COUNT(*) FROM message WHERE id = $1",
-      params!(id),
+      params!(*id),
     )
     .await?
     .get(0)?;

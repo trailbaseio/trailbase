@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-  use libsql::params;
+  use tokio_rusqlite::params;
 
   use crate::records::json_to_sql::JsonRow;
   use crate::util::query_one_row2;
@@ -93,7 +93,7 @@ mod tests {
     let room: [u8; 16] = query_one_row2(
       conn,
       "INSERT INTO room (name) VALUES ($1) RETURNING id",
-      params!(name),
+      params!(name.to_string()),
     )
     .await?
     .get(0)?;
@@ -125,7 +125,7 @@ mod tests {
       query_one_row2(
         conn,
         "INSERT INTO message (_owner, room, data) VALUES ($1, $2, $3) RETURNING id",
-        params!(user, room, message),
+        params!(user, room, message.to_string()),
       )
       .await?
       .get(0)?,

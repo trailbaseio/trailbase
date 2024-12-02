@@ -36,7 +36,7 @@ fn value_to_json2(value: rusqlite::types::Value) -> Result<serde_json::Value, Js
   });
 }
 
-/// Serialize libsql row to json.
+/// Serialize SQL row to json.
 pub fn row_to_json2(
   metadata: &(dyn TableOrViewMetadata + Send + Sync),
   row: &tokio_rusqlite::Row,

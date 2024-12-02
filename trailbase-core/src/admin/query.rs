@@ -36,7 +36,7 @@ pub async fn query_handler(
   //
   // In the end we really want to allow executing all constructs as valid to sqlite. As such we
   // best effort parse the statements to see if need to invalidate the table cache and otherwise
-  // fall back to libsql's execute batch which materializes all rows and invalidate anyway.
+  // fall back to execute batch which materializes all rows and invalidate anyway.
 
   // Check the statements are correct before executing anything, just to be sure.
   let statements = sqlite3_parse_into_statements(&request.query)?;

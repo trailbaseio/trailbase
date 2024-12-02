@@ -184,8 +184,8 @@ mod test {
   use crate::util::{id_to_b64, query_one_row2};
 
   #[tokio::test]
-  async fn libsql_ignores_extra_parameters_test() -> Result<(), anyhow::Error> {
-    // This test is actually just testing libsql and making sure that we can overprovision
+  async fn ignores_extra_sql_parameters_test() -> Result<(), anyhow::Error> {
+    // This test is actually just testing our SQL driver and making sure that we can overprovision
     // arguments. Specifically, we want to provide :user and :id arguments even if they're not
     // consumed by a user-provided access query.
     let state = test_state(None).await?;
@@ -195,14 +195,14 @@ mod test {
     conn
       .execute(
         &format!("INSERT INTO '{USER_TABLE}' (email) VALUES ($1)"),
-        libsql::params!(EMAIL),
+        tokio_rusqlite::params!(EMAIL),
       )
       .await?;
 
     query_one_row2(
       conn,
       &format!("SELECT * from '{USER_TABLE}' WHERE email = :email"),
-      libsql::named_params! {
+      tokio_rusqlite::named_params! {
         ":email": EMAIL,
         ":unused": "unused",
         ":foo": 42,

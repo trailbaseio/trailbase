@@ -27,7 +27,7 @@ impl From<tokio_rusqlite::Error> for QueryError {
       tokio_rusqlite::Error::Rusqlite(err) => match err {
         // rusqlite::Error::QueryReturnedNoRows => {
         //   #[cfg(debug_assertions)]
-        //   info!("libsql returned empty rows error");
+        //   info!("rusqlite returned empty rows error");
         //
         //   Self::RecordNotFound
         // }

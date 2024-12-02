@@ -1,7 +1,6 @@
 use fallible_iterator::FallibleIterator;
 use jsonschema::Validator;
 use lazy_static::lazy_static;
-use libsql::params;
 use log::*;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -10,6 +9,7 @@ use sqlite3_parser::ast::Stmt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
+use tokio_rusqlite::params;
 
 use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
 use crate::schema::{Column, ColumnDataType, ColumnOption, ForeignKey, SchemaError, Table, View};
@@ -541,7 +541,7 @@ pub async fn lookup_and_parse_table_schema2(
   let sql: String = crate::util::query_one_row2(
     conn,
     &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1"),
-    params!(table_name),
+    params!(table_name.to_string()),
   )
   .await?
   .get(0)?;

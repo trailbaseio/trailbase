@@ -798,8 +798,8 @@ mod tests {
 
   #[tokio::test]
   async fn test_serial_tests() {
-    // NOTE: needs to run serially since registration of libsql connection with singleton v8 runtime
-    // is racy.
+    // NOTE: needs to run serially since registration of SQLite connection with singleton v8
+    // runtime is racy.
     test_runtime_apply().await;
     test_runtime_javascript().await;
     test_javascript_query().await;
