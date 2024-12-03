@@ -32,9 +32,7 @@ pub async fn delete_record_handler(
 
   let record_id = api.id_to_sql(&record)?;
 
-  api
-    .check_record_level_access(Permission::Delete, Some(&record_id), None, user.as_ref())
-    .await?;
+  api.check_record_level_access(Permission::Delete, Some(&record_id), None, user.as_ref())?;
 
   DeleteQueryBuilder::run(
     &state,
@@ -51,7 +49,7 @@ pub async fn delete_record_handler(
 #[cfg(test)]
 mod test {
   use axum::extract::Query;
-  use tokio_rusqlite::params;
+  use trailbase_sqlite::params;
 
   use super::*;
   use crate::admin::user::*;
@@ -137,15 +135,14 @@ mod test {
   }
 
   async fn message_exists(
-    conn: &tokio_rusqlite::Connection,
+    conn: &trailbase_sqlite::Connection,
     id: &[u8; 16],
   ) -> Result<bool, anyhow::Error> {
     let count: i64 = crate::util::query_one_row(
       conn,
       "SELECT COUNT(*) FROM message WHERE id = $1",
       params!(*id),
-    )
-    .await?
+    )?
     .get(0)?;
     return Ok(count > 0);
   }

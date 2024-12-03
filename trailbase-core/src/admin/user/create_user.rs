@@ -1,7 +1,7 @@
 use axum::{extract::State, Json};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use tokio_rusqlite::named_params;
+use trailbase_sqlite::named_params;
 use ts_rs::TS;
 use uuid::Uuid;
 
@@ -63,19 +63,16 @@ pub async fn create_user_handler(
     );
   }
 
-  let Some(user) = state
-    .user_conn()
-    .query_value::<DbUser>(
-      &INSERT_USER_QUERY,
-      named_params! {
-        ":email": normalized_email,
-        ":password_hash": hashed_password,
-        ":verified": request.verified,
-        ":admin": request.admin,
-        ":email_verification_code": email_verification_code.clone(),
-      },
-    )
-    .await?
+  let Some(user) = state.user_conn().query_value::<DbUser>(
+    &INSERT_USER_QUERY,
+    named_params! {
+      ":email": normalized_email,
+      ":password_hash": hashed_password,
+      ":verified": request.verified,
+      ":admin": request.admin,
+      ":email_verification_code": email_verification_code.clone(),
+    },
+  )?
   else {
     return Err(Error::Precondition("Internal".into()));
   };

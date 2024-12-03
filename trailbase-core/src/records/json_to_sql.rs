@@ -66,7 +66,7 @@ pub enum QueryError {
   #[error("FromSql error: {0}")]
   FromSql(Arc<rusqlite::types::FromSqlError>),
   #[error("Tokio Rusqlite error: {0}")]
-  TokioRusqlite(Arc<tokio_rusqlite::Error>),
+  TokioRusqlite(Arc<trailbase_sqlite::Error>),
   #[error("Json serialization error: {0}")]
   JsonSerialization(Arc<serde_json::Error>),
   #[error("ObjectStore error: {0}")]
@@ -83,8 +83,8 @@ impl From<serde_json::Error> for QueryError {
   }
 }
 
-impl From<tokio_rusqlite::Error> for QueryError {
-  fn from(err: tokio_rusqlite::Error) -> Self {
+impl From<trailbase_sqlite::Error> for QueryError {
+  fn from(err: trailbase_sqlite::Error) -> Self {
     return Self::TokioRusqlite(err.into());
   }
 }
@@ -118,7 +118,7 @@ pub struct Params {
 
   /// List of named params with their respective placeholders, e.g.:
   ///   '(":col_name": Value::Text("hi"))'.
-  params: Vec<(String, tokio_rusqlite::Value)>,
+  params: Vec<(String, trailbase_sqlite::Value)>,
 
   /// List of columns that are targeted by the params. Useful for building Insert/Update queries.
   ///
@@ -134,7 +134,7 @@ pub struct Params {
 }
 
 impl Params {
-  /// Converts a top-level Json object into tokio_rusqlite::Values and extract files.
+  /// Converts a top-level Json object into trailbase_sqlite::Values and extract files.
   ///
   /// Note: that this function by design is non-recursive, since we're mapping to a flat hierarchy
   /// in sqlite, since even JSON/JSONB is simply text/blob that is lazily parsed.
@@ -210,7 +210,7 @@ impl Params {
     return metadata.column_by_name(field_name);
   }
 
-  pub fn push_param(&mut self, col: String, value: tokio_rusqlite::Value) {
+  pub fn push_param(&mut self, col: String, value: trailbase_sqlite::Value) {
     self.params.push((format!(":{col}"), value));
     self.col_names.push(col);
   }
@@ -219,7 +219,7 @@ impl Params {
     return &self.col_names;
   }
 
-  pub(crate) fn named_params(&self) -> &Vec<(String, tokio_rusqlite::Value)> {
+  pub(crate) fn named_params(&self) -> &Vec<(String, trailbase_sqlite::Value)> {
     &self.params
   }
 
@@ -289,7 +289,7 @@ impl Params {
     for (col_name, file_upload) in file_upload_map {
       self.params.push((
         format!(":{col_name}"),
-        tokio_rusqlite::Value::Text(serde_json::to_string(&file_upload)?),
+        trailbase_sqlite::Value::Text(serde_json::to_string(&file_upload)?),
       ));
       self.col_names.push(col_name.clone());
       self.file_col_names.push(col_name);
@@ -298,7 +298,7 @@ impl Params {
     for (col_name, file_uploads) in file_uploads_map {
       self.params.push((
         format!(":{col_name}"),
-        tokio_rusqlite::Value::Text(serde_json::to_string(&FileUploads(file_uploads))?),
+        trailbase_sqlite::Value::Text(serde_json::to_string(&FileUploads(file_uploads))?),
       ));
       self.col_names.push(col_name.clone());
       self.file_col_names.push(col_name);
@@ -318,19 +318,16 @@ impl Params {
 pub(crate) struct SelectQueryBuilder;
 
 impl SelectQueryBuilder {
-  pub(crate) async fn run(
+  pub(crate) fn run(
     state: &AppState,
     table_name: &str,
     pk_column: &str,
-    pk_value: tokio_rusqlite::Value,
-  ) -> Result<Option<tokio_rusqlite::Row>, tokio_rusqlite::Error> {
-    return state
-      .conn()
-      .query_row(
-        &format!("SELECT * FROM '{table_name}' WHERE {pk_column} = $1"),
-        [pk_value],
-      )
-      .await;
+    pk_value: trailbase_sqlite::Value,
+  ) -> Result<Option<trailbase_sqlite::Row>, trailbase_sqlite::Error> {
+    return state.conn().query_row(
+      &format!("SELECT * FROM '{table_name}' WHERE {pk_column} = $1"),
+      [pk_value],
+    );
   }
 }
 
@@ -342,19 +339,16 @@ impl GetFileQueryBuilder {
     table_name: &str,
     file_column: (&Column, &ColumnMetadata),
     pk_column: &str,
-    pk_value: tokio_rusqlite::Value,
+    pk_value: trailbase_sqlite::Value,
   ) -> Result<FileUpload, QueryError> {
     return match &file_column.1.json {
       Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUpload" => {
         let column_name = &file_column.0.name;
 
-        let Some(row) = state
-          .conn()
-          .query_row(
-            &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
-            [pk_value],
-          )
-          .await?
+        let Some(row) = state.conn().query_row(
+          &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
+          [pk_value],
+        )?
         else {
           return Err(QueryError::NotFound);
         };
@@ -376,19 +370,16 @@ impl GetFilesQueryBuilder {
     table_name: &str,
     file_column: (&Column, &ColumnMetadata),
     pk_column: &str,
-    pk_value: tokio_rusqlite::Value,
+    pk_value: trailbase_sqlite::Value,
   ) -> Result<FileUploads, QueryError> {
     return match &file_column.1.json {
       Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUploads" => {
         let column_name = &file_column.0.name;
 
-        let Some(row) = state
-          .conn()
-          .query_row(
-            &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
-            [pk_value],
-          )
-          .await?
+        let Some(row) = state.conn().query_row(
+          &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
+          [pk_value],
+        )?
         else {
           return Err(QueryError::NotFound);
         };
@@ -402,6 +393,8 @@ impl GetFilesQueryBuilder {
   }
 }
 
+type NamedParams = Vec<(String, trailbase_sqlite::Value)>;
+
 pub(crate) struct InsertQueryBuilder;
 
 impl InsertQueryBuilder {
@@ -410,7 +403,7 @@ impl InsertQueryBuilder {
     params: Params,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: Option<&str>,
-  ) -> Result<tokio_rusqlite::Row, QueryError> {
+  ) -> Result<trailbase_sqlite::Row, QueryError> {
     let (query_fragment, named_params, mut files) =
       Self::build_insert_query(params, conflict_resolution)?;
     let query = match return_column_name {
@@ -427,7 +420,7 @@ impl InsertQueryBuilder {
       }
     }
 
-    let row = match query_one_row(state.conn(), &query, named_params).await {
+    let row = match query_one_row(state.conn(), &query, named_params) {
       Ok(row) => row,
       Err(err) => {
         if !files.is_empty() {
@@ -450,14 +443,7 @@ impl InsertQueryBuilder {
   fn build_insert_query(
     params: Params,
     conflict_resolution: Option<ConflictResolutionStrategy>,
-  ) -> Result<
-    (
-      String,
-      Vec<(String, tokio_rusqlite::Value)>,
-      FileMetadataContents,
-    ),
-    QueryError,
-  > {
+  ) -> Result<(String, NamedParams, FileMetadataContents), QueryError> {
     let table_name = &params.table_name;
 
     let conflict_clause = Self::conflict_resolution_clause(
@@ -498,7 +484,7 @@ impl UpdateQueryBuilder {
     metadata: &TableMetadata,
     mut params: Params,
     pk_column: &str,
-    pk_value: tokio_rusqlite::Value,
+    pk_value: trailbase_sqlite::Value,
   ) -> Result<(), QueryError> {
     let table_name = metadata.name();
     assert_eq!(params.table_name, *table_name);
@@ -517,13 +503,13 @@ impl UpdateQueryBuilder {
       }
     }
 
-    async fn row_update(
-      conn: &tokio_rusqlite::Connection,
+    fn row_update(
+      conn: &trailbase_sqlite::Connection,
       table_name: &str,
       params: Params,
       pk_column: &str,
-      pk_value: tokio_rusqlite::Value,
-    ) -> Result<Option<tokio_rusqlite::Row>, QueryError> {
+      pk_value: trailbase_sqlite::Value,
+    ) -> Result<Option<trailbase_sqlite::Row>, QueryError> {
       let build_setters = || -> String {
         assert_eq!(params.col_names.len(), params.params.len());
         return std::iter::zip(&params.col_names, &params.params)
@@ -535,53 +521,51 @@ impl UpdateQueryBuilder {
 
       let pk_column = pk_column.to_string();
       let table_name = table_name.to_string();
-      let files_row = conn
-        .call(move |conn| {
-          let tx = conn.transaction()?;
+      let files_row = conn.call(move |conn| {
+        let tx = conn.transaction()?;
 
-          // First, fetch updated file column contents so we can delete the files after updating the
-          // column.
-          let files_row = if params.file_col_names.is_empty() {
-            None
+        // First, fetch updated file column contents so we can delete the files after updating the
+        // column.
+        let files_row = if params.file_col_names.is_empty() {
+          None
+        } else {
+          let file_columns = params.file_col_names.join(", ");
+
+          let mut stmt = tx.prepare(&format!(
+            "SELECT {file_columns} FROM '{table_name}' WHERE {pk_column} = ${pk_column}"
+          ))?;
+
+          use trailbase_sqlite::Params;
+          [(":pk_column", pk_value)].bind(&mut stmt)?;
+
+          let mut rows = stmt.raw_query();
+          if let Some(row) = rows.next()? {
+            Some(trailbase_sqlite::Row::from_row(row, None)?)
           } else {
-            let file_columns = params.file_col_names.join(", ");
-
-            let mut stmt = tx.prepare(&format!(
-              "SELECT {file_columns} FROM '{table_name}' WHERE {pk_column} = ${pk_column}"
-            ))?;
-
-            use tokio_rusqlite::Params;
-            [(":pk_column", pk_value)].bind(&mut stmt)?;
-
-            let mut rows = stmt.raw_query();
-            if let Some(row) = rows.next()? {
-              Some(tokio_rusqlite::Row::from_row(row, None)?)
-            } else {
-              None
-            }
-          };
-
-          // Update the column.
-          {
-            let mut stmt = tx.prepare(&format!(
-              "UPDATE '{table_name}' SET {setters} WHERE {pk_column} = :{pk_column}"
-            ))?;
-            use tokio_rusqlite::Params;
-            params.params.bind(&mut stmt)?;
-
-            stmt.raw_execute()?;
+            None
           }
+        };
 
-          tx.commit()?;
+        // Update the column.
+        {
+          let mut stmt = tx.prepare(&format!(
+            "UPDATE '{table_name}' SET {setters} WHERE {pk_column} = :{pk_column}"
+          ))?;
+          use trailbase_sqlite::Params;
+          params.params.bind(&mut stmt)?;
 
-          return Ok(files_row);
-        })
-        .await?;
+          stmt.raw_execute()?;
+        }
+
+        tx.commit()?;
+
+        return Ok(files_row);
+      })?;
 
       return Ok(files_row);
     }
 
-    let files_row = match row_update(state.conn(), table_name, params, pk_column, pk_value).await {
+    let files_row = match row_update(state.conn(), table_name, params, pk_column, pk_value) {
       Ok(files_row) => files_row,
       Err(err) => {
         if !files.is_empty() {
@@ -615,7 +599,7 @@ impl DeleteQueryBuilder {
     state: &AppState,
     metadata: &TableMetadata,
     pk_column: &str,
-    pk_value: tokio_rusqlite::Value,
+    pk_value: trailbase_sqlite::Value,
   ) -> Result<(), QueryError> {
     let table_name = metadata.name();
 
@@ -623,8 +607,7 @@ impl DeleteQueryBuilder {
       state.conn(),
       &format!("DELETE FROM '{table_name}' WHERE {pk_column} = $1 RETURNING *"),
       [pk_value],
-    )
-    .await?;
+    )?;
 
     // Finally, delete files.
     delete_files_in_row(state, metadata, row).await?;
@@ -649,7 +632,7 @@ async fn write_file(
 
 fn try_json_array_to_blob(
   arr: &Vec<serde_json::Value>,
-) -> Result<tokio_rusqlite::Value, ParamsError> {
+) -> Result<trailbase_sqlite::Value, ParamsError> {
   let mut byte_array: Vec<u8> = vec![];
   for el in arr {
     match el {
@@ -678,25 +661,25 @@ fn try_json_array_to_blob(
     };
   }
 
-  return Ok(tokio_rusqlite::Value::Blob(byte_array));
+  return Ok(trailbase_sqlite::Value::Blob(byte_array));
 }
 
 fn json_string_to_value(
   data_type: ColumnDataType,
   value: String,
-) -> Result<tokio_rusqlite::Value, ParamsError> {
+) -> Result<trailbase_sqlite::Value, ParamsError> {
   return Ok(match data_type {
-    ColumnDataType::Null => tokio_rusqlite::Value::Null,
+    ColumnDataType::Null => trailbase_sqlite::Value::Null,
     // Strict/storage types
-    ColumnDataType::Any => tokio_rusqlite::Value::Text(value),
-    ColumnDataType::Text => tokio_rusqlite::Value::Text(value),
-    ColumnDataType::Blob => tokio_rusqlite::Value::Blob(BASE64_URL_SAFE.decode(value)?),
-    ColumnDataType::Integer => tokio_rusqlite::Value::Integer(value.parse::<i64>()?),
-    ColumnDataType::Real => tokio_rusqlite::Value::Real(value.parse::<f64>()?),
-    ColumnDataType::Numeric => tokio_rusqlite::Value::Integer(value.parse::<i64>()?),
+    ColumnDataType::Any => trailbase_sqlite::Value::Text(value),
+    ColumnDataType::Text => trailbase_sqlite::Value::Text(value),
+    ColumnDataType::Blob => trailbase_sqlite::Value::Blob(BASE64_URL_SAFE.decode(value)?),
+    ColumnDataType::Integer => trailbase_sqlite::Value::Integer(value.parse::<i64>()?),
+    ColumnDataType::Real => trailbase_sqlite::Value::Real(value.parse::<f64>()?),
+    ColumnDataType::Numeric => trailbase_sqlite::Value::Integer(value.parse::<i64>()?),
     // JSON types.
-    ColumnDataType::JSONB => tokio_rusqlite::Value::Blob(value.into_bytes().to_vec()),
-    ColumnDataType::JSON => tokio_rusqlite::Value::Text(value),
+    ColumnDataType::JSONB => trailbase_sqlite::Value::Blob(value.into_bytes().to_vec()),
+    ColumnDataType::JSON => trailbase_sqlite::Value::Text(value),
     // Affine types
     //
     // Integers:
@@ -708,7 +691,7 @@ fn json_string_to_value(
     | ColumnDataType::UnignedBigInt
     | ColumnDataType::Int2
     | ColumnDataType::Int4
-    | ColumnDataType::Int8 => tokio_rusqlite::Value::Integer(value.parse::<i64>()?),
+    | ColumnDataType::Int8 => trailbase_sqlite::Value::Integer(value.parse::<i64>()?),
     // Text:
     ColumnDataType::Character
     | ColumnDataType::Varchar
@@ -716,23 +699,23 @@ fn json_string_to_value(
     | ColumnDataType::NChar
     | ColumnDataType::NativeCharacter
     | ColumnDataType::NVarChar
-    | ColumnDataType::Clob => tokio_rusqlite::Value::Text(value),
+    | ColumnDataType::Clob => trailbase_sqlite::Value::Text(value),
     // Real:
     ColumnDataType::Double | ColumnDataType::DoublePrecision | ColumnDataType::Float => {
-      tokio_rusqlite::Value::Real(value.parse::<f64>()?)
+      trailbase_sqlite::Value::Real(value.parse::<f64>()?)
     }
     // Numeric
     ColumnDataType::Boolean
     | ColumnDataType::Decimal
     | ColumnDataType::Date
-    | ColumnDataType::DateTime => tokio_rusqlite::Value::Integer(value.parse::<i64>()?),
+    | ColumnDataType::DateTime => trailbase_sqlite::Value::Integer(value.parse::<i64>()?),
   });
 }
 
 pub fn simple_json_value_to_param(
   col_type: ColumnDataType,
   value: serde_json::Value,
-) -> Result<tokio_rusqlite::Value, ParamsError> {
+) -> Result<trailbase_sqlite::Value, ParamsError> {
   let param = match value {
     serde_json::Value::Object(ref _map) => {
       return Err(ParamsError::UnexpectedType(
@@ -752,16 +735,16 @@ pub fn simple_json_value_to_param(
 
       try_json_array_to_blob(arr)?
     }
-    serde_json::Value::Null => tokio_rusqlite::Value::Null,
-    serde_json::Value::Bool(b) => tokio_rusqlite::Value::Integer(b as i64),
+    serde_json::Value::Null => trailbase_sqlite::Value::Null,
+    serde_json::Value::Bool(b) => trailbase_sqlite::Value::Integer(b as i64),
     serde_json::Value::String(str) => json_string_to_value(col_type, str)?,
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
-        tokio_rusqlite::Value::Integer(n)
+        trailbase_sqlite::Value::Integer(n)
       } else if let Some(n) = number.as_u64() {
-        tokio_rusqlite::Value::Integer(n as i64)
+        trailbase_sqlite::Value::Integer(n as i64)
       } else if let Some(n) = number.as_f64() {
-        tokio_rusqlite::Value::Real(n)
+        trailbase_sqlite::Value::Real(n)
       } else {
         warn!("Not a valid number: {number:?}");
         return Err(ParamsError::NotANumber);
@@ -776,7 +759,7 @@ fn extract_params_and_files_from_json(
   col: &Column,
   col_meta: &ColumnMetadata,
   value: serde_json::Value,
-) -> Result<(tokio_rusqlite::Value, Option<FileMetadataContents>), ParamsError> {
+) -> Result<(trailbase_sqlite::Value, Option<FileMetadataContents>), ParamsError> {
   let col_name = &col.name;
   match value {
     serde_json::Value::Object(ref _map) => {
@@ -801,13 +784,13 @@ fn extract_params_and_files_from_json(
           let file_upload: FileUploadInput = serde_json::from_value(value)?;
 
           let (_col_name, metadata, content) = file_upload.consume()?;
-          let param = tokio_rusqlite::Value::Text(serde_json::to_string(&metadata)?);
+          let param = trailbase_sqlite::Value::Text(serde_json::to_string(&metadata)?);
 
           return Ok((param, Some(vec![(metadata, content)])));
         }
         _ => {
           json.validate(&value)?;
-          return Ok((tokio_rusqlite::Value::Text(value.to_string()), None));
+          return Ok((trailbase_sqlite::Value::Text(value.to_string()), None));
         }
       }
     }
@@ -831,13 +814,14 @@ fn extract_params_and_files_from_json(
                   uploads.push((metadata, content));
                 }
 
-                let param = tokio_rusqlite::Value::Text(serde_json::to_string(&FileUploads(temp))?);
+                let param =
+                  trailbase_sqlite::Value::Text(serde_json::to_string(&FileUploads(temp))?);
 
                 return Ok((param, Some(uploads)));
               }
               schema => {
                 schema.validate(&value)?;
-                return Ok((tokio_rusqlite::Value::Text(value.to_string()), None));
+                return Ok((trailbase_sqlite::Value::Text(value.to_string()), None));
               }
             }
           }
@@ -974,24 +958,26 @@ mod tests {
         match param.as_str() {
           ID_COL_PLACEHOLDER => {
             assert!(
-              matches!(value, tokio_rusqlite::Value::Blob(x) if *x == id),
+              matches!(value, trailbase_sqlite::Value::Blob(x) if *x == id),
               "VALUE: {value:?}"
             );
           }
           ":blob" => {
-            assert!(matches!(value, tokio_rusqlite::Value::Blob(x) if *x == blob));
+            assert!(matches!(value, trailbase_sqlite::Value::Blob(x) if *x == blob));
           }
           ":text" => {
-            assert!(matches!(value, tokio_rusqlite::Value::Text(x) if x.contains("some text :)")));
+            assert!(
+              matches!(value, trailbase_sqlite::Value::Text(x) if x.contains("some text :)"))
+            );
           }
           ":num" => {
-            assert!(matches!(value, tokio_rusqlite::Value::Integer(x) if *x == 5));
+            assert!(matches!(value, trailbase_sqlite::Value::Integer(x) if *x == 5));
           }
           ":real" => {
-            assert!(matches!(value, tokio_rusqlite::Value::Real(x) if *x == 3.0));
+            assert!(matches!(value, trailbase_sqlite::Value::Real(x) if *x == 3.0));
           }
           ":json_col" => {
-            assert!(matches!(value, tokio_rusqlite::Value::Text(_x)));
+            assert!(matches!(value, trailbase_sqlite::Value::Text(_x)));
           }
           x => assert!(false, "{x}"),
         }
@@ -1089,7 +1075,7 @@ mod tests {
 
       let params = Params::from(&metadata, json_row_from_value(value).unwrap(), None).unwrap();
 
-      let json_col: Vec<tokio_rusqlite::Value> = params
+      let json_col: Vec<trailbase_sqlite::Value> = params
         .params
         .iter()
         .filter_map(|(name, value)| {
@@ -1101,7 +1087,7 @@ mod tests {
         .collect();
 
       assert_eq!(json_col.len(), 1);
-      let tokio_rusqlite::Value::Text(ref text) = json_col[0] else {
+      let trailbase_sqlite::Value::Text(ref text) = json_col[0] else {
         panic!("Unexpected param type: {:?}", json_col[0]);
       };
 

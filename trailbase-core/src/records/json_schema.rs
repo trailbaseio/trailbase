@@ -29,9 +29,7 @@ pub async fn json_schema_handler(
     return Err(RecordError::ApiNotFound);
   };
 
-  api
-    .check_record_level_access(Permission::Schema, None, None, user.as_ref())
-    .await?;
+  api.check_record_level_access(Permission::Schema, None, None, user.as_ref())?;
 
   let mode = request.mode.unwrap_or(JsonSchemaMode::Insert);
   let (_schema, json) = build_json_schema(api.table_name(), api.metadata(), mode)

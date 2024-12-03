@@ -49,13 +49,13 @@ pub async fn list_records_handler(
   if let Some(cursor) = cursor {
     params.push((
       ":cursor".to_string(),
-      tokio_rusqlite::Value::Blob(cursor.to_vec()),
+      trailbase_sqlite::Value::Blob(cursor.to_vec()),
     ));
     clause = format!("{clause} AND _ROW_.id < :cursor");
   }
   params.push((
     ":limit".to_string(),
-    tokio_rusqlite::Value::Integer(limit_or_default(limit) as i64),
+    trailbase_sqlite::Value::Integer(limit_or_default(limit) as i64),
   ));
 
   // User properties
@@ -105,11 +105,10 @@ pub async fn list_records_handler(
     table_name = api.table_name()
   );
 
-  let rows = state.conn().query(&query, params).await?;
+  let rows = state.conn().query(&query, params)?;
 
   return Ok(Json(serde_json::Value::Array(
     rows_to_json(metadata, rows, |col_name| !col_name.starts_with("_"))
-      .await
       .map_err(|err| RecordError::Internal(err.into()))?,
   )));
 }

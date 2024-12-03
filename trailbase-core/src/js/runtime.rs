@@ -72,7 +72,7 @@ enum Message {
 
 struct State {
   sender: async_channel::Sender<Message>,
-  connection: Mutex<Option<tokio_rusqlite::Connection>>,
+  connection: Mutex<Option<trailbase_sqlite::Connection>>,
 }
 
 struct RuntimeSingleton {
@@ -344,7 +344,7 @@ impl RuntimeSingleton {
         let query: String = get_arg(&args, 0)?;
         let json_params: Vec<serde_json::Value> = get_arg(&args, 1)?;
 
-        let mut params: Vec<tokio_rusqlite::Value> = vec![];
+        let mut params: Vec<trailbase_sqlite::Value> = vec![];
         for value in json_params {
           params.push(json_value_to_param(value)?);
         }
@@ -357,7 +357,6 @@ impl RuntimeSingleton {
 
         let rows = conn
           .query(&query, params)
-          .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
         let (values, _columns) = rows_to_json_arrays(rows, usize::MAX)
@@ -373,7 +372,7 @@ impl RuntimeSingleton {
         let query: String = get_arg(&args, 0)?;
         let json_params: Vec<serde_json::Value> = get_arg(&args, 1)?;
 
-        let mut params: Vec<tokio_rusqlite::Value> = vec![];
+        let mut params: Vec<trailbase_sqlite::Value> = vec![];
         for value in json_params {
           params.push(json_value_to_param(value)?);
         }
@@ -386,7 +385,6 @@ impl RuntimeSingleton {
 
         let rows_affected = conn
           .execute(&query, params)
-          .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
         return Ok(serde_json::Value::Number(rows_affected.into()));
@@ -412,7 +410,7 @@ pub(crate) struct RuntimeHandle {
 
 impl RuntimeHandle {
   #[cfg(not(test))]
-  pub(crate) fn set_connection(&self, conn: tokio_rusqlite::Connection) {
+  pub(crate) fn set_connection(&self, conn: trailbase_sqlite::Connection) {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
@@ -423,7 +421,7 @@ impl RuntimeHandle {
   }
 
   #[cfg(test)]
-  pub(crate) fn set_connection(&self, conn: tokio_rusqlite::Connection) {
+  pub(crate) fn set_connection(&self, conn: trailbase_sqlite::Connection) {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
@@ -435,7 +433,7 @@ impl RuntimeHandle {
   }
 
   #[cfg(test)]
-  pub(crate) fn override_connection(&self, conn: tokio_rusqlite::Connection) {
+  pub(crate) fn override_connection(&self, conn: trailbase_sqlite::Connection) {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
@@ -484,7 +482,7 @@ impl RuntimeHandle {
 
 pub fn json_value_to_param(
   value: serde_json::Value,
-) -> Result<tokio_rusqlite::Value, rustyscript::Error> {
+) -> Result<trailbase_sqlite::Value, rustyscript::Error> {
   use rustyscript::Error;
   return Ok(match value {
     serde_json::Value::Object(ref _map) => {
@@ -493,16 +491,16 @@ pub fn json_value_to_param(
     serde_json::Value::Array(ref _arr) => {
       return Err(Error::Runtime("Array unsupported".to_string()));
     }
-    serde_json::Value::Null => tokio_rusqlite::Value::Null,
-    serde_json::Value::Bool(b) => tokio_rusqlite::Value::Integer(b as i64),
-    serde_json::Value::String(str) => tokio_rusqlite::Value::Text(str),
+    serde_json::Value::Null => trailbase_sqlite::Value::Null,
+    serde_json::Value::Bool(b) => trailbase_sqlite::Value::Integer(b as i64),
+    serde_json::Value::String(str) => trailbase_sqlite::Value::Text(str),
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
-        tokio_rusqlite::Value::Integer(n)
+        trailbase_sqlite::Value::Integer(n)
       } else if let Some(n) = number.as_u64() {
-        tokio_rusqlite::Value::Integer(n as i64)
+        trailbase_sqlite::Value::Integer(n as i64)
       } else if let Some(n) = number.as_f64() {
-        tokio_rusqlite::Value::Real(n)
+        trailbase_sqlite::Value::Real(n)
       } else {
         return Err(Error::Runtime(format!("invalid number: {number:?}")));
       }
@@ -842,14 +840,12 @@ mod tests {
   }
 
   async fn test_javascript_query() {
-    let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
+    let conn = trailbase_sqlite::Connection::open_in_memory();
     conn
       .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
-      .await
       .unwrap();
     conn
       .execute("INSERT INTO test (v0, v1) VALUES ('0', 0), ('1', 1);", ())
-      .await
       .unwrap();
 
     let handle = RuntimeHandle::new();
@@ -891,10 +887,9 @@ mod tests {
   }
 
   async fn test_javascript_execute() {
-    let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
+    let conn = trailbase_sqlite::Connection::open_in_memory();
     conn
       .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
-      .await
       .unwrap();
 
     let handle = RuntimeHandle::new();
@@ -922,7 +917,6 @@ mod tests {
 
     let row = conn
       .query_row("SELECT COUNT(*) FROM test", ())
-      .await
       .unwrap()
       .unwrap();
     let count: i64 = row.get(0).unwrap();

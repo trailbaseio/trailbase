@@ -54,7 +54,7 @@ pub(crate) async fn read_file_into_response(
 pub(crate) async fn delete_files_in_row(
   state: &AppState,
   metadata: &(dyn TableOrViewMetadata + Send + Sync),
-  row: tokio_rusqlite::Row,
+  row: trailbase_sqlite::Row,
 ) -> Result<(), FileError> {
   for i in 0..row.column_count() {
     let Some(col_name) = row.column_name(i) else {

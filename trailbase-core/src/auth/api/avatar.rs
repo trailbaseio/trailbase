@@ -2,7 +2,7 @@ use axum::extract::{Json, Path, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use serde::{Deserialize, Serialize};
-use tokio_rusqlite::params;
+use trailbase_sqlite::params;
 use trailbase_sqlite::schema::FileUpload;
 use uuid::Uuid;
 
@@ -18,9 +18,7 @@ async fn get_avatar_url(state: &AppState, user: &DbUser) -> Option<String> {
     state.user_conn(),
     &format!("SELECT EXISTS(SELECT user FROM '{AVATAR_TABLE}' WHERE user = $1)"),
     params!(user.id),
-  )
-  .await
-  {
+  ) {
     let has_avatar: bool = row.get(0).unwrap_or(false);
     if has_avatar {
       let site = state.site_url();
@@ -200,7 +198,6 @@ mod tests {
         &format!("SELECT * FROM '{USER_TABLE}' WHERE email = $1"),
         (email,),
       )
-      .await
       .unwrap()
       .unwrap();
 

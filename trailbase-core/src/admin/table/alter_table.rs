@@ -73,25 +73,24 @@ pub async fn alter_table_handler(
 
   let migration_path = state.data_dir().migrations_path();
   let conn = state.conn();
-  let writer = conn
-    .call(
-      move |conn| -> Result<Option<MigrationWriter>, tokio_rusqlite::Error> {
-        let mut tx = TransactionRecorder::new(
-          conn,
-          migration_path,
-          format!("alter_table_{source_table_name}"),
-        )
-        .map_err(|err| tokio_rusqlite::Error::Other(err.into()))?;
+  let writer = conn.call(
+    move |conn| -> Result<Option<MigrationWriter>, trailbase_sqlite::Error> {
+      let mut tx = TransactionRecorder::new(
+        conn,
+        migration_path,
+        format!("alter_table_{source_table_name}"),
+      )
+      .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
-        tx.execute("PRAGMA foreign_keys = OFF")?;
+      tx.execute("PRAGMA foreign_keys = OFF")?;
 
-        // Create new table
-        let sql = target_schema_copy.create_table_statement();
-        tx.execute(&sql)?;
+      // Create new table
+      let sql = target_schema_copy.create_table_statement();
+      tx.execute(&sql)?;
 
-        // Copy
-        tx.execute(&format!(
-          r#"
+      // Copy
+      tx.execute(&format!(
+        r#"
             INSERT INTO
               {temp_table_name} ({column_list})
             SELECT
@@ -99,25 +98,24 @@ pub async fn alter_table_handler(
             FROM
               {source_table_name}
           "#,
-          column_list = copy_columns.join(", "),
+        column_list = copy_columns.join(", "),
+      ))?;
+
+      tx.execute(&format!("DROP TABLE {source_table_name}"))?;
+
+      if *target_table_name != temp_table_name {
+        tx.execute(&format!(
+          "ALTER TABLE '{temp_table_name}' RENAME TO '{target_table_name}'"
         ))?;
+      }
 
-        tx.execute(&format!("DROP TABLE {source_table_name}"))?;
+      tx.execute("PRAGMA foreign_keys = ON")?;
 
-        if *target_table_name != temp_table_name {
-          tx.execute(&format!(
-            "ALTER TABLE '{temp_table_name}' RENAME TO '{target_table_name}'"
-          ))?;
-        }
-
-        tx.execute("PRAGMA foreign_keys = ON")?;
-
-        return tx
-          .rollback_and_create_migration()
-          .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
-      },
-    )
-    .await?;
+      return tx
+        .rollback_and_create_migration()
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+    },
+  )?;
 
   // Write to migration file.
   if let Some(writer) = writer {
@@ -165,7 +163,7 @@ mod tests {
     );
     let _ = create_table_handler(State(state.clone()), Json(create_table_request.clone())).await?;
 
-    conn.query(&format!("SELECT {pk_col} FROM foo"), ()).await?;
+    conn.query(&format!("SELECT {pk_col} FROM foo"), ())?;
 
     {
       // Noop: source and target identical.
@@ -178,7 +176,7 @@ mod tests {
         .await
         .unwrap();
 
-      conn.query(&format!("SELECT {pk_col} FROM foo"), ()).await?;
+      conn.query(&format!("SELECT {pk_col} FROM foo"), ())?;
     }
 
     {
@@ -205,9 +203,7 @@ mod tests {
         .await
         .unwrap();
 
-      conn
-        .query(&format!("SELECT {pk_col}, new FROM foo"), ())
-        .await?;
+      conn.query(&format!("SELECT {pk_col}, new FROM foo"), ())?;
     }
 
     {
@@ -227,8 +223,8 @@ mod tests {
         .await
         .unwrap();
 
-      assert!(conn.query("SELECT * FROM foo", ()).await.is_err());
-      conn.query(&format!("SELECT {pk_col} FROM bar"), ()).await?;
+      assert!(conn.query("SELECT * FROM foo", ()).is_err());
+      conn.query(&format!("SELECT {pk_col} FROM bar"), ())?;
     }
 
     return Ok(());

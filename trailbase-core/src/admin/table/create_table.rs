@@ -39,18 +39,16 @@ pub async fn create_table_handler(
     let create_table_query = create_table_query.clone();
     let migration_path = state.data_dir().migrations_path();
     let conn = state.conn();
-    let writer = conn
-      .call(move |conn| {
-        let mut tx =
-          TransactionRecorder::new(conn, migration_path, format!("create_table_{table_name}"))?;
+    let writer = conn.call(move |conn| {
+      let mut tx =
+        TransactionRecorder::new(conn, migration_path, format!("create_table_{table_name}"))?;
 
-        tx.execute(&create_table_query)?;
+      tx.execute(&create_table_query)?;
 
-        return tx
-          .rollback_and_create_migration()
-          .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
-      })
-      .await?;
+      return tx
+        .rollback_and_create_migration()
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+    })?;
 
     // Write to migration file.
     if let Some(writer) = writer {

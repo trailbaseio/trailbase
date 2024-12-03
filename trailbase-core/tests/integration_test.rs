@@ -4,7 +4,7 @@ use axum_test::multipart::MultipartForm;
 use axum_test::TestServer;
 use cookie::Cookie;
 use std::rc::Rc;
-use tokio_rusqlite::params;
+use trailbase_sqlite::params;
 
 use trailbase_core::api::{create_user_handler, login_with_password, CreateUserRequest};
 use trailbase_core::config::proto::PermissionFlag;
@@ -175,12 +175,11 @@ fn test_record_apis() {
 }
 
 pub async fn create_chat_message_app_tables(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
 ) -> Result<(), anyhow::Error> {
   // Create a messages, chat room and members tables.
-  conn
-    .execute_batch(
-      r#"
+  conn.execute_batch(
+    r#"
           CREATE TABLE room (
             id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
             name         TEXT
@@ -206,22 +205,20 @@ pub async fn create_chat_message_app_tables(
             FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
           ) STRICT;
         "#,
-    )
-    .await?;
+  )?;
 
   return Ok(());
 }
 
 pub async fn add_room(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   name: &str,
 ) -> Result<[u8; 16], anyhow::Error> {
   let room: [u8; 16] = conn
     .query_row(
       "INSERT INTO room (name) VALUES ($1) RETURNING id",
       params!(name.to_string()),
-    )
-    .await?
+    )?
     .unwrap()
     .get(0)?;
 
@@ -229,16 +226,14 @@ pub async fn add_room(
 }
 
 pub async fn add_user_to_room(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   user: [u8; 16],
   room: [u8; 16],
 ) -> Result<(), anyhow::Error> {
-  conn
-    .execute(
-      "INSERT INTO room_members (user, room) VALUES ($1, $2)",
-      params!(user, room),
-    )
-    .await?;
+  conn.execute(
+    "INSERT INTO room_members (user, room) VALUES ($1, $2)",
+    params!(user, room),
+  )?;
   return Ok(());
 }
 

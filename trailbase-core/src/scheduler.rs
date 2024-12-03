@@ -1,7 +1,7 @@
 use chrono::{Duration, Utc};
 use log::*;
 use std::future::Future;
-use tokio_rusqlite::params;
+use trailbase_sqlite::params;
 
 use crate::app_state::AppState;
 use crate::constants::{DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT, SESSION_TABLE};
@@ -57,15 +57,13 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
       let backup_file = backup_file.clone();
 
       async move {
-        let result = conn
-          .call(|conn| {
-            return Ok(conn.backup(
-              rusqlite::DatabaseName::Main,
-              backup_file,
-              /* progress= */ None,
-            )?);
-          })
-          .await;
+        let result = conn.call(|conn| {
+          return Ok(conn.backup(
+            rusqlite::DatabaseName::Main,
+            backup_file,
+            /* progress= */ None,
+          )?);
+        });
 
         match result {
           Ok(_) => info!("Backup complete"),
@@ -87,10 +85,7 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
 
       tokio::spawn(async move {
         let timestamp = (Utc::now() - retention).timestamp();
-        match logs_conn
-          .execute("DELETE FROM _logs WHERE created < $1", params!(timestamp))
-          .await
-        {
+        match logs_conn.execute("DELETE FROM _logs WHERE created < $1", params!(timestamp)) {
           Ok(_) => info!("Successfully pruned logs"),
           Err(err) => warn!("Failed to clean up old logs: {err}"),
         };
@@ -110,14 +105,10 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
 
       let timestamp = (Utc::now() - refresh_token_ttl).timestamp();
 
-      match state
-        .user_conn()
-        .execute(
-          &format!("DELETE FROM '{SESSION_TABLE}' WHERE updated < $1"),
-          params!(timestamp),
-        )
-        .await
-      {
+      match state.user_conn().execute(
+        &format!("DELETE FROM '{SESSION_TABLE}' WHERE updated < $1"),
+        params!(timestamp),
+      ) {
         Ok(count) => info!("Successfully pruned {count} old sessions."),
         Err(err) => warn!("Failed to clean up sessions: {err}"),
       };
@@ -130,7 +121,7 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
     let conn = conn.clone();
 
     tokio::spawn(async move {
-      match conn.execute("PRAGMA optimize", ()).await {
+      match conn.execute("PRAGMA optimize", ()) {
         Ok(_) => info!("Successfully ran query optimizer"),
         Err(err) => warn!("query optimizer failed: {err}"),
       };

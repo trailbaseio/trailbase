@@ -5,8 +5,8 @@ use axum::{
 };
 use chrono::Duration;
 use lazy_static::lazy_static;
-use tokio_rusqlite::params;
 use tower_cookies::Cookies;
+use trailbase_sqlite::params;
 
 use crate::app_state::AppState;
 use crate::auth::jwt::TokenClaims;
@@ -163,13 +163,10 @@ pub(crate) async fn mint_new_tokens(
       format!("INSERT INTO '{SESSION_TABLE}' (user, refresh_token) VALUES ($1, $2)");
   }
 
-  state
-    .user_conn()
-    .execute(
-      &QUERY,
-      params!(user_id.into_bytes().to_vec(), refresh_token.clone(),),
-    )
-    .await?;
+  state.user_conn().execute(
+    &QUERY,
+    params!(user_id.into_bytes().to_vec(), refresh_token.clone(),),
+  )?;
 
   return Ok(FreshTokens {
     auth_token_claims: claims,
@@ -196,13 +193,10 @@ pub(crate) async fn reauth_with_refresh_token(
     );
   }
 
-  let Some(db_user) = state
-    .user_conn()
-    .query_value::<DbUser>(
-      &QUERY,
-      params!(refresh_token, refresh_token_ttl.num_seconds()),
-    )
-    .await?
+  let Some(db_user) = state.user_conn().query_value::<DbUser>(
+    &QUERY,
+    params!(refresh_token, refresh_token_ttl.num_seconds()),
+  )?
   else {
     // Row not found case, typically expected in one of 4 cases:
     //  1. Above where clause doesn't match, e.g. refresh token expired.

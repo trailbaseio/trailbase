@@ -1,5 +1,7 @@
 use log::*;
+use parking_lot::Mutex;
 use std::path::PathBuf;
+use std::sync::Arc;
 use thiserror::Error;
 
 use crate::app_state::{build_objectstore, AppState, AppStateArgs};
@@ -14,7 +16,7 @@ use crate::table_metadata::TableMetadataCache;
 #[derive(Debug, Error)]
 pub enum InitError {
   #[error("TRusqlite error: {0}")]
-  TokioRusqlite(#[from] tokio_rusqlite::Error),
+  TokioRusqlite(#[from] trailbase_sqlite::Error),
   #[error("Rusqlite error: {0}")]
   Rusqlite(#[from] rusqlite::Error),
   #[error("RusqliteFromSql error: {0}")]
@@ -57,27 +59,42 @@ pub async fn init_app_state(
 
   // Then open or init new databases.
   let logs_conn = {
-    let mut conn = init_logs_db(&data_dir)?;
-    apply_logs_migrations(&mut conn)?;
-    tokio_rusqlite::Connection::from_conn(conn).await?
+    let data_dir = data_dir.clone();
+    let f = move || {
+      let mut conn = init_logs_db(&data_dir).unwrap();
+      apply_logs_migrations(&mut conn).unwrap();
+      conn
+    };
+    trailbase_sqlite::Connection::from_conn(f)
   };
 
   // Open or init the main db. Note that we derive whether a new DB was initialized based on
   // whether the V1 migration had to be applied. Should be fairly robust.
-  let (conn2, new_db) = {
-    let mut conn = trailbase_sqlite::connect_sqlite(Some(data_dir.main_db_path()), None)?;
-    let new_db = apply_main_migrations(&mut conn, Some(data_dir.migrations_path()))?;
+  let (conn, new_db) = {
+    let data_dir = data_dir.clone();
+    let new_db = Arc::new(Mutex::new(false));
+    let new_db_clone = new_db.clone();
+    let f = move || {
+      let mut conn = trailbase_sqlite::connect_sqlite(Some(data_dir.main_db_path()), None).unwrap();
+      *new_db_clone.lock() =
+        apply_main_migrations(&mut conn, Some(data_dir.migrations_path())).unwrap();
 
-    (tokio_rusqlite::Connection::from_conn(conn).await?, new_db)
+      return conn;
+    };
+
+    let conn = trailbase_sqlite::Connection::from_conn(f);
+    let new_db = conn.call(move |_conn| Ok(*new_db.lock()))?;
+
+    (conn, new_db)
   };
 
-  let table_metadata = TableMetadataCache::new(conn2.clone()).await?;
+  let table_metadata = TableMetadataCache::new(conn.clone()).await?;
 
   // Read config or write default one.
   let config = load_or_init_config_textproto(&data_dir, &table_metadata).await?;
 
   debug!("Initializing JSON schemas from config");
-  trailbase_sqlite::set_user_schemas(
+  trailbase_sqlite::schema::set_user_schemas(
     config
       .schemas
       .iter()
@@ -109,7 +126,7 @@ pub async fn init_app_state(
 
   // Init geoip if present.
   let geoip_db_path = data_dir.root().join("GeoLite2-Country.mmdb");
-  if let Err(err) = trailbase_sqlite::load_geoip_db(geoip_db_path.clone()) {
+  if let Err(err) = trailbase_sqlite::geoip::load_geoip_db(geoip_db_path.clone()) {
     debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
   }
 
@@ -125,7 +142,7 @@ pub async fn init_app_state(
     dev: args.dev,
     table_metadata,
     config,
-    conn2,
+    conn,
     logs_conn,
     jwt,
     object_store,
@@ -137,29 +154,25 @@ pub async fn init_app_state(
       app_state.user_conn(),
       &format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE admin = TRUE"),
       (),
-    )
-    .await?
+    )?
     .get(0)?;
 
     if num_admins == 0 {
       let email = "admin@localhost".to_string();
       let password = generate_random_string(20);
 
-      app_state
-        .user_conn()
-        .execute(
-          &format!(
-            r#"
+      app_state.user_conn().execute(
+        &format!(
+          r#"
         INSERT INTO {USER_TABLE}
           (email, password_hash, verified, admin)
         VALUES
           ('{email}', (hash_password('{password}')), TRUE, TRUE);
         INSERT INTO
         "#
-          ),
-          (),
-        )
-        .await?;
+        ),
+        (),
+      )?;
 
       info!(
         "{}",

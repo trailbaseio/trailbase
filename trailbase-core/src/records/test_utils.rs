@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-  use tokio_rusqlite::params;
+  use trailbase_sqlite::params;
 
   use crate::records::json_to_sql::JsonRow;
   use crate::util::query_one_row;
@@ -8,10 +8,8 @@ mod tests {
 
   pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), anyhow::Error> {
     // Create a messages, chat room and members tables.
-    state
-      .conn()
-      .execute_batch(
-        r#"
+    state.conn().execute_batch(
+      r#"
           CREATE TABLE room (
             id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
             name         TEXT
@@ -37,8 +35,7 @@ mod tests {
             FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
           ) STRICT;
         "#,
-      )
-      .await?;
+    )?;
 
     state.table_metadata().invalidate_all().await.unwrap();
 
@@ -49,10 +46,8 @@ mod tests {
     state: &AppState,
   ) -> Result<(), anyhow::Error> {
     // Create a messages, chat room and members tables.
-    state
-      .conn()
-      .execute_batch(
-        r#"
+    state.conn().execute_batch(
+      r#"
           CREATE TABLE room (
             id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
             name         TEXT
@@ -78,8 +73,7 @@ mod tests {
             FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
           ) STRICT;
         "#,
-      )
-      .await?;
+    )?;
 
     state.table_metadata().invalidate_all().await.unwrap();
 
@@ -87,36 +81,33 @@ mod tests {
   }
 
   pub async fn add_room(
-    conn: &tokio_rusqlite::Connection,
+    conn: &trailbase_sqlite::Connection,
     name: &str,
   ) -> Result<[u8; 16], anyhow::Error> {
     let room: [u8; 16] = query_one_row(
       conn,
       "INSERT INTO room (name) VALUES ($1) RETURNING id",
       params!(name.to_string()),
-    )
-    .await?
+    )?
     .get(0)?;
 
     return Ok(room);
   }
 
   pub async fn add_user_to_room(
-    conn: &tokio_rusqlite::Connection,
+    conn: &trailbase_sqlite::Connection,
     user: [u8; 16],
     room: [u8; 16],
-  ) -> Result<(), tokio_rusqlite::Error> {
-    conn
-      .execute(
-        "INSERT INTO room_members (user, room) VALUES ($1, $2)",
-        params!(user, room),
-      )
-      .await?;
+  ) -> Result<(), trailbase_sqlite::Error> {
+    conn.execute(
+      "INSERT INTO room_members (user, room) VALUES ($1, $2)",
+      params!(user, room),
+    )?;
     return Ok(());
   }
 
   pub async fn send_message(
-    conn: &tokio_rusqlite::Connection,
+    conn: &trailbase_sqlite::Connection,
     user: [u8; 16],
     room: [u8; 16],
     message: &str,
@@ -126,8 +117,7 @@ mod tests {
         conn,
         "INSERT INTO message (_owner, room, data) VALUES ($1, $2, $3) RETURNING id",
         params!(user, room, message.to_string()),
-      )
-      .await?
+      )?
       .get(0)?,
     );
   }

@@ -24,13 +24,12 @@ pub(crate) async fn delete_handler(
 ) -> Result<Response, AuthError> {
   let _ = delete_all_sessions_for_user(&state, user.uuid).await;
 
-  state
-    .user_conn()
-    .execute(
-      &format!("DELETE FROM '{USER_TABLE}' WHERE id = $1"),
-      [tokio_rusqlite::Value::Blob(user.uuid.into_bytes().to_vec())],
-    )
-    .await?;
+  state.user_conn().execute(
+    &format!("DELETE FROM '{USER_TABLE}' WHERE id = $1"),
+    [trailbase_sqlite::Value::Blob(
+      user.uuid.into_bytes().to_vec(),
+    )],
+  )?;
 
   remove_all_cookies(&cookies);
 

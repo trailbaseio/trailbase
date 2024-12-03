@@ -109,7 +109,7 @@ pub async fn list_logs_handler(
 
   // NOTE: We cannot use state.table_metadata() here, since we're working on the logs database.
   // We could cache, however this is just the admin logs handler.
-  let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME).await?;
+  let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME)?;
   let table_metadata = TableMetadata::new(table.clone(), &[table]);
   let filter_where_clause = build_filter_where_clause(&table_metadata, filter_params)?;
 
@@ -121,8 +121,7 @@ pub async fn list_logs_handler(
         clause = filter_where_clause.clause
       ),
       filter_where_clause.params.clone(),
-    )
-    .await?;
+    )?;
 
     row.get::<i64>(0)?
   };
@@ -182,7 +181,7 @@ pub async fn list_logs_handler(
 }
 
 async fn fetch_logs(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   filter_where_clause: WhereClause,
   cursor: Option<[u8; 16]>,
   order: Vec<(String, Order)>,
@@ -192,13 +191,13 @@ async fn fetch_logs(
   let mut where_clause = filter_where_clause.clause;
   params.push((
     ":limit".to_string(),
-    tokio_rusqlite::Value::Integer(limit as i64),
+    trailbase_sqlite::Value::Integer(limit as i64),
   ));
 
   if let Some(cursor) = cursor {
     params.push((
       ":cursor".to_string(),
-      tokio_rusqlite::Value::Blob(cursor.to_vec()),
+      trailbase_sqlite::Value::Blob(cursor.to_vec()),
     ));
     where_clause = format!("{where_clause} AND log.id < :cursor",);
   }
@@ -230,7 +229,7 @@ async fn fetch_logs(
     "#,
   );
 
-  return Ok(conn.query_values::<LogQuery>(&sql_query, params).await?);
+  return Ok(conn.query_values::<LogQuery>(&sql_query, params)?);
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -250,7 +249,7 @@ struct FetchAggregateArgs {
 }
 
 async fn fetch_aggregate_stats(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   args: &FetchAggregateArgs,
 ) -> Result<Stats, Error> {
   let filter_clause = args
@@ -284,10 +283,10 @@ async fn fetch_aggregate_stats(
   "#
   );
 
-  use tokio_rusqlite::Value::Integer;
+  use trailbase_sqlite::Value::Integer;
   let from_seconds = args.from.timestamp();
   let interval_seconds = args.interval.num_seconds();
-  let mut params: Vec<(String, tokio_rusqlite::Value)> = vec![
+  let mut params: Vec<(String, trailbase_sqlite::Value)> = vec![
     (":interval_seconds".to_string(), Integer(interval_seconds)),
     (":from_seconds".to_string(), Integer(from_seconds)),
     (":to_seconds".to_string(), Integer(args.to.timestamp())),
@@ -297,7 +296,7 @@ async fn fetch_aggregate_stats(
     params.extend(filter.params.clone())
   }
 
-  let rows = conn.query_values::<AggRow>(&qps_query, params).await?;
+  let rows = conn.query_values::<AggRow>(&qps_query, params)?;
 
   let mut rate: Vec<(i64, f64)> = vec![];
   for r in rows.iter() {
@@ -317,7 +316,7 @@ async fn fetch_aggregate_stats(
     ));
   }
 
-  if trailbase_sqlite::has_geoip_db() {
+  if trailbase_sqlite::geoip::has_geoip_db() {
     let cc_query = format!(
       r#"
     SELECT
@@ -330,7 +329,7 @@ async fn fetch_aggregate_stats(
   "#
     );
 
-    let rows = conn.query(&cc_query, ()).await?;
+    let rows = conn.query(&cc_query, ())?;
 
     let mut country_codes = HashMap::<String, usize>::new();
     for row in rows.iter() {
@@ -364,11 +363,11 @@ mod tests {
 
   #[tokio::test]
   async fn test_aggregate_rate_computation() {
-    let mut conn_sync = trailbase_sqlite::connect_sqlite(None, None).unwrap();
-    apply_logs_migrations(&mut conn_sync).unwrap();
-    let conn = tokio_rusqlite::Connection::from_conn(conn_sync)
-      .await
-      .unwrap();
+    let conn = trailbase_sqlite::Connection::from_conn(|| {
+      let mut conn_sync = trailbase_sqlite::connect_sqlite(None, None).unwrap();
+      apply_logs_migrations(&mut conn_sync).unwrap();
+      conn_sync
+    });
 
     let interval_seconds = 600;
     let to = DateTime::parse_from_rfc3339("1996-12-22T12:00:00Z").unwrap();
@@ -399,7 +398,6 @@ mod tests {
             INSERT INTO {LOGS_TABLE_NAME} (created) VALUES({smack_in_there1});
           "#,
         ))
-        .await
         .unwrap();
     }
 

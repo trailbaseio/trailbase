@@ -26,20 +26,18 @@ pub async fn drop_index_handler(
 
   let migration_path = state.data_dir().migrations_path();
   let conn = state.conn();
-  let writer = conn
-    .call(move |conn| {
-      let mut tx =
-        TransactionRecorder::new(conn, migration_path, format!("drop_index_{index_name}"))?;
+  let writer = conn.call(move |conn| {
+    let mut tx =
+      TransactionRecorder::new(conn, migration_path, format!("drop_index_{index_name}"))?;
 
-      let query = format!("DROP INDEX IF EXISTS {}", index_name);
-      info!("dropping index: {query}");
-      tx.execute(&query)?;
+    let query = format!("DROP INDEX IF EXISTS {}", index_name);
+    info!("dropping index: {query}");
+    tx.execute(&query)?;
 
-      return tx
-        .rollback_and_create_migration()
-        .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
-    })
-    .await?;
+    return tx
+      .rollback_and_create_migration()
+      .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+  })?;
 
   // Write to migration file.
   if let Some(writer) = writer {

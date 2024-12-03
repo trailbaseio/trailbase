@@ -39,7 +39,7 @@ fn value_to_json(value: rusqlite::types::Value) -> Result<serde_json::Value, Jso
 /// Serialize SQL row to json.
 pub fn row_to_json(
   metadata: &(dyn TableOrViewMetadata + Send + Sync),
-  row: &tokio_rusqlite::Row,
+  row: &trailbase_sqlite::Row,
   column_filter: fn(&str) -> bool,
 ) -> Result<serde_json::Value, JsonError> {
   let mut map = serde_json::Map::<String, serde_json::Value>::default();
@@ -72,9 +72,9 @@ pub fn row_to_json(
 }
 
 /// Turns rows into a list of json objects.
-pub async fn rows_to_json(
+pub fn rows_to_json(
   metadata: &(dyn TableOrViewMetadata + Send + Sync),
-  rows: tokio_rusqlite::Rows,
+  rows: trailbase_sqlite::Rows,
   column_filter: fn(&str) -> bool,
 ) -> Result<Vec<serde_json::Value>, JsonError> {
   let mut objects: Vec<serde_json::Value> = vec![];
@@ -86,7 +86,7 @@ pub async fn rows_to_json(
   return Ok(objects);
 }
 
-pub fn row_to_json_array(row: &tokio_rusqlite::Row) -> Result<Vec<serde_json::Value>, JsonError> {
+pub fn row_to_json_array(row: &trailbase_sqlite::Row) -> Result<Vec<serde_json::Value>, JsonError> {
   let cols = row.column_count();
   let mut json_row = Vec::<serde_json::Value>::with_capacity(cols);
 
@@ -102,8 +102,8 @@ pub fn row_to_json_array(row: &tokio_rusqlite::Row) -> Result<Vec<serde_json::Va
 ///
 /// WARN: This is lossy and whenever possible we should rely on parsed "CREATE TABLE" statement for
 /// the respective column.
-fn rows_to_columns(rows: &tokio_rusqlite::Rows) -> Result<Vec<Column>, rusqlite::Error> {
-  use tokio_rusqlite::ValueType as T;
+fn rows_to_columns(rows: &trailbase_sqlite::Rows) -> Result<Vec<Column>, rusqlite::Error> {
+  use trailbase_sqlite::ValueType as T;
 
   let mut columns: Vec<Column> = vec![];
   for i in 0..rows.column_count() {
@@ -124,10 +124,12 @@ fn rows_to_columns(rows: &tokio_rusqlite::Rows) -> Result<Vec<Column>, rusqlite:
   return Ok(columns);
 }
 
+type Row = Vec<serde_json::Value>;
+
 pub fn rows_to_json_arrays(
-  rows: tokio_rusqlite::Rows,
+  rows: trailbase_sqlite::Rows,
   limit: usize,
-) -> Result<(Vec<Vec<serde_json::Value>>, Option<Vec<Column>>), JsonError> {
+) -> Result<(Vec<Row>, Option<Vec<Column>>), JsonError> {
   let columns = match rows_to_columns(&rows) {
     Ok(columns) => Some(columns),
     Err(err) => {
@@ -189,24 +191,19 @@ mod tests {
         ),
         (),
       )
-      .await
       .unwrap();
 
-    let table = lookup_and_parse_table_schema(conn, "test_table")
-      .await
-      .unwrap();
+    let table = lookup_and_parse_table_schema(conn, "test_table").unwrap();
     let metadata = TableMetadata::new(table.clone(), &[table]);
 
     let insert = |json: serde_json::Value| async move {
-      conn
-        .execute(
-          &format!(
-            "INSERT INTO test_table (col0) VALUES ('{}')",
-            json.to_string()
-          ),
-          (),
-        )
-        .await
+      conn.execute(
+        &format!(
+          "INSERT INTO test_table (col0) VALUES ('{}')",
+          json.to_string()
+        ),
+        (),
+      )
     };
 
     let object = json!({"name": "foo", "obj": json!({
@@ -215,8 +212,8 @@ mod tests {
     })});
     insert(object.clone()).await.unwrap();
 
-    let rows = conn.query("SELECT * FROM test_table", ()).await.unwrap();
-    let parsed = rows_to_json(&metadata, rows, |_| true).await.unwrap();
+    let rows = conn.query("SELECT * FROM test_table", ()).unwrap();
+    let parsed = rows_to_json(&metadata, rows, |_| true).unwrap();
 
     assert_eq!(parsed.len(), 1);
     let serde_json::Value::Object(map) = parsed.first().unwrap() else {

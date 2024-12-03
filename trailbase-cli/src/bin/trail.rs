@@ -54,16 +54,13 @@ impl DbUser {
 }
 
 async fn get_user_by_email(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   email: &str,
 ) -> Result<DbUser, BoxError> {
-  if let Some(user) = conn
-    .query_value::<DbUser>(
-      &format!("SELECT * FROM {USER_TABLE} WHERE email = $1"),
-      (email.to_string(),),
-    )
-    .await?
-  {
+  if let Some(user) = conn.query_value::<DbUser>(
+    &format!("SELECT * FROM {USER_TABLE} WHERE email = $1"),
+    (email.to_string(),),
+  )? {
     return Ok(user);
   }
   return Err("not found".into());
@@ -158,11 +155,10 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Schema(cmd)) => {
       init_logger(false);
 
-      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
-        Some(data_dir.main_db_path()),
-        None,
-      )?)
-      .await?;
+      let path = data_dir.main_db_path();
+      let conn = trailbase_sqlite::Connection::from_conn(move || {
+        api::connect_sqlite(Some(path.clone()), None).unwrap()
+      });
       let table_metadata = api::TableMetadataCache::new(conn.clone()).await?;
 
       let table_name = &cmd.table;
@@ -202,17 +198,15 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Admin { cmd }) => {
       init_logger(false);
 
-      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
-        Some(data_dir.main_db_path()),
-        None,
-      )?)
-      .await?;
+      let path = data_dir.main_db_path();
+      let conn = trailbase_sqlite::Connection::from_conn(move || {
+        api::connect_sqlite(Some(path.clone()), None).unwrap()
+      });
 
       match cmd {
         Some(AdminSubCommands::List) => {
           let users = conn
-            .query_values::<DbUser>(&format!("SELECT * FROM {USER_TABLE} WHERE admin > 0"), ())
-            .await?;
+            .query_values::<DbUser>(&format!("SELECT * FROM {USER_TABLE} WHERE admin > 0"), ())?;
 
           println!("{: >36}\temail\tcreated\tupdated", "id");
           for user in users {
@@ -227,22 +221,18 @@ async fn async_main() -> Result<(), BoxError> {
           }
         }
         Some(AdminSubCommands::Demote { email }) => {
-          conn
-            .execute(
-              &format!("UPDATE {USER_TABLE} SET admin = FALSE WHERE email = $1"),
-              (email.clone(),),
-            )
-            .await?;
+          conn.execute(
+            &format!("UPDATE {USER_TABLE} SET admin = FALSE WHERE email = $1"),
+            (email.clone(),),
+          )?;
 
           println!("'{email}' has been demoted");
         }
         Some(AdminSubCommands::Promote { email }) => {
-          conn
-            .execute(
-              &format!("UPDATE {USER_TABLE} SET admin = TRUE WHERE email = $1"),
-              (email.clone(),),
-            )
-            .await?;
+          conn.execute(
+            &format!("UPDATE {USER_TABLE} SET admin = TRUE WHERE email = $1"),
+            (email.clone(),),
+          )?;
 
           println!("'{email}' is now an admin");
         }
@@ -257,11 +247,10 @@ async fn async_main() -> Result<(), BoxError> {
       init_logger(false);
 
       let data_dir = DataDir(args.data_dir);
-      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
-        Some(data_dir.main_db_path()),
-        None,
-      )?)
-      .await?;
+      let path = data_dir.main_db_path();
+      let conn = trailbase_sqlite::Connection::from_conn(move || {
+        api::connect_sqlite(Some(path.clone()), None).unwrap()
+      });
 
       match cmd {
         Some(UserSubCommands::ResetPassword { email, password }) => {

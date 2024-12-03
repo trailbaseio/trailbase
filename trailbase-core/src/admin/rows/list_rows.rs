@@ -59,8 +59,7 @@ pub async fn list_rows_handler(
       state.conn(),
       &count_query,
       filter_where_clause.params.clone(),
-    )
-    .await?;
+    )?;
 
     row.get::<i64>(0)?
   };
@@ -77,8 +76,7 @@ pub async fn list_rows_handler(
       offset,
       limit: limit_or_default(limit),
     },
-  )
-  .await?;
+  )?;
 
   let next_cursor = cursor_column.and_then(|(col_idx, _col)| {
     let row = rows.last()?;
@@ -115,30 +113,32 @@ struct Pagination<'a> {
   limit: usize,
 }
 
-async fn fetch_rows(
-  conn: &tokio_rusqlite::Connection,
+type Row = Vec<serde_json::Value>;
+
+fn fetch_rows(
+  conn: &trailbase_sqlite::Connection,
   table_or_view_name: &str,
   filter_where_clause: WhereClause,
   order: Option<Vec<(String, Order)>>,
   pagination: Pagination<'_>,
-) -> Result<(Vec<Vec<serde_json::Value>>, Option<Vec<Column>>), Error> {
+) -> Result<(Vec<Row>, Option<Vec<Column>>), Error> {
   let WhereClause {
     mut clause,
     mut params,
   } = filter_where_clause;
   params.push((
     ":limit".to_string(),
-    tokio_rusqlite::Value::Integer(pagination.limit as i64),
+    trailbase_sqlite::Value::Integer(pagination.limit as i64),
   ));
   params.push((
     ":offset".to_string(),
-    tokio_rusqlite::Value::Integer(pagination.offset.unwrap_or(0) as i64),
+    trailbase_sqlite::Value::Integer(pagination.offset.unwrap_or(0) as i64),
   ));
 
   if let Some(cursor) = pagination.cursor {
     params.push((
       ":cursor".to_string(),
-      tokio_rusqlite::Value::Blob(cursor.to_vec()),
+      trailbase_sqlite::Value::Blob(cursor.to_vec()),
     ));
     clause = format!("{clause} AND _row_.id < :cursor",);
   }
@@ -177,7 +177,7 @@ async fn fetch_rows(
     "#,
   );
 
-  let result_rows = conn.query(&query, params).await.map_err(|err| {
+  let result_rows = conn.query(&query, params).map_err(|err| {
     #[cfg(debug_assertions)]
     error!("QUERY: {query}\n\t=> {err}");
 

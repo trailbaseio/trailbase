@@ -5,7 +5,7 @@ use axum::{
 };
 use lazy_static::lazy_static;
 use serde::Deserialize;
-use tokio_rusqlite::params;
+use trailbase_sqlite::params;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
@@ -64,13 +64,10 @@ pub async fn request_email_verification_handler(
     );
   }
 
-  let rows_affected = state
-    .user_conn()
-    .execute(
-      &UPDATE_VERIFICATION_CODE_QUERY,
-      params!(email_verification_code.clone(), user.id),
-    )
-    .await?;
+  let rows_affected = state.user_conn().execute(
+    &UPDATE_VERIFICATION_CODE_QUERY,
+    params!(email_verification_code.clone(), user.id),
+  )?;
 
   return match rows_affected {
     0 => Err(AuthError::Conflict),
@@ -126,8 +123,7 @@ pub async fn verify_email_handler(
 
   let rows_affected = state
     .user_conn()
-    .execute(&UPDATE_CODE_QUERY, params!(email_verification_code))
-    .await?;
+    .execute(&UPDATE_CODE_QUERY, params!(email_verification_code))?;
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid verification code")),

@@ -9,8 +9,8 @@ use oauth2::{AsyncHttpClient, HttpClientError, HttpRequest, HttpResponse};
 use oauth2::{AuthorizationCode, StandardTokenResponse, TokenResponse};
 use serde::Deserialize;
 use thiserror::Error;
-use tokio_rusqlite::{named_params, params};
 use tower_cookies::Cookies;
+use trailbase_sqlite::{named_params, params};
 
 use crate::auth::oauth::state::{OAuthState, ResponseType};
 use crate::auth::oauth::OAuthUser;
@@ -221,17 +221,14 @@ pub(crate) async fn callback_from_external_auth_provider(
         );
       }
 
-      let rows_affected = state
-        .user_conn()
-        .execute(
-          &QUERY,
-          named_params! {
-            ":authorization_code": authorization_code.clone(),
-            ":pkce_code_challenge": oauth_state.user_pkce_code_challenge,
-            ":user_id": db_user.id,
-          },
-        )
-        .await?;
+      let rows_affected = state.user_conn().execute(
+        &QUERY,
+        named_params! {
+          ":authorization_code": authorization_code.clone(),
+          ":pkce_code_challenge": oauth_state.user_pkce_code_challenge,
+          ":user_id": db_user.id,
+        },
+      )?;
 
       match rows_affected {
         0 => return Err(AuthError::BadRequest("invalid user")),
@@ -253,7 +250,7 @@ pub(crate) async fn callback_from_external_auth_provider(
 }
 
 async fn create_user_for_external_provider(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   user: &OAuthUser,
 ) -> Result<uuid::Uuid, AuthError> {
   if !user.verified {
@@ -282,8 +279,7 @@ async fn create_user_for_external_provider(
         ":email": user.email.clone(),
         ":avatar": user.avatar.clone(),
     },
-  )
-  .await?;
+  )?;
 
   return Ok(uuid::Uuid::from_bytes(
     row
@@ -293,7 +289,7 @@ async fn create_user_for_external_provider(
 }
 
 async fn user_by_provider_id(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   provider_id: OAuthProviderId,
   provider_user_id: &str,
 ) -> Result<DbUser, AuthError> {
@@ -307,7 +303,6 @@ async fn user_by_provider_id(
       &QUERY,
       params!(provider_id as i64, provider_user_id.to_string()),
     )
-    .await
     .map_err(|err| AuthError::Internal(err.into()))?
     .ok_or_else(|| AuthError::NotFound);
 }

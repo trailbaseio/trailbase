@@ -5,7 +5,7 @@ use axum::{
 };
 use lazy_static::lazy_static;
 use serde::Deserialize;
-use tokio_rusqlite::named_params;
+use trailbase_sqlite::named_params;
 use utoipa::ToSchema;
 use validator::ValidateEmail;
 
@@ -96,7 +96,6 @@ pub async fn register_user_handler(
         ":email_verification_code": email_verification_code.clone(),
       },
     )
-    .await
     .map_err(|_err| {
       #[cfg(debug_assertions)]
       log::debug!("Failed to create user {normalized_email}: {_err}");

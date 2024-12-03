@@ -50,25 +50,23 @@ pub async fn update_user_handler(
 
   let email = request.email.clone();
   let verified = request.verified;
-  conn
-    .call(move |conn| {
-      let tx = conn.transaction()?;
+  conn.call(move |conn| {
+    let tx = conn.transaction()?;
 
-      if let Some(email) = email {
-        tx.execute(&UPDATE_EMAIL_QUERY, params![email, user_id_bytes])?;
-      }
-      if let Some(password_hash) = hashed_password {
-        tx.execute(&UPDATE_PW_HASH_QUERY, params!(password_hash, user_id_bytes))?;
-      }
-      if let Some(verified) = verified {
-        tx.execute(&UPDATE_VERIFIED_QUERY, params!(verified, user_id_bytes))?;
-      }
+    if let Some(email) = email {
+      tx.execute(&UPDATE_EMAIL_QUERY, params![email, user_id_bytes])?;
+    }
+    if let Some(password_hash) = hashed_password {
+      tx.execute(&UPDATE_PW_HASH_QUERY, params!(password_hash, user_id_bytes))?;
+    }
+    if let Some(verified) = verified {
+      tx.execute(&UPDATE_VERIFIED_QUERY, params!(verified, user_id_bytes))?;
+    }
 
-      tx.commit()?;
+    tx.commit()?;
 
-      return Ok(());
-    })
-    .await?;
+    return Ok(());
+  })?;
 
   return Ok((StatusCode::OK, format!("Updated user: {request:?}")).into_response());
 }

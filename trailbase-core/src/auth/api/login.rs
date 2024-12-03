@@ -6,8 +6,8 @@ use axum::{
 };
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use tokio_rusqlite::named_params;
 use tower_cookies::Cookies;
+use trailbase_sqlite::named_params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
@@ -125,17 +125,14 @@ pub(crate) async fn login_handler(
       );
     }
 
-    let rows_affected = state
-      .user_conn()
-      .execute(
-        &QUERY,
-        named_params! {
-          ":authorization_code": authorization_code.clone(),
-          ":pkce_code_challenge": pkce_code_challenge,
-          ":email": email,
-        },
-      )
-      .await?;
+    let rows_affected = state.user_conn().execute(
+      &QUERY,
+      named_params! {
+        ":authorization_code": authorization_code.clone(),
+        ":pkce_code_challenge": pkce_code_challenge,
+        ":email": email,
+      },
+    )?;
 
     return match rows_affected {
       0 => Err(AuthError::BadRequest("invalid user")),

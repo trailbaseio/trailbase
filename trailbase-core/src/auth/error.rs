@@ -26,10 +26,10 @@ pub enum AuthError {
   Internal(Box<dyn std::error::Error + Send + Sync>),
 }
 
-impl From<tokio_rusqlite::Error> for AuthError {
-  fn from(err: tokio_rusqlite::Error) -> Self {
+impl From<trailbase_sqlite::Error> for AuthError {
+  fn from(err: trailbase_sqlite::Error) -> Self {
     return match err {
-      tokio_rusqlite::Error::Rusqlite(err) => match err {
+      trailbase_sqlite::Error::Rusqlite(err) => match err {
         rusqlite::Error::QueryReturnedNoRows => {
           #[cfg(debug_assertions)]
           info!("SQLite returned empty rows error");
@@ -106,10 +106,9 @@ mod tests {
 
   #[tokio::test]
   async fn test_some_sqlite_errors_yield_client_errors() {
-    let conn =
-      tokio_rusqlite::Connection::from_conn(trailbase_sqlite::connect_sqlite(None, None).unwrap())
-        .await
-        .unwrap();
+    let conn = trailbase_sqlite::Connection::from_conn(|| {
+      trailbase_sqlite::connect_sqlite(None, None).unwrap()
+    });
 
     conn
       .execute(
@@ -119,12 +118,10 @@ mod tests {
     );"#,
         (),
       )
-      .await
       .unwrap();
 
     conn
       .execute("INSERT INTO test_table (id, data) VALUES (0, 'first');", ())
-      .await
       .unwrap();
 
     let sqlite_err = conn
@@ -132,12 +129,11 @@ mod tests {
         "INSERT INTO test_table (id, data) VALUES (0, 'second');",
         (),
       )
-      .await
       .err()
       .unwrap();
 
     match sqlite_err {
-      tokio_rusqlite::Error::Rusqlite(rusqlite::Error::SqliteFailure(err, _)) => {
+      trailbase_sqlite::Error::Rusqlite(rusqlite::Error::SqliteFailure(err, _)) => {
         assert_eq!(err.extended_code, 1555);
       }
       _ => panic!("{sqlite_err}"),

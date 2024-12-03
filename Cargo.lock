@@ -1166,15 +1166,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crossbeam-channel"
-version = "0.5.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33480d6946193aa8033910124896ca395333cae7e2d1113d1fef6c3272217df2"
-dependencies = [
- "crossbeam-utils",
-]
-
-[[package]]
 name = "crossbeam-deque"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5915,17 +5906,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-rusqlite"
-version = "0.6.0"
-dependencies = [
- "crossbeam-channel",
- "rusqlite",
- "serde",
- "serde_rusqlite",
- "tokio",
-]
-
-[[package]]
 name = "tokio-rustls"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6119,9 +6099,9 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tokio-rusqlite",
  "tracing-subscriber",
  "trailbase-core",
+ "trailbase-sqlite",
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
@@ -6186,7 +6166,6 @@ dependencies = [
  "thiserror 2.0.3",
  "thread_local",
  "tokio",
- "tokio-rusqlite",
  "tower 0.5.1",
  "tower-cookies",
  "tower-http",
@@ -6216,7 +6195,6 @@ dependencies = [
  "regex",
  "rusqlite",
  "serde_json",
- "sqlean",
  "sqlite-loadable",
  "uuid",
  "validator",
@@ -6230,12 +6208,16 @@ dependencies = [
  "jsonschema",
  "lazy_static",
  "log",
+ "parking_lot",
  "rusqlite",
  "schemars",
  "serde",
  "serde_json",
+ "serde_rusqlite",
+ "sqlean",
  "sqlite-vec",
  "thiserror 2.0.3",
+ "thread_local",
  "tokio",
  "trailbase-extension",
  "uuid",

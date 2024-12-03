@@ -41,20 +41,20 @@ pub async fn query_handler(
     None => HashMap::new(),
   };
 
-  let mut params: Vec<(String, tokio_rusqlite::Value)> = vec![];
+  let mut params: Vec<(String, trailbase_sqlite::Value)> = vec![];
   for (name, typ) in api.params() {
     match query_params.remove(name) {
       Some(value) => match *typ {
         QueryApiParameterType::Text => {
           params.push((
             format!(":{name}"),
-            tokio_rusqlite::Value::Text(value.clone()),
+            trailbase_sqlite::Value::Text(value.clone()),
           ));
         }
         QueryApiParameterType::Blob => {
           params.push((
             format!(":{name}"),
-            tokio_rusqlite::Value::Blob(
+            trailbase_sqlite::Value::Blob(
               BASE64_URL_SAFE
                 .decode(value)
                 .map_err(|_err| E::BadRequest("not b64"))?,
@@ -64,7 +64,7 @@ pub async fn query_handler(
         QueryApiParameterType::Real => {
           params.push((
             format!(":{name}"),
-            tokio_rusqlite::Value::Real(
+            trailbase_sqlite::Value::Real(
               value
                 .parse::<f64>()
                 .map_err(|_err| E::BadRequest("expected f64"))?,
@@ -74,7 +74,7 @@ pub async fn query_handler(
         QueryApiParameterType::Integer => {
           params.push((
             format!(":{name}"),
-            tokio_rusqlite::Value::Integer(
+            trailbase_sqlite::Value::Integer(
               value
                 .parse::<i64>()
                 .map_err(|_err| E::BadRequest("expected i64"))?,
@@ -83,7 +83,7 @@ pub async fn query_handler(
         }
       },
       None => {
-        params.push((format!(":{name}"), tokio_rusqlite::Value::Null));
+        params.push((format!(":{name}"), trailbase_sqlite::Value::Null));
       }
     };
   }
@@ -92,23 +92,20 @@ pub async fn query_handler(
     return Err(E::BadRequest("invalid query param"));
   }
 
-  api.check_api_access(&params, user.as_ref()).await?;
+  api.check_api_access(&params, user.as_ref())?;
 
   const LIMIT: usize = 128;
-  let response_rows = state
-    .conn()
-    .query(
-      &format!(
-        "SELECT * FROM {virtual_table_name}({placeholders}) WHERE TRUE LIMIT {LIMIT}",
-        placeholders = params
-          .iter()
-          .map(|e| e.0.as_str())
-          .collect::<Vec<_>>()
-          .join(", ")
-      ),
-      params,
-    )
-    .await?;
+  let response_rows = state.conn().query(
+    &format!(
+      "SELECT * FROM {virtual_table_name}({placeholders}) WHERE TRUE LIMIT {LIMIT}",
+      placeholders = params
+        .iter()
+        .map(|e| e.0.as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
+    ),
+    params,
+  )?;
 
   let (json_rows, columns) =
     rows_to_json_arrays(response_rows, LIMIT).map_err(|err| E::Internal(err.into()))?;
@@ -156,7 +153,6 @@ mod test {
         "CREATE VIRTUAL TABLE test_vtable USING define((SELECT $1 AS value))",
         (),
       )
-      .await
       .unwrap();
 
     let mut config = state.get_config();

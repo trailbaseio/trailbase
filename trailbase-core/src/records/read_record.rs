@@ -30,17 +30,14 @@ pub async fn read_record_handler(
 
   let record_id = api.id_to_sql(&record)?;
 
-  api
-    .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
-    .await?;
+  api.check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())?;
 
   let Some(row) = SelectQueryBuilder::run(
     &state,
     api.table_name(),
     &api.record_pk_column().name,
     record_id,
-  )
-  .await?
+  )?
   else {
     return Err(RecordError::RecordNotFound);
   };
@@ -76,9 +73,8 @@ pub async fn get_uploaded_file_from_record_handler(
 
   let record_id = api.id_to_sql(&record)?;
 
-  let Ok(()) = api
-    .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
-    .await
+  let Ok(()) =
+    api.check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
   else {
     return Err(RecordError::Forbidden);
   };
@@ -129,9 +125,8 @@ pub async fn get_uploaded_files_from_record_handler(
 
   let record_id = api.id_to_sql(&record)?;
 
-  let Ok(()) = api
-    .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
-    .await
+  let Ok(()) =
+    api.check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
   else {
     return Err(RecordError::Forbidden);
   };
@@ -192,23 +187,20 @@ mod test {
     let conn = state.user_conn();
 
     const EMAIL: &str = "foo@bar.baz";
-    conn
-      .execute(
-        &format!("INSERT INTO '{USER_TABLE}' (email) VALUES ($1)"),
-        tokio_rusqlite::params!(EMAIL),
-      )
-      .await?;
+    conn.execute(
+      &format!("INSERT INTO '{USER_TABLE}' (email) VALUES ($1)"),
+      trailbase_sqlite::params!(EMAIL),
+    )?;
 
     query_one_row(
       conn,
       &format!("SELECT * from '{USER_TABLE}' WHERE email = :email"),
-      tokio_rusqlite::named_params! {
+      trailbase_sqlite::named_params! {
         ":email": EMAIL,
         ":unused": "unused",
         ":foo": 42,
       },
-    )
-    .await?;
+    )?;
 
     return Ok(());
   }
@@ -315,18 +307,16 @@ mod test {
 
   async fn create_test_record_api(state: &AppState, api_name: &str) -> Result<(), anyhow::Error> {
     let conn = state.conn();
-    conn
-      .execute(
-        &format!(
-          r#"CREATE TABLE 'test_table' (
+    conn.execute(
+      &format!(
+        r#"CREATE TABLE 'test_table' (
             id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
             file         TEXT CHECK(jsonschema('std.FileUpload', file)),
             files        TEXT CHECK(jsonschema('std.FileUploads', files))
           ) strict"#
-        ),
-        (),
-      )
-      .await?;
+      ),
+      (),
+    )?;
 
     state.table_metadata().invalidate_all().await?;
 
@@ -536,12 +526,10 @@ mod test {
     // Create view
     let table_name = "message";
     let view_name = "message_view";
-    conn
-      .execute(
-        &format!("CREATE VIEW {view_name} AS SELECT * FROM {table_name}"),
-        (),
-      )
-      .await?;
+    conn.execute(
+      &format!("CREATE VIEW {view_name} AS SELECT * FROM {table_name}"),
+      (),
+    )?;
 
     state.table_metadata().invalidate_all().await?;
 

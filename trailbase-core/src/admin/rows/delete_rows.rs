@@ -185,7 +185,6 @@ mod tests {
     let count = || async {
       conn
         .query_row(&format!("SELECT COUNT(*) FROM '{table_name}'"), ())
-        .await
         .unwrap()
         .unwrap()
         .get::<i64>(0)

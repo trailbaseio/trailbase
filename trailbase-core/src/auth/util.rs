@@ -4,8 +4,8 @@ use chrono::Duration;
 use cookie::SameSite;
 use lazy_static::lazy_static;
 use sha2::{Digest, Sha256};
-use tokio_rusqlite::params;
 use tower_cookies::{Cookie, Cookies};
+use trailbase_sqlite::params;
 
 use crate::auth::user::{DbUser, User};
 use crate::auth::AuthError;
@@ -132,7 +132,7 @@ pub async fn user_by_email(state: &AppState, email: &str) -> Result<DbUser, Auth
 }
 
 pub async fn get_user_by_email(
-  user_conn: &tokio_rusqlite::Connection,
+  user_conn: &trailbase_sqlite::Connection,
   email: &str,
 ) -> Result<DbUser, AuthError> {
   lazy_static! {
@@ -140,7 +140,6 @@ pub async fn get_user_by_email(
   };
   let db_user = user_conn
     .query_value::<DbUser>(&QUERY, params!(email.to_string()))
-    .await
     .map_err(|_err| AuthError::UnauthorizedExt("user not found by email".into()))?;
 
   return db_user.ok_or_else(|| AuthError::UnauthorizedExt("invalid user".into()));
@@ -151,7 +150,7 @@ pub async fn user_by_id(state: &AppState, id: &uuid::Uuid) -> Result<DbUser, Aut
 }
 
 async fn get_user_by_id(
-  user_conn: &tokio_rusqlite::Connection,
+  user_conn: &trailbase_sqlite::Connection,
   id: &uuid::Uuid,
 ) -> Result<DbUser, AuthError> {
   lazy_static! {
@@ -159,7 +158,6 @@ async fn get_user_by_id(
   };
   let db_user = user_conn
     .query_value::<DbUser>(&QUERY, params!(id.into_bytes()))
-    .await
     .map_err(|_err| AuthError::UnauthorizedExt("User not found by id".into()))?;
 
   return db_user.ok_or_else(|| AuthError::UnauthorizedExt("invalid user".into()));
@@ -171,22 +169,17 @@ pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, AuthErro
       format!("SELECT EXISTS(SELECT 1 FROM '{USER_TABLE}' WHERE email = $1)");
   };
   let row =
-    crate::util::query_one_row(state.user_conn(), &EXISTS_QUERY, params!(email.to_string()))
-      .await?;
+    crate::util::query_one_row(state.user_conn(), &EXISTS_QUERY, params!(email.to_string()))?;
   return row
     .get::<bool>(0)
     .map_err(|err| AuthError::Internal(err.into()));
 }
 
 pub(crate) async fn is_admin(state: &AppState, user: &User) -> bool {
-  let Ok(Some(row)) = state
-    .user_conn()
-    .query_row(
-      &format!("SELECT admin FROM {USER_TABLE} WHERE id = $1"),
-      params!(user.uuid.as_bytes().to_vec()),
-    )
-    .await
-  else {
+  let Ok(Some(row)) = state.user_conn().query_row(
+    &format!("SELECT admin FROM {USER_TABLE} WHERE id = $1"),
+    params!(user.uuid.as_bytes().to_vec()),
+  ) else {
     return false;
   };
 
@@ -201,15 +194,10 @@ pub(crate) async fn delete_all_sessions_for_user(
     static ref QUERY: String = format!("DELETE FROM '{SESSION_TABLE}' WHERE user = $1");
   };
 
-  return Ok(
-    state
-      .user_conn()
-      .execute(
-        &QUERY,
-        [tokio_rusqlite::Value::Blob(user_id.into_bytes().to_vec())],
-      )
-      .await?,
-  );
+  return Ok(state.user_conn().execute(
+    &QUERY,
+    [trailbase_sqlite::Value::Blob(user_id.into_bytes().to_vec())],
+  )?);
 }
 
 pub(crate) async fn delete_session(
@@ -220,12 +208,7 @@ pub(crate) async fn delete_session(
     static ref QUERY: String = format!("DELETE FROM '{SESSION_TABLE}' WHERE refresh_token = $1");
   };
 
-  return Ok(
-    state
-      .user_conn()
-      .execute(&QUERY, params!(refresh_token))
-      .await?,
-  );
+  return Ok(state.user_conn().execute(&QUERY, params!(refresh_token))?);
 }
 
 /// Derives the code challenge given the verifier as base64UrlNoPad(sha256([codeVerifier])).

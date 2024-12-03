@@ -11,7 +11,7 @@ pub struct QueryApi {
 }
 
 struct QueryApiState {
-  conn: tokio_rusqlite::Connection,
+  conn: trailbase_sqlite::Connection,
 
   api_name: String,
   virtual_table_name: String,
@@ -22,7 +22,7 @@ struct QueryApiState {
 }
 
 impl QueryApi {
-  pub fn from(conn: tokio_rusqlite::Connection, config: QueryApiConfig) -> Result<Self, String> {
+  pub fn from(conn: trailbase_sqlite::Connection, config: QueryApiConfig) -> Result<Self, String> {
     return Ok(QueryApi {
       state: Arc::new(QueryApiState {
         conn,
@@ -67,9 +67,9 @@ impl QueryApi {
     return &self.state.params;
   }
 
-  pub(crate) async fn check_api_access(
+  pub(crate) fn check_api_access(
     &self,
-    query_params: &[(String, tokio_rusqlite::Value)],
+    query_params: &[(String, trailbase_sqlite::Value)],
     user: Option<&User>,
   ) -> Result<(), QueryError> {
     let Some(acl) = self.state.acl else {
@@ -115,30 +115,29 @@ impl QueryApi {
           let mut params = query_params.to_vec();
           params.push((
             ":__user_id".to_string(),
-            user.map_or(tokio_rusqlite::Value::Null, |u| {
-              tokio_rusqlite::Value::Blob(u.uuid.into())
+            user.map_or(trailbase_sqlite::Value::Null, |u| {
+              trailbase_sqlite::Value::Blob(u.uuid.into())
             }),
           ));
 
-          let row = match crate::util::query_one_row(&self.state.conn, &access_query, params).await
-          {
-            Ok(row) => row,
+          let allowed = match self.state.conn.query_row_map(&access_query, params, |row| {
+            row
+              .get::<_, bool>(0)
+              .map_err(trailbase_sqlite::Error::Rusqlite)
+          }) {
+            Ok(Some(allowed)) => allowed,
+            Ok(None) => {
+              if cfg!(test) {
+                panic!("Query API access query returned NULL. Failing closed: '{access_query}'");
+              }
+              warn!("RLA query returned NULL. Failing closed: '{access_query}'");
+              break 'acl;
+            }
             Err(err) => {
               error!("Query API access query: '{access_query}' failed: {err}");
               break 'acl;
             }
           };
-
-          let allowed: bool = row.get(0).unwrap_or_else(|err| {
-            if cfg!(test) {
-              panic!(
-                "Query API access query returned NULL. Failing closed: '{access_query}'\n{err}"
-              );
-            }
-
-            warn!("RLA query returned NULL. Failing closed: '{access_query}'\n{err}");
-            false
-          });
 
           if allowed {
             return Ok(());

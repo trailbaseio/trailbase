@@ -5,7 +5,7 @@ use axum::{
 };
 use lazy_static::lazy_static;
 use serde::Deserialize;
-use tokio_rusqlite::named_params;
+use trailbase_sqlite::named_params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
@@ -86,17 +86,14 @@ pub async fn change_password_handler(
     );
   }
 
-  let rows_affected = state
-    .user_conn()
-    .execute(
-      &QUERY,
-      named_params! {
-        ":user_id": user.uuid.into_bytes().to_vec(),
-        ":new_password_hash": new_password_hash,
-        ":old_password_hash": old_password_hash,
-      },
-    )
-    .await?;
+  let rows_affected = state.user_conn().execute(
+    &QUERY,
+    named_params! {
+      ":user_id": user.uuid.into_bytes().to_vec(),
+      ":new_password_hash": new_password_hash,
+      ":old_password_hash": old_password_hash,
+    },
+  )?;
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid old password")),

@@ -1,7 +1,7 @@
 use axum::extract::{Json, State};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use tokio_rusqlite::params;
+use trailbase_sqlite::params;
 use ts_rs::TS;
 use utoipa::ToSchema;
 
@@ -73,13 +73,10 @@ pub(crate) async fn auth_code_to_token_handler(
     );
   }
 
-  let Some(db_user) = state
-    .user_conn()
-    .query_value::<DbUser>(
-      &UPDATE_QUERY,
-      params!(authorization_code, pkce_code_challenge),
-    )
-    .await?
+  let Some(db_user) = state.user_conn().query_value::<DbUser>(
+    &UPDATE_QUERY,
+    params!(authorization_code, pkce_code_challenge),
+  )?
   else {
     return Err(AuthError::NotFound);
   };

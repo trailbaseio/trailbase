@@ -106,7 +106,7 @@ pub(super) fn sqlite_logger_on_response(
 }
 
 pub struct SqliteLogLayer {
-  conn: tokio_rusqlite::Connection,
+  conn: trailbase_sqlite::Connection,
 }
 
 impl SqliteLogLayer {
@@ -121,8 +121,8 @@ impl SqliteLogLayer {
   //
   // TODO: should we use a bound receiver to create back pressure?
   // TODO: use recv_many() and batch insert.
-  fn write_log(&self, log: Log) -> Result<(), tokio_rusqlite::Error> {
-    return self.conn.call_and_forget(move |conn| {
+  fn write_log(&self, log: Log) -> Result<(), trailbase_sqlite::Error> {
+    self.conn.call(move |conn| {
       let result = conn.execute(
         r#"
         INSERT INTO
@@ -143,10 +143,16 @@ impl SqliteLogLayer {
         ),
       );
 
-      if let Err(err) = result {
-        warn!("logs writing failed: {err}");
-      }
-    });
+      return Ok(result?);
+
+      // if let Err(err) = result {
+      //   warn!("logs writing failed: {err}");
+      // }
+      //
+      // return Ok(());
+    })?;
+
+    return Ok(());
   }
 }
 
