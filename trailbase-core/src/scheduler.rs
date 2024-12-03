@@ -57,15 +57,13 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
       let backup_file = backup_file.clone();
 
       async move {
-        let result = conn
-          .call(|conn| {
-            return Ok(conn.backup(
-              rusqlite::DatabaseName::Main,
-              backup_file,
-              /* progress= */ None,
-            )?);
-          })
-          .await;
+        let result = conn.call(|conn| {
+          return Ok(conn.backup(
+            rusqlite::DatabaseName::Main,
+            backup_file,
+            /* progress= */ None,
+          )?);
+        });
 
         match result {
           Ok(_) => info!("Backup complete"),
@@ -76,27 +74,27 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
   }
 
   // Logs cleaner.
-  let logs_conn = app_state.logs_conn().clone();
-  let retention = app_state
-    .access_config(|c| c.server.logs_retention_sec)
-    .map_or(LOGS_RETENTION_DEFAULT, Duration::seconds);
-
-  if !retention.is_zero() {
-    tasks.add_periodic_task(Duration::hours(2), move || {
-      let logs_conn = logs_conn.clone();
-
-      tokio::spawn(async move {
-        let timestamp = (Utc::now() - retention).timestamp();
-        match logs_conn
-          .execute("DELETE FROM _logs WHERE created < $1", params!(timestamp))
-          .await
-        {
-          Ok(_) => info!("Successfully pruned logs"),
-          Err(err) => warn!("Failed to clean up old logs: {err}"),
-        };
-      })
-    });
-  }
+  // let logs_conn = app_state.logs_conn().clone();
+  // let retention = app_state
+  //   .access_config(|c| c.server.logs_retention_sec)
+  //   .map_or(LOGS_RETENTION_DEFAULT, Duration::seconds);
+  //
+  // if !retention.is_zero() {
+  //   tasks.add_periodic_task(Duration::hours(2), move || {
+  //     let logs_conn = logs_conn.clone();
+  //
+  //     tokio::spawn(async move {
+  //       let timestamp = (Utc::now() - retention).timestamp();
+  //       match logs_conn
+  //         .execute("DELETE FROM _logs WHERE created < $1", params!(timestamp))
+  //         .await
+  //       {
+  //         Ok(_) => info!("Successfully pruned logs"),
+  //         Err(err) => warn!("Failed to clean up old logs: {err}"),
+  //       };
+  //     })
+  //   });
+  // }
 
   // Refresh token cleaner.
   let state = app_state.clone();

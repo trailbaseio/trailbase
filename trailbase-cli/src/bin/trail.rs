@@ -8,6 +8,7 @@ use clap::{CommandFactory, Parser};
 use log::*;
 use serde::Deserialize;
 use std::rc::Rc;
+use std::sync::Arc;
 use tokio::{fs, io::AsyncWriteExt};
 use tracing_subscriber::{filter, prelude::*};
 use trailbase_core::{
@@ -158,10 +159,10 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Schema(cmd)) => {
       init_logger(false);
 
-      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
-        Some(data_dir.main_db_path()),
-        None,
-      )?)
+      let path = data_dir.main_db_path();
+      let conn = tokio_rusqlite::Connection::from_conn(Arc::new(move || {
+        api::connect_sqlite(Some(path.clone()), None).unwrap()
+      }))
       .await?;
       let table_metadata = api::TableMetadataCache::new(conn.clone()).await?;
 
@@ -202,10 +203,10 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Admin { cmd }) => {
       init_logger(false);
 
-      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
-        Some(data_dir.main_db_path()),
-        None,
-      )?)
+      let path = data_dir.main_db_path();
+      let conn = tokio_rusqlite::Connection::from_conn(Arc::new(move || {
+        api::connect_sqlite(Some(path.clone()), None).unwrap()
+      }))
       .await?;
 
       match cmd {
@@ -257,10 +258,10 @@ async fn async_main() -> Result<(), BoxError> {
       init_logger(false);
 
       let data_dir = DataDir(args.data_dir);
-      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
-        Some(data_dir.main_db_path()),
-        None,
-      )?)
+      let path = data_dir.main_db_path();
+      let conn = tokio_rusqlite::Connection::from_conn(Arc::new(move || {
+        api::connect_sqlite(Some(path.clone()), None).unwrap()
+      }))
       .await?;
 
       match cmd {

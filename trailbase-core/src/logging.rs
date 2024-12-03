@@ -106,13 +106,14 @@ pub(super) fn sqlite_logger_on_response(
 }
 
 pub struct SqliteLogLayer {
-  conn: tokio_rusqlite::Connection,
+  conn: Option<tokio_rusqlite::Connection>,
 }
 
 impl SqliteLogLayer {
   pub fn new(state: &AppState) -> Self {
     return SqliteLogLayer {
-      conn: state.logs_conn().clone(),
+      // conn: state.logs_conn().clone(),
+      conn: None,
     };
   }
 
@@ -122,31 +123,39 @@ impl SqliteLogLayer {
   // TODO: should we use a bound receiver to create back pressure?
   // TODO: use recv_many() and batch insert.
   fn write_log(&self, log: Log) -> Result<(), tokio_rusqlite::Error> {
-    return self.conn.call_and_forget(move |conn| {
-      let result = conn.execute(
-        r#"
+    if let Some(conn) = &self.conn {
+      conn.call(move |conn| {
+        let result = conn.execute(
+          r#"
         INSERT INTO
           _logs (type, level, status, method, url, latency, client_ip, referer, user_agent)
         VALUES
           ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       "#,
-        rusqlite::params!(
-          log.r#type,
-          log.level,
-          log.status,
-          log.method,
-          log.url,
-          log.latency,
-          log.client_ip,
-          log.referer,
-          log.user_agent
-        ),
-      );
+          rusqlite::params!(
+            log.r#type,
+            log.level,
+            log.status,
+            log.method,
+            log.url,
+            log.latency,
+            log.client_ip,
+            log.referer,
+            log.user_agent
+          ),
+        );
 
-      if let Err(err) = result {
-        warn!("logs writing failed: {err}");
-      }
-    });
+        return Ok(result?);
+
+        // if let Err(err) = result {
+        //   warn!("logs writing failed: {err}");
+        // }
+        //
+        // return Ok(());
+      })?;
+    }
+
+    return Ok(());
   }
 }
 

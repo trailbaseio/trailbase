@@ -37,23 +37,21 @@ pub async fn drop_table_handler(
 
   let migration_path = state.data_dir().migrations_path();
   let conn = state.conn();
-  let writer = conn
-    .call(move |conn| {
-      let mut tx = TransactionRecorder::new(
-        conn,
-        migration_path,
-        format!("drop_{}_{table_name}", entity_type.to_lowercase()),
-      )?;
+  let writer = conn.call(move |conn| {
+    let mut tx = TransactionRecorder::new(
+      conn,
+      migration_path,
+      format!("drop_{}_{table_name}", entity_type.to_lowercase()),
+    )?;
 
-      let query = format!("DROP {entity_type} IF EXISTS {table_name}");
-      info!("dropping table: {query}");
-      tx.execute(&query)?;
+    let query = format!("DROP {entity_type} IF EXISTS {table_name}");
+    info!("dropping table: {query}");
+    tx.execute(&query)?;
 
-      return tx
-        .rollback_and_create_migration()
-        .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
-    })
-    .await?;
+    return tx
+      .rollback_and_create_migration()
+      .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
+  })?;
 
   // Write to migration file.
   if let Some(writer) = writer {

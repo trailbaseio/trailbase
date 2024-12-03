@@ -97,88 +97,89 @@ pub async fn list_logs_handler(
   State(state): State<AppState>,
   RawQuery(raw_url_query): RawQuery,
 ) -> Result<Json<ListLogsResponse>, Error> {
-  let conn = state.logs_conn();
+  return Err(Error::Precondition("FOO".to_string()));
 
-  // FIXME: we should probably return an error if the query parsing fails rather than quietly
-  // falling back to defaults.
-  let url_query = parse_query(raw_url_query);
-  let (filter_params, cursor, limit, order) = match url_query {
-    Some(q) => (Some(q.params), q.cursor, q.limit, q.order),
-    None => (None, None, None, None),
-  };
-
-  // NOTE: We cannot use state.table_metadata() here, since we're working on the logs database.
-  // We could cache, however this is just the admin logs handler.
-  let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME).await?;
-  let table_metadata = TableMetadata::new(table.clone(), &[table]);
-  let filter_where_clause = build_filter_where_clause(&table_metadata, filter_params)?;
-
-  let total_row_count = {
-    let row = crate::util::query_one_row(
-      conn,
-      &format!(
-        "SELECT COUNT(*) FROM {LOGS_TABLE_NAME} WHERE {clause}",
-        clause = filter_where_clause.clause
-      ),
-      filter_where_clause.params.clone(),
-    )
-    .await?;
-
-    row.get::<i64>(0)?
-  };
-
-  lazy_static! {
-    static ref DEFAULT_ORDERING: Vec<(String, Order)> =
-      vec![(LOGS_TABLE_ID_COLUMN.to_string(), Order::Descending)];
-  }
-  let logs = fetch_logs(
-    conn,
-    filter_where_clause.clone(),
-    cursor,
-    order.unwrap_or_else(|| DEFAULT_ORDERING.clone()),
-    limit_or_default(limit),
-  )
-  .await?;
-
-  let stats = {
-    let now = Utc::now();
-    let args = FetchAggregateArgs {
-      filter_where_clause: Some(filter_where_clause),
-      from: now
-        - Duration::seconds(state.access_config(|c| {
-          c.server
-            .logs_retention_sec
-            .unwrap_or_else(|| LOGS_RETENTION_DEFAULT.num_seconds())
-        })),
-      to: now,
-      interval: Duration::seconds(600),
-    };
-
-    let first_page = cursor.is_none();
-    match first_page {
-      true => {
-        let stats = fetch_aggregate_stats(conn, &args).await;
-
-        if let Err(ref err) = stats {
-          warn!("Failed to fetch stats for {args:?}: {err}");
-        }
-        stats.ok()
-      }
-      false => None,
-    }
-  };
-
-  let response = ListLogsResponse {
-    total_row_count,
-    cursor: logs.last().and_then(|log| log.id.as_ref().map(id_to_b64)),
-    entries: logs
-      .into_iter()
-      .map(|log| log.into())
-      .collect::<Vec<LogJson>>(),
-    stats,
-  };
-
-  return Ok(Json(response));
+  //
+  // let conn = state.logs_conn();
+  //
+  // // FIXME: we should probably return an error if the query parsing fails rather than quietly
+  // // falling back to defaults.
+  // let url_query = parse_query(raw_url_query);
+  // let (filter_params, cursor, limit, order) = match url_query {
+  //   Some(q) => (Some(q.params), q.cursor, q.limit, q.order),
+  //   None => (None, None, None, None),
+  // };
+  //
+  // // NOTE: We cannot use state.table_metadata() here, since we're working on the logs database.
+  // // We could cache, however this is just the admin logs handler.
+  // let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME).await?;
+  // let table_metadata = TableMetadata::new(table.clone(), &[table]);
+  // let filter_where_clause = build_filter_where_clause(&table_metadata, filter_params)?;
+  //
+  // let total_row_count = {
+  //   let row = crate::util::query_one_row(
+  //     conn,
+  //     &format!(
+  //       "SELECT COUNT(*) FROM {LOGS_TABLE_NAME} WHERE {clause}",
+  //       clause = filter_where_clause.clause
+  //     ),
+  //     filter_where_clause.params.clone(),
+  //   )
+  //   .await?;
+  //
+  //   row.get::<i64>(0)?
+  // };
+  //
+  // lazy_static! {
+  //   static ref DEFAULT_ORDERING: Vec<(String, Order)> =
+  //     vec![(LOGS_TABLE_ID_COLUMN.to_string(), Order::Descending)];
+  // }
+  // let logs = fetch_logs(
+  //   conn,
+  //   filter_where_clause.clone(),
+  //   cursor,
+  //   order.unwrap_or_else(|| DEFAULT_ORDERING.clone()),
+  //   limit_or_default(limit),
+  // )
+  // .await?;
+  //
+  // let stats = {
+  //   let now = Utc::now();
+  //   let args = FetchAggregateArgs {
+  //     filter_where_clause: Some(filter_where_clause),
+  //     from: now
+  //       - Duration::seconds(state.access_config(|c| { c.server .logs_retention_sec
+  //         .unwrap_or_else(|| LOGS_RETENTION_DEFAULT.num_seconds())
+  //       })),
+  //     to: now,
+  //     interval: Duration::seconds(600),
+  //   };
+  //
+  //   let first_page = cursor.is_none();
+  //   match first_page {
+  //     true => {
+  //       let stats = fetch_aggregate_stats(conn, &args).await;
+  //
+  //       if let Err(ref err) = stats {
+  //         warn!("Failed to fetch stats for {args:?}: {err}");
+  //       }
+  //       stats.ok()
+  //     }
+  //     false => None,
+  //   }
+  // };
+  //
+  // let response = ListLogsResponse {
+  //   total_row_count,
+  //   cursor: logs.last().and_then(|log| log.id.as_ref().map(id_to_b64)),
+  //   entries: logs
+  //     .into_iter()
+  //     .map(|log| log.into())
+  //     .collect::<Vec<LogJson>>(),
+  //   stats,
+  // };
+  //
+  // return Ok(Json(response));
 }
 
 async fn fetch_logs(
@@ -358,17 +359,20 @@ async fn fetch_aggregate_stats(
 #[cfg(test)]
 mod tests {
   use chrono::{DateTime, Duration};
+  use std::sync::Arc;
 
   use super::*;
   use crate::migrations::apply_logs_migrations;
 
   #[tokio::test]
   async fn test_aggregate_rate_computation() {
-    let mut conn_sync = trailbase_sqlite::connect_sqlite(None, None).unwrap();
-    apply_logs_migrations(&mut conn_sync).unwrap();
-    let conn = tokio_rusqlite::Connection::from_conn(conn_sync)
-      .await
-      .unwrap();
+    let conn = tokio_rusqlite::Connection::from_conn(Arc::new(|| {
+      let mut conn_sync = trailbase_sqlite::connect_sqlite(None, None).unwrap();
+      apply_logs_migrations(&mut conn_sync).unwrap();
+      conn_sync
+    }))
+    .await
+    .unwrap();
 
     let interval_seconds = 600;
     let to = DateTime::parse_from_rfc3339("1996-12-22T12:00:00Z").unwrap();

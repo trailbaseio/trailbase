@@ -535,48 +535,46 @@ impl UpdateQueryBuilder {
 
       let pk_column = pk_column.to_string();
       let table_name = table_name.to_string();
-      let files_row = conn
-        .call(move |conn| {
-          let tx = conn.transaction()?;
+      let files_row = conn.call(move |conn| {
+        let tx = conn.transaction()?;
 
-          // First, fetch updated file column contents so we can delete the files after updating the
-          // column.
-          let files_row = if params.file_col_names.is_empty() {
-            None
+        // First, fetch updated file column contents so we can delete the files after updating the
+        // column.
+        let files_row = if params.file_col_names.is_empty() {
+          None
+        } else {
+          let file_columns = params.file_col_names.join(", ");
+
+          let mut stmt = tx.prepare(&format!(
+            "SELECT {file_columns} FROM '{table_name}' WHERE {pk_column} = ${pk_column}"
+          ))?;
+
+          use tokio_rusqlite::Params;
+          [(":pk_column", pk_value)].bind(&mut stmt)?;
+
+          let mut rows = stmt.raw_query();
+          if let Some(row) = rows.next()? {
+            Some(tokio_rusqlite::Row::from_row(row, None)?)
           } else {
-            let file_columns = params.file_col_names.join(", ");
-
-            let mut stmt = tx.prepare(&format!(
-              "SELECT {file_columns} FROM '{table_name}' WHERE {pk_column} = ${pk_column}"
-            ))?;
-
-            use tokio_rusqlite::Params;
-            [(":pk_column", pk_value)].bind(&mut stmt)?;
-
-            let mut rows = stmt.raw_query();
-            if let Some(row) = rows.next()? {
-              Some(tokio_rusqlite::Row::from_row(row, None)?)
-            } else {
-              None
-            }
-          };
-
-          // Update the column.
-          {
-            let mut stmt = tx.prepare(&format!(
-              "UPDATE '{table_name}' SET {setters} WHERE {pk_column} = :{pk_column}"
-            ))?;
-            use tokio_rusqlite::Params;
-            params.params.bind(&mut stmt)?;
-
-            stmt.raw_execute()?;
+            None
           }
+        };
 
-          tx.commit()?;
+        // Update the column.
+        {
+          let mut stmt = tx.prepare(&format!(
+            "UPDATE '{table_name}' SET {setters} WHERE {pk_column} = :{pk_column}"
+          ))?;
+          use tokio_rusqlite::Params;
+          params.params.bind(&mut stmt)?;
 
-          return Ok(files_row);
-        })
-        .await?;
+          stmt.raw_execute()?;
+        }
+
+        tx.commit()?;
+
+        return Ok(files_row);
+      })?;
 
       return Ok(files_row);
     }

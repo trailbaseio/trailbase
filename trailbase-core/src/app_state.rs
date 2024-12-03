@@ -29,7 +29,7 @@ struct InternalState {
   query_apis: Computed<Vec<(String, QueryApi)>, Config>,
   config: ValueNotifier<Config>,
 
-  logs_conn: tokio_rusqlite::Connection,
+  // logs_conn: tokio_rusqlite::Connection,
   conn2: tokio_rusqlite::Connection,
 
   jwt: JwtHelper,
@@ -51,7 +51,7 @@ pub(crate) struct AppStateArgs {
   pub table_metadata: TableMetadataCache,
   pub config: Config,
   pub conn2: tokio_rusqlite::Connection,
-  pub logs_conn: tokio_rusqlite::Connection,
+  // pub logs_conn: tokio_rusqlite::Connection,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore + Send + Sync>,
   pub js_runtime_threads: Option<usize>,
@@ -122,7 +122,7 @@ impl AppState {
         }),
         config,
         conn2: args.conn2.clone(),
-        logs_conn: args.logs_conn,
+        // logs_conn: args.logs_conn,
         jwt: args.jwt,
         table_metadata: args.table_metadata,
         object_store: args.object_store,
@@ -155,9 +155,9 @@ impl AppState {
     return &self.state.conn2;
   }
 
-  pub(crate) fn logs_conn(&self) -> &tokio_rusqlite::Connection {
-    return &self.state.logs_conn;
-  }
+  // pub(crate) fn logs_conn(&self) -> &tokio_rusqlite::Connection {
+  //   return &self.state.logs_conn;
+  // }
 
   pub(crate) fn table_metadata(&self) -> &TableMetadataCache {
     return &self.state.table_metadata;
@@ -306,19 +306,27 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
 
   let conn2 = {
-    let mut conn = trailbase_sqlite::connect_sqlite(None, None)?;
-    apply_user_migrations(&mut conn)?;
-    let _new_db = apply_main_migrations(&mut conn, None)?;
+    let f = Arc::new(|| {
+      let mut conn = trailbase_sqlite::connect_sqlite(None, None).unwrap();
+      apply_user_migrations(&mut conn).unwrap();
+      let _new_db = apply_main_migrations(&mut conn, None).unwrap();
 
-    tokio_rusqlite::Connection::from_conn(conn).await?
+      conn
+    });
+
+    tokio_rusqlite::Connection::from_conn(f).await?
   };
 
-  let logs_conn = {
-    let mut conn = trailbase_sqlite::connect_sqlite(None, None)?;
-    apply_logs_migrations(&mut conn)?;
-
-    tokio_rusqlite::Connection::from_conn(conn).await?
-  };
+  // let logs_conn = {
+  //   let f = Arc::new(|| {
+  //     let mut conn = trailbase_sqlite::connect_sqlite(None, None).unwrap();
+  //     apply_logs_migrations(&mut conn).unwrap();
+  //
+  //     conn
+  //   });
+  //
+  //   tokio_rusqlite::Connection::from_conn(f).await?
+  // };
 
   let table_metadata = TableMetadataCache::new(conn2.clone()).await?;
 
@@ -429,7 +437,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       }),
       config,
       conn2,
-      logs_conn,
+      // logs_conn,
       jwt: jwt::test_jwt_helper(),
       table_metadata,
       object_store,

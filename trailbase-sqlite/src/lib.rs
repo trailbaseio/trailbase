@@ -44,10 +44,12 @@ pub fn connect_sqlite(
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
       | OpenFlags::SQLITE_OPEN_CREATE
       | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    log::warn!("Opening DB: {p:?}");
     rusqlite::Connection::open_with_flags(p, flags)?
   } else {
     rusqlite::Connection::open_in_memory()?
   };
+  conn.busy_timeout(std::time::Duration::from_secs(10))?;
 
   const CONFIG: &[&str] = &[
     "PRAGMA busy_timeout       = 10000",

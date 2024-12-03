@@ -1,5 +1,6 @@
 use log::*;
 use std::path::PathBuf;
+use std::sync::Arc;
 use thiserror::Error;
 
 use crate::app_state::{build_objectstore, AppState, AppStateArgs};
@@ -56,19 +57,29 @@ pub async fn init_app_state(
   data_dir.ensure_directory_structure().await?;
 
   // Then open or init new databases.
-  let logs_conn = {
-    let mut conn = init_logs_db(&data_dir)?;
-    apply_logs_migrations(&mut conn)?;
-    tokio_rusqlite::Connection::from_conn(conn).await?
-  };
+  // let logs_conn = {
+  //   let data_dir = data_dir.clone();
+  //   let f = Arc::new(move || {
+  //     let mut conn = init_logs_db(&data_dir).unwrap();
+  //     apply_logs_migrations(&mut conn).unwrap();
+  //     conn
+  //   });
+  //   tokio_rusqlite::Connection::from_conn(f).await?
+  // };
 
   // Open or init the main db. Note that we derive whether a new DB was initialized based on
   // whether the V1 migration had to be applied. Should be fairly robust.
   let (conn2, new_db) = {
-    let mut conn = trailbase_sqlite::connect_sqlite(Some(data_dir.main_db_path()), None)?;
-    let new_db = apply_main_migrations(&mut conn, Some(data_dir.migrations_path()))?;
+    let data_dir = data_dir.clone();
+    let f = Arc::new(move || {
+      let mut conn = trailbase_sqlite::connect_sqlite(Some(data_dir.main_db_path()), None).unwrap();
+      let _new_db = apply_main_migrations(&mut conn, Some(data_dir.migrations_path())).unwrap();
 
-    (tokio_rusqlite::Connection::from_conn(conn).await?, new_db)
+      return conn;
+    });
+
+    // FIXME: new db is not passed
+    (tokio_rusqlite::Connection::from_conn(f).await?, false)
   };
 
   let table_metadata = TableMetadataCache::new(conn2.clone()).await?;
@@ -126,7 +137,7 @@ pub async fn init_app_state(
     table_metadata,
     config,
     conn2,
-    logs_conn,
+    // logs_conn,
     jwt,
     object_store,
     js_runtime_threads: args.js_runtime_threads,

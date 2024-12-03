@@ -40,7 +40,6 @@ impl MigrationWriter {
 
         return Ok(report);
       })
-      .await
       .map_err(|err| {
         error!("Migration aborted with: {err} for {}", self.sql);
         err

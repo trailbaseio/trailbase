@@ -5919,6 +5919,7 @@ name = "tokio-rusqlite"
 version = "0.6.0"
 dependencies = [
  "crossbeam-channel",
+ "parking_lot",
  "rusqlite",
  "serde",
  "serde_rusqlite",
