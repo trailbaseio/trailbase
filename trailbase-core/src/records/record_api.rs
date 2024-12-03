@@ -228,7 +228,7 @@ impl RecordApi {
   }
 
   /// Check if the given user (if any) can access a record given the request and the operation.
-  pub async fn check_record_level_access(
+  pub fn check_record_level_access(
     &self,
     p: Permission,
     record_id: Option<&tokio_rusqlite::Value>,
@@ -243,33 +243,27 @@ impl RecordApi {
         return Ok(());
       };
 
-      let (access_query, params) = self
-        .build_access_query_and_params(
-          p,
-          access_rule,
-          self.table_name(),
-          record_id,
-          request_params,
-          user,
-        )
-        .await?;
+      let (access_query, params) = self.build_access_query_and_params(
+        p,
+        access_rule,
+        self.table_name(),
+        record_id,
+        request_params,
+        user,
+      )?;
 
-      let row = match crate::util::query_one_row(&self.state.conn, &access_query, params).await {
-        Ok(row) => row,
-        Err(err) => {
-          error!("RLA query '{access_query}' failed: {err}");
+      let allowed = match self.state.conn.query_row_map(&access_query, params, |row| {
+        row
+          .get::<_, bool>(0)
+          .map_err(tokio_rusqlite::Error::Rusqlite)
+      }) {
+        Ok(Some(allowed)) => allowed,
+        Ok(None) => {
+          warn!("RLA query returned NULL. Failing closed: '{access_query}'");
           break 'acl;
         }
-      };
-
-      let allowed: bool = match row.get(0) {
-        Ok(allowed) => allowed,
         Err(err) => {
-          if cfg!(test) {
-            panic!("RLA query returned NULL. Failing closed: '{access_query}'\n{err}");
-          } else {
-            warn!("RLA query returned NULL. Failing closed: '{access_query}'\n{err}");
-          }
+          error!("RLA query '{access_query}' failed: {err}");
           break 'acl;
         }
       };
@@ -305,7 +299,7 @@ impl RecordApi {
   // TODO: We should probably break this up into separate functions for CRUD, to only do and inject
   // what's actually needed. Maybe even break up the entire check_access_and_rls_then. It's pretty
   // winding right now.
-  async fn build_access_query_and_params(
+  fn build_access_query_and_params(
     &self,
     p: Permission,
     access_rule: &str,

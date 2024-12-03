@@ -29,8 +29,8 @@ struct InternalState {
   query_apis: Computed<Vec<(String, QueryApi)>, Config>,
   config: ValueNotifier<Config>,
 
-  // logs_conn: tokio_rusqlite::Connection,
-  conn2: tokio_rusqlite::Connection,
+  logs_conn: tokio_rusqlite::Connection,
+  conn: tokio_rusqlite::Connection,
 
   jwt: JwtHelper,
 
@@ -50,8 +50,8 @@ pub(crate) struct AppStateArgs {
   pub dev: bool,
   pub table_metadata: TableMetadataCache,
   pub config: Config,
-  pub conn2: tokio_rusqlite::Connection,
-  // pub logs_conn: tokio_rusqlite::Connection,
+  pub conn: tokio_rusqlite::Connection,
+  pub logs_conn: tokio_rusqlite::Connection,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore + Send + Sync>,
   pub js_runtime_threads: Option<usize>,
@@ -67,13 +67,13 @@ impl AppState {
     let config = ValueNotifier::new(args.config);
 
     let table_metadata_clone = args.table_metadata.clone();
-    let conn_clone0 = args.conn2.clone();
-    let conn_clone1 = args.conn2.clone();
+    let conn_clone0 = args.conn.clone();
+    let conn_clone1 = args.conn.clone();
 
     let runtime = args
       .js_runtime_threads
       .map_or_else(RuntimeHandle::new, RuntimeHandle::new_with_threads);
-    runtime.set_connection(args.conn2.clone());
+    runtime.set_connection(args.conn.clone());
 
     AppState {
       state: Arc::new(InternalState {
@@ -121,8 +121,8 @@ impl AppState {
             .collect::<Vec<_>>();
         }),
         config,
-        conn2: args.conn2.clone(),
-        // logs_conn: args.logs_conn,
+        conn: args.conn.clone(),
+        logs_conn: args.logs_conn,
         jwt: args.jwt,
         table_metadata: args.table_metadata,
         object_store: args.object_store,
@@ -148,16 +148,16 @@ impl AppState {
   }
 
   pub fn conn(&self) -> &tokio_rusqlite::Connection {
-    return &self.state.conn2;
+    return &self.state.conn;
   }
 
   pub fn user_conn(&self) -> &tokio_rusqlite::Connection {
-    return &self.state.conn2;
+    return &self.state.conn;
   }
 
-  // pub(crate) fn logs_conn(&self) -> &tokio_rusqlite::Connection {
-  //   return &self.state.logs_conn;
-  // }
+  pub(crate) fn logs_conn(&self) -> &tokio_rusqlite::Connection {
+    return &self.state.logs_conn;
+  }
 
   pub(crate) fn table_metadata(&self) -> &TableMetadataCache {
     return &self.state.table_metadata;
@@ -305,30 +305,30 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let temp_dir = temp_dir::TempDir::new()?;
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
 
-  let conn2 = {
-    let f = Arc::new(|| {
+  let conn = {
+    let f = || {
       let mut conn = trailbase_sqlite::connect_sqlite(None, None).unwrap();
       apply_user_migrations(&mut conn).unwrap();
       let _new_db = apply_main_migrations(&mut conn, None).unwrap();
 
       conn
-    });
+    };
 
-    tokio_rusqlite::Connection::from_conn(f).await?
+    tokio_rusqlite::Connection::from_conn(f)
   };
 
-  // let logs_conn = {
-  //   let f = Arc::new(|| {
-  //     let mut conn = trailbase_sqlite::connect_sqlite(None, None).unwrap();
-  //     apply_logs_migrations(&mut conn).unwrap();
-  //
-  //     conn
-  //   });
-  //
-  //   tokio_rusqlite::Connection::from_conn(f).await?
-  // };
+  let logs_conn = {
+    let f = || {
+      let mut conn = trailbase_sqlite::connect_sqlite(None, None).unwrap();
+      apply_logs_migrations(&mut conn).unwrap();
 
-  let table_metadata = TableMetadataCache::new(conn2.clone()).await?;
+      conn
+    };
+
+    tokio_rusqlite::Connection::from_conn(f)
+  };
+
+  let table_metadata = TableMetadataCache::new(conn.clone()).await?;
 
   let build_default_config = || {
     // Construct a fabricated config for tests and make sure it's valid.
@@ -372,8 +372,8 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   validate_config(&table_metadata, &config).unwrap();
   let config = ValueNotifier::new(config);
 
-  let main_conn_clone0 = conn2.clone();
-  let main_conn_clone1 = conn2.clone();
+  let main_conn_clone0 = conn.clone();
+  let main_conn_clone1 = conn.clone();
   let table_metadata_clone = table_metadata.clone();
 
   let data_dir = DataDir(temp_dir.path().to_path_buf());
@@ -397,7 +397,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   };
 
   let runtime = RuntimeHandle::new();
-  runtime.set_connection(conn2.clone());
+  runtime.set_connection(conn.clone());
 
   return Ok(AppState {
     state: Arc::new(InternalState {
@@ -436,8 +436,8 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
           .collect::<Vec<_>>();
       }),
       config,
-      conn2,
-      // logs_conn,
+      conn,
+      logs_conn,
       jwt: jwt::test_jwt_helper(),
       table_metadata,
       object_store,

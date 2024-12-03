@@ -72,7 +72,7 @@ pub fn row_to_json(
 }
 
 /// Turns rows into a list of json objects.
-pub async fn rows_to_json(
+pub fn rows_to_json(
   metadata: &(dyn TableOrViewMetadata + Send + Sync),
   rows: tokio_rusqlite::Rows,
   column_filter: fn(&str) -> bool,
@@ -189,24 +189,19 @@ mod tests {
         ),
         (),
       )
-      .await
       .unwrap();
 
-    let table = lookup_and_parse_table_schema(conn, "test_table")
-      .await
-      .unwrap();
+    let table = lookup_and_parse_table_schema(conn, "test_table").unwrap();
     let metadata = TableMetadata::new(table.clone(), &[table]);
 
     let insert = |json: serde_json::Value| async move {
-      conn
-        .execute(
-          &format!(
-            "INSERT INTO test_table (col0) VALUES ('{}')",
-            json.to_string()
-          ),
-          (),
-        )
-        .await
+      conn.execute(
+        &format!(
+          "INSERT INTO test_table (col0) VALUES ('{}')",
+          json.to_string()
+        ),
+        (),
+      )
     };
 
     let object = json!({"name": "foo", "obj": json!({
@@ -215,8 +210,8 @@ mod tests {
     })});
     insert(object.clone()).await.unwrap();
 
-    let rows = conn.query("SELECT * FROM test_table", ()).await.unwrap();
-    let parsed = rows_to_json(&metadata, rows, |_| true).await.unwrap();
+    let rows = conn.query("SELECT * FROM test_table", ()).unwrap();
+    let parsed = rows_to_json(&metadata, rows, |_| true).unwrap();
 
     assert_eq!(parsed.len(), 1);
     let serde_json::Value::Object(map) = parsed.first().unwrap() else {

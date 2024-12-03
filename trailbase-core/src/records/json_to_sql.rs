@@ -318,19 +318,16 @@ impl Params {
 pub(crate) struct SelectQueryBuilder;
 
 impl SelectQueryBuilder {
-  pub(crate) async fn run(
+  pub(crate) fn run(
     state: &AppState,
     table_name: &str,
     pk_column: &str,
     pk_value: tokio_rusqlite::Value,
   ) -> Result<Option<tokio_rusqlite::Row>, tokio_rusqlite::Error> {
-    return state
-      .conn()
-      .query_row(
-        &format!("SELECT * FROM '{table_name}' WHERE {pk_column} = $1"),
-        [pk_value],
-      )
-      .await;
+    return state.conn().query_row(
+      &format!("SELECT * FROM '{table_name}' WHERE {pk_column} = $1"),
+      [pk_value],
+    );
   }
 }
 
@@ -348,13 +345,10 @@ impl GetFileQueryBuilder {
       Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUpload" => {
         let column_name = &file_column.0.name;
 
-        let Some(row) = state
-          .conn()
-          .query_row(
-            &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
-            [pk_value],
-          )
-          .await?
+        let Some(row) = state.conn().query_row(
+          &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
+          [pk_value],
+        )?
         else {
           return Err(QueryError::NotFound);
         };
@@ -382,13 +376,10 @@ impl GetFilesQueryBuilder {
       Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUploads" => {
         let column_name = &file_column.0.name;
 
-        let Some(row) = state
-          .conn()
-          .query_row(
-            &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
-            [pk_value],
-          )
-          .await?
+        let Some(row) = state.conn().query_row(
+          &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
+          [pk_value],
+        )?
         else {
           return Err(QueryError::NotFound);
         };
@@ -427,7 +418,7 @@ impl InsertQueryBuilder {
       }
     }
 
-    let row = match query_one_row(state.conn(), &query, named_params).await {
+    let row = match query_one_row(state.conn(), &query, named_params) {
       Ok(row) => row,
       Err(err) => {
         if !files.is_empty() {
@@ -517,7 +508,7 @@ impl UpdateQueryBuilder {
       }
     }
 
-    async fn row_update(
+    fn row_update(
       conn: &tokio_rusqlite::Connection,
       table_name: &str,
       params: Params,
@@ -579,7 +570,7 @@ impl UpdateQueryBuilder {
       return Ok(files_row);
     }
 
-    let files_row = match row_update(state.conn(), table_name, params, pk_column, pk_value).await {
+    let files_row = match row_update(state.conn(), table_name, params, pk_column, pk_value) {
       Ok(files_row) => files_row,
       Err(err) => {
         if !files.is_empty() {
@@ -621,8 +612,7 @@ impl DeleteQueryBuilder {
       state.conn(),
       &format!("DELETE FROM '{table_name}' WHERE {pk_column} = $1 RETURNING *"),
       [pk_value],
-    )
-    .await?;
+    )?;
 
     // Finally, delete files.
     delete_files_in_row(state, metadata, row).await?;

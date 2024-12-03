@@ -26,7 +26,7 @@ unsafe extern "C" fn init_trailbase_extension(
   // Add trailbase-extensions.
   return trailbase_extension::sqlite3_extension_init(
     db,
-    pz_err_msg as *mut *mut ::std::os::raw::c_char,
+    pz_err_msg,
     p_thunk as *mut rusqlite::ffi::sqlite3_api_routines,
   ) as ::std::os::raw::c_int;
 }

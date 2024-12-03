@@ -54,14 +54,12 @@ pub async fn create_record_handler(
 
   let mut lazy_params = LazyParams::new(table_metadata, request, multipart_files);
 
-  api
-    .check_record_level_access(
-      Permission::Create,
-      None,
-      Some(&mut lazy_params),
-      user.as_ref(),
-    )
-    .await?;
+  api.check_record_level_access(
+    Permission::Create,
+    None,
+    Some(&mut lazy_params),
+    user.as_ref(),
+  )?;
 
   let Ok(mut params) = lazy_params.consume() else {
     return Err(RecordError::BadRequest("Parameter conversion"));

@@ -74,27 +74,24 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
   }
 
   // Logs cleaner.
-  // let logs_conn = app_state.logs_conn().clone();
-  // let retention = app_state
-  //   .access_config(|c| c.server.logs_retention_sec)
-  //   .map_or(LOGS_RETENTION_DEFAULT, Duration::seconds);
-  //
-  // if !retention.is_zero() {
-  //   tasks.add_periodic_task(Duration::hours(2), move || {
-  //     let logs_conn = logs_conn.clone();
-  //
-  //     tokio::spawn(async move {
-  //       let timestamp = (Utc::now() - retention).timestamp();
-  //       match logs_conn
-  //         .execute("DELETE FROM _logs WHERE created < $1", params!(timestamp))
-  //         .await
-  //       {
-  //         Ok(_) => info!("Successfully pruned logs"),
-  //         Err(err) => warn!("Failed to clean up old logs: {err}"),
-  //       };
-  //     })
-  //   });
-  // }
+  let logs_conn = app_state.logs_conn().clone();
+  let retention = app_state
+    .access_config(|c| c.server.logs_retention_sec)
+    .map_or(LOGS_RETENTION_DEFAULT, Duration::seconds);
+
+  if !retention.is_zero() {
+    tasks.add_periodic_task(Duration::hours(2), move || {
+      let logs_conn = logs_conn.clone();
+
+      tokio::spawn(async move {
+        let timestamp = (Utc::now() - retention).timestamp();
+        match logs_conn.execute("DELETE FROM _logs WHERE created < $1", params!(timestamp)) {
+          Ok(_) => info!("Successfully pruned logs"),
+          Err(err) => warn!("Failed to clean up old logs: {err}"),
+        };
+      })
+    });
+  }
 
   // Refresh token cleaner.
   let state = app_state.clone();
@@ -108,14 +105,10 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
 
       let timestamp = (Utc::now() - refresh_token_ttl).timestamp();
 
-      match state
-        .user_conn()
-        .execute(
-          &format!("DELETE FROM '{SESSION_TABLE}' WHERE updated < $1"),
-          params!(timestamp),
-        )
-        .await
-      {
+      match state.user_conn().execute(
+        &format!("DELETE FROM '{SESSION_TABLE}' WHERE updated < $1"),
+        params!(timestamp),
+      ) {
         Ok(count) => info!("Successfully pruned {count} old sessions."),
         Err(err) => warn!("Failed to clean up sessions: {err}"),
       };
@@ -128,7 +121,7 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
     let conn = conn.clone();
 
     tokio::spawn(async move {
-      match conn.execute("PRAGMA optimize", ()).await {
+      match conn.execute("PRAGMA optimize", ()) {
         Ok(_) => info!("Successfully ran query optimizer"),
         Err(err) => warn!("query optimizer failed: {err}"),
       };

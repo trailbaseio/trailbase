@@ -67,7 +67,7 @@ impl QueryApi {
     return &self.state.params;
   }
 
-  pub(crate) async fn check_api_access(
+  pub(crate) fn check_api_access(
     &self,
     query_params: &[(String, tokio_rusqlite::Value)],
     user: Option<&User>,
@@ -120,25 +120,24 @@ impl QueryApi {
             }),
           ));
 
-          let row = match crate::util::query_one_row(&self.state.conn, &access_query, params).await
-          {
-            Ok(row) => row,
+          let allowed = match self.state.conn.query_row_map(&access_query, params, |row| {
+            row
+              .get::<_, bool>(0)
+              .map_err(tokio_rusqlite::Error::Rusqlite)
+          }) {
+            Ok(Some(allowed)) => allowed,
+            Ok(None) => {
+              if cfg!(test) {
+                panic!("Query API access query returned NULL. Failing closed: '{access_query}'");
+              }
+              warn!("RLA query returned NULL. Failing closed: '{access_query}'");
+              break 'acl;
+            }
             Err(err) => {
               error!("Query API access query: '{access_query}' failed: {err}");
               break 'acl;
             }
           };
-
-          let allowed: bool = row.get(0).unwrap_or_else(|err| {
-            if cfg!(test) {
-              panic!(
-                "Query API access query returned NULL. Failing closed: '{access_query}'\n{err}"
-              );
-            }
-
-            warn!("RLA query returned NULL. Failing closed: '{access_query}'\n{err}");
-            false
-          });
 
           if allowed {
             return Ok(());

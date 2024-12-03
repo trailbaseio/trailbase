@@ -221,17 +221,14 @@ pub(crate) async fn callback_from_external_auth_provider(
         );
       }
 
-      let rows_affected = state
-        .user_conn()
-        .execute(
-          &QUERY,
-          named_params! {
-            ":authorization_code": authorization_code.clone(),
-            ":pkce_code_challenge": oauth_state.user_pkce_code_challenge,
-            ":user_id": db_user.id,
-          },
-        )
-        .await?;
+      let rows_affected = state.user_conn().execute(
+        &QUERY,
+        named_params! {
+          ":authorization_code": authorization_code.clone(),
+          ":pkce_code_challenge": oauth_state.user_pkce_code_challenge,
+          ":user_id": db_user.id,
+        },
+      )?;
 
       match rows_affected {
         0 => return Err(AuthError::BadRequest("invalid user")),
@@ -282,8 +279,7 @@ async fn create_user_for_external_provider(
         ":email": user.email.clone(),
         ":avatar": user.avatar.clone(),
     },
-  )
-  .await?;
+  )?;
 
   return Ok(uuid::Uuid::from_bytes(
     row
@@ -307,7 +303,6 @@ async fn user_by_provider_id(
       &QUERY,
       params!(provider_id as i64, provider_user_id.to_string()),
     )
-    .await
     .map_err(|err| AuthError::Internal(err.into()))?
     .ok_or_else(|| AuthError::NotFound);
 }

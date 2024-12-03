@@ -101,17 +101,14 @@ impl IntoResponse for AuthError {
 mod tests {
   use axum::http::StatusCode;
   use axum::response::IntoResponse;
-  use std::sync::Arc;
 
   use crate::auth::AuthError;
 
   #[tokio::test]
   async fn test_some_sqlite_errors_yield_client_errors() {
-    let conn = tokio_rusqlite::Connection::from_conn(Arc::new(|| {
+    let conn = tokio_rusqlite::Connection::from_conn(|| {
       trailbase_sqlite::connect_sqlite(None, None).unwrap()
-    }))
-    .await
-    .unwrap();
+    });
 
     conn
       .execute(
@@ -121,12 +118,10 @@ mod tests {
     );"#,
         (),
       )
-      .await
       .unwrap();
 
     conn
       .execute("INSERT INTO test_table (id, data) VALUES (0, 'first');", ())
-      .await
       .unwrap();
 
     let sqlite_err = conn
@@ -134,7 +129,6 @@ mod tests {
         "INSERT INTO test_table (id, data) VALUES (0, 'second');",
         (),
       )
-      .await
       .err()
       .unwrap();
 

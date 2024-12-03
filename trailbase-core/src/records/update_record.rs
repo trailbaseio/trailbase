@@ -38,14 +38,12 @@ pub async fn update_record_handler(
   };
 
   let mut lazy_params = LazyParams::new(table_metadata, request, multipart_files);
-  api
-    .check_record_level_access(
-      Permission::Update,
-      Some(&record_id),
-      Some(&mut lazy_params),
-      user.as_ref(),
-    )
-    .await?;
+  api.check_record_level_access(
+    Permission::Update,
+    Some(&record_id),
+    Some(&mut lazy_params),
+    user.as_ref(),
+  )?;
 
   UpdateQueryBuilder::run(
     &state,
@@ -173,8 +171,7 @@ mod test {
         conn,
         "SELECT data FROM message WHERE id = $1",
         params!(b64_to_id(&b64_id)?),
-      )
-      .await?
+      )?
       .get(0)?;
       assert_eq!(updated_message_text, message_text);
     }

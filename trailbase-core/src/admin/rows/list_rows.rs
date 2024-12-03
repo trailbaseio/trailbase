@@ -59,8 +59,7 @@ pub async fn list_rows_handler(
       state.conn(),
       &count_query,
       filter_where_clause.params.clone(),
-    )
-    .await?;
+    )?;
 
     row.get::<i64>(0)?
   };
@@ -77,8 +76,7 @@ pub async fn list_rows_handler(
       offset,
       limit: limit_or_default(limit),
     },
-  )
-  .await?;
+  )?;
 
   let next_cursor = cursor_column.and_then(|(col_idx, _col)| {
     let row = rows.last()?;
@@ -115,7 +113,7 @@ struct Pagination<'a> {
   limit: usize,
 }
 
-async fn fetch_rows(
+fn fetch_rows(
   conn: &tokio_rusqlite::Connection,
   table_or_view_name: &str,
   filter_where_clause: WhereClause,
@@ -177,7 +175,7 @@ async fn fetch_rows(
     "#,
   );
 
-  let result_rows = conn.query(&query, params).await.map_err(|err| {
+  let result_rows = conn.query(&query, params).map_err(|err| {
     #[cfg(debug_assertions)]
     error!("QUERY: {query}\n\t=> {err}");
 

@@ -163,7 +163,7 @@ mod tests {
     );
     let _ = create_table_handler(State(state.clone()), Json(create_table_request.clone())).await?;
 
-    conn.query(&format!("SELECT {pk_col} FROM foo"), ()).await?;
+    conn.query(&format!("SELECT {pk_col} FROM foo"), ())?;
 
     {
       // Noop: source and target identical.
@@ -176,7 +176,7 @@ mod tests {
         .await
         .unwrap();
 
-      conn.query(&format!("SELECT {pk_col} FROM foo"), ()).await?;
+      conn.query(&format!("SELECT {pk_col} FROM foo"), ())?;
     }
 
     {
@@ -203,9 +203,7 @@ mod tests {
         .await
         .unwrap();
 
-      conn
-        .query(&format!("SELECT {pk_col}, new FROM foo"), ())
-        .await?;
+      conn.query(&format!("SELECT {pk_col}, new FROM foo"), ())?;
     }
 
     {
@@ -225,8 +223,8 @@ mod tests {
         .await
         .unwrap();
 
-      assert!(conn.query("SELECT * FROM foo", ()).await.is_err());
-      conn.query(&format!("SELECT {pk_col} FROM bar"), ()).await?;
+      assert!(conn.query("SELECT * FROM foo", ()).is_err());
+      conn.query(&format!("SELECT {pk_col} FROM bar"), ())?;
     }
 
     return Ok(());

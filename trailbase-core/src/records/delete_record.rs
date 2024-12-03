@@ -32,9 +32,7 @@ pub async fn delete_record_handler(
 
   let record_id = api.id_to_sql(&record)?;
 
-  api
-    .check_record_level_access(Permission::Delete, Some(&record_id), None, user.as_ref())
-    .await?;
+  api.check_record_level_access(Permission::Delete, Some(&record_id), None, user.as_ref())?;
 
   DeleteQueryBuilder::run(
     &state,
@@ -144,8 +142,7 @@ mod test {
       conn,
       "SELECT COUNT(*) FROM message WHERE id = $1",
       params!(*id),
-    )
-    .await?
+    )?
     .get(0)?;
     return Ok(count > 0);
   }

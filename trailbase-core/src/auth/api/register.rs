@@ -96,7 +96,6 @@ pub async fn register_user_handler(
         ":email_verification_code": email_verification_code.clone(),
       },
     )
-    .await
     .map_err(|_err| {
       #[cfg(debug_assertions)]
       log::debug!("Failed to create user {normalized_email}: {_err}");

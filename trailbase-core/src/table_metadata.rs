@@ -450,8 +450,8 @@ pub struct TableMetadataCache {
 
 impl TableMetadataCache {
   pub async fn new(conn: tokio_rusqlite::Connection) -> Result<Self, TableLookupError> {
-    let (table_map, tables) = Self::build_tables(&conn).await?;
-    let views = Self::build_views(&conn, &tables).await?;
+    let (table_map, tables) = Self::build_tables(&conn)?;
+    let views = Self::build_views(&conn, &tables)?;
 
     return Ok(TableMetadataCache {
       state: Arc::new(TableMetadataCacheState {
@@ -462,10 +462,10 @@ impl TableMetadataCache {
     });
   }
 
-  async fn build_tables(
+  fn build_tables(
     conn: &tokio_rusqlite::Connection,
   ) -> Result<(HashMap<String, Arc<TableMetadata>>, Vec<Table>), TableLookupError> {
-    let tables = lookup_and_parse_all_table_schemas(conn).await?;
+    let tables = lookup_and_parse_all_table_schemas(conn)?;
     let build = |table: &Table| {
       (
         table.name.clone(),
@@ -476,11 +476,11 @@ impl TableMetadataCache {
     return Ok((tables.iter().map(build).collect(), tables));
   }
 
-  async fn build_views(
+  fn build_views(
     conn: &tokio_rusqlite::Connection,
     tables: &[Table],
   ) -> Result<HashMap<String, Arc<ViewMetadata>>, TableLookupError> {
-    let views = lookup_and_parse_all_view_schemas(conn, tables).await?;
+    let views = lookup_and_parse_all_view_schemas(conn, tables)?;
     let build = |view: View| {
       // NOTE: we check during record API config validation that no temporary views are referenced.
       // if view.temporary {
@@ -503,9 +503,9 @@ impl TableMetadataCache {
 
   pub async fn invalidate_all(&self) -> Result<(), TableLookupError> {
     debug!("Rebuilding TableMetadataCache");
-    let (table_map, tables) = Self::build_tables(&self.state.conn).await?;
+    let (table_map, tables) = Self::build_tables(&self.state.conn)?;
     *self.state.tables.write() = table_map;
-    *self.state.views.write() = Self::build_views(&self.state.conn, &tables).await?;
+    *self.state.views.write() = Self::build_views(&self.state.conn, &tables)?;
     Ok(())
   }
 }
@@ -533,7 +533,7 @@ pub enum TableLookupError {
   SqlParse(#[from] sqlite3_parser::lexer::sql::Error),
 }
 
-pub async fn lookup_and_parse_table_schema(
+pub fn lookup_and_parse_table_schema(
   conn: &tokio_rusqlite::Connection,
   table_name: &str,
 ) -> Result<Table, TableLookupError> {
@@ -542,8 +542,7 @@ pub async fn lookup_and_parse_table_schema(
     conn,
     &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1"),
     params!(table_name.to_string()),
-  )
-  .await?
+  )?
   .get(0)?;
 
   let Some(stmt) = sqlite3_parse_into_statement(&sql)? else {
@@ -614,16 +613,14 @@ pub(crate) fn sqlite3_parse_into_statement(
   };
 }
 
-pub async fn lookup_and_parse_all_table_schemas(
+pub fn lookup_and_parse_all_table_schemas(
   conn: &tokio_rusqlite::Connection,
 ) -> Result<Vec<Table>, TableLookupError> {
   // Then get the actual table.
-  let rows = conn
-    .query(
-      &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table'"),
-      (),
-    )
-    .await?;
+  let rows = conn.query(
+    &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table'"),
+    (),
+  )?;
 
   let mut tables: Vec<Table> = vec![];
   for row in rows.iter() {
@@ -651,17 +648,15 @@ fn sqlite3_parse_view(sql: &str, tables: &[Table]) -> Result<View, TableLookupEr
   }
 }
 
-pub async fn lookup_and_parse_all_view_schemas(
+pub fn lookup_and_parse_all_view_schemas(
   conn: &tokio_rusqlite::Connection,
   tables: &[Table],
 ) -> Result<Vec<View>, TableLookupError> {
   // Then get the actual table.
-  let rows = conn
-    .query(
-      &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'view'"),
-      (),
-    )
-    .await?;
+  let rows = conn.query(
+    &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'view'"),
+    (),
+  )?;
 
   let mut views: Vec<View> = vec![];
   for row in rows.iter() {
@@ -895,19 +890,16 @@ mod tests {
         ),
         (),
       )
-      .await
       .unwrap();
 
     let insert = |col: &'static str, json: serde_json::Value| async move {
-      conn
-        .execute(
-          &format!(
-            "INSERT INTO test_table ({col}) VALUES ('{}')",
-            json.to_string()
-          ),
-          (),
-        )
-        .await
+      conn.execute(
+        &format!(
+          "INSERT INTO test_table ({col}) VALUES ('{}')",
+          json.to_string()
+        ),
+        (),
+      )
     };
 
     assert!(insert("col2", json!({"name": 42})).await.unwrap() > 0);
@@ -967,7 +959,6 @@ mod tests {
 
     let cnt: i64 = conn
       .query_row("SELECT COUNT(*) FROM test_table", ())
-      .await
       .unwrap()
       .unwrap()
       .get(0)
@@ -975,9 +966,7 @@ mod tests {
 
     assert_eq!(cnt, 4);
 
-    let table = lookup_and_parse_table_schema(conn, "test_table")
-      .await
-      .unwrap();
+    let table = lookup_and_parse_table_schema(conn, "test_table").unwrap();
     let col = table.columns.first().unwrap();
     let check_expr = col
       .options

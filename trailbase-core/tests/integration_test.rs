@@ -178,9 +178,8 @@ pub async fn create_chat_message_app_tables(
   conn: &tokio_rusqlite::Connection,
 ) -> Result<(), anyhow::Error> {
   // Create a messages, chat room and members tables.
-  conn
-    .execute_batch(
-      r#"
+  conn.execute_batch(
+    r#"
           CREATE TABLE room (
             id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
             name         TEXT
@@ -206,8 +205,7 @@ pub async fn create_chat_message_app_tables(
             FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
           ) STRICT;
         "#,
-    )
-    .await?;
+  )?;
 
   return Ok(());
 }
@@ -220,8 +218,7 @@ pub async fn add_room(
     .query_row(
       "INSERT INTO room (name) VALUES ($1) RETURNING id",
       params!(name.to_string()),
-    )
-    .await?
+    )?
     .unwrap()
     .get(0)?;
 
@@ -233,12 +230,10 @@ pub async fn add_user_to_room(
   user: [u8; 16],
   room: [u8; 16],
 ) -> Result<(), anyhow::Error> {
-  conn
-    .execute(
-      "INSERT INTO room_members (user, room) VALUES ($1, $2)",
-      params!(user, room),
-    )
-    .await?;
+  conn.execute(
+    "INSERT INTO room_members (user, room) VALUES ($1, $2)",
+    params!(user, room),
+  )?;
   return Ok(());
 }
 

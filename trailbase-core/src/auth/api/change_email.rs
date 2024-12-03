@@ -99,18 +99,15 @@ pub async fn change_email_request_handler(
     );
   }
 
-  let rows_affected = state
-    .user_conn()
-    .execute(
-      &QUERY,
-      named_params! {
-        ":new_email": request.new_email,
-        ":old_email": request.old_email,
-        ":email_verification_code": email_verification_code.clone(),
-        ":user_id": user.uuid.into_bytes().to_vec(),
-      },
-    )
-    .await?;
+  let rows_affected = state.user_conn().execute(
+    &QUERY,
+    named_params! {
+      ":new_email": request.new_email,
+      ":old_email": request.old_email,
+      ":email_verification_code": email_verification_code.clone(),
+      ":user_id": user.uuid.into_bytes().to_vec(),
+    },
+  )?;
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("failed to change email")),
@@ -184,16 +181,13 @@ pub async fn change_email_confirm_handler(
     );
   }
 
-  let rows_affected = state
-    .user_conn()
-    .execute(
-      &QUERY,
-      named_params! {
-        ":new_email": new_email,
-        ":email_verification_code": email_verification_code,
-      },
-    )
-    .await?;
+  let rows_affected = state.user_conn().execute(
+    &QUERY,
+    named_params! {
+      ":new_email": new_email,
+      ":email_verification_code": email_verification_code,
+    },
+  )?;
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid verification code")),

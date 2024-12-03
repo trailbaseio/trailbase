@@ -59,7 +59,6 @@ mod tests {
         &format!("DELETE FROM '{USER_TABLE}' WHERE id = $1"),
         (user.get_id().as_bytes().to_vec(),),
       )
-      .await
       .unwrap();
 
     assert!(user_by_email(&state, email).await.is_err());

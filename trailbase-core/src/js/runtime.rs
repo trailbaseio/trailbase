@@ -357,7 +357,6 @@ impl RuntimeSingleton {
 
         let rows = conn
           .query(&query, params)
-          .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
         let (values, _columns) = rows_to_json_arrays(rows, usize::MAX)
@@ -386,7 +385,6 @@ impl RuntimeSingleton {
 
         let rows_affected = conn
           .execute(&query, params)
-          .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
         return Ok(serde_json::Value::Number(rows_affected.into()));
@@ -842,14 +840,12 @@ mod tests {
   }
 
   async fn test_javascript_query() {
-    let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
+    let conn = tokio_rusqlite::Connection::open_in_memory();
     conn
       .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
-      .await
       .unwrap();
     conn
       .execute("INSERT INTO test (v0, v1) VALUES ('0', 0), ('1', 1);", ())
-      .await
       .unwrap();
 
     let handle = RuntimeHandle::new();
@@ -891,10 +887,9 @@ mod tests {
   }
 
   async fn test_javascript_execute() {
-    let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
+    let conn = tokio_rusqlite::Connection::open_in_memory();
     conn
       .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
-      .await
       .unwrap();
 
     let handle = RuntimeHandle::new();
@@ -922,7 +917,6 @@ mod tests {
 
     let row = conn
       .query_row("SELECT COUNT(*) FROM test", ())
-      .await
       .unwrap()
       .unwrap();
     let count: i64 = row.get(0).unwrap();

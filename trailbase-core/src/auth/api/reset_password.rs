@@ -78,13 +78,10 @@ pub async fn reset_password_request_handler(
     );
   }
 
-  let rows_affected = state
-    .user_conn()
-    .execute(
-      &UPDATE_CODE_QUERY,
-      params!(password_reset_code.clone(), user.id),
-    )
-    .await?;
+  let rows_affected = state.user_conn().execute(
+    &UPDATE_CODE_QUERY,
+    params!(password_reset_code.clone(), user.id),
+  )?;
 
   return match rows_affected {
     0 => Err(AuthError::Conflict),
@@ -151,13 +148,10 @@ pub async fn reset_password_update_handler(
     );
   }
 
-  let rows_affected = state
-    .user_conn()
-    .execute(
-      &UPDATE_PASSWORD_QUERY,
-      params!(hashed_password, password_reset_code),
-    )
-    .await?;
+  let rows_affected = state.user_conn().execute(
+    &UPDATE_PASSWORD_QUERY,
+    params!(hashed_password, password_reset_code),
+  )?;
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid reset code.")),
@@ -184,8 +178,7 @@ pub async fn force_password_reset(
     user_conn,
     &UPDATE_PASSWORD_QUERY,
     params!(hashed_password, email),
-  )
-  .await?
+  )?
   .get(0)
   .map_err(|_err| AuthError::NotFound)?;
 

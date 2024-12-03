@@ -1,4 +1,5 @@
 use log::*;
+use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
@@ -57,32 +58,37 @@ pub async fn init_app_state(
   data_dir.ensure_directory_structure().await?;
 
   // Then open or init new databases.
-  // let logs_conn = {
-  //   let data_dir = data_dir.clone();
-  //   let f = Arc::new(move || {
-  //     let mut conn = init_logs_db(&data_dir).unwrap();
-  //     apply_logs_migrations(&mut conn).unwrap();
-  //     conn
-  //   });
-  //   tokio_rusqlite::Connection::from_conn(f).await?
-  // };
+  let logs_conn = {
+    let data_dir = data_dir.clone();
+    let f = move || {
+      let mut conn = init_logs_db(&data_dir).unwrap();
+      apply_logs_migrations(&mut conn).unwrap();
+      conn
+    };
+    tokio_rusqlite::Connection::from_conn(f)
+  };
 
   // Open or init the main db. Note that we derive whether a new DB was initialized based on
   // whether the V1 migration had to be applied. Should be fairly robust.
-  let (conn2, new_db) = {
+  let (conn, new_db) = {
     let data_dir = data_dir.clone();
-    let f = Arc::new(move || {
+    let new_db = Arc::new(Mutex::new(false));
+    let new_db_clone = new_db.clone();
+    let f = move || {
       let mut conn = trailbase_sqlite::connect_sqlite(Some(data_dir.main_db_path()), None).unwrap();
-      let _new_db = apply_main_migrations(&mut conn, Some(data_dir.migrations_path())).unwrap();
+      *new_db_clone.lock() =
+        apply_main_migrations(&mut conn, Some(data_dir.migrations_path())).unwrap();
 
       return conn;
-    });
+    };
 
-    // FIXME: new db is not passed
-    (tokio_rusqlite::Connection::from_conn(f).await?, false)
+    let conn = tokio_rusqlite::Connection::from_conn(f);
+    let new_db = conn.call(move |_conn| Ok(*new_db.lock()))?;
+
+    (conn, new_db)
   };
 
-  let table_metadata = TableMetadataCache::new(conn2.clone()).await?;
+  let table_metadata = TableMetadataCache::new(conn.clone()).await?;
 
   // Read config or write default one.
   let config = load_or_init_config_textproto(&data_dir, &table_metadata).await?;
@@ -136,8 +142,8 @@ pub async fn init_app_state(
     dev: args.dev,
     table_metadata,
     config,
-    conn2,
-    // logs_conn,
+    conn,
+    logs_conn,
     jwt,
     object_store,
     js_runtime_threads: args.js_runtime_threads,
@@ -148,29 +154,25 @@ pub async fn init_app_state(
       app_state.user_conn(),
       &format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE admin = TRUE"),
       (),
-    )
-    .await?
+    )?
     .get(0)?;
 
     if num_admins == 0 {
       let email = "admin@localhost".to_string();
       let password = generate_random_string(20);
 
-      app_state
-        .user_conn()
-        .execute(
-          &format!(
-            r#"
+      app_state.user_conn().execute(
+        &format!(
+          r#"
         INSERT INTO {USER_TABLE}
           (email, password_hash, verified, admin)
         VALUES
           ('{email}', (hash_password('{password}')), TRUE, TRUE);
         INSERT INTO
         "#
-          ),
-          (),
-        )
-        .await?;
+        ),
+        (),
+      )?;
 
       info!(
         "{}",

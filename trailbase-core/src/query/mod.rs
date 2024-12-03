@@ -92,23 +92,20 @@ pub async fn query_handler(
     return Err(E::BadRequest("invalid query param"));
   }
 
-  api.check_api_access(&params, user.as_ref()).await?;
+  api.check_api_access(&params, user.as_ref())?;
 
   const LIMIT: usize = 128;
-  let response_rows = state
-    .conn()
-    .query(
-      &format!(
-        "SELECT * FROM {virtual_table_name}({placeholders}) WHERE TRUE LIMIT {LIMIT}",
-        placeholders = params
-          .iter()
-          .map(|e| e.0.as_str())
-          .collect::<Vec<_>>()
-          .join(", ")
-      ),
-      params,
-    )
-    .await?;
+  let response_rows = state.conn().query(
+    &format!(
+      "SELECT * FROM {virtual_table_name}({placeholders}) WHERE TRUE LIMIT {LIMIT}",
+      placeholders = params
+        .iter()
+        .map(|e| e.0.as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
+    ),
+    params,
+  )?;
 
   let (json_rows, columns) =
     rows_to_json_arrays(response_rows, LIMIT).map_err(|err| E::Internal(err.into()))?;
@@ -156,7 +153,6 @@ mod test {
         "CREATE VIRTUAL TABLE test_vtable USING define((SELECT $1 AS value))",
         (),
       )
-      .await
       .unwrap();
 
     let mut config = state.get_config();

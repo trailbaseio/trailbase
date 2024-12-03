@@ -105,11 +105,10 @@ pub async fn list_records_handler(
     table_name = api.table_name()
   );
 
-  let rows = state.conn().query(&query, params).await?;
+  let rows = state.conn().query(&query, params)?;
 
   return Ok(Json(serde_json::Value::Array(
     rows_to_json(metadata, rows, |col_name| !col_name.starts_with("_"))
-      .await
       .map_err(|err| RecordError::Internal(err.into()))?,
   )));
 }
