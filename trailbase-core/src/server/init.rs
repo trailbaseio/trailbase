@@ -94,7 +94,7 @@ pub async fn init_app_state(
   let config = load_or_init_config_textproto(&data_dir, &table_metadata).await?;
 
   debug!("Initializing JSON schemas from config");
-  trailbase_sqlite::set_user_schemas(
+  trailbase_sqlite::schema::set_user_schemas(
     config
       .schemas
       .iter()
@@ -126,7 +126,7 @@ pub async fn init_app_state(
 
   // Init geoip if present.
   let geoip_db_path = data_dir.root().join("GeoLite2-Country.mmdb");
-  if let Err(err) = trailbase_sqlite::load_geoip_db(geoip_db_path.clone()) {
+  if let Err(err) = trailbase_sqlite::geoip::load_geoip_db(geoip_db_path.clone()) {
     debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
   }
 

@@ -1,18 +1,9 @@
 #![allow(clippy::needless_return)]
 
+pub mod geoip;
 pub mod schema;
 
-pub use schema::set_user_schemas;
-
 use std::path::PathBuf;
-
-pub fn load_geoip_db(path: PathBuf) -> Result<(), String> {
-  return trailbase_extension::maxminddb::load_geoip_db(path).map_err(|err| err.to_string());
-}
-
-pub fn has_geoip_db() -> bool {
-  return trailbase_extension::maxminddb::has_geoip_db();
-}
 
 #[no_mangle]
 unsafe extern "C" fn init_trailbase_extension(
@@ -23,12 +14,25 @@ unsafe extern "C" fn init_trailbase_extension(
   // Add sqlite-vec extension.
   sqlite_vec::sqlite3_vec_init();
 
+  // Init sqlean's stored procedures: "define", see:
+  //   https://github.com/nalgeon/sqlean/blob/main/docs/define.md
+  let status = sqlean::define_init(db as *mut sqlean::sqlite3);
+  if status != 0 {
+    log::error!("Failed to load sqlean::define",);
+    return status;
+  }
+
   // Add trailbase-extensions.
-  return trailbase_extension::sqlite3_extension_init(
+  let status = trailbase_extension::sqlite3_extension_init(
     db,
     pz_err_msg,
     p_thunk as *mut rusqlite::ffi::sqlite3_api_routines,
   ) as ::std::os::raw::c_int;
+  if status != 0 {
+    log::error!("Failed to load trailbase-extension",);
+  }
+
+  return status;
 }
 
 pub fn connect_sqlite(
@@ -95,7 +99,7 @@ mod test {
   use uuid::Uuid;
 
   #[test]
-  fn test_connect() {
+  fn test_connect_and_extensions() {
     let conn = connect_sqlite(None, None).unwrap();
 
     let row = conn
@@ -107,9 +111,28 @@ mod test {
       .unwrap();
 
     let uuid = Uuid::from_bytes(row);
-
     assert_eq!(uuid.get_version_num(), 7);
-
     assert!(trailbase_extension::jsonschema::get_schema("std.FileUpload").is_some());
+
+    // sqlean: Define a stored procedure, use it, and remove it.
+    conn
+      .query_row("SELECT define('sumn', ':n * (:n + 1) / 2')", (), |_row| {
+        Ok(())
+      })
+      .unwrap();
+
+    let value: i64 = conn
+      .query_row("SELECT sumn(5)", (), |row| row.get(0))
+      .unwrap();
+    assert_eq!(value, 15);
+
+    conn
+      .query_row("SELECT undefine('sumn')", (), |_row| Ok(()))
+      .unwrap();
+
+    // sqlite-vec
+    conn
+      .query_row("SELECT vec_f32('[0, 1, 2, 3]')", (), |_row| Ok(()))
+      .unwrap();
   }
 }

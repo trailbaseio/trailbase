@@ -316,7 +316,7 @@ async fn fetch_aggregate_stats(
     ));
   }
 
-  if trailbase_sqlite::has_geoip_db() {
+  if trailbase_sqlite::geoip::has_geoip_db() {
     let cc_query = format!(
       r#"
     SELECT
