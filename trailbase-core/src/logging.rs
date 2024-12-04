@@ -60,18 +60,16 @@ pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
   let host = get_header(headers, "host").unwrap_or("");
   let user_agent = get_header(headers, "user-agent").unwrap_or("");
   let referer = get_header(headers, "referer").unwrap_or("");
-  let client_ip = InsecureClientIp::from(headers, request.extensions())
-    .map(|ip| ip.0.to_string())
-    .unwrap_or_else(|_| "".to_string());
-  // let extensions = request.extensions().get::<ConnectInfo<SocketAddr>>();
+  let client_ip = InsecureClientIp::from(headers, request.extensions()).map(|ip| ip.0.to_string());
 
+  // NOTE: "%" means print using fmt::Display, and "?" means fmt::Debug.
   let span = tracing::info_span!(
       "request",
       method = %request.method(),
       uri = %request.uri(),
       version = ?request.version(),
       host,
-      client_ip,
+      client_ip = %client_ip.as_ref().map_or("", |s| s.as_str()),
       user_agent,
       referer,
   );
@@ -84,10 +82,12 @@ pub(super) fn sqlite_logger_on_request(_req: &Request<Body>, _span: &Span) {
   // request related information into the span
 }
 
+#[inline]
 fn as_millis_f64(d: &Duration) -> f64 {
   const NANOS_PER_MILLI: f64 = 1_000_000.0;
   const MILLIS_PER_SEC: u64 = 1_000;
-  return d.as_secs_f64() * (MILLIS_PER_SEC as f64) + (d.as_nanos() as f64) / (NANOS_PER_MILLI);
+  return (d.as_secs() as f64) * (MILLIS_PER_SEC as f64)
+    + (d.subsec_nanos() as f64) / (NANOS_PER_MILLI);
 }
 
 pub(super) fn sqlite_logger_on_response(
@@ -95,13 +95,13 @@ pub(super) fn sqlite_logger_on_response(
   latency: Duration,
   _span: &Span,
 ) {
-  let length = get_header(response.headers(), "content-length").unwrap_or("-1");
+  let length = get_header(response.headers(), "content-length");
 
   tracing::info!(
       name: "response",
       latency_ms = as_millis_f64(&latency),
       status = response.status().as_u16(),
-      length = length.parse::<i64>().unwrap(),
+      length = length.and_then(|l| l.parse::<i64>().ok()),
   );
 }
 
@@ -123,32 +123,39 @@ impl SqliteLogLayer {
   // TODO: We could use recv_many() and batch insert.
   fn write_log(&self, log: Log) -> Result<(), trailbase_sqlite::Error> {
     return self.conn.call_and_forget(move |conn| {
-      let result = conn.execute(
+      let mut stmt = match conn.prepare_cached(
         r#"
         INSERT INTO
           _logs (type, level, status, method, url, latency, client_ip, referer, user_agent)
         VALUES
           ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       "#,
-        rusqlite::params!(
-          log.r#type,
-          log.level,
-          log.status,
-          log.method,
-          log.url,
-          log.latency,
-          log.client_ip,
-          log.referer,
-          log.user_agent
-        ),
-      );
+      ) {
+        Ok(stmt) => stmt,
+        Err(err) => {
+          warn!("Logs stmt failed: {err}");
+          return;
+        }
+      };
 
-      if let Err(err) = result {
+      if let Err(err) = stmt.execute(rusqlite::params!(
+        log.r#type,
+        log.level,
+        log.status,
+        log.method,
+        log.url,
+        log.latency,
+        log.client_ip,
+        log.referer,
+        log.user_agent
+      )) {
         warn!("logs writing failed: {err}");
       }
     });
   }
 }
+
+const BUG_TEXT: &str = "Span not found, this is a bug";
 
 impl<S> Layer<S> for SqliteLogLayer
 where
@@ -156,11 +163,7 @@ where
   S: for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
 {
   fn on_new_span(&self, attrs: &Attributes<'_>, id: &Id, ctx: Context<'_, S>) {
-    let span = ctx.span(id).unwrap();
-
-    // let mut fields = BTreeMap::new();
-    // attrs.record(&mut JsonVisitor(&mut fields));
-    // span.extensions_mut().insert(CustomFieldStorage(fields));
+    let span = ctx.span(id).expect(BUG_TEXT);
 
     let mut storage = LogFieldStorage::default();
     attrs.record(&mut LogJsonVisitor(&mut storage));
@@ -168,44 +171,23 @@ where
   }
 
   fn on_record(&self, id: &Id, values: &Record<'_>, ctx: Context<'_, S>) {
-    // Get a mutable reference to the data we created in new_span
-    let span = ctx.span(id).unwrap();
-    let mut extensions_mut = span.extensions_mut();
+    let span = ctx.span(id).expect(BUG_TEXT);
 
-    // And add to using our old friend the visitor!
-    // let custom_field_storage = extensions_mut.get_mut::<CustomFieldStorage>().unwrap();
-    // values.record(&mut JsonVisitor(&mut custom_field_storage.0));
-
-    let log_field_storage = extensions_mut.get_mut::<LogFieldStorage>().unwrap();
-    values.record(&mut LogJsonVisitor(log_field_storage));
+    let mut extensions = span.extensions_mut();
+    if let Some(storage) = extensions.get_mut::<LogFieldStorage>() {
+      values.record(&mut LogJsonVisitor(storage));
+    }
   }
 
   fn on_event(&self, event: &tracing::Event<'_>, ctx: Context<'_, S>) {
-    let mut request_storage: Option<LogFieldStorage> = None;
+    let Some(span) = ctx.event_span(event) else {
+      return;
+    };
 
-    let scope = ctx.event_scope(event).unwrap();
-    for span in scope.from_root() {
-      // TODO: we should be merging here to account for multiple spans. Maybe we should have a json
-      // span representation in the data field.
-      let extensions = span.extensions();
-      if let Some(storage) = extensions.get::<LogFieldStorage>() {
-        request_storage = Some(storage.clone());
-      }
-    }
+    let mut extensions = span.extensions_mut();
+    if let Some(s) = extensions.get_mut::<LogFieldStorage>() {
+      let mut storage = std::mem::take(s);
 
-    // The fields of the event
-    // let mut fields = BTreeMap::new();
-    // event.record(&mut JsonVisitor(&mut fields));
-    // let output = json!({
-    //     "target": event.metadata().target(),
-    //     "name": event.metadata().name(),
-    //     "level": format!("{:?}", event.metadata().level()),
-    //     "fields": fields,
-    //     "spans": spans,
-    // });
-    // println!("{}", serde_json::to_string_pretty(&output).unwrap());
-
-    if let Some(mut storage) = request_storage {
       event.record(&mut LogJsonVisitor(&mut storage));
 
       let log = Log {
@@ -222,7 +204,13 @@ where
         client_ip: storage.client_ip,
         referer: storage.referer,
         user_agent: storage.user_agent,
-        data: Some(json!(storage.fields)),
+        data: {
+          if storage.fields.is_empty() {
+            None
+          } else {
+            Some(json!(storage.fields))
+          }
+        },
       };
 
       if let Err(err) = self.write_log(log) {
@@ -259,77 +247,69 @@ struct LogFieldStorage {
   length: i64,
 
   // All other fields.
-  fields: BTreeMap<String, serde_json::Value>,
+  fields: BTreeMap<&'static str, serde_json::Value>,
 }
 
 struct LogJsonVisitor<'a>(&'a mut LogFieldStorage);
 
 impl tracing::field::Visit for LogJsonVisitor<'_> {
   fn record_f64(&mut self, field: &Field, double: f64) {
-    let name = field.name();
-    match name {
+    match field.name() {
       "latency_ms" => self.0.latency_ms = double,
-      _ => {
-        self.0.fields.insert(name.to_string(), json!(double));
+      name => {
+        self.0.fields.insert(name, json!(double));
       }
     };
   }
 
   fn record_i64(&mut self, field: &Field, int: i64) {
-    let name = field.name();
-    match name {
+    match field.name() {
       "length" => self.0.length = int,
-      _ => {
-        self.0.fields.insert(name.to_string(), json!(int));
+      name => {
+        self.0.fields.insert(name, json!(int));
       }
     };
   }
 
   fn record_u64(&mut self, field: &Field, uint: u64) {
-    let name = field.name();
-    match name {
+    match field.name() {
       "status" => self.0.status = uint,
-      _ => {
-        self.0.fields.insert(name.to_string(), json!(uint));
+      name => {
+        self.0.fields.insert(name, json!(uint));
       }
     };
   }
 
   fn record_bool(&mut self, field: &Field, b: bool) {
-    self.0.fields.insert(field.name().to_string(), json!(b));
+    self.0.fields.insert(field.name(), json!(b));
   }
 
   fn record_str(&mut self, field: &Field, s: &str) {
-    let name: &str = field.name();
-    match name {
+    match field.name() {
       "client_ip" => self.0.client_ip = s.to_string(),
       "host" => self.0.host = s.to_string(),
       "referer" => self.0.referer = s.to_string(),
       "user_agent" => self.0.user_agent = s.to_string(),
       name => {
-        self.0.fields.insert(name.to_string(), json!(s));
+        self.0.fields.insert(name, json!(s));
       }
     };
   }
 
   fn record_debug(&mut self, field: &Field, dbg: &dyn std::fmt::Debug) {
-    let name = field.name();
     let v = format!("{:?}", dbg);
-    match name {
+    match field.name() {
       "method" => self.0.method = v,
       "uri" => self.0.uri = v,
       "version" => self.0.version = v,
       name => {
-        self.0.fields.insert(name.to_string(), json!(v));
+        self.0.fields.insert(name, json!(v));
       }
     };
   }
 
   fn record_error(&mut self, field: &Field, err: &(dyn std::error::Error + 'static)) {
-    self
-      .0
-      .fields
-      .insert(field.name().to_string(), json!(err.to_string()));
+    self.0.fields.insert(field.name(), json!(err.to_string()));
   }
 }
 
