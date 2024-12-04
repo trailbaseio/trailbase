@@ -16,7 +16,7 @@ addRoute(
     return await query(
       `SELECT Owner, Aroma, Flavor, Acidity, Sweetness
          FROM coffee
-         ORDER BY vector_distance_cos(
+         ORDER BY vec_distance_L2(
            embedding, '[${aroma}, ${flavor}, ${acid}, ${sweet}]')
          LIMIT 100`,
       [],

@@ -73,7 +73,7 @@ Because `trail` starts for the first time the migrations in
 `traildepot/migrations` will be applied, which are essentially:
 
 ```sql
-UPDATE coffee SET embedding = VECTOR(FORMAT("[%f, %f, %f, %f]", Aroma, Flavor, Acidity, Sweetness));
+UPDATE coffee SET embedding = vec_f32(FORMAT("[%f, %f, %f, %f]", Aroma, Flavor, Acidity, Sweetness));
 ```
 
 initializing the previously skipped `coffee.embedding` for all records.
