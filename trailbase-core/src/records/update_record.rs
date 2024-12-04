@@ -65,7 +65,7 @@ pub async fn update_record_handler(
 #[cfg(test)]
 mod test {
   use axum::extract::Query;
-  use tokio_rusqlite::params;
+  use trailbase_sqlite::params;
 
   use super::*;
   use crate::admin::user::*;

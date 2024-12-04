@@ -148,7 +148,7 @@ export function Duration100kInsertsChartMoreResults() {
 
 export function PocketBaseAndTrailBaseReadLatencies() {
   // 2024-10-12
-  // Read 1000000 messages, took 0:00:57.952120 (limit=64)
+  // TB: Read 1 000 000 messages, took 0:00:57.952120 (limit=64)
   const readTrailbaseMicroS = {
     p50: 3504,
     p75: 3947,
@@ -157,7 +157,7 @@ export function PocketBaseAndTrailBaseReadLatencies() {
   };
 
   // 2024-10-12
-  // Read 100000 messages, took 0:00:20.273054 (limit=64)
+  // PB: Read 100 000 messages, took 0:00:20.273054 (limit=64)
   const readPocketbaseMicroS = {
     p50: 12740,
     p75: 13718,

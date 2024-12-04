@@ -57,14 +57,14 @@ pub(crate) fn assert_uuidv7_version(uuid: &Uuid) {
 pub(crate) fn assert_uuidv7_version(_uuid: &Uuid) {}
 
 pub async fn query_one_row(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   sql: &str,
-  params: impl tokio_rusqlite::Params + Send + 'static,
-) -> Result<tokio_rusqlite::Row, tokio_rusqlite::Error> {
+  params: impl trailbase_sqlite::Params + Send + 'static,
+) -> Result<trailbase_sqlite::Row, trailbase_sqlite::Error> {
   if let Some(row) = conn.query_row(sql, params).await? {
     return Ok(row);
   }
-  return Err(tokio_rusqlite::Error::Rusqlite(
+  return Err(trailbase_sqlite::Error::Rusqlite(
     rusqlite::Error::QueryReturnedNoRows,
   ));
 }

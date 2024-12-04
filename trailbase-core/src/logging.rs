@@ -106,7 +106,7 @@ pub(super) fn sqlite_logger_on_response(
 }
 
 pub struct SqliteLogLayer {
-  conn: tokio_rusqlite::Connection,
+  conn: trailbase_sqlite::Connection,
 }
 
 impl SqliteLogLayer {
@@ -119,9 +119,9 @@ impl SqliteLogLayer {
   // The writer runs in a separate Task in the background and receives Logs via a channel, which it
   // then writes to Sqlite.
   //
-  // TODO: should we use a bound receiver to create back pressure?
-  // TODO: use recv_many() and batch insert.
-  fn write_log(&self, log: Log) -> Result<(), tokio_rusqlite::Error> {
+  // TODO: should we use a bounded receiver to create back-pressure?
+  // TODO: We could use recv_many() and batch insert.
+  fn write_log(&self, log: Log) -> Result<(), trailbase_sqlite::Error> {
     return self.conn.call_and_forget(move |conn| {
       let result = conn.execute(
         r#"

@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 

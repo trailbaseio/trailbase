@@ -5,7 +5,7 @@ use axum::{
 };
 use lazy_static::lazy_static;
 use serde::Deserialize;
-use tokio_rusqlite::params;
+use trailbase_sqlite::params;
 use ts_rs::TS;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -169,7 +169,7 @@ pub async fn reset_password_update_handler(
 }
 
 pub async fn force_password_reset(
-  user_conn: &tokio_rusqlite::Connection,
+  user_conn: &trailbase_sqlite::Connection,
   email: String,
   password: String,
 ) -> Result<Uuid, AuthError> {

@@ -5,8 +5,8 @@ use axum::{
 };
 use chrono::Duration;
 use lazy_static::lazy_static;
-use tokio_rusqlite::params;
 use tower_cookies::Cookies;
+use trailbase_sqlite::params;
 
 use crate::app_state::AppState;
 use crate::auth::jwt::TokenClaims;

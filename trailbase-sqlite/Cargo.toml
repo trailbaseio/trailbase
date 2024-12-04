@@ -5,18 +5,21 @@ edition = "2021"
 license = "OSL-3.0"
 
 [dependencies]
-trailbase-extension = { path = "../trailbase-extension" }
+crossbeam-channel = "0.5.13"
 infer = "0.16.0"
 jsonschema = { version = "0.26.0", default-features = false }
 lazy_static = "1.5.0"
+log = "0.4.22"
 rusqlite = { workspace = true }
 schemars = "0.8.21"
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "1.0.122"
+serde_rusqlite = "0.36.0"
+sqlean = { path = "../vendor/sqlean" }
 sqlite-vec = "0.1.6"
 thiserror = "2.0.1"
-tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs"] }
+tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "sync"] }
+trailbase-extension = { path = "../trailbase-extension" }
 uuid = { version = "^1.8.0", features = ["v4", "serde"] }
-log = "0.4.22"
 
 [dev-dependencies]

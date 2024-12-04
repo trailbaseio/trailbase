@@ -363,7 +363,7 @@ fn recursively_strip_secrets(
       }
       Value::String(field) => {
         if secret {
-          secrets.insert(var_name, field.to_string());
+          secrets.insert(var_name, field.clone());
           msg.clear_field(&field_descr);
         }
       }

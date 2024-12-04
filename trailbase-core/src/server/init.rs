@@ -13,8 +13,8 @@ use crate::table_metadata::TableMetadataCache;
 
 #[derive(Debug, Error)]
 pub enum InitError {
-  #[error("TRusqlite error: {0}")]
-  TokioRusqlite(#[from] tokio_rusqlite::Error),
+  #[error("TB SQLite error: {0}")]
+  Sqlite(#[from] trailbase_sqlite::Error),
   #[error("Rusqlite error: {0}")]
   Rusqlite(#[from] rusqlite::Error),
   #[error("RusqliteFromSql error: {0}")]
@@ -59,25 +59,25 @@ pub async fn init_app_state(
   let logs_conn = {
     let mut conn = init_logs_db(&data_dir)?;
     apply_logs_migrations(&mut conn)?;
-    tokio_rusqlite::Connection::from_conn(conn).await?
+    trailbase_sqlite::Connection::from_conn(conn).await?
   };
 
   // Open or init the main db. Note that we derive whether a new DB was initialized based on
   // whether the V1 migration had to be applied. Should be fairly robust.
-  let (conn2, new_db) = {
+  let (conn, new_db) = {
     let mut conn = trailbase_sqlite::connect_sqlite(Some(data_dir.main_db_path()), None)?;
     let new_db = apply_main_migrations(&mut conn, Some(data_dir.migrations_path()))?;
 
-    (tokio_rusqlite::Connection::from_conn(conn).await?, new_db)
+    (trailbase_sqlite::Connection::from_conn(conn).await?, new_db)
   };
 
-  let table_metadata = TableMetadataCache::new(conn2.clone()).await?;
+  let table_metadata = TableMetadataCache::new(conn.clone()).await?;
 
   // Read config or write default one.
   let config = load_or_init_config_textproto(&data_dir, &table_metadata).await?;
 
   debug!("Initializing JSON schemas from config");
-  trailbase_sqlite::set_user_schemas(
+  trailbase_sqlite::schema::set_user_schemas(
     config
       .schemas
       .iter()
@@ -109,7 +109,7 @@ pub async fn init_app_state(
 
   // Init geoip if present.
   let geoip_db_path = data_dir.root().join("GeoLite2-Country.mmdb");
-  if let Err(err) = trailbase_sqlite::load_geoip_db(geoip_db_path.clone()) {
+  if let Err(err) = trailbase_sqlite::geoip::load_geoip_db(geoip_db_path.clone()) {
     debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
   }
 
@@ -125,7 +125,7 @@ pub async fn init_app_state(
     dev: args.dev,
     table_metadata,
     config,
-    conn2,
+    conn,
     logs_conn,
     jwt,
     object_store,

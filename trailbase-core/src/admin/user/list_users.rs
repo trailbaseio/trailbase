@@ -110,7 +110,7 @@ pub async fn list_users_handler(
 }
 
 async fn fetch_users(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   filter_where_clause: WhereClause,
   cursor: Option<[u8; 16]>,
   order: Vec<(String, Order)>,
@@ -120,13 +120,13 @@ async fn fetch_users(
   let mut where_clause = filter_where_clause.clause;
   params.push((
     ":limit".to_string(),
-    tokio_rusqlite::Value::Integer(limit as i64),
+    trailbase_sqlite::Value::Integer(limit as i64),
   ));
 
   if let Some(cursor) = cursor {
     params.push((
       ":cursor".to_string(),
-      tokio_rusqlite::Value::Blob(cursor.to_vec()),
+      trailbase_sqlite::Value::Blob(cursor.to_vec()),
     ));
     where_clause = format!("{where_clause} AND _row_.id < :cursor",);
   }

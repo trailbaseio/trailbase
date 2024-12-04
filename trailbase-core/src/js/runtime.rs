@@ -72,7 +72,7 @@ enum Message {
 
 struct State {
   sender: async_channel::Sender<Message>,
-  connection: Mutex<Option<tokio_rusqlite::Connection>>,
+  connection: Mutex<Option<trailbase_sqlite::Connection>>,
 }
 
 struct RuntimeSingleton {
@@ -216,7 +216,7 @@ impl RuntimeSingleton {
         }
 
         tokio::select! {
-          result = runtime.await_event_loop(PollEventLoopOptions::default(), Some(std::time::Duration::from_millis(25))), if !completed.is_empty() => {
+          result = runtime.await_event_loop(PollEventLoopOptions::default(), Some(std::time::Duration::from_millis(25))), if !completers.is_empty() => {
             if let Err(err) = result{
               log::error!("JS event loop: {err}");
             }
@@ -344,7 +344,7 @@ impl RuntimeSingleton {
         let query: String = get_arg(&args, 0)?;
         let json_params: Vec<serde_json::Value> = get_arg(&args, 1)?;
 
-        let mut params: Vec<tokio_rusqlite::Value> = vec![];
+        let mut params: Vec<trailbase_sqlite::Value> = vec![];
         for value in json_params {
           params.push(json_value_to_param(value)?);
         }
@@ -373,7 +373,7 @@ impl RuntimeSingleton {
         let query: String = get_arg(&args, 0)?;
         let json_params: Vec<serde_json::Value> = get_arg(&args, 1)?;
 
-        let mut params: Vec<tokio_rusqlite::Value> = vec![];
+        let mut params: Vec<trailbase_sqlite::Value> = vec![];
         for value in json_params {
           params.push(json_value_to_param(value)?);
         }
@@ -412,7 +412,7 @@ pub(crate) struct RuntimeHandle {
 
 impl RuntimeHandle {
   #[cfg(not(test))]
-  pub(crate) fn set_connection(&self, conn: tokio_rusqlite::Connection) {
+  pub(crate) fn set_connection(&self, conn: trailbase_sqlite::Connection) {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
@@ -423,7 +423,7 @@ impl RuntimeHandle {
   }
 
   #[cfg(test)]
-  pub(crate) fn set_connection(&self, conn: tokio_rusqlite::Connection) {
+  pub(crate) fn set_connection(&self, conn: trailbase_sqlite::Connection) {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
@@ -435,7 +435,7 @@ impl RuntimeHandle {
   }
 
   #[cfg(test)]
-  pub(crate) fn override_connection(&self, conn: tokio_rusqlite::Connection) {
+  pub(crate) fn override_connection(&self, conn: trailbase_sqlite::Connection) {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
@@ -484,7 +484,7 @@ impl RuntimeHandle {
 
 pub fn json_value_to_param(
   value: serde_json::Value,
-) -> Result<tokio_rusqlite::Value, rustyscript::Error> {
+) -> Result<trailbase_sqlite::Value, rustyscript::Error> {
   use rustyscript::Error;
   return Ok(match value {
     serde_json::Value::Object(ref _map) => {
@@ -493,16 +493,16 @@ pub fn json_value_to_param(
     serde_json::Value::Array(ref _arr) => {
       return Err(Error::Runtime("Array unsupported".to_string()));
     }
-    serde_json::Value::Null => tokio_rusqlite::Value::Null,
-    serde_json::Value::Bool(b) => tokio_rusqlite::Value::Integer(b as i64),
-    serde_json::Value::String(str) => tokio_rusqlite::Value::Text(str),
+    serde_json::Value::Null => trailbase_sqlite::Value::Null,
+    serde_json::Value::Bool(b) => trailbase_sqlite::Value::Integer(b as i64),
+    serde_json::Value::String(str) => trailbase_sqlite::Value::Text(str),
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
-        tokio_rusqlite::Value::Integer(n)
+        trailbase_sqlite::Value::Integer(n)
       } else if let Some(n) = number.as_u64() {
-        tokio_rusqlite::Value::Integer(n as i64)
+        trailbase_sqlite::Value::Integer(n as i64)
       } else if let Some(n) = number.as_f64() {
-        tokio_rusqlite::Value::Real(n)
+        trailbase_sqlite::Value::Real(n)
       } else {
         return Err(Error::Runtime(format!("invalid number: {number:?}")));
       }
@@ -653,7 +653,7 @@ async fn install_routes(
   module: Module,
 ) -> Result<Option<Router<AppState>>, AnyError> {
   if runtime_handle.runtime.n_threads == 0 {
-    log::error!(
+    log::info!(
       "JS threads set to zero. Skipping initialization for JS module: {:?}",
       module.filename()
     );
@@ -842,7 +842,9 @@ mod tests {
   }
 
   async fn test_javascript_query() {
-    let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
+    let conn = trailbase_sqlite::Connection::open_in_memory()
+      .await
+      .unwrap();
     conn
       .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
       .await
@@ -891,7 +893,9 @@ mod tests {
   }
 
   async fn test_javascript_execute() {
-    let conn = tokio_rusqlite::Connection::open_in_memory().await.unwrap();
+    let conn = trailbase_sqlite::Connection::open_in_memory()
+      .await
+      .unwrap();
     conn
       .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
       .await

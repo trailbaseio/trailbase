@@ -195,14 +195,14 @@ mod test {
     conn
       .execute(
         &format!("INSERT INTO '{USER_TABLE}' (email) VALUES ($1)"),
-        tokio_rusqlite::params!(EMAIL),
+        trailbase_sqlite::params!(EMAIL),
       )
       .await?;
 
     query_one_row(
       conn,
       &format!("SELECT * from '{USER_TABLE}' WHERE email = :email"),
-      tokio_rusqlite::named_params! {
+      trailbase_sqlite::named_params! {
         ":email": EMAIL,
         ":unused": "unused",
         ":foo": 42,

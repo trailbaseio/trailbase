@@ -9,7 +9,7 @@ use sqlite3_parser::ast::Stmt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio_rusqlite::params;
+use trailbase_sqlite::params;
 
 use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
 use crate::schema::{Column, ColumnDataType, ColumnOption, ForeignKey, SchemaError, Table, View};
@@ -438,7 +438,7 @@ fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<u
 }
 
 struct TableMetadataCacheState {
-  conn: tokio_rusqlite::Connection,
+  conn: trailbase_sqlite::Connection,
   tables: parking_lot::RwLock<HashMap<String, Arc<TableMetadata>>>,
   views: parking_lot::RwLock<HashMap<String, Arc<ViewMetadata>>>,
 }
@@ -449,7 +449,7 @@ pub struct TableMetadataCache {
 }
 
 impl TableMetadataCache {
-  pub async fn new(conn: tokio_rusqlite::Connection) -> Result<Self, TableLookupError> {
+  pub async fn new(conn: trailbase_sqlite::Connection) -> Result<Self, TableLookupError> {
     let (table_map, tables) = Self::build_tables(&conn).await?;
     let views = Self::build_views(&conn, &tables).await?;
 
@@ -463,7 +463,7 @@ impl TableMetadataCache {
   }
 
   async fn build_tables(
-    conn: &tokio_rusqlite::Connection,
+    conn: &trailbase_sqlite::Connection,
   ) -> Result<(HashMap<String, Arc<TableMetadata>>, Vec<Table>), TableLookupError> {
     let tables = lookup_and_parse_all_table_schemas(conn).await?;
     let build = |table: &Table| {
@@ -477,7 +477,7 @@ impl TableMetadataCache {
   }
 
   async fn build_views(
-    conn: &tokio_rusqlite::Connection,
+    conn: &trailbase_sqlite::Connection,
     tables: &[Table],
   ) -> Result<HashMap<String, Arc<ViewMetadata>>, TableLookupError> {
     let views = lookup_and_parse_all_view_schemas(conn, tables).await?;
@@ -522,7 +522,7 @@ impl std::fmt::Debug for TableMetadataCache {
 #[derive(Debug, Error)]
 pub enum TableLookupError {
   #[error("SQL2 error: {0}")]
-  Sql(#[from] tokio_rusqlite::Error),
+  Sql(#[from] trailbase_sqlite::Error),
   #[error("SQL3 error: {0}")]
   FromSql(#[from] rusqlite::types::FromSqlError),
   #[error("Schema error: {0}")]
@@ -534,7 +534,7 @@ pub enum TableLookupError {
 }
 
 pub async fn lookup_and_parse_table_schema(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   table_name: &str,
 ) -> Result<Table, TableLookupError> {
   // Then get the actual table.
@@ -615,7 +615,7 @@ pub(crate) fn sqlite3_parse_into_statement(
 }
 
 pub async fn lookup_and_parse_all_table_schemas(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
 ) -> Result<Vec<Table>, TableLookupError> {
   // Then get the actual table.
   let rows = conn
@@ -652,7 +652,7 @@ fn sqlite3_parse_view(sql: &str, tables: &[Table]) -> Result<View, TableLookupEr
 }
 
 pub async fn lookup_and_parse_all_view_schemas(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   tables: &[Table],
 ) -> Result<Vec<View>, TableLookupError> {
   // Then get the actual table.

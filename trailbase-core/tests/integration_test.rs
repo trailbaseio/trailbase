@@ -4,7 +4,7 @@ use axum_test::multipart::MultipartForm;
 use axum_test::TestServer;
 use cookie::Cookie;
 use std::rc::Rc;
-use tokio_rusqlite::params;
+use trailbase_sqlite::params;
 
 use trailbase_core::api::{create_user_handler, login_with_password, CreateUserRequest};
 use trailbase_core::config::proto::PermissionFlag;
@@ -175,7 +175,7 @@ fn test_record_apis() {
 }
 
 pub async fn create_chat_message_app_tables(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
 ) -> Result<(), anyhow::Error> {
   // Create a messages, chat room and members tables.
   conn
@@ -213,7 +213,7 @@ pub async fn create_chat_message_app_tables(
 }
 
 pub async fn add_room(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   name: &str,
 ) -> Result<[u8; 16], anyhow::Error> {
   let room: [u8; 16] = conn
@@ -229,7 +229,7 @@ pub async fn add_room(
 }
 
 pub async fn add_user_to_room(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   user: [u8; 16],
   room: [u8; 16],
 ) -> Result<(), anyhow::Error> {

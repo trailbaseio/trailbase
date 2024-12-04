@@ -52,7 +52,7 @@ pub async fn alter_index_handler(
 
       return tx
         .rollback_and_create_migration()
-        .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
     })
     .await?;
 

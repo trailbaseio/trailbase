@@ -164,7 +164,7 @@ pub fn parse_query(query: Option<String>) -> Option<QueryParseResult> {
 #[derive(Debug, Clone)]
 pub struct WhereClause {
   pub clause: String,
-  pub params: Vec<(String, tokio_rusqlite::Value)>,
+  pub params: Vec<(String, trailbase_sqlite::Value)>,
 }
 
 pub fn build_filter_where_clause(
@@ -172,7 +172,7 @@ pub fn build_filter_where_clause(
   filter_params: Option<HashMap<String, Vec<QueryParam>>>,
 ) -> Result<WhereClause, WhereClauseError> {
   let mut where_clauses: Vec<String> = vec![];
-  let mut params: Vec<(String, tokio_rusqlite::Value)> = vec![];
+  let mut params: Vec<(String, trailbase_sqlite::Value)> = vec![];
 
   if let Some(filter_params) = filter_params {
     for (column_name, query_params) in filter_params {

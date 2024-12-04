@@ -4,8 +4,8 @@ use chrono::Duration;
 use cookie::SameSite;
 use lazy_static::lazy_static;
 use sha2::{Digest, Sha256};
-use tokio_rusqlite::params;
 use tower_cookies::{Cookie, Cookies};
+use trailbase_sqlite::params;
 
 use crate::auth::user::{DbUser, User};
 use crate::auth::AuthError;
@@ -132,7 +132,7 @@ pub async fn user_by_email(state: &AppState, email: &str) -> Result<DbUser, Auth
 }
 
 pub async fn get_user_by_email(
-  user_conn: &tokio_rusqlite::Connection,
+  user_conn: &trailbase_sqlite::Connection,
   email: &str,
 ) -> Result<DbUser, AuthError> {
   lazy_static! {
@@ -151,7 +151,7 @@ pub async fn user_by_id(state: &AppState, id: &uuid::Uuid) -> Result<DbUser, Aut
 }
 
 async fn get_user_by_id(
-  user_conn: &tokio_rusqlite::Connection,
+  user_conn: &trailbase_sqlite::Connection,
   id: &uuid::Uuid,
 ) -> Result<DbUser, AuthError> {
   lazy_static! {
@@ -206,7 +206,7 @@ pub(crate) async fn delete_all_sessions_for_user(
       .user_conn()
       .execute(
         &QUERY,
-        [tokio_rusqlite::Value::Blob(user_id.into_bytes().to_vec())],
+        [trailbase_sqlite::Value::Blob(user_id.into_bytes().to_vec())],
       )
       .await?,
   );

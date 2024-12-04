@@ -54,7 +54,7 @@ impl DbUser {
 }
 
 async fn get_user_by_email(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   email: &str,
 ) -> Result<DbUser, BoxError> {
   if let Some(user) = conn
@@ -158,7 +158,7 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Schema(cmd)) => {
       init_logger(false);
 
-      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
+      let conn = trailbase_sqlite::Connection::from_conn(api::connect_sqlite(
         Some(data_dir.main_db_path()),
         None,
       )?)
@@ -202,7 +202,7 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Admin { cmd }) => {
       init_logger(false);
 
-      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
+      let conn = trailbase_sqlite::Connection::from_conn(api::connect_sqlite(
         Some(data_dir.main_db_path()),
         None,
       )?)
@@ -257,7 +257,7 @@ async fn async_main() -> Result<(), BoxError> {
       init_logger(false);
 
       let data_dir = DataDir(args.data_dir);
-      let conn = tokio_rusqlite::Connection::from_conn(api::connect_sqlite(
+      let conn = trailbase_sqlite::Connection::from_conn(api::connect_sqlite(
         Some(data_dir.main_db_path()),
         None,
       )?)

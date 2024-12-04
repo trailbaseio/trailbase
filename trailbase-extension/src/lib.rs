@@ -123,23 +123,11 @@ pub fn sqlite3_extension_init(db: *mut sqlite3) -> Result<(), sqlite_loadable::E
     FunctionFlags::UTF8 | FunctionFlags::INNOCUOUS,
   )?;
 
-  // TODO: The third-party extensions should probably be initialized in trailbase-sqlite like
-  // sqlite-vec and trailbase-extension itself.
-  //
-  // Lastly init sqlean's "define" for application-defined functions defined in pure SQL.
-  // See: https://github.com/nalgeon/sqlean/blob/main/docs/define.md
-  let status = unsafe { sqlean::define_init(db as *mut sqlean::sqlite3) };
-  if status != 0 {
-    return Err(sqlite_loadable::Error::new_message(
-      "Failed to load sqlean::define",
-    ));
-  }
-
   Ok(())
 }
 
 #[cfg(test)]
-unsafe extern "C" fn init_extension(
+unsafe extern "C" fn init_trailbase_extension_for_test(
   db: *mut rusqlite::ffi::sqlite3,
   pz_err_msg: *mut *mut ::std::os::raw::c_char,
   p_thunk: *const rusqlite::ffi::sqlite3_api_routines,
@@ -154,32 +142,8 @@ unsafe extern "C" fn init_extension(
 #[cfg(test)]
 pub(crate) fn connect() -> Result<rusqlite::Connection, rusqlite::Error> {
   unsafe {
-    rusqlite::ffi::sqlite3_auto_extension(Some(init_extension));
+    rusqlite::ffi::sqlite3_auto_extension(Some(init_trailbase_extension_for_test));
   }
 
   return Ok(rusqlite::Connection::open_in_memory()?);
-}
-
-#[cfg(test)]
-mod tests {
-  #[test]
-  fn test_sqlean_define() {
-    let conn = crate::connect().unwrap();
-
-    // Define an application defined function in SQL and test it below.
-    conn
-      .query_row("SELECT define('sumn', ':n * (:n + 1) / 2')", (), |_row| {
-        Ok(())
-      })
-      .unwrap();
-
-    let value: i64 = conn
-      .query_row("SELECT sumn(5)", (), |row| row.get(0))
-      .unwrap();
-    assert_eq!(value, 15);
-
-    conn
-      .query_row("SELECT undefine('sumn')", (), |_row| Ok(()))
-      .unwrap();
-  }
 }

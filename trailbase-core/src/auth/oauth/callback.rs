@@ -9,8 +9,8 @@ use oauth2::{AsyncHttpClient, HttpClientError, HttpRequest, HttpResponse};
 use oauth2::{AuthorizationCode, StandardTokenResponse, TokenResponse};
 use serde::Deserialize;
 use thiserror::Error;
-use tokio_rusqlite::{named_params, params};
 use tower_cookies::Cookies;
+use trailbase_sqlite::{named_params, params};
 
 use crate::auth::oauth::state::{OAuthState, ResponseType};
 use crate::auth::oauth::OAuthUser;
@@ -253,7 +253,7 @@ pub(crate) async fn callback_from_external_auth_provider(
 }
 
 async fn create_user_for_external_provider(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   user: &OAuthUser,
 ) -> Result<uuid::Uuid, AuthError> {
   if !user.verified {
@@ -293,7 +293,7 @@ async fn create_user_for_external_provider(
 }
 
 async fn user_by_provider_id(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   provider_id: OAuthProviderId,
   provider_user_id: &str,
 ) -> Result<DbUser, AuthError> {

@@ -182,7 +182,7 @@ pub async fn list_logs_handler(
 }
 
 async fn fetch_logs(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   filter_where_clause: WhereClause,
   cursor: Option<[u8; 16]>,
   order: Vec<(String, Order)>,
@@ -192,13 +192,13 @@ async fn fetch_logs(
   let mut where_clause = filter_where_clause.clause;
   params.push((
     ":limit".to_string(),
-    tokio_rusqlite::Value::Integer(limit as i64),
+    trailbase_sqlite::Value::Integer(limit as i64),
   ));
 
   if let Some(cursor) = cursor {
     params.push((
       ":cursor".to_string(),
-      tokio_rusqlite::Value::Blob(cursor.to_vec()),
+      trailbase_sqlite::Value::Blob(cursor.to_vec()),
     ));
     where_clause = format!("{where_clause} AND log.id < :cursor",);
   }
@@ -250,7 +250,7 @@ struct FetchAggregateArgs {
 }
 
 async fn fetch_aggregate_stats(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   args: &FetchAggregateArgs,
 ) -> Result<Stats, Error> {
   let filter_clause = args
@@ -284,10 +284,10 @@ async fn fetch_aggregate_stats(
   "#
   );
 
-  use tokio_rusqlite::Value::Integer;
+  use trailbase_sqlite::Value::Integer;
   let from_seconds = args.from.timestamp();
   let interval_seconds = args.interval.num_seconds();
-  let mut params: Vec<(String, tokio_rusqlite::Value)> = vec![
+  let mut params: Vec<(String, trailbase_sqlite::Value)> = vec![
     (":interval_seconds".to_string(), Integer(interval_seconds)),
     (":from_seconds".to_string(), Integer(from_seconds)),
     (":to_seconds".to_string(), Integer(args.to.timestamp())),
@@ -317,7 +317,7 @@ async fn fetch_aggregate_stats(
     ));
   }
 
-  if trailbase_sqlite::has_geoip_db() {
+  if trailbase_sqlite::geoip::has_geoip_db() {
     let cc_query = format!(
       r#"
     SELECT
@@ -366,7 +366,7 @@ mod tests {
   async fn test_aggregate_rate_computation() {
     let mut conn_sync = trailbase_sqlite::connect_sqlite(None, None).unwrap();
     apply_logs_migrations(&mut conn_sync).unwrap();
-    let conn = tokio_rusqlite::Connection::from_conn(conn_sync)
+    let conn = trailbase_sqlite::Connection::from_conn(conn_sync)
       .await
       .unwrap();
 

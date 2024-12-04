@@ -7,7 +7,6 @@ members = [
   "trailbase-extension",
   "trailbase-sqlite",
   "vendor/sqlean",
-  "vendor/tokio-rusqlite",
 ]
 default-members = [
   "trailbase-cli",
@@ -41,6 +40,4 @@ rusqlite = { version = "^0.32.1", default-features = false, features = [
     "limits",
     "backup",
 ] }
-serde_rusqlite = { package = "serde_rusqlite", path = "./vendor/serde_rusqlite" }
 sqlite-loadable = { package = "sqlite-loadable", path = "./vendor/sqlite-loadable", features=["static"]  }
-tokio-rusqlite = { package = "tokio-rusqlite", path = "./vendor/tokio-rusqlite" }

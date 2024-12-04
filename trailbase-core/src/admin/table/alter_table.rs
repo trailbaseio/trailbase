@@ -75,13 +75,13 @@ pub async fn alter_table_handler(
   let conn = state.conn();
   let writer = conn
     .call(
-      move |conn| -> Result<Option<MigrationWriter>, tokio_rusqlite::Error> {
+      move |conn| -> Result<Option<MigrationWriter>, trailbase_sqlite::Error> {
         let mut tx = TransactionRecorder::new(
           conn,
           migration_path,
           format!("alter_table_{source_table_name}"),
         )
-        .map_err(|err| tokio_rusqlite::Error::Other(err.into()))?;
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
         tx.execute("PRAGMA foreign_keys = OFF")?;
 
@@ -114,7 +114,7 @@ pub async fn alter_table_handler(
 
         return tx
           .rollback_and_create_migration()
-          .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
       },
     )
     .await?;

@@ -9,7 +9,7 @@ pub enum TransactionError {
   #[error("Rusqlite error: {0}")]
   Rusqlite(#[from] rusqlite::Error),
   #[error("Tokio Rusqlite error: {0}")]
-  TokioRusqlite(#[from] tokio_rusqlite::Error),
+  TokioRusqlite(#[from] trailbase_sqlite::Error),
   #[error("IO error: {0}")]
   IO(#[from] std::io::Error),
   #[error("Migration error: {0}")]
@@ -27,7 +27,7 @@ pub struct MigrationWriter {
 impl MigrationWriter {
   pub(crate) async fn write(
     &self,
-    conn: &tokio_rusqlite::Connection,
+    conn: &trailbase_sqlite::Connection,
   ) -> Result<refinery::Report, TransactionError> {
     let migrations = vec![refinery::Migration::unapplied(&self.stem, &self.sql)?];
     let runner = migrations::new_migration_runner(&migrations).set_abort_missing(false);
@@ -36,7 +36,7 @@ impl MigrationWriter {
       .call(move |conn| {
         let report = runner
           .run(conn)
-          .map_err(|err| tokio_rusqlite::Error::Other(err.into()))?;
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
         return Ok(report);
       })

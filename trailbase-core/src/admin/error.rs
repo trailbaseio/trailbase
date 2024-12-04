@@ -7,7 +7,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum AdminError {
   #[error("TokioRusqlite error: {0}")]
-  TokioRusqlite(#[from] tokio_rusqlite::Error),
+  TokioRusqlite(#[from] trailbase_sqlite::Error),
   #[error("Rusqlite error: {0}")]
   Rusqlite(#[from] rusqlite::Error),
   #[error("Rusqlite FromSql error: {0}")]

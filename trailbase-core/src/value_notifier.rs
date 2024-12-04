@@ -8,8 +8,6 @@ pub struct ValueNotifier<T> {
   value: ArcSwap<T>,
   listeners: Mutex<Vec<Listener<T>>>,
 }
-//
-// unsafe impl<T> Send for ValueNotifier<T> where T: Send {}
 
 impl<T> ValueNotifier<T> {
   pub fn new(v: T) -> Self {

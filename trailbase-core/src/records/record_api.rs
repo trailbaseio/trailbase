@@ -31,7 +31,7 @@ enum RecordApiMetadata {
 }
 
 struct RecordApiState {
-  conn: tokio_rusqlite::Connection,
+  conn: trailbase_sqlite::Connection,
   metadata: RecordApiMetadata,
   record_pk_column: Column,
 
@@ -50,7 +50,7 @@ struct RecordApiState {
 
 impl RecordApi {
   pub fn from_table(
-    conn: tokio_rusqlite::Connection,
+    conn: trailbase_sqlite::Connection,
     table_metadata: TableMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
@@ -81,7 +81,7 @@ impl RecordApi {
   }
 
   pub fn from_view(
-    conn: tokio_rusqlite::Connection,
+    conn: trailbase_sqlite::Connection,
     view_metadata: ViewMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
@@ -118,7 +118,7 @@ impl RecordApi {
   }
 
   fn from_impl(
-    conn: tokio_rusqlite::Connection,
+    conn: trailbase_sqlite::Connection,
     record_pk_column: Column,
     metadata: RecordApiMetadata,
     config: RecordApiConfig,
@@ -186,14 +186,14 @@ impl RecordApi {
     }
   }
 
-  pub fn id_to_sql(&self, id: &str) -> Result<tokio_rusqlite::Value, RecordError> {
+  pub fn id_to_sql(&self, id: &str) -> Result<trailbase_sqlite::Value, RecordError> {
     return match self.state.record_pk_column.data_type {
       ColumnDataType::Blob => {
         let record_id = b64_to_id(id).map_err(|_err| RecordError::BadRequest("Invalid id"))?;
         assert_uuidv7(&record_id);
-        Ok(tokio_rusqlite::Value::Blob(record_id.into()))
+        Ok(trailbase_sqlite::Value::Blob(record_id.into()))
       }
-      ColumnDataType::Integer => Ok(tokio_rusqlite::Value::Integer(
+      ColumnDataType::Integer => Ok(trailbase_sqlite::Value::Integer(
         id.parse::<i64>()
           .map_err(|_err| RecordError::BadRequest("Invalid id"))?,
       )),
@@ -231,7 +231,7 @@ impl RecordApi {
   pub async fn check_record_level_access(
     &self,
     p: Permission,
-    record_id: Option<&tokio_rusqlite::Value>,
+    record_id: Option<&trailbase_sqlite::Value>,
     request_params: Option<&mut LazyParams<'_>>,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
@@ -310,10 +310,10 @@ impl RecordApi {
     p: Permission,
     access_rule: &str,
     table_name: &str,
-    record_id: Option<&tokio_rusqlite::Value>,
+    record_id: Option<&trailbase_sqlite::Value>,
     request_params: Option<&mut LazyParams<'_>>,
     user: Option<&User>,
-  ) -> Result<(String, Vec<(String, tokio_rusqlite::Value)>), RecordError> {
+  ) -> Result<(String, Vec<(String, trailbase_sqlite::Value)>), RecordError> {
     let pk_column_name = &self.state.record_pk_column.name;
     // We need to inject context like: record id, user, request, and row into the access
     // check. Below we're building the query and binding the context as params accordingly.
@@ -321,7 +321,7 @@ impl RecordApi {
 
     params.push((
       ":__record_id".to_string(),
-      record_id.map_or(tokio_rusqlite::Value::Null, |id| id.clone()),
+      record_id.map_or(trailbase_sqlite::Value::Null, |id| id.clone()),
     ));
 
     // Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
@@ -396,7 +396,7 @@ impl RecordApi {
 
 pub(crate) fn build_user_sub_select(
   user: Option<&User>,
-) -> (&'static str, Vec<(String, tokio_rusqlite::Value)>) {
+) -> (&'static str, Vec<(String, trailbase_sqlite::Value)>) {
   const QUERY: &str = "SELECT :__user_id AS id";
 
   if let Some(user) = user {
@@ -404,13 +404,13 @@ pub(crate) fn build_user_sub_select(
       QUERY,
       vec![(
         ":__user_id".to_string(),
-        tokio_rusqlite::Value::Blob(user.uuid.into()),
+        trailbase_sqlite::Value::Blob(user.uuid.into()),
       )],
     );
   } else {
     return (
       QUERY,
-      vec![(":__user_id".to_string(), tokio_rusqlite::Value::Null)],
+      vec![(":__user_id".to_string(), trailbase_sqlite::Value::Null)],
     );
   }
 }
@@ -419,7 +419,7 @@ pub(crate) fn build_user_sub_select(
 fn build_request_sub_select(
   table_metadata: &TableMetadata,
   request_params: &Params,
-) -> (String, Vec<(String, tokio_rusqlite::Value)>) {
+) -> (String, Vec<(String, trailbase_sqlite::Value)>) {
   // NOTE: This has gotten pretty wild. We cannot have access queries access missing _REQ_.props.
   // So we need to inject an explicit NULL value for all missing fields on the request.
   // Can we make this cheaper, either by pre-processing the access query or improving construction?
@@ -427,10 +427,10 @@ fn build_request_sub_select(
   // save some string ops?
   let schema = &table_metadata.schema;
 
-  let mut named_params: Vec<(String, tokio_rusqlite::Value)> = schema
+  let mut named_params: Vec<(String, trailbase_sqlite::Value)> = schema
     .columns
     .iter()
-    .map(|c| (format!(":{}", c.name), tokio_rusqlite::Value::Null))
+    .map(|c| (format!(":{}", c.name), trailbase_sqlite::Value::Null))
     .collect();
 
   for (param_index, col_name) in request_params.column_names().iter().enumerate() {

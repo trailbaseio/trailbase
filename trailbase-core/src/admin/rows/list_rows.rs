@@ -116,7 +116,7 @@ struct Pagination<'a> {
 }
 
 async fn fetch_rows(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   table_or_view_name: &str,
   filter_where_clause: WhereClause,
   order: Option<Vec<(String, Order)>>,
@@ -128,17 +128,17 @@ async fn fetch_rows(
   } = filter_where_clause;
   params.push((
     ":limit".to_string(),
-    tokio_rusqlite::Value::Integer(pagination.limit as i64),
+    trailbase_sqlite::Value::Integer(pagination.limit as i64),
   ));
   params.push((
     ":offset".to_string(),
-    tokio_rusqlite::Value::Integer(pagination.offset.unwrap_or(0) as i64),
+    trailbase_sqlite::Value::Integer(pagination.offset.unwrap_or(0) as i64),
   ));
 
   if let Some(cursor) = pagination.cursor {
     params.push((
       ":cursor".to_string(),
-      tokio_rusqlite::Value::Blob(cursor.to_vec()),
+      trailbase_sqlite::Value::Blob(cursor.to_vec()),
     ));
     clause = format!("{clause} AND _row_.id < :cursor",);
   }

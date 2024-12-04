@@ -5915,17 +5915,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-rusqlite"
-version = "0.6.0"
-dependencies = [
- "crossbeam-channel",
- "rusqlite",
- "serde",
- "serde_rusqlite",
- "tokio",
-]
-
-[[package]]
 name = "tokio-rustls"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6119,9 +6108,9 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tokio-rusqlite",
  "tracing-subscriber",
  "trailbase-core",
+ "trailbase-sqlite",
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
@@ -6186,7 +6175,6 @@ dependencies = [
  "thiserror 2.0.3",
  "thread_local",
  "tokio",
- "tokio-rusqlite",
  "tower 0.5.1",
  "tower-cookies",
  "tower-http",
@@ -6216,7 +6204,6 @@ dependencies = [
  "regex",
  "rusqlite",
  "serde_json",
- "sqlean",
  "sqlite-loadable",
  "uuid",
  "validator",
@@ -6226,6 +6213,7 @@ dependencies = [
 name = "trailbase-sqlite"
 version = "0.1.0"
 dependencies = [
+ "crossbeam-channel",
  "infer",
  "jsonschema",
  "lazy_static",
@@ -6234,6 +6222,8 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "serde_rusqlite",
+ "sqlean",
  "sqlite-vec",
  "thiserror 2.0.3",
  "tokio",
