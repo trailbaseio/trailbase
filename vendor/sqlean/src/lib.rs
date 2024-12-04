@@ -5,7 +5,7 @@
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 #[no_mangle]
-unsafe extern "C" fn init_extension(
+unsafe extern "C" fn init_sqlean_extension(
   db: *mut libsqlite3_sys::sqlite3,
   _pzErrMrg: *mut *mut ::std::os::raw::c_char,
   _pThunk: *const libsqlite3_sys::sqlite3_api_routines,
@@ -20,7 +20,7 @@ mod tests {
   #[test]
   fn load_test() {
     unsafe {
-      libsqlite3_sys::sqlite3_auto_extension(Some(super::init_extension));
+      libsqlite3_sys::sqlite3_auto_extension(Some(super::init_sqlean_extension));
     };
 
     let conn = Connection::open_in_memory().unwrap();

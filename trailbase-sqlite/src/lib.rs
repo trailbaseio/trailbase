@@ -15,7 +15,7 @@ pub fn has_geoip_db() -> bool {
 }
 
 #[no_mangle]
-unsafe extern "C" fn init_extension(
+unsafe extern "C" fn init_trailbase_extension(
   db: *mut rusqlite::ffi::sqlite3,
   pz_err_msg: *mut *mut ::std::os::raw::c_char,
   p_thunk: *const rusqlite::ffi::sqlite3_api_routines,
@@ -37,7 +37,7 @@ pub fn connect_sqlite(
 ) -> Result<rusqlite::Connection, rusqlite::Error> {
   schema::try_init_schemas();
 
-  unsafe { rusqlite::ffi::sqlite3_auto_extension(Some(init_extension)) };
+  unsafe { rusqlite::ffi::sqlite3_auto_extension(Some(init_trailbase_extension)) };
 
   let conn = if let Some(p) = path {
     use rusqlite::OpenFlags;

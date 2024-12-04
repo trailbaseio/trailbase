@@ -6,8 +6,8 @@ use axum::body::Body;
 use axum::extract::{Json, State};
 use axum::http::{self, Request};
 use base64::prelude::*;
-use libsql::params;
 use std::sync::{Arc, Mutex};
+use tokio_rusqlite::params;
 use tower::{Service, ServiceExt};
 use trailbase_core::config::proto::PermissionFlag;
 use trailbase_core::records::Acls;
@@ -62,7 +62,7 @@ async fn add_room(
   let room: [u8; 16] = conn
     .query_row(
       "INSERT INTO room (name) VALUES ($1) RETURNING id",
-      params!(name),
+      params!(name.to_string()),
     )
     .await?
     .unwrap()
