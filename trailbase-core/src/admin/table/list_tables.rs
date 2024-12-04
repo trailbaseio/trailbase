@@ -30,11 +30,10 @@ pub struct ListSchemasResponse {
 pub async fn list_tables_handler(
   State(state): State<AppState>,
 ) -> Result<Json<ListSchemasResponse>, Error> {
-  let conn = state.conn();
-
   // NOTE: the "ORDER BY" is a bit sneaky, it ensures that we parse all "table"s before we parse
   // "view"s.
-  let rows = conn
+  let rows = state
+    .conn()
     .query(
       &format!("SELECT type, name, tbl_name, sql FROM {SQLITE_SCHEMA_TABLE} ORDER BY type"),
       (),
@@ -55,8 +54,8 @@ pub async fn list_tables_handler(
     let schema = SqliteSchema {
       r#type: row.get(0)?,
       name: row.get(1)?,
-      tbl_name: row.get(3)?,
-      sql: row.get(4)?,
+      tbl_name: row.get(2)?,
+      sql: row.get(3).ok(),
     };
     let name = &schema.name;
 
