@@ -1,7 +1,7 @@
 use axum::{extract::State, Json};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use tokio_rusqlite::named_params;
+use trailbase_sqlite::named_params;
 use ts_rs::TS;
 use uuid::Uuid;
 

@@ -1050,7 +1050,7 @@ mod tests {
 
     {
       // First Make sure the query is actually valid, as opposed to "only" parsable.
-      let conn = tokio_rusqlite::Connection::open_in_memory();
+      let conn = trailbase_sqlite::Connection::open_in_memory();
       conn.execute(&SQL, ()).unwrap();
     }
 
@@ -1062,7 +1062,7 @@ mod tests {
     let sql = table1.create_table_statement();
     {
       // Same as above, make sure the constructed query is valid as opposed to "only" parsable.
-      let conn = tokio_rusqlite::Connection::open_in_memory();
+      let conn = trailbase_sqlite::Connection::open_in_memory();
       conn.execute(&sql, ()).unwrap();
     }
 

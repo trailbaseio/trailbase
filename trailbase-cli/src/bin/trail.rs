@@ -54,7 +54,7 @@ impl DbUser {
 }
 
 async fn get_user_by_email(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   email: &str,
 ) -> Result<DbUser, BoxError> {
   if let Some(user) = conn.query_value::<DbUser>(
@@ -156,7 +156,7 @@ async fn async_main() -> Result<(), BoxError> {
       init_logger(false);
 
       let path = data_dir.main_db_path();
-      let conn = tokio_rusqlite::Connection::from_conn(move || {
+      let conn = trailbase_sqlite::Connection::from_conn(move || {
         api::connect_sqlite(Some(path.clone()), None).unwrap()
       });
       let table_metadata = api::TableMetadataCache::new(conn.clone()).await?;
@@ -199,7 +199,7 @@ async fn async_main() -> Result<(), BoxError> {
       init_logger(false);
 
       let path = data_dir.main_db_path();
-      let conn = tokio_rusqlite::Connection::from_conn(move || {
+      let conn = trailbase_sqlite::Connection::from_conn(move || {
         api::connect_sqlite(Some(path.clone()), None).unwrap()
       });
 
@@ -248,7 +248,7 @@ async fn async_main() -> Result<(), BoxError> {
 
       let data_dir = DataDir(args.data_dir);
       let path = data_dir.main_db_path();
-      let conn = tokio_rusqlite::Connection::from_conn(move || {
+      let conn = trailbase_sqlite::Connection::from_conn(move || {
         api::connect_sqlite(Some(path.clone()), None).unwrap()
       });
 

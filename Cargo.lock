@@ -5906,17 +5906,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-rusqlite"
-version = "0.6.0"
-dependencies = [
- "parking_lot",
- "rusqlite",
- "serde",
- "serde_rusqlite",
- "thread_local",
-]
-
-[[package]]
 name = "tokio-rustls"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6110,9 +6099,9 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tokio-rusqlite",
  "tracing-subscriber",
  "trailbase-core",
+ "trailbase-sqlite",
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
@@ -6177,7 +6166,6 @@ dependencies = [
  "thiserror 2.0.3",
  "thread_local",
  "tokio",
- "tokio-rusqlite",
  "tower 0.5.1",
  "tower-cookies",
  "tower-http",
@@ -6220,13 +6208,16 @@ dependencies = [
  "jsonschema",
  "lazy_static",
  "log",
+ "parking_lot",
  "rusqlite",
  "schemars",
  "serde",
  "serde_json",
+ "serde_rusqlite",
  "sqlean",
  "sqlite-vec",
  "thiserror 2.0.3",
+ "thread_local",
  "tokio",
  "trailbase-extension",
  "uuid",

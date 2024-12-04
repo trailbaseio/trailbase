@@ -5,7 +5,7 @@ use axum::{
 };
 use lazy_static::lazy_static;
 use serde::Deserialize;
-use tokio_rusqlite::named_params;
+use trailbase_sqlite::named_params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 

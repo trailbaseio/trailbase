@@ -29,8 +29,8 @@ struct InternalState {
   query_apis: Computed<Vec<(String, QueryApi)>, Config>,
   config: ValueNotifier<Config>,
 
-  logs_conn: tokio_rusqlite::Connection,
-  conn: tokio_rusqlite::Connection,
+  logs_conn: trailbase_sqlite::Connection,
+  conn: trailbase_sqlite::Connection,
 
   jwt: JwtHelper,
 
@@ -50,8 +50,8 @@ pub(crate) struct AppStateArgs {
   pub dev: bool,
   pub table_metadata: TableMetadataCache,
   pub config: Config,
-  pub conn: tokio_rusqlite::Connection,
-  pub logs_conn: tokio_rusqlite::Connection,
+  pub conn: trailbase_sqlite::Connection,
+  pub logs_conn: trailbase_sqlite::Connection,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore + Send + Sync>,
   pub js_runtime_threads: Option<usize>,
@@ -147,15 +147,15 @@ impl AppState {
     return self.state.dev;
   }
 
-  pub fn conn(&self) -> &tokio_rusqlite::Connection {
+  pub fn conn(&self) -> &trailbase_sqlite::Connection {
     return &self.state.conn;
   }
 
-  pub fn user_conn(&self) -> &tokio_rusqlite::Connection {
+  pub fn user_conn(&self) -> &trailbase_sqlite::Connection {
     return &self.state.conn;
   }
 
-  pub(crate) fn logs_conn(&self) -> &tokio_rusqlite::Connection {
+  pub(crate) fn logs_conn(&self) -> &trailbase_sqlite::Connection {
     return &self.state.logs_conn;
   }
 
@@ -314,7 +314,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       conn
     };
 
-    tokio_rusqlite::Connection::from_conn(f)
+    trailbase_sqlite::Connection::from_conn(f)
   };
 
   let logs_conn = {
@@ -325,7 +325,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       conn
     };
 
-    tokio_rusqlite::Connection::from_conn(f)
+    trailbase_sqlite::Connection::from_conn(f)
   };
 
   let table_metadata = TableMetadataCache::new(conn.clone()).await?;
@@ -448,7 +448,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 }
 
 fn build_record_api(
-  conn: tokio_rusqlite::Connection,
+  conn: trailbase_sqlite::Connection,
   table_metadata_cache: &TableMetadataCache,
   config: RecordApiConfig,
 ) -> Result<RecordApi, String> {
@@ -468,7 +468,7 @@ fn build_record_api(
 }
 
 fn build_query_api(
-  conn: tokio_rusqlite::Connection,
+  conn: trailbase_sqlite::Connection,
   config: QueryApiConfig,
 ) -> Result<QueryApi, String> {
   // TODO: Check virtual table exists

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-  use tokio_rusqlite::params;
+  use trailbase_sqlite::params;
 
   use crate::records::json_to_sql::JsonRow;
   use crate::util::query_one_row;
@@ -81,7 +81,7 @@ mod tests {
   }
 
   pub async fn add_room(
-    conn: &tokio_rusqlite::Connection,
+    conn: &trailbase_sqlite::Connection,
     name: &str,
   ) -> Result<[u8; 16], anyhow::Error> {
     let room: [u8; 16] = query_one_row(
@@ -95,10 +95,10 @@ mod tests {
   }
 
   pub async fn add_user_to_room(
-    conn: &tokio_rusqlite::Connection,
+    conn: &trailbase_sqlite::Connection,
     user: [u8; 16],
     room: [u8; 16],
-  ) -> Result<(), tokio_rusqlite::Error> {
+  ) -> Result<(), trailbase_sqlite::Error> {
     conn.execute(
       "INSERT INTO room_members (user, room) VALUES ($1, $2)",
       params!(user, room),
@@ -107,7 +107,7 @@ mod tests {
   }
 
   pub async fn send_message(
-    conn: &tokio_rusqlite::Connection,
+    conn: &trailbase_sqlite::Connection,
     user: [u8; 16],
     room: [u8; 16],
     message: &str,

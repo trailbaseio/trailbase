@@ -11,7 +11,7 @@ pub struct QueryApi {
 }
 
 struct QueryApiState {
-  conn: tokio_rusqlite::Connection,
+  conn: trailbase_sqlite::Connection,
 
   api_name: String,
   virtual_table_name: String,
@@ -22,7 +22,7 @@ struct QueryApiState {
 }
 
 impl QueryApi {
-  pub fn from(conn: tokio_rusqlite::Connection, config: QueryApiConfig) -> Result<Self, String> {
+  pub fn from(conn: trailbase_sqlite::Connection, config: QueryApiConfig) -> Result<Self, String> {
     return Ok(QueryApi {
       state: Arc::new(QueryApiState {
         conn,
@@ -69,7 +69,7 @@ impl QueryApi {
 
   pub(crate) fn check_api_access(
     &self,
-    query_params: &[(String, tokio_rusqlite::Value)],
+    query_params: &[(String, trailbase_sqlite::Value)],
     user: Option<&User>,
   ) -> Result<(), QueryError> {
     let Some(acl) = self.state.acl else {
@@ -115,15 +115,15 @@ impl QueryApi {
           let mut params = query_params.to_vec();
           params.push((
             ":__user_id".to_string(),
-            user.map_or(tokio_rusqlite::Value::Null, |u| {
-              tokio_rusqlite::Value::Blob(u.uuid.into())
+            user.map_or(trailbase_sqlite::Value::Null, |u| {
+              trailbase_sqlite::Value::Blob(u.uuid.into())
             }),
           ));
 
           let allowed = match self.state.conn.query_row_map(&access_query, params, |row| {
             row
               .get::<_, bool>(0)
-              .map_err(tokio_rusqlite::Error::Rusqlite)
+              .map_err(trailbase_sqlite::Error::Rusqlite)
           }) {
             Ok(Some(allowed)) => allowed,
             Ok(None) => {

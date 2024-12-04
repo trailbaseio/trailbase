@@ -16,7 +16,7 @@ use crate::table_metadata::TableMetadataCache;
 #[derive(Debug, Error)]
 pub enum InitError {
   #[error("TRusqlite error: {0}")]
-  TokioRusqlite(#[from] tokio_rusqlite::Error),
+  TokioRusqlite(#[from] trailbase_sqlite::Error),
   #[error("Rusqlite error: {0}")]
   Rusqlite(#[from] rusqlite::Error),
   #[error("RusqliteFromSql error: {0}")]
@@ -65,7 +65,7 @@ pub async fn init_app_state(
       apply_logs_migrations(&mut conn).unwrap();
       conn
     };
-    tokio_rusqlite::Connection::from_conn(f)
+    trailbase_sqlite::Connection::from_conn(f)
   };
 
   // Open or init the main db. Note that we derive whether a new DB was initialized based on
@@ -82,7 +82,7 @@ pub async fn init_app_state(
       return conn;
     };
 
-    let conn = tokio_rusqlite::Connection::from_conn(f);
+    let conn = trailbase_sqlite::Connection::from_conn(f);
     let new_db = conn.call(move |_conn| Ok(*new_db.lock()))?;
 
     (conn, new_db)

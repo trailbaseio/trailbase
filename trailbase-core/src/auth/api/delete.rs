@@ -26,7 +26,9 @@ pub(crate) async fn delete_handler(
 
   state.user_conn().execute(
     &format!("DELETE FROM '{USER_TABLE}' WHERE id = $1"),
-    [tokio_rusqlite::Value::Blob(user.uuid.into_bytes().to_vec())],
+    [trailbase_sqlite::Value::Blob(
+      user.uuid.into_bytes().to_vec(),
+    )],
   )?;
 
   remove_all_cookies(&cookies);

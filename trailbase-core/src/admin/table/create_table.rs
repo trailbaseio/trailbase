@@ -47,7 +47,7 @@ pub async fn create_table_handler(
 
       return tx
         .rollback_and_create_migration()
-        .map_err(|err| tokio_rusqlite::Error::Other(err.into()));
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
     })?;
 
     // Write to migration file.

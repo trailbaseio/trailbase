@@ -1,6 +1,6 @@
 default: format check
 
-target/x86_64-unknown-linux-gnu/release/trail:
+static:
 	RUSTFLAGS="-C target-feature=+crt-static" cargo build --target x86_64-unknown-linux-gnu --release --bin trail
 
 format:
@@ -21,4 +21,4 @@ check:
 docker:
 	docker build . -t trailbase/trailbase
 
-.PHONY: default format check
+.PHONY: default format check static

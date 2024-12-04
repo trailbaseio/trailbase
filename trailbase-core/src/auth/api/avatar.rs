@@ -2,7 +2,7 @@ use axum::extract::{Json, Path, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use serde::{Deserialize, Serialize};
-use tokio_rusqlite::params;
+use trailbase_sqlite::params;
 use trailbase_sqlite::schema::FileUpload;
 use uuid::Uuid;
 

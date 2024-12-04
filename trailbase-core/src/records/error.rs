@@ -25,10 +25,10 @@ pub enum RecordError {
   Internal(Box<dyn std::error::Error + Send + Sync>),
 }
 
-impl From<tokio_rusqlite::Error> for RecordError {
-  fn from(err: tokio_rusqlite::Error) -> Self {
+impl From<trailbase_sqlite::Error> for RecordError {
+  fn from(err: trailbase_sqlite::Error) -> Self {
     return match err {
-      tokio_rusqlite::Error::Rusqlite(err) => match err {
+      trailbase_sqlite::Error::Rusqlite(err) => match err {
         rusqlite::Error::QueryReturnedNoRows => {
           #[cfg(debug_assertions)]
           info!("SQLite returned empty rows error");

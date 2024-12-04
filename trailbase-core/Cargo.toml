@@ -60,7 +60,6 @@ sqlite3-parser = "0.13.0"
 thiserror = "2.0.1"
 thread_local = "1.1.8"
 tokio = { version = "^1.38.0", features=["macros", "rt-multi-thread", "fs", "signal", "time"] }
-tokio-rusqlite = { workspace = true }
 tower-cookies = { version = "0.10.0" }
 tower-http = { version = "^0.6.0", features=["cors", "trace", "fs", "limit"] }
 tower-service = "0.3.3"
