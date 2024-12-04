@@ -1,9 +1,18 @@
 ---
 title: Welcome to TrailBase
-description: A blazingly fast, single-file, open-source application server with type-safe APIs, built-in JS/ES6/TS Runtime, Auth, and Admin UI built on Rust+SQLite+V8
+description: A blazingly fast, single-file, open-source application server with type-safe APIs, built-in JS/ES6/TS Runtime, Auth, and Admin UI built on Rust, SQLite & V8
 template: splash
 hero:
-  tagline: A blazingly fast, single-file, open-source application server with type-safe APIs, built-in JS/ES6/TS Runtime, Auth, and Admin UI built on Rust+SQLite+V8
+  tagline:
+    A blazingly fast, open-source application server with type-safe APIs,
+    built-in JS/ES6/TS Runtime, Auth, and Admin UI built on Rust, SQLite & V8.
+    <br />
+    <br />
+    Simplify your stack&colon; an easy to self-host, extensible, single-file
+    backend for your mobile, PWA, or desktop application.
+    Sub-millisecond latencies eliminate the need for dedicated caching
+    infrastructure and an entire class of issues.
+
   image:
     file: ../../assets/logo_512.webp
   actions:
@@ -46,7 +55,7 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
       * SQLite: one of the fastest full-SQL databases,
       * V8: one of the fastest JS engines.
 
-      TrailBase APIs are [6-7x faster than PocketBase's and 15x faster than SupaBase's
+      TrailBase APIs are [10x faster than PocketBase's and 20x faster than SupaBase's
       needing only a fraction of the footprint](/reference/benchmarks), allowing
       you to serve millions of customers from a tiny box.
 
