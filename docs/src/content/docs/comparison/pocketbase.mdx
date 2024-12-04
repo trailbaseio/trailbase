@@ -17,7 +17,7 @@ TrailBase was born out of admiration for PocketBase trying to move the needle
 in a few areas:
 
 - Less abstraction, embracing standards (SQL[^1], JWT, UUID), and untethered access
-  to SQLite/libsql[^2] including features such as recursive CTEs, virtual tables
+  to SQLite[^2] including features such as recursive CTEs, virtual tables
   and vector search.
   The goal is to not get in your way and avoid lock-in by bespoke solutions
   making it easier adopt TrailBase either fully or as piece-meal as well as
@@ -52,7 +52,7 @@ Likewise, TrailBase has a few nifty tricks up its sleeve:
   being enforced all the way down to the database level[^4].
 - TrailBase's JavaScript runtime supports full ES6, TypeScript transpilation,
   and is built on V8 making it [~45x faster](/reference/benchmarks/).
-- First-class access to all of SQLite/libsql's features and capabilities.
+- First-class access to all of SQLite's features and capabilities.
 - A simple auth UI.
 - Stateless JWT auth-tokens for simple, hermetic authentication in other
   backends.
@@ -73,7 +73,7 @@ To our own surprise, we found a significant gap. TrailBase is roughly 3.5x to
 depending on the use-case.
 Not to toot our own horn, this is mostly thanks to combining a very low
 overhead language, one of the fastest HTTP servers, a V8 engine, and incredibly
-quick SQLite/libsql.
+quick SQLite.
 
 <div class="h-[30px]" />
 
