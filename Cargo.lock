@@ -5189,6 +5189,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sqlite-vec"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ec77b84fb8dd5f0f8def127226db83b5d1152c5bf367f09af03998b76ba554a"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "sqlite3-parser"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6225,6 +6234,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sqlite-vec",
  "thiserror 2.0.3",
  "tokio",
  "trailbase-extension",

@@ -123,6 +123,9 @@ pub fn sqlite3_extension_init(db: *mut sqlite3) -> Result<(), sqlite_loadable::E
     FunctionFlags::UTF8 | FunctionFlags::INNOCUOUS,
   )?;
 
+  // TODO: The third-party extensions should probably be initialized in trailbase-sqlite like
+  // sqlite-vec and trailbase-extension itself.
+  //
   // Lastly init sqlean's "define" for application-defined functions defined in pure SQL.
   // See: https://github.com/nalgeon/sqlean/blob/main/docs/define.md
   let status = unsafe { sqlean::define_init(db as *mut sqlean::sqlite3) };

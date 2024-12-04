@@ -10,9 +10,9 @@ CREATE TABLE IF NOT EXISTS coffee (
   embedding BLOB
 ) STRICT;
 
-UPDATE coffee SET embedding = VECTOR(FORMAT("[%f, %f, %f, %f]", Aroma, Flavor, Acidity, Sweetness));
+UPDATE coffee SET embedding = vec_f32(FORMAT("[%f, %f, %f, %f]", Aroma, Flavor, Acidity, Sweetness));
 
 CREATE TRIGGER _coffee__updated_trigger AFTER INSERT ON coffee FOR EACH ROW
   BEGIN
-    UPDATE coffee SET embedding = VECTOR(FORMAT("[%f, %f, %f, %f]", Aroma, Flavor, Acidity, Sweetness)) WHERE _rowid_ = OLD._rowid_;
+    UPDATE coffee SET embedding = vec_f32(FORMAT("[%f, %f, %f, %f]", Aroma, Flavor, Acidity, Sweetness)) WHERE _rowid_ = OLD._rowid_;
   END;
