@@ -448,6 +448,8 @@ pub struct TableMetadataCache {
   state: Arc<TableMetadataCacheState>,
 }
 
+type TableMap = HashMap<String, Arc<TableMetadata>>;
+
 impl TableMetadataCache {
   pub async fn new(conn: trailbase_sqlite::Connection) -> Result<Self, TableLookupError> {
     let (table_map, tables) = Self::build_tables(&conn)?;
@@ -464,7 +466,7 @@ impl TableMetadataCache {
 
   fn build_tables(
     conn: &trailbase_sqlite::Connection,
-  ) -> Result<(HashMap<String, Arc<TableMetadata>>, Vec<Table>), TableLookupError> {
+  ) -> Result<(TableMap, Vec<Table>), TableLookupError> {
     let tables = lookup_and_parse_all_table_schemas(conn)?;
     let build = |table: &Table| {
       (

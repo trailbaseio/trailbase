@@ -113,13 +113,15 @@ struct Pagination<'a> {
   limit: usize,
 }
 
+type Row = Vec<serde_json::Value>;
+
 fn fetch_rows(
   conn: &trailbase_sqlite::Connection,
   table_or_view_name: &str,
   filter_where_clause: WhereClause,
   order: Option<Vec<(String, Order)>>,
   pagination: Pagination<'_>,
-) -> Result<(Vec<Vec<serde_json::Value>>, Option<Vec<Column>>), Error> {
+) -> Result<(Vec<Row>, Option<Vec<Column>>), Error> {
   let WhereClause {
     mut clause,
     mut params,

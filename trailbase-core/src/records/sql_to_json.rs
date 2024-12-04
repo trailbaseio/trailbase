@@ -124,10 +124,12 @@ fn rows_to_columns(rows: &trailbase_sqlite::Rows) -> Result<Vec<Column>, rusqlit
   return Ok(columns);
 }
 
+type Row = Vec<serde_json::Value>;
+
 pub fn rows_to_json_arrays(
   rows: trailbase_sqlite::Rows,
   limit: usize,
-) -> Result<(Vec<Vec<serde_json::Value>>, Option<Vec<Column>>), JsonError> {
+) -> Result<(Vec<Row>, Option<Vec<Column>>), JsonError> {
   let columns = match rows_to_columns(&rows) {
     Ok(columns) => Some(columns),
     Err(err) => {

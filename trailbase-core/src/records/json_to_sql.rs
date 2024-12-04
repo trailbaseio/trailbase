@@ -393,6 +393,8 @@ impl GetFilesQueryBuilder {
   }
 }
 
+type NamedParams = Vec<(String, trailbase_sqlite::Value)>;
+
 pub(crate) struct InsertQueryBuilder;
 
 impl InsertQueryBuilder {
@@ -441,14 +443,7 @@ impl InsertQueryBuilder {
   fn build_insert_query(
     params: Params,
     conflict_resolution: Option<ConflictResolutionStrategy>,
-  ) -> Result<
-    (
-      String,
-      Vec<(String, trailbase_sqlite::Value)>,
-      FileMetadataContents,
-    ),
-    QueryError,
-  > {
+  ) -> Result<(String, NamedParams, FileMetadataContents), QueryError> {
     let table_name = &params.table_name;
 
     let conflict_clause = Self::conflict_resolution_clause(
