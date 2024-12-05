@@ -5,13 +5,12 @@ use std::sync::Arc;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::oauth::providers::{ConfiguredOAuthProviders, OAuthProviderType};
-use crate::config::proto::{Config, QueryApiConfig, RecordApiConfig, S3StorageConfig};
+use crate::config::proto::{Config, RecordApiConfig, S3StorageConfig};
 use crate::config::{validate_config, write_config_and_vault_textproto};
 use crate::constants::SITE_URL_DEFAULT;
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::js::RuntimeHandle;
-use crate::query::QueryApi;
 use crate::records::RecordApi;
 use crate::table_metadata::TableMetadataCache;
 use crate::value_notifier::{Computed, ValueNotifier};
@@ -26,7 +25,6 @@ struct InternalState {
   oauth: Computed<ConfiguredOAuthProviders, Config>,
   mailer: Computed<Mailer, Config>,
   record_apis: Computed<Vec<(String, RecordApi)>, Config>,
-  query_apis: Computed<Vec<(String, QueryApi)>, Config>,
   config: ValueNotifier<Config>,
 
   logs_conn: trailbase_sqlite::Connection,
@@ -67,8 +65,7 @@ impl AppState {
     let config = ValueNotifier::new(args.config);
 
     let table_metadata_clone = args.table_metadata.clone();
-    let conn_clone0 = args.conn.clone();
-    let conn_clone1 = args.conn.clone();
+    let conn_clone = args.conn.clone();
 
     let runtime = args
       .js_runtime_threads
@@ -95,7 +92,7 @@ impl AppState {
             .record_apis
             .iter()
             .filter_map(|config| {
-              match build_record_api(conn_clone0.clone(), &table_metadata_clone, config.clone()) {
+              match build_record_api(conn_clone.clone(), &table_metadata_clone, config.clone()) {
                 Ok(api) => Some((api.api_name().to_string(), api)),
                 Err(err) => {
                   error!("{err}");
@@ -103,21 +100,6 @@ impl AppState {
                 }
               }
             })
-            .collect::<Vec<_>>();
-        }),
-        query_apis: Computed::new(&config, move |c| {
-          return c
-            .query_apis
-            .iter()
-            .filter_map(
-              |config| match build_query_api(conn_clone1.clone(), config.clone()) {
-                Ok(api) => Some((api.api_name().to_string(), api)),
-                Err(err) => {
-                  error!("{err}");
-                  None
-                }
-              },
-            )
             .collect::<Vec<_>>();
         }),
         config,
@@ -204,15 +186,6 @@ impl AppState {
     for (record_api_name, record_api) in self.state.record_apis.load().iter() {
       if record_api_name == name {
         return Some(record_api.clone());
-      }
-    }
-    return None;
-  }
-
-  pub(crate) fn lookup_query_api(&self, name: &str) -> Option<QueryApi> {
-    for (query_api_name, query_api) in self.state.query_apis.load().iter() {
-      if query_api_name == name {
-        return Some(query_api.clone());
       }
     }
     return None;
@@ -364,8 +337,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   validate_config(&table_metadata, &config).unwrap();
   let config = ValueNotifier::new(config);
 
-  let main_conn_clone0 = conn.clone();
-  let main_conn_clone1 = conn.clone();
+  let main_conn_clone = conn.clone();
   let table_metadata_clone = table_metadata.clone();
 
   let data_dir = DataDir(temp_dir.path().to_path_buf());
@@ -406,22 +378,11 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
           .iter()
           .filter_map(|config| {
             let api = build_record_api(
-              main_conn_clone0.clone(),
+              main_conn_clone.clone(),
               &table_metadata_clone,
               config.clone(),
             )
             .unwrap();
-
-            return Some((api.api_name().to_string(), api));
-          })
-          .collect::<Vec<_>>();
-      }),
-      query_apis: Computed::new(&config, move |c| {
-        return c
-          .query_apis
-          .iter()
-          .filter_map(|config| {
-            let api = build_query_api(main_conn_clone1.clone(), config.clone()).unwrap();
 
             return Some((api.api_name().to_string(), api));
           })
@@ -457,14 +418,6 @@ fn build_record_api(
   }
 
   return Err(format!("RecordApi references missing table: {config:?}"));
-}
-
-fn build_query_api(
-  conn: trailbase_sqlite::Connection,
-  config: QueryApiConfig,
-) -> Result<QueryApi, String> {
-  // TODO: Check virtual table exists
-  return QueryApi::from(conn, config);
 }
 
 pub(crate) fn build_objectstore(

@@ -140,48 +140,6 @@ message RecordApiConfig {
   optional string schema_access_rule = 15;
 }
 
-enum QueryApiParameterType {
-  TEXT = 1;
-  BLOB = 2;
-  INTEGER = 3;
-  REAL = 4;
-}
-
-message QueryApiParameter {
-  optional string name = 1;
-  optional QueryApiParameterType type = 2;
-}
-
-enum QueryApiAcl {
-  QUERY_API_ACL_UNDEFINED = 0;
-  WORLD = 1;
-  AUTHENTICATED = 2;
-}
-
-/// Configuration schema for Query APIs.
-///
-/// Note that unlike record APIs, query APIs are read-only,
-/// which simplifies authorization.
-/// That said, query APIs are backed by virtual tables, thus in theory, they
-/// could allow writes (unlike views) in the future for module implementations
-/// that allow it such as SQLite's R*-tree.
-message QueryApiConfig {
-  optional string name = 1;
-  optional string virtual_table_name = 2;
-
-  /// Query parameters the Query API will accept and forward to the virtual
-  /// table (function) as argument expressions.
-  repeated QueryApiParameter params = 3;
-
-
-  // Read access control.
-  optional QueryApiAcl acl = 8;
-  optional string access_rule = 9;
-
-  // TODO: We might want to consider requiring or allowing to specify an
-  // optional JSON schema for query APIs to allow generating client bindings.
-}
-
 message JsonSchemaConfig {
   optional string name = 1;
   optional string schema = 2;
@@ -196,7 +154,6 @@ message Config {
   required AuthConfig auth = 4;
 
   repeated RecordApiConfig record_apis = 11;
-  repeated QueryApiConfig query_apis = 12;
 
   repeated JsonSchemaConfig schemas = 21;
 }

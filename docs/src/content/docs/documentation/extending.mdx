@@ -5,35 +5,21 @@ description: Collocating your logic
 
 import { Aside } from "@astrojs/starlight/components";
 
-This article explores different ways to extend TrailBase and integrate your own
-custom logic.
+This article explores different ways to integrate your App with TrailBase,
+extend it and your custom logic.
 
-## The Elephant in the Room
+The question of where code should run weighs heavily on the web: push
+everything to the server, more to the client or even the edge?
+Answering this question is s a lot simpler for rich client-side applications
+such as mobile, desktop, and progressive web apps or SPAs where the inclination
+is to run on the users device providing privacy friendly, snappy interactivity
+and offline capabilities.
+There are perfectly good reasons to not run everything in an untrusted, battery
+limited, SEO unfriendly client-side sandbox but the overall need for
+server-side execution is greatly reduced.
+**It's rich client-side apps where application servers like TrailBase can shine
+providing common server-side functionality and strategic extension points**.
 
-The question on where your code should run is as old as the modern internets
-becoming ever present since moving away from a static mainframe model and
-hermetic desktop applications.
-With pushing more interactive applications to slow platforms, such as early
-browsers or mobile phone, there was an increased need to distribute
-applications with interactivity happening in the front-end and heavy lifting
-happening in a back-end.
-That's not to say that there aren't other good reasons to not just run all your
-code in an untrusted, potentially slow client-side sandbox.
-
-In any case, having a rich client-side application like a mobile, desktop or
-progressive web apps will reduce your need for server-side integrations.
-They're often a good place to start [^1], even if over time you decide to move more
-logic to a backend to address issues like high fan-out, initial load
-times, and SEO for web applications.
-
-Inversely, if you have an existing application that is mostly running
-server-side, you probably already have a database, auth, and are hosting your
-own APIs, ... .
-If so, there's intrinsically less any application base can help you with.
-Remaining use-cases might be piece-meal adoption to speed up existing APIs or
-delegate authentication.
-One advantage of lightweight, self-hosted solutions is that they can be
-co-locate with your existing stack to reduce costs and latency.
 
 ## Bring your own Backend
 
@@ -46,27 +32,23 @@ services.
 Its stateless tokens using asymmetric crypto make it easy for other resource
 servers to hermetically authenticate your users.
 TrailBase's APIs can be accessed transitively, simply by forwarding user
-tokens.
+tokens [^1].
 Alternatively, you can fall back to raw SQLite for reads, writes and even
 schema alterations[^2].
 
-<Aside type="note" title="Service Accounts">
-  We would like to add service accounts in the future to authorize privileged
-  services independent from user-provided tokens or using fake user-accounts
-  for services.
-</Aside>
-
 ## Custom APIs in TrailBase
 
-TrailBase provides three main ways to embed your code and expose custom APIs:
+TrailBase provides a couple of ways to embed custom logic and provide custom APIs endpoints:
 
-1. Rust/Axum handlers.
-2. Stored procedures & [Query APIs](/documentation/apis/query_apis/)
-3. SQLite extensions, virtual table modules & [Query APIs](/documentation/apis/query_apis/)
+1. Rust HTTP handlers using Axum,
+2. JS/TS handlers [APIs](/documentation/apis/js_apis/),
+3. Stored database procedures,
+3. SQLite extensions and modules (virtual tables).
 
-Beware that the Rust APIs and [Query APIs](/documentation/apis/query_apis/) are
-likely subject to change. We rely on semantic versioning to explicitly signal
-breaking changes.
+<Aside type="note" title="Rust Handlers">
+  the Rust APIs are subject to change. However, we will rely on semantic
+  versioning to communicate breaking changes explicitly.
+</Aside>
 
 ### Using ES6 JavaScript & TypeScript
 
@@ -82,17 +64,16 @@ That said, similar to using PocketBase as a Go framework, you can build your
 own TrailBase binary and register custom Axum handlers written in rust with the
 main application router, see `/examples/custom-binary`.
 
-### Stored Procedures & Query APIs
+### Stored Procedures
 
-Unlike Postgres or MySQL, SQLite does not support stored procedures out of
-the box.
-TrailBase has adopted sqlean's
+Unlike Postgres or MySQL, SQLite does not support stored procedures out of the
+box.
+However, TrailBase has integrated sqlean's
 [user-defined functions](https://github.com/nalgeon/sqlean/blob/main/docs/define.md)
-to provide similar functionality and minimize lock-in over vanilla SQLite.
-Check out [Query APIs](/documentation/apis/query_apis/), to see how stored
-procedures can be hooked up.
+to fill the gap. You can easily adopt SQLean in your own backends avoiding
+lock-in.
 
-### SQLite extensions, virtual table modules  & Query APIs
+### SQLite Extensions and Modules a.k.a. Virtual Tables
 
 Likely the most bespoke approach is to expose your functionality as a custom
 SQLite extension or module similar to how TrailBase extends SQLite itself.
@@ -113,10 +94,11 @@ modules are:
 <div class="h-[30px]" />
 
 ---
+
 [^1]:
-    There are genuinely good properties in terms of latency, interactivity, offline
-    capabilities and privacy when processing your users' data locally on their
-    device.
+    We would like to add service accounts in the future to authorize privileged
+    services independent from user-provided tokens or using fake user-accounts
+    for services.
 
 [^2]:
     SQLite is running in WAL mode, which allows for parallel reads and

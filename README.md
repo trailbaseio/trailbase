@@ -8,8 +8,15 @@
 
 <p align="center">
   A <a href="https://trailbase.io/reference/benchmarks/">blazingly</a> fast,
-  single-file, open-source application server with type-safe APIs, built-in
-  JS/ES6/TS Runtime, Auth, and Admin UI built on Rust+SQLite+V8.
+  open-source application server with type-safe APIs, built-in JS/ES6/TS
+  Runtime, Auth, and Admin UI built on Rust, SQLite & V8.
+<p>
+
+<p align="center">
+  Simplify with fewer moving parts: an easy to self-host, single-file,
+  extensible backend for your mobile, web or desktop application.
+  Sub-millisecond latencies eliminate the need for dedicated caches, no more
+  stale or inconsistent data.
 <p>
 
 <p align="center">
@@ -41,11 +48,11 @@
   Try the <a href="https://demo.trailbase.io/_/admin" target="_blank">demo</a> online - Email: <em>admin@localhost</em>, password: <em>secret</em>.
 </p>
 
-For more context, documentation, and an online live demo, check out our website
+For more context, documentation, and a live demo, check out the website:
 [trailbase.io](https://trailbase.io).
-Questions? Thoughts? Check out the [FAQ](https://trailbase.io/reference/faq/)
-on our website or reach out.
-If you like TrailBase or its prospect, consider leaving a ⭐🙏.
+Questions? Thoughts? - Take a look at the
+[FAQ](https://trailbase.io/reference/faq/) or reach out.
+If you like TrailBase or want to follow along, consider leaving a ⭐🙏.
 
 ## Project Structure & Releases
 
@@ -58,7 +65,7 @@ Pre-built static binaries are available as [GitHub
 releases](https://github.com/trailbaseio/trailbase/releases/) for Linux an
 MacOS.
 
-Moreover, client packages and containers are available via:
+Moreover, containers and client packages are available via:
 
 - [Docker](https://hub.docker.com/r/trailbase/trailbase)
 - [JavaScript/Typescript client](https://www.npmjs.com/package/trailbase)

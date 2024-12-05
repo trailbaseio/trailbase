@@ -45,7 +45,5 @@ INSERT INTO virtual_spatial_index VALUES
 --   (INSERT INTO virtual_spatial_index VALUES ($1, $2, $3, $4, $5, uuid_v7()) RETURNING *));
 
 -- Create a virtual table based on a stored procedure.
---
--- This virtual table is also exposed as a Query API in the config. To see in
--- action browse to: http://localhost:4000/api/query/v1/simple_query_api?number=4.
-CREATE VIRTUAL TABLE simple_query_api USING define((SELECT UNIXEPOCH() AS epoch, $1 AS random_number));
+CREATE VIRTUAL TABLE simple_vtable_from_stored_procedure
+  USING define((SELECT UNIXEPOCH() AS epoch, $1 AS random_number));

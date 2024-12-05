@@ -46,13 +46,10 @@ addRoute("GET", "/test/:table", stringHandler(async (req) => {
     return `entries: ${rows[0][0]}`;
   }
 
-  throw new HttpError(StatusCodes.BAD_REQUEST, "Missing '?table=' search query parm");
+  throw new HttpError(
+      StatusCodes.BAD_REQUEST, "Missing '?table=' search query parm");
 }));
 ```
 
 More examples can be found in the repository in
 `client/testfixture/scripts/index.ts`.
-
-<Aside type="note" title="ToDO">
-  Needs more extensive documentation.
-</Aside>

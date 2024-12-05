@@ -1,3 +1,39 @@
+## v0.3.0
+
+A foundational overhaul of SQLite's integration and orchestration. This will
+unlock more features in the future and already improves performance.
+Write performance roughly doubled and read latencies are are down by about two
+thirds to sub-milliseconds 🏃:
+
+* Replaced the libsql rust bindings with rusqlite and the libsql fork of SQLite
+  with vanilla SQLite.
+ * The bindings specifically are sub-par as witnessed by libsql-server itself
+   using a forked rusqlite.
+ * Besides some missing APIs like `update_hooks`, which we require for realtime
+   APIs in the future, the implemented execution model is not ideal for
+   high-concurrency.
+ * The libsql fork is also slowly getting more and more outdated missing out on
+   recent SQLite development.
+ * The idea of a more inclusive SQLite is great but the manifesto hasn't yet
+   manifested itself. It seems the owners are currently focused on
+   libsql-server and another fork called limbo. Time will tell, we can always
+   revisit.
+
+Other breaking changes:
+
+* Removed Query APIs in favor of JS/TS APIs, which were added in v0.2. The JS
+  runtime is a lot more versatile and provides general I/O. Moreover, query APIs
+  weren't very integrated yet, for one they were missing an Admin UI. We would
+  rather spent the effort on realtime APIs instead.
+  If you have an existing configuration, you need to strip the `query_apis`
+  top-level field to satisfy the textproto parser. We could have left the
+  field as deprecated but since there aren't any users yet, might as well...
+
+Other changes:
+
+* Replaced libsql's vector search with sqlite-vec.
+* Reduced logging overhead.
+
 ## v0.2.6
 
 * Type JSON more strictly.

@@ -51,7 +51,7 @@ Likewise, TrailBase has a few nifty tricks up its sleeve:
 - Language independent type-safety via JSON Schemas with strict typing
   being enforced all the way down to the database level[^4].
 - TrailBase's JavaScript runtime supports full ES6, TypeScript transpilation,
-  and is built on V8 making it [~45x faster](/reference/benchmarks/).
+  and is built on V8 making it [~40x faster](/reference/benchmarks/).
 - First-class access to all of SQLite's features and capabilities.
 - A simple auth UI.
 - Stateless JWT auth-tokens for simple, hermetic authentication in other
@@ -61,19 +61,17 @@ Likewise, TrailBase has a few nifty tricks up its sleeve:
 
 ### Language & Performance
 
-Another difference is that PocketBase and TrailBase are written in Go and Rust,
-respectively, which may matter to you especially when modifying either or using
-them as "frameworks".
+Another difference is that PocketBase is written in Go, while TrailBase uses
+Rust. Beyond feelings this may matter to you when using them as a "framework"
+or modifying the core.
 
-Beyond personal preferences, both languages are speedy options in practice.
+In practice, both languages are speedy options with a rich ecosystem.
 That said, Rust's lack of a runtime and lower FFI overhead should make it the
 more performant choice.
-To our own surprise, we found a significant gap. TrailBase is roughly 3.5x to
-7x faster, in our [simplistic micro-benchmarks](/reference/benchmarks/)
-depending on the use-case.
-Not to toot our own horn, this is mostly thanks to combining a very low
-overhead language, one of the fastest HTTP servers, a V8 engine, and incredibly
-quick SQLite.
+Measuring we found a significant gap with TrailBase's APIs being roughly
+[10x and JS runtime 40x faster](/reference/benchmarks/).
+This is the result of SQLite of first-class JS engines being so quick that even
+small overheads weight heavily.
 
 <div class="h-[30px]" />
 

@@ -10,5 +10,5 @@ For context, some larger features we have on our Roadmap:
   Also, service-accounts to auth other backends as opposed to end-users.
 - Many SQLite databases: imagine a separate database by tenant or user.
 - TLS termination and proxy capabilities.
-- Consider a GraphQL layer to address fan-out and integrate external
-  resources.
+- We might want to address fan-out and the integration of external resources
+  through GraphQL or similar.

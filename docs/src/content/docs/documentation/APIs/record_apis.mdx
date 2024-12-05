@@ -184,22 +184,27 @@ handling in place so that only metadata is stored in the underlying table while
 the actual files are kept in an object store.
 
 By adding a `TEXT` column with a `CHECK(jsonschema('std.FileUpload'))`
-constrained to your TABLE, you instruct TrailBase to store file metadata as
-defined by the "std.FileUpload" JSON schema and write the contents off to
-object storage.
-Files can then be upload by sending the contents as part your JSON or
-`multipart/form-data` POST request.
+constrained to your table definition, you instruct TrailBase to store file
+metadata as defined by the "std.FileUpload" JSON schema while keeping the contents
+in a separate object store.
+Files can then be upload by sending their contents as part of your JSON
+requests or `multipart/form-data` POST requests.
 Downloading files is slightly different, since reading the column through
 record APIs will only yield the metadata. There's a dedicated GET API endpoint
 for file downloads:
 `/api/v1/records/<record_api_name>/<record_id>/file/<column_name>`
 
+### S3 Integration
 
-<Aside type="note" title="S3">
-  In principle, TrailBase can also S3 object storage, however the settings
-  aren't yet wired through. Currently uploads are stored under
-  `--data-dir/uploads` in the local file system.
-</Aside>
+By default, TrailBase will keep the object store on the local file system under
+`<data-dir>/uploads`.
+Alternatively, one can configure an S3 bucket via the
+[configuration file](https://github.com/trailbaseio/trailbase/blob/38e0580fdc3109523cc66387a6b1a30259b270bd/proto/config.proto#L57),
+it's not yet accessible through the admin dashboard.
+If you need support for
+[other storage backends](https://docs.rs/object_store/latest/object_store/#available-objectstore-implementations),
+let us know.
+
 
 ## Custom JSON Schemas
 

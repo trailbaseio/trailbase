@@ -34,19 +34,6 @@ record_apis: [
     acl_authenticated: [CREATE, READ, UPDATE, DELETE]
   }
 ]
-query_apis: [
-  {
-    name: "simple_query_api"
-    virtual_table_name: "simple_query_api"
-    params: [
-      {
-        name: "number"
-        type: INTEGER
-      }
-    ]
-    acl: WORLD
-  }
-]
 schemas: [
   {
     name: "simple_schema"

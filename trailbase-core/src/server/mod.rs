@@ -19,7 +19,7 @@ use crate::app_state::AppState;
 use crate::assets::AssetService;
 use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
-use crate::constants::{AUTH_API_PATH, HEADER_CSRF_TOKEN, QUERY_API_PATH, RECORD_API_PATH};
+use crate::constants::{AUTH_API_PATH, HEADER_CSRF_TOKEN, RECORD_API_PATH};
 use crate::data_dir::DataDir;
 use crate::logging;
 use crate::scheduler;
@@ -250,7 +250,6 @@ impl Server {
     let mut router = Router::new()
       // Public, stable and versioned APIs.
       .nest(&format!("/{RECORD_API_PATH}"), crate::records::router())
-      .nest(&format!("/{QUERY_API_PATH}"), crate::query::router())
       .nest(&format!("/{AUTH_API_PATH}"), auth::router())
       .route("/api/healthcheck", get(healthcheck_handler));
 
