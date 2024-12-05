@@ -5,6 +5,7 @@ use axum_client_ip::InsecureClientIp;
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::field::Field;
 use tracing::span::{Attributes, Id, Record, Span};
@@ -97,54 +98,105 @@ pub(super) fn sqlite_logger_on_response(
   );
 }
 
-pub struct SqliteLogLayer {
+struct SqliteLogLayerState {
   conn: trailbase_sqlite::Connection,
+  sender: crossbeam_channel::Sender<LogFieldStorage>,
+  receiver: crossbeam_channel::Receiver<LogFieldStorage>,
+}
+
+pub struct SqliteLogLayer {
+  state: Arc<SqliteLogLayerState>,
 }
 
 impl SqliteLogLayer {
   pub fn new(state: &AppState) -> Self {
+    // TODO: should we use a bounded receiver to create back-pressure?
+    let (sender, receiver) = crossbeam_channel::unbounded();
     return SqliteLogLayer {
-      conn: state.logs_conn().clone(),
+      state: Arc::new(SqliteLogLayerState {
+        conn: state.logs_conn().clone(),
+        sender,
+        receiver,
+      }),
     };
   }
 
   // The writer runs in a separate Task in the background and receives Logs via a channel, which it
   // then writes to Sqlite.
-  //
-  // TODO: should we use a bounded receiver to create back-pressure?
-  // TODO: We could use recv_many() and batch insert.
   fn write_log(&self, log: LogFieldStorage) -> Result<(), trailbase_sqlite::Error> {
-    return self.conn.call_and_forget(move |conn| {
-      let mut stmt = match conn.prepare_cached(
-        r#"
+    let state = self.state.clone();
+    state.sender.send(log).expect(BUG_TEXT);
+
+    let rt = tokio::runtime::Handle::current();
+    rt.spawn(async move {
+      tokio::time::sleep(Duration::from_millis(50)).await;
+
+      // Work stealing.
+      let logs = state.receiver.try_iter().take(128).collect::<Vec<_>>();
+      if logs.is_empty() {
+        return;
+      }
+
+      let result = state.conn.call_and_forget(move |conn| {
+        if logs.len() > 1 {
+          fn commit(
+            conn: &mut rusqlite::Connection,
+            logs: Vec<LogFieldStorage>,
+          ) -> Result<(), rusqlite::Error> {
+            let tx = conn.transaction()?;
+            for log in logs {
+              SqliteLogLayer::insert_log(&tx, log)?;
+            }
+            return tx.commit();
+          }
+
+          if let Err(err) = commit(conn, logs) {
+            log::warn!("log insert failed: {err}");
+          }
+        } else {
+          for log in logs {
+            if let Err(err) = Self::insert_log(conn, log) {
+              log::warn!("log insert failed: {err}");
+            }
+          }
+        }
+      });
+
+      if let Err(err) = result {
+        error!("{err}");
+      }
+    });
+
+    return Ok(());
+  }
+
+  #[inline]
+  fn insert_log(conn: &rusqlite::Connection, log: LogFieldStorage) -> Result<(), rusqlite::Error> {
+    lazy_static::lazy_static! {
+      static ref QUERY: String = indoc::formatdoc! {"
         INSERT INTO
           _logs (type, level, status, method, url, latency, client_ip, referer, user_agent)
         VALUES
           ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      "#,
-      ) {
-        Ok(stmt) => stmt,
-        Err(err) => {
-          warn!("Logs stmt failed: {err}");
-          return;
-        }
-      };
+      "};
+    }
 
-      if let Err(err) = stmt.execute(rusqlite::params!(
-        // "type": FIXME: should be: admin, records, auth, other request
-        LogType::HttpRequest as i32,
-        log.level,
-        log.status,
-        log.method,
-        log.uri,
-        log.latency_ms,
-        log.client_ip,
-        log.referer,
-        log.user_agent // FIXME: we're not writing the JSON data.
-      )) {
-        warn!("logs writing failed: {err}");
-      }
-    });
+    let mut stmt = conn.prepare_cached(&QUERY)?;
+    stmt.execute((
+      // FIXME: we're not writing the JSON data.
+      // FIXME: type-field is hard-coded. Should be: admin, records, auth, other request
+      LogType::HttpRequest as i32,
+      log.level,
+      log.status,
+      log.method,
+      log.uri,
+      log.latency_ms,
+      log.client_ip,
+      log.referer,
+      log.user_agent,
+    ))?;
+
+    return Ok(());
   }
 }
 

@@ -6134,6 +6134,7 @@ dependencies = [
  "chrono",
  "cookie",
  "criterion",
+ "crossbeam-channel",
  "ed25519-dalek",
  "env_logger 0.11.5",
  "fallible-iterator",
