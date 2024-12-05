@@ -13,7 +13,6 @@ use tokio::signal;
 use tokio::task::JoinSet;
 use tower_cookies::CookieManagerLayer;
 use tower_http::{cors, limit::RequestBodyLimitLayer, services::ServeDir, trace::TraceLayer};
-use tracing_subscriber::{filter, prelude::*};
 
 use crate::admin;
 use crate::app_state::AppState;
@@ -143,17 +142,20 @@ impl Server {
     // This declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
     //
     // NOTE: it's ok to fail. Just means someone else already initialize the tracing sub-system.
-    let _ = tracing_subscriber::registry()
-      .with(
-        logging::SqliteLogLayer::new(&self.state).with_filter(
-          filter::Targets::new()
-            .with_target("tower_http::trace::on_response", filter::LevelFilter::DEBUG)
-            .with_target("tower_http::trace::on_request", filter::LevelFilter::DEBUG)
-            .with_target("tower_http::trace::make_span", filter::LevelFilter::DEBUG)
-            .with_default(filter::LevelFilter::INFO),
-        ),
-      )
-      .try_init();
+    // {
+    //   use tracing_subscriber::{filter, prelude::*};
+    //   let _ = tracing_subscriber::registry()
+    //     .with(
+    //       logging::SqliteLogLayer::new(&self.state).with_filter(
+    //         filter::Targets::new()
+    //           .with_target("tower_http::trace::on_response", filter::LevelFilter::DEBUG)
+    //           .with_target("tower_http::trace::on_request", filter::LevelFilter::DEBUG)
+    //           .with_target("tower_http::trace::make_span", filter::LevelFilter::DEBUG)
+    //           .with_default(filter::LevelFilter::INFO),
+    //       ),
+    //     )
+    //     .try_init();
+    // }
 
     let _raii_tasks = scheduler::start_periodic_tasks(&self.state);
 

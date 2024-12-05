@@ -5,7 +5,6 @@ use axum_client_ip::InsecureClientIp;
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
 use std::time::Duration;
 use tracing::field::Field;
 use tracing::span::{Attributes, Id, Record, Span};
@@ -98,80 +97,66 @@ pub(super) fn sqlite_logger_on_response(
   );
 }
 
-struct SqliteLogLayerState {
-  conn: trailbase_sqlite::Connection,
-  sender: crossbeam_channel::Sender<LogFieldStorage>,
-  receiver: crossbeam_channel::Receiver<LogFieldStorage>,
-}
-
 pub struct SqliteLogLayer {
-  state: Arc<SqliteLogLayerState>,
+  sender: tokio::sync::mpsc::UnboundedSender<Box<LogFieldStorage>>,
 }
 
 impl SqliteLogLayer {
   pub fn new(state: &AppState) -> Self {
+    // NOTE: We're boxing the channel contents to lower the growth rate of back-stopped unbound
+    // channels. The underlying container doesn't seem to every shrink :/.
+    //
     // TODO: should we use a bounded receiver to create back-pressure?
-    let (sender, receiver) = crossbeam_channel::unbounded();
-    return SqliteLogLayer {
-      state: Arc::new(SqliteLogLayerState {
-        conn: state.logs_conn().clone(),
-        sender,
-        receiver,
-      }),
-    };
+    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+
+    let conn = state.logs_conn().clone();
+    let rt = tokio::runtime::Handle::current();
+    rt.spawn(async move {
+      const LIMIT: usize = 128;
+      let mut buffer = Vec::<Box<LogFieldStorage>>::with_capacity(LIMIT);
+
+      while receiver.recv_many(&mut buffer, LIMIT).await > 0 {
+        let logs = std::mem::take(&mut buffer);
+
+        let result = conn
+          .call(move |conn| {
+            if logs.len() > 1 {
+              let tx = conn.transaction()?;
+              for log in logs {
+                SqliteLogLayer::insert_log(&tx, log)?;
+              }
+              tx.commit()?;
+            } else {
+              for log in logs {
+                Self::insert_log(conn, log)?
+              }
+            }
+
+            Ok(())
+          })
+          .await;
+
+        if let Err(err) = result {
+          warn!("Failed to send logs: {err}");
+        }
+      }
+    });
+
+    return SqliteLogLayer { sender };
   }
 
   // The writer runs in a separate Task in the background and receives Logs via a channel, which it
   // then writes to Sqlite.
-  fn write_log(&self, log: LogFieldStorage) -> Result<(), trailbase_sqlite::Error> {
-    let state = self.state.clone();
-    state.sender.send(log).expect(BUG_TEXT);
-
-    let rt = tokio::runtime::Handle::current();
-    rt.spawn(async move {
-      tokio::time::sleep(Duration::from_millis(50)).await;
-
-      // Work stealing.
-      let logs = state.receiver.try_iter().take(128).collect::<Vec<_>>();
-      if logs.is_empty() {
-        return;
-      }
-
-      let result = state.conn.call_and_forget(move |conn| {
-        if logs.len() > 1 {
-          fn commit(
-            conn: &mut rusqlite::Connection,
-            logs: Vec<LogFieldStorage>,
-          ) -> Result<(), rusqlite::Error> {
-            let tx = conn.transaction()?;
-            for log in logs {
-              SqliteLogLayer::insert_log(&tx, log)?;
-            }
-            return tx.commit();
-          }
-
-          if let Err(err) = commit(conn, logs) {
-            log::warn!("log insert failed: {err}");
-          }
-        } else {
-          for log in logs {
-            if let Err(err) = Self::insert_log(conn, log) {
-              log::warn!("log insert failed: {err}");
-            }
-          }
-        }
-      });
-
-      if let Err(err) = result {
-        error!("{err}");
-      }
-    });
-
-    return Ok(());
+  #[inline]
+  fn write_log(&self, log: LogFieldStorage) {
+    self.sender.send(Box::new(log)).expect(BUG_TEXT);
   }
 
   #[inline]
-  fn insert_log(conn: &rusqlite::Connection, log: LogFieldStorage) -> Result<(), rusqlite::Error> {
+  fn insert_log(
+    conn: &rusqlite::Connection,
+    log: Box<LogFieldStorage>,
+  ) -> Result<(), rusqlite::Error> {
     lazy_static::lazy_static! {
       static ref QUERY: String = indoc::formatdoc! {"
         INSERT INTO
@@ -233,9 +218,7 @@ where
 
       storage.level = level_to_int(event.metadata().level());
 
-      if let Err(err) = self.write_log(storage) {
-        warn!("Failed to send to logs to writer: {err}");
-      }
+      self.write_log(storage);
     }
   }
 }
