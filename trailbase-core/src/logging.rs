@@ -5,7 +5,6 @@ use axum_client_ip::InsecureClientIp;
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::BTreeMap;
 use std::time::Duration;
 use tracing::field::Field;
 use tracing::span::{Attributes, Id, Record, Span};
@@ -27,7 +26,7 @@ use crate::AppState;
 //  * We have a period task to wipe logs past their retention.
 //
 #[repr(i32)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 enum LogType {
   Undefined = 0,
   AdminRequest = 1,
@@ -35,7 +34,8 @@ enum LogType {
   RecordApiRequest = 3,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// DB schema representation.
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct Log {
   pub id: Option<[u8; 16]>,
   pub created: Option<f64>,
@@ -82,14 +82,6 @@ pub(super) fn sqlite_logger_on_request(_req: &Request<Body>, _span: &Span) {
   // request related information into the span
 }
 
-#[inline]
-fn as_millis_f64(d: &Duration) -> f64 {
-  const NANOS_PER_MILLI: f64 = 1_000_000.0;
-  const MILLIS_PER_SEC: u64 = 1_000;
-  return (d.as_secs() as f64) * (MILLIS_PER_SEC as f64)
-    + (d.subsec_nanos() as f64) / (NANOS_PER_MILLI);
-}
-
 pub(super) fn sqlite_logger_on_response(
   response: &Response<Body>,
   latency: Duration,
@@ -121,7 +113,7 @@ impl SqliteLogLayer {
   //
   // TODO: should we use a bounded receiver to create back-pressure?
   // TODO: We could use recv_many() and batch insert.
-  fn write_log(&self, log: Log) -> Result<(), trailbase_sqlite::Error> {
+  fn write_log(&self, log: LogFieldStorage) -> Result<(), trailbase_sqlite::Error> {
     return self.conn.call_and_forget(move |conn| {
       let mut stmt = match conn.prepare_cached(
         r#"
@@ -139,23 +131,22 @@ impl SqliteLogLayer {
       };
 
       if let Err(err) = stmt.execute(rusqlite::params!(
-        log.r#type,
+        // "type": FIXME: should be: admin, records, auth, other request
+        LogType::HttpRequest as i32,
         log.level,
         log.status,
         log.method,
-        log.url,
-        log.latency,
+        log.uri,
+        log.latency_ms,
         log.client_ip,
         log.referer,
-        log.user_agent
+        log.user_agent // FIXME: we're not writing the JSON data.
       )) {
         warn!("logs writing failed: {err}");
       }
     });
   }
 }
-
-const BUG_TEXT: &str = "Span not found, this is a bug";
 
 impl<S> Layer<S> for SqliteLogLayer
 where
@@ -176,57 +167,24 @@ where
     let mut extensions = span.extensions_mut();
     if let Some(storage) = extensions.get_mut::<LogFieldStorage>() {
       values.record(&mut LogJsonVisitor(storage));
+    } else {
+      info!("logs already consumed");
     }
   }
 
   fn on_event(&self, event: &tracing::Event<'_>, ctx: Context<'_, S>) {
-    let Some(span) = ctx.event_span(event) else {
-      return;
-    };
+    let span = ctx.event_span(event).expect(BUG_TEXT);
 
     let mut extensions = span.extensions_mut();
-    if let Some(s) = extensions.get_mut::<LogFieldStorage>() {
-      let mut storage = std::mem::take(s);
-
+    if let Some(mut storage) = extensions.remove::<LogFieldStorage>() {
       event.record(&mut LogJsonVisitor(&mut storage));
 
-      let log = Log {
-        id: None,
-        created: None,
-        // FIXME: Is it a admin/records/auth,plain http request...?
-        // Or should this even be here? Couldn't we just infer client-side by prefix?
-        r#type: LogType::HttpRequest as i32,
-        level: level_to_int(event.metadata().level()),
-        status: storage.status as u16,
-        method: storage.method,
-        url: storage.uri,
-        latency: storage.latency_ms,
-        client_ip: storage.client_ip,
-        referer: storage.referer,
-        user_agent: storage.user_agent,
-        data: {
-          if storage.fields.is_empty() {
-            None
-          } else {
-            Some(json!(storage.fields))
-          }
-        },
-      };
+      storage.level = level_to_int(event.metadata().level());
 
-      if let Err(err) = self.write_log(log) {
+      if let Err(err) = self.write_log(storage) {
         warn!("Failed to send to logs to writer: {err}");
       }
     }
-  }
-}
-
-fn level_to_int(level: &tracing::Level) -> i32 {
-  match *level {
-    tracing::Level::TRACE => 4,
-    tracing::Level::DEBUG => 3,
-    tracing::Level::INFO => 2,
-    tracing::Level::WARN => 1,
-    tracing::Level::ERROR => 0,
   }
 }
 
@@ -241,13 +199,16 @@ struct LogFieldStorage {
   user_agent: String,
   version: String,
 
+  // Log level.
+  level: i64,
+
   // Response fields/properties
   status: u64,
   latency_ms: f64,
   length: i64,
 
   // All other fields.
-  fields: BTreeMap<&'static str, serde_json::Value>,
+  fields: serde_json::Map<String, serde_json::Value>,
 }
 
 struct LogJsonVisitor<'a>(&'a mut LogFieldStorage);
@@ -257,7 +218,7 @@ impl tracing::field::Visit for LogJsonVisitor<'_> {
     match field.name() {
       "latency_ms" => self.0.latency_ms = double,
       name => {
-        self.0.fields.insert(name, json!(double));
+        self.0.fields.insert(name.into(), double.into());
       }
     };
   }
@@ -266,7 +227,7 @@ impl tracing::field::Visit for LogJsonVisitor<'_> {
     match field.name() {
       "length" => self.0.length = int,
       name => {
-        self.0.fields.insert(name, json!(int));
+        self.0.fields.insert(name.into(), int.into());
       }
     };
   }
@@ -275,13 +236,13 @@ impl tracing::field::Visit for LogJsonVisitor<'_> {
     match field.name() {
       "status" => self.0.status = uint,
       name => {
-        self.0.fields.insert(name, json!(uint));
+        self.0.fields.insert(name.into(), uint.into());
       }
     };
   }
 
   fn record_bool(&mut self, field: &Field, b: bool) {
-    self.0.fields.insert(field.name(), json!(b));
+    self.0.fields.insert(field.name().into(), b.into());
   }
 
   fn record_str(&mut self, field: &Field, s: &str) {
@@ -291,7 +252,7 @@ impl tracing::field::Visit for LogJsonVisitor<'_> {
       "referer" => self.0.referer = s.to_string(),
       "user_agent" => self.0.user_agent = s.to_string(),
       name => {
-        self.0.fields.insert(name, json!(s));
+        self.0.fields.insert(name.into(), s.into());
       }
     };
   }
@@ -303,57 +264,44 @@ impl tracing::field::Visit for LogJsonVisitor<'_> {
       "uri" => self.0.uri = v,
       "version" => self.0.version = v,
       name => {
-        self.0.fields.insert(name, json!(v));
+        self.0.fields.insert(name.into(), v.into());
       }
     };
   }
 
   fn record_error(&mut self, field: &Field, err: &(dyn std::error::Error + 'static)) {
-    self.0.fields.insert(field.name(), json!(err.to_string()));
+    self
+      .0
+      .fields
+      .insert(field.name().into(), json!(err.to_string()));
   }
 }
 
-// #[derive(Debug)]
-// struct CustomFieldStorage(BTreeMap<String, serde_json::Value>);
-//
-// struct JsonVisitor<'a>(&'a mut BTreeMap<String, serde_json::Value>);
-//
-// impl<'a> tracing::field::Visit for JsonVisitor<'a> {
-//   fn record_f64(&mut self, field: &Field, double: f64) {
-//     self.0.insert(field.name().to_string(), json!(double));
-//   }
-//
-//   fn record_i64(&mut self, field: &Field, int: i64) {
-//     self.0.insert(field.name().to_string(), json!(int));
-//   }
-//
-//   fn record_u64(&mut self, field: &Field, uint: u64) {
-//     self.0.insert(field.name().to_string(), json!(uint));
-//   }
-//
-//   fn record_bool(&mut self, field: &Field, b: bool) {
-//     self.0.insert(field.name().to_string(), json!(b));
-//   }
-//
-//   fn record_str(&mut self, field: &Field, s: &str) {
-//     self.0.insert(field.name().to_string(), json!(s));
-//   }
-//
-//   fn record_error(&mut self, field: &Field, err: &(dyn std::error::Error + 'static)) {
-//     self
-//       .0
-//       .insert(field.name().to_string(), json!(err.to_string()));
-//   }
-//
-//   fn record_debug(&mut self, field: &Field, dbg: &dyn std::fmt::Debug) {
-//     self
-//       .0
-//       .insert(field.name().to_string(), json!(format!("{:?}", dbg)));
-//   }
-// }
+#[inline]
+fn as_millis_f64(d: &Duration) -> f64 {
+  const NANOS_PER_MILLI: f64 = 1_000_000.0;
+  const MILLIS_PER_SEC: u64 = 1_000;
 
+  return (d.as_secs() as f64) * (MILLIS_PER_SEC as f64)
+    + (d.subsec_nanos() as f64) / (NANOS_PER_MILLI);
+}
+
+#[inline]
 fn get_header<'a>(headers: &'a HeaderMap, header_name: &'static str) -> Option<&'a str> {
   headers
     .get(header_name)
     .and_then(|header_value| header_value.to_str().ok())
 }
+
+#[inline]
+fn level_to_int(level: &tracing::Level) -> i64 {
+  match *level {
+    tracing::Level::TRACE => 4,
+    tracing::Level::DEBUG => 3,
+    tracing::Level::INFO => 2,
+    tracing::Level::WARN => 1,
+    tracing::Level::ERROR => 0,
+  }
+}
+
+const BUG_TEXT: &str = "Span not found, this is a bug";

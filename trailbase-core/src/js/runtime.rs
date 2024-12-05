@@ -303,9 +303,9 @@ impl RuntimeSingleton {
         })
         .collect();
 
-      for thread in threads {
-        if thread.join().is_err() {
-          log::error!("Failed to join worker");
+      for (idx, thread) in threads.into_iter().enumerate() {
+        if let Err(err) = thread.join() {
+          log::error!("Failed to join worker: {idx}: {err:?}");
         }
       }
     });
