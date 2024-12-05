@@ -12,6 +12,7 @@ use serde_json::from_value;
 use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::oneshot;
 
@@ -203,20 +204,32 @@ impl RuntimeSingleton {
       let mut completers: Vec<Completer> = vec![];
 
       loop {
-        let mut completed = vec![];
-        for (index, completer) in completers.iter().enumerate() {
-          if completer.is_ready(runtime) {
-            completed.push(index);
-          }
-        }
+        let completed = completers
+          .iter()
+          .enumerate()
+          .filter_map(|(idx, completer)| {
+            if completer.is_ready(runtime) {
+              Some(idx)
+            } else {
+              None
+            }
+          })
+          .collect::<Vec<_>>();
 
-        for index in completed.iter().rev() {
-          let completer = completers.swap_remove(*index);
+        for index in completed.into_iter().rev() {
+          let completer = completers.swap_remove(index);
           completer.resolve(runtime).await;
         }
+        let pending = !completers.is_empty();
+
+        const DURATION: Option<Duration> = Some(Duration::from_millis(25));
+        const OPTS: PollEventLoopOptions = PollEventLoopOptions {
+          wait_for_inspector: false,
+          pump_v8_message_loop: true,
+        };
 
         tokio::select! {
-          result = runtime.await_event_loop(PollEventLoopOptions::default(), Some(std::time::Duration::from_millis(25))), if !completers.is_empty() => {
+          result = runtime.await_event_loop(OPTS, DURATION), if pending => {
             if let Err(err) = result{
               log::error!("JS event loop: {err}");
             }
@@ -272,48 +285,52 @@ impl RuntimeSingleton {
       })
       .unzip();
 
-    let root_thread = std::thread::spawn(move || {
-      init_platform(n_threads as u32, true);
+    let handle = if n_threads > 0 {
+      Some(std::thread::spawn(move || {
+        init_platform(n_threads as u32, true);
 
-      let threads: Vec<_> = receivers
-        .into_iter()
-        .enumerate()
-        .map(|(index, receiver)| {
-          let shared_receiver = shared_receiver.clone();
+        let threads: Vec<_> = receivers
+          .into_iter()
+          .enumerate()
+          .map(|(index, receiver)| {
+            let shared_receiver = shared_receiver.clone();
 
-          return std::thread::spawn(move || {
-            let tokio_runtime = std::rc::Rc::new(
-              tokio::runtime::Builder::new_current_thread()
-                .enable_time()
-                .enable_io()
-                .thread_name("v8-runtime")
-                .build()
-                .unwrap(),
-            );
+            return std::thread::spawn(move || {
+              let tokio_runtime = std::rc::Rc::new(
+                tokio::runtime::Builder::new_current_thread()
+                  .enable_time()
+                  .enable_io()
+                  .thread_name("v8-runtime")
+                  .build()
+                  .unwrap(),
+              );
 
-            let mut js_runtime = match Self::init_runtime(index, tokio_runtime.clone()) {
-              Ok(js_runtime) => js_runtime,
-              Err(err) => {
-                panic!("Failed to init v8 runtime on thread {index}: {err}");
-              }
-            };
+              let mut js_runtime = match Self::init_runtime(index, tokio_runtime.clone()) {
+                Ok(js_runtime) => js_runtime,
+                Err(err) => {
+                  panic!("Failed to init v8 runtime on thread {index}: {err}");
+                }
+              };
 
-            Self::event_loop(&mut js_runtime, receiver, shared_receiver);
-          });
-        })
-        .collect();
+              Self::event_loop(&mut js_runtime, receiver, shared_receiver);
+            });
+          })
+          .collect();
 
-      for (idx, thread) in threads.into_iter().enumerate() {
-        if let Err(err) = thread.join() {
-          log::error!("Failed to join worker: {idx}: {err:?}");
+        for (idx, thread) in threads.into_iter().enumerate() {
+          if let Err(err) = thread.join() {
+            log::error!("Failed to join worker: {idx}: {err:?}");
+          }
         }
-      }
-    });
+      }))
+    } else {
+      None
+    };
 
     return RuntimeSingleton {
       n_threads,
       sender: shared_sender,
-      handle: Some(root_thread),
+      handle,
       state,
     };
   }
