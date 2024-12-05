@@ -185,7 +185,7 @@ impl Row {
 type CallFn = Box<dyn FnOnce(&mut rusqlite::Connection) + Send + 'static>;
 
 enum Message {
-  Execute(CallFn),
+  Run(CallFn),
   Close(oneshot::Sender<std::result::Result<(), rusqlite::Error>>),
 }
 
@@ -224,7 +224,7 @@ impl Connection {
 
     self
       .sender
-      .send(Message::Execute(Box::new(move |conn| {
+      .send(Message::Run(Box::new(move |conn| {
         let value = function(conn);
         let _ = sender.send(value);
       })))
@@ -239,39 +239,12 @@ impl Connection {
   {
     self
       .sender
-      .send(Message::Execute(Box::new(move |conn| {
+      .send(Message::Run(Box::new(move |conn| {
         function(conn);
       })))
       .map_err(|_| Error::ConnectionClosed)?;
 
     return Ok(());
-  }
-
-  /// Call a function in background thread and get the result
-  /// asynchronously.
-  ///
-  /// This method can cause a `panic` if the underlying database connection is closed.
-  /// it is a more user-friendly alternative to the [`Connection::call`] method.
-  /// It should be safe if the connection is never explicitly closed (using the
-  /// [`Connection::close`] call).
-  ///
-  /// Calling this on a closed connection will cause a `panic`.
-  pub async fn call_unwrap<F, R>(&self, function: F) -> R
-  where
-    F: FnOnce(&mut rusqlite::Connection) -> R + Send + 'static,
-    R: Send + 'static,
-  {
-    let (sender, receiver) = oneshot::channel::<R>();
-
-    self
-      .sender
-      .send(Message::Execute(Box::new(move |conn| {
-        let value = function(conn);
-        let _ = sender.send(value);
-      })))
-      .expect("database connection should be open");
-
-    receiver.await.expect(BUG_TEXT)
   }
 
   /// Query SQL statement.
@@ -464,20 +437,14 @@ where
 fn event_loop(mut conn: rusqlite::Connection, receiver: Receiver<Message>) {
   while let Ok(message) = receiver.recv() {
     match message {
-      Message::Execute(f) => f(&mut conn),
+      Message::Run(f) => f(&mut conn),
       Message::Close(s) => {
-        let result = conn.close();
+        match conn.close() {
+          Ok(v) => s.send(Ok(v)).expect(BUG_TEXT),
+          Err((_conn, e)) => s.send(Err(e)).expect(BUG_TEXT),
+        };
 
-        match result {
-          Ok(v) => {
-            s.send(Ok(v)).expect(BUG_TEXT);
-            break;
-          }
-          Err((c, e)) => {
-            conn = c;
-            s.send(Err(e)).expect(BUG_TEXT);
-          }
-        }
+        return;
       }
     }
   }
