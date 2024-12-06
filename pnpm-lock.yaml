@@ -57,9 +57,6 @@ importers:
       '@astrojs/check':
         specifier: ^0.9.4
         version: 0.9.4(prettier-plugin-astro@0.14.1)(prettier@3.4.2)(typescript@5.7.2)
-      '@astrojs/mdx':
-        specifier: ^4.0.1
-        version: 4.0.1(astro@4.16.17(@types/node@22.10.1)(rollup@4.28.1)(typescript@5.7.2))
       '@astrojs/starlight':
         specifier: ^0.29.2
         version: 0.29.2(astro@4.16.17(@types/node@22.10.1)(rollup@4.28.1)(typescript@5.7.2))
@@ -544,12 +541,6 @@ packages:
     engines: {node: ^18.17.1 || ^20.3.0 || >=21.0.0}
     peerDependencies:
       astro: ^4.8.0
-
-  '@astrojs/mdx@4.0.1':
-    resolution: {integrity: sha512-ShntQtbIsMEnR29DCF9vBNxBOGU29FVRBXKdS5njYic4t4asrbxYmjFXiqqQ0ONnBNHk9P0RHFgqEy1GL/YbJg==}
-    engines: {node: ^18.17.1 || ^20.3.0 || >=22.0.0}
-    peerDependencies:
-      astro: ^5.0.0
 
   '@astrojs/prism@3.1.0':
     resolution: {integrity: sha512-Z9IYjuXSArkAUx3N6xj6+Bnvx8OdUSHA8YoOgyepp3+zJmtVYJIl/I18GozdJVW1p5u/CNpl3Km7/gwTJK85cw==}
@@ -4973,25 +4964,6 @@ snapshots:
       es-module-lexer: 1.5.4
       estree-util-visit: 2.0.0
       gray-matter: 4.0.3
-      hast-util-to-html: 9.0.3
-      kleur: 4.1.5
-      rehype-raw: 7.0.0
-      remark-gfm: 4.0.0
-      remark-smartypants: 3.0.2
-      source-map: 0.7.4
-      unist-util-visit: 5.0.0
-      vfile: 6.0.3
-    transitivePeerDependencies:
-      - supports-color
-
-  '@astrojs/mdx@4.0.1(astro@4.16.17(@types/node@22.10.1)(rollup@4.28.1)(typescript@5.7.2))':
-    dependencies:
-      '@astrojs/markdown-remark': 6.0.0
-      '@mdx-js/mdx': 3.1.0(acorn@8.14.0)
-      acorn: 8.14.0
-      astro: 4.16.17(@types/node@22.10.1)(rollup@4.28.1)(typescript@5.7.2)
-      es-module-lexer: 1.5.4
-      estree-util-visit: 2.0.0
       hast-util-to-html: 9.0.3
       kleur: 4.1.5
       rehype-raw: 7.0.0
