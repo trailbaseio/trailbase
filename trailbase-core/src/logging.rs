@@ -69,7 +69,7 @@ pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
       uri = %request.uri(),
       version = ?request.version(),
       host,
-      client_ip = %client_ip.as_ref().map_or("", |s| s.as_str()),
+      client_ip = client_ip.as_ref().map_or("", |s| s.as_str()),
       user_agent,
       referer,
   );

@@ -137,7 +137,7 @@ impl AppState {
     return &self.state.conn;
   }
 
-  pub(crate) fn logs_conn(&self) -> &trailbase_sqlite::Connection {
+  pub fn logs_conn(&self) -> &trailbase_sqlite::Connection {
     return &self.state.logs_conn;
   }
 

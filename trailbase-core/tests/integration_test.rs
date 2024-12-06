@@ -4,6 +4,10 @@ use axum_test::multipart::MultipartForm;
 use axum_test::TestServer;
 use cookie::Cookie;
 use std::rc::Rc;
+use tracing_subscriber::{
+  filter::{self, LevelFilter},
+  prelude::*,
+};
 use trailbase_sqlite::params;
 
 use trailbase_core::api::{create_user_handler, login_with_password, CreateUserRequest};
@@ -15,7 +19,7 @@ use trailbase_core::AppState;
 use trailbase_core::{DataDir, Server, ServerOptions};
 
 #[test]
-fn test_record_apis() {
+fn integration_tests() {
   let runtime = Rc::new(
     tokio::runtime::Builder::new_multi_thread()
       .enable_all()
@@ -23,9 +27,12 @@ fn test_record_apis() {
       .unwrap(),
   );
 
+  let _ = runtime.block_on(test_record_apis());
+}
+
+async fn test_record_apis() {
   let data_dir = temp_dir::TempDir::new().unwrap();
 
-  let _ = runtime.block_on(async move {
   let app = Server::init(ServerOptions {
     data_dir: DataDir(data_dir.path().to_path_buf()),
     address: "".to_string(),
@@ -41,137 +48,184 @@ fn test_record_apis() {
 
   let state = app.state();
   let conn = state.conn();
+  let logs_conn = state.logs_conn();
 
   create_chat_message_app_tables(conn).await.unwrap();
   state.refresh_table_cache().await.unwrap();
 
   let room = add_room(conn, "room0").await.unwrap();
   let password = "Secret!1!!";
+  let client_ip = "22.11.22.11";
 
   // Register message table as record API with moderator read access.
   add_record_api(
-      &state,
-      "messages_api",
-      "message",
-    Acls {
-      authenticated: vec![PermissionFlag::Create, PermissionFlag::Read],
-      ..Default::default()
-    },
-      AccessRules {
-        create: Some(
-          "(SELECT 1 FROM room_members AS m WHERE _USER_.id = _REQ_._owner AND m.user = _USER_.id AND m.room = _REQ_.room)".to_string(),
-        ),
-        ..Default::default()
-      },
-    )
-    .await.unwrap();
+        &state,
+        "messages_api",
+        "message",
+        Acls {
+          authenticated: vec![PermissionFlag::Create, PermissionFlag::Read],
+          ..Default::default()
+        },
+        AccessRules {
+          create: Some(
+            "(SELECT 1 FROM room_members AS m WHERE _USER_.id = _REQ_._owner AND m.user = _USER_.id AND m.room = _REQ_.room)".to_string(),
+          ),
+          ..Default::default()
+        },
+      )
+      .await.unwrap();
 
   let user_x_email = "user_x@test.com";
   let user_x = create_user_for_test(&state, user_x_email, password)
-    .await.unwrap()
+    .await
+    .unwrap()
     .into_bytes();
 
-  let user_x_token = login_with_password(&state, user_x_email, password).await.unwrap();
+  let user_x_token = login_with_password(&state, user_x_email, password)
+    .await
+    .unwrap();
 
   add_user_to_room(conn, user_x, room).await.unwrap();
 
-  let server = TestServer::new(app.router().clone()).unwrap();
+  // Set up logging
+  let filter = || {
+    filter::Targets::new()
+      .with_target("tower_http::trace::on_response", LevelFilter::DEBUG)
+      .with_target("tower_http::trace::on_request", LevelFilter::DEBUG)
+      .with_target("tower_http::trace::make_span", LevelFilter::DEBUG)
+      .with_default(LevelFilter::INFO)
+  };
 
-  {
-    // User X can post to a JSON message.
-    let test_response = server
-      .post(&format!("/{RECORD_API_PATH}/messages_api"))
-      .add_cookie(Cookie::new(
-        COOKIE_AUTH_TOKEN,
-        user_x_token.auth_token.clone(),
-      ))
-      .json(&serde_json::json!({
-        "_owner": id_to_b64(&user_x),
-        "room": id_to_b64(&room),
-        "data": "user_x message to room",
-      }))
-      .await;
+  // This declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
+  let layer = tracing_subscriber::registry()
+    .with(trailbase_core::logging::SqliteLogLayer::new(app.state()).with_filter(filter()));
 
-    assert_eq!(
-      test_response.status_code(),
-      StatusCode::OK,
-      "{:?}",
-      test_response
-    );
-  }
-
-  {
-    // User X can post a form message.
-    let test_response = server
-      .post(&format!("/{RECORD_API_PATH}/messages_api"))
-      .add_cookie(Cookie::new(
-        COOKIE_AUTH_TOKEN,
-        user_x_token.auth_token.clone(),
-      ))
-      .form(&serde_json::json!({
-        "_owner": id_to_b64(&user_x),
-        "room": id_to_b64(&room),
-        "data": "user_x message to room",
-      }))
-      .await;
-
-    assert_eq!(test_response.status_code(), StatusCode::OK);
-  }
-
-  {
-    // User X can post a multipart message.
-    let form = MultipartForm::new()
-      .add_text("_owner", id_to_b64(&user_x))
-      .add_text("room", id_to_b64(&room))
-      .add_text("data", "user_x message to room");
-
-    let test_response = server
-      .post(&format!("/{RECORD_API_PATH}/messages_api"))
-      .add_cookie(Cookie::new(
-        COOKIE_AUTH_TOKEN,
-        user_x_token.auth_token.clone(),
-      ))
-      .multipart(form)
-      .await;
-
-    assert_eq!(test_response.status_code(), StatusCode::OK);
-  }
-
-  {
-    // Add a second record API for the same table
-    add_record_api(
-      &state,
-      "messages_api_yolo",
-      "message",
-      Acls {
-        world: vec![PermissionFlag::Create, PermissionFlag::Read],
-        ..Default::default()
-      },
-      AccessRules::default(),
+  let _ = layer
+    .with(
+      tracing_subscriber::fmt::layer()
+        .compact()
+        .with_filter(filter()),
     )
-    .await.unwrap();
+    .try_init();
 
-    // Anonymous can post to a JSON message (i.e. no credentials/tokens are attached).
-    let test_response = server
-      .post(&format!("/{RECORD_API_PATH}/messages_api_yolo"))
-      .json(&serde_json::json!({
-        // NOTE: Id must be not null and a random id would violate foreign key constraint as
-        // defined by the `message` table.
-        // "_owner": id_to_b64(&Uuid::now_v7().into_bytes()),
-        "_owner": id_to_b64(&user_x),
-        "room": id_to_b64(&room),
-        "data": "anonymous' message to room",
-      }))
-      .await;
+  {
+    let server = TestServer::new(app.router().clone()).unwrap();
 
-    assert_eq!(
-      test_response.status_code(),
-      StatusCode::OK,
-      "{test_response:?}"
-    );
+    {
+      // User X can post to a JSON message.
+      let test_response = server
+        .post(&format!("/{RECORD_API_PATH}/messages_api"))
+        .add_header("X-Forwarded-For", client_ip)
+        .add_cookie(Cookie::new(
+          COOKIE_AUTH_TOKEN,
+          user_x_token.auth_token.clone(),
+        ))
+        .json(&serde_json::json!({
+          "_owner": id_to_b64(&user_x),
+          "room": id_to_b64(&room),
+          "data": "user_x message to room",
+        }))
+        .await;
+
+      assert_eq!(
+        test_response.status_code(),
+        StatusCode::OK,
+        "{:?}",
+        test_response
+      );
+    }
+
+    {
+      // User X can post a form message.
+      let test_response = server
+        .post(&format!("/{RECORD_API_PATH}/messages_api"))
+        .add_cookie(Cookie::new(
+          COOKIE_AUTH_TOKEN,
+          user_x_token.auth_token.clone(),
+        ))
+        .form(&serde_json::json!({
+          "_owner": id_to_b64(&user_x),
+          "room": id_to_b64(&room),
+          "data": "user_x message to room",
+        }))
+        .await;
+
+      assert_eq!(test_response.status_code(), StatusCode::OK);
+    }
+
+    {
+      // User X can post a multipart message.
+      let form = MultipartForm::new()
+        .add_text("_owner", id_to_b64(&user_x))
+        .add_text("room", id_to_b64(&room))
+        .add_text("data", "user_x message to room");
+
+      let test_response = server
+        .post(&format!("/{RECORD_API_PATH}/messages_api"))
+        .add_cookie(Cookie::new(
+          COOKIE_AUTH_TOKEN,
+          user_x_token.auth_token.clone(),
+        ))
+        .multipart(form)
+        .await;
+
+      assert_eq!(test_response.status_code(), StatusCode::OK);
+    }
+
+    {
+      // Add a second record API for the same table
+      add_record_api(
+        &state,
+        "messages_api_yolo",
+        "message",
+        Acls {
+          world: vec![PermissionFlag::Create, PermissionFlag::Read],
+          ..Default::default()
+        },
+        AccessRules::default(),
+      )
+      .await
+      .unwrap();
+
+      // Anonymous can post to a JSON message (i.e. no credentials/tokens are attached).
+      let test_response = server
+        .post(&format!("/{RECORD_API_PATH}/messages_api_yolo"))
+        .json(&serde_json::json!({
+          // NOTE: Id must be not null and a random id would violate foreign key constraint as
+          // defined by the `message` table.
+          "_owner": id_to_b64(&user_x),
+          "room": id_to_b64(&room),
+          "data": "anonymous' message to room",
+        }))
+        .await;
+
+      assert_eq!(
+        test_response.status_code(),
+        StatusCode::OK,
+        "{test_response:?}"
+      );
+    }
   }
 
-  });
+  let logs_count: i64 = logs_conn
+    .query_row("SELECT COUNT(*) FROM _logs", ())
+    .await
+    .unwrap()
+    .unwrap()
+    .get(0)
+    .unwrap();
+  assert!(logs_count > 0);
+
+  let row = logs_conn
+    .query_row(
+      "SELECT client_ip FROM _logs WHERE client_ip = $1",
+      trailbase_sqlite::params!(client_ip),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+
+  assert_eq!(row.get::<String>(0).unwrap(), client_ip);
 }
 
 pub async fn create_chat_message_app_tables(
