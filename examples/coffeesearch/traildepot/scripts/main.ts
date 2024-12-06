@@ -17,9 +17,9 @@ addRoute(
       `SELECT Owner, Aroma, Flavor, Acidity, Sweetness
          FROM coffee
          ORDER BY vec_distance_L2(
-           embedding, '[${aroma}, ${flavor}, ${acid}, ${sweet}]')
+           embedding, FORMAT("[%f, %f, %f, %f]", $1, $2, $3, $4))
          LIMIT 100`,
-      [],
+      [+aroma, +flavor, +acid, +sweet],
     );
   }),
 );
