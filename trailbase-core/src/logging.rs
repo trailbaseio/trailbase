@@ -11,6 +11,7 @@ use tracing::span::{Attributes, Id, Record, Span};
 use tracing::Level;
 use tracing_subscriber::layer::{Context, Layer};
 
+use crate::constants::{ADMIN_API_PATH, RECORD_API_PATH};
 use crate::AppState;
 
 // Memo to my future self.
@@ -26,7 +27,7 @@ use crate::AppState;
 //    the database.
 //  * We have a period task to wipe logs past their retention.
 //
-#[repr(i32)]
+#[repr(i64)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 enum LogType {
   Undefined = 0,
@@ -44,7 +45,7 @@ pub(crate) struct Log {
 
   // NOTE: Level isn't particularly useful at the moment. It's not derived from status but rather
   // whatever we choose for the span, i.e. `LEVEL`.
-  pub level: i32,
+  pub level: i16,
   pub status: u16,
   pub method: String,
   pub url: String,
@@ -69,10 +70,28 @@ pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
   let client_ip = InsecureClientIp::from(headers, request.extensions())
     .map_or_else(|_err| String::new(), |ip| ip.0.to_string());
 
+  let uri = request.uri();
+  let request_type = {
+    lazy_static::lazy_static! {
+      static ref ADMIN: String = format!("/{ADMIN_API_PATH}");
+      static ref RECORD : String = format!("/{RECORD_API_PATH}");
+    }
+
+    let path = uri.path();
+    if path.starts_with(ADMIN.as_str()) {
+      LogType::AdminRequest
+    } else if path.starts_with(RECORD.as_str()) {
+      LogType::RecordApiRequest
+    } else {
+      LogType::HttpRequest
+    }
+  } as i32;
+
   // NOTE: "%" means print using fmt::Display, and "?" means fmt::Debug.
-  let span = tracing::span!(
+  return tracing::span!(
       LEVEL,
       NAME,
+      request_type,
       method = %request.method(),
       uri = %request.uri(),
       version = ?request.version(),
@@ -82,10 +101,8 @@ pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
       referer,
       latency_ms = tracing::field::Empty,
       status = tracing::field::Empty,
-      length= tracing::field::Empty,
+      length = tracing::field::Empty,
   );
-
-  return span;
 }
 
 pub(super) fn sqlite_logger_on_request(_req: &Request<Body>, _span: &Span) {
@@ -100,7 +117,7 @@ pub(super) fn sqlite_logger_on_response(response: &Response<Body>, latency: Dura
   span.record("length", length.and_then(|l| l.parse::<i64>().ok()));
 
   // Log an event that can actually be seen, e.g. when a stderr logger is installed.
-  tracing::info!("response sent");
+  tracing::event!(LEVEL, "response sent");
 }
 
 pub struct SqliteLogLayer {
@@ -176,9 +193,8 @@ impl SqliteLogLayer {
 
     let mut stmt = conn.prepare_cached(&QUERY)?;
     stmt.execute((
-      // FIXME: we're not writing the JSON data.
-      // FIXME: type-field is hard-coded. Should be: admin, records, auth, other request
-      LogType::HttpRequest as i32,
+      // TODO: we're yet not writing extra JSON data to the data field.
+      log.r#type,
       log.level,
       log.status,
       log.method,
@@ -201,12 +217,6 @@ where
   /// When a new "__tbreq" span is created, attach field storage.
   fn on_new_span(&self, attrs: &Attributes<'_>, id: &Id, ctx: Context<'_, S>) {
     let span = ctx.span(id).expect("span must exist in on_new_span");
-    let _metadata = match ctx.metadata(&span.id()) {
-      Some(metadata) if metadata.name() == NAME => metadata,
-      _ => {
-        return;
-      }
-    };
 
     let mut storage = LogFieldStorage::default();
     attrs.record(&mut LogJsonVisitor(&mut storage));
@@ -220,6 +230,10 @@ where
     };
     let metadata = span.metadata();
     if metadata.name() != NAME {
+      // TODO: If we're in a child of the request-response-span, we should recursively merge field
+      // storages into their parents in on_close. This becomes relevant if we want to allow
+      // user-defined spans and custom fields logged to Log::data. Alternatively, we could traverse
+      // up to the spans to fill the root storage in on_record & on_event.
       return;
     }
 
@@ -239,9 +253,11 @@ where
       return;
     };
 
-    let mut extensions = span.extensions_mut();
-    if let Some(storage) = extensions.get_mut::<LogFieldStorage>() {
-      values.record(&mut LogJsonVisitor(storage));
+    if !values.is_empty() {
+      let mut extensions = span.extensions_mut();
+      if let Some(storage) = extensions.get_mut::<LogFieldStorage>() {
+        values.record(&mut LogJsonVisitor(storage));
+      }
     }
   }
 
@@ -261,6 +277,7 @@ where
 #[derive(Debug, Default, Clone)]
 struct LogFieldStorage {
   // Request fields/properties.
+  r#type: i64,
   method: String,
   uri: String,
   client_ip: String,
@@ -296,6 +313,7 @@ impl tracing::field::Visit for LogJsonVisitor<'_> {
   fn record_i64(&mut self, field: &Field, int: i64) {
     match field.name() {
       "length" => self.0.length = int,
+      "request_type" => self.0.r#type = int,
       name => {
         self.0.fields.insert(name.into(), int.into());
       }
@@ -328,13 +346,12 @@ impl tracing::field::Visit for LogJsonVisitor<'_> {
   }
 
   fn record_debug(&mut self, field: &Field, dbg: &dyn std::fmt::Debug) {
-    let v = format!("{:?}", dbg);
     match field.name() {
-      "method" => self.0.method = v,
-      "uri" => self.0.uri = v,
-      "version" => self.0.version = v,
-      name => {
-        self.0.fields.insert(name.into(), v.into());
+      "method" => self.0.method = format!("{:?}", dbg),
+      "uri" => self.0.uri = format!("{:?}", dbg),
+      "version" => self.0.version = format!("{:?}", dbg),
+      _name => {
+        // Skip "messages" and other fields, we only log structured data.
       }
     };
   }

@@ -200,7 +200,7 @@ async fn test_record_apis() {
 
   let row = logs_conn
     .query_row(
-      "SELECT client_ip, latency, status FROM _logs WHERE client_ip = $1",
+      "SELECT client_ip, latency, status, type FROM _logs WHERE client_ip = $1",
       trailbase_sqlite::params!(client_ip),
     )
     .await
@@ -212,6 +212,8 @@ async fn test_record_apis() {
   assert_eq!(row.get::<String>(0).unwrap(), client_ip);
   assert!(row.get::<f64>(1).unwrap() > 0.0);
   assert_eq!(row.get::<i64>(2).unwrap(), 200);
+  // Assert it's a record api request.
+  assert_eq!(row.get::<i64>(3).unwrap(), 3);
 }
 
 pub async fn create_chat_message_app_tables(

@@ -19,7 +19,7 @@ use crate::app_state::AppState;
 use crate::assets::AssetService;
 use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
-use crate::constants::{AUTH_API_PATH, HEADER_CSRF_TOKEN, RECORD_API_PATH};
+use crate::constants::{ADMIN_API_PATH, AUTH_API_PATH, HEADER_CSRF_TOKEN, RECORD_API_PATH};
 use crate::data_dir::DataDir;
 use crate::logging;
 use crate::scheduler;
@@ -207,7 +207,7 @@ impl Server {
   fn build_admin_router(state: &AppState) -> Router<AppState> {
     return Router::new()
       .nest(
-        "/api/_admin/",
+        &format!("/{ADMIN_API_PATH}/"),
         admin::router().layer(middleware::from_fn_with_state(
           state.clone(),
           assert_admin_api_access,
