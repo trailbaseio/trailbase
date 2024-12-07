@@ -18,9 +18,7 @@ pub async fn handler(State(_state): State<AppState>, user: Option<User>) -> Resp
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
-  env_logger::init_from_env(
-    env_logger::Env::new().default_filter_or("info,trailbase_core=debug,refinery_core=warn"),
-  );
+  env_logger::init_from_env(env_logger::Env::new().default_filter_or("info,refinery_core=warn"));
 
   let custom_routes: Router<AppState> = Router::new().route("/", get(handler));
 
@@ -43,23 +41,21 @@ async fn main() -> Result<(), BoxError> {
   )
   .await?;
 
-  let filter = || {
-    filter::Targets::new()
-      .with_target("tower_http::trace::on_response", filter::LevelFilter::DEBUG)
-      .with_target("tower_http::trace::on_request", filter::LevelFilter::DEBUG)
-      .with_target("tower_http::trace::make_span", filter::LevelFilter::DEBUG)
-      .with_default(filter::LevelFilter::INFO)
-  };
-
   // This declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
-  let layer = tracing_subscriber::registry()
-    .with(trailbase_core::logging::SqliteLogLayer::new(app.state()).with_filter(filter()));
-
-  let _ = layer
+  let _layer = tracing_subscriber::registry()
     .with(
-      tracing_subscriber::fmt::layer()
-        .compact()
-        .with_filter(filter()),
+      trailbase_core::logging::SqliteLogLayer::new(app.state())
+        .with_filter(filter::LevelFilter::INFO),
+    )
+    .with(
+      tracing_subscriber::fmt::layer().compact().with_filter(
+        // Limit messages to INFO and above except for request handling logs.
+        filter::Targets::new()
+          .with_target("tower_http::trace::on_response", filter::LevelFilter::DEBUG)
+          .with_target("tower_http::trace::on_request", filter::LevelFilter::DEBUG)
+          .with_target("tower_http::trace::make_span", filter::LevelFilter::DEBUG)
+          .with_default(filter::LevelFilter::INFO),
+      ),
     )
     .try_init();
 

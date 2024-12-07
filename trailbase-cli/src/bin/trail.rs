@@ -91,29 +91,28 @@ async fn async_main() -> Result<(), BoxError> {
       })
       .await?;
 
-      let filter = || {
-        filter::Targets::new()
-          .with_target("tower_http::trace::on_response", filter::LevelFilter::DEBUG)
-          .with_target("tower_http::trace::on_request", filter::LevelFilter::DEBUG)
-          .with_target("tower_http::trace::make_span", filter::LevelFilter::DEBUG)
-          .with_default(filter::LevelFilter::INFO)
-      };
-
       // This declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
       //
       // NOTE: the try_init() will actually fail because the tracing system was already initialized
       // by the env_logger above.
       // FIXME: Without the sqlite logger here, logging is broken despite us trying to initialize
       // in app.server() as well.
-      let layer = tracing_subscriber::registry()
-        .with(trailbase_core::logging::SqliteLogLayer::new(app.state()).with_filter(filter()));
+      let layer = tracing_subscriber::registry().with(
+        trailbase_core::logging::SqliteLogLayer::new(app.state())
+          .with_filter(filter::LevelFilter::INFO),
+      );
 
       if stderr_logging {
         let _ = layer
           .with(
-            tracing_subscriber::fmt::layer()
-              .compact()
-              .with_filter(filter()),
+            tracing_subscriber::fmt::layer().compact().with_filter(
+              // Limit messages to INFO and above except for request handling logs.
+              filter::Targets::new()
+                .with_target("tower_http::trace::on_response", filter::LevelFilter::DEBUG)
+                .with_target("tower_http::trace::on_request", filter::LevelFilter::DEBUG)
+                .with_target("tower_http::trace::make_span", filter::LevelFilter::DEBUG)
+                .with_default(filter::LevelFilter::INFO),
+            ),
           )
           .try_init();
       } else {

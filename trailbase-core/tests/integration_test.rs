@@ -4,10 +4,7 @@ use axum_test::multipart::MultipartForm;
 use axum_test::TestServer;
 use cookie::Cookie;
 use std::rc::Rc;
-use tracing_subscriber::{
-  filter::{self, LevelFilter},
-  prelude::*,
-};
+use tracing_subscriber::prelude::*;
 use trailbase_sqlite::params;
 
 use trailbase_core::api::{create_user_handler, login_with_password, CreateUserRequest};
@@ -87,26 +84,11 @@ async fn test_record_apis() {
 
   add_user_to_room(conn, user_x, room).await.unwrap();
 
-  // Set up logging
-  let filter = || {
-    filter::Targets::new()
-      .with_target("tower_http::trace::on_response", LevelFilter::DEBUG)
-      .with_target("tower_http::trace::on_request", LevelFilter::DEBUG)
-      .with_target("tower_http::trace::make_span", LevelFilter::DEBUG)
-      .with_default(LevelFilter::INFO)
-  };
-
-  // This declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
-  let layer = tracing_subscriber::registry()
-    .with(trailbase_core::logging::SqliteLogLayer::new(app.state()).with_filter(filter()));
-
-  let _ = layer
-    .with(
-      tracing_subscriber::fmt::layer()
-        .compact()
-        .with_filter(filter()),
-    )
-    .try_init();
+  // Set up logging: declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
+  tracing_subscriber::registry()
+    .with(trailbase_core::logging::SqliteLogLayer::new(app.state()))
+    .try_init()
+    .unwrap();
 
   {
     let server = TestServer::new(app.router().clone()).unwrap();
@@ -218,14 +200,18 @@ async fn test_record_apis() {
 
   let row = logs_conn
     .query_row(
-      "SELECT client_ip FROM _logs WHERE client_ip = $1",
+      "SELECT client_ip, latency, status FROM _logs WHERE client_ip = $1",
       trailbase_sqlite::params!(client_ip),
     )
     .await
     .unwrap()
     .unwrap();
 
+  // We're also testing stiching here, since client_ip is recorded on_request and latency/status
+  // on_response.
   assert_eq!(row.get::<String>(0).unwrap(), client_ip);
+  assert!(row.get::<f64>(1).unwrap() > 0.0);
+  assert_eq!(row.get::<i64>(2).unwrap(), 200);
 }
 
 pub async fn create_chat_message_app_tables(

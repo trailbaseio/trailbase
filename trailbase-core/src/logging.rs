@@ -8,6 +8,7 @@ use serde_json::json;
 use std::time::Duration;
 use tracing::field::Field;
 use tracing::span::{Attributes, Id, Record, Span};
+use tracing::Level;
 use tracing_subscriber::layer::{Context, Layer};
 
 use crate::AppState;
@@ -41,6 +42,8 @@ pub(crate) struct Log {
   pub created: Option<f64>,
   pub r#type: i32,
 
+  // NOTE: Level isn't particularly useful at the moment. It's not derived from status but rather
+  // whatever we choose for the span, i.e. `LEVEL`.
   pub level: i32,
   pub status: u16,
   pub method: String,
@@ -55,46 +58,49 @@ pub(crate) struct Log {
   pub data: Option<serde_json::Value>,
 }
 
+const LEVEL: Level = Level::INFO;
+const NAME: &str = "TB::sqlog";
+
 pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
   let headers = request.headers();
   let host = get_header(headers, "host").unwrap_or("");
   let user_agent = get_header(headers, "user-agent").unwrap_or("");
   let referer = get_header(headers, "referer").unwrap_or("");
-  let client_ip = InsecureClientIp::from(headers, request.extensions()).map(|ip| ip.0.to_string());
+  let client_ip = InsecureClientIp::from(headers, request.extensions())
+    .map_or_else(|_err| String::new(), |ip| ip.0.to_string());
 
   // NOTE: "%" means print using fmt::Display, and "?" means fmt::Debug.
-  let span = tracing::info_span!(
-      "request",
+  let span = tracing::span!(
+      LEVEL,
+      NAME,
       method = %request.method(),
       uri = %request.uri(),
       version = ?request.version(),
       host,
-      client_ip = client_ip.as_ref().map_or("", |s| s.as_str()),
+      client_ip,
       user_agent,
       referer,
+      latency_ms = tracing::field::Empty,
+      status = tracing::field::Empty,
+      length= tracing::field::Empty,
   );
 
   return span;
 }
 
 pub(super) fn sqlite_logger_on_request(_req: &Request<Body>, _span: &Span) {
-  // We're deliberately not creating a request event, since we're already inserting all the
-  // request related information into the span
+  // We don't need to record anything extra, since we already unpacked the request during span
+  // creation above.
 }
 
-pub(super) fn sqlite_logger_on_response(
-  response: &Response<Body>,
-  latency: Duration,
-  _span: &Span,
-) {
+pub(super) fn sqlite_logger_on_response(response: &Response<Body>, latency: Duration, span: &Span) {
   let length = get_header(response.headers(), "content-length");
+  span.record("latency_ms", as_millis_f64(&latency));
+  span.record("status", response.status().as_u16());
+  span.record("length", length.and_then(|l| l.parse::<i64>().ok()));
 
-  tracing::info!(
-      name: "response",
-      latency_ms = as_millis_f64(&latency),
-      status = response.status().as_u16(),
-      length = length.and_then(|l| l.parse::<i64>().ok()),
-  );
+  // Log an event that can actually be seen, e.g. when a stderr logger is installed.
+  tracing::info!("response sent");
 }
 
 pub struct SqliteLogLayer {
@@ -149,7 +155,9 @@ impl SqliteLogLayer {
   // then writes to Sqlite.
   #[inline]
   fn write_log(&self, log: LogFieldStorage) {
-    self.sender.send(Box::new(log)).expect(BUG_TEXT);
+    if let Err(err) = self.sender.send(Box::new(log)) {
+      panic!("Sending logs failed: {err}");
+    }
   }
 
   #[inline]
@@ -190,35 +198,62 @@ where
   S: tracing::Subscriber,
   S: for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
 {
+  /// When a new "__tbreq" span is created, attach field storage.
   fn on_new_span(&self, attrs: &Attributes<'_>, id: &Id, ctx: Context<'_, S>) {
-    let span = ctx.span(id).expect(BUG_TEXT);
+    let span = ctx.span(id).expect("span must exist in on_new_span");
+    let _metadata = match ctx.metadata(&span.id()) {
+      Some(metadata) if metadata.name() == NAME => metadata,
+      _ => {
+        return;
+      }
+    };
 
     let mut storage = LogFieldStorage::default();
     attrs.record(&mut LogJsonVisitor(&mut storage));
     span.extensions_mut().insert(storage);
   }
 
+  // Then the (request->response) span "__tbreq" is closed, write out the logs.
+  fn on_close(&self, id: Id, ctx: Context<'_, S>) {
+    let Some(span) = ctx.span(&id) else {
+      return;
+    };
+    let metadata = span.metadata();
+    if metadata.name() != NAME {
+      return;
+    }
+
+    let mut extensions = span.extensions_mut();
+    if let Some(mut storage) = extensions.remove::<LogFieldStorage>() {
+      storage.level = level_to_int(metadata.level());
+
+      self.write_log(storage);
+    } else {
+      error!("span already closed/consumed?!");
+    }
+  }
+
+  // When span.record() is called, add to field storage.
   fn on_record(&self, id: &Id, values: &Record<'_>, ctx: Context<'_, S>) {
-    let span = ctx.span(id).expect(BUG_TEXT);
+    let Some(span) = ctx.span(id) else {
+      return;
+    };
 
     let mut extensions = span.extensions_mut();
     if let Some(storage) = extensions.get_mut::<LogFieldStorage>() {
       values.record(&mut LogJsonVisitor(storage));
-    } else {
-      info!("logs already consumed");
     }
   }
 
+  // Add events to field storage.
   fn on_event(&self, event: &tracing::Event<'_>, ctx: Context<'_, S>) {
-    let span = ctx.event_span(event).expect(BUG_TEXT);
+    let Some(span) = ctx.event_span(event) else {
+      return;
+    };
 
     let mut extensions = span.extensions_mut();
-    if let Some(mut storage) = extensions.remove::<LogFieldStorage>() {
-      event.record(&mut LogJsonVisitor(&mut storage));
-
-      storage.level = level_to_int(event.metadata().level());
-
-      self.write_log(storage);
+    if let Some(storage) = extensions.get_mut::<LogFieldStorage>() {
+      event.record(&mut LogJsonVisitor(storage));
     }
   }
 }
@@ -338,5 +373,3 @@ fn level_to_int(level: &tracing::Level) -> i64 {
     tracing::Level::ERROR => 0,
   }
 }
-
-const BUG_TEXT: &str = "Span not found, this is a bug";
