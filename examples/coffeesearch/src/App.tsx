@@ -25,12 +25,17 @@ function Table() {
   const [acidity, setAcidity] = useState(8);
   const [sweetness, setSweetness] = useState(8);
 
-  const [data, setData] = useState<Array<Array<object>> | undefined>();
+  type Record = [string, number, number, number, number];
+  const [data, setData] = useState<Record[]>([]);
+
   useEffect(() => {
     const URL = import.meta.env.DEV ? "http://localhost:4000" : "";
-    const params = Object.entries({ aroma, flavor, acidity, sweetness })
-      .map(([k, v]) => `${k}=${v}`)
-      .join("&");
+    const params = new URLSearchParams({
+      aroma: `${aroma}`,
+      flavor: `${flavor}`,
+      acidity: `${acidity}`,
+      sweetness: `${sweetness}`,
+    });
 
     fetch(`${URL}/search?${params}`).then(async (r) => setData(await r.json()));
   }, [aroma, flavor, acidity, sweetness]);
@@ -57,7 +62,7 @@ function Table() {
           </thead>
 
           <tbody>
-            {(data ?? []).map((row) => (
+            {data.map((row) => (
               <tr>
                 {row.map((d) => (
                   <td>{d.toString()}</td>

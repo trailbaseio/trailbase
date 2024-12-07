@@ -71,7 +71,11 @@ test("Record integration tests", async () => {
   const api = client.records("simple_strict_table");
 
   const now = new Date().getTime();
-  const messages = [`ts client test 0: ${now}`, `ts client test 1: ${now}`];
+  // Throw in some url characters for good measure.
+  const messages = [
+    `ts client test 1: =?&${now}`,
+    `ts client test 2: =?&${now}`,
+  ];
 
   const ids: string[] = [];
   for (const msg of messages) {
@@ -90,7 +94,7 @@ test("Record integration tests", async () => {
 
   {
     const records = await api.list<SimpleStrict>({
-      filters: [`text_not_null[like]=%${now}`],
+      filters: [`text_not_null[like]=% =?&${now}`],
       order: ["+text_not_null"],
     });
     expect(records.map((el) => el.text_not_null)).toStrictEqual(messages);
@@ -157,7 +161,7 @@ test("record error tests", async () => {
     String.fromCharCode.apply(null, uuidParse(uuidv7())),
   );
   const nonExistantApi = client.records("non-existant");
-  expect(
+  await expect(
     async () => await nonExistantApi.read<SimpleStrict>(nonExistantId),
   ).rejects.toThrowError(
     expect.objectContaining({
@@ -166,14 +170,14 @@ test("record error tests", async () => {
   );
 
   const api = client.records("simple_strict_table");
-  expect(
+  await expect(
     async () => await api.read<SimpleStrict>("invalid id"),
   ).rejects.toThrowError(
     expect.objectContaining({
       status: status.BAD_REQUEST,
     }),
   );
-  expect(
+  await expect(
     async () => await api.read<SimpleStrict>(nonExistantId),
   ).rejects.toThrowError(
     expect.objectContaining({

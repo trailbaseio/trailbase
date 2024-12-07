@@ -115,34 +115,33 @@ export class RecordApi {
     order?: string[];
     filters?: string[];
   }): Promise<T[]> {
-    const params: [string, string][] = [];
+    const params = new URLSearchParams();
     const pagination = opts?.pagination;
     if (pagination) {
       const cursor = pagination.cursor;
-      if (cursor) params.push(["cursor", cursor]);
+      if (cursor) params.append("cursor", cursor);
 
       const limit = pagination.limit;
-      if (limit) params.push(["limit", limit.toString()]);
+      if (limit) params.append("limit", limit.toString());
     }
     const order = opts?.order;
-    if (order) params.push(["order", order.join(",")]);
+    if (order) params.append("order", order.join(","));
 
     const filters = opts?.filters;
     if (filters) {
       for (const filter of filters) {
-        const [nameOp, value] = filter.split("=", 2);
-        if (value === undefined) {
+        const pos = filter.indexOf("=");
+        if (pos <= 0) {
           throw Error(`Filter '${filter}' does not match: 'name[op]=value'`);
         }
-        params.push([nameOp, value]);
+        const nameOp = filter.slice(0, pos);
+        const value = filter.slice(pos + 1);
+        params.append(nameOp, value);
       }
     }
 
-    const queryParams = encodeURI(
-      params.map(([key, value]) => `${key}=${value}`).join("&"),
-    );
     const response = await this.client.fetch(
-      `${RecordApi._recordApi}/${this.name}?${queryParams}`,
+      `${RecordApi._recordApi}/${this.name}?${params}`,
     );
     return (await response.json()) as T[];
   }
