@@ -1,3 +1,8 @@
+## v0.3.1
+
+* Fix client-ip logging.
+* Wire request-type into logs
+
 ## v0.3.0
 
 A foundational overhaul of SQLite's integration and orchestration. This will

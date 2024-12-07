@@ -1,4 +1,4 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1.81-slim AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.83-slim AS chef
 
 # Install additional build dependencies.
 #
