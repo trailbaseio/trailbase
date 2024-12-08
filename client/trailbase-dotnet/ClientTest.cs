@@ -122,8 +122,8 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     // Ideally, we'd run the tests sequentially or with better isolation :/.
     var suffix = $"{now} {System.Environment.Version}";
     List<string> messages = [
-      $"C# client test 0: {suffix}",
-      $"C# client test 1: {suffix}",
+      $"C# client test 0:  =?&{suffix}",
+      $"C# client test 1:  =?&{suffix}",
     ];
 
     List<RecordId> ids = [];
@@ -144,7 +144,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       var recordsAsc = await api.List<SimpleStrict>(
           null,
         ["+text_not_null"],
-        [$"text_not_null[like]=%{suffix}"]
+        [$"text_not_null[like]=% =?&{suffix}"]
       )!;
       Assert.Equal(messages.Count, recordsAsc.Count);
       Assert.Equal(messages, recordsAsc.ConvertAll((e) => e.text_not_null));

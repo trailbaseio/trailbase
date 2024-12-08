@@ -106,8 +106,8 @@ def test_records(trailbase: TrailBaseFixture):
 
     now = int(time())
     messages = [
-        f"dart client test 0: {now}",
-        f"dart client test 1: {now}",
+        f"dart client test 0: =?&{now}",
+        f"dart client test 1: =?&{now}",
     ]
     ids: list[RecordId] = []
     for msg in messages:
@@ -123,7 +123,7 @@ def test_records(trailbase: TrailBaseFixture):
     if True:
         recordsAsc = api.list(
             order=["+text_not_null"],
-            filters=[f"text_not_null[like]=%{now}"],
+            filters=[f"text_not_null[like]=% =?&{now}"],
         )
 
         assert [el["text_not_null"] for el in recordsAsc] == messages

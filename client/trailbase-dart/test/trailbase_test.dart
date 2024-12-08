@@ -108,8 +108,8 @@ Future<void> main() async {
 
       final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final messages = [
-        'dart client test 0: ${now}',
-        'dart client test 1: ${now}',
+        'dart client test 0: =?&${now}',
+        'dart client test 1: =?&${now}',
       ];
       final ids = [];
       for (final msg in messages) {
@@ -127,7 +127,7 @@ Future<void> main() async {
       {
         final recordsAsc = await api.list(
           order: ['+text_not_null'],
-          filters: ['text_not_null[like]=%${now}'],
+          filters: ['text_not_null[like]=% =?&${now}'],
         );
         expect(recordsAsc.map((el) => el['text_not_null']),
             orderedEquals(messages));
