@@ -1,7 +1,7 @@
 {
   "name": "trailbase",
   "description": "Official TrailBase client",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "license": "OSL-3.0",
   "type": "module",
   "main": "./src/index.ts",
@@ -22,7 +22,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/trailbaseio/trailbae.git",
+    "url": "https://github.com/trailbaseio/trailbase.git",
     "directory": "client/trailbase-ts"
   },
   "homepage": "https://trailbase.io",
