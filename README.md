@@ -64,25 +64,38 @@ kept separately due to their external dependencies.
 Pre-built static binaries are available as [GitHub
 releases](https://github.com/trailbaseio/trailbase/releases/) for Linux an
 MacOS.
+On Windows the Docker [image](https://hub.docker.com/r/trailbase/trailbase) can
+be used.
 
-Moreover, containers and client packages are available via:
+Client packages for various languages are available via:
 
-- [Docker](https://hub.docker.com/r/trailbase/trailbase)
-- [JavaScript/Typescript client](https://www.npmjs.com/package/trailbase)
-- [Dart/Flutter client](https://pub.dev/packages/trailbase)
+- [JavaScript/Typescript](https://www.npmjs.com/package/trailbase)
+- [Dart/Flutter](https://pub.dev/packages/trailbase)
 - [C#/.Net](https://www.nuget.org/packages/TrailBase/)
 - [Python](https://pypi.org/project/trailbase/)
 
 ## Running
 
-You can run pre-built TrailBase either by downloading the latest
-[release](https://github.com/trailbaseio/trailbase/releases/) and running
+You can get TrailBase either as a pre-built static binary (MacOS &
+Linux), run it using [Docker](https://hub.docker.com/r/trailbase/trailbase)
+(Windows, MacOS, Linux, ...), or [build](#building) it from source.
+
+The latest pre-built binaries can be downloaded from [GitHub
+releases](https://github.com/trailbaseio/trailbase/releases/) and run via:
 
 ```bash
 $ ./trail run
 ```
 
-or using docker:
+Thanks to `trail` being a single static binary, there's no need to install
+anything including system dependencies.
+This also means that you can confidently update your system and deploy to
+different machines without having to worry about prior set-up or shared
+library compatibility.
+
+Using [Docker](https://hub.docker.com/r/trailbase/trailbase), you can run the
+following, which will also create and mount a local `./traildepot` asset
+directory:
 
 ```bash
 $ mkdir traildepot
@@ -90,27 +103,27 @@ $ alias trail="docker run -p 4000:4000 --mount type=bind,source=$PWD/traildepot,
 $ trail run
 ```
 
-. Run `trail --help` to get a full list of commands. If you don't want to rely
-on pre-built binaries, TrailBase is easy to build yourself, see below.
+To get a full list of commands, simply run `trail --help` .
 
 ## Building
 
-If you have all the necessary dependencies (rust, nodejs, pnpm, ...) installed,
-you can build TrailBase simply by running:
+If you have all the necessary dependencies (Rust, node.js, pnpm, ...)
+installed, you can build TrailBase by running:
 
 ```bash
 $ git submodule update --init --recursive
 $ cargo build --release
 ```
 
-To build fully static binaries on Linux (et al):
+To build a static binary you have to explicitly specify the target platform,
+e.g. for Linux using glibc:
 
 ```bash
 $ RUSTFLAGS="-C target-feature=+crt-static" cargo build --target x86_64-unknown-linux-gnu --release
 ```
 
-Alternatively, if you want a container or don't have to deal with dependencies,
-you can build using docker:
+Alternatively, if you want to build a Docker image or don't have to deal with
+build dependencies, you can simply run:
 
 ```bash
 $ git submodule update --init --recursive
@@ -120,7 +133,7 @@ $ docker build . -t trailbase
 ## Contributing
 
 Contributions are very much appreciated 🙏. For anything beyond bug fixes,
-let's quickly chat to see how a proposal fits into the overall roadmap and
+let's briefly chat to see how a proposal fits into the overall roadmap and
 avoid any surprises.
 
 We're not sure yet what the best setup or exact license is for compatibility
@@ -136,12 +149,12 @@ TrailBase is free software under the terms of the [OSL-3.0](LICENSE).
 
 We chose this license over more popular, similar copyleft licenses such as
 AGPLv3 due to its narrower definition of derivative work that only covers
-modifications to TrailBase itself. This is similar to GPL's classpath exception
-or LGPL's linkage exception allowing the use of TrailBase as a framework
-without inflicting licensing requirements on original work layered on top.
-That said, we ain't lawyers. The author of the license provides a more
-thorough [explanation](https://rosenlaw.com/OSL3.0-explained.htm).
-If you have any concerns or advice for us, please reach out.
+modifications to TrailBase itself. This is similar to GPL's classpath or LGPL's
+linkage exception allowing the use of TrailBase as a framework without
+inflicting licensing requirements on original work layered on top.
+That said, we ain't lawyers. The author of the license provides a more thorough
+[explanation](https://rosenlaw.com/OSL3.0-explained.htm). If you have any
+concerns or advice for us, please reach out.
 
 If you require an
 [exception](https://www.gnu.org/philosophy/selling-exceptions.html), reach out
