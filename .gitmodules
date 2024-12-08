@@ -1,9 +1,9 @@
 [submodule "vendor/refinery"]
 	path = vendor/refinery
-	url = git@github.com:trailbaseio/refinery.git
+	url = https://github.com/trailbaseio/refinery.git
 [submodule "vendor/sqlite_loadable"]
 	path = vendor/sqlite-loadable
-	url = git@github.com:trailbaseio/sqlite-loadable-rs.git
+	url = https://github.com/trailbaseio/sqlite-loadable-rs.git
 [submodule "vendor/sqlean/bundled/sqlean"]
 	path = vendor/sqlean/bundled/sqlean
 	url = https://github.com/trailbaseio/sqlean
