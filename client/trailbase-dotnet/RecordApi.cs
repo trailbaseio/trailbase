@@ -1,4 +1,9 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+using System.Net.Http.Json;
+using System.Diagnostics.CodeAnalysis;
 
 namespace TrailBase;
 
@@ -52,8 +57,16 @@ public class Pagination {
   }
 }
 
+
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(ResponseRecordId))]
+internal partial class SerializeResponseRecordIdContext : JsonSerializerContext {
+}
+
 public class RecordApi {
   static readonly string _recordApi = "api/records/v1";
+  const string DynamicCodeMessage = "Use overload with JsonTypeInfo instead";
+  const string UnreferencedCodeMessage = "Use overload with JsonTypeInfo instead";
 
   Client client { get; }
   string name { get; }
@@ -63,33 +76,84 @@ public class RecordApi {
     this.name = name;
   }
 
+  [RequiresDynamicCode(DynamicCodeMessage)]
+  [RequiresUnreferencedCode(UnreferencedCodeMessage)]
   public async Task<T?> Read<T>(RecordId id) {
-    var response = await client.Fetch<object>(
+    string json = await (await ReadImpl(id)).ReadAsStringAsync();
+    return JsonSerializer.Deserialize<T>(json);
+  }
+  [RequiresDynamicCode(DynamicCodeMessage)]
+  [RequiresUnreferencedCode(UnreferencedCodeMessage)]
+  public async Task<T?> Read<T>(string id) => await Read<T>(new UuidRecordId(id));
+  [RequiresDynamicCode(DynamicCodeMessage)]
+  [RequiresUnreferencedCode(UnreferencedCodeMessage)]
+  public async Task<T?> Read<T>(long id) => await Read<T>(new IntegerRecordId(id));
+
+  public async Task<T?> Read<T>(RecordId id, JsonTypeInfo<T> jsonTypeInfo) {
+    string json = await (await ReadImpl(id)).ReadAsStringAsync();
+    return JsonSerializer.Deserialize<T>(json, jsonTypeInfo);
+  }
+  public async Task<T?> Read<T>(string id, JsonTypeInfo<T> jsonTypeInfo) => await Read<T>(new UuidRecordId(id), jsonTypeInfo);
+  public async Task<T?> Read<T>(long id, JsonTypeInfo<T> jsonTypeInfo) => await Read<T>(new IntegerRecordId(id), jsonTypeInfo);
+
+  public async Task<HttpContent> ReadImpl(RecordId id) {
+    var response = await client.Fetch(
       $"{RecordApi._recordApi}/{name}/{id}",
       HttpMethod.Get,
       null,
       null
     );
-
-    string json = await response.Content.ReadAsStringAsync();
-    return JsonSerializer.Deserialize<T>(json);
+    return response.Content;
   }
-  public async Task<T?> Read<T>(string id) => await Read<T>(new UuidRecordId(id));
-  public async Task<T?> Read<T>(long id) => await Read<T>(new IntegerRecordId(id));
 
+  [RequiresDynamicCode(DynamicCodeMessage)]
+  [RequiresUnreferencedCode(UnreferencedCodeMessage)]
   public async Task<RecordId> Create<T>(T record) {
+    var options = new JsonSerializerOptions {
+      DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    var recordJson = JsonContent.Create(record, typeof(T), default, options);
+    return await CreateImpl(recordJson);
+  }
+
+  public async Task<RecordId> Create<T>(T record, JsonTypeInfo<T> jsonTypeInfo) {
+    var recordJson = JsonContent.Create(record, jsonTypeInfo, default);
+    return await CreateImpl(recordJson);
+  }
+
+  private async Task<RecordId> CreateImpl(HttpContent recordJson) {
     var response = await client.Fetch(
       $"{RecordApi._recordApi}/{name}",
       HttpMethod.Post,
-      record,
+      recordJson,
       null
     );
 
     string json = await response.Content.ReadAsStringAsync();
-    return JsonSerializer.Deserialize<ResponseRecordId>(json)!;
+    return JsonSerializer.Deserialize<ResponseRecordId>(json, SerializeResponseRecordIdContext.Default.ResponseRecordId)!;
+  }
+
+  [RequiresDynamicCode(DynamicCodeMessage)]
+  [RequiresUnreferencedCode(UnreferencedCodeMessage)]
+  public async Task<List<T>> List<T>(
+    Pagination? pagination,
+    List<string>? order,
+    List<string>? filters
+  ) {
+    string json = await (await ListImpl(pagination, order, filters)).ReadAsStringAsync();
+    return JsonSerializer.Deserialize<List<T>>(json) ?? [];
   }
 
   public async Task<List<T>> List<T>(
+    Pagination? pagination,
+    List<string>? order,
+    List<string>? filters, JsonTypeInfo<List<T>> jsonTypeInfo
+  ) {
+    string json = await (await ListImpl(pagination, order, filters)).ReadAsStringAsync();
+    return JsonSerializer.Deserialize<List<T>>(json, jsonTypeInfo) ?? [];
+  }
+
+  public async Task<HttpContent> ListImpl(
     Pagination? pagination,
     List<string>? order,
     List<string>? filters
@@ -123,31 +187,52 @@ public class RecordApi {
       }
     }
 
-    var response = await client.Fetch<object>(
+    var response = await client.Fetch(
       $"{RecordApi._recordApi}/{name}",
       HttpMethod.Get,
       null,
       param
     );
 
-    string json = await response.Content.ReadAsStringAsync();
-    return JsonSerializer.Deserialize<List<T>>(json)!;
+    return response.Content;
   }
 
+  [RequiresDynamicCode(DynamicCodeMessage)]
+  [RequiresUnreferencedCode(UnreferencedCodeMessage)]
   public async Task Update<T>(
     RecordId id,
     T record
   ) {
+    var options = new JsonSerializerOptions {
+      DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    var recordJson = JsonContent.Create(record, typeof(T), default, options);
+    await UpdateImpl(id, recordJson);
+  }
+
+  public async Task Update<T>(
+    RecordId id,
+    T record,
+    JsonTypeInfo<T> jsonTypeInfo
+  ) {
+    var recordJson = JsonContent.Create(record, jsonTypeInfo, default);
+    await UpdateImpl(id, recordJson);
+  }
+
+  public async Task UpdateImpl(
+    RecordId id,
+    HttpContent recordJson
+  ) {
     await client.Fetch(
       $"{RecordApi._recordApi}/{name}/{id}",
       HttpMethod.Patch,
-      record,
+      recordJson,
       null
     );
   }
 
   public async Task Delete(RecordId id) {
-    await client.Fetch<object>(
+    await client.Fetch(
       $"{RecordApi._recordApi}/{name}/{id}",
       HttpMethod.Delete,
       null,

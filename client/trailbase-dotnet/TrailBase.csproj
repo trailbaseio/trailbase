@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <PackageId>TrailBase</PackageId>
-    <Version>0.1.1</Version>
+    <Version>0.1.3</Version>
     <Authors>TrailBase authors</Authors>
     <PackageReadmeFile>./README.md</PackageReadmeFile>
     <PackageLicenseExpression>OSL-3.0</PackageLicenseExpression>
@@ -12,6 +12,8 @@
     <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
 
     <IsPackable>true</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <!-- <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault> -->
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>

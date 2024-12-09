@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json;
 
@@ -83,6 +84,16 @@ public class JwtToken {
   }
 }
 
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(Credentials))]
+[JsonSerializable(typeof(JwtToken))]
+[JsonSerializable(typeof(Tokens))]
+[JsonSerializable(typeof(TokenResponse))]
+[JsonSerializable(typeof(RefreshToken))]
+[JsonSerializable(typeof(User))]
+internal partial class SourceGenerationContext : JsonSerializerContext {
+}
+
 class TokenState {
   public (Tokens, JwtToken)? state;
   public HttpRequestHeaders headers;
@@ -100,7 +111,7 @@ class TokenState {
       var json = jwtToken.Payload.SerializeToJson();
 
       return new TokenState(
-        (tokens, JsonSerializer.Deserialize<JwtToken>(json))!,
+        (tokens, JsonSerializer.Deserialize<JwtToken>(json, SourceGenerationContext.Default.JwtToken))!,
         buildHeaders(tokens)
       );
     }
@@ -137,10 +148,10 @@ class ThinClient {
     this.site = site;
   }
 
-  public async Task<HttpResponseMessage> Fetch<T>(
+  public async Task<HttpResponseMessage> Fetch(
     String path,
     TokenState tokenState,
-    T? data,
+    HttpContent? data,
     HttpMethod? method,
     Dictionary<string, string>? queryParams
   ) {
@@ -156,10 +167,6 @@ class ThinClient {
       return queryString.ToString();
     };
 
-    var options = new JsonSerializerOptions {
-      DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-
     var httpRequestMessage = new HttpRequestMessage {
       Method = method ?? HttpMethod.Post,
       RequestUri =
@@ -167,10 +174,7 @@ class ThinClient {
           null => new Uri($"{site}/{path}"),
           _ => new Uri($"{site}/{path}?{query(queryParams)}"),
         },
-      Content = data switch {
-        null => null,
-        _ => new StringContent(JsonSerializer.Serialize(data!, options), System.Text.Encoding.UTF8, "application/json"),
-      },
+      Content = data,
     };
 
     foreach (var (key, values) in tokenState.headers) {
@@ -205,7 +209,7 @@ public class Client {
       var jwtToken = (JwtSecurityToken)handler.ReadToken(authToken);
       var json = jwtToken.Payload.SerializeToJson();
 
-      return JsonSerializer.Deserialize<User>(json);
+      return JsonSerializer.Deserialize<User>(json, SourceGenerationContext.Default.User);
     }
     return null;
   }
@@ -218,24 +222,26 @@ public class Client {
     var response = await Fetch(
       $"{_authApi}/login",
       HttpMethod.Post,
-      new Credentials(email, password),
+      JsonContent.Create(new Credentials(email, password), SourceGenerationContext.Default.Credentials),
       null
     );
 
     string json = await response.Content.ReadAsStringAsync();
-    Tokens tokens = JsonSerializer.Deserialize<Tokens>(json)!;
+    Tokens tokens = JsonSerializer.Deserialize<Tokens>(json, SourceGenerationContext.Default.Tokens)!;
     updateTokens(tokens);
     return tokens;
   }
 
   public async Task<bool> Logout() {
     var refreshToken = tokenState.state?.Item1.refresh_token;
+
     try {
       if (refreshToken != null) {
-        await Fetch($"{_authApi}/logout", HttpMethod.Post, new RefreshToken(refreshToken), null);
+        var tokenJson = JsonContent.Create(new RefreshToken(refreshToken), SourceGenerationContext.Default.RefreshToken);
+        await Fetch($"{_authApi}/logout", HttpMethod.Post, tokenJson, null);
       }
       else {
-        await Fetch<RefreshToken>($"{_authApi}/logout", null, null, null);
+        await Fetch($"{_authApi}/logout", null, null, null);
       }
     }
     catch (Exception err) {
@@ -284,13 +290,13 @@ public class Client {
     var response = await client.Fetch(
       $"{_authApi}/refresh",
       tokenState,
-      new RefreshToken(refreshToken),
+      JsonContent.Create(new RefreshToken(refreshToken), SourceGenerationContext.Default.RefreshToken),
       HttpMethod.Post,
       null
     );
 
     string json = await response.Content.ReadAsStringAsync();
-    TokenResponse tokenResponse = JsonSerializer.Deserialize<TokenResponse>(json)!;
+    TokenResponse tokenResponse = JsonSerializer.Deserialize<TokenResponse>(json, SourceGenerationContext.Default.TokenResponse)!;
 
     return TokenState.build(new Tokens(
       tokenResponse.auth_token,
@@ -299,10 +305,10 @@ public class Client {
     ));
   }
 
-  public async Task<HttpResponseMessage> Fetch<T>(
+  public async Task<HttpResponseMessage> Fetch(
     string path,
     HttpMethod? method,
-    T? data,
+    HttpContent? data,
     Dictionary<string, string>? queryParams
   ) {
     var ts = tokenState;
@@ -311,7 +317,7 @@ public class Client {
       ts = tokenState = await refreshTokensImpl(refreshToken);
     }
 
-    var response = await client.Fetch<T>(path, ts, data, method, queryParams);
+    var response = await client.Fetch(path, ts, data, method, queryParams);
 
     if (response.StatusCode != System.Net.HttpStatusCode.OK) {
       string errMsg = await response.Content.ReadAsStringAsync();

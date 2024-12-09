@@ -1,5 +1,8 @@
 using Xunit;
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Diagnostics.CodeAnalysis;
 
 namespace TrailBase;
 
@@ -20,6 +23,13 @@ class SimpleStrict {
     this.text_default = text_default;
     this.text_not_null = text_not_null;
   }
+}
+
+
+[JsonSourceGenerationOptions(WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(SimpleStrict))]
+[JsonSerializable(typeof(List<SimpleStrict>))]
+internal partial class SerializeSimpleStrictContext : JsonSerializerContext {
 }
 
 public class ClientTestFixture : IDisposable {
@@ -107,7 +117,9 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
   }
 
   [Fact]
-  public async Task RecordsTest() {
+  [RequiresDynamicCode("Testing dynamic code")]
+  [RequiresUnreferencedCode("testing dynamic code")]
+  public async Task RecordsTestDynamic() {
     var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
     await client.Login("admin@localhost", "secret");
 
@@ -120,7 +132,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     // underlying database file. We include the runtime version in the filter
     // query to avoid a race between both tests. This feels a bit hacky.
     // Ideally, we'd run the tests sequentially or with better isolation :/.
-    var suffix = $"{now} {System.Environment.Version}";
+    var suffix = $"{now} {System.Environment.Version} dyn";
     List<string> messages = [
       $"C# client test 0:  =?&{suffix}",
       $"C# client test 1:  =?&{suffix}",
@@ -133,7 +145,8 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
 
     {
       List<SimpleStrict> records = await api.List<SimpleStrict>(
-          null, null,
+        null,
+        null,
         [$"text_not_null={messages[0]}"]
       )!;
       Assert.Single(records);
@@ -142,7 +155,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
 
     {
       var recordsAsc = await api.List<SimpleStrict>(
-          null,
+        null,
         ["+text_not_null"],
         [$"text_not_null[like]=% =?&{suffix}"]
       )!;
@@ -150,7 +163,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       Assert.Equal(messages, recordsAsc.ConvertAll((e) => e.text_not_null));
 
       var recordsDesc = await api.List<SimpleStrict>(
-          null,
+        null,
         ["-text_not_null"],
         [$"text_not_null[like]=%{suffix}"]
       )!;
@@ -185,9 +198,106 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       await api.Delete(id);
 
       var records = await api.List<SimpleStrict>(
-          null,
-          null,
+        null,
+        null,
         [$"text_not_null[like]=%{suffix}"]
+      )!;
+
+      Assert.Single(records);
+    }
+  }
+
+  [Fact]
+  public async Task RecordsTest() {
+    var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
+    await client.Login("admin@localhost", "secret");
+
+    var api = client.Records("simple_strict_table");
+
+    var now = DateTimeOffset.Now.ToUnixTimeSeconds();
+
+    // Dotnet runs tests for multiple target framework versions in parallel.
+    // Each test currently brings up its own server but pointing at the same
+    // underlying database file. We include the runtime version in the filter
+    // query to avoid a race between both tests. This feels a bit hacky.
+    // Ideally, we'd run the tests sequentially or with better isolation :/.
+    var suffix = $"{now} {System.Environment.Version} static";
+    List<string> messages = [
+      $"C# client test 0:  =?&{suffix}",
+      $"C# client test 1:  =?&{suffix}",
+    ];
+
+    List<RecordId> ids = [];
+    foreach (var msg in messages) {
+      ids.Add(await api.Create(new SimpleStrict(null, null, null, msg), SerializeSimpleStrictContext.Default.SimpleStrict));
+    }
+
+    {
+      List<SimpleStrict> records = await api.List(
+        null,
+        null,
+        [$"text_not_null={messages[0]}"],
+        SerializeSimpleStrictContext.Default.ListSimpleStrict
+      )!;
+      Assert.Single(records);
+      Assert.Equal(messages[0], records[0].text_not_null);
+    }
+
+    {
+      var recordsAsc = await api.List(
+        null,
+        ["+text_not_null"],
+        [$"text_not_null[like]=% =?&{suffix}"],
+        SerializeSimpleStrictContext.Default.ListSimpleStrict
+      )!;
+      Assert.Equal(messages.Count, recordsAsc.Count);
+      Assert.Equal(messages, recordsAsc.ConvertAll((e) => e.text_not_null));
+
+      var recordsDesc = await api.List(
+        null,
+        ["-text_not_null"],
+        [$"text_not_null[like]=%{suffix}"],
+        SerializeSimpleStrictContext.Default.ListSimpleStrict
+      )!;
+      Assert.Equal(messages.Count, recordsDesc.Count);
+      recordsDesc.Reverse();
+      Assert.Equal(messages, recordsDesc.ConvertAll((e) => e.text_not_null));
+    }
+
+    var i = 0;
+    foreach (var id in ids) {
+      var msg = messages[i++];
+      var record = await api.Read(id, SerializeSimpleStrictContext.Default.SimpleStrict);
+
+      Assert.Equal(msg, record!.text_not_null);
+      Assert.NotNull(record.id);
+
+      var uuidId = new UuidRecordId(record.id!);
+      Assert.Equal(id.ToString(), uuidId.ToString());
+    }
+
+    {
+      var id = ids[0];
+      var msg = $"{messages[0]} - updated";
+      await api.Update(
+        id,
+        new SimpleStrict(null, null, null, msg),
+        SerializeSimpleStrictContext.Default.SimpleStrict
+      );
+      var record = await api.Read(id, SerializeSimpleStrictContext.Default.SimpleStrict);
+
+      Assert.Equal(msg, record!.text_not_null);
+    }
+
+    {
+      var id = ids[0];
+      await api.Delete(id);
+
+      var records = await api.List(
+        null,
+        null,
+        [$"text_not_null[like]=%{suffix}"],
+        SerializeSimpleStrictContext.Default.ListSimpleStrict
       )!;
 
       Assert.Single(records);
