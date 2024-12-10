@@ -339,23 +339,23 @@ impl RecordApi {
 
   /// Check if the given user (if any) can access a record given the request and the operation.
   #[allow(unused)]
-  pub fn check_record_level_access_sync(
+  pub fn check_record_level_read_access_by_rowid(
     &self,
-    conn: &mut rusqlite::Connection,
+    conn: &rusqlite::Connection,
     p: Permission,
-    record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_>>,
+    rowid: i64,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
-    let Some(access_query) = self.access_query(p) else {
+    let Some(access_rule) = self.access_rule(p) else {
       return Ok(());
     };
-    let params = self.build_named_params(p, record_id, request_params, user)?;
+    let params = build_named_params_for_read_by_rowid(rowid, user);
+    let query = build_read_access_query_by_rowid(self.table_name(), access_rule);
 
-    match Self::query_access(conn, access_query, params) {
+    match Self::query_access(conn, &query, params) {
       Ok(allowed) => {
         if allowed {
           return Ok(());
@@ -389,7 +389,7 @@ impl RecordApi {
 
   #[inline]
   fn query_access(
-    conn: &mut rusqlite::Connection,
+    conn: &rusqlite::Connection,
     access_query: &str,
     params: NamedParams,
   ) -> Result<bool, trailbase_sqlite::Error> {
@@ -451,6 +451,30 @@ impl RecordApi {
 
     return Ok(params);
   }
+}
+
+fn build_named_params_for_read_by_rowid(rowid: i64, user: Option<&User>) -> NamedParams {
+  return vec![
+    (
+      Cow::Borrowed(":__user_id"),
+      user.map_or(Value::Null, |u| Value::Blob(u.uuid.into())),
+    ),
+    (Cow::Borrowed(":__row_id"), Value::Integer(rowid)),
+  ];
+}
+
+fn build_read_access_query_by_rowid(table_name: &str, access_rule: &str) -> String {
+  // Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
+  // let access_rule = self.access_rule(Permission::Read);
+  return indoc::formatdoc!(
+    r#"
+        SELECT
+          ({access_rule})
+        FROM
+          (SELECT :__user_id AS id) AS _USER_,
+          (SELECT * FROM "{table_name}" WHERE _rowid_ = :__row_id) AS _ROW_
+      "#
+  );
 }
 
 /// Build access query for record reads, deletes and query access.

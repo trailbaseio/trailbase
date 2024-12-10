@@ -14,6 +14,7 @@ mod list_records;
 pub(crate) mod read_record;
 mod record_api;
 pub mod sql_to_json;
+pub(crate) mod subscribe;
 pub mod test_utils;
 mod update_record;
 mod validate;
@@ -63,7 +64,8 @@ pub(crate) fn router() -> Router<AppState> {
       "/:name/:record/files/:column_name/:file_index",
       get(read_record::get_uploaded_files_from_record_handler),
     )
-    .route("/:name/schema", get(json_schema::json_schema_handler));
+    .route("/:name/schema", get(json_schema::json_schema_handler))
+    .route("/:name/subscribe/:record", get(subscribe::sse_handler));
 }
 
 // Since this is for APIs access control, we'll use the API- space CRUD terminology instead of
