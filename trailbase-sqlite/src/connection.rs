@@ -1,5 +1,6 @@
 use crossbeam_channel::{Receiver, Sender};
-use rusqlite::hooks::Action;
+use rusqlite::hooks::{Action, PreUpdateCase};
+use rusqlite::types::Value;
 use std::{
   fmt::{self, Debug},
   sync::Arc,
@@ -35,11 +36,9 @@ macro_rules! named_params {
 pub type Result<T> = std::result::Result<T, Error>;
 
 type CallFn = Box<dyn FnOnce(&mut rusqlite::Connection) + Send + 'static>;
-type HookFn = Arc<dyn Fn(&rusqlite::Connection, Action, &str, &str, i64) + Send + Sync + 'static>;
 
 enum Message {
   Run(CallFn),
-  ExecuteHook(HookFn, Action, String, String, i64),
   Close(oneshot::Sender<std::result::Result<(), rusqlite::Error>>),
 }
 
@@ -73,7 +72,7 @@ impl Connection {
   /// Will return `Err` if the database connection has been closed.
   pub async fn call<F, R>(&self, function: F) -> Result<R>
   where
-    F: FnOnce(&mut rusqlite::Connection) -> Result<R> + 'static + Send,
+    F: FnOnce(&mut rusqlite::Connection) -> Result<R> + Send + 'static,
     R: Send + 'static,
   {
     let (sender, receiver) = oneshot::channel::<Result<R>>();
@@ -87,6 +86,12 @@ impl Connection {
       .map_err(|_| Error::ConnectionClosed)?;
 
     receiver.await.map_err(|_| Error::ConnectionClosed)?
+  }
+
+  pub fn call_and_forget(&self, function: impl FnOnce(&rusqlite::Connection) + Send + 'static) {
+    let _ = self
+      .sender
+      .send(Message::Run(Box::new(move |conn| function(conn))));
   }
 
   /// Query SQL statement.
@@ -204,39 +209,12 @@ impl Connection {
       .await;
   }
 
-  pub async fn add_hook(
+  /// Convenience API for (un)setting a new pre-update hook.
+  pub async fn add_preupdate_hook(
     &self,
-    f: impl Fn(&rusqlite::Connection, Action, &str, &str, i64) + Send + Sync + 'static,
+    hook: Option<impl (Fn(Action, &str, &str, &PreUpdateCase)) + Send + Sync + 'static>,
   ) -> Result<()> {
-    let sender = self.sender.clone();
-    let f = Arc::new(f);
-
-    return self
-      .call(|conn| {
-        conn.update_hook(Some(
-          move |action: Action, db: &str, table: &str, row: i64| {
-            let _ = sender.send(Message::ExecuteHook(
-              f.clone(),
-              action,
-              db.to_string(),
-              table.to_string(),
-              row,
-            ));
-          },
-        ));
-
-        return Ok(());
-      })
-      .await;
-  }
-
-  pub async fn remove_hook(&self) -> Result<()> {
-    return self
-      .call(|conn| {
-        conn.update_hook(None::<fn(Action, &str, &str, i64)>);
-        return Ok(());
-      })
-      .await;
+    return self.call(|conn| Ok(conn.preupdate_hook(hook))).await;
   }
 
   /// Close the database connection.
@@ -286,7 +264,6 @@ fn event_loop(mut conn: rusqlite::Connection, receiver: Receiver<Message>) {
   while let Ok(message) = receiver.recv() {
     match message {
       Message::Run(f) => f(&mut conn),
-      Message::ExecuteHook(f, action, db, table, row) => f(&conn, action, &db, &table, row),
       Message::Close(ch) => {
         match conn.close() {
           Ok(v) => ch.send(Ok(v)).expect(BUG_TEXT),
@@ -297,6 +274,50 @@ fn event_loop(mut conn: rusqlite::Connection, receiver: Receiver<Message>) {
       }
     }
   }
+}
+
+pub fn extract_row_id(case: &PreUpdateCase) -> Option<i64> {
+  return match case {
+    PreUpdateCase::Insert(accessor) => Some(accessor.get_new_row_id()),
+    PreUpdateCase::Delete(accessor) => Some(accessor.get_old_row_id()),
+    PreUpdateCase::Update {
+      new_value_accessor: accessor,
+      ..
+    } => Some(accessor.get_new_row_id()),
+    PreUpdateCase::Unknown => None,
+  };
+}
+
+pub fn extract_record_values(case: &PreUpdateCase) -> Option<Vec<Value>> {
+  return Some(match case {
+    PreUpdateCase::Insert(accessor) => (0..accessor.get_column_count())
+      .map(|idx| -> Value {
+        accessor
+          .get_new_column_value(idx)
+          .map_or(rusqlite::types::Value::Null, |v| v.into())
+      })
+      .collect(),
+    PreUpdateCase::Delete(accessor) => (0..accessor.get_column_count())
+      .map(|idx| -> rusqlite::types::Value {
+        accessor
+          .get_old_column_value(idx)
+          .map_or(rusqlite::types::Value::Null, |v| v.into())
+      })
+      .collect(),
+    PreUpdateCase::Update {
+      new_value_accessor: accessor,
+      ..
+    } => (0..accessor.get_column_count())
+      .map(|idx| -> rusqlite::types::Value {
+        accessor
+          .get_new_column_value(idx)
+          .map_or(rusqlite::types::Value::Null, |v| v.into())
+      })
+      .collect(),
+    PreUpdateCase::Unknown => {
+      return None;
+    }
+  });
 }
 
 #[cfg(test)]

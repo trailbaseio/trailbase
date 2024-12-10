@@ -14,6 +14,7 @@ mod list_records;
 pub(crate) mod read_record;
 mod record_api;
 pub mod sql_to_json;
+pub(crate) mod subscribe;
 pub mod test_utils;
 mod update_record;
 mod validate;
@@ -76,6 +77,10 @@ pub(crate) fn router() -> Router<AppState> {
     .route(
       &format!("/{RECORD_API_PATH}/{{name}}/schema"),
       get(json_schema::json_schema_handler),
+    )
+    .route(
+      &format!("/{RECORD_API_PATH}/{{name}}/subscribe/{{record}}"),
+      get(subscribe::add_subscription_sse_handler),
     );
 }
 

@@ -19,20 +19,20 @@ pub enum JsonError {
   ValueNotFound,
 }
 
-fn value_to_json(value: rusqlite::types::Value) -> Result<serde_json::Value, JsonError> {
+pub(crate) fn value_to_json(value: rusqlite::types::Value) -> Result<serde_json::Value, JsonError> {
+  use rusqlite::types::Value;
+
   return Ok(match value {
-    rusqlite::types::Value::Null => serde_json::Value::Null,
-    rusqlite::types::Value::Real(real) => {
+    Value::Null => serde_json::Value::Null,
+    Value::Real(real) => {
       let Some(number) = serde_json::Number::from_f64(real) else {
         return Err(JsonError::Finite);
       };
       serde_json::Value::Number(number)
     }
-    rusqlite::types::Value::Integer(integer) => {
-      serde_json::Value::Number(serde_json::Number::from(integer))
-    }
-    rusqlite::types::Value::Blob(blob) => serde_json::Value::String(BASE64_URL_SAFE.encode(blob)),
-    rusqlite::types::Value::Text(text) => serde_json::Value::String(text),
+    Value::Integer(integer) => serde_json::Value::Number(serde_json::Number::from(integer)),
+    Value::Blob(blob) => serde_json::Value::String(BASE64_URL_SAFE.encode(blob)),
+    Value::Text(text) => serde_json::Value::String(text),
   });
 }
 

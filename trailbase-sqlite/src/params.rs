@@ -78,10 +78,9 @@ impl Params for () {
 impl Params for Vec<(String, types::Value)> {
   fn bind(self, stmt: &mut Statement<'_>) -> rusqlite::Result<()> {
     for (name, v) in self {
-      let Some(idx) = stmt.parameter_index(&name)? else {
-        continue;
+      if let Some(idx) = stmt.parameter_index(&name)? {
+        stmt.raw_bind_parameter(idx, v)?;
       };
-      stmt.raw_bind_parameter(idx, v)?;
     }
     return Ok(());
   }

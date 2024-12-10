@@ -73,7 +73,7 @@ pub struct TableMetadata {
   metadata: Vec<ColumnMetadata>,
   name_to_index: HashMap<String, usize>,
 
-  record_pk_column: Option<usize>,
+  pub record_pk_column: Option<usize>,
   pub user_id_columns: Vec<usize>,
   pub file_upload_columns: Vec<usize>,
   pub file_uploads_columns: Vec<usize>,

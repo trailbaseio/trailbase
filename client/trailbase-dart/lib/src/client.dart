@@ -5,6 +5,8 @@ import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:logging/logging.dart';
 import 'package:dio/dio.dart' as dio;
 
+import 'sse.dart';
+
 class User {
   final String id;
   final String email;
@@ -272,6 +274,22 @@ class RecordApi {
     );
   }
 
+  Future<Stream<Map<String, dynamic>>> subscribe(RecordId id) async {
+    final resp = await _client.fetch(
+      '${RecordApi._recordApi}/${_name}/subscribe/${id}',
+      responseType: dio.ResponseType.stream,
+    );
+
+    final Stream<Uint8List> stream = resp.data.stream;
+    return stream.asyncMap((Uint8List bytes) {
+      final decoded = utf8.decode(bytes);
+      if (decoded.startsWith('data: ')) {
+        return jsonDecode(decoded.substring(6));
+      }
+      return jsonDecode(decoded);
+    });
+  }
+
   Uri imageUri(RecordId id, String colName, {int? index}) {
     if (index != null) {
       return Uri.parse(
@@ -283,7 +301,7 @@ class RecordApi {
 }
 
 class _ThinClient {
-  static final _dio = dio.Dio();
+  static final _dio = dio.Dio()..interceptors.add(SeeInterceptor());
 
   final String site;
 
@@ -295,6 +313,7 @@ class _ThinClient {
     Object? data,
     String? method,
     Map<String, dynamic>? queryParams,
+    dio.ResponseType? responseType,
   }) async {
     if (path.startsWith('/')) {
       throw Exception('Path starts with "/". Relative path expected.');
@@ -308,6 +327,7 @@ class _ThinClient {
         method: method,
         headers: tokenState.headers,
         validateStatus: (int? status) => true,
+        responseType: responseType,
       ),
     );
 
@@ -508,6 +528,7 @@ class Client {
     Object? data,
     String? method,
     Map<String, dynamic>? queryParams,
+    dio.ResponseType? responseType,
   }) async {
     var tokenState = _tokenState;
     final refreshToken = _shouldRefresh(tokenState);
@@ -515,8 +536,14 @@ class Client {
       tokenState = _tokenState = await _refreshTokensImpl(refreshToken);
     }
 
-    final response = await _client.fetch(path, tokenState,
-        data: data, method: method, queryParams: queryParams);
+    final response = await _client.fetch(
+      path,
+      tokenState,
+      data: data,
+      method: method,
+      queryParams: queryParams,
+      responseType: responseType,
+    );
 
     if (response.statusCode != 200 && (throwOnError ?? true)) {
       final errMsg = await response.data;

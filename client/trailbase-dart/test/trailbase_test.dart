@@ -57,14 +57,19 @@ Future<Process> initTrailBase() async {
       print('Trying to connect to TrailBase');
     }
 
-    await Future.delayed(Duration(milliseconds: 500));
+    if (await process.exitCode
+            .timeout(Duration(milliseconds: 500), onTimeout: () => -1) >=
+        0) {
+      break;
+    }
   }
 
   process.kill(ProcessSignal.sigkill);
   final exitCode = await process.exitCode;
 
-  await process.stdout.forEach(print);
-  await process.stderr.forEach(print);
+  await process.stderr.forEach(stdout.add);
+  await process.stdout.forEach(stdout.add);
+
   throw Exception('Cargo run failed: ${exitCode}.');
 }
 
@@ -73,7 +78,15 @@ Future<void> main() async {
     throw Exception('Unexpected working directory');
   }
 
-  await initTrailBase();
+  final process = await initTrailBase();
+
+  tearDownAll(() async {
+    process.kill(ProcessSignal.sigkill);
+    final _ = await process.exitCode;
+
+    // await process.stderr.forEach(stdout.add);
+    // await process.stdout.forEach(stdout.add);
+  });
 
   group('client tests', () {
     test('auth', () async {
@@ -158,6 +171,28 @@ Future<void> main() async {
 
       await api.delete(ids[0]);
       expect(() async => await api.read(ids[0]), throwsException);
+    });
+
+    test('realtime', () async {
+      final client = await connect();
+      final api = client.records('simple_strict_table');
+
+      final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final id = await api
+          .create({'text_not_null': 'dart client realtime test 0: =?&${now}'});
+
+      final events = await api.subscribe(id);
+
+      final updatedMessage = 'dart client updated realtime test 0: ${now}';
+      await api.update(id, {'text_not_null': updatedMessage});
+      await api.delete(id);
+
+      final eventList =
+          await events.timeout(Duration(seconds: 10), onTimeout: (sink) {
+        print('Stream timeout');
+        sink.close();
+      }).toList();
+      expect(eventList.length, equals(2));
     });
   });
 }

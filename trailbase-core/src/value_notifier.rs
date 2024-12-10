@@ -68,6 +68,7 @@ struct ComputedState<T, V> {
   f: Box<dyn Sync + Send + Fn(&V) -> T>,
 }
 
+#[derive(Clone)]
 pub struct Computed<T, V> {
   state: Arc<ComputedState<T, V>>,
 }
