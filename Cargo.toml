@@ -39,5 +39,6 @@ rusqlite = { version = "^0.32.1", default-features = false, features = [
     "functions",
     "limits",
     "backup",
+    "hooks",
 ] }
 sqlite-loadable = { package = "sqlite-loadable", path = "./vendor/sqlite-loadable", features=["static"]  }

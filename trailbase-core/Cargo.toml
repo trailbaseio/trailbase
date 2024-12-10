@@ -17,7 +17,7 @@ arc-swap = "1.7.1"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
 async-channel = "2.3.1"
 async-trait = "0.1.80"
-axum = { version = "^0.7.5", features=["multipart"] }
+axum = { version = "^0.7.5", features=["multipart", "ws"] }
 axum-client-ip = "0.6.0"
 axum-extra = { version = "^0.9.3", default-features = false, features=["protobuf"] }
 base64 = { version = "0.22.1", default-features = false }
