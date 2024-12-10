@@ -11,6 +11,7 @@ use crate::constants::SITE_URL_DEFAULT;
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::js::RuntimeHandle;
+use crate::records::subscribe::SubscriptionManager;
 use crate::records::RecordApi;
 use crate::table_metadata::TableMetadataCache;
 use crate::value_notifier::{Computed, ValueNotifier};
@@ -33,6 +34,7 @@ struct InternalState {
   jwt: JwtHelper,
 
   table_metadata: TableMetadataCache,
+  subscription_manager: SubscriptionManager,
   object_store: Box<dyn ObjectStore + Send + Sync>,
 
   runtime: RuntimeHandle,
@@ -107,6 +109,7 @@ impl AppState {
         logs_conn: args.logs_conn,
         jwt: args.jwt,
         table_metadata: args.table_metadata,
+        subscription_manager: SubscriptionManager::new(args.conn).unwrap(),
         object_store: args.object_store,
         runtime,
         #[cfg(test)]
@@ -143,6 +146,10 @@ impl AppState {
 
   pub(crate) fn table_metadata(&self) -> &TableMetadataCache {
     return &self.state.table_metadata;
+  }
+
+  pub(crate) fn subscription_manager(&self) -> &SubscriptionManager {
+    return &self.state.subscription_manager;
   }
 
   pub async fn refresh_table_cache(&self) -> Result<(), crate::table_metadata::TableLookupError> {
@@ -389,10 +396,11 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
           .collect::<Vec<_>>();
       }),
       config,
-      conn,
+      conn: conn.clone(),
       logs_conn,
       jwt: jwt::test_jwt_helper(),
       table_metadata,
+      subscription_manager: SubscriptionManager::new(conn).unwrap(),
       object_store,
       runtime,
       cleanup: vec![Box::new(temp_dir)],

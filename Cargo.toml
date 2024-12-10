@@ -29,7 +29,6 @@ codegen-units = 1
 
 [workspace.dependencies]
 refinery = { package = "refinery", path = "vendor/refinery/refinery", default-features = false, features = ["rusqlite"] }
-refinery-core = { package = "refinery-core", path = "vendor/refinery/refinery_core" }
 rusqlite = { version = "^0.32.1", default-features = false, features = [
     "bundled",
     "column_decltype",
