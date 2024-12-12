@@ -43,7 +43,7 @@ fn build_js(path: &str) -> Result<()> {
   let output = pnpm_run(&["--dir", path, "build"])?;
   if !output.status.success() {
     // NOTE: We don't want to break backend-builds on frontend errors, at least for dev builds.
-    if Ok("release") == env::var("PROFILE").as_deref() {
+    if env::var("SKIP_ERROR").is_err() {
       panic!(
         "Failed to build js '{path}': {}",
         String::from_utf8_lossy(&output.stderr)
