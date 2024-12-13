@@ -11,7 +11,7 @@ fn copy_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
   fs::create_dir_all(&dst)?;
   for entry in fs::read_dir(src)? {
     let entry = entry?;
-    if entry.file_name().to_str().unwrap().starts_with(".") {
+    if entry.file_name().to_string_lossy().starts_with(".") {
       continue;
     }
 
@@ -27,31 +27,37 @@ fn copy_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
 
 fn build_js(path: &str) -> Result<()> {
   let pnpm_run = |args: &[&str]| -> Result<std::process::Output> {
-    let output = std::process::Command::new("pnpm")
+    let cmd = "pnpm";
+    let output = std::process::Command::new(cmd)
       .current_dir("..")
       .args(args)
-      .output()?;
+      .output()
+      .map_err(|err| {
+        eprintln!("Error: Failed to run '{cmd} {}'", args.join(" "));
+        return err;
+      })?;
 
-    std::io::stdout().write_all(&output.stdout).unwrap();
-    std::io::stderr().write_all(&output.stderr).unwrap();
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
 
     Ok(output)
   };
 
-  let _ = pnpm_run(&["--dir", path, "install", "--frozen-lockfile"]);
+  // We deliberately chose not use "--frozen-lockfile" here, since this is not a CI use-case.
+  let _install_output = pnpm_run(&["--dir", path, "install"])?;
 
-  let output = pnpm_run(&["--dir", path, "build"])?;
-  if !output.status.success() {
+  let build_output = pnpm_run(&["--dir", path, "build"])?;
+  if !build_output.status.success() {
     // NOTE: We don't want to break backend-builds on frontend errors, at least for dev builds.
     if env::var("SKIP_ERROR").is_err() {
       panic!(
         "Failed to build js '{path}': {}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&build_output.stderr)
       );
     }
     warn!(
       "Failed to build js '{path}': {}",
-      String::from_utf8_lossy(&output.stderr)
+      String::from_utf8_lossy(&build_output.stderr)
     );
   }
 
@@ -88,7 +94,7 @@ fn build_protos() -> Result<()> {
 fn main() -> Result<()> {
   env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-  build_protos().unwrap();
+  build_protos()?;
 
   // WARN: watching non-existent paths will also trigger rebuilds.
   println!("cargo::rerun-if-changed=../client/trailbase-ts/src/");
@@ -97,7 +103,7 @@ fn main() -> Result<()> {
     let path = "ui/admin";
     println!("cargo::rerun-if-changed=../{path}/src/components/");
     println!("cargo::rerun-if-changed=../{path}/src/lib/");
-    let _ = build_js(path);
+    build_js(path)?;
   }
 
   {
@@ -106,12 +112,12 @@ fn main() -> Result<()> {
     println!("cargo::rerun-if-changed=../{path}/src/lib/");
     println!("cargo::rerun-if-changed=../{path}/src/pages/");
     println!("cargo::rerun-if-changed=../{path}/src/layouts/");
-    let _ = build_js(path);
+    build_js(path)?;
   }
 
   {
     println!("cargo::rerun-if-changed=js/src/");
-    let _ = build_js("trailbase-core/js");
+    build_js("trailbase-core/js")?;
   }
 
   return Ok(());
