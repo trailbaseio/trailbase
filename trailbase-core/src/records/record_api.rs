@@ -375,7 +375,7 @@ impl RecordApi {
           FROM
             ({user_sub_select}) AS _USER_,
             ({request_sub_select}) AS _REQ_,
-            (SELECT * FROM [{table_name}] WHERE [{pk_column_name}] = :__record_id) AS _ROW_
+            (SELECT * FROM "{table_name}" WHERE "{pk_column_name}" = :__record_id) AS _ROW_
         "#,
         )
       }
@@ -385,7 +385,7 @@ impl RecordApi {
             ({access_rule})
           FROM
             ({user_sub_select}) AS _USER_,
-            (SELECT * FROM [{table_name}] WHERE [{pk_column_name}] = :__record_id) AS _ROW_
+            (SELECT * FROM "{table_name}" WHERE "{pk_column_name}" = :__record_id) AS _ROW_
         "#
       ),
     };

@@ -136,7 +136,7 @@ pub async fn get_user_by_email(
   email: &str,
 ) -> Result<DbUser, AuthError> {
   lazy_static! {
-    static ref QUERY: String = format!("SELECT * FROM {USER_TABLE} WHERE email = $1");
+    static ref QUERY: String = format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#);
   };
   let db_user = user_conn
     .query_value::<DbUser>(&QUERY, params!(email.to_string()))
@@ -155,7 +155,7 @@ async fn get_user_by_id(
   id: &uuid::Uuid,
 ) -> Result<DbUser, AuthError> {
   lazy_static! {
-    static ref QUERY: String = format!("SELECT * FROM {USER_TABLE} WHERE id = $1");
+    static ref QUERY: String = format!(r#"SELECT * FROM "{USER_TABLE}" WHERE id = $1"#);
   };
   let db_user = user_conn
     .query_value::<DbUser>(&QUERY, params!(id.into_bytes()))
@@ -167,24 +167,24 @@ async fn get_user_by_id(
 
 pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, AuthError> {
   lazy_static! {
-    static ref EXISTS_QUERY: String =
-      format!("SELECT EXISTS(SELECT 1 FROM '{USER_TABLE}' WHERE email = $1)");
+    static ref QUERY: String =
+      format!(r#"SELECT EXISTS(SELECT 1 FROM "{USER_TABLE}" WHERE email = $1)"#);
   };
   let row =
-    crate::util::query_one_row(state.user_conn(), &EXISTS_QUERY, params!(email.to_string()))
-      .await?;
+    crate::util::query_one_row(state.user_conn(), &QUERY, params!(email.to_string())).await?;
   return row
     .get::<bool>(0)
     .map_err(|err| AuthError::Internal(err.into()));
 }
 
 pub(crate) async fn is_admin(state: &AppState, user: &User) -> bool {
+  lazy_static! {
+    static ref QUERY: String = format!(r#"SELECT admin FROM "{USER_TABLE}" WHERE id = $1"#);
+  };
+
   let Ok(Some(row)) = state
     .user_conn()
-    .query_row(
-      &format!("SELECT admin FROM {USER_TABLE} WHERE id = $1"),
-      params!(user.uuid.as_bytes().to_vec()),
-    )
+    .query_row(&QUERY, params!(user.uuid.as_bytes().to_vec()))
     .await
   else {
     return false;
@@ -198,7 +198,7 @@ pub(crate) async fn delete_all_sessions_for_user(
   user_id: uuid::Uuid,
 ) -> Result<usize, AuthError> {
   lazy_static! {
-    static ref QUERY: String = format!("DELETE FROM '{SESSION_TABLE}' WHERE user = $1");
+    static ref QUERY: String = format!(r#"DELETE FROM "{SESSION_TABLE}" WHERE user = $1"#);
   };
 
   return Ok(
@@ -217,7 +217,7 @@ pub(crate) async fn delete_session(
   refresh_token: String,
 ) -> Result<usize, AuthError> {
   lazy_static! {
-    static ref QUERY: String = format!("DELETE FROM '{SESSION_TABLE}' WHERE refresh_token = $1");
+    static ref QUERY: String = format!(r#"DELETE FROM "{SESSION_TABLE}" WHERE refresh_token = $1"#);
   };
 
   return Ok(

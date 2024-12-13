@@ -1,6 +1,7 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use lazy_static::lazy_static;
 use tower_cookies::Cookies;
 
 use crate::app_state::AppState;
@@ -24,14 +25,13 @@ pub(crate) async fn delete_handler(
 ) -> Result<Response, AuthError> {
   let _ = delete_all_sessions_for_user(&state, user.uuid).await;
 
+  lazy_static! {
+    static ref QUERY: String = format!(r#"DELETE FROM "{USER_TABLE}" WHERE id = $1"#);
+  }
+
   state
     .user_conn()
-    .execute(
-      &format!("DELETE FROM '{USER_TABLE}' WHERE id = $1"),
-      [trailbase_sqlite::Value::Blob(
-        user.uuid.into_bytes().to_vec(),
-      )],
-    )
+    .execute(&QUERY, [trailbase_sqlite::Value::Blob(user.uuid.into())])
     .await?;
 
   remove_all_cookies(&cookies);

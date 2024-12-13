@@ -194,14 +194,14 @@ mod test {
     const EMAIL: &str = "foo@bar.baz";
     conn
       .execute(
-        &format!("INSERT INTO '{USER_TABLE}' (email) VALUES ($1)"),
+        &format!(r#"INSERT INTO "{USER_TABLE}" (email) VALUES ($1)"#),
         trailbase_sqlite::params!(EMAIL),
       )
       .await?;
 
     query_one_row(
       conn,
-      &format!("SELECT * from '{USER_TABLE}' WHERE email = :email"),
+      &format!(r#"SELECT * from "{USER_TABLE}" WHERE email = :email"#),
       trailbase_sqlite::named_params! {
         ":email": EMAIL,
         ":unused": "unused",

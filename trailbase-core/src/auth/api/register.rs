@@ -75,9 +75,9 @@ pub async fn register_user_handler(
   let hashed_password = hash_password(&request.password)?;
 
   lazy_static! {
-    static ref INSERT_USER_QUERY: String = format!(
+    static ref INSERT_USER_QUERY: String = indoc::formatdoc!(
       r#"
-        INSERT INTO '{USER_TABLE}'
+        INSERT INTO "{USER_TABLE}"
           (email, password_hash, email_verification_code, email_verification_code_sent_at)
         VALUES
           (:email, :password_hash, :email_verification_code, UNIXEPOCH())

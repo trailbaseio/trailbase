@@ -185,7 +185,7 @@ async fn test_oauth() {
   let row = state
     .user_conn()
     .query_row(
-      &format!("SELECT email FROM {USER_TABLE} WHERE provider_user_id = $1"),
+      &format!(r#"SELECT email FROM "{USER_TABLE}" WHERE provider_user_id = $1"#),
       (external_user_id,),
     )
     .await

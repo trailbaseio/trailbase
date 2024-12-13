@@ -45,7 +45,7 @@ async fn test_auth_registration_reset_and_change_email() {
   let email = "user@test.org".to_string();
   let password = "secret123".to_string();
   let session_exists_query =
-    format!("SELECT EXISTS(SELECT 1 FROM '{SESSION_TABLE}' WHERE user = $1)");
+    format!(r#"SELECT EXISTS(SELECT 1 FROM "{SESSION_TABLE}" WHERE user = $1)"#);
 
   let user = {
     // Register new user and email verification flow.
@@ -67,7 +67,7 @@ async fn test_auth_registration_reset_and_change_email() {
     let email_verification_code = {
       let db_user = conn
         .query_value::<DbUser>(
-          &format!("SELECT * FROM '{USER_TABLE}' WHERE email = $1"),
+          &format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
           (email.clone(),),
         )
         .await
@@ -106,7 +106,7 @@ async fn test_auth_registration_reset_and_change_email() {
     let (verified, user) = {
       let db_user = conn
         .query_value::<DbUser>(
-          &format!("SELECT * FROM '{USER_TABLE}' WHERE email = $1"),
+          &format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
           (email.clone(),),
         )
         .await
@@ -215,7 +215,7 @@ async fn test_auth_registration_reset_and_change_email() {
     // Steal the reset code.
     let reset_code: String = query_one_row(
       conn,
-      &format!("SELECT password_reset_code FROM '{USER_TABLE}' WHERE id = $1"),
+      &format!(r#"SELECT password_reset_code FROM "{USER_TABLE}" WHERE id = $1"#),
       (user.uuid.into_bytes().to_vec(),),
     )
     .await
@@ -328,7 +328,7 @@ async fn test_auth_registration_reset_and_change_email() {
     // Steal the verification code.
     let email_verification_code: String = query_one_row(
       conn,
-      &format!("SELECT email_verification_code FROM '{USER_TABLE}' WHERE id = $1"),
+      &format!(r#"SELECT email_verification_code FROM "{USER_TABLE}" WHERE id = $1"#),
       params!(user.uuid.into_bytes()),
     )
     .await
@@ -361,7 +361,7 @@ async fn test_auth_registration_reset_and_change_email() {
 
     let db_email: String = query_one_row(
       conn,
-      &format!("SELECT email FROM '{USER_TABLE}' WHERE id = $1"),
+      &format!(r#"SELECT email FROM "{USER_TABLE}" WHERE id = $1"#),
       params!(user.uuid.into_bytes()),
     )
     .await
@@ -417,7 +417,7 @@ async fn test_auth_registration_reset_and_change_email() {
 
     let user_exists: bool = query_one_row(
       conn,
-      &format!("SELECT EXISTS(SELECT * FROM '{USER_TABLE}' WHERE id = $1)"),
+      &format!(r#"SELECT EXISTS(SELECT * FROM "{USER_TABLE}" WHERE id = $1)"#),
       params!(user.uuid.into_bytes()),
     )
     .await

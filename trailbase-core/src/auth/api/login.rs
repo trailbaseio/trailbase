@@ -111,10 +111,10 @@ pub(crate) async fn login_handler(
     let authorization_code = generate_random_string(VERIFICATION_CODE_LENGTH);
 
     lazy_static! {
-      pub static ref QUERY: String = format!(
+      pub static ref QUERY: String = indoc::formatdoc!(
         r#"
         UPDATE
-          '{USER_TABLE}'
+          "{USER_TABLE}"
         SET
           authorization_code = :authorization_code,
           authorization_code_sent_at = UNIXEPOCH(),

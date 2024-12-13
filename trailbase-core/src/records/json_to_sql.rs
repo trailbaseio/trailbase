@@ -327,7 +327,7 @@ impl SelectQueryBuilder {
     return state
       .conn()
       .query_row(
-        &format!("SELECT * FROM '{table_name}' WHERE {pk_column} = $1"),
+        &format!(r#"SELECT * FROM "{table_name}" WHERE "{pk_column}" = $1"#),
         [pk_value],
       )
       .await;
@@ -351,7 +351,7 @@ impl GetFileQueryBuilder {
         let Some(row) = state
           .conn()
           .query_row(
-            &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
+            &format!(r#"SELECT "{column_name}" FROM "{table_name}" WHERE "{pk_column}" = $1"#),
             [pk_value],
           )
           .await?
@@ -385,7 +385,7 @@ impl GetFilesQueryBuilder {
         let Some(row) = state
           .conn()
           .query_row(
-            &format!("SELECT [{column_name}] FROM '{table_name}' WHERE {pk_column} = $1"),
+            &format!(r#"SELECT "{column_name}" FROM "{table_name}" WHERE "{pk_column}" = $1"#),
             [pk_value],
           )
           .await?
@@ -415,9 +415,16 @@ impl InsertQueryBuilder {
   ) -> Result<trailbase_sqlite::Row, QueryError> {
     let (query_fragment, named_params, mut files) =
       Self::build_insert_query(params, conflict_resolution)?;
+
     let query = match return_column_name {
-      Some(return_column_name) => format!("{query_fragment} RETURNING {return_column_name}"),
-      None => format!("{query_fragment} RETURNING NULL"),
+      Some(return_column_name) => {
+        if return_column_name == "*" {
+          format!(r#"{query_fragment} RETURNING *"#)
+        } else {
+          format!(r#"{query_fragment} RETURNING "{return_column_name}""#)
+        }
+      }
+      None => query_fragment,
     };
 
     // We're storing any files to the object store first to make sure the DB entry is valid right
@@ -461,10 +468,13 @@ impl InsertQueryBuilder {
 
     let column_names = params.column_names();
     let query = match column_names.is_empty() {
-      true => format!("INSERT {conflict_clause} INTO '{table_name}' DEFAULT VALUES"),
+      true => format!(r#"INSERT {conflict_clause} INTO "{table_name}" DEFAULT VALUES"#),
       false => format!(
-        "INSERT {conflict_clause} INTO '{table_name}' ({col_names}) VALUES ({placeholders})",
-        col_names = column_names.join(", "),
+        r#"INSERT {conflict_clause} INTO "{table_name}" ({col_names}) VALUES ({placeholders})"#,
+        col_names = column_names
+          .iter()
+          .map(|name| format!(r#""{name}""#))
+          .join(", "),
         placeholders = params.placeholders(),
       ),
     };
@@ -519,14 +529,13 @@ impl UpdateQueryBuilder {
       pk_column: &str,
       pk_value: trailbase_sqlite::Value,
     ) -> Result<Option<trailbase_sqlite::Row>, QueryError> {
-      let build_setters = || -> String {
+      let setters: String = {
         assert_eq!(params.col_names.len(), params.params.len());
-        return std::iter::zip(&params.col_names, &params.params)
-          .map(|(col_name, p)| format!("{col_name} = {placeholder}", placeholder = p.0))
-          .join(", ");
-      };
 
-      let setters = build_setters();
+        std::iter::zip(&params.col_names, &params.params)
+          .map(|(col_name, (placeholder, _value))| format!(r#""{col_name}" = {placeholder}"#))
+          .join(", ")
+      };
 
       let pk_column = pk_column.to_string();
       let table_name = table_name.to_string();
@@ -542,7 +551,7 @@ impl UpdateQueryBuilder {
             let file_columns = params.file_col_names.join(", ");
 
             let mut stmt = tx.prepare(&format!(
-              "SELECT {file_columns} FROM '{table_name}' WHERE {pk_column} = ${pk_column}"
+              r#"SELECT {file_columns} FROM "{table_name}" WHERE "{pk_column}" = :{pk_column}"#
             ))?;
 
             use trailbase_sqlite::Params;
@@ -559,7 +568,7 @@ impl UpdateQueryBuilder {
           // Update the column.
           {
             let mut stmt = tx.prepare(&format!(
-              "UPDATE '{table_name}' SET {setters} WHERE {pk_column} = :{pk_column}"
+              r#"UPDATE "{table_name}" SET {setters} WHERE "{pk_column}" = :{pk_column}"#
             ))?;
             use trailbase_sqlite::Params;
             params.params.bind(&mut stmt)?;
@@ -616,7 +625,7 @@ impl DeleteQueryBuilder {
 
     let row = query_one_row(
       state.conn(),
-      &format!("DELETE FROM '{table_name}' WHERE {pk_column} = $1 RETURNING *"),
+      &format!(r#"DELETE FROM "{table_name}" WHERE "{pk_column}" = $1 RETURNING *"#),
       [pk_value],
     )
     .await?;
