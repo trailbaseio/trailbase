@@ -48,8 +48,8 @@ pub struct Connection {
 }
 
 impl Connection {
-  pub async fn from_conn(conn: rusqlite::Connection) -> Result<Self> {
-    return Ok(start(move || Ok(conn)).await?);
+  pub fn from_conn(conn: rusqlite::Connection) -> Result<Self> {
+    return Ok(start(conn));
   }
 
   /// Open a new connection to an in-memory SQLite database.
@@ -57,8 +57,9 @@ impl Connection {
   /// # Failure
   ///
   /// Will return `Err` if the underlying SQLite open call fails.
-  pub async fn open_in_memory() -> Result<Self> {
-    return Ok(start(rusqlite::Connection::open_in_memory).await?);
+  pub fn open_in_memory() -> Result<Self> {
+    let conn = rusqlite::Connection::open_in_memory()?;
+    return Ok(start(conn));
   }
 
   /// Call a function in background thread and get the result
@@ -243,33 +244,14 @@ impl Debug for Connection {
   }
 }
 
-async fn start<F>(open: F) -> rusqlite::Result<Connection>
-where
-  F: FnOnce() -> rusqlite::Result<rusqlite::Connection> + Send + 'static,
+fn start(conn: rusqlite::Connection) -> Connection
+// F: FnOnce() -> rusqlite::Result<rusqlite::Connection> + Send + 'static,
 {
   let (sender, receiver) = crossbeam_channel::unbounded::<Message>();
-  let (result_sender, result_receiver) = oneshot::channel();
 
-  std::thread::spawn(move || {
-    let conn = match open() {
-      Ok(c) => c,
-      Err(e) => {
-        let _ = result_sender.send(Err(e));
-        return;
-      }
-    };
+  std::thread::spawn(move || event_loop(conn, receiver));
 
-    if let Err(_e) = result_sender.send(Ok(())) {
-      return;
-    }
-
-    event_loop(conn, receiver);
-  });
-
-  result_receiver
-    .await
-    .expect(BUG_TEXT)
-    .map(|_| Connection { sender })
+  return Connection { sender };
 }
 
 fn event_loop(mut conn: rusqlite::Connection, receiver: Receiver<Message>) {

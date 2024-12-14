@@ -6,13 +6,13 @@ use rusqlite::ErrorCode;
 
 #[tokio::test]
 async fn open_in_memory_test() {
-  let conn = Connection::open_in_memory().await;
+  let conn = Connection::open_in_memory();
   assert!(conn.is_ok());
 }
 
 #[tokio::test]
 async fn call_success_test() {
-  let conn = Connection::open_in_memory().await.unwrap();
+  let conn = Connection::open_in_memory().unwrap();
 
   let result = conn
     .call(|conn| {
@@ -30,7 +30,7 @@ async fn call_success_test() {
 
 #[tokio::test]
 async fn call_failure_test() {
-  let conn = Connection::open_in_memory().await.unwrap();
+  let conn = Connection::open_in_memory().unwrap();
 
   let result = conn
     .call(|conn| conn.execute("Invalid sql", []).map_err(|e| e.into()))
@@ -54,14 +54,14 @@ async fn call_failure_test() {
 
 #[tokio::test]
 async fn close_success_test() {
-  let conn = Connection::open_in_memory().await.unwrap();
+  let conn = Connection::open_in_memory().unwrap();
 
   assert!(conn.close().await.is_ok());
 }
 
 #[tokio::test]
 async fn double_close_test() {
-  let conn = Connection::open_in_memory().await.unwrap();
+  let conn = Connection::open_in_memory().unwrap();
 
   let conn2 = conn.clone();
 
@@ -71,7 +71,7 @@ async fn double_close_test() {
 
 #[tokio::test]
 async fn close_call_test() {
-  let conn = Connection::open_in_memory().await.unwrap();
+  let conn = Connection::open_in_memory().unwrap();
 
   let conn2 = conn.clone();
 
@@ -89,7 +89,7 @@ async fn close_call_test() {
 
 #[tokio::test]
 async fn close_failure_test() {
-  let conn = Connection::open_in_memory().await.unwrap();
+  let conn = Connection::open_in_memory().unwrap();
 
   conn
     .call(|conn| {
@@ -130,7 +130,7 @@ async fn close_failure_test() {
 
 #[tokio::test]
 async fn debug_format_test() {
-  let conn = Connection::open_in_memory().await.unwrap();
+  let conn = Connection::open_in_memory().unwrap();
 
   assert_eq!("Connection".to_string(), format!("{conn:?}"));
 }
@@ -152,7 +152,7 @@ fn failable_func(_: &rusqlite::Connection) -> std::result::Result<(), MyError> {
 
 #[tokio::test]
 async fn test_ergonomic_errors() {
-  let conn = Connection::open_in_memory().await.unwrap();
+  let conn = Connection::open_in_memory().unwrap();
 
   let res = conn
     .call(|conn| failable_func(conn).map_err(|e| Error::Other(Box::new(e))))
@@ -168,7 +168,7 @@ async fn test_ergonomic_errors() {
 
 #[tokio::test]
 async fn test_call_libsql_query() {
-  let conn = Connection::open_in_memory().await.unwrap();
+  let conn = Connection::open_in_memory().unwrap();
 
   let result = conn
     .call(|conn| {
@@ -255,7 +255,7 @@ async fn test_params() {
       ":text": Some("test".to_string()),
   };
 
-  let conn = Connection::open_in_memory().await.unwrap();
+  let conn = Connection::open_in_memory().unwrap();
 
   conn
     .call(|conn| {

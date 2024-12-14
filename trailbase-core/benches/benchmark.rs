@@ -7,10 +7,10 @@ use axum::extract::{Json, State};
 use axum::http::{self, Request};
 use base64::prelude::*;
 use std::sync::{Arc, Mutex};
-use tokio_rusqlite::params;
 use tower::{Service, ServiceExt};
 use trailbase_core::config::proto::PermissionFlag;
 use trailbase_core::records::Acls;
+use trailbase_sqlite::params;
 
 use trailbase_core::api::{create_user_handler, login_with_password, CreateUserRequest};
 use trailbase_core::constants::RECORD_API_PATH;
@@ -18,8 +18,8 @@ use trailbase_core::records::{add_record_api, AccessRules};
 use trailbase_core::{DataDir, Server, ServerOptions};
 
 async fn create_chat_message_app_tables(
-  conn: &tokio_rusqlite::Connection,
-) -> Result<(), tokio_rusqlite::Error> {
+  conn: &trailbase_sqlite::Connection,
+) -> Result<(), trailbase_sqlite::Error> {
   // Create a messages, chat room and members tables.
   conn
     .execute_batch(
@@ -56,7 +56,7 @@ async fn create_chat_message_app_tables(
 }
 
 async fn add_room(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   name: &str,
 ) -> Result<[u8; 16], anyhow::Error> {
   let room: [u8; 16] = conn
@@ -72,10 +72,10 @@ async fn add_room(
 }
 
 async fn add_user_to_room(
-  conn: &tokio_rusqlite::Connection,
+  conn: &trailbase_sqlite::Connection,
   user: [u8; 16],
   room: [u8; 16],
-) -> Result<(), tokio_rusqlite::Error> {
+) -> Result<(), trailbase_sqlite::Error> {
   conn
     .execute(
       "INSERT INTO room_members (user, room) VALUES ($1, $2)",

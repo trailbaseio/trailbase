@@ -859,9 +859,7 @@ mod tests {
   }
 
   async fn test_javascript_query() {
-    let conn = trailbase_sqlite::Connection::open_in_memory()
-      .await
-      .unwrap();
+    let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
     conn
       .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
       .await
@@ -910,9 +908,7 @@ mod tests {
   }
 
   async fn test_javascript_execute() {
-    let conn = trailbase_sqlite::Connection::open_in_memory()
-      .await
-      .unwrap();
+    let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
     conn
       .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
       .await

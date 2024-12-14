@@ -366,9 +366,7 @@ mod tests {
   async fn test_aggregate_rate_computation() {
     let mut conn_sync = trailbase_sqlite::connect_sqlite(None, None).unwrap();
     apply_logs_migrations(&mut conn_sync).unwrap();
-    let conn = trailbase_sqlite::Connection::from_conn(conn_sync)
-      .await
-      .unwrap();
+    let conn = trailbase_sqlite::Connection::from_conn(conn_sync).unwrap();
 
     let interval_seconds = 600;
     let to = DateTime::parse_from_rfc3339("1996-12-22T12:00:00Z").unwrap();

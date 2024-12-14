@@ -109,7 +109,6 @@ mod tests {
     let conn = trailbase_sqlite::Connection::from_conn(
       trailbase_sqlite::connect_sqlite(None, None).unwrap(),
     )
-    .await
     .unwrap();
 
     conn

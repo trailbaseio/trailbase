@@ -283,14 +283,14 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     apply_user_migrations(&mut conn)?;
     let _new_db = apply_main_migrations(&mut conn, None)?;
 
-    trailbase_sqlite::Connection::from_conn(conn).await?
+    trailbase_sqlite::Connection::from_conn(conn)?
   };
 
   let logs_conn = {
     let mut conn = trailbase_sqlite::connect_sqlite(None, None)?;
     apply_logs_migrations(&mut conn)?;
 
-    trailbase_sqlite::Connection::from_conn(conn).await?
+    trailbase_sqlite::Connection::from_conn(conn)?
   };
 
   let table_metadata = TableMetadataCache::new(conn.clone()).await?;

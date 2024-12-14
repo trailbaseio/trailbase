@@ -160,8 +160,7 @@ async fn async_main() -> Result<(), BoxError> {
       let conn = trailbase_sqlite::Connection::from_conn(api::connect_sqlite(
         Some(data_dir.main_db_path()),
         None,
-      )?)
-      .await?;
+      )?)?;
       let table_metadata = api::TableMetadataCache::new(conn.clone()).await?;
 
       let table_name = &cmd.table;
@@ -204,8 +203,7 @@ async fn async_main() -> Result<(), BoxError> {
       let conn = trailbase_sqlite::Connection::from_conn(api::connect_sqlite(
         Some(data_dir.main_db_path()),
         None,
-      )?)
-      .await?;
+      )?)?;
 
       match cmd {
         Some(AdminSubCommands::List) => {
@@ -259,8 +257,7 @@ async fn async_main() -> Result<(), BoxError> {
       let conn = trailbase_sqlite::Connection::from_conn(api::connect_sqlite(
         Some(data_dir.main_db_path()),
         None,
-      )?)
-      .await?;
+      )?)?;
 
       match cmd {
         Some(UserSubCommands::ResetPassword { email, password }) => {

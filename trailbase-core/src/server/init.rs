@@ -59,7 +59,7 @@ pub async fn init_app_state(
   let logs_conn = {
     let mut conn = init_logs_db(&data_dir)?;
     apply_logs_migrations(&mut conn)?;
-    trailbase_sqlite::Connection::from_conn(conn).await?
+    trailbase_sqlite::Connection::from_conn(conn)?
   };
 
   // Open or init the main db. Note that we derive whether a new DB was initialized based on
@@ -68,7 +68,7 @@ pub async fn init_app_state(
     let mut conn = trailbase_sqlite::connect_sqlite(Some(data_dir.main_db_path()), None)?;
     let new_db = apply_main_migrations(&mut conn, Some(data_dir.migrations_path()))?;
 
-    (trailbase_sqlite::Connection::from_conn(conn).await?, new_db)
+    (trailbase_sqlite::Connection::from_conn(conn)?, new_db)
   };
 
   let table_metadata = TableMetadataCache::new(conn.clone()).await?;
