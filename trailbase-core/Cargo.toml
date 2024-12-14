@@ -17,14 +17,14 @@ arc-swap = "1.7.1"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
 async-channel = "2.3.1"
 async-trait = "0.1.80"
-axum = { version = "^0.7.5", features=["multipart"] }
+axum = { version = "^0.7.5", features = ["multipart"] }
 axum-client-ip = "0.6.0"
-axum-extra = { version = "^0.9.3", default-features = false, features=["protobuf"] }
+axum-extra = { version = "^0.9.3", default-features = false, features = ["protobuf"] }
 base64 = { version = "0.22.1", default-features = false }
 bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
 cookie = "0.18.1"
-ed25519-dalek = { version = "2.1.1", features=["pkcs8", "pem", "rand_core"] }
+ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
 env_logger = "^0.11.3"
 fallible-iterator = "0.3.0"
 form_urlencoded = "1.2.1"
@@ -39,7 +39,7 @@ lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-ru
 log = "^0.4.21"
 minijinja = "2.1.2"
 oauth2 = { version = "5.0.0-alpha.4", default-features = false, features = ["reqwest", "rustls-tls"] }
-object_store = { version = "0.11.0", default-features = false, features=["aws"] }
+object_store = { version = "0.11.0", default-features = false, features = ["aws"] }
 parking_lot = "0.12.3"
 prost = "^0.12.6"
 prost-reflect = { version = "^0.13.0", features = ["derive", "text-format"] }
@@ -59,14 +59,14 @@ sqlformat = "0.3.1"
 sqlite3-parser = "0.13.0"
 thiserror = "2.0.1"
 thread_local = "1.1.8"
-tokio = { version = "^1.38.0", features=["macros", "rt-multi-thread", "fs", "signal", "time"] }
+tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "signal", "time"] }
 tower-cookies = { version = "0.10.0" }
-tower-http = { version = "^0.6.0", features=["cors", "trace", "fs", "limit"] }
+tower-http = { version = "^0.6.0", features = ["cors", "trace", "fs", "limit"] }
 tower-service = "0.3.3"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 trailbase-sqlite = { path = "../trailbase-sqlite" }
-ts-rs = { version = "10", features=["uuid-impl", "serde-json-impl"] }
+ts-rs = { version = "10", features = ["uuid-impl", "serde-json-impl"] }
 url = "^2.4.1"
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 uuid = { version = "^1.8.0", features = ["v4", "serde"] }

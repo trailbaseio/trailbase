@@ -16,9 +16,11 @@ pub mod connection;
 pub mod error;
 pub mod geoip;
 pub mod params;
+mod rows;
 pub mod schema;
 
-pub use connection::{Connection, Row, Rows, Value, ValueType};
+pub use connection::{Connection, Value};
 pub use error::Error;
 pub use extension::connect_sqlite;
 pub use params::Params;
+pub use rows::{Row, Rows, ValueType};
