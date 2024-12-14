@@ -74,9 +74,6 @@ fn build_protos() -> Result<()> {
     config
   };
 
-  // "descriptor.proto" is provided by "libprotobuf-dev" on Debian and lives in:
-  //   /usr/include/google/protobuf/descriptor.proto
-  let includes = vec![PathBuf::from("/usr/include"), PathBuf::from(PROTO_PATH)];
   let proto_files = vec![
     PathBuf::from(format!("{PROTO_PATH}/config.proto")),
     PathBuf::from(format!("{PROTO_PATH}/config_api.proto")),
@@ -85,8 +82,7 @@ fn build_protos() -> Result<()> {
 
   prost_reflect_build::Builder::new()
     .descriptor_pool("crate::DESCRIPTOR_POOL")
-    //.file_descriptor_set_bytes("crate::FILE_DESCRIPTOR_SET")
-    .compile_protos_with_config(prost_config, &proto_files, &includes)?;
+    .compile_protos_with_config(prost_config, &proto_files, &[PathBuf::from(PROTO_PATH)])?;
 
   return Ok(());
 }
