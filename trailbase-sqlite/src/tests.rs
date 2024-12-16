@@ -313,6 +313,43 @@ async fn test_params() {
   assert_eq!(rows.0.get(0).unwrap().get::<i64>(0), Ok(4));
 }
 
+#[tokio::test]
+async fn test_hooks() {
+  let conn = Connection::open_in_memory().unwrap();
+
+  conn
+    .execute("CREATE TABLE test (id INTEGER PRIMARY KEY, text TEXT)", ())
+    .await
+    .unwrap();
+
+  let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<String>();
+  conn
+    .add_hook(move |c, action, _db, table, row_id| match action {
+      rusqlite::hooks::Action::SQLITE_INSERT => {
+        let text = c
+          .query_row(
+            &format!(r#"SELECT text FROM "{table}" WHERE _rowid_ = $1"#),
+            [row_id],
+            |row| row.get::<_, String>(0),
+          )
+          .unwrap();
+
+        sender.send(text).unwrap();
+      }
+      _ => {}
+    })
+    .await
+    .unwrap();
+
+  conn
+    .execute("INSERT INTO test (id, text) VALUES (5, 'foo')", ())
+    .await
+    .unwrap();
+
+  let text = receiver.recv().await.unwrap();
+  assert_eq!(text, "foo");
+}
+
 // The rest is boilerplate, not really that important
 #[derive(Debug, thiserror::Error)]
 enum MyError {

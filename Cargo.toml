@@ -38,4 +38,5 @@ rusqlite = { version = "^0.32.1", default-features = false, features = [
     "functions",
     "limits",
     "backup",
+    "hooks",
 ] }
