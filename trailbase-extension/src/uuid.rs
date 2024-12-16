@@ -1,79 +1,65 @@
-use base64::prelude::*;
-use sqlite_loadable::prelude::*;
-use sqlite_loadable::{api, Error, ErrorKind, Result};
+use rusqlite::functions::Context;
+use rusqlite::types::ValueRef;
+use rusqlite::Error;
 use uuid::Uuid;
 
-pub(super) fn is_uuid(context: *mut sqlite3_context, values: &[*mut sqlite3_value]) {
-  match unpack_uuid_or_null(values) {
-    Ok(Some(uuid)) => api::result_bool(context, uuid.get_version_num() == 7),
-    Ok(None) => api::result_bool(context, true),
-    _ => api::result_bool(context, false),
-  };
+pub(super) fn is_uuid(context: &Context) -> rusqlite::Result<bool> {
+  return Ok(unpack_uuid_or_null(context).is_ok());
 }
 
-pub(super) fn is_uuid_v7(context: *mut sqlite3_context, values: &[*mut sqlite3_value]) {
-  match unpack_uuid_or_null(values) {
-    Ok(Some(uuid)) => api::result_bool(context, uuid.get_version_num() == 7),
-    Ok(None) => api::result_bool(context, true),
-    _ => api::result_bool(context, false),
-  };
+pub(super) fn is_uuid_v7(context: &Context) -> rusqlite::Result<bool> {
+  return Ok(match unpack_uuid_or_null(context)? {
+    Some(uuid) => uuid.get_version_num() == 7,
+    None => true,
+  });
 }
 
-pub(super) fn uuid_url_safe_b64(
-  context: *mut sqlite3_context,
-  values: &[*mut sqlite3_value],
-) -> Result<()> {
-  if let Some(uuid) = unpack_uuid_or_null(values)? {
-    let _ = api::result_text(context, BASE64_URL_SAFE.encode(uuid.as_bytes()));
+#[inline]
+fn unpack_uuid_or_null(context: &Context<'_>) -> rusqlite::Result<Option<Uuid>> {
+  #[cfg(debug_assertions)]
+  if context.len() != 1 {
+    return Err(Error::InvalidParameterCount(context.len(), 1));
   }
 
-  return Ok(());
-}
-
-#[inline(always)]
-fn unpack_uuid_or_null(values: &[*mut sqlite3_value]) -> Result<Option<Uuid>> {
-  if values.len() != 1 {
-    return Err(Error::new_message("Wrong number of arguments"));
-  }
-
-  let value = &values[0];
-  return match api::value_type(value) {
-    api::ValueType::Null => Ok(None),
-    api::ValueType::Blob => match Uuid::from_slice(api::value_blob(value)) {
+  return match context.get_raw(0) {
+    ValueRef::Null => Ok(None),
+    ValueRef::Blob(b) => match Uuid::from_slice(b) {
       Ok(uuid) => Ok(Some(uuid)),
-      Err(err) => Err(Error::new(ErrorKind::Message(format!(
-        "Failed to read uuid: {err}"
-      )))),
+      Err(err) => Err(Error::UserFunctionError(
+        format!("Failed to read uuid: {err}").into(),
+      )),
     },
-    _ => Err(Error::new_message("Expected BLOB column type.")),
+    _ => Err(Error::UserFunctionError(
+      "Expected BLOB column type.".into(),
+    )),
   };
 }
 
-pub(super) fn uuid_v7_text(
-  context: *mut sqlite3_context,
-  _values: &[*mut sqlite3_value],
-) -> Result<()> {
-  api::result_text(context, Uuid::now_v7().to_string())
+pub(super) fn uuid_v7_text(_context: &Context) -> rusqlite::Result<String> {
+  return Ok(Uuid::now_v7().to_string());
 }
 
-pub(super) fn uuid_v7(context: *mut sqlite3_context, _values: &[*mut sqlite3_value]) {
-  api::result_blob(context, Uuid::now_v7().as_bytes());
+pub(super) fn uuid_v7(_context: &Context) -> rusqlite::Result<Vec<u8>> {
+  return Ok(Uuid::now_v7().as_bytes().to_vec());
 }
 
-pub(super) fn parse_uuid(
-  context: *mut sqlite3_context,
-  values: &[*mut sqlite3_value],
-) -> Result<()> {
-  if values.len() != 1 {
-    return Err(Error::new_message("Wrong number of arguments"));
+pub(super) fn parse_uuid(context: &Context) -> rusqlite::Result<Vec<u8>> {
+  #[cfg(debug_assertions)]
+  if context.len() != 1 {
+    return Err(Error::InvalidParameterCount(context.len(), 1));
   }
-  let value: &str = api::value_text(&values[0])?;
-  let id = Uuid::parse_str(value)
-    .map_err(|err| Error::new(ErrorKind::Message(format!("UUID parse: {err}"))))?;
 
-  api::result_blob(context, id.as_bytes());
+  return match context.get_raw(0) {
+    ValueRef::Text(ascii) => {
+      let uuid =
+        Uuid::try_parse_ascii(ascii).map_err(|err| Error::UserFunctionError(err.into()))?;
 
-  Ok(())
+      Ok(uuid.as_bytes().to_vec())
+    }
+    arg => Err(Error::UserFunctionError(
+      format!("Expected text, got {}", arg.data_type()).into(),
+    )),
+  };
 }
 
 #[cfg(test)]

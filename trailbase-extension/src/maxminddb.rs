@@ -1,7 +1,8 @@
 use maxminddb::{MaxMindDBError, Reader};
 use parking_lot::Mutex;
-use sqlite_loadable::prelude::*;
-use sqlite_loadable::{api, Error as SqliteError};
+use rusqlite::functions::Context;
+use rusqlite::types::ValueRef;
+use rusqlite::Error;
 use std::net::IpAddr;
 use std::path::Path;
 use std::sync::LazyLock;
@@ -18,43 +19,35 @@ pub fn has_geoip_db() -> bool {
   return READER.lock().is_some();
 }
 
-pub(crate) fn geoip_country(
-  context: *mut sqlite3_context,
-  values: &[*mut sqlite3_value],
-) -> Result<(), SqliteError> {
-  let client_ip_value = values
-    .first()
-    .ok_or_else(|| SqliteError::new_message("Missing argument"))?;
-  if api::value_is_null(client_ip_value) {
-    api::result_null(context);
-    return Ok(());
+pub(crate) fn geoip_country(context: &Context) -> rusqlite::Result<Option<String>> {
+  #[cfg(debug_assertions)]
+  if context.len() != 1 {
+    return Err(Error::InvalidParameterCount(context.len(), 1));
   }
 
-  let text = api::value_text(client_ip_value)?;
-  if text.is_empty() {
-    api::result_null(context);
-    return Ok(());
-  }
+  return match context.get_raw(0) {
+    ValueRef::Null => Ok(None),
+    ValueRef::Text(ascii) => {
+      if ascii.is_empty() {
+        return Ok(None);
+      }
 
-  let client_ip: IpAddr = text.parse().map_err(|err| {
-    SqliteError::new_message(format!("Parsing ip '{client_ip_value:?}' failed: {err}"))
-  })?;
+      let text = String::from_utf8_lossy(ascii);
+      let client_ip: IpAddr = text.parse().map_err(|err| {
+        Error::UserFunctionError(format!("Parsing ip '{text:?}' failed: {err}").into())
+      })?;
 
-  let cc: Option<String> = READER.lock().as_ref().and_then(|reader| {
-    let country: maxminddb::geoip2::Country = reader.lookup(client_ip).ok()?;
-    return Some(country.country?.iso_code?.to_owned());
-  });
+      let cc: Option<String> = READER.lock().as_ref().and_then(|reader| {
+        let country: maxminddb::geoip2::Country = reader.lookup(client_ip).ok()?;
+        return Some(country.country?.iso_code?.to_owned());
+      });
 
-  match cc {
-    Some(cc) => {
-      api::result_text(context, cc)?;
+      Ok(cc)
     }
-    None => {
-      api::result_null(context);
-    }
+    arg => Err(Error::UserFunctionError(
+      format!("Expected text, got {}", arg.data_type()).into(),
+    )),
   };
-
-  return Ok(());
 }
 
 #[cfg(test)]

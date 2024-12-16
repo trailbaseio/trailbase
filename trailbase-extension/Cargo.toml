@@ -16,13 +16,13 @@ maxminddb = "0.24.0"
 parking_lot = { version = "0.12.3", default-features = false }
 rand = "0.8.5"
 regex = "1.11.0"
+rusqlite = { workspace = true }
 serde_json = "1.0.121"
-sqlite-loadable = { workspace = true }
+# sqlite-loadable = { workspace = true }
 uuid = { version = "1.7.0", default-features = false, features = ["std", "v7"] }
 validator = "0.19.0"
 
 [dev-dependencies]
-rusqlite = { workspace = true }
 uuid = { version = "1.7.0", default-features = false, features = ["std", "v4", "v7"] }
 
 [profile.release]

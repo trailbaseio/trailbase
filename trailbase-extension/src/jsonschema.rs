@@ -1,8 +1,8 @@
 use jsonschema::Validator;
 use lru::LruCache;
 use parking_lot::Mutex;
-use sqlite_loadable::prelude::*;
-use sqlite_loadable::{api, Error as SqliteError};
+use rusqlite::functions::Context;
+use rusqlite::Error;
 use std::collections::HashMap;
 use std::ffi;
 use std::num::NonZeroUsize;
@@ -92,126 +92,93 @@ pub fn get_schemas() -> Vec<(String, serde_json::Value)> {
     .collect()
 }
 
-fn get_text_or_null(
-  values: &[*mut sqlite3_value],
-  index: usize,
-) -> Result<Option<&str>, SqliteError> {
-  let value = values
-    .get(index)
-    .ok_or_else(|| SqliteError::new_message("Missing argument"))?;
+// fn get_text_or_null<'a>(context: &Context<'a>, idx: usize) -> Option<&'a str> {
+//   return context.get_raw(idx).as_str_or_null();
+// }
+//
+// fn get_text<'a>(context: &Context<'a>, idx: usize) -> rusqlite::Result<&'a str> {
+//   return context.get_raw(idx).as_str();
+// }
 
-  if api::value_is_null(value) {
-    return Ok(None);
-  }
-
-  return Ok(Some(api::value_text(value)?));
-}
-
-fn get_text(values: &[*mut sqlite3_value], index: usize) -> Result<&str, SqliteError> {
-  let value = values
-    .get(index)
-    .ok_or_else(|| SqliteError::new_message("Missing argument"))?;
-  assert!(!api::value_is_null(value), "Got null value");
-  return Ok(api::value_text(value)?);
-}
-
-pub(crate) fn jsonschema_by_name(
-  context: *mut sqlite3_context,
-  values: &[*mut sqlite3_value],
-) -> Result<(), SqliteError> {
-  let schema_name = get_text(values, 0)?;
+pub(crate) fn jsonschema_by_name(context: &Context) -> rusqlite::Result<bool> {
+  let schema_name = context.get_raw(0).as_str()?;
 
   // Get and parse the JSON contents. If it's invalid JSON to start with, there's not much
   // we can validate.
-  let Some(contents) = get_text_or_null(values, 1)? else {
-    return Ok(());
+  let Some(contents) = context.get_raw(1).as_str_or_null()? else {
+    return Ok(true);
   };
-  let json = serde_json::from_str(contents).map_err(|err| {
-    SqliteError::new_message(format!("Invalid JSON: {contents} => {err}").as_str())
-  })?;
+
+  let json = serde_json::from_str(contents)
+    .map_err(|err| Error::UserFunctionError(format!("Invalid JSON: {contents} => {err}").into()))?;
 
   // Then get/build the schema validator for the given pattern.
   let Some(entry) = SCHEMA_REGISTRY.lock().get(schema_name).cloned() else {
-    return Err(SqliteError::new_message(format!(
-      "Schema {schema_name} not found"
-    )));
+    return Err(Error::UserFunctionError(
+      format!("Schema {schema_name} not found").into(),
+    ));
   };
 
   if !entry.validator.is_valid(&json) {
-    api::result_bool(context, false);
-    return Ok(());
+    return Ok(false);
   }
 
   if let Some(validator) = entry.custom_validator {
     if !validator(&json, None) {
-      api::result_bool(context, false);
-      return Ok(());
+      return Ok(false);
     }
   }
 
-  api::result_bool(context, true);
-
-  return Ok(());
+  return Ok(true);
 }
 
-pub(crate) fn jsonschema_by_name_with_extra_args(
-  context: *mut sqlite3_context,
-  values: &[*mut sqlite3_value],
-) -> Result<(), SqliteError> {
-  let schema_name = get_text(values, 0)?;
-  let extra_args = get_text(values, 2)?;
+pub(crate) fn jsonschema_by_name_with_extra_args(context: &Context) -> rusqlite::Result<bool> {
+  let schema_name = context.get_raw(0).as_str()?;
+  let extra_args = context.get_raw(2).as_str()?;
 
   // Get and parse the JSON contents. If it's invalid JSON to start with, there's not much
   // we can validate.
-  let Some(contents) = get_text_or_null(values, 1)? else {
-    return Ok(());
+  let Some(contents) = context.get_raw(1).as_str_or_null()? else {
+    return Ok(true);
   };
-  let json = serde_json::from_str(contents).map_err(|err| {
-    SqliteError::new_message(format!("Invalid JSON: {contents} => {err}").as_str())
-  })?;
+  let json = serde_json::from_str(contents)
+    .map_err(|err| Error::UserFunctionError(format!("Invalid JSON: {contents} => {err}").into()))?;
 
   // Then get/build the schema validator for the given pattern.
   let Some(entry) = SCHEMA_REGISTRY.lock().get(schema_name).cloned() else {
-    return Err(SqliteError::new_message(format!(
-      "Schema {schema_name} not found"
-    )));
+    return Err(Error::UserFunctionError(
+      format!("Schema {schema_name} not found").into(),
+    ));
   };
 
   if !entry.validator.is_valid(&json) {
-    api::result_bool(context, false);
-    return Ok(());
+    return Ok(false);
   }
 
   if let Some(validator) = entry.custom_validator {
     if !validator(&json, Some(extra_args)) {
-      api::result_bool(context, false);
-      return Ok(());
+      return Ok(false);
     }
   }
 
-  api::result_bool(context, true);
-
-  return Ok(());
+  return Ok(true);
 }
 
-pub(crate) fn jsonschema_matches(
-  context: *mut sqlite3_context,
-  values: &[*mut sqlite3_value],
-) -> Result<(), SqliteError> {
+pub(crate) fn jsonschema_matches(context: &Context) -> rusqlite::Result<bool> {
   type CacheType = LazyLock<Mutex<LruCache<String, Arc<Validator>>>>;
   static SCHEMA_CACHE: CacheType =
     LazyLock::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(128).unwrap())));
 
   // First, get and parse the JSON contents. If it's invalid JSON to start with, there's not much
   // we can validate.
-  let Some(contents) = get_text_or_null(values, 1)? else {
-    return Ok(());
+  let Some(contents) = context.get_raw(1).as_str_or_null()? else {
+    return Ok(true);
   };
   let json = serde_json::from_str(contents).map_err(|err| {
-    SqliteError::new_message(format!("Invalid JSON: '{contents}' => {err}").as_str())
+    Error::UserFunctionError(format!("Invalid JSON: '{contents}' => {err}").into())
   })?;
 
-  let pattern = get_text(values, 0)?;
+  let pattern = context.get_raw(0).as_str()?;
 
   // Then get/build the schema validator for the given pattern.
   let validator: Option<Arc<Validator>> = SCHEMA_CACHE.lock().get(pattern).cloned();
@@ -219,9 +186,10 @@ pub(crate) fn jsonschema_matches(
     Some(validator) => validator.is_valid(&json),
     None => {
       let schema = serde_json::from_str(pattern)
-        .map_err(|err| SqliteError::new_message(format!("Invalid JSON Schema: {err}")))?;
-      let validator = Validator::new(&schema)
-        .map_err(|err| SqliteError::new_message(format!("Failed to compile Schema: {err}")))?;
+        .map_err(|err| Error::UserFunctionError(format!("Invalid JSON Schema: {err}").into()))?;
+      let validator = Validator::new(&schema).map_err(|err| {
+        Error::UserFunctionError(format!("Failed to compile Schema: {err}").into())
+      })?;
 
       let valid = validator.is_valid(&json);
       SCHEMA_CACHE
@@ -231,9 +199,7 @@ pub(crate) fn jsonschema_matches(
     }
   };
 
-  api::result_bool(context, valid);
-
-  Ok(())
+  return Ok(valid);
 }
 
 #[cfg(test)]

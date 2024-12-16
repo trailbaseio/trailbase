@@ -5,8 +5,8 @@ use std::path::PathBuf;
 #[no_mangle]
 extern "C" fn init_trailbase_extensions(
   db: *mut rusqlite::ffi::sqlite3,
-  pz_err_msg: *mut *mut ::std::os::raw::c_char,
-  p_thunk: *const rusqlite::ffi::sqlite3_api_routines,
+  _pz_err_msg: *mut *mut std::os::raw::c_char,
+  _p_api: *const rusqlite::ffi::sqlite3_api_routines,
 ) -> ::std::os::raw::c_int {
   // Add sqlite-vec extension.
   unsafe {
@@ -19,18 +19,6 @@ extern "C" fn init_trailbase_extensions(
   if status != 0 {
     log::error!("Failed to load sqlean::define",);
     return status;
-  }
-
-  // Add trailbase-extensions.
-  let status = unsafe {
-    trailbase_extension::sqlite3_extension_init(
-      db,
-      pz_err_msg,
-      p_thunk as *mut rusqlite::ffi::sqlite3_api_routines,
-    ) as ::std::os::raw::c_int
-  };
-  if status != 0 {
-    log::error!("Failed to load trailbase-extension",);
   }
 
   return status;
@@ -48,7 +36,7 @@ pub fn connect_sqlite(
     return Err(Error::Other("Failed to load extensions".into()));
   }
 
-  let conn = if let Some(p) = path {
+  let conn = trailbase_extension::sqlite3_extension_init(if let Some(p) = path {
     use rusqlite::OpenFlags;
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
       | OpenFlags::SQLITE_OPEN_CREATE
@@ -57,7 +45,7 @@ pub fn connect_sqlite(
     rusqlite::Connection::open_with_flags(p, flags)?
   } else {
     rusqlite::Connection::open_in_memory()?
-  };
+  })?;
   conn.busy_timeout(std::time::Duration::from_secs(10))?;
 
   const CONFIG: &[&str] = &[

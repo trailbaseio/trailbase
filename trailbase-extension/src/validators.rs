@@ -1,8 +1,9 @@
 use lru::LruCache;
 use parking_lot::Mutex;
 use regex::Regex;
-use sqlite_loadable::prelude::*;
-use sqlite_loadable::{api, Error, ErrorKind};
+use rusqlite::functions::Context;
+use rusqlite::types::ValueRef;
+use rusqlite::Error;
 use std::num::NonZeroUsize;
 use std::sync::LazyLock;
 use validator::ValidateEmail;
@@ -11,92 +12,68 @@ use validator::ValidateEmail;
 ///
 /// NOTE: Sqlite supports `col REGEXP pattern` in expression, which requires a custom
 /// `regexp(pattern, col)` scalar function to be registered.
-pub(super) fn regexp(
-  context: *mut sqlite3_context,
-  values: &[*mut sqlite3_value],
-) -> Result<(), Error> {
+pub(super) fn regexp(context: &Context) -> rusqlite::Result<bool> {
   type CacheType = LazyLock<Mutex<LruCache<String, Regex>>>;
   static REGEX_CACHE: CacheType =
     LazyLock::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(128).unwrap())));
 
-  if values.len() != 2 {
-    return Err(Error::new_message("Expected 2 arguments"));
+  #[cfg(debug_assertions)]
+  if context.len() != 2 {
+    return Err(Error::InvalidParameterCount(context.len(), 2));
   }
 
-  let string = &values[1];
-  let valid = match api::value_type(string) {
-    api::ValueType::Null => true,
-    api::ValueType::Text => {
-      let contents = api::value_text(string)?;
-      let re = api::value_text(&values[0])?;
+  // let string = &values[1];
+  return match context.get_raw(1) {
+    ValueRef::Null => Ok(true),
+    ValueRef::Text(ascii) => {
+      let contents = String::from_utf8_lossy(ascii);
+      let re = context.get_raw(0).as_str()?;
 
       let pattern: Option<Regex> = REGEX_CACHE.lock().get(re).cloned();
       match pattern {
-        Some(pattern) => pattern.is_match(contents),
+        Some(pattern) => Ok(pattern.is_match(&contents)),
         None => {
           let pattern = Regex::new(re)
-            .map_err(|err| Error::new(ErrorKind::Message(format!("Regex: {err}"))))?;
+            .map_err(|err| Error::UserFunctionError(format!("Regex: {err}").into()))?;
 
-          let valid = pattern.is_match(contents);
+          let valid = pattern.is_match(&contents);
           REGEX_CACHE.lock().push(re.to_string(), pattern);
-          valid
+          Ok(valid)
         }
       }
     }
-    _ => false,
+    _ => Ok(false),
   };
-
-  api::result_bool(context, valid);
-
-  Ok(())
 }
 
-pub(super) fn is_email(
-  context: *mut sqlite3_context,
-  values: &[*mut sqlite3_value],
-) -> Result<(), Error> {
-  if values.len() != 1 {
-    return Err(Error::new_message("Expected 1 argument"));
+pub(super) fn is_email(context: &Context) -> rusqlite::Result<bool> {
+  #[cfg(debug_assertions)]
+  if context.len() != 1 {
+    return Err(Error::InvalidParameterCount(context.len(), 1));
   }
 
-  let value = &values[0];
-  let valid = match api::value_type(value) {
-    api::ValueType::Null => true,
-    api::ValueType::Text => {
-      let contents = api::value_text(value)?;
-      contents.validate_email()
-    }
-    _ => false,
+  return match context.get_raw(0).as_str_or_null()? {
+    None => Ok(true),
+    Some(str) => Ok(str.validate_email()),
   };
-
-  api::result_bool(context, valid);
-
-  Ok(())
 }
 
-pub(super) fn is_json(
-  context: *mut sqlite3_context,
-  values: &[*mut sqlite3_value],
-) -> Result<(), Error> {
-  if values.len() != 1 {
-    return Err(Error::new_message("Expected 1 argument"));
+pub(super) fn is_json(context: &Context) -> rusqlite::Result<bool> {
+  #[cfg(debug_assertions)]
+  if context.len() != 1 {
+    return Err(Error::InvalidParameterCount(context.len(), 1));
   }
 
-  let value = &values[0];
-  let valid = match api::value_type(value) {
-    api::ValueType::Null => true,
-    api::ValueType::Text => {
-      let contents = api::value_text(value)?;
-      serde_json::from_str::<serde_json::Value>(contents)
-        .map_err(|err| Error::new(ErrorKind::Message(format!("JSON: {err}"))))?;
-      true
+  return match context.get_raw(0).as_str_or_null()? {
+    None => Ok(true),
+    Some(str) => {
+      if serde_json::from_str::<serde_json::Value>(str).is_ok() {
+        Ok(true)
+      } else {
+        Ok(false)
+      }
     }
-    _ => false,
   };
-
-  api::result_bool(context, valid);
-
-  Ok(())
 }
 
 #[cfg(test)]

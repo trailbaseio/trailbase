@@ -16,7 +16,6 @@ default-members = [
 ]
 exclude = [
   "vendor/refinery",
-  "vendor/sqlite-loadable",
 ]
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html
@@ -40,4 +39,3 @@ rusqlite = { version = "^0.32.1", default-features = false, features = [
     "limits",
     "backup",
 ] }
-sqlite-loadable = { package = "sqlite-loadable", path = "./vendor/sqlite-loadable", features=["static"]  }
