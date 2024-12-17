@@ -1,3 +1,11 @@
+## v0.3.2
+
+* Move record API access query construction to RecordApi construction time.
+* Cache auth queries
+* Some tweaks and hooks API for trailbase_sqlite::Connection.
+* Remove sqlite-loadable and replace with rusqlite functions.
+* Reduce allocations.
+
 ## v0.3.1
 
 * Fix client-ip logging.

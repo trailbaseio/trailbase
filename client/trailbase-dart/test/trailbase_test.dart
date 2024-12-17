@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:trailbase/trailbase.dart';
 import 'package:test/test.dart';
@@ -30,7 +31,7 @@ Future<Process> initTrailBase() async {
   final result = await Process.run('cargo', ['build']);
   if (result.exitCode > 0) {
     throw Exception(
-        'Cargo build failed.\n\nstdout: ${result.stdout}}\n\nstderr: ${result.stderr}}\n');
+        'Cargo build failed.\n\nstdout: ${utf8.decode(result.stdout)}}\n\nstderr: ${utf8.decode(result.stderr)}}\n');
   }
   final process = await Process.start('cargo', [
     'run',
