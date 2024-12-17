@@ -403,7 +403,7 @@ export function PocketBaseAndTrailBaseUsageChart() {
   const trailbaseUtilization = insertTrailBase as Datum[];
   const pocketbaseUtilization = insertPocketBase as Datum[];
 
-  const trailbaseTimeOffset = -5.1 * 1000;
+  const trailbaseTimeOffset = -0.35 * 1000;
 
   const data: ChartData<"scatter"> = {
     datasets: [
@@ -459,19 +459,30 @@ export function PocketBaseAndTrailBaseUsageChart() {
       data={data}
       scales={{
         yLeft: {
+          min: 0,
+          max: 5,
           position: "left",
           title: {
             display: true,
             text: "CPU Cores",
           },
+          ticks: {
+            stepSize: 1,
+          },
         },
         yRight: {
+          min: 30 * 1024,
+          max: 120 * 1024,
           position: "right",
           title: {
             display: true,
             text: "Resident Memory Size [MB]",
           },
+          grid: {
+            display: false,
+          },
           ticks: {
+            stepSize: 10 * 1024,
             callback: (
               value: number | string,
               _index: number,
@@ -553,6 +564,11 @@ export function FibonacciPocketBaseAndTrailBaseUsageChart() {
       scales={{
         yLeft: {
           position: "left",
+          min: 0,
+          max: 16,
+          ticks: {
+            stepSize: 2,
+          },
           title: {
             display: true,
             text: "CPU Cores",
@@ -564,7 +580,10 @@ export function FibonacciPocketBaseAndTrailBaseUsageChart() {
             display: true,
             text: "Resident Memory Size [MB]",
           },
+          min: 0,
+          max: 400 * 1024,
           ticks: {
+            stepSize: 50 * 1024,
             callback: (
               value: number | string,
               _index: number,
