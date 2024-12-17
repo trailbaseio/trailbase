@@ -344,7 +344,7 @@ impl RecordApi {
     access_query: &str,
     params: Vec<(String, trailbase_sqlite::Value)>,
   ) -> Result<bool, trailbase_sqlite::Error> {
-    let mut stmt = conn.prepare(access_query)?;
+    let mut stmt = conn.prepare_cached(access_query)?;
     params.bind(&mut stmt)?;
 
     let mut rows = stmt.raw_query();

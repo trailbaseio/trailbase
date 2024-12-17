@@ -2,6 +2,7 @@ use base64::prelude::*;
 use itertools::Itertools;
 use log::*;
 use object_store::ObjectStore;
+use std::borrow::Cow;
 use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Arc;
 use trailbase_sqlite::schema::{FileUpload, FileUploadInput, FileUploads};
@@ -10,7 +11,6 @@ use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::files::delete_files_in_row;
 use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{self, ColumnMetadata, JsonColumnMetadata, TableMetadata};
-use crate::util::query_one_row;
 use crate::AppState;
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -413,19 +413,8 @@ impl InsertQueryBuilder {
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: Option<&str>,
   ) -> Result<trailbase_sqlite::Row, QueryError> {
-    let (query_fragment, named_params, mut files) =
-      Self::build_insert_query(params, conflict_resolution)?;
-
-    let query = match return_column_name {
-      Some(return_column_name) => {
-        if return_column_name == "*" {
-          format!(r#"{query_fragment} RETURNING *"#)
-        } else {
-          format!(r#"{query_fragment} RETURNING "{return_column_name}""#)
-        }
-      }
-      None => query_fragment,
-    };
+    let (query, named_params, mut files) =
+      Self::build_insert_query(params, conflict_resolution, return_column_name)?;
 
     // We're storing any files to the object store first to make sure the DB entry is valid right
     // after commit and not racily pointing to soon-to-be-written files.
@@ -436,8 +425,11 @@ impl InsertQueryBuilder {
       }
     }
 
-    let row = match query_one_row(state.conn(), &query, named_params).await {
-      Ok(row) => row,
+    let row = match state.conn().query_row(&query, named_params).await {
+      Ok(Some(row)) => row,
+      Ok(None) => {
+        return Err(QueryError::Sql(rusqlite::Error::QueryReturnedNoRows.into()));
+      }
       Err(err) => {
         if !files.is_empty() {
           let objectstore = state.objectstore();
@@ -459,6 +451,7 @@ impl InsertQueryBuilder {
   fn build_insert_query(
     params: Params,
     conflict_resolution: Option<ConflictResolutionStrategy>,
+    return_column_name: Option<&str>,
   ) -> Result<(String, NamedParams, FileMetadataContents), QueryError> {
     let table_name = &params.table_name;
 
@@ -466,11 +459,24 @@ impl InsertQueryBuilder {
       conflict_resolution.unwrap_or(ConflictResolutionStrategy::Undefined),
     );
 
+    let return_fragment: Cow<'_, str> = match return_column_name {
+      Some(return_column_name) => {
+        if return_column_name == "*" {
+          Cow::Borrowed(r#"RETURNING *"#)
+        } else {
+          format!(r#"RETURNING "{return_column_name}""#).into()
+        }
+      }
+      None => Cow::Borrowed(""),
+    };
+
     let column_names = params.column_names();
     let query = match column_names.is_empty() {
-      true => format!(r#"INSERT {conflict_clause} INTO "{table_name}" DEFAULT VALUES"#),
+      true => {
+        format!(r#"INSERT {conflict_clause} INTO "{table_name}" DEFAULT VALUES {return_fragment}"#)
+      }
       false => format!(
-        r#"INSERT {conflict_clause} INTO "{table_name}" ({col_names}) VALUES ({placeholders})"#,
+        r#"INSERT {conflict_clause} INTO "{table_name}" ({col_names}) VALUES ({placeholders}) {return_fragment}"#,
         col_names = column_names
           .iter()
           .map(|name| format!(r#""{name}""#))
@@ -482,6 +488,7 @@ impl InsertQueryBuilder {
     return Ok((query, params.params, params.files));
   }
 
+  #[inline]
   fn conflict_resolution_clause(config: ConflictResolutionStrategy) -> &'static str {
     type C = ConflictResolutionStrategy;
     return match config {
@@ -623,12 +630,14 @@ impl DeleteQueryBuilder {
   ) -> Result<(), QueryError> {
     let table_name = metadata.name();
 
-    let row = query_one_row(
-      state.conn(),
-      &format!(r#"DELETE FROM "{table_name}" WHERE "{pk_column}" = $1 RETURNING *"#),
-      [pk_value],
-    )
-    .await?;
+    let row = state
+      .conn()
+      .query_row(
+        &format!(r#"DELETE FROM "{table_name}" WHERE "{pk_column}" = $1 RETURNING *"#),
+        [pk_value],
+      )
+      .await?
+      .ok_or_else(|| QueryError::Sql(rusqlite::Error::QueryReturnedNoRows.into()))?;
 
     // Finally, delete files.
     delete_files_in_row(state, metadata, row).await?;
