@@ -6,6 +6,7 @@ use chrono::{DateTime, Duration, Utc};
 use lazy_static::lazy_static;
 use log::*;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use ts_rs::TS;
 use uuid::Uuid;
@@ -191,13 +192,13 @@ async fn fetch_logs(
   let mut params = filter_where_clause.params;
   let mut where_clause = filter_where_clause.clause;
   params.push((
-    ":limit".to_string(),
+    Cow::Borrowed(":limit"),
     trailbase_sqlite::Value::Integer(limit as i64),
   ));
 
   if let Some(cursor) = cursor {
     params.push((
-      ":cursor".to_string(),
+      Cow::Borrowed(":cursor"),
       trailbase_sqlite::Value::Blob(cursor.to_vec()),
     ));
     where_clause = format!("{where_clause} AND log.id < :cursor",);
@@ -287,11 +288,16 @@ async fn fetch_aggregate_stats(
   use trailbase_sqlite::Value::Integer;
   let from_seconds = args.from.timestamp();
   let interval_seconds = args.interval.num_seconds();
-  let mut params: Vec<(String, trailbase_sqlite::Value)> = vec![
-    (":interval_seconds".to_string(), Integer(interval_seconds)),
-    (":from_seconds".to_string(), Integer(from_seconds)),
-    (":to_seconds".to_string(), Integer(args.to.timestamp())),
-  ];
+  let mut params = Vec::<(Cow<'_, str>, trailbase_sqlite::Value)>::with_capacity(16);
+
+  params.extend_from_slice(&[
+    (
+      Cow::Borrowed(":interval_seconds"),
+      Integer(interval_seconds),
+    ),
+    (Cow::Borrowed(":from_seconds"), Integer(from_seconds)),
+    (Cow::Borrowed(":to_seconds"), Integer(args.to.timestamp())),
+  ]);
 
   if let Some(filter) = &args.filter_where_clause {
     params.extend(filter.params.clone())

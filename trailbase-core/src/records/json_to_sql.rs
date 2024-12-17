@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Arc;
 use trailbase_sqlite::schema::{FileUpload, FileUploadInput, FileUploads};
+use trailbase_sqlite::{NamedParams, Value};
 
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::files::delete_files_in_row;
@@ -118,7 +119,7 @@ pub struct Params {
 
   /// List of named params with their respective placeholders, e.g.:
   ///   '(":col_name": Value::Text("hi"))'.
-  params: Vec<(String, trailbase_sqlite::Value)>,
+  named_params: NamedParams,
 
   /// List of columns that are targeted by the params. Useful for building Insert/Update queries.
   ///
@@ -210,8 +211,8 @@ impl Params {
     return metadata.column_by_name(field_name);
   }
 
-  pub fn push_param(&mut self, col: String, value: trailbase_sqlite::Value) {
-    self.params.push((format!(":{col}"), value));
+  pub fn push_param(&mut self, col: String, value: Value) {
+    self.named_params.push((format!(":{col}").into(), value));
     self.col_names.push(col);
   }
 
@@ -219,12 +220,12 @@ impl Params {
     return &self.col_names;
   }
 
-  pub(crate) fn named_params(&self) -> &Vec<(String, trailbase_sqlite::Value)> {
-    &self.params
+  pub(crate) fn named_params(&self) -> &NamedParams {
+    &self.named_params
   }
 
   pub(crate) fn placeholders(&self) -> String {
-    return self.params.iter().map(|(k, _v)| k.clone()).join(", ");
+    return self.named_params.iter().map(|(k, _v)| k.clone()).join(", ");
   }
 
   fn append_multipart_files(
@@ -287,18 +288,18 @@ impl Params {
     }
 
     for (col_name, file_upload) in file_upload_map {
-      self.params.push((
-        format!(":{col_name}"),
-        trailbase_sqlite::Value::Text(serde_json::to_string(&file_upload)?),
+      self.named_params.push((
+        format!(":{col_name}").into(),
+        Value::Text(serde_json::to_string(&file_upload)?),
       ));
       self.col_names.push(col_name.clone());
       self.file_col_names.push(col_name);
     }
 
     for (col_name, file_uploads) in file_uploads_map {
-      self.params.push((
-        format!(":{col_name}"),
-        trailbase_sqlite::Value::Text(serde_json::to_string(&FileUploads(file_uploads))?),
+      self.named_params.push((
+        format!(":{col_name}").into(),
+        Value::Text(serde_json::to_string(&FileUploads(file_uploads))?),
       ));
       self.col_names.push(col_name.clone());
       self.file_col_names.push(col_name);
@@ -322,7 +323,7 @@ impl SelectQueryBuilder {
     state: &AppState,
     table_name: &str,
     pk_column: &str,
-    pk_value: trailbase_sqlite::Value,
+    pk_value: Value,
   ) -> Result<Option<trailbase_sqlite::Row>, trailbase_sqlite::Error> {
     return state
       .conn()
@@ -342,7 +343,7 @@ impl GetFileQueryBuilder {
     table_name: &str,
     file_column: (&Column, &ColumnMetadata),
     pk_column: &str,
-    pk_value: trailbase_sqlite::Value,
+    pk_value: Value,
   ) -> Result<FileUpload, QueryError> {
     return match &file_column.1.json {
       Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUpload" => {
@@ -376,7 +377,7 @@ impl GetFilesQueryBuilder {
     table_name: &str,
     file_column: (&Column, &ColumnMetadata),
     pk_column: &str,
-    pk_value: trailbase_sqlite::Value,
+    pk_value: Value,
   ) -> Result<FileUploads, QueryError> {
     return match &file_column.1.json {
       Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUploads" => {
@@ -401,8 +402,6 @@ impl GetFilesQueryBuilder {
     };
   }
 }
-
-type NamedParams = Vec<(String, trailbase_sqlite::Value)>;
 
 pub(crate) struct InsertQueryBuilder;
 
@@ -485,7 +484,7 @@ impl InsertQueryBuilder {
       ),
     };
 
-    return Ok((query, params.params, params.files));
+    return Ok((query, params.named_params, params.files));
   }
 
   #[inline]
@@ -510,7 +509,7 @@ impl UpdateQueryBuilder {
     metadata: &TableMetadata,
     mut params: Params,
     pk_column: &str,
-    pk_value: trailbase_sqlite::Value,
+    pk_value: Value,
   ) -> Result<(), QueryError> {
     let table_name = metadata.name();
     assert_eq!(params.table_name, *table_name);
@@ -534,12 +533,12 @@ impl UpdateQueryBuilder {
       table_name: &str,
       params: Params,
       pk_column: &str,
-      pk_value: trailbase_sqlite::Value,
+      pk_value: Value,
     ) -> Result<Option<trailbase_sqlite::Row>, QueryError> {
       let setters: String = {
-        assert_eq!(params.col_names.len(), params.params.len());
+        assert_eq!(params.col_names.len(), params.named_params.len());
 
-        std::iter::zip(&params.col_names, &params.params)
+        std::iter::zip(&params.col_names, &params.named_params)
           .map(|(col_name, (placeholder, _value))| format!(r#""{col_name}" = {placeholder}"#))
           .join(", ")
       };
@@ -578,7 +577,7 @@ impl UpdateQueryBuilder {
               r#"UPDATE "{table_name}" SET {setters} WHERE "{pk_column}" = :{pk_column}"#
             ))?;
             use trailbase_sqlite::Params;
-            params.params.bind(&mut stmt)?;
+            params.named_params.bind(&mut stmt)?;
 
             stmt.raw_execute()?;
           }
@@ -626,7 +625,7 @@ impl DeleteQueryBuilder {
     state: &AppState,
     metadata: &TableMetadata,
     pk_column: &str,
-    pk_value: trailbase_sqlite::Value,
+    pk_value: Value,
   ) -> Result<(), QueryError> {
     let table_name = metadata.name();
 
@@ -660,9 +659,7 @@ async fn write_file(
   return Ok(());
 }
 
-fn try_json_array_to_blob(
-  arr: &Vec<serde_json::Value>,
-) -> Result<trailbase_sqlite::Value, ParamsError> {
+fn try_json_array_to_blob(arr: &Vec<serde_json::Value>) -> Result<Value, ParamsError> {
   let mut byte_array: Vec<u8> = vec![];
   for el in arr {
     match el {
@@ -691,25 +688,22 @@ fn try_json_array_to_blob(
     };
   }
 
-  return Ok(trailbase_sqlite::Value::Blob(byte_array));
+  return Ok(Value::Blob(byte_array));
 }
 
-fn json_string_to_value(
-  data_type: ColumnDataType,
-  value: String,
-) -> Result<trailbase_sqlite::Value, ParamsError> {
+fn json_string_to_value(data_type: ColumnDataType, value: String) -> Result<Value, ParamsError> {
   return Ok(match data_type {
-    ColumnDataType::Null => trailbase_sqlite::Value::Null,
+    ColumnDataType::Null => Value::Null,
     // Strict/storage types
-    ColumnDataType::Any => trailbase_sqlite::Value::Text(value),
-    ColumnDataType::Text => trailbase_sqlite::Value::Text(value),
-    ColumnDataType::Blob => trailbase_sqlite::Value::Blob(BASE64_URL_SAFE.decode(value)?),
-    ColumnDataType::Integer => trailbase_sqlite::Value::Integer(value.parse::<i64>()?),
-    ColumnDataType::Real => trailbase_sqlite::Value::Real(value.parse::<f64>()?),
-    ColumnDataType::Numeric => trailbase_sqlite::Value::Integer(value.parse::<i64>()?),
+    ColumnDataType::Any => Value::Text(value),
+    ColumnDataType::Text => Value::Text(value),
+    ColumnDataType::Blob => Value::Blob(BASE64_URL_SAFE.decode(value)?),
+    ColumnDataType::Integer => Value::Integer(value.parse::<i64>()?),
+    ColumnDataType::Real => Value::Real(value.parse::<f64>()?),
+    ColumnDataType::Numeric => Value::Integer(value.parse::<i64>()?),
     // JSON types.
-    ColumnDataType::JSONB => trailbase_sqlite::Value::Blob(value.into_bytes().to_vec()),
-    ColumnDataType::JSON => trailbase_sqlite::Value::Text(value),
+    ColumnDataType::JSONB => Value::Blob(value.into_bytes().to_vec()),
+    ColumnDataType::JSON => Value::Text(value),
     // Affine types
     //
     // Integers:
@@ -721,7 +715,7 @@ fn json_string_to_value(
     | ColumnDataType::UnignedBigInt
     | ColumnDataType::Int2
     | ColumnDataType::Int4
-    | ColumnDataType::Int8 => trailbase_sqlite::Value::Integer(value.parse::<i64>()?),
+    | ColumnDataType::Int8 => Value::Integer(value.parse::<i64>()?),
     // Text:
     ColumnDataType::Character
     | ColumnDataType::Varchar
@@ -729,23 +723,23 @@ fn json_string_to_value(
     | ColumnDataType::NChar
     | ColumnDataType::NativeCharacter
     | ColumnDataType::NVarChar
-    | ColumnDataType::Clob => trailbase_sqlite::Value::Text(value),
+    | ColumnDataType::Clob => Value::Text(value),
     // Real:
     ColumnDataType::Double | ColumnDataType::DoublePrecision | ColumnDataType::Float => {
-      trailbase_sqlite::Value::Real(value.parse::<f64>()?)
+      Value::Real(value.parse::<f64>()?)
     }
     // Numeric
     ColumnDataType::Boolean
     | ColumnDataType::Decimal
     | ColumnDataType::Date
-    | ColumnDataType::DateTime => trailbase_sqlite::Value::Integer(value.parse::<i64>()?),
+    | ColumnDataType::DateTime => Value::Integer(value.parse::<i64>()?),
   });
 }
 
 pub fn simple_json_value_to_param(
   col_type: ColumnDataType,
   value: serde_json::Value,
-) -> Result<trailbase_sqlite::Value, ParamsError> {
+) -> Result<Value, ParamsError> {
   let param = match value {
     serde_json::Value::Object(ref _map) => {
       return Err(ParamsError::UnexpectedType(
@@ -765,16 +759,16 @@ pub fn simple_json_value_to_param(
 
       try_json_array_to_blob(arr)?
     }
-    serde_json::Value::Null => trailbase_sqlite::Value::Null,
-    serde_json::Value::Bool(b) => trailbase_sqlite::Value::Integer(b as i64),
+    serde_json::Value::Null => Value::Null,
+    serde_json::Value::Bool(b) => Value::Integer(b as i64),
     serde_json::Value::String(str) => json_string_to_value(col_type, str)?,
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
-        trailbase_sqlite::Value::Integer(n)
+        Value::Integer(n)
       } else if let Some(n) = number.as_u64() {
-        trailbase_sqlite::Value::Integer(n as i64)
+        Value::Integer(n as i64)
       } else if let Some(n) = number.as_f64() {
-        trailbase_sqlite::Value::Real(n)
+        Value::Real(n)
       } else {
         warn!("Not a valid number: {number:?}");
         return Err(ParamsError::NotANumber);
@@ -789,7 +783,7 @@ fn extract_params_and_files_from_json(
   col: &Column,
   col_meta: &ColumnMetadata,
   value: serde_json::Value,
-) -> Result<(trailbase_sqlite::Value, Option<FileMetadataContents>), ParamsError> {
+) -> Result<(Value, Option<FileMetadataContents>), ParamsError> {
   let col_name = &col.name;
   match value {
     serde_json::Value::Object(ref _map) => {
@@ -814,13 +808,13 @@ fn extract_params_and_files_from_json(
           let file_upload: FileUploadInput = serde_json::from_value(value)?;
 
           let (_col_name, metadata, content) = file_upload.consume()?;
-          let param = trailbase_sqlite::Value::Text(serde_json::to_string(&metadata)?);
+          let param = Value::Text(serde_json::to_string(&metadata)?);
 
           return Ok((param, Some(vec![(metadata, content)])));
         }
         _ => {
           json.validate(&value)?;
-          return Ok((trailbase_sqlite::Value::Text(value.to_string()), None));
+          return Ok((Value::Text(value.to_string()), None));
         }
       }
     }
@@ -844,14 +838,13 @@ fn extract_params_and_files_from_json(
                   uploads.push((metadata, content));
                 }
 
-                let param =
-                  trailbase_sqlite::Value::Text(serde_json::to_string(&FileUploads(temp))?);
+                let param = Value::Text(serde_json::to_string(&FileUploads(temp))?);
 
                 return Ok((param, Some(uploads)));
               }
               schema => {
                 schema.validate(&value)?;
-                return Ok((trailbase_sqlite::Value::Text(value.to_string()), None));
+                return Ok((Value::Text(value.to_string()), None));
               }
             }
           }
@@ -982,32 +975,30 @@ mod tests {
     let real = 3.0;
 
     let assert_params = |p: Params| {
-      assert!(p.params.len() >= 5, "{:?}", p.params);
+      assert!(p.named_params.len() >= 5, "{:?}", p.named_params);
 
-      for (param, value) in &p.params {
-        match param.as_str() {
+      for (param, value) in &p.named_params {
+        match param.as_ref() {
           ID_COL_PLACEHOLDER => {
             assert!(
-              matches!(value, trailbase_sqlite::Value::Blob(x) if *x == id),
+              matches!(value, Value::Blob(x) if *x == id),
               "VALUE: {value:?}"
             );
           }
           ":blob" => {
-            assert!(matches!(value, trailbase_sqlite::Value::Blob(x) if *x == blob));
+            assert!(matches!(value, Value::Blob(x) if *x == blob));
           }
           ":text" => {
-            assert!(
-              matches!(value, trailbase_sqlite::Value::Text(x) if x.contains("some text :)"))
-            );
+            assert!(matches!(value, Value::Text(x) if x.contains("some text :)")));
           }
           ":num" => {
-            assert!(matches!(value, trailbase_sqlite::Value::Integer(x) if *x == 5));
+            assert!(matches!(value, Value::Integer(x) if *x == 5));
           }
           ":real" => {
-            assert!(matches!(value, trailbase_sqlite::Value::Real(x) if *x == 3.0));
+            assert!(matches!(value, Value::Real(x) if *x == 3.0));
           }
           ":json_col" => {
-            assert!(matches!(value, trailbase_sqlite::Value::Text(_x)));
+            assert!(matches!(value, Value::Text(_x)));
           }
           x => assert!(false, "{x}"),
         }
@@ -1105,8 +1096,8 @@ mod tests {
 
       let params = Params::from(&metadata, json_row_from_value(value).unwrap(), None).unwrap();
 
-      let json_col: Vec<trailbase_sqlite::Value> = params
-        .params
+      let json_col: Vec<Value> = params
+        .named_params
         .iter()
         .filter_map(|(name, value)| {
           if name == ":json_col" {
@@ -1117,7 +1108,7 @@ mod tests {
         .collect();
 
       assert_eq!(json_col.len(), 1);
-      let trailbase_sqlite::Value::Text(ref text) = json_col[0] else {
+      let Value::Text(ref text) = json_col[0] else {
         panic!("Unexpected param type: {:?}", json_col[0]);
       };
 

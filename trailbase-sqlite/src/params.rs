@@ -1,5 +1,8 @@
 use rusqlite::types::ToSqlOutput;
 use rusqlite::{types, Result, Statement};
+use std::borrow::Cow;
+
+pub type NamedParams = Vec<(Cow<'static, str>, types::Value)>;
 
 // This strong typedef only exists to implement From<Option<T>>.
 #[allow(missing_debug_implementations)]
@@ -73,6 +76,18 @@ impl Params for () {
 }
 
 impl Params for Vec<(String, types::Value)> {
+  fn bind(self, stmt: &mut Statement<'_>) -> rusqlite::Result<()> {
+    for (name, v) in self {
+      let Some(idx) = stmt.parameter_index(&name)? else {
+        continue;
+      };
+      stmt.raw_bind_parameter(idx, v)?;
+    }
+    return Ok(());
+  }
+}
+
+impl Params for NamedParams {
   fn bind(self, stmt: &mut Statement<'_>) -> rusqlite::Result<()> {
     for (name, v) in self {
       let Some(idx) = stmt.parameter_index(&name)? else {

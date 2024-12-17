@@ -5,6 +5,7 @@ use axum::{
 use lazy_static::lazy_static;
 use log::*;
 use serde::Serialize;
+use std::borrow::Cow;
 use ts_rs::TS;
 use uuid::Uuid;
 
@@ -118,14 +119,15 @@ async fn fetch_users(
 ) -> Result<Vec<DbUser>, Error> {
   let mut params = filter_where_clause.params;
   let mut where_clause = filter_where_clause.clause;
+
   params.push((
-    ":limit".to_string(),
+    Cow::Borrowed(":limit"),
     trailbase_sqlite::Value::Integer(limit as i64),
   ));
 
   if let Some(cursor) = cursor {
     params.push((
-      ":cursor".to_string(),
+      Cow::Borrowed(":cursor"),
       trailbase_sqlite::Value::Blob(cursor.to_vec()),
     ));
     where_clause = format!("{where_clause} AND _row_.id < :cursor",);

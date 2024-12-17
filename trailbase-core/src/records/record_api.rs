@@ -1,7 +1,8 @@
 use itertools::Itertools;
 use log::*;
+use std::borrow::Cow;
 use std::sync::Arc;
-use trailbase_sqlite::Params as _;
+use trailbase_sqlite::{NamedParams, Params as _, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
@@ -187,14 +188,14 @@ impl RecordApi {
     }
   }
 
-  pub fn id_to_sql(&self, id: &str) -> Result<trailbase_sqlite::Value, RecordError> {
+  pub fn id_to_sql(&self, id: &str) -> Result<Value, RecordError> {
     return match self.state.record_pk_column.data_type {
       ColumnDataType::Blob => {
         let record_id = b64_to_id(id).map_err(|_err| RecordError::BadRequest("Invalid id"))?;
         assert_uuidv7(&record_id);
-        Ok(trailbase_sqlite::Value::Blob(record_id.into()))
+        Ok(Value::Blob(record_id.into()))
       }
-      ColumnDataType::Integer => Ok(trailbase_sqlite::Value::Integer(
+      ColumnDataType::Integer => Ok(Value::Integer(
         id.parse::<i64>()
           .map_err(|_err| RecordError::BadRequest("Invalid id"))?,
       )),
@@ -232,7 +233,7 @@ impl RecordApi {
   pub async fn check_record_level_access(
     &self,
     p: Permission,
-    record_id: Option<&trailbase_sqlite::Value>,
+    record_id: Option<&Value>,
     request_params: Option<&mut LazyParams<'_>>,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
@@ -283,7 +284,7 @@ impl RecordApi {
     &self,
     conn: &mut rusqlite::Connection,
     p: Permission,
-    record_id: Option<&trailbase_sqlite::Value>,
+    record_id: Option<&Value>,
     request_params: Option<&mut LazyParams<'_>>,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
@@ -342,7 +343,7 @@ impl RecordApi {
   fn query_access(
     conn: &mut rusqlite::Connection,
     access_query: &str,
-    params: Vec<(String, trailbase_sqlite::Value)>,
+    params: NamedParams,
   ) -> Result<bool, trailbase_sqlite::Error> {
     let mut stmt = conn.prepare_cached(access_query)?;
     params.bind(&mut stmt)?;
@@ -368,19 +369,24 @@ impl RecordApi {
     p: Permission,
     access_rule: &str,
     table_name: &str,
-    record_id: Option<&trailbase_sqlite::Value>,
+    record_id: Option<&Value>,
     request_params: Option<&mut LazyParams<'_>>,
     user: Option<&User>,
-  ) -> Result<(String, Vec<(String, trailbase_sqlite::Value)>), RecordError> {
-    let pk_column_name = &self.state.record_pk_column.name;
+  ) -> Result<(String, NamedParams), RecordError> {
     // We need to inject context like: record id, user, request, and row into the access
     // check. Below we're building the query and binding the context as params accordingly.
-    let (user_sub_select, mut params) = build_user_sub_select(user);
+    let mut params = NamedParams::with_capacity(16);
 
-    params.push((
-      ":__record_id".to_string(),
-      record_id.map_or(trailbase_sqlite::Value::Null, |id| id.clone()),
-    ));
+    params.extend_from_slice(&[
+      (
+        Cow::Borrowed(":__user_id"),
+        user.map_or(Value::Null, |u| Value::Blob(u.uuid.into())),
+      ),
+      (
+        Cow::Borrowed(":__record_id"),
+        record_id.map_or(Value::Null, |id| id.clone()),
+      ),
+    ]);
 
     // Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
     //
@@ -407,12 +413,13 @@ impl RecordApi {
           SELECT
             ({access_rule})
           FROM
-            ({user_sub_select}) AS _USER_,
+            (SELECT :__user_id AS id) AS _USER_,
             ({request_sub_select}) AS _REQ_
         "#,
         )
       }
       Permission::Update => {
+        let pk_column_name = &self.state.record_pk_column.name;
         let Some(table_metadata) = self.table_metadata() else {
           return Err(RecordError::ApiRequiresTable);
         };
@@ -431,45 +438,28 @@ impl RecordApi {
           SELECT
             ({access_rule})
           FROM
-            ({user_sub_select}) AS _USER_,
+            (SELECT :__user_id AS id) AS _USER_,
             ({request_sub_select}) AS _REQ_,
             (SELECT * FROM "{table_name}" WHERE "{pk_column_name}" = :__record_id) AS _ROW_
         "#,
         )
       }
-      Permission::Read | Permission::Delete | Permission::Schema => indoc::formatdoc!(
-        r#"
+      Permission::Read | Permission::Delete | Permission::Schema => {
+        let pk_column_name = &self.state.record_pk_column.name;
+
+        indoc::formatdoc!(
+          r#"
           SELECT
             ({access_rule})
           FROM
-            ({user_sub_select}) AS _USER_,
+            (SELECT :__user_id AS id) AS _USER_,
             (SELECT * FROM "{table_name}" WHERE "{pk_column_name}" = :__record_id) AS _ROW_
         "#
-      ),
+        )
+      }
     };
 
     return Ok((query, params));
-  }
-}
-
-pub(crate) fn build_user_sub_select(
-  user: Option<&User>,
-) -> (&'static str, Vec<(String, trailbase_sqlite::Value)>) {
-  const QUERY: &str = "SELECT :__user_id AS id";
-
-  if let Some(user) = user {
-    return (
-      QUERY,
-      vec![(
-        ":__user_id".to_string(),
-        trailbase_sqlite::Value::Blob(user.uuid.into()),
-      )],
-    );
-  } else {
-    return (
-      QUERY,
-      vec![(":__user_id".to_string(), trailbase_sqlite::Value::Null)],
-    );
   }
 }
 
@@ -477,7 +467,7 @@ pub(crate) fn build_user_sub_select(
 fn build_request_sub_select(
   table_metadata: &TableMetadata,
   request_params: &Params,
-) -> (String, Vec<(String, trailbase_sqlite::Value)>) {
+) -> (String, NamedParams) {
   // NOTE: This has gotten pretty wild. We cannot have access queries access missing _REQ_.props.
   // So we need to inject an explicit NULL value for all missing fields on the request.
   // Can we make this cheaper, either by pre-processing the access query or improving construction?
@@ -485,10 +475,10 @@ fn build_request_sub_select(
   // save some string ops?
   let schema = &table_metadata.schema;
 
-  let mut named_params: Vec<(String, trailbase_sqlite::Value)> = schema
+  let mut named_params: NamedParams = schema
     .columns
     .iter()
-    .map(|c| (format!(":{}", c.name), trailbase_sqlite::Value::Null))
+    .map(|c| (Cow::Owned(format!(r#":{}"#, c.name)), Value::Null))
     .collect();
 
   for (param_index, col_name) in request_params.column_names().iter().enumerate() {
@@ -507,7 +497,7 @@ fn build_request_sub_select(
       placeholders = schema
         .columns
         .iter()
-        .map(|col| format!(":{col_name} AS '{col_name}'", col_name = col.name))
+        .map(|col| format!(r#":{name} AS '{name}'"#, name = col.name))
         .join(", ")
     ),
     named_params,

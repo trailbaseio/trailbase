@@ -2,13 +2,13 @@ use axum::{
   extract::{Path, RawQuery, State},
   Json,
 };
+use std::borrow::Cow;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::listing::{
   build_filter_where_clause, limit_or_default, parse_query, Order, WhereClause,
 };
-use crate::records::record_api::build_user_sub_select;
 use crate::records::sql_to_json::rows_to_json;
 use crate::records::{Permission, RecordError};
 
@@ -46,21 +46,28 @@ pub async fn list_records_handler(
     mut params,
   } = build_filter_where_clause(metadata, filter_params)
     .map_err(|_err| RecordError::BadRequest("Invalid filter params"))?;
+
   if let Some(cursor) = cursor {
     params.push((
-      ":cursor".to_string(),
+      Cow::Borrowed(":cursor"),
       trailbase_sqlite::Value::Blob(cursor.to_vec()),
     ));
     clause = format!("{clause} AND _ROW_.id < :cursor");
   }
-  params.push((
-    ":limit".to_string(),
-    trailbase_sqlite::Value::Integer(limit_or_default(limit) as i64),
-  ));
 
   // User properties
-  let (user_sub_select, mut user_params) = build_user_sub_select(user.as_ref());
-  params.append(&mut user_params);
+  params.extend_from_slice(&[
+    (
+      Cow::Borrowed(":limit"),
+      trailbase_sqlite::Value::Integer(limit_or_default(limit) as i64),
+    ),
+    (
+      Cow::Borrowed(":__user_id"),
+      user.map_or(trailbase_sqlite::Value::Null, |u| {
+        trailbase_sqlite::Value::Blob(u.uuid.into())
+      }),
+    ),
+  ]);
 
   // NOTE: We're using the read access rule to filter the rows as opposed to yes/no early access
   // blocking as for read-record.
@@ -94,7 +101,7 @@ pub async fn list_records_handler(
     r#"
       SELECT _ROW_.*
       FROM
-        ({user_sub_select}) AS _USER_,
+        (SELECT :__user_id AS id) AS _USER_,
         (SELECT * FROM '{table_name}') as _ROW_
       WHERE
         {clause}

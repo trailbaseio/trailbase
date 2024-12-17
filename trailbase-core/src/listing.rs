@@ -1,5 +1,6 @@
 use lazy_static::lazy_static;
 use log::*;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use thiserror::Error;
 
@@ -164,15 +165,15 @@ pub fn parse_query(query: Option<String>) -> Option<QueryParseResult> {
 #[derive(Debug, Clone)]
 pub struct WhereClause {
   pub clause: String,
-  pub params: Vec<(String, trailbase_sqlite::Value)>,
+  pub params: Vec<(Cow<'static, str>, trailbase_sqlite::Value)>,
 }
 
 pub fn build_filter_where_clause(
   table_metadata: &dyn TableOrViewMetadata,
   filter_params: Option<HashMap<String, Vec<QueryParam>>>,
 ) -> Result<WhereClause, WhereClauseError> {
-  let mut where_clauses: Vec<String> = vec![];
-  let mut params: Vec<(String, trailbase_sqlite::Value)> = vec![];
+  let mut where_clauses = Vec::<String>::with_capacity(16);
+  let mut params = Vec::<(Cow<'static, str>, trailbase_sqlite::Value)>::with_capacity(16);
 
   if let Some(filter_params) = filter_params {
     for (column_name, query_params) in filter_params {
@@ -199,9 +200,8 @@ pub fn build_filter_where_clause(
           serde_json::Value::String(query_param.value.clone()),
         ) {
           Ok(value) => {
-            let clause = format!("{column_name} {op} :{column_name}");
-            where_clauses.push(clause);
-            params.push((format!(":{column_name}"), value));
+            where_clauses.push(format!("{column_name} {op} :{column_name}"));
+            params.push((format!(":{column_name}").into(), value));
           }
           Err(err) => debug!("Parameter conversion for {column_name} failed: {err}"),
         };

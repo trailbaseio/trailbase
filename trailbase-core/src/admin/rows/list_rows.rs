@@ -1,6 +1,7 @@
 use axum::extract::{Json, Path, RawQuery, State};
 use log::*;
 use serde::Serialize;
+use std::borrow::Cow;
 use std::sync::Arc;
 use ts_rs::TS;
 
@@ -126,18 +127,21 @@ async fn fetch_rows(
     mut clause,
     mut params,
   } = filter_where_clause;
-  params.push((
-    ":limit".to_string(),
-    trailbase_sqlite::Value::Integer(pagination.limit as i64),
-  ));
-  params.push((
-    ":offset".to_string(),
-    trailbase_sqlite::Value::Integer(pagination.offset.unwrap_or(0) as i64),
-  ));
+
+  params.extend_from_slice(&[
+    (
+      Cow::Borrowed(":limit"),
+      trailbase_sqlite::Value::Integer(pagination.limit as i64),
+    ),
+    (
+      Cow::Borrowed(":offset"),
+      trailbase_sqlite::Value::Integer(pagination.offset.unwrap_or(0) as i64),
+    ),
+  ]);
 
   if let Some(cursor) = pagination.cursor {
     params.push((
-      ":cursor".to_string(),
+      Cow::Borrowed(":cursor"),
       trailbase_sqlite::Value::Blob(cursor.to_vec()),
     ));
     clause = format!("{clause} AND _row_.id < :cursor",);
