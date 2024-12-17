@@ -4,7 +4,7 @@ use axum::{
 };
 use futures::stream::{Stream, StreamExt};
 use parking_lot::{Mutex, RwLock};
-use rusqlite::hooks::Action;
+use rusqlite::hooks::{Action, PreUpdateCase};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::{
@@ -109,13 +109,8 @@ impl SubscriptionManager {
     table: &str,
     rowid: i64,
   ) {
-    if db != "main" {
-      #[cfg(debug_assertions)]
-      log::warn!("Expected db: {db}");
-      return;
-    }
+    assert_eq!(db, "main");
 
-    log::info!("ROW ID: {rowid}");
     match action {
       Action::SQLITE_UPDATE | Action::SQLITE_INSERT | Action::SQLITE_DELETE => {}
       a => {
@@ -212,6 +207,21 @@ impl SubscriptionManager {
     }
 
     let s = state.clone();
+
+    state
+      .conn
+      .call(|conn| {
+        conn.preupdate_hook(Some(
+          |action: Action, db: &str, table: &str, value: &PreUpdateCase| {
+            // TODO: explore this as a more perfomant alternative to post-update hook with rowid and
+            // additional lookups. Security/ACL implications?
+          },
+        ));
+
+        return Ok(());
+      })
+      .await?;
+
     return state
       .conn
       .add_hook(
