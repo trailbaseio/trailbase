@@ -25,7 +25,12 @@ export default defineConfig({
       },
       plugins: [
         starlightLinksValidator({
-          exclude: ["http://localhost:4000/", "http://localhost:4000/**/*"],
+          exclude: [
+            "http://localhost:4000/",
+            "http://localhost:4000/**/*",
+            // https://github.com/HiDeoo/starlight-links-validator/issues/76
+            "/license",
+          ],
         }),
       ],
       sidebar: [
