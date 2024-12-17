@@ -12,6 +12,29 @@ use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{TableMetadata, TableOrViewMetadata, ViewMetadata};
 use crate::util::{assert_uuidv7, b64_to_id};
 
+enum RecordApiMetadata {
+  Table(TableMetadata),
+  View(ViewMetadata),
+}
+
+impl RecordApiMetadata {
+  #[inline]
+  fn table_name(&self) -> &str {
+    match &self {
+      RecordApiMetadata::Table(ref table) => &table.schema.name,
+      RecordApiMetadata::View(ref view) => &view.schema.name,
+    }
+  }
+
+  #[inline]
+  fn metadata(&self) -> &(dyn TableOrViewMetadata + Send + Sync) {
+    match &self {
+      RecordApiMetadata::Table(ref table) => table,
+      RecordApiMetadata::View(ref view) => view,
+    }
+  }
+}
+
 /// FILTER CONTROL.
 ///
 /// Open question: right now we use the read_access rule also for listing. It could be nice to
@@ -27,11 +50,6 @@ pub struct RecordApi {
   state: Arc<RecordApiState>,
 }
 
-enum RecordApiMetadata {
-  Table(TableMetadata),
-  View(ViewMetadata),
-}
-
 struct RecordApiState {
   conn: trailbase_sqlite::Connection,
   metadata: RecordApiMetadata,
@@ -44,10 +62,19 @@ struct RecordApiState {
   insert_autofill_missing_user_id_columns: bool,
 
   create_access_rule: Option<String>,
+  create_access_query: Option<String>,
+
   read_access_rule: Option<String>,
+  read_access_query: Option<String>,
+
   update_access_rule: Option<String>,
+  update_access_query: Option<String>,
+
   delete_access_rule: Option<String>,
+  delete_access_query: Option<String>,
+
   schema_access_rule: Option<String>,
+  schema_access_query: Option<String>,
 }
 
 impl RecordApi {
@@ -129,6 +156,32 @@ impl RecordApi {
       return Err(format!("RecordApi misses name: {config:?}"));
     };
 
+    let read_access_query = config.read_access_rule.as_ref().map(|rule| {
+      build_read_delete_schema_query(metadata.table_name(), &record_pk_column.name, rule)
+    });
+
+    let delete_access_query = config.delete_access_rule.as_ref().map(|rule| {
+      build_read_delete_schema_query(metadata.table_name(), &record_pk_column.name, rule)
+    });
+
+    let schema_access_query = config.schema_access_rule.as_ref().map(|rule| {
+      build_read_delete_schema_query(metadata.table_name(), &record_pk_column.name, rule)
+    });
+
+    let create_access_query = config.create_access_rule.as_ref().and_then(|rule| {
+      if let RecordApiMetadata::Table(ref m) = metadata {
+        return Some(build_create_access_query(m, rule));
+      }
+      return None;
+    });
+
+    let update_access_query = config.update_access_rule.as_ref().and_then(|rule| {
+      if let RecordApiMetadata::Table(ref m) = metadata {
+        return Some(build_update_access_query(m, &record_pk_column.name, rule));
+      }
+      return None;
+    });
+
     return Ok(RecordApi {
       state: Arc::new(RecordApiState {
         conn,
@@ -151,11 +204,22 @@ impl RecordApi {
           convert_acl(&config.acl_authenticated),
         ],
         // Access rules.
+        //
+        // Create:
         create_access_rule: config.create_access_rule,
+        create_access_query,
+
         read_access_rule: config.read_access_rule,
+        read_access_query,
+
         update_access_rule: config.update_access_rule,
+        update_access_query,
+
         delete_access_rule: config.delete_access_rule,
+        delete_access_query,
+
         schema_access_rule: config.schema_access_rule,
+        schema_access_query,
       }),
     });
   }
@@ -167,18 +231,12 @@ impl RecordApi {
 
   #[inline]
   pub fn table_name(&self) -> &str {
-    match &self.state.metadata {
-      RecordApiMetadata::Table(ref table) => &table.schema.name,
-      RecordApiMetadata::View(ref view) => &view.schema.name,
-    }
+    return self.state.metadata.table_name();
   }
 
   #[inline]
   pub fn metadata(&self) -> &(dyn TableOrViewMetadata + Send + Sync) {
-    match &self.state.metadata {
-      RecordApiMetadata::Table(ref table) => table,
-      RecordApiMetadata::View(ref view) => view,
-    }
+    return self.state.metadata.metadata();
   }
 
   pub fn table_metadata(&self) -> Option<&TableMetadata> {
@@ -220,6 +278,17 @@ impl RecordApi {
   }
 
   #[inline]
+  fn access_query(&self, p: Permission) -> &Option<String> {
+    return match p {
+      Permission::Create => &self.state.create_access_query,
+      Permission::Read => &self.state.read_access_query,
+      Permission::Update => &self.state.update_access_query,
+      Permission::Delete => &self.state.delete_access_query,
+      Permission::Schema => &self.state.schema_access_query,
+    };
+  }
+
+  #[inline]
   pub fn insert_autofill_missing_user_id_columns(&self) -> bool {
     return self.state.insert_autofill_missing_user_id_columns;
   }
@@ -240,40 +309,30 @@ impl RecordApi {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
-    'acl: {
-      let Some(ref access_rule) = self.access_rule(p) else {
-        return Ok(());
-      };
+    let Some(access_query) = self.access_query(p) else {
+      return Ok(());
+    };
+    let access_query = access_query.clone();
+    let params = self.build_named_params(p, record_id, request_params, user)?;
 
-      let (access_query, params) = self.build_access_query_and_params(
-        p,
-        access_rule,
-        self.table_name(),
-        record_id,
-        request_params,
-        user,
-      )?;
-
-      let allowed = match self
-        .state
-        .conn
-        .call(move |conn| Self::query_access(conn, &access_query, params))
-        .await
-      {
-        Ok(allowed) => allowed,
-        Err(err) => {
-          if cfg!(test) {
-            panic!("RLA query failed: {err}");
-          }
-          warn!("RLA query failed: {err}");
-          break 'acl;
+    match self
+      .state
+      .conn
+      .call(move |conn| Self::query_access(conn, &access_query, params))
+      .await
+    {
+      Ok(allowed) => {
+        if allowed {
+          return Ok(());
         }
-      };
-
-      if allowed {
-        return Ok(());
       }
-    }
+      Err(err) => {
+        warn!("RLA query failed: {err}");
+
+        #[cfg(test)]
+        panic!("RLA query failed: {err}");
+      }
+    };
 
     return Err(RecordError::Forbidden);
   }
@@ -291,35 +350,24 @@ impl RecordApi {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
-    'acl: {
-      let Some(ref access_rule) = self.access_rule(p) else {
-        return Ok(());
-      };
+    let Some(access_query) = self.access_query(p) else {
+      return Ok(());
+    };
+    let params = self.build_named_params(p, record_id, request_params, user)?;
 
-      let (access_query, params) = self.build_access_query_and_params(
-        p,
-        access_rule,
-        self.table_name(),
-        record_id,
-        request_params,
-        user,
-      )?;
-
-      let allowed = match Self::query_access(conn, &access_query, params) {
-        Ok(allowed) => allowed,
-        Err(err) => {
-          if cfg!(test) {
-            panic!("RLA query failed: {err}");
-          }
-          warn!("RLA query failed: {err}");
-          break 'acl;
+    match Self::query_access(conn, access_query, params) {
+      Ok(allowed) => {
+        if allowed {
+          return Ok(());
         }
-      };
-
-      if allowed {
-        return Ok(());
       }
-    }
+      Err(err) => {
+        warn!("RLA query failed: {err}");
+
+        #[cfg(test)]
+        panic!("RLA query failed: {err}");
+      }
+    };
 
     return Err(RecordError::Forbidden);
   }
@@ -364,18 +412,31 @@ impl RecordApi {
   // TODO: We should probably break this up into separate functions for CRUD, to only do and inject
   // what's actually needed. Maybe even break up the entire check_access_and_rls_then. It's pretty
   // winding right now.
-  fn build_access_query_and_params(
+  fn build_named_params(
     &self,
     p: Permission,
-    access_rule: &str,
-    table_name: &str,
     record_id: Option<&Value>,
     request_params: Option<&mut LazyParams<'_>>,
     user: Option<&User>,
-  ) -> Result<(String, NamedParams), RecordError> {
+  ) -> Result<NamedParams, RecordError> {
     // We need to inject context like: record id, user, request, and row into the access
     // check. Below we're building the query and binding the context as params accordingly.
-    let mut params = NamedParams::with_capacity(16);
+    let mut params = match p {
+      Permission::Create | Permission::Update => {
+        let Some(table_metadata) = self.table_metadata() else {
+          return Err(RecordError::ApiRequiresTable);
+        };
+
+        build_request_params(
+          table_metadata,
+          request_params
+            .expect("params for update & create")
+            .params()
+            .map_err(|err| RecordError::Internal(err.into()))?,
+        )
+      }
+      Permission::Read | Permission::Delete | Permission::Schema => NamedParams::with_capacity(2),
+    };
 
     params.extend_from_slice(&[
       (
@@ -388,94 +449,95 @@ impl RecordApi {
       ),
     ]);
 
-    // Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
-    //
-    // Create has no "row"
-    // Read and delete have no "request"
-    // And only update has "row" and "request".
-    let query = match p {
-      Permission::Create => {
-        let Some(table_metadata) = self.table_metadata() else {
-          return Err(RecordError::ApiRequiresTable);
-        };
-
-        let (request_sub_select, mut request_params) = build_request_sub_select(
-          table_metadata,
-          request_params
-            .unwrap()
-            .params()
-            .map_err(|err| RecordError::Internal(err.into()))?,
-        );
-        params.append(&mut request_params);
-
-        indoc::formatdoc!(
-          r#"
-          SELECT
-            ({access_rule})
-          FROM
-            (SELECT :__user_id AS id) AS _USER_,
-            ({request_sub_select}) AS _REQ_
-        "#,
-        )
-      }
-      Permission::Update => {
-        let pk_column_name = &self.state.record_pk_column.name;
-        let Some(table_metadata) = self.table_metadata() else {
-          return Err(RecordError::ApiRequiresTable);
-        };
-
-        let (request_sub_select, mut request_params) = build_request_sub_select(
-          table_metadata,
-          request_params
-            .unwrap()
-            .params()
-            .map_err(|err| RecordError::Internal(err.into()))?,
-        );
-        params.append(&mut request_params);
-
-        indoc::formatdoc!(
-          r#"
-          SELECT
-            ({access_rule})
-          FROM
-            (SELECT :__user_id AS id) AS _USER_,
-            ({request_sub_select}) AS _REQ_,
-            (SELECT * FROM "{table_name}" WHERE "{pk_column_name}" = :__record_id) AS _ROW_
-        "#,
-        )
-      }
-      Permission::Read | Permission::Delete | Permission::Schema => {
-        let pk_column_name = &self.state.record_pk_column.name;
-
-        indoc::formatdoc!(
-          r#"
-          SELECT
-            ({access_rule})
-          FROM
-            (SELECT :__user_id AS id) AS _USER_,
-            (SELECT * FROM "{table_name}" WHERE "{pk_column_name}" = :__record_id) AS _ROW_
-        "#
-        )
-      }
-    };
-
-    return Ok((query, params));
+    return Ok(params);
   }
 }
 
-/// Builds the sub-query for _REQ_.
-fn build_request_sub_select(
+/// Build access query for record reads, deletes and query access.
+///
+/// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
+fn build_read_delete_schema_query(
+  table_name: &str,
+  pk_column_name: &str,
+  access_rule: &str,
+) -> String {
+  return indoc::formatdoc!(
+    r#"
+      SELECT
+        ({access_rule})
+      FROM
+        (SELECT :__user_id AS id) AS _USER_,
+        (SELECT * FROM "{table_name}" WHERE "{pk_column_name}" = :__record_id) AS _ROW_
+    "#
+  );
+}
+
+/// Build access query for record creation.
+///
+/// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
+fn build_create_access_query(table_metadata: &TableMetadata, create_access_rule: &str) -> String {
+  let column_sub_select = format!(
+    "SELECT {placeholders}",
+    placeholders = table_metadata
+      .schema
+      .columns
+      .iter()
+      .map(|col| format!(r#":{name} AS '{name}'"#, name = col.name))
+      .join(", ")
+  );
+
+  return indoc::formatdoc!(
+    r#"
+      SELECT
+        ({create_access_rule})
+      FROM
+        (SELECT :__user_id AS id) AS _USER_,
+        ({column_sub_select}) AS _REQ_
+    "#,
+  );
+}
+
+/// Build access query for record updates.
+///
+/// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
+fn build_update_access_query(
   table_metadata: &TableMetadata,
-  request_params: &Params,
-) -> (String, NamedParams) {
+  pk_column_name: &str,
+  update_access_rule: &str,
+) -> String {
+  let table_name = table_metadata.name();
+
+  let column_sub_select = format!(
+    "SELECT {placeholders}",
+    placeholders = table_metadata
+      .schema
+      .columns
+      .iter()
+      .map(|col| format!(r#":{name} AS '{name}'"#, name = col.name))
+      .join(", ")
+  );
+
+  return indoc::formatdoc!(
+    r#"
+      SELECT
+        ({update_access_rule})
+      FROM
+        (SELECT :__user_id AS id) AS _USER_,
+        ({column_sub_select}) AS _REQ_,
+        (SELECT * FROM "{table_name}" WHERE "{pk_column_name}" = :__record_id) AS _ROW_
+    "#,
+  );
+}
+
+/// Build SQL named parameters from request fields.
+fn build_request_params(table_metadata: &TableMetadata, request_params: &Params) -> NamedParams {
   // NOTE: This has gotten pretty wild. We cannot have access queries access missing _REQ_.props.
   // So we need to inject an explicit NULL value for all missing fields on the request.
   // Can we make this cheaper, either by pre-processing the access query or improving construction?
   // For example, could we build a transaction-scoped temp view with positional placeholders to
   // save some string ops?
-  let schema = &table_metadata.schema;
-
-  let mut named_params: NamedParams = schema
+  let mut named_params: NamedParams = table_metadata
+    .schema
     .columns
     .iter()
     .map(|c| (Cow::Owned(format!(r#":{}"#, c.name)), Value::Null))
@@ -491,17 +553,7 @@ fn build_request_sub_select(
     named_params[col_index].1 = request_params.named_params()[param_index].1.clone();
   }
 
-  return (
-    format!(
-      "SELECT {placeholders}",
-      placeholders = schema
-        .columns
-        .iter()
-        .map(|col| format!(r#":{name} AS '{name}'"#, name = col.name))
-        .join(", ")
-    ),
-    named_params,
-  );
+  return named_params;
 }
 
 fn convert_acl(acl: &Vec<i32>) -> u8 {

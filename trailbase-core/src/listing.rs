@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use thiserror::Error;
 
-use crate::records::json_to_sql::simple_json_value_to_param;
+use crate::records::json_to_sql::json_string_to_value;
 use crate::table_metadata::TableOrViewMetadata;
 use crate::util::b64_to_id;
 
@@ -141,6 +141,16 @@ pub fn parse_query(query: Option<String>) -> Option<QueryParseResult> {
           continue;
         };
 
+        if !k
+          .chars()
+          .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_')
+        {
+          #[cfg(debug_assertions)]
+          debug!("skipping non-trivial query param: {key}={value}");
+
+          continue;
+        }
+
         if value.is_empty() {
           continue;
         }
@@ -183,6 +193,8 @@ pub fn build_filter_where_clause(
         )));
       }
 
+      // IMPORTANT: We only include parameters with known columns to avoid building an invalid
+      // query early and forbid injections.
       let Some((col, _col_meta)) = table_metadata.column_by_name(&column_name) else {
         return Err(WhereClauseError::UnrecognizedParam(format!(
           "Unrecognized parameter: {column_name}"
@@ -195,10 +207,7 @@ pub fn build_filter_where_clause(
           continue;
         };
 
-        match simple_json_value_to_param(
-          col.data_type,
-          serde_json::Value::String(query_param.value.clone()),
-        ) {
+        match json_string_to_value(col.data_type, query_param.value) {
           Ok(value) => {
             where_clauses.push(format!("{column_name} {op} :{column_name}"));
             params.push((format!(":{column_name}").into(), value));

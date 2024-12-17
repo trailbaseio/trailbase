@@ -691,7 +691,10 @@ fn try_json_array_to_blob(arr: &Vec<serde_json::Value>) -> Result<Value, ParamsE
   return Ok(Value::Blob(byte_array));
 }
 
-fn json_string_to_value(data_type: ColumnDataType, value: String) -> Result<Value, ParamsError> {
+pub(crate) fn json_string_to_value(
+  data_type: ColumnDataType,
+  value: String,
+) -> Result<Value, ParamsError> {
   return Ok(match data_type {
     ColumnDataType::Null => Value::Null,
     // Strict/storage types

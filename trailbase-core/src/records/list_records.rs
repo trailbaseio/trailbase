@@ -2,7 +2,9 @@ use axum::{
   extract::{Path, RawQuery, State},
   Json,
 };
+use itertools::Itertools;
 use std::borrow::Cow;
+use trailbase_sqlite::Value;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
@@ -48,10 +50,7 @@ pub async fn list_records_handler(
     .map_err(|_err| RecordError::BadRequest("Invalid filter params"))?;
 
   if let Some(cursor) = cursor {
-    params.push((
-      Cow::Borrowed(":cursor"),
-      trailbase_sqlite::Value::Blob(cursor.to_vec()),
-    ));
+    params.push((Cow::Borrowed(":cursor"), Value::Blob(cursor.to_vec())));
     clause = format!("{clause} AND _ROW_.id < :cursor");
   }
 
@@ -59,13 +58,11 @@ pub async fn list_records_handler(
   params.extend_from_slice(&[
     (
       Cow::Borrowed(":limit"),
-      trailbase_sqlite::Value::Integer(limit_or_default(limit) as i64),
+      Value::Integer(limit_or_default(limit) as i64),
     ),
     (
       Cow::Borrowed(":__user_id"),
-      user.map_or(trailbase_sqlite::Value::Null, |u| {
-        trailbase_sqlite::Value::Blob(u.uuid.into())
-      }),
+      user.map_or(Value::Null, |u| Value::Blob(u.uuid.into())),
     ),
   ]);
 
@@ -75,7 +72,7 @@ pub async fn list_records_handler(
   // TODO: Should this be a separate access rule? Maybe one wants users to access a specific
   // record but not list all the records.
   if let Some(read_access) = api.access_rule(Permission::Read) {
-    clause = format!("({clause}) AND {read_access}");
+    clause = format!("({read_access}) AND ({clause})");
   }
 
   let default_ordering = || {
@@ -94,7 +91,6 @@ pub async fn list_records_handler(
         }
       )
     })
-    .collect::<Vec<_>>()
     .join(", ");
 
   let query = format!(
