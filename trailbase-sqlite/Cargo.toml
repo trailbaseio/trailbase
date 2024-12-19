@@ -7,7 +7,7 @@ license = "OSL-3.0"
 [dependencies]
 crossbeam-channel = "0.5.13"
 infer = "0.16.0"
-jsonschema = { version = "0.26.0", default-features = false }
+jsonschema = { version = "0.27.0", default-features = false }
 lazy_static = "1.5.0"
 log = "0.4.22"
 rusqlite = { workspace = true }
