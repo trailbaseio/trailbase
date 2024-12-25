@@ -55,9 +55,12 @@ fn build_object() {
     // Disable SQLEAN's define-eval feature
     .flag("-DDISABLE_DEFINE_EVAL");
 
+  let sqlite3_include_dir = env::var("DEP_SQLITE3_INCLUDE").expect("Set by libsqlite3-sys");
+
   cfg
     .warnings(false)
     .include(PATH)
+    .include(sqlite3_include_dir)
     .files(files.iter().map(|f| format!("{PATH}/{f}")))
     .compile("define");
 
