@@ -27,6 +27,14 @@ opt-level = 3
 lto = true
 codegen-units = 1
 
+# Workaround for https://github.com/gwenn/lemon-rs/issues/78. sqlite3-parser
+# requires 1+MB stack frames to parse trivial SQL statements, which is larger
+# than Window's default stack size of 1MB. This is due to the rust compiler not
+# overlapping stack variables of disjoint branches in dev mode and instead
+# allocating them all.
+[profile.dev.package.sqlite3-parser]
+opt-level = 1
+
 [workspace.dependencies]
 refinery = { package = "refinery", path = "vendor/refinery/refinery", default-features = false, features = ["rusqlite"] }
 refinery-core = { package = "refinery-core", path = "vendor/refinery/refinery_core" }

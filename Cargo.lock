@@ -2927,9 +2927,9 @@ dependencies = [
 
 [[package]]
 name = "jsonschema"
-version = "0.27.0"
+version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc38ec7f43c54485b3ae1970a345b2b54ba6681a52ce3919669f304a5d13ef78"
+checksum = "c9deec35f105267485e0b85b4da7861d444ad498bd476418ec10aeaec3c2ead1"
 dependencies = [
  "ahash",
  "base64 0.22.1",
@@ -3475,9 +3475,9 @@ dependencies = [
 
 [[package]]
 name = "object_store"
-version = "0.11.1"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6eb4c22c6154a1e759d7099f9ffad7cc5ef8245f9efbab4a41b92623079c82f3"
+checksum = "3cfccb68961a56facde1163f9319e0d15743352344e7808a11795fb99698dcaf"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -4188,9 +4188,9 @@ checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
 name = "quick-xml"
-version = "0.36.2"
+version = "0.37.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7649a7b4df05aed9ea7ec6f628c67c9953a43869b8bc50929569b2999d443fe"
+checksum = "f22f29bdff3987b4d8632ef95fd6424ec7e4e0a57e2f4fc63e489e75357f6a03"
 dependencies = [
  "memchr",
  "serde",
@@ -4350,9 +4350,9 @@ dependencies = [
 
 [[package]]
 name = "referencing"
-version = "0.27.0"
+version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29c10f0563f85afe089e962995e19b64fe0af341883a6304c45e12fdcfc97b5e"
+checksum = "040034d1c0deb1c413e44dafaea2f8bd7d273f1b56de531ab8cee5a93acb1741"
 dependencies = [
  "ahash",
  "fluent-uri",
@@ -6399,9 +6399,9 @@ dependencies = [
 
 [[package]]
 name = "unicase"
-version = "2.8.0"
+version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e51b68083f157f853b6379db119d1c1be0e6e4dec98101079dec41f6f5cf6df"
+checksum = "75b844d17643ee918803943289730bec8aac480150456169e647ed0b576ba539"
 
 [[package]]
 name = "unicode-id"
