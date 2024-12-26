@@ -123,3 +123,35 @@ jobs:
         with:
           fail_on_unmatched_files: true
           files: trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip
+
+  release-windows:
+    needs: changelog
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+      - name: Install Dependencies
+        run: |
+          vcpkg install protobuf
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: PNPM install
+        run: |
+          pnpm i
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-pc-windows-gnu
+          default: true
+      - name: Rust Build
+        run: |
+          cargo build --target x86_64-pc-windows-gnu --release --bin trail && ls target/ && \
+            Write-Output target/x86_64-pc-windows-gnu/release/trail CHANGELOG.md LICENSE | Compress-Archive -DestinationPath trailbase_${{  github.ref_name }}_x86_64_windows.zip
+
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: trailbase_${{  github.ref_name }}_x86_64_windows.zip
