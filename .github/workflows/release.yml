@@ -131,9 +131,27 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: 'true'
-      - name: Install Dependencies
+      - uses: MinoruSekine/setup-scoop@v4.0.1
+        with:
+          buckets: extras
+          apps: nodejs pnpm protobuf
+      - name: Debug
+        shell: pwsh
         run: |
-          vcpkg install protobuf
+          Get-Command protoc && Get-Command node && Get-Command pnpm
+
+      # - name: Install winget
+      #   uses: Cyberboss/install-winget@v1
+      #   with:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Install Dependencies
+      #   shell: pwsh
+      #   run: |
+      #     winget install pnpm.pnpm Node.js --disable-interactivity --accept-source-agreements
+      #     winget install protobuf --accept-source-agreements
+
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
       - uses: pnpm/action-setup@v4
         with:
           version: 9
@@ -143,12 +161,13 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          target: x86_64-pc-windows-gnu
+          target: x86_64-pc-windows-msvc
           default: true
       - name: Rust Build
+        shell: pwsh
         run: |
-          cargo build --target x86_64-pc-windows-gnu --release --bin trail && ls target/ && \
-            Write-Output target/x86_64-pc-windows-gnu/release/trail CHANGELOG.md LICENSE | Compress-Archive -DestinationPath trailbase_${{  github.ref_name }}_x86_64_windows.zip
+          cargo build --target x86_64-pc-windows-msvc --release --bin trail && ls target/ && \
+            Write-Output target/x86_64-pc-windows-msvc/release/trail CHANGELOG.md LICENSE | Compress-Archive -DestinationPath trailbase_${{  github.ref_name }}_x86_64_windows.zip
 
       - name: Release binaries
         uses: softprops/action-gh-release@v2
