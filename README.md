@@ -61,9 +61,9 @@ libraries, tests, documentation and examples.
 Only the [benchmarks](https://github.com/trailbaseio/trailbase-benchmark) are
 kept separately due to their external dependencies.
 
-Pre-built static binaries are available as [GitHub
-releases](https://github.com/trailbaseio/trailbase/releases/) for Linux an
-MacOS.
+Pre-built static binaries are available as
+[GitHub releases](https://github.com/trailbaseio/trailbase/releases/) for
+Linux, MacOS and Windows.
 On Windows the Docker [image](https://hub.docker.com/r/trailbase/trailbase) can
 be used.
 

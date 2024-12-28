@@ -1,5 +1,5 @@
-You can download the latest pre-built `trail` binary for Mac and Linux from
-[GitHub](https://github.com/trailbaseio/trailbase/releases/).
+You can download the latest pre-built `trail` binary for Mac, Windows and Linux
+from [GitHub](https://github.com/trailbaseio/trailbase/releases/).
 
 Alternatively, you can run TrailBase straight from DockerHub:
 

@@ -1,3 +1,7 @@
+## v0.3.3
+
+* Pre-built Windows binary.
+
 ## v0.3.2
 
 * Move record API access query construction to RecordApi construction time.

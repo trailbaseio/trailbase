@@ -123,3 +123,31 @@ jobs:
         with:
           fail_on_unmatched_files: true
           files: trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip
+
+  release-windows:
+    needs: changelog
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+      - uses: MinoruSekine/setup-scoop@v4.0.1
+        with:
+          buckets: extras
+          apps: nodejs pnpm protobuf zip
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-pc-windows-msvc
+          default: true
+      - name: Rust Build
+        shell: bash
+        run: |
+          cargo build --target x86_64-pc-windows-msvc --release --bin trail && \
+            zip -r -j trailbase_${{  github.ref_name }}_x86_64_windows.zip target/x86_64-pc-windows-msvc/release/trail.exe CHANGELOG.md LICENSE
+
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: trailbase_${{  github.ref_name }}_x86_64_windows.zip
