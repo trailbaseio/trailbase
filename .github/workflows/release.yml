@@ -134,7 +134,7 @@ jobs:
       - uses: MinoruSekine/setup-scoop@v4.0.1
         with:
           buckets: extras
-          apps: nodejs pnpm protobuf
+          apps: nodejs pnpm protobuf zip
       - name: Debug
         shell: pwsh
         run: |
@@ -150,24 +150,22 @@ jobs:
       #     winget install pnpm.pnpm Node.js --disable-interactivity --accept-source-agreements
       #     winget install protobuf --accept-source-agreements
 
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-      - name: PNPM install
-        run: |
-          pnpm i
+      # - name: Install Protoc
+      #   uses: arduino/setup-protoc@v3
+      # - uses: pnpm/action-setup@v4
+      #   with:
+      #     version: 9
+      # - name: PNPM install
+      #   run: |
+      #     pnpm i
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           target: x86_64-pc-windows-msvc
           default: true
       - name: Rust Build
-        shell: pwsh
         run: |
-          cargo build --target x86_64-pc-windows-msvc --release --bin trail && ls target/ && \
-            Write-Output target/x86_64-pc-windows-msvc/release/trail CHANGELOG.md LICENSE | Compress-Archive -DestinationPath trailbase_${{  github.ref_name }}_x86_64_windows.zip
+          cargo build --target x86_64-pc-windows-msvc --release --bin trail && ls target && zip -r -j trailbase_${{  github.ref_name }}_x86_64_windows.zip target/x86_64-pc-windows-msvc/release/trail.exe CHANGELOG.md LICENSE
 
       - name: Release binaries
         uses: softprops/action-gh-release@v2
