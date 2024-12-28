@@ -135,37 +135,16 @@ jobs:
         with:
           buckets: extras
           apps: nodejs pnpm protobuf zip
-      - name: Debug
-        shell: pwsh
-        run: |
-          Get-Command protoc && Get-Command node && Get-Command pnpm
-
-      # - name: Install winget
-      #   uses: Cyberboss/install-winget@v1
-      #   with:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # - name: Install Dependencies
-      #   shell: pwsh
-      #   run: |
-      #     winget install pnpm.pnpm Node.js --disable-interactivity --accept-source-agreements
-      #     winget install protobuf --accept-source-agreements
-
-      # - name: Install Protoc
-      #   uses: arduino/setup-protoc@v3
-      # - uses: pnpm/action-setup@v4
-      #   with:
-      #     version: 9
-      # - name: PNPM install
-      #   run: |
-      #     pnpm i
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           target: x86_64-pc-windows-msvc
           default: true
       - name: Rust Build
+        shell: bash
         run: |
-          cargo build --target x86_64-pc-windows-msvc --release --bin trail && ls target && zip -r -j trailbase_${{  github.ref_name }}_x86_64_windows.zip target/x86_64-pc-windows-msvc/release/trail.exe CHANGELOG.md LICENSE
+          cargo build --target x86_64-pc-windows-msvc --release --bin trail && \
+            zip -r -j trailbase_${{  github.ref_name }}_x86_64_windows.zip target/x86_64-pc-windows-msvc/release/trail.exe CHANGELOG.md LICENSE
 
       - name: Release binaries
         uses: softprops/action-gh-release@v2
