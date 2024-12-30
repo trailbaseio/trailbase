@@ -17,7 +17,7 @@
     "@nanostores/persistent": "^0.10.2",
     "@nanostores/solid": "^0.5.0",
     "astro": "^5.1.1",
-    "astro-icon": "^1.1.4",
+    "astro-icon": "^1.1.5",
     "nanostores": "^0.11.3",
     "solid-icons": "^1.1.0",
     "solid-js": "^1.9.3",

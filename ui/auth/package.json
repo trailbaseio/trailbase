@@ -18,7 +18,7 @@
     "@astrojs/tailwind": "^5.1.4",
     "@kobalte/core": "^0.13.7",
     "astro": "^5.1.1",
-    "astro-icon": "^1.1.4",
+    "astro-icon": "^1.1.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "solid-icons": "^1.1.0",
@@ -34,7 +34,7 @@
     "prettier": "^3.4.2",
     "prettier-plugin-astro": "^0.14.1",
     "sharp": "^0.33.5",
-    "ts-proto": "^2.6.0",
+    "ts-proto": "^2.6.1",
     "typescript": "^5.7.2"
   }
 }

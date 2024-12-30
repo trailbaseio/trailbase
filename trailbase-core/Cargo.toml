@@ -32,7 +32,7 @@ futures = "0.3.30"
 indexmap = "2.6.0"
 indoc = "2.0.5"
 itertools = "0.13.0"
-jsonschema = { version = "0.27.0", default-features = false }
+jsonschema = { version = "0.28.0", default-features = false }
 jsonwebtoken = { version = "^9.3.0", default-features = false, features = ["use_pem"] }
 lazy_static = "1.4.0"
 lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
