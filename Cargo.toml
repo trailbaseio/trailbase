@@ -19,21 +19,13 @@ exclude = [
 ]
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html
-[profile.release.'cfg(not(windows))']
+[profile.release]
 panic = "unwind"
 opt-level = 3
 # PGO doesn't work with LTO: https://github.com/llvm/llvm-project/issues/57501
 # lto = "off"
 lto = true
 codegen-units = 1
-
-# Release builds for Windows on GitHub action runners are much slower, thus
-# increase the parallel codegen units.
-[profile.release.'cfg(windows)']
-panic = "unwind"
-opt-level = 3
-lto = true
-codegen-units = 16
 
 # Workaround for https://github.com/gwenn/lemon-rs/issues/78. sqlite3-parser
 # requires 1+MB stack frames to parse trivial SQL statements, which is larger
