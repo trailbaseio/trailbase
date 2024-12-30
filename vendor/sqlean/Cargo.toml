@@ -1,10 +1,19 @@
 [package]
-name = "sqlean"
+name = "trailbase-sqlean"
 version = "0.0.1"
 edition = "2021"
+license = "MIT"
+description = "An build wrapper for the sqlean SQLite extensions"
+homepage = "https://trailbase.io"
+repository = "https://github.com/trailbaseio/trailbase"
+readme = "README.md"
+
+[badges]
+appveyor = { repository = "trailbaseio/trailbase" }
+maintenance = { status = "actively-developed" }
 
 [dependencies]
-libsqlite3-sys = "0.30.1"
+libsqlite3-sys = { version = "0.30.1", features = ["bundled"] }
 
 [build-dependencies]
 bindgen = "0.71.0"

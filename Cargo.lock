@@ -5213,16 +5213,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sqlean"
-version = "0.0.1"
-dependencies = [
- "bindgen 0.71.1",
- "cc",
- "libsqlite3-sys",
- "rusqlite",
-]
-
-[[package]]
 name = "sqlformat"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6273,6 +6263,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "trailbase-sqlean"
+version = "0.0.1"
+dependencies = [
+ "bindgen 0.71.1",
+ "cc",
+ "libsqlite3-sys",
+ "rusqlite",
+]
+
+[[package]]
 name = "trailbase-sqlite"
 version = "0.1.0"
 dependencies = [
@@ -6286,11 +6286,11 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_rusqlite",
- "sqlean",
  "sqlite-vec",
  "thiserror 2.0.9",
  "tokio",
  "trailbase-extension",
+ "trailbase-sqlean",
  "uuid",
 ]
 

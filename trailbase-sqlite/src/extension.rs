@@ -15,7 +15,7 @@ extern "C" fn init_trailbase_extensions(
 
   // Init sqlean's stored procedures: "define", see:
   //   https://github.com/nalgeon/sqlean/blob/main/docs/define.md
-  let status = unsafe { sqlean::define_init(db as *mut sqlean::sqlite3) };
+  let status = unsafe { trailbase_sqlean::define_init(db as *mut trailbase_sqlean::sqlite3) };
   if status != 0 {
     log::error!("Failed to load sqlean::define",);
     return status;
