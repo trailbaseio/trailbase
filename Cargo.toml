@@ -16,6 +16,7 @@ default-members = [
 ]
 exclude = [
   "vendor/refinery",
+  "vendor/rusqlite",
 ]
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html
@@ -38,7 +39,7 @@ opt-level = 1
 [workspace.dependencies]
 refinery = { package = "refinery", path = "vendor/refinery/refinery", default-features = false, features = ["rusqlite"] }
 refinery-core = { package = "refinery-core", path = "vendor/refinery/refinery_core" }
-rusqlite = { version = "^0.32.1", default-features = false, features = [
+rusqlite = { path = "vendor/rusqlite", version = "^0.32.1", default-features = false, features = [
     "bundled",
     "column_decltype",
     "load_extension",
@@ -50,3 +51,7 @@ rusqlite = { version = "^0.32.1", default-features = false, features = [
 ] }
 trailbase-sqlean = { path = "vendor/sqlean", version = "^0.0.1" }
 trailbase-extension = { path = "trailbase-extension", version = "^0.1.0" }
+
+# Override needed because of serde_rusqlite
+[patch.crates-io]
+rusqlite = { path = "vendor/rusqlite" }
