@@ -1,8 +1,8 @@
 packages:
   - 'client/trailbase-ts'
   - 'docs'
-  - 'ui/admin'
-  - 'ui/auth'
+  - 'trailbase-core/ui/admin'
+  - 'trailbase-core/ui/auth'
   - 'examples/blog/web'
   - 'examples/coffeesearch'
   - 'examples/tutorial/scripts'

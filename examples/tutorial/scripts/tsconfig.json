@@ -1,5 +1,5 @@
 {
-  "extends": "../../../ui/common/tsconfig.base.json",
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
     "paths": {

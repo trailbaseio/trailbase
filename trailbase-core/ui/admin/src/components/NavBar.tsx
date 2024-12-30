@@ -10,7 +10,7 @@ import { IconTypes } from "solid-icons";
 
 import { AuthButton } from "@/components/auth/AuthButton";
 
-import logo from "@assets/logo_104.webp";
+import logo from "@/assets/logo_104.webp";
 
 const BASE = "/_/admin";
 const options = [

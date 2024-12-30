@@ -260,7 +260,7 @@ importers:
         specifier: ^5.7.2
         version: 5.7.2
 
-  ui/admin:
+  trailbase-core/ui/admin:
     dependencies:
       '@bufbuild/protobuf':
         specifier: ^2.2.3
@@ -357,7 +357,7 @@ importers:
         version: 1.0.7(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@22.10.2)(typescript@5.7.2)))
       trailbase:
         specifier: workspace:*
-        version: link:../../client/trailbase-ts
+        version: link:../../../client/trailbase-ts
       uuid:
         specifier: ^11.0.3
         version: 11.0.3
@@ -420,7 +420,7 @@ importers:
         specifier: ^2.1.8
         version: 2.1.8(@types/node@22.10.2)(happy-dom@15.11.7)(jsdom@25.0.1)
 
-  ui/auth:
+  trailbase-core/ui/auth:
     dependencies:
       '@astrojs/check':
         specifier: ^0.9.4
@@ -463,7 +463,7 @@ importers:
         version: 1.0.7(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@22.10.2)(typescript@5.7.2)))
       trailbase:
         specifier: workspace:*
-        version: link:../../client/trailbase-ts
+        version: link:../../../client/trailbase-ts
     devDependencies:
       '@iconify-json/tabler':
         specifier: ^1.2.13

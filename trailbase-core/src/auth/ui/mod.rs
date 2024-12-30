@@ -257,5 +257,5 @@ fn hidden_input(name: &str, value: Option<&String>) -> String {
 }
 
 #[derive(RustEmbed, Clone)]
-#[folder = "../ui/auth/dist/"]
+#[folder = "ui/auth/dist/"]
 struct AuthAssets;

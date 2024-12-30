@@ -6,8 +6,7 @@
     "baseUrl": "./",
     "paths": {
       "@/*": ["./src/*"],
-      "@assets/*": ["../assets/*"],
-      "@common/*": ["../ui/common/*"]
+      "@assets/*": ["../assets/*"]
     }
   },
   "exclude": [

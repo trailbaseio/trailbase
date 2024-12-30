@@ -1,6 +1,6 @@
 [package]
 name = "trailbase-core"
-version = "0.2.0"
+version = "0.1.0"
 edition = "2021"
 license = "OSL-3.0"
 
@@ -65,7 +65,7 @@ tower-http = { version = "^0.6.0", features = ["cors", "trace", "fs", "limit"] }
 tower-service = "0.3.3"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
-trailbase-sqlite = { path = "../trailbase-sqlite" }
+trailbase-sqlite = { workspace = true }
 ts-rs = { version = "10", features = ["uuid-impl", "serde-json-impl"] }
 url = "^2.4.1"
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
@@ -82,7 +82,7 @@ prost-reflect-build = "0.14.0"
 anyhow = "^1.0.86"
 axum-test = "16.3.0"
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
-trailbase-extension = { path = "../trailbase-extension" }
+trailbase-extension = { workspace = true }
 quoted_printable = "0.5.1"
 schemars = "0.8.21"
 temp-dir = "0.1.13"

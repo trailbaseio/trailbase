@@ -50,3 +50,4 @@ rusqlite = { version = "^0.32.1", default-features = false, features = [
 ] }
 trailbase-sqlean = { path = "vendor/sqlean", version = "^0.0.1" }
 trailbase-extension = { path = "trailbase-extension", version = "^0.1.0" }
+trailbase-sqlite = { path = "trailbase-sqlite", version = "^0.1.0" }

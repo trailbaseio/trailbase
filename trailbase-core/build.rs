@@ -29,7 +29,6 @@ fn build_js(path: &str) -> Result<()> {
   let pnpm_run = |args: &[&str]| -> Result<std::process::Output> {
     let cmd = "pnpm";
     let output = std::process::Command::new(cmd)
-      .current_dir("..")
       .args(args)
       .output()
       .map_err(|err| {
@@ -97,23 +96,23 @@ fn main() -> Result<()> {
 
   {
     let path = "ui/admin";
-    println!("cargo::rerun-if-changed=../{path}/src/components/");
-    println!("cargo::rerun-if-changed=../{path}/src/lib/");
+    println!("cargo::rerun-if-changed={path}/src/components/");
+    println!("cargo::rerun-if-changed={path}/src/lib/");
     build_js(path)?;
   }
 
   {
     let path = "ui/auth";
-    println!("cargo::rerun-if-changed=../{path}/src/components/");
-    println!("cargo::rerun-if-changed=../{path}/src/lib/");
-    println!("cargo::rerun-if-changed=../{path}/src/pages/");
-    println!("cargo::rerun-if-changed=../{path}/src/layouts/");
+    println!("cargo::rerun-if-changed={path}/src/components/");
+    println!("cargo::rerun-if-changed={path}/src/lib/");
+    println!("cargo::rerun-if-changed={path}/src/pages/");
+    println!("cargo::rerun-if-changed={path}/src/layouts/");
     build_js(path)?;
   }
 
   {
     println!("cargo::rerun-if-changed=js/src/");
-    build_js("trailbase-core/js")?;
+    build_js("js")?;
   }
 
   return Ok(());

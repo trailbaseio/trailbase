@@ -10,8 +10,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@proto/*": ["./proto/*"],
-      "@assets/*": ["../../assets/*"],
-      "@bindings/*": ["../../trailbase-core/bindings/*"],
+      "@bindings/*": ["../../bindings/*"],
       "@common/*": ["../common/*"]
     }
   },
