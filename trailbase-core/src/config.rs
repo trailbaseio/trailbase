@@ -549,7 +549,7 @@ pub(crate) fn validate_config(
 
     let schema_json: serde_json::Value = serde_json::from_str(schema_text)
       .map_err(|err| ConfigError::Invalid(format!("Schema is invalid Json: {err}")))?;
-    if let Err(err) = jsonschema::Validator::new(&schema_json) {
+    if let Err(err) = jsonschema::meta::validate(&schema_json) {
       return Err(ConfigError::Invalid(format!(
         "Not a valid Json schema: {err}"
       )));

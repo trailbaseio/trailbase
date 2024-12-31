@@ -48,10 +48,11 @@ impl JsonColumnMetadata {
       Self::Pattern(pattern) => {
         let schema =
           Validator::new(pattern).map_err(|err| JsonSchemaError::SchemaCompile(err.to_string()))?;
-        schema
-          .validate(value)
-          .map_err(|_err| JsonSchemaError::Validation)?;
-        return Ok(());
+        if !schema.is_valid(value) {
+          Err(JsonSchemaError::Validation)
+        } else {
+          Ok(())
+        }
       }
     }
   }
