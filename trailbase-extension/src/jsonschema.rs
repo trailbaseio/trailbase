@@ -11,15 +11,6 @@ use std::sync::LazyLock;
 
 pub type ValidationError = jsonschema::ValidationError<'static>;
 
-fn validation_error_into_owned(err: jsonschema::ValidationError<'_>) -> ValidationError {
-  ValidationError {
-    instance_path: err.instance_path.clone(),
-    instance: std::borrow::Cow::Owned(err.instance.into_owned()),
-    kind: err.kind,
-    schema_path: err.schema_path,
-  }
-}
-
 type CustomValidatorFn = Arc<dyn Fn(&serde_json::Value, Option<&str>) -> bool + Send + Sync>;
 
 #[derive(Clone)]
@@ -34,7 +25,7 @@ impl SchemaEntry {
     schema: serde_json::Value,
     custom_validator: Option<CustomValidatorFn>,
   ) -> Result<Self, ValidationError> {
-    let validator = Validator::new(&schema).map_err(|err| validation_error_into_owned(err))?;
+    let validator = Validator::new(&schema)?;
 
     return Ok(Self {
       schema,
