@@ -19,6 +19,7 @@ use crate::records::{Permission, RecordError};
     (status = 200, description = "Record contents.", body = serde_json::Value)
   )
 )]
+#[axum::debug_handler]
 pub async fn read_record_handler(
   State(state): State<AppState>,
   Path((api_name, record)): Path<(String, String)>,
