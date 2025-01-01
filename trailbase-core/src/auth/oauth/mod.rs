@@ -23,11 +23,11 @@ pub fn oauth_router() -> Router<AppState> {
       get(list_providers::list_configured_providers_handler),
     )
     .route(
-      "/:provider/login",
+      "/{provider}/login",
       get(login::login_with_external_auth_provider),
     )
     .route(
-      "/:provider/callback",
+      "/{provider}/callback",
       get(callback::callback_from_external_auth_provider),
     )
 }

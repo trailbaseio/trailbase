@@ -21,19 +21,22 @@ use axum::{
 pub fn router() -> Router<AppState> {
   Router::new()
     // Row actions.
-    .route("/table/:table_name/rows", get(rows::list_rows_handler))
-    .route("/table/:table_name/files", get(rows::read_files_handler))
-    .route("/table/:table_name/rows", delete(rows::delete_rows_handler))
-    .route("/table/:table_name", patch(rows::update_row_handler))
-    .route("/table/:table_name", post(rows::insert_row_handler))
-    .route("/table/:table_name", delete(rows::delete_row_handler))
+    .route("/table/{table_name}/rows", get(rows::list_rows_handler))
+    .route("/table/{table_name}/files", get(rows::read_files_handler))
+    .route(
+      "/table/{table_name}/rows",
+      delete(rows::delete_rows_handler),
+    )
+    .route("/table/{table_name}", patch(rows::update_row_handler))
+    .route("/table/{table_name}", post(rows::insert_row_handler))
+    .route("/table/{table_name}", delete(rows::delete_row_handler))
     // Index actions.
     .route("/index", post(table::create_index_handler))
     .route("/index", patch(table::alter_index_handler))
     .route("/index", delete(table::drop_index_handler))
     // Table actions.
     .route(
-      "/table/:table_name/schema.json",
+      "/table/{table_name}/schema.json",
       get(table::get_table_schema_handler),
     )
     .route("/table", post(table::create_table_handler))

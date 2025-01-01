@@ -19,9 +19,10 @@ use crate::app_state::AppState;
 use crate::assets::AssetService;
 use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
-use crate::constants::{ADMIN_API_PATH, AUTH_API_PATH, HEADER_CSRF_TOKEN, RECORD_API_PATH};
+use crate::constants::{ADMIN_API_PATH, HEADER_CSRF_TOKEN};
 use crate::data_dir::DataDir;
 use crate::logging;
+use crate::records;
 use crate::scheduler;
 
 pub use init::{init_app_state, InitArgs, InitError};
@@ -114,7 +115,7 @@ impl Server {
         .map_err(|err| InitError::ScriptError(err.to_string()))?;
 
       if let Some(js_routes) = js_routes {
-        Some(custom_routes.unwrap_or_default().nest("/", js_routes))
+        Some(custom_routes.unwrap_or_default().merge(js_routes))
       } else {
         custom_routes
       }
@@ -233,8 +234,8 @@ impl Server {
     }
 
     let router = Router::new()
-      .nest(&format!("/{AUTH_API_PATH}"), auth::admin_auth_router())
-      .nest("/", Self::build_admin_router(state));
+      .merge(auth::admin_auth_router())
+      .merge(Self::build_admin_router(state));
 
     return Some((
       address.clone(),
@@ -249,20 +250,20 @@ impl Server {
   ) -> (String, Router<()>) {
     let mut router = Router::new()
       // Public, stable and versioned APIs.
-      .nest(&format!("/{RECORD_API_PATH}"), crate::records::router())
-      .nest(&format!("/{AUTH_API_PATH}"), auth::router())
+      .merge(records::router())
+      .merge(auth::router())
       .route("/api/healthcheck", get(healthcheck_handler));
 
     if !has_indepenedent_admin_router(opts) {
-      router = router.nest("/", Self::build_admin_router(state));
+      router = router.merge(Self::build_admin_router(state));
     }
 
     if !opts.disable_auth_ui {
-      router = router.nest("/_/auth", crate::auth::auth_ui_router());
+      router = router.merge(auth::auth_ui_router());
     }
 
     if let Some(custom_router) = custom_router {
-      router = router.nest("/", custom_router);
+      router = router.merge(custom_router);
     }
 
     if let Some(public_dir) = &opts.public_dir {

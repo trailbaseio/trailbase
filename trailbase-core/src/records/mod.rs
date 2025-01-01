@@ -24,6 +24,7 @@ pub(crate) use validate::validate_record_api_config;
 
 use crate::config::proto::{PermissionFlag, RecordApiConfig};
 use crate::config::ConfigError;
+use crate::constants::RECORD_API_PATH;
 use crate::AppState;
 
 #[derive(OpenApi)]
@@ -44,26 +45,38 @@ pub(super) struct RecordOpenApi;
 
 pub(crate) fn router() -> Router<AppState> {
   return Router::new()
-    .route("/:name/:record", get(read_record::read_record_handler))
-    .route("/:name", post(create_record::create_record_handler))
     .route(
-      "/:name/:record",
+      &format!("/{RECORD_API_PATH}/{{name}}/{{record}}"),
+      get(read_record::read_record_handler),
+    )
+    .route(
+      &format!("/{RECORD_API_PATH}/{{name}}"),
+      post(create_record::create_record_handler),
+    )
+    .route(
+      &format!("/{RECORD_API_PATH}/{{name}}/{{record}}"),
       patch(update_record::update_record_handler),
     )
     .route(
-      "/:name/:record",
+      &format!("/{RECORD_API_PATH}/{{name}}/{{record}}"),
       delete(delete_record::delete_record_handler),
     )
-    .route("/:name", get(list_records::list_records_handler))
     .route(
-      "/:name/:record/file/:column_name",
+      &format!("/{RECORD_API_PATH}/{{name}}"),
+      get(list_records::list_records_handler),
+    )
+    .route(
+      &format!("/{RECORD_API_PATH}/{{name}}/{{record}}/file/{{column_name}}"),
       get(read_record::get_uploaded_file_from_record_handler),
     )
     .route(
-      "/:name/:record/files/:column_name/:file_index",
+      &format!("/{RECORD_API_PATH}/{{name}}/{{record}}/files/{{column_name}}/{{file_index}}"),
       get(read_record::get_uploaded_files_from_record_handler),
     )
-    .route("/:name/schema", get(json_schema::json_schema_handler));
+    .route(
+      &format!("/{RECORD_API_PATH}/{{name}}/schema"),
+      get(json_schema::json_schema_handler),
+    );
 }
 
 // Since this is for APIs access control, we'll use the API- space CRUD terminology instead of

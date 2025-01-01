@@ -107,24 +107,27 @@ pub(crate) fn remove_all_cookies(cookies: &Cookies) {
   }
 }
 
-#[cfg(test)]
-pub(crate) fn extract_cookies_from_parts(parts: &mut Parts) -> Result<Cookies, AuthError> {
-  let cookies = Cookies::default();
-
-  for ref header in parts.headers.get_all(axum::http::header::COOKIE) {
-    cookies.add(Cookie::parse(header.to_str().unwrap().to_string()).unwrap());
-  }
-
-  return Ok(cookies);
-}
-
-#[cfg(not(test))]
 pub(crate) fn extract_cookies_from_parts(parts: &mut Parts) -> Result<Cookies, AuthError> {
   if let Some(cookies) = parts.extensions.get::<Cookies>() {
     return Ok(cookies.clone());
   };
-  log::error!("Failed to get Cookies");
-  return Err(AuthError::Internal("cookie error".into()));
+
+  // Fallback code for when handlers are called directly in unit tests w/o tower::Cookies
+  // middleware to parse the cookies header for us.
+  #[cfg(test)]
+  {
+    let cookies = Cookies::default();
+    for ref header in parts.headers.get_all(axum::http::header::COOKIE) {
+      cookies.add(Cookie::parse(header.to_str().unwrap().to_string()).unwrap());
+    }
+    return Ok(cookies);
+  }
+
+  #[cfg(not(test))]
+  {
+    log::error!("Failed to get Cookies");
+    return Err(AuthError::Internal("cookie error".into()));
+  }
 }
 
 pub async fn user_by_email(state: &AppState, email: &str) -> Result<DbUser, AuthError> {

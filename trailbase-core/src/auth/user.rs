@@ -1,6 +1,5 @@
 use axum::{
-  async_trait,
-  extract::{FromRef, FromRequestParts},
+  extract::{FromRef, FromRequestParts, OptionalFromRequestParts},
   http::request::Parts,
 };
 use serde::{Deserialize, Serialize};
@@ -110,7 +109,6 @@ impl User {
   }
 }
 
-#[async_trait]
 impl<S> FromRequestParts<S> for User
 where
   AppState: FromRef<S>,
@@ -119,10 +117,30 @@ where
   type Rejection = AuthError;
 
   async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-    let tokens = Tokens::from_request_parts(parts, state).await?;
+    let tokens = <Tokens as FromRequestParts<S>>::from_request_parts(parts, state).await?;
     return User::from_token_claims(tokens.auth_token_claims);
   }
 }
+
+impl<S> OptionalFromRequestParts<S> for User
+where
+  AppState: FromRef<S>,
+  S: Send + Sync,
+{
+  type Rejection = AuthError;
+
+  async fn from_request_parts(
+    parts: &mut Parts,
+    state: &S,
+  ) -> Result<Option<Self>, Self::Rejection> {
+    let tokens = <Tokens as OptionalFromRequestParts<S>>::from_request_parts(parts, state).await?;
+    if let Some(tokens) = tokens {
+      return Ok(Some(User::from_token_claims(tokens.auth_token_claims)?));
+    }
+    return Ok(None);
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -165,6 +183,8 @@ mod tests {
       .unwrap();
 
     let (mut parts, _body) = request.into_parts();
-    User::from_request_parts(&mut parts, &state).await.unwrap();
+    <User as FromRequestParts<AppState>>::from_request_parts(&mut parts, &state)
+      .await
+      .unwrap();
   }
 }

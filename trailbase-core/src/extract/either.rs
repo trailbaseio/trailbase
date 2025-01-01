@@ -1,4 +1,3 @@
-use axum::async_trait;
 use axum::extract::{rejection::*, Form, FromRequest, Request};
 use axum::http::header::CONTENT_TYPE;
 use axum::http::StatusCode;
@@ -43,7 +42,6 @@ pub enum Either<T> {
   // Proto(DynamicMessage),
 }
 
-#[async_trait]
 impl<S, T> FromRequest<S> for Either<T>
 where
   T: DeserializeOwned + Sync + Send + 'static,

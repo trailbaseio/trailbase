@@ -27,9 +27,9 @@ arc-swap = "1.7.1"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
 async-channel = "2.3.1"
 async-trait = "0.1.80"
-axum = { version = "^0.7.5", features = ["multipart"] }
-axum-client-ip = "0.6.0"
-axum-extra = { version = "^0.9.3", default-features = false, features = ["protobuf"] }
+axum = { version = "^0.8.1", features = ["multipart"] }
+axum-client-ip = "0.7.0"
+axum-extra = { version = "^0.10.0", default-features = false, features = ["protobuf"] }
 base64 = { version = "0.22.1", default-features = false }
 bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
@@ -51,8 +51,8 @@ minijinja = "2.1.2"
 oauth2 = { version = "5.0.0-alpha.4", default-features = false, features = ["reqwest", "rustls-tls"] }
 object_store = { version = "0.11.0", default-features = false, features = ["aws"] }
 parking_lot = "0.12.3"
-prost = "^0.12.6"
-prost-reflect = { version = "^0.13.0", features = ["derive", "text-format"] }
+prost = "^0.13.4"
+prost-reflect = { version = "^0.14.3", features = ["derive", "text-format"] }
 rand = "0.8.5"
 trailbase-refinery-core = { workspace = true }
 trailbase-refinery-macros = { workspace = true }
@@ -71,7 +71,7 @@ sqlite3-parser = "0.13.0"
 thiserror = "2.0.1"
 thread_local = "1.1.8"
 tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "signal", "time"] }
-tower-cookies = { version = "0.10.0" }
+tower-cookies = "0.11.0"
 tower-http = { version = "^0.6.0", features = ["cors", "trace", "fs", "limit"] }
 tower-service = "0.3.3"
 tracing = "0.1.40"
@@ -91,7 +91,7 @@ prost-reflect-build = "0.14.0"
 
 [dev-dependencies]
 anyhow = "^1.0.86"
-axum-test = "16.3.0"
+axum-test = "17.0.1"
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 trailbase-extension = { workspace = true }
 quoted_printable = "0.5.1"

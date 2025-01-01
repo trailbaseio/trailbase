@@ -33,7 +33,7 @@ addRoute(
 
 addRoute(
   "GET",
-  "/test/:table",
+  "/test/{table}",
   stringHandler(async (req: StringRequestType) => {
     const table = req.params["table"];
     if (table) {

@@ -22,6 +22,8 @@ pub use jwt::{JwtHelper, TokenClaims};
 pub(crate) use ui::auth_ui_router;
 pub use user::User;
 
+use crate::constants::AUTH_API_PATH;
+
 #[derive(OpenApi)]
 #[openapi(
   paths(
@@ -82,68 +84,101 @@ pub(super) fn router() -> Router<crate::AppState> {
   //   * vacuum expired pending registrations.
   return Router::new()
     // Sign-up new users.
-    .route("/register", post(api::register::register_user_handler))
+    .route(
+      &format!("/{AUTH_API_PATH}/register"),
+      post(api::register::register_user_handler),
+    )
     // E-mail verification and change flows.
     .route(
-      "/verify_email/trigger",
+      &format!("/{AUTH_API_PATH}/verify_email/trigger"),
       get(api::verify_email::request_email_verification_handler),
     )
     .route(
-      "/verify_email/confirm/:email_verification_code",
+      &format!("/{AUTH_API_PATH}/verify_email/confirm/{{email_verification_code}}"),
       get(api::verify_email::verify_email_handler),
     )
     .route(
-      "/change_email/request",
+      &format!("/{AUTH_API_PATH}/change_email/request"),
       post(api::change_email::change_email_request_handler),
     )
     .route(
-      "/change_email/confirm/:email_verification_code",
+      &format!("/{AUTH_API_PATH}/change_email/confirm/{{email_verification_code}}"),
       get(api::change_email::change_email_confirm_handler),
     )
     // Password-reset flow.
     .route(
-      "/reset_password/request",
+      &format!("/{AUTH_API_PATH}/reset_password/request"),
       post(api::reset_password::reset_password_request_handler),
     )
     .route(
-      "/reset_password/update/:password_reset_code",
+      &format!("/{AUTH_API_PATH}/reset_password/update/{{password_reset_code}}"),
       post(api::reset_password::reset_password_update_handler),
     )
     // Change password flow.
     .route(
-      "/change_password",
+      &format!("/{AUTH_API_PATH}/change_password"),
       post(api::change_password::change_password_handler),
     )
     // Token refresh flow.
-    .route("/refresh", post(api::refresh::refresh_handler))
+    .route(
+      &format!("/{AUTH_API_PATH}/refresh"),
+      post(api::refresh::refresh_handler),
+    )
     // Login
-    .route("/login", post(api::login::login_handler))
+    .route(
+      &format!("/{AUTH_API_PATH}/login"),
+      post(api::login::login_handler),
+    )
     // Converts auth code (+pkce code verifier) to auth tokens
-    .route("/token", post(api::token::auth_code_to_token_handler))
+    .route(
+      &format!("/{AUTH_API_PATH}/token"),
+      post(api::token::auth_code_to_token_handler),
+    )
     // Login status (also let's one lift tokens from cookies).
-    .route("/status", get(api::login::login_status_handler))
+    .route(
+      &format!("/{AUTH_API_PATH}/status"),
+      get(api::login::login_status_handler),
+    )
     // Logout [get]: deletes all sessions for the current user.
-    .route("/logout", get(api::logout::logout_handler))
+    .route(
+      &format!("/{AUTH_API_PATH}/logout"),
+      get(api::logout::logout_handler),
+    )
     // Logout [post]: deletes given session
-    .route("/logout", post(api::logout::post_logout_handler))
+    .route(
+      &format!("/{AUTH_API_PATH}/logout"),
+      post(api::logout::post_logout_handler),
+    )
     // Get a user's avatar.
     .route(
-      "/avatar/:b64_user_id",
+      &format!("/{AUTH_API_PATH}/avatar/{{b64_user_id}}"),
       get(api::avatar::get_avatar_url_handler),
     )
     // User delete.
-    .route("/delete", delete(api::delete::delete_handler))
+    .route(
+      &format!("/{AUTH_API_PATH}/delete"),
+      delete(api::delete::delete_handler),
+    )
     // OAuth flows: list providers, login+callback
-    .nest("/oauth", oauth::oauth_router());
+    .nest(&format!("/{AUTH_API_PATH}/oauth"), oauth::oauth_router());
 }
 
 /// Replicating minimal functionality of the above main router in case the admin dash is routed
 /// from a different port to prevent cross-origin requests.
 pub(super) fn admin_auth_router() -> Router<crate::AppState> {
   return Router::new()
-    .route("/login", post(api::login::login_handler))
-    .route("/status", get(api::login::login_status_handler))
-    .route("/logout", get(api::logout::logout_handler));
+    .route(
+      &format!("/{AUTH_API_PATH}/login"),
+      post(api::login::login_handler),
+    )
+    .route(
+      &format!("/{AUTH_API_PATH}/status"),
+      get(api::login::login_status_handler),
+    )
+    .route(
+      &format!("/{AUTH_API_PATH}/logout"),
+      get(api::logout::logout_handler),
+    );
 }
 
 #[cfg(test)]

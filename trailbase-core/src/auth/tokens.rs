@@ -1,6 +1,5 @@
 use axum::{
-  async_trait,
-  extract::{FromRef, FromRequestParts},
+  extract::{FromRef, FromRequestParts, OptionalFromRequestParts},
   http::{header, request::Parts},
 };
 use chrono::Duration;
@@ -25,7 +24,6 @@ pub(crate) struct Tokens {
   pub refresh_token: Option<String>,
 }
 
-#[async_trait]
 impl<S> FromRequestParts<S> for Tokens
 where
   AppState: FromRef<S>,
@@ -42,6 +40,28 @@ where
 
     let cookies = extract_cookies_from_parts(parts)?;
     return extract_tokens_from_cookies(&state, &cookies).await;
+  }
+}
+
+impl<S> OptionalFromRequestParts<S> for Tokens
+where
+  AppState: FromRef<S>,
+  S: Send + Sync,
+{
+  type Rejection = AuthError;
+
+  async fn from_request_parts(
+    parts: &mut Parts,
+    state: &S,
+  ) -> Result<Option<Self>, Self::Rejection> {
+    let state = AppState::from_ref(state);
+
+    if let Ok(tokens) = extract_tokens_from_headers(&state, &parts.headers).await {
+      return Ok(Some(tokens));
+    }
+
+    let cookies = extract_cookies_from_parts(parts)?;
+    return Ok(extract_tokens_from_cookies(&state, &cookies).await.ok());
   }
 }
 

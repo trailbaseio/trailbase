@@ -233,20 +233,20 @@ pub(crate) fn auth_ui_router() -> Router<crate::AppState> {
   );
 
   return Router::new()
-    .route("/login", get(ui_login_handler))
-    .route("/logout", get(ui_logout_handler))
-    .route("/register", get(ui_register_handler))
+    .route("/_/auth/login", get(ui_login_handler))
+    .route("/_/auth/logout", get(ui_logout_handler))
+    .route("/_/auth/register", get(ui_register_handler))
     .route(
-      "/reset_password/request",
+      "/_/auth/reset_password/request",
       get(ui_reset_password_request_handler),
     )
     .route(
-      "/reset_password/update",
+      "/_/auth/reset_password/update",
       get(ui_reset_password_update_handler),
     )
-    .route("/change_password", get(ui_change_password_handler))
-    .route("/change_email", get(ui_change_email_handler))
-    .nest_service("/", serve_auth_assets);
+    .route("/_/auth/change_password", get(ui_change_password_handler))
+    .route("/_/auth/change_email", get(ui_change_email_handler))
+    .nest_service("/_/auth/", serve_auth_assets);
 }
 
 fn hidden_input(name: &str, value: Option<&String>) -> String {

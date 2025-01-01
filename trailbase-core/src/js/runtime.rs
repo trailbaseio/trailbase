@@ -758,21 +758,20 @@ pub(crate) async fn load_routes_from_js_modules(
     }
   };
 
-  let mut js_router = Some(Router::new());
+  let mut js_router = Router::new();
   for module in modules {
     let fname = module.filename().to_owned();
     let router = install_routes(state.script_runtime(), module).await?;
 
     if let Some(router) = router {
-      js_router = Some(js_router.take().unwrap().nest("/", router));
+      js_router = js_router.merge(router);
     } else {
       log::debug!("Skipping js module '{fname:?}': no routes");
     }
   }
 
-  let router = js_router.take().unwrap();
-  if router.has_routes() {
-    return Ok(Some(router));
+  if js_router.has_routes() {
+    return Ok(Some(js_router));
   }
 
   return Ok(None);
