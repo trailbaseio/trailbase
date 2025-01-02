@@ -10,7 +10,7 @@ use serde::Deserialize;
 use std::rc::Rc;
 use tokio::{fs, io::AsyncWriteExt};
 use tracing_subscriber::{filter, prelude::*};
-use trailbase_core::{
+use trailbase::{
   api::{self, init_app_state, Email, InitArgs, TokenClaims},
   constants::USER_TABLE,
   DataDir, Server, ServerOptions,
@@ -32,7 +32,7 @@ fn init_logger(dev: bool) {
   const DEFAULT: &str = "info,refinery_core=warn,tracing::span=warn";
 
   env_logger::init_from_env(if dev {
-    env_logger::Env::new().default_filter_or(format!("{DEFAULT},trailbase_core=debug"))
+    env_logger::Env::new().default_filter_or(format!("{DEFAULT},trailbase=debug"))
   } else {
     env_logger::Env::new().default_filter_or(DEFAULT)
   });
@@ -98,8 +98,7 @@ async fn async_main() -> Result<(), BoxError> {
       // FIXME: Without the sqlite logger here, logging is broken despite us trying to initialize
       // in app.server() as well.
       let layer = tracing_subscriber::registry().with(
-        trailbase_core::logging::SqliteLogLayer::new(app.state())
-          .with_filter(filter::LevelFilter::INFO),
+        trailbase::logging::SqliteLogLayer::new(app.state()).with_filter(filter::LevelFilter::INFO),
       );
 
       if stderr_logging {
@@ -131,7 +130,7 @@ async fn async_main() -> Result<(), BoxError> {
 
       let run_server = |port: u16| async move {
         let router = axum::Router::new().merge(
-          SwaggerUi::new("/docs").url("/api/openapi.json", trailbase_core::openapi::Doc::openapi()),
+          SwaggerUi::new("/docs").url("/api/openapi.json", trailbase::openapi::Doc::openapi()),
         );
 
         let addr = format!("localhost:{port}");
@@ -143,7 +142,7 @@ async fn async_main() -> Result<(), BoxError> {
 
       match cmd {
         Some(OpenApiSubCommands::Print) => {
-          let json = trailbase_core::openapi::Doc::openapi().to_pretty_json()?;
+          let json = trailbase::openapi::Doc::openapi().to_pretty_json()?;
           println!("{json}");
         }
         Some(OpenApiSubCommands::Run { port }) => {
@@ -165,7 +164,7 @@ async fn async_main() -> Result<(), BoxError> {
 
       let table_name = &cmd.table;
       if let Some(table) = table_metadata.get(table_name) {
-        let (_validator, schema) = trailbase_core::api::build_json_schema(
+        let (_validator, schema) = trailbase::api::build_json_schema(
           table.name(),
           &*table,
           cmd.mode.unwrap_or(JsonSchemaModeArg::Insert).into(),
@@ -173,7 +172,7 @@ async fn async_main() -> Result<(), BoxError> {
 
         println!("{}", serde_json::to_string_pretty(&schema)?);
       } else if let Some(view) = table_metadata.get_view(table_name) {
-        let (_validator, schema) = trailbase_core::api::build_json_schema(
+        let (_validator, schema) = trailbase::api::build_json_schema(
           view.name(),
           &*view,
           cmd.mode.unwrap_or(JsonSchemaModeArg::Insert).into(),

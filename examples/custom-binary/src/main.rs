@@ -4,7 +4,7 @@ use axum::{
   routing::{get, Router},
 };
 use tracing_subscriber::{filter, prelude::*};
-use trailbase_core::{AppState, DataDir, Server, ServerOptions, User};
+use trailbase::{AppState, DataDir, Server, ServerOptions, User};
 
 type BoxError = Box<dyn std::error::Error>;
 
@@ -44,8 +44,7 @@ async fn main() -> Result<(), BoxError> {
   // This declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
   let _layer = tracing_subscriber::registry()
     .with(
-      trailbase_core::logging::SqliteLogLayer::new(app.state())
-        .with_filter(filter::LevelFilter::INFO),
+      trailbase::logging::SqliteLogLayer::new(app.state()).with_filter(filter::LevelFilter::INFO),
     )
     .with(
       tracing_subscriber::fmt::layer().compact().with_filter(

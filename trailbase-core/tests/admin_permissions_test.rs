@@ -2,7 +2,7 @@ use axum::http::StatusCode;
 use axum_test::TestServer;
 use std::rc::Rc;
 
-use trailbase_core::{DataDir, Server, ServerOptions};
+use trailbase::{DataDir, Server, ServerOptions};
 
 #[test]
 fn test_admin_permissions() {

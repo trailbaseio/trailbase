@@ -1256,7 +1256,7 @@ dependencies = [
  "env_logger",
  "tokio",
  "tracing-subscriber",
- "trailbase-core",
+ "trailbase",
 ]
 
 [[package]]
@@ -6159,29 +6159,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "trailbase-cli"
-version = "0.2.0"
-dependencies = [
- "axum",
- "chrono",
- "clap",
- "env_logger",
- "log",
- "mimalloc",
- "serde",
- "serde_json",
- "tokio",
- "tracing-subscriber",
- "trailbase-core",
- "trailbase-sqlite",
- "utoipa",
- "utoipa-swagger-ui",
- "uuid",
-]
-
-[[package]]
-name = "trailbase-core"
-version = "0.1.0"
+name = "trailbase"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -6251,6 +6230,27 @@ dependencies = [
  "utoipa",
  "uuid",
  "validator",
+]
+
+[[package]]
+name = "trailbase-cli"
+version = "0.2.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "clap",
+ "env_logger",
+ "log",
+ "mimalloc",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing-subscriber",
+ "trailbase",
+ "trailbase-sqlite",
+ "utoipa",
+ "utoipa-swagger-ui",
+ "uuid",
 ]
 
 [[package]]

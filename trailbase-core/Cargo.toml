@@ -1,6 +1,6 @@
 [package]
-name = "trailbase-core"
-version = "0.1.0"
+name = "trailbase"
+version = "0.0.1"
 edition = "2021"
 license = "OSL-3.0"
 

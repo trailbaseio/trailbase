@@ -7,13 +7,13 @@ use std::rc::Rc;
 use tracing_subscriber::prelude::*;
 use trailbase_sqlite::params;
 
-use trailbase_core::api::{create_user_handler, login_with_password, CreateUserRequest};
-use trailbase_core::config::proto::PermissionFlag;
-use trailbase_core::constants::{COOKIE_AUTH_TOKEN, RECORD_API_PATH};
-use trailbase_core::records::*;
-use trailbase_core::util::id_to_b64;
-use trailbase_core::AppState;
-use trailbase_core::{DataDir, Server, ServerOptions};
+use trailbase::api::{create_user_handler, login_with_password, CreateUserRequest};
+use trailbase::config::proto::PermissionFlag;
+use trailbase::constants::{COOKIE_AUTH_TOKEN, RECORD_API_PATH};
+use trailbase::records::*;
+use trailbase::util::id_to_b64;
+use trailbase::AppState;
+use trailbase::{DataDir, Server, ServerOptions};
 
 #[test]
 fn integration_tests() {
@@ -86,7 +86,7 @@ async fn test_record_apis() {
 
   // Set up logging: declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
   tracing_subscriber::registry()
-    .with(trailbase_core::logging::SqliteLogLayer::new(app.state()))
+    .with(trailbase::logging::SqliteLogLayer::new(app.state()))
     .try_init()
     .unwrap();
 
