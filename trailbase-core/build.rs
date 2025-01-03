@@ -25,40 +25,43 @@ fn copy_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
   return Ok(());
 }
 
-fn build_js(path: &str) -> Result<()> {
-  let pnpm_run = |args: &[&str]| -> Result<std::process::Output> {
-    let cmd = "pnpm";
-    let output = std::process::Command::new(cmd)
-      .args(args)
-      .output()
-      .map_err(|err| {
-        eprintln!("Error: Failed to run '{cmd} {}'", args.join(" "));
-        return err;
-      })?;
+fn pnpm_run(args: &[&str]) -> Result<std::process::Output> {
+  let cmd = "pnpm";
+  let output = std::process::Command::new(cmd)
+    .args(args)
+    .output()
+    .map_err(|err| {
+      eprintln!("Error: Failed to run '{cmd} {}'", args.join(" "));
+      return err;
+    })?;
 
-    std::io::stdout().write_all(&output.stdout)?;
-    std::io::stderr().write_all(&output.stderr)?;
+  std::io::stdout().write_all(&output.stdout)?;
+  std::io::stderr().write_all(&output.stderr)?;
 
-    Ok(output)
-  };
-
-  // We deliberately chose not use "--frozen-lockfile" here, since this is not a CI use-case.
-  let _install_output = pnpm_run(&["--dir", path, "install"])?;
-
-  let build_output = pnpm_run(&["--dir", path, "build"])?;
-  if !build_output.status.success() {
+  if !output.status.success() {
     // NOTE: We don't want to break backend-builds on frontend errors, at least for dev builds.
     if env::var("SKIP_ERROR").is_err() {
-      panic!(
-        "Failed to build js '{path}': {}",
-        String::from_utf8_lossy(&build_output.stderr)
-      );
+      return Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        format!(
+          "Failed to run '{args:?}': {}",
+          String::from_utf8_lossy(&output.stderr)
+        ),
+      ));
     }
     warn!(
-      "Failed to build js '{path}': {}",
-      String::from_utf8_lossy(&build_output.stderr)
+      "Failed to run '{args:?}': {}",
+      String::from_utf8_lossy(&output.stderr)
     );
   }
+
+  Ok(output)
+}
+
+fn build_js(path: &str) -> Result<()> {
+  // We deliberately chose not to use "--frozen-lockfile" here, since this is not a CI use-case.
+  let _install_output = pnpm_run(&["--dir", path, "install", "--no-frozen-lockfile"])?;
+  let _build_output = pnpm_run(&["--dir", path, "build"])?;
 
   return Ok(());
 }

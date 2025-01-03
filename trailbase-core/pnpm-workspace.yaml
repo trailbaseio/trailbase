@@ -1,0 +1,7 @@
+packages:
+  - 'ui/trailbase-ts'
+  - 'ui/admin'
+  - 'ui/auth'
+options:
+  prefer-workspace-packages: true
+  strict-peer-dependencies: true
