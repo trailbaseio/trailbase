@@ -13,7 +13,7 @@ pub enum TransactionError {
   #[error("IO error: {0}")]
   IO(#[from] std::io::Error),
   #[error("Migration error: {0}")]
-  Migration(#[from] refinery::Error),
+  Migration(#[from] trailbase_refinery_core::Error),
   #[error("File error: {0}")]
   File(String),
 }
@@ -28,8 +28,10 @@ impl MigrationWriter {
   pub(crate) async fn write(
     &self,
     conn: &trailbase_sqlite::Connection,
-  ) -> Result<refinery::Report, TransactionError> {
-    let migrations = vec![refinery::Migration::unapplied(&self.stem, &self.sql)?];
+  ) -> Result<trailbase_refinery_core::Report, TransactionError> {
+    let migrations = vec![trailbase_refinery_core::Migration::unapplied(
+      &self.stem, &self.sql,
+    )?];
     let runner = migrations::new_migration_runner(&migrations).set_abort_missing(false);
 
     let report = conn

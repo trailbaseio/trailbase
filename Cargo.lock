@@ -4371,42 +4371,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "refinery"
-version = "0.8.14"
-dependencies = [
- "refinery-core",
- "refinery-macros",
-]
-
-[[package]]
-name = "refinery-core"
-version = "0.8.14"
-dependencies = [
- "async-trait",
- "cfg-if",
- "log",
- "regex",
- "rusqlite",
- "siphasher 1.0.1",
- "thiserror 1.0.69",
- "time",
- "url",
- "walkdir",
-]
-
-[[package]]
-name = "refinery-macros"
-version = "0.8.14"
-dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "refinery-core",
- "regex",
- "syn 2.0.94",
-]
-
-[[package]]
 name = "regex"
 version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6199,7 +6163,6 @@ dependencies = [
  "prost-reflect-build",
  "quoted_printable",
  "rand",
- "refinery",
  "regex",
  "reqwest",
  "rusqlite",
@@ -6224,6 +6187,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "trailbase-extension",
+ "trailbase-refinery-core",
+ "trailbase-refinery-macros",
  "trailbase-sqlite",
  "ts-rs",
  "url",
@@ -6269,6 +6234,34 @@ dependencies = [
  "serde_json",
  "uuid",
  "validator",
+]
+
+[[package]]
+name = "trailbase-refinery-core"
+version = "0.8.15"
+dependencies = [
+ "async-trait",
+ "cfg-if",
+ "log",
+ "regex",
+ "rusqlite",
+ "siphasher 1.0.1",
+ "thiserror 1.0.69",
+ "time",
+ "url",
+ "walkdir",
+]
+
+[[package]]
+name = "trailbase-refinery-macros"
+version = "0.8.15"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "syn 2.0.94",
+ "trailbase-refinery-core",
 ]
 
 [[package]]

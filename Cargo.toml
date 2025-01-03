@@ -36,8 +36,8 @@ codegen-units = 1
 opt-level = 1
 
 [workspace.dependencies]
-refinery = { package = "refinery", path = "vendor/refinery/refinery", default-features = false, features = ["rusqlite-bundled"] }
-refinery-core = { package = "refinery-core", path = "vendor/refinery/refinery_core" }
+trailbase-refinery-core = { path = "vendor/refinery/refinery_core", version = "0.8.15", default-features = false, features = ["rusqlite-bundled"] }
+trailbase-refinery-macros = { path = "vendor/refinery/refinery_macros", version = "0.8.15" }
 libsqlite3-sys = { version = "0.30.1", features = ["bundled"] }
 rusqlite = { version = "^0.32.1", default-features = false, features = [
     "bundled",

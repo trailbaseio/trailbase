@@ -27,7 +27,7 @@ pub enum AdminError {
   #[error("Table lookup error: {0}")]
   TableLookup(#[from] crate::table_metadata::TableLookupError),
   #[error("DB Migration error: {0}")]
-  Migration(#[from] refinery::Error),
+  Migration(#[from] trailbase_refinery_core::Error),
   #[error("SQL -> Json error: {0}")]
   Json(#[from] crate::records::sql_to_json::JsonError),
   #[error("Schema error: {0}")]

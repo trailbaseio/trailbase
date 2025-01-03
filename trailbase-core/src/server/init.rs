@@ -20,7 +20,7 @@ pub enum InitError {
   #[error("RusqliteFromSql error: {0}")]
   FromSql(#[from] rusqlite::types::FromSqlError),
   #[error("DB Migration error: {0}")]
-  Migration(#[from] refinery::Error),
+  Migration(#[from] trailbase_refinery_core::Error),
   #[error("IO error: {0}")]
   IO(#[from] std::io::Error),
   #[error("Config error: {0}")]
