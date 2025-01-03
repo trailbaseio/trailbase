@@ -64,7 +64,7 @@ fn build_js(path: &str) -> Result<()> {
 }
 
 fn build_protos() -> Result<()> {
-  const PROTO_PATH: &str = "../proto";
+  const PROTO_PATH: &str = "./proto";
   println!("cargo::rerun-if-changed={PROTO_PATH}");
 
   let prost_config = {

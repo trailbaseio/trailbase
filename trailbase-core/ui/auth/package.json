@@ -9,8 +9,7 @@
     "preview": "astro preview",
     "astro": "astro",
     "check": "astro check",
-    "format": "prettier -w src",
-    "proto": "protoc --plugin=protoc-gen-ts=${PWD}/node_modules/ts-proto/protoc-gen-ts_proto ../trailbase-core/proto/*.proto -I../trailbase-core/proto -I/usr/include --ts_out=src/proto/ --ts_opt=esModuleInterop=true && prettier -w src"
+    "format": "prettier -w src"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
@@ -34,7 +33,6 @@
     "prettier": "^3.4.2",
     "prettier-plugin-astro": "^0.14.1",
     "sharp": "^0.33.5",
-    "ts-proto": "^2.6.1",
     "typescript": "^5.7.2"
   }
 }

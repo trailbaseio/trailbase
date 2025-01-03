@@ -480,9 +480,6 @@ importers:
       sharp:
         specifier: ^0.33.5
         version: 0.33.5
-      ts-proto:
-        specifier: ^2.6.1
-        version: 2.6.1
       typescript:
         specifier: ^5.7.2
         version: 5.7.2
