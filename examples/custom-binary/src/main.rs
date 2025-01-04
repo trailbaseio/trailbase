@@ -18,7 +18,10 @@ pub async fn handler(State(_state): State<AppState>, user: Option<User>) -> Resp
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
-  env_logger::init_from_env(env_logger::Env::new().default_filter_or("info,refinery_core=warn"));
+  env_logger::init_from_env(
+    env_logger::Env::new()
+      .default_filter_or("info,refinery_core=warn,tracing::span=warn,swc_ecma_codegen=off"),
+  );
 
   let custom_routes: Router<AppState> = Router::new().route("/", get(handler));
 
