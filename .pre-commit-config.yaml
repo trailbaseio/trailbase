@@ -130,7 +130,7 @@ repos:
     ### Python client
     - id: python_format
       name: Python format
-      entry: poetry -C client/trailbase-py run black --check .
+      entry: poetry -P client/trailbase-py run black --config client/trailbase-py/pyproject.toml --check .
       language: system
       types: [file]
       files: .*\.(py)$
@@ -138,7 +138,7 @@ repos:
 
     - id: python_check
       name: Python check
-      entry: poetry -C client/trailbase-py run pyright
+      entry: poetry -P client/trailbase-py run pyright --outputjson
       language: system
       types: [file]
       files: .*\.(py)$
@@ -146,7 +146,7 @@ repos:
 
     - id: python_test
       name: Python test
-      entry: poetry -C client/trailbase-py run pytest
+      entry: poetry -P client/trailbase-py run pytest
       language: system
       types: [file]
       files: .*\.(py)$

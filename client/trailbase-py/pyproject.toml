@@ -4,6 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["TrailBase <contact@trailbase.io>"]
 readme = "README.md"
+requires-poetry = ">=2.0"
 
 [tool.poetry.dependencies]
 python = "^3.12"
