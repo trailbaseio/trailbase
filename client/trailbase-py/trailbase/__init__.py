@@ -212,7 +212,11 @@ class Client:
         tokens = self.tokens()
         if tokens != None:
             return User.fromJson(
-                jwt.decode(tokens.auth, algorithms=["EdDSA"], options={"verify_signature": False})
+                jwt.decode(
+                    tokens.auth,
+                    algorithms=["EdDSA"],
+                    options={"verify_signature": False},
+                )
             )
 
     def site(self) -> str:

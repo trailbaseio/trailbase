@@ -9,7 +9,7 @@ format:
 		dart format client/trailbase-dart/ examples/blog/flutter/; \
 		txtpbfmt `find . -regex ".*.textproto"`; \
 		dotnet format client/trailbase-dotnet; \
-		poetry -C client/trailbase-py run black client/trailbase-py
+		poetry -C client/trailbase-py run black --config client/trailbase-py/pyproject.toml .
 
 check:
 	pnpm -r check; \

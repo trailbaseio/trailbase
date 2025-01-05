@@ -130,7 +130,7 @@ repos:
     ### Python client
     - id: python_format
       name: Python format
-      entry: poetry -C client/trailbase-py run black client/trailbase-py --check
+      entry: poetry -C client/trailbase-py run black --check .
       language: system
       types: [file]
       files: .*\.(py)$
@@ -138,7 +138,7 @@ repos:
 
     - id: python_check
       name: Python check
-      entry: poetry -C client/trailbase-py run pyright client/trailbase-py
+      entry: poetry -C client/trailbase-py run pyright
       language: system
       types: [file]
       files: .*\.(py)$
