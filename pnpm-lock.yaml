@@ -6,52 +6,6 @@ settings:
 
 importers:
 
-  client/trailbase-ts:
-    dependencies:
-      jwt-decode:
-        specifier: ^4.0.0
-        version: 4.0.0
-      uuid:
-        specifier: ^11.0.3
-        version: 11.0.3
-    devDependencies:
-      '@eslint/js':
-        specifier: ^9.17.0
-        version: 9.17.0
-      eslint:
-        specifier: ^9.17.0
-        version: 9.17.0(jiti@2.4.2)
-      execa:
-        specifier: ^9.5.2
-        version: 9.5.2
-      globals:
-        specifier: ^15.14.0
-        version: 15.14.0
-      http-status:
-        specifier: ^2.0.0
-        version: 2.0.0
-      jsdom:
-        specifier: ^25.0.1
-        version: 25.0.1
-      prettier:
-        specifier: ^3.4.2
-        version: 3.4.2
-      tinybench:
-        specifier: ^3.1.0
-        version: 3.1.0
-      typescript:
-        specifier: ^5.7.2
-        version: 5.7.2
-      typescript-eslint:
-        specifier: ^8.18.2
-        version: 8.18.2(eslint@9.17.0(jiti@2.4.2))(typescript@5.7.2)
-      vite-node:
-        specifier: ^2.1.8
-        version: 2.1.8(@types/node@22.10.2)
-      vitest:
-        specifier: ^2.1.8
-        version: 2.1.8(@types/node@22.10.2)(happy-dom@15.11.7)(jsdom@25.0.1)
-
   docs:
     dependencies:
       '@astrojs/check':
@@ -227,7 +181,7 @@ importers:
         version: 5.6.0
       trailbase:
         specifier: workspace:*
-        version: link:../../../client/trailbase-ts
+        version: link:../../../trailbase-core/js/client
     devDependencies:
       '@eslint/js':
         specifier: ^9.17.0
@@ -251,16 +205,7 @@ importers:
         specifier: ^8.18.2
         version: 8.18.2(eslint@9.17.0(jiti@2.4.2))(typescript@5.7.2)
 
-  trailbase-core/js:
-    devDependencies:
-      prettier:
-        specifier: ^3.4.2
-        version: 3.4.2
-      typescript:
-        specifier: ^5.7.2
-        version: 5.7.2
-
-  trailbase-core/ui/admin:
+  trailbase-core/js/admin:
     dependencies:
       '@bufbuild/protobuf':
         specifier: ^2.2.3
@@ -357,7 +302,7 @@ importers:
         version: 1.0.7(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@22.10.2)(typescript@5.7.2)))
       trailbase:
         specifier: workspace:*
-        version: link:../../../client/trailbase-ts
+        version: link:../client
       uuid:
         specifier: ^11.0.3
         version: 11.0.3
@@ -420,7 +365,7 @@ importers:
         specifier: ^2.1.8
         version: 2.1.8(@types/node@22.10.2)(happy-dom@15.11.7)(jsdom@25.0.1)
 
-  trailbase-core/ui/auth:
+  trailbase-core/js/auth:
     dependencies:
       '@astrojs/check':
         specifier: ^0.9.4
@@ -463,7 +408,7 @@ importers:
         version: 1.0.7(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@22.10.2)(typescript@5.7.2)))
       trailbase:
         specifier: workspace:*
-        version: link:../../../client/trailbase-ts
+        version: link:../client
     devDependencies:
       '@iconify-json/tabler':
         specifier: ^1.2.13
@@ -480,6 +425,61 @@ importers:
       sharp:
         specifier: ^0.33.5
         version: 0.33.5
+      typescript:
+        specifier: ^5.7.2
+        version: 5.7.2
+
+  trailbase-core/js/client:
+    dependencies:
+      jwt-decode:
+        specifier: ^4.0.0
+        version: 4.0.0
+      uuid:
+        specifier: ^11.0.3
+        version: 11.0.3
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.17.0
+        version: 9.17.0
+      eslint:
+        specifier: ^9.17.0
+        version: 9.17.0(jiti@2.4.2)
+      execa:
+        specifier: ^9.5.2
+        version: 9.5.2
+      globals:
+        specifier: ^15.14.0
+        version: 15.14.0
+      http-status:
+        specifier: ^2.0.0
+        version: 2.0.0
+      jsdom:
+        specifier: ^25.0.1
+        version: 25.0.1
+      prettier:
+        specifier: ^3.4.2
+        version: 3.4.2
+      tinybench:
+        specifier: ^3.1.0
+        version: 3.1.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.7.2
+      typescript-eslint:
+        specifier: ^8.18.2
+        version: 8.18.2(eslint@9.17.0(jiti@2.4.2))(typescript@5.7.2)
+      vite-node:
+        specifier: ^2.1.8
+        version: 2.1.8(@types/node@22.10.2)
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.8(@types/node@22.10.2)(happy-dom@15.11.7)(jsdom@25.0.1)
+
+  trailbase-core/js/runtime:
+    devDependencies:
+      prettier:
+        specifier: ^3.4.2
+        version: 3.4.2
       typescript:
         specifier: ^5.7.2
         version: 5.7.2

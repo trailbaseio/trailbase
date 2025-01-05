@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 import { createVitest } from "vitest/node";
-import { cwd } from "node:process";
+import { cwd, chdir } from "node:process";
+import { join } from "node:path";
 import { execa, type Subprocess } from "execa";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -9,18 +10,22 @@ const port: number = 4005;
 
 async function initTrailBase(): Promise<{ subprocess: Subprocess }> {
   const pwd = cwd();
-  if (!pwd.endsWith("trailbase-ts")) {
+  if (!pwd.endsWith("client")) {
     throw Error(`Unxpected CWD: ${pwd}`);
   }
 
-  const build = await execa`cargo build`;
+  const root = join(pwd, "..", "..", "..");
+
+  const build = await execa({ cwd: root })`cargo build`;
   if (build.failed) {
     console.error("STDOUT:", build.stdout);
     console.error("STDERR:", build.stderr);
     throw Error("cargo build failed");
   }
 
-  const subprocess = execa`cargo run -- --data-dir ../testfixture run -a 127.0.0.1:${port} --js-runtime-threads 1`;
+  const subprocess = execa({
+    cwd: root,
+  })`cargo run -- --data-dir client/testfixture run -a 127.0.0.1:${port} --js-runtime-threads 1`;
 
   for (let i = 0; i < 100; ++i) {
     if ((subprocess.exitCode ?? 0) > 0) {

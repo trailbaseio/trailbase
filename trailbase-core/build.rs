@@ -95,17 +95,17 @@ fn main() -> Result<()> {
   build_protos()?;
 
   // WARN: watching non-existent paths will also trigger rebuilds.
-  println!("cargo::rerun-if-changed=../client/trailbase-ts/src/");
+  println!("cargo::rerun-if-changed=js/client/src/");
 
   {
-    let path = "ui/admin";
+    let path = "js/admin";
     println!("cargo::rerun-if-changed={path}/src/components/");
     println!("cargo::rerun-if-changed={path}/src/lib/");
     build_js(path)?;
   }
 
   {
-    let path = "ui/auth";
+    let path = "js/auth";
     println!("cargo::rerun-if-changed={path}/src/components/");
     println!("cargo::rerun-if-changed={path}/src/lib/");
     println!("cargo::rerun-if-changed={path}/src/pages/");
@@ -114,8 +114,8 @@ fn main() -> Result<()> {
   }
 
   {
-    println!("cargo::rerun-if-changed=js/src/");
-    build_js("js")?;
+    println!("cargo::rerun-if-changed=js/runtime/src/");
+    build_js("js/runtime")?;
   }
 
   return Ok(());

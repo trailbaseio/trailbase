@@ -1,12 +1,12 @@
 packages:
-  - 'client/trailbase-ts'
   - 'docs'
-  - 'trailbase-core/ui/admin'
-  - 'trailbase-core/ui/auth'
+  - 'trailbase-core/js/admin'
+  - 'trailbase-core/js/auth'
+  - 'trailbase-core/js/client'
   - 'examples/blog/web'
   - 'examples/coffeesearch'
   - 'examples/tutorial/scripts'
-  - 'trailbase-core/js'
+  - 'trailbase-core/js/runtime'
 options:
   prefer-workspace-packages: true
   strict-peer-dependencies: true

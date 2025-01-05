@@ -410,5 +410,5 @@ async fn shutdown_signal() {
 }
 
 #[derive(RustEmbed, Clone)]
-#[folder = "ui/admin/dist/"]
+#[folder = "js/admin/dist/"]
 struct AdminAssets;

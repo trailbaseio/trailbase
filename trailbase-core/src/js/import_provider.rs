@@ -55,5 +55,5 @@ impl ImportProvider for ImportProviderImpl {
 }
 
 #[derive(RustEmbed, Clone)]
-#[folder = "js/dist/"]
+#[folder = "js/runtime/dist/"]
 pub(crate) struct JsRuntimeAssets;
