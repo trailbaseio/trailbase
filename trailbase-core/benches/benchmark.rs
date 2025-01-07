@@ -8,14 +8,14 @@ use axum::http::{self, Request};
 use base64::prelude::*;
 use std::sync::{Arc, Mutex};
 use tower::{Service, ServiceExt};
-use trailbase_core::config::proto::PermissionFlag;
-use trailbase_core::records::Acls;
-use trailbase_sqlite::params;
 
-use trailbase_core::api::{create_user_handler, login_with_password, CreateUserRequest};
-use trailbase_core::constants::RECORD_API_PATH;
-use trailbase_core::records::{add_record_api, AccessRules};
-use trailbase_core::{DataDir, Server, ServerOptions};
+use trailbase::api::{create_user_handler, login_with_password, CreateUserRequest};
+use trailbase::config::proto::PermissionFlag;
+use trailbase::constants::RECORD_API_PATH;
+use trailbase::records::Acls;
+use trailbase::records::{add_record_api, AccessRules};
+use trailbase::{DataDir, Server, ServerOptions};
+use trailbase_sqlite::params;
 
 async fn create_chat_message_app_tables(
   conn: &trailbase_sqlite::Connection,
