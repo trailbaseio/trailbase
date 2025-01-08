@@ -83,9 +83,6 @@ utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 uuid = { version = "^1.8.0", features = ["v4", "serde"] }
 validator = { version = "0.19.0", default-features = false }
 
-# FIXME: Only here to pin the version. Remove when latest builds again.
-v8 = "=130.0.5"
-
 [build-dependencies]
 env_logger = "^0.11.3"
 log = "^0.4.21"
