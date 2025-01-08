@@ -1,3 +1,8 @@
+## v0.3.4
+
+* Update Axum major version to v0.8.
+* Major overhaul of project structure to allow for releasing crates.
+
 ## v0.3.3
 
 * Pre-built Windows binary.
