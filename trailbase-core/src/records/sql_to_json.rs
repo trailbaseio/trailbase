@@ -36,6 +36,25 @@ pub(crate) fn value_to_json(value: rusqlite::types::Value) -> Result<serde_json:
   });
 }
 
+pub(crate) fn valueref_to_json(
+  value: rusqlite::types::ValueRef<'_>,
+) -> Result<serde_json::Value, JsonError> {
+  use rusqlite::types::ValueRef;
+
+  return Ok(match value {
+    ValueRef::Null => serde_json::Value::Null,
+    ValueRef::Real(real) => {
+      let Some(number) = serde_json::Number::from_f64(real) else {
+        return Err(JsonError::Finite);
+      };
+      serde_json::Value::Number(number)
+    }
+    ValueRef::Integer(integer) => serde_json::Value::Number(serde_json::Number::from(integer)),
+    ValueRef::Blob(blob) => serde_json::Value::String(BASE64_URL_SAFE.encode(blob)),
+    ValueRef::Text(text) => serde_json::Value::String(String::from_utf8_lossy(text).to_string()),
+  });
+}
+
 /// Serialize SQL row to json.
 pub fn row_to_json(
   metadata: &(dyn TableOrViewMetadata + Send + Sync),

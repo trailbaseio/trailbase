@@ -214,7 +214,12 @@ impl Connection {
     &self,
     hook: Option<impl (Fn(Action, &str, &str, &PreUpdateCase)) + Send + Sync + 'static>,
   ) -> Result<()> {
-    return self.call(|conn| Ok(conn.preupdate_hook(hook))).await;
+    return self
+      .call(|conn| {
+        conn.preupdate_hook(hook);
+        return Ok(());
+      })
+      .await;
   }
 
   /// Close the database connection.

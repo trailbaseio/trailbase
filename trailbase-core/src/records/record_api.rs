@@ -2,7 +2,7 @@ use itertools::Itertools;
 use log::*;
 use std::borrow::Cow;
 use std::sync::Arc;
-use trailbase_sqlite::{NamedParams, Params as _, Value};
+use trailbase_sqlite::{NamedParamRef, NamedParams, NamedParamsRef, Params as _, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
@@ -343,7 +343,7 @@ impl RecordApi {
     &self,
     conn: &rusqlite::Connection,
     p: Permission,
-    record: Vec<(&str, rusqlite::types::Value)>,
+    record: &[(&str, rusqlite::types::ValueRef<'_>)],
     user: Option<&User>,
   ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
@@ -355,7 +355,7 @@ impl RecordApi {
 
     let (query, params) = build_query_and_params_for_record_read(access_rule, user, record);
 
-    match Self::query_access(conn, &query, params) {
+    match Self::query_access_ref(conn, &query, &params) {
       Ok(allowed) => {
         if allowed {
           return Ok(());
@@ -392,6 +392,23 @@ impl RecordApi {
     conn: &rusqlite::Connection,
     access_query: &str,
     params: NamedParams,
+  ) -> Result<bool, trailbase_sqlite::Error> {
+    let mut stmt = conn.prepare_cached(access_query)?;
+    params.bind(&mut stmt)?;
+
+    let mut rows = stmt.raw_query();
+    if let Some(row) = rows.next()? {
+      return Ok(row.get(0)?);
+    }
+
+    return Err(rusqlite::Error::QueryReturnedNoRows.into());
+  }
+
+  #[inline]
+  fn query_access_ref(
+    conn: &rusqlite::Connection,
+    access_query: &str,
+    params: NamedParamsRef,
   ) -> Result<bool, trailbase_sqlite::Error> {
     let mut stmt = conn.prepare_cached(access_query)?;
     params.bind(&mut stmt)?;
@@ -453,11 +470,11 @@ impl RecordApi {
   }
 }
 
-fn build_query_and_params_for_record_read(
+fn build_query_and_params_for_record_read<'a>(
   access_rule: &str,
   user: Option<&User>,
-  record: Vec<(&str, rusqlite::types::Value)>,
-) -> (String, NamedParams) {
+  record: &[(&str, rusqlite::types::ValueRef<'a>)],
+) -> (String, Vec<NamedParamRef<'a>>) {
   let row = record
     .iter()
     .map(|(name, _value)| {
@@ -467,15 +484,22 @@ fn build_query_and_params_for_record_read(
     .join(", ");
 
   let mut params: Vec<_> = record
-    .into_iter()
+    .iter()
     .map(|(name, value)| {
-      return (Cow::Owned(format!(":__v_{name}")), value);
+      return (
+        Cow::Owned(format!(":__v_{name}")),
+        rusqlite::types::ToSqlOutput::Borrowed(*value),
+      );
     })
     .collect();
 
+  static NULL: rusqlite::types::ToSqlOutput<'static> =
+    rusqlite::types::ToSqlOutput::Owned(Value::Null);
   params.push((
     Cow::Borrowed(":__user_id"),
-    user.map_or(Value::Null, |u| Value::Blob(u.uuid.into())),
+    user.map_or(NULL.clone(), |u| {
+      rusqlite::types::ToSqlOutput::Owned(Value::Blob(u.uuid.into()))
+    }),
   ));
 
   // Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
