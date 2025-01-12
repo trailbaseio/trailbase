@@ -108,7 +108,7 @@ class Pagination {
   });
 }
 
-class RecordId {
+abstract class RecordId {
   @override
   String toString();
 
@@ -193,6 +193,83 @@ extension RecordIdExtString on String {
   RecordId id() => _UuidRecordId(this);
 }
 
+abstract class Event {
+  Event();
+
+  Map<String, dynamic>? value();
+
+  static Event fromJson(Map<String, dynamic> json) {
+    final insert = json['Insert'];
+    if (insert != null) {
+      return InsertEvent(insert as Map<String, dynamic>);
+    }
+
+    final update = json['Update'];
+    if (update != null) {
+      return UpdateEvent(update as Map<String, dynamic>);
+    }
+
+    final delete = json['Delete'];
+    if (delete != null) {
+      return DeleteEvent(delete as Map<String, dynamic>);
+    }
+
+    final error = json['Error'];
+    if (error != null) {
+      return ErrorEvent(error as String);
+    }
+    throw Exception('Failed to parse event: ${json}');
+  }
+}
+
+class InsertEvent extends Event {
+  final Map<String, dynamic>? _value;
+
+  InsertEvent(this._value);
+
+  @override
+  Map<String, dynamic>? value() => _value;
+
+  @override
+  String toString() => 'InsertEvent(${_value})';
+}
+
+class UpdateEvent extends Event {
+  final Map<String, dynamic>? _value;
+
+  UpdateEvent(this._value);
+
+  @override
+  Map<String, dynamic>? value() => _value;
+
+  @override
+  String toString() => 'UpdateEvent(${_value})';
+}
+
+class DeleteEvent extends Event {
+  final Map<String, dynamic>? _value;
+
+  DeleteEvent(this._value);
+
+  @override
+  Map<String, dynamic>? value() => _value;
+
+  @override
+  String toString() => 'DeleteEvent(${_value})';
+}
+
+class ErrorEvent extends Event {
+  final String _error;
+
+  ErrorEvent(this._error);
+
+  @override
+  Map<String, dynamic>? value() => null;
+
+  @override
+  String toString() => 'ErrorEvent(${_error})';
+}
+
 class RecordApi {
   static const String _recordApi = 'api/records/v1';
 
@@ -274,20 +351,32 @@ class RecordApi {
     );
   }
 
-  Future<Stream<Map<String, dynamic>>> subscribe(RecordId id) async {
+  static Event _decodeEvent(Uint8List bytes) {
+    final decoded = utf8.decode(bytes);
+    if (decoded.startsWith('data: ')) {
+      return Event.fromJson(jsonDecode(decoded.substring(6)));
+    }
+    return Event.fromJson(jsonDecode(decoded));
+  }
+
+  Future<Stream<Event>> subscribe(RecordId id) async {
     final resp = await _client.fetch(
       '${RecordApi._recordApi}/${_name}/subscribe/${id}',
       responseType: dio.ResponseType.stream,
     );
 
     final Stream<Uint8List> stream = resp.data.stream;
-    return stream.asyncMap((Uint8List bytes) {
-      final decoded = utf8.decode(bytes);
-      if (decoded.startsWith('data: ')) {
-        return jsonDecode(decoded.substring(6));
-      }
-      return jsonDecode(decoded);
-    });
+    return stream.asyncMap(_decodeEvent);
+  }
+
+  Future<Stream<Event>> subscribeAll() async {
+    final resp = await _client.fetch(
+      '${RecordApi._recordApi}/${_name}/subscribe/*',
+      responseType: dio.ResponseType.stream,
+    );
+
+    final Stream<Uint8List> stream = resp.data.stream;
+    return stream.asyncMap(_decodeEvent);
   }
 
   Uri imageUri(RecordId id, String colName, {int? index}) {

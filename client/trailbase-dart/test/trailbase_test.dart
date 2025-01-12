@@ -11,14 +11,39 @@ class SimpleStrict {
   final String id;
 
   final String? textNull;
-  final String? textDefault;
+  final String textDefault;
   final String textNotNull;
+
+  SimpleStrict({
+    required this.id,
+    this.textNull,
+    this.textDefault = '',
+    required this.textNotNull,
+  });
 
   SimpleStrict.fromJson(Map<String, dynamic> json)
       : id = json['id'],
         textNull = json['text_null'],
         textDefault = json['text_default'],
         textNotNull = json['text_not_null'];
+
+  @override
+  bool operator ==(Object other) {
+    return other is SimpleStrict &&
+        id == other.id &&
+        textNull == other.textNull &&
+        textDefault == other.textDefault &&
+        textNotNull == other.textNotNull;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(id, textNull, textDefault, textNotNull);
+  }
+
+  @override
+  String toString() =>
+      'SimpleStrict(id: ${id}, textNull: ${textNull}, textDefault: ${textDefault}, textNotNull: ${textNotNull})';
 }
 
 Future<Client> connect() async {
@@ -177,9 +202,11 @@ Future<void> main() async {
       final client = await connect();
       final api = client.records('simple_strict_table');
 
+      final tableEvents = await api.subscribeAll();
+
       final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final id = await api
-          .create({'text_not_null': 'dart client realtime test 0: =?&${now}'});
+      final createMessage = 'dart client realtime test 0: =?&${now}';
+      final id = await api.create({'text_not_null': createMessage});
 
       final events = await api.subscribe(id);
 
@@ -192,7 +219,38 @@ Future<void> main() async {
         print('Stream timeout');
         sink.close();
       }).toList();
+
       expect(eventList.length, equals(2));
+      expect(eventList[0].runtimeType, equals(UpdateEvent));
+      expect(
+          SimpleStrict.fromJson(eventList[0].value()!),
+          SimpleStrict(
+            id: id.toString(),
+            textNotNull: updatedMessage,
+          ));
+
+      expect(eventList[1].runtimeType, equals(DeleteEvent));
+      expect(
+          SimpleStrict.fromJson(eventList[1].value()!),
+          SimpleStrict(
+            id: id.toString(),
+            textNotNull: updatedMessage,
+          ));
+
+      final tableEventList =
+          await tableEvents.timeout(Duration(seconds: 10), onTimeout: (sink) {
+        print('Stream timeout');
+        sink.close();
+      }).toList();
+      expect(tableEventList.length, equals(3));
+
+      expect(tableEventList[0].runtimeType, equals(InsertEvent));
+      expect(
+          SimpleStrict.fromJson(tableEventList[0].value()!),
+          SimpleStrict(
+            id: id.toString(),
+            textNotNull: createMessage,
+          ));
     });
   });
 }
