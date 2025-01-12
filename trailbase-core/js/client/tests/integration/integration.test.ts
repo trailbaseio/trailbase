@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 
 import { expect, test } from "vitest";
-import { Client, headers, urlSafeBase64Encode } from "../../src/index";
+import { Client, Event, headers, urlSafeBase64Encode } from "../../src/index";
 import { status } from "http-status";
 import { v7 as uuidv7, parse as uuidParse } from "uuid";
 
@@ -184,6 +184,68 @@ test("record error tests", async () => {
       status: status.NOT_FOUND,
     }),
   );
+});
+
+test("realtime subscribe specific record tests", async () => {
+  const client = await connect();
+  const api = client.records("simple_strict_table");
+
+  const now = new Date().getTime();
+  const createMessage = `ts client realtime test 0: =?&${now}`;
+  const id = (await api.createId<NewSimpleStrict>({
+    text_not_null: createMessage,
+  })) as string;
+
+  const eventStream = await api.subscribe(id);
+
+  const updatedMessage = `ts client updated realtime test 0: ${now}`;
+  const updatedValue: Partial<SimpleStrict> = {
+    text_not_null: updatedMessage,
+  };
+  await api.update(id, updatedValue);
+  await api.delete(id);
+
+  const events: Event[] = [];
+  for await (const event of eventStream) {
+    events.push(event);
+  }
+
+  expect(events).toHaveLength(2);
+  expect(events[0]["Update"]["text_not_null"]).equals(updatedMessage);
+  expect(events[1]["Delete"]["text_not_null"]).equals(updatedMessage);
+});
+
+test("realtime subscribe table tests", async () => {
+  const client = await connect();
+  const api = client.records("simple_strict_table");
+  const eventStream = await api.subscribe("*");
+
+  const now = new Date().getTime();
+  const createMessage = `ts client realtime test 0: =?&${now}`;
+  const id = (await api.createId<NewSimpleStrict>({
+    text_not_null: createMessage,
+  })) as string;
+
+  const updatedMessage = `ts client updated realtime test 0: ${now}`;
+  const updatedValue: Partial<SimpleStrict> = {
+    text_not_null: updatedMessage,
+  };
+  await api.update(id, updatedValue);
+  await api.delete(id);
+
+  const events: Event[] = [];
+  for await (const event of eventStream) {
+    events.push(event);
+
+    if (events.length === 3) {
+      break;
+    }
+  }
+
+  expect(events).toHaveLength(3);
+  expect(events[0]["Insert"]["text_not_null"]).equals(createMessage);
+  expect(events[1]["Update"]["text_not_null"]).equals(updatedMessage);
+  expect(events[2]["Delete"]["text_not_null"]).equals(updatedMessage);
 });
 
 test("JS runtime", async () => {

@@ -40,6 +40,12 @@ type TokenState = {
   headers: HeadersInit;
 };
 
+export type Event =
+  | { Insert: object }
+  | { Update: object }
+  | { Delete: object }
+  | { Error: string };
+
 function buildTokenState(tokens?: Tokens): TokenState {
   return {
     state: tokens && {
@@ -185,6 +191,33 @@ export class RecordApi {
     await this.client.fetch(`${RecordApi._recordApi}/${this.name}/${id}`, {
       method: "DELETE",
     });
+  }
+
+  public async subscribe(id: string | number): Promise<ReadableStream<Event>> {
+    const response = await this.client.fetch(
+      `${RecordApi._recordApi}/${this.name}/subscribe/${id}`,
+    );
+    const body = response.body;
+    if (!body) {
+      throw Error("Subscription reader is null.");
+    }
+
+    const decoder = new TextDecoder();
+    const transformStream = new TransformStream<Uint8Array, Event>({
+      transform(chunk: Uint8Array, controller) {
+        const msgs = decoder.decode(chunk).trimEnd().split("\n\n");
+        for (const msg of msgs) {
+          if (msg.startsWith("data: ")) {
+            controller.enqueue(JSON.parse(msg.substring(6)));
+          }
+        }
+      },
+      flush(controller) {
+        controller.terminate();
+      },
+    });
+
+    return body.pipeThrough(transformStream);
   }
 
   public imageUri(id: string | number, colName: string): string {
