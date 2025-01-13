@@ -1,16 +1,20 @@
+use async_channel::WeakReceiver;
 use axum::{
   extract::{Path, State},
   response::sse::{Event, KeepAlive, Sse},
 };
-use futures::stream::{Stream, StreamExt};
+use futures::Stream;
 use parking_lot::RwLock;
+use pin_project_lite::pin_project;
 use rusqlite::hooks::{Action, PreUpdateCase};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::{
   atomic::{AtomicI64, Ordering},
   Arc,
 };
+use std::task::{Context, Poll};
 use trailbase_sqlite::connection::{extract_record_values, extract_row_id};
 
 use crate::auth::user::User;
@@ -23,10 +27,100 @@ use crate::AppState;
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
 
-// TODO:
-//  * clients
-
 type SseEvent = Result<axum::response::sse::Event, axum::Error>;
+
+/// RAII type for automatically cleaning up subscriptions when the receiving side gets dropped,
+/// e.g. client disconnects.
+struct CleanupSubscription {
+  receiver: WeakReceiver<Event>,
+  state: AppState,
+  table_name: String,
+  row_id: Option<i64>,
+  sub_id: i64,
+}
+
+impl Drop for CleanupSubscription {
+  fn drop(&mut self) {
+    if self.receiver.upgrade().is_none() {
+      log::debug!("Subscription cleaned up on the sender side.");
+      return;
+    }
+
+    let conn = self.state.conn();
+
+    let mgr_state = self.state.subscription_manager().state.clone();
+    let table_name = std::mem::take(&mut self.table_name);
+    let row_id = self.row_id;
+    let sub_id = self.sub_id;
+
+    if let Some(row_id) = row_id {
+      conn.call_and_forget(move |conn| {
+        let mut lock = mgr_state.record_subscriptions.write();
+        let subs = lock.get_mut(&table_name).and_then(|x| x.get_mut(&row_id));
+        if let Some(subs) = subs {
+          subs.retain(|sub| {
+            return sub.subscription_id != sub_id;
+          });
+
+          if subs.is_empty() {
+            let table = lock.get_mut(&table_name).unwrap();
+            table.remove(&row_id);
+
+            if table.is_empty() {
+              lock.remove(&table_name);
+
+              if lock.is_empty() && mgr_state.table_subscriptions.read().is_empty() {
+                conn.preupdate_hook(NO_HOOK);
+              }
+            }
+          }
+        }
+      });
+    } else {
+      conn.call_and_forget(move |conn| {
+        let mut lock = mgr_state.table_subscriptions.write();
+        let subs = lock.get_mut(&table_name);
+        if let Some(subs) = subs {
+          subs.retain(|sub| {
+            return sub.subscription_id != sub_id;
+          });
+
+          if subs.is_empty() {
+            lock.remove(&table_name);
+            if lock.is_empty() && mgr_state.record_subscriptions.read().is_empty() {
+              conn.preupdate_hook(NO_HOOK);
+            }
+          }
+        }
+      });
+    }
+  }
+}
+
+pin_project! {
+  /// Receiver wrapper that knows how to cleanup the corresponding subscription.
+  #[must_use = "streams do nothing unless polled"]
+  struct AutoCleanupEventStream {
+    cleanup: CleanupSubscription,
+
+    #[pin]
+    stream: async_channel::Receiver<Event>,
+  }
+}
+
+impl Stream for AutoCleanupEventStream {
+  type Item = Result<Event, axum::Error>;
+
+  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    let mut this = self.project();
+    let res = futures::ready!(this.stream.as_mut().poll_next(cx));
+    Poll::Ready(res.map(Ok))
+  }
+
+  fn size_hint(&self) -> (usize, Option<usize>) {
+    self.stream.size_hint()
+  }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize)]
 pub enum RecordAction {
@@ -65,7 +159,7 @@ pub struct Subscription {
   // record_id: Option<trailbase_sqlite::Value>,
   user: Option<User>,
   /// Channel for sending events to the SSE handler.
-  channel: async_channel::Sender<Event>,
+  sender: async_channel::Sender<Event>,
 }
 
 /// Internal, shareable state of the cloneable SubscriptionManager.
@@ -149,6 +243,7 @@ impl SubscriptionManager {
     for (idx, sub) in subs.iter().enumerate() {
       let Some(api) = s.lookup_record_api(&sub.record_api_name) else {
         dead_subscriptions.push(idx);
+        sub.sender.close();
         continue;
       };
 
@@ -158,19 +253,21 @@ impl SubscriptionManager {
         // This can happen if the record api configuration has changed since originally
         // subscribed. In this case we just send and error and cancel the subscription.
         if let Ok(ev) = Event::default().json_data(DbEvent::Error("Access denied".into())) {
-          let _ = sub.channel.try_send(ev);
+          let _ = sub.sender.try_send(ev);
         }
         dead_subscriptions.push(idx);
+        sub.sender.close();
         continue;
       }
 
-      match sub.channel.try_send(event.clone()) {
+      match sub.sender.try_send(event.clone()) {
         Ok(_) => {}
         Err(async_channel::TrySendError::Full(ev)) => {
           log::warn!("Channel full, dropping event: {ev:?}");
         }
         Err(async_channel::TrySendError::Closed(_ev)) => {
           dead_subscriptions.push(idx);
+          sub.sender.close();
         }
       }
     }
@@ -388,11 +485,12 @@ impl SubscriptionManager {
 
   async fn add_record_subscription(
     &self,
+    app_state: AppState,
     api: RecordApi,
     record: trailbase_sqlite::Value,
     user: Option<User>,
-  ) -> Result<async_channel::Receiver<Event>, RecordError> {
-    let table_name = api.table_name();
+  ) -> Result<AutoCleanupEventStream, RecordError> {
+    let table_name = api.table_name().to_string();
     let pk_column = &api.record_pk_column().name;
 
     let Some(row) = self
@@ -411,18 +509,19 @@ impl SubscriptionManager {
       .map_err(|err| RecordError::Internal(err.into()))?;
 
     let (sender, receiver) = async_channel::bounded::<Event>(16);
+
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let empty = {
       let mut lock = self.state.record_subscriptions.write();
       let empty = lock.is_empty();
-      let m: &mut HashMap<i64, Vec<Subscription>> = lock.entry(table_name.to_string()).or_default();
+      let m: &mut HashMap<i64, Vec<Subscription>> = lock.entry(table_name.clone()).or_default();
 
       m.entry(row_id).or_default().push(Subscription {
         subscription_id,
         record_api_name: api.api_name().to_string(),
         // record_id: Some(record),
         user,
-        channel: sender,
+        sender,
       });
 
       empty
@@ -432,28 +531,39 @@ impl SubscriptionManager {
       self.add_hook().await.unwrap();
     }
 
-    return Ok(receiver);
+    return Ok(AutoCleanupEventStream {
+      cleanup: CleanupSubscription {
+        receiver: receiver.downgrade(),
+        state: app_state,
+        table_name,
+        row_id: Some(row_id),
+        sub_id: subscription_id,
+      },
+      stream: receiver,
+    });
   }
 
   async fn add_table_subscription(
     &self,
+    app_state: AppState,
     api: RecordApi,
     user: Option<User>,
-  ) -> Result<async_channel::Receiver<Event>, RecordError> {
-    let table_name = api.table_name();
+  ) -> Result<AutoCleanupEventStream, RecordError> {
+    let state = &self.state;
+    let table_name = api.table_name().to_string();
 
     let (sender, receiver) = async_channel::bounded::<Event>(16);
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let empty = {
-      let mut lock = self.state.table_subscriptions.write();
-      let empty = lock.is_empty() && self.state.record_subscriptions.read().is_empty();
-      let m: &mut Vec<Subscription> = lock.entry(table_name.to_string()).or_default();
+      let mut lock = state.table_subscriptions.write();
+      let empty = lock.is_empty() && state.record_subscriptions.read().is_empty();
+      let m: &mut Vec<Subscription> = lock.entry(table_name.clone()).or_default();
 
       m.push(Subscription {
         subscription_id,
         record_api_name: api.api_name().to_string(),
         user,
-        channel: sender,
+        sender,
       });
 
       empty
@@ -463,37 +573,17 @@ impl SubscriptionManager {
       self.add_hook().await.unwrap();
     }
 
-    return Ok(receiver);
+    return Ok(AutoCleanupEventStream {
+      cleanup: CleanupSubscription {
+        receiver: receiver.downgrade(),
+        state: app_state,
+        table_name,
+        row_id: None,
+        sub_id: subscription_id,
+      },
+      stream: receiver,
+    });
   }
-
-  // TODO: Cleaning up subscriptions might be a thing, e.g. if SSE handlers had an onDisconnect
-  // handler. Right now we're handling cleanups reactively, i.e. we only remove subscriptions when
-  // sending new events and the receiving end of a handler channel became invalid. It would
-  // be better to be pro-active and remove subscriptions sooner.
-  //
-  // async fn cleanup_subscription(&self, subscription_id: SubscriptionId) -> Result<(),
-  // RecordError> {   let mut lock = self.state.subscriptions.write();
-  //
-  //   if let Some(table_subs) = lock.get_mut(&subscription_id.table_name) {
-  //     if let Some(subs) = table_subs.get_mut(&subscription_id.row_id) {
-  //       subs.retain(|s| s.id != subscription_id.subscription_id);
-  //
-  //       if subs.is_empty() {
-  //         table_subs.remove(&subscription_id.row_id);
-  //       }
-  //     }
-  //
-  //     if table_subs.is_empty() {
-  //       lock.remove(&subscription_id.table_name);
-  //     }
-  //   }
-  //
-  //   if lock.is_empty() {
-  //     Self::remove_preupdate_hook(&*self.state).await?;
-  //   }
-  //
-  //   return Ok(());
-  // }
 }
 
 pub async fn add_subscription_sse_handler(
@@ -505,19 +595,15 @@ pub async fn add_subscription_sse_handler(
     return Err(RecordError::ApiNotFound);
   };
 
-  fn encode(ev: Event) -> Result<Event, axum::Error> {
-    return Ok(ev);
-  }
-
   if record == "*" {
     api.check_table_level_access(Permission::Read, user.as_ref())?;
 
     let receiver = state
       .subscription_manager()
-      .add_table_subscription(api, user)
+      .add_table_subscription(state.clone(), api, user)
       .await?;
 
-    return Ok(Sse::new(receiver.map(encode)).keep_alive(KeepAlive::default()));
+    return Ok(Sse::new(receiver).keep_alive(KeepAlive::default()));
   } else {
     let record_id = api.id_to_sql(&record)?;
     api
@@ -526,16 +612,17 @@ pub async fn add_subscription_sse_handler(
 
     let receiver = state
       .subscription_manager()
-      .add_record_subscription(api, record_id, user)
+      .add_record_subscription(state.clone(), api, record_id, user)
       .await?;
 
-    return Ok(Sse::new(receiver.map(encode)).keep_alive(KeepAlive::default()));
+    return Ok(Sse::new(receiver).keep_alive(KeepAlive::default()));
   }
 }
 
 #[cfg(test)]
 async fn decode_sse_json_event(event: Event) -> serde_json::Value {
   use axum::response::IntoResponse;
+  use futures::stream::StreamExt;
 
   let (sender, receiver) = async_channel::unbounded::<Event>();
   let sse = Sse::new(receiver.map(|ev| -> Result<Event, axum::Error> { Ok(ev) }));
@@ -583,8 +670,7 @@ mod tests {
     assert_eq!(decode_db_event(event).await, db_event);
   }
 
-  #[tokio::test]
-  async fn subscribe_to_record_test() {
+  async fn setup() -> AppState {
     let state = test_state(None).await.unwrap();
     let conn = state.conn().clone();
 
@@ -612,6 +698,14 @@ mod tests {
     .await
     .unwrap();
 
+    return state;
+  }
+
+  #[tokio::test]
+  async fn subscribe_to_record_test() {
+    let state = setup().await;
+    let conn = state.conn().clone();
+
     let record_id_raw = 0;
     let record_id = trailbase_sqlite::Value::Integer(record_id_raw);
     let rowid: i64 = conn
@@ -629,10 +723,17 @@ mod tests {
 
     let manager = state.subscription_manager();
     let api = state.lookup_record_api("api_name").unwrap();
-    let receiver = manager
-      .add_record_subscription(api, trailbase_sqlite::Value::Integer(0), None)
+    let cleanup = manager
+      .add_record_subscription(
+        state.clone(),
+        api,
+        trailbase_sqlite::Value::Integer(0),
+        None,
+      )
       .await
       .unwrap();
+
+    let receiver = &cleanup.stream;
 
     assert_eq!(1, manager.num_record_subscriptions());
 
@@ -676,36 +777,16 @@ mod tests {
 
   #[tokio::test]
   async fn subscribe_to_table_test() {
-    let state = test_state(None).await.unwrap();
+    let state = setup().await;
     let conn = state.conn().clone();
-
-    conn
-      .execute(
-        "CREATE TABLE test (id INTEGER PRIMARY KEY, text TEXT) STRICT",
-        (),
-      )
-      .await
-      .unwrap();
-
-    state.table_metadata().invalidate_all().await.unwrap();
-
-    // Register message table as record api with moderator read access.
-    add_record_api(
-      &state,
-      "api_name",
-      "test",
-      Acls {
-        world: vec![PermissionFlag::Create, PermissionFlag::Read],
-        ..Default::default()
-      },
-      AccessRules::default(),
-    )
-    .await
-    .unwrap();
 
     let manager = state.subscription_manager();
     let api = state.lookup_record_api("api_name").unwrap();
-    let receiver = manager.add_table_subscription(api, None).await.unwrap();
+    let cleanup = manager
+      .add_table_subscription(state.clone(), api, None)
+      .await
+      .unwrap();
+    let receiver = &cleanup.stream;
 
     let record_id_raw = 0;
     conn
@@ -765,7 +846,43 @@ mod tests {
     }
   }
 
-  // TODO: Test actual SSE handler.
+  #[tokio::test]
+  async fn subscription_lifecycle_test() {
+    let state = setup().await;
+    let conn = state.conn().clone();
+
+    let record_id_raw = 0;
+    let record_id = trailbase_sqlite::Value::Integer(record_id_raw);
+    let rowid: i64 = conn
+      .query_row(
+        "INSERT INTO test (id, text) VALUES ($1, 'foo') RETURNING _rowid_",
+        [record_id],
+      )
+      .await
+      .unwrap()
+      .unwrap()
+      .get(0)
+      .unwrap();
+
+    assert_eq!(rowid, record_id_raw);
+
+    let sse = add_subscription_sse_handler(
+      State(state.clone()),
+      Path(("api_name".to_string(), record_id_raw.to_string())),
+      None,
+    )
+    .await;
+
+    let manager = state.subscription_manager();
+    assert_eq!(1, manager.num_record_subscriptions());
+
+    drop(sse);
+
+    // Implicitly await for the cleanup to be scheduled on the sqlite executor.
+    conn.query("SELECT 1", ()).await.unwrap();
+
+    assert_eq!(0, manager.num_record_subscriptions());
+  }
 }
 
 const NO_HOOK: Option<fn(Action, &str, &str, &PreUpdateCase)> = None;
