@@ -303,4 +303,72 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       Assert.Single(records);
     }
   }
+
+  [Fact]
+  public async Task RealtimeTest() {
+    var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
+    await client.Login("admin@localhost", "secret");
+
+    var api = client.Records("simple_strict_table");
+
+    var tableEventStream = await api.SubscribeAll();
+
+    // Dotnet runs tests for multiple target framework versions in parallel.
+    // Each test currently brings up its own server but pointing at the same
+    // underlying database file. We include the runtime version in the filter
+    // query to avoid a race between both tests. This feels a bit hacky.
+    // Ideally, we'd run the tests sequentially or with better isolation :/.
+    var now = DateTimeOffset.Now.ToUnixTimeSeconds();
+    var suffix = $"{now} {System.Environment.Version} static";
+    var CreateMessage = $"C# client test 0:  =?&{suffix}";
+
+    RecordId id = await api.Create(
+        new SimpleStrict(null, null, null, CreateMessage),
+        SerializeSimpleStrictContext.Default.SimpleStrict
+    );
+
+    var eventStream = await api.Subscribe(id);
+
+    var UpdatedMessage = $"C# client update test 0:  =?&{suffix}";
+    await api.Update(
+        id,
+        new SimpleStrict(null, null, null, UpdatedMessage),
+        SerializeSimpleStrictContext.Default.SimpleStrict
+    );
+
+    await api.Delete(id);
+
+    List<Event> events = [];
+    await foreach (Event msg in eventStream) {
+      events.Add(msg);
+    }
+
+    Assert.Equal(2, events.Count);
+
+    Assert.True(events[0] is UpdateEvent);
+    Assert.Equal(UpdatedMessage, events[0].Value!["text_not_null"]?.ToString());
+
+    Assert.True(events[1] is DeleteEvent);
+    Assert.Equal(UpdatedMessage, events[1].Value!["text_not_null"]?.ToString());
+
+    List<Event> tableEvents = [];
+    await foreach (Event msg in tableEventStream) {
+      tableEvents.Add(msg);
+
+      if (tableEvents.Count >= 3) {
+        break;
+      }
+    }
+
+    Assert.Equal(3, tableEvents.Count);
+
+    Assert.True(tableEvents[0] is InsertEvent);
+    Assert.Equal(CreateMessage, tableEvents[0].Value!["text_not_null"]?.ToString());
+
+    Assert.True(tableEvents[1] is UpdateEvent);
+    Assert.Equal(UpdatedMessage, tableEvents[1].Value!["text_not_null"]?.ToString());
+
+    Assert.True(tableEvents[2] is DeleteEvent);
+    Assert.Equal(UpdatedMessage, tableEvents[2].Value!["text_not_null"]?.ToString());
+  }
 }

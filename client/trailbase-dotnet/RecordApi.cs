@@ -57,6 +57,77 @@ public class Pagination {
   }
 }
 
+public abstract class Event {
+  public abstract JsonNode? Value { get; }
+
+  internal static Event Parse(string message) {
+    var obj = (JsonObject?)JsonNode.Parse(message);
+    if (obj != null) {
+      var insert = obj["Insert"];
+      if (insert != null) {
+        return new InsertEvent(insert);
+      }
+
+      var update = obj["Update"];
+      if (update != null) {
+        return new UpdateEvent(update);
+      }
+
+      var delete = obj["Delete"];
+      if (delete != null) {
+        return new DeleteEvent(delete);
+      }
+
+      var error = obj["Error"];
+      if (error != null) {
+        return new ErrorEvent(error.ToString());
+      }
+    }
+
+    throw new Exception($"Failed to parse {message}");
+  }
+}
+
+public class InsertEvent : Event {
+  public override JsonNode? Value { get; }
+
+  public InsertEvent(JsonNode? value) {
+    this.Value = value;
+  }
+
+  public override string ToString() => $"InsertEvent({Value})";
+}
+
+public class UpdateEvent : Event {
+  public override JsonNode? Value { get; }
+
+  public UpdateEvent(JsonNode? value) {
+    this.Value = value;
+  }
+
+  public override string ToString() => $"UpdateEvent({Value})";
+}
+
+public class DeleteEvent : Event {
+  public override JsonNode? Value { get; }
+
+  public DeleteEvent(JsonNode? value) {
+    this.Value = value;
+  }
+
+  public override string ToString() => $"DeleteEvent({Value})";
+}
+
+public class ErrorEvent : Event {
+  public override JsonNode? Value { get { return null; } }
+  public string ErrorMessage { get; }
+
+  public ErrorEvent(string errorMsg) {
+    this.ErrorMessage = errorMsg;
+  }
+
+  public override string ToString() => $"ErrorEvent({ErrorMessage})";
+}
 
 [JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(ResponseRecordId))]
@@ -96,7 +167,7 @@ public class RecordApi {
   public async Task<T?> Read<T>(string id, JsonTypeInfo<T> jsonTypeInfo) => await Read<T>(new UuidRecordId(id), jsonTypeInfo);
   public async Task<T?> Read<T>(long id, JsonTypeInfo<T> jsonTypeInfo) => await Read<T>(new IntegerRecordId(id), jsonTypeInfo);
 
-  public async Task<HttpContent> ReadImpl(RecordId id) {
+  private async Task<HttpContent> ReadImpl(RecordId id) {
     var response = await client.Fetch(
       $"{RecordApi._recordApi}/{name}/{id}",
       HttpMethod.Get,
@@ -153,7 +224,7 @@ public class RecordApi {
     return JsonSerializer.Deserialize<List<T>>(json, jsonTypeInfo) ?? [];
   }
 
-  public async Task<HttpContent> ListImpl(
+  private async Task<HttpContent> ListImpl(
     Pagination? pagination,
     List<string>? order,
     List<string>? filters
@@ -219,7 +290,7 @@ public class RecordApi {
     await UpdateImpl(id, recordJson);
   }
 
-  public async Task UpdateImpl(
+  private async Task UpdateImpl(
     RecordId id,
     HttpContent recordJson
   ) {
@@ -232,11 +303,47 @@ public class RecordApi {
   }
 
   public async Task Delete(RecordId id) {
-    await client.Fetch(
+    var response = await client.Fetch(
       $"{RecordApi._recordApi}/{name}/{id}",
       HttpMethod.Delete,
       null,
       null
     );
+  }
+
+  public async Task<IAsyncEnumerable<Event>> Subscribe(RecordId id) {
+    var response = await SubscribeImpl(id.ToString()!);
+    return StreamToEnumerableImpl(await response.ReadAsStreamAsync());
+  }
+
+  public async Task<IAsyncEnumerable<Event>> SubscribeAll() {
+    var response = await SubscribeImpl("*");
+    return StreamToEnumerableImpl(await response.ReadAsStreamAsync());
+  }
+
+  private async Task<HttpContent> SubscribeImpl(string id) {
+    var response = await client.Fetch(
+      $"{RecordApi._recordApi}/{name}/subscribe/{id}",
+      HttpMethod.Get,
+      null,
+      null,
+      HttpCompletionOption.ResponseHeadersRead
+    );
+
+    return response.Content;
+  }
+
+  private static async IAsyncEnumerable<Event> StreamToEnumerableImpl(Stream stream) {
+    using (var streamReader = new StreamReader(stream)) {
+      while (!streamReader.EndOfStream) {
+        var message = await streamReader.ReadLineAsync();
+        if (message != null) {
+          message.Trim();
+          if (message.StartsWith("data: ")) {
+            yield return Event.Parse(message.Substring(6));
+          }
+        }
+      }
+    }
   }
 }

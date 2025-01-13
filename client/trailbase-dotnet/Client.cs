@@ -144,16 +144,17 @@ class ThinClient {
 
   string site;
 
-  public ThinClient(string site) {
+  internal ThinClient(string site) {
     this.site = site;
   }
 
-  public async Task<HttpResponseMessage> Fetch(
+  internal async Task<HttpResponseMessage> Fetch(
     String path,
     TokenState tokenState,
     HttpContent? data,
     HttpMethod? method,
-    Dictionary<string, string>? queryParams
+    Dictionary<string, string>? queryParams,
+    HttpCompletionOption completion = HttpCompletionOption.ResponseContentRead
   ) {
     if (path.StartsWith('/')) {
       throw new ArgumentException("Path starts with '/'. Relative path expected.");
@@ -183,7 +184,7 @@ class ThinClient {
       }
     }
 
-    return await client.SendAsync(httpRequestMessage);
+    return await client.SendAsync(httpRequestMessage, completion);
   }
 }
 
@@ -309,7 +310,8 @@ public class Client {
     string path,
     HttpMethod? method,
     HttpContent? data,
-    Dictionary<string, string>? queryParams
+    Dictionary<string, string>? queryParams,
+    HttpCompletionOption completion = HttpCompletionOption.ResponseContentRead
   ) {
     var ts = tokenState;
     var refreshToken = shouldRefresh(tokenState);
@@ -317,7 +319,7 @@ public class Client {
       ts = tokenState = await refreshTokensImpl(refreshToken);
     }
 
-    var response = await client.Fetch(path, ts, data, method, queryParams);
+    var response = await client.Fetch(path, ts, data, method, queryParams, completion);
 
     if (response.StatusCode != System.Net.HttpStatusCode.OK) {
       string errMsg = await response.Content.ReadAsStringAsync();
