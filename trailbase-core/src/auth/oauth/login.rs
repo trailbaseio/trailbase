@@ -31,7 +31,7 @@ pub(crate) async fn login_with_external_auth_provider(
     return Err(AuthError::OAuthProviderNotFound);
   };
   let redirect = validate_redirects(&state, &query.redirect_to, &None)?;
-  let code_response = query.response_type.map_or(false, |r| r == "code");
+  let code_response = query.response_type.is_some_and(|r| r == "code");
 
   let client = provider.oauth_client(&state)?;
 

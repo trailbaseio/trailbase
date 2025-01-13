@@ -71,10 +71,7 @@ pub(crate) async fn login_handler(
 
   let email = request.email.clone();
   let redirect = validate_redirects(&state, &query.redirect_to, &request.redirect_to)?;
-  let code_response = request
-    .response_type
-    .as_ref()
-    .map_or(false, |t| t == "code");
+  let code_response = request.response_type.as_ref().is_some_and(|t| t == "code");
   let pkce_code_challenge = request.pkce_code_challenge.clone();
 
   let response_or = login_handler_impl(&state, request).await;

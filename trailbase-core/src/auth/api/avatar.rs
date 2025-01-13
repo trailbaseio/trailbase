@@ -53,7 +53,7 @@ pub async fn get_avatar_url_handler(
 
   let json = headers
     .get(header::CONTENT_TYPE)
-    .map_or(false, |t| t == "application/json");
+    .is_some_and(|t| t == "application/json");
 
   let db_user = user_by_id(&state, &user_id).await?;
 
