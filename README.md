@@ -107,7 +107,7 @@ To get a full list of commands, simply run `trail --help` .
 
 ## Building
 
-If you have all the necessary dependencies (Rust, node.js, pnpm, ...)
+If you have all the necessary dependencies (Rust, protobuf, node.js, pnpm)
 installed, you can build TrailBase by running:
 
 ```bash
