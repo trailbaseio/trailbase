@@ -9,14 +9,14 @@ format:
 		dart format client/trailbase-dart/ examples/blog/flutter/; \
 		txtpbfmt `find . -regex ".*.textproto"`; \
 		dotnet format client/trailbase-dotnet; \
-		poetry -P client/trailbase-py run black --config client/trailbase-py/pyproject.toml .
+		poetry -C client/trailbase-py run black --config pyproject.toml .
 
 check:
 	pnpm -r check; \
 		cargo clippy --workspace --no-deps; \
 		dart analyze client/trailbase-dart examples/blog/flutter; \
 		dotnet format client/trailbase-dotnet --verify-no-changes; \
-		poetry -P client/trailbase-py run pyright
+		poetry -C client/trailbase-py run pyright
 
 docker:
 	docker build . -t trailbase/trailbase

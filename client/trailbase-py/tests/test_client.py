@@ -1,4 +1,3 @@
-from re import sub
 from trailbase import Client, RecordId
 
 import httpx
@@ -17,7 +16,7 @@ site = f"http://{address}"
 
 
 class TrailBaseFixture:
-    process: None | subprocess.Popen
+    process: None | subprocess.Popen[bytes]
 
     def __init__(self) -> None:
         cwd = os.getcwd()

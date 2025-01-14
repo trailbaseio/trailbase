@@ -274,7 +274,7 @@ class Client:
             claims = state[1]
             now = int(time())
             if claims.exp < now:
-                logger.warn("Token expired")
+                logger.warning("Token expired")
 
         return state
 
@@ -353,7 +353,7 @@ class RecordApi:
         if filters != None:
             for filter in filters:
                 (nameOp, value) = filter.split("=", 1)
-                if value == None:
+                if value == "":
                     raise Exception(f"Filter '{filter}' does not match: 'name[op]=value'")
 
                 params[nameOp] = value
