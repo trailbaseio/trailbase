@@ -29,71 +29,37 @@ static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
 
 type SseEvent = Result<axum::response::sse::Event, axum::Error>;
 
-/// RAII type for automatically cleaning up subscriptions when the receiving side gets dropped,
-/// e.g. client disconnects.
-struct CleanupSubscription {
-  receiver: WeakReceiver<Event>,
-  state: AppState,
+/// Composite id uniquely identifying a subscription.
+///
+/// If row_id is Some, this is considered to reference a subscription to a specific record.
+#[derive(Default)]
+struct SubscriptionId {
   table_name: String,
   row_id: Option<i64>,
   sub_id: i64,
 }
 
+/// RAII type for automatically cleaning up subscriptions when the receiving side gets dropped,
+/// e.g. client disconnects.
+struct CleanupSubscription {
+  receiver: WeakReceiver<Event>,
+  state: AppState,
+  id: SubscriptionId,
+}
+
 impl Drop for CleanupSubscription {
   fn drop(&mut self) {
     if self.receiver.upgrade().is_none() {
-      log::debug!("Subscription cleaned up on the sender side.");
+      log::debug!("Subscription cleaned up already by the sender side.");
       return;
     }
 
-    let conn = self.state.conn();
-
     let mgr_state = self.state.subscription_manager().state.clone();
-    let table_name = std::mem::take(&mut self.table_name);
-    let row_id = self.row_id;
-    let sub_id = self.sub_id;
+    let id = std::mem::take(&mut self.id);
 
-    if let Some(row_id) = row_id {
-      conn.call_and_forget(move |conn| {
-        let mut lock = mgr_state.record_subscriptions.write();
-        let subs = lock.get_mut(&table_name).and_then(|x| x.get_mut(&row_id));
-        if let Some(subs) = subs {
-          subs.retain(|sub| {
-            return sub.subscription_id != sub_id;
-          });
-
-          if subs.is_empty() {
-            let table = lock.get_mut(&table_name).unwrap();
-            table.remove(&row_id);
-
-            if table.is_empty() {
-              lock.remove(&table_name);
-
-              if lock.is_empty() && mgr_state.table_subscriptions.read().is_empty() {
-                conn.preupdate_hook(NO_HOOK);
-              }
-            }
-          }
-        }
-      });
-    } else {
-      conn.call_and_forget(move |conn| {
-        let mut lock = mgr_state.table_subscriptions.write();
-        let subs = lock.get_mut(&table_name);
-        if let Some(subs) = subs {
-          subs.retain(|sub| {
-            return sub.subscription_id != sub_id;
-          });
-
-          if subs.is_empty() {
-            lock.remove(&table_name);
-            if lock.is_empty() && mgr_state.record_subscriptions.read().is_empty() {
-              conn.preupdate_hook(NO_HOOK);
-            }
-          }
-        }
-      });
-    }
+    self.state.conn().call_and_forget(move |conn| {
+      mgr_state.remove_subscription(conn, id);
+    });
   }
 }
 
@@ -104,7 +70,7 @@ pin_project! {
     cleanup: CleanupSubscription,
 
     #[pin]
-    stream: async_channel::Receiver<Event>,
+    receiver: async_channel::Receiver<Event>,
   }
 }
 
@@ -113,12 +79,12 @@ impl Stream for AutoCleanupEventStream {
 
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let mut this = self.project();
-    let res = futures::ready!(this.stream.as_mut().poll_next(cx));
+    let res = futures::ready!(this.receiver.as_mut().poll_next(cx));
     Poll::Ready(res.map(Ok))
   }
 
   fn size_hint(&self) -> (usize, Option<usize>) {
-    self.stream.size_hint()
+    self.receiver.size_hint()
   }
 }
 
@@ -187,6 +153,50 @@ impl ManagerState {
       }
     }
     return None;
+  }
+
+  fn remove_subscription(&self, conn: &rusqlite::Connection, id: SubscriptionId) -> bool {
+    if let Some(row_id) = id.row_id {
+      let mut lock = self.record_subscriptions.write();
+      let subs = lock
+        .get_mut(&id.table_name)
+        .and_then(|x| x.get_mut(&row_id));
+      if let Some(subs) = subs {
+        subs.retain(|sub| {
+          return sub.subscription_id != id.sub_id;
+        });
+
+        if subs.is_empty() {
+          let table = lock.get_mut(&id.table_name).unwrap();
+          table.remove(&row_id);
+
+          if table.is_empty() {
+            lock.remove(&id.table_name);
+
+            if lock.is_empty() && self.table_subscriptions.read().is_empty() {
+              conn.preupdate_hook(NO_HOOK);
+            }
+          }
+        }
+      }
+    } else {
+      let mut lock = self.table_subscriptions.write();
+      let subs = lock.get_mut(&id.table_name);
+      if let Some(subs) = subs {
+        subs.retain(|sub| {
+          return sub.subscription_id != id.sub_id;
+        });
+
+        if subs.is_empty() {
+          lock.remove(&id.table_name);
+          if lock.is_empty() && self.record_subscriptions.read().is_empty() {
+            conn.preupdate_hook(NO_HOOK);
+          }
+        }
+      }
+    }
+
+    return true;
   }
 }
 
@@ -548,11 +558,13 @@ impl SubscriptionManager {
       cleanup: CleanupSubscription {
         receiver: receiver.downgrade(),
         state: app_state,
-        table_name,
-        row_id: Some(row_id),
-        sub_id: subscription_id,
+        id: SubscriptionId {
+          table_name,
+          row_id: Some(row_id),
+          sub_id: subscription_id,
+        },
       },
-      stream: receiver,
+      receiver,
     });
   }
 
@@ -590,11 +602,13 @@ impl SubscriptionManager {
       cleanup: CleanupSubscription {
         receiver: receiver.downgrade(),
         state: app_state,
-        table_name,
-        row_id: None,
-        sub_id: subscription_id,
+        id: SubscriptionId {
+          table_name,
+          row_id: None,
+          sub_id: subscription_id,
+        },
       },
-      stream: receiver,
+      receiver,
     });
   }
 }
@@ -689,7 +703,7 @@ mod tests {
     assert_eq!(decode_db_event(event).await, db_event);
   }
 
-  async fn setup() -> AppState {
+  async fn setup_world_readable() -> AppState {
     let state = test_state(None).await.unwrap();
     let conn = state.conn().clone();
 
@@ -722,7 +736,7 @@ mod tests {
 
   #[tokio::test]
   async fn subscribe_to_record_test() {
-    let state = setup().await;
+    let state = setup_world_readable().await;
     let conn = state.conn().clone();
 
     let record_id_raw = 0;
@@ -742,7 +756,7 @@ mod tests {
 
     let manager = state.subscription_manager();
     let api = state.lookup_record_api("api_name").unwrap();
-    let cleanup = manager
+    let stream = manager
       .add_record_subscription(
         state.clone(),
         api,
@@ -751,8 +765,6 @@ mod tests {
       )
       .await
       .unwrap();
-
-    let receiver = &cleanup.stream;
 
     assert_eq!(1, manager.num_record_subscriptions());
 
@@ -777,7 +789,7 @@ mod tests {
       "id": record_id_raw,
       "text": "bar",
     });
-    match decode_db_event(receiver.recv().await.unwrap()).await {
+    match decode_db_event(stream.receiver.recv().await.unwrap()).await {
       DbEvent::Update(Some(value)) => {
         assert_eq!(value, expected);
       }
@@ -791,32 +803,34 @@ mod tests {
       .await
       .unwrap();
 
-    match decode_db_event(receiver.recv().await.unwrap()).await {
+    match decode_db_event(stream.receiver.recv().await.unwrap()).await {
       DbEvent::Delete(Some(value)) => {
         assert_eq!(value, expected);
       }
       x => {
-        assert!(false, "Expected update, got: {x:?}");
+        assert!(false, "Expected delete, got: {x:?}");
       }
     }
+
+    // Implicitly await for scheduled cleanups to go through.
+    conn.query("SELECT 1", ()).await.unwrap();
 
     assert_eq!(0, manager.num_record_subscriptions());
   }
 
   #[tokio::test]
   async fn subscribe_to_table_test() {
-    let state = setup().await;
+    let state = setup_world_readable().await;
     let conn = state.conn().clone();
 
     let manager = state.subscription_manager();
     let api = state.lookup_record_api("api_name").unwrap();
 
     {
-      let cleanup = manager
+      let stream = manager
         .add_table_subscription(state.clone(), api, None)
         .await
         .unwrap();
-      let receiver = &cleanup.stream;
 
       assert_eq!(1, manager.num_table_subscriptions());
 
@@ -837,16 +851,16 @@ mod tests {
         .await
         .unwrap();
 
-      let expected = serde_json::json!({
-        "id": record_id_raw,
-        "text": "foo",
-      });
-      match decode_db_event(receiver.recv().await.unwrap()).await {
+      match decode_db_event(stream.receiver.recv().await.unwrap()).await {
         DbEvent::Insert(Some(value)) => {
+          let expected = serde_json::json!({
+            "id": record_id_raw,
+            "text": "foo",
+          });
           assert_eq!(value, expected);
         }
         x => {
-          assert!(false, "Expected update, got: {x:?}");
+          assert!(false, "Expected insert, got: {x:?}");
         }
       };
 
@@ -854,7 +868,7 @@ mod tests {
         "id": record_id_raw,
         "text": "bar",
       });
-      match decode_db_event(receiver.recv().await.unwrap()).await {
+      match decode_db_event(stream.receiver.recv().await.unwrap()).await {
         DbEvent::Update(Some(value)) => {
           assert_eq!(value, expected);
         }
@@ -868,12 +882,12 @@ mod tests {
         .await
         .unwrap();
 
-      match decode_db_event(receiver.recv().await.unwrap()).await {
+      match decode_db_event(stream.receiver.recv().await.unwrap()).await {
         DbEvent::Delete(Some(value)) => {
           assert_eq!(value, expected);
         }
         x => {
-          assert!(false, "Expected update, got: {x:?}");
+          assert!(false, "Expected delete, got: {x:?}");
         }
       }
     }
@@ -886,7 +900,7 @@ mod tests {
 
   #[tokio::test]
   async fn subscription_lifecycle_test() {
-    let state = setup().await;
+    let state = setup_world_readable().await;
     let conn = state.conn().clone();
 
     let record_id_raw = 0;
@@ -922,8 +936,7 @@ mod tests {
     assert_eq!(0, manager.num_record_subscriptions());
   }
 
-  #[tokio::test]
-  async fn subscription_acl_test() {
+  async fn setup_with_tight_acls() -> AppState {
     let state = test_state(None).await.unwrap();
     let conn = state.conn().clone();
 
@@ -957,6 +970,14 @@ mod tests {
     )
     .await
     .unwrap();
+
+    return state;
+  }
+
+  #[tokio::test]
+  async fn subscription_acl_test() {
+    let state = setup_with_tight_acls().await;
+    let conn = state.conn();
 
     let user_x_email = "user_x@bar.com";
     let password = "Secret!1!!";
@@ -1040,39 +1061,8 @@ mod tests {
 
   #[tokio::test]
   async fn test_acl_selective_table_subs() {
-    let state = test_state(None).await.unwrap();
-    let conn = state.conn().clone();
-
-    conn
-      .execute(
-        "CREATE TABLE test (
-            id          INTEGER PRIMARY KEY,
-            user        BLOB NOT NULL,
-            text        TEXT
-         ) STRICT",
-        (),
-      )
-      .await
-      .unwrap();
-
-    state.table_metadata().invalidate_all().await.unwrap();
-
-    // Register message table as record api with moderator read access.
-    add_record_api(
-      &state,
-      "api_name",
-      "test",
-      Acls {
-        authenticated: vec![PermissionFlag::Read],
-        ..Default::default()
-      },
-      AccessRules {
-        read: Some("EXISTS(SELECT 1 FROM test AS m WHERE _USER_.id = _ROW_.user)".to_string()),
-        ..Default::default()
-      },
-    )
-    .await
-    .unwrap();
+    let state = setup_with_tight_acls().await;
+    let conn = state.conn();
 
     let manager = state.subscription_manager();
     let api = state.lookup_record_api("api_name").unwrap();
@@ -1129,30 +1119,29 @@ mod tests {
         .await
         .unwrap();
 
-      let expected = serde_json::json!({
-        "id": record_id_raw,
-        "user": uuid_to_b64(&user_x),
-        "text": "foo",
-      });
-
-      match decode_db_event(user_x_subscription.stream.recv().await.unwrap()).await {
+      match decode_db_event(user_x_subscription.receiver.recv().await.unwrap()).await {
         DbEvent::Insert(Some(value)) => {
+          let expected = serde_json::json!({
+            "id": record_id_raw,
+            "user": uuid_to_b64(&user_x),
+            "text": "foo",
+          });
           assert_eq!(value, expected);
         }
         x => {
-          assert!(false, "Expected update, got: {x:?}");
+          assert!(false, "Expected insert, got: {x:?}");
         }
       };
 
       // User y should *not* have received the insert event.
       assert!(tokio::time::timeout(
         tokio::time::Duration::from_millis(300),
-        user_y_subscription.stream.clone().count()
+        user_y_subscription.receiver.clone().count()
       )
       .await
       .is_err());
       assert_eq!(
-        user_y_subscription.stream.try_recv().err().unwrap(),
+        user_y_subscription.receiver.try_recv().err().unwrap(),
         TryRecvError::Empty
       );
     }
@@ -1161,6 +1150,93 @@ mod tests {
     conn.query("SELECT 1", ()).await.unwrap();
 
     assert_eq!(0, manager.num_table_subscriptions());
+  }
+
+  #[tokio::test]
+  async fn subscription_acl_change_owner() {
+    let state = setup_with_tight_acls().await;
+    let conn = state.conn();
+
+    let user_x_email = "user_x@bar.com";
+    let password = "Secret!1!!";
+
+    let user_x_id = create_user_for_test(&state, user_x_email, password)
+      .await
+      .unwrap();
+    let user_x_token = login_with_password(&state, user_x_email, password)
+      .await
+      .unwrap();
+    let user_x = User::from_auth_token(&state, &user_x_token.auth_token);
+
+    let record_id = 0;
+    let _ = conn
+      .query_row(
+        "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo') RETURNING _rowid_",
+        [
+          trailbase_sqlite::Value::Integer(record_id),
+          trailbase_sqlite::Value::Blob(user_x_id.into()),
+        ],
+      )
+      .await
+      .unwrap();
+
+    let manager = state.subscription_manager();
+    let api = state.lookup_record_api("api_name").unwrap();
+    let stream = manager
+      .add_record_subscription(
+        state.clone(),
+        api,
+        trailbase_sqlite::Value::Integer(record_id),
+        user_x,
+      )
+      .await
+      .unwrap();
+
+    assert_eq!(1, manager.num_record_subscriptions());
+
+    conn
+      .execute(
+        "UPDATE test SET text = $1 WHERE id = $2",
+        params!("bar", record_id),
+      )
+      .await
+      .unwrap();
+
+    // Unset the owner. This Update should no longer be delivered.
+    conn
+      .execute(
+        "UPDATE test SET user = $1 WHERE id = $2",
+        params!(Vec::<u8>::new(), record_id),
+      )
+      .await
+      .unwrap();
+
+    match decode_db_event(stream.receiver.recv().await.unwrap()).await {
+      DbEvent::Update(Some(value)) => {
+        let expected = serde_json::json!({
+          "id": record_id,
+          "user": uuid_to_b64(&user_x_id),
+          "text": "bar",
+        });
+        assert_eq!(value, expected);
+      }
+      x => {
+        assert!(false, "Expected update, got: {x:?}");
+      }
+    }
+
+    match decode_db_event(stream.receiver.recv().await.unwrap()).await {
+      DbEvent::Error(_msg) => {}
+      x => {
+        assert!(false, "Expected error, got: {x:?}");
+      }
+    }
+
+    conn.query("SELECT 1", ()).await.unwrap();
+
+    // Make sure the subscription was cleaned up after the access error.
+    assert!(stream.receiver.is_closed());
+    assert_eq!(0, manager.num_record_subscriptions());
   }
 }
 
