@@ -9,7 +9,7 @@
 <p align="center">
   A <a href="https://trailbase.io/reference/benchmarks/">blazingly</a> fast,
   open-source application server with type-safe APIs, built-in JS/ES6/TS
-  Runtime, Auth, and Admin UI built on Rust, SQLite & V8.
+  runtime, realtime, auth, and admin UI built on Rust, SQLite & V8.
 <p>
 
 <p align="center">
