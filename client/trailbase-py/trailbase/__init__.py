@@ -5,7 +5,10 @@ __version__ = "0.1.0"
 import httpx
 import jwt
 import logging
+import typing
+import json
 
+from contextlib import contextmanager
 from time import time
 from typing import TypeAlias, Any
 
@@ -175,9 +178,6 @@ class ThinClient:
         queryParams: dict[str, str] | None = None,
     ) -> httpx.Response:
         assert not path.startswith("/")
-
-        logger.debug(f"headers: {data} {tokenState.headers}")
-
         return self.http_client.request(
             method=method or "GET",
             url=f"{self.site}/{path}",
@@ -185,6 +185,43 @@ class ThinClient:
             headers=tokenState.headers,
             params=queryParams,
         )
+
+    def stream(
+        self,
+        path: str,
+        tokenState: TokenState,
+        method: str | None = "GET",
+        data: dict[str, Any] | None = None,
+        queryParams: dict[str, str] | None = None,
+        timeout: httpx.Timeout | None = None,
+    ):
+        assert not path.startswith("/")
+        headers = tokenState.headers.copy()
+        headers["Accept"] = "text/event-stream"
+        headers["Cache-Control"] = "no-store"
+
+        request = self.http_client.build_request(
+            method=method or "GET",
+            url=f"{self.site}/{path}",
+            json=data,
+            headers=headers,
+            params=queryParams,
+            timeout=timeout,
+        )
+
+        response = self.http_client.send(
+            request=request,
+            stream=True,
+        )
+
+        @contextmanager
+        def impl():
+            try:
+                yield response
+            finally:
+                response.close()
+
+        return impl()
 
 
 class Client:
@@ -317,9 +354,24 @@ class Client:
         if refreshToken != None:
             tokenState = self._tokenState = self._refreshTokensImpl(refreshToken)
 
-        response = self._client.fetch(path, tokenState, method=method, data=data, queryParams=queryParams)
+        return self._client.fetch(path, tokenState, method=method, data=data, queryParams=queryParams)
 
-        return response
+    def stream(
+        self,
+        path: str,
+        method: str | None = "GET",
+        data: dict[str, Any] | None = None,
+        queryParams: dict[str, str] | None = None,
+        timeout: httpx.Timeout | None = None,
+    ):
+        tokenState = self._tokenState
+        refreshToken = Client._shouldRefresh(tokenState)
+        if refreshToken != None:
+            tokenState = self._tokenState = self._refreshTokensImpl(refreshToken)
+
+        return self._client.stream(
+            path, tokenState, method=method, data=data, queryParams=queryParams, timeout=timeout
+        )
 
 
 class RecordApi:
@@ -362,12 +414,13 @@ class RecordApi:
         return response.json()
 
     def read(self, recordId: RecordId | str | int) -> dict[str, object]:
-        response = self._client.fetch(f"{self._recordApi}/{self._name}/{repr(recordId)}")
+        id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
+        response = self._client.fetch(f"{self._recordApi}/{self._name}/{id}")
         return response.json()
 
     def create(self, record: dict[str, object]) -> RecordId:
         response = self._client.fetch(
-            f"{RecordApi._recordApi}/{self._name}",
+            f"{self._recordApi}/{self._name}",
             method="POST",
             data=record,
         )
@@ -377,8 +430,9 @@ class RecordApi:
         return RecordId.fromJson(response.json())
 
     def update(self, recordId: RecordId | str | int, record: dict[str, object]) -> None:
+        id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
         response = self._client.fetch(
-            f"{RecordApi._recordApi}/{self._name}/{repr(recordId)}",
+            f"{self._recordApi}/{self._name}/{id}",
             method="PATCH",
             data=record,
         )
@@ -386,12 +440,30 @@ class RecordApi:
             raise Exception(f"{response}")
 
     def delete(self, recordId: RecordId | str | int) -> None:
+        id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
         response = self._client.fetch(
-            f"{RecordApi._recordApi}/{self._name}/{repr(recordId)}",
+            f"{self._recordApi}/{self._name}/{id}",
             method="DELETE",
         )
         if response.status_code > 200:
             raise Exception(f"{response}")
+
+    def subscribe(self, recordId: RecordId | str | int) -> typing.Generator[dict[str, JSON]]:
+        id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
+        context = self._client.stream(
+            f"{self._recordApi}/{self._name}/subscribe/{id}", timeout=httpx.Timeout(None)
+        )
+
+        def impl() -> typing.Generator[dict[str, JSON]]:
+            with context as response:
+                if response.status_code > 200:
+                    raise Exception(f"{response}")
+
+                for line in response.iter_lines():
+                    if line.startswith("data: "):
+                        yield json.loads(line.rstrip("\n")[6:])
+
+        return impl()
 
 
 logger = logging.getLogger(__name__)

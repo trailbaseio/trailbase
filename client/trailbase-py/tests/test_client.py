@@ -1,4 +1,4 @@
-from trailbase import Client, RecordId
+from trailbase import Client, RecordId, JSON
 
 import httpx
 import logging
@@ -7,6 +7,7 @@ import pytest
 import subprocess
 
 from time import time, sleep
+from typing import List
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -108,7 +109,7 @@ def test_records(trailbase: TrailBaseFixture):
         f"dart client test 0: =?&{now}",
         f"dart client test 1: =?&{now}",
     ]
-    ids: list[RecordId] = []
+    ids: List[RecordId] = []
     for msg in messages:
         ids.append(api.create({"text_not_null": msg}))
 
@@ -152,6 +153,28 @@ def test_records(trailbase: TrailBaseFixture):
 
         with pytest.raises(Exception):
             api.read(ids[0])
+
+
+def test_subscriptions(trailbase: TrailBaseFixture):
+    assert trailbase.isUp()
+
+    client = connect()
+    api = client.records("simple_strict_table")
+
+    table_subscription = api.subscribe("*")
+
+    now = int(time())
+    create_message = f"dart client test 0: =?&{now}"
+    api.create({"text_not_null": create_message})
+
+    events: List[dict[str, JSON]] = []
+    for ev in table_subscription:
+        events.append(ev)
+        break
+
+    table_subscription.close()
+
+    assert "Insert" in events[0]
 
 
 logger = logging.getLogger(__name__)
