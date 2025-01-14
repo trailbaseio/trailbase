@@ -1,3 +1,9 @@
+## v0.4.0
+
+Added an early version of Record change subscriptions, a.k.a. realtime, APIs.
+Users can now subscribe to an entire API/table or specific record to listen for
+changes: insertions, updates, deletions (see client tests, docs are TBD).
+
 ## v0.3.4
 
 * Update Axum major version to v0.8.
