@@ -113,7 +113,7 @@ repos:
     ### Dotnet client
     - id: dotnet_format
       name: Dotnet format
-      entry: dotnet format client/trailbase-dotnet --verify-no-changes
+      entry: sh -c 'dotnet format client/trailbase-dotnet/src --verify-no-changes && dotnet format client/trailbase-dotnet/test --verify-no-changes'
       language: system
       types: [file]
       files: .*\.(cs|csproj)$
@@ -121,7 +121,7 @@ repos:
 
     - id: dotnet_test
       name: Dotnet test
-      entry: dotnet test client/trailbase-dotnet
+      entry: dotnet test client/trailbase-dotnet/test
       language: system
       types: [file]
       files: .*\.(cs|csproj)$

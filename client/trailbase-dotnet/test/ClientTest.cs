@@ -57,7 +57,7 @@ public class ClientTestFixture : IDisposable {
     process = new Process();
     process.StartInfo.WorkingDirectory = projectDirectory;
     process.StartInfo.FileName = "cargo";
-    process.StartInfo.Arguments = $"run -- --data-dir ../testfixture run -a {address} --js-runtime-threads 2";
+    process.StartInfo.Arguments = $"run -- --data-dir ../../testfixture run -a {address} --js-runtime-threads 2";
     process.StartInfo.UseShellExecute = false;
     process.StartInfo.RedirectStandardOutput = true;
     process.Start();

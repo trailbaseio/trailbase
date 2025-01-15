@@ -4,13 +4,11 @@
     {
       "src": [
         {
-          "src": ".",
+          "src": "../src",
           "files": [
             "**/*.csproj"
           ],
           "exclude": [
-            "test/**",
-            "_site/**",
             "**/bin/**",
             "**/obj/**"
           ]
@@ -46,6 +44,7 @@
       "_appName": "TrailBase",
       "_appTitle": "TrailBase",
       "_appLogoPath": "images/logo_48.svg",
+      "_appFaviconPath": "images/favicon.svg",
       "_enableSearch": true,
       "pdf": false
     }
