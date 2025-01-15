@@ -29,5 +29,5 @@ pub async fn update_config_handler(
     return Ok((StatusCode::OK, "Config updated"));
   }
 
-  return Err(ConfigError::Update("Concurrent edit".to_string()).into());
+  return Err(ConfigError::Update("Concurrent edit. Stale admin-UI cache?".to_string()).into());
 }
