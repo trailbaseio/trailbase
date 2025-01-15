@@ -53,21 +53,24 @@ Future<Client> connect() async {
 }
 
 Future<Process> initTrailBase() async {
-  final result = await Process.run('cargo', ['build']);
+  final result = await Process.run('cargo', ['build'],
+      stdoutEncoding: utf8, stderrEncoding: utf8);
   if (result.exitCode > 0) {
     throw Exception(
-        'Cargo build failed.\n\nstdout: ${utf8.decode(result.stdout)}}\n\nstderr: ${utf8.decode(result.stderr)}}\n');
+        'Cargo build failed.\n\nstdout: ${result.stdout}\n\nstderr: ${result.stderr}\n');
   }
+
+  // Relative to CWD.
+  const depotPath = '../testfixture';
+
   final process = await Process.start('cargo', [
     'run',
     '--',
-    '--data-dir',
-    '../testfixture',
+    '--data-dir=${depotPath}',
     'run',
-    '-a',
-    '127.0.0.1:${port}',
-    '--js-runtime-threads',
-    '2',
+    '--address=127.0.0.1:${port}',
+    // We want at least some parallelism to experience isolate-local state.
+    '--js-runtime-threads=2',
   ]);
 
   final dio = Dio();

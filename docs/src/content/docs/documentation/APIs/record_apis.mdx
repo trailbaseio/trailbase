@@ -2,7 +2,8 @@
 title: Record APIs
 ---
 
-import { Aside } from "@astrojs/starlight/components";
+import { Aside, Code } from "@astrojs/starlight/components";
+import { apiPath, recordApiNamePlaceholder, recordApiIdPlaceholder } from "./record_apis.ts";
 
 The easiest and most type-safe path to access your `TABLE`s and `VIEW`s is to use
 TrailBase's restful CRUD _Record APIs_.
@@ -44,7 +45,7 @@ record_apis: [
 A quick explanation:
 
 * The `name` needs to be unique. It's what is used to access the API via
-  `<https://myhost>/api/v1/records/<name>/`.
+  <code>{apiPath({name:"name", prefix:"http://<host>"})}</code>
 * `table_name` references the table or view that is being exposed.
 * `conflict_resolution` declares what should happen if a newly created record is
   conflicting with an existing one.
@@ -125,19 +126,25 @@ main endpoints[^3]:
 
 * **C**reate: endpoint for for inserting new and potentially overriding records
   depending on conflict resolution strategy.<br/>
-  `POST /api/v1/records/<record_api_name>`
+  <code>POST {apiPath({name: recordApiNamePlaceholder})}</code>
 * **R**ead: endpoint for reading specific records given the record id.<br/>
-  `GET /api/v1/records/<record_api_name>/<url_safe_b64_record_id>`
+  <code>GET {apiPath({name: recordApiNamePlaceholder, suffix: recordApiIdPlaceholder})}</code>
 * **U**pdate: partial updates to existing records given a record id and subset of fields <br/>
-  `PATCH /api/v1/records/<record_api_name>/<url_safe_b64_record_id>`
+  <code>PATCH {apiPath({name: recordApiNamePlaceholder, suffix: recordApiIdPlaceholder})}</code>
 * **D**elete: endpoints for deleting record given a record id. <br/>
-  `DELETE /api/v1/records/<record_api_name>/<url_safe_b64_record_id>`
+  <code>DELETE {apiPath({name: recordApiNamePlaceholder, suffix: recordApiIdPlaceholder})}</code>
 * List: endpoint for listing, filtering and sorting records based on the
   configured read access rule and provided filters.<br/>
-  `GET /api/v1/records/<record_api_name>?<params>`
+  <code>GET {apiPath({name: `${recordApiNamePlaceholder}?<params>`})}</code>
 * Schema: endpoint for reading the APIs JSON schema definition. Can be used for
   introspection and to drive code generation.<br/>
-  `GET /api/v1/records/<record_api_name>/schema`
+  <code>GET {apiPath({name: recordApiNamePlaceholder, suffix: "schema"})}</code>
+* "realtime" subscriptions/notifications: establish a streaming HTTP connection to listen for updates via SSE:
+  * Specific record:<br/>
+    <code>GET {apiPath({name: recordApiNamePlaceholder, suffix: `subscribe/${recordApiIdPlaceholder}`})}</code>
+  * All record:<br/>
+    <code>GET {apiPath({name: recordApiNamePlaceholder, suffix: `subscribe/*`})}</code>
+
 
 All of the above endpoints can be interacted with through requests that are
 either JSON encoded, url-encoded, or `multipart/form-data` encoded, which makes
@@ -146,7 +153,7 @@ static HTML forms alike.
 
 ### Listing, filtering & sorting records
 
-Using the `GET /api/v1/records/<record_api_name>?<params>` endpoint and given
+Using the <code>GET {apiPath({name: `${recordApiNamePlaceholder}?<params>`})}</code> endpoint and given
 sufficient permissions one can query records based the given `read_access_rule`
 and query parameters.
 
@@ -173,9 +180,10 @@ Parameters:
 For example, to query the 10 highest grossing movies with a watch time less
 than 2 hours and an actor called John, one could query:
 
-```bash
-curl -g '<address>/api/records/v1/movies?limit=10&order=grossing&watch_time_min[lt]=120&actors[like]=%John%'
-```
+export const curlListRecords =
+  `curl -g '${apiPath({name: "movies?limit=10&order=grossing&watch_time_min[lt]=120&actors[like]=%John%", prefix: "http://<host>"})}'`;
+
+<Code code={curlListRecords} lang="bash" frame="terminal" />
 
 ## File Upload
 
@@ -192,7 +200,9 @@ requests or `multipart/form-data` POST requests.
 Downloading files is slightly different, since reading the column through
 record APIs will only yield the metadata. There's a dedicated GET API endpoint
 for file downloads:
-`/api/v1/records/<record_api_name>/<record_id>/file/<column_name>`
+<code>
+{apiPath({name: recordApiNamePlaceholder, suffix:`${recordApiIdPlaceholder}/file/<column_name>`})}
+</code>
 
 ### S3 Integration
 
