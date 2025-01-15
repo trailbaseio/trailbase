@@ -7,57 +7,78 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace TrailBase;
 
-public class RecordId { }
+/// <summary>Base for RecordId representations.</summary>
+public abstract class RecordId {
+  /// <summary>Serialize RecordId.</summary>
+  public abstract override string ToString();
+}
 
+/// <summary>Un-typed record id.</summary>
 public class ResponseRecordId : RecordId {
+  /// <summary>Serialized id, could be integer or UUID.</summary>
   public string id { get; }
 
+  /// <summary>ResponseRecordId constructor.</summary>
   public ResponseRecordId(string id) {
     this.id = id;
   }
 
+  /// <summary>Serialize RecordId.</summary>
   public override string ToString() => id;
 }
 
+/// <summary>Integer record id.</summary>
 public class IntegerRecordId : RecordId {
-  public long id { get; }
+  long id { get; }
 
+  /// <summary>Integer record id constructor.</summary>
   public IntegerRecordId(long id) {
     this.id = id;
   }
 
+  /// <summary>Serialize RecordId.</summary>
   public override string ToString() => id.ToString();
 }
 
+/// <summary>UUID record id.</summary>
 public class UuidRecordId : RecordId {
-  public Guid id { get; }
+  Guid id { get; }
 
+  /// <summary>UUID record id constructor.</summary>
   public UuidRecordId(Guid id) {
     this.id = id;
   }
 
+  /// <summary>UUID record id constructor.</summary>
   public UuidRecordId(string id) {
     var bytes = System.Convert.FromBase64String(id.Replace('-', '+').Replace('_', '/'));
     this.id = new Guid(bytes);
   }
 
+  /// <summary>Serialize UuidRecordId.</summary>
   public override string ToString() {
     var bytes = id.ToByteArray();
     return System.Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_');
   }
 }
 
+/// <summary>Pagination state representation.</summary>
 public class Pagination {
+  /// <summary>Offset cursor.</summary>
   public string? cursor { get; }
+  /// <summary>Limit of elements per page.</summary>
   public int? limit { get; }
 
+  /// <summary>Pagination constructor.</summary>
   public Pagination(string? cursor, int? limit) {
     this.cursor = cursor;
     this.limit = limit;
   }
 }
 
+/// <summary>Realtime event for change subscriptions.</summary>
 public abstract class Event {
+  /// <summary>Get associated record value as JSON object.</summary>
   public abstract JsonNode? Value { get; }
 
   internal static Event Parse(string message) {
@@ -88,44 +109,61 @@ public abstract class Event {
   }
 }
 
+/// <summary>Record insertion event.</summary>
 public class InsertEvent : Event {
+  /// <summary>Get associated record value as JSON object.</summary>
   public override JsonNode? Value { get; }
 
+  /// <summary>InsertEvent constructor.</summary>
   public InsertEvent(JsonNode? value) {
     this.Value = value;
   }
 
+  /// <summary>Serialize InsertEvent.</summary>
   public override string ToString() => $"InsertEvent({Value})";
 }
 
+/// <summary>Record update event.</summary>
 public class UpdateEvent : Event {
+  /// <summary>Get associated record value as JSON object.</summary>
   public override JsonNode? Value { get; }
 
+  /// <summary>UpdateEvent constructor.</summary>
   public UpdateEvent(JsonNode? value) {
     this.Value = value;
   }
 
+  /// <summary>Serialize UpdateEvent.</summary>
   public override string ToString() => $"UpdateEvent({Value})";
 }
 
+/// <summary>Record deletion event.</summary>
 public class DeleteEvent : Event {
+  /// <summary>Get associated record value as JSON object.</summary>
   public override JsonNode? Value { get; }
 
+  /// <summary>DeleteEvent constructor.</summary>
   public DeleteEvent(JsonNode? value) {
     this.Value = value;
   }
 
+  /// <summary>Serialize DeleteEvent.</summary>
   public override string ToString() => $"DeleteEvent({Value})";
 }
 
+/// <summary>Error event.</summary>
 public class ErrorEvent : Event {
+  /// <summary>Get associated record value as JSON object.</summary>
   public override JsonNode? Value { get { return null; } }
+  /// <summary>Get associated error message.</summary>
   public string ErrorMessage { get; }
 
+  /// <summary>ErrorEvent constructor.</summary>
   public ErrorEvent(string errorMsg) {
     this.ErrorMessage = errorMsg;
   }
 
+  /// <summary>Serialize ErrorEvent.</summary>
   public override string ToString() => $"ErrorEvent({ErrorMessage})";
 }
 
@@ -134,6 +172,7 @@ public class ErrorEvent : Event {
 internal partial class SerializeResponseRecordIdContext : JsonSerializerContext {
 }
 
+/// <summary>Main API to interact with Records.</summary>
 public class RecordApi {
   static readonly string _recordApi = "api/records/v1";
   const string DynamicCodeMessage = "Use overload with JsonTypeInfo instead";
@@ -142,30 +181,38 @@ public class RecordApi {
   Client client { get; }
   string name { get; }
 
-  public RecordApi(Client client, string name) {
+  internal RecordApi(Client client, string name) {
     this.client = client;
     this.name = name;
   }
 
+  /// <summary>Read the record with given id.</summary>
   [RequiresDynamicCode(DynamicCodeMessage)]
   [RequiresUnreferencedCode(UnreferencedCodeMessage)]
   public async Task<T?> Read<T>(RecordId id) {
     string json = await (await ReadImpl(id)).ReadAsStringAsync();
     return JsonSerializer.Deserialize<T>(json);
   }
+  /// <summary>Read the record with given id.</summary>
   [RequiresDynamicCode(DynamicCodeMessage)]
   [RequiresUnreferencedCode(UnreferencedCodeMessage)]
   public async Task<T?> Read<T>(string id) => await Read<T>(new UuidRecordId(id));
+  /// <summary>Read the record with given id.</summary>
   [RequiresDynamicCode(DynamicCodeMessage)]
   [RequiresUnreferencedCode(UnreferencedCodeMessage)]
   public async Task<T?> Read<T>(long id) => await Read<T>(new IntegerRecordId(id));
 
+  /// <summary>Read the record with given id.</summary>
   public async Task<T?> Read<T>(RecordId id, JsonTypeInfo<T> jsonTypeInfo) {
     string json = await (await ReadImpl(id)).ReadAsStringAsync();
     return JsonSerializer.Deserialize<T>(json, jsonTypeInfo);
   }
-  public async Task<T?> Read<T>(string id, JsonTypeInfo<T> jsonTypeInfo) => await Read<T>(new UuidRecordId(id), jsonTypeInfo);
-  public async Task<T?> Read<T>(long id, JsonTypeInfo<T> jsonTypeInfo) => await Read<T>(new IntegerRecordId(id), jsonTypeInfo);
+  /// <summary>Read the record with given id.</summary>
+  public async Task<T?> Read<T>(string id, JsonTypeInfo<T> jsonTypeInfo)
+    => await Read<T>(new UuidRecordId(id), jsonTypeInfo);
+  /// <summary>Read the record with given id.</summary>
+  public async Task<T?> Read<T>(long id, JsonTypeInfo<T> jsonTypeInfo)
+    => await Read<T>(new IntegerRecordId(id), jsonTypeInfo);
 
   private async Task<HttpContent> ReadImpl(RecordId id) {
     var response = await client.Fetch(
@@ -177,6 +224,7 @@ public class RecordApi {
     return response.Content;
   }
 
+  /// <summary>Create a new record with the given value.</summary>
   [RequiresDynamicCode(DynamicCodeMessage)]
   [RequiresUnreferencedCode(UnreferencedCodeMessage)]
   public async Task<RecordId> Create<T>(T record) {
@@ -187,6 +235,7 @@ public class RecordApi {
     return await CreateImpl(recordJson);
   }
 
+  /// <summary>Create a new record with the given value.</summary>
   public async Task<RecordId> Create<T>(T record, JsonTypeInfo<T> jsonTypeInfo) {
     var recordJson = JsonContent.Create(record, jsonTypeInfo, default);
     return await CreateImpl(recordJson);
@@ -201,9 +250,18 @@ public class RecordApi {
     );
 
     string json = await response.Content.ReadAsStringAsync();
-    return JsonSerializer.Deserialize<ResponseRecordId>(json, SerializeResponseRecordIdContext.Default.ResponseRecordId)!;
+    return JsonSerializer.Deserialize<ResponseRecordId>(
+        json,
+        SerializeResponseRecordIdContext.Default.ResponseRecordId
+    )!;
   }
 
+  /// <summary>
+  /// List records.
+  /// </summary>
+  /// <param name="pagination">Pagination state.</param>
+  /// <param name="order">Sort results by the given columns in ascending/descending order, e.g. "-col_name".</param>
+  /// <param name="filters">Results filters, e.g. "col0[gte]=100".</param>
   [RequiresDynamicCode(DynamicCodeMessage)]
   [RequiresUnreferencedCode(UnreferencedCodeMessage)]
   public async Task<List<T>> List<T>(
@@ -215,10 +273,18 @@ public class RecordApi {
     return JsonSerializer.Deserialize<List<T>>(json) ?? [];
   }
 
+  /// <summary>
+  /// List records.
+  /// </summary>
+  /// <param name="pagination">Pagination state.</param>
+  /// <param name="order">Sort results by the given columns in ascending/descending order, e.g. "-col_name".</param>
+  /// <param name="filters">Results filters, e.g. "col0[gte]=100".</param>
+  /// <param name="jsonTypeInfo">Serialization type info for AOT mode.</param>
   public async Task<List<T>> List<T>(
     Pagination? pagination,
     List<string>? order,
-    List<string>? filters, JsonTypeInfo<List<T>> jsonTypeInfo
+    List<string>? filters,
+    JsonTypeInfo<List<T>> jsonTypeInfo
   ) {
     string json = await (await ListImpl(pagination, order, filters)).ReadAsStringAsync();
     return JsonSerializer.Deserialize<List<T>>(json, jsonTypeInfo) ?? [];
@@ -268,6 +334,7 @@ public class RecordApi {
     return response.Content;
   }
 
+  /// <summary>Update record with the given id with the given values.</summary>
   [RequiresDynamicCode(DynamicCodeMessage)]
   [RequiresUnreferencedCode(UnreferencedCodeMessage)]
   public async Task Update<T>(
@@ -281,6 +348,7 @@ public class RecordApi {
     await UpdateImpl(id, recordJson);
   }
 
+  /// <summary>Update record with the given id with the given values.</summary>
   public async Task Update<T>(
     RecordId id,
     T record,
@@ -302,6 +370,7 @@ public class RecordApi {
     );
   }
 
+  /// <summary>Delete record with the given id.</summary>
   public async Task Delete(RecordId id) {
     var response = await client.Fetch(
       $"{RecordApi._recordApi}/{name}/{id}",
@@ -311,11 +380,13 @@ public class RecordApi {
     );
   }
 
+  /// <summary>Listen for changes to record with given id.</summary>
   public async Task<IAsyncEnumerable<Event>> Subscribe(RecordId id) {
     var response = await SubscribeImpl(id.ToString()!);
     return StreamToEnumerableImpl(await response.ReadAsStreamAsync());
   }
 
+  /// <summary>Listen for all accessible changes to this Record API.</summary>
   public async Task<IAsyncEnumerable<Event>> SubscribeAll() {
     var response = await SubscribeImpl("*");
     return StreamToEnumerableImpl(await response.ReadAsStreamAsync());

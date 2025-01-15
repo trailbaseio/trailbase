@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace TrailBase;
 
-public static class Constants {
+static class Constants {
   public static int Port = 4010 + System.Environment.Version.Major;
 }
 

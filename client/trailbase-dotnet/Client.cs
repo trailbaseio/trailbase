@@ -7,67 +7,124 @@ using System.Text.Json;
 
 namespace TrailBase;
 
+/// <summary>
+/// Representation of User JSON objects.
+/// </summary>
 public class User {
+  /// <summary>Auth subject, i.e. user id.</summary>
   public string sub { get; }
+  /// <summary>The user's email address.</summary>
   public string email { get; }
 
+  /// <summary>
+  /// User constructor.
+  /// </summary>
+  /// <param name="sub">Auth subject, i.e. user id.</param>
+  /// <param name="email">User's email address</param>
   public User(string sub, string email) {
     this.sub = sub;
     this.email = email;
   }
 }
 
+/// <summary>
+/// Representation of Credentials JSON objects used for log in.
+/// </summary>
 public class Credentials {
+  /// <summary>The user's email address.</summary>
   public string email { get; }
+  /// <summary>The user's password.</summary>
   public string password { get; }
 
+  /// <summary>
+  /// Credentials constructor.
+  /// </summary>
+  /// <param name="email">User's email address</param>
+  /// <param name="password">User's password</param>
   public Credentials(string email, string password) {
     this.email = email;
     this.password = password;
   }
 }
 
-public class RefreshToken {
+/// <summary>
+/// Representation of RefreshTokenRequest JSON objects.
+/// </summary>
+public class RefreshTokenRequest {
+  /// <summary>The refresh token received at login.</summary>
   public string refresh_token { get; }
 
-  public RefreshToken(string refreshToken) {
+  /// <summary>
+  /// RefreshTokenRequest constructor.
+  /// </summary>
+  /// <param name="refreshToken">The refresh token.</param>
+  public RefreshTokenRequest(string refreshToken) {
     refresh_token = refreshToken;
   }
 }
 
-public class TokenResponse {
+/// <summary>
+/// Representation of RefreshTokenResponse JSON objects provided on refresh.
+/// </summary>
+public class RefreshTokenResponse {
+  /// <summary>New auth token in exchange for the refresh token.</summary>
   public string auth_token { get; }
+  /// <summary>Cross-site request forgery token.</summary>
   public string? csrf_token { get; }
 
-  public TokenResponse(string authToken, string? csrfToken) {
+  /// <summary>
+  /// RefreshTokenResponse constructor.
+  /// </summary>
+  /// <param name="authToken">User authentication token.</param>
+  /// <param name="csrfToken">User Cross-site request forgery token.</param>
+  public RefreshTokenResponse(string authToken, string? csrfToken) {
     auth_token = authToken;
     csrf_token = csrfToken;
   }
 }
 
+/// <summary>
+/// Representation of Token JSON objects provided on login.
+/// </summary>
 public class Tokens {
+  /// <summary>User auth token.</summary>
   public string auth_token { get; }
+  /// <summary>User refresh token for future auth token exchanges.</summary>
   public string? refresh_token { get; }
+  /// <summary>Cross-site request forgery token.</summary>
   public string? csrf_token { get; }
 
+  /// <summary>
+  /// Tokens constructor.
+  /// </summary>
   public Tokens(string auth_token, string? refresh_token, string? csrf_token) {
     this.auth_token = auth_token;
     this.refresh_token = refresh_token;
     this.csrf_token = csrf_token;
   }
 
+  /// <summary>Serialize Tokens.</summary>
   public override string ToString() {
     return $"Tokens({auth_token}, {refresh_token}, {csrf_token})";
   }
 }
 
+/// <summary>
+/// Representation of JwtToken JSON objects.
+/// </summary>
 public class JwtToken {
+  /// <summary>Auth subject, i.e. user id.</summary>
   public string sub { get; }
+  /// <summary>JWT token issue timestamp.</summary>
   public long iat { get; }
+  /// <summary>Expiration timestamp.</summary>
   public long exp { get; }
+  /// <summary>User's email address.</summary>
   public string email { get; }
+  /// <summary>Cross-site request forgery token.</summary>
   public string csrf_token { get; }
 
+  /// <summary>JwtToken constructor.</summary>
   [JsonConstructor]
   public JwtToken(
     string sub,
@@ -88,8 +145,8 @@ public class JwtToken {
 [JsonSerializable(typeof(Credentials))]
 [JsonSerializable(typeof(JwtToken))]
 [JsonSerializable(typeof(Tokens))]
-[JsonSerializable(typeof(TokenResponse))]
-[JsonSerializable(typeof(RefreshToken))]
+[JsonSerializable(typeof(RefreshTokenResponse))]
+[JsonSerializable(typeof(RefreshTokenRequest))]
 [JsonSerializable(typeof(User))]
 internal partial class SourceGenerationContext : JsonSerializerContext {
 }
@@ -111,7 +168,10 @@ class TokenState {
       var json = jwtToken.Payload.SerializeToJson();
 
       return new TokenState(
-        (tokens, JsonSerializer.Deserialize<JwtToken>(json, SourceGenerationContext.Default.JwtToken))!,
+        (
+          tokens,
+          JsonSerializer.Deserialize<JwtToken>(json, SourceGenerationContext.Default.JwtToken)
+        )!,
         buildHeaders(tokens)
       );
     }
@@ -139,7 +199,7 @@ class TokenState {
   }
 }
 
-class ThinClient {
+internal class ThinClient {
   static readonly HttpClient client = new HttpClient();
 
   string site;
@@ -188,21 +248,33 @@ class ThinClient {
   }
 }
 
+/// <summary>
+/// The main API for interacting with TrailBase servers.
+/// </summary>
 public class Client {
   static readonly string _authApi = "api/auth/v1";
-  static readonly ILogger logger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger("TrailBase.Client");
+  static readonly ILogger logger = LoggerFactory.Create(
+      builder => builder.AddConsole()).CreateLogger("TrailBase.Client");
 
   ThinClient client;
+  /// <summary>Site this Client is connected to.</summary>
   public string site { get; }
   TokenState tokenState;
 
+  /// <summary>
+  /// Construct a TrailBase Client for the given [site] and [tokens].
+  /// </summary>
+  /// <param name="site">Site URL, e.g. https://trailbase.io:4000.</param>
+  /// <param name="tokens">Optional tokens for a given authenticated user</param>
   public Client(String site, Tokens? tokens) {
     client = new ThinClient(site);
     this.site = site;
     tokenState = TokenState.build(tokens);
   }
 
+  /// <summary>Get tokens of the logged-in user if any.</summary>
   public Tokens? Tokens() => tokenState.state?.Item1;
+  /// <summary>Get the logged-in user if any.</summary>
   public User? User() {
     var authToken = Tokens()?.auth_token;
     if (authToken != null) {
@@ -215,10 +287,12 @@ public class Client {
     return null;
   }
 
+  /// <summary>Construct a record API object for the API with the given name.</summary>
   public RecordApi Records(string name) {
     return new RecordApi(this, name);
   }
 
+  /// <summary>Log in with the given credentials.</summary>
   public async Task<Tokens> Login(string email, string password) {
     var response = await Fetch(
       $"{_authApi}/login",
@@ -233,12 +307,16 @@ public class Client {
     return tokens;
   }
 
+  /// <summary>Log out the current user.</summary>
   public async Task<bool> Logout() {
     var refreshToken = tokenState.state?.Item1.refresh_token;
 
     try {
       if (refreshToken != null) {
-        var tokenJson = JsonContent.Create(new RefreshToken(refreshToken), SourceGenerationContext.Default.RefreshToken);
+        var tokenJson = JsonContent.Create(
+            new RefreshTokenRequest(refreshToken),
+            SourceGenerationContext.Default.RefreshTokenRequest
+        );
         await Fetch($"{_authApi}/logout", HttpMethod.Post, tokenJson, null);
       }
       else {
@@ -280,6 +358,7 @@ public class Client {
     return ts;
   }
 
+  /// <summary>Refresh the current auth token.</summary>
   public async Task RefreshAuthToken() {
     var refreshToken = shouldRefresh(tokenState);
     if (refreshToken != null) {
@@ -291,13 +370,19 @@ public class Client {
     var response = await client.Fetch(
       $"{_authApi}/refresh",
       tokenState,
-      JsonContent.Create(new RefreshToken(refreshToken), SourceGenerationContext.Default.RefreshToken),
+      JsonContent.Create(
+        new RefreshTokenRequest(refreshToken),
+        SourceGenerationContext.Default.RefreshTokenRequest
+      ),
       HttpMethod.Post,
       null
     );
 
     string json = await response.Content.ReadAsStringAsync();
-    TokenResponse tokenResponse = JsonSerializer.Deserialize<TokenResponse>(json, SourceGenerationContext.Default.TokenResponse)!;
+    RefreshTokenResponse tokenResponse = JsonSerializer.Deserialize<RefreshTokenResponse>(
+        json,
+        SourceGenerationContext.Default.RefreshTokenResponse
+    )!;
 
     return TokenState.build(new Tokens(
       tokenResponse.auth_token,
@@ -306,7 +391,7 @@ public class Client {
     ));
   }
 
-  public async Task<HttpResponseMessage> Fetch(
+  internal async Task<HttpResponseMessage> Fetch(
     string path,
     HttpMethod? method,
     HttpContent? data,

@@ -1,2 +1,6 @@
 bin/
 obj/
+
+# docfx documentation.
+_site/
+api/
