@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+  "client/trailbase-rs",
   "examples/custom-binary",
   "trailbase-cli",
   "trailbase-core",
