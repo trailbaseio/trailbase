@@ -79,7 +79,7 @@ struct SimpleStrict {
 }
 
 async fn connect() -> Client {
-  let client = Client::new(&format!("http://127.0.0.1:{PORT}"), None);
+  let client = Client::new(&format!("http://127.0.0.1:{PORT}"), None).unwrap();
   let _ = client.login("admin@localhost", "secret").await.unwrap();
   return client;
 }
