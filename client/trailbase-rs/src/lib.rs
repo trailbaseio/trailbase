@@ -1,5 +1,7 @@
 #![allow(clippy::needless_return)]
 
+use eventsource_stream::Eventsource;
+use futures::{Stream, StreamExt};
 use parking_lot::RwLock;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Method;
@@ -41,6 +43,14 @@ pub struct Tokens {
 pub struct Pagination {
   pub cursor: Option<String>,
   pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum DbEvent {
+  Update(Option<serde_json::Value>),
+  Insert(Option<serde_json::Value>),
+  Delete(Option<serde_json::Value>),
+  Error(String),
 }
 
 pub trait RecordId<'a> {
@@ -258,6 +268,40 @@ impl RecordApi {
       .await?;
 
     return Ok(());
+  }
+
+  pub async fn subscribe<'a>(
+    &self,
+    id: impl RecordId<'a>,
+  ) -> Result<impl Stream<Item = DbEvent>, Error> {
+    // TODO: Might have to add HeaderValue::from_static("text/event-stream").
+    let response = self
+      .client
+      .fetch(
+        &format!(
+          "/{RECORD_API}/{name}/subscribe/{id}",
+          name = self.name,
+          id = id.serialized_id()
+        ),
+        Method::GET,
+        None::<&()>,
+        None,
+      )
+      .await?;
+
+    return Ok(
+      response
+        .bytes_stream()
+        .eventsource()
+        .filter_map(|event_or| async {
+          if let Ok(event) = event_or {
+            if let Ok(db_event) = serde_json::from_str::<DbEvent>(&event.data) {
+              return Some(db_event);
+            }
+          }
+          return None;
+        }),
+    );
   }
 }
 

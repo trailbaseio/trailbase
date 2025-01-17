@@ -2025,6 +2025,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "eventsource-stream"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74fef4569247a5f429d9156b9d0a2599914385dd189c539334c625d8099d90ab"
+dependencies = [
+ "futures-core",
+ "nom",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "fallible-iterator"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6372,6 +6383,8 @@ dependencies = [
 name = "trailbase-client"
 version = "0.0.3"
 dependencies = [
+ "eventsource-stream",
+ "futures",
  "jsonwebtoken",
  "log",
  "parking_lot",
