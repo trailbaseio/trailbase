@@ -127,7 +127,7 @@ struct JwtTokenClaims {
   csrf_token: String,
 }
 
-pub fn decode_auth_token<T: DeserializeOwned>(token: &str) -> Result<T, Error> {
+fn decode_auth_token<T: DeserializeOwned>(token: &str) -> Result<T, Error> {
   let decoding_key = jsonwebtoken::DecodingKey::from_secret(&[]);
 
   // Don't validate the token, we don't have the secret key. Just deserialize the claims/contents.
