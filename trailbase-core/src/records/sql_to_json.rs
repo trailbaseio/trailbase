@@ -19,23 +19,6 @@ pub enum JsonError {
   ValueNotFound,
 }
 
-pub(crate) fn value_to_json(value: rusqlite::types::Value) -> Result<serde_json::Value, JsonError> {
-  use rusqlite::types::Value;
-
-  return Ok(match value {
-    Value::Null => serde_json::Value::Null,
-    Value::Real(real) => {
-      let Some(number) = serde_json::Number::from_f64(real) else {
-        return Err(JsonError::Finite);
-      };
-      serde_json::Value::Number(number)
-    }
-    Value::Integer(integer) => serde_json::Value::Number(serde_json::Number::from(integer)),
-    Value::Blob(blob) => serde_json::Value::String(BASE64_URL_SAFE.encode(blob)),
-    Value::Text(text) => serde_json::Value::String(text),
-  });
-}
-
 pub(crate) fn valueref_to_json(
   value: rusqlite::types::ValueRef<'_>,
 ) -> Result<serde_json::Value, JsonError> {
@@ -72,7 +55,7 @@ pub fn row_to_json(
       continue;
     }
 
-    let value = row.get_value(i).map_err(|_err| JsonError::ValueNotFound)?;
+    let value = row.get_value(i).ok_or(JsonError::ValueNotFound)?;
     if let rusqlite::types::Value::Text(str) = &value {
       if let Some((_col, col_meta)) = metadata.column_by_name(col_name) {
         if col_meta.json.is_some() {
@@ -84,7 +67,7 @@ pub fn row_to_json(
       }
     }
 
-    map.insert(col_name.to_string(), value_to_json(value)?);
+    map.insert(col_name.to_string(), valueref_to_json(value.into())?);
   }
 
   return Ok(serde_json::Value::Object(map));
@@ -110,8 +93,8 @@ pub fn row_to_json_array(row: &trailbase_sqlite::Row) -> Result<Vec<serde_json::
   let mut json_row = Vec::<serde_json::Value>::with_capacity(cols);
 
   for i in 0..cols {
-    let value = row.get_value(i).map_err(|_err| JsonError::ValueNotFound)?;
-    json_row.push(value_to_json(value)?);
+    let value = row.get_value(i).ok_or(JsonError::ValueNotFound)?;
+    json_row.push(valueref_to_json(value.into())?);
   }
 
   return Ok(json_row);

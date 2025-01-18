@@ -76,6 +76,26 @@ public class Pagination {
   }
 }
 
+/// <summary>
+/// Representation of ListResponse JSON objects.
+/// </summary>
+// @JsonSerializable(explicitToJson: true)
+public class ListResponse<T> {
+  /// <summary>List cursor for subsequent fetches.</summary>
+  public string? cursor { get; }
+  /// <summary>The actual records.</summary>
+  public List<T> records { get; }
+
+  [JsonConstructor]
+  public ListResponse(
+      string? cursor,
+      List<T>? records
+  ) {
+    this.cursor = cursor;
+    this.records = records ?? [];
+  }
+}
+
 /// <summary>Realtime event for change subscriptions.</summary>
 public abstract class Event {
   /// <summary>Get associated record value as JSON object.</summary>
@@ -264,13 +284,13 @@ public class RecordApi {
   /// <param name="filters">Results filters, e.g. "col0[gte]=100".</param>
   [RequiresDynamicCode(DynamicCodeMessage)]
   [RequiresUnreferencedCode(UnreferencedCodeMessage)]
-  public async Task<List<T>> List<T>(
+  public async Task<ListResponse<T>> List<T>(
     Pagination? pagination,
     List<string>? order,
     List<string>? filters
   ) {
     string json = await (await ListImpl(pagination, order, filters)).ReadAsStringAsync();
-    return JsonSerializer.Deserialize<List<T>>(json) ?? [];
+    return JsonSerializer.Deserialize<ListResponse<T>>(json);
   }
 
   /// <summary>
@@ -280,14 +300,14 @@ public class RecordApi {
   /// <param name="order">Sort results by the given columns in ascending/descending order, e.g. "-col_name".</param>
   /// <param name="filters">Results filters, e.g. "col0[gte]=100".</param>
   /// <param name="jsonTypeInfo">Serialization type info for AOT mode.</param>
-  public async Task<List<T>> List<T>(
+  public async Task<ListResponse<T>> List<T>(
     Pagination? pagination,
     List<string>? order,
     List<string>? filters,
-    JsonTypeInfo<List<T>> jsonTypeInfo
+    JsonTypeInfo<ListResponse<T>> jsonTypeInfo
   ) {
     string json = await (await ListImpl(pagination, order, filters)).ReadAsStringAsync();
-    return JsonSerializer.Deserialize<List<T>>(json, jsonTypeInfo) ?? [];
+    return JsonSerializer.Deserialize<ListResponse<T>>(json, jsonTypeInfo);
   }
 
   private async Task<HttpContent> ListImpl(

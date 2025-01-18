@@ -8,18 +8,28 @@ const client = new Client("http://localhost:4000");
 await client.login("admin@localhost", "secret");
 const api = client.records("movies");
 
-let movies = [];
-do {
-  movies = await api.list<Movie>({
+// Start fresh: delete all existing movies.
+let cnt = 0;
+while (true) {
+  const movies = await api.list<Movie>({
     pagination: {
       limit: 100,
     },
   });
 
-  for (const movie of movies) {
+  const records = movies.records;
+  const length = records.length;
+  if (length === 0) {
+    break;
+  }
+  cnt += length;
+
+  for (const movie of records) {
     await api.delete(movie.rank!);
   }
-} while (movies.length > 0);
+}
+
+console.log(`Cleaned up ${cnt} movies`);
 
 const file = await readFile("../data/Top_1000_IMDb_movies_New_version.csv");
 const records = parse(file, {
@@ -41,3 +51,5 @@ for (const movie of records) {
     description: movie.description,
   });
 }
+
+console.log(`Inserted ${records.length} movies`);

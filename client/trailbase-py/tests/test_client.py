@@ -114,9 +114,10 @@ def test_records(trailbase: TrailBaseFixture):
         ids.append(api.create({"text_not_null": msg}))
 
     if True:
-        records = api.list(
+        response = api.list(
             filters=[f"text_not_null={messages[0]}"],
         )
+        records = response.records
         assert len(records) == 1
         assert records[0]["text_not_null"] == messages[0]
 
@@ -126,14 +127,14 @@ def test_records(trailbase: TrailBaseFixture):
             filters=[f"text_not_null[like]=% =?&{now}"],
         )
 
-        assert [el["text_not_null"] for el in recordsAsc] == messages
+        assert [el["text_not_null"] for el in recordsAsc.records] == messages
 
         recordsDesc = api.list(
             order=["-text_not_null"],
             filters=[f"text_not_null[like]=%{now}"],
         )
 
-        assert [el["text_not_null"] for el in recordsDesc] == list(reversed(messages))
+        assert [el["text_not_null"] for el in recordsDesc.records] == list(reversed(messages))
 
     if True:
         record = api.read(ids[0])

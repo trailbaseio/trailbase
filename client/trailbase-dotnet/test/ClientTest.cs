@@ -28,7 +28,7 @@ class SimpleStrict {
 
 [JsonSourceGenerationOptions(WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(SimpleStrict))]
-[JsonSerializable(typeof(List<SimpleStrict>))]
+[JsonSerializable(typeof(ListResponse<SimpleStrict>))]
 internal partial class SerializeSimpleStrictContext : JsonSerializerContext {
 }
 
@@ -144,29 +144,31 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     }
 
     {
-      List<SimpleStrict> records = await api.List<SimpleStrict>(
+      ListResponse<SimpleStrict> response = await api.List<SimpleStrict>(
         null,
         null,
         [$"text_not_null={messages[0]}"]
       )!;
-      Assert.Single(records);
-      Assert.Equal(messages[0], records[0].text_not_null);
+      Assert.Single(response.records);
+      Assert.Equal(messages[0], response.records[0].text_not_null);
     }
 
     {
-      var recordsAsc = await api.List<SimpleStrict>(
+      var responseAsc = await api.List<SimpleStrict>(
         null,
         ["+text_not_null"],
         [$"text_not_null[like]=% =?&{suffix}"]
       )!;
+      var recordsAsc = responseAsc.records;
       Assert.Equal(messages.Count, recordsAsc.Count);
       Assert.Equal(messages, recordsAsc.ConvertAll((e) => e.text_not_null));
 
-      var recordsDesc = await api.List<SimpleStrict>(
+      var responseDesc = await api.List<SimpleStrict>(
         null,
         ["-text_not_null"],
         [$"text_not_null[like]=%{suffix}"]
       )!;
+      var recordsDesc = responseDesc.records;
       Assert.Equal(messages.Count, recordsDesc.Count);
       recordsDesc.Reverse();
       Assert.Equal(messages, recordsDesc.ConvertAll((e) => e.text_not_null));
@@ -197,13 +199,13 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       var id = ids[0];
       await api.Delete(id);
 
-      var records = await api.List<SimpleStrict>(
+      var response = await api.List<SimpleStrict>(
         null,
         null,
         [$"text_not_null[like]=%{suffix}"]
       )!;
 
-      Assert.Single(records);
+      Assert.Single(response.records);
     }
   }
 
@@ -233,32 +235,34 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     }
 
     {
-      List<SimpleStrict> records = await api.List(
+      ListResponse<SimpleStrict> response = await api.List(
         null,
         null,
         [$"text_not_null={messages[0]}"],
-        SerializeSimpleStrictContext.Default.ListSimpleStrict
+        SerializeSimpleStrictContext.Default.ListResponseSimpleStrict
       )!;
-      Assert.Single(records);
-      Assert.Equal(messages[0], records[0].text_not_null);
+      Assert.Single(response.records);
+      Assert.Equal(messages[0], response.records[0].text_not_null);
     }
 
     {
-      var recordsAsc = await api.List(
+      var responseAsc = await api.List(
         null,
         ["+text_not_null"],
         [$"text_not_null[like]=% =?&{suffix}"],
-        SerializeSimpleStrictContext.Default.ListSimpleStrict
+        SerializeSimpleStrictContext.Default.ListResponseSimpleStrict
       )!;
+      var recordsAsc = responseAsc.records;
       Assert.Equal(messages.Count, recordsAsc.Count);
       Assert.Equal(messages, recordsAsc.ConvertAll((e) => e.text_not_null));
 
-      var recordsDesc = await api.List(
+      var responseDesc = await api.List(
         null,
         ["-text_not_null"],
         [$"text_not_null[like]=%{suffix}"],
-        SerializeSimpleStrictContext.Default.ListSimpleStrict
+        SerializeSimpleStrictContext.Default.ListResponseSimpleStrict
       )!;
+      var recordsDesc = responseDesc.records;
       Assert.Equal(messages.Count, recordsDesc.Count);
       recordsDesc.Reverse();
       Assert.Equal(messages, recordsDesc.ConvertAll((e) => e.text_not_null));
@@ -293,14 +297,14 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       var id = ids[0];
       await api.Delete(id);
 
-      var records = await api.List(
+      var response = await api.List(
         null,
         null,
         [$"text_not_null[like]=%{suffix}"],
-        SerializeSimpleStrictContext.Default.ListSimpleStrict
+        SerializeSimpleStrictContext.Default.ListResponseSimpleStrict
       )!;
 
-      Assert.Single(records);
+      Assert.Single(response.records);
     }
   }
 

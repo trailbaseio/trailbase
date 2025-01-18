@@ -12,4 +12,4 @@ const m = await movies.list({
   filters: ["watch_time[lt]=120"],
 });
 
-console.log(m);
+console.log(m.records);

@@ -159,25 +159,27 @@ Future<void> main() async {
       }
 
       {
-        final records = await api.list(
+        final response = await api.list(
           filters: ['text_not_null=${messages[0]}'],
         );
-        expect(records.length, 1);
-        expect(records[0]['text_not_null'], messages[0]);
+        expect(response.records.length, 1);
+        expect(response.records[0]['text_not_null'], messages[0]);
       }
 
       {
-        final recordsAsc = await api.list(
+        final recordsAsc = (await api.list(
           order: ['+text_not_null'],
           filters: ['text_not_null[like]=% =?&${now}'],
-        );
+        ))
+            .records;
         expect(recordsAsc.map((el) => el['text_not_null']),
             orderedEquals(messages));
 
-        final recordsDesc = await api.list(
+        final recordsDesc = (await api.list(
           order: ['-text_not_null'],
           filters: ['text_not_null[like]=%${now}'],
-        );
+        ))
+            .records;
         expect(recordsDesc.map((el) => el['text_not_null']).toList().reversed,
             orderedEquals(messages));
       }

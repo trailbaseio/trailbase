@@ -85,29 +85,33 @@ test("Record integration tests", async () => {
   }
 
   {
-    const records = await api.list<SimpleStrict>({
+    const response = await api.list<SimpleStrict>({
       filters: [`text_not_null=${messages[0]}`],
     });
+    expect(response.cursor).not.undefined.and.not.toBe("");
+    const records = response.records;
     expect(records.length).toBe(1);
     expect(records[0].text_not_null).toBe(messages[0]);
   }
 
   {
-    const records = await api.list<SimpleStrict>({
+    const response = await api.list<SimpleStrict>({
       filters: [`text_not_null[like]=% =?&${now}`],
       order: ["+text_not_null"],
     });
-    expect(records.map((el) => el.text_not_null)).toStrictEqual(messages);
+    expect(response.records.map((el) => el.text_not_null)).toStrictEqual(
+      messages,
+    );
   }
 
   {
-    const records = await api.list<SimpleStrict>({
+    const response = await api.list<SimpleStrict>({
       filters: [`text_not_null[like]=%${now}`],
       order: ["-text_not_null"],
     });
-    expect(records.map((el) => el.text_not_null).reverse()).toStrictEqual(
-      messages,
-    );
+    expect(
+      response.records.map((el) => el.text_not_null).reverse(),
+    ).toStrictEqual(messages);
   }
 
   const record: SimpleStrict = await api.read(ids[0]);

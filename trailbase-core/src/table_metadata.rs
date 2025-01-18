@@ -246,7 +246,7 @@ pub trait TableOrViewMetadata {
   // Used by RecordAPI.
   fn column_by_name(&self, key: &str) -> Option<(&Column, &ColumnMetadata)>;
 
-  // Impl detail: only used by admin
+  // Impl detail: only used by admin and list
   fn columns(&self) -> Option<Vec<Column>>;
   fn record_pk_column(&self) -> Option<(usize, &Column)>;
 }

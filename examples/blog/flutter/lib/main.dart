@@ -94,8 +94,9 @@ class _LandingState extends State<Landing> {
 
   Future<void> _fetchArticles() async {
     try {
-      final records = await _articlesApi.list();
-      _articlesCtrl.add(records.map((r) => Article.fromJson(r)).toList());
+      final response = await _articlesApi.list();
+      _articlesCtrl
+          .add(response.records.map((r) => Article.fromJson(r)).toList());
     } catch (err) {
       _articlesCtrl.addError(err);
     }

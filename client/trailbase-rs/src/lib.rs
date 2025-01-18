@@ -1,3 +1,8 @@
+//! A client library to connect to a TrailBase server via HTTP.
+//!
+//! TrailBase is a sub-millisecond, open-source application server with type-safe APIs, built-in
+//! JS/ES6/TS runtime, realtime, auth, and admin UI built on Rust, SQLite & V8.
+
 #![allow(clippy::needless_return)]
 
 use eventsource_stream::Eventsource;
@@ -26,12 +31,16 @@ pub enum Error {
   Precondition(&'static str),
 }
 
+/// Represents the currently logged-in user.
 #[derive(Clone, Debug)]
 pub struct User {
   pub sub: String,
   pub email: String,
 }
 
+/// Holds the tokens minted by the server on login.
+///
+/// It is also the exact JSON serialization format.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Tokens {
   pub auth_token: String,
@@ -51,6 +60,12 @@ pub enum DbEvent {
   Insert(Option<serde_json::Value>),
   Delete(Option<serde_json::Value>),
   Error(String),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct ListResponse<T> {
+  pub cursor: Option<String>,
+  pub records: Vec<T>,
 }
 
 pub trait RecordId<'a> {
@@ -151,7 +166,7 @@ impl RecordApi {
     pagination: Option<Pagination>,
     order: Option<&[&str]>,
     filters: Option<&[&str]>,
-  ) -> Result<Vec<T>, Error> {
+  ) -> Result<ListResponse<T>, Error> {
     let mut params: Vec<(Cow<'static, str>, Cow<'static, str>)> = vec![];
     if let Some(pagination) = pagination {
       if let Some(cursor) = pagination.cursor {

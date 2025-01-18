@@ -1,7 +1,8 @@
 use rusqlite::{types, Statement};
-use std::{fmt::Debug, str::FromStr, sync::Arc};
-
-use crate::error::Error;
+use std::fmt::Debug;
+use std::ops::Index;
+use std::str::FromStr;
+use std::sync::Arc;
 
 #[derive(Debug, Copy, Clone)]
 pub enum ValueType {
@@ -57,28 +58,39 @@ impl Rows {
       result.push(Row::from_row(row, Some(columns.clone()))?);
     }
 
-    Ok(Self(result, columns))
+    return Ok(Self(result, columns));
   }
 
-  #[cfg(test)]
   pub fn len(&self) -> usize {
-    self.0.len()
+    return self.0.len();
+  }
+
+  pub fn is_empty(&self) -> bool {
+    return self.0.is_empty();
   }
 
   pub fn iter(&self) -> std::slice::Iter<'_, Row> {
-    self.0.iter()
+    return self.0.iter();
+  }
+
+  pub fn get(&self, idx: usize) -> Option<&Row> {
+    return self.0.get(idx);
+  }
+
+  pub fn last(&self) -> Option<&Row> {
+    return self.0.last();
   }
 
   pub fn column_count(&self) -> usize {
-    self.1.len()
+    return self.1.len();
   }
 
   pub fn column_names(&self) -> Vec<&str> {
-    self.1.iter().map(|s| s.name.as_str()).collect()
+    return self.1.iter().map(|s| s.name.as_str()).collect();
   }
 
   pub fn column_name(&self, idx: usize) -> Option<&str> {
-    self.1.get(idx).map(|c| c.name.as_str())
+    return self.1.get(idx).map(|c| c.name.as_str());
   }
 
   pub fn column_type(&self, idx: usize) -> std::result::Result<ValueType, rusqlite::Error> {
@@ -91,11 +103,20 @@ impl Rows {
         )
       });
     }
+
     return Err(rusqlite::Error::InvalidColumnType(
       idx,
       self.column_name(idx).unwrap_or("?").to_string(),
       types::Type::Null,
     ));
+  }
+}
+
+impl Index<usize> for Rows {
+  type Output = Row;
+
+  fn index(&self, idx: usize) -> &Self::Output {
+    return &self.0[idx];
   }
 }
 
@@ -112,37 +133,50 @@ impl Row {
       values.push(row.get_ref(idx)?.into());
     }
 
-    Ok(Self(values, columns))
+    return Ok(Self(values, columns));
   }
 
   pub fn get<T>(&self, idx: usize) -> types::FromSqlResult<T>
   where
     T: types::FromSql,
   {
-    let val = self
-      .0
-      .get(idx)
-      .ok_or_else(|| types::FromSqlError::Other("Index out of bounds".into()))?;
-    T::column_result(val.into())
+    let Some(value) = self.0.get(idx) else {
+      return Err(types::FromSqlError::OutOfRange(idx as i64));
+    };
+    return T::column_result(value.into());
   }
 
-  pub fn get_value(&self, idx: usize) -> Result<types::Value, Error> {
-    self
-      .0
-      .get(idx)
-      .ok_or_else(|| Error::Other("Index out of bounds".into()))
-      .cloned()
+  pub fn get_value(&self, idx: usize) -> Option<&types::Value> {
+    return self.0.get(idx);
+  }
+
+  pub fn len(&self) -> usize {
+    assert_eq!(self.1.len(), self.0.len());
+    return self.0.len();
+  }
+
+  pub fn is_empty(&self) -> bool {
+    return self.0.is_empty();
   }
 
   pub fn column_count(&self) -> usize {
-    self.0.len()
+    assert_eq!(self.1.len(), self.0.len());
+    return self.1.len();
   }
 
   pub fn column_names(&self) -> Vec<&str> {
-    self.1.iter().map(|s| s.name.as_str()).collect()
+    return self.1.iter().map(|s| s.name.as_str()).collect();
   }
 
   pub fn column_name(&self, idx: usize) -> Option<&str> {
-    self.1.get(idx).map(|c| c.name.as_str())
+    return self.1.get(idx).map(|c| c.name.as_str());
+  }
+}
+
+impl Index<usize> for Row {
+  type Output = types::Value;
+
+  fn index(&self, idx: usize) -> &Self::Output {
+    return &self.0[idx];
   }
 }

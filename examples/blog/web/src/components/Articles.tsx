@@ -133,9 +133,10 @@ function AssignNewUsername(props: { client: Client }) {
 
 export function ArticleList() {
   const client = useStore($client);
-  const [articles] = createResource(client, (client) =>
-    client?.records("articles_view").list<Article>(),
-  );
+  const [articles] = createResource(client, async (client) => {
+    const response = await client?.records("articles_view").list<Article>();
+    return response.records;
+  });
   const profile = useStore($profile);
 
   return (
@@ -205,7 +206,7 @@ export function ArticlePage() {
       <Match when={article.error}>Failed to load: {`${article.error}`}</Match>
 
       <Match when={article()}>
-        <ArticlePageImpl article={article()!} />
+        <ArticlePageImpl article={article()!.records} />
       </Match>
     </Switch>
   );

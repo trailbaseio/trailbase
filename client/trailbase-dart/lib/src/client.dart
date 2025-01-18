@@ -108,6 +108,17 @@ class Pagination {
   });
 }
 
+class ListResponse {
+  final String? cursor;
+  final List<Map<String, dynamic>> records;
+
+  const ListResponse({this.cursor, required this.records});
+
+  ListResponse.fromJson(Map<String, dynamic> json)
+      : cursor = json['cursor'],
+        records = (json['records'] as List).cast<Map<String, dynamic>>();
+}
+
 abstract class RecordId {
   @override
   String toString();
@@ -278,7 +289,7 @@ class RecordApi {
 
   const RecordApi(this._client, this._name);
 
-  Future<List<Map<String, dynamic>>> list({
+  Future<ListResponse> list({
     Pagination? pagination,
     List<String>? order,
     List<String>? filters,
@@ -310,7 +321,7 @@ class RecordApi {
       queryParams: params,
     );
 
-    return (response.data as List).cast<Map<String, dynamic>>();
+    return ListResponse.fromJson(response.data);
   }
 
   Future<Map<String, dynamic>> read(RecordId id) async {

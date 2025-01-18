@@ -10,7 +10,7 @@ import json
 
 from contextlib import contextmanager
 from time import time
-from typing import TypeAlias, Any
+from typing import TypeAlias, Any, cast
 
 JSON: TypeAlias = dict[str, "JSON"] | list["JSON"] | str | int | float | bool | None
 
@@ -53,6 +53,24 @@ class User:
             "sub": self.id,
             "email": self.email,
         }
+
+
+class ListResponse:
+    cursor: str | None
+    records: list[dict[str, object]]
+
+    def __init__(self, cursor: str | None, records: list[dict[str, object]]) -> None:
+        self.cursor = cursor
+        self.records = records
+
+    @staticmethod
+    def fromJson(json: dict[str, "JSON"]) -> "ListResponse":
+        cursor = json["cursor"]
+        assert isinstance(cursor, str | None)
+        records = json["records"]
+        assert isinstance(records, list)
+
+        return ListResponse(cursor, cast(list[dict[str, object]], records))
 
 
 class Tokens:
@@ -390,7 +408,7 @@ class RecordApi:
         filters: list[str] | None = None,
         cursor: str | None = None,
         limit: int | None = None,
-    ) -> list[dict[str, object]]:
+    ) -> ListResponse:
         params: dict[str, str] = {}
 
         if cursor != None:
@@ -411,7 +429,7 @@ class RecordApi:
                 params[nameOp] = value
 
         response = self._client.fetch(f"{self._recordApi}/{self._name}", queryParams=params)
-        return response.json()
+        return ListResponse.fromJson(response.json())
 
     def read(self, recordId: RecordId | str | int) -> dict[str, object]:
         id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"

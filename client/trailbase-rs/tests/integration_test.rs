@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use trailbase_client::{Client, DbEvent};
+use trailbase_client::{Client, DbEvent, Pagination};
 
 struct Server {
   child: std::process::Child,
@@ -122,12 +122,26 @@ async fn records_test() {
     // List one specific message.
     let filter = format!("text_not_null={}", messages[0]);
     let filters = vec![filter.as_str()];
-    let records = api
+    let response = api
       .list::<serde_json::Value>(None, None, Some(filters.as_slice()))
       .await
       .unwrap();
 
-    assert_eq!(records.len(), 1);
+    assert_eq!(response.records.len(), 1);
+
+    let second_response = api
+      .list::<serde_json::Value>(
+        Some(Pagination {
+          cursor: response.cursor,
+          limit: None,
+        }),
+        None,
+        Some(filters.as_slice()),
+      )
+      .await
+      .unwrap();
+
+    assert_eq!(second_response.records.len(), 0);
   }
 
   {
@@ -136,7 +150,8 @@ async fn records_test() {
     let records_ascending: Vec<SimpleStrict> = api
       .list(None, Some(&["+text_not_null"]), Some(&[&filter]))
       .await
-      .unwrap();
+      .unwrap()
+      .records;
 
     let messages_ascending: Vec<_> = records_ascending
       .into_iter()
@@ -147,7 +162,8 @@ async fn records_test() {
     let records_descending: Vec<SimpleStrict> = api
       .list(None, Some(&["-text_not_null"]), Some(&[&filter]))
       .await
-      .unwrap();
+      .unwrap()
+      .records;
 
     let messages_descending: Vec<_> = records_descending
       .into_iter()

@@ -3,6 +3,7 @@ use axum::{
   Json,
 };
 use itertools::Itertools;
+use serde::Serialize;
 use std::borrow::Cow;
 use trailbase_sqlite::Value;
 
@@ -13,6 +14,13 @@ use crate::listing::{
 };
 use crate::records::sql_to_json::rows_to_json;
 use crate::records::{Permission, RecordError};
+use crate::util::uuid_to_b64;
+
+#[derive(Debug, Serialize)]
+pub struct ListResponse {
+  cursor: Option<String>,
+  records: Vec<serde_json::Value>,
+}
 
 /// Lists records matching the given filters
 #[utoipa::path(
@@ -27,7 +35,7 @@ pub async fn list_records_handler(
   Path(api_name): Path<String>,
   RawQuery(raw_url_query): RawQuery,
   user: Option<User>,
-) -> Result<Json<serde_json::Value>, RecordError> {
+) -> Result<Json<ListResponse>, RecordError> {
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
@@ -36,13 +44,17 @@ pub async fn list_records_handler(
   // on the table, i.e. no access -> empty results.
   api.check_table_level_access(Permission::Read, user.as_ref())?;
 
+  let metadata = api.metadata();
+  let Some((pk_index, _pk_column)) = metadata.record_pk_column() else {
+    return Err(RecordError::Internal("missing pk column".into()));
+  };
+
   let (filter_params, cursor, limit, order) = match parse_query(raw_url_query) {
     Some(q) => (Some(q.params), q.cursor, q.limit, q.order),
     None => (None, None, None, None),
   };
 
   // Where clause contains column filters and cursor depending on what's present.
-  let metadata = api.metadata();
   let WhereClause {
     mut clause,
     mut params,
@@ -109,12 +121,28 @@ pub async fn list_records_handler(
   );
 
   let rows = state.conn().query(&query, params).await?;
+  let Some(last_row) = rows.last() else {
+    // Rows are empty:
+    return Ok(Json(ListResponse {
+      cursor: None,
+      records: vec![],
+    }));
+  };
 
-  return Ok(Json(serde_json::Value::Array(
-    rows_to_json(metadata, rows, |col_name| !col_name.starts_with("_"))
-      .await
-      .map_err(|err| RecordError::Internal(err.into()))?,
-  )));
+  assert!(pk_index < last_row.len());
+  let cursor = match &last_row[pk_index] {
+    rusqlite::types::Value::Blob(blob) => {
+      uuid::Uuid::from_slice(blob).as_ref().map(uuid_to_b64).ok()
+    }
+    rusqlite::types::Value::Integer(i) => Some(i.to_string()),
+    _ => None,
+  };
+
+  let records = rows_to_json(metadata, rows, |col_name| !col_name.starts_with("_"))
+    .await
+    .map_err(|err| RecordError::Internal(err.into()))?;
+
+  return Ok(Json(ListResponse { cursor, records }));
 }
 
 #[cfg(test)]
@@ -261,7 +289,7 @@ mod tests {
     auth_token: Option<&str>,
     query: Option<String>,
   ) -> Result<Vec<serde_json::Value>, RecordError> {
-    let response = list_records_handler(
+    let json_response = list_records_handler(
       State(state.clone()),
       Path("messages_api".to_string()),
       RawQuery(query),
@@ -269,10 +297,7 @@ mod tests {
     )
     .await?;
 
-    let json = response.0;
-    if let serde_json::Value::Array(arr) = json {
-      return Ok(arr);
-    }
-    return Err(RecordError::BadRequest("Not a json array"));
+    let response: ListResponse = json_response.0;
+    return Ok(response.records);
   }
 }

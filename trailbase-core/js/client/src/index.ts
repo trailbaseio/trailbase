@@ -18,6 +18,11 @@ export type Pagination = {
   limit?: number;
 };
 
+export type ListResponse<T> = {
+  cursor?: string;
+  records: T[];
+};
+
 export type Tokens = {
   auth_token: string;
   refresh_token: string | null;
@@ -120,7 +125,7 @@ export class RecordApi {
     pagination?: Pagination;
     order?: string[];
     filters?: string[];
-  }): Promise<T[]> {
+  }): Promise<ListResponse<T>> {
     const params = new URLSearchParams();
     const pagination = opts?.pagination;
     if (pagination) {
@@ -149,7 +154,7 @@ export class RecordApi {
     const response = await this.client.fetch(
       `${RecordApi._recordApi}/${this.name}?${params}`,
     );
-    return (await response.json()) as T[];
+    return (await response.json()) as ListResponse<T>;
   }
 
   public async read<T = Record<string, unknown>>(
