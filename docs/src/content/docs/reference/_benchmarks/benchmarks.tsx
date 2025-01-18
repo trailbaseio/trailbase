@@ -179,8 +179,17 @@ export function PocketBaseAndTrailBaseReadLatencies() {
     p95: 1895.4,
   };
 
+  // 2025-01-18
+  // TB: Read 1 000 000 messages, took 00:00:21.8387601 (limit=64) (C#)
+  const readTrailbaseRustMicroS = {
+    p50: 379.254,
+    p75: 438.446,
+    p90: 506.493,
+    p95: 554.533,
+  };
+
   // 2024-10-12
-  // PB: Read 100 000 messages, took 0:00:20.273054 (limit=64)
+  // PB: Read 1 000 000 rows in 26.724486507s (Rust).
   const readPocketbaseMicroS = {
     p50: 12740,
     p75: 13718,
@@ -207,6 +216,11 @@ export function PocketBaseAndTrailBaseReadLatencies() {
       {
         label: "TrailBase C#",
         data: latenciesMs(readTrailbaseDotnetMicroS),
+        backgroundColor: colors.trailbase2,
+      },
+      {
+        label: "TrailBase Rust",
+        data: latenciesMs(readTrailbaseRustMicroS),
         backgroundColor: colors.trailbase2,
       },
     ],
@@ -254,6 +268,15 @@ export function PocketBaseAndTrailBaseInsertLatencies() {
     p95: 4489.9,
   };
 
+  // 2025-01-18
+  // TB: Inserted 10 000 rows in 873.530967ms
+  const insertTrailbaseRustMicroS = {
+    p50: 808.301,
+    p75: 897.399,
+    p90: 1001.876,
+    p95: 1071.336,
+  };
+
   // 2024-10-12
   // PB: Inserted 10 000 messages, took 0:00:07.759677 (limit=64)
   const insertPocketbaseMicroS = {
@@ -282,6 +305,11 @@ export function PocketBaseAndTrailBaseInsertLatencies() {
       {
         label: "TrailBase C#",
         data: latenciesMs(insertTrailbaseDotnetMicroS),
+        backgroundColor: colors.trailbase2,
+      },
+      {
+        label: "TrailBase Rust",
+        data: latenciesMs(insertTrailbaseRustMicroS),
         backgroundColor: colors.trailbase2,
       },
     ],
@@ -399,6 +427,7 @@ export function PocketBaseAndTrailBaseUsageChart() {
   //   PB: Inserted 100000 messages, took 0:01:02.549495 (limit=64)
   //   TB: Inserted 100000 messages, took 0:00:07.086891 (limit=64) (Dart AOT)
   //   TB: Inserted 100000 messages, took 00:00:05.7039362 (limit=64) (C#)
+  //   TB: Inserted 100000 rows in 6.351865901s (rust)
 
   const trailbaseUtilization = insertTrailBase as Datum[];
   const pocketbaseUtilization = insertPocketBase as Datum[];

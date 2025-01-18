@@ -164,6 +164,8 @@ latencies for the Dart and C# client are fairly similar, while reads with Dart
 take about 3 times longer compared to C#. TrailBase is fast enough that we're
 being bottlenecked on the client. The minimum latency you can expect from Dart
 and Node.js is around 3-5ms.
+This likely means that the bottleneck for PocketBase is on the server-side.
+
 With sub-millisecond read latencies at full tilt, TrailBase is in the same
 ballpark as something like Redis, however this is primary data and **not a
 cache!**
