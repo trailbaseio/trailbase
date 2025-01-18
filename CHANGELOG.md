@@ -1,3 +1,10 @@
+## v0.4.1
+
+Minor update:
+
+* Fix issue with delete table potentially invalidating config due to stale RecordAPI entries.
+* Update dependencies.
+
 ## v0.4.0
 
 Added an early version of Record change subscriptions, a.k.a. realtime, APIs.
