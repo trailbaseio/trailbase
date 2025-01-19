@@ -733,7 +733,7 @@ impl View {
             info!("CREATE VIEW column filtering not supported (yet)");
             None
           }
-          false => try_extract_column_mapping(select.clone(), tables)?.map(|column_mapping| {
+          false => try_extract_column_mapping((*select).clone(), tables)?.map(|column_mapping| {
             column_mapping
               .into_iter()
               .map(|mapping| mapping.column)
@@ -744,7 +744,7 @@ impl View {
         Ok(View {
           name: view_name.to_string(),
           columns,
-          query: SelectFormatter(select).to_string(),
+          query: SelectFormatter(*select).to_string(),
           temporary,
           if_not_exists,
         })
@@ -1202,7 +1202,7 @@ mod tests {
       },
     ];
 
-    let mapping = try_extract_column_mapping(select, &tables)
+    let mapping = try_extract_column_mapping(*select, &tables)
       .unwrap()
       .unwrap();
 

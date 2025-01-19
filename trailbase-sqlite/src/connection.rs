@@ -1,4 +1,5 @@
 use crossbeam_channel::{Receiver, Sender};
+use rusqlite::fallible_iterator::FallibleIterator;
 use rusqlite::hooks::{Action, PreUpdateCase};
 use rusqlite::types::Value;
 use std::{
@@ -186,22 +187,24 @@ impl Connection {
         let batch = rusqlite::Batch::new(conn, &sql);
 
         let mut p = batch.peekable();
-        while let Some(iter) = p.next() {
-          let mut stmt = iter?;
-
+        while let Ok(Some(mut stmt)) = p.next() {
           let mut rows = stmt.raw_query();
           let row = rows.next()?;
-          if p.peek().is_none() {
-            if let Some(row) = row {
-              let cols: Arc<Vec<Column>> = Arc::new(columns(row.as_ref()));
 
-              let mut result = vec![Row::from_row(row, Some(cols.clone()))?];
-              while let Some(row) = rows.next()? {
-                result.push(Row::from_row(row, Some(cols.clone()))?);
+          match p.peek() {
+            Err(_) | Ok(None) => {
+              if let Some(row) = row {
+                let cols: Arc<Vec<Column>> = Arc::new(columns(row.as_ref()));
+
+                let mut result = vec![Row::from_row(row, Some(cols.clone()))?];
+                while let Some(row) = rows.next()? {
+                  result.push(Row::from_row(row, Some(cols.clone()))?);
+                }
+                return Ok(Some(Rows(result, cols)));
               }
-              return Ok(Some(Rows(result, cols)));
+              return Ok(None);
             }
-            return Ok(None);
+            _ => {}
           }
         }
         return Ok(None);
