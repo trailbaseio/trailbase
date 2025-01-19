@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0
+
+- Return ListResponse from RecordApi::list.
+
 ## 0.1.2
 
 - Add support for "realtime" subscriptions to listen for record changes:

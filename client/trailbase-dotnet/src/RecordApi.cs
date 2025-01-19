@@ -86,6 +86,7 @@ public class ListResponse<T> {
   /// <summary>The actual records.</summary>
   public List<T> records { get; }
 
+  /// <summary>ListResponse constructor.</summary>
   [JsonConstructor]
   public ListResponse(
       string? cursor,
@@ -290,7 +291,7 @@ public class RecordApi {
     List<string>? filters
   ) {
     string json = await (await ListImpl(pagination, order, filters)).ReadAsStringAsync();
-    return JsonSerializer.Deserialize<ListResponse<T>>(json);
+    return JsonSerializer.Deserialize<ListResponse<T>>(json) ?? new ListResponse<T>(null, []);
   }
 
   /// <summary>
@@ -307,7 +308,7 @@ public class RecordApi {
     JsonTypeInfo<ListResponse<T>> jsonTypeInfo
   ) {
     string json = await (await ListImpl(pagination, order, filters)).ReadAsStringAsync();
-    return JsonSerializer.Deserialize<ListResponse<T>>(json, jsonTypeInfo);
+    return JsonSerializer.Deserialize<ListResponse<T>>(json, jsonTypeInfo) ?? new ListResponse<T>(null, []);
   }
 
   private async Task<HttpContent> ListImpl(

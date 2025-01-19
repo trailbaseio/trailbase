@@ -1,3 +1,9 @@
+## v0.5.0
+
+* Breaking change: RecordApi.list now nests records in a parent structure to
+  include cursor now and be extensible for the future.
+* Update all the client libraries to expect a ListResponse.
+
 ## v0.4.1
 
 Minor update:

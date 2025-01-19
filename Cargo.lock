@@ -6379,7 +6379,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-client"
-version = "0.0.5"
+version = "0.1.0"
 dependencies = [
  "eventsource-stream",
  "futures",
