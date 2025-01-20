@@ -38,7 +38,7 @@ Future<Client> connect() async {
 }
 
 void main() {
-  test('Test examples', () async {
+  test('Test code examples', () async {
       final client = await connect();
 
       final tableStream = await subscribeAll(client);

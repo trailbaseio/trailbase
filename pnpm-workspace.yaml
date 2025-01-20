@@ -1,5 +1,6 @@
 packages:
   - 'docs'
+  - 'docs/examples/record_api_ts'
   - 'trailbase-core/js/admin'
   - 'trailbase-core/js/auth'
   - 'trailbase-core/js/client'

@@ -144,8 +144,13 @@ The create endpoint lets you insert new records and potentially override
 existing ones depending on conflict resolution strategy.
 
 import createDartCode from "@examples/record_api_dart/lib/src/create.dart?raw";
+import createTsCode from "@examples/record_api_ts/src/create.ts?raw";
 
 <Tabs>
+  <TabItem label="JS/TS">
+    <Code lang="ts" code={createTsCode} />
+  </TabItem>
+
   <TabItem label="Dart">
     <Code lang="dart" code={createDartCode} />
   </TabItem>
@@ -157,8 +162,13 @@ import createDartCode from "@examples/record_api_dart/lib/src/create.dart?raw";
 The read endpoint lets you read specific records given their id.
 
 import readDartCode from "@examples/record_api_dart/lib/src/read.dart?raw";
+import readTsCode from "@examples/record_api_ts/src/read.ts?raw";
 
 <Tabs>
+  <TabItem label="JS/TS">
+    <Code lang="ts" code={readTsCode} />
+  </TabItem>
+
   <TabItem label="Dart">
     <Code lang="dart" code={readDartCode} />
   </TabItem>
@@ -169,8 +179,13 @@ import readDartCode from "@examples/record_api_dart/lib/src/read.dart?raw";
 The update endpoint lets you modify, i.e. partially update, existing records given their id
 
 import updateDartCode from "@examples/record_api_dart/lib/src/update.dart?raw";
+import updateTsCode from "@examples/record_api_ts/src/update.ts?raw";
 
 <Tabs>
+  <TabItem label="JS/TS">
+    <Code lang="ts" code={updateTsCode} />
+  </TabItem>
+
   <TabItem label="Dart">
     <Code lang="dart" code={updateDartCode} />
   </TabItem>
@@ -178,9 +193,14 @@ import updateDartCode from "@examples/record_api_dart/lib/src/update.dart?raw";
 
 ### Delete
 
-import deleteDartCode from "@examples/record_api_dart/lib/src/update.dart?raw";
+import deleteDartCode from "@examples/record_api_dart/lib/src/delete.dart?raw";
+import deleteTsCode from "@examples/record_api_ts/src/delete.ts?raw";
 
 <Tabs>
+  <TabItem label="JS/TS">
+    <Code lang="ts" code={deleteTsCode} />
+  </TabItem>
+
   <TabItem label="Dart">
     <Code lang="dart" code={deleteDartCode} />
   </TabItem>
@@ -230,8 +250,13 @@ an API or specific records given their id. Change events can be insertions,
 updates, and deletions.
 
 import subscribeDartCode from "@examples/record_api_dart/lib/src/subscribe.dart?raw";
+import subscribeTsCode from "@examples/record_api_ts/src/subscribe.ts?raw";
 
 <Tabs>
+  <TabItem label="JS/TS">
+    <Code lang="ts" code={subscribeTsCode} />
+  </TabItem>
+
   <TabItem label="Dart">
     <Code lang="dart" code={subscribeDartCode} />
   </TabItem>
