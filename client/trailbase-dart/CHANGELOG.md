@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- Fix heartbeat decoding issue with record subscriptions.
+
 ## 0.2.0
 
 - Return ListResponse from RecordApi::list.

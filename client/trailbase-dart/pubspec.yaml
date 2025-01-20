@@ -2,7 +2,7 @@ name: trailbase
 description: Thing client library for TrailBase.
 homepage: https://trailbase.io
 repository: https://github.com/trailbaseio/trailbase
-version: 0.2.0
+version: 0.2.1
 
 environment:
   sdk: ^3.5.3
