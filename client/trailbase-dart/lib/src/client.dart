@@ -362,12 +362,14 @@ class RecordApi {
     );
   }
 
-  static Event _decodeEvent(Uint8List bytes) {
+  static List<Event> _decodeEvent(Uint8List bytes) {
     final decoded = utf8.decode(bytes);
     if (decoded.startsWith('data: ')) {
-      return Event.fromJson(jsonDecode(decoded.substring(6)));
+      return [Event.fromJson(jsonDecode(decoded.substring(6)))];
     }
-    return Event.fromJson(jsonDecode(decoded));
+
+    // Heart-beat, do nothing.
+    return [];
   }
 
   Future<Stream<Event>> subscribe(RecordId id) async {
@@ -377,7 +379,7 @@ class RecordApi {
     );
 
     final Stream<Uint8List> stream = resp.data.stream;
-    return stream.asyncMap(_decodeEvent);
+    return stream.expand(_decodeEvent);
   }
 
   Future<Stream<Event>> subscribeAll() async {
@@ -387,7 +389,7 @@ class RecordApi {
     );
 
     final Stream<Uint8List> stream = resp.data.stream;
-    return stream.asyncMap(_decodeEvent);
+    return stream.expand(_decodeEvent);
   }
 
   Uri imageUri(RecordId id, String colName, {int? index}) {

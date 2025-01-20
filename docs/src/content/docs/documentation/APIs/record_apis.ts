@@ -4,7 +4,7 @@ type ApiOptions = {
   prefix?: string;
 };
 
-export const recordApiNamePlaceholder = "<record_api_name>";
+export const recordApiNamePlaceholder = "<api_name>";
 export const recordApiIdPlaceholder = "<url-safe_b64_uuid_or_int>";
 
 export function apiPath(opts: ApiOptions): string {

@@ -3,11 +3,12 @@ title: Record APIs
 ---
 
 import { Aside, Code } from "@astrojs/starlight/components";
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 import { apiPath, recordApiNamePlaceholder, recordApiIdPlaceholder } from "./record_apis.ts";
 
-The easiest and most type-safe path to access your `TABLE`s and `VIEW`s is to use
-TrailBase's restful CRUD _Record APIs_.
-The only requirements are:
+TrailBase's restful CRUD _Record APIs_ allow you to access your `TABLE`s and
+`VIEW`s in an easy and type-safe manner.
 
 - Tables and views need to be `STRICT`ly[^1] typed to guarantee type-safety all the
   way from your records, via JSON schema, to your client-side language bindings [^2].
@@ -15,14 +16,14 @@ The only requirements are:
   and thus efficient cursor-based pagination. Either an explicit `INTEGER` or
   UUIDv7 `PRIMARY KEY` will do, including `FOREIGN KEY` columns.
 
-## Configuring APIs
+## Configuration
 
-Record APIs can be configured through the admin dashboard or immediately in
-TrailBase's configuration file.
-Note that there are certain features that aren't yet exposed in the dashboard,
-like supporting multiple APIs based on the same table or view.
-In this case you can drop down to the configuration to set up as many as you
-like allowing for a lot of extra flexibility around permissions and visibility.
+Record APIs can be configured via the admin dashboard or in TrailBase's
+configuration file.
+Not all features are yet exposed via the UI like exporting the same table/view
+multiple times as different API endpoints.
+Editing the configuration file directly, you can set up as many as you like
+allowing for some extra flexibility around permissions and visibility.
 
 An example API setup for managing user avatars:
 
@@ -60,7 +61,7 @@ A quick explanation:
   match. In other words, user X cannot modify user Y's avatar.
 
 
-### Access Control
+### Permissions
 
 Access can be controlled through combination of a simple ACL-based system (a
 matrix of who and what) and custom SQL access rules of the nature:
@@ -108,50 +109,87 @@ appropriately tight to avoid permission escalations.
 ### Write-only columns
 
 Columns with names starting with an underscore can be written on insert or
-update but are hidden on reads. This is meant as a convenient convention to
+updated but are hidden on reads. This is meant as a convenient convention to
 allow for internal data fields, e.g hiding the record owner in an otherwise public
 data set or hiding a user's internal credit rating from their profile. A
-similar effect could otherwise be achieved by exposing a table for inserts and
-updates only while proxying reads through a VIEW.
+similar effect could otherwise be achieved by only allowing create/update
+operations on the table and exposing a subset of columns through a readable
+`VIEW`. However, this would lead to different API endpoints for read vs
+create/update.
 
 <Aside type="note" title="Unhiding">
   Note that views can also be used to rename columns and thus expose hidden columns
   in a read-only fashion.
 </Aside>
 
-## Accessing Record APIs
+## Access
 
-After configuring the APIs and setting up permissions, record APIs expose six
-main endpoints[^3]:
+After setting up your API, TrailBase will expose the following main endpoints[^3]:
 
-* **C**reate: endpoint for for inserting new and potentially overriding records
-  depending on conflict resolution strategy.<br/>
-  <code>POST {apiPath({name: recordApiNamePlaceholder})}</code>
-* **R**ead: endpoint for reading specific records given the record id.<br/>
-  <code>GET {apiPath({name: recordApiNamePlaceholder, suffix: recordApiIdPlaceholder})}</code>
-* **U**pdate: partial updates to existing records given a record id and subset of fields <br/>
-  <code>PATCH {apiPath({name: recordApiNamePlaceholder, suffix: recordApiIdPlaceholder})}</code>
-* **D**elete: endpoints for deleting record given a record id. <br/>
-  <code>DELETE {apiPath({name: recordApiNamePlaceholder, suffix: recordApiIdPlaceholder})}</code>
-* List: endpoint for listing, filtering and sorting records based on the
-  configured read access rule and provided filters.<br/>
-  <code>GET {apiPath({name: `${recordApiNamePlaceholder}?<params>`})}</code>
-* Schema: endpoint for reading the APIs JSON schema definition. Can be used for
-  introspection and to drive code generation.<br/>
-  <code>GET {apiPath({name: recordApiNamePlaceholder, suffix: "schema"})}</code>
-* "realtime" subscriptions/notifications: establish a streaming HTTP connection to listen for updates via SSE:
-  * Specific record:<br/>
-    <code>GET {apiPath({name: recordApiNamePlaceholder, suffix: `subscribe/${recordApiIdPlaceholder}`})}</code>
-  * All record:<br/>
-    <code>GET {apiPath({name: recordApiNamePlaceholder, suffix: `subscribe/*`})}</code>
+* **C**reate: <code>POST {apiPath({name: recordApiNamePlaceholder})}</code>
+* **R**ead: <code>GET {apiPath({name: recordApiNamePlaceholder, suffix: recordApiIdPlaceholder})}</code>
+* **U**pdate: <code>PATCH {apiPath({name: recordApiNamePlaceholder, suffix: recordApiIdPlaceholder})}</code>
+* **D**elete: <code>DELETE {apiPath({name: recordApiNamePlaceholder, suffix: recordApiIdPlaceholder})}</code>
+* List: <code>GET {apiPath({name: `${recordApiNamePlaceholder}?<params>`})}</code>
+* Change Subscriptions: <br/><code>GET {apiPath({name: recordApiNamePlaceholder, suffix: `subscribe/[*|${recordApiIdPlaceholder}]`})}</code>
+* Schema: <code>GET {apiPath({name: recordApiNamePlaceholder, suffix: "schema"})}</code>
+
+All of the endpoints accept requests that are JSON encoded, url-encoded, or
+`multipart/form-data` encoded, which makes them accessible via rich client-side
+applications, progressive web apps, and static HTML forms alike.
+
+### Create
+
+The create endpoint lets you insert new records and potentially override
+existing ones depending on conflict resolution strategy.
+
+import createDartCode from "@examples/record_api_dart/lib/src/create.dart?raw";
+
+<Tabs>
+  <TabItem label="Dart">
+    <Code lang="dart" code={createDartCode} />
+  </TabItem>
+</Tabs>
 
 
-All of the above endpoints can be interacted with through requests that are
-either JSON encoded, url-encoded, or `multipart/form-data` encoded, which makes
-them accessible via rich client-side applications, progressive web apps, and
-static HTML forms alike.
+### Read
 
-### Listing, filtering & sorting records
+The read endpoint lets you read specific records given their id.
+
+import readDartCode from "@examples/record_api_dart/lib/src/read.dart?raw";
+
+<Tabs>
+  <TabItem label="Dart">
+    <Code lang="dart" code={readDartCode} />
+  </TabItem>
+</Tabs>
+
+### Update
+
+The update endpoint lets you modify, i.e. partially update, existing records given their id
+
+import updateDartCode from "@examples/record_api_dart/lib/src/update.dart?raw";
+
+<Tabs>
+  <TabItem label="Dart">
+    <Code lang="dart" code={updateDartCode} />
+  </TabItem>
+</Tabs>
+
+### Delete
+
+import deleteDartCode from "@examples/record_api_dart/lib/src/update.dart?raw";
+
+<Tabs>
+  <TabItem label="Dart">
+    <Code lang="dart" code={deleteDartCode} />
+  </TabItem>
+</Tabs>
+
+The delete endpoints lets you remove a record given its id.
+
+
+### List: Filter, Sort and Paginate
 
 Using the <code>GET {apiPath({name: `${recordApiNamePlaceholder}?<params>`})}</code> endpoint and given
 sufficient permissions one can query records based the given `read_access_rule`
@@ -185,7 +223,27 @@ export const curlListRecords =
 
 <Code code={curlListRecords} lang="bash" frame="terminal" />
 
-## File Upload
+### Subscribe
+
+The streaming subscribe endpoints lets you listen for changes to tables backing
+an API or specific records given their id. Change events can be insertions,
+updates, and deletions.
+
+import subscribeDartCode from "@examples/record_api_dart/lib/src/subscribe.dart?raw";
+
+<Tabs>
+  <TabItem label="Dart">
+    <Code lang="dart" code={subscribeDartCode} />
+  </TabItem>
+</Tabs>
+
+### Schema
+
+The schema endpoint allows for reading the APIs JSON schema definition. This
+can be useful for introspection such as driving external code generation.
+
+
+## File Uploads
 
 Record APIs can also support file uploads and downloads. There's some special
 handling in place so that only metadata is stored in the underlying table while
@@ -254,7 +312,9 @@ When generating new client-side bindings for a table or view with such nested
 schemas, they will be included ensuring type-safety all the way to the
 client-side APIs.
 
-### Tangent: Querying JSON
+{/*
+
+## Tangent: Querying JSON
 
 Independent of type-safety and Record APIs,
 [SQLite](https://www.sqlite.org/json1.html) has first-class support for
@@ -286,6 +346,7 @@ on it would be a lot more efficient.
 Yet, using JSON for complex structured or denormalized data can be powerful
 addition to your toolbox.
 
+*/}
 
 <div class="h-[50px]" />
 
@@ -305,8 +366,8 @@ addition to your toolbox.
     that you think should be supported but aren't.
 
 [^3]:
-   There's also a few other endpoints, e.g. for downloading files as described
-   later in the document.
+    There's also a few other endpoints, e.g. for downloading files, which will
+    be described further down in the docs.
 
 [^4]:
     Record APIs only support textual JSON. Binary JSON is more compact and more

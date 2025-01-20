@@ -40,7 +40,7 @@ we'll use the `sqlite3` CLI[^1] directly to import
 `examples/coffeesearch/arabica_data_cleaned.csv` with the following SQL
 script:
 
-import importScript from "../../../../../examples/coffeesearch/import.sql?raw";
+import importScript from "@root/examples/coffeesearch/import.sql?raw";
 
 <Code
   code={importScript}
@@ -95,7 +95,7 @@ Let's have a quick look at `examples/coffeesearch/traildepot/scripts/main.ts`,
 which defines a `/search` API route we'll later use in our application to
 find coffees most closely matching our desired coffee notes:
 
-import handlerCode from "../../../../../examples/coffeesearch/traildepot/scripts/main.ts?raw";
+import handlerCode from "@root/examples/coffeesearch/traildepot/scripts/main.ts?raw";
 
 <Code
   code={handlerCode}

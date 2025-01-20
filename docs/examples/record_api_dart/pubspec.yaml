@@ -1,0 +1,15 @@
+name: record_api
+description: Example uses of record APIs for documentation purposes.
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: ^3.6.1
+
+dependencies:
+  trailbase:
+    path: ../../../client/trailbase-dart
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.24.0

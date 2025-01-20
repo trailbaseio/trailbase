@@ -1,0 +1,18 @@
+include: package:lints/recommended.yaml
+
+linter:
+  rules:
+    prefer_single_quotes: true
+    unnecessary_brace_in_string_interps: false
+    unawaited_futures: true
+    sort_child_properties_last: false
+
+# analyzer:
+#   exclude:
+#     - path/to/excluded/files/**
+
+# For more information about the core and recommended set of lints, see
+# https://dart.dev/go/core-lints
+
+# For additional information about configuring this file, see
+# https://dart.dev/guides/language/analysis-options

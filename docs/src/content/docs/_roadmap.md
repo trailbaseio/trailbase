@@ -5,7 +5,6 @@ can figure out how any feature will fit into the overall picture and minimize
 friction.
 For context, some larger features we have on our Roadmap:
 
-- Realtime/notification APIs for subscribing to data changes.
 - Auth: more customizable settings, more customizable UI, and multi-factor.
   Also, service-accounts to auth other backends as opposed to end-users.
 - Many SQLite databases: imagine a separate database by tenant or user.

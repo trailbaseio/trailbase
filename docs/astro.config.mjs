@@ -41,7 +41,7 @@ export default defineConfig({
               slug: "getting-started/first-ui-app",
             },
             {
-              label: "A CRUD App",
+              label: "A CLI App",
               slug: "getting-started/first-cli-app",
             },
             {
