@@ -1,6 +1,6 @@
 [package]
 name = "trailbase-sqlean"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 license = "MIT"
 description = "An build wrapper for the sqlean SQLite extensions"

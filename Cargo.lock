@@ -6256,7 +6256,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -6370,7 +6370,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-extension"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -6388,7 +6388,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-refinery-core"
-version = "0.8.15"
+version = "0.8.16"
 dependencies = [
  "async-trait",
  "cfg-if",
@@ -6416,7 +6416,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-sqlean"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "bindgen 0.71.1",
  "cc",
@@ -6426,7 +6426,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-sqlite"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "crossbeam-channel",
  "infer",

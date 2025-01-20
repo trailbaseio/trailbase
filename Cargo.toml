@@ -38,7 +38,7 @@ codegen-units = 1
 opt-level = 1
 
 [workspace.dependencies]
-trailbase-refinery-core = { path = "vendor/refinery/refinery_core", version = "0.8.15", default-features = false, features = ["rusqlite-bundled"] }
+trailbase-refinery-core = { path = "vendor/refinery/refinery_core", version = "0.8.16", default-features = false, features = ["rusqlite-bundled"] }
 trailbase-refinery-macros = { path = "vendor/refinery/refinery_macros", version = "0.8.15" }
 libsqlite3-sys = { version = "0.31.0", features = ["bundled"] }
 rusqlite = { version = "^0.33.0", default-features = false, features = [
@@ -52,7 +52,7 @@ rusqlite = { version = "^0.33.0", default-features = false, features = [
     "hooks",
     "preupdate_hook",
 ] }
-trailbase-sqlean = { path = "vendor/sqlean", version = "^0.0.1" }
-trailbase-extension = { path = "trailbase-extension", version = "^0.1.0" }
-trailbase-sqlite = { path = "trailbase-sqlite", version = "^0.1.0" }
-trailbase = { path = "trailbase-core", version = "^0.0.3" }
+trailbase-sqlean = { path = "vendor/sqlean", version = "0.0.2" }
+trailbase-extension = { path = "trailbase-extension", version = "0.1.1" }
+trailbase-sqlite = { path = "trailbase-sqlite", version = "0.1.1" }
+trailbase = { path = "trailbase-core", version = "0.0.4" }

@@ -1,3 +1,7 @@
+## v0.5.1
+
+* Update SQLite from 3.46.1 to 3.48.0.
+
 ## v0.5.0
 
 * Breaking change: RecordApi.list now nests records in a parent structure to
