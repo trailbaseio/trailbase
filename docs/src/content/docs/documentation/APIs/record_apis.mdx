@@ -145,6 +145,7 @@ existing ones depending on conflict resolution strategy.
 
 import createDartCode from "@examples/record_api_dart/lib/src/create.dart?raw";
 import createTsCode from "@examples/record_api_ts/src/create.ts?raw";
+import createDotnetCode from "@examples/record_api_dotnet/Create.cs?raw";
 import createCurlCode from "@examples/record_api_curl/create.sh?raw";
 
 <Tabs>
@@ -154,6 +155,10 @@ import createCurlCode from "@examples/record_api_curl/create.sh?raw";
 
   <TabItem label="Dart">
     <Code lang="dart" code={createDartCode} />
+  </TabItem>
+
+  <TabItem label="C#/.NET">
+    <Code lang="cs" code={createDotnetCode} />
   </TabItem>
 
   <TabItem label="curl">
@@ -168,6 +173,7 @@ The read endpoint lets you read specific records given their id.
 
 import readDartCode from "@examples/record_api_dart/lib/src/read.dart?raw";
 import readTsCode from "@examples/record_api_ts/src/read.ts?raw";
+import readDotnetCode from "@examples/record_api_dotnet/Read.cs?raw";
 import readCurlCode from "@examples/record_api_curl/read.sh?raw";
 
 <Tabs>
@@ -177,6 +183,10 @@ import readCurlCode from "@examples/record_api_curl/read.sh?raw";
 
   <TabItem label="Dart">
     <Code lang="dart" code={readDartCode} />
+  </TabItem>
+
+  <TabItem label="C#/.NET">
+    <Code lang="cs" code={readDotnetCode} />
   </TabItem>
 
   <TabItem label="curl">
@@ -190,6 +200,7 @@ The update endpoint lets you modify, i.e. partially update, existing records giv
 
 import updateDartCode from "@examples/record_api_dart/lib/src/update.dart?raw";
 import updateTsCode from "@examples/record_api_ts/src/update.ts?raw";
+import updateDotnetCode from "@examples/record_api_dotnet/Update.cs?raw";
 import updateCurlCode from "@examples/record_api_curl/update.sh?raw";
 
 <Tabs>
@@ -201,6 +212,10 @@ import updateCurlCode from "@examples/record_api_curl/update.sh?raw";
     <Code lang="dart" code={updateDartCode} />
   </TabItem>
 
+  <TabItem label="C#/.NET">
+    <Code lang="cs" code={updateDotnetCode} />
+  </TabItem>
+
   <TabItem label="curl">
     <Code lang="sh" frame="code" code={updateCurlCode} />
   </TabItem>
@@ -210,6 +225,7 @@ import updateCurlCode from "@examples/record_api_curl/update.sh?raw";
 
 import deleteDartCode from "@examples/record_api_dart/lib/src/delete.dart?raw";
 import deleteTsCode from "@examples/record_api_ts/src/delete.ts?raw";
+import deleteDotnetCode from "@examples/record_api_dotnet/Delete.cs?raw";
 import deleteCurlCode from "@examples/record_api_curl/delete.sh?raw";
 
 <Tabs>
@@ -219,6 +235,10 @@ import deleteCurlCode from "@examples/record_api_curl/delete.sh?raw";
 
   <TabItem label="Dart">
     <Code lang="dart" code={deleteDartCode} />
+  </TabItem>
+
+  <TabItem label="C#/.NET">
+    <Code lang="cs" code={deleteDotnetCode} />
   </TabItem>
 
   <TabItem label="curl">
