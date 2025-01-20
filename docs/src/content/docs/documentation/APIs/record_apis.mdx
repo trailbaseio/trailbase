@@ -145,6 +145,7 @@ existing ones depending on conflict resolution strategy.
 
 import createDartCode from "@examples/record_api_dart/lib/src/create.dart?raw";
 import createTsCode from "@examples/record_api_ts/src/create.ts?raw";
+import createCurlCode from "@examples/record_api_curl/create.sh?raw";
 
 <Tabs>
   <TabItem label="JS/TS">
@@ -153,6 +154,10 @@ import createTsCode from "@examples/record_api_ts/src/create.ts?raw";
 
   <TabItem label="Dart">
     <Code lang="dart" code={createDartCode} />
+  </TabItem>
+
+  <TabItem label="curl">
+    <Code lang="sh" frame="code" code={createCurlCode} />
   </TabItem>
 </Tabs>
 
@@ -163,6 +168,7 @@ The read endpoint lets you read specific records given their id.
 
 import readDartCode from "@examples/record_api_dart/lib/src/read.dart?raw";
 import readTsCode from "@examples/record_api_ts/src/read.ts?raw";
+import readCurlCode from "@examples/record_api_curl/read.sh?raw";
 
 <Tabs>
   <TabItem label="JS/TS">
@@ -172,6 +178,10 @@ import readTsCode from "@examples/record_api_ts/src/read.ts?raw";
   <TabItem label="Dart">
     <Code lang="dart" code={readDartCode} />
   </TabItem>
+
+  <TabItem label="curl">
+    <Code lang="sh" frame="code" code={readCurlCode} />
+  </TabItem>
 </Tabs>
 
 ### Update
@@ -180,6 +190,7 @@ The update endpoint lets you modify, i.e. partially update, existing records giv
 
 import updateDartCode from "@examples/record_api_dart/lib/src/update.dart?raw";
 import updateTsCode from "@examples/record_api_ts/src/update.ts?raw";
+import updateCurlCode from "@examples/record_api_curl/update.sh?raw";
 
 <Tabs>
   <TabItem label="JS/TS">
@@ -189,12 +200,17 @@ import updateTsCode from "@examples/record_api_ts/src/update.ts?raw";
   <TabItem label="Dart">
     <Code lang="dart" code={updateDartCode} />
   </TabItem>
+
+  <TabItem label="curl">
+    <Code lang="sh" frame="code" code={updateCurlCode} />
+  </TabItem>
 </Tabs>
 
 ### Delete
 
 import deleteDartCode from "@examples/record_api_dart/lib/src/delete.dart?raw";
 import deleteTsCode from "@examples/record_api_ts/src/delete.ts?raw";
+import deleteCurlCode from "@examples/record_api_curl/delete.sh?raw";
 
 <Tabs>
   <TabItem label="JS/TS">
@@ -203,6 +219,10 @@ import deleteTsCode from "@examples/record_api_ts/src/delete.ts?raw";
 
   <TabItem label="Dart">
     <Code lang="dart" code={deleteDartCode} />
+  </TabItem>
+
+  <TabItem label="curl">
+    <Code lang="sh" frame="code" code={deleteCurlCode} />
   </TabItem>
 </Tabs>
 
