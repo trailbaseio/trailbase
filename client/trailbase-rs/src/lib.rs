@@ -6,7 +6,8 @@
 #![allow(clippy::needless_return)]
 
 use eventsource_stream::Eventsource;
-use futures::{Stream, StreamExt};
+pub use futures::Stream;
+use futures::StreamExt;
 use parking_lot::RwLock;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Method;

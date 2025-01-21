@@ -1,0 +1,12 @@
+[package]
+name = "record_api_rs"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1.0.95"
+futures = "0.3.31"
+serde_json = "1.0.137"
+tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread"] }
+trailbase-client = { path = "../../../client/trailbase-rs/" }
