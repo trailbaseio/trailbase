@@ -24,7 +24,11 @@ public class ExamplesTest : IClassFixture<ExamplesTestFixture> {
   public async Task BasicTest() {
     var client = await Connect();
 
+    var tableStream = await Examples.SubscribeAll(client);
+
     var id = await Examples.Create(client);
+
+    var recordStream = await Examples.Subscribe(client, id);
 
     Console.WriteLine($"ID: {id}");
 
@@ -41,5 +45,20 @@ public class ExamplesTest : IClassFixture<ExamplesTestFixture> {
     }
 
     await Examples.Delete(client, id);
+
+    List<Event> events = [];
+    await foreach (Event ev in recordStream) {
+      events.Add(ev);
+    }
+    Assert.Equal(2, events.Count);
+
+    List<Event> tableEvents = [];
+    await foreach (Event ev in tableStream) {
+      tableEvents.Add(ev);
+
+      if (tableEvents.Count >= 3) {
+        break;
+      }
+    }
   }
 }
