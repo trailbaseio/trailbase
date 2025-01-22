@@ -49,7 +49,7 @@ pub struct Tokens {
   pub csrf_token: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Pagination {
   pub cursor: Option<String>,
   pub limit: Option<usize>,
@@ -164,36 +164,32 @@ impl RecordApi {
 
   pub async fn list<T: DeserializeOwned>(
     &self,
-    pagination: Option<Pagination>,
-    order: Option<&[&str]>,
-    filters: Option<&[&str]>,
+    pagination: Pagination,
+    order: &[&str],
+    filters: &[&str],
   ) -> Result<ListResponse<T>, Error> {
     let mut params: Vec<(Cow<'static, str>, Cow<'static, str>)> = vec![];
-    if let Some(pagination) = pagination {
-      if let Some(cursor) = pagination.cursor {
-        params.push((Cow::Borrowed("cursor"), Cow::Owned(cursor)));
-      }
-
-      if let Some(limit) = pagination.limit {
-        params.push((Cow::Borrowed("limit"), Cow::Owned(limit.to_string())));
-      }
+    if let Some(cursor) = pagination.cursor {
+      params.push((Cow::Borrowed("cursor"), Cow::Owned(cursor)));
     }
 
-    if let Some(order) = order {
+    if let Some(limit) = pagination.limit {
+      params.push((Cow::Borrowed("limit"), Cow::Owned(limit.to_string())));
+    }
+
+    if !order.is_empty() {
       params.push((Cow::Borrowed("order"), Cow::Owned(order.join(","))));
     }
 
-    if let Some(filters) = filters {
-      for filter in filters {
-        let Some((name_op, value)) = filter.split_once("=") else {
-          panic!("Filter '{filter}' does not match: 'name[op]=value'");
-        };
+    for filter in filters {
+      let Some((name_op, value)) = filter.split_once("=") else {
+        panic!("Filter '{filter}' does not match: 'name[op]=value'");
+      };
 
-        params.push((
-          Cow::Owned(name_op.to_string()),
-          Cow::Owned(value.to_string()),
-        ));
-      }
+      params.push((
+        Cow::Owned(name_op.to_string()),
+        Cow::Owned(value.to_string()),
+      ));
     }
 
     let response = self

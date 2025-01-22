@@ -103,8 +103,8 @@ class Pagination {
   final int? limit;
 
   const Pagination({
-    required this.cursor,
-    required this.limit,
+    this.cursor,
+    this.limit,
   });
 }
 

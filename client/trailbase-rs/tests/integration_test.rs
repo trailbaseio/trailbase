@@ -123,7 +123,7 @@ async fn records_test() {
     let filter = format!("text_not_null={}", messages[0]);
     let filters = vec![filter.as_str()];
     let response = api
-      .list::<serde_json::Value>(None, None, Some(filters.as_slice()))
+      .list::<serde_json::Value>(Pagination::default(), &[], filters.as_slice())
       .await
       .unwrap();
 
@@ -131,12 +131,12 @@ async fn records_test() {
 
     let second_response = api
       .list::<serde_json::Value>(
-        Some(Pagination {
+        Pagination {
           cursor: response.cursor,
-          limit: None,
-        }),
-        None,
-        Some(filters.as_slice()),
+          ..Default::default()
+        },
+        &[],
+        filters.as_slice(),
       )
       .await
       .unwrap();
@@ -148,7 +148,7 @@ async fn records_test() {
     // List all the messages
     let filter = format!("text_not_null[like]=% =?&{now}");
     let records_ascending: Vec<SimpleStrict> = api
-      .list(None, Some(&["+text_not_null"]), Some(&[&filter]))
+      .list(Pagination::default(), &["+text_not_null"], &[&filter])
       .await
       .unwrap()
       .records;
@@ -160,7 +160,7 @@ async fn records_test() {
     assert_eq!(messages, messages_ascending);
 
     let records_descending: Vec<SimpleStrict> = api
-      .list(None, Some(&["-text_not_null"]), Some(&[&filter]))
+      .list(Pagination::default(), &["-text_not_null"], &[&filter])
       .await
       .unwrap()
       .records;

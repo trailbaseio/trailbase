@@ -61,4 +61,13 @@ public class ExamplesTest : IClassFixture<ExamplesTestFixture> {
       }
     }
   }
+
+  [Fact]
+  public async Task ListTest() {
+    var client = await Connect();
+    var response = await Examples.List(client);
+
+    Assert.Equal(3, response.records.Count);
+    Assert.Equal("Casablanca", response.records[0]["name"]!.ToString());
+  }
 }

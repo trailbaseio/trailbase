@@ -64,13 +64,13 @@ public class UuidRecordId : RecordId {
 
 /// <summary>Pagination state representation.</summary>
 public class Pagination {
-  /// <summary>Offset cursor.</summary>
-  public string? cursor { get; }
   /// <summary>Limit of elements per page.</summary>
   public int? limit { get; }
+  /// <summary>Offset cursor.</summary>
+  public string? cursor { get; }
 
   /// <summary>Pagination constructor.</summary>
-  public Pagination(string? cursor, int? limit) {
+  public Pagination(int? limit = null, string? cursor = null) {
     this.cursor = cursor;
     this.limit = limit;
   }
@@ -190,6 +190,7 @@ public class ErrorEvent : Event {
 
 [JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(ResponseRecordId))]
+[JsonSerializable(typeof(ListResponse<JsonObject>))]
 internal partial class SerializeResponseRecordIdContext : JsonSerializerContext {
 }
 
@@ -286,9 +287,9 @@ public class RecordApi {
   [RequiresDynamicCode(DynamicCodeMessage)]
   [RequiresUnreferencedCode(UnreferencedCodeMessage)]
   public async Task<ListResponse<T>> List<T>(
-    Pagination? pagination,
-    List<string>? order,
-    List<string>? filters
+    Pagination? pagination = null,
+    List<string>? order = null,
+    List<string>? filters = null
   ) {
     string json = await (await ListImpl(pagination, order, filters)).ReadAsStringAsync();
     return JsonSerializer.Deserialize<ListResponse<T>>(json) ?? new ListResponse<T>(null, []);
@@ -297,18 +298,34 @@ public class RecordApi {
   /// <summary>
   /// List records.
   /// </summary>
+  /// <param name="jsonTypeInfo">Serialization type info for AOT mode.</param>
   /// <param name="pagination">Pagination state.</param>
   /// <param name="order">Sort results by the given columns in ascending/descending order, e.g. "-col_name".</param>
   /// <param name="filters">Results filters, e.g. "col0[gte]=100".</param>
-  /// <param name="jsonTypeInfo">Serialization type info for AOT mode.</param>
   public async Task<ListResponse<T>> List<T>(
-    Pagination? pagination,
-    List<string>? order,
-    List<string>? filters,
-    JsonTypeInfo<ListResponse<T>> jsonTypeInfo
+    JsonTypeInfo<ListResponse<T>> jsonTypeInfo,
+    Pagination? pagination = null,
+    List<string>? order = null,
+    List<string>? filters = null
   ) {
     string json = await (await ListImpl(pagination, order, filters)).ReadAsStringAsync();
     return JsonSerializer.Deserialize<ListResponse<T>>(json, jsonTypeInfo) ?? new ListResponse<T>(null, []);
+  }
+
+  /// <summary>
+  /// List records.
+  /// </summary>
+  /// <param name="pagination">Pagination state.</param>
+  /// <param name="order">Sort results by the given columns in ascending/descending order, e.g. "-col_name".</param>
+  /// <param name="filters">Results filters, e.g. "col0[gte]=100".</param>
+  public async Task<ListResponse<JsonObject>> List(
+    Pagination? pagination = null,
+    List<string>? order = null,
+    List<string>? filters = null
+  ) {
+    string json = await (await ListImpl(pagination, order, filters)).ReadAsStringAsync();
+    return JsonSerializer.Deserialize<ListResponse<JsonObject>>(
+        json, SerializeResponseRecordIdContext.Default.ListResponseJsonObject) ?? new ListResponse<JsonObject>(null, []);
   }
 
   private async Task<HttpContent> ListImpl(

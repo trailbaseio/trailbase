@@ -71,4 +71,12 @@ void main() {
       }).toList();
       expect(tableEventList.length, equals(3));
   });
+
+  test('Test code listing example', () async {
+      final client = await connect();
+      final results = await list(client);
+
+      expect(results.records.length, 3);
+      expect(results.records[0]['name'], 'Casablanca');
+  });
 }

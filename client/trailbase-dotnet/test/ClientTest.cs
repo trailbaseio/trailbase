@@ -236,10 +236,8 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
 
     {
       ListResponse<SimpleStrict> response = await api.List(
-        null,
-        null,
-        [$"text_not_null={messages[0]}"],
-        SerializeSimpleStrictContext.Default.ListResponseSimpleStrict
+        SerializeSimpleStrictContext.Default.ListResponseSimpleStrict,
+        filters: [$"text_not_null={messages[0]}"]
       )!;
       Assert.Single(response.records);
       Assert.Equal(messages[0], response.records[0].text_not_null);
@@ -247,20 +245,18 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
 
     {
       var responseAsc = await api.List(
-        null,
-        ["+text_not_null"],
-        [$"text_not_null[like]=% =?&{suffix}"],
-        SerializeSimpleStrictContext.Default.ListResponseSimpleStrict
+        SerializeSimpleStrictContext.Default.ListResponseSimpleStrict,
+        order: ["+text_not_null"],
+        filters: [$"text_not_null[like]=% =?&{suffix}"]
       )!;
       var recordsAsc = responseAsc.records;
       Assert.Equal(messages.Count, recordsAsc.Count);
       Assert.Equal(messages, recordsAsc.ConvertAll((e) => e.text_not_null));
 
       var responseDesc = await api.List(
-        null,
-        ["-text_not_null"],
-        [$"text_not_null[like]=%{suffix}"],
-        SerializeSimpleStrictContext.Default.ListResponseSimpleStrict
+        SerializeSimpleStrictContext.Default.ListResponseSimpleStrict,
+        order: ["-text_not_null"],
+        filters: [$"text_not_null[like]=%{suffix}"]
       )!;
       var recordsDesc = responseDesc.records;
       Assert.Equal(messages.Count, recordsDesc.Count);
@@ -298,10 +294,8 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       await api.Delete(id);
 
       var response = await api.List(
-        null,
-        null,
-        [$"text_not_null[like]=%{suffix}"],
-        SerializeSimpleStrictContext.Default.ListResponseSimpleStrict
+        SerializeSimpleStrictContext.Default.ListResponseSimpleStrict,
+        filters: [$"text_not_null[like]=%{suffix}"]
       )!;
 
       Assert.Single(response.records);

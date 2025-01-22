@@ -5,6 +5,7 @@ import { create } from "../src/create.ts";
 import { read } from "../src/read.ts";
 import { update } from "../src/update.ts";
 import { remove } from "../src/delete.ts";
+import { list } from "../src/list.ts";
 import { subscribe, subscribeAll } from "../src/subscribe.ts";
 
 async function connect(): Promise<Client> {
@@ -57,4 +58,19 @@ test("Test code examples", async () => {
     recordStream.cancel();
   }
 
+});
+
+test("Test list examples", async () => {
+  const client = await connect();
+
+  const response = await list(client);
+
+  expect(response.records.length).toBe(3);
+
+  type Movie = {
+    name: string;
+  };
+
+  const record = response.records[0] as Movie;
+  expect(record.name).toBe("Casablanca");
 });

@@ -91,7 +91,7 @@ of a group "mygroup":
 Independently, you can use `VIEW`s to filter which rows and columns of
 your `TABLE`s should be accessible.
 
-#### Building access groups and capabilities
+#### Building Access Groups and Capabilities
 
 As hinted at by the example above, the SQL access rules can be used to
 build higher-level access protection such as group ACLs or capabilities.
@@ -277,15 +277,17 @@ and query parameters.
 
 Parameters:
 
-* Pagination can be controlled with two parameters: `limit=N` (with a hard
-  limit of 1024) and `cursor=<primary key>`.
-* Ordering can be controlled via `order=[[+-]?<column_name>]+`, e.g.
-  `order=created,-rank`, which would sort records first by their `created`
-  column in ascending order (same as "+") and then by the `rank` column in
-  descending order due to the "-".
-* Lastly, one can filter records by matching against one or more columns like
-  `<column_name>[op]=<value>`, e.g. `revenue[gt]=0` to request only records
-  with revenue values "greater than" 0. The supported operators are:
+* Pagination can be controlled via two query parameters:
+  * `limit=N` (with a built-in hard limit of 1024 to avoid abuse) and
+  * `cursor=<primary key>`.
+* Ordering can be controlled using the `order=[[+-]?<column_name>]+` parameter, e.g.
+  `order=created,-rank`, which sorts records based on their `created` column in
+  ascending order first (same as "+") and subsequently in descending order by
+  their `rank` column due to the minus prefix.
+* Filtering can be controlled by passing one or more
+  `<column_name>[op]=<value>` parameters.
+  For example, `revenue[gt]=0` would list records with a positive `revenue` only.
+  Supported operators are:
   * equal, is the empty operator, e.g. `?success=TRUE`.
   * **not**|**ne**: not equal
   * **gte**: greater-than-equal
@@ -295,13 +297,36 @@ Parameters:
   * **like**: SQL `LIKE` operator
   * **re**: SQL `REGEXP` operator
 
-For example, to query the 10 highest grossing movies with a watch time less
-than 2 hours and an actor called John, one could query:
+For example, to query the top-3 ranked movies with a watch time below 2 hours
+and "love" in their description:
 
-export const curlListRecords =
-  `curl -g '${apiPath({name: "movies?limit=10&order=grossing&watch_time_min[lt]=120&actors[like]=%John%", prefix: "http://<host>"})}'`;
+import listDartCode from "@examples/record_api_dart/lib/src/list.dart?raw";
+import listTsCode from "@examples/record_api_ts/src/list.ts?raw";
+import listRustCode from "@examples/record_api_rs/src/list.rs?raw";
+import listDotnetCode from "@examples/record_api_dotnet/List.cs?raw";
+import listCurlCode from "@examples/record_api_curl/list.sh?raw";
 
-<Code code={curlListRecords} lang="bash" frame="terminal" />
+<Tabs>
+  <TabItem label="JS/TS">
+    <Code lang="ts" code={listTsCode} />
+  </TabItem>
+
+  <TabItem label="Dart">
+    <Code lang="dart" code={listDartCode} />
+  </TabItem>
+
+  <TabItem label="C#/.NET">
+    <Code lang="cs" code={listDotnetCode} />
+  </TabItem>
+
+  <TabItem label="Rust">
+    <Code lang="rust" code={listRustCode} />
+  </TabItem>
+
+  <TabItem label="curl">
+    <Code lang="sh" frame="code" code={listCurlCode} />
+  </TabItem>
+</Tabs>
 
 ### Subscribe
 
@@ -335,7 +360,7 @@ import subscribeDotnetCode from "@examples/record_api_dotnet/Subscribe.cs?raw";
 ### Schema
 
 The schema endpoint allows for reading the APIs JSON schema definition. This
-can be useful for introspection such as driving external code generation.
+can be useful for driving external code generation or introspection in general.
 
 
 ## File Uploads

@@ -1,5 +1,6 @@
 pub mod create;
 pub mod delete;
+pub mod list;
 pub mod read;
 pub mod subscribe;
 pub mod update;
@@ -11,6 +12,7 @@ mod test {
 
   use crate::create::*;
   use crate::delete::*;
+  use crate::list::*;
   use crate::read::*;
   use crate::subscribe::*;
   use crate::update::*;
@@ -57,5 +59,19 @@ mod test {
 
     let table_events = table_stream.take(3).collect::<Vec<_>>().await;
     assert_eq!(table_events.len(), 3);
+  }
+
+  #[ignore]
+  #[tokio::test]
+  async fn list_test() {
+    let client = connect().await;
+
+    let response = list(&client).await.unwrap();
+
+    assert_eq!(response.records.len(), 3);
+    assert_eq!(
+      response.records[0].get("name").unwrap(),
+      &serde_json::Value::String("Casablanca".into())
+    );
   }
 }

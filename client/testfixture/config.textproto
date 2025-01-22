@@ -32,6 +32,12 @@ record_apis: [
     name: "simple_subset_view"
     table_name: "simple_subset_view"
     acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+  },
+  {
+    name: "movies"
+    table_name: "movies"
+    acl_world: [READ]
+    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
   }
 ]
 schemas: [
