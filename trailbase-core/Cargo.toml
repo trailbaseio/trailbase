@@ -81,7 +81,7 @@ ts-rs = { version = "10", features = ["uuid-impl", "serde-json-impl"] }
 url = "^2.4.1"
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 uuid = { version = "^1.8.0", features = ["v4", "serde"] }
-validator = { version = "0.19.0", default-features = false }
+validator = { version = "0.20.0", default-features = false }
 pin-project-lite = "0.2.16"
 
 [build-dependencies]

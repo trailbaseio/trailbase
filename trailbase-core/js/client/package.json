@@ -43,9 +43,9 @@
     "prettier": "^3.4.2",
     "tinybench": "^3.1.0",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.20.0",
-    "vite-node": "^2.1.8",
-    "vitest": "^2.1.8"
+    "typescript-eslint": "^8.21.0",
+    "vite-node": "^3.0.3",
+    "vitest": "^3.0.3"
   },
   "dependencies": {
     "jwt-decode": "^4.0.0",

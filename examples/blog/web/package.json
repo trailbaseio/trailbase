@@ -13,10 +13,10 @@
     "types": "make --always-make types"
   },
   "dependencies": {
-    "@astrojs/tailwind": "^5.1.4",
+    "@astrojs/tailwind": "^5.1.5",
     "@nanostores/persistent": "^0.10.2",
     "@nanostores/solid": "^0.5.0",
-    "astro": "^5.1.6",
+    "astro": "^5.1.8",
     "astro-icon": "^1.1.5",
     "nanostores": "^0.11.3",
     "solid-icons": "^1.1.0",
@@ -25,13 +25,13 @@
     "trailbase": "workspace:*"
   },
   "devDependencies": {
-    "@astrojs/solid-js": "^5.0.2",
+    "@astrojs/solid-js": "^5.0.4",
     "@iconify-json/tabler": "^1.2.14",
     "@tailwindcss/typography": "^0.5.16",
     "@types/dateformat": "^5.0.3",
     "prettier": "^3.4.2",
     "prettier-plugin-astro": "^0.14.1",
-    "quicktype": "^23.0.170",
+    "quicktype": "^23.0.171",
     "sharp": "^0.33.5"
   }
 }
