@@ -7,6 +7,7 @@ packages:
   - 'examples/blog/web'
   - 'examples/coffeesearch'
   - 'examples/tutorial/scripts'
+  - 'examples/ssr/solid-ssr-app'
   - 'trailbase-core/js/runtime'
 options:
   prefer-workspace-packages: true

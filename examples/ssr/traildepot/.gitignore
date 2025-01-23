@@ -1,0 +1,8 @@
+
+backups/
+data/
+secrets/
+uploads/
+
+# Is being built by Makefile.
+scripts/entry-server.js
