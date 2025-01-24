@@ -1,16 +1,20 @@
 TRAILBIN ?= RUST_BACKTRACE=1 cargo run --
-DISTDIR := dist
+TRAILDEPOT := traildepot
 
-run: traildepot/scripts/entry-server.js
-	${TRAILBIN} --data-dir=traildepot run --public-dir=${DISTDIR}/client
+APPDIR := .
+DISTDIR := ${APPDIR}/dist
+ADDRESS := 127.0.0.1:4000
 
-traildepot/scripts/entry-server.js: ${DISTDIR}/server/entry-server.js
+run: ${TRAILDEPOT}/scripts/entry-server.js
+	${TRAILBIN} --data-dir=${TRAILDEPOT} run --public-dir=${DISTDIR}/client --address=${ADDRESS}
+
+${TRAILDEPOT}/scripts/entry-server.js: ${DISTDIR}/server/entry-server.js
 	cp $< $@
 
-${DISTDIR}/server/entry-server.js:
+${DISTDIR}/server/entry-server.js: $(shell find ${APPDIR}/src/ -type f)
 	pnpm run build
 
 clean:
-	rm -rf dist
+	rm -rf ${DISTDIR} ${TRAILDEPOT}/data
 
 .PHONY: run clean

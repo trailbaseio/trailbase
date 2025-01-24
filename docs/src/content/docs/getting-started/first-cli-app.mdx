@@ -1,5 +1,5 @@
 ---
-title: A CLI App
+title: A Movie Data CLI App
 ---
 
 import { Code } from "@astrojs/starlight/components";
@@ -10,7 +10,7 @@ TrailBase and write a simple client CLI application to query the data using
 *Record APIs*.
 
 In an effort to demonstrate TrailBase's loose coupling and the possibility of
-simply trying out TrailBase with an existing SQLite-based data analysis
+simply trying out TrailBase with an existing SQLite-based data-focused
 project, we will also offer an alternative path to bootstrapping the database
 using the vanilla `sqlite3` CLI.
 
@@ -89,7 +89,15 @@ sqlite> SELECT COUNT(*) FROM movies;
 1000
 ```
 
-## Reading the Data
+## API Data Access
+
+
+<Aside type="note" title="Try TrailBase on Existing Datasets">
+  Until here - setting up the schema and ingesting data - TrailBase wasn't
+  strictly needed, which goes to show that you can use TrailBase on
+  pre-existing SQLite databases. For example, exploring the data using the
+  dashboard or exposing and querying it using APIs as follows.
+</Aside>
 
 With TrailBase up and running (`trail run`), the easiest way to explore your
 data is go to the admin dashboard under
@@ -134,7 +142,10 @@ the respective movies.
 ## Writing Data with a Custom CLI
 
 Finally, let's authenticate and use privileged APIs to first delete all movies
-and then add them back using type-safe APIs rather than `sqlite3`.
+and then add them back using type-safe APIs rather than `sqlite3`. This
+may seem silly at first, however, many uses cases will require more complex
+ingestion strategies such as incremental insertion over time, de-duping against
+existing records, or access across an auth and process boundary.
 
 Let's first create the JSON Schema type definitions from the database schema we
 added above. Note, that the type definition for creation, reading, and updating
@@ -173,10 +184,13 @@ import fillCode from "@root/examples/data-cli-tutorial/src/fill.ts?raw";
 ## What's Next?
 
 Thanks for making it to the end.
-Beyond the basic example above, the repository contains a more involved Blog
-example (`/examples/blog`) including both, a Web and Flutter UI.
-The blog example also demonstrates more complex APIs, authorization, custom
-user profiles, etc.
+Beyond the basic example above, the repository contains a more involved examples, such as:
+
+* A [Blog](https://github.com/trailbaseio/trailbase/tree/main/examples/blog)
+  with both, a Web and Flutter UI, more complex APIs, authorization and custom
+  user profiles.
+* A collaborative clicker *game* demonstrating server-side rendering (SSR) with
+  popular JS frameworks and *realtime* updates to synchronize state.
 
 Any questions or suggestions? Reach out on GitHub and help us improve the docs.
 Thanks!
