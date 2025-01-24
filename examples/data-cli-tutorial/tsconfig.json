@@ -11,7 +11,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@schema/*": ["./types/*"],
-      "@bindings/*": ["../../../trailbase-core/bindings/*"]
+      "@bindings/*": ["../../trailbase-core/bindings/*"]
     }
   },
   "include": ["src/**/*"],

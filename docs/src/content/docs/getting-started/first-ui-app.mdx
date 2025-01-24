@@ -13,7 +13,7 @@ production-ready web app all in ~100 lines of code.
 
 <div class="flex justify-center">
   <div class="w-[80%] shadow-lg	 ">
-    ![screenshot](../../../../../examples/coffeesearch/assets/screenshot.png)
+    ![screenshot](../../../../../examples/coffee-vector-search/assets/screenshot.png)
   </div>
 </div>
 
@@ -24,7 +24,7 @@ can be downloaded to follow along by running:
 
 ```bash
 $ git clone https://github.com/trailbaseio/trailbase.git
-$ cd trailbase/examples/coffeesearch
+$ cd trailbase/examples/coffee-vector-search
 ```
 
 import GettingTrailBase from "./_getting_trailbase.md";
@@ -37,15 +37,15 @@ import GettingTrailBase from "./_getting_trailbase.md";
 
 Before building the app, let's import some data. Keeping it simple,
 we'll use the `sqlite3` CLI[^1] directly to import
-`examples/coffeesearch/arabica_data_cleaned.csv` with the following SQL
+`examples/coffee-vector-search/arabica_data_cleaned.csv` with the following SQL
 script:
 
-import importScript from "@root/examples/coffeesearch/import.sql?raw";
+import importScript from "@root/examples/coffee-vector-search/import.sql?raw";
 
 <Code
   code={importScript}
   lang="sql"
-  title={"examples/coffeesearch/import.sql"}
+  title={"examples/coffee-vector-search/import.sql"}
   mark={[]}
 />
 
@@ -54,7 +54,7 @@ Note that we didn't initialize the vector `embedding`. This is merely because
 We'll update the entries later on, adding the embedding as part of our initial
 database migrations[^2].
 
-From within the `example/coffeesearch` directory, you can execute the script
+From within the `example/coffee-vector-search` directory, you can execute the script
 above and import the coffee data by running:
 
 ```bash
@@ -91,16 +91,16 @@ Any time you start `trail run`[^3], JavaScript and TypeScript files under
 </Aside>
 
 We can use this to register custom HTTP API routes among other things.
-Let's have a quick look at `examples/coffeesearch/traildepot/scripts/main.ts`,
+Let's have a quick look at `examples/coffee-vector-search/traildepot/scripts/main.ts`,
 which defines a `/search` API route we'll later use in our application to
 find coffees most closely matching our desired coffee notes:
 
-import handlerCode from "@root/examples/coffeesearch/traildepot/scripts/main.ts?raw";
+import handlerCode from "@root/examples/coffee-vector-search/traildepot/scripts/main.ts?raw";
 
 <Code
   code={handlerCode}
   lang="ts"
-  title={"examples/coffeesearch/traildepot/scripts/main.ts"}
+  title={"examples/coffee-vector-search/traildepot/scripts/main.ts"}
   mark={[]}
 />
 
@@ -141,12 +141,12 @@ framework, e.g.: `npm create vite@latest my-project -- --template react`.
 Our provided reference implementation, renders 4 numeric input fields to search
 for coffee with a certain aroma, flavor, acidity and sweetness score:
 
-import uiCode from "../../../../../examples/coffeesearch/src/App.tsx?raw";
+import uiCode from "../../../../../examples/coffee-vector-search/src/App.tsx?raw";
 
 <Code
   code={uiCode}
   lang="ts"
-  title={"examples/coffeesearch/src/App.tsx"}
+  title={"examples/coffee-vector-search/src/App.tsx"}
   mark={[]}
 />
 
@@ -190,7 +190,7 @@ depending on a pyramid of shared libraries or requiring other services to be up
 and running like a separate database server.
 This makes it very easy to just copy the files over to your server or bundle
 everything in a single container.
-`examples/coffeesearch/Dockerfile` is an example of how you can both build and
+`examples/coffee-vector-search/Dockerfile` is an example of how you can both build and
 bundle using Docker. In fact,
 
 ```

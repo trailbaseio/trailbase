@@ -5,10 +5,10 @@ export default [
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ["dist/", "node_modules/", "types"],
+    ignores: ["dist/", "node_modules/", "types", "traildepot"],
   },
   {
-    files: ["scripts/*.{js,mjs,cjs,mts,ts,tsx,jsx}"],
+    files: ["src/*.{js,mjs,cjs,mts,ts,tsx,jsx}"],
     rules: {
       // https://typescript-eslint.io/rules/no-explicit-any/
       "@typescript-eslint/no-explicit-any": "warn",

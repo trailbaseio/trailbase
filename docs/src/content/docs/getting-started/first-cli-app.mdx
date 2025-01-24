@@ -6,7 +6,7 @@ import { Code } from "@astrojs/starlight/components";
 import { Aside } from "@astrojs/starlight/components";
 
 In this tutorial, we'll set up a database with an IMDB test dataset, spin up
-TrailBase and write a simple client CLI application to access the data using
+TrailBase and write a simple client CLI application to query the data using
 *Record APIs*.
 
 In an effort to demonstrate TrailBase's loose coupling and the possibility of
@@ -161,12 +161,12 @@ version and copy&paste the JSON schema from above.
 With the generated types, we can use the TrailBase TypeScript client to write
 the following program:
 
-import fillCode from "@root/examples/tutorial/scripts/src/fill.ts?raw";
+import fillCode from "@root/examples/data-cli-tutorial/src/fill.ts?raw";
 
 <Code
   code={fillCode}
   lang="ts"
-  title={"examples/tutorial/scripts/src/fill.ts"}
+  title={"examples/data-cli-tutorial/src/fill.ts"}
   mark={[]}
 />
 

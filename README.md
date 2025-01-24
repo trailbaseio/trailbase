@@ -13,7 +13,7 @@
 <p>
 
 <p align="center">
-  Simplify with fewer moving parts: an easy to self-host, single-file,
+  Simplify with fewer moving parts: an easy to self-host, single-executable,
   extensible backend for your mobile, web or desktop application.
   Sub-millisecond latencies eliminate the need for dedicated caches, no more
   stale or inconsistent data.

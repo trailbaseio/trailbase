@@ -37,12 +37,17 @@ export default defineConfig({
               slug: "getting-started/starting-up",
             },
             {
-              label: "First App",
-              slug: "getting-started/first-ui-app",
-            },
-            {
-              label: "A CLI App",
-              slug: "getting-started/first-cli-app",
+              label: "Tutorials",
+              items: [
+                {
+                  label: "API, Vector Search & UI",
+                  slug: "getting-started/first-ui-app",
+                },
+                {
+                  label: "Data CLI",
+                  slug: "getting-started/first-cli-app",
+                },
+              ],
             },
             {
               label: "Philosophy",
