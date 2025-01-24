@@ -1,3 +1,10 @@
+## v0.5.2
+
+* Add file-system APIs to JS/TS runtime to facility accessing resources, e.g.
+  templates for SSR (see example/colab-clicker-ssr).
+* Add a timeout to graceful shutdown to deal with long-lived streaming connections.
+* Allow short-cutting above timeout by pressing a Ctrl+C second time.
+
 ## v0.5.1
 
 * Update SQLite from 3.46.1 to 3.48.0.

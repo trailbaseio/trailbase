@@ -410,7 +410,7 @@ async fn shutdown_signal() {
         _ = sleep(Duration::from_secs(1)) => {}
         _ = signal::ctrl_c() => {
             println!("Got Ctrl+C. Shutting down");
-            std::process::exit(0);
+            std::process::exit(1);
         }
       };
 
