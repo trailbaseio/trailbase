@@ -8,6 +8,7 @@ target/
 
 traildepot/
 docs/
+!docs/examples/record_api_rs
 
 Dockerfile*
 .docker*
