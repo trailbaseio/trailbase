@@ -47,6 +47,10 @@ export default defineConfig({
                   label: "Data CLI",
                   slug: "getting-started/first-cli-app",
                 },
+                {
+                  label: "Realtime Sync & SSR",
+                  slug: "getting-started/first-realtime-app",
+                },
               ],
             },
             {
