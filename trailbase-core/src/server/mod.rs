@@ -406,7 +406,13 @@ async fn shutdown_signal() {
     const SECONDS: usize = 10;
 
     for remaining in (0..SECONDS).rev() {
-      sleep(Duration::from_secs(1)).await;
+      tokio::select! {
+        _ = sleep(Duration::from_secs(1)) => {}
+        _ = signal::ctrl_c() => {
+            println!("Got Ctrl+C. Shutting down");
+            std::process::exit(0);
+        }
+      };
 
       if remaining > 0 {
         println!("Waiting {SECONDS}s for graceful shutdown: {remaining}s remaining.");
