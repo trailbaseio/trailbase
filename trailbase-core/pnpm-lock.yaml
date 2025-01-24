@@ -278,6 +278,12 @@ importers:
 
   js/runtime:
     devDependencies:
+      '@eslint/js':
+        specifier: ^9.18.0
+        version: 9.18.0
+      eslint:
+        specifier: ^9.18.0
+        version: 9.18.0(jiti@1.21.7)
       prettier:
         specifier: ^3.4.2
         version: 3.4.2

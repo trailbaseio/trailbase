@@ -1,13 +1,18 @@
 {
   "compilerOptions": {
+    "lib": ["esnext", "DOM"],
+    "target": "es2022",
+    "module": "es2022",
     "declaration": true,
     "strict": true,
     "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": false,
     "moduleResolution": "bundler",
-    "target": "ESNext",
-    "module": "ESNext",
     "outDir": "dist"
-  }
+  },
+  "exclude": [
+    "dist/**",
+    "types/**"
+  ]
 }

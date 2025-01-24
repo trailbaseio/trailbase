@@ -1,11 +1,11 @@
-import { addRoute, htmlHandler, jsonHandler, query } from "../trailbase.js";
+import { addRoute, htmlHandler, jsonHandler, query, fs } from "../trailbase.js";
 import { render } from "./entry-server.js";
 
 let _template: Promise<string> | null = null;
 
 async function getTemplate(): Promise<string> {
   if (_template == null) {
-    const template = _template = Deno.readTextFile('solid-ssr-app/dist/client/index.html');
+    const template = _template = fs.readTextFile('solid-ssr-app/dist/client/index.html');
     return await template;
   }
   return await _template;

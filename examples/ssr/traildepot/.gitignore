@@ -1,8 +1,10 @@
-
 backups/
 data/
 secrets/
 uploads/
+
+trailbase.d.ts
+trailbase.js
 
 # Is being built by Makefile.
 scripts/entry-server.js

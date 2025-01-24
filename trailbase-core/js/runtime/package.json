@@ -7,9 +7,12 @@
   "homepage": "https://trailbase.io",
   "scripts": {
     "build": "tsc",
+    "check": "tsc --noEmit --skipLibCheck && eslint",
     "format": "prettier -w src"
   },
   "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "eslint": "^9.18.0",
     "prettier": "^3.4.2",
     "typescript": "^5.7.3"
   }
