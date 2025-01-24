@@ -400,12 +400,31 @@ async fn shutdown_signal() {
   #[cfg(not(unix))]
   let terminate = std::future::pending::<()>();
 
+  async fn timer() {
+    use tokio::time::*;
+
+    const SECONDS: usize = 10;
+
+    for remaining in (0..SECONDS).rev() {
+      sleep(Duration::from_secs(1)).await;
+
+      if remaining > 0 {
+        println!("Waiting {SECONDS}s for graceful shutdown: {remaining}s remaining.");
+      } else {
+        println!("Graceful shutdown failed. Shutting down");
+        std::process::exit(0);
+      }
+    }
+  }
+
   tokio::select! {
       _ = ctrl_c => {
       println!("Received Ctrl+C. Shutting down gracefully.");
+      tokio::spawn(timer());
     },
       _ = terminate => {
       println!("Received termination. Shutting down gracefully.");
+      tokio::spawn(timer());
     },
   }
 }
