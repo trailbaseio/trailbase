@@ -42,7 +42,7 @@ function Table() {
 
   return (
     <>
-      <div className="inputs">
+      <div className="inputs" style={{ margin: "2rem" }}>
         <Input label="Aroma" value={aroma} update={setAroma} />
         <Input label="Flavor" value={flavor} update={setFlavor} />
         <Input label="Acidity" value={acidity} update={setAcidity} />
@@ -78,7 +78,7 @@ function Table() {
 
 export const App = () => (
   <>
-    <h1>Coffee Search</h1>
+    <h1>☕ search</h1>
     <Table />
   </>
 );

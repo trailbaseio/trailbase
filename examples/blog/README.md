@@ -4,7 +4,7 @@
   <picture align="center">
     <img
       height="420"
-      src="https://raw.githubusercontent.com/ignatz/trailbase/refs/heads/main/examples/blog/assets/screenshot_web.png"
+      src="screenshots/screenshot_web.png"
       alt="Screenshot Web"
     />
   </picture>
@@ -12,7 +12,7 @@
   <picture align="center">
     <img
       height="420"
-      src="https://raw.githubusercontent.com/ignatz/trailbase/refs/heads/main/examples/blog/assets/screenshot_flutter.png"
+      src="screenshots/screenshot_flutter.png"
       alt="Screenshot Flutter"
     />
   </picture>

@@ -1,4 +1,4 @@
-# Coffee Search
+# Coffee Vector Search
 
 A small web application demonstrating the use of TrailBase and its vector
 search to build a coffee search.

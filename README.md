@@ -1,7 +1,7 @@
 <p align="center">
   <a href="https://trailbase.io" target="_blank">
     <picture>
-      <img alt="TrailBase logo" width="150" src="https://raw.githubusercontent.com/trailbaseio/trailbase/refs/heads/main/assets/logo.svg" />
+      <img alt="TrailBase logo" width="150" src="assets/logo.svg" />
     </picture>
   </a>
 </p>
@@ -39,7 +39,7 @@
 <p align="center">
   <a href="https://demo.trailbase.io/_/admin" target="_blank">
     <picture>
-      <img alt="Admin UI" width="512" src="https://raw.githubusercontent.com/trailbaseio/trailbase/refs/heads/main/docs/src/assets/screenshot.webp" />
+      <img alt="Admin UI" width="512" src="assets/screenshot.webp" />
     </picture>
   </a>
 </p>

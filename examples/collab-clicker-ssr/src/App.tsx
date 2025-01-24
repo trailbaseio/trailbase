@@ -1,4 +1,5 @@
 import { createSignal, onMount } from "solid-js"
+import logo from "../public/favicon.svg";
 
 export type Clicked = {
   count: number
@@ -58,20 +59,33 @@ export function App({ initialCount }: { initialCount?: number }) {
 
   return (
     <div class="flex flex-col gap-4 text-neutral-800">
-      <h1>TrailBase Clicker</h1>
+      <h1>TrailBase</h1>
 
-      <div class="px-4 py-2">
+      <div>
         <button
-          class="rounded bg-neutral-100 p-2 font-medium hover:scale-110 hover:outline outline-accent-600 active:scale-100 animate-all"
+          class="p-2 rounded-full hover:bg-accent-200 hover:scale-100 active:scale-90 animate-all"
           onClick={onClick}
         >
-          clicked {count()} times
+          <img class="size-[256px] m-2" src={logo} />
         </button>
       </div>
 
-      <p>
-        Click the button across different tabs, windows or browsers.
-      </p>
+      <button class="px-4 py-2" onClick={onClick}>
+        <span class="p-2 bg-neutral-100 rounded font-bold">Clicked {count()} times</span>
+      </button>
+
+      <p>Click the acorn across different tabs, browsers or computers.</p>
+
+      <div class="m-4 p-4 outline outline-1 outline-natural-200 rounded text-sm max-w-[680px]">
+        <p class="font-bold py-1">Context</p>
+        <p>
+          This page showcases TrailBase's "realtime" APIs and server-side rendering (SSR) capabilities.
+          The initial page-load contains pre-rendered HTML, which is then hydrated on the client.
+          This reduces latency by saving the client a round-trip to fetch the initial counter value.
+          The client also subscribes to counter changes and is updates the page whenever someone else
+          presses the acorn.
+        </p>
+      </div>
     </div>
   )
 }

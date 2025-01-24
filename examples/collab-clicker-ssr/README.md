@@ -1,4 +1,8 @@
-# SSR Web App with Client-Side Hydration
+# Collaborative Clicker App with SSR
+
+This app serves as a showcase for "realtime" API subscriptions and server-side
+rendering (SSR). This app uses SolidJS but the same approach applies to React,
+Vue, Svelte, Preact, ... .
 
 ## Generate the App
 
