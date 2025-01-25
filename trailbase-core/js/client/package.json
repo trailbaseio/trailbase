@@ -1,18 +1,18 @@
 {
   "name": "trailbase",
   "description": "Official TrailBase client",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "license": "OSL-3.0",
   "type": "module",
   "main": "./src/index.ts",
   "publishConfig": {
     "access": "public",
-    "main": "./dist/client/trailbase-ts/src/index.js",
-    "types": "./dist/client/trailbase-ts/src/index.d.ts",
+    "main": "./dist/js/client/src/index.js",
+    "types": "/dist/js/client/src/index.d.ts",
     "exports": {
       ".": {
-        "types": "./dist/client/trailbase-ts/src/index.d.ts",
-        "default": "./dist/client/trailbase-ts/src/index.js"
+        "default": "./dist/js/client/src/index.js",
+        "types": "./dist/js/client/src/index.d.ts"
       }
     }
   },
