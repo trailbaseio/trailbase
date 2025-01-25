@@ -59,11 +59,13 @@ export function App({ initialCount }: { initialCount?: number }) {
 
   return (
     <div class="flex flex-col gap-4 text-neutral-800">
-      <h1>TrailBase</h1>
+      <h1 class="bg-gradient-to-r from-accent-600 via-purple-500 to-pink-500 inline-block text-transparent bg-clip-text">
+        TrailBase
+      </h1>
 
       <div>
         <button
-          class="p-2 rounded-full hover:bg-accent-200 hover:scale-100 active:scale-90 animate-all"
+          class="p-2 rounded-full hover:bg-accent-200 scale-95 hover:scale-100 active:scale-90 animate-all"
           onClick={onClick}
         >
           <img class="size-[256px] m-2" src={logo} />

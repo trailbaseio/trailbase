@@ -1,5 +1,5 @@
 import { addRoute, htmlHandler, jsonHandler, query, fs } from "../trailbase.js";
-import { render } from "./entry-server.js";
+import { render } from "../../dist/server/entry-server.js";
 
 let _template: Promise<string> | null = null;
 
