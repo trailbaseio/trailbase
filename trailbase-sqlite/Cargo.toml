@@ -24,6 +24,6 @@ sqlite-vec = "0.1.6"
 thiserror = "2.0.1"
 tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "sync"] }
 trailbase-extension = { workspace = true }
-uuid = { version = "^1.8.0", features = ["v4", "serde"] }
+uuid = { version = "1.7.0", default-features = false, features = ["std", "v4"] }
 
 [dev-dependencies]

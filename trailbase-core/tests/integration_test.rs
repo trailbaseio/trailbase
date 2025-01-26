@@ -2,8 +2,8 @@ use axum::extract::{Json, State};
 use axum::http::StatusCode;
 use axum_test::multipart::MultipartForm;
 use axum_test::TestServer;
-use cookie::Cookie;
 use std::rc::Rc;
+use tower_cookies::Cookie;
 use tracing_subscriber::prelude::*;
 use trailbase_sqlite::params;
 

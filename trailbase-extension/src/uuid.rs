@@ -102,11 +102,10 @@ mod tests {
     }
 
     {
-      let uuidv4 = Uuid::new_v4();
       assert!(conn
         .execute(
           "INSERT INTO test (uuid, uuid_v7) VALUES (NULL, $1)",
-          params!(uuidv4.into_bytes().to_vec())
+          params!(Vec::<u8>::from([0, 0, 1, 2, 3, 4, 5, 6]))
         )
         .is_err());
     }

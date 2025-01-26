@@ -12,8 +12,8 @@ readme = "../README.md"
 crate-type=["cdylib", "rlib"]
 
 [dependencies]
-argon2 = "0.5.3"
-base64 = "0.22.1"
+argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
+base64 = { version = "0.22.1", default-features = false }
 jsonschema = { version = "0.28.0", default-features = false }
 lru = { version = "0.12.3", default-features = false }
 maxminddb = "0.24.0"
@@ -23,13 +23,4 @@ regex = "1.11.0"
 rusqlite = { workspace = true }
 serde_json = "1.0.121"
 uuid = { version = "1.7.0", default-features = false, features = ["std", "v7"] }
-validator = "0.20.0"
-
-[dev-dependencies]
-uuid = { version = "1.7.0", default-features = false, features = ["std", "v4", "v7"] }
-
-[profile.release]
-strip = "debuginfo"
-opt-level = "s"
-panic = "unwind"
-lto = true
+validator = { version = "0.20.0", default-features = false }

@@ -33,9 +33,7 @@ axum-extra = { version = "^0.10.0", default-features = false, features = ["proto
 base64 = { version = "0.22.1", default-features = false }
 bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
-cookie = "0.18.1"
 ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
-env_logger = "^0.11.3"
 fallible-iterator = "0.3.0"
 form_urlencoded = "1.2.1"
 futures = "0.3.30"
@@ -47,12 +45,12 @@ jsonwebtoken = { version = "^9.3.0", default-features = false, features = ["use_
 lazy_static = "1.4.0"
 lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
 log = "^0.4.21"
-minijinja = "2.1.2"
+minijinja = { version = "2.1.2", default-features = false }
 oauth2 = { version = "5.0.0-alpha.4", default-features = false, features = ["reqwest", "rustls-tls"] }
 object_store = { version = "0.11.0", default-features = false, features = ["aws"] }
-parking_lot = "0.12.3"
-prost = "^0.13.4"
-prost-reflect = { version = "^0.14.3", features = ["derive", "text-format"] }
+parking_lot = { version = "0.12.3", default-features = false }
+prost = { version = "^0.13.4", default-features = false }
+prost-reflect = { version = "^0.14.3", default-features = false, features = ["derive", "text-format"] }
 rand = "0.8.5"
 trailbase-refinery-core = { workspace = true }
 trailbase-refinery-macros = { workspace = true }
@@ -69,18 +67,17 @@ sha2 = "0.10.8"
 sqlformat = "0.3.1"
 sqlite3-parser = "0.14.0"
 thiserror = "2.0.1"
-thread_local = "1.1.8"
 tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "signal", "time"] }
 tower-cookies = "0.11.0"
-tower-http = { version = "^0.6.0", features = ["cors", "trace", "fs", "limit"] }
-tower-service = "0.3.3"
-tracing = "0.1.40"
-tracing-subscriber = "0.3.18"
+tower-http = { version = "^0.6.0", default-features = false, features = ["cors", "trace", "fs", "limit"] }
+tower-service = { version = "0.3.3", default-features = false }
+tracing = { version = "0.1.40", default-features = false }
+tracing-subscriber = { version = "0.3.18" }
 trailbase-sqlite = { workspace = true }
 ts-rs = { version = "10", features = ["uuid-impl", "serde-json-impl"] }
 url = "^2.4.1"
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
-uuid = { version = "^1.8.0", features = ["v4", "serde"] }
+uuid = { version = "1.7.0", default-features = false, features = ["std", "v7"] }
 validator = { version = "0.20.0", default-features = false }
 pin-project-lite = "0.2.16"
 
@@ -94,6 +91,7 @@ prost-reflect-build = "0.14.0"
 anyhow = "^1.0.86"
 axum-test = "17.0.1"
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+env_logger = "^0.11.3"
 trailbase-extension = { workspace = true }
 quoted_printable = "0.5.1"
 schemars = "0.8.21"

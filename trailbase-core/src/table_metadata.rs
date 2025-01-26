@@ -916,7 +916,7 @@ mod tests {
       insert(
         "col1",
         serde_json::to_value(FileUpload::new(
-          uuid::Uuid::new_v4(),
+          uuid::Uuid::now_v7(),
           Some("filename".to_string()),
           None,
           None
@@ -947,7 +947,7 @@ mod tests {
     assert!(insert(
       "col3",
       json!({
-          "id": uuid::Uuid::new_v4().to_string(),
+          "id": uuid::Uuid::now_v7().to_string(),
           // Missing mime-type.
       })
     )
@@ -959,7 +959,7 @@ mod tests {
     assert!(insert(
       "col3",
       json!({
-        "id": uuid::Uuid::new_v4().to_string(),
+        "id": uuid::Uuid::now_v7().to_string(),
         "mime_type": "image/png"
       })
     )

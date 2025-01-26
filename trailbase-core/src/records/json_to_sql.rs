@@ -971,7 +971,7 @@ mod tests {
 
     let metadata = TableMetadata::new(table.clone(), &[table]);
 
-    let id: [u8; 16] = uuid::Uuid::new_v4().as_bytes().clone();
+    let id: [u8; 16] = uuid::Uuid::now_v7().as_bytes().clone();
     let blob: Vec<u8> = [0; 128].to_vec();
     let text = "some text :)";
     let num = 5;
