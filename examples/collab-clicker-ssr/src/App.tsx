@@ -63,18 +63,24 @@ export function App({ initialCount }: { initialCount?: number }) {
         TrailBase
       </h1>
 
+      <a href="https://github.com/trailbaseio/trailbase">
+        If you like the demo, consider leaving a ⭐ on GitHub
+      </a>
+
       <div>
         <button
-          class="p-2 rounded-full hover:bg-accent-200 scale-95 hover:scale-100 active:scale-90 animate-all"
+          class={`${buttonStyle} rounded-full`}
           onClick={onClick}
         >
           <img class="size-[256px] m-2" src={logo} />
         </button>
       </div>
 
-      <button class="px-4 py-2" onClick={onClick}>
-        <span class="p-2 bg-neutral-100 rounded font-bold">Clicked {count()} times</span>
-      </button>
+      <div>
+        <button class={`${buttonStyle}, w-[200px] rounded bg-neutral-100`} onClick={onClick}>
+          Clicked {count()}x globally
+        </button>
+      </div>
 
       <p>Click the acorn across different tabs, browsers or computers.</p>
 
@@ -91,3 +97,5 @@ export function App({ initialCount }: { initialCount?: number }) {
     </div>
   )
 }
+
+const buttonStyle = "p-2 scale-95 hover:scale-100 hover:bg-accent-200 active:scale-90 animate-all font-bold";
