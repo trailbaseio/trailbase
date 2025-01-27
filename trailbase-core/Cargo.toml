@@ -49,15 +49,15 @@ minijinja = { version = "2.1.2", default-features = false }
 oauth2 = { version = "5.0.0-alpha.4", default-features = false, features = ["reqwest", "rustls-tls"] }
 object_store = { version = "0.11.0", default-features = false, features = ["aws"] }
 parking_lot = { version = "0.12.3", default-features = false }
+pin-project-lite = "0.2.16"
 prost = { version = "^0.13.4", default-features = false }
 prost-reflect = { version = "^0.14.3", default-features = false, features = ["derive", "text-format"] }
 rand = "0.8.5"
-trailbase-refinery-core = { workspace = true }
-trailbase-refinery-macros = { workspace = true }
 regex = "1.11.0"
 reqwest = { version = "0.12.8", default-features = false, features = ["rustls-tls", "json"] }
 rusqlite = { workspace = true }
 rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
+rustc_tools_util = "0.4.0"
 rustyscript = { version = "^0.11.0", optional = true, features = ["web", "fs"] }
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "^1.0.117"
@@ -73,19 +73,21 @@ tower-http = { version = "^0.6.0", default-features = false, features = ["cors",
 tower-service = { version = "0.3.3", default-features = false }
 tracing = { version = "0.1.40", default-features = false }
 tracing-subscriber = { version = "0.3.18" }
+trailbase-refinery-core = { workspace = true }
+trailbase-refinery-macros = { workspace = true }
 trailbase-sqlite = { workspace = true }
 ts-rs = { version = "10", features = ["uuid-impl", "serde-json-impl"] }
 url = "^2.4.1"
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 uuid = { version = "1.7.0", default-features = false, features = ["std", "v7"] }
 validator = { version = "0.20.0", default-features = false }
-pin-project-lite = "0.2.16"
 
 [build-dependencies]
 env_logger = "^0.11.3"
 log = "^0.4.21"
 prost-build = "0.13.1"
 prost-reflect-build = "0.14.0"
+rustc_tools_util = "0.4.0"
 
 [dev-dependencies]
 anyhow = "^1.0.86"

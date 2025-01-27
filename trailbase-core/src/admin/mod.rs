@@ -1,5 +1,6 @@
 mod config;
 mod error;
+mod info;
 mod jwt;
 mod list_logs;
 mod oauth_providers;
@@ -66,4 +67,5 @@ pub fn router() -> Router<AppState> {
       get(oauth_providers::available_oauth_providers_handler),
     )
     .route("/public_key", get(jwt::get_public_key))
+    .route("/info", get(info::info_handler))
 }

@@ -146,6 +146,10 @@ impl AppState {
     return &self.state.logs_conn;
   }
 
+  pub fn version(&self) -> rustc_tools_util::VersionInfo {
+    return rustc_tools_util::get_version_info!();
+  }
+
   pub(crate) fn table_metadata(&self) -> &TableMetadataCache {
     return &self.state.table_metadata;
   }

@@ -1,20 +1,29 @@
-import { createSignal, For, Show } from "solid-js";
+import {
+  createResource,
+  createSignal,
+  For,
+  Show,
+  Switch,
+  Match,
+} from "solid-js";
 import type { Component, JSXElement } from "solid-js";
 import { Route, useNavigate, type RouteSectionProps } from "@solidjs/router";
 import { createForm } from "@tanstack/solid-form";
 
-import { showToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Dialog } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { TextField, TextFieldLabel } from "@/components/ui/text-field";
+import { showToast } from "@/components/ui/toast";
 
 import { Config, ServerConfig } from "@proto/config";
 import {
   notEmptyValidator,
   buildNumberFormField,
   buildTextFormField,
+  gapStyle,
 } from "@/components/FormFields";
 import { ConfirmCloseDialog } from "@/components/SafeSheet";
 import { AuthSettings } from "@/components/settings/AuthSettings";
@@ -22,7 +31,9 @@ import { SchemaSettings } from "@/components/settings/SchemaSettings";
 import { EmailSettings } from "@/components/settings/EmailSettings";
 import { SplitView } from "@/components/SplitView";
 
+import type { InfoResponse } from "@bindings/InfoResponse";
 import { createConfigQuery, setConfig } from "@/lib/config";
+import { adminFetch } from "@/lib/fetch";
 
 function ServerSettings(props: CommonProps) {
   const config = createConfigQuery();
@@ -152,8 +163,48 @@ function ServerSettings(props: CommonProps) {
     return ServerConfig.create();
   };
 
+  const [info] = createResource(async (): Promise<InfoResponse> => {
+    const response = await adminFetch("/info");
+    return await response.json();
+  });
+
+  const width = "w-40";
+
   return (
-    <div>
+    <div class="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <h2>Server Info</h2>
+        </CardHeader>
+
+        <CardContent class="flex flex-col gap-4">
+          <Switch>
+            <Match when={info.error}>info.error</Match>
+            <Match when={info.loading}>Loading...</Match>
+            <Match when={info()}>
+              <TextField class="w-full">
+                <div
+                  class={`grid items-center ${gapStyle}`}
+                  style="grid-template-columns: auto 1fr"
+                >
+                  <TextFieldLabel class={width}>CPU Threads:</TextFieldLabel>
+                  <span>{info()?.threads}</span>
+
+                  <TextFieldLabel class={width}>Compiler:</TextFieldLabel>
+                  <span>{info()?.compiler}</span>
+
+                  <TextFieldLabel class={width}>Commit Hash:</TextFieldLabel>
+                  <span>{info()?.commit_hash}</span>
+
+                  <TextFieldLabel class={width}>Commit Date:</TextFieldLabel>
+                  <span>{info()?.commit_date}</span>
+                </div>
+              </TextField>
+            </Match>
+          </Switch>
+        </CardContent>
+      </Card>
+
       <Show when={config.isError}>Failed to fetch config</Show>
 
       <Show when={config.isLoading}>Loading</Show>
