@@ -1,0 +1,71 @@
+---
+title: Our Goals
+---
+
+TrailBase's goal is to help address common needs with standard solutions and
+best-practices, while being blazingly fast, w/o lock-in, or getting in your
+way.
+
+It's enough to wrangle your evolving product needs, you shouldn't also have to
+fight your platform or be held hostage.
+There's never a single best solution for all problems at all scales. Typically,
+as you scale up you'll address growing pain points with more specialized
+solutions.
+That's why we believe in the importance of *loose coupling* and *simple*[^1],
+*standard* solutions.
+
+Not wanting to sound like empty marketing speak, we believe that these
+properties can provide practical, material benefits. For example:
+
+- TrailBase being a simple single-executable allows for **consistent** setups
+  across development, testing, pre-prod, and prod. In contrast, spinning up a
+  sea of micro-services may be prohibitive for non-prod environments
+  and certainly unit tests. A consistent setup will improve your velocity, help
+  you catch issues sooner, and reduce cognitive overhead.
+- Similarly, it lets you migrate your production deployment more easily, e.g.
+  to a different cloud provider, to address soaring bills, ToS changes and
+  policy requirements such as data governance.
+- Loosely coupled standard solutions make it easier for you to move off
+  TrailBase if necessary, but also makes it easier and lower risk for you to just
+  give it a go both in full or as piecemeal. If you like it, great. If you
+  don't, ...
+- We can address your feedback more quickly to keep making TrailBase better and
+  better ❤️.
+
+
+## Inspiration
+
+Honor to whom honor is due, we're big fans of both SupaBase and PocketBase.
+TrailBase tries to be the love child of PocketBase's architectural simplicity
+with SupaBase's coupling sprinkled with a generous dash of performance.
+
+For example, TrailBase does not prescribe an ORMs and gives you untethered
+access to the underling SQL in line with SupaBase.
+ORMs often yield pleasing example code but eventually fall apart, sometimes as
+early as simple joins.
+Data models and architectural decisions driven by the short-comings of an
+abstraction are a big smell.
+That said, ORMs aren't without merit. Better ones can provide type-safety
+within their set of constraints.
+TrailBase attempts to give you the best of both worlds:
+
+ * Type-safe cross-language client bindings leaning into HTTP, JSON and JSON-schemas
+   giving you the freedom to pick the "right" language for the job.
+ * And untethered server-side SQL.
+
+In the end, all paths lead to SQL as the only truly cross-platform,
+cross-database, cross-language solution[^2] 😉.
+
+<div class="h-[50px]" />
+
+---
+
+[^1]:
+    Simplicity is contextual: a simple solution to a hard problem will naturally be
+    more involved than a simple solution to a simple problem. Simple solutions are
+    easy to understand but easy solutions aren't necessarily simple. Easy solutions
+    can substitute clarity for magic and fall apart when straying an inch off the
+    beaten path. Magic solutions will always lead to tight coupling and lock-in.
+
+[^2]:
+    [FireBase finally added SQL support 12 years after its introduction](https://firebase.blog/posts/2024/05/introducing-firebase-data-connect/)
