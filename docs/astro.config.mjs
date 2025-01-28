@@ -53,10 +53,10 @@ export default defineConfig({
                 },
               ],
             },
-            {
-              label: "Philosophy",
-              slug: "getting-started/philosophy",
-            },
+            // {
+            //   label: "Philosophy",
+            //   slug: "getting-started/philosophy",
+            // },
           ],
         },
         {
