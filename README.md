@@ -39,7 +39,7 @@
 <p align="center">
   <a href="https://demo.trailbase.io/_/admin" target="_blank">
     <picture>
-      <img alt="Admin UI" width="512" src="assets/screenshot.webp" />
+      <img alt="Admin UI" width="512" src="docs/src/assets/screenshot.webp" />
     </picture>
   </a>
 </p>
@@ -69,8 +69,9 @@ be used.
 
 Client packages for various languages are available via:
 
-- [JavaScript/Typescript](https://www.npmjs.com/package/trailbase)
+- [JavaScript/TypeScript](https://www.npmjs.com/package/trailbase)
 - [Dart/Flutter](https://pub.dev/packages/trailbase)
+- [Rust](https://crates.io/crates/trailbase-client)
 - [C#/.Net](https://www.nuget.org/packages/TrailBase/)
 - [Python](https://pypi.org/project/trailbase/)
 
