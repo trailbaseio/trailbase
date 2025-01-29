@@ -20,26 +20,40 @@ could be:
 - introspection
 - disaster recovery
 
-## TLS termination
+## TLS Termination
 
-The most important thing alongside ensuring proper access protection is to set
-up TLS termination ensuring that all traffic from your users to your
-termination point is encrypted.
-In practice, this means putting TrailBase behind a reverse proxy such as NGinx,
-Caddy, ... . The main benefit of using an established reverse proxy is the
-availability of auto-renewal of self-signed certificates with SSL authorities
-Let's encrypt.
+The most important thing alongside ensuring least-priviledge access protection
+is to set up TLS termination establishing your server authority and ensuring
+that your users' traffic is end-to-end encrypted.
+
+TrailBase has built-in support for TLS and will automatically start in HTTPS
+mode, if it finds:
+
+ * a PEM key file under `<traildepot>/secrets/certs/key.pem`,
+ * and a PEM cert file under `<traildepot>/secrets/certs/cert.pem`.
+
+At this point TrailBase does not yet support automated certificate signing and
+renewal.
+We therefore recommend using tools like [certbot](https://certbot.eff.org/) in
+standalone mode to periodically refresh your certificates to avoid accidentally
+being left w/o a valid one.
+
+You could also consider using a reverse proxy with first-class certbot integration
+like [nginx](https://nginx.org) or built-in support for *Let's encrypt* like
+[caddy](https://caddyserver.com/).
+We would like to add support for auto-refresh with *Let's encrypt* in the
+future.
 
 ## Access
 
-### API access
+### API Access
 
 Make sure to use record API's authorization primitives to tighten access to
 data as much as possible. It's a good idea to check `_REQ_.<user_id> ==
 _USER_.id` on record creations and updates to avoid users can impersonate or
 touch on other users records.
 
-### Admin access
+### Admin Access
 
 You can expose TrailBase's admin APIs and UIs on a separate private port as an
 extra precaution and to simply expose a smaller surface.

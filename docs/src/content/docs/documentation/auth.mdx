@@ -14,11 +14,11 @@ authorize or deny access to your data, let users change their email address,
 reset their password, etc.
 
 <Aside type="danger" title="HTTPs">
-  The safety of any authentication flow hinges on TLS/HTTPS, both for your users
-  to trust that the server they're talking to is yours and for credentials to be
-  transferred encrypted. Otherwise, credentials will be transmitted in plain
-  text. In production, use a reverse proxy like nginx, caddy, or similar for TLS
-  termination, see [here](/documentation/production).
+  The safety of any authentication flow in hinges on TLS/HTTPS.
+  Always use TLS in [production](/documentation/production).
+  It allows your users to trust that the server they're talking to is actually
+  yours *and* ensures credentials are end-to-end encrypted on the wire as
+  opposed to plain text.
 </Aside>
 
 ## Implementation

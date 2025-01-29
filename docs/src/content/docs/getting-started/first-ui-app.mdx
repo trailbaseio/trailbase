@@ -243,7 +243,7 @@ Thanks!
     Unless explicitly disabled.
 
 [^4]:
-    To serve HTTPS you'll either need a reverse proxy in front to terminate TLS
-    or if you don't require end-to-end encryption (e.g. you're not using auth
-    or handling sensitive data) you can fall back to TLS termination via a CDN
-    like cloudflare.
+    For sensitive use-cases, e.g. auth, you'll also need certificates for
+    integrity and end end-to-end TLS encryption.
+    For less sensitive use cases, such as establishing an authority, you could
+    fall back to TLS termination via a CDN like cloudflare.
