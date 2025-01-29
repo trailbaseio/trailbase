@@ -1,3 +1,9 @@
+## v0.5.3
+
+* Built-in TLS support.
+* Add "server info" to the admin dashboard, e.g. including build commit hash.
+* Update deps.
+
 ## v0.5.2
 
 * Add file-system APIs to JS/TS runtime to facility accessing resources, e.g.
