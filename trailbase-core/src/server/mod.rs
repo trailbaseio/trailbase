@@ -9,9 +9,15 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{RequestExt, Router};
 use rust_embed::RustEmbed;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::signal;
 use tokio::task::JoinSet;
+use tokio_rustls::{
+  rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer},
+  rustls::ServerConfig,
+  TlsAcceptor,
+};
 use tower_cookies::CookieManagerLayer;
 use tower_http::{cors, limit::RequestBodyLimitLayer, services::ServeDir, trace::TraceLayer};
 
@@ -187,20 +193,53 @@ impl Server {
   }
 
   async fn start_listener(addr: &str, router: Router<()>) -> std::io::Result<()> {
-    let listener = match tokio::net::TcpListener::bind(addr).await {
-      Ok(listener) => listener,
-      Err(err) => {
-        log::error!("Failed to listen on: {addr}: {err}");
+    let tls = false;
+    if tls {
+      let tcp_listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(listener) => listener,
+        Err(err) => {
+          log::error!("Failed to listen on: {addr}: {err}");
+          std::process::exit(1);
+        }
+      };
+
+      let rustls_config = rustls_server_config(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+          .join("self_signed_certs")
+          .join("key.pem"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+          .join("self_signed_certs")
+          .join("cert.pem"),
+      );
+
+      let listener = serve::TlsListener {
+        listener: tcp_listener,
+        acceptor: TlsAcceptor::from(rustls_config),
+      };
+
+      if let Err(err) = serve::serve(listener, router.clone())
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+      {
+        log::error!("Failed to start server: {err}");
         std::process::exit(1);
       }
-    };
+    } else {
+      let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(listener) => listener,
+        Err(err) => {
+          log::error!("Failed to listen on: {addr}: {err}");
+          std::process::exit(1);
+        }
+      };
 
-    if let Err(err) = serve::serve(listener, router.clone())
-      .with_graceful_shutdown(shutdown_signal())
-      .await
-    {
-      log::error!("Failed to start server: {err}");
-      std::process::exit(1);
+      if let Err(err) = serve::serve(listener, router.clone())
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+      {
+        log::error!("Failed to start server: {err}");
+        std::process::exit(1);
+      }
     }
 
     return Ok(());
@@ -434,6 +473,24 @@ async fn shutdown_signal() {
       tokio::spawn(timer());
     },
   }
+}
+
+fn rustls_server_config(key: impl AsRef<Path>, cert: impl AsRef<Path>) -> Arc<ServerConfig> {
+  let key = PrivateKeyDer::from_pem_file(key).unwrap();
+
+  let certs = CertificateDer::pem_file_iter(cert)
+    .unwrap()
+    .map(|cert| cert.unwrap())
+    .collect();
+
+  let mut config = ServerConfig::builder()
+    .with_no_client_auth()
+    .with_single_cert(certs, key)
+    .expect("bad certificate/key");
+
+  config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+
+  return Arc::new(config);
 }
 
 #[derive(RustEmbed, Clone)]
