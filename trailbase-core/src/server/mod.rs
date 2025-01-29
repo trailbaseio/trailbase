@@ -10,8 +10,17 @@ use axum::routing::get;
 use axum::{RequestExt, Router};
 use rust_embed::RustEmbed;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::signal;
 use tokio::task::JoinSet;
+use tokio_rustls::{
+  rustls::pki_types::{
+    pem::{Error as TlsPemError, PemObject},
+    CertificateDer, PrivateKeyDer,
+  },
+  rustls::ServerConfig,
+  TlsAcceptor,
+};
 use tower_cookies::CookieManagerLayer;
 use tower_http::{cors, limit::RequestBodyLimitLayer, services::ServeDir, trace::TraceLayer};
 
@@ -165,11 +174,13 @@ impl Server {
 
     {
       let (addr, router) = self.main_router.clone();
-      set.spawn(async move { Self::start_listener(&addr, router).await });
+      let data_dir = self.state.data_dir().clone();
+      set.spawn(async move { Self::start_listen(&addr, router, data_dir).await });
     }
 
     if let Some((addr, router)) = self.admin_router.clone() {
-      set.spawn(async move { Self::start_listener(&addr, router).await });
+      let data_dir = self.state.data_dir().clone();
+      set.spawn(async move { Self::start_listen(&addr, router, data_dir).await });
     }
 
     log::info!(
@@ -186,24 +197,57 @@ impl Server {
     return Ok(());
   }
 
-  async fn start_listener(addr: &str, router: Router<()>) -> std::io::Result<()> {
-    let listener = match tokio::net::TcpListener::bind(addr).await {
-      Ok(listener) => listener,
-      Err(err) => {
-        log::error!("Failed to listen on: {addr}: {err}");
-        std::process::exit(1);
+  async fn start_listen(addr: &str, router: Router<()>, data_dir: DataDir) {
+    let key_path = data_dir.secrets_path().join("certs").join("key.pem");
+    let cert_path = data_dir.secrets_path().join("certs").join("cert.pem");
+
+    let key = tokio::fs::read(key_path).await;
+    let cert = tokio::fs::read(cert_path).await;
+
+    match (key, cert) {
+      (Ok(key), Ok(cert)) => {
+        let tcp_listener = match tokio::net::TcpListener::bind(addr).await {
+          Ok(listener) => listener,
+          Err(err) => {
+            log::error!("Failed to listen on: {addr}: {err}");
+            std::process::exit(1);
+          }
+        };
+
+        let server_config = rustls_server_config(key, cert)
+          .expect("Found TLS key and cert but failed to build valid server config.");
+
+        let listener = serve::TlsListener {
+          listener: tcp_listener,
+          acceptor: TlsAcceptor::from(Arc::new(server_config)),
+        };
+
+        if let Err(err) = serve::serve(listener, router.clone())
+          .with_graceful_shutdown(shutdown_signal())
+          .await
+        {
+          log::error!("Failed to start server: {err}");
+          std::process::exit(1);
+        }
+      }
+      _ => {
+        let listener = match tokio::net::TcpListener::bind(addr).await {
+          Ok(listener) => listener,
+          Err(err) => {
+            log::error!("Failed to listen on: {addr}: {err}");
+            std::process::exit(1);
+          }
+        };
+
+        if let Err(err) = serve::serve(listener, router.clone())
+          .with_graceful_shutdown(shutdown_signal())
+          .await
+        {
+          log::error!("Failed to start server: {err}");
+          std::process::exit(1);
+        }
       }
     };
-
-    if let Err(err) = serve::serve(listener, router.clone())
-      .with_graceful_shutdown(shutdown_signal())
-      .await
-    {
-      log::error!("Failed to start server: {err}");
-      std::process::exit(1);
-    }
-
-    return Ok(());
   }
 
   fn build_admin_router(state: &AppState) -> Router<AppState> {
@@ -434,6 +478,20 @@ async fn shutdown_signal() {
       tokio::spawn(timer());
     },
   }
+}
+
+fn rustls_server_config(key: Vec<u8>, cert: Vec<u8>) -> Result<ServerConfig, TlsPemError> {
+  let key = PrivateKeyDer::from_pem_slice(&key)?;
+  let certs = CertificateDer::from_pem_slice(&cert)?;
+
+  let mut config = ServerConfig::builder()
+    .with_no_client_auth()
+    .with_single_cert(vec![certs], key)
+    .expect("Failed to build server config");
+
+  config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+
+  return Ok(config);
 }
 
 #[derive(RustEmbed, Clone)]

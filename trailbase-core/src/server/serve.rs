@@ -2,7 +2,6 @@
 //!
 //! Ripped straight from axum::serve to add rustls support.
 
-use axum::serve::Listener;
 use axum::{body::Body, extract::Request, response::Response};
 use futures_util::{pin_mut, FutureExt};
 use hyper::body::Incoming;
@@ -18,10 +17,106 @@ use std::{
   sync::Arc,
   task::{Context, Poll},
 };
-use tokio::net::TcpListener;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch;
+use tokio_rustls::TlsAcceptor;
 use tower::ServiceExt as _;
 use tower_service::Service;
+
+/// Types that can listen for connections.
+pub trait Listener: Send + 'static {
+  /// The listener's IO type.
+  type Io: AsyncRead + AsyncWrite + Unpin + Send + 'static;
+
+  /// The listener's address type.
+  type Addr: Send;
+
+  /// Accept a new incoming connection to this listener.
+  ///
+  /// If the underlying accept call can return an error, this function must
+  /// take care of logging and retrying.
+  fn accept(
+    &mut self,
+  ) -> impl std::future::Future<Output = io::Result<(Self::Io, Self::Addr)>> + Send;
+
+  /// Returns the local address that this listener is bound to.
+  fn local_addr(&self) -> io::Result<Self::Addr>;
+}
+
+impl Listener for TcpListener {
+  type Io = TcpStream;
+  type Addr = std::net::SocketAddr;
+
+  async fn accept(&mut self) -> io::Result<(Self::Io, Self::Addr)> {
+    loop {
+      match Self::accept(self).await {
+        Ok(tup) => return Ok(tup),
+        Err(e) => handle_accept_error(e).await,
+      }
+    }
+  }
+
+  #[inline]
+  fn local_addr(&self) -> io::Result<Self::Addr> {
+    Self::local_addr(self)
+  }
+}
+
+async fn handle_accept_error(e: io::Error) {
+  if is_connection_error(&e) {
+    return;
+  }
+
+  // [From `hyper::Server` in 0.14](https://github.com/hyperium/hyper/blob/v0.14.27/src/server/tcp.rs#L186)
+  //
+  // > A possible scenario is that the process has hit the max open files
+  // > allowed, and so trying to accept a new connection will fail with
+  // > `EMFILE`. In some cases, it's preferable to just wait for some time, if
+  // > the application will likely close some files (or connections), and try
+  // > to accept the connection again. If this option is `true`, the error
+  // > will be logged at the `error` level, since it is still a big deal,
+  // > and then the listener will sleep for 1 second.
+  //
+  // hyper allowed customizing this but axum does not.
+  log::warn!("accept error: {e}");
+  tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+}
+
+fn is_connection_error(e: &io::Error) -> bool {
+  matches!(
+    e.kind(),
+    io::ErrorKind::ConnectionRefused
+      | io::ErrorKind::ConnectionAborted
+      | io::ErrorKind::ConnectionReset
+  )
+}
+
+pub(crate) struct TlsListener {
+  pub(crate) acceptor: TlsAcceptor,
+  pub(crate) listener: TcpListener,
+}
+
+impl Listener for TlsListener {
+  type Io = tokio_rustls::server::TlsStream<TcpStream>;
+  type Addr = std::net::SocketAddr;
+
+  async fn accept(&mut self) -> io::Result<(Self::Io, Self::Addr)> {
+    loop {
+      match self.listener.accept().await {
+        Ok((stream, remote_addr)) => {
+          return Ok((self.acceptor.accept(stream).await?, remote_addr));
+        }
+        Err(e) => handle_accept_error(e).await,
+      }
+    }
+  }
+
+  #[inline]
+  fn local_addr(&self) -> io::Result<Self::Addr> {
+    self.listener.local_addr()
+  }
+}
 
 /// Serve the service with the supplied listener.
 ///
@@ -294,7 +389,12 @@ where
 
       loop {
         let (io, remote_addr) = tokio::select! {
-            conn = listener.accept() => conn,
+            tuple_or = listener.accept() => {
+            let Ok(tuple) = tuple_or else {
+              continue;
+            };
+            tuple
+          },
             _ = signal_tx.closed() => {
                 log::trace!("signal received, not accepting new connections");
                 break;
@@ -431,65 +531,34 @@ mod tests {
   };
 
   use axum::http::StatusCode;
-  use axum::{body::Body, extract::Request};
+  use axum::{
+    body::{to_bytes, Body},
+    extract::Request,
+    routing::get,
+    Router,
+  };
   use hyper_util::rt::TokioIo;
-  #[cfg(unix)]
-  use tokio::net::UnixListener;
   use tokio::{
     io::{self, AsyncRead, AsyncWrite},
     net::TcpListener,
   };
 
-  #[cfg(unix)]
-  use super::IncomingStream;
   use super::{serve, Listener};
-  #[cfg(unix)]
-  use axum::extract::connect_info::Connected;
-  use axum::{body::to_bytes, routing::get, serve::ListenerExt, Router};
 
   #[allow(dead_code, unused_must_use)]
   async fn if_it_compiles_it_works() {
     #[derive(Clone, Debug)]
     struct UdsConnectInfo;
 
-    #[cfg(unix)]
-    impl Connected<IncomingStream<'_, UnixListener>> for UdsConnectInfo {
-      fn connect_info(_stream: IncomingStream<'_, UnixListener>) -> Self {
-        Self
-      }
-    }
-
     let router: Router = Router::new();
 
     let addr = "0.0.0.0:0";
 
-    let tcp_nodelay_listener = || async {
-      TcpListener::bind(addr).await.unwrap().tap_io(|tcp_stream| {
-        if let Err(err) = tcp_stream.set_nodelay(true) {
-          eprintln!("failed to set TCP_NODELAY on incoming connection: {err:#}");
-        }
-      })
-    };
-
     // router
     serve(TcpListener::bind(addr).await.unwrap(), router.clone());
-    serve(tcp_nodelay_listener().await, router.clone())
-      .await
-      .unwrap();
-    #[cfg(unix)]
-    serve(UnixListener::bind("").unwrap(), router.clone());
 
     serve(
       TcpListener::bind(addr).await.unwrap(),
-      router.clone().into_make_service(),
-    );
-    serve(
-      tcp_nodelay_listener().await,
-      router.clone().into_make_service(),
-    );
-    #[cfg(unix)]
-    serve(
-      UnixListener::bind("").unwrap(),
       router.clone().into_make_service(),
     );
 
@@ -498,11 +567,6 @@ mod tests {
       router
         .clone()
         .into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    );
-    #[cfg(unix)]
-    serve(
-      UnixListener::bind("").unwrap(),
-      router.into_make_service_with_connect_info::<UdsConnectInfo>(),
     );
   }
 
@@ -558,9 +622,9 @@ mod tests {
       type Io = T;
       type Addr = ();
 
-      async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+      async fn accept(&mut self) -> io::Result<(Self::Io, Self::Addr)> {
         match self.0.take() {
-          Some(server) => (server, ()),
+          Some(server) => Ok((server, ())),
           None => std::future::pending().await,
         }
       }
