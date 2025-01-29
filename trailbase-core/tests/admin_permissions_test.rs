@@ -1,17 +1,14 @@
 use axum::http::StatusCode;
 use axum_test::TestServer;
-use std::rc::Rc;
 
 use trailbase::{DataDir, Server, ServerOptions};
 
 #[test]
 fn test_admin_permissions() {
-  let runtime = Rc::new(
-    tokio::runtime::Builder::new_multi_thread()
-      .enable_all()
-      .build()
-      .unwrap(),
-  );
+  let runtime = tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .build()
+    .unwrap();
 
   let data_dir = temp_dir::TempDir::new().unwrap();
 
@@ -25,9 +22,11 @@ fn test_admin_permissions() {
       disable_auth_ui: false,
       cors_allowed_origins: vec![],
       js_runtime_threads: None,
+      ..Default::default()
     })
     .await
     .unwrap();
+
     let server = TestServer::new(app.router().clone()).unwrap();
 
     assert_eq!(

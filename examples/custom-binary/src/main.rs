@@ -6,7 +6,7 @@ use axum::{
 use tracing_subscriber::{filter, prelude::*};
 use trailbase::{AppState, DataDir, Server, ServerOptions, User};
 
-type BoxError = Box<dyn std::error::Error>;
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 pub async fn handler(State(_state): State<AppState>, user: Option<User>) -> Response {
   Html(format!(
@@ -35,6 +35,7 @@ async fn main() -> Result<(), BoxError> {
       disable_auth_ui: false,
       cors_allowed_origins: vec![],
       js_runtime_threads: None,
+      ..Default::default()
     },
     Some(custom_routes),
     |state: AppState| async move {

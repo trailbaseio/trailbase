@@ -2,7 +2,6 @@ use axum::extract::{Json, State};
 use axum::http::StatusCode;
 use axum_test::multipart::MultipartForm;
 use axum_test::TestServer;
-use std::rc::Rc;
 use tower_cookies::Cookie;
 use tracing_subscriber::prelude::*;
 use trailbase_sqlite::params;
@@ -17,12 +16,10 @@ use trailbase::{DataDir, Server, ServerOptions};
 
 #[test]
 fn integration_tests() {
-  let runtime = Rc::new(
-    tokio::runtime::Builder::new_multi_thread()
-      .enable_all()
-      .build()
-      .unwrap(),
-  );
+  let runtime = tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .build()
+    .unwrap();
 
   let _ = runtime.block_on(test_record_apis());
 }
@@ -39,6 +36,7 @@ async fn test_record_apis() {
     disable_auth_ui: false,
     cors_allowed_origins: vec![],
     js_runtime_threads: None,
+    ..Default::default()
   })
   .await
   .unwrap();

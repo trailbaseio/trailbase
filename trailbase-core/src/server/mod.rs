@@ -14,10 +14,7 @@ use std::sync::Arc;
 use tokio::signal;
 use tokio::task::JoinSet;
 use tokio_rustls::{
-  rustls::pki_types::{
-    pem::{Error as TlsPemError, PemObject},
-    CertificateDer, PrivateKeyDer,
-  },
+  rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer},
   rustls::ServerConfig,
   TlsAcceptor,
 };
@@ -40,7 +37,7 @@ pub use init::{init_app_state, InitArgs, InitError};
 /// A set of options to configure serving behaviors. Changing any of these options
 /// requires a server restart, which makes them a natural fit for being exposed as command line
 /// arguments.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct ServerOptions {
   /// Optional path to static assets that will be served at the HTTP root.
   pub data_dir: DataDir,
@@ -69,6 +66,11 @@ pub struct ServerOptions {
 
   /// Number of V8 worker threads. If set to None, default of num available cores will be used.
   pub js_runtime_threads: Option<usize>,
+
+  /// TLS certificate path.
+  pub tls_cert: Option<CertificateDer<'static>>,
+  /// TLS key path.
+  pub tls_key: Option<PrivateKeyDer<'static>>,
 }
 
 pub struct Server {
@@ -77,6 +79,11 @@ pub struct Server {
   // Routers.
   main_router: (String, Router),
   admin_router: Option<(String, Router)>,
+
+  /// TLS certificate path.
+  pub tls_cert: Option<CertificateDer<'static>>,
+  /// TLS key path.
+  pub tls_key: Option<PrivateKeyDer<'static>>,
 }
 
 impl Server {
@@ -138,6 +145,8 @@ impl Server {
       state,
       main_router,
       admin_router,
+      tls_key: opts.tls_key,
+      tls_cert: opts.tls_cert,
     })
   }
 
@@ -149,38 +158,38 @@ impl Server {
     return &self.main_router.1;
   }
 
-  pub async fn serve(&self) -> Result<(), Box<dyn std::error::Error>> {
-    // This declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
-    //
-    // NOTE: it's ok to fail. Just means someone else already initialize the tracing sub-system.
-    // {
-    //   use tracing_subscriber::{filter, prelude::*};
-    //   let _ = tracing_subscriber::registry()
-    //     .with(
-    //       logging::SqliteLogLayer::new(&self.state).with_filter(
-    //         filter::Targets::new()
-    //           .with_target("tower_http::trace::on_response", filter::LevelFilter::DEBUG)
-    //           .with_target("tower_http::trace::on_request", filter::LevelFilter::DEBUG)
-    //           .with_target("tower_http::trace::make_span", filter::LevelFilter::DEBUG)
-    //           .with_default(filter::LevelFilter::INFO),
-    //       ),
-    //     )
-    //     .try_init();
-    // }
-
+  pub async fn serve(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let _raii_tasks = scheduler::start_periodic_tasks(&self.state);
 
-    let mut set = JoinSet::new();
+    // NOTE: We panic if  a key/cert that was explicitly specified cannot be loaded.
+    let data_dir = self.state.data_dir();
+    let tls_key = self.tls_key.as_ref().map_or_else(
+      || {
+        std::fs::read(data_dir.secrets_path().join("certs").join("key.pem"))
+          .ok()
+          .and_then(|key| PrivateKeyDer::from_pem_slice(&key).ok())
+      },
+      |key| Some(key.clone_key()),
+    );
+    let tls_cert = self.tls_cert.clone().map_or_else(
+      || {
+        std::fs::read(data_dir.secrets_path().join("certs").join("cert.pem"))
+          .ok()
+          .and_then(|cert| CertificateDer::from_pem_slice(&cert).ok())
+      },
+      Some,
+    );
 
+    let mut set = JoinSet::new();
     {
       let (addr, router) = self.main_router.clone();
-      let data_dir = self.state.data_dir().clone();
-      set.spawn(async move { Self::start_listen(&addr, router, data_dir).await });
+      let (tls_key, tls_cert) = (tls_key.as_ref().map(|k| k.clone_key()), tls_cert.clone());
+
+      set.spawn(async move { Self::start_listen(&addr, router, tls_key, tls_cert).await });
     }
 
     if let Some((addr, router)) = self.admin_router.clone() {
-      let data_dir = self.state.data_dir().clone();
-      set.spawn(async move { Self::start_listen(&addr, router, data_dir).await });
+      set.spawn(async move { Self::start_listen(&addr, router, tls_key, tls_cert).await });
     }
 
     log::info!(
@@ -197,15 +206,14 @@ impl Server {
     return Ok(());
   }
 
-  async fn start_listen(addr: &str, router: Router<()>, data_dir: DataDir) {
-    let key_path = data_dir.secrets_path().join("certs").join("key.pem");
-    let cert_path = data_dir.secrets_path().join("certs").join("cert.pem");
-
-    let key = tokio::fs::read(key_path).await;
-    let cert = tokio::fs::read(cert_path).await;
-
-    match (key, cert) {
-      (Ok(key), Ok(cert)) => {
+  async fn start_listen(
+    addr: &str,
+    router: Router<()>,
+    tls_key: Option<PrivateKeyDer<'static>>,
+    tls_cert: Option<CertificateDer<'static>>,
+  ) {
+    match (tls_key, tls_cert) {
+      (Some(key), Some(cert)) => {
         let tcp_listener = match tokio::net::TcpListener::bind(addr).await {
           Ok(listener) => listener,
           Err(err) => {
@@ -214,8 +222,10 @@ impl Server {
           }
         };
 
-        let server_config = rustls_server_config(key, cert)
-          .expect("Found TLS key and cert but failed to build valid server config.");
+        let server_config = ServerConfig::builder()
+          .with_no_client_auth()
+          .with_single_cert(vec![cert], key)
+          .expect("Failed to build server config");
 
         let listener = serve::TlsListener {
           listener: tcp_listener,
@@ -478,20 +488,6 @@ async fn shutdown_signal() {
       tokio::spawn(timer());
     },
   }
-}
-
-fn rustls_server_config(key: Vec<u8>, cert: Vec<u8>) -> Result<ServerConfig, TlsPemError> {
-  let key = PrivateKeyDer::from_pem_slice(&key)?;
-  let certs = CertificateDer::from_pem_slice(&cert)?;
-
-  let mut config = ServerConfig::builder()
-    .with_no_client_auth()
-    .with_single_cert(vec![certs], key)
-    .expect("Failed to build server config");
-
-  config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-
-  return Ok(config);
 }
 
 #[derive(RustEmbed, Clone)]
