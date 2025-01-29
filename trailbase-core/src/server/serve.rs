@@ -36,7 +36,9 @@ pub trait Listener: Send + 'static {
   ///
   /// If the underlying accept call can return an error, this function must
   /// take care of logging and retrying.
-  fn accept(&mut self) -> impl std::future::Future<Output = (Self::Io, Self::Addr)> + Send;
+  fn accept(
+    &mut self,
+  ) -> impl std::future::Future<Output = io::Result<(Self::Io, Self::Addr)>> + Send;
 
   /// Returns the local address that this listener is bound to.
   fn local_addr(&self) -> io::Result<Self::Addr>;
@@ -46,10 +48,10 @@ impl Listener for TcpListener {
   type Io = TcpStream;
   type Addr = std::net::SocketAddr;
 
-  async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+  async fn accept(&mut self) -> io::Result<(Self::Io, Self::Addr)> {
     loop {
       match Self::accept(self).await {
-        Ok(tup) => return tup,
+        Ok(tup) => return Ok(tup),
         Err(e) => handle_accept_error(e).await,
       }
     }
@@ -99,12 +101,11 @@ impl Listener for TlsListener {
   type Io = tokio_rustls::server::TlsStream<TcpStream>;
   type Addr = std::net::SocketAddr;
 
-  async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+  async fn accept(&mut self) -> io::Result<(Self::Io, Self::Addr)> {
     loop {
       match self.listener.accept().await {
         Ok((stream, remote_addr)) => {
-          // FIXME: Change Listener definition to return Result.
-          return (self.acceptor.accept(stream).await.unwrap(), remote_addr);
+          return Ok((self.acceptor.accept(stream).await?, remote_addr));
         }
         Err(e) => handle_accept_error(e).await,
       }
@@ -388,7 +389,12 @@ where
 
       loop {
         let (io, remote_addr) = tokio::select! {
-            conn = listener.accept() => conn,
+            tuple_or = listener.accept() => {
+            let Ok(tuple) = tuple_or else {
+              continue;
+            };
+            tuple
+          },
             _ = signal_tx.closed() => {
                 log::trace!("signal received, not accepting new connections");
                 break;
@@ -616,9 +622,9 @@ mod tests {
       type Io = T;
       type Addr = ();
 
-      async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+      async fn accept(&mut self) -> io::Result<(Self::Io, Self::Addr)> {
         match self.0.take() {
-          Some(server) => (server, ()),
+          Some(server) => Ok((server, ())),
           None => std::future::pending().await,
         }
       }
