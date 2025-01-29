@@ -20,7 +20,7 @@ use trailbase_cli::{
   AdminSubCommands, DefaultCommandLineArgs, JsonSchemaModeArg, SubCommands, UserSubCommands,
 };
 
-type BoxError = Box<dyn std::error::Error>;
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 fn init_logger(dev: bool) {
   // SWC is very spammy in in debug builds and complaints about source maps when compiling
@@ -88,6 +88,8 @@ async fn async_main() -> Result<(), BoxError> {
         disable_auth_ui: cmd.disable_auth_ui,
         cors_allowed_origins: cmd.cors_allowed_origins,
         js_runtime_threads: cmd.js_runtime_threads,
+        tls_key: None,
+        tls_cert: None,
       })
       .await?;
 
