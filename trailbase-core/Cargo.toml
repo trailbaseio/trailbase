@@ -36,7 +36,9 @@ chrono = "^0.4.38"
 ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
 form_urlencoded = "1.2.1"
-futures = "0.3.30"
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+hyper = "1.6.0"
+hyper-util = "0.1.7"
 indexmap = "2.6.0"
 indoc = "2.0.5"
 itertools = "0.14.0"
@@ -68,6 +70,7 @@ sqlformat = "0.3.1"
 sqlite3-parser = "0.14.0"
 thiserror = "2.0.1"
 tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "signal", "time"] }
+tower = "0.5.0"
 tower-cookies = "0.11.0"
 tower-http = { version = "^0.6.0", default-features = false, features = ["cors", "trace", "fs", "limit"] }
 tower-service = { version = "0.3.3", default-features = false }

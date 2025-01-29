@@ -1,4 +1,5 @@
 mod init;
+mod serve;
 
 use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::handler::HandlerWithoutStateExt;
@@ -194,7 +195,7 @@ impl Server {
       }
     };
 
-    if let Err(err) = axum::serve(listener, router.clone())
+    if let Err(err) = serve::serve(listener, router.clone())
       .with_graceful_shutdown(shutdown_signal())
       .await
     {

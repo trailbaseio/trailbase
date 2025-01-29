@@ -739,7 +739,7 @@ async fn install_routes(
     })
     .collect();
 
-  let mut receivers = futures::future::join_all(receivers).await;
+  let mut receivers = futures_util::future::join_all(receivers).await;
 
   // Note: We only return the first router assuming that js route registration is deterministic.
   return Ok(receivers.swap_remove(0));

@@ -3,7 +3,7 @@ use axum::{
   extract::{Path, State},
   response::sse::{Event, KeepAlive, Sse},
 };
-use futures::Stream;
+use futures_util::Stream;
 use parking_lot::RwLock;
 use pin_project_lite::pin_project;
 use rusqlite::hooks::{Action, PreUpdateCase};
@@ -79,7 +79,7 @@ impl Stream for AutoCleanupEventStream {
 
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let mut this = self.project();
-    let res = futures::ready!(this.receiver.as_mut().poll_next(cx));
+    let res = futures_util::ready!(this.receiver.as_mut().poll_next(cx));
     Poll::Ready(res.map(Ok))
   }
 
@@ -649,7 +649,7 @@ pub async fn add_subscription_sse_handler(
 #[cfg(test)]
 async fn decode_sse_json_event(event: Event) -> serde_json::Value {
   use axum::response::IntoResponse;
-  use futures::stream::StreamExt;
+  use futures_util::stream::StreamExt;
 
   let (sender, receiver) = async_channel::unbounded::<Event>();
   let sse = Sse::new(receiver.map(|ev| -> Result<Event, axum::Error> { Ok(ev) }));
@@ -674,7 +674,7 @@ async fn decode_sse_json_event(event: Event) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
   use async_channel::TryRecvError;
-  use futures::StreamExt;
+  use futures_util::StreamExt;
   use trailbase_sqlite::params;
 
   use super::DbEvent;

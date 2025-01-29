@@ -2743,9 +2743,9 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hyper"
-version = "1.5.2"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "256fb8d4bd6413123cc9d91832d78325c48ff41677595be797d90f42969beae0"
+checksum = "cc2b571658e38e0c01b1fdca3bbbe93c00d3d71693ff2770043f8c29bc7d6f80"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -6545,7 +6545,9 @@ dependencies = [
  "env_logger",
  "fallible-iterator",
  "form_urlencoded",
- "futures",
+ "futures-util",
+ "hyper",
+ "hyper-util",
  "indexmap 2.7.1",
  "indoc",
  "itertools 0.14.0",
