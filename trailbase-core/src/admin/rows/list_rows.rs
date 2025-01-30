@@ -8,7 +8,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::listing::{
-  build_filter_where_clause, limit_or_default, parse_query, Order, WhereClause,
+  build_filter_where_clause, limit_or_default, parse_query, Order, QueryParseResult, WhereClause,
 };
 use crate::records::sql_to_json::rows_to_json_arrays;
 use crate::schema::Column;
@@ -32,10 +32,16 @@ pub async fn list_rows_handler(
   Path(table_name): Path<String>,
   RawQuery(raw_url_query): RawQuery,
 ) -> Result<Json<ListRowsResponse>, Error> {
-  let (filter_params, cursor, offset, limit, order) = match parse_query(raw_url_query) {
-    Some(q) => (Some(q.params), q.cursor, q.offset, q.limit, q.order),
-    None => (None, None, None, None, None),
-  };
+  // TODO: we should probably return an error if the query parsing fails rather than quietly
+  // falling back to defaults.
+  let QueryParseResult {
+    params: filter_params,
+    cursor,
+    limit,
+    order,
+    offset,
+    ..
+  } = parse_query(raw_url_query.as_deref()).unwrap_or_default();
 
   let (virtual_table, table_or_view_metadata): (bool, Arc<dyn TableOrViewMetadata + Sync + Send>) = {
     if let Some(table_metadata) = state.table_metadata().get(&table_name) {

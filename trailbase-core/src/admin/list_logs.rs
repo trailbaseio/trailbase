@@ -15,7 +15,7 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::constants::{LOGS_RETENTION_DEFAULT, LOGS_TABLE_ID_COLUMN};
 use crate::listing::{
-  build_filter_where_clause, limit_or_default, parse_query, Order, WhereClause,
+  build_filter_where_clause, limit_or_default, parse_query, Order, QueryParseResult, WhereClause,
 };
 use crate::table_metadata::{lookup_and_parse_table_schema, TableMetadata};
 use crate::util::id_to_b64;
@@ -100,13 +100,15 @@ pub async fn list_logs_handler(
 ) -> Result<Json<ListLogsResponse>, Error> {
   let conn = state.logs_conn();
 
-  // FIXME: we should probably return an error if the query parsing fails rather than quietly
+  // TODO: we should probably return an error if the query parsing fails rather than quietly
   // falling back to defaults.
-  let url_query = parse_query(raw_url_query);
-  let (filter_params, cursor, limit, order) = match url_query {
-    Some(q) => (Some(q.params), q.cursor, q.limit, q.order),
-    None => (None, None, None, None),
-  };
+  let QueryParseResult {
+    params: filter_params,
+    cursor,
+    limit,
+    order,
+    ..
+  } = parse_query(raw_url_query.as_deref()).unwrap_or_default();
 
   // NOTE: We cannot use state.table_metadata() here, since we're working on the logs database.
   // We could cache, however this is just the admin logs handler.

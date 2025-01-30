@@ -84,13 +84,14 @@ pub struct QueryParseResult {
   pub limit: Option<usize>,
   pub cursor: Option<[u8; 16]>,
   pub offset: Option<usize>,
+  pub count: Option<bool>,
 
   // Ordering. It's a vector for &order=-col0,+col1,col2
   pub order: Option<Vec<(String, Order)>>,
 
   // Map from filter params to filter value. It's a vector in cases like
   // "col0[gte]=2&col0[lte]=10".
-  pub params: HashMap<String, Vec<QueryParam>>,
+  pub params: Option<HashMap<String, Vec<QueryParam>>>,
 }
 
 pub fn limit_or_default(limit: Option<usize>) -> usize {
@@ -100,22 +101,34 @@ pub fn limit_or_default(limit: Option<usize>) -> usize {
   return std::cmp::min(limit.unwrap_or(DEFAULT_LIMIT), MAX_LIMIT);
 }
 
+fn parse_bool(s: &str) -> Option<bool> {
+  return match s {
+    "TRUE" | "true" | "1" => Some(true),
+    "FALSE" | "false" | "0" => Some(true),
+    _ => None,
+  };
+}
+
 /// Parses out list-related query params including pagination (limit, cursort), order, and filters.
 ///
 /// An example query may look like:
 ///  ?cursor=[0:16]&limit=50&order=price,-date&price[lte]=100&date[gte]=<timestamp>.
-pub fn parse_query(query: Option<String>) -> Option<QueryParseResult> {
-  let q = query?;
-  if q.is_empty() {
-    return None;
+pub fn parse_query(query: Option<&str>) -> Result<QueryParseResult, String> {
+  let mut result: QueryParseResult = Default::default();
+  let Some(query) = query else {
+    return Ok(result);
+  };
+
+  if query.is_empty() {
+    return Ok(result);
   }
 
-  let mut result: QueryParseResult = Default::default();
-  for (key, value) in form_urlencoded::parse(q.as_bytes()) {
+  for (key, value) in form_urlencoded::parse(query.as_bytes()) {
     match key.as_ref() {
       "limit" => result.limit = value.parse::<usize>().ok(),
       "cursor" => result.cursor = b64_to_id(value.as_ref()).ok(),
       "offset" => result.offset = value.parse::<usize>().ok(),
+      "count" => result.count = parse_bool(&value),
       "order" => {
         let order: Vec<(String, Order)> = value
           .split(",")
@@ -135,24 +148,18 @@ pub fn parse_query(query: Option<String>) -> Option<QueryParseResult> {
         // assume it's a column filter. We try to split any qualifier/operation, e.g.
         // column[op]=value.
         let Some((k, maybe_op)) = split_key_into_col_and_op(key) else {
-          #[cfg(debug_assertions)]
-          debug!("skipping query param: {key}={value}");
-
-          continue;
+          return Err(key.to_string());
         };
 
         if !k
           .chars()
           .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_')
         {
-          #[cfg(debug_assertions)]
-          debug!("skipping non-trivial query param: {key}={value}");
-
-          continue;
+          return Err(key.to_string());
         }
 
         if value.is_empty() {
-          continue;
+          return Err(key.to_string());
         }
 
         let query_param = QueryParam {
@@ -160,16 +167,17 @@ pub fn parse_query(query: Option<String>) -> Option<QueryParseResult> {
           qualifier: Qualifier::from(maybe_op),
         };
 
-        if let Some(v) = result.params.get_mut(k) {
+        let params = result.params.get_or_insert_default();
+        if let Some(v) = params.get_mut(k) {
           v.push(query_param)
         } else {
-          result.params.insert(k.to_string(), vec![query_param]);
+          params.insert(k.to_string(), vec![query_param]);
         }
       }
     }
   }
 
-  return Some(result);
+  return Ok(result);
 }
 
 #[derive(Debug, Clone)]
@@ -270,8 +278,8 @@ mod tests {
 
   #[test]
   fn test_query_parsing() {
-    assert!(parse_query(None).is_none());
-    assert!(parse_query(Some("".to_string())).is_none());
+    assert!(parse_query(None).is_ok());
+    assert!(parse_query(Some("")).is_ok());
 
     {
       let cursor: [u8; 16] = [0; 16];
@@ -282,7 +290,7 @@ mod tests {
         "limit=10&cursor={cursor}&order=%2bcol0,-col1,col2",
         cursor = id_to_b64(&cursor)
       ));
-      let result = parse_query(query).unwrap();
+      let result = parse_query(query.as_deref()).unwrap();
 
       assert_eq!(result.limit, Some(10));
       assert_eq!(result.cursor, Some(cursor));
@@ -297,21 +305,18 @@ mod tests {
     }
 
     {
-      let query = Some("foo,bar&foo_bar&baz=23&bar[like]=foo".to_string());
+      let query = Some("baz=23&bar[like]=foo");
       let result = parse_query(query).unwrap();
 
-      // foo,bar is an invalid key.
-      assert_eq!(result.params.get("foo,bar"), None);
-      assert_eq!(result.params.get("foo_bar"), None);
       assert_eq!(
-        result.params.get("baz").unwrap(),
+        result.params.as_ref().unwrap().get("baz").unwrap(),
         &vec![QueryParam {
           value: "23".to_string(),
           qualifier: Some(Qualifier::Equal),
         }]
       );
       assert_eq!(
-        result.params.get("bar").unwrap(),
+        result.params.as_ref().unwrap().get("bar").unwrap(),
         &vec![QueryParam {
           value: "foo".to_string(),
           qualifier: Some(Qualifier::Like),
@@ -320,19 +325,28 @@ mod tests {
     }
 
     {
+      // foo,bar is an invalid key.
+      let query = Some("baz=23&foo,bar&foo_bar");
+      assert_eq!(parse_query(query).err(), Some("foo,bar".to_string()));
+
+      let query = Some("baz=23&foo_bar");
+      assert_eq!(parse_query(query).err(), Some("foo_bar".to_string()));
+    }
+
+    {
       // Check whitespaces
-      let query = Some("foo=a+b&bar=a%20b".to_string());
+      let query = Some("foo=a+b&bar=a%20b");
       let result = parse_query(query).unwrap();
 
       assert_eq!(
-        result.params.get("foo").unwrap(),
+        result.params.as_ref().unwrap().get("foo").unwrap(),
         &vec![QueryParam {
           value: "a b".to_string(),
           qualifier: Some(Qualifier::Equal),
         }]
       );
       assert_eq!(
-        result.params.get("bar").unwrap(),
+        result.params.as_ref().unwrap().get("bar").unwrap(),
         &vec![QueryParam {
           value: "a b".to_string(),
           qualifier: Some(Qualifier::Equal),
@@ -341,11 +355,11 @@ mod tests {
     }
 
     {
-      let query = Some("col_0[gte]=10&col_0[lte]=100".to_string());
+      let query = Some("col_0[gte]=10&col_0[lte]=100");
       let result = parse_query(query).unwrap();
 
       assert_eq!(
-        result.params.get("col_0"),
+        result.params.as_ref().unwrap().get("col_0"),
         Some(vec![
           QueryParam {
             value: "10".to_string(),
@@ -366,10 +380,10 @@ mod tests {
       // Test both encodings: "+" and %20 for " ".
       let value = "with+white%20spaces";
       let query = Some(format!("text={value}"));
-      let result = parse_query(query).unwrap();
+      let result = parse_query(query.as_deref()).unwrap();
 
       assert_eq!(
-        result.params.get("text"),
+        result.params.as_ref().unwrap().get("text"),
         Some(vec![QueryParam {
           value: "with white spaces".to_string(),
           qualifier: Some(Qualifier::Equal),

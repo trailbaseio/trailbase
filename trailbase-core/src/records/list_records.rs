@@ -2,6 +2,7 @@ use axum::{
   extract::{Path, RawQuery, State},
   Json,
 };
+use indoc::formatdoc;
 use itertools::Itertools;
 use serde::Serialize;
 use std::borrow::Cow;
@@ -10,16 +11,21 @@ use trailbase_sqlite::Value;
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::listing::{
-  build_filter_where_clause, limit_or_default, parse_query, Order, WhereClause,
+  build_filter_where_clause, limit_or_default, parse_query, Order, QueryParseResult, WhereClause,
 };
 use crate::records::sql_to_json::rows_to_json;
 use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;
 
+/// JSON response containing the listed records.
 #[derive(Debug, Serialize)]
 pub struct ListResponse {
+  /// Pagination cursor. Round-trip to get the next batch.
   cursor: Option<String>,
+  /// Actual record data for records matching the query.
   records: Vec<serde_json::Value>,
+  /// The total number of records matching the query.
+  total_count: Option<usize>,
 }
 
 /// Lists records matching the given filters
@@ -49,9 +55,19 @@ pub async fn list_records_handler(
     return Err(RecordError::Internal("missing pk column".into()));
   };
 
-  let (filter_params, cursor, limit, order) = match parse_query(raw_url_query) {
-    Some(q) => (Some(q.params), q.cursor, q.limit, q.order),
-    None => (None, None, None, None),
+  let Ok(QueryParseResult {
+    params: filter_params,
+    cursor,
+    limit,
+    order,
+    count,
+    ..
+  }) = parse_query(raw_url_query.as_deref())
+  else {
+    #[cfg(test)]
+    log::error!("{:?}", raw_url_query);
+
+    return Err(RecordError::BadRequest("Bad query"));
   };
 
   // Where clause contains column filters and cursor depending on what's present.
@@ -60,11 +76,6 @@ pub async fn list_records_handler(
     mut params,
   } = build_filter_where_clause(metadata, filter_params)
     .map_err(|_err| RecordError::BadRequest("Invalid filter params"))?;
-
-  if let Some(cursor) = cursor {
-    params.push((Cow::Borrowed(":cursor"), Value::Blob(cursor.to_vec())));
-    clause = format!("{clause} AND _ROW_.id < :cursor");
-  }
 
   // User properties
   params.extend_from_slice(&[
@@ -87,12 +98,16 @@ pub async fn list_records_handler(
     clause = format!("({read_access}) AND ({clause})");
   }
 
-  let default_ordering = || {
-    return vec![(api.record_pk_column().name.clone(), Order::Descending)];
+  let clause_with_cursor = match cursor {
+    Some(cursor) => {
+      params.push((Cow::Borrowed(":cursor"), Value::Blob(cursor.to_vec())));
+      format!("{clause} AND _ROW_.id < :cursor")
+    }
+    None => clause.clone(),
   };
 
   let order_clause = order
-    .unwrap_or_else(default_ordering)
+    .unwrap_or_else(|| vec![(api.record_pk_column().name.clone(), Order::Descending)])
     .iter()
     .map(|(col, ord)| {
       format!(
@@ -105,20 +120,48 @@ pub async fn list_records_handler(
     })
     .join(", ");
 
-  let query = format!(
-    r#"
-      SELECT _ROW_.*
+  let get_total_count = count.unwrap_or(false);
+  let query = if get_total_count {
+    formatdoc!(
+      r#"
+      WITH total_count AS (
+        SELECT COUNT(*)
+        FROM
+          '{table_name}' as _ROW_,
+          (SELECT :__user_id AS id) AS _USER_
+        WHERE
+          {clause}
+      )
+
+      SELECT _ROW_.*, _COUNT_.*
       FROM
-        (SELECT :__user_id AS id) AS _USER_,
-        (SELECT * FROM '{table_name}') as _ROW_
+        total_count AS _COUNT_,
+        '{table_name}' as _ROW_,
+        (SELECT :__user_id AS id) AS _USER_
       WHERE
-        {clause}
+        {clause_with_cursor}
       ORDER BY
         {order_clause}
       LIMIT :limit
-    "#,
-    table_name = api.table_name()
-  );
+      "#,
+      table_name = api.table_name()
+    )
+  } else {
+    formatdoc!(
+      r#"
+      SELECT _ROW_.*
+      FROM
+        '{table_name}' as _ROW_,
+        (SELECT :__user_id AS id) AS _USER_
+      WHERE
+        {clause_with_cursor}
+      ORDER BY
+        {order_clause}
+      LIMIT :limit
+      "#,
+      table_name = api.table_name()
+    )
+  };
 
   let rows = state.conn().query(&query, params).await?;
   let Some(last_row) = rows.last() else {
@@ -126,6 +169,7 @@ pub async fn list_records_handler(
     return Ok(Json(ListResponse {
       cursor: None,
       records: vec![],
+      total_count: Some(0),
     }));
   };
 
@@ -138,15 +182,34 @@ pub async fn list_records_handler(
     _ => None,
   };
 
+  let total_count = if get_total_count {
+    let first_row = &rows[0];
+    let last_index = first_row.len() - 1;
+    let rusqlite::types::Value::Integer(ref count) = first_row[last_index] else {
+      return Err(RecordError::Internal(
+        format!("expected count, got {:?}", first_row[last_index]).into(),
+      ));
+    };
+    Some(*count as usize)
+  } else {
+    None
+  };
+
   let records = rows_to_json(metadata, rows, |col_name| !col_name.starts_with("_"))
     .await
     .map_err(|err| RecordError::Internal(err.into()))?;
 
-  return Ok(Json(ListResponse { cursor, records }));
+  return Ok(Json(ListResponse {
+    cursor,
+    records,
+    total_count,
+  }));
 }
 
 #[cfg(test)]
 mod tests {
+  use serde::Deserialize;
+
   use super::*;
   use crate::admin::user::*;
   use crate::app_state::*;
@@ -165,14 +228,23 @@ mod tests {
     };
   }
 
+  #[allow(unused)]
+  #[derive(Deserialize)]
+  struct Message {
+    id: String,
+    _owner: Option<String>,
+    room: String,
+    data: String,
+  }
+
   #[tokio::test]
-  async fn test_record_api_list() -> Result<(), anyhow::Error> {
-    let state = test_state(None).await?;
+  async fn test_record_api_list() {
+    let state = test_state(None).await.unwrap();
     let conn = state.conn();
 
-    create_chat_message_app_tables(&state).await?;
-    let room0 = add_room(conn, "room0").await?;
-    let room1 = add_room(conn, "room1").await?;
+    create_chat_message_app_tables(&state).await.unwrap();
+    let room0 = add_room(conn, "room0").await.unwrap();
+    let room1 = add_room(conn, "room1").await.unwrap();
     let password = "Secret!1!!";
 
     add_record_api(
@@ -188,7 +260,7 @@ mod tests {
         ..Default::default()
       },
     )
-    .await?;
+    .await.unwrap();
 
     {
       // Unauthenticated users cannot list
@@ -201,35 +273,132 @@ mod tests {
 
     let user_x_email = "user_x@test.com";
     let user_x = create_user_for_test(&state, user_x_email, password)
-      .await?
+      .await
+      .unwrap()
       .into_bytes();
-    let user_x_token = login_with_password(&state, user_x_email, password).await?;
+    let user_x_token = login_with_password(&state, user_x_email, password)
+      .await
+      .unwrap();
 
-    add_user_to_room(conn, user_x, room0).await?;
-    send_message(conn, user_x, room0, "user_x to room0").await?;
+    add_user_to_room(conn, user_x, room0).await.unwrap();
+    send_message(conn, user_x, room0, "user_x to room0")
+      .await
+      .unwrap();
 
     let user_y_email = "user_y@foo.baz";
     let user_y = create_user_for_test(&state, user_y_email, password)
-      .await?
+      .await
+      .unwrap()
       .into_bytes();
 
-    add_user_to_room(conn, user_y, room0).await?;
-    send_message(conn, user_y, room0, "user_y to room0").await?;
+    add_user_to_room(conn, user_y, room0).await.unwrap();
+    send_message(conn, user_y, room0, "user_y to room0")
+      .await
+      .unwrap();
 
-    add_user_to_room(conn, user_y, room1).await?;
-    send_message(conn, user_y, room1, "user_y to room1").await?;
+    add_user_to_room(conn, user_y, room1).await.unwrap();
+    send_message(conn, user_y, room1, "user_y to room1")
+      .await
+      .unwrap();
 
-    let user_y_token = login_with_password(&state, user_y_email, password).await?;
+    let user_y_token = login_with_password(&state, user_y_email, password)
+      .await
+      .unwrap();
 
     {
       // User X can list the messages they have access to, i.e. room0.
-      let arr = list_records(&state, Some(&user_x_token.auth_token), None).await?;
-      assert_eq!(arr.len(), 2);
+      let resp = list_records(&state, Some(&user_x_token.auth_token), None)
+        .await
+        .unwrap();
+
+      assert_eq!(resp.records.len(), 2);
+
+      let messages: Vec<_> = resp
+        .records
+        .into_iter()
+        .map(|v| {
+          let message = serde_json::from_value::<Message>(v).unwrap();
+          assert_eq!(None, message._owner);
+          message.data
+        })
+        .collect();
+
+      assert_eq!(
+        vec!["user_y to room0".to_string(), "user_x to room0".to_string()],
+        messages
+      );
+    }
+
+    {
+      // Test total count.
+      //
+      // User X can list the messages they have access to, i.e. room0.
+      let resp = list_records(
+        &state,
+        Some(&user_x_token.auth_token),
+        Some("count=TRUE".to_string()),
+      )
+      .await
+      .unwrap();
+
+      assert_eq!(resp.records.len(), 2);
+      assert_eq!(resp.total_count, Some(2));
+
+      // Let's paginate
+      let resp0 = list_records(
+        &state,
+        Some(&user_x_token.auth_token),
+        Some("count=1&limit=1".to_string()),
+      )
+      .await
+      .unwrap();
+
+      assert_eq!(resp0.records.len(), 1);
+      assert_eq!(
+        "user_y to room0",
+        serde_json::from_value::<Message>(resp0.records[0].clone())
+          .unwrap()
+          .data
+      );
+      assert_eq!(resp0.total_count, Some(2));
+
+      let cursor = resp0.cursor.unwrap();
+      let resp1 = list_records(
+        &state,
+        Some(&user_x_token.auth_token),
+        Some(format!("count=1&limit=1&cursor={cursor}")),
+      )
+      .await
+      .unwrap();
+
+      assert_eq!(resp1.records.len(), 1);
+      assert_eq!(
+        "user_x to room0",
+        serde_json::from_value::<Message>(resp1.records[0].clone())
+          .unwrap()
+          .data
+      );
+      assert_eq!(resp1.total_count, Some(2));
+      let cursor = resp1.cursor.unwrap();
+
+      let resp2 = list_records(
+        &state,
+        Some(&user_x_token.auth_token),
+        Some(format!("count=1&limit=1&cursor={cursor}")),
+      )
+      .await
+      .unwrap();
+
+      assert_eq!(resp2.records.len(), 0);
+      assert!(resp2.cursor.is_none());
     }
 
     {
       // User Y can list the messages they have access to, i.e. room0 & room1.
-      let arr = list_records(&state, Some(&user_y_token.auth_token), Some("".to_string())).await?;
+      let arr = list_records(&state, Some(&user_y_token.auth_token), Some("".to_string()))
+        .await
+        .unwrap()
+        .records;
       assert_eq!(arr.len(), 3);
 
       let arr = list_records(
@@ -237,7 +406,9 @@ mod tests {
         Some(&user_y_token.auth_token),
         Some("limit=1".to_string()),
       )
-      .await?;
+      .await
+      .unwrap()
+      .records;
       assert_eq!(arr.len(), 1);
     }
 
@@ -248,7 +419,9 @@ mod tests {
         Some(&user_y_token.auth_token),
         Some("order=+id".to_string()),
       )
-      .await?;
+      .await
+      .unwrap()
+      .records;
       assert_eq!(arr_asc.len(), 3);
 
       let arr_desc = list_records(
@@ -256,7 +429,9 @@ mod tests {
         Some(&user_y_token.auth_token),
         Some("order=-id".to_string()),
       )
-      .await?;
+      .await
+      .unwrap()
+      .records;
       assert_eq!(arr_desc.len(), 3);
 
       assert_eq!(arr_asc, arr_desc.into_iter().rev().collect::<Vec<_>>());
@@ -269,7 +444,10 @@ mod tests {
         Some(&user_y_token.auth_token),
         Some(format!("room={}", id_to_b64(&room0))),
       )
-      .await?;
+      .await
+      .unwrap()
+      .records;
+
       assert_eq!(arr0.len(), 2);
 
       let arr1 = list_records(
@@ -277,18 +455,18 @@ mod tests {
         Some(&user_y_token.auth_token),
         Some(format!("room={}", id_to_b64(&room1))),
       )
-      .await?;
+      .await
+      .unwrap()
+      .records;
       assert_eq!(arr1.len(), 1);
     }
-
-    return Ok(());
   }
 
   async fn list_records(
     state: &AppState,
     auth_token: Option<&str>,
     query: Option<String>,
-  ) -> Result<Vec<serde_json::Value>, RecordError> {
+  ) -> Result<ListResponse, RecordError> {
     let json_response = list_records_handler(
       State(state.clone()),
       Path("messages_api".to_string()),
@@ -298,6 +476,6 @@ mod tests {
     .await?;
 
     let response: ListResponse = json_response.0;
-    return Ok(response.records);
+    return Ok(response);
   }
 }
