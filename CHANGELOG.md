@@ -1,3 +1,14 @@
+## v0.5.4
+
+* Add a `?count=true` query parameter to RecordApi.list to fetch the total
+  number of entries.
+* Return error on invalid list queries rather than skipping over them.
+* Address Admin UI issues:
+ * Stale config after altering schema or dropping table.
+ * Out-of-sync filter bar value.
+ * Reset filter when switching tables.
+* Hide "sqlite_" internal tables in Admin UI.
+
 ## v0.5.3
 
 * Built-in TLS support.
