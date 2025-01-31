@@ -69,7 +69,8 @@ pub async fn list_users_handler(
     limit,
     order,
     ..
-  } = parse_query(raw_url_query.as_deref()).unwrap_or_default();
+  } = parse_query(raw_url_query.as_deref())
+    .map_err(|err| Error::Precondition(format!("Invalid query '{err}': {raw_url_query:?}")))?;
 
   let Some(table_metadata) = state.table_metadata().get(USER_TABLE) else {
     return Err(Error::Precondition(format!("Table {USER_TABLE} not found")));

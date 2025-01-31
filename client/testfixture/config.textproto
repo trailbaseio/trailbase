@@ -43,14 +43,6 @@ record_apis: [
 schemas: [
   {
     name: "simple_schema"
-    schema:
-      "{"
-      "  \"type\": \"object\","
-      "  \"properties\": {"
-      "    \"name\": { \"type\": \"string\" },"
-      "    \"obj\": { \"type\": \"object\" }"
-      "  },"
-      "  \"required\": [\"name\"]"
-      "}"
+    schema: "{  \"type\": \"object\",  \"properties\": {    \"name\": { \"type\": \"string\" },    \"obj\": { \"type\": \"object\" }  },  \"required\": [\"name\"]}"
   }
 ]

@@ -66,6 +66,7 @@ import {
 } from "@/components/FormFields";
 import type { FormType, AnyFieldApi } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
+import { invalidateConfig } from "@/lib/config";
 
 export function CreateAlterTableForm(props: {
   close: () => void;
@@ -108,6 +109,7 @@ export function CreateAlterTableForm(props: {
       }
 
       if (!dryRun) {
+        invalidateConfig();
         props.schemaRefetch().then(() => {
           props.setSelected(value.name);
         });

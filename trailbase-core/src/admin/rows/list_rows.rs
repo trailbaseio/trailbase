@@ -32,8 +32,6 @@ pub async fn list_rows_handler(
   Path(table_name): Path<String>,
   RawQuery(raw_url_query): RawQuery,
 ) -> Result<Json<ListRowsResponse>, Error> {
-  // TODO: we should probably return an error if the query parsing fails rather than quietly
-  // falling back to defaults.
   let QueryParseResult {
     params: filter_params,
     cursor,
@@ -41,7 +39,8 @@ pub async fn list_rows_handler(
     order,
     offset,
     ..
-  } = parse_query(raw_url_query.as_deref()).unwrap_or_default();
+  } = parse_query(raw_url_query.as_deref())
+    .map_err(|err| Error::Precondition(format!("Invalid query '{err}': {raw_url_query:?}")))?;
 
   let (virtual_table, table_or_view_metadata): (bool, Arc<dyn TableOrViewMetadata + Sync + Send>) = {
     if let Some(table_metadata) = state.table_metadata().get(&table_name) {

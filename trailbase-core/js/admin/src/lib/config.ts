@@ -11,7 +11,7 @@ function createClient(): QueryClient {
 }
 const queryClient = createClient();
 
-export async function setConfig(config: Config) {
+export async function setConfig(config: Config): Promise<void> {
   const data = queryClient.getQueryData<GetConfigResponse>(defaultKey);
   const hash = data?.hash;
   if (!hash) {
@@ -24,11 +24,13 @@ export async function setConfig(config: Config) {
     hash,
   };
   console.debug("Updating config:", request);
-  const response = await updateConfig(request);
+  await updateConfig(request);
 
+  invalidateConfig();
+}
+
+export function invalidateConfig() {
   queryClient.invalidateQueries();
-
-  return response;
 }
 
 export function createConfigQuery() {

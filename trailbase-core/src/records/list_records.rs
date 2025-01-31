@@ -55,20 +55,16 @@ pub async fn list_records_handler(
     return Err(RecordError::Internal("missing pk column".into()));
   };
 
-  let Ok(QueryParseResult {
+  let QueryParseResult {
     params: filter_params,
     cursor,
     limit,
     order,
     count,
     ..
-  }) = parse_query(raw_url_query.as_deref())
-  else {
-    #[cfg(test)]
-    log::error!("{:?}", raw_url_query);
-
-    return Err(RecordError::BadRequest("Bad query"));
-  };
+  } = parse_query(raw_url_query.as_deref()).map_err(|_err| {
+    return RecordError::BadRequest("Invalid query");
+  })?;
 
   // Where clause contains column filters and cursor depending on what's present.
   let WhereClause {

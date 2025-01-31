@@ -108,7 +108,8 @@ pub async fn list_logs_handler(
     limit,
     order,
     ..
-  } = parse_query(raw_url_query.as_deref()).unwrap_or_default();
+  } = parse_query(raw_url_query.as_deref())
+    .map_err(|err| Error::Precondition(format!("Invalid query '{err}': {raw_url_query:?}")))?;
 
   // NOTE: We cannot use state.table_metadata() here, since we're working on the logs database.
   // We could cache, however this is just the admin logs handler.

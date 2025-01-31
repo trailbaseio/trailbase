@@ -70,7 +70,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { createConfigQuery } from "@/lib/config";
+import { createConfigQuery, invalidateConfig } from "@/lib/config";
 import { adminFetch } from "@/lib/fetch";
 import { urlSafeBase64ToUuid, showSaveFileDialog } from "@/lib/utils";
 import { RecordApiConfig } from "@proto/config";
@@ -339,6 +339,8 @@ function TableHeaderRightHandButtons(props: {
             await dropTable({
               name: table().name,
             });
+
+            invalidateConfig();
             props.schemaRefetch();
           }}
           msg="Deleting a table will irreversibly delete all the data contained. Are you sure you'd like to continue?"
@@ -518,13 +520,13 @@ type TableStore = {
   schemas: ListSchemasResponse;
 
   // Filter & pagination
-  filter: string | undefined;
+  filter: string | null;
   pagination: PaginationState;
 };
 
 type FetchArgs = {
   tableName: string;
-  filter: string | undefined;
+  filter: string | null;
   pageSize: number;
   pageIndex: number;
   cursors: string[];
@@ -700,7 +702,7 @@ function RowDataTable(props: {
               </SheetContent>
 
               <FilterBar
-                initial={props.state.store.filter}
+                initial={props.state.store.filter ?? undefined}
                 onSubmit={(value: string) => {
                   if (value === props.state.store.filter) {
                     refetch();
@@ -831,11 +833,11 @@ function TablePane(props: {
     pageSize?: string;
   }>();
 
-  function newStore(): TableStore {
+  function newStore({ filter }: { filter: string | null }): TableStore {
     return {
       selected: props.selectedTable,
       schemas: props.schemas,
-      filter: searchParams.filter ?? "",
+      filter,
       pagination: defaultPaginationState({
         // NOTE: We index has to start at 0 since we're building the list of
         // stable cursors as we incrementally page.
@@ -847,14 +849,25 @@ function TablePane(props: {
 
   // Cursors are deliberately kept out of the store to avoid tracking.
   let cursors: string[] = [];
-  const [store, setStore] = createStore<TableStore>(newStore());
+  const [store, setStore] = createStore<TableStore>(
+    newStore({ filter: searchParams.filter ?? null }),
+  );
   createEffect(() => {
+    // When switching tables/views, recreate the state. This includes the main
+    // store but also the current search params and the untracked cursors.
     if (store.selected.name !== props.selectedTable.name) {
-      // Recreate the state/store when we switch tables.
       cursors = [];
-      setStore(newStore());
+
+      // The new table probably has different schema, thus filters must not
+      // carry over.
+      const newFilter = { filter: null };
+      setSearchParams(newFilter);
+
+      setStore(newStore(newFilter));
+      return;
     }
 
+    // When the filter changes, we also update the search params to be in sync.
     setSearchParams({
       filter: store.filter,
     });

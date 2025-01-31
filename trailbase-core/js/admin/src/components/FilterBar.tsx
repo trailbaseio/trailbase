@@ -1,5 +1,3 @@
-import { createSignal } from "solid-js";
-
 import { Button } from "@/components/ui/button";
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
 
@@ -9,12 +7,13 @@ export function FilterBar(props: {
   initial?: string;
   onSubmit: (filter: string) => void;
 }) {
-  const [input, setInput] = createSignal(props.initial ?? "");
-
+  let ref: HTMLInputElement | undefined;
   const onSubmit = () => {
-    const value = input();
+    const value = ref?.value;
     console.debug("set filter: ", value);
-    props.onSubmit(value);
+    if (value !== undefined) {
+      props.onSubmit(value);
+    }
   };
 
   return (
@@ -26,12 +25,10 @@ export function FilterBar(props: {
       >
         <TextField class="w-full">
           <TextFieldInput
+            ref={ref}
+            value={props.initial}
             type="text"
             placeholder={props.placeholder ?? "filter"}
-            onKeyUp={(e: KeyboardEvent) => {
-              const value = (e.currentTarget as HTMLInputElement).value;
-              setInput(value);
-            }}
           />
         </TextField>
 
