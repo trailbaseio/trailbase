@@ -121,7 +121,7 @@ pub async fn list_records_handler(
     formatdoc!(
       r#"
       WITH total_count AS (
-        SELECT COUNT(*)
+        SELECT COUNT(*) AS _value_
         FROM
           '{table_name}' as _ROW_,
           (SELECT :__user_id AS id) AS _USER_
@@ -129,9 +129,9 @@ pub async fn list_records_handler(
           {clause}
       )
 
-      SELECT _ROW_.*, _COUNT_.*
+      SELECT _ROW_.*, total_count._value_
       FROM
-        total_count AS _COUNT_,
+        total_count,
         '{table_name}' as _ROW_,
         (SELECT :__user_id AS id) AS _USER_
       WHERE
@@ -313,6 +313,15 @@ mod tests {
         .records
         .into_iter()
         .map(|v| {
+          match v {
+            serde_json::Value::Object(ref obj) => {
+              let keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
+              assert_eq!(3, keys.len(), "Got: {:?}", keys);
+              assert_eq!(keys, vec!["id", "room", "data"])
+            }
+            _ => panic!("expected object, got {v:?}"),
+          };
+
           let message = serde_json::from_value::<Message>(v).unwrap();
           assert_eq!(None, message._owner);
           message.data
@@ -339,6 +348,30 @@ mod tests {
 
       assert_eq!(resp.records.len(), 2);
       assert_eq!(resp.total_count, Some(2));
+
+      let messages: Vec<_> = resp
+        .records
+        .into_iter()
+        .map(|v| {
+          match v {
+            serde_json::Value::Object(ref obj) => {
+              let keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
+              assert_eq!(3, keys.len(), "Got: {:?}", keys);
+              assert_eq!(keys, vec!["id", "room", "data"])
+            }
+            _ => panic!("expected object, got {v:?}"),
+          };
+
+          let message = serde_json::from_value::<Message>(v).unwrap();
+          assert_eq!(None, message._owner);
+          message.data
+        })
+        .collect();
+
+      assert_eq!(
+        vec!["user_y to room0".to_string(), "user_x to room0".to_string()],
+        messages
+      );
 
       // Let's paginate
       let resp0 = list_records(

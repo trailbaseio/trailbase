@@ -111,12 +111,18 @@ class Pagination {
 class ListResponse {
   final String? cursor;
   final List<Map<String, dynamic>> records;
+  final int? totalCount;
 
-  const ListResponse({this.cursor, required this.records});
+  const ListResponse({
+    this.cursor,
+    required this.records,
+    this.totalCount,
+  });
 
   ListResponse.fromJson(Map<String, dynamic> json)
       : cursor = json['cursor'],
-        records = (json['records'] as List).cast<Map<String, dynamic>>();
+        records = (json['records'] as List).cast<Map<String, dynamic>>(),
+        totalCount = json['total_count'];
 }
 
 abstract class RecordId {
@@ -293,6 +299,7 @@ class RecordApi {
     Pagination? pagination,
     List<String>? order,
     List<String>? filters,
+    bool? count,
   }) async {
     final params = <String, dynamic>{};
     if (pagination != null) {
@@ -304,6 +311,7 @@ class RecordApi {
     }
 
     if (order != null) params['order'] = order.join(',');
+    if (count ?? false) params['count'] = 'true';
 
     if (filters != null) {
       for (final filter in filters) {

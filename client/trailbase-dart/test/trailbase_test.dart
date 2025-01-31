@@ -184,6 +184,19 @@ Future<void> main() async {
             orderedEquals(messages));
       }
 
+      {
+        final response = (await api.list(
+          pagination: Pagination(limit: 1),
+          order: ['-text_not_null'],
+          filters: ['text_not_null[like]=%${now}'],
+          count: true,
+        ));
+
+        expect(response.totalCount ?? -1, 2);
+        // Ensure there's no extra field, i.e the count doesn't get serialized.
+        expect(response.records[0].keys.length, 13);
+      }
+
       final record = SimpleStrict.fromJson(await api.read(ids[0]));
 
       expect(ids[0] == record.id, isTrue);
