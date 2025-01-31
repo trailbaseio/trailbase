@@ -1,14 +1,11 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1.83-slim AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.84-slim AS chef
 
-# Install additional build dependencies.
-#
-# NOTE: we should consider building sqlean against
-# libsql/libsql-sqlite3/src/sqlite3ext.h rather than upstrean libsqlite3-dev
-# for increased consistency.
-RUN apt-get update && apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev libsqlite3-dev
+# Install additional build dependencies. git is needed to bake version metadata.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl git libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev libsqlite3-dev
 
 ENV PATH=/usr/local/node/bin:$PATH
-ARG NODE_VERSION=22.9.0
+ARG NODE_VERSION=22.13.1
 
 RUN curl -sL https://github.com/nodenv/node-build/archive/master.tar.gz | tar xz -C /tmp/ && \
     /tmp/node-build-master/bin/node-build "${NODE_VERSION}" /usr/local/node && \

@@ -13,8 +13,11 @@ docs/
 Dockerfile*
 .docker*
 
-.git/
+# Include parts of the .git/ folder needed to bake version info into the
+# binary.
 .git*
+!.git/
+.git/modules
 
 *.image
 .rustfmt.toml

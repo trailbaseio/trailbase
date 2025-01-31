@@ -19,6 +19,7 @@ default-members = [
 ]
 exclude = [
   "vendor/refinery",
+  "vendor/rustc_tools_util",
 ]
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html
@@ -53,6 +54,7 @@ rusqlite = { version = "^0.33.0", default-features = false, features = [
     "hooks",
     "preupdate_hook",
 ] }
+rustc_tools_util = { path = "vendor/rustc_tools_util", version = "0.4.0" }
 trailbase-sqlean = { path = "vendor/sqlean", version = "0.0.2" }
 trailbase-extension = { path = "trailbase-extension", version = "0.1.1" }
 trailbase-sqlite = { path = "trailbase-sqlite", version = "0.1.1" }
