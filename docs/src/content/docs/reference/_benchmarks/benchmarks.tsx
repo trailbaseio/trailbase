@@ -791,7 +791,7 @@ export function TrailBaseFileSystemWriteLatency() {
         y: {
           title: {
             display: true,
-            text: "Read Latency [µs]",
+            text: "Write Latency [µs]",
           },
         },
       }}
