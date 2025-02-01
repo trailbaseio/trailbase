@@ -12,6 +12,8 @@ import {
   SupaBaseMemoryUsageChart,
   SupaBaseCpuUsageChart,
   PocketBaseAndTrailBaseUsageChart,
+  TrailBaseFileSystemReadLatency,
+  TrailBaseFileSystemWriteLatency,
   FibonacciPocketBaseAndTrailBaseUsageChart,
 } from "./_benchmarks/benchmarks.tsx";
 
@@ -178,6 +180,49 @@ being roughly 5 times slower than p50.
 Slower insertions can take north of 100ms. This may be related to GC pauses,
 scheduling, or more generally the same CPU variability we observed earlier.
 
+## File System Performance
+
+File systems play an important role for the performance of storage systems,
+we'll therefore take a quick at their impact on SQLite/TrailBase's performance.
+
+Note that the numbers aren't directly comparable to the ones above, due to
+being taken on a different machine with more storage options,
+specifically an AMD 8700G with a 2TB WD SN850x NVMe SSD running a 6.12 kernel.
+
+<div class="flex justify-center h-[340px] w-[90%]">
+  <div class="w-[50%]">
+    <TrailBaseFileSystemReadLatency client:only="solid-js" />
+  </div>
+
+  <div class="w-[50%]">
+    <TrailBaseFileSystemWriteLatency client:only="solid-js" />
+  </div>
+</div>
+
+Interestingly, the read performance appears identical suggesting that caching
+is at play w/o much real file system interaction.
+In the future we should rerun with a larger data set to observe the degraded
+performance for when not everything fits into memory anymore.
+Yet, most queries being cached is a not too uncommon reality and it's
+reassuring to see that caches are indeed working independent of the file system
+😅.
+
+The write latencies are bit more interesting. Unsurprisingly modern
+copy-on-write (CoW) file systems have a bit more overhead. The relative ranking
+is roughly in line with
+[Phoronix'](https://www.phoronix.com/review/linux-611-filesystems/2)
+results[^7], with the added OpenZFS (2.2.7) falling in line with its peers.
+Also, the differences are attenuated due to the constant overhead TrailBase
+adds over vanilla SQLite.
+
+We won't discuss the specific trade-offs and baggage coming with each file
+system but hope that the numbers can help guide the optimization of your own
+production setup.
+In the end its a trade-off between performance, maturity, reliability, physical
+disc space and feature sets. For example, CoW snapshots may or may not be
+important to you.
+
+
 ## JavaScript Performance
 
 The benchmark sets up a custom HTTP endpoint `/fibonacci?n=<N>` using the same
@@ -224,9 +269,8 @@ threads will be an effective remedy (`--js-runtime-threads`).
 
 We're very happy to confirm that TrailBase's APIs and JS/ES6/TS runtime are
 quick.
-The significant performance gap we observed, especially for the APIs, is likely
-a consequence of how quick SQLite is making even small overheads matter that
-much more.
+The significant performance gap we observed for API access is a consequence of
+how fast SQLite itself is making even small overheads matter that much more.
 
 With the numbers fresh off the press, prudence is of the essence and ultimately
 nothing beats benchmarking your own setup and workloads.
@@ -282,3 +326,8 @@ The benchmarks are available on [GitHub](https://github.com/trailbaseio/trailbas
     Runtime-effects, such as garbage collection, may have an effect, however we
     would have expected these to show on shorter time-scales.
     This could also indicate a contention or thrashing issue 🤷.
+
+[^7]:
+    Despite being close, XFS' and ext4's relative ranking is swapped, which
+    could be due to a variety of reason like mount options, kernel version,
+    hardware, ...

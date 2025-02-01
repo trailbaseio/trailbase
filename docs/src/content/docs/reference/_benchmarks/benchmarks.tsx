@@ -634,3 +634,167 @@ export function FibonacciPocketBaseAndTrailBaseUsageChart() {
     />
   );
 }
+
+const fsColors = {
+  ext4: "#008b6dff",
+  xfs: "#29c299ff",
+  bcachefs: "#47a1cdff",
+  btrfsNoComp: "#ba36c8ff",
+  btrfsZstd1: "#c865d5ff",
+  btrfsLzo: "#db9be3ff",
+  zfs: "#e6bb1eff",
+};
+
+export function TrailBaseFileSystemReadLatency() {
+  //                i100k   i10k      ip50 ip75 ip90 ip95    rp50 rp75 rp90 rp95
+  // ext4	          2.415	  0.23942  	355	 425	476	 499	   169	196	 226	249
+  // zfs	          3.532	  0.35463  	535	 581	655	 730	   170	197	 229	253
+  // xfs	          2.3789	0.24695  	372	 441	481	 503	   168	195	 226	248
+  // btrfs no compr	3.2142	0.32212  	475	 533	646	 689	   168	195	 226	249
+  // btrfs zstd:1	  3.1774	0.31789  	475	 523	607	 659	   167	194	 225	249
+  // btrfs lzo	    3.2673	0.34607  	513	 609	687	 726	   167	194	 224	247
+  // bcachefs	      2.6001	0.27165  	398	 489	547	 572	   169	195	 226	249
+
+  // 2025-02-01
+  const readLatenciesMicroSec = {
+    ext4: [169, 196, 226, 249],
+    zfs: [170, 197, 229, 253],
+    xfs: [168, 195, 226, 248],
+    btrfsNoComp: [168, 195, 226, 249],
+    btrfsZstd1: [167, 194, 225, 249],
+    btrfsLzo: [167, 194, 224, 247],
+    bcachefs: [169, 195, 226, 249],
+  };
+
+  const data: ChartData<"bar"> = {
+    labels: ["p50", "p75", "p90", "p95"],
+    datasets: [
+      {
+        label: "ext4",
+        data: readLatenciesMicroSec.ext4,
+        backgroundColor: fsColors.ext4,
+      },
+      {
+        label: "xfs",
+        data: readLatenciesMicroSec.xfs,
+        backgroundColor: fsColors.xfs,
+      },
+      {
+        label: "bcachefs",
+        data: readLatenciesMicroSec.bcachefs,
+        backgroundColor: fsColors.bcachefs,
+      },
+      {
+        label: "btrfs w/o compression",
+        data: readLatenciesMicroSec.btrfsNoComp,
+        backgroundColor: fsColors.btrfsNoComp,
+      },
+      {
+        label: "btrfs zstd:1",
+        data: readLatenciesMicroSec.btrfsZstd1,
+        backgroundColor: fsColors.btrfsZstd1,
+      },
+      {
+        label: "btrfs lzo",
+        data: readLatenciesMicroSec.btrfsLzo,
+        backgroundColor: fsColors.btrfsLzo,
+      },
+      {
+        label: "zfs",
+        data: readLatenciesMicroSec.zfs,
+        backgroundColor: fsColors.zfs,
+      },
+    ],
+  };
+
+  return (
+    <BarChart
+      data={data}
+      scales={{
+        y: {
+          title: {
+            display: true,
+            text: "Read Latency [µs]",
+          },
+        },
+      }}
+    />
+  );
+}
+
+export function TrailBaseFileSystemWriteLatency() {
+  //                i100k   i10k      ip50 ip75 ip90 ip95    rp50 rp75 rp90 rp95
+  // ext4	          2.415	  0.23942  	355	 425	476	 499	   169	196	 226	249
+  // zfs	          3.532	  0.35463  	535	 581	655	 730	   170	197	 229	253
+  // xfs	          2.3789	0.24695  	372	 441	481	 503	   168	195	 226	248
+  // btrfs no compr	3.2142	0.32212  	475	 533	646	 689	   168	195	 226	249
+  // btrfs zstd:1	  3.1774	0.31789  	475	 523	607	 659	   167	194	 225	249
+  // btrfs lzo	    3.2673	0.34607  	513	 609	687	 726	   167	194	 224	247
+  // bcachefs	      2.6001	0.27165  	398	 489	547	 572	   169	195	 226	249
+
+  // 2025-02-01
+  const writeLatenciesMicroSec = {
+    ext4: [355, 425, 476, 499],
+    zfs: [535, 581, 655, 730],
+    xfs: [372, 441, 481, 503],
+    btrfsNoComp: [475, 533, 646, 689],
+    btrfsZstd1: [475, 523, 607, 659],
+    btrfsLzo: [513, 609, 687, 726],
+    bcachefs: [398, 489, 547, 572],
+  };
+
+  const data: ChartData<"bar"> = {
+    labels: ["p50", "p75", "p90", "p95"],
+    datasets: [
+      {
+        label: "ext4",
+        data: writeLatenciesMicroSec.ext4,
+        backgroundColor: fsColors.ext4,
+      },
+      {
+        label: "xfs",
+        data: writeLatenciesMicroSec.xfs,
+        backgroundColor: fsColors.xfs,
+      },
+      {
+        label: "bcachefs",
+        data: writeLatenciesMicroSec.bcachefs,
+        backgroundColor: fsColors.bcachefs,
+      },
+      {
+        label: "btrfs w/o compression",
+        data: writeLatenciesMicroSec.btrfsNoComp,
+        backgroundColor: fsColors.btrfsNoComp,
+      },
+      {
+        label: "btrfs zstd:1",
+        data: writeLatenciesMicroSec.btrfsZstd1,
+        backgroundColor: fsColors.btrfsZstd1,
+      },
+      {
+        label: "btrfs lzo",
+        data: writeLatenciesMicroSec.btrfsLzo,
+        backgroundColor: fsColors.btrfsLzo,
+      },
+      {
+        label: "zfs",
+        data: writeLatenciesMicroSec.zfs,
+        backgroundColor: fsColors.zfs,
+      },
+    ],
+  };
+
+  return (
+    <BarChart
+      data={data}
+      scales={{
+        y: {
+          title: {
+            display: true,
+            text: "Read Latency [µs]",
+          },
+        },
+      }}
+    />
+  );
+}
