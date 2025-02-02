@@ -16,7 +16,7 @@
     "@astrojs/solid-js": "^5.0.4",
     "@astrojs/tailwind": "^5.1.5",
     "@kobalte/core": "^0.13.7",
-    "astro": "^5.1.10",
+    "astro": "^5.2.3",
     "astro-icon": "^1.1.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

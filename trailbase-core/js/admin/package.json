@@ -27,7 +27,7 @@
     "@solid-primitives/memo": "^1.4.0",
     "@solidjs/router": "^0.15.3",
     "@tanstack/solid-form": "^0.41.3",
-    "@tanstack/solid-query": "^5.65.0",
+    "@tanstack/solid-query": "^5.66.0",
     "@tanstack/solid-table": "^8.20.5",
     "@tanstack/table-core": "^8.20.5",
     "chart.js": "^4.4.7",
