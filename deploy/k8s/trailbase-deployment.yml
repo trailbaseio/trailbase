@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trailbase-deployment
+  namespace: trailbase
+  labels:
+    app: trailbase
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trailbase
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: trailbase
+    spec:
+      containers:
+        - name: trailbase
+          image: docker.io/trailbase/trailbase:latest
+          env:
+          - name: RUST_BACKTRACE
+            value: "1"
+          volumeMounts:
+            - name: trailbase-storage
+              mountPath: /app/traildepot
+      restartPolicy: Always
+      volumes:
+        - name: trailbase-storage
+          hostPath:
+            path: /home/sebastian/traildepot/
