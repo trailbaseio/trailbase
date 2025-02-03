@@ -1,0 +1,238 @@
+---
+title: Models & Relations
+---
+
+import { Image } from "astro:assets";
+import { Aside } from "@astrojs/starlight/components";
+
+import foo from "./_relations.svg"
+
+## Modeling Data
+
+TrailBase gives you full, untethered access to SQLite, as such data is modeled
+on top of ISO SQL and SQLite concepts.
+This means that all data is organized as rows or records within columns of a
+table as defined by the table schema.
+Relationships between records are expressed by simply referencing other records
+via their primary key. Relationships commonly cross table boundaries.
+Data can then be *joined* together within the same database at query time.
+If you're new to SQL and this sounds abstract, don't worry it will become clear
+very soon.
+
+One of the main benefits of SQL databases is that you can define your models
+based on intrinsic properties of the underlying data and their relations,
+rather than having to worry about how the data is or will be used in the future.
+Instead, SQL *queries* let you flexibly define what data is being accessed, how
+it's transformed and what's returned.
+*How* data is accessed is never explicitly defined and is derived by the
+[*query optimizer*](https://sqlite.org/optoverview.html).
+This means, if you discover new use-cases in your data that require combining
+data in ways that would be slow, you can optimize it after the fact by adding
+ore removing indexes typically without ever having to touch the models, the
+queries, or the downstream code consuming the data 🎉.
+
+### Tables, Schemas & Data Types
+
+When creating a new table to hold your data, you define a table schema telling
+the database what columns there are, what kind of data they contain, and if
+there are any constraints on your data. For example[^1],
+
+```sql
+CREATE TABLE post (
+    id        INTEGER PRIMARY KEY,
+    created   INTEGER NOT NULL DEFAULT (UNIXEPOCH()),
+    author    INTEGER NOT NULL REFERENCES _user ON DELETE CASCADE,
+
+    title     TEXT    NOT NULL,
+    body      TEXT    NOT NULL
+);
+```
+
+This creates a table to hold posts in a blog storing an integer creation
+timestamp, the author, the title and lastly the contents.
+We also set it up such that an author deleting their account, will delete their
+posts as well through cascading deletions.
+
+Coming from other SQL databases, it may come as a surprise that despite the
+data types above SQLite isn't strictly typed by default, e.g. the `title`
+column above may hold values other than `TEXT`.
+SQLite interprets types merely as *affinities* to judge how literals should be
+interpreted on insert or or update but will happily accept incompatible values.
+While "flexible", this has far reaching consequences on downstream code
+interpreting or transforming data, now having to explicitly deal with
+unexpected data types.
+Thus, we strongly encourage working with `STRICT` table schemas whenever
+possible.
+In fact, TrailBase APIs are type-safe and thus require the underlying tables to
+be `STRICT`, i.e.:
+
+```sql {4}
+CREATE TABLE post (
+    id        INTEGER PRIMARY KEY,
+    -- ...
+) STRICT;
+```
+
+At the fundamental storage-level SQLite supports the following data types:
+`NULL`, `INTEGER`, `REAL`, `TEXT`, `BLOB`, which all type affinities boil down
+to.
+For example, columns with `JSON` or `JSONB` type affinities are stored as
+`TEXT` or `BLOB`, respectively[^2].
+
+When defining `STRICT` tables there's no affinity, limiting you to SQLite's
+fundamental types.
+However, TrailBase provides you with some extensions to enforce strict schema
+compatibility on a sub-column-level, e.g.
+
+```sql {3-4}
+CREATE TABLE my_table (
+    id        INTEGER PRIMARY KEY,
+    any_json  TEXT CHECK(is_json(any_json)),
+    my_json   TEXT CHECK(jsonschema('MyRegisteredJsonSchema', my_json))
+) STRICT;
+```
+
+### Constraints
+
+Using TrailBase you can make use of any of SQLite's column and table
+constraints. We've already encountered some of the former, e.g. `NOT NULL`,
+`REFERENCES` or `CHECK`, which all *constrain* the values a column may
+contain.
+
+Similarly, one can define more complex table constraints constraining tuples of
+values, e.g.
+
+```sql {5}
+CREATE TABLE fully_qualifed_ids (
+    prefix    TEXT NOT NULL,
+    suffix    TEXT NOT NULL,
+
+    UNIQUE (prefix, suffix)
+) STRICT;
+```
+
+For a complete list of constraints, check out the
+[SQLite manual](https://www.sqlite.org/lang_createtable.html).
+
+### Generated Columns
+
+SQLite's generated columns allow you to either materialized derived columns at
+modification-time or compute values for virtual columns on the fly. Check out
+[SQLite manual](https://www.sqlite.org/lang_createtable.html) for comprehensive
+information.
+
+
+## Relations
+
+SQL typically distinguishes between three types of relations:
+
+* 1:1 relations, e.g. each user has exactly one profile.
+* 1:M or one-to-many relations, e.g. posts may have many comments but each
+  comment belongs to exactly one post.
+* N:M or many-to-many relations, e.g. shoppers' wishlists can contain many
+  items, and each item can be in many wishlists.
+
+In practice, **all relations are simply edges, i.e. tuples of the shape
+`(parent id, child id)`**.
+There's some freedom as to where these edges are stored. In case of 1:1 and 1:M
+relations they can be denormalized into the child record effectively becoming
+`(primary key, foreign key)`.
+Alternatively, edges can always be stored in a separate "bridge" table as
+`(foreign key, foreign key)` edge records.
+In case of N:M relations, this is even necessary to achieve the required
+cardinality.
+This is not a limitation of TrailBase but rather common SQL practice.
+Linking children to their parents individually[^2] via foreign keys exposes
+their relationships to the database allowing `ON DELETE` and `ON UPDATE`
+actions to propagate.
+For example, a user deletion may trigger related data to be deleted
+automatically.
+
+<Aside type="note" title="PocketBase">
+If you're coming from PocketBase, 1:M and N:M relations are modeled as
+denormalized lists of primary keys in JSON format.
+While this *adjacency list* approach may feel more intuitive, it is opaque to
+SQLite and thus breaking built-in foreign key support.
+</Aside>
+
+Let's look at the following *blog* example,
+
+<div class="flex justify-center">
+    <div class="max-w-[420px]">
+      <Image src={foo} alt="Blog relationship example" />
+    </div>
+</div>
+
+Each block represents a able schema. We can see:
+* a 1:1 relation between users and user profiles,
+* a 1:M relationship between posts and users,
+* and an N:M relationship between posts and tags using the `post_tag` bridge table.
+
+We could have implemented the 1:1 user-profile and 1:M user-post relationships
+via separate bridge tables with appropriate uniqueness constraints, however
+pulling the parent key into the child records leads to less indirection.
+
+In order to combine related data we can simply join on the keys. For example to
+get a list of all users with profiles:
+
+```sql
+SELECT * FROM _user AS U
+    JOIN profile AS P ON U.id = P.user;
+```
+
+To connect posts and tags we have to do two joins across the `post_tag` bridge
+table:
+
+```sql
+SELECT * FROM post AS P
+    LEFT JOIN post_tag AS PT ON P.id = PT.post
+    LEFT JOIN tag AS T ON T.ID = PT.tag;
+```
+
+### Record APIs
+
+There's an elephant in the room: while this is all pretty standard fair, at
+least in SQL land, connecting relations across TrailBase's record APIs without
+joins is a lot more painful.
+For N:M relations, one would have to expose 3 different APIs including the
+bridge table, manage their ACLs and then traverse the edges manually on the
+client side.
+
+This is an area where we're actively exploring how to expand API capabilities,
+however the most general approach is to push more responsibility to the
+server.
+Concretely, we can expose a single API tailored for a specific client use-case
+implementing the join on the server using `VIEW`s:
+
+```sql
+CREATE VIEW post_tag_view AS SELECT * FROM post AS P
+    LEFT JOIN post_tag AS PT ON P.id = PT.post
+    LEFT JOIN tag AS T ON T.ID = PT.tag;
+```
+
+More generally, views can be useful to decouple an API from the underlying data
+model.
+For example, you may want to restructure your data model or APIs while keeping
+the other stable.
+
+Alternatively, custom JS/TS handlers can provide a more free-form approach to
+push joining edges and other responsibilities to the server.
+
+<div class="h-[50px]" />
+
+---
+
+[^1]:
+    This is not meant as full SQL tutorial. We'll keep it simple so hopefully
+    it is clear from context what any statement intends to do.
+    Note further that SQL keywords are case-insensitive. We'll use all-caps to
+    highlight them.
+
+[^2]:
+    This also means than one can use SQLite's builtin JSON operators on any
+    TEXT column as long as it parses as JSON.
+
+[^3]:
+    Even feature rich SQL databases like Postgres
+    [do not support foreign key arrays](https://commitfest.postgresql.org/17/1252/)
+    natively and rely on separate relationship tables.
