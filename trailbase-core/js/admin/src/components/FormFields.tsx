@@ -441,8 +441,8 @@ export function formFieldBuilder(
     return buildNumberFormField({ label });
   }
 
-  console.warn(
-    `Type: (${type}, ${optional}) not (yet) supported. Falling back to textfields`,
+  console.debug(
+    `Custom FormFields not yet implemented for (${type}, ${optional}). Falling back to textfields`,
   );
   if (optional) {
     return buildOptionalTextFormField({ label, nullPlaceholder });

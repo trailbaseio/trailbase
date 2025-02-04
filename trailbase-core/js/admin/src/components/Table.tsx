@@ -238,6 +238,12 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
               <For each={table().getRowModel().rows}>
                 {(row) => {
                   const onClick = () => {
+                    // Don't trigger on text selection.
+                    const selection = window.getSelection();
+                    if (selection?.toString()) {
+                      return;
+                    }
+
                     const handler = props.onRowClick;
                     if (!handler) {
                       return;
