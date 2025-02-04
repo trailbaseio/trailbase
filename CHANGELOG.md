@@ -1,3 +1,9 @@
+## v0.5.5
+
+* Fix build metadata release channel and include compiler version.
+* Admin UI: Avoid triggering table's onClick action on text selection.
+* Update deps.
+
 ## v0.5.4
 
 * Add a `?count=true` query parameter to RecordApi.list to fetch the total
