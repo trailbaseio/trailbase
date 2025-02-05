@@ -24,9 +24,15 @@ We can expect it to go fast but how fast exactly? Let's compare it to a few
 amazing, and certainly more weathered alternatives such as SupaBase,
 PocketBase, and vanilla SQLite.
 
-<Aside type="note" title="Update v0.3.0">
-The SQLite execution model changed with v0.3.0 providing further, significant
-improvements.
+<Aside type="note" title="Update: TrailBase v0.3+">
+  The SQLite execution model changed with v0.3.0 providing further, significant
+  improvements.
+</Aside>
+
+<Aside type="note" title="Update: PocketBase v0.24+">
+  Insertions got streamlined in recent PocketBase releases providing some 30%
+  uplift in our benchmarks. Most benchmarks are run using v0.25.0.
+  The JS benchmarks use v0.22.21.
 </Aside>
 
 ### Disclaimer
@@ -73,7 +79,7 @@ features like authorization, i.e. more table look-ups.
 
 Looking at the other, more similar setups, the measurement suggests that for
 this test TrailBase can insert 100k records 100+ times faster than Payload[^4],
-more than 20 times faster than SupaBase[^5], and comfortably 10 times faster
+more than 20 times faster than SupaBase[^5], and comfortably 7 times faster
 than PocketBase [^1].
 
 The total time of inserting a large batch of data tells only part of the story.
@@ -91,18 +97,16 @@ _TrailBase & PocketBase Utilization_
 The graph shows the CPU utilization and memory consumption (RSS) of both
 PocketBase and TrailBase. Squinting, they look fairly similar apart from
 TrailBase finishing earlier.
-They load roughly 3 and 4 CPUs, respectively. PocketBase's CPU consumption
-being slightly more variable [^6].
+They load roughly 4 to 5 CPUs, with PocketBase's utilization being more
+variable [^6].
 
 In terms of memory consumption, they're also both fairly similar consuming
-between 100MB and 120MB  making them suitable for a tiny VPS or a toaster.
-Though, when TrailBase finished, it had not yet saturated.
+between 120MB and 150MB  making them suitable for a tiny VPS or a toaster.
 Note that RSS is not an accurate measure of how much memory a process needs but
 rather how much memory has been allocated from the OS. Allocators will
-typically retrieve large chunks of memory and occasionally return memory based on
-consumption, fragmentation and strategy.
-This is also why TrailBase's allocated memory doesn't drop after the load goes
-away. TrailBase currently uses Mimalloc, which holds on to memory at idle.
+typically retrieve large chunks of memory and only occasionally return memory
+based on usage, fragmentation and strategy.
+This is also why the allocated memory doesn't drop after the load goes away.
 Independently, fragmentation is a problem where a garbage-collector running
 compactions can help.
 
@@ -147,8 +151,8 @@ Let's take a closer look at latency distributions. To keep things manageable
 we'll focus on PocketBase and TrailBase, which are architecturally simpler and
 more comparable.
 
-For TrailBase, reads were on average 9x (C#) and insertions 10x faster. The
-latter is in line with the throughput results we've seen above.
+For TrailBase, median latencies for reads were 17x (C#) and insertions almost 7x faster.
+The latter is well in line with the throughput results we've seen above.
 
 <div class="flex justify-center h-[340px] w-[90%]">
   <div class="w-[50%]">
@@ -176,7 +180,7 @@ consistency, invalidation and can greatly simplify a stack.
 Looking at the latency distributions we can see that the spread is well
 contained for TrailBase. For PocketBase, read latencies are well contained.
 However, insert latencies show a more significant "tail" with the p90 latency
-being roughly 5 times slower than p50.
+being roughly 3 times slower than p50.
 Slower insertions can take north of 100ms. This may be related to GC pauses,
 scheduling, or more generally the same CPU variability we observed earlier.
 
@@ -283,13 +287,10 @@ The benchmarks are available on [GitHub](https://github.com/trailbaseio/trailbas
 ---
 
 [^1]:
-    Trying to give PocketBase the best chance, the binary was built with the
-    latest go compiler (v1.23.1 at the time of writing), `CGO_ENABLED=1` (which
-    according to PB's own documentation will use a faster C-based SQLite
-    driver) and `GOAMD64=v4` (for less portable but more aggressive CPU
-    optimizations).
-    We found this setup to be roughly 20% faster than the static, pre-built
-    binary release.
+    Trying to give PocketBase the best chance, we built v0.25.0 with the
+    latest go compiler (v1.23.5 at the time of writing), the mattn/go-sqlite3 driver
+    (which based on PB's docs uses a faster C-based SQLite driver)
+    and `GOAMD64=v4` (for less portable but more aggressive CPU optimizations).
 
 [^2]:
     Our setup with drizzle and node.js is certainly not the fastest possible.

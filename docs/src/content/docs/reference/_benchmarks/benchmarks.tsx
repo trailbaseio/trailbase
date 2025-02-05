@@ -6,7 +6,7 @@ import { ScatterChart } from "@/components/ScatterChart.tsx";
 
 import { data as supabaseUtilization } from "./supabase_utilization";
 import insertTrailBase from "./insert_tb.json";
-import insertPocketBase from "./insert_pb.json";
+import insertPocketBase from "./insert_pb_2025-02-05.json";
 import fibTrailBase from "./fib_tb.json";
 import fibPocketBase from "./fib_pb.json";
 
@@ -72,16 +72,12 @@ const durations100k = {
   },
   pocketbase_ts: {
     label: "PocketBase TS",
-    data: [67.721],
+    data: [45.408],
     backgroundColor: colors.pocketbase0,
-  },
-  pocketbase_dart_aot: {
-    label: "PocketBase Dart (AOT)",
-    data: [62.8136],
   },
   pocketbase_dart_jit: {
     label: "PocketBase Dart",
-    data: [61.687],
+    data: [42.896],
     backgroundColor: colors.pocketbase1,
   },
   trailbase_ts: {
@@ -189,12 +185,21 @@ export function PocketBaseAndTrailBaseReadLatencies() {
   };
 
   // 2024-10-12
-  // PB: Read 1 000 000 rows in 26.724486507s (Rust).
+  // PB: Read 1 000 000 rows in 26.724486507s
+  // const readPocketbaseMicroS = {
+  //   p50: 12740,
+  //   p75: 13718,
+  //   p90: 14755,
+  //   p95: 15495,
+  // };
+  //
+  // 2025-02-05
+  // PB v0.25.0: Read 100000 messages, took 0:00:26.628162 (limit=64)
   const readPocketbaseMicroS = {
-    p50: 12740,
-    p75: 13718,
-    p90: 14755,
-    p95: 15495,
+    p50: 16678,
+    p75: 18133,
+    p90: 19599,
+    p95: 20503,
   };
 
   const latenciesMs = (d: any) =>
@@ -279,11 +284,20 @@ export function PocketBaseAndTrailBaseInsertLatencies() {
 
   // 2024-10-12
   // PB: Inserted 10 000 messages, took 0:00:07.759677 (limit=64)
+  // const insertPocketbaseMicroS = {
+  //   p50: 28160,
+  //   p75: 58570,
+  //   p90: 108325,
+  //   p95: 157601,
+  // };
+
+  // 2025-02-05
+  // PB: Inserted 10000 messages, took 0:00:04.245788 (limit=64)
   const insertPocketbaseMicroS = {
-    p50: 28160,
-    p75: 58570,
-    p90: 108325,
-    p95: 157601,
+    p50: 22356,
+    p75: 27123,
+    p90: 49613,
+    p95: 61512,
   };
 
   const latenciesMs = (d: any) =>
@@ -424,7 +438,7 @@ export function SupaBaseCpuUsageChart() {
 
 export function PocketBaseAndTrailBaseUsageChart() {
   // specific run:
-  //   PB: Inserted 100000 messages, took 0:01:02.549495 (limit=64)
+  //   PB: Inserted 100000 messages, took 0:00:44.702654 (limit=64)
   //   TB: Inserted 100000 messages, took 0:00:07.086891 (limit=64) (Dart AOT)
   //   TB: Inserted 100000 messages, took 00:00:05.7039362 (limit=64) (C#)
   //   TB: Inserted 100000 rows in 6.351865901s (rust)
@@ -489,7 +503,7 @@ export function PocketBaseAndTrailBaseUsageChart() {
       scales={{
         yLeft: {
           min: 0,
-          max: 5,
+          max: 7,
           position: "left",
           title: {
             display: true,
@@ -501,7 +515,7 @@ export function PocketBaseAndTrailBaseUsageChart() {
         },
         yRight: {
           min: 30 * 1024,
-          max: 120 * 1024,
+          max: 160 * 1024,
           position: "right",
           title: {
             display: true,
@@ -524,6 +538,7 @@ export function PocketBaseAndTrailBaseUsageChart() {
         },
         x: {
           min: 0,
+          max: 52 * 1000,
           ticks: {
             display: true,
             callback: transformMillisecondTicks,
