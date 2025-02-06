@@ -10,25 +10,32 @@ import json
 
 from contextlib import contextmanager
 from time import time
-from typing import TypeAlias, Any, cast
+from typing import TypeAlias, cast
 
 JSON: TypeAlias = dict[str, "JSON"] | list["JSON"] | str | int | float | bool | None
+JSON_OBJECT: TypeAlias = dict[str, JSON]
+JSON_ARRAY: TypeAlias = list[JSON]
 
 
 class RecordId:
-    id: str | int
+    id: str
 
-    def __init__(self, id: str | int):
+    def __init__(self, id: str):
         self.id = id
-
-    @staticmethod
-    def fromJson(json: dict[str, "JSON"]) -> "RecordId":
-        id = json["id"]
-        assert isinstance(id, str) or isinstance(id, int)
-        return RecordId(id)
 
     def __repr__(self) -> str:
         return f"{self.id}"
+
+
+def record_ids_from_json(json: JSON_OBJECT) -> list[RecordId]:
+    ids = json["ids"]
+    assert isinstance(ids, list)
+
+    def convert(value: JSON) -> RecordId:
+        assert isinstance(value, str)
+        return RecordId(value)
+
+    return list([convert(id) for id in ids])
 
 
 class User:
@@ -40,7 +47,7 @@ class User:
         self.email = email
 
     @staticmethod
-    def fromJson(json: dict[str, "JSON"]) -> "User":
+    def from_json(json: JSON_OBJECT) -> "User":
         sub = json["sub"]
         assert isinstance(sub, str)
         email = json["email"]
@@ -48,7 +55,7 @@ class User:
 
         return User(sub, email)
 
-    def toJson(self) -> dict[str, str]:
+    def to_json(self) -> dict[str, str]:
         return {
             "sub": self.id,
             "email": self.email,
@@ -57,20 +64,20 @@ class User:
 
 class ListResponse:
     cursor: str | None
-    records: list[dict[str, object]]
+    records: list[JSON_OBJECT]
 
-    def __init__(self, cursor: str | None, records: list[dict[str, object]]) -> None:
+    def __init__(self, cursor: str | None, records: list[JSON_OBJECT]) -> None:
         self.cursor = cursor
         self.records = records
 
     @staticmethod
-    def fromJson(json: dict[str, "JSON"]) -> "ListResponse":
+    def from_json(json: JSON_OBJECT) -> "ListResponse":
         cursor = json["cursor"]
         assert isinstance(cursor, str | None)
         records = json["records"]
         assert isinstance(records, list)
 
-        return ListResponse(cursor, cast(list[dict[str, object]], records))
+        return ListResponse(cursor, cast(list[JSON_OBJECT], records))
 
 
 class Tokens:
@@ -84,7 +91,7 @@ class Tokens:
         self.csrf = csrf
 
     @staticmethod
-    def fromJson(json: dict[str, "JSON"]) -> "Tokens":
+    def from_json(json: JSON_OBJECT) -> "Tokens":
         auth = json["auth_token"]
         assert isinstance(auth, str)
         refresh = json["refresh_token"]
@@ -94,14 +101,14 @@ class Tokens:
 
         return Tokens(auth, refresh, csrf)
 
-    def toJson(self) -> dict[str, str | None]:
+    def to_json(self) -> dict[str, str | None]:
         return {
             "auth_token": self.auth,
             "refresh_token": self.refresh,
             "csrf_token": self.csrf,
         }
 
-    def isValid(self) -> bool:
+    def valid(self) -> bool:
         return jwt.decode(self.auth, algorithms=["EdDSA"], options={"verify_signature": False}) != None
 
 
@@ -120,7 +127,7 @@ class JwtToken:
         self.csrfToken = csrfToken
 
     @staticmethod
-    def fromJson(json: dict[str, "JSON"]) -> "JwtToken":
+    def from_json(json: JSON_OBJECT) -> "JwtToken":
         sub = json["sub"]
         assert isinstance(sub, str)
         iat = json["iat"]
@@ -152,15 +159,15 @@ class TokenState:
         )
 
         if decoded == None or tokens == None:
-            return TokenState(None, TokenState.buildHeaders(tokens))
+            return TokenState(None, TokenState.build_headers(tokens))
 
         return TokenState(
-            (tokens, JwtToken.fromJson(decoded)),
-            TokenState.buildHeaders(tokens),
+            (tokens, JwtToken.from_json(decoded)),
+            TokenState.build_headers(tokens),
         )
 
     @staticmethod
-    def buildHeaders(tokens: Tokens | None) -> dict[str, str]:
+    def build_headers(tokens: Tokens | None) -> dict[str, str]:
         base = {
             "Content-Type": "application/json",
         }
@@ -192,7 +199,7 @@ class ThinClient:
         path: str,
         tokenState: TokenState,
         method: str | None = "GET",
-        data: dict[str, Any] | None = None,
+        data: JSON | None = None,
         queryParams: dict[str, str] | None = None,
     ) -> httpx.Response:
         assert not path.startswith("/")
@@ -209,7 +216,6 @@ class ThinClient:
         path: str,
         tokenState: TokenState,
         method: str | None = "GET",
-        data: dict[str, Any] | None = None,
         queryParams: dict[str, str] | None = None,
         timeout: httpx.Timeout | None = None,
     ):
@@ -221,7 +227,6 @@ class ThinClient:
         request = self.http_client.build_request(
             method=method or "GET",
             url=f"{self.site}/{path}",
-            json=data,
             headers=headers,
             params=queryParams,
             timeout=timeout,
@@ -266,7 +271,7 @@ class Client:
     def user(self) -> User | None:
         tokens = self.tokens()
         if tokens != None:
-            return User.fromJson(
+            return User.from_json(
                 jwt.decode(
                     tokens.auth,
                     algorithms=["EdDSA"],
@@ -364,7 +369,7 @@ class Client:
         self,
         path: str,
         method: str | None = "GET",
-        data: dict[str, Any] | None = None,
+        data: JSON | None = None,
         queryParams: dict[str, str] | None = None,
     ) -> httpx.Response:
         tokenState = self._tokenState
@@ -378,7 +383,6 @@ class Client:
         self,
         path: str,
         method: str | None = "GET",
-        data: dict[str, Any] | None = None,
         queryParams: dict[str, str] | None = None,
         timeout: httpx.Timeout | None = None,
     ):
@@ -388,7 +392,11 @@ class Client:
             tokenState = self._tokenState = self._refreshTokensImpl(refreshToken)
 
         return self._client.stream(
-            path, tokenState, method=method, data=data, queryParams=queryParams, timeout=timeout
+            path,
+            tokenState,
+            method=method,
+            queryParams=queryParams,
+            timeout=timeout,
         )
 
 
@@ -429,14 +437,14 @@ class RecordApi:
                 params[nameOp] = value
 
         response = self._client.fetch(f"{self._recordApi}/{self._name}", queryParams=params)
-        return ListResponse.fromJson(response.json())
+        return ListResponse.from_json(response.json())
 
-    def read(self, recordId: RecordId | str | int) -> dict[str, object]:
+    def read(self, recordId: RecordId | str | int) -> JSON_OBJECT:
         id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
         response = self._client.fetch(f"{self._recordApi}/{self._name}/{id}")
         return response.json()
 
-    def create(self, record: dict[str, object]) -> RecordId:
+    def create(self, record: JSON_OBJECT) -> RecordId:
         response = self._client.fetch(
             f"{self._recordApi}/{self._name}",
             method="POST",
@@ -445,9 +453,20 @@ class RecordApi:
         if response.status_code > 200:
             raise Exception(f"{response}")
 
-        return RecordId.fromJson(response.json())
+        return record_ids_from_json(response.json())[0]
 
-    def update(self, recordId: RecordId | str | int, record: dict[str, object]) -> None:
+    def create_bulk(self, records: JSON_ARRAY):
+        response = self._client.fetch(
+            f"{self._recordApi}/{self._name}",
+            method="POST",
+            data=records,
+        )
+        if response.status_code > 200:
+            raise Exception(f"{response}")
+
+        return record_ids_from_json(response.json())
+
+    def update(self, recordId: RecordId | str | int, record: JSON_OBJECT) -> None:
         id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
         response = self._client.fetch(
             f"{self._recordApi}/{self._name}/{id}",
@@ -466,13 +485,13 @@ class RecordApi:
         if response.status_code > 200:
             raise Exception(f"{response}")
 
-    def subscribe(self, recordId: RecordId | str | int) -> typing.Generator[dict[str, JSON]]:
+    def subscribe(self, recordId: RecordId | str | int) -> typing.Generator[JSON_OBJECT]:
         id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
         context = self._client.stream(
             f"{self._recordApi}/{self._name}/subscribe/{id}", timeout=httpx.Timeout(None)
         )
 
-        def impl() -> typing.Generator[dict[str, JSON]]:
+        def impl() -> typing.Generator[JSON_OBJECT]:
             with context as response:
                 if response.status_code > 200:
                     raise Exception(f"{response}")

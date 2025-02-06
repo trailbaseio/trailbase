@@ -133,33 +133,28 @@ abstract class RecordId {
   factory RecordId.uuid(String id) => _UuidRecordId(id);
 }
 
-class _ResponseRecordId implements RecordId {
-  final String id;
+class _ResponseRecordIds {
+  final List<String> _ids;
 
-  const _ResponseRecordId(this.id);
+  const _ResponseRecordIds(this._ids);
 
-  _ResponseRecordId.fromJson(Map<String, dynamic> json) : id = json['id'];
+  _ResponseRecordIds.fromJson(Map<String, dynamic> json)
+      : _ids = (json['ids'] as List).cast<String>();
 
-  int integer() => int.parse(id);
-  Uint8List uuid() => base64Decode(id);
+  List<RecordId> toRecordIds() {
+    return _ids.map(toRecordId).toList();
+  }
 
-  @override
-  String toString() => id;
-
-  @override
-  bool operator ==(Object other) {
-    if (other is _ResponseRecordId) return id == other.id;
-
-    if (other is int) return int.tryParse(id) == other;
-    if (other is _IntegerRecordId) return int.tryParse(id) == other.id;
-    if (other is String) return id == other;
-    if (other is _UuidRecordId) return id == other.id;
-
-    return false;
+  static RecordId toRecordId(String id) {
+    final intId = int.tryParse(id);
+    if (intId != null) {
+      return _IntegerRecordId(intId);
+    }
+    return _UuidRecordId(id);
   }
 
   @override
-  int get hashCode => id.hashCode;
+  String toString() => _ids.toString();
 }
 
 class _IntegerRecordId implements RecordId {
@@ -174,7 +169,6 @@ class _IntegerRecordId implements RecordId {
   bool operator ==(Object other) {
     if (other is _IntegerRecordId) return id == other.id;
     if (other is int) return id == other;
-    if (other is _ResponseRecordId) return id == int.tryParse(other.id);
     return false;
   }
 
@@ -198,7 +192,6 @@ class _UuidRecordId implements RecordId {
   bool operator ==(Object other) {
     if (other is _UuidRecordId) return id == other.id;
     if (other is String) return id == other;
-    if (other is _ResponseRecordId) return id == other.id;
     return false;
   }
 
@@ -349,7 +342,23 @@ class RecordApi {
     if ((response.statusCode ?? 400) > 200) {
       throw Exception('${response.data} ${response.statusMessage}');
     }
-    return _ResponseRecordId.fromJson(response.data);
+    final responseIds = _ResponseRecordIds.fromJson(response.data);
+    assert(responseIds._ids.length == 1);
+    return responseIds.toRecordIds()[0];
+  }
+
+  Future<List<RecordId>> createBulk(List<Map<String, dynamic>> records) async {
+    final response = await _client.fetch(
+      '${RecordApi._recordApi}/${_name}',
+      method: 'POST',
+      data: records,
+    );
+
+    if ((response.statusCode ?? 400) > 200) {
+      throw Exception('${response.data} ${response.statusMessage}');
+    }
+    final responseIds = _ResponseRecordIds.fromJson(response.data);
+    return responseIds.toRecordIds();
   }
 
   Future<void> update(

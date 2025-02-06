@@ -159,6 +159,15 @@ Future<void> main() async {
       }
 
       {
+        // Bulk
+        final ids = await api.createBulk([
+          {'text_not_null': 'dart 1st bulk'},
+          {'text_not_null': 'dart 2nd bulk'},
+        ]);
+        expect(ids.length, 2);
+      }
+
+      {
         final response = await api.list(
           filters: ['text_not_null=${messages[0]}'],
         );

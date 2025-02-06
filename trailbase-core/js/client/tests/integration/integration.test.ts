@@ -80,8 +80,16 @@ test("Record integration tests", async () => {
   const ids: string[] = [];
   for (const msg of messages) {
     ids.push(
-      (await api.createId<NewSimpleStrict>({ text_not_null: msg })) as string,
+      (await api.create<NewSimpleStrict>({ text_not_null: msg })) as string,
     );
+  }
+
+  {
+    const bulkIds = await api.createBulk<NewSimpleStrict>([
+      { text_not_null: "ts bulk create 0" },
+      { text_not_null: "ts bulk create 1" },
+    ]);
+    expect(bulkIds.length).toBe(2);
   }
 
   {
@@ -151,7 +159,9 @@ test("Record integration tests", async () => {
   expect(await client.logout()).toBe(true);
   expect(client.user()).toBe(undefined);
 
-  expect(async () => await api.read<SimpleStrict>(ids[0])).rejects.toThrowError(
+  await expect(
+    async () => await api.read<SimpleStrict>(ids[0]),
+  ).rejects.toThrowError(
     expect.objectContaining({
       status: status.FORBIDDEN,
     }),
@@ -196,7 +206,7 @@ test("realtime subscribe specific record tests", async () => {
 
   const now = new Date().getTime();
   const createMessage = `ts client realtime test 0: =?&${now}`;
-  const id = (await api.createId<NewSimpleStrict>({
+  const id = (await api.create<NewSimpleStrict>({
     text_not_null: createMessage,
   })) as string;
 
@@ -226,7 +236,7 @@ test("realtime subscribe table tests", async () => {
 
   const now = new Date().getTime();
   const createMessage = `ts client realtime test 0: =?&${now}`;
-  const id = (await api.createId<NewSimpleStrict>({
+  const id = (await api.create<NewSimpleStrict>({
     text_not_null: createMessage,
   })) as string;
 

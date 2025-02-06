@@ -119,6 +119,18 @@ async fn records_test() {
   }
 
   {
+    let bulk_ids = api
+      .create_bulk(&[
+        json!({"text_not_null": "rust bulk 0"}),
+        json!({"text_not_null": "rust bulk 1"}),
+      ])
+      .await
+      .unwrap();
+
+    assert_eq!(2, bulk_ids.len());
+  }
+
+  {
     // List one specific message.
     let filter = format!("text_not_null={}", messages[0]);
     let filters = vec![filter.as_str()];

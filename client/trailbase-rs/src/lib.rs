@@ -224,6 +224,14 @@ impl RecordApi {
   }
 
   pub async fn create<T: Serialize>(&self, record: T) -> Result<String, Error> {
+    return Ok(self.create_impl(record).await?.swap_remove(0));
+  }
+
+  pub async fn create_bulk<T: Serialize>(&self, record: &[T]) -> Result<Vec<String>, Error> {
+    return self.create_impl(record).await;
+  }
+
+  async fn create_impl<T: Serialize>(&self, record: T) -> Result<Vec<String>, Error> {
     let response = self
       .client
       .fetch(
@@ -236,10 +244,10 @@ impl RecordApi {
 
     #[derive(Deserialize)]
     pub struct RecordIdResponse {
-      pub id: String,
+      pub ids: Vec<String>,
     }
 
-    return Ok(response.json::<RecordIdResponse>().await?.id);
+    return Ok(response.json::<RecordIdResponse>().await?.ids);
   }
 
   pub async fn update<'a, T: Serialize>(

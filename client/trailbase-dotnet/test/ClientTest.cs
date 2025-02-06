@@ -144,6 +144,14 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     }
 
     {
+      var bulkIds = await api.CreateBulk([
+          new SimpleStrict(null, null, null, "C# bulk create 0"),
+          new SimpleStrict(null, null, null, "C# bulk create 1"),
+      ]);
+      Assert.Equal(2, bulkIds.Count);
+    }
+
+    {
       ListResponse<SimpleStrict> response = await api.List<SimpleStrict>(
         null,
         null,

@@ -166,7 +166,7 @@ mod tests {
     .await
     .unwrap();
 
-    return Ok(b64_to_uuid(&response.id)?);
+    return Ok(b64_to_uuid(&response.ids[0])?);
   }
 
   async fn download_avatar(state: &AppState, record_id: &[u8; 16]) -> Response {

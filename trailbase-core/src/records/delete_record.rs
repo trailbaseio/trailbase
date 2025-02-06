@@ -167,7 +167,7 @@ mod test {
       Path("messages_api".to_string()),
       Query(CreateRecordQuery::default()),
       User::from_auth_token(state, auth_token),
-      Either::Json(json_row_from_value(create_json).unwrap()),
+      Either::Json(json_row_from_value(create_json).unwrap().into()),
     )
     .await;
 
@@ -177,7 +177,7 @@ mod test {
       .await
       .unwrap();
 
-    return Ok(b64_to_id(&response.id)?);
+    return Ok(b64_to_id(&response.ids[0])?);
   }
 
   async fn delete_message(

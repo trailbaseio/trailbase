@@ -88,7 +88,7 @@ def test_client_login(trailbase: TrailBaseFixture):
     assert client.site() == site
 
     tokens = client.tokens()
-    assert tokens != None and tokens.isValid()
+    assert tokens != None and tokens.valid()
 
     user = client.user()
     assert user != None and user.id != ""
@@ -106,12 +106,21 @@ def test_records(trailbase: TrailBaseFixture):
 
     now = int(time())
     messages = [
-        f"dart client test 0: =?&{now}",
-        f"dart client test 1: =?&{now}",
+        f"python client test 0: =?&{now}",
+        f"python client test 1: =?&{now}",
     ]
     ids: List[RecordId] = []
     for msg in messages:
         ids.append(api.create({"text_not_null": msg}))
+
+    if True:
+        bulk_ids = api.create_bulk(
+            [
+                {"text_not_null": "python bulk test 0"},
+                {"text_not_null": "python bulk test 1"},
+            ]
+        )
+        assert len(bulk_ids) == 2
 
     if True:
         response = api.list(
@@ -144,7 +153,7 @@ def test_records(trailbase: TrailBaseFixture):
         assert record["text_not_null"] == messages[1]
 
     if True:
-        updatedMessage = f"dart client updated test 0: {now}"
+        updatedMessage = f"python client updated test 0: {now}"
         api.update(ids[0], {"text_not_null": updatedMessage})
         record = api.read(ids[0])
         assert record["text_not_null"] == updatedMessage
@@ -165,7 +174,7 @@ def test_subscriptions(trailbase: TrailBaseFixture):
     table_subscription = api.subscribe("*")
 
     now = int(time())
-    create_message = f"dart client test 0: =?&{now}"
+    create_message = f"python client test 0: =?&{now}"
     api.create({"text_not_null": create_message})
 
     events: List[dict[str, JSON]] = []

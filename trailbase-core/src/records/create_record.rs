@@ -2,12 +2,13 @@ use axum::extract::{Json, Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
+use trailbase_sqlite::schema::FileUploadInput;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::json_to_sql::{InsertQueryBuilder, JsonRow, LazyParams};
+use crate::records::json_to_sql::{InsertQueryBuilder, JsonRow, LazyParams, Params};
 use crate::records::{Permission, RecordError};
 use crate::schema::ColumnDataType;
 
@@ -19,7 +20,55 @@ pub struct CreateRecordQuery {
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct CreateRecordResponse {
   /// Safe-url base64 encoded id of the newly created record.
-  pub id: String,
+  pub ids: Vec<String>,
+}
+
+#[inline]
+fn extract_record(value: serde_json::Value) -> Result<JsonRow, RecordError> {
+  return Ok(match value {
+    serde_json::Value::Object(record) => record,
+    _ => {
+      return Err(RecordError::BadRequest("Expected single record"));
+    }
+  });
+}
+
+#[inline]
+fn extract_records(value: serde_json::Value) -> Result<Vec<JsonRow>, RecordError> {
+  return Ok(match value {
+    serde_json::Value::Object(record) => vec![record],
+    serde_json::Value::Array(records) => {
+      let mut record_rows = Vec::<JsonRow>::with_capacity(records.len());
+      for record in records {
+        let serde_json::Value::Object(record) = record else {
+          return Err(RecordError::BadRequest(
+            "Expected record or array of records",
+          ));
+        };
+        record_rows.push(record);
+      }
+      record_rows
+    }
+    _ => {
+      return Err(RecordError::BadRequest(
+        "Expected record or array of records",
+      ));
+    }
+  });
+}
+
+#[inline]
+fn extract_record_id(
+  data_type: ColumnDataType,
+  row: &rusqlite::Row,
+) -> Result<String, trailbase_sqlite::Error> {
+  return match data_type {
+    ColumnDataType::Blob => Ok(BASE64_URL_SAFE.encode(row.get::<_, [u8; 16]>(0)?)),
+    ColumnDataType::Integer => Ok(row.get::<_, i64>(0)?.to_string()),
+    _ => Err(trailbase_sqlite::Error::Other(
+      "Unexpected data type".into(),
+    )),
+  };
 }
 
 /// Create new record.
@@ -37,7 +86,7 @@ pub async fn create_record_handler(
   Path(api_name): Path<String>,
   Query(create_record_query): Query<CreateRecordQuery>,
   user: Option<User>,
-  either_request: Either<JsonRow>,
+  either_request: Either<serde_json::Value>,
 ) -> Result<Response, RecordError> {
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
@@ -46,85 +95,93 @@ pub async fn create_record_handler(
     .table_metadata()
     .ok_or_else(|| RecordError::ApiRequiresTable)?;
 
-  let (request, multipart_files) = match either_request {
-    Either::Json(value) => (value, None),
-    Either::Multipart(value, files) => (value, Some(files)),
-    Either::Form(value) => (value, None),
+  let record_and_files: Vec<(JsonRow, Option<Vec<FileUploadInput>>)> = match either_request {
+    Either::Json(value) => extract_records(value)?
+      .into_iter()
+      .map(|r| (r, None))
+      .collect(),
+    Either::Multipart(value, files) => vec![(extract_record(value)?, Some(files))],
+    Either::Form(value) => vec![(extract_record(value)?, None)],
   };
 
-  let mut lazy_params = LazyParams::new(table_metadata, request, multipart_files);
+  let mut params_list: Vec<Params> = Vec::with_capacity(record_and_files.len());
+  for (record, files) in record_and_files {
+    let mut lazy_params = LazyParams::new(table_metadata, record, files);
 
-  api
-    .check_record_level_access(
-      Permission::Create,
-      None,
-      Some(&mut lazy_params),
-      user.as_ref(),
-    )
-    .await?;
+    api
+      .check_record_level_access(
+        Permission::Create,
+        None,
+        Some(&mut lazy_params),
+        user.as_ref(),
+      )
+      .await?;
 
-  let Ok(mut params) = lazy_params.consume() else {
-    return Err(RecordError::BadRequest("Parameter conversion"));
-  };
+    let Ok(mut params) = lazy_params.consume() else {
+      return Err(RecordError::BadRequest("Parameter conversion"));
+    };
 
-  if api.insert_autofill_missing_user_id_columns() {
-    let column_names = params.column_names();
-    let missing_columns = table_metadata
-      .user_id_columns
-      .iter()
-      .filter_map(|index| {
-        let col = &table_metadata.schema.columns[*index];
-        if column_names.iter().any(|c| c == &col.name) {
-          return None;
-        }
-        return Some(col.name.clone());
-      })
-      .collect::<Vec<_>>();
+    if api.insert_autofill_missing_user_id_columns() {
+      let column_names = params.column_names();
+      let missing_columns = table_metadata
+        .user_id_columns
+        .iter()
+        .filter_map(|index| {
+          let col = &table_metadata.schema.columns[*index];
+          if column_names.iter().any(|c| c == &col.name) {
+            return None;
+          }
+          return Some(col.name.clone());
+        })
+        .collect::<Vec<_>>();
 
-    if !missing_columns.is_empty() {
-      if let Some(user) = user {
-        for col in missing_columns {
-          params.push_param(col, trailbase_sqlite::Value::Blob(user.uuid.into()));
+      if !missing_columns.is_empty() {
+        if let Some(ref user) = user {
+          for col in missing_columns {
+            params.push_param(col, trailbase_sqlite::Value::Blob(user.uuid.into()));
+          }
         }
       }
     }
+
+    params_list.push(params);
   }
 
   let pk_column = api.record_pk_column();
-  let row = InsertQueryBuilder::run(
-    &state,
-    params,
-    api.insert_conflict_resolution_strategy(),
-    Some(&pk_column.name),
-  )
-  .await
-  .map_err(|err| RecordError::Internal(err.into()))?;
+  let data_type = pk_column.data_type;
+  let record_ids = match params_list.len() {
+    0 => {
+      return Err(RecordError::Internal("".into()));
+    }
+    1 => {
+      let record_id = InsertQueryBuilder::run(
+        &state,
+        params_list.swap_remove(0),
+        api.insert_conflict_resolution_strategy(),
+        Some(&pk_column.name),
+        move |row| extract_record_id(data_type, row),
+      )
+      .await
+      .map_err(|err| RecordError::Internal(err.into()))?;
+
+      vec![record_id]
+    }
+    _ => InsertQueryBuilder::run_bulk(
+      &state,
+      params_list,
+      api.insert_conflict_resolution_strategy(),
+      Some(&pk_column.name),
+      move |row| extract_record_id(data_type, row),
+    )
+    .await
+    .map_err(|err| RecordError::Internal(err.into()))?,
+  };
 
   if let Some(redirect_to) = create_record_query.redirect_to {
     return Ok(Redirect::to(&redirect_to).into_response());
   }
 
-  return Ok(
-    Json(CreateRecordResponse {
-      id: match pk_column.data_type {
-        ColumnDataType::Blob => BASE64_URL_SAFE.encode(
-          row
-            .get::<[u8; 16]>(0)
-            .map_err(|err| RecordError::Internal(err.into()))?,
-        ),
-        ColumnDataType::Integer => row
-          .get::<i64>(0)
-          .map_err(|err| RecordError::Internal(err.into()))?
-          .to_string(),
-        _ => {
-          return Err(RecordError::Internal(
-            format!("Unexpected data type: {:?}", pk_column.data_type).into(),
-          ));
-        }
-      },
-    })
-    .into_response(),
-  );
+  return Ok(Json(CreateRecordResponse { ids: record_ids }).into_response());
 }
 
 #[cfg(test)]
@@ -136,15 +193,16 @@ mod test {
   use crate::config::proto::PermissionFlag;
   use crate::records::test_utils::*;
   use crate::records::*;
+  use crate::test::unpack_json_response;
   use crate::util::id_to_b64;
 
   #[tokio::test]
-  async fn test_record_api_create() -> Result<(), anyhow::Error> {
-    let state = test_state(None).await?;
+  async fn test_record_api_create() {
+    let state = test_state(None).await.unwrap();
     let conn = state.conn();
 
-    create_chat_message_app_tables(&state).await?;
-    let room = add_room(conn, "room0").await?;
+    create_chat_message_app_tables(&state).await.unwrap();
+    let room = add_room(conn, "room0").await.unwrap();
     let password = "Secret!1!!";
 
     // Register message table as api with moderator read access.
@@ -163,22 +221,28 @@ mod test {
         ..Default::default()
       },
     )
-    .await?;
+    .await.unwrap();
 
     let user_x_email = "user_x@bar.com";
     let user_x = create_user_for_test(&state, user_x_email, password)
-      .await?
+      .await
+      .unwrap()
       .into_bytes();
-    let user_x_token = login_with_password(&state, user_x_email, password).await?;
+    let user_x_token = login_with_password(&state, user_x_email, password)
+      .await
+      .unwrap();
 
-    add_user_to_room(conn, user_x, room).await?;
+    add_user_to_room(conn, user_x, room).await.unwrap();
 
     let user_y_email = "user_y@test.com";
     let user_y = create_user_for_test(&state, user_y_email, password)
-      .await?
+      .await
+      .unwrap()
       .into_bytes();
 
-    let user_y_token = login_with_password(&state, user_y_email, password).await?;
+    let user_y_token = login_with_password(&state, user_y_email, password)
+      .await
+      .unwrap();
 
     {
       // User X can post to the room, they're a member of
@@ -192,14 +256,43 @@ mod test {
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
         User::from_auth_token(&state, &user_x_token.auth_token),
-        Either::Json(json_row_from_value(json).unwrap()),
+        Either::Json(json_row_from_value(json).unwrap().into()),
       )
       .await;
       assert!(response.is_ok(), "{response:?}");
+
+      let response: CreateRecordResponse = unpack_json_response(response.unwrap()).await.unwrap();
+
+      assert_eq!(1, response.ids.len());
     }
 
     {
-      // User X can post as a different "_owner".
+      // User X can bulk post to the room, they're a member of
+      let json = |i: usize| {
+        serde_json::json!({
+          "_owner": id_to_b64(&user_x),
+          "room": id_to_b64(&room),
+          "data": format!("user_x bulk message to room {i}"),
+        })
+      };
+
+      let response = create_record_handler(
+        State(state.clone()),
+        Path("messages_api".to_string()),
+        Query(CreateRecordQuery::default()),
+        User::from_auth_token(&state, &user_x_token.auth_token),
+        Either::Json(serde_json::Value::Array(vec![json(0), json(1)])),
+      )
+      .await;
+      assert!(response.is_ok(), "{response:?}");
+
+      let response: CreateRecordResponse = unpack_json_response(response.unwrap()).await.unwrap();
+
+      assert_eq!(2, response.ids.len());
+    }
+
+    {
+      // User X cannot post as a different "_owner".
       let json = serde_json::json!({
         "_owner": id_to_b64(&user_y),
         "room": id_to_b64(&room),
@@ -210,10 +303,47 @@ mod test {
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
         User::from_auth_token(&state, &user_x_token.auth_token),
-        Either::Json(json_row_from_value(json).unwrap()),
+        Either::Json(json_row_from_value(json).unwrap().into()),
       )
       .await;
       assert!(response.is_err(), "{response:?}");
+    }
+
+    {
+      // Bulk inserts are rolled back in a transaction is second insert fails.
+      let count_before: usize = state
+        .conn()
+        .query_value("SELECT COUNT(*) FROM message", ())
+        .await
+        .unwrap()
+        .unwrap();
+
+      let json = |user_id: &[u8; 16]| {
+        serde_json::json!({
+          "_owner": id_to_b64(user_id),
+          "room": id_to_b64(&room),
+          "data": "user_x bulk message to room",
+        })
+      };
+
+      // This should fail because of user_y as _owner.
+      let response = create_record_handler(
+        State(state.clone()),
+        Path("messages_api".to_string()),
+        Query(CreateRecordQuery::default()),
+        User::from_auth_token(&state, &user_x_token.auth_token),
+        Either::Json(serde_json::Value::Array(vec![json(&user_x), json(&user_y)])),
+      )
+      .await;
+      assert!(response.is_err(), "{response:?}");
+
+      let count_after: usize = state
+        .conn()
+        .query_value("SELECT COUNT(*) FROM message", ())
+        .await
+        .unwrap()
+        .unwrap();
+      assert_eq!(count_before, count_after);
     }
 
     {
@@ -227,22 +357,22 @@ mod test {
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
         User::from_auth_token(&state, &user_y_token.auth_token),
-        Either::Json(json_row_from_value(json).unwrap()),
+        Either::Json(json_row_from_value(json).unwrap().into()),
       )
       .await;
       assert!(response.is_err(), "{response:?}");
     }
-
-    return Ok(());
   }
 
   #[tokio::test]
-  async fn test_record_api_create_integer_id() -> Result<(), anyhow::Error> {
-    let state = test_state(None).await?;
+  async fn test_record_api_create_integer_id() {
+    let state = test_state(None).await.unwrap();
     let conn = state.conn();
 
-    create_chat_message_app_tables_integer(&state).await?;
-    let room = add_room(conn, "room0").await?;
+    create_chat_message_app_tables_integer(&state)
+      .await
+      .unwrap();
+    let room = add_room(conn, "room0").await.unwrap();
     let password = "Secret!1!!";
 
     // Register message table as api with moderator read access.
@@ -261,15 +391,18 @@ mod test {
         ..Default::default()
       },
     )
-    .await?;
+    .await.unwrap();
 
     let user_x_email = "user_x@bar.com";
     let user_x = create_user_for_test(&state, user_x_email, password)
-      .await?
+      .await
+      .unwrap()
       .into_bytes();
-    let user_x_token = login_with_password(&state, user_x_email, password).await?;
+    let user_x_token = login_with_password(&state, user_x_email, password)
+      .await
+      .unwrap();
 
-    add_user_to_room(conn, user_x, room).await?;
+    add_user_to_room(conn, user_x, room).await.unwrap();
 
     {
       // User X can post to the room, they're a member of
@@ -283,12 +416,10 @@ mod test {
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
         User::from_auth_token(&state, &user_x_token.auth_token),
-        Either::Json(json_row_from_value(json).unwrap()),
+        Either::Json(json_row_from_value(json).unwrap().into()),
       )
       .await;
       assert!(response.is_ok(), "{response:?}");
     }
-
-    return Ok(());
   }
 }

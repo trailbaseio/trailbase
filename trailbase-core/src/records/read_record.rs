@@ -362,7 +362,7 @@ mod test {
       Path(API_NAME.to_string()),
       Query(CreateRecordQuery::default()),
       None,
-      Either::Json(JsonRow::new()),
+      Either::Json(JsonRow::new().into()),
     )
     .await
     .unwrap();
@@ -393,14 +393,15 @@ mod test {
               data: bytes.clone(),
             },
           }))
-          .unwrap(),
+          .unwrap()
+          .into(),
         ),
       )
       .await?,
     )
     .await?;
 
-    let record_path = Path((API_NAME.to_string(), create_response.id.clone()));
+    let record_path = Path((API_NAME.to_string(), create_response.ids[0].clone()));
 
     let Json(value) =
       read_record_handler(State(state.clone()), Path(record_path.clone()), None).await?;
@@ -415,7 +416,7 @@ mod test {
 
     let record_file_path = Path((
       API_NAME.to_string(),
-      create_response.id.clone(),
+      create_response.ids[0].clone(),
       file_column.to_string(),
     ));
 
@@ -485,14 +486,15 @@ mod test {
             },
             ],
           }))
-          .unwrap(),
+          .unwrap()
+          .into(),
         ),
       )
       .await?,
     )
     .await?;
 
-    let record_path = Path((API_NAME.to_string(), resp.id.clone()));
+    let record_path = Path((API_NAME.to_string(), resp.ids[0].clone()));
 
     let Json(value) = read_record_handler(State(state.clone()), record_path, None).await?;
 
@@ -509,7 +511,7 @@ mod test {
 
       let record_file_path = Path((
         API_NAME.to_string(),
-        resp.id.clone(),
+        resp.ids[0].clone(),
         files_column.to_string(),
         index,
       ));

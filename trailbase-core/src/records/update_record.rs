@@ -145,13 +145,14 @@ mod test {
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
         User::from_auth_token(&state, &user_x_token.auth_token),
-        Either::Json(json_row_from_value(create_json).unwrap()),
+        Either::Json(json_row_from_value(create_json).unwrap().into()),
       )
       .await?,
     )
     .await?;
 
-    let b64_id = create_response.id;
+    assert_eq!(create_response.ids.len(), 1);
+    let b64_id = create_response.ids[0].clone();
 
     {
       // User X can modify their own message.
@@ -163,7 +164,7 @@ mod test {
         State(state.clone()),
         Path(("messages_api".to_string(), b64_id.clone())),
         User::from_auth_token(&state, &user_x_token.auth_token),
-        Either::Json(json_row_from_value(update_json).unwrap()),
+        Either::Json(json_row_from_value(update_json).unwrap().into()),
       )
       .await;
 
@@ -188,7 +189,7 @@ mod test {
         State(state.clone()),
         Path(("messages_api".to_string(), b64_id.clone())),
         User::from_auth_token(&state, &user_y_token.auth_token),
-        Either::Json(json_row_from_value(update_json).unwrap()),
+        Either::Json(json_row_from_value(update_json).unwrap().into()),
       )
       .await;
 

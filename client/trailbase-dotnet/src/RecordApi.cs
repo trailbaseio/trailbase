@@ -13,20 +13,6 @@ public abstract class RecordId {
   public abstract override string ToString();
 }
 
-/// <summary>Un-typed record id.</summary>
-public class ResponseRecordId : RecordId {
-  /// <summary>Serialized id, could be integer or UUID.</summary>
-  public string id { get; }
-
-  /// <summary>ResponseRecordId constructor.</summary>
-  public ResponseRecordId(string id) {
-    this.id = id;
-  }
-
-  /// <summary>Serialize RecordId.</summary>
-  public override string ToString() => id;
-}
-
 /// <summary>Integer record id.</summary>
 public class IntegerRecordId : RecordId {
   long id { get; }
@@ -59,6 +45,25 @@ public class UuidRecordId : RecordId {
   public override string ToString() {
     var bytes = id.ToByteArray();
     return System.Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_');
+  }
+}
+
+/// <summary>Response returned by RecordApi.Create().</summary>
+internal class CreateRecordResponse {
+  /// <summary>Serialized id, could be integer or UUID.</summary>
+  public List<string> ids { get; }
+
+  /// <summary>CreateRecordResponse constructor.</summary>
+  public CreateRecordResponse(List<string> ids) {
+    this.ids = ids;
+  }
+
+  static public RecordId Parse(string id) {
+    long value = 0;
+    if (long.TryParse(id, out value)) {
+      return new IntegerRecordId(value);
+    }
+    return new UuidRecordId(id);
   }
 }
 
@@ -189,7 +194,7 @@ public class ErrorEvent : Event {
 }
 
 [JsonSourceGenerationOptions(WriteIndented = true)]
-[JsonSerializable(typeof(ResponseRecordId))]
+[JsonSerializable(typeof(CreateRecordResponse))]
 [JsonSerializable(typeof(ListResponse<JsonObject>))]
 internal partial class SerializeResponseRecordIdContext : JsonSerializerContext {
 }
@@ -254,16 +259,33 @@ public class RecordApi {
       DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
     var recordJson = JsonContent.Create(record, typeof(T), default, options);
-    return await CreateImpl(recordJson);
+    return (await CreateImpl(recordJson))[0];
   }
 
   /// <summary>Create a new record with the given value.</summary>
   public async Task<RecordId> Create<T>(T record, JsonTypeInfo<T> jsonTypeInfo) {
     var recordJson = JsonContent.Create(record, jsonTypeInfo, default);
+    return (await CreateImpl(recordJson))[0];
+  }
+
+  /// <summary>Create new records in bulk with the given values.</summary>
+  [RequiresDynamicCode(DynamicCodeMessage)]
+  [RequiresUnreferencedCode(UnreferencedCodeMessage)]
+  public async Task<List<RecordId>> CreateBulk<T>(List<T> record) {
+    var options = new JsonSerializerOptions {
+      DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    var recordJson = JsonContent.Create(record, typeof(List<T>), default, options);
     return await CreateImpl(recordJson);
   }
 
-  private async Task<RecordId> CreateImpl(HttpContent recordJson) {
+  /// <summary>Create new records in bulk with the given values.</summary>
+  public async Task<List<RecordId>> CreateBulk<T>(List<T> record, JsonTypeInfo<T> jsonTypeInfo) {
+    var recordJson = JsonContent.Create(record, jsonTypeInfo, default);
+    return await CreateImpl(recordJson);
+  }
+
+  private async Task<List<RecordId>> CreateImpl(HttpContent recordJson) {
     var response = await client.Fetch(
       $"{RecordApi._recordApi}/{name}",
       HttpMethod.Post,
@@ -272,10 +294,12 @@ public class RecordApi {
     );
 
     string json = await response.Content.ReadAsStringAsync();
-    return JsonSerializer.Deserialize<ResponseRecordId>(
+    var createResponse = JsonSerializer.Deserialize<CreateRecordResponse>(
         json,
-        SerializeResponseRecordIdContext.Default.ResponseRecordId
+        SerializeResponseRecordIdContext.Default.CreateRecordResponse
     )!;
+
+    return createResponse.ids.ConvertAll(id => CreateRecordResponse.Parse(id));
   }
 
   /// <summary>

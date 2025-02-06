@@ -38,6 +38,7 @@ pub(crate) async fn insert_row(
     Params::from(&table_metadata, json_row, None)?,
     None,
     Some("*"),
+    |row| Ok(trailbase_sqlite::Row::from_row(row, None)?),
   )
   .await?;
 

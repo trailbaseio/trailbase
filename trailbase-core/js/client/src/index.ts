@@ -168,18 +168,24 @@ export class RecordApi {
 
   public async create<T = Record<string, unknown>>(
     record: T,
-  ): Promise<Response> {
-    return this.client.fetch(this._createApi, {
+  ): Promise<string | number> {
+    const response = await this.client.fetch(this._createApi, {
       method: "POST",
       body: JSON.stringify(record),
     });
+
+    return (await response.json()).ids[0];
   }
 
-  public async createId<T = Record<string, unknown>>(
-    record: T,
-  ): Promise<string | number> {
-    const response = await this.create(record);
-    return (await response.json()).id;
+  public async createBulk<T = Record<string, unknown>>(
+    records: T[],
+  ): Promise<(string | number)[]> {
+    const response = await this.client.fetch(this._createApi, {
+      method: "POST",
+      body: JSON.stringify(records),
+    });
+
+    return (await response.json()).ids;
   }
 
   public async update<T = Record<string, unknown>>(
@@ -266,11 +272,6 @@ type ClientOptions = {
 };
 
 /// Client for interacting with TrailBase auth and record APIs.
-///
-/// TODO: Add
-///  * issue_password_reset_email
-///  * issue_change_email
-///  * status
 export class Client {
   private static readonly _authApi = "api/auth/v1";
   private static readonly _authUi = "_/auth";
