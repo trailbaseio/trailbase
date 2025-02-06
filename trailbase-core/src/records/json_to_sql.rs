@@ -211,8 +211,18 @@ impl Params {
     return metadata.column_by_name(field_name);
   }
 
+  #[inline]
+  fn prefix_colon(s: &str) -> String {
+    let mut new = String::with_capacity(s.len() + 1);
+    new.insert(0, ':');
+    new.insert_str(1, s);
+    return new;
+  }
+
   pub fn push_param(&mut self, col: String, value: Value) {
-    self.named_params.push((format!(":{col}").into(), value));
+    self
+      .named_params
+      .push((Self::prefix_colon(&col).into(), value));
     self.col_names.push(col);
   }
 
@@ -289,7 +299,7 @@ impl Params {
 
     for (col_name, file_upload) in file_upload_map {
       self.named_params.push((
-        format!(":{col_name}").into(),
+        Self::prefix_colon(&col_name).into(),
         Value::Text(serde_json::to_string(&file_upload)?),
       ));
       self.col_names.push(col_name.clone());
@@ -298,7 +308,7 @@ impl Params {
 
     for (col_name, file_uploads) in file_uploads_map {
       self.named_params.push((
-        format!(":{col_name}").into(),
+        Self::prefix_colon(&col_name).into(),
         Value::Text(serde_json::to_string(&FileUploads(file_uploads))?),
       ));
       self.col_names.push(col_name.clone());
@@ -470,21 +480,33 @@ impl InsertQueryBuilder {
     };
 
     let column_names = params.column_names();
-    let query = match column_names.is_empty() {
-      true => {
-        format!(r#"INSERT {conflict_clause} INTO "{table_name}" DEFAULT VALUES {return_fragment}"#)
-      }
-      false => format!(
+    let query = if !column_names.is_empty() {
+      format!(
         r#"INSERT {conflict_clause} INTO "{table_name}" ({col_names}) VALUES ({placeholders}) {return_fragment}"#,
-        col_names = column_names
-          .iter()
-          .map(|name| format!(r#""{name}""#))
-          .join(", "),
+        col_names = Self::build_col_names(column_names),
         placeholders = params.placeholders(),
-      ),
+      )
+    } else {
+      // The insert empty record case, i.e. "{}".
+      format!(r#"INSERT {conflict_clause} INTO "{table_name}" DEFAULT VALUES {return_fragment}"#)
     };
 
     return Ok((query, params.named_params, params.files));
+  }
+
+  #[inline]
+  fn build_col_names(column_names: &[String]) -> String {
+    let mut s = String::new();
+    for (i, name) in column_names.iter().enumerate() {
+      if i > 0 {
+        s.push_str(", \"");
+      } else {
+        s.push('"');
+      }
+      s.push_str(name);
+      s.push('"');
+    }
+    return s;
   }
 
   #[inline]
