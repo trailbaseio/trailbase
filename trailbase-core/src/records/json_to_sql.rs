@@ -3,7 +3,7 @@ use itertools::Itertools;
 use log::*;
 use object_store::ObjectStore;
 use std::borrow::Cow;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::HashSet;
 use std::sync::Arc;
 use trailbase_sqlite::schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{NamedParams, Value};
@@ -214,8 +214,8 @@ impl Params {
   #[inline]
   fn prefix_colon(s: &str) -> String {
     let mut new = String::with_capacity(s.len() + 1);
-    new.insert(0, ':');
-    new.insert_str(1, s);
+    new.push(':');
+    new.push_str(s);
     return new;
   }
 
@@ -235,7 +235,7 @@ impl Params {
   }
 
   pub(crate) fn placeholders(&self) -> String {
-    return self.named_params.iter().map(|(k, _v)| k.clone()).join(", ");
+    return self.named_params.iter().map(|(k, _v)| k).join(", ");
   }
 
   fn append_multipart_files(
@@ -258,10 +258,8 @@ impl Params {
       }
     }
 
-    let mut file_upload_map = HashMap::<String, FileUpload>::new();
-    let mut file_uploads_map = HashMap::<String, Vec<FileUpload>>::new();
-
     // Validate and organize by type;
+    let mut uploaded_files = HashSet::<&'static str>::new();
     for (field_name, file_metadata, _content) in &files {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
@@ -273,46 +271,32 @@ impl Params {
         return Err(ParamsError::Column("Expected json column"));
       };
 
-      let col_name = col.name.to_string();
+      let value = Value::Text(serde_json::to_string(&file_metadata)?);
       match schema_name.as_str() {
         "std.FileUpload" => {
-          if file_upload_map
-            .insert(col_name, file_metadata.clone())
-            .is_some()
-          {
+          if !uploaded_files.insert(&col.name) {
             return Err(ParamsError::Column(
               "Collision: too many files for std.FileUpload",
             ));
           }
+
+          self
+            .named_params
+            .push((Self::prefix_colon(&col.name).into(), value));
+          self.col_names.push(col.name.to_string());
+          self.file_col_names.push(col.name.to_string());
         }
-        "std.FileUploads" => match file_uploads_map.entry(col_name) {
-          Entry::Occupied(mut entry) => entry.get_mut().push(file_metadata.clone()),
-          Entry::Vacant(entry) => {
-            entry.insert(vec![file_metadata.clone()]);
-          }
-        },
+        "std.FileUploads" => {
+          self
+            .named_params
+            .push((Self::prefix_colon(&col.name).into(), value));
+          self.col_names.push(col.name.to_string());
+          self.file_col_names.push(col.name.to_string());
+        }
         _ => {
           return Err(ParamsError::Column("Mismatching JSON schema"));
         }
       }
-    }
-
-    for (col_name, file_upload) in file_upload_map {
-      self.named_params.push((
-        Self::prefix_colon(&col_name).into(),
-        Value::Text(serde_json::to_string(&file_upload)?),
-      ));
-      self.col_names.push(col_name.clone());
-      self.file_col_names.push(col_name);
-    }
-
-    for (col_name, file_uploads) in file_uploads_map {
-      self.named_params.push((
-        Self::prefix_colon(&col_name).into(),
-        Value::Text(serde_json::to_string(&FileUploads(file_uploads))?),
-      ));
-      self.col_names.push(col_name.clone());
-      self.file_col_names.push(col_name);
     }
 
     self.files.append(

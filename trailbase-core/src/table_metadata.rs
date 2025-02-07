@@ -750,12 +750,25 @@ pub fn build_json_schema(
   metadata: &(dyn TableOrViewMetadata + Send + Sync),
   mode: JsonSchemaMode,
 ) -> Result<(Validator, serde_json::Value), JsonSchemaError> {
+  return build_json_schema_recursive(table_or_view_name, metadata, mode, &[]);
+}
+
+/// NOTE: Foreign keys can only reference tables not view, so the inline schemas don't need to be
+/// able to reference views.
+pub(crate) fn build_json_schema_recursive(
+  table_or_view_name: &str,
+  metadata: &(dyn TableOrViewMetadata + Send + Sync),
+  mode: JsonSchemaMode,
+  inline: &[&TableMetadata],
+) -> Result<(Validator, serde_json::Value), JsonSchemaError> {
   let mut properties = serde_json::Map::new();
-  let mut required_cols: Vec<String> = vec![];
   let mut defs = serde_json::Map::new();
+  let mut required_cols: Vec<String> = vec![];
 
   let Some(columns) = metadata.columns() else {
-    return Err(JsonSchemaError::NotFound("".to_string()));
+    return Err(JsonSchemaError::NotFound(
+      "Column defs not found".to_string(),
+    ));
   };
 
   for col in columns {
@@ -799,6 +812,17 @@ pub fn build_json_schema(
             }
 
             default = true;
+          }
+        }
+        ColumnOption::ForeignKey {
+          foreign_table,
+          referred_columns: _,
+          ..
+        } => {
+          for metadata in inline {
+            if metadata.name() == foreign_table {
+              // TODO: Implement nesting.
+            }
           }
         }
         _ => {}
