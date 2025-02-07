@@ -35,26 +35,30 @@ fn extract_record(value: serde_json::Value) -> Result<JsonRow, RecordError> {
 
 #[inline]
 fn extract_records(value: serde_json::Value) -> Result<Vec<JsonRow>, RecordError> {
-  return Ok(match value {
-    serde_json::Value::Object(record) => vec![record],
+  return match value {
+    serde_json::Value::Object(record) => Ok(vec![record]),
     serde_json::Value::Array(records) => {
-      let mut record_rows = Vec::<JsonRow>::with_capacity(records.len());
-      for record in records {
-        let serde_json::Value::Object(record) = record else {
-          return Err(RecordError::BadRequest(
-            "Expected record or array of records",
-          ));
-        };
-        record_rows.push(record);
+      if records.len() > 1024 {
+        return Err(RecordError::BadRequest("Bulk creation exceeds limit: 1024"));
       }
-      record_rows
+
+      records
+        .into_iter()
+        .map(|record| {
+          let serde_json::Value::Object(record) = record else {
+            return Err(RecordError::BadRequest(
+              "Expected record or array of records",
+            ));
+          };
+
+          Ok(record)
+        })
+        .collect()
     }
-    _ => {
-      return Err(RecordError::BadRequest(
-        "Expected record or array of records",
-      ));
-    }
-  });
+    _ => Err(RecordError::BadRequest(
+      "Expected record or array of records",
+    )),
+  };
 }
 
 #[inline]

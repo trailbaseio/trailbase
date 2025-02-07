@@ -243,20 +243,18 @@ impl Params {
     metadata: &TableMetadata,
     multipart_files: Vec<FileUploadInput>,
   ) -> Result<(), ParamsError> {
-    let mut files: Vec<(String, FileUpload, Vec<u8>)> = vec![];
-    for file in multipart_files {
-      let (col_name, metadata, content) = file.consume()?;
-      match col_name {
-        None => {
-          return Err(ParamsError::Column(
+    let files: Vec<(String, FileUpload, Vec<u8>)> = multipart_files
+      .into_iter()
+      .map(|file| {
+        let (col_name, metadata, content) = file.consume()?;
+        return match col_name {
+          Some(col_name) => Ok((col_name, metadata, content)),
+          None => Err(ParamsError::Column(
             "Multipart form upload missing name property",
-          ));
-        }
-        Some(col_name) => {
-          files.push((col_name, metadata, content));
-        }
-      }
-    }
+          )),
+        };
+      })
+      .collect::<Result<_, ParamsError>>()?;
 
     // Validate and organize by type;
     let mut uploaded_files = HashSet::<&'static str>::new();
