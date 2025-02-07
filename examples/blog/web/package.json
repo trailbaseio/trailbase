@@ -16,7 +16,7 @@
     "@astrojs/tailwind": "^5.1.5",
     "@nanostores/persistent": "^0.10.2",
     "@nanostores/solid": "^0.5.0",
-    "astro": "^5.2.3",
+    "astro": "^5.2.5",
     "astro-icon": "^1.1.5",
     "nanostores": "^0.11.3",
     "solid-icons": "^1.1.0",
