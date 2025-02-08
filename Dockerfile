@@ -27,13 +27,19 @@ RUN cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
 
-RUN RUSTFLAGS="-C target-feature=+crt-static" cargo build --target x86_64-unknown-linux-gnu --release --bin trail
+ARG TARGETPLATFORM
 
+RUN case ${TARGETPLATFORM} in \
+         "linux/arm64")  RUST_TARGET="aarch64-unknown-linux-gnu"  ;; \
+         *)              RUST_TARGET="x86_64-unknown-linux-gnu"   ;; \
+    esac && \
+    RUSTFLAGS="-C target-feature=+crt-static" cargo build --target ${RUST_TARGET} --release --bin trail && \
+    mv target/${RUST_TARGET}/release/trail /app/trail.exe
 
 FROM alpine:3.20 AS runtime
 RUN apk add --no-cache tini curl
 
-COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/trail /app/
+COPY --from=builder /app/trail.exe /app/trail
 
 # When `docker run` is executed, launch the binary as unprivileged user.
 RUN adduser -D trailbase

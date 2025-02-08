@@ -21,6 +21,6 @@ check:
 		poetry -C client/trailbase-py run pyright
 
 docker:
-	docker build . -t trailbase/trailbase
+	docker buildx build --platform linux/arm64,linux/amd64 -t trailbase/trailbase .
 
-.PHONY: default format check static
+.PHONY: default format check static docker
