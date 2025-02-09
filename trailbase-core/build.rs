@@ -75,7 +75,13 @@ fn pnpm_run(args: &[&str]) -> Result<std::process::Output> {
 
 fn build_js(path: &str) -> Result<()> {
   // We deliberately chose not to use "--frozen-lockfile" here, since this is not a CI use-case.
-  let _install_output = pnpm_run(&["--dir", path, "install"])?;
+  let out_dir = std::env::var("OUT_DIR").unwrap();
+  let _install_output = if out_dir.contains("target/package") {
+    pnpm_run(&["--dir", path, "install", "--ignore-workspace"])?
+  } else {
+    pnpm_run(&["--dir", path, "install"])?
+  };
+
   let _build_output = pnpm_run(&["--dir", path, "build"])?;
 
   return Ok(());

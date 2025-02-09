@@ -9,9 +9,9 @@ repository = "https://github.com/trailbaseio/trailbase"
 readme = "../README.md"
 exclude = [
   "benches/",
+  "tests/",
   "**/node_modules/",
   "**/dist/",
-  "**/.gitignore",
 ]
 
 [[bench]]

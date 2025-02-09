@@ -384,8 +384,8 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@22.13.1)(typescript@5.7.3)))
       trailbase:
-        specifier: workspace:*
-        version: link:../client
+        specifier: ^0.2.2
+        version: 0.2.2
       uuid:
         specifier: ^11.0.5
         version: 11.0.5
@@ -490,8 +490,8 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@22.13.1)(typescript@5.7.3)))
       trailbase:
-        specifier: workspace:*
-        version: link:../client
+        specifier: ^0.2.2
+        version: 0.2.2
     devDependencies:
       '@iconify-json/tabler':
         specifier: ^1.2.15
@@ -4702,6 +4702,9 @@ packages:
   tr46@5.0.0:
     resolution: {integrity: sha512-tk2G5R2KRwBd+ZN0zaEXpmzdKyOYksXwywulIX95MBODjSzMIuQnQ3m8JxgbhnL1LeVo7lqQKsYa1O3Htl7K5g==}
     engines: {node: '>=18'}
+
+  trailbase@0.2.2:
+    resolution: {integrity: sha512-mOkVXyyqxHS4WSfQIfkle+/iTq59HBQarGcsyw+KDCzlK3Kc4GCPHXoKL7bVp1aNFiqvnpt5KinnTZz01zUClA==}
 
   trim-lines@3.0.1:
     resolution: {integrity: sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg==}
@@ -10612,6 +10615,11 @@ snapshots:
   tr46@5.0.0:
     dependencies:
       punycode: 2.3.1
+
+  trailbase@0.2.2:
+    dependencies:
+      jwt-decode: 4.0.0
+      uuid: 11.0.5
 
   trim-lines@3.0.1: {}
 

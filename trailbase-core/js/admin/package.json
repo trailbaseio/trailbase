@@ -43,7 +43,7 @@
     "solid-js": "^1.9.4",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
-    "trailbase": "workspace:*",
+    "trailbase": "^0.2.2",
     "uuid": "^11.0.5"
   },
   "devDependencies": {
