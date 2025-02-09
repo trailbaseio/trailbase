@@ -1,3 +1,5 @@
+import type { Config } from "tailwindcss";
+
 import starlightPlugin from "@astrojs/starlight-tailwind";
 
 // Generated color palettes
@@ -18,7 +20,6 @@ const gray = {
   900: "#121a1c",
 };
 
-/** @type {import('tailwindcss').Config} */
 export default {
   content: ["./src/**/*.{astro,html,js,jsx,md,mdx,svelte,ts,tsx,vue}"],
   theme: {
@@ -30,4 +31,4 @@ export default {
     },
   },
   plugins: [starlightPlugin()],
-};
+} satisfies Config;

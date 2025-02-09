@@ -9,7 +9,7 @@
     "preview": "astro preview",
     "astro": "astro",
     "check": "astro check",
-    "format": "prettier -w tailwind.config.mjs astro.config.mjs src "
+    "format": "prettier -w tailwind.config.ts astro.config.mjs src "
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",

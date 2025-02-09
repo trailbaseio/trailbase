@@ -1,13 +1,8 @@
-import animate from "tailwindcss-animate";
-import typography from "@tailwindcss/typography";
 import { fontFamily } from "tailwindcss/defaultTheme";
 
 /**@type {import("tailwindcss").Config} */
 const solidUiPreset = {
   darkMode: ["class", '[data-kb-theme="dark"]'],
-  content: [
-    "./src/**/*.{astro,html,js,jsx,md,mdx,ts,tsx}",
-  ],
   theme: {
     container: {
       center: true,
@@ -79,20 +74,20 @@ const solidUiPreset = {
       },
       keyframes: {
         "accordion-down": {
-          from: { height: 0 },
+          from: { height: "0" },
           to: { height: "var(--kb-accordion-content-height)" },
         },
         "accordion-up": {
           from: { height: "var(--kb-accordion-content-height)" },
-          to: { height: 0 },
+          to: { height: "0" },
         },
         "content-show": {
-          from: { opacity: 0, transform: "scale(0.96)" },
-          to: { opacity: 1, transform: "scale(1)" },
+          from: { opacity: "0", transform: "scale(0.96)" },
+          to: { opacity: "1", transform: "scale(1)" },
         },
         "content-hide": {
-          from: { opacity: 1, transform: "scale(1)" },
-          to: { opacity: 0, transform: "scale(0.96)" },
+          from: { opacity: "1", transform: "scale(1)" },
+          to: { opacity: "0", transform: "scale(0.96)" },
         },
       },
       animation: {
@@ -103,7 +98,6 @@ const solidUiPreset = {
       },
     },
   },
-  plugins: [animate],
 };
 
 // Colors from starlight.
@@ -127,27 +121,10 @@ const gray = {
 
 /**@type {import("tailwindcss").Config} */
 export const commonTailwindConfig = {
-  darkMode: ["class", '[data-kb-theme="dark"]'],
-  content: ["./src/**/*.{astro,html,js,jsx,md,mdx,ts,tsx}"],
   presets: [solidUiPreset],
   theme: {
     extend: {
       colors: { accent, gray },
-      keyframes: {
-        "accordion-down": {
-          from: { height: "0" },
-          to: { height: "var(--kb-accordion-content-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--kb-accordion-content-height)" },
-          to: { height: "0" },
-        },
-      },
-      animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-      },
     },
   },
-  plugins: [typography],
 };

@@ -7,7 +7,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@bindings/*": ["../../bindings/*"],
-      "@common/*": ["../common/*"]
+      "@styles/*": ["../styles/*"]
     }
   },
   "exclude": [

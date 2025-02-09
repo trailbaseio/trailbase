@@ -1,6 +1,12 @@
 {
-  "extends": "../common/tsconfig.base.json",
   "compilerOptions": {
+    "strict": true,
+    "strictNullChecks": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": false,
+    "moduleResolution": "bundler",
+    "target": "ESNext",
+    "module": "ESNext",
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
     "types": [
@@ -11,7 +17,7 @@
       "@/*": ["./src/*"],
       "@proto/*": ["./proto/*"],
       "@bindings/*": ["../../bindings/*"],
-      "@common/*": ["../common/*"]
+      "@styles/*": ["../styles/*"]
     }
   },
   "exclude": [

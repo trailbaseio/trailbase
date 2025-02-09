@@ -1,8 +1,8 @@
 /* @refresh reload */
 import { render } from "solid-js/web";
 
-import "@common/css/global.css";
-import "@common/css/kobalte.css";
+import "@styles/global.css";
+import "@styles/kobalte.css";
 
 import App from "./App";
 
