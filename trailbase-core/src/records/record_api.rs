@@ -61,6 +61,8 @@ struct RecordApiState {
   insert_conflict_resolution_strategy: Option<ConflictResolutionStrategy>,
   insert_autofill_missing_user_id_columns: bool,
 
+  expand: Vec<String>,
+
   create_access_rule: Option<String>,
   create_access_query: Option<String>,
 
@@ -198,6 +200,8 @@ impl RecordApi {
           .autofill_missing_user_id_columns
           .unwrap_or(false),
 
+        expand: vec![], // config.expand,
+
         // Access control lists.
         acl: [
           convert_acl(&config.acl_world),
@@ -237,6 +241,11 @@ impl RecordApi {
   #[inline]
   pub fn metadata(&self) -> &(dyn TableOrViewMetadata + Send + Sync) {
     return self.state.metadata.metadata();
+  }
+
+  #[inline]
+  pub fn expand(&self) -> &[String] {
+    return &self.state.expand;
   }
 
   pub fn table_metadata(&self) -> Option<&TableMetadata> {

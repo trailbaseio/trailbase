@@ -12,7 +12,7 @@ use crate::listing::{
 };
 use crate::records::sql_to_json::rows_to_json_arrays;
 use crate::schema::Column;
-use crate::table_metadata::TableOrViewMetadata;
+use crate::table_metadata::{TableMetadata, TableOrViewMetadata};
 
 #[derive(Debug, Serialize, TS)]
 #[ts(export)]
@@ -42,11 +42,14 @@ pub async fn list_rows_handler(
   } = parse_query(raw_url_query.as_deref())
     .map_err(|err| Error::Precondition(format!("Invalid query '{err}': {raw_url_query:?}")))?;
 
-  let (virtual_table, table_or_view_metadata): (bool, Arc<dyn TableOrViewMetadata + Sync + Send>) = {
+  let (table_metadata, table_or_view_metadata): (
+    Option<Arc<TableMetadata>>,
+    Arc<dyn TableOrViewMetadata + Sync + Send>,
+  ) = {
     if let Some(table_metadata) = state.table_metadata().get(&table_name) {
-      (table_metadata.schema.virtual_table, table_metadata)
+      (Some(table_metadata.clone()), table_metadata)
     } else if let Some(view_metadata) = state.table_metadata().get_view(&table_name) {
-      (false, view_metadata)
+      (None, view_metadata)
     } else {
       return Err(Error::Precondition(format!(
         "Table or view '{table_name}' not found"
@@ -103,12 +106,24 @@ pub async fn list_rows_handler(
     cursor: next_cursor,
     // NOTE: in the view case we don't have a good way of extracting the columns from the "CREATE
     // VIEW" query so we fall back to columns constructed from the returned data.
-    columns: match virtual_table {
-      true => columns.unwrap_or_else(Vec::new),
-      false => table_or_view_metadata.columns().unwrap_or_else(|| {
-        debug!("Falling back to inferred cols for view: '{table_name}'");
+    columns: match table_metadata {
+      Some(ref metadata) if metadata.schema.virtual_table => {
+        // Virtual TABLE case.
         columns.unwrap_or_else(Vec::new)
-      }),
+      }
+      Some(ref metadata) => {
+        // Non-virtual TABLE case.
+        metadata.schema.columns.clone()
+      }
+      _ => {
+        // VIEW-case
+        if let Some(columns) = table_or_view_metadata.columns() {
+          columns.clone()
+        } else {
+          debug!("Falling back to inferred cols for view: '{table_name}'");
+          columns.unwrap_or_else(Vec::new)
+        }
+      }
     },
     rows,
   }));

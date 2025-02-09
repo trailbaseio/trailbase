@@ -247,7 +247,8 @@ pub trait TableOrViewMetadata {
   fn column_by_name(&self, key: &str) -> Option<(&Column, &ColumnMetadata)>;
 
   // Impl detail: only used by admin and list
-  fn columns(&self) -> Option<Vec<Column>>;
+  fn columns(&self) -> Option<&Vec<Column>>;
+  fn column_metadata(&self) -> &Vec<ColumnMetadata>;
   fn record_pk_column(&self) -> Option<(usize, &Column)>;
 }
 
@@ -256,8 +257,12 @@ impl TableOrViewMetadata for TableMetadata {
     self.column_by_name(key)
   }
 
-  fn columns(&self) -> Option<Vec<Column>> {
-    Some(self.schema.columns.clone())
+  fn columns(&self) -> Option<&Vec<Column>> {
+    Some(&self.schema.columns)
+  }
+
+  fn column_metadata(&self) -> &Vec<ColumnMetadata> {
+    return &self.metadata;
   }
 
   fn record_pk_column(&self) -> Option<(usize, &Column)> {
@@ -271,8 +276,12 @@ impl TableOrViewMetadata for ViewMetadata {
     self.column_by_name(key)
   }
 
-  fn columns(&self) -> Option<Vec<Column>> {
-    return self.schema.columns.clone();
+  fn columns(&self) -> Option<&Vec<Column>> {
+    return self.schema.columns.as_ref();
+  }
+
+  fn column_metadata(&self) -> &Vec<ColumnMetadata> {
+    return &self.metadata;
   }
 
   fn record_pk_column(&self) -> Option<(usize, &Column)> {
@@ -750,7 +759,12 @@ pub fn build_json_schema(
   metadata: &(dyn TableOrViewMetadata + Send + Sync),
   mode: JsonSchemaMode,
 ) -> Result<(Validator, serde_json::Value), JsonSchemaError> {
-  return build_json_schema_recursive(table_or_view_name, metadata, mode, &[]);
+  return build_json_schema_recursive(table_or_view_name, metadata, mode, None);
+}
+
+pub(crate) struct Expand<'a> {
+  pub(crate) table_metadata: &'a TableMetadataCache,
+  pub(crate) foreign_key_columns: &'a [String],
 }
 
 /// NOTE: Foreign keys can only reference tables not view, so the inline schemas don't need to be
@@ -759,7 +773,7 @@ pub(crate) fn build_json_schema_recursive(
   table_or_view_name: &str,
   metadata: &(dyn TableOrViewMetadata + Send + Sync),
   mode: JsonSchemaMode,
-  inline: &[&TableMetadata],
+  expand: Option<Expand<'_>>,
 ) -> Result<(Validator, serde_json::Value), JsonSchemaError> {
   let mut properties = serde_json::Map::new();
   let mut defs = serde_json::Map::new();
@@ -789,12 +803,10 @@ pub(crate) fn build_json_schema_recursive(
                 };
                 defs.insert(col.name.clone(), schema.schema);
                 found_def = true;
-                break;
               }
               JsonColumnMetadata::Pattern(pattern) => {
                 defs.insert(col.name.clone(), pattern.clone());
                 found_def = true;
-                break;
               }
             }
           }
@@ -819,9 +831,40 @@ pub(crate) fn build_json_schema_recursive(
           referred_columns: _,
           ..
         } => {
-          for metadata in inline {
-            if metadata.name() == foreign_table {
+          if let (Some(expand), JsonSchemaMode::Select) = (&expand, mode) {
+            for metadata in expand.foreign_key_columns {
+              if metadata != foreign_table {
+                continue;
+              }
+
               // TODO: Implement nesting.
+              let Some(table) = expand.table_metadata.get(foreign_table) else {
+                warn!("Failed to find table: {foreign_table}");
+                continue;
+              };
+
+              let Some((_idx, pk_column)) = table.record_pk_column() else {
+                warn!("Missing pk column for table: {foreign_table}");
+                continue;
+              };
+
+              let (_validator, schema) = build_json_schema(foreign_table, &*table, mode)?;
+              defs.insert(
+                col.name.clone(),
+                serde_json::json!({
+                  "type": "object",
+                  "properties": {
+
+                    "id": serde_json::json!({
+                      "type": column_data_type_to_json_type(pk_column.data_type),
+                    }),
+                    // "id": { "type" : "string" },
+                    "data": schema,
+                  },
+                  "required": ["id"],
+                }),
+              );
+              found_def = true;
             }
           }
         }
@@ -851,24 +894,32 @@ pub(crate) fn build_json_schema_recursive(
           "$ref": format!("#/$defs/{name}")
         }),
       );
-      continue;
+    } else {
+      properties.insert(
+        col.name.clone(),
+        serde_json::json!({
+          "type": column_data_type_to_json_type(col.data_type),
+        }),
+      );
     }
-
-    properties.insert(
-      col.name.clone(),
-      serde_json::json!({
-        "type": column_data_type_to_json_type(col.data_type),
-      }),
-    );
   }
 
-  let schema = serde_json::json!({
-    "title": table_or_view_name,
-    "type": "object",
-    "properties": serde_json::Value::Object(properties),
-    "required": serde_json::Value::Array(required_cols.into_iter().map(serde_json::Value::String).collect()),
-    "$defs":serde_json::Value::Object(defs),
-  });
+  let schema = if defs.is_empty() {
+    serde_json::json!({
+      "title": table_or_view_name,
+      "type": "object",
+      "properties": serde_json::Value::Object(properties),
+      "required": serde_json::json!(required_cols),
+    })
+  } else {
+    serde_json::json!({
+      "title": table_or_view_name,
+      "type": "object",
+      "properties": serde_json::Value::Object(properties),
+      "required": serde_json::json!(required_cols),
+      "$defs": serde_json::Value::Object(defs),
+    })
+  };
 
   return Ok((
     Validator::new(&schema).map_err(|err| JsonSchemaError::SchemaCompile(err.to_string()))?,
@@ -1037,6 +1088,130 @@ mod tests {
         "name": 42, "age": "23",
       }),
     })));
+  }
+
+  #[tokio::test]
+  async fn test_expanded_foreign_key() {
+    let state = test_state(None).await.unwrap();
+    let conn = state.conn();
+
+    conn
+      .execute(
+        "CREATE TABLE foreign_table (id INTEGER PRIMARY KEY) STRICT",
+        (),
+      )
+      .await
+      .unwrap();
+
+    let table_name = "test_table";
+    conn
+      .execute(
+        &format!(
+          r#"CREATE TABLE {table_name} (
+            id INTEGER PRIMARY KEY,
+            fk INTEGER REFERENCES foreign_table(id)
+          ) STRICT"#
+        ),
+        (),
+      )
+      .await
+      .unwrap();
+
+    state.table_metadata().invalidate_all().await.unwrap();
+
+    use crate::config::proto::PermissionFlag;
+    use crate::records::read_record::read_record_handler;
+    use crate::records::*;
+
+    add_record_api(
+      &state,
+      "test_table_api",
+      table_name,
+      Acls {
+        world: vec![PermissionFlag::Create, PermissionFlag::Read],
+        ..Default::default()
+      },
+      AccessRules::default(),
+    )
+    .await
+    .unwrap();
+
+    let test_table_metadata = state.table_metadata().get(table_name).unwrap();
+
+    let (_validator, schema) = build_json_schema_recursive(
+      table_name,
+      &*test_table_metadata,
+      JsonSchemaMode::Select,
+      Some(Expand {
+        table_metadata: state.table_metadata(),
+        foreign_key_columns: &["foreign_table".to_string()],
+      }),
+    )
+    .unwrap();
+
+    assert_eq!(
+      schema,
+      json!({
+        "title": table_name,
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "fk": { "$ref": "#/$defs/fk" },
+        },
+        "required": ["id"],
+        "$defs": {
+          "fk": {
+            "type": "object",
+            "properties": {
+              "id" : { "type": "integer"},
+              "data": {
+                "title": "foreign_table",
+                "type": "object",
+                "properties": {
+                  "id" : { "type": "integer" },
+                },
+                "required": ["id"],
+              },
+            },
+            "required": ["id"],
+          },
+        },
+      })
+    );
+
+    conn
+      .execute("INSERT INTO foreign_table (id) VALUES (1);", ())
+      .await
+      .unwrap();
+
+    conn
+      .execute(
+        &format!("INSERT INTO {table_name} (id, fk) VALUES (1, 1);"),
+        (),
+      )
+      .await
+      .unwrap();
+
+    use axum::extract::{Json, Path, State};
+    let Json(value) = read_record_handler(
+      State(state.clone()),
+      Path(("test_table_api".to_string(), "1".to_string())),
+      None,
+    )
+    .await
+    .unwrap();
+
+    {
+      let (validator, _schema) = build_json_schema_recursive(
+        table_name,
+        &*test_table_metadata,
+        JsonSchemaMode::Select,
+        None,
+      )
+      .unwrap();
+
+      validator.validate(&value).expect(&format!("{value}"));
+    }
   }
 
   #[test]

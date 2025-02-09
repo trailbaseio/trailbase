@@ -27,6 +27,10 @@ pub async fn read_record_handler(
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
+  let metadata = api.metadata();
+  let Some(columns) = metadata.columns() else {
+    return Err(RecordError::ApiNotFound);
+  };
 
   let record_id = api.id_to_sql(&record)?;
 
@@ -46,8 +50,10 @@ pub async fn read_record_handler(
   };
 
   return Ok(Json(
-    row_to_json(api.metadata(), &row, |col_name| !col_name.starts_with("_"))
-      .map_err(|err| RecordError::Internal(err.into()))?,
+    row_to_json(columns, metadata.column_metadata(), &row, |col_name| {
+      !col_name.starts_with("_")
+    })
+    .map_err(|err| RecordError::Internal(err.into()))?,
   ));
 }
 

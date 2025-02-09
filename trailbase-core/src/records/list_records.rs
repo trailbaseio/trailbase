@@ -51,6 +51,9 @@ pub async fn list_records_handler(
   api.check_table_level_access(Permission::Read, user.as_ref())?;
 
   let metadata = api.metadata();
+  let Some(columns) = metadata.columns() else {
+    return Err(RecordError::Internal("missing columns".into()));
+  };
   let Some((pk_index, _pk_column)) = metadata.record_pk_column() else {
     return Err(RecordError::Internal("missing pk column".into()));
   };
@@ -191,9 +194,11 @@ pub async fn list_records_handler(
     None
   };
 
-  let records = rows_to_json(metadata, rows, |col_name| !col_name.starts_with("_"))
-    .await
-    .map_err(|err| RecordError::Internal(err.into()))?;
+  let records = rows_to_json(columns, metadata.column_metadata(), rows, |col_name| {
+    !col_name.starts_with("_")
+  })
+  .await
+  .map_err(|err| RecordError::Internal(err.into()))?;
 
   return Ok(Json(ListResponse {
     cursor,

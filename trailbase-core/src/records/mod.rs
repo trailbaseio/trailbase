@@ -135,6 +135,7 @@ pub async fn add_record_api(
     update_access_rule: access_rules.update,
     delete_access_rule: access_rules.delete,
     schema_access_rule: access_rules.schema,
+    // expand: vec![],
   });
 
   return state.validate_and_update_config(config, None).await;

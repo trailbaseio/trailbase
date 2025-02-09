@@ -138,6 +138,9 @@ message RecordApiConfig {
   optional string update_access_rule = 13;
   optional string delete_access_rule = 14;
   optional string schema_access_rule = 15;
+
+  // A list of foreign key columns that can be expanded on read/list.
+  // repeated string expand = 21;
 }
 
 message JsonSchemaConfig {

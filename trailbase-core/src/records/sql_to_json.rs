@@ -3,7 +3,7 @@ use log::*;
 use thiserror::Error;
 
 use crate::schema::{Column, ColumnDataType};
-use crate::table_metadata::TableOrViewMetadata;
+use crate::table_metadata::ColumnMetadata;
 
 #[derive(Debug, Error)]
 pub enum JsonError {
@@ -17,6 +17,8 @@ pub enum JsonError {
   Finite,
   #[error("Value not found")]
   ValueNotFound,
+  #[error("Missing col name")]
+  MissingColumnName,
 }
 
 pub(crate) fn valueref_to_json(
@@ -40,49 +42,85 @@ pub(crate) fn valueref_to_json(
 
 /// Serialize SQL row to json.
 pub fn row_to_json(
-  metadata: &(dyn TableOrViewMetadata + Send + Sync),
+  columns: &[Column],
+  column_metadata: &[ColumnMetadata],
   row: &trailbase_sqlite::Row,
   column_filter: fn(&str) -> bool,
 ) -> Result<serde_json::Value, JsonError> {
-  let mut map = serde_json::Map::<String, serde_json::Value>::default();
-
-  for i in 0..(row.column_count()) {
-    let Some(col_name) = row.column_name(i) else {
-      error!("Missing column name for {i} in  {row:?}");
-      continue;
-    };
-    if !column_filter(col_name) {
-      continue;
-    }
-
-    let value = row.get_value(i).ok_or(JsonError::ValueNotFound)?;
-    if let rusqlite::types::Value::Text(str) = &value {
-      if let Some((_col, col_meta)) = metadata.column_by_name(col_name) {
-        if col_meta.json.is_some() {
-          map.insert(col_name.to_string(), serde_json::from_str(str)?);
-          continue;
-        }
-      } else {
-        warn!("Missing col: {col_name}");
+  let map = (0..row.column_count())
+    .filter_map(|i| {
+      let Some(column_name) = row.column_name(i) else {
+        return Some(Err(JsonError::MissingColumnName));
+      };
+      if !column_filter(column_name) {
+        return None;
       }
-    }
 
-    map.insert(col_name.to_string(), valueref_to_json(value.into())?);
-  }
+      assert!(i < columns.len());
+      assert!(i < column_metadata.len());
+      let column = &columns[i];
+      assert_eq!(column_name, column.name);
+
+      let Some(value) = row.get_value(i) else {
+        return Some(Err(JsonError::ValueNotFound));
+      };
+
+      // TODO: Follow references for extended columns.
+      // TODO: Should this only expand if mentioned in the config or should we always pull out IDs.
+      // use crate::schema::ColumnOption;
+      // use itertools::Itertools;
+      // if let Some(ColumnOption::ForeignKey {
+      //   foreign_table: _,
+      //   referred_columns: _,
+      //   ..
+      // }) = column
+      //   .options
+      //   .iter()
+      //   .find_or_first(|o| matches!(o, ColumnOption::ForeignKey { .. }))
+      // {
+      //   return match valueref_to_json(value.into()) {
+      //     Ok(value) => Some(Ok((
+      //       column_name.to_string(),
+      //       serde_json::json!({
+      //         "id": value,
+      //         // "data": serde_json::Value::Null,
+      //       }),
+      //     ))),
+      //     Err(err) => Some(Err(err)),
+      //   };
+      // }
+
+      if let rusqlite::types::Value::Text(str) = &value {
+        let metadata = &column_metadata[i];
+        if metadata.json.is_some() {
+          return match serde_json::from_str(str) {
+            Ok(json) => Some(Ok((column_name.to_string(), json))),
+            Err(err) => Some(Err(err.into())),
+          };
+        }
+      }
+
+      return match valueref_to_json(value.into()) {
+        Ok(value) => Some(Ok((column_name.to_string(), value))),
+        Err(err) => Some(Err(err)),
+      };
+    })
+    .collect::<Result<serde_json::Map<_, _>, JsonError>>()?;
 
   return Ok(serde_json::Value::Object(map));
 }
 
 /// Turns rows into a list of json objects.
 pub async fn rows_to_json(
-  metadata: &(dyn TableOrViewMetadata + Send + Sync),
+  columns: &[Column],
+  column_metadata: &[ColumnMetadata],
   rows: trailbase_sqlite::Rows,
   column_filter: fn(&str) -> bool,
 ) -> Result<Vec<serde_json::Value>, JsonError> {
   let mut objects: Vec<serde_json::Value> = vec![];
 
   for row in rows.iter() {
-    objects.push(row_to_json(metadata, row, column_filter)?);
+    objects.push(row_to_json(columns, column_metadata, row, column_filter)?);
   }
 
   return Ok(objects);
@@ -159,7 +197,7 @@ mod tests {
 
   use super::*;
   use crate::app_state::*;
-  use crate::table_metadata::{lookup_and_parse_table_schema, TableMetadata};
+  use crate::table_metadata::{lookup_and_parse_table_schema, TableMetadata, TableOrViewMetadata};
 
   #[tokio::test]
   async fn test_read_rows() {
@@ -220,7 +258,14 @@ mod tests {
     insert(object.clone()).await.unwrap();
 
     let rows = conn.query("SELECT * FROM test_table", ()).await.unwrap();
-    let parsed = rows_to_json(&metadata, rows, |_| true).await.unwrap();
+    let parsed = rows_to_json(
+      metadata.columns().unwrap(),
+      metadata.column_metadata(),
+      rows,
+      |_| true,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(parsed.len(), 1);
     let serde_json::Value::Object(map) = parsed.first().unwrap() else {
