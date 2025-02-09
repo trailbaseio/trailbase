@@ -4,5 +4,6 @@ packages:
   - 'js/admin'
   - 'js/auth'
 options:
+  link-workspace-packages: true
   prefer-workspace-packages: true
   strict-peer-dependencies: true

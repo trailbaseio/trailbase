@@ -25,6 +25,14 @@ fn copy_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
   return Ok(());
 }
 
+fn write_output(mut sink: impl Write, source: &[u8], header: &str) -> Result<()> {
+  sink.write_all(header.as_bytes())?;
+  sink.write_all(b"\n")?;
+  sink.write_all(source)?;
+  sink.write_all(b"\n\n")?;
+  return Ok(());
+}
+
 fn pnpm_run(args: &[&str]) -> Result<std::process::Output> {
   let cmd = "pnpm";
   let output = std::process::Command::new(cmd)
@@ -35,24 +43,31 @@ fn pnpm_run(args: &[&str]) -> Result<std::process::Output> {
       return err;
     })?;
 
-  std::io::stdout().write_all(&output.stdout)?;
-  std::io::stderr().write_all(&output.stderr)?;
+  let header = format!(
+    "== {cmd} {} (cwd: {:?}) ==",
+    args.join(" "),
+    std::env::current_dir()?
+  );
+  write_output(std::io::stdout(), &output.stdout, &header)?;
+  write_output(std::io::stderr(), &output.stderr, &header)?;
 
   if !output.status.success() {
-    // NOTE: We don't want to break backend-builds on frontend errors, at least for dev builds.
-    if env::var("SKIP_ERROR").is_err() {
-      return Err(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        format!(
-          "Failed to run '{args:?}': {}",
-          String::from_utf8_lossy(&output.stderr)
-        ),
-      ));
-    }
-    warn!(
-      "Failed to run '{args:?}': {}",
+    let msg = format!(
+      "Failed to run '{args:?}'\n\t{}",
       String::from_utf8_lossy(&output.stderr)
     );
+
+    fn is_true(v: &str) -> bool {
+      return matches!(v.to_lowercase().as_str(), "true" | "1" | "");
+    }
+
+    // NOTE: We don't want to break backend-builds on frontend errors, at least for dev builds.
+    match env::var("SKIP_ERROR") {
+      Ok(v) if is_true(&v) => warn!("{}", msg),
+      _ => {
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, msg));
+      }
+    }
   }
 
   Ok(output)
@@ -60,7 +75,7 @@ fn pnpm_run(args: &[&str]) -> Result<std::process::Output> {
 
 fn build_js(path: &str) -> Result<()> {
   // We deliberately chose not to use "--frozen-lockfile" here, since this is not a CI use-case.
-  let _install_output = pnpm_run(&["--dir", path, "install", "--no-frozen-lockfile"])?;
+  let _install_output = pnpm_run(&["--dir", path, "install"])?;
   let _build_output = pnpm_run(&["--dir", path, "build"])?;
 
   return Ok(());

@@ -10,5 +10,7 @@ packages:
   - 'trailbase-core/js/client'
   - 'trailbase-core/js/runtime'
 options:
+  link-workspace-packages: true
   prefer-workspace-packages: true
   strict-peer-dependencies: true
+  # shared-workspace-lockfile: false
