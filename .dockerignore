@@ -1,14 +1,18 @@
-.hooks/
-
 target/
-../../target/
+traildepot/
+**/traildepot/
+**/target/
 **/target/
 **/node_modules/
 **/dist/
 
-traildepot/
+client
+!client/trailbase-rs
+deploy/
 docs/
 !docs/examples/record_api_rs
+examples/
+!examples/custom-binary
 
 Dockerfile*
 .docker*
@@ -19,6 +23,8 @@ Dockerfile*
 !.git/
 .git/modules
 
+.hooks/
+.cargo
 *.image
 .rustfmt.toml
 .env
