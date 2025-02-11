@@ -288,6 +288,11 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   use crate::config::validate_config;
   use crate::migrations::{apply_logs_migrations, apply_main_migrations, apply_user_migrations};
 
+  let _ = env_logger::try_init_from_env(
+    env_logger::Env::new()
+      .default_filter_or("info,refinery_core=warn,tracing::span=warn,swc_ecma_codegen=off"),
+  );
+
   let temp_dir = temp_dir::TempDir::new()?;
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
 
