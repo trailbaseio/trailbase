@@ -1,3 +1,7 @@
+use crate::schema::ColumnOption;
+use itertools::Itertools;
+use std::collections::HashMap;
+
 use base64::prelude::*;
 use log::*;
 use thiserror::Error;
@@ -47,6 +51,17 @@ pub fn row_to_json(
   row: &trailbase_sqlite::Row,
   column_filter: fn(&str) -> bool,
 ) -> Result<serde_json::Value, JsonError> {
+  return row_to_json_expand(columns, column_metadata, row, column_filter, None);
+}
+
+/// Serialize SQL row to json.
+pub fn row_to_json_expand(
+  columns: &[Column],
+  column_metadata: &[ColumnMetadata],
+  row: &trailbase_sqlite::Row,
+  column_filter: fn(&str) -> bool,
+  expand: Option<HashMap<&str, serde_json::Value>>,
+) -> Result<serde_json::Value, JsonError> {
   let map = (0..row.column_count())
     .filter_map(|i| {
       let Some(column_name) = row.column_name(i) else {
@@ -65,30 +80,45 @@ pub fn row_to_json(
         return Some(Err(JsonError::ValueNotFound));
       };
 
-      // TODO: Follow references for extended columns.
-      // TODO: Should this only expand if mentioned in the config or should we always pull out IDs.
-      // use crate::schema::ColumnOption;
-      // use itertools::Itertools;
-      // if let Some(ColumnOption::ForeignKey {
-      //   foreign_table: _,
-      //   referred_columns: _,
-      //   ..
-      // }) = column
-      //   .options
-      //   .iter()
-      //   .find_or_first(|o| matches!(o, ColumnOption::ForeignKey { .. }))
-      // {
-      //   return match valueref_to_json(value.into()) {
-      //     Ok(value) => Some(Ok((
-      //       column_name.to_string(),
-      //       serde_json::json!({
-      //         "id": value,
-      //         // "data": serde_json::Value::Null,
-      //       }),
-      //     ))),
-      //     Err(err) => Some(Err(err)),
-      //   };
-      // }
+      if matches!(value, rusqlite::types::Value::Null) {
+        return Some(Ok((column_name.to_string(), serde_json::Value::Null)));
+      }
+
+      // TODO: Should IDs be pulled out only if explicitly requested? Implications for schema
+      // migrations.
+      // WARN: this probably brakes admin UI right now.
+      if let Some(ColumnOption::ForeignKey {
+        foreign_table: _,
+        referred_columns: _,
+        ..
+      }) = column
+        .options
+        .iter()
+        .find_or_first(|o| matches!(o, ColumnOption::ForeignKey { .. }))
+      {
+        if let Some(ref foreign_value) = expand.as_ref().and_then(|m| m.get(column_name)) {
+          return match valueref_to_json(value.into()) {
+            Ok(value) => Some(Ok((
+              column_name.to_string(),
+              serde_json::json!({
+                "id": value,
+                "data": foreign_value,
+              }),
+            ))),
+            Err(err) => Some(Err(err)),
+          };
+        } else {
+          return match valueref_to_json(value.into()) {
+            Ok(value) => Some(Ok((
+              column_name.to_string(),
+              serde_json::json!({
+                "id": value,
+              }),
+            ))),
+            Err(err) => Some(Err(err)),
+          };
+        }
+      }
 
       if let rusqlite::types::Value::Text(str) = &value {
         let metadata = &column_metadata[i];

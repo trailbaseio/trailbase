@@ -135,7 +135,37 @@ pub async fn add_record_api(
     update_access_rule: access_rules.update,
     delete_access_rule: access_rules.delete,
     schema_access_rule: access_rules.schema,
-    // expand: vec![],
+    expand: vec![],
+  });
+
+  return state.validate_and_update_config(config, None).await;
+}
+
+#[cfg(test)]
+pub(crate) async fn add_record_api_expand(
+  state: &AppState,
+  api_name: &str,
+  table_name: &str,
+  acls: Acls,
+  access_rules: AccessRules,
+  expand: Vec<String>,
+) -> Result<(), ConfigError> {
+  let mut config = state.get_config();
+
+  config.record_apis.push(RecordApiConfig {
+    name: Some(api_name.to_string()),
+    table_name: Some(table_name.to_string()),
+
+    acl_world: acls.world.into_iter().map(|f| f as i32).collect(),
+    acl_authenticated: acls.authenticated.into_iter().map(|f| f as i32).collect(),
+    conflict_resolution: None,
+    autofill_missing_user_id_columns: Some(false),
+    create_access_rule: access_rules.create,
+    read_access_rule: access_rules.read,
+    update_access_rule: access_rules.update,
+    delete_access_rule: access_rules.delete,
+    schema_access_rule: access_rules.schema,
+    expand,
   });
 
   return state.validate_and_update_config(config, None).await;

@@ -1,15 +1,17 @@
+use std::collections::HashMap;
+
 use axum::{
   extract::{Path, State},
   response::Response,
   Json,
 };
 
-use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::records::files::read_file_into_response;
 use crate::records::json_to_sql::{GetFileQueryBuilder, GetFilesQueryBuilder, SelectQueryBuilder};
-use crate::records::sql_to_json::row_to_json;
+use crate::records::sql_to_json::{row_to_json, JsonError};
 use crate::records::{Permission, RecordError};
+use crate::{app_state::AppState, records::sql_to_json::row_to_json_expand};
 
 /// Read record.
 #[utoipa::path(
@@ -38,23 +40,67 @@ pub async fn read_record_handler(
     .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
     .await?;
 
-  let Some(row) = SelectQueryBuilder::run(
-    &state,
-    api.table_name(),
-    &api.record_pk_column().name,
-    record_id,
-  )
-  .await?
-  else {
-    return Err(RecordError::RecordNotFound);
-  };
+  fn filter(col_name: &str) -> bool {
+    return !col_name.starts_with("_");
+  }
 
-  return Ok(Json(
-    row_to_json(columns, metadata.column_metadata(), &row, |col_name| {
-      !col_name.starts_with("_")
-    })
-    .map_err(|err| RecordError::Internal(err.into()))?,
-  ));
+  if api.expand().is_empty() {
+    let Some(row) = SelectQueryBuilder::run(
+      &state,
+      api.table_name(),
+      &api.record_pk_column().name,
+      record_id,
+    )
+    .await?
+    else {
+      return Err(RecordError::RecordNotFound);
+    };
+
+    return Ok(Json(
+      row_to_json(columns, metadata.column_metadata(), &row, filter)
+        .map_err(|err| RecordError::Internal(err.into()))?,
+    ));
+  } else {
+    let expand = api.expand();
+    let mut rows = SelectQueryBuilder::run_expanded(
+      &state,
+      api.table_name(),
+      &api.record_pk_column().name,
+      record_id,
+      expand,
+    )
+    .await?;
+
+    if rows.is_empty() {
+      return Err(RecordError::RecordNotFound);
+    }
+
+    let foreign_rows = rows.split_off(1);
+
+    let foreign_values = std::iter::zip(expand, foreign_rows)
+      .map(|(col_name, (metadata, row))| {
+        let value = row_to_json(
+          &metadata.schema.columns,
+          metadata.column_metadata(),
+          &row,
+          filter,
+        )?;
+        return Ok((col_name.as_str(), value));
+      })
+      .collect::<Result<HashMap<&str, serde_json::Value>, JsonError>>()
+      .map_err(|err| RecordError::Internal(err.into()))?;
+
+    return Ok(Json(
+      row_to_json_expand(
+        columns,
+        metadata.column_metadata(),
+        &rows[0].1,
+        filter,
+        Some(foreign_values),
+      )
+      .map_err(|err| RecordError::Internal(err.into()))?,
+    ));
+  }
 }
 
 type GetUploadedFileFromRecordPath = Path<(
@@ -89,8 +135,7 @@ pub async fn get_uploaded_file_from_record_handler(
     return Err(RecordError::Forbidden);
   };
 
-  let metadata = api.metadata();
-  let Some(column) = metadata.column_by_name(&column_name) else {
+  let Some(column) = api.metadata().column_by_name(&column_name) else {
     return Err(RecordError::BadRequest("Invalid field/column name"));
   };
 
@@ -143,7 +188,7 @@ pub async fn get_uploaded_files_from_record_handler(
   };
 
   let Some(column) = api.metadata().column_by_name(&column_name) else {
-    return Err(RecordError::RecordNotFound);
+    return Err(RecordError::BadRequest("Invalid field/column name"));
   };
 
   let mut file_uploads = GetFilesQueryBuilder::run(

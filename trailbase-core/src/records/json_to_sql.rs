@@ -9,8 +9,9 @@ use trailbase_sqlite::schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{NamedParams, Params as _, Value};
 
 use crate::config::proto::ConflictResolutionStrategy;
+use crate::records::error::RecordError;
 use crate::records::files::delete_files_in_row;
-use crate::schema::{Column, ColumnDataType};
+use crate::schema::{Column, ColumnDataType, ColumnOption};
 use crate::table_metadata::{self, ColumnMetadata, JsonColumnMetadata, TableMetadata};
 use crate::AppState;
 
@@ -324,6 +325,74 @@ impl SelectQueryBuilder {
         [pk_value],
       )
       .await;
+  }
+
+  pub(crate) async fn run_expanded(
+    state: &AppState,
+    table_name: &str,
+    pk_column: &str,
+    pk_value: Value,
+    expand: &[String],
+  ) -> Result<Vec<(Arc<TableMetadata>, trailbase_sqlite::Row)>, RecordError> {
+    let table_metadata = state.table_metadata();
+    let Some(root_table) = table_metadata.get(table_name) else {
+      return Err(RecordError::ApiRequiresTable);
+    };
+
+    let mut joins = vec![];
+    let mut indexes = vec![(root_table.schema.columns.len(), root_table.clone())];
+
+    for (idx, col_name) in expand.iter().enumerate() {
+      let Some((column, _col_metadata)) = root_table.column_by_name(col_name) else {
+        return Err(RecordError::ApiRequiresTable);
+      };
+
+      let Some(ColumnOption::ForeignKey {
+        foreign_table: foreign_table_name,
+        referred_columns: _,
+        ..
+      }) = column
+        .options
+        .iter()
+        .find_or_first(|o| matches!(o, ColumnOption::ForeignKey { .. }))
+      else {
+        return Err(RecordError::ApiRequiresTable);
+      };
+
+      let Some(foreign_table) = table_metadata.get(foreign_table_name) else {
+        return Err(RecordError::ApiRequiresTable);
+      };
+
+      let Some(foreign_pk_column_idx) = foreign_table.record_pk_column else {
+        return Err(RecordError::ApiRequiresTable);
+      };
+
+      let foreign_pk_column = &foreign_table.schema.columns[foreign_pk_column_idx].name;
+
+      joins.push(format!(
+        r#"LEFT JOIN "{foreign_table_name}" AS F{idx} ON "{col_name}" = F{idx}.{foreign_pk_column}"#
+      ));
+      indexes.push((foreign_table.schema.columns.len(), foreign_table));
+    }
+
+    let sql = format!(
+      r#"SELECT * FROM "{table_name}" AS R {} WHERE R.{pk_column} = $1"#,
+      joins.join(" ")
+    );
+
+    let Some(row) = state.conn().query_row(&sql, [pk_value]).await? else {
+      return Ok(vec![]);
+    };
+
+    let mut curr = row;
+    let mut result = Vec::with_capacity(indexes.len());
+    for (idx, metadata) in indexes {
+      let next = curr.split_off(idx);
+      result.push((metadata, curr));
+      curr = next;
+    }
+
+    return Ok(result);
   }
 }
 

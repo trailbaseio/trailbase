@@ -170,7 +170,7 @@ pub mod proto {
         update_access_rule: Some("_ROW_.user = _USER_.id".to_string()),
         delete_access_rule: Some("_ROW_.user = _USER_.id".to_string()),
         schema_access_rule: None,
-        // expand: vec![],
+        expand: vec![],
       }];
 
       return config;

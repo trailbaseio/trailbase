@@ -200,7 +200,7 @@ impl RecordApi {
           .autofill_missing_user_id_columns
           .unwrap_or(false),
 
-        expand: vec![], // config.expand,
+        expand: config.expand,
 
         // Access control lists.
         acl: [

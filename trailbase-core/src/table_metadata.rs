@@ -173,6 +173,11 @@ impl TableMetadata {
     let index = self.column_index_by_name(key)?;
     return Some((&self.schema.columns[index], &self.metadata[index]));
   }
+
+  #[inline]
+  pub fn column_metadata(&self) -> &Vec<ColumnMetadata> {
+    return &self.metadata;
+  }
 }
 
 /// A data class describing a sqlite View and future, additional meta data useful for TrailBase.
@@ -240,6 +245,11 @@ impl ViewMetadata {
     let cols = self.schema.columns.as_ref()?;
     return Some((&cols[index], &self.metadata[index]));
   }
+
+  #[inline]
+  pub fn column_metadata(&self) -> &Vec<ColumnMetadata> {
+    return &self.metadata;
+  }
 }
 
 pub trait TableOrViewMetadata {
@@ -262,7 +272,7 @@ impl TableOrViewMetadata for TableMetadata {
   }
 
   fn column_metadata(&self) -> &Vec<ColumnMetadata> {
-    return &self.metadata;
+    return self.column_metadata();
   }
 
   fn record_pk_column(&self) -> Option<(usize, &Column)> {
@@ -281,7 +291,7 @@ impl TableOrViewMetadata for ViewMetadata {
   }
 
   fn column_metadata(&self) -> &Vec<ColumnMetadata> {
-    return &self.metadata;
+    return self.column_metadata();
   }
 
   fn record_pk_column(&self) -> Option<(usize, &Column)> {
@@ -854,11 +864,9 @@ pub(crate) fn build_json_schema_recursive(
                 serde_json::json!({
                   "type": "object",
                   "properties": {
-
-                    "id": serde_json::json!({
+                    "id": {
                       "type": column_data_type_to_json_type(pk_column.data_type),
-                    }),
-                    // "id": { "type" : "string" },
+                    },
                     "data": schema,
                   },
                   "required": ["id"],
@@ -929,12 +937,16 @@ pub(crate) fn build_json_schema_recursive(
 
 #[cfg(test)]
 mod tests {
+  use axum::extract::{Json, Path, State};
   use indoc::indoc;
   use serde_json::json;
   use trailbase_sqlite::schema::FileUpload;
 
   use super::*;
   use crate::app_state::*;
+  use crate::config::proto::PermissionFlag;
+  use crate::records::read_record::read_record_handler;
+  use crate::records::*;
   use crate::schema::ColumnOption;
 
   #[tokio::test]
@@ -1119,11 +1131,7 @@ mod tests {
 
     state.table_metadata().invalidate_all().await.unwrap();
 
-    use crate::config::proto::PermissionFlag;
-    use crate::records::read_record::read_record_handler;
-    use crate::records::*;
-
-    add_record_api(
+    add_record_api_expand(
       &state,
       "test_table_api",
       table_name,
@@ -1132,13 +1140,14 @@ mod tests {
         ..Default::default()
       },
       AccessRules::default(),
+      vec!["fk".to_string()],
     )
     .await
     .unwrap();
 
     let test_table_metadata = state.table_metadata().get(table_name).unwrap();
 
-    let (_validator, schema) = build_json_schema_recursive(
+    let (validator, schema) = build_json_schema_recursive(
       table_name,
       &*test_table_metadata,
       JsonSchemaMode::Select,
@@ -1192,7 +1201,6 @@ mod tests {
       .await
       .unwrap();
 
-    use axum::extract::{Json, Path, State};
     let Json(value) = read_record_handler(
       State(state.clone()),
       Path(("test_table_api".to_string(), "1".to_string())),
@@ -1201,17 +1209,110 @@ mod tests {
     .await
     .unwrap();
 
-    {
-      let (validator, _schema) = build_json_schema_recursive(
-        table_name,
-        &*test_table_metadata,
-        JsonSchemaMode::Select,
-        None,
-      )
+    validator.validate(&value).expect(&format!("{value}"));
+
+    assert_eq!(
+      value,
+      json!({
+        "id": 1,
+        "fk":{
+          "id": 1,
+          "data": {
+            "id": 1,
+          },
+        }
+      })
+    );
+  }
+
+  #[tokio::test]
+  async fn test_foo_bar() {
+    let state = test_state(None).await.unwrap();
+
+    let exec = {
+      let conn = state.conn();
+      move |sql: &str| {
+        let conn = conn.clone();
+        let owned = sql.to_owned();
+        return async move { conn.execute(&owned, ()).await };
+      }
+    };
+
+    exec("CREATE TABLE foreign_table0 (id INTEGER PRIMARY KEY) STRICT")
+      .await
+      .unwrap();
+    exec("CREATE TABLE foreign_table1 (id INTEGER PRIMARY KEY) STRICT")
+      .await
       .unwrap();
 
-      validator.validate(&value).expect(&format!("{value}"));
-    }
+    let table_name = "test_table";
+    exec(&format!(
+      r#"CREATE TABLE {table_name} (
+          id        INTEGER PRIMARY KEY,
+          fk0       INTEGER REFERENCES foreign_table0(id),
+          fk0_null  INTEGER REFERENCES foreign_table0(id),
+          fk1       INTEGER REFERENCES foreign_table1(id)
+        ) STRICT"#
+    ))
+    .await
+    .unwrap();
+
+    state.table_metadata().invalidate_all().await.unwrap();
+
+    add_record_api_expand(
+      &state,
+      "test_table_api",
+      table_name,
+      Acls {
+        world: vec![PermissionFlag::Create, PermissionFlag::Read],
+        ..Default::default()
+      },
+      AccessRules::default(),
+      vec!["fk0".to_string(), "fk1".to_string()],
+    )
+    .await
+    .unwrap();
+
+    exec("INSERT INTO foreign_table0 (id) VALUES (1);")
+      .await
+      .unwrap();
+    exec("INSERT INTO foreign_table1 (id) VALUES (1);")
+      .await
+      .unwrap();
+
+    exec(&format!(
+      "INSERT INTO {table_name} (id, fk0, fk0_null, fk1) VALUES (1, 1, NULL, 1);"
+    ))
+    .await
+    .unwrap();
+
+    let Json(value) = read_record_handler(
+      State(state.clone()),
+      Path(("test_table_api".to_string(), "1".to_string())),
+      None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+      value,
+      json!({
+        "id": 1,
+        "fk0": {
+          "id": 1,
+          "data": {
+            "id": 1,
+          },
+        },
+        "fk0_null": serde_json::Value::Null,
+        "fk1": {
+          "id": 1,
+          "data": {
+            "id": 1,
+          },
+        },
+      })
+    );
   }
 
   #[test]
@@ -1273,8 +1374,7 @@ mod tests {
       let table_view = View::from(create_view_statement, &[table.clone()]).unwrap();
 
       assert_eq!(table_view.name, view_name);
-      //FIXME:
-      // assert_eq!(table_view.query, query);
+      assert_eq!(table_view.query, query);
       assert_eq!(table_view.temporary, false);
 
       let view_metadata = ViewMetadata::new(table_view, &[table.clone()]);

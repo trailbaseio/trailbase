@@ -28,8 +28,7 @@ impl FromStr for ValueType {
   }
 }
 
-#[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Column {
   name: String,
   decl_type: Option<ValueType>,
@@ -127,13 +126,19 @@ impl Row {
   pub fn from_row(row: &rusqlite::Row, cols: Option<Arc<Vec<Column>>>) -> rusqlite::Result<Self> {
     let columns = cols.unwrap_or_else(|| Arc::new(columns(row.as_ref())));
 
-    let count = columns.len();
-    let mut values = Vec::<types::Value>::with_capacity(count);
-    for idx in 0..count {
-      values.push(row.get_ref(idx)?.into());
-    }
+    let values = (0..columns.len())
+      .map(|idx| Ok(row.get_ref(idx)?.into()))
+      .collect::<Result<Vec<types::Value>, rusqlite::Error>>()?;
 
     return Ok(Self(values, columns));
+  }
+
+  pub fn split_off(&mut self, at: usize) -> Row {
+    let split_values = self.0.split_off(at);
+    let mut columns = (*self.1).clone();
+    let split_columns = columns.split_off(at);
+    self.1 = Arc::new(columns);
+    return Row(split_values, Arc::new(split_columns));
   }
 
   pub fn get<T>(&self, idx: usize) -> types::FromSqlResult<T>
