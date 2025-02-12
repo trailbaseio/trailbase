@@ -1,3 +1,6 @@
+# Custom cargo settings
+.cargo
+
 # Build artifacts
 target/
 node_modules/
