@@ -1,5 +1,4 @@
 use crate::schema::ColumnOption;
-use itertools::Itertools;
 use std::collections::HashMap;
 
 use base64::prelude::*;
@@ -54,6 +53,13 @@ pub fn row_to_json(
   return row_to_json_expand(columns, column_metadata, row, column_filter, None);
 }
 
+#[inline]
+fn is_foreign_key(options: &[ColumnOption]) -> bool {
+  return options
+    .iter()
+    .any(|o| matches!(o, ColumnOption::ForeignKey { .. }));
+}
+
 /// Serialize SQL row to json.
 pub fn row_to_json_expand(
   columns: &[Column],
@@ -84,39 +90,30 @@ pub fn row_to_json_expand(
         return Some(Ok((column_name.to_string(), serde_json::Value::Null)));
       }
 
-      // TODO: Should IDs be pulled out only if explicitly requested? Implications for schema
-      // migrations.
-      // WARN: this probably brakes admin UI right now.
-      if let Some(ColumnOption::ForeignKey {
-        foreign_table: _,
-        referred_columns: _,
-        ..
-      }) = column
-        .options
-        .iter()
-        .find_or_first(|o| matches!(o, ColumnOption::ForeignKey { .. }))
-      {
-        if let Some(ref foreign_value) = expand.as_ref().and_then(|m| m.get(column_name)) {
-          return match valueref_to_json(value.into()) {
-            Ok(value) => Some(Ok((
+      if let Some(foreign_value) = expand.and_then(|e| e.get(column_name)) {
+        if is_foreign_key(&column.options) {
+          let id = match valueref_to_json(value.into()) {
+            Ok(value) => value,
+            Err(err) => {
+              return Some(Err(err));
+            }
+          };
+
+          return Some(Ok(match foreign_value {
+            serde_json::Value::Null => (
               column_name.to_string(),
               serde_json::json!({
-                "id": value,
-                "data": foreign_value,
+                "id": id,
               }),
-            ))),
-            Err(err) => Some(Err(err)),
-          };
-        } else {
-          return match valueref_to_json(value.into()) {
-            Ok(value) => Some(Ok((
+            ),
+            value => (
               column_name.to_string(),
               serde_json::json!({
-                "id": value,
+                "id": id,
+                "data": value,
               }),
-            ))),
-            Err(err) => Some(Err(err)),
-          };
+            ),
+          }));
         }
       }
 
@@ -150,6 +147,20 @@ pub fn rows_to_json(
   return rows
     .iter()
     .map(|row| row_to_json_expand(columns, column_metadata, row, column_filter, None))
+    .collect::<Result<Vec<_>, JsonError>>();
+}
+
+/// Turns rows into a list of json objects.
+pub fn rows_to_json_expand(
+  columns: &[Column],
+  column_metadata: &[ColumnMetadata],
+  rows: trailbase_sqlite::Rows,
+  column_filter: fn(&str) -> bool,
+  expand: Option<&HashMap<&str, serde_json::Value>>,
+) -> Result<Vec<serde_json::Value>, JsonError> {
+  return rows
+    .iter()
+    .map(|row| row_to_json_expand(columns, column_metadata, row, column_filter, expand))
     .collect::<Result<Vec<_>, JsonError>>();
 }
 

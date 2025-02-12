@@ -72,10 +72,6 @@ impl Rows {
     return self.0.iter();
   }
 
-  pub fn into_iter(self) -> std::vec::IntoIter<Row> {
-    return self.0.into_iter();
-  }
-
   pub fn get(&self, idx: usize) -> Option<&Row> {
     return self.0.get(idx);
   }
@@ -120,6 +116,15 @@ impl Index<usize> for Rows {
 
   fn index(&self, idx: usize) -> &Self::Output {
     return &self.0[idx];
+  }
+}
+
+impl IntoIterator for Rows {
+  type Item = Row;
+  type IntoIter = std::vec::IntoIter<Self::Item>;
+
+  fn into_iter(self) -> Self::IntoIter {
+    return self.0.into_iter();
   }
 }
 

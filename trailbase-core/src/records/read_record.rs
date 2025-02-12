@@ -1,10 +1,10 @@
-use std::collections::HashMap;
-
 use axum::{
-  extract::{Path, State},
+  extract::{Path, Query, State},
   response::Response,
   Json,
 };
+use serde::Deserialize;
+use std::collections::HashMap;
 
 use crate::auth::user::User;
 use crate::records::files::read_file_into_response;
@@ -12,6 +12,11 @@ use crate::records::json_to_sql::{GetFileQueryBuilder, GetFilesQueryBuilder, Sel
 use crate::records::sql_to_json::{row_to_json, JsonError};
 use crate::records::{Permission, RecordError};
 use crate::{app_state::AppState, records::sql_to_json::row_to_json_expand};
+
+#[derive(Debug, Default, Deserialize)]
+pub struct ReadRecordQuery {
+  pub expand: Option<Vec<String>>,
+}
 
 /// Read record.
 #[utoipa::path(
@@ -24,6 +29,7 @@ use crate::{app_state::AppState, records::sql_to_json::row_to_json_expand};
 pub async fn read_record_handler(
   State(state): State<AppState>,
   Path((api_name, record)): Path<(String, String)>,
+  Query(query): Query<ReadRecordQuery>,
   user: Option<User>,
 ) -> Result<Json<serde_json::Value>, RecordError> {
   let Some(api) = state.lookup_record_api(&api_name) else {
@@ -44,53 +50,50 @@ pub async fn read_record_handler(
     return !col_name.starts_with("_");
   }
 
-  let expand = api.expand();
-  if expand.is_empty() {
-    let Some(row) = SelectQueryBuilder::run(
-      &state,
-      api.table_name(),
-      &api.record_pk_column().name,
-      record_id,
-    )
-    .await?
-    else {
-      return Err(RecordError::RecordNotFound);
-    };
+  let config_expand = api.expand();
+  return Ok(Json(match query.expand {
+    Some(query_expand) if !query_expand.is_empty() => {
+      for col_name in &query_expand {
+        if !config_expand.iter().any(|e| e == col_name) {
+          return Err(RecordError::BadRequest("Invalid expansion"));
+        }
+      }
 
-    return Ok(Json(
-      row_to_json(columns, metadata.column_metadata(), &row, filter)
-        .map_err(|err| RecordError::Internal(err.into()))?,
-    ));
-  } else {
-    let mut rows = SelectQueryBuilder::run_expanded(
-      &state,
-      api.table_name(),
-      &api.record_pk_column().name,
-      record_id,
-      expand,
-    )
-    .await?;
+      let mut rows = SelectQueryBuilder::run_expanded(
+        &state,
+        api.table_name(),
+        &api.record_pk_column().name,
+        record_id,
+        &query_expand,
+      )
+      .await?;
 
-    if rows.is_empty() {
-      return Err(RecordError::RecordNotFound);
-    }
+      if rows.is_empty() {
+        return Err(RecordError::RecordNotFound);
+      }
 
-    let foreign_rows = rows.split_off(1);
+      let foreign_rows = rows.split_off(1);
 
-    let foreign_values = std::iter::zip(expand, foreign_rows)
-      .map(|(col_name, (metadata, row))| {
-        let value = row_to_json(
-          &metadata.schema.columns,
-          metadata.column_metadata(),
-          &row,
-          filter,
-        )?;
-        return Ok((col_name.as_str(), value));
-      })
-      .collect::<Result<HashMap<&str, serde_json::Value>, JsonError>>()
-      .map_err(|err| RecordError::Internal(err.into()))?;
+      let mut foreign_values = std::iter::zip(&query_expand, foreign_rows)
+        .map(|(col_name, (metadata, row))| {
+          let value = row_to_json(
+            &metadata.schema.columns,
+            metadata.column_metadata(),
+            &row,
+            filter,
+          )?;
+          return Ok((col_name.as_str(), value));
+        })
+        .collect::<Result<HashMap<&str, serde_json::Value>, JsonError>>()
+        .map_err(|err| RecordError::Internal(err.into()))?;
 
-    return Ok(Json(
+      // Set missing foreign values to null.
+      for col_name in config_expand {
+        foreign_values
+          .entry(col_name)
+          .or_insert(serde_json::Value::Null);
+      }
+
       row_to_json_expand(
         columns,
         metadata.column_metadata(),
@@ -98,9 +101,41 @@ pub async fn read_record_handler(
         filter,
         Some(&foreign_values),
       )
-      .map_err(|err| RecordError::Internal(err.into()))?,
-    ));
-  }
+      .map_err(|err| RecordError::Internal(err.into()))?
+    }
+    _ => {
+      let Some(row) = SelectQueryBuilder::run(
+        &state,
+        api.table_name(),
+        &api.record_pk_column().name,
+        record_id,
+      )
+      .await?
+      else {
+        return Err(RecordError::RecordNotFound);
+      };
+
+      let expand: Option<HashMap<&str, serde_json::Value>> = if config_expand.is_empty() {
+        None
+      } else {
+        Some(
+          config_expand
+            .iter()
+            .map(|col_name| (col_name.as_str(), serde_json::Value::Null))
+            .collect(),
+        )
+      };
+
+      row_to_json_expand(
+        columns,
+        metadata.column_metadata(),
+        &row,
+        filter,
+        expand.as_ref(),
+      )
+      .map_err(|err| RecordError::Internal(err.into()))?
+    }
+  }));
 }
 
 type GetUploadedFileFromRecordPath = Path<(
@@ -319,6 +354,7 @@ mod test {
       assert!(read_record_handler(
         State(state.clone()),
         Path(("messages_api".to_string(), id_to_b64(&message_id),)),
+        Query(ReadRecordQuery::default()),
         None
       )
       .await
@@ -329,6 +365,7 @@ mod test {
         let response = read_record_handler(
           State(state.clone()),
           Path(("messages_api".to_string(), id_to_b64(&message_id))),
+          Query(ReadRecordQuery::default()),
           User::from_auth_token(&state, &user_x_token.auth_token),
         )
         .await;
@@ -340,6 +377,7 @@ mod test {
         let response = read_record_handler(
           State(state.clone()),
           Path(("messages_api".to_string(), id_to_b64(&message_id))),
+          Query(ReadRecordQuery::default()),
           User::from_auth_token(&state, &user_y_token.auth_token),
         )
         .await;
@@ -355,6 +393,7 @@ mod test {
       let response = read_record_handler(
         State(state.clone()),
         Path(("messages_api".to_string(), id_to_b64(&message_id))),
+        Query(ReadRecordQuery::default()),
         User::from_auth_token(&state, &user_y_token.auth_token),
       )
       .await;
@@ -454,8 +493,13 @@ mod test {
 
     let record_path = Path((API_NAME.to_string(), create_response.ids[0].clone()));
 
-    let Json(value) =
-      read_record_handler(State(state.clone()), Path(record_path.clone()), None).await?;
+    let Json(value) = read_record_handler(
+      State(state.clone()),
+      Path(record_path.clone()),
+      Query(ReadRecordQuery::default()),
+      None,
+    )
+    .await?;
 
     let serde_json::Value::Object(map) = value else {
       panic!("Not a map");
@@ -547,7 +591,13 @@ mod test {
 
     let record_path = Path((API_NAME.to_string(), resp.ids[0].clone()));
 
-    let Json(value) = read_record_handler(State(state.clone()), record_path, None).await?;
+    let Json(value) = read_record_handler(
+      State(state.clone()),
+      record_path,
+      Query(ReadRecordQuery::default()),
+      None,
+    )
+    .await?;
 
     let serde_json::Value::Object(map) = value else {
       panic!("Not a map");
@@ -634,6 +684,7 @@ mod test {
     let response = read_record_handler(
       State(state.clone()),
       Path(("messages_api".to_string(), id_to_b64(&message_id))),
+      Query(ReadRecordQuery::default()),
       User::from_auth_token(&state, &user_x_token.auth_token),
     )
     .await;

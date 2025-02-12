@@ -85,6 +85,7 @@ pub struct QueryParseResult {
   pub cursor: Option<[u8; 16]>,
   pub offset: Option<usize>,
   pub count: Option<bool>,
+  pub expand: Option<Vec<String>>,
 
   // Ordering. It's a vector for &order=-col0,+col1,col2
   pub order: Option<Vec<(String, Order)>>,
@@ -129,6 +130,7 @@ pub fn parse_query(query: Option<&str>) -> Result<QueryParseResult, String> {
       "cursor" => result.cursor = b64_to_id(value.as_ref()).ok(),
       "offset" => result.offset = value.parse::<usize>().ok(),
       "count" => result.count = parse_bool(&value),
+      "expand" => result.expand = Some(value.split(",").map(|s| s.to_owned()).collect()),
       "order" => {
         let order: Vec<(String, Order)> = value
           .split(",")

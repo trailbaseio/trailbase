@@ -311,30 +311,26 @@ impl Params {
   }
 }
 
-pub(crate) struct SelectQueryBuilder;
+pub(crate) struct Expansions {
+  /// Contains the indexes on where to cut the resulting Row.
+  ///
+  /// The joins will lead to a row schema that looks something like:
+  ///   (root_table..., foreign_table0..., foreign_table1...).
+  pub indexes: Vec<(usize, Arc<TableMetadata>)>,
+  /// The actual join statements.
+  pub joins: Vec<String>,
 
-impl SelectQueryBuilder {
-  pub(crate) async fn run(
-    state: &AppState,
-    table_name: &str,
-    pk_column: &str,
-    pk_value: Value,
-  ) -> Result<Option<trailbase_sqlite::Row>, trailbase_sqlite::Error> {
-    return state
-      .conn()
-      .query_row(
-        &format!(r#"SELECT * FROM "{table_name}" WHERE "{pk_column}" = $1"#),
-        [pk_value],
-      )
-      .await;
-  }
+  /// Select clauses in case the joins are aliased, i.e. a `prefix` is given.
+  pub selects: Option<Vec<String>>,
+}
 
-  pub(crate) fn build_joins(
+impl Expansions {
+  pub(crate) fn build(
     table_metadata: &TableMetadataCache,
     table_name: &str,
     expand: &[String],
     prefix: Option<&str>,
-  ) -> Result<(Vec<(usize, Arc<TableMetadata>)>, Vec<String>), RecordError> {
+  ) -> Result<Expansions, RecordError> {
     let Some(root_table) = table_metadata.get(table_name) else {
       return Err(RecordError::ApiRequiresTable);
     };
@@ -376,7 +372,40 @@ impl SelectQueryBuilder {
       indexes.push((foreign_table.schema.columns.len(), foreign_table));
     }
 
-    return Ok((indexes, joins));
+    let selects = if prefix.is_none() {
+      None
+    } else {
+      Some(
+        (0..joins.len())
+          .map(|idx| format!("F{idx}.*"))
+          .collect::<Vec<_>>(),
+      )
+    };
+
+    return Ok(Expansions {
+      indexes,
+      joins,
+      selects,
+    });
+  }
+}
+
+pub(crate) struct SelectQueryBuilder;
+
+impl SelectQueryBuilder {
+  pub(crate) async fn run(
+    state: &AppState,
+    table_name: &str,
+    pk_column: &str,
+    pk_value: Value,
+  ) -> Result<Option<trailbase_sqlite::Row>, trailbase_sqlite::Error> {
+    return state
+      .conn()
+      .query_row(
+        &format!(r#"SELECT * FROM "{table_name}" WHERE "{pk_column}" = $1"#),
+        [pk_value],
+      )
+      .await;
   }
 
   pub(crate) async fn run_expanded(
@@ -387,7 +416,8 @@ impl SelectQueryBuilder {
     expand: &[String],
   ) -> Result<Vec<(Arc<TableMetadata>, trailbase_sqlite::Row)>, RecordError> {
     let table_metadata = state.table_metadata();
-    let (indexes, joins) = Self::build_joins(table_metadata, table_name, expand, None)?;
+    let Expansions { indexes, joins, .. } =
+      Expansions::build(table_metadata, table_name, expand, None)?;
 
     let sql = format!(
       r#"SELECT * FROM "{table_name}" AS R {} WHERE R.{pk_column} = $1"#,

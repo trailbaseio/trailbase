@@ -14,8 +14,10 @@ use crate::auth::user::User;
 use crate::listing::{
   build_filter_where_clause, limit_or_default, parse_query, Order, QueryParseResult, WhereClause,
 };
-use crate::records::json_to_sql::SelectQueryBuilder;
-use crate::records::sql_to_json::{row_to_json, row_to_json_expand, rows_to_json, JsonError};
+use crate::records::json_to_sql::Expansions;
+use crate::records::sql_to_json::{
+  row_to_json, row_to_json_expand, rows_to_json_expand, JsonError,
+};
 use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;
 
@@ -66,6 +68,7 @@ pub async fn list_records_handler(
     limit,
     order,
     count,
+    expand: query_expand,
     ..
   } = parse_query(raw_url_query.as_deref()).map_err(|_err| {
     return RecordError::BadRequest("Invalid query");
@@ -122,14 +125,18 @@ pub async fn list_records_handler(
     .join(", ");
 
   let table_name = api.table_name();
-  let expand = api.expand();
-  let (indexes, joins, selects) = if expand.is_empty() {
-    (vec![], vec![], vec![])
-  } else {
-    let (indexes, joins) =
-      SelectQueryBuilder::build_joins(state.table_metadata(), table_name, expand, Some("_ROW_"))?;
-    let selects: Vec<String> = (0..joins.len()).map(|idx| format!("F{idx}.*")).collect();
-    (indexes, joins, selects)
+
+  let (indexes, joins, selects) = match query_expand {
+    Some(ref expand) if !expand.is_empty() => {
+      let Expansions {
+        indexes,
+        joins,
+        selects,
+      } = Expansions::build(state.table_metadata(), table_name, expand, Some("_ROW_"))?;
+
+      (Some(indexes), Some(joins), selects)
+    }
+    _ => (None, None, None),
   };
 
   let get_total_count = count.unwrap_or(false);
@@ -159,8 +166,8 @@ pub async fn list_records_handler(
         {order_clause}
       LIMIT :limit
       "#,
-      selects = selects.iter().map(|s| format!("{s}, ")).join(" "),
-      joins = joins.join(" "),
+      selects = selects.map_or(EMPTY, |v| format!("{}, ", v.join(", "))),
+      joins = joins.map_or(EMPTY, |j| j.join(" ")),
     )
   } else {
     formatdoc!(
@@ -177,8 +184,8 @@ pub async fn list_records_handler(
         {order_clause}
       LIMIT :limit
       "#,
-      selects = selects.iter().map(|s| format!(", {s}")).join(" "),
-      joins = joins.join(" "),
+      selects = selects.map_or(EMPTY, |v| format!(", {}", v.join(", "))),
+      joins = joins.map_or(EMPTY, |j| j.join(" ")),
     )
   };
 
@@ -216,10 +223,8 @@ pub async fn list_records_handler(
     return !col_name.starts_with("_");
   }
 
-  let records = if expand.is_empty() {
-    rows_to_json(columns, metadata.column_metadata(), rows, filter)
-      .map_err(|err| RecordError::Internal(err.into()))?
-  } else {
+  let config_expand = api.expand();
+  let records = if let (Some(query_expand), Some(indexes)) = (query_expand, indexes) {
     rows
       .into_iter()
       .map(|row| {
@@ -233,7 +238,7 @@ pub async fn list_records_handler(
 
         let foreign_rows = result.split_off(1);
 
-        let foreign_values = std::iter::zip(expand, foreign_rows)
+        let mut foreign_values = std::iter::zip(&query_expand, foreign_rows)
           .map(|(col_name, (metadata, row))| {
             let value = row_to_json(
               &metadata.schema.columns,
@@ -246,6 +251,12 @@ pub async fn list_records_handler(
           .collect::<Result<HashMap<&str, serde_json::Value>, JsonError>>()
           .map_err(|err| RecordError::Internal(err.into()))?;
 
+        for col_name in config_expand {
+          foreign_values
+            .entry(col_name)
+            .or_insert(serde_json::Value::Null);
+        }
+
         return row_to_json_expand(
           columns,
           metadata.column_metadata(),
@@ -256,6 +267,26 @@ pub async fn list_records_handler(
         .map_err(|err| RecordError::Internal(err.into()));
       })
       .collect::<Result<Vec<_>, RecordError>>()?
+  } else {
+    let expand: Option<HashMap<&str, serde_json::Value>> = if config_expand.is_empty() {
+      None
+    } else {
+      Some(
+        config_expand
+          .iter()
+          .map(|col_name| (col_name.as_str(), serde_json::Value::Null))
+          .collect(),
+      )
+    };
+
+    rows_to_json_expand(
+      columns,
+      metadata.column_metadata(),
+      rows,
+      filter,
+      expand.as_ref(),
+    )
+    .map_err(|err| RecordError::Internal(err.into()))?
   };
 
   return Ok(Json(ListResponse {
@@ -264,6 +295,8 @@ pub async fn list_records_handler(
     total_count,
   }));
 }
+
+const EMPTY: String = String::new();
 
 #[cfg(test)]
 mod tests {

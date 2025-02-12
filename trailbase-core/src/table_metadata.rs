@@ -937,7 +937,7 @@ pub(crate) fn build_json_schema_recursive(
 
 #[cfg(test)]
 mod tests {
-  use axum::extract::{Json, Path, RawQuery, State};
+  use axum::extract::{Json, Path, Query, RawQuery, State};
   use indoc::indoc;
   use serde_json::json;
   use trailbase_sqlite::schema::FileUpload;
@@ -946,7 +946,7 @@ mod tests {
   use crate::app_state::*;
   use crate::config::proto::PermissionFlag;
   use crate::records::list_records::list_records_handler;
-  use crate::records::read_record::read_record_handler;
+  use crate::records::read_record::{read_record_handler, ReadRecordQuery};
   use crate::records::*;
   use crate::schema::ColumnOption;
 
@@ -1202,6 +1202,29 @@ mod tests {
       .await
       .unwrap();
 
+    {
+      let Json(value) = read_record_handler(
+        State(state.clone()),
+        Path(("test_table_api".to_string(), "1".to_string())),
+        Query(ReadRecordQuery::default()),
+        None,
+      )
+      .await
+      .unwrap();
+
+      validator.validate(&value).expect(&format!("{value}"));
+
+      assert_eq!(
+        json!({
+          "id": 1,
+          "fk":{
+            "id": 1,
+          },
+        }),
+        value
+      );
+    }
+
     let expected = json!({
       "id": 1,
       "fk":{
@@ -1212,23 +1235,28 @@ mod tests {
       },
     });
 
-    let Json(value) = read_record_handler(
-      State(state.clone()),
-      Path(("test_table_api".to_string(), "1".to_string())),
-      None,
-    )
-    .await
-    .unwrap();
+    {
+      let Json(value) = read_record_handler(
+        State(state.clone()),
+        Path(("test_table_api".to_string(), "1".to_string())),
+        Query(ReadRecordQuery {
+          expand: Some(vec!["fk".to_string()]),
+        }),
+        None,
+      )
+      .await
+      .unwrap();
 
-    validator.validate(&value).expect(&format!("{value}"));
+      validator.validate(&value).expect(&format!("{value}"));
 
-    assert_eq!(expected, value);
+      assert_eq!(expected, value);
+    }
 
     {
       let Json(list_response) = list_records_handler(
         State(state.clone()),
         Path("test_table_api".to_string()),
-        RawQuery(None),
+        RawQuery(Some("expand=fk".to_string())),
         None,
       )
       .await
@@ -1241,7 +1269,7 @@ mod tests {
       let Json(list_response) = list_records_handler(
         State(state.clone()),
         Path("test_table_api".to_string()),
-        RawQuery(Some("count=1".to_string())),
+        RawQuery(Some("count=1&expand=fk".to_string())),
         None,
       )
       .await
@@ -1313,42 +1341,117 @@ mod tests {
     .await
     .unwrap();
 
-    let expected = json!({
-      "id": 1,
-      "fk0": {
-        "id": 1,
-        "data": {
-          "id": 1,
-        },
-      },
-      "fk0_null": serde_json::Value::Null,
-      "fk1": {
-        "id": 1,
-        "data": {
-          "id": 1,
-        },
-      },
-    });
-
-    let Json(value) = read_record_handler(
-      State(state.clone()),
-      Path(("test_table_api".to_string(), "1".to_string())),
-      None,
-    )
-    .await
-    .unwrap();
-
-    assert_eq!(expected, value);
-
-    exec(&format!("INSERT INTO {table_name} (id) VALUES (2);"))
+    // Expand none
+    {
+      let Json(value) = read_record_handler(
+        State(state.clone()),
+        Path(("test_table_api".to_string(), "1".to_string())),
+        Query(ReadRecordQuery { expand: None }),
+        None,
+      )
       .await
       .unwrap();
 
-    {
+      let expected = json!({
+        "id": 1,
+        "fk0": { "id": 1 },
+        "fk0_null": serde_json::Value::Null,
+        "fk1": { "id": 1 },
+      });
+
+      assert_eq!(expected, value);
+
       let Json(list_response) = list_records_handler(
         State(state.clone()),
         Path("test_table_api".to_string()),
         RawQuery(None),
+        None,
+      )
+      .await
+      .unwrap();
+
+      assert_eq!(vec![expected], list_response.records);
+    }
+
+    // Expand one
+    {
+      let expected = json!({
+        "id": 1,
+        "fk0": { "id": 1 },
+        "fk0_null": serde_json::Value::Null,
+        "fk1": {
+          "id": 1,
+          "data": {
+            "id": 1,
+          },
+        },
+      });
+
+      let Json(value) = read_record_handler(
+        State(state.clone()),
+        Path(("test_table_api".to_string(), "1".to_string())),
+        Query(ReadRecordQuery {
+          expand: Some(vec!["fk1".to_string()]),
+        }),
+        None,
+      )
+      .await
+      .unwrap();
+
+      assert_eq!(expected, value);
+
+      let Json(list_response) = list_records_handler(
+        State(state.clone()),
+        Path("test_table_api".to_string()),
+        RawQuery(Some("expand=fk1".to_string())),
+        None,
+      )
+      .await
+      .unwrap();
+
+      assert_eq!(vec![expected], list_response.records);
+    }
+
+    // Expand all.
+    {
+      let expected = json!({
+        "id": 1,
+        "fk0": {
+          "id": 1,
+          "data": {
+            "id": 1,
+          },
+        },
+        "fk0_null": serde_json::Value::Null,
+        "fk1": {
+          "id": 1,
+          "data": {
+            "id": 1,
+          },
+        },
+      });
+
+      let Json(value) = read_record_handler(
+        State(state.clone()),
+        Path(("test_table_api".to_string(), "1".to_string())),
+        Query(ReadRecordQuery {
+          expand: Some(vec!["fk0".to_string(), "fk1".to_string()]),
+        }),
+        None,
+      )
+      .await
+      .unwrap();
+
+      assert_eq!(expected, value);
+
+      exec(&format!("INSERT INTO {table_name} (id) VALUES (2);"))
+        .await
+        .unwrap();
+
+      let Json(list_response) = list_records_handler(
+        State(state.clone()),
+        Path("test_table_api".to_string()),
+        RawQuery(Some("expand=fk0,fk1".to_string())),
         None,
       )
       .await
