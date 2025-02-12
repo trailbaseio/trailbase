@@ -14,7 +14,7 @@ crate-type=["cdylib", "rlib"]
 [dependencies]
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
 base64 = { version = "0.22.1", default-features = false }
-jsonschema = { version = "0.28.0", default-features = false }
+jsonschema = { version = "0.29.0", default-features = false }
 lru = { version = "0.13.0", default-features = false }
 maxminddb = "0.24.0"
 parking_lot = { version = "0.12.3", default-features = false }
