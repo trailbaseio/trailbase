@@ -27,9 +27,10 @@ fn init_logger(dev: bool) {
   // typescript to javascript. Since we don't care about source maps and didn't find a better
   // option to mute the errors, turn it off in debug builds.
   #[cfg(debug_assertions)]
-  const DEFAULT: &str = "info,refinery_core=warn,tracing::span=warn,swc_ecma_codegen=off";
+  const DEFAULT: &str =
+    "info,refinery_core=warn,trailbase_refinery_core=warn,tracing::span=warn,swc_ecma_codegen=off";
   #[cfg(not(debug_assertions))]
-  const DEFAULT: &str = "info,refinery_core=warn,tracing::span=warn";
+  const DEFAULT: &str = "info,refinery_core=warn,trailbase_refinery_core=warn,tracing::span=warn";
 
   env_logger::init_from_env(if dev {
     env_logger::Env::new().default_filter_or(format!("{DEFAULT},trailbase=debug"))

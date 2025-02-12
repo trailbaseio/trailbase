@@ -23,4 +23,7 @@ check:
 docker:
 	docker buildx build --platform linux/arm64,linux/amd64 -t trailbase/trailbase .
 
-.PHONY: default format check static docker
+cloc:
+	cloc --not-match-d=".*(/target|/dist|/node_modules|/vendor|.astro|.venv|/traildepot|/flutter|/assets|lock|_benchmark|/bin|/obj).*" .
+
+.PHONY: default format check static docker cloc
