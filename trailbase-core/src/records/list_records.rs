@@ -6,6 +6,7 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use serde::Serialize;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use trailbase_sqlite::Value;
 
 use crate::app_state::AppState;
@@ -13,7 +14,8 @@ use crate::auth::user::User;
 use crate::listing::{
   build_filter_where_clause, limit_or_default, parse_query, Order, QueryParseResult, WhereClause,
 };
-use crate::records::sql_to_json::rows_to_json;
+use crate::records::json_to_sql::SelectQueryBuilder;
+use crate::records::sql_to_json::{row_to_json, row_to_json_expand, rows_to_json, JsonError};
 use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;
 
@@ -21,11 +23,11 @@ use crate::util::uuid_to_b64;
 #[derive(Debug, Serialize)]
 pub struct ListResponse {
   /// Pagination cursor. Round-trip to get the next batch.
-  cursor: Option<String>,
+  pub cursor: Option<String>,
   /// Actual record data for records matching the query.
-  records: Vec<serde_json::Value>,
+  pub records: Vec<serde_json::Value>,
   /// The total number of records matching the query.
-  total_count: Option<usize>,
+  pub total_count: Option<usize>,
 }
 
 /// Lists records matching the given filters
@@ -119,6 +121,17 @@ pub async fn list_records_handler(
     })
     .join(", ");
 
+  let table_name = api.table_name();
+  let expand = api.expand();
+  let (indexes, joins, selects) = if expand.is_empty() {
+    (vec![], vec![], vec![])
+  } else {
+    let (indexes, joins) =
+      SelectQueryBuilder::build_joins(state.table_metadata(), table_name, expand, Some("_ROW_"))?;
+    let selects: Vec<String> = (0..joins.len()).map(|idx| format!("F{idx}.*")).collect();
+    (indexes, joins, selects)
+  };
+
   let get_total_count = count.unwrap_or(false);
   let query = if get_total_count {
     formatdoc!(
@@ -132,25 +145,31 @@ pub async fn list_records_handler(
           {clause}
       )
 
-      SELECT _ROW_.*, total_count._value_
+      SELECT
+        _ROW_.*,
+        {selects}
+        total_count._value_
       FROM
-        total_count,
-        '{table_name}' as _ROW_,
-        (SELECT :__user_id AS id) AS _USER_
+        '{table_name}' as _ROW_ {joins},
+        (SELECT :__user_id AS id) AS _USER_,
+        total_count
       WHERE
         {clause_with_cursor}
       ORDER BY
         {order_clause}
       LIMIT :limit
       "#,
-      table_name = api.table_name()
+      selects = selects.iter().map(|s| format!("{s}, ")).join(" "),
+      joins = joins.join(" "),
     )
   } else {
     formatdoc!(
       r#"
-      SELECT _ROW_.*
+      SELECT
+        _ROW_.*
+        {selects}
       FROM
-        '{table_name}' as _ROW_,
+        '{table_name}' AS _ROW_ {joins},
         (SELECT :__user_id AS id) AS _USER_
       WHERE
         {clause_with_cursor}
@@ -158,7 +177,8 @@ pub async fn list_records_handler(
         {order_clause}
       LIMIT :limit
       "#,
-      table_name = api.table_name()
+      selects = selects.iter().map(|s| format!(", {s}")).join(" "),
+      joins = joins.join(" "),
     )
   };
 
@@ -182,11 +202,9 @@ pub async fn list_records_handler(
   };
 
   let total_count = if get_total_count {
-    let first_row = &rows[0];
-    let last_index = first_row.len() - 1;
-    let rusqlite::types::Value::Integer(ref count) = first_row[last_index] else {
+    let Some(rusqlite::types::Value::Integer(ref count)) = rows[0].last() else {
       return Err(RecordError::Internal(
-        format!("expected count, got {:?}", first_row[last_index]).into(),
+        format!("expected count, got {:?}", rows[0].last()).into(),
       ));
     };
     Some(*count as usize)
@@ -194,11 +212,51 @@ pub async fn list_records_handler(
     None
   };
 
-  let records = rows_to_json(columns, metadata.column_metadata(), rows, |col_name| {
-    !col_name.starts_with("_")
-  })
-  .await
-  .map_err(|err| RecordError::Internal(err.into()))?;
+  fn filter(col_name: &str) -> bool {
+    return !col_name.starts_with("_");
+  }
+
+  let records = if expand.is_empty() {
+    rows_to_json(columns, metadata.column_metadata(), rows, filter)
+      .map_err(|err| RecordError::Internal(err.into()))?
+  } else {
+    rows
+      .into_iter()
+      .map(|row| {
+        let mut curr = row;
+        let mut result = Vec::with_capacity(indexes.len());
+        for (idx, metadata) in &indexes {
+          let next = curr.split_off(*idx);
+          result.push((metadata, curr));
+          curr = next;
+        }
+
+        let foreign_rows = result.split_off(1);
+
+        let foreign_values = std::iter::zip(expand, foreign_rows)
+          .map(|(col_name, (metadata, row))| {
+            let value = row_to_json(
+              &metadata.schema.columns,
+              metadata.column_metadata(),
+              &row,
+              filter,
+            )?;
+            return Ok((col_name.as_str(), value));
+          })
+          .collect::<Result<HashMap<&str, serde_json::Value>, JsonError>>()
+          .map_err(|err| RecordError::Internal(err.into()))?;
+
+        return row_to_json_expand(
+          columns,
+          metadata.column_metadata(),
+          &result[0].1,
+          filter,
+          Some(&foreign_values),
+        )
+        .map_err(|err| RecordError::Internal(err.into()));
+      })
+      .collect::<Result<Vec<_>, RecordError>>()?
+  };
 
   return Ok(Json(ListResponse {
     cursor,

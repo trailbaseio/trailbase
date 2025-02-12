@@ -12,7 +12,9 @@ use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
 use crate::records::files::delete_files_in_row;
 use crate::schema::{Column, ColumnDataType, ColumnOption};
-use crate::table_metadata::{self, ColumnMetadata, JsonColumnMetadata, TableMetadata};
+use crate::table_metadata::{
+  self, ColumnMetadata, JsonColumnMetadata, TableMetadata, TableMetadataCache,
+};
 use crate::AppState;
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -327,14 +329,12 @@ impl SelectQueryBuilder {
       .await;
   }
 
-  pub(crate) async fn run_expanded(
-    state: &AppState,
+  pub(crate) fn build_joins(
+    table_metadata: &TableMetadataCache,
     table_name: &str,
-    pk_column: &str,
-    pk_value: Value,
     expand: &[String],
-  ) -> Result<Vec<(Arc<TableMetadata>, trailbase_sqlite::Row)>, RecordError> {
-    let table_metadata = state.table_metadata();
+    prefix: Option<&str>,
+  ) -> Result<(Vec<(usize, Arc<TableMetadata>)>, Vec<String>), RecordError> {
     let Some(root_table) = table_metadata.get(table_name) else {
       return Err(RecordError::ApiRequiresTable);
     };
@@ -370,10 +370,24 @@ impl SelectQueryBuilder {
       let foreign_pk_column = &foreign_table.schema.columns[foreign_pk_column_idx].name;
 
       joins.push(format!(
-        r#"LEFT JOIN "{foreign_table_name}" AS F{idx} ON "{col_name}" = F{idx}.{foreign_pk_column}"#
+        r#"LEFT JOIN "{foreign_table_name}" AS F{idx} ON {col_name} = F{idx}.{foreign_pk_column}"#,
+        col_name = prefix.map_or_else(|| col_name.clone(), |p| format!("{p}.{col_name}")),
       ));
       indexes.push((foreign_table.schema.columns.len(), foreign_table));
     }
+
+    return Ok((indexes, joins));
+  }
+
+  pub(crate) async fn run_expanded(
+    state: &AppState,
+    table_name: &str,
+    pk_column: &str,
+    pk_value: Value,
+    expand: &[String],
+  ) -> Result<Vec<(Arc<TableMetadata>, trailbase_sqlite::Row)>, RecordError> {
+    let table_metadata = state.table_metadata();
+    let (indexes, joins) = Self::build_joins(table_metadata, table_name, expand, None)?;
 
     let sql = format!(
       r#"SELECT * FROM "{table_name}" AS R {} WHERE R.{pk_column} = $1"#,

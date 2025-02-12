@@ -44,7 +44,8 @@ pub async fn read_record_handler(
     return !col_name.starts_with("_");
   }
 
-  if api.expand().is_empty() {
+  let expand = api.expand();
+  if expand.is_empty() {
     let Some(row) = SelectQueryBuilder::run(
       &state,
       api.table_name(),
@@ -61,7 +62,6 @@ pub async fn read_record_handler(
         .map_err(|err| RecordError::Internal(err.into()))?,
     ));
   } else {
-    let expand = api.expand();
     let mut rows = SelectQueryBuilder::run_expanded(
       &state,
       api.table_name(),
@@ -96,7 +96,7 @@ pub async fn read_record_handler(
         metadata.column_metadata(),
         &rows[0].1,
         filter,
-        Some(foreign_values),
+        Some(&foreign_values),
       )
       .map_err(|err| RecordError::Internal(err.into()))?,
     ));

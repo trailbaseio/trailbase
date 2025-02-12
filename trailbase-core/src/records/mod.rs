@@ -10,7 +10,7 @@ mod error;
 pub(crate) mod files;
 mod json_schema;
 pub mod json_to_sql;
-mod list_records;
+pub(crate) mod list_records;
 pub(crate) mod read_record;
 mod record_api;
 pub mod sql_to_json;

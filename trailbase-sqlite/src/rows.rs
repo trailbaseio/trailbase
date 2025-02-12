@@ -72,6 +72,10 @@ impl Rows {
     return self.0.iter();
   }
 
+  pub fn into_iter(self) -> std::vec::IntoIter<Row> {
+    return self.0.into_iter();
+  }
+
   pub fn get(&self, idx: usize) -> Option<&Row> {
     return self.0.get(idx);
   }
@@ -162,6 +166,10 @@ impl Row {
 
   pub fn is_empty(&self) -> bool {
     return self.0.is_empty();
+  }
+
+  pub fn last(&self) -> Option<&types::Value> {
+    return self.0.last();
   }
 
   pub fn column_count(&self) -> usize {
