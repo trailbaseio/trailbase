@@ -66,7 +66,7 @@ pub fn row_to_json_expand(
   column_metadata: &[ColumnMetadata],
   row: &trailbase_sqlite::Row,
   column_filter: fn(&str) -> bool,
-  expand: Option<&HashMap<&str, serde_json::Value>>,
+  expand: Option<&HashMap<String, serde_json::Value>>,
 ) -> Result<serde_json::Value, JsonError> {
   let map = (0..row.column_count())
     .filter_map(|i| {
@@ -156,7 +156,7 @@ pub fn rows_to_json_expand(
   column_metadata: &[ColumnMetadata],
   rows: trailbase_sqlite::Rows,
   column_filter: fn(&str) -> bool,
-  expand: Option<&HashMap<&str, serde_json::Value>>,
+  expand: Option<&HashMap<String, serde_json::Value>>,
 ) -> Result<Vec<serde_json::Value>, JsonError> {
   return rows
     .iter()

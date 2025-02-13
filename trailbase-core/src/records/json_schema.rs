@@ -34,13 +34,13 @@ pub async fn json_schema_handler(
     .await?;
 
   let mode = request.mode.unwrap_or(JsonSchemaMode::Insert);
-  let expand = api.expand();
 
-  match (expand.len(), mode) {
-    (n, JsonSchemaMode::Select) if n > 0 => {
+  match (api.expand(), mode) {
+    (Some(config_expand), JsonSchemaMode::Select) => {
+      let foreign_key_columns = config_expand.keys().map(|k| k.as_str()).collect::<Vec<_>>();
       let expand = Expand {
         table_metadata: state.table_metadata(),
-        foreign_key_columns: expand,
+        foreign_key_columns,
       };
       let (_schema, json) =
         build_json_schema_recursive(api.table_name(), api.metadata(), mode, Some(expand))

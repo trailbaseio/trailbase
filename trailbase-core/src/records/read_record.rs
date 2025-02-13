@@ -4,12 +4,11 @@ use axum::{
   Json,
 };
 use serde::Deserialize;
-use std::collections::HashMap;
 
 use crate::auth::user::User;
 use crate::records::files::read_file_into_response;
 use crate::records::json_to_sql::{GetFileQueryBuilder, GetFilesQueryBuilder, SelectQueryBuilder};
-use crate::records::sql_to_json::{row_to_json, JsonError};
+use crate::records::sql_to_json::row_to_json;
 use crate::records::{Permission, RecordError};
 use crate::{app_state::AppState, records::sql_to_json::row_to_json_expand};
 
@@ -50,11 +49,14 @@ pub async fn read_record_handler(
     return !col_name.starts_with("_");
   }
 
-  let config_expand = api.expand();
   return Ok(Json(match query.expand {
     Some(query_expand) if !query_expand.is_empty() => {
+      let Some(mut expand) = api.expand().cloned() else {
+        return Err(RecordError::BadRequest("Invalid expansion"));
+      };
+
       for col_name in &query_expand {
-        if !config_expand.iter().any(|e| e == col_name) {
+        if !query_expand.contains(col_name) {
           return Err(RecordError::BadRequest("Invalid expansion"));
         }
       }
@@ -73,25 +75,17 @@ pub async fn read_record_handler(
       }
 
       let foreign_rows = rows.split_off(1);
-
-      let mut foreign_values = std::iter::zip(&query_expand, foreign_rows)
-        .map(|(col_name, (metadata, row))| {
-          let value = row_to_json(
-            &metadata.schema.columns,
-            metadata.column_metadata(),
-            &row,
-            filter,
-          )?;
-          return Ok((col_name.as_str(), value));
-        })
-        .collect::<Result<HashMap<&str, serde_json::Value>, JsonError>>()
+      for (col_name, (metadata, row)) in std::iter::zip(query_expand, foreign_rows) {
+        let foreign_value = row_to_json(
+          &metadata.schema.columns,
+          metadata.column_metadata(),
+          &row,
+          filter,
+        )
         .map_err(|err| RecordError::Internal(err.into()))?;
 
-      // Set missing foreign values to null.
-      for col_name in config_expand {
-        foreign_values
-          .entry(col_name)
-          .or_insert(serde_json::Value::Null);
+        let result = expand.insert(col_name, foreign_value);
+        assert!(result.is_some());
       }
 
       row_to_json_expand(
@@ -99,7 +93,7 @@ pub async fn read_record_handler(
         metadata.column_metadata(),
         &rows[0].1,
         filter,
-        Some(&foreign_values),
+        Some(&expand),
       )
       .map_err(|err| RecordError::Internal(err.into()))?
     }
@@ -115,23 +109,12 @@ pub async fn read_record_handler(
         return Err(RecordError::RecordNotFound);
       };
 
-      let expand: Option<HashMap<&str, serde_json::Value>> = if config_expand.is_empty() {
-        None
-      } else {
-        Some(
-          config_expand
-            .iter()
-            .map(|col_name| (col_name.as_str(), serde_json::Value::Null))
-            .collect(),
-        )
-      };
-
       row_to_json_expand(
         columns,
         metadata.column_metadata(),
         &row,
         filter,
-        expand.as_ref(),
+        api.expand(),
       )
       .map_err(|err| RecordError::Internal(err.into()))?
     }

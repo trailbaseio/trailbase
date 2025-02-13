@@ -6,7 +6,6 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use serde::Serialize;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use trailbase_sqlite::Value;
 
 use crate::app_state::AppState;
@@ -15,9 +14,7 @@ use crate::listing::{
   build_filter_where_clause, limit_or_default, parse_query, Order, QueryParseResult, WhereClause,
 };
 use crate::records::json_to_sql::Expansions;
-use crate::records::sql_to_json::{
-  row_to_json, row_to_json_expand, rows_to_json_expand, JsonError,
-};
+use crate::records::sql_to_json::{row_to_json, row_to_json_expand, rows_to_json_expand};
 use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;
 
@@ -128,6 +125,16 @@ pub async fn list_records_handler(
 
   let (indexes, joins, selects) = match query_expand {
     Some(ref expand) if !expand.is_empty() => {
+      let Some(config_expand) = api.expand() else {
+        return Err(RecordError::BadRequest("Invalid expansion"));
+      };
+
+      for col_name in expand {
+        if !config_expand.contains_key(col_name) {
+          return Err(RecordError::BadRequest("Invalid expansion"));
+        }
+      }
+
       let Expansions {
         indexes,
         joins,
@@ -223,11 +230,16 @@ pub async fn list_records_handler(
     return !col_name.starts_with("_");
   }
 
-  let config_expand = api.expand();
   let records = if let (Some(query_expand), Some(indexes)) = (query_expand, indexes) {
     rows
       .into_iter()
       .map(|row| {
+        let Some(mut expand) = api.expand().cloned() else {
+          return Err(RecordError::Internal(
+            "Expansion config must be some".into(),
+          ));
+        };
+
         let mut curr = row;
         let mut result = Vec::with_capacity(indexes.len());
         for (idx, metadata) in &indexes {
@@ -237,24 +249,17 @@ pub async fn list_records_handler(
         }
 
         let foreign_rows = result.split_off(1);
-
-        let mut foreign_values = std::iter::zip(&query_expand, foreign_rows)
-          .map(|(col_name, (metadata, row))| {
-            let value = row_to_json(
-              &metadata.schema.columns,
-              metadata.column_metadata(),
-              &row,
-              filter,
-            )?;
-            return Ok((col_name.as_str(), value));
-          })
-          .collect::<Result<HashMap<&str, serde_json::Value>, JsonError>>()
+        for (col_name, (metadata, row)) in std::iter::zip(&query_expand, foreign_rows) {
+          let foreign_value = row_to_json(
+            &metadata.schema.columns,
+            metadata.column_metadata(),
+            &row,
+            filter,
+          )
           .map_err(|err| RecordError::Internal(err.into()))?;
 
-        for col_name in config_expand {
-          foreign_values
-            .entry(col_name)
-            .or_insert(serde_json::Value::Null);
+          let result = expand.insert(col_name.to_string(), foreign_value);
+          assert!(result.is_some());
         }
 
         return row_to_json_expand(
@@ -262,29 +267,18 @@ pub async fn list_records_handler(
           metadata.column_metadata(),
           &result[0].1,
           filter,
-          Some(&foreign_values),
+          Some(&expand),
         )
         .map_err(|err| RecordError::Internal(err.into()));
       })
       .collect::<Result<Vec<_>, RecordError>>()?
   } else {
-    let expand: Option<HashMap<&str, serde_json::Value>> = if config_expand.is_empty() {
-      None
-    } else {
-      Some(
-        config_expand
-          .iter()
-          .map(|col_name| (col_name.as_str(), serde_json::Value::Null))
-          .collect(),
-      )
-    };
-
     rows_to_json_expand(
       columns,
       metadata.column_metadata(),
       rows,
       filter,
-      expand.as_ref(),
+      api.expand(),
     )
     .map_err(|err| RecordError::Internal(err.into()))?
   };

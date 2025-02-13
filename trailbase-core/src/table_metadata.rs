@@ -774,7 +774,7 @@ pub fn build_json_schema(
 
 pub(crate) struct Expand<'a> {
   pub(crate) table_metadata: &'a TableMetadataCache,
-  pub(crate) foreign_key_columns: &'a [String],
+  pub(crate) foreign_key_columns: Vec<&'a str>,
 }
 
 /// NOTE: Foreign keys can only reference tables not view, so the inline schemas don't need to be
@@ -842,7 +842,7 @@ pub(crate) fn build_json_schema_recursive(
           ..
         } => {
           if let (Some(expand), JsonSchemaMode::Select) = (&expand, mode) {
-            for metadata in expand.foreign_key_columns {
+            for metadata in &expand.foreign_key_columns {
               if metadata != foreign_table {
                 continue;
               }
@@ -1154,7 +1154,7 @@ mod tests {
       JsonSchemaMode::Select,
       Some(Expand {
         table_metadata: state.table_metadata(),
-        foreign_key_columns: &["foreign_table".to_string()],
+        foreign_key_columns: vec!["foreign_table"],
       }),
     )
     .unwrap();
@@ -1202,7 +1202,38 @@ mod tests {
       .await
       .unwrap();
 
+    // Expansion of invalid column.
     {
+      let response = read_record_handler(
+        State(state.clone()),
+        Path(("test_table_api".to_string(), "1".to_string())),
+        Query(ReadRecordQuery {
+          expand: Some(vec!["UNKNOWN".to_string()]),
+        }),
+        None,
+      )
+      .await;
+
+      assert!(response.is_err());
+
+      let list_response = list_records_handler(
+        State(state.clone()),
+        Path("test_table_api".to_string()),
+        RawQuery(Some("expand=UNKNOWN".to_string())),
+        None,
+      )
+      .await;
+
+      assert!(list_response.is_err());
+    }
+
+    // Not expanded
+    {
+      let expected = json!({
+        "id": 1,
+        "fk":{ "id": 1 },
+      });
+
       let Json(value) = read_record_handler(
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
@@ -1214,15 +1245,19 @@ mod tests {
 
       validator.validate(&value).expect(&format!("{value}"));
 
-      assert_eq!(
-        json!({
-          "id": 1,
-          "fk":{
-            "id": 1,
-          },
-        }),
-        value
-      );
+      assert_eq!(expected, value);
+
+      let Json(list_response) = list_records_handler(
+        State(state.clone()),
+        Path("test_table_api".to_string()),
+        RawQuery(None),
+        None,
+      )
+      .await
+      .unwrap();
+
+      assert_eq!(vec![expected.clone()], list_response.records);
+      validator.validate(&list_response.records[0]).unwrap();
     }
 
     let expected = json!({
@@ -1263,6 +1298,7 @@ mod tests {
       .unwrap();
 
       assert_eq!(vec![expected.clone()], list_response.records);
+      validator.validate(&list_response.records[0]).unwrap();
     }
 
     {
@@ -1277,6 +1313,7 @@ mod tests {
 
       assert_eq!(Some(1), list_response.total_count);
       assert_eq!(vec![expected], list_response.records);
+      validator.validate(&list_response.records[0]).unwrap();
     }
   }
 

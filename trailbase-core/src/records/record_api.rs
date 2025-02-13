@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use log::*;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::sync::Arc;
 use trailbase_sqlite::{NamedParamRef, NamedParams, NamedParamsRef, Params as _, Value};
 
@@ -61,7 +62,7 @@ struct RecordApiState {
   insert_conflict_resolution_strategy: Option<ConflictResolutionStrategy>,
   insert_autofill_missing_user_id_columns: bool,
 
-  expand: Vec<String>,
+  expand: Option<HashMap<String, serde_json::Value>>,
 
   create_access_rule: Option<String>,
   create_access_query: Option<String>,
@@ -200,7 +201,17 @@ impl RecordApi {
           .autofill_missing_user_id_columns
           .unwrap_or(false),
 
-        expand: config.expand,
+        expand: if config.expand.is_empty() {
+          None
+        } else {
+          Some(
+            config
+              .expand
+              .iter()
+              .map(|col_name| (col_name.to_string(), serde_json::Value::Null))
+              .collect(),
+          )
+        },
 
         // Access control lists.
         acl: [
@@ -244,8 +255,8 @@ impl RecordApi {
   }
 
   #[inline]
-  pub fn expand(&self) -> &[String] {
-    return &self.state.expand;
+  pub(crate) fn expand(&self) -> Option<&HashMap<String, serde_json::Value>> {
+    return self.state.expand.as_ref();
   }
 
   pub fn table_metadata(&self) -> Option<&TableMetadata> {
