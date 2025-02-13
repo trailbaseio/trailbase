@@ -4946,7 +4946,9 @@ checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
 
 [[package]]
 name = "rustc_tools_util"
-version = "0.4.0"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3b75158011a63889ba12084cf1224baad7bcad50f6ee7c842f772b74aa148ed"
 
 [[package]]
 name = "rustc_version"
