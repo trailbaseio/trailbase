@@ -1,4 +1,4 @@
-import { For, createSignal } from "solid-js";
+import { For, JSXElement, createSignal } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { TbInfoCircle } from "solid-icons/tb";
 
@@ -28,14 +28,14 @@ import {
   RecordApiConfig,
 } from "@proto/config";
 import { SheetContainer } from "@/components/SafeSheet";
-import type { Table, View } from "@/lib/bindings";
+import type { ForeignKey, Table, View } from "@/lib/bindings";
 import {
   buildTextFormField,
   buildOptionalTextFormField,
 } from "@/components/FormFields";
 import { createConfigQuery, setConfig } from "@/lib/config";
 import { parseSql } from "@/lib/parse";
-import { tableType } from "@/lib/schema";
+import { tableType, getForeignKey } from "@/lib/schema";
 
 const tablePermissions = {
   Create: PermissionFlag.CREATE,
@@ -121,19 +121,19 @@ interface AccessRule {
 const tableAccessRules: AccessRule[] = [
   {
     field: "readAccessRule",
-    label: "Read access:",
+    label: "Read Access:",
     description:
       'Row- and request-level read access (_user_, _row_, _req_): If the table has an "owner"\'s column containing binary user ids, access could be rstricted to the owner by setting \'_row_.owner = _user_\' here. Or if the table as a foreign key to a "group" and a relationship defined in a "membership" table: \'(SELECT 1 FROM membership WHERE group = _row_.group AND user = _user_)\'',
   },
   {
     field: "createAccessRule",
-    label: "Create access:",
+    label: "Create Access:",
     description:
       "Request-level create access validation base on _USER_, _REQ_:",
   },
   {
     field: "updateAccessRule",
-    label: "Update access",
+    label: "Update Access",
     description:
       "Row- and request level update access based on _USER_, _ROW_, _REQ_:",
   },
@@ -235,6 +235,22 @@ function findRecordApi(
   return undefined;
 }
 
+function StyledHoverCard(props: { children: JSXElement }) {
+  return (
+    <HoverCard>
+      <HoverCardTrigger
+        class="size-[32px]"
+        as={Button<"button">}
+        variant="link"
+      >
+        <TbInfoCircle />
+      </HoverCardTrigger>
+
+      <HoverCardContent class="w-80">{props.children}</HoverCardContent>
+    </HoverCard>
+  );
+}
+
 export function RecordApiSettingsForm(props: {
   close: () => void;
   markDirty: () => void;
@@ -243,6 +259,10 @@ export function RecordApiSettingsForm(props: {
   const config = createConfigQuery();
 
   const type = () => tableType(props.schema);
+  const foreignKeys = () =>
+    props.schema.columns
+      ?.map((c) => [c.name, getForeignKey(c.options)])
+      .filter((k) => k[1]) as [string, ForeignKey][];
 
   // FIXME: We don't currently handle the "multiple APIs for a single table" case.
   const currentApi = () =>
@@ -256,6 +276,7 @@ export function RecordApiSettingsForm(props: {
         tableName: tableName,
         aclWorld: [],
         aclAuthenticated: [],
+        expand: [],
       },
       onSubmit: async ({ value }: { value: RecordApiConfig }) => {
         console.debug("Add record api config:", value);
@@ -312,7 +333,19 @@ export function RecordApiSettingsForm(props: {
                 }}
               >
                 {buildTextFormField({
-                  label: () => <div class={labelWidth}>API name</div>,
+                  label: () => (
+                    <div class={labelWidth}>
+                      <Label>API Name</Label>
+                      <StyledHoverCard>
+                        <div class="flex justify-between space-x-4">
+                          <div class="space-y-1 text-sm">
+                            Public name used to access the API via{" "}
+                            <div class="font-mono">/api/records/v1/name</div>
+                          </div>
+                        </div>
+                      </StyledHoverCard>
+                    </div>
+                  ),
                 })}
               </form.Field>
 
@@ -320,8 +353,18 @@ export function RecordApiSettingsForm(props: {
                 <>
                   <form.Field name="conflictResolution">
                     {(field) => (
-                      <div class="flex items-center gap-2">
-                        <Label>Conflict resolution</Label>
+                      <div class="flex items-center justify-between gap-2">
+                        <div>
+                          <Label>Conflict Resolution</Label>
+                          <StyledHoverCard>
+                            <div class="flex justify-between space-x-4">
+                              <div class="space-y-1 text-sm">
+                                SQLite conflict resolution strategy to employ on
+                                record collision.
+                              </div>
+                            </div>
+                          </StyledHoverCard>
+                        </div>
 
                         <Select<ConflictResolutionStrategy>
                           multiple={false}
@@ -367,49 +410,32 @@ export function RecordApiSettingsForm(props: {
                   <form.Field
                     name="autofillMissingUserIdColumns"
                     children={(field) => {
-                      const HCard = () => (
-                        <HoverCard>
-                          <HoverCardTrigger
-                            class="size-[32px]"
-                            as={Button<"button">}
-                            variant="link"
-                          >
-                            <TbInfoCircle />
-                          </HoverCardTrigger>
-
-                          <HoverCardContent class="w-80">
-                            <div class="flex justify-between space-x-4">
-                              <div class="space-y-1">
-                                <h4 class="text-sm font-semibold">
-                                  User Id Auto-Fill
-                                </h4>
-
-                                <p class="text-sm">
-                                  When enabled, user id columns that are not
-                                  provided as part of a CREATE request will be
-                                  auto-filled with the id of the calling user
-                                  when authenticated.
-                                </p>
-
-                                <p class="text-sm">
-                                  For most use-cases this setting should stay
-                                  turned-off and user ids should be provided
-                                  explicitly by the client. This setting can be
-                                  useful in case the client cannot run any logic
-                                  like JS-less HTML forms.
-                                </p>
-                              </div>
-                            </div>
-                          </HoverCardContent>
-                        </HoverCard>
-                      );
                       // TODO: Should be buildBoolFormField?
                       const v = () => field().state.value;
                       return (
-                        <div class="flex items-center gap-2 mt-2">
-                          <Label>Autofill absent user ids</Label>
+                        <div class="flex items-center justify-between gap-2 mt-2">
+                          <div>
+                            <Label>Infer Missing User</Label>
+                            <StyledHoverCard>
+                              <div class="flex justify-between space-x-4">
+                                <div class="space-y-1">
+                                  <p class="text-sm">
+                                    When enabled, user id values not provided as
+                                    part of a CREATE request will be auto-filled
+                                    using the calling user's authentication
+                                    context.
+                                  </p>
 
-                          <HCard />
+                                  <p class="text-sm">
+                                    For most use-cases this setting should be
+                                    off with user ids being provided explicitly
+                                    by the client. This can be useful for static
+                                    HTML forms.
+                                  </p>
+                                </div>
+                              </div>
+                            </StyledHoverCard>
+                          </div>
 
                           <Checkbox
                             checked={v()}
@@ -419,6 +445,14 @@ export function RecordApiSettingsForm(props: {
                       );
                     }}
                   />
+
+                  <form.Field name="expand">
+                    {(_field) => (
+                      <For each={foreignKeys()}>
+                        {([_colName, _item]) => <></>}
+                      </For>
+                    )}
+                  </form.Field>
                 </>
               )}
             </CardContent>

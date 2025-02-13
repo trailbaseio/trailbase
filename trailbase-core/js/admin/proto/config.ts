@@ -308,7 +308,11 @@ export interface RecordApiConfig {
   readAccessRule?: string | undefined;
   updateAccessRule?: string | undefined;
   deleteAccessRule?: string | undefined;
-  schemaAccessRule?: string | undefined;
+  schemaAccessRule?:
+    | string
+    | undefined;
+  /** A list of foreign key columns that can be expanded on read/list. */
+  expand: string[];
 }
 
 export interface JsonSchemaConfig {
@@ -1255,6 +1259,7 @@ function createBaseRecordApiConfig(): RecordApiConfig {
     updateAccessRule: "",
     deleteAccessRule: "",
     schemaAccessRule: "",
+    expand: [],
   };
 }
 
@@ -1296,6 +1301,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     }
     if (message.schemaAccessRule !== undefined && message.schemaAccessRule !== "") {
       writer.uint32(122).string(message.schemaAccessRule);
+    }
+    for (const v of message.expand) {
+      writer.uint32(170).string(v!);
     }
     return writer;
   },
@@ -1415,6 +1423,14 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
           message.schemaAccessRule = reader.string();
           continue;
         }
+        case 21: {
+          if (tag !== 170) {
+            break;
+          }
+
+          message.expand.push(reader.string());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1445,6 +1461,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
       updateAccessRule: isSet(object.updateAccessRule) ? globalThis.String(object.updateAccessRule) : "",
       deleteAccessRule: isSet(object.deleteAccessRule) ? globalThis.String(object.deleteAccessRule) : "",
       schemaAccessRule: isSet(object.schemaAccessRule) ? globalThis.String(object.schemaAccessRule) : "",
+      expand: globalThis.Array.isArray(object?.expand)
+        ? object.expand.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -1483,6 +1502,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     if (message.schemaAccessRule !== undefined && message.schemaAccessRule !== "") {
       obj.schemaAccessRule = message.schemaAccessRule;
     }
+    if (message.expand?.length) {
+      obj.expand = message.expand;
+    }
     return obj;
   },
 
@@ -1502,6 +1524,7 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     message.updateAccessRule = object.updateAccessRule ?? "";
     message.deleteAccessRule = object.deleteAccessRule ?? "";
     message.schemaAccessRule = object.schemaAccessRule ?? "";
+    message.expand = object.expand?.map((e) => e) || [];
     return message;
   },
 };
