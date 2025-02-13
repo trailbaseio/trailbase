@@ -340,7 +340,7 @@ export function RecordApiSettingsForm(props: {
                         <div class="flex justify-between space-x-4">
                           <div class="space-y-1 text-sm">
                             Public name used to access the API via{" "}
-                            <div class="font-mono">/api/records/v1/name</div>
+                            <span class="font-mono">/api/records/v1/name</span>.
                           </div>
                         </div>
                       </StyledHoverCard>
@@ -447,11 +447,62 @@ export function RecordApiSettingsForm(props: {
                   />
 
                   <form.Field name="expand">
-                    {(_field) => (
-                      <For each={foreignKeys()}>
-                        {([_colName, _item]) => <></>}
-                      </For>
-                    )}
+                    {(field) => {
+                      const has = (colName: string) =>
+                        new Set([...field().state.value]).has(colName);
+                      const add = (colName: string) =>
+                        field().handleChange(
+                          Array.from(
+                            new Set([colName, ...field().state.value]),
+                          ),
+                        );
+                      const remove = (colName: string) => {
+                        const s = new Set(field().state.value);
+                        s.delete(colName);
+                        field().handleChange(Array.from(s));
+                      };
+
+                      return (
+                        <For each={foreignKeys()}>
+                          {([colName, item]) => {
+                            return (
+                              <div class="flex items-center justify-between gap-2 mt-2">
+                                <div>
+                                  <Label>
+                                    Expand Column ({colName} {"=>"}{" "}
+                                    {item.foreign_table})
+                                  </Label>
+                                  <StyledHoverCard>
+                                    <div class="flex justify-between space-x-4">
+                                      <div class="space-y-1 text-sm">
+                                        Expanding a foreign key column, changes
+                                        the APIs field schema from simply being
+                                        the foreign key, to
+                                        <span class="font-mono">{`{ id: any, data?: object }`}</span>
+                                        . Then the respective foreign record can
+                                        be included during read/list by
+                                        specifying
+                                        <span class="font-mono">
+                                          ?expand={colName}
+                                        </span>
+                                        .
+                                      </div>
+                                    </div>
+                                  </StyledHoverCard>
+                                </div>
+
+                                <Checkbox
+                                  checked={has(colName)}
+                                  onChange={(v: boolean) =>
+                                    v ? add(colName) : remove(colName)
+                                  }
+                                />
+                              </div>
+                            );
+                          }}
+                        </For>
+                      );
+                    }}
                   </form.Field>
                 </>
               )}
