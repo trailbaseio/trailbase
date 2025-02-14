@@ -251,6 +251,31 @@ function StyledHoverCard(props: { children: JSXElement }) {
   );
 }
 
+function getForeignKeyColumns(schema: Table | View): [string, ForeignKey][] {
+  function filter([colName, fk]: [string, ForeignKey | undefined]) {
+    if (!fk) {
+      return false;
+    }
+
+    if (colName.startsWith("_")) {
+      return false;
+    }
+
+    if (fk.foreign_table.startsWith("_")) {
+      return false;
+    }
+
+    return true;
+  }
+
+  return (schema.columns ?? [])
+    .map(
+      (c) =>
+        [c.name, getForeignKey(c.options)] as [string, ForeignKey | undefined],
+    )
+    .filter(filter) as [string, ForeignKey][];
+}
+
 export function RecordApiSettingsForm(props: {
   close: () => void;
   markDirty: () => void;
@@ -259,10 +284,7 @@ export function RecordApiSettingsForm(props: {
   const config = createConfigQuery();
 
   const type = () => tableType(props.schema);
-  const foreignKeys = () =>
-    props.schema.columns
-      ?.map((c) => [c.name, getForeignKey(c.options)])
-      .filter((k) => k[1]) as [string, ForeignKey][];
+  const foreignKeys = () => getForeignKeyColumns(props.schema);
 
   // FIXME: We don't currently handle the "multiple APIs for a single table" case.
   const currentApi = () =>
