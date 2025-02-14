@@ -7,7 +7,8 @@ format:
 	pnpm -r format; \
 		cargo +nightly fmt; \
 		dart format client/trailbase-dart/ examples/blog/flutter/; \
-		txtpbfmt `find . -regex ".*.textproto"`; \
+		# Don't mess with TrailBase writing config.textproto
+		txtpbfmt `find . -regex ".*.textproto" | grep -v config.textproto`; \
 		dotnet format client/trailbase-dotnet/src; \
 	       	dotnet format client/trailbase-dotnet/test; \
 		poetry -C client/trailbase-py run black --config pyproject.toml .

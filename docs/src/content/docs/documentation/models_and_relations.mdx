@@ -194,16 +194,51 @@ SELECT * FROM post AS P
 
 There's an elephant in the room: while this is all pretty standard fair, at
 least in SQL land, connecting relations across TrailBase's record APIs without
-joins is a lot more painful.
-For N:M relations, one would have to expose 3 different APIs including the
-bridge table, manage their ACLs and then traverse the edges manually on the
-client side.
+joins can be a lot more work.
+Naively, for N:M relations, one would have to expose 3 different APIs including
+the bridge table, manage their ACLs and then have the client manually stich the
+edges.
 
-This is an area where we're actively exploring how to expand API capabilities,
-however the most general approach is to push more responsibility to the
-server.
-Concretely, we can expose a single API tailored for specific client use-cases
-implementing a server-side join using `VIEW`s:
+For simple, single hop client ⇨ parent traversals we can use TrailBase builtin
+expansion support, i.e. a referenced parent record will be joined and then
+nested into the client response.
+First, we need to set a foreign key columns as "expand" in the API
+configuration, which changes the read schema to:
+
+```ts
+type Schema = {
+  // ...
+  <foreign_key_col>: {
+    id: <number | string>,
+    data?: ParentSchema,
+  };
+}
+```
+
+Subsequently, joins can be requested for any of the configured foreign key
+columns during read and list operations, e.g.:
+
+```
+await api.read<Comment>(1, { expand: ["post"] })
+► {
+  id: 1,
+  post: {
+    id: 'AZUECN4ZfEKDOhVAip8S3g==',
+    data: {
+      id: 'AZUECN4ZfEKDOhVAip8S3g==',
+      author: 'AZUECMTAfqOZJjHfEzAqkA==',
+      title: 'first post',
+      body: 'body'
+    }
+  },
+  author: { id: 'AZUECN4ZfEKDOhU6uTkLVw==' },
+  body: 'first comment'
+}
+```
+
+For more complex relations and traversals, it is recommended to push more
+responsibility to the server. Concretely, we can expose a single API tailored
+for specific client use-cases implementing a server-side join using `VIEW`s:
 
 ```sql
 CREATE VIEW post_tag_view AS SELECT * FROM post AS P
