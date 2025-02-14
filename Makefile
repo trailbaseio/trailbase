@@ -22,7 +22,7 @@ check:
 		poetry -C client/trailbase-py run pyright
 
 docker:
-	docker buildx build --platform linux/arm64,linux/amd64 -t trailbase/trailbase .
+	docker buildx build --platform linux/arm64,linux/amd64 --output=type=registry -t trailbase/trailbase:latest .
 
 cloc:
 	cloc --not-match-d=".*(/target|/dist|/node_modules|/vendor|.astro|.venv|/traildepot|/flutter|/assets|lock|_benchmark|/bin|/obj).*" .
