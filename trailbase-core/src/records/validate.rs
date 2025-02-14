@@ -1,4 +1,7 @@
+use itertools::Itertools;
+
 use crate::config::{proto, ConfigError};
+use crate::schema::ColumnOption;
 use crate::table_metadata::{
   sqlite3_parse_into_statements, TableMetadataCache, TableOrViewMetadata,
 };
@@ -34,42 +37,81 @@ pub(crate) fn validate_record_api_config(
     return ierr("RecordApi config misses table name.");
   };
 
-  if let Some(metadata) = tables.get(table_name) {
-    if !metadata.schema.strict {
-      return Err(ConfigError::Invalid(format!(
-        "RecordApi table '{table_name}' for api '{name}' must be strict to support JSON schema and type-safety."
-      )));
-    }
-
-    if metadata.record_pk_column().is_none() {
-      return Err(ConfigError::Invalid(format!(
-        "Table for api '{name}' is missing valid integer/uuidv7 primary key column: {:?}",
-        metadata.schema
-      )));
-    }
-  } else if let Some(metadata) = tables.get_view(table_name) {
-    if metadata.schema.temporary {
-      return Err(ConfigError::Invalid(format!(
-        "RecordApi {name} references temporary view: {table_name}"
-      )));
-    }
-
-    if metadata.record_pk_column().is_none() {
-      return Err(ConfigError::Invalid(format!(
-        "View for api '{name}' is missing valid integer/uuidv7 primary key column: {:?}",
-        metadata.schema
-      )));
-    }
-
-    let Some(ref _columns) = metadata.schema.columns else {
-      return Err(ConfigError::Invalid(format!(
-        "View for api '{name}' is not a \"simple\" view, i.e. the column types couldn't be inferred and thus type-safety cannot be guaranteed."
-      )));
+  let metadata: std::sync::Arc<dyn TableOrViewMetadata> =
+    if let Some(metadata) = tables.get(table_name) {
+      metadata
+    } else if let Some(metadata) = tables.get_view(table_name) {
+      metadata
+    } else {
+      return ierr(&format!("Missing table or view for API: {name}"));
     };
-  } else {
-    return Err(ConfigError::Invalid(format!(
-      "Missing table or view for API: {name}"
-    )));
+
+  if metadata.record_pk_column().is_none() {
+    return ierr(&format!(
+      "Table for api '{name}' is missing valid integer/uuidv7 primary key column."
+    ));
+  }
+
+  let Some(columns) = metadata.columns() else {
+    return ierr(&format!(
+        "View for api '{name}' is not a \"simple\" view, i.e unable to infer colum types to guarantee type-safety"
+      ));
+  };
+
+  for expand in &api_config.expand {
+    if expand.starts_with("_") {
+      return ierr(&format!("{name} expands hidden column: {expand}"));
+    }
+
+    let Some(column) = columns.iter().find(|c| c.name == *expand) else {
+      return ierr(&format!("{name} expands missing column: {expand}"));
+    };
+
+    let Some(ColumnOption::ForeignKey {
+      foreign_table: foreign_table_name,
+      referred_columns,
+      ..
+    }) = column
+      .options
+      .iter()
+      .find_or_first(|o| matches!(o, ColumnOption::ForeignKey { .. }))
+    else {
+      return ierr(&format!("{name} expands non-foreign-key column: {expand}"));
+    };
+
+    if foreign_table_name.starts_with("_") {
+      return ierr(&format!(
+        "{name} expands reference '{expand}' to hidden table: {foreign_table_name}"
+      ));
+    }
+
+    let Some(foreign_table) = tables.get(foreign_table_name) else {
+      return ierr(&format!(
+        "{name} reference missing table: {foreign_table_name}"
+      ));
+    };
+
+    let Some((_idx, foreign_pk_column)) = foreign_table.record_pk_column() else {
+      return ierr(&format!(
+        "{name} references pk-less table: {foreign_table_name}"
+      ));
+    };
+
+    match referred_columns.len() {
+      0 => {}
+      1 => {
+        if referred_columns[0] != foreign_pk_column.name {
+          return ierr(&format!(
+            "{name}.{expand} expands non-primary-key reference"
+          ));
+        }
+      }
+      _ => {
+        return ierr(&format!(
+          "Composite keys cannot be expanded for {name}.{expand}"
+        ));
+      }
+    };
   }
 
   let rules = [
@@ -80,17 +122,12 @@ pub(crate) fn validate_record_api_config(
     &api_config.schema_access_rule,
   ];
   for rule in rules.into_iter().flatten() {
-    let map = |err| ConfigError::Invalid(format!("'{rule}' not a valid SQL expression: {err}"));
+    let _stmt = sqlite3_parse_into_statements(&format!("SELECT ({rule})"))
+      .map_err(|err| ConfigError::Invalid(format!("'{rule}' not a valid SQL expression: {err}")))?;
 
-    // const DIALECT: SQLiteDialect = SQLiteDialect {};
-    // SqlParser::new(&DIALECT)
-    //   .try_with_sql(rule)
-    //   .map_err(map)?
-    //   .parse_expr()
-    //   .map_err(map)?;
-
-    let _statements = sqlite3_parse_into_statements(&format!("SELECT ({rule})")).map_err(map)?;
+    // TODO: Add better validation to make sure access rule isn't just a statement but also returns
+    // a single boolean value.
   }
 
-  return Ok(name.clone());
+  return Ok(name.to_owned());
 }

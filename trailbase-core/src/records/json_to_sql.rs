@@ -368,6 +368,9 @@ impl Expansions {
 
       let foreign_pk_column = &foreign_table.schema.columns[foreign_pk_column_idx].name;
 
+      // TODO: Check that `referred_columns` and foreign_pk_column are the same. It's already
+      // validated as part of config validation.
+
       joins.push(format!(
         r#"LEFT JOIN "{foreign_table_name}" AS F{idx} ON {col_name} = F{idx}.{foreign_pk_column}"#,
         col_name = prefix.map_or_else(

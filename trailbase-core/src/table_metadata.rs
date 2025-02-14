@@ -258,6 +258,7 @@ pub trait TableOrViewMetadata {
 
   // Impl detail: only used by admin and list
   fn columns(&self) -> Option<&Vec<Column>>;
+
   fn column_metadata(&self) -> &Vec<ColumnMetadata>;
   fn record_pk_column(&self) -> Option<(usize, &Column)>;
 }
