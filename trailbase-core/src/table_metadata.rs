@@ -1208,7 +1208,7 @@ mod tests {
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery {
-          expand: Some(vec!["UNKNOWN".to_string()]),
+          expand: Some("UNKNOWN".to_string()),
         }),
         None,
       )
@@ -1275,7 +1275,7 @@ mod tests {
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery {
-          expand: Some(vec!["fk".to_string()]),
+          expand: Some("fk".to_string()),
         }),
         None,
       )
@@ -1428,7 +1428,7 @@ mod tests {
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery {
-          expand: Some(vec!["fk1".to_string()]),
+          expand: Some("fk1".to_string()),
         }),
         None,
       )
@@ -1472,7 +1472,7 @@ mod tests {
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery {
-          expand: Some(vec!["fk0".to_string(), "fk1".to_string()]),
+          expand: Some("fk0,fk1".to_string()),
         }),
         None,
       )

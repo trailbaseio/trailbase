@@ -793,8 +793,6 @@ fn try_extract_column_mapping(
   tables: &[Table],
 ) -> Result<Option<Vec<ColumnMapping>>, SchemaError> {
   let body = select.body;
-  #[cfg(debug_assertions)]
-  debug!("Derive column mapping from: {body:?}");
 
   if body.compounds.is_some() {
     return Ok(None);

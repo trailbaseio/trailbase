@@ -325,10 +325,10 @@ pub(crate) struct Expansions {
 }
 
 impl Expansions {
-  pub(crate) fn build(
+  pub(crate) fn build<T: AsRef<str>>(
     table_metadata: &TableMetadataCache,
     table_name: &str,
-    expand: &[String],
+    expand: &[T],
     prefix: Option<&str>,
   ) -> Result<Expansions, RecordError> {
     let Some(root_table) = table_metadata.get(table_name) else {
@@ -339,7 +339,10 @@ impl Expansions {
     let mut indexes = vec![(root_table.schema.columns.len(), root_table.clone())];
 
     for (idx, col_name) in expand.iter().enumerate() {
-      let Some((column, _col_metadata)) = root_table.column_by_name(col_name) else {
+      if col_name.as_ref().is_empty() {
+        continue;
+      }
+      let Some((column, _col_metadata)) = root_table.column_by_name(col_name.as_ref()) else {
         return Err(RecordError::ApiRequiresTable);
       };
 
@@ -367,7 +370,10 @@ impl Expansions {
 
       joins.push(format!(
         r#"LEFT JOIN "{foreign_table_name}" AS F{idx} ON {col_name} = F{idx}.{foreign_pk_column}"#,
-        col_name = prefix.map_or_else(|| col_name.clone(), |p| format!("{p}.{col_name}")),
+        col_name = prefix.map_or_else(
+          || col_name.as_ref().to_owned(),
+          |p| format!("{p}.{}", col_name.as_ref())
+        ),
       ));
       indexes.push((foreign_table.schema.columns.len(), foreign_table));
     }
@@ -413,7 +419,7 @@ impl SelectQueryBuilder {
     table_name: &str,
     pk_column: &str,
     pk_value: Value,
-    expand: &[String],
+    expand: &[&str],
   ) -> Result<Vec<(Arc<TableMetadata>, trailbase_sqlite::Row)>, RecordError> {
     let table_metadata = state.table_metadata();
     let Expansions { indexes, joins, .. } =

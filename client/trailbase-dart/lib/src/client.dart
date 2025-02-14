@@ -293,6 +293,7 @@ class RecordApi {
     List<String>? order,
     List<String>? filters,
     bool? count,
+    List<String>? expand,
   }) async {
     final params = <String, dynamic>{};
     if (pagination != null) {
@@ -305,6 +306,7 @@ class RecordApi {
 
     if (order != null) params['order'] = order.join(',');
     if (count ?? false) params['count'] = 'true';
+    if (expand != null) params['expand'] = expand.join(',');
 
     if (filters != null) {
       for (final filter in filters) {
@@ -325,10 +327,10 @@ class RecordApi {
     return ListResponse.fromJson(response.data);
   }
 
-  Future<Map<String, dynamic>> read(RecordId id) async {
-    final response = await _client.fetch(
-      '${RecordApi._recordApi}/${_name}/${id}',
-    );
+  Future<Map<String, dynamic>> read(RecordId id, {List<String>? expand}) async {
+    final response = await _client.fetch(expand == null
+        ? '${RecordApi._recordApi}/${_name}/${id}'
+        : '${RecordApi._recordApi}/${_name}/${id}?expand=${expand.join(",")}');
     return response.data;
   }
 

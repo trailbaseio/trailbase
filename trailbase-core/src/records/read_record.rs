@@ -14,7 +14,7 @@ use crate::{app_state::AppState, records::sql_to_json::row_to_json_expand};
 
 #[derive(Debug, Default, Deserialize)]
 pub struct ReadRecordQuery {
-  pub expand: Option<Vec<String>>,
+  pub expand: Option<String>,
 }
 
 /// Read record.
@@ -55,6 +55,7 @@ pub async fn read_record_handler(
         return Err(RecordError::BadRequest("Invalid expansion"));
       };
 
+      let query_expand: Vec<_> = query_expand.split(",").collect();
       for col_name in &query_expand {
         if !query_expand.contains(col_name) {
           return Err(RecordError::BadRequest("Invalid expansion"));
@@ -84,7 +85,7 @@ pub async fn read_record_handler(
         )
         .map_err(|err| RecordError::Internal(err.into()))?;
 
-        let result = expand.insert(col_name, foreign_value);
+        let result = expand.insert(col_name.to_string(), foreign_value);
         assert!(result.is_some());
       }
 

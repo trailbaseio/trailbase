@@ -46,6 +46,60 @@ class SimpleStrict {
       'SimpleStrict(id: ${id}, textNull: ${textNull}, textDefault: ${textDefault}, textNotNull: ${textNotNull})';
 }
 
+class Author {
+  final String id;
+  final String user;
+  final String name;
+
+  Author.fromJson(Map<String, dynamic> json)
+      : id = json['id'],
+        user = json['user'],
+        name = json['name'];
+}
+
+class Post {
+  final String id;
+  final String author;
+  final String title;
+  final String body;
+
+  Post.fromJson(Map<String, dynamic> json)
+      : id = json['id'],
+        author = json['author'],
+        title = json['title'],
+        body = json['body'];
+}
+
+class Comment {
+  final int id;
+  final String body;
+  final (String, Post?) post;
+  final (String, Author?) author;
+
+  Comment({
+    required this.id,
+    required this.body,
+    required String postId,
+    Map<String, dynamic>? post,
+    required String authorId,
+    Map<String, dynamic>? authorProfile,
+  })  : post = (postId, post != null ? Post.fromJson(post) : null),
+        author = (
+          authorId,
+          authorProfile != null ? Author.fromJson(authorProfile) : null
+        );
+
+  Comment.fromJson(Map<String, dynamic> json)
+      : this(
+          id: json['id'],
+          body: json['body'],
+          postId: json['post']['id'],
+          post: json['post']['data'],
+          authorId: json['author']['id'],
+          authorProfile: json['author']['data'],
+        );
+}
+
 Future<Client> connect() async {
   final client = Client('http://127.0.0.1:${port}');
   await client.login('admin@localhost', 'secret');
@@ -223,6 +277,46 @@ Future<void> main() async {
 
       await api.delete(ids[0]);
       expect(() async => await api.read(ids[0]), throwsException);
+    });
+
+    test('expand foreign records', () async {
+      final client = await connect();
+      final api = client.records('comment');
+
+      {
+        final comment = Comment.fromJson(await api.read(RecordId.integer(1)));
+
+        expect(comment.id, equals(1));
+        expect(comment.body, equals('first comment'));
+        expect(comment.author.$2, isNull);
+        expect(comment.post.$2?.title, isNull);
+      }
+
+      {
+        final comment = Comment.fromJson(await api.read(
+          RecordId.integer(1),
+          expand: ['post'],
+        ));
+
+        expect(comment.id, equals(1));
+        expect(comment.body, equals('first comment'));
+        expect(comment.author.$2, isNull);
+        expect(comment.post.$2?.title, equals('first post'));
+      }
+
+      {
+        final response = await api.list(
+          expand: ['author', 'post'],
+          order: ['-id'],
+          pagination: Pagination(limit: 1),
+        );
+
+        final comment = Comment.fromJson(response.records[0]);
+        expect(comment.id, equals(2));
+        expect(comment.body, equals('second comment'));
+        expect(comment.author.$2?.name, equals('SecondUser'));
+        expect(comment.post.$2?.title, equals('first post'));
+      }
     });
 
     test('realtime', () async {
