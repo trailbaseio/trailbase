@@ -21,6 +21,7 @@ export type Pagination = {
 export type ListResponse<T> = {
   cursor?: string;
   records: T[];
+  total_count?: number;
 };
 
 export type Tokens = {
@@ -125,6 +126,8 @@ export class RecordApi {
     pagination?: Pagination;
     order?: string[];
     filters?: string[];
+    count?: boolean;
+    expand?: string[];
   }): Promise<ListResponse<T>> {
     const params = new URLSearchParams();
     const pagination = opts?.pagination;
@@ -137,6 +140,11 @@ export class RecordApi {
     }
     const order = opts?.order;
     if (order) params.append("order", order.join(","));
+
+    if (opts?.count) params.append("count", "true");
+
+    const expand = opts?.expand;
+    if (expand) params.append("expand", expand.join(","));
 
     const filters = opts?.filters;
     if (filters) {
@@ -159,9 +167,15 @@ export class RecordApi {
 
   public async read<T = Record<string, unknown>>(
     id: string | number,
+    opt?: {
+      expand?: string[];
+    },
   ): Promise<T> {
+    const expand = opt?.expand;
     const response = await this.client.fetch(
-      `${RecordApi._recordApi}/${this.name}/${id}`,
+      expand
+        ? `${RecordApi._recordApi}/${this.name}/${id}?expand=${expand.join(",")}`
+        : `${RecordApi._recordApi}/${this.name}/${id}`,
     );
     return (await response.json()) as T;
   }

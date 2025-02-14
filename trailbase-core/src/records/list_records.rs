@@ -22,11 +22,13 @@ use crate::util::uuid_to_b64;
 #[derive(Debug, Serialize)]
 pub struct ListResponse {
   /// Pagination cursor. Round-trip to get the next batch.
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub cursor: Option<String>,
+  /// The total number of records matching the query.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub total_count: Option<usize>,
   /// Actual record data for records matching the query.
   pub records: Vec<serde_json::Value>,
-  /// The total number of records matching the query.
-  pub total_count: Option<usize>,
 }
 
 /// Lists records matching the given filters
@@ -201,8 +203,8 @@ pub async fn list_records_handler(
     // Rows are empty:
     return Ok(Json(ListResponse {
       cursor: None,
-      records: vec![],
       total_count: Some(0),
+      records: vec![],
     }));
   };
 
@@ -285,8 +287,8 @@ pub async fn list_records_handler(
 
   return Ok(Json(ListResponse {
     cursor,
-    records,
     total_count,
+    records,
   }));
 }
 

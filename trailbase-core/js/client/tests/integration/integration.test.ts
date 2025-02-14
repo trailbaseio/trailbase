@@ -96,6 +96,7 @@ test("Record integration tests", async () => {
     const response = await api.list<SimpleStrict>({
       filters: [`text_not_null=${messages[0]}`],
     });
+    expect(response.total_count).toBeUndefined();
     expect(response.cursor).not.undefined.and.not.toBe("");
     const records = response.records;
     expect(records.length).toBe(1);
@@ -106,7 +107,9 @@ test("Record integration tests", async () => {
     const response = await api.list<SimpleStrict>({
       filters: [`text_not_null[like]=% =?&${now}`],
       order: ["+text_not_null"],
+      count: true,
     });
+    expect(response.total_count).toBe(2);
     expect(response.records.map((el) => el.text_not_null)).toStrictEqual(
       messages,
     );
@@ -166,6 +169,67 @@ test("Record integration tests", async () => {
       status: status.FORBIDDEN,
     }),
   );
+});
+
+type Comment = {
+  id: number;
+  body: string;
+  post: {
+    id: string;
+    data?: {
+      id: string;
+      author: string;
+      title: string;
+      body: string;
+    };
+  };
+  author: {
+    id: string;
+    data?: {
+      id: string;
+      user: string;
+      name: string;
+    };
+  };
+};
+
+test("expand foreign records", async () => {
+  const client = await connect();
+  const api = client.records("comment");
+
+  {
+    const comment = await api.read<Comment>(1);
+    expect(comment.id).toBe(1);
+    expect(comment.body).toBe("first comment");
+    expect(comment.author.data).toBeUndefined();
+    expect(comment.post.data).toBeUndefined();
+  }
+
+  {
+    const comment = await api.read<Comment>(1, { expand: ["post"] });
+    expect(comment.id).toBe(1);
+    expect(comment.body).toBe("first comment");
+    expect(comment.author.data).toBeUndefined();
+    expect(comment.post.data?.title).toBe("first post");
+  }
+
+  {
+    const response = await api.list<Comment>({
+      expand: ["author", "post"],
+      order: ["-id"],
+      pagination: {
+        limit: 1,
+      },
+    });
+
+    expect(response.records.length).toBe(1);
+    const comment = response.records[0];
+
+    expect(comment.id).toBe(2);
+    expect(comment.body).toBe("second comment");
+    expect(comment.author.data?.name).toBe("SecondUser");
+    expect(comment.post.data?.title).toBe("first post");
+  }
 });
 
 test("record error tests", async () => {
