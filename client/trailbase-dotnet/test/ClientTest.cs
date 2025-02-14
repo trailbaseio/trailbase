@@ -1,6 +1,7 @@
 using Xunit;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Diagnostics.CodeAnalysis;
 
@@ -92,6 +93,15 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     this.fixture = fixture;
   }
 
+  public static async Task<Client> Connect(
+    string email = "admin@localhost",
+    string password = "secret"
+  ) {
+    var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
+    await client.Login(email, password);
+    return client;
+  }
+
   [Fact]
   public void IdTest() {
     var integerId = new IntegerRecordId(42);
@@ -120,9 +130,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
   [RequiresDynamicCode("Testing dynamic code")]
   [RequiresUnreferencedCode("testing dynamic code")]
   public async Task RecordsTestDynamic() {
-    var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
-    await client.Login("admin@localhost", "secret");
-
+    var client = await ClientTest.Connect();
     var api = client.Records("simple_strict_table");
 
     var now = DateTimeOffset.Now.ToUnixTimeSeconds();
@@ -155,26 +163,28 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       ListResponse<SimpleStrict> response = await api.List<SimpleStrict>(
         null,
         null,
-        [$"text_not_null={messages[0]}"]
+        [$"text_not_null={messages[0]}"],
+        null,
+        false
       )!;
       Assert.Single(response.records);
+      Assert.Null(response.total_count);
       Assert.Equal(messages[0], response.records[0].text_not_null);
     }
 
     {
       var responseAsc = await api.List<SimpleStrict>(
-        null,
-        ["+text_not_null"],
-        [$"text_not_null[like]=% =?&{suffix}"]
+        order: ["+text_not_null"],
+        filters: [$"text_not_null[like]=% =?&{suffix}"],
+        count: true
       )!;
-      var recordsAsc = responseAsc.records;
-      Assert.Equal(messages.Count, recordsAsc.Count);
-      Assert.Equal(messages, recordsAsc.ConvertAll((e) => e.text_not_null));
+      Assert.Equal(2, responseAsc.total_count);
+      Assert.Equal(messages.Count, responseAsc.records.Count);
+      Assert.Equal(messages, responseAsc.records.ConvertAll((e) => e.text_not_null));
 
       var responseDesc = await api.List<SimpleStrict>(
-        null,
-        ["-text_not_null"],
-        [$"text_not_null[like]=%{suffix}"]
+        order: ["-text_not_null"],
+        filters: [$"text_not_null[like]=%{suffix}"]
       )!;
       var recordsDesc = responseDesc.records;
       Assert.Equal(messages.Count, recordsDesc.Count);
@@ -207,11 +217,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       var id = ids[0];
       await api.Delete(id);
 
-      var response = await api.List<SimpleStrict>(
-        null,
-        null,
-        [$"text_not_null[like]=%{suffix}"]
-      )!;
+      var response = await api.List<SimpleStrict>(filters: [$"text_not_null[like]=%{suffix}"])!;
 
       Assert.Single(response.records);
     }
@@ -219,9 +225,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
 
   [Fact]
   public async Task RecordsTest() {
-    var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
-    await client.Login("admin@localhost", "secret");
-
+    var client = await ClientTest.Connect();
     var api = client.Records("simple_strict_table");
 
     var now = DateTimeOffset.Now.ToUnixTimeSeconds();
@@ -311,10 +315,51 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
   }
 
   [Fact]
-  public async Task RealtimeTest() {
-    var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
-    await client.Login("admin@localhost", "secret");
+  [RequiresDynamicCode("Testing dynamic code")]
+  [RequiresUnreferencedCode("testing dynamic code")]
+  public async Task ExpandForeignRecordsTest() {
+    var client = await ClientTest.Connect();
+    var api = client.Records("comment");
 
+    {
+      var comment = await api.Read<JsonObject>(1)!;
+      Assert.NotNull(comment);
+      Assert.Equal(1, comment["id"]!.GetValue<int>());
+      Assert.Equal("first comment", comment["body"]!.GetValue<string>());
+      Assert.NotNull(comment["author"]!["id"]);
+      Assert.Null(comment["author"]!["data"]);
+      Assert.NotNull(comment["post"]!["id"]);
+      Assert.Null(comment["post"]!["data"]);
+    }
+
+    {
+      var comment = await api.Read<JsonObject>(1, expand: ["post"])!;
+      Assert.NotNull(comment);
+      Assert.Equal(1, comment["id"]!.GetValue<int>());
+      Assert.Null(comment["author"]!["data"]);
+      Assert.Equal("first post", comment["post"]!["data"]!["title"]!.GetValue<string>());
+    }
+
+    {
+      var response = await api.List<JsonObject>(
+        pagination: new Pagination(limit: 1),
+        expand: ["author", "post"],
+        order: ["-id"]
+      );
+
+      Assert.Single(response.records);
+      var comment = response.records[0];
+
+      Assert.Equal(2, comment["id"]!.GetValue<int>());
+      Assert.Equal("second comment", comment["body"]!.GetValue<string>());
+      Assert.Equal("SecondUser", comment["author"]!["data"]!["name"]!.GetValue<string>());
+      Assert.Equal("first post", comment["post"]!["data"]!["title"]!.GetValue<string>());
+    }
+  }
+
+  [Fact]
+  public async Task RealtimeTest() {
+    var client = await ClientTest.Connect();
     var api = client.Records("simple_strict_table");
 
     var tableEventStream = await api.SubscribeAll();

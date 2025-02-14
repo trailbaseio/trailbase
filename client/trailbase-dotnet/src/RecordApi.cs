@@ -88,16 +88,20 @@ public class Pagination {
 public class ListResponse<T> {
   /// <summary>List cursor for subsequent fetches.</summary>
   public string? cursor { get; }
+  /// <summary>The total count of record matching the filter. Useful for pagination.</summary>
+  public int? total_count { get; }
   /// <summary>The actual records.</summary>
   public List<T> records { get; }
 
   /// <summary>ListResponse constructor.</summary>
   [JsonConstructor]
   public ListResponse(
-      string? cursor,
-      List<T>? records
+      string? cursor = null,
+      int? total_count = null,
+      List<T>? records = null
   ) {
     this.cursor = cursor;
+    this.total_count = total_count;
     this.records = records ?? [];
   }
 }
@@ -216,37 +220,45 @@ public class RecordApi {
   /// <summary>Read the record with given id.</summary>
   [RequiresDynamicCode(DynamicCodeMessage)]
   [RequiresUnreferencedCode(UnreferencedCodeMessage)]
-  public async Task<T?> Read<T>(RecordId id) {
-    string json = await (await ReadImpl(id)).ReadAsStringAsync();
+  public async Task<T?> Read<T>(RecordId id, List<string>? expand = null) {
+    string json = await (await ReadImpl(id, expand)).ReadAsStringAsync();
     return JsonSerializer.Deserialize<T>(json);
   }
   /// <summary>Read the record with given id.</summary>
   [RequiresDynamicCode(DynamicCodeMessage)]
   [RequiresUnreferencedCode(UnreferencedCodeMessage)]
-  public async Task<T?> Read<T>(string id) => await Read<T>(new UuidRecordId(id));
+  public async Task<T?> Read<T>(string id, List<string>? expand = null) => await Read<T>(new UuidRecordId(id), expand);
   /// <summary>Read the record with given id.</summary>
   [RequiresDynamicCode(DynamicCodeMessage)]
   [RequiresUnreferencedCode(UnreferencedCodeMessage)]
-  public async Task<T?> Read<T>(long id) => await Read<T>(new IntegerRecordId(id));
+  public async Task<T?> Read<T>(long id, List<string>? expand = null) => await Read<T>(new IntegerRecordId(id), expand);
 
   /// <summary>Read the record with given id.</summary>
-  public async Task<T?> Read<T>(RecordId id, JsonTypeInfo<T> jsonTypeInfo) {
-    string json = await (await ReadImpl(id)).ReadAsStringAsync();
+  public async Task<T?> Read<T>(RecordId id, JsonTypeInfo<T> jsonTypeInfo, List<string>? expand = null) {
+    string json = await (await ReadImpl(id, expand)).ReadAsStringAsync();
     return JsonSerializer.Deserialize<T>(json, jsonTypeInfo);
   }
   /// <summary>Read the record with given id.</summary>
-  public async Task<T?> Read<T>(string id, JsonTypeInfo<T> jsonTypeInfo)
-    => await Read<T>(new UuidRecordId(id), jsonTypeInfo);
+  public async Task<T?> Read<T>(string id, JsonTypeInfo<T> jsonTypeInfo, List<string>? expand = null)
+    => await Read<T>(new UuidRecordId(id), jsonTypeInfo, expand);
   /// <summary>Read the record with given id.</summary>
-  public async Task<T?> Read<T>(long id, JsonTypeInfo<T> jsonTypeInfo)
-    => await Read<T>(new IntegerRecordId(id), jsonTypeInfo);
+  public async Task<T?> Read<T>(long id, JsonTypeInfo<T> jsonTypeInfo, List<string>? expand = null)
+    => await Read<T>(new IntegerRecordId(id), jsonTypeInfo, expand);
 
-  private async Task<HttpContent> ReadImpl(RecordId id) {
+  private async Task<HttpContent> ReadImpl(
+    RecordId id,
+    List<string>? expand
+  ) {
+    var queryParams = expand != null ?
+      new Dictionary<string, string>() {
+        ["expand"] = String.Join(",", expand.ToArray())
+      } : null;
+
     var response = await client.Fetch(
       $"{RecordApi._recordApi}/{name}/{id}",
       HttpMethod.Get,
       null,
-      null
+      queryParams
     );
     return response.Content;
   }
@@ -308,15 +320,19 @@ public class RecordApi {
   /// <param name="pagination">Pagination state.</param>
   /// <param name="order">Sort results by the given columns in ascending/descending order, e.g. "-col_name".</param>
   /// <param name="filters">Results filters, e.g. "col0[gte]=100".</param>
+  /// <param name="expand">Foreign key column names to be expanded.</param>
+  /// <param name="count">Fetch total number of records.</param>
   [RequiresDynamicCode(DynamicCodeMessage)]
   [RequiresUnreferencedCode(UnreferencedCodeMessage)]
   public async Task<ListResponse<T>> List<T>(
     Pagination? pagination = null,
     List<string>? order = null,
-    List<string>? filters = null
+    List<string>? filters = null,
+    List<string>? expand = null,
+    bool count = false
   ) {
-    string json = await (await ListImpl(pagination, order, filters)).ReadAsStringAsync();
-    return JsonSerializer.Deserialize<ListResponse<T>>(json) ?? new ListResponse<T>(null, []);
+    string json = await (await ListImpl(pagination, order, filters, expand, count)).ReadAsStringAsync();
+    return JsonSerializer.Deserialize<ListResponse<T>>(json) ?? new ListResponse<T>();
   }
 
   /// <summary>
@@ -326,14 +342,18 @@ public class RecordApi {
   /// <param name="pagination">Pagination state.</param>
   /// <param name="order">Sort results by the given columns in ascending/descending order, e.g. "-col_name".</param>
   /// <param name="filters">Results filters, e.g. "col0[gte]=100".</param>
+  /// <param name="expand">Foreign key column names to be expanded.</param>
+  /// <param name="count">Fetch total number of records.</param>
   public async Task<ListResponse<T>> List<T>(
     JsonTypeInfo<ListResponse<T>> jsonTypeInfo,
     Pagination? pagination = null,
     List<string>? order = null,
-    List<string>? filters = null
+    List<string>? filters = null,
+    List<string>? expand = null,
+    bool count = false
   ) {
-    string json = await (await ListImpl(pagination, order, filters)).ReadAsStringAsync();
-    return JsonSerializer.Deserialize<ListResponse<T>>(json, jsonTypeInfo) ?? new ListResponse<T>(null, []);
+    string json = await (await ListImpl(pagination, order, filters, expand, count)).ReadAsStringAsync();
+    return JsonSerializer.Deserialize<ListResponse<T>>(json, jsonTypeInfo) ?? new ListResponse<T>();
   }
 
   /// <summary>
@@ -342,20 +362,26 @@ public class RecordApi {
   /// <param name="pagination">Pagination state.</param>
   /// <param name="order">Sort results by the given columns in ascending/descending order, e.g. "-col_name".</param>
   /// <param name="filters">Results filters, e.g. "col0[gte]=100".</param>
+  /// <param name="expand">Foreign key column names to be expanded.</param>
+  /// <param name="count">Fetch total number of records.</param>
   public async Task<ListResponse<JsonObject>> List(
     Pagination? pagination = null,
     List<string>? order = null,
-    List<string>? filters = null
+    List<string>? filters = null,
+    List<string>? expand = null,
+    bool count = false
   ) {
-    string json = await (await ListImpl(pagination, order, filters)).ReadAsStringAsync();
+    string json = await (await ListImpl(pagination, order, filters, expand, count)).ReadAsStringAsync();
     return JsonSerializer.Deserialize<ListResponse<JsonObject>>(
-        json, SerializeResponseRecordIdContext.Default.ListResponseJsonObject) ?? new ListResponse<JsonObject>(null, []);
+        json, SerializeResponseRecordIdContext.Default.ListResponseJsonObject) ?? new ListResponse<JsonObject>();
   }
 
   private async Task<HttpContent> ListImpl(
     Pagination? pagination,
     List<string>? order,
-    List<string>? filters
+    List<string>? filters,
+    List<string>? expand,
+    bool count
   ) {
     var param = new Dictionary<string, string>();
     if (pagination != null) {
@@ -372,6 +398,14 @@ public class RecordApi {
 
     if (order != null) {
       param.Add("order", String.Join(",", order.ToArray()));
+    }
+
+    if (count) {
+      param.Add("count", "true");
+    }
+
+    if (expand != null) {
+      param.Add("expand", String.Join(",", expand.ToArray()));
     }
 
     if (filters != null) {
