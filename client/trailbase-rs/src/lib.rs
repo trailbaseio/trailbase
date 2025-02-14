@@ -66,6 +66,7 @@ pub enum DbEvent {
 #[derive(Clone, Debug, Deserialize)]
 pub struct ListResponse<T> {
   pub cursor: Option<String>,
+  pub total_count: Option<usize>,
   pub records: Vec<T>,
 }
 
@@ -159,37 +160,61 @@ pub struct RecordApi {
   name: String,
 }
 
-impl RecordApi {
-  // TODO: add subscription APIs.
+#[derive(Default)]
+pub struct ListArguments<'a> {
+  pub pagination: Pagination,
+  pub order: Option<&'a [&'a str]>,
+  pub filters: Option<&'a [&'a str]>,
+  pub expand: Option<&'a [&'a str]>,
+  pub count: bool,
+}
 
+impl RecordApi {
   pub async fn list<T: DeserializeOwned>(
     &self,
-    pagination: Pagination,
-    order: &[&str],
-    filters: &[&str],
+    args: ListArguments<'_>,
   ) -> Result<ListResponse<T>, Error> {
     let mut params: Vec<(Cow<'static, str>, Cow<'static, str>)> = vec![];
-    if let Some(cursor) = pagination.cursor {
+    if let Some(cursor) = args.pagination.cursor {
       params.push((Cow::Borrowed("cursor"), Cow::Owned(cursor)));
     }
 
-    if let Some(limit) = pagination.limit {
+    if let Some(limit) = args.pagination.limit {
       params.push((Cow::Borrowed("limit"), Cow::Owned(limit.to_string())));
     }
 
-    if !order.is_empty() {
-      params.push((Cow::Borrowed("order"), Cow::Owned(order.join(","))));
+    #[inline]
+    fn to_list(slice: &[&str]) -> String {
+      return slice.join(",");
     }
 
-    for filter in filters {
-      let Some((name_op, value)) = filter.split_once("=") else {
-        panic!("Filter '{filter}' does not match: 'name[op]=value'");
-      };
+    if let Some(order) = args.order {
+      if !order.is_empty() {
+        params.push((Cow::Borrowed("order"), Cow::Owned(to_list(order))));
+      }
+    }
 
-      params.push((
-        Cow::Owned(name_op.to_string()),
-        Cow::Owned(value.to_string()),
-      ));
+    if let Some(expand) = args.expand {
+      if !expand.is_empty() {
+        params.push((Cow::Borrowed("expand"), Cow::Owned(to_list(expand))));
+      }
+    }
+
+    if args.count {
+      params.push((Cow::Borrowed("count"), Cow::Borrowed("true")));
+    }
+
+    if let Some(filters) = args.filters {
+      for filter in filters {
+        let Some((name_op, value)) = filter.split_once("=") else {
+          panic!("Filter '{filter}' does not match: 'name[op]=value'");
+        };
+
+        params.push((
+          Cow::Owned(name_op.to_string()),
+          Cow::Owned(value.to_string()),
+        ));
+      }
     }
 
     let response = self

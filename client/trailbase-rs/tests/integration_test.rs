@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use trailbase_client::{Client, DbEvent, Pagination};
+use trailbase_client::{Client, DbEvent, ListArguments, ListResponse, Pagination};
 
 struct Server {
   child: std::process::Child,
@@ -79,6 +79,42 @@ struct SimpleStrict {
   text_not_null: String,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct Profile {
+  id: String,
+  user: String,
+  name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct Post {
+  id: String,
+  author: String,
+  title: String,
+  body: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ProfileReference {
+  id: String,
+  data: Option<Profile>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct PostReference {
+  id: String,
+  data: Option<Post>,
+}
+
+#[allow(unused)]
+#[derive(Debug, Clone, Deserialize)]
+struct Comment {
+  id: i64,
+  body: String,
+  author: ProfileReference,
+  post: PostReference,
+}
+
 async fn connect() -> Client {
   let client = Client::new(&format!("http://127.0.0.1:{PORT}"), None).unwrap();
   let _ = client.login("admin@localhost", "secret").await.unwrap();
@@ -135,21 +171,24 @@ async fn records_test() {
     let filter = format!("text_not_null={}", messages[0]);
     let filters = vec![filter.as_str()];
     let response = api
-      .list::<serde_json::Value>(Pagination::default(), &[], filters.as_slice())
+      .list::<serde_json::Value>(ListArguments {
+        filters: Some(&filters),
+        ..Default::default()
+      })
       .await
       .unwrap();
 
     assert_eq!(response.records.len(), 1);
 
     let second_response = api
-      .list::<serde_json::Value>(
-        Pagination {
+      .list::<serde_json::Value>(ListArguments {
+        pagination: Pagination {
           cursor: response.cursor,
           ..Default::default()
         },
-        &[],
-        filters.as_slice(),
-      )
+        filters: Some(&filters),
+        ..Default::default()
+      })
       .await
       .unwrap();
 
@@ -159,25 +198,35 @@ async fn records_test() {
   {
     // List all the messages
     let filter = format!("text_not_null[like]=% =?&{now}");
-    let records_ascending: Vec<SimpleStrict> = api
-      .list(Pagination::default(), &["+text_not_null"], &[&filter])
+    let records_ascending: ListResponse<SimpleStrict> = api
+      .list(ListArguments {
+        order: Some(&["+text_not_null"]),
+        filters: Some(&[&filter]),
+        count: true,
+        ..Default::default()
+      })
       .await
-      .unwrap()
-      .records;
+      .unwrap();
 
     let messages_ascending: Vec<_> = records_ascending
+      .records
       .into_iter()
       .map(|s| s.text_not_null)
       .collect();
     assert_eq!(messages, messages_ascending);
+    assert_eq!(Some(2), records_ascending.total_count);
 
-    let records_descending: Vec<SimpleStrict> = api
-      .list(Pagination::default(), &["-text_not_null"], &[&filter])
+    let records_descending: ListResponse<SimpleStrict> = api
+      .list(ListArguments {
+        order: Some(&["-text_not_null"]),
+        filters: Some(&[&filter]),
+        ..Default::default()
+      })
       .await
-      .unwrap()
-      .records;
+      .unwrap();
 
     let messages_descending: Vec<_> = records_descending
+      .records
       .into_iter()
       .map(|s| s.text_not_null)
       .collect();
@@ -212,6 +261,44 @@ async fn records_test() {
 
     let response = api.read::<SimpleStrict>(&ids[0]).await;
     assert!(response.is_err());
+  }
+}
+
+async fn expand_foreign_records_test() {
+  let client = connect().await;
+  let api = client.records("comment");
+
+  {
+    let comment: Comment = api.read(1).await.unwrap();
+    assert_eq!(1, comment.id);
+    assert_eq!("first comment", comment.body);
+    assert_ne!("", comment.author.id);
+    assert!(comment.author.data.is_none());
+    assert_ne!("", comment.post.id);
+    assert!(comment.post.data.is_none());
+  }
+
+  {
+    let comments: ListResponse<Comment> = api
+      .list(ListArguments {
+        pagination: Pagination {
+          limit: Some(1),
+          ..Default::default()
+        },
+        order: Some(&["-id"]),
+        expand: Some(&["author", "post"]),
+        ..Default::default()
+      })
+      .await
+      .unwrap();
+
+    assert_eq!(1, comments.records.len());
+    let comment = &comments.records[0];
+
+    assert_eq!(2, comment.id);
+    assert_eq!("second comment", comment.body);
+    assert_eq!("SecondUser", comment.author.data.as_ref().unwrap().name);
+    assert_eq!("first post", comment.post.data.as_ref().unwrap().title);
   }
 }
 
@@ -291,6 +378,9 @@ fn integration_test() {
 
   runtime.block_on(records_test());
   println!("Ran records tests");
+
+  runtime.block_on(expand_foreign_records_test());
+  println!("Ran expand foreign records tests");
 
   runtime.block_on(subscription_test());
   println!("Ran subscription tests");
