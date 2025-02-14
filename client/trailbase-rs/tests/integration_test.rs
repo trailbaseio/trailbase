@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use trailbase_client::{Client, DbEvent, ListArguments, ListResponse, Pagination};
+use trailbase_client::{Client, DbEvent, ListArguments, ListResponse, Pagination, ReadArguments};
 
 struct Server {
   child: std::process::Child,
@@ -182,10 +182,7 @@ async fn records_test() {
 
     let second_response = api
       .list::<serde_json::Value>(ListArguments {
-        pagination: Pagination {
-          cursor: response.cursor,
-          ..Default::default()
-        },
+        pagination: Pagination::with_cursor(response.cursor),
         filters: Some(&filters),
         ..Default::default()
       })
@@ -279,12 +276,23 @@ async fn expand_foreign_records_test() {
   }
 
   {
+    let comment: Comment = api
+      .read(ReadArguments {
+        id: 1,
+        expand: Some(&["post"]),
+      })
+      .await
+      .unwrap();
+    assert_eq!(1, comment.id);
+    assert_eq!("first comment", comment.body);
+    assert!(comment.author.data.is_none());
+    assert_eq!("first post", comment.post.data.as_ref().unwrap().title)
+  }
+
+  {
     let comments: ListResponse<Comment> = api
       .list(ListArguments {
-        pagination: Pagination {
-          limit: Some(1),
-          ..Default::default()
-        },
+        pagination: Pagination::with_limit(1),
         order: Some(&["-id"]),
         expand: Some(&["author", "post"]),
         ..Default::default()

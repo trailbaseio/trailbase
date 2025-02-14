@@ -55,6 +55,23 @@ pub struct Pagination {
   pub limit: Option<usize>,
 }
 
+impl Pagination {
+  pub fn with(limit: impl Into<Option<usize>>, cursor: impl Into<Option<String>>) -> Pagination {
+    return Pagination {
+      limit: limit.into(),
+      cursor: cursor.into(),
+    };
+  }
+
+  pub fn with_limit(limit: impl Into<Option<usize>>) -> Pagination {
+    return Pagination::with(limit, None);
+  }
+
+  pub fn with_cursor(cursor: impl Into<Option<String>>) -> Pagination {
+    return Pagination::with(None, cursor);
+  }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DbEvent {
   Update(Option<serde_json::Value>),
@@ -97,6 +114,38 @@ impl RecordId<'_> for i64 {
     return Cow::Owned(self.to_string());
   }
 }
+
+pub trait ReadArgumentsTrait<'a> {
+  fn serialized_id(self) -> Cow<'a, str>;
+  fn expand(&self) -> Option<&'a [&'a str]>;
+}
+
+impl<'a, T: RecordId<'a>> ReadArgumentsTrait<'a> for T {
+  fn serialized_id(self) -> Cow<'a, str> {
+    return self.serialized_id();
+  }
+
+  fn expand(&self) -> Option<&'a [&'a str]> {
+    return None;
+  }
+}
+
+#[derive(Debug, Default)]
+pub struct ReadArguments<'a, T: RecordId<'a>> {
+  pub id: T,
+  pub expand: Option<&'a [&'a str]>,
+}
+
+impl<'a, T: RecordId<'a>> ReadArgumentsTrait<'a> for ReadArguments<'a, T> {
+  fn serialized_id(self) -> Cow<'a, str> {
+    return self.id.serialized_id();
+  }
+
+  fn expand(&self) -> Option<&'a [&'a str]> {
+    return self.expand;
+  }
+}
+
 struct ThinClient {
   client: reqwest::Client,
   url: url::Url,
@@ -230,18 +279,25 @@ impl RecordApi {
     return Ok(response.json().await?);
   }
 
-  pub async fn read<'a, T: DeserializeOwned>(&self, id: impl RecordId<'a>) -> Result<T, Error> {
+  pub async fn read<'a, T: DeserializeOwned>(
+    &self,
+    args: impl ReadArgumentsTrait<'a>,
+  ) -> Result<T, Error> {
+    let expand = args
+      .expand()
+      .map(|e| vec![(Cow::Borrowed("expand"), Cow::Owned(e.join(",")))]);
+
     let response = self
       .client
       .fetch(
         &format!(
           "/{RECORD_API}/{name}/{id}",
           name = self.name,
-          id = id.serialized_id()
+          id = args.serialized_id()
         ),
         Method::GET,
         None::<&()>,
-        None,
+        expand.as_deref(),
       )
       .await?;
 
@@ -395,10 +451,13 @@ impl ClientState {
       *self.tokens.write() = new_tokens;
     }
 
-    return self
-      .client
-      .fetch(path, headers, method, body, query_params)
-      .await;
+    return Ok(
+      self
+        .client
+        .fetch(path, headers, method, body, query_params)
+        .await?
+        .error_for_status()?,
+    );
   }
 
   #[inline]
