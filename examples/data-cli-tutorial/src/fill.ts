@@ -31,7 +31,7 @@ while (true) {
 
 console.log(`Cleaned up ${cnt} movies`);
 
-const file = await readFile("../data/Top_1000_IMDb_movies_New_version.csv");
+const file = await readFile("data/Top_1000_IMDb_movies_New_version.csv");
 const records = parse(file, {
   fromLine: 2,
   // prettier-ignore
