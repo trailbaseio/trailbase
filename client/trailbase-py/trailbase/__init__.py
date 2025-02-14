@@ -64,20 +64,24 @@ class User:
 
 class ListResponse:
     cursor: str | None
+    total_count: int | None
     records: list[JSON_OBJECT]
 
-    def __init__(self, cursor: str | None, records: list[JSON_OBJECT]) -> None:
+    def __init__(self, cursor: str | None, total_count: int | None, records: list[JSON_OBJECT]) -> None:
         self.cursor = cursor
+        self.total_count = total_count
         self.records = records
 
     @staticmethod
     def from_json(json: JSON_OBJECT) -> "ListResponse":
-        cursor = json["cursor"]
+        cursor = json.get("cursor")
         assert isinstance(cursor, str | None)
+        total_count = json.get("total_count")
+        assert isinstance(total_count, int | None)
         records = json["records"]
         assert isinstance(records, list)
 
-        return ListResponse(cursor, cast(list[JSON_OBJECT], records))
+        return ListResponse(cursor, total_count, cast(list[JSON_OBJECT], records))
 
 
 class Tokens:
@@ -415,7 +419,9 @@ class RecordApi:
         order: list[str] | None = None,
         filters: list[str] | None = None,
         cursor: str | None = None,
+        expand: list[str] | None = None,
         limit: int | None = None,
+        count: bool = False,
     ) -> ListResponse:
         params: dict[str, str] = {}
 
@@ -428,6 +434,12 @@ class RecordApi:
         if order != None:
             params["order"] = ",".join(order)
 
+        if expand != None:
+            params["expand"] = ",".join(expand)
+
+        if count:
+            params["count"] = "true"
+
         if filters != None:
             for filter in filters:
                 (nameOp, value) = filter.split("=", 1)
@@ -439,10 +451,18 @@ class RecordApi:
         response = self._client.fetch(f"{self._recordApi}/{self._name}", queryParams=params)
         return ListResponse.from_json(response.json())
 
-    def read(self, recordId: RecordId | str | int) -> JSON_OBJECT:
+    def read(
+        self,
+        recordId: RecordId | str | int,
+        expand: "list[str] | None" = None,
+    ) -> JSON_OBJECT:
         id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
-        response = self._client.fetch(f"{self._recordApi}/{self._name}/{id}")
-        return response.json()
+        params = {"expand": ",".join(expand)} if expand != None else None
+
+        return self._client.fetch(
+            f"{self._recordApi}/{self._name}/{id}",
+            queryParams=params,
+        ).json()
 
     def create(self, record: JSON_OBJECT) -> RecordId:
         response = self._client.fetch(

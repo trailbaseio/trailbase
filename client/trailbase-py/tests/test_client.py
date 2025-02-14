@@ -1,4 +1,4 @@
-from trailbase import Client, RecordId, JSON
+from trailbase import Client, RecordId, JSON, JSON_OBJECT
 
 import httpx
 import logging
@@ -134,8 +134,10 @@ def test_records(trailbase: TrailBaseFixture):
         recordsAsc = api.list(
             order=["+text_not_null"],
             filters=[f"text_not_null[like]=% =?&{now}"],
+            count=True,
         )
 
+        assert recordsAsc.total_count == 2
         assert [el["text_not_null"] for el in recordsAsc.records] == messages
 
         recordsDesc = api.list(
@@ -163,6 +165,62 @@ def test_records(trailbase: TrailBaseFixture):
 
         with pytest.raises(Exception):
             api.read(ids[0])
+
+
+def test_expand_foreign_records(trailbase: TrailBaseFixture):
+    assert trailbase.isUp()
+
+    client = connect()
+    api = client.records("comment")
+
+    def get_nested(obj: JSON_OBJECT, k0: str, k1: str) -> JSON | None:
+        x = obj[k0]
+        assert type(x) is dict
+        return x.get(k1)
+
+    if True:
+        comment = api.read(1)
+
+        assert comment.get("id") == 1
+        assert comment.get("body") == "first comment"
+        assert get_nested(comment, "author", "id") != ""
+        assert get_nested(comment, "author", "data") == None
+        assert get_nested(comment, "post", "id") != ""
+
+    if True:
+        comment = api.read(1, expand=["post"])
+
+        assert comment.get("id") == 1
+        assert comment.get("body") == "first comment"
+        assert get_nested(comment, "author", "data") == None
+
+        x = get_nested(comment, "post", "data")
+        assert type(x) is dict
+        assert x.get("title") == "first post"
+
+    if True:
+        comments = api.list(
+            expand=["author", "post"],
+            order=["-id"],
+            limit=1,
+            count=True,
+        )
+
+        assert comments.total_count == 2
+        assert len(comments.records) == 1
+
+        comment = comments.records[0]
+
+        assert comment.get("id") == 2
+        assert comment.get("body") == "second comment"
+
+        x = get_nested(comment, "post", "data")
+        assert type(x) is dict
+        assert x.get("title") == "first post"
+
+        y = get_nested(comment, "author", "data")
+        assert type(y) is dict
+        assert y.get("name") == "SecondUser"
 
 
 def test_subscriptions(trailbase: TrailBaseFixture):
