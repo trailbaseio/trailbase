@@ -5,7 +5,7 @@ title: Record APIs
 import { Aside, Code } from "@astrojs/starlight/components";
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
-import { apiPath, recordApiNamePlaceholder, recordApiIdPlaceholder } from "./record_apis.ts";
+import { apiPath, recordApiNamePlaceholder, recordApiIdPlaceholder } from "./_record_apis.ts";
 
 TrailBase's restful CRUD _Record APIs_ allow you to access your `TABLE`s and
 `VIEW`s in an easy and type-safe manner.
@@ -277,9 +277,11 @@ and query parameters.
 
 Parameters:
 
-* Pagination can be controlled via two query parameters:
-  * `limit=N` (with a built-in hard limit of 1024 to avoid abuse) and
-  * `cursor=<primary key>`.
+* Pagination can be controlled via the following query parameters:
+  * `limit=N`, with a built-in hard limit of 1024 to avoid abuse.
+  * `cursor=<primary key>` to offset into results.
+  * `count=true` will yield a `total_count` of records in the result. This can
+    be used together with `limit` and `cursor` to build pagination UIs.
 * Ordering can be controlled using the `order=[[+-]?<column_name>]+` parameter, e.g.
   `order=created,-rank`, which sorts records based on their `created` column in
   ascending order first (same as "+") and subsequently in descending order by
@@ -296,6 +298,9 @@ Parameters:
   * **lt**: less-than
   * **like**: SQL `LIKE` operator
   * **re**: SQL `REGEXP` operator
+* Parent records, i.e. records pointed to by foreign key columns, can be
+  expanded using the `?expand=<col0>,<col`>` parameter, if the respective columns
+  were allow-listed in the API configuration.
 
 For example, to query the top-3 ranked movies with a watch time below 2 hours
 and "love" in their description:
