@@ -23,8 +23,7 @@ pub(crate) use error::RecordError;
 pub use record_api::RecordApi;
 pub(crate) use validate::validate_record_api_config;
 
-use crate::config::proto::{PermissionFlag, RecordApiConfig};
-use crate::config::ConfigError;
+use crate::config::proto::PermissionFlag;
 use crate::constants::RECORD_API_PATH;
 use crate::AppState;
 
@@ -112,61 +111,44 @@ pub struct AccessRules {
   pub schema: Option<String>,
 }
 
-// NOTE: used in integration test.
-pub async fn add_record_api(
+// NOTE: Prefer add_record_api_config below.
+#[cfg(test)]
+pub(crate) async fn add_record_api(
   state: &AppState,
   api_name: &str,
   table_name: &str,
   acls: Acls,
   access_rules: AccessRules,
-) -> Result<(), ConfigError> {
+) -> Result<(), crate::config::ConfigError> {
   let mut config = state.get_config();
 
-  config.record_apis.push(RecordApiConfig {
-    name: Some(api_name.to_string()),
-    table_name: Some(table_name.to_string()),
+  config
+    .record_apis
+    .push(crate::config::proto::RecordApiConfig {
+      name: Some(api_name.to_string()),
+      table_name: Some(table_name.to_string()),
 
-    acl_world: acls.world.into_iter().map(|f| f as i32).collect(),
-    acl_authenticated: acls.authenticated.into_iter().map(|f| f as i32).collect(),
-    conflict_resolution: None,
-    autofill_missing_user_id_columns: Some(false),
-    create_access_rule: access_rules.create,
-    read_access_rule: access_rules.read,
-    update_access_rule: access_rules.update,
-    delete_access_rule: access_rules.delete,
-    schema_access_rule: access_rules.schema,
-    expand: vec![],
-  });
+      acl_world: acls.world.into_iter().map(|f| f as i32).collect(),
+      acl_authenticated: acls.authenticated.into_iter().map(|f| f as i32).collect(),
+      conflict_resolution: None,
+      autofill_missing_user_id_columns: None,
+      create_access_rule: access_rules.create,
+      read_access_rule: access_rules.read,
+      update_access_rule: access_rules.update,
+      delete_access_rule: access_rules.delete,
+      schema_access_rule: access_rules.schema,
+      expand: vec![],
+    });
 
   return state.validate_and_update_config(config, None).await;
 }
 
 #[cfg(test)]
-pub(crate) async fn add_record_api_expand(
+pub(crate) async fn add_record_api_config(
   state: &AppState,
-  api_name: &str,
-  table_name: &str,
-  acls: Acls,
-  access_rules: AccessRules,
-  expand: Vec<String>,
-) -> Result<(), ConfigError> {
+  api: crate::config::proto::RecordApiConfig,
+) -> Result<(), crate::config::ConfigError> {
   let mut config = state.get_config();
-
-  config.record_apis.push(RecordApiConfig {
-    name: Some(api_name.to_string()),
-    table_name: Some(table_name.to_string()),
-
-    acl_world: acls.world.into_iter().map(|f| f as i32).collect(),
-    acl_authenticated: acls.authenticated.into_iter().map(|f| f as i32).collect(),
-    conflict_resolution: None,
-    autofill_missing_user_id_columns: Some(false),
-    create_access_rule: access_rules.create,
-    read_access_rule: access_rules.read,
-    update_access_rule: access_rules.update,
-    delete_access_rule: access_rules.delete,
-    schema_access_rule: access_rules.schema,
-    expand,
-  });
-
+  config.record_apis.push(api);
   return state.validate_and_update_config(config, None).await;
 }

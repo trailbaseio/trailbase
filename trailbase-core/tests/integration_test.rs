@@ -7,12 +7,20 @@ use tracing_subscriber::prelude::*;
 use trailbase_sqlite::params;
 
 use trailbase::api::{create_user_handler, login_with_password, CreateUserRequest};
-use trailbase::config::proto::PermissionFlag;
+use trailbase::config::proto::{PermissionFlag, RecordApiConfig};
 use trailbase::constants::{COOKIE_AUTH_TOKEN, RECORD_API_PATH};
-use trailbase::records::*;
 use trailbase::util::id_to_b64;
 use trailbase::AppState;
 use trailbase::{DataDir, Server, ServerOptions};
+
+pub(crate) async fn add_record_api_config(
+  state: &AppState,
+  api: RecordApiConfig,
+) -> Result<(), anyhow::Error> {
+  let mut config = state.get_config();
+  config.record_apis.push(api);
+  return Ok(state.validate_and_update_config(config, None).await?);
+}
 
 #[test]
 fn integration_tests() {
@@ -53,20 +61,17 @@ async fn test_record_apis() {
   let client_ip = "22.11.22.11";
 
   // Register message table as record API with moderator read access.
-  add_record_api(
+  add_record_api_config(
         &state,
-        "messages_api",
-        "message",
-        Acls {
-          authenticated: vec![PermissionFlag::Create, PermissionFlag::Read],
-          ..Default::default()
-        },
-        AccessRules {
-          create: Some(
+    RecordApiConfig{
+      name: Some("messages_api".to_string()),
+      table_name: Some("message".to_string()),
+      acl_authenticated: [PermissionFlag::Read as i32, PermissionFlag::Create as i32].into(),
+      create_access_rule: Some(
             "(SELECT 1 FROM room_members AS m WHERE _USER_.id = _REQ_._owner AND m.user = _USER_.id AND m.room = _REQ_.room)".to_string(),
-          ),
-          ..Default::default()
-        },
+        ),
+      ..Default::default()
+    }
       )
       .await.unwrap();
 
@@ -154,15 +159,14 @@ async fn test_record_apis() {
 
     {
       // Add a second record API for the same table
-      add_record_api(
+      add_record_api_config(
         &state,
-        "messages_api_yolo",
-        "message",
-        Acls {
-          world: vec![PermissionFlag::Create, PermissionFlag::Read],
+        RecordApiConfig {
+          name: Some("messages_api_yolo".to_string()),
+          table_name: Some("message".to_string()),
+          acl_world: [PermissionFlag::Read as i32, PermissionFlag::Create as i32].into(),
           ..Default::default()
         },
-        AccessRules::default(),
       )
       .await
       .unwrap();

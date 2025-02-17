@@ -945,7 +945,7 @@ mod tests {
 
   use super::*;
   use crate::app_state::*;
-  use crate::config::proto::PermissionFlag;
+  use crate::config::proto::{PermissionFlag, RecordApiConfig};
   use crate::records::list_records::list_records_handler;
   use crate::records::read_record::{read_record_handler, ReadRecordQuery};
   use crate::records::*;
@@ -1133,16 +1133,15 @@ mod tests {
 
     state.table_metadata().invalidate_all().await.unwrap();
 
-    add_record_api_expand(
+    add_record_api_config(
       &state,
-      "test_table_api",
-      table_name,
-      Acls {
-        world: vec![PermissionFlag::Create, PermissionFlag::Read],
+      RecordApiConfig {
+        name: Some("test_table_api".to_string()),
+        table_name: Some(table_name.to_string()),
+        acl_world: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
+        expand: vec!["fk".to_string()],
         ..Default::default()
       },
-      AccessRules::default(),
-      vec!["fk".to_string()],
     )
     .await
     .unwrap();
@@ -1352,16 +1351,15 @@ mod tests {
 
     state.table_metadata().invalidate_all().await.unwrap();
 
-    add_record_api_expand(
+    add_record_api_config(
       &state,
-      "test_table_api",
-      table_name,
-      Acls {
-        world: vec![PermissionFlag::Create, PermissionFlag::Read],
+      RecordApiConfig {
+        name: Some("test_table_api".to_string()),
+        table_name: Some(table_name.to_string()),
+        acl_world: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
+        expand: vec!["fk0".to_string(), "fk1".to_string()],
         ..Default::default()
       },
-      AccessRules::default(),
-      vec!["fk0".to_string(), "fk1".to_string()],
     )
     .await
     .unwrap();

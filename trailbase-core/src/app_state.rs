@@ -208,14 +208,14 @@ impl AppState {
     return (*self.state.config.load_full()).clone();
   }
 
-  pub(crate) fn access_config<F, T>(&self, f: F) -> T
+  pub fn access_config<F, T>(&self, f: F) -> T
   where
     F: Fn(&Config) -> T,
   {
     return f(&self.state.config.load());
   }
 
-  pub(crate) async fn validate_and_update_config(
+  pub async fn validate_and_update_config(
     &self,
     config: Config,
     hash: Option<u64>,

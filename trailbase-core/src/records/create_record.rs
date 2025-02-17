@@ -194,11 +194,109 @@ mod test {
   use crate::admin::user::*;
   use crate::app_state::*;
   use crate::auth::api::login::login_with_password;
-  use crate::config::proto::PermissionFlag;
+  use crate::config::proto::{ConflictResolutionStrategy, PermissionFlag, RecordApiConfig};
   use crate::records::test_utils::*;
   use crate::records::*;
   use crate::test::unpack_json_response;
-  use crate::util::id_to_b64;
+  use crate::util::{id_to_b64, uuid_to_b64};
+
+  use serde_json::json;
+
+  #[tokio::test]
+  async fn test_simple_record_api_create() {
+    let state = test_state(None).await.unwrap();
+
+    state
+      .conn()
+      .execute(
+        r#"
+      CREATE TABLE simple (
+        owner   BLOB PRIMARY KEY CHECK(is_uuid_v7(owner)) REFERENCES _user,
+        value   INTEGER
+      ) STRICT;
+      "#,
+        (),
+      )
+      .await
+      .unwrap();
+
+    state.table_metadata().invalidate_all().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some("simple_api".to_string()),
+        table_name: Some("simple".to_string()),
+        conflict_resolution: Some(ConflictResolutionStrategy::Replace as i32),
+        acl_authenticated: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
+        create_access_rule: Some("_USER_.id = _REQ_.owner".to_string()),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    let password = "Secret!1!!";
+    let user_x_email = "user_x@bar.com";
+    let user_x = create_user_for_test(&state, user_x_email, password)
+      .await
+      .unwrap()
+      .into_bytes();
+    let user_x_token = login_with_password(&state, user_x_email, password)
+      .await
+      .unwrap();
+
+    // Test conflict resolution strategy replacement.
+    for idx in 5..10 {
+      let _ = create_record_handler(
+        State(state.clone()),
+        Path("simple_api".to_string()),
+        Query(CreateRecordQuery::default()),
+        User::from_auth_token(&state, &user_x_token.auth_token),
+        Either::Json(
+          json_row_from_value(json!({
+            "owner": id_to_b64(&user_x),
+            "value": idx,
+          }))
+          .unwrap()
+          .into(),
+        ),
+      )
+      .await
+      .unwrap();
+    }
+
+    let value: Option<i64> = state
+      .conn()
+      .query_value(
+        "SELECT value FROM simple WHERE owner = ?1",
+        trailbase_sqlite::params!(user_x),
+      )
+      .await
+      .unwrap();
+    assert_eq!(value, Some(9));
+
+    {
+      // Make sure user.id == owner ACL check works
+      let response = create_record_handler(
+        State(state.clone()),
+        Path("simple_api".to_string()),
+        Query(CreateRecordQuery::default()),
+        User::from_auth_token(&state, &user_x_token.auth_token),
+        Either::Json(
+          json_row_from_value(json!({
+            "owner": uuid_to_b64(&uuid::Uuid::now_v7()),
+            "value": 17,
+          }))
+          .unwrap()
+          .into(),
+        ),
+      )
+      .await;
+
+      assert!(response.is_err());
+    }
+  }
 
   #[tokio::test]
   async fn test_record_api_create() {
@@ -209,7 +307,7 @@ mod test {
     let room = add_room(conn, "room0").await.unwrap();
     let password = "Secret!1!!";
 
-    // Register message table as api with moderator read access.
+    // Register message table as api.
     add_record_api(
       &state,
       "messages_api",
@@ -220,7 +318,7 @@ mod test {
       },
       AccessRules {
         create: Some(
-          "EXISTS(SELECT 1 FROM room_members AS m WHERE _USER_.id = _REQ_._owner AND m.user = _USER_.id AND m.room = _REQ_.room )".to_string(),
+          "_USER_.id = _REQ_._owner AND EXISTS(SELECT 1 FROM room_members AS m WHERE m.user = _USER_.id AND m.room = _REQ_.room)".to_string(),
         ),
         ..Default::default()
       },
@@ -250,7 +348,7 @@ mod test {
 
     {
       // User X can post to the room, they're a member of
-      let json = serde_json::json!({
+      let json = json!({
         "_owner": id_to_b64(&user_x),
         "room": id_to_b64(&room),
         "data": "user_x message to room",
@@ -273,7 +371,7 @@ mod test {
     {
       // User X can bulk post to the room, they're a member of
       let json = |i: usize| {
-        serde_json::json!({
+        json!({
           "_owner": id_to_b64(&user_x),
           "room": id_to_b64(&room),
           "data": format!("user_x bulk message to room {i}"),
@@ -297,7 +395,7 @@ mod test {
 
     {
       // User X cannot post as a different "_owner".
-      let json = serde_json::json!({
+      let json = json!({
         "_owner": id_to_b64(&user_y),
         "room": id_to_b64(&room),
         "data": "user_x message to room",
@@ -323,7 +421,7 @@ mod test {
         .unwrap();
 
       let json = |user_id: &[u8; 16]| {
-        serde_json::json!({
+        json!({
           "_owner": id_to_b64(user_id),
           "room": id_to_b64(&room),
           "data": "user_x bulk message to room",
@@ -352,7 +450,7 @@ mod test {
 
     {
       // User Y is not a member and cannot post to the room.
-      let json = serde_json::json!({
+      let json = json!({
         "room": id_to_b64(&room),
         "data": "user_x message to room",
       });
@@ -379,7 +477,7 @@ mod test {
     let room = add_room(conn, "room0").await.unwrap();
     let password = "Secret!1!!";
 
-    // Register message table as api with moderator read access.
+    // Register message table as api.
     add_record_api(
       &state,
       "messages_api",
@@ -390,7 +488,7 @@ mod test {
       },
       AccessRules {
         create: Some(
-          "EXISTS(SELECT 1 FROM room_members AS m WHERE _USER_.id = _REQ_._owner AND m.user = _USER_.id AND m.room = _REQ_.room )".to_string(),
+          "_USER_.id = _REQ_._owner AND EXISTS(SELECT 1 FROM room_members AS m WHERE m.user = _USER_.id AND m.room = _REQ_.room)".to_string(),
         ),
         ..Default::default()
       },
@@ -410,7 +508,7 @@ mod test {
 
     {
       // User X can post to the room, they're a member of
-      let json = serde_json::json!({
+      let json = json!({
         "_owner": id_to_b64(&user_x),
         "room": id_to_b64(&room),
         "data": "user_x message to room",

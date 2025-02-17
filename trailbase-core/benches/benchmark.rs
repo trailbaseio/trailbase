@@ -10,10 +10,9 @@ use std::sync::{Arc, Mutex};
 use tower::{Service, ServiceExt};
 
 use trailbase::api::{create_user_handler, login_with_password, CreateUserRequest};
-use trailbase::config::proto::PermissionFlag;
+use trailbase::config::proto::{PermissionFlag, RecordApiConfig};
 use trailbase::constants::RECORD_API_PATH;
-use trailbase::records::Acls;
-use trailbase::records::{add_record_api, AccessRules};
+use trailbase::AppState;
 use trailbase::{DataDir, Server, ServerOptions};
 use trailbase_sqlite::params;
 
@@ -93,6 +92,15 @@ struct SetupResult {
   user_x_token: String,
 }
 
+pub(crate) async fn add_record_api_config(
+  state: &AppState,
+  api: RecordApiConfig,
+) -> Result<(), anyhow::Error> {
+  let mut config = state.get_config();
+  config.record_apis.push(api);
+  return Ok(state.validate_and_update_config(config, None).await?);
+}
+
 async fn setup_app() -> Result<SetupResult, anyhow::Error> {
   let data_dir = temp_dir::TempDir::new()?;
 
@@ -114,16 +122,13 @@ async fn setup_app() -> Result<SetupResult, anyhow::Error> {
   let create_access_rule =
     r#"(SELECT 1 FROM room_members WHERE user = _USER_.id AND room = _REQ_.room)"#;
 
-  add_record_api(
+  add_record_api_config(
     &state,
-    "messages_api",
-    "message",
-    Acls {
-      authenticated: vec![PermissionFlag::Read, PermissionFlag::Create],
-      ..Default::default()
-    },
-    AccessRules {
-      create: Some(create_access_rule.to_string()),
+    RecordApiConfig {
+      name: Some("messages_api".to_string()),
+      table_name: Some("message".to_string()),
+      acl_authenticated: [PermissionFlag::Read as i32, PermissionFlag::Create as i32].into(),
+      create_access_rule: Some(create_access_rule.to_string()),
       ..Default::default()
     },
   )
