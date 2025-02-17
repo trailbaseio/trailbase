@@ -295,15 +295,55 @@ export interface ServerConfig {
 }
 
 export interface RecordApiConfig {
-  name?: string | undefined;
-  tableName?: string | undefined;
-  conflictResolution?: ConflictResolutionStrategy | undefined;
+  /** / API name, i.e. unique name used to access data via HTTP. */
+  name?:
+    | string
+    | undefined;
+  /** / Referenced table to be exposed. */
+  tableName?:
+    | string
+    | undefined;
+  /** / Strategy to be used on insert if a table constraint is violated. */
+  conflictResolution?:
+    | ConflictResolutionStrategy
+    | undefined;
+  /**
+   * / Fill columns referencing _user(id) automatically from current user's
+   * / authentication context if present. Can be useful for static clients, such
+   * / as HTML forms, otherwise it's recommended to have the client provide user
+   * / ids explicitly and to keep this feature off.
+   */
   autofillMissingUserIdColumns?:
     | boolean
     | undefined;
-  /** Access control lists. */
+  /**
+   * / Allow subscribing to data changes in realtime using SSE streaming.
+   * /
+   * / NOTE: If you're using a reverse proxy, this will likely require
+   * / configuration changes to allow for server-side streaming HTTP, e.g.
+   * / tell the proxy to keep listening and not cache.
+   */
+  enableSubscriptions?:
+    | boolean
+    | undefined;
+  /** / Access control lists. */
   aclWorld: PermissionFlag[];
   aclAuthenticated: PermissionFlag[];
+  /**
+   * / Access rules to be evaluated on request. Expected to be valid SQL
+   * / expression, where `SELECT <expr>` returns a unary boolean.
+   * /
+   * / The evaluator injects _USER_, _ROW_ and _REQ_ tables that can be
+   * / used for validating access, e.g.:
+   * /
+   * /   _USER_.id = _REQ_.owner
+   * /
+   * / ensures that the value provided for the `owner` column during an insert
+   * / matches the current authenticated user's id. One can also construct
+   * / arbitrary validations including sub-queries, e.g.:
+   * /
+   * /   _USER_.id = _REQ_.owner AND EXISTS(SELECT FROM allowed WHERE allowed.user = _USER_.id)
+   */
   createAccessRule?: string | undefined;
   readAccessRule?: string | undefined;
   updateAccessRule?: string | undefined;
@@ -311,7 +351,13 @@ export interface RecordApiConfig {
   schemaAccessRule?:
     | string
     | undefined;
-  /** A list of foreign key columns that can be expanded on read/list. */
+  /**
+   * / A list of foreign key columns that can be expanded on read/list, i.e. the
+   * / foreign record will be inlined into the response.
+   * /
+   * / Only columns and foreign tables with names not starting with "_", i.e. are
+   * / allowed to be expanded.
+   */
   expand: string[];
 }
 
@@ -1252,6 +1298,7 @@ function createBaseRecordApiConfig(): RecordApiConfig {
     tableName: "",
     conflictResolution: 0,
     autofillMissingUserIdColumns: false,
+    enableSubscriptions: false,
     aclWorld: [],
     aclAuthenticated: [],
     createAccessRule: "",
@@ -1276,6 +1323,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     }
     if (message.autofillMissingUserIdColumns !== undefined && message.autofillMissingUserIdColumns !== false) {
       writer.uint32(48).bool(message.autofillMissingUserIdColumns);
+    }
+    if (message.enableSubscriptions !== undefined && message.enableSubscriptions !== false) {
+      writer.uint32(72).bool(message.enableSubscriptions);
     }
     writer.uint32(58).fork();
     for (const v of message.aclWorld) {
@@ -1345,6 +1395,14 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
           }
 
           message.autofillMissingUserIdColumns = reader.bool();
+          continue;
+        }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.enableSubscriptions = reader.bool();
           continue;
         }
         case 7: {
@@ -1450,6 +1508,7 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
       autofillMissingUserIdColumns: isSet(object.autofillMissingUserIdColumns)
         ? globalThis.Boolean(object.autofillMissingUserIdColumns)
         : false,
+      enableSubscriptions: isSet(object.enableSubscriptions) ? globalThis.Boolean(object.enableSubscriptions) : false,
       aclWorld: globalThis.Array.isArray(object?.aclWorld)
         ? object.aclWorld.map((e: any) => permissionFlagFromJSON(e))
         : [],
@@ -1461,9 +1520,7 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
       updateAccessRule: isSet(object.updateAccessRule) ? globalThis.String(object.updateAccessRule) : "",
       deleteAccessRule: isSet(object.deleteAccessRule) ? globalThis.String(object.deleteAccessRule) : "",
       schemaAccessRule: isSet(object.schemaAccessRule) ? globalThis.String(object.schemaAccessRule) : "",
-      expand: globalThis.Array.isArray(object?.expand)
-        ? object.expand.map((e: any) => globalThis.String(e))
-        : [],
+      expand: globalThis.Array.isArray(object?.expand) ? object.expand.map((e: any) => globalThis.String(e)) : [],
     };
   },
 
@@ -1480,6 +1537,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     }
     if (message.autofillMissingUserIdColumns !== undefined && message.autofillMissingUserIdColumns !== false) {
       obj.autofillMissingUserIdColumns = message.autofillMissingUserIdColumns;
+    }
+    if (message.enableSubscriptions !== undefined && message.enableSubscriptions !== false) {
+      obj.enableSubscriptions = message.enableSubscriptions;
     }
     if (message.aclWorld?.length) {
       obj.aclWorld = message.aclWorld.map((e) => permissionFlagToJSON(e));
@@ -1517,6 +1577,7 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     message.tableName = object.tableName ?? "";
     message.conflictResolution = object.conflictResolution ?? 0;
     message.autofillMissingUserIdColumns = object.autofillMissingUserIdColumns ?? false;
+    message.enableSubscriptions = object.enableSubscriptions ?? false;
     message.aclWorld = object.aclWorld?.map((e) => e) || [];
     message.aclAuthenticated = object.aclAuthenticated?.map((e) => e) || [];
     message.createAccessRule = object.createAccessRule ?? "";

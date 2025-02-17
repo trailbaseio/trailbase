@@ -468,6 +468,38 @@ export function RecordApiSettingsForm(props: {
                     }}
                   />
 
+                  <form.Field
+                    name="enableSubscriptions"
+                    children={(field) => {
+                      const v = () => field().state.value;
+                      return (
+                        <div class="flex items-center justify-between gap-2 mt-2">
+                          <div>
+                            <Label>Enable Subscriptions</Label>
+                            <StyledHoverCard>
+                              <div class="flex justify-between space-x-4">
+                                <div class="space-y-1">
+                                  <p class="text-sm">
+                                    When enabled, users can subscribe to data
+                                    changes in real time. Record access is
+                                    checked on a per-record level at
+                                    notification time ensuring up-to-date
+                                    enforcement as data evolves.
+                                  </p>
+                                </div>
+                              </div>
+                            </StyledHoverCard>
+                          </div>
+
+                          <Checkbox
+                            checked={v()}
+                            onChange={(v: boolean) => field().handleChange(v)}
+                          />
+                        </div>
+                      );
+                    }}
+                  />
+
                   <form.Field name="expand">
                     {(field) => {
                       const has = (colName: string) =>

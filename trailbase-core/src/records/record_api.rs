@@ -61,6 +61,7 @@ struct RecordApiState {
   acl: [u8; 2],
   insert_conflict_resolution_strategy: Option<ConflictResolutionStrategy>,
   insert_autofill_missing_user_id_columns: bool,
+  enable_subscriptions: bool,
 
   expand: Option<HashMap<String, serde_json::Value>>,
 
@@ -200,6 +201,7 @@ impl RecordApi {
         insert_autofill_missing_user_id_columns: config
           .autofill_missing_user_id_columns
           .unwrap_or(false),
+        enable_subscriptions: config.enable_subscriptions.unwrap_or(false),
 
         expand: if config.expand.is_empty() {
           None
@@ -311,6 +313,11 @@ impl RecordApi {
   #[inline]
   pub fn insert_autofill_missing_user_id_columns(&self) -> bool {
     return self.state.insert_autofill_missing_user_id_columns;
+  }
+
+  #[inline]
+  pub fn enable_subscriptions(&self) -> bool {
+    return self.state.enable_subscriptions;
   }
 
   #[inline]

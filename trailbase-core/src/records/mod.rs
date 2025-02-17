@@ -132,6 +132,7 @@ pub(crate) async fn add_record_api(
       acl_authenticated: acls.authenticated.into_iter().map(|f| f as i32).collect(),
       conflict_resolution: None,
       autofill_missing_user_id_columns: None,
+      enable_subscriptions: None,
       create_access_rule: access_rules.create,
       read_access_rule: access_rules.read,
       update_access_rule: access_rules.update,

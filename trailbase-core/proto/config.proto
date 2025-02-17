@@ -130,11 +130,19 @@ message RecordApiConfig {
 
   /// Strategy to be used on insert if a table constraint is violated.
   optional ConflictResolutionStrategy conflict_resolution = 5;
+
   /// Fill columns referencing _user(id) automatically from current user's
   /// authentication context if present. Can be useful for static clients, such
   /// as HTML forms, otherwise it's recommended to have the client provide user
   /// ids explicitly and to keep this feature off.
   optional bool autofill_missing_user_id_columns = 6;
+
+  /// Allow subscribing to data changes in realtime using SSE streaming.
+  ///
+  /// NOTE: If you're using a reverse proxy, this will likely require
+  /// configuration changes to allow for server-side streaming HTTP, e.g.
+  /// tell the proxy to keep listening and not cache.
+  optional bool enable_subscriptions = 9;
 
   /// Access control lists.
   repeated PermissionFlag acl_world = 7;

@@ -19,6 +19,7 @@ record_apis: [{
 }, {
   name: "simple_strict_table"
   table_name: "simple_strict_table"
+  enable_subscriptions: true
   acl_authenticated: [CREATE, READ, UPDATE, DELETE]
 }, {
   name: "simple_complete_view"

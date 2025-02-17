@@ -158,6 +158,7 @@ pub mod proto {
         table_name: Some(AVATAR_TABLE.to_string()),
         conflict_resolution: Some(ConflictResolutionStrategy::Replace.into()),
         autofill_missing_user_id_columns: Some(true),
+        enable_subscriptions: None,
         acl_world: vec![PermissionFlag::Read as i32],
         acl_authenticated: vec![
           PermissionFlag::Create as i32,

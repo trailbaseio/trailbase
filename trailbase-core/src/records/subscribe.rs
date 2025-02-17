@@ -622,6 +622,10 @@ pub async fn add_subscription_sse_handler(
     return Err(RecordError::ApiNotFound);
   };
 
+  if !api.enable_subscriptions() {
+    return Err(RecordError::Forbidden);
+  }
+
   if record == "*" {
     api.check_table_level_access(Permission::Read, user.as_ref())?;
 
@@ -683,7 +687,8 @@ mod tests {
   use crate::admin::user::*;
   use crate::app_state::test_state;
   use crate::auth::api::login::login_with_password;
-  use crate::records::{add_record_api, AccessRules, Acls, PermissionFlag};
+  use crate::config::proto::RecordApiConfig;
+  use crate::records::{add_record_api_config, PermissionFlag};
   use crate::util::uuid_to_b64;
 
   async fn decode_db_event(event: Event) -> DbEvent {
@@ -718,15 +723,15 @@ mod tests {
     state.table_metadata().invalidate_all().await.unwrap();
 
     // Register message table as record api with moderator read access.
-    add_record_api(
+    add_record_api_config(
       &state,
-      "api_name",
-      "test",
-      Acls {
-        world: vec![PermissionFlag::Create, PermissionFlag::Read],
+      RecordApiConfig {
+        name: Some("api_name".to_string()),
+        table_name: Some("test".to_string()),
+        enable_subscriptions: Some(true),
+        acl_world: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
         ..Default::default()
       },
-      AccessRules::default(),
     )
     .await
     .unwrap();
@@ -955,16 +960,16 @@ mod tests {
     state.table_metadata().invalidate_all().await.unwrap();
 
     // Register message table as record api with moderator read access.
-    add_record_api(
+    add_record_api_config(
       &state,
-      "api_name",
-      "test",
-      Acls {
-        authenticated: vec![PermissionFlag::Read],
-        ..Default::default()
-      },
-      AccessRules {
-        read: Some("EXISTS(SELECT 1 FROM test AS m WHERE _USER_.id = _ROW_.user)".to_string()),
+      RecordApiConfig {
+        name: Some("api_name".to_string()),
+        table_name: Some("test".to_string()),
+        enable_subscriptions: Some(true),
+        acl_authenticated: [PermissionFlag::Read as i32].into(),
+        read_access_rule: Some(
+          "EXISTS(SELECT 1 FROM test AS m WHERE _USER_.id = _ROW_.user)".to_string(),
+        ),
         ..Default::default()
       },
     )
