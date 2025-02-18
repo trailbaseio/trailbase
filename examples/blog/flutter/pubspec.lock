@@ -411,7 +411,7 @@ packages:
       path: "../../../client/trailbase-dart"
       relative: true
     source: path
-    version: "0.2.1"
+    version: "0.3.0"
   typed_data:
     dependency: transitive
     description:

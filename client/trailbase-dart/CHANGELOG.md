@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- Add `count` parameter to RecordApi.list to retrieve `total_count` at extra cost.
+  Requires TB >= v0.6.0.
+- Add `expand` parameter for RecordApi.(list|get) to expand foreign records.
+  Requires TB >= v0.6.0.
+
 ## 0.2.1
 
 - Fix heartbeat decoding issue with record subscriptions.

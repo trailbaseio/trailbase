@@ -1,3 +1,20 @@
+## v0.6.0
+
+* Support foreign record expansion. If a record API is configured allow
+  expansion of specific foreign key columns, clients can request to expand the
+  parent record into the JSON response of RecordApi `read` and `list`. This is
+  also reflected in the JSON schema and warrants a major version update.
+  Updates to all the client packages have already been pushed out.
+* Support for bulk record creation. This is particularly useful when
+  transactional consistency is advisable, e.g. creating a large set of M:N
+  dependencies.
+* Record subscriptions now have to be explicitly enabled in the
+  admin-UI/configuration
+* Simplify PNPM workspace setup, i.e. get rid of nesting.
+* Fixed rustc_tools_util upstream, thus drop vendored version.
+* Reduce logs noise.
+* Update dependencies.
+
 ## v0.5.5
 
 * Fix build metadata release channel and include compiler version.
