@@ -24,7 +24,7 @@
     "solid-js": "^1.9.4",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
-    "trailbase": "^0.2.2"
+    "trailbase": "^0.3.0"
   },
   "devDependencies": {
     "@iconify-json/tabler": "^1.2.16",

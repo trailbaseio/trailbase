@@ -218,7 +218,7 @@ pub async fn list_records_handler(
   };
 
   let total_count = if get_total_count {
-    let Some(rusqlite::types::Value::Integer(ref count)) = rows[0].last() else {
+    let Some(rusqlite::types::Value::Integer(count)) = rows[0].last() else {
       return Err(RecordError::Internal(
         format!("expected count, got {:?}", rows[0].last()).into(),
       ));

@@ -41,7 +41,7 @@ pub(crate) fn validate_redirects(
 
   #[allow(clippy::manual_flatten)]
   for r in [first, second] {
-    if let Some(ref r) = r {
+    if let Some(r) = r {
       if valid(r) {
         return Ok(Some(r.to_owned()));
       }

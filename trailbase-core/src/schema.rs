@@ -434,7 +434,11 @@ impl TableIndex {
     return format!(
       "CREATE {unique} INDEX {if_not_exists} {name} ON {table_name} ({indexed_columns}) {predicate}",
       unique = if self.unique { "UNIQUE" } else { "" },
-      if_not_exists = if self.if_not_exists { "IF NOT EXISTS" } else { "" },
+      if_not_exists = if self.if_not_exists {
+        "IF NOT EXISTS"
+      } else {
+        ""
+      },
       name = self.name,
       table_name = self.table_name,
       indexed_columns = indexed_columns_vec.join(", "),

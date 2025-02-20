@@ -22,16 +22,16 @@ impl RecordApiMetadata {
   #[inline]
   fn table_name(&self) -> &str {
     match &self {
-      RecordApiMetadata::Table(ref table) => &table.schema.name,
-      RecordApiMetadata::View(ref view) => &view.schema.name,
+      RecordApiMetadata::Table(table) => &table.schema.name,
+      RecordApiMetadata::View(view) => &view.schema.name,
     }
   }
 
   #[inline]
   fn metadata(&self) -> &(dyn TableOrViewMetadata + Send + Sync) {
     match &self {
-      RecordApiMetadata::Table(ref table) => table,
-      RecordApiMetadata::View(ref view) => view,
+      RecordApiMetadata::Table(table) => table,
+      RecordApiMetadata::View(view) => view,
     }
   }
 }
@@ -263,8 +263,8 @@ impl RecordApi {
 
   pub fn table_metadata(&self) -> Option<&TableMetadata> {
     match &self.state.metadata {
-      RecordApiMetadata::Table(ref table) => Some(table),
-      RecordApiMetadata::View(ref _view) => None,
+      RecordApiMetadata::Table(table) => Some(table),
+      RecordApiMetadata::View(_view) => None,
     }
   }
 

@@ -11,8 +11,7 @@ pub struct OAuthProviderResponse {
   providers: Vec<OAuthProviderEntry>,
 }
 
-pub async fn available_oauth_providers_handler(// State(state): State<AppState>,
-) -> Result<Json<OAuthProviderResponse>, Error> {
+pub async fn available_oauth_providers_handler() -> Result<Json<OAuthProviderResponse>, Error> {
   return Ok(Json(OAuthProviderResponse {
     providers: oauth_provider_registry
       .iter()

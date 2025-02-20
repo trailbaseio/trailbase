@@ -199,7 +199,9 @@ impl Params {
     field_name: &str,
   ) -> Option<(&'a Column, &'a ColumnMetadata)> {
     let Some(col) = metadata.column_by_name(field_name) else {
-      info!("Skipping field '{field_name}' in request: no matching column. This is just an FYI in dev builds and not an issue.");
+      info!(
+        "Skipping field '{field_name}' in request: no matching column. This is just an FYI in dev builds and not an issue."
+      );
       return None;
     };
     return Some(col);

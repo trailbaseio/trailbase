@@ -43,12 +43,12 @@
     "prettier": "^3.5.1",
     "tinybench": "^3.1.1",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.24.0",
-    "vite-node": "^3.0.5",
-    "vitest": "^3.0.5"
+    "typescript-eslint": "^8.24.1",
+    "vite-node": "^3.0.6",
+    "vitest": "^3.0.6"
   },
   "dependencies": {
     "jwt-decode": "^4.0.0",
-    "uuid": "^11.0.5"
+    "uuid": "^11.1.0"
   }
 }
