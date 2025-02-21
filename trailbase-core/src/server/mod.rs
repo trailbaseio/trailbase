@@ -110,7 +110,11 @@ impl Server {
     O: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Sync + Send>>>,
   {
     let version_info = rustc_tools_util::get_version_info!();
-    log::info!("Initializing server {version_info}");
+    log::info!(
+      "Initializing server version: {hash} {date}",
+      hash = version_info.commit_hash.unwrap_or_default(),
+      date = version_info.commit_date.unwrap_or_default(),
+    );
 
     let (new_data_dir, state) = init::init_app_state(
       opts.data_dir.clone(),
