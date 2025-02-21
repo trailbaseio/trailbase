@@ -988,7 +988,7 @@ mod tests {
       .await
       .unwrap();
 
-    let insert = |col: &'static str, json: serde_json::Value| async move {
+    let insert = async move |col: &'static str, json: serde_json::Value| {
       conn
         .execute(
           &format!(

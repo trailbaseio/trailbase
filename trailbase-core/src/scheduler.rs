@@ -85,7 +85,7 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
     tasks.add_periodic_task(Duration::hours(2), move || {
       let logs_conn = logs_conn.clone();
 
-      tokio::spawn(async move {
+      async move {
         let timestamp = (Utc::now() - retention).timestamp();
         match logs_conn
           .execute("DELETE FROM _logs WHERE created < $1", params!(timestamp))
@@ -94,7 +94,7 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
           Ok(_) => info!("Successfully pruned logs"),
           Err(err) => warn!("Failed to clean up old logs: {err}"),
         };
-      })
+      }
     });
   }
 
@@ -103,7 +103,7 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
   tasks.add_periodic_task(Duration::hours(12), move || {
     let state = state.clone();
 
-    tokio::spawn(async move {
+    async move {
       let refresh_token_ttl = state
         .access_config(|c| c.auth.refresh_token_ttl_sec)
         .map_or(DEFAULT_REFRESH_TOKEN_TTL, Duration::seconds);
@@ -121,7 +121,7 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
         Ok(count) => info!("Successfully pruned {count} old sessions."),
         Err(err) => warn!("Failed to clean up sessions: {err}"),
       };
-    })
+    }
   });
 
   // Optimizer
@@ -129,13 +129,52 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
   tasks.add_periodic_task(Duration::hours(24), move || {
     let conn = conn.clone();
 
-    tokio::spawn(async move {
+    async move {
       match conn.execute("PRAGMA optimize", ()).await {
         Ok(_) => info!("Successfully ran query optimizer"),
         Err(err) => warn!("query optimizer failed: {err}"),
       };
-    })
+    }
   });
 
   return tasks;
+}
+
+#[cfg(test)]
+mod tests {
+  use chrono::Duration;
+  use std::sync::{Arc, Mutex};
+
+  use super::*;
+
+  #[tokio::test]
+  async fn test_periodic_tasks() {
+    let arc: Arc<Mutex<i64>> = Arc::new(Mutex::new(0));
+    let weak = Arc::downgrade(&arc);
+
+    {
+      let arc_clone = arc.clone();
+
+      let mut tasks = AbortOnDrop::default();
+      tasks.add_periodic_task(Duration::milliseconds(2), move || {
+        let mut guard = arc_clone.lock().unwrap();
+        *guard = *guard + 1;
+
+        async {}
+      });
+
+      tokio::time::sleep(Duration::milliseconds(100).to_std().unwrap().into()).await;
+
+      // Make sure it ran multiple times.
+      assert!(*arc.lock().unwrap() > 1);
+
+      drop(arc);
+      drop(tasks);
+    }
+
+    // Make sure pending task have been canceled.
+    tokio::time::sleep(Duration::milliseconds(100).to_std().unwrap().into()).await;
+
+    assert!(weak.upgrade().is_none());
+  }
 }

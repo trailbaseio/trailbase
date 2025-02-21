@@ -89,7 +89,7 @@ pub struct Server {
 impl Server {
   /// Initializes the server. Will create a new data directory on first start.
   pub async fn init(opts: ServerOptions) -> Result<Self, InitError> {
-    return Self::init_with_custom_routes_and_initializer(opts, None, |_| async { Ok(()) }).await;
+    return Self::init_with_custom_routes_and_initializer(opts, None, async |_| Ok(())).await;
   }
 
   /// Initializes the server in a more customizable manner. Will create a new data directory on

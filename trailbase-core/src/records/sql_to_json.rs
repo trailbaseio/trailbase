@@ -277,7 +277,7 @@ mod tests {
       .unwrap();
     let metadata = TableMetadata::new(table.clone(), &[table]);
 
-    let insert = |json: serde_json::Value| async move {
+    let insert = async move |json: serde_json::Value| {
       conn
         .execute(
           &format!(

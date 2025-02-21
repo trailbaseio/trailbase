@@ -63,11 +63,11 @@ async fn test_oauth() {
   let app = Router::new()
     .route(
       auth_path,
-      get(|Query(query): Query<AuthQuery>| async { Json(query) }),
+      get(async |Query(query): Query<AuthQuery>| Json(query)),
     )
     .route(
       token_path,
-      post(|Form(req): Form<TokenRequest>| async move {
+      post(async move |Form(req): Form<TokenRequest>| {
         Json(TokenResponse {
           access_token: "opaque_token".to_string(),
           token_type: "Bearer".to_string(),
@@ -77,7 +77,7 @@ async fn test_oauth() {
     )
     .route(
       user_api_path,
-      get(|| async {
+      get(async || {
         Json(TestUser {
           id: external_user_id.to_string(),
           email: external_user_email.to_string(),

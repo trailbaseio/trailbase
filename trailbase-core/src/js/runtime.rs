@@ -561,7 +561,7 @@ fn add_route_to_router(
   let method_uppercase = method.to_uppercase();
 
   let route_path = route.clone();
-  let handler = move |params: RawPathParams, user: Option<User>, req: Request| async move {
+  let handler = async move |params: RawPathParams, user: Option<User>, req: Request| {
     let (parts, body) = req.into_parts();
 
     let Ok(body_bytes) = axum::body::to_bytes(body, usize::MAX).await else {
