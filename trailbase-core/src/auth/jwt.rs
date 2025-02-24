@@ -73,7 +73,7 @@ pub struct JwtHelper {
 
   // The public key used for validating provided JWTs.
   decoding_key: DecodingKey,
-  public_key: Vec<u8>,
+  public_key: String,
 }
 
 impl JwtHelper {
@@ -83,7 +83,7 @@ impl JwtHelper {
       validation: Validation::new(jsonwebtoken::Algorithm::EdDSA),
       encoding_key: EncodingKey::from_ed_pem(&private_key)?,
       decoding_key: DecodingKey::from_ed_pem(&public_key)?,
-      public_key,
+      public_key: String::from_utf8_lossy(&public_key).to_string(),
     });
   }
 
@@ -114,7 +114,7 @@ impl JwtHelper {
   }
 
   pub fn public_key(&self) -> String {
-    String::from_utf8_lossy(&self.public_key).to_string()
+    return self.public_key.clone();
   }
 
   pub fn decode<T: DeserializeOwned>(&self, token: &str) -> Result<T, JwtError> {

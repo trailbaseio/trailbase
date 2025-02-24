@@ -34,7 +34,7 @@ where
   async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
     let state = AppState::from_ref(state);
 
-    if let Ok(tokens) = extract_tokens_from_headers(&state, &parts.headers).await {
+    if let Ok(tokens) = extract_tokens_from_headers(&state, &parts.headers) {
       return Ok(tokens);
     }
 
@@ -56,7 +56,7 @@ where
   ) -> Result<Option<Self>, Self::Rejection> {
     let state = AppState::from_ref(state);
 
-    if let Ok(tokens) = extract_tokens_from_headers(&state, &parts.headers).await {
+    if let Ok(tokens) = extract_tokens_from_headers(&state, &parts.headers) {
       return Ok(Some(tokens));
     }
 
@@ -65,24 +65,24 @@ where
   }
 }
 
-async fn extract_tokens_from_headers(
+fn extract_tokens_from_headers(
   state: &AppState,
   headers: &header::HeaderMap,
 ) -> Result<Tokens, AuthError> {
-  let Some(auth_token) = headers.get(header::AUTHORIZATION).and_then(|value| {
-    if let Ok(value) = value.to_str() {
-      return value.strip_prefix("Bearer ");
-    }
-    None
-  }) else {
+  let Some(auth_token_str) = headers
+    .get(header::AUTHORIZATION)
+    .and_then(|v| v.to_str().ok())
+    .and_then(|v| v.strip_prefix("Bearer "))
+  else {
     return Err(AuthError::Unauthorized);
   };
 
-  let refresh_token = headers
-    .get(HEADER_REFRESH_TOKEN)
-    .and_then(|value| value.to_str().ok().map(|s| s.to_string()));
+  if let Ok(claims) = state.jwt().decode(auth_token_str) {
+    let refresh_token = headers
+      .get(HEADER_REFRESH_TOKEN)
+      .and_then(|value| value.to_str().ok())
+      .map(str::to_string);
 
-  if let Ok(claims) = state.jwt().decode(auth_token) {
     return Ok(Tokens {
       auth_token_claims: claims,
       refresh_token,
