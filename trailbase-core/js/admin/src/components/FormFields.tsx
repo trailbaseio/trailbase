@@ -46,7 +46,7 @@ type TextFieldOptions = {
   placeholder?: string;
 };
 
-export function buildTextFormFieldT<T extends string | (string | undefined)>(
+export function buildTextFormFieldT<T extends string | undefined>(
   opts: TextFieldOptions,
 ) {
   const externDisable = opts.disabled ?? false;
@@ -92,10 +92,12 @@ export function buildTextFormField(opts: TextFieldOptions) {
   return buildTextFormFieldT<string>(opts);
 }
 
-export function buildOptionalTextFormField(opts: TextFieldOptions) {
+export function buildOptionalTextFormFieldT<T extends string | undefined>(
+  opts: TextFieldOptions,
+) {
   const externDisable = opts.disabled ?? false;
 
-  function builder(field: () => FieldApiT<string | undefined>) {
+  function builder(field: () => FieldApiT<T>) {
     const initialValue = field().state.value;
     const [enabled, setEnabled] = createSignal<boolean>(
       !externDisable && initialValue !== undefined && initialValue !== null,
@@ -113,13 +115,13 @@ export function buildOptionalTextFormField(opts: TextFieldOptions) {
             <TextFieldInput
               disabled={!enabled()}
               type={opts.type ?? "text"}
-              value={field().state.value?.toString()}
+              value={field().state.value?.toString() ?? ""}
               placeholder={enabled() ? "" : "NULL"}
               onBlur={field().handleBlur}
               autocomplete={opts.autocomplete}
               autocorrect={opts.type === "password" ? "off" : undefined}
               onKeyUp={(e) =>
-                field().handleChange((e.target as HTMLInputElement).value)
+                field().handleChange((e.target as HTMLInputElement).value as T)
               }
             />
 
@@ -130,7 +132,8 @@ export function buildOptionalTextFormField(opts: TextFieldOptions) {
                 setEnabled(enabled);
                 // NOTE: null is critical here to actively unset a cell, undefined
                 // would merely take it out of the patch set.
-                field().handleChange(enabled ? initialValue : undefined);
+                const value = enabled ? (initialValue ?? "") : null;
+                field().handleChange(value as T);
               }}
             />
           </div>
@@ -146,6 +149,10 @@ export function buildOptionalTextFormField(opts: TextFieldOptions) {
   }
 
   return builder;
+}
+
+export function buildOptionalTextFormField(opts: TextFieldOptions) {
+  return buildOptionalTextFormFieldT<string | undefined>(opts);
 }
 
 export function buildSecretFormField(opts: Omit<TextFieldOptions, "type">) {
@@ -235,9 +242,9 @@ type NumberFieldOptions = {
   integer?: boolean;
 };
 
-export function buildNumberFormFieldT<
-  T extends number | (number | undefined) | string,
->(opts: NumberFieldOptions) {
+export function buildNumberFormFieldT<T extends number | string | undefined>(
+  opts: NumberFieldOptions,
+) {
   const isInt = opts.integer ?? false;
 
   return (field: () => FieldApiT<T>) => {
@@ -253,7 +260,7 @@ export function buildNumberFormFieldT<
             type="number"
             step={isInt ? "1" : undefined}
             pattern={isInt ? "d+" : undefined}
-            value={field().state.value}
+            value={field().state.value ?? undefined}
             disabled={opts?.disabled}
             onBlur={field().handleBlur}
             onKeyUp={(e: Event) => {
@@ -449,31 +456,6 @@ export function buildDBCellField(props: {
     return buildOptionalTextFormField({ label, placeholder });
   }
   return buildTextFormFieldT<string | undefined>({ label, placeholder });
-}
-
-export function buildOptionalDBCellField(props: {
-  type: ColumnDataType;
-  label: string;
-  placeholder?: string;
-}) {
-  const label = () => (
-    <div class="w-[100px] flex gap-2 items-center overflow-hidden">
-      {props.type === "Blob" && <BinaryBlobHoverCard />}
-      {props.label}
-    </div>
-  );
-
-  const type = props.type;
-  const placeholder = props.placeholder;
-  if (type === "Text" || type === "Blob") {
-    return buildOptionalTextFormField({ label, placeholder });
-  }
-
-  console.debug(
-    `Custom FormFields not yet implemented for '${type}'. Falling back to textfields`,
-  );
-
-  return buildOptionalTextFormField({ label, placeholder });
 }
 
 export const gapStyle = "gap-x-2 gap-y-1";
