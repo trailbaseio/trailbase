@@ -24,7 +24,7 @@ Dockerfile*
 .git/modules
 
 .hooks/
-.cargo
+.cargo/
 *.image
 .rustfmt.toml
 .env
