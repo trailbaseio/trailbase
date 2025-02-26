@@ -1,4 +1,4 @@
-import { createEffect, createSignal, Show } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import { useStore } from "@nanostores/solid";
 import { TbUser } from "solid-icons/tb";
 import { type User } from "trailbase";
@@ -34,10 +34,6 @@ function Profile(props: { user: User }) {
 export function AuthButton() {
   const [open, setOpen] = createSignal(false);
   const user = useStore($user);
-
-  createEffect(() => {
-    console.log("user", user());
-  });
 
   return (
     <Dialog open={open()} onOpenChange={setOpen}>

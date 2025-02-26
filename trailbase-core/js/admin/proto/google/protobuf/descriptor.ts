@@ -1299,8 +1299,6 @@ export const FileDescriptorSet: MessageFns<FileDescriptorSet> = {
 
 function createBaseFileDescriptorProto(): FileDescriptorProto {
   return {
-    name: "",
-    package: "",
     dependency: [],
     publicDependency: [],
     weakDependency: [],
@@ -1308,9 +1306,6 @@ function createBaseFileDescriptorProto(): FileDescriptorProto {
     enumType: [],
     service: [],
     extension: [],
-    options: undefined,
-    sourceCodeInfo: undefined,
-    syntax: "",
   };
 }
 
@@ -1493,8 +1488,8 @@ export const FileDescriptorProto: MessageFns<FileDescriptorProto> = {
 
   fromJSON(object: any): FileDescriptorProto {
     return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
-      package: isSet(object.package) ? globalThis.String(object.package) : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : undefined,
+      package: isSet(object.package) ? globalThis.String(object.package) : undefined,
       dependency: globalThis.Array.isArray(object?.dependency)
         ? object.dependency.map((e: any) => globalThis.String(e))
         : [],
@@ -1518,7 +1513,7 @@ export const FileDescriptorProto: MessageFns<FileDescriptorProto> = {
         : [],
       options: isSet(object.options) ? FileOptions.fromJSON(object.options) : undefined,
       sourceCodeInfo: isSet(object.sourceCodeInfo) ? SourceCodeInfo.fromJSON(object.sourceCodeInfo) : undefined,
-      syntax: isSet(object.syntax) ? globalThis.String(object.syntax) : "",
+      syntax: isSet(object.syntax) ? globalThis.String(object.syntax) : undefined,
     };
   },
 
@@ -1590,14 +1585,12 @@ export const FileDescriptorProto: MessageFns<FileDescriptorProto> = {
 
 function createBaseDescriptorProto(): DescriptorProto {
   return {
-    name: "",
     field: [],
     extension: [],
     nestedType: [],
     enumType: [],
     extensionRange: [],
     oneofDecl: [],
-    options: undefined,
     reservedRange: [],
     reservedName: [],
   };
@@ -1736,7 +1729,7 @@ export const DescriptorProto: MessageFns<DescriptorProto> = {
 
   fromJSON(object: any): DescriptorProto {
     return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : undefined,
       field: globalThis.Array.isArray(object?.field)
         ? object.field.map((e: any) => FieldDescriptorProto.fromJSON(e))
         : [],
@@ -1822,7 +1815,7 @@ export const DescriptorProto: MessageFns<DescriptorProto> = {
 };
 
 function createBaseDescriptorProto_ExtensionRange(): DescriptorProto_ExtensionRange {
-  return { start: 0, end: 0, options: undefined };
+  return {};
 }
 
 export const DescriptorProto_ExtensionRange: MessageFns<DescriptorProto_ExtensionRange> = {
@@ -1881,8 +1874,8 @@ export const DescriptorProto_ExtensionRange: MessageFns<DescriptorProto_Extensio
 
   fromJSON(object: any): DescriptorProto_ExtensionRange {
     return {
-      start: isSet(object.start) ? globalThis.Number(object.start) : 0,
-      end: isSet(object.end) ? globalThis.Number(object.end) : 0,
+      start: isSet(object.start) ? globalThis.Number(object.start) : undefined,
+      end: isSet(object.end) ? globalThis.Number(object.end) : undefined,
       options: isSet(object.options) ? ExtensionRangeOptions.fromJSON(object.options) : undefined,
     };
   },
@@ -1918,7 +1911,7 @@ export const DescriptorProto_ExtensionRange: MessageFns<DescriptorProto_Extensio
 };
 
 function createBaseDescriptorProto_ReservedRange(): DescriptorProto_ReservedRange {
-  return { start: 0, end: 0 };
+  return {};
 }
 
 export const DescriptorProto_ReservedRange: MessageFns<DescriptorProto_ReservedRange> = {
@@ -1966,8 +1959,8 @@ export const DescriptorProto_ReservedRange: MessageFns<DescriptorProto_ReservedR
 
   fromJSON(object: any): DescriptorProto_ReservedRange {
     return {
-      start: isSet(object.start) ? globalThis.Number(object.start) : 0,
-      end: isSet(object.end) ? globalThis.Number(object.end) : 0,
+      start: isSet(object.start) ? globalThis.Number(object.start) : undefined,
+      end: isSet(object.end) ? globalThis.Number(object.end) : undefined,
     };
   },
 
@@ -2058,19 +2051,7 @@ export const ExtensionRangeOptions: MessageFns<ExtensionRangeOptions> = {
 };
 
 function createBaseFieldDescriptorProto(): FieldDescriptorProto {
-  return {
-    name: "",
-    number: 0,
-    label: 1,
-    type: 1,
-    typeName: "",
-    extendee: "",
-    defaultValue: "",
-    oneofIndex: 0,
-    jsonName: "",
-    options: undefined,
-    proto3Optional: false,
-  };
+  return {};
 }
 
 export const FieldDescriptorProto: MessageFns<FieldDescriptorProto> = {
@@ -2217,17 +2198,17 @@ export const FieldDescriptorProto: MessageFns<FieldDescriptorProto> = {
 
   fromJSON(object: any): FieldDescriptorProto {
     return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
-      number: isSet(object.number) ? globalThis.Number(object.number) : 0,
-      label: isSet(object.label) ? fieldDescriptorProto_LabelFromJSON(object.label) : 1,
-      type: isSet(object.type) ? fieldDescriptorProto_TypeFromJSON(object.type) : 1,
-      typeName: isSet(object.typeName) ? globalThis.String(object.typeName) : "",
-      extendee: isSet(object.extendee) ? globalThis.String(object.extendee) : "",
-      defaultValue: isSet(object.defaultValue) ? globalThis.String(object.defaultValue) : "",
-      oneofIndex: isSet(object.oneofIndex) ? globalThis.Number(object.oneofIndex) : 0,
-      jsonName: isSet(object.jsonName) ? globalThis.String(object.jsonName) : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : undefined,
+      number: isSet(object.number) ? globalThis.Number(object.number) : undefined,
+      label: isSet(object.label) ? fieldDescriptorProto_LabelFromJSON(object.label) : undefined,
+      type: isSet(object.type) ? fieldDescriptorProto_TypeFromJSON(object.type) : undefined,
+      typeName: isSet(object.typeName) ? globalThis.String(object.typeName) : undefined,
+      extendee: isSet(object.extendee) ? globalThis.String(object.extendee) : undefined,
+      defaultValue: isSet(object.defaultValue) ? globalThis.String(object.defaultValue) : undefined,
+      oneofIndex: isSet(object.oneofIndex) ? globalThis.Number(object.oneofIndex) : undefined,
+      jsonName: isSet(object.jsonName) ? globalThis.String(object.jsonName) : undefined,
       options: isSet(object.options) ? FieldOptions.fromJSON(object.options) : undefined,
-      proto3Optional: isSet(object.proto3Optional) ? globalThis.Boolean(object.proto3Optional) : false,
+      proto3Optional: isSet(object.proto3Optional) ? globalThis.Boolean(object.proto3Optional) : undefined,
     };
   },
 
@@ -2292,7 +2273,7 @@ export const FieldDescriptorProto: MessageFns<FieldDescriptorProto> = {
 };
 
 function createBaseOneofDescriptorProto(): OneofDescriptorProto {
-  return { name: "", options: undefined };
+  return {};
 }
 
 export const OneofDescriptorProto: MessageFns<OneofDescriptorProto> = {
@@ -2340,7 +2321,7 @@ export const OneofDescriptorProto: MessageFns<OneofDescriptorProto> = {
 
   fromJSON(object: any): OneofDescriptorProto {
     return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : undefined,
       options: isSet(object.options) ? OneofOptions.fromJSON(object.options) : undefined,
     };
   },
@@ -2370,7 +2351,7 @@ export const OneofDescriptorProto: MessageFns<OneofDescriptorProto> = {
 };
 
 function createBaseEnumDescriptorProto(): EnumDescriptorProto {
-  return { name: "", value: [], options: undefined, reservedRange: [], reservedName: [] };
+  return { value: [], reservedRange: [], reservedName: [] };
 }
 
 export const EnumDescriptorProto: MessageFns<EnumDescriptorProto> = {
@@ -2451,7 +2432,7 @@ export const EnumDescriptorProto: MessageFns<EnumDescriptorProto> = {
 
   fromJSON(object: any): EnumDescriptorProto {
     return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : undefined,
       value: globalThis.Array.isArray(object?.value)
         ? object.value.map((e: any) => EnumValueDescriptorProto.fromJSON(e))
         : [],
@@ -2503,7 +2484,7 @@ export const EnumDescriptorProto: MessageFns<EnumDescriptorProto> = {
 };
 
 function createBaseEnumDescriptorProto_EnumReservedRange(): EnumDescriptorProto_EnumReservedRange {
-  return { start: 0, end: 0 };
+  return {};
 }
 
 export const EnumDescriptorProto_EnumReservedRange: MessageFns<EnumDescriptorProto_EnumReservedRange> = {
@@ -2551,8 +2532,8 @@ export const EnumDescriptorProto_EnumReservedRange: MessageFns<EnumDescriptorPro
 
   fromJSON(object: any): EnumDescriptorProto_EnumReservedRange {
     return {
-      start: isSet(object.start) ? globalThis.Number(object.start) : 0,
-      end: isSet(object.end) ? globalThis.Number(object.end) : 0,
+      start: isSet(object.start) ? globalThis.Number(object.start) : undefined,
+      end: isSet(object.end) ? globalThis.Number(object.end) : undefined,
     };
   },
 
@@ -2583,7 +2564,7 @@ export const EnumDescriptorProto_EnumReservedRange: MessageFns<EnumDescriptorPro
 };
 
 function createBaseEnumValueDescriptorProto(): EnumValueDescriptorProto {
-  return { name: "", number: 0, options: undefined };
+  return {};
 }
 
 export const EnumValueDescriptorProto: MessageFns<EnumValueDescriptorProto> = {
@@ -2642,8 +2623,8 @@ export const EnumValueDescriptorProto: MessageFns<EnumValueDescriptorProto> = {
 
   fromJSON(object: any): EnumValueDescriptorProto {
     return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
-      number: isSet(object.number) ? globalThis.Number(object.number) : 0,
+      name: isSet(object.name) ? globalThis.String(object.name) : undefined,
+      number: isSet(object.number) ? globalThis.Number(object.number) : undefined,
       options: isSet(object.options) ? EnumValueOptions.fromJSON(object.options) : undefined,
     };
   },
@@ -2677,7 +2658,7 @@ export const EnumValueDescriptorProto: MessageFns<EnumValueDescriptorProto> = {
 };
 
 function createBaseServiceDescriptorProto(): ServiceDescriptorProto {
-  return { name: "", method: [], options: undefined };
+  return { method: [] };
 }
 
 export const ServiceDescriptorProto: MessageFns<ServiceDescriptorProto> = {
@@ -2736,7 +2717,7 @@ export const ServiceDescriptorProto: MessageFns<ServiceDescriptorProto> = {
 
   fromJSON(object: any): ServiceDescriptorProto {
     return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : undefined,
       method: globalThis.Array.isArray(object?.method)
         ? object.method.map((e: any) => MethodDescriptorProto.fromJSON(e))
         : [],
@@ -2773,14 +2754,7 @@ export const ServiceDescriptorProto: MessageFns<ServiceDescriptorProto> = {
 };
 
 function createBaseMethodDescriptorProto(): MethodDescriptorProto {
-  return {
-    name: "",
-    inputType: "",
-    outputType: "",
-    options: undefined,
-    clientStreaming: false,
-    serverStreaming: false,
-  };
+  return {};
 }
 
 export const MethodDescriptorProto: MessageFns<MethodDescriptorProto> = {
@@ -2872,12 +2846,12 @@ export const MethodDescriptorProto: MessageFns<MethodDescriptorProto> = {
 
   fromJSON(object: any): MethodDescriptorProto {
     return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
-      inputType: isSet(object.inputType) ? globalThis.String(object.inputType) : "",
-      outputType: isSet(object.outputType) ? globalThis.String(object.outputType) : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : undefined,
+      inputType: isSet(object.inputType) ? globalThis.String(object.inputType) : undefined,
+      outputType: isSet(object.outputType) ? globalThis.String(object.outputType) : undefined,
       options: isSet(object.options) ? MethodOptions.fromJSON(object.options) : undefined,
-      clientStreaming: isSet(object.clientStreaming) ? globalThis.Boolean(object.clientStreaming) : false,
-      serverStreaming: isSet(object.serverStreaming) ? globalThis.Boolean(object.serverStreaming) : false,
+      clientStreaming: isSet(object.clientStreaming) ? globalThis.Boolean(object.clientStreaming) : undefined,
+      serverStreaming: isSet(object.serverStreaming) ? globalThis.Boolean(object.serverStreaming) : undefined,
     };
   },
 
@@ -2922,29 +2896,7 @@ export const MethodDescriptorProto: MessageFns<MethodDescriptorProto> = {
 };
 
 function createBaseFileOptions(): FileOptions {
-  return {
-    javaPackage: "",
-    javaOuterClassname: "",
-    javaMultipleFiles: false,
-    javaGenerateEqualsAndHash: false,
-    javaStringCheckUtf8: false,
-    optimizeFor: 1,
-    goPackage: "",
-    ccGenericServices: false,
-    javaGenericServices: false,
-    pyGenericServices: false,
-    phpGenericServices: false,
-    deprecated: false,
-    ccEnableArenas: true,
-    objcClassPrefix: "",
-    csharpNamespace: "",
-    swiftPrefix: "",
-    phpClassPrefix: "",
-    phpNamespace: "",
-    phpMetadataNamespace: "",
-    rubyPackage: "",
-    uninterpretedOption: [],
-  };
+  return { uninterpretedOption: [] };
 }
 
 export const FileOptions: MessageFns<FileOptions> = {
@@ -3201,28 +3153,34 @@ export const FileOptions: MessageFns<FileOptions> = {
 
   fromJSON(object: any): FileOptions {
     return {
-      javaPackage: isSet(object.javaPackage) ? globalThis.String(object.javaPackage) : "",
-      javaOuterClassname: isSet(object.javaOuterClassname) ? globalThis.String(object.javaOuterClassname) : "",
-      javaMultipleFiles: isSet(object.javaMultipleFiles) ? globalThis.Boolean(object.javaMultipleFiles) : false,
+      javaPackage: isSet(object.javaPackage) ? globalThis.String(object.javaPackage) : undefined,
+      javaOuterClassname: isSet(object.javaOuterClassname) ? globalThis.String(object.javaOuterClassname) : undefined,
+      javaMultipleFiles: isSet(object.javaMultipleFiles) ? globalThis.Boolean(object.javaMultipleFiles) : undefined,
       javaGenerateEqualsAndHash: isSet(object.javaGenerateEqualsAndHash)
         ? globalThis.Boolean(object.javaGenerateEqualsAndHash)
-        : false,
-      javaStringCheckUtf8: isSet(object.javaStringCheckUtf8) ? globalThis.Boolean(object.javaStringCheckUtf8) : false,
-      optimizeFor: isSet(object.optimizeFor) ? fileOptions_OptimizeModeFromJSON(object.optimizeFor) : 1,
-      goPackage: isSet(object.goPackage) ? globalThis.String(object.goPackage) : "",
-      ccGenericServices: isSet(object.ccGenericServices) ? globalThis.Boolean(object.ccGenericServices) : false,
-      javaGenericServices: isSet(object.javaGenericServices) ? globalThis.Boolean(object.javaGenericServices) : false,
-      pyGenericServices: isSet(object.pyGenericServices) ? globalThis.Boolean(object.pyGenericServices) : false,
-      phpGenericServices: isSet(object.phpGenericServices) ? globalThis.Boolean(object.phpGenericServices) : false,
-      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : false,
-      ccEnableArenas: isSet(object.ccEnableArenas) ? globalThis.Boolean(object.ccEnableArenas) : true,
-      objcClassPrefix: isSet(object.objcClassPrefix) ? globalThis.String(object.objcClassPrefix) : "",
-      csharpNamespace: isSet(object.csharpNamespace) ? globalThis.String(object.csharpNamespace) : "",
-      swiftPrefix: isSet(object.swiftPrefix) ? globalThis.String(object.swiftPrefix) : "",
-      phpClassPrefix: isSet(object.phpClassPrefix) ? globalThis.String(object.phpClassPrefix) : "",
-      phpNamespace: isSet(object.phpNamespace) ? globalThis.String(object.phpNamespace) : "",
-      phpMetadataNamespace: isSet(object.phpMetadataNamespace) ? globalThis.String(object.phpMetadataNamespace) : "",
-      rubyPackage: isSet(object.rubyPackage) ? globalThis.String(object.rubyPackage) : "",
+        : undefined,
+      javaStringCheckUtf8: isSet(object.javaStringCheckUtf8)
+        ? globalThis.Boolean(object.javaStringCheckUtf8)
+        : undefined,
+      optimizeFor: isSet(object.optimizeFor) ? fileOptions_OptimizeModeFromJSON(object.optimizeFor) : undefined,
+      goPackage: isSet(object.goPackage) ? globalThis.String(object.goPackage) : undefined,
+      ccGenericServices: isSet(object.ccGenericServices) ? globalThis.Boolean(object.ccGenericServices) : undefined,
+      javaGenericServices: isSet(object.javaGenericServices)
+        ? globalThis.Boolean(object.javaGenericServices)
+        : undefined,
+      pyGenericServices: isSet(object.pyGenericServices) ? globalThis.Boolean(object.pyGenericServices) : undefined,
+      phpGenericServices: isSet(object.phpGenericServices) ? globalThis.Boolean(object.phpGenericServices) : undefined,
+      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : undefined,
+      ccEnableArenas: isSet(object.ccEnableArenas) ? globalThis.Boolean(object.ccEnableArenas) : undefined,
+      objcClassPrefix: isSet(object.objcClassPrefix) ? globalThis.String(object.objcClassPrefix) : undefined,
+      csharpNamespace: isSet(object.csharpNamespace) ? globalThis.String(object.csharpNamespace) : undefined,
+      swiftPrefix: isSet(object.swiftPrefix) ? globalThis.String(object.swiftPrefix) : undefined,
+      phpClassPrefix: isSet(object.phpClassPrefix) ? globalThis.String(object.phpClassPrefix) : undefined,
+      phpNamespace: isSet(object.phpNamespace) ? globalThis.String(object.phpNamespace) : undefined,
+      phpMetadataNamespace: isSet(object.phpMetadataNamespace)
+        ? globalThis.String(object.phpMetadataNamespace)
+        : undefined,
+      rubyPackage: isSet(object.rubyPackage) ? globalThis.String(object.rubyPackage) : undefined,
       uninterpretedOption: globalThis.Array.isArray(object?.uninterpretedOption)
         ? object.uninterpretedOption.map((e: any) => UninterpretedOption.fromJSON(e))
         : [],
@@ -3328,13 +3286,7 @@ export const FileOptions: MessageFns<FileOptions> = {
 };
 
 function createBaseMessageOptions(): MessageOptions {
-  return {
-    messageSetWireFormat: false,
-    noStandardDescriptorAccessor: false,
-    deprecated: false,
-    mapEntry: false,
-    uninterpretedOption: [],
-  };
+  return { uninterpretedOption: [] };
 }
 
 export const MessageOptions: MessageFns<MessageOptions> = {
@@ -3417,12 +3369,12 @@ export const MessageOptions: MessageFns<MessageOptions> = {
     return {
       messageSetWireFormat: isSet(object.messageSetWireFormat)
         ? globalThis.Boolean(object.messageSetWireFormat)
-        : false,
+        : undefined,
       noStandardDescriptorAccessor: isSet(object.noStandardDescriptorAccessor)
         ? globalThis.Boolean(object.noStandardDescriptorAccessor)
-        : false,
-      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : false,
-      mapEntry: isSet(object.mapEntry) ? globalThis.Boolean(object.mapEntry) : false,
+        : undefined,
+      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : undefined,
+      mapEntry: isSet(object.mapEntry) ? globalThis.Boolean(object.mapEntry) : undefined,
       uninterpretedOption: globalThis.Array.isArray(object?.uninterpretedOption)
         ? object.uninterpretedOption.map((e: any) => UninterpretedOption.fromJSON(e))
         : [],
@@ -3464,16 +3416,7 @@ export const MessageOptions: MessageFns<MessageOptions> = {
 };
 
 function createBaseFieldOptions(): FieldOptions {
-  return {
-    ctype: 0,
-    packed: false,
-    jstype: 0,
-    lazy: false,
-    unverifiedLazy: false,
-    deprecated: false,
-    weak: false,
-    uninterpretedOption: [],
-  };
+  return { uninterpretedOption: [] };
 }
 
 export const FieldOptions: MessageFns<FieldOptions> = {
@@ -3587,13 +3530,13 @@ export const FieldOptions: MessageFns<FieldOptions> = {
 
   fromJSON(object: any): FieldOptions {
     return {
-      ctype: isSet(object.ctype) ? fieldOptions_CTypeFromJSON(object.ctype) : 0,
-      packed: isSet(object.packed) ? globalThis.Boolean(object.packed) : false,
-      jstype: isSet(object.jstype) ? fieldOptions_JSTypeFromJSON(object.jstype) : 0,
-      lazy: isSet(object.lazy) ? globalThis.Boolean(object.lazy) : false,
-      unverifiedLazy: isSet(object.unverifiedLazy) ? globalThis.Boolean(object.unverifiedLazy) : false,
-      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : false,
-      weak: isSet(object.weak) ? globalThis.Boolean(object.weak) : false,
+      ctype: isSet(object.ctype) ? fieldOptions_CTypeFromJSON(object.ctype) : undefined,
+      packed: isSet(object.packed) ? globalThis.Boolean(object.packed) : undefined,
+      jstype: isSet(object.jstype) ? fieldOptions_JSTypeFromJSON(object.jstype) : undefined,
+      lazy: isSet(object.lazy) ? globalThis.Boolean(object.lazy) : undefined,
+      unverifiedLazy: isSet(object.unverifiedLazy) ? globalThis.Boolean(object.unverifiedLazy) : undefined,
+      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : undefined,
+      weak: isSet(object.weak) ? globalThis.Boolean(object.weak) : undefined,
       uninterpretedOption: globalThis.Array.isArray(object?.uninterpretedOption)
         ? object.uninterpretedOption.map((e: any) => UninterpretedOption.fromJSON(e))
         : [],
@@ -3709,7 +3652,7 @@ export const OneofOptions: MessageFns<OneofOptions> = {
 };
 
 function createBaseEnumOptions(): EnumOptions {
-  return { allowAlias: false, deprecated: false, uninterpretedOption: [] };
+  return { uninterpretedOption: [] };
 }
 
 export const EnumOptions: MessageFns<EnumOptions> = {
@@ -3768,8 +3711,8 @@ export const EnumOptions: MessageFns<EnumOptions> = {
 
   fromJSON(object: any): EnumOptions {
     return {
-      allowAlias: isSet(object.allowAlias) ? globalThis.Boolean(object.allowAlias) : false,
-      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : false,
+      allowAlias: isSet(object.allowAlias) ? globalThis.Boolean(object.allowAlias) : undefined,
+      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : undefined,
       uninterpretedOption: globalThis.Array.isArray(object?.uninterpretedOption)
         ? object.uninterpretedOption.map((e: any) => UninterpretedOption.fromJSON(e))
         : [],
@@ -3803,7 +3746,7 @@ export const EnumOptions: MessageFns<EnumOptions> = {
 };
 
 function createBaseEnumValueOptions(): EnumValueOptions {
-  return { deprecated: false, uninterpretedOption: [] };
+  return { uninterpretedOption: [] };
 }
 
 export const EnumValueOptions: MessageFns<EnumValueOptions> = {
@@ -3851,7 +3794,7 @@ export const EnumValueOptions: MessageFns<EnumValueOptions> = {
 
   fromJSON(object: any): EnumValueOptions {
     return {
-      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : false,
+      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : undefined,
       uninterpretedOption: globalThis.Array.isArray(object?.uninterpretedOption)
         ? object.uninterpretedOption.map((e: any) => UninterpretedOption.fromJSON(e))
         : [],
@@ -3881,7 +3824,7 @@ export const EnumValueOptions: MessageFns<EnumValueOptions> = {
 };
 
 function createBaseServiceOptions(): ServiceOptions {
-  return { deprecated: false, uninterpretedOption: [] };
+  return { uninterpretedOption: [] };
 }
 
 export const ServiceOptions: MessageFns<ServiceOptions> = {
@@ -3929,7 +3872,7 @@ export const ServiceOptions: MessageFns<ServiceOptions> = {
 
   fromJSON(object: any): ServiceOptions {
     return {
-      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : false,
+      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : undefined,
       uninterpretedOption: globalThis.Array.isArray(object?.uninterpretedOption)
         ? object.uninterpretedOption.map((e: any) => UninterpretedOption.fromJSON(e))
         : [],
@@ -3959,7 +3902,7 @@ export const ServiceOptions: MessageFns<ServiceOptions> = {
 };
 
 function createBaseMethodOptions(): MethodOptions {
-  return { deprecated: false, idempotencyLevel: 0, uninterpretedOption: [] };
+  return { uninterpretedOption: [] };
 }
 
 export const MethodOptions: MessageFns<MethodOptions> = {
@@ -4018,10 +3961,10 @@ export const MethodOptions: MessageFns<MethodOptions> = {
 
   fromJSON(object: any): MethodOptions {
     return {
-      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : false,
+      deprecated: isSet(object.deprecated) ? globalThis.Boolean(object.deprecated) : undefined,
       idempotencyLevel: isSet(object.idempotencyLevel)
         ? methodOptions_IdempotencyLevelFromJSON(object.idempotencyLevel)
-        : 0,
+        : undefined,
       uninterpretedOption: globalThis.Array.isArray(object?.uninterpretedOption)
         ? object.uninterpretedOption.map((e: any) => UninterpretedOption.fromJSON(e))
         : [],
@@ -4055,15 +3998,7 @@ export const MethodOptions: MessageFns<MethodOptions> = {
 };
 
 function createBaseUninterpretedOption(): UninterpretedOption {
-  return {
-    name: [],
-    identifierValue: "",
-    positiveIntValue: 0,
-    negativeIntValue: 0,
-    doubleValue: 0,
-    stringValue: new Uint8Array(0),
-    aggregateValue: "",
-  };
+  return { name: [] };
 }
 
 export const UninterpretedOption: MessageFns<UninterpretedOption> = {
@@ -4169,12 +4104,12 @@ export const UninterpretedOption: MessageFns<UninterpretedOption> = {
       name: globalThis.Array.isArray(object?.name)
         ? object.name.map((e: any) => UninterpretedOption_NamePart.fromJSON(e))
         : [],
-      identifierValue: isSet(object.identifierValue) ? globalThis.String(object.identifierValue) : "",
-      positiveIntValue: isSet(object.positiveIntValue) ? globalThis.Number(object.positiveIntValue) : 0,
-      negativeIntValue: isSet(object.negativeIntValue) ? globalThis.Number(object.negativeIntValue) : 0,
-      doubleValue: isSet(object.doubleValue) ? globalThis.Number(object.doubleValue) : 0,
-      stringValue: isSet(object.stringValue) ? bytesFromBase64(object.stringValue) : new Uint8Array(0),
-      aggregateValue: isSet(object.aggregateValue) ? globalThis.String(object.aggregateValue) : "",
+      identifierValue: isSet(object.identifierValue) ? globalThis.String(object.identifierValue) : undefined,
+      positiveIntValue: isSet(object.positiveIntValue) ? globalThis.Number(object.positiveIntValue) : undefined,
+      negativeIntValue: isSet(object.negativeIntValue) ? globalThis.Number(object.negativeIntValue) : undefined,
+      doubleValue: isSet(object.doubleValue) ? globalThis.Number(object.doubleValue) : undefined,
+      stringValue: isSet(object.stringValue) ? bytesFromBase64(object.stringValue) : undefined,
+      aggregateValue: isSet(object.aggregateValue) ? globalThis.String(object.aggregateValue) : undefined,
     };
   },
 
@@ -4359,7 +4294,7 @@ export const SourceCodeInfo: MessageFns<SourceCodeInfo> = {
 };
 
 function createBaseSourceCodeInfo_Location(): SourceCodeInfo_Location {
-  return { path: [], span: [], leadingComments: "", trailingComments: "", leadingDetachedComments: [] };
+  return { path: [], span: [], leadingDetachedComments: [] };
 }
 
 export const SourceCodeInfo_Location: MessageFns<SourceCodeInfo_Location> = {
@@ -4466,8 +4401,8 @@ export const SourceCodeInfo_Location: MessageFns<SourceCodeInfo_Location> = {
     return {
       path: globalThis.Array.isArray(object?.path) ? object.path.map((e: any) => globalThis.Number(e)) : [],
       span: globalThis.Array.isArray(object?.span) ? object.span.map((e: any) => globalThis.Number(e)) : [],
-      leadingComments: isSet(object.leadingComments) ? globalThis.String(object.leadingComments) : "",
-      trailingComments: isSet(object.trailingComments) ? globalThis.String(object.trailingComments) : "",
+      leadingComments: isSet(object.leadingComments) ? globalThis.String(object.leadingComments) : undefined,
+      trailingComments: isSet(object.trailingComments) ? globalThis.String(object.trailingComments) : undefined,
       leadingDetachedComments: globalThis.Array.isArray(object?.leadingDetachedComments)
         ? object.leadingDetachedComments.map((e: any) => globalThis.String(e))
         : [],
@@ -4571,7 +4506,7 @@ export const GeneratedCodeInfo: MessageFns<GeneratedCodeInfo> = {
 };
 
 function createBaseGeneratedCodeInfo_Annotation(): GeneratedCodeInfo_Annotation {
-  return { path: [], sourceFile: "", begin: 0, end: 0 };
+  return { path: [] };
 }
 
 export const GeneratedCodeInfo_Annotation: MessageFns<GeneratedCodeInfo_Annotation> = {
@@ -4654,9 +4589,9 @@ export const GeneratedCodeInfo_Annotation: MessageFns<GeneratedCodeInfo_Annotati
   fromJSON(object: any): GeneratedCodeInfo_Annotation {
     return {
       path: globalThis.Array.isArray(object?.path) ? object.path.map((e: any) => globalThis.Number(e)) : [],
-      sourceFile: isSet(object.sourceFile) ? globalThis.String(object.sourceFile) : "",
-      begin: isSet(object.begin) ? globalThis.Number(object.begin) : 0,
-      end: isSet(object.end) ? globalThis.Number(object.end) : 0,
+      sourceFile: isSet(object.sourceFile) ? globalThis.String(object.sourceFile) : undefined,
+      begin: isSet(object.begin) ? globalThis.Number(object.begin) : undefined,
+      end: isSet(object.end) ? globalThis.Number(object.end) : undefined,
     };
   },
 

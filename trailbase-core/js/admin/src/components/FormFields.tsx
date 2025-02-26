@@ -1,5 +1,4 @@
-import { createSignal } from "solid-js";
-import type { Accessor, Setter, JSXElement } from "solid-js";
+import { createSignal, type JSX } from "solid-js";
 import { createForm, type FieldApi } from "@tanstack/solid-form";
 import { TbInfoCircle, TbEye } from "solid-icons/tb";
 
@@ -31,67 +30,128 @@ import type { ColumnDataType } from "@/lib/bindings";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyFieldApi = FieldApi<any, any, any, any>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type FieldApiT<T> = FieldApi<T, any>;
+export type FieldApiT<T> = FieldApi<any, any, any, any, T>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type FormType<T> = ReturnType<typeof createForm<T, any>>;
 
 type TextFieldOptions = {
   disabled?: boolean;
   type?: TextFieldType;
-  onKeyUp?: Setter<string>;
-  required?: boolean;
 
-  label: () => JSXElement;
-  info?: JSXElement;
+  label: () => JSX.Element;
+  info?: JSX.Element;
   autocomplete?: string;
 
   // Optional placeholder string for absent values, e.g. "NULL". Optional only option.
-  nullPlaceholder?: string;
+  placeholder?: string;
 };
 
-export function buildTextFormField(opts: TextFieldOptions) {
-  const keyUp = opts.onKeyUp;
+export function buildTextFormFieldT<T extends string | (string | undefined)>(
+  opts: TextFieldOptions,
+) {
+  const externDisable = opts.disabled ?? false;
 
-  return (field: () => AnyFieldApi) => (
-    <TextField class="w-full">
-      <div
-        class={`grid items-center ${gapStyle}`}
-        style="grid-template-columns: auto 1fr"
-      >
-        <TextFieldLabel>{opts.label()}</TextFieldLabel>
+  function builder(field: () => FieldApiT<T>) {
+    return (
+      <TextField class="w-full">
+        <div
+          class={`grid items-center ${gapStyle}`}
+          style="grid-template-columns: auto 1fr"
+        >
+          <TextFieldLabel>{opts.label()}</TextFieldLabel>
 
-        <TextFieldInput
-          required={opts.required ?? true}
-          disabled={opts.disabled ?? false}
-          type={opts.type ?? "text"}
-          value={field().state.value ?? ""}
-          onBlur={field().handleBlur}
-          autocomplete={opts.autocomplete}
-          autocorrect={opts.type === "password" ? "off" : undefined}
-          onKeyUp={(e: Event) => {
-            const v = (e.target as HTMLInputElement).value;
-            field().handleChange(v);
-            if (keyUp) {
-              keyUp(v);
+          <TextFieldInput
+            disabled={externDisable}
+            type={opts.type ?? "text"}
+            value={field().state.value ?? ""}
+            placeholder={opts.placeholder}
+            onBlur={field().handleBlur}
+            autocomplete={opts.autocomplete}
+            autocorrect={opts.type === "password" ? "off" : undefined}
+            onKeyUp={(e) =>
+              field().handleChange((e.target as HTMLInputElement).value as T)
             }
-          }}
-        />
+          />
 
-        <div class="col-start-2 ml-2 text-sm text-muted-foreground">
-          {field && <FieldInfo field={field()} />}
+          <div class="col-start-2 ml-2 text-sm text-muted-foreground">
+            {field && <FieldInfo field={field()} />}
+          </div>
+
+          <div class="col-start-2 text-sm">{opts.info}</div>
         </div>
+      </TextField>
+    );
+  }
 
-        <div class="col-start-2 text-sm">{opts.info}</div>
-      </div>
-    </TextField>
-  );
+  return builder;
+}
+
+/// Note that we make not-required/optional explicit by having a checkbox, since there's
+/// a difference between empty string and not set.
+export function buildTextFormField(opts: TextFieldOptions) {
+  return buildTextFormFieldT<string>(opts);
+}
+
+export function buildOptionalTextFormField(opts: TextFieldOptions) {
+  const externDisable = opts.disabled ?? false;
+
+  function builder(field: () => FieldApiT<string | undefined>) {
+    const initialValue = field().state.value;
+    const [enabled, setEnabled] = createSignal<boolean>(
+      !externDisable && initialValue !== undefined && initialValue !== null,
+    );
+
+    return (
+      <TextField class="w-full">
+        <div
+          class={`grid items-center ${gapStyle}`}
+          style="grid-template-columns: auto 1fr"
+        >
+          <TextFieldLabel>{opts.label()}</TextFieldLabel>
+
+          <div class="flex items-center">
+            <TextFieldInput
+              disabled={!enabled()}
+              type={opts.type ?? "text"}
+              value={field().state.value?.toString()}
+              placeholder={enabled() ? "" : "NULL"}
+              onBlur={field().handleBlur}
+              autocomplete={opts.autocomplete}
+              autocorrect={opts.type === "password" ? "off" : undefined}
+              onKeyUp={(e) =>
+                field().handleChange((e.target as HTMLInputElement).value)
+              }
+            />
+
+            <Checkbox
+              disabled={externDisable}
+              checked={enabled()}
+              onChange={(enabled: boolean) => {
+                setEnabled(enabled);
+                // NOTE: null is critical here to actively unset a cell, undefined
+                // would merely take it out of the patch set.
+                field().handleChange(enabled ? initialValue : undefined);
+              }}
+            />
+          </div>
+
+          <div class="col-start-2 ml-2 text-sm text-muted-foreground">
+            {field && <FieldInfo field={field()} />}
+          </div>
+
+          <div class="col-start-2 text-sm">{opts.info}</div>
+        </div>
+      </TextField>
+    );
+  }
+
+  return builder;
 }
 
 export function buildSecretFormField(opts: Omit<TextFieldOptions, "type">) {
-  const keyUp = opts.onKeyUp;
   const [type, setType] = createSignal<TextFieldType>("password");
 
-  return (field: () => AnyFieldApi) => (
+  return (field: () => FieldApiT<string>) => (
     <TextField class="w-full">
       <div
         class={`grid items-center ${gapStyle}`}
@@ -101,19 +161,14 @@ export function buildSecretFormField(opts: Omit<TextFieldOptions, "type">) {
 
         <div class="flex gap-2 items-center">
           <TextFieldInput
-            required={opts.required ?? true}
             disabled={opts.disabled ?? false}
             type={type()}
-            value={field().state.value ?? ""}
+            value={field().state.value}
             onBlur={field().handleBlur}
             autocomplete={opts.autocomplete ?? "off"}
             autocorrect="off"
             onKeyUp={(e: Event) => {
-              const v = (e.target as HTMLInputElement).value;
-              field().handleChange(v);
-              if (keyUp) {
-                keyUp(v);
-              }
+              field().handleChange((e.target as HTMLInputElement).value);
             }}
           />
 
@@ -138,153 +193,54 @@ export function buildSecretFormField(opts: Omit<TextFieldOptions, "type">) {
   );
 }
 
-export function OptionalTextFormField(props: {
-  label: () => JSXElement;
-  info?: JSXElement;
-  field?: () => AnyFieldApi;
-
-  type?: TextFieldType;
-  onKeyUp?: Setter<string>;
-
-  initial?: string;
-  initialEnabled?: boolean;
-  disabled?: boolean;
-
-  nullPlaceholder?: string;
-
-  handleBlur?: () => void;
-  handleChange?: (v: string | undefined) => void;
-}) {
-  const [text, setText] = createSignal(props.initial ?? "");
-  const [enabled, setEnabled] = createSignal<boolean>(
-    props.initialEnabled ?? props.initial !== undefined,
-  );
-
-  const externDisable = props.disabled ?? false;
-  const effEnabled = () => enabled() && !externDisable;
-
-  const keyUp = props.onKeyUp;
-
-  return (
-    <TextField class="w-full">
-      <div
-        class={`grid items-center ${gapStyle}`}
-        style="grid-template-columns: auto 1fr"
-      >
-        <TextFieldLabel class={effEnabled() ? "" : "text-muted-foreground"}>
-          {props.label()}
-        </TextFieldLabel>
-
-        <div class="w-full flex items-center">
-          <TextFieldInput
-            required={false}
-            type={props.type ?? "text"}
-            value={effEnabled() ? text() : (props.nullPlaceholder ?? "NULL")}
-            disabled={!effEnabled()}
-            onBlur={props.handleBlur}
-            onKeyUp={(e: Event) => {
-              const v = (e.target as HTMLInputElement).value;
-              setText(v);
-              props.handleChange?.(v);
-              if (keyUp) {
-                keyUp(v);
-              }
-            }}
-            onChange={(e: Event) => {
-              const v: string = (e.currentTarget as HTMLInputElement).value;
-              props.handleChange?.(v);
-            }}
-          />
-
-          <Checkbox
-            disabled={externDisable}
-            checked={enabled()}
-            onChange={(value: boolean) => {
-              setEnabled(value);
-              // NOTE: null is critical here to actively unset a cell, undefined
-              // would merely take it out of the patch set.
-              props.handleChange?.(value ? text() : undefined);
-            }}
-          />
-        </div>
-
-        <div class="col-start-2 ml-2 text-sm text-muted-foreground">
-          {props.field && <FieldInfo field={props.field()} />}
-        </div>
-
-        <div class="col-start-2 text-sm">{props.info}</div>
-      </div>
-    </TextField>
-  );
-}
-
-export function buildOptionalTextFormField(opts: TextFieldOptions) {
-  return (field: () => AnyFieldApi) => {
+export function buildTextAreaFormField(
+  opts: Omit<TextFieldOptions, "type">,
+  rows?: number,
+) {
+  return (field: () => FieldApiT<string | undefined>) => {
     return (
-      <OptionalTextFormField
-        initial={field().state.value}
-        initialEnabled={field().state.value}
-        disabled={opts.disabled}
-        field={field}
-        label={opts.label}
-        info={opts.info}
-        type={opts.type}
-        onKeyUp={opts.onKeyUp}
-        nullPlaceholder={opts.nullPlaceholder}
-        handleBlur={field().handleBlur}
-        handleChange={field().handleChange}
-      />
+      <TextField class="w-full">
+        <div
+          class={`grid items-center ${gapStyle}`}
+          style="grid-template-columns: auto 1fr"
+        >
+          <TextFieldLabel>{opts.label()}</TextFieldLabel>
+
+          <TextFieldTextArea
+            rows={rows}
+            disabled={opts?.disabled ?? false}
+            value={field().state.value}
+            onBlur={field().handleBlur}
+            onKeyUp={(e: Event) => {
+              field().handleChange((e.target as HTMLInputElement).value);
+            }}
+          />
+
+          <div class="col-start-2 ml-2 text-sm text-muted-foreground">
+            {field && <FieldInfo field={field()} />}
+          </div>
+
+          <div class="col-start-2 text-sm">{opts.info}</div>
+        </div>
+      </TextField>
     );
   };
 }
 
-export function buildTextAreaFormField(opts: TextFieldOptions, rows?: number) {
-  const keyUp = opts?.onKeyUp;
-
-  return (field: () => AnyFieldApi) => (
-    <TextField class="w-full">
-      <div
-        class={`grid items-center ${gapStyle}`}
-        style="grid-template-columns: auto 1fr"
-      >
-        <TextFieldLabel>{opts.label()}</TextFieldLabel>
-
-        <TextFieldTextArea
-          rows={rows}
-          disabled={opts?.disabled ?? false}
-          value={field().state.value}
-          onBlur={field().handleBlur}
-          onKeyUp={(e: Event) => {
-            const v = (e.target as HTMLInputElement).value;
-            field().handleChange(v);
-            if (keyUp) {
-              keyUp(v);
-            }
-          }}
-        />
-
-        <div class="col-start-2 ml-2 text-sm text-muted-foreground">
-          {field && <FieldInfo field={field()} />}
-        </div>
-
-        <div class="col-start-2 text-sm">{opts.info}</div>
-      </div>
-    </TextField>
-  );
-}
-
 type NumberFieldOptions = {
   disabled?: boolean;
-  label: () => JSXElement;
+  label: () => JSX.Element;
 
-  info?: JSXElement;
+  info?: JSX.Element;
   integer?: boolean;
 };
 
-export function buildNumberFormField(opts: NumberFieldOptions) {
+export function buildNumberFormFieldT<
+  T extends number | (number | undefined) | string,
+>(opts: NumberFieldOptions) {
   const isInt = opts.integer ?? false;
 
-  return (field: () => AnyFieldApi) => {
+  return (field: () => FieldApiT<T>) => {
     return (
       <TextField class="w-full">
         <div
@@ -294,7 +250,6 @@ export function buildNumberFormField(opts: NumberFieldOptions) {
           <TextFieldLabel>{opts.label()}</TextFieldLabel>
 
           <TextFieldInput
-            required={true}
             type="number"
             step={isInt ? "1" : undefined}
             pattern={isInt ? "d+" : undefined}
@@ -303,8 +258,10 @@ export function buildNumberFormField(opts: NumberFieldOptions) {
             onBlur={field().handleBlur}
             onKeyUp={(e: Event) => {
               const v = (e.target as HTMLInputElement).value;
-              const i = parseInt(v);
-              field().handleChange(i);
+              if (v) {
+                const i = parseInt(v);
+                field().handleChange(i as T);
+              }
             }}
           />
 
@@ -319,8 +276,12 @@ export function buildNumberFormField(opts: NumberFieldOptions) {
   };
 }
 
-export function buildBoolFormField(props: { label: () => JSXElement }) {
-  return (field: () => AnyFieldApi) => (
+export function buildNumberFormField(opts: NumberFieldOptions) {
+  return buildNumberFormFieldT<number>(opts);
+}
+
+export function buildBoolFormField(props: { label: () => JSX.Element }) {
+  return (field: () => FieldApiT<boolean>) => (
     <div class="w-full flex gap-4 justify-end">
       <Label class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
         {props.label()}
@@ -336,38 +297,42 @@ export function buildBoolFormField(props: { label: () => JSXElement }) {
 }
 
 interface SelectFieldOpts {
-  label: () => JSXElement;
-  disabled?: Accessor<boolean>;
-  multiple?: boolean;
+  label: () => JSX.Element;
+  disabled?: boolean;
 }
 
-export function buildSelectField<T>(options: T[], opts: SelectFieldOpts) {
-  return (field: () => AnyFieldApi) => (
-    <div
-      class={`w-full grid items-center ${gapStyle}`}
-      style="grid-template-columns: auto 1fr"
-    >
-      <Label>{opts.label()}</Label>
-
-      <Select
-        multiple={opts?.multiple ?? false}
-        value={field().state.value}
-        onBlur={field().handleBlur}
-        onChange={field().handleChange}
-        options={options}
-        itemComponent={(props) => (
-          <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
-        )}
-        disabled={opts?.disabled?.() ?? false}
+export function buildSelectField(options: string[], opts: SelectFieldOpts) {
+  return (field: () => FieldApiT<string>) => {
+    return (
+      <div
+        class={`w-full grid items-center ${gapStyle}`}
+        style="grid-template-columns: auto 1fr"
       >
-        <SelectTrigger>
-          <SelectValue<string>>{(state) => state.selectedOption()}</SelectValue>
-        </SelectTrigger>
+        <Label>{opts.label()}</Label>
 
-        <SelectContent />
-      </Select>
-    </div>
-  );
+        <Select
+          required={true}
+          multiple={false}
+          value={field().state.value}
+          onBlur={field().handleBlur}
+          onChange={(v: string | null) => field().handleChange(v!)}
+          options={options}
+          itemComponent={(props) => (
+            <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+          )}
+          disabled={opts?.disabled}
+        >
+          <SelectTrigger>
+            <SelectValue<string>>
+              {(state) => state.selectedOption()}
+            </SelectValue>
+          </SelectTrigger>
+
+          <SelectContent />
+        </Select>
+      </div>
+    );
+  };
 }
 
 function FieldInfo<T>(props: { field: FieldApiT<T> }) {
@@ -385,6 +350,24 @@ export function notEmptyValidator() {
   return {
     onChange: ({ value }: { value: string | undefined }) => {
       if (!value) {
+        if (import.meta.env.DEV) {
+          return `Must not be empty. Undefined: ${value === undefined}`;
+        }
+        return "Must not be empty";
+      }
+    },
+  };
+}
+
+export function unsetOrNotEmptyValidator() {
+  return {
+    onChange: ({ value }: { value: string | undefined }) => {
+      if (value === undefined) return undefined;
+
+      if (!value) {
+        if (import.meta.env.DEV) {
+          return `Must not be empty. Undefined: ${value === undefined}`;
+        }
         return "Must not be empty";
       }
     },
@@ -401,54 +384,96 @@ export function largerThanZero() {
   };
 }
 
-export function formFieldBuilder(
-  type: ColumnDataType,
-  labelText: string,
-  optional: boolean,
-  nullPlaceholder?: string,
-) {
+export function unsetOrLargerThanZero() {
+  return {
+    onChange: ({ value }: { value: number | undefined }) => {
+      if (value === undefined) return;
+
+      if (value <= 0) {
+        return "Must be positive";
+      }
+    },
+  };
+}
+
+function BinaryBlobHoverCard() {
+  return (
+    <HoverCard>
+      <HoverCardTrigger
+        class="size-[32px]"
+        as={Button<"button">}
+        variant="link"
+      >
+        <TbInfoCircle />
+      </HoverCardTrigger>
+
+      <HoverCardContent>
+        Binary blobs can be entered encoded as url-safe Base64.
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+export function buildDBCellField(props: {
+  type: ColumnDataType;
+  label: string;
+  optional: boolean;
+  placeholder?: string;
+}) {
   const label = () => (
-    <div class="w-[100px] flex gap-2 items-center">
-      {type === "Blob" && (
-        <HoverCard>
-          <HoverCardTrigger
-            class="size-[32px]"
-            as={Button<"button">}
-            variant="link"
-          >
-            <TbInfoCircle />
-          </HoverCardTrigger>
-
-          <HoverCardContent>
-            Binary blobs can be entered encoded as url-safe Base64.
-          </HoverCardContent>
-        </HoverCard>
-      )}
-
-      {labelText}
+    <div class="w-[100px] flex gap-2 items-center overflow-hidden">
+      {props.type === "Blob" && <BinaryBlobHoverCard />}
+      {props.label}
     </div>
   );
 
+  const type = props.type;
+  const optional = props.optional;
+  const placeholder = props.placeholder;
   if (type === "Text" || type === "Blob") {
     if (optional) {
-      return buildOptionalTextFormField({ label, nullPlaceholder });
-    } else {
-      return buildTextFormField({ label });
+      return buildOptionalTextFormField({ label, placeholder });
     }
+    return buildTextFormFieldT<string | undefined>({ label, placeholder });
   }
 
   if (type === "Integer" && !optional) {
-    return buildNumberFormField({ label });
+    return buildNumberFormFieldT<string | undefined>({ label });
   }
 
   console.debug(
-    `Custom FormFields not yet implemented for (${type}, ${optional}). Falling back to textfields`,
+    `Custom FormFields not implemented for '${type}'. Falling back to text field`,
   );
+
   if (optional) {
-    return buildOptionalTextFormField({ label, nullPlaceholder });
-  } else {
-    return buildTextFormField({ label });
+    return buildOptionalTextFormField({ label, placeholder });
   }
+  return buildTextFormFieldT<string | undefined>({ label, placeholder });
+}
+
+export function buildOptionalDBCellField(props: {
+  type: ColumnDataType;
+  label: string;
+  placeholder?: string;
+}) {
+  const label = () => (
+    <div class="w-[100px] flex gap-2 items-center overflow-hidden">
+      {props.type === "Blob" && <BinaryBlobHoverCard />}
+      {props.label}
+    </div>
+  );
+
+  const type = props.type;
+  const placeholder = props.placeholder;
+  if (type === "Text" || type === "Blob") {
+    return buildOptionalTextFormField({ label, placeholder });
+  }
+
+  console.debug(
+    `Custom FormFields not yet implemented for '${type}'. Falling back to textfields`,
+  );
+
+  return buildOptionalTextFormField({ label, placeholder });
 }
 
 export const gapStyle = "gap-x-2 gap-y-1";

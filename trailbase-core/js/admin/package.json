@@ -8,7 +8,7 @@
     "build": "vite build",
     "serve": "vite preview",
     "format": "prettier -w src",
-    "proto": "protoc --plugin=protoc-gen-ts=${PWD}/node_modules/ts-proto/protoc-gen-ts_proto ../../proto/*.proto -I../../proto -I/usr/include --ts_out=./proto/ --ts_opt=esModuleInterop=true",
+    "proto": "protoc --plugin=protoc-gen-ts=${PWD}/node_modules/ts-proto/protoc-gen-ts_proto ../../proto/*.proto -I../../proto -I/usr/include --ts_out=./proto/ --ts_opt=esModuleInterop=true,initializeFieldsAsUndefined=false",
     "check": "tsc --noEmit --skipLibCheck && eslint && vitest run",
     "test": "vitest run"
   },

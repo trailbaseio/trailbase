@@ -60,6 +60,7 @@ export function SafeSheet(props: SafeProps) {
     }
 
     if (!dirty()) {
+      setDirty(false);
       setSheetOpen(false);
       return;
     }
@@ -78,6 +79,7 @@ export function SafeSheet(props: SafeProps) {
       <ConfirmCloseDialog
         back={() => setDialogOpen(false)}
         confirm={() => {
+          setDirty(false);
           setDialogOpen(false);
           setSheetOpen(false);
         }}

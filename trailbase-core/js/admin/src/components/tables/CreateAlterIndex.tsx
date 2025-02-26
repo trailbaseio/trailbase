@@ -205,7 +205,6 @@ export function CreateAlterIndexForm(props: {
                             disabled={!state().canSubmit}
                             variant="outline"
                             onClick={() => {
-                              console.log("here");
                               onSubmit(form.state.values, true).catch(
                                 console.error,
                               );

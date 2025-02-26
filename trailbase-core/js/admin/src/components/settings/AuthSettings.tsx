@@ -10,9 +10,9 @@ import {
 import { createForm } from "@tanstack/solid-form";
 
 import {
-  buildTextFormField,
   buildNumberFormField,
   buildSecretFormField,
+  buildOptionalTextFormField,
 } from "@/components/FormFields";
 import type { FormType } from "@/components/FormFields";
 import {
@@ -204,7 +204,7 @@ function ProviderSettingsSubForm(props: {
               },
             }}
           >
-            {buildTextFormField({ label: () => "Client Id", required: false })}
+            {buildOptionalTextFormField({ label: () => "Client Id" })}
           </props.form.Field>
 
           <props.form.Field
@@ -215,10 +215,7 @@ function ProviderSettingsSubForm(props: {
               },
             }}
           >
-            {buildSecretFormField({
-              label: () => "Client Secret",
-              required: false,
-            })}
+            {buildSecretFormField({ label: () => "Client Secret" })}
           </props.form.Field>
         </div>
 
@@ -445,7 +442,7 @@ export function AuthSettings(props: {
       return Config.decode(Config.encode(c).finish());
     }
     // Fallback
-    return Config.create();
+    return Config.fromJSON({});
   };
 
   return (

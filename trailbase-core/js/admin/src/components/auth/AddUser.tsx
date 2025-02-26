@@ -7,6 +7,7 @@ import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import {
   buildBoolFormField,
   buildTextFormField,
+  buildSecretFormField,
   notEmptyValidator,
 } from "@/components/FormFields";
 import type { CreateUserRequest } from "@/lib/bindings";
@@ -53,9 +54,8 @@ export function AddUser(props: {
           </form.Field>
 
           <form.Field name="password" validators={notEmptyValidator()}>
-            {buildTextFormField({
+            {buildSecretFormField({
               label: () => <L>Password</L>,
-              type: "password",
             })}
           </form.Field>
 

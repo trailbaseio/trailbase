@@ -32,7 +32,7 @@ export function NavBar(props: { location: Location }) {
     <div class="grow flex flex-col justify-between items-center bg-gray-100 py-2 gap-4">
       <nav class="flex flex-col items-center gap-4">
         <a href={`${BASE}/`}>
-          <img src={logo} width="52" height="52" alt="TrailBase Logo" />
+          <img src={logo} width="42" height="42" alt="TrailBase Logo" />
         </a>
 
         {options.map(([pathname, icon]) => {

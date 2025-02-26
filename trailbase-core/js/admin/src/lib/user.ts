@@ -59,8 +59,6 @@ export async function fetchUsers(
     .map((frag) => frag.trim().replaceAll(" ", ""))
     .join("&");
 
-  console.log("QUERY: ", filterQuery);
-
   const params = new URLSearchParams(filterQuery);
   params.set("limit", limit.toString());
 

@@ -21,7 +21,7 @@ export interface UpdateConfigRequest {
 }
 
 function createBaseGetConfigResponse(): GetConfigResponse {
-  return { config: undefined, hash: "" };
+  return {};
 }
 
 export const GetConfigResponse: MessageFns<GetConfigResponse> = {
@@ -70,7 +70,7 @@ export const GetConfigResponse: MessageFns<GetConfigResponse> = {
   fromJSON(object: any): GetConfigResponse {
     return {
       config: isSet(object.config) ? Config.fromJSON(object.config) : undefined,
-      hash: isSet(object.hash) ? globalThis.String(object.hash) : "",
+      hash: isSet(object.hash) ? globalThis.String(object.hash) : undefined,
     };
   },
 
@@ -99,7 +99,7 @@ export const GetConfigResponse: MessageFns<GetConfigResponse> = {
 };
 
 function createBaseUpdateConfigRequest(): UpdateConfigRequest {
-  return { config: undefined, hash: "" };
+  return {};
 }
 
 export const UpdateConfigRequest: MessageFns<UpdateConfigRequest> = {
@@ -148,7 +148,7 @@ export const UpdateConfigRequest: MessageFns<UpdateConfigRequest> = {
   fromJSON(object: any): UpdateConfigRequest {
     return {
       config: isSet(object.config) ? Config.fromJSON(object.config) : undefined,
-      hash: isSet(object.hash) ? globalThis.String(object.hash) : "",
+      hash: isSet(object.hash) ? globalThis.String(object.hash) : undefined,
     };
   },
 

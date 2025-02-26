@@ -316,7 +316,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     // Construct a fabricated config for tests and make sure it's valid.
     let mut config = Config::new_with_custom_defaults();
 
-    config.email.smtp_host = Some("host".to_string());
+    config.email.smtp_host = Some("smtp.test.org".to_string());
     config.email.smtp_port = Some(587);
     config.email.smtp_username = Some("user".to_string());
     config.email.smtp_password = Some("pass".to_string());

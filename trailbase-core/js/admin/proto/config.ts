@@ -380,7 +380,7 @@ export interface Config {
 }
 
 function createBaseEmailTemplate(): EmailTemplate {
-  return { subject: "", body: "" };
+  return {};
 }
 
 export const EmailTemplate: MessageFns<EmailTemplate> = {
@@ -428,8 +428,8 @@ export const EmailTemplate: MessageFns<EmailTemplate> = {
 
   fromJSON(object: any): EmailTemplate {
     return {
-      subject: isSet(object.subject) ? globalThis.String(object.subject) : "",
-      body: isSet(object.body) ? globalThis.String(object.body) : "",
+      subject: isSet(object.subject) ? globalThis.String(object.subject) : undefined,
+      body: isSet(object.body) ? globalThis.String(object.body) : undefined,
     };
   },
 
@@ -456,17 +456,7 @@ export const EmailTemplate: MessageFns<EmailTemplate> = {
 };
 
 function createBaseEmailConfig(): EmailConfig {
-  return {
-    smtpHost: "",
-    smtpPort: 0,
-    smtpUsername: "",
-    smtpPassword: "",
-    senderName: "",
-    senderAddress: "",
-    userVerificationTemplate: undefined,
-    passwordResetTemplate: undefined,
-    changeEmailTemplate: undefined,
-  };
+  return {};
 }
 
 export const EmailConfig: MessageFns<EmailConfig> = {
@@ -591,12 +581,12 @@ export const EmailConfig: MessageFns<EmailConfig> = {
 
   fromJSON(object: any): EmailConfig {
     return {
-      smtpHost: isSet(object.smtpHost) ? globalThis.String(object.smtpHost) : "",
-      smtpPort: isSet(object.smtpPort) ? globalThis.Number(object.smtpPort) : 0,
-      smtpUsername: isSet(object.smtpUsername) ? globalThis.String(object.smtpUsername) : "",
-      smtpPassword: isSet(object.smtpPassword) ? globalThis.String(object.smtpPassword) : "",
-      senderName: isSet(object.senderName) ? globalThis.String(object.senderName) : "",
-      senderAddress: isSet(object.senderAddress) ? globalThis.String(object.senderAddress) : "",
+      smtpHost: isSet(object.smtpHost) ? globalThis.String(object.smtpHost) : undefined,
+      smtpPort: isSet(object.smtpPort) ? globalThis.Number(object.smtpPort) : undefined,
+      smtpUsername: isSet(object.smtpUsername) ? globalThis.String(object.smtpUsername) : undefined,
+      smtpPassword: isSet(object.smtpPassword) ? globalThis.String(object.smtpPassword) : undefined,
+      senderName: isSet(object.senderName) ? globalThis.String(object.senderName) : undefined,
+      senderAddress: isSet(object.senderAddress) ? globalThis.String(object.senderAddress) : undefined,
       userVerificationTemplate: isSet(object.userVerificationTemplate)
         ? EmailTemplate.fromJSON(object.userVerificationTemplate)
         : undefined,
@@ -668,16 +658,7 @@ export const EmailConfig: MessageFns<EmailConfig> = {
 };
 
 function createBaseOAuthProviderConfig(): OAuthProviderConfig {
-  return {
-    clientId: "",
-    clientSecret: "",
-    providerId: 0,
-    displayName: "",
-    authUrl: "",
-    tokenUrl: "",
-    userApiUrl: "",
-    pkce: false,
-  };
+  return {};
 }
 
 export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
@@ -791,14 +772,14 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
 
   fromJSON(object: any): OAuthProviderConfig {
     return {
-      clientId: isSet(object.clientId) ? globalThis.String(object.clientId) : "",
-      clientSecret: isSet(object.clientSecret) ? globalThis.String(object.clientSecret) : "",
-      providerId: isSet(object.providerId) ? oAuthProviderIdFromJSON(object.providerId) : 0,
-      displayName: isSet(object.displayName) ? globalThis.String(object.displayName) : "",
-      authUrl: isSet(object.authUrl) ? globalThis.String(object.authUrl) : "",
-      tokenUrl: isSet(object.tokenUrl) ? globalThis.String(object.tokenUrl) : "",
-      userApiUrl: isSet(object.userApiUrl) ? globalThis.String(object.userApiUrl) : "",
-      pkce: isSet(object.pkce) ? globalThis.Boolean(object.pkce) : false,
+      clientId: isSet(object.clientId) ? globalThis.String(object.clientId) : undefined,
+      clientSecret: isSet(object.clientSecret) ? globalThis.String(object.clientSecret) : undefined,
+      providerId: isSet(object.providerId) ? oAuthProviderIdFromJSON(object.providerId) : undefined,
+      displayName: isSet(object.displayName) ? globalThis.String(object.displayName) : undefined,
+      authUrl: isSet(object.authUrl) ? globalThis.String(object.authUrl) : undefined,
+      tokenUrl: isSet(object.tokenUrl) ? globalThis.String(object.tokenUrl) : undefined,
+      userApiUrl: isSet(object.userApiUrl) ? globalThis.String(object.userApiUrl) : undefined,
+      pkce: isSet(object.pkce) ? globalThis.Boolean(object.pkce) : undefined,
     };
   },
 
@@ -849,7 +830,7 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
 };
 
 function createBaseAuthConfig(): AuthConfig {
-  return { authTokenTtlSec: 0, refreshTokenTtlSec: 0, oauthProviders: {} };
+  return { oauthProviders: {} };
 }
 
 export const AuthConfig: MessageFns<AuthConfig> = {
@@ -911,8 +892,8 @@ export const AuthConfig: MessageFns<AuthConfig> = {
 
   fromJSON(object: any): AuthConfig {
     return {
-      authTokenTtlSec: isSet(object.authTokenTtlSec) ? globalThis.Number(object.authTokenTtlSec) : 0,
-      refreshTokenTtlSec: isSet(object.refreshTokenTtlSec) ? globalThis.Number(object.refreshTokenTtlSec) : 0,
+      authTokenTtlSec: isSet(object.authTokenTtlSec) ? globalThis.Number(object.authTokenTtlSec) : undefined,
+      refreshTokenTtlSec: isSet(object.refreshTokenTtlSec) ? globalThis.Number(object.refreshTokenTtlSec) : undefined,
       oauthProviders: isObject(object.oauthProviders)
         ? Object.entries(object.oauthProviders).reduce<{ [key: string]: OAuthProviderConfig }>((acc, [key, value]) => {
           acc[key] = OAuthProviderConfig.fromJSON(value);
@@ -1043,7 +1024,7 @@ export const AuthConfig_OauthProvidersEntry: MessageFns<AuthConfig_OauthProvider
 };
 
 function createBaseS3StorageConfig(): S3StorageConfig {
-  return { endpoint: "", region: "", bucketName: "", accessKey: "", secretAccessKey: "" };
+  return {};
 }
 
 export const S3StorageConfig: MessageFns<S3StorageConfig> = {
@@ -1124,11 +1105,11 @@ export const S3StorageConfig: MessageFns<S3StorageConfig> = {
 
   fromJSON(object: any): S3StorageConfig {
     return {
-      endpoint: isSet(object.endpoint) ? globalThis.String(object.endpoint) : "",
-      region: isSet(object.region) ? globalThis.String(object.region) : "",
-      bucketName: isSet(object.bucketName) ? globalThis.String(object.bucketName) : "",
-      accessKey: isSet(object.accessKey) ? globalThis.String(object.accessKey) : "",
-      secretAccessKey: isSet(object.secretAccessKey) ? globalThis.String(object.secretAccessKey) : "",
+      endpoint: isSet(object.endpoint) ? globalThis.String(object.endpoint) : undefined,
+      region: isSet(object.region) ? globalThis.String(object.region) : undefined,
+      bucketName: isSet(object.bucketName) ? globalThis.String(object.bucketName) : undefined,
+      accessKey: isSet(object.accessKey) ? globalThis.String(object.accessKey) : undefined,
+      secretAccessKey: isSet(object.secretAccessKey) ? globalThis.String(object.secretAccessKey) : undefined,
     };
   },
 
@@ -1167,7 +1148,7 @@ export const S3StorageConfig: MessageFns<S3StorageConfig> = {
 };
 
 function createBaseServerConfig(): ServerConfig {
-  return { applicationName: "", siteUrl: "", logsRetentionSec: 0, backupIntervalSec: 0, s3StorageConfig: undefined };
+  return {};
 }
 
 export const ServerConfig: MessageFns<ServerConfig> = {
@@ -1248,10 +1229,10 @@ export const ServerConfig: MessageFns<ServerConfig> = {
 
   fromJSON(object: any): ServerConfig {
     return {
-      applicationName: isSet(object.applicationName) ? globalThis.String(object.applicationName) : "",
-      siteUrl: isSet(object.siteUrl) ? globalThis.String(object.siteUrl) : "",
-      logsRetentionSec: isSet(object.logsRetentionSec) ? globalThis.Number(object.logsRetentionSec) : 0,
-      backupIntervalSec: isSet(object.backupIntervalSec) ? globalThis.Number(object.backupIntervalSec) : 0,
+      applicationName: isSet(object.applicationName) ? globalThis.String(object.applicationName) : undefined,
+      siteUrl: isSet(object.siteUrl) ? globalThis.String(object.siteUrl) : undefined,
+      logsRetentionSec: isSet(object.logsRetentionSec) ? globalThis.Number(object.logsRetentionSec) : undefined,
+      backupIntervalSec: isSet(object.backupIntervalSec) ? globalThis.Number(object.backupIntervalSec) : undefined,
       s3StorageConfig: isSet(object.s3StorageConfig) ? S3StorageConfig.fromJSON(object.s3StorageConfig) : undefined,
     };
   },
@@ -1293,21 +1274,7 @@ export const ServerConfig: MessageFns<ServerConfig> = {
 };
 
 function createBaseRecordApiConfig(): RecordApiConfig {
-  return {
-    name: "",
-    tableName: "",
-    conflictResolution: 0,
-    autofillMissingUserIdColumns: false,
-    enableSubscriptions: false,
-    aclWorld: [],
-    aclAuthenticated: [],
-    createAccessRule: "",
-    readAccessRule: "",
-    updateAccessRule: "",
-    deleteAccessRule: "",
-    schemaAccessRule: "",
-    expand: [],
-  };
+  return { aclWorld: [], aclAuthenticated: [], expand: [] };
 }
 
 export const RecordApiConfig: MessageFns<RecordApiConfig> = {
@@ -1500,26 +1467,28 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
 
   fromJSON(object: any): RecordApiConfig {
     return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
-      tableName: isSet(object.tableName) ? globalThis.String(object.tableName) : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : undefined,
+      tableName: isSet(object.tableName) ? globalThis.String(object.tableName) : undefined,
       conflictResolution: isSet(object.conflictResolution)
         ? conflictResolutionStrategyFromJSON(object.conflictResolution)
-        : 0,
+        : undefined,
       autofillMissingUserIdColumns: isSet(object.autofillMissingUserIdColumns)
         ? globalThis.Boolean(object.autofillMissingUserIdColumns)
-        : false,
-      enableSubscriptions: isSet(object.enableSubscriptions) ? globalThis.Boolean(object.enableSubscriptions) : false,
+        : undefined,
+      enableSubscriptions: isSet(object.enableSubscriptions)
+        ? globalThis.Boolean(object.enableSubscriptions)
+        : undefined,
       aclWorld: globalThis.Array.isArray(object?.aclWorld)
         ? object.aclWorld.map((e: any) => permissionFlagFromJSON(e))
         : [],
       aclAuthenticated: globalThis.Array.isArray(object?.aclAuthenticated)
         ? object.aclAuthenticated.map((e: any) => permissionFlagFromJSON(e))
         : [],
-      createAccessRule: isSet(object.createAccessRule) ? globalThis.String(object.createAccessRule) : "",
-      readAccessRule: isSet(object.readAccessRule) ? globalThis.String(object.readAccessRule) : "",
-      updateAccessRule: isSet(object.updateAccessRule) ? globalThis.String(object.updateAccessRule) : "",
-      deleteAccessRule: isSet(object.deleteAccessRule) ? globalThis.String(object.deleteAccessRule) : "",
-      schemaAccessRule: isSet(object.schemaAccessRule) ? globalThis.String(object.schemaAccessRule) : "",
+      createAccessRule: isSet(object.createAccessRule) ? globalThis.String(object.createAccessRule) : undefined,
+      readAccessRule: isSet(object.readAccessRule) ? globalThis.String(object.readAccessRule) : undefined,
+      updateAccessRule: isSet(object.updateAccessRule) ? globalThis.String(object.updateAccessRule) : undefined,
+      deleteAccessRule: isSet(object.deleteAccessRule) ? globalThis.String(object.deleteAccessRule) : undefined,
+      schemaAccessRule: isSet(object.schemaAccessRule) ? globalThis.String(object.schemaAccessRule) : undefined,
       expand: globalThis.Array.isArray(object?.expand) ? object.expand.map((e: any) => globalThis.String(e)) : [],
     };
   },
@@ -1591,7 +1560,7 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
 };
 
 function createBaseJsonSchemaConfig(): JsonSchemaConfig {
-  return { name: "", schema: "" };
+  return {};
 }
 
 export const JsonSchemaConfig: MessageFns<JsonSchemaConfig> = {
@@ -1639,8 +1608,8 @@ export const JsonSchemaConfig: MessageFns<JsonSchemaConfig> = {
 
   fromJSON(object: any): JsonSchemaConfig {
     return {
-      name: isSet(object.name) ? globalThis.String(object.name) : "",
-      schema: isSet(object.schema) ? globalThis.String(object.schema) : "",
+      name: isSet(object.name) ? globalThis.String(object.name) : undefined,
+      schema: isSet(object.schema) ? globalThis.String(object.schema) : undefined,
     };
   },
 

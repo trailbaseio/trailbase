@@ -1,4 +1,3 @@
-import type { JSXElement } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 
 import {
@@ -9,14 +8,14 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 
 import {
-  notEmptyValidator,
-  buildTextFormField,
+  unsetOrLargerThanZero,
+  unsetOrNotEmptyValidator,
   buildTextAreaFormField,
   buildNumberFormField,
-  largerThanZero,
-  buildSecretFormField,
+  buildOptionalTextFormField,
 } from "@/components/FormFields";
 import type { FormType } from "@/components/FormFields";
 import { Config, EmailConfig } from "@proto/config";
@@ -32,10 +31,10 @@ function EmailTemplate(props: {
     <div class="my-2 mr-1 flex flex-col gap-4">
       <form.Field
         name={`${props.fieldName}.subject`}
-        validators={notEmptyValidator()}
+        validators={unsetOrNotEmptyValidator()}
       >
-        {buildTextFormField({
-          label: () => <L>Subject</L>,
+        {buildOptionalTextFormField({
+          label: textLabel("Subject"),
           info: (
             <p>
               Email's subject line. Valid template parameters:{" "}
@@ -50,11 +49,11 @@ function EmailTemplate(props: {
 
       <form.Field
         name="userVerificationTemplate.body"
-        validators={notEmptyValidator()}
+        validators={unsetOrNotEmptyValidator()}
       >
         {buildTextAreaFormField(
           {
-            label: () => <L>Body</L>,
+            label: textLabel("Body"),
             info: (
               <p>
                 Email's body. Valid template parameters:{" "}
@@ -87,6 +86,8 @@ export function EmailSettings(props: {
   const config = createConfigQuery();
 
   const Form = (p: { config: EmailConfig }) => {
+    console.debug({ ...p.config });
+
     const form = createForm<EmailConfig>(() => ({
       defaultValues: p.config,
       onSubmit: async ({ value }) => {
@@ -134,25 +135,42 @@ export function EmailSettings(props: {
                 <a href="https://www.brevo.com/">Brevo</a>, ...
               </p>
 
-              <form.Field name="smtpHost" validators={notEmptyValidator()}>
-                {buildTextFormField({ label: () => <L>Host</L> })}
+              <form.Field
+                name="smtpHost"
+                validators={unsetOrNotEmptyValidator()}
+              >
+                {buildOptionalTextFormField({ label: textLabel("Host") })}
               </form.Field>
 
-              <form.Field name="smtpPort" validators={largerThanZero()}>
+              <form.Field name="smtpPort" validators={unsetOrLargerThanZero()}>
                 {buildNumberFormField({
                   integer: true,
-                  label: () => <L>Port</L>,
+                  label: textLabel("Port"),
                 })}
               </form.Field>
 
-              <form.Field name="smtpUsername" validators={notEmptyValidator()}>
-                {buildTextFormField({ label: () => <L>Username</L> })}
+              <form.Field
+                name="smtpUsername"
+                validators={unsetOrNotEmptyValidator()}
+              >
+                {buildOptionalTextFormField({
+                  label: textLabel("Username"),
+                  autocomplete: "username",
+                })}
               </form.Field>
 
-              <form.Field name="smtpPassword" validators={notEmptyValidator()}>
-                {buildSecretFormField({
-                  label: () => <L>Password</L>,
-                })}
+              <form.Field
+                name="smtpPassword"
+                validators={unsetOrNotEmptyValidator()}
+              >
+                {
+                  // NOTE: we're not using buildSecretFormField here because it doesn't support optional.
+                  buildOptionalTextFormField({
+                    type: "password",
+                    autocomplete: "current-password",
+                    label: textLabel("Password"),
+                  })
+                }
               </form.Field>
             </CardContent>
           </Card>
@@ -163,15 +181,20 @@ export function EmailSettings(props: {
             </CardHeader>
 
             <CardContent class={flexColStyle}>
-              <form.Field name="senderAddress" validators={notEmptyValidator()}>
-                {buildTextFormField({
-                  label: () => <L>Sender Address</L>,
+              <form.Field
+                name="senderAddress"
+                validators={unsetOrNotEmptyValidator()}
+              >
+                {buildOptionalTextFormField({
+                  label: textLabel("Sender Address"),
                   type: "email",
                 })}
               </form.Field>
 
               <form.Field name="senderName">
-                {buildTextFormField({ label: () => <L>Sender Name</L> })}
+                {buildOptionalTextFormField({
+                  label: textLabel("Sender Name"),
+                })}
               </form.Field>
             </CardContent>
           </Card>
@@ -241,15 +264,20 @@ export function EmailSettings(props: {
       // "deep-copy"
       return EmailConfig.decode(EmailConfig.encode(c).finish());
     }
+
     // Fallback
-    return EmailConfig.create();
+    return EmailConfig.fromJSON({});
   };
 
   return <Form config={emailConfig()} />;
 }
 
-function L(props: { children: JSXElement }) {
-  return <div class="w-40">{props.children}</div>;
+function textLabel(label: string) {
+  return () => (
+    <div class="w-40">
+      <Label>{label}</Label>
+    </div>
+  );
 }
 
 const flexColStyle = "flex flex-col gap-2";

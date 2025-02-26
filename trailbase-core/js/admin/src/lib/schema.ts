@@ -28,9 +28,12 @@ function unpackDefaultValue(col: ColumnOption): string | undefined {
 }
 
 export function getDefaultValue(options: ColumnOption[]): string | undefined {
-  return options.reduce<string | undefined>((acc, cur: ColumnOption) => {
-    return unpackDefaultValue(cur) ?? acc;
-  }, undefined);
+  for (const opt of options) {
+    const v = unpackDefaultValue(opt);
+    if (v !== undefined) {
+      return v;
+    }
+  }
 }
 
 export function setDefaultValue(
@@ -72,16 +75,17 @@ export function setCheckValue(
 }
 
 export function isOptional(options: ColumnOption[]): boolean {
-  let notNull = false;
+  let required = false;
   for (const opt of options) {
     if (opt === "NotNull") {
-      notNull = true;
+      required = true;
     }
+
     if (unpackDefaultValue(opt)) {
       return true;
     }
   }
-  return !notNull;
+  return !required;
 }
 
 export type ForeignKey = {

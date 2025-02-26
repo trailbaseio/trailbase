@@ -5,8 +5,10 @@ use prost_reflect::{
 };
 use proto::EmailTemplate;
 use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
 use thiserror::Error;
 use tokio::fs;
+use validator::{ValidateEmail, ValidateUrl};
 
 use crate::data_dir::DataDir;
 use crate::records::validate_record_api_config;
@@ -493,7 +495,9 @@ pub(crate) fn validate_config(
   tables: &TableMetadataCache,
   config: &proto::Config,
 ) -> Result<(), ConfigError> {
-  let ierr = |msg: &str| Err(ConfigError::Invalid(msg.to_string()));
+  fn ierr(msg: impl Into<String>) -> Result<(), ConfigError> {
+    return Err(ConfigError::Invalid(msg.into()));
+  }
 
   let Some(app_name) = &config.server.application_name else {
     return ierr("Missing application name");
@@ -509,7 +513,7 @@ pub(crate) fn validate_config(
     let api_name = validate_record_api_config(tables, api)?;
 
     if !api_names.insert(api_name.clone()) {
-      return ierr(&format!(
+      return ierr(format!(
         "Two or more APIs have the colliding name: '{api_name}'"
       ));
     }
@@ -521,19 +525,19 @@ pub(crate) fn validate_config(
     let _provider_id = match &provider.provider_id {
       Some(id) if *id > 0 => *id,
       _ => {
-        return ierr(&format!("Provider id for: {name}"));
+        return ierr(format!("Provider id for: {name}"));
       }
     };
     if !providers.insert(name.to_string()) {
-      return ierr(&format!("Multiple providers for: {name}"));
+      return ierr(format!("Multiple providers for: {name}"));
     }
 
     if provider.client_secret.is_none() {
-      return ierr(&format!("Missing secret for: {name}"));
+      return ierr(format!("Missing secret for: {name}"));
     }
 
     if provider.client_id.is_none() {
-      return ierr(&format!("Missing client id for: {name}"));
+      return ierr(format!("Missing client id for: {name}"));
     }
 
     // TODO: validate critical endpoint urls are present and valid.
@@ -561,6 +565,49 @@ pub(crate) fn validate_config(
   // Check email config.
   {
     let email = &config.email;
+
+    let mut num_smtp_fields = 0;
+    if let Some(ref host) = email.smtp_host {
+      if !format!("http://{host}/").validate_url() {
+        return ierr(format!("Invalid SMTP host {host}."));
+      }
+      num_smtp_fields += 1;
+    }
+
+    if let Some(port) = email.smtp_port {
+      let port = u16::try_from(port).map_err(|_| ConfigError::Invalid("not a u16".into()))?;
+      if port == 0 {
+        return ierr("Invalid SMTP port.");
+      }
+      num_smtp_fields += 1;
+    }
+
+    if let Some(ref username) = email.smtp_username {
+      if username.is_empty() {
+        return ierr("Invalid SMTP username.");
+      }
+      num_smtp_fields += 1;
+    }
+
+    if let Some(ref password) = email.smtp_password {
+      if password.is_empty() {
+        return ierr("Invalid SMTP username.");
+      }
+      num_smtp_fields += 1;
+    }
+
+    if num_smtp_fields != 0 && num_smtp_fields != 4 {
+      return ierr("Only a subset of SMTP settings provided");
+    }
+
+    if let Some(ref sender_address) = email.sender_address {
+      if !sender_address.validate_email() {
+        return ierr("Invalid sender address.");
+      };
+      if email.sender_name.is_none() {
+        return ierr("Sender address but missing sender name.");
+      }
+    }
 
     let validate_template = |template: Option<&EmailTemplate>| {
       if let Some(template) = template {

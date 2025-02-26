@@ -6,7 +6,7 @@ import {
   Switch,
   Suspense,
 } from "solid-js";
-import type { Setter, JSXElement } from "solid-js";
+import type { Setter } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { TbCrown } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
@@ -40,7 +40,7 @@ import {
 import type { UpdateUserRequest, UserJson } from "@/lib/bindings";
 import {
   buildTextFormField,
-  buildOptionalTextFormField,
+  buildSecretFormField,
 } from "@/components/FormFields";
 import { SafeSheet, SheetContainer } from "@/components/SafeSheet";
 
@@ -79,10 +79,7 @@ function buildColumns(
           <div class="flex gap-2">
             <Button
               variant="outline"
-              onClick={() => {
-                console.debug(ctx.row.original);
-                setEditUser(ctx.row.original);
-              }}
+              onClick={() => setEditUser(ctx.row.original)}
             >
               edit
             </Button>
@@ -142,15 +139,14 @@ function EditSheetContent(props: {
         <div class="flex flex-col items-center gap-4 py-4">
           <form.Field name={"email"}>
             {buildTextFormField({
-              label: () => <L>E-mail</L>,
+              label: textLabel("E-mail"),
               type: "email",
             })}
           </form.Field>
 
           <form.Field name="password">
-            {buildOptionalTextFormField({
-              label: () => <L>Password</L>,
-              type: "password",
+            {buildSecretFormField({
+              label: textLabel("Password"),
             })}
           </form.Field>
 
@@ -298,8 +294,12 @@ export function UserTable() {
   );
 }
 
-function L(props: { children: JSXElement }) {
-  return <div class="w-32">{props.children}</div>;
+function textLabel(label: string) {
+  return () => (
+    <div class="w-32">
+      <Label>{label}</Label>
+    </div>
+  );
 }
 
 const sheetMaxWidth = "sm:max-w-[520px]";

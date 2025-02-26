@@ -160,7 +160,7 @@ function ServerSettings(props: CommonProps) {
       return ServerConfig.decode(ServerConfig.encode(c).finish());
     }
     // Fallback
-    return ServerConfig.create();
+    return ServerConfig.fromJSON({});
   };
 
   const [info] = createResource(async (): Promise<InfoResponse> => {
@@ -245,6 +245,8 @@ function BackupImportSettings(props: CommonProps) {
         const newConfig = Config.fromPartial(c);
         newConfig.server = value;
         await setConfig(newConfig);
+
+        props.postSubmit();
       },
     }));
 
@@ -348,7 +350,7 @@ function BackupImportSettings(props: CommonProps) {
       return ServerConfig.decode(ServerConfig.encode(c).finish());
     }
     // Fallback
-    return ServerConfig.create();
+    return ServerConfig.fromJSON({});
   };
 
   return (

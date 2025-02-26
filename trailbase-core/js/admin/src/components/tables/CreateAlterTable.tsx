@@ -248,7 +248,6 @@ export function CreateAlterTableForm(props: {
                           disabled={!state().canSubmit}
                           variant="outline"
                           onClick={() => {
-                            console.log("here");
                             onSubmit(form.state.values, true).catch(
                               console.error,
                             );
@@ -332,7 +331,7 @@ function columnTypeField(
 
     return buildSelectField([...columnDataTypes], {
       label: () => <L>Type</L>,
-      disabled: isDisabled,
+      disabled: isDisabled(),
     })(field);
   };
 }
@@ -376,15 +375,6 @@ function ColumnOptionCheckField(props: {
     </HoverCard>
   );
 
-  // TODO: Factor out inner component from buildTextFormField and use it here.
-  // return (
-  //   <OptionalTextFormField
-  //     label={() => (<L><HCard />Check</L>)}
-  //     initial={getCheckValue(props.value) ?? ""}
-  //     handleChange={(value) => props.onChange(setCheckValue(props.value, value))}
-  //     disabled={disabled()}
-  //   />
-  // );
   return (
     <TextField>
       <div
@@ -759,6 +749,7 @@ function ColumnSubForm(props: {
                 defaultValue={name()}
                 validators={{
                   onChange: ({ value }: { value: string | undefined }) => {
+                    setName(value ?? "<missing>");
                     return value ? undefined : "Column name missing";
                   },
                 }}
@@ -766,7 +757,6 @@ function ColumnSubForm(props: {
                 {buildTextFormField({
                   label: () => <L>Name</L>,
                   disabled,
-                  onKeyUp: setName,
                 })}
               </props.form.Field>
 

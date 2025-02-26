@@ -8,7 +8,7 @@ import type { Column, Table } from "@/lib/bindings";
 import type { InsertRowRequest } from "@bindings/InsertRowRequest";
 import type { UpdateRowRequest } from "@bindings/UpdateRowRequest";
 
-import { formFieldBuilder } from "@/components/FormFields";
+import { buildDBCellField } from "@/components/FormFields";
 import {
   findPrimaryKeyColumnIndex,
   getDefaultValue,
@@ -102,6 +102,10 @@ function buildDefault(schema: Table): FormRow {
   return obj;
 }
 
+type FormRowForm = {
+  row: FormRow;
+};
+
 export function InsertAlterRowForm(props: {
   close: () => void;
   markDirty: () => void;
@@ -113,15 +117,17 @@ export function InsertAlterRowForm(props: {
     ? JSON.parse(JSON.stringify(props.row))
     : undefined;
 
-  const form = createForm<FormRow>(() => ({
-    defaultValues: props.row ?? buildDefault(props.schema),
-    onSubmit: async ({ value }) => {
-      console.debug(`Submitting {original ? "update" : "insert"}:`, value);
+  const form = createForm<FormRowForm>(() => ({
+    defaultValues: {
+      row: props.row ?? buildDefault(props.schema),
+    },
+    onSubmit: async ({ value }: { value: FormRowForm }) => {
+      console.debug(`Submitting ${original ? "update" : "insert"}:`, value);
       try {
         if (original) {
-          await updateRow(props.schema, value);
+          await updateRow(props.schema, value.row);
         } else {
-          await insertRow(props.schema.name, value);
+          await insertRow(props.schema.name, value.row);
         }
 
         props.rowsRefetch();
@@ -160,37 +166,34 @@ export function InsertAlterRowForm(props: {
             {(col: Column) => {
               const notNull = isNotNull(col.options);
               const label = `${col.name} [${col.data_type}${notNull ? "" : "?"}]`;
-              const optional = isOptional(col.options);
               const defaultValue = getDefaultValue(col.options);
 
               return (
                 <form.Field
-                  name={col.name}
+                  name={`row[${col.name}]`}
                   validators={{
                     onChange: ({ value }: { value: string | undefined }) => {
-                      if (value !== undefined) {
-                        // TODO: Better input validation
-                        if (value === "" && col.data_type !== "Text") {
-                          return `Invalid value for: ${col.data_type}`;
+                      const required = notNull && defaultValue === undefined;
+                      if (value === undefined) {
+                        if (required) {
+                          return `Missing value for ${col.name}`;
                         }
                         return undefined;
                       }
 
-                      const defaultValue = getDefaultValue(col.options);
-                      if (defaultValue !== undefined) {
-                        return undefined;
+                      // TODO: Better input validation or better typed form fields.
+                      if (value === "" && col.data_type !== "Text") {
+                        return `Invalid value for: ${col.data_type}`;
                       }
-                      if (isNotNull(col.options)) {
-                        return `Missing value for ${col.name}`;
-                      }
+                      return undefined;
                     },
                   }}
-                  children={formFieldBuilder(
-                    col.data_type,
+                  children={buildDBCellField({
+                    type: col.data_type,
                     label,
-                    optional,
-                    defaultValue,
-                  )}
+                    optional: !notNull,
+                    placeholder: defaultValue,
+                  })}
                 />
               );
             }}
