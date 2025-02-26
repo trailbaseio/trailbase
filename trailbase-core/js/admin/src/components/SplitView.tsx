@@ -20,21 +20,20 @@ export function createWindowWidth(): Accessor<number> {
   return width;
 }
 
-function setSizes(v: number[] | ((prev: number[]) => number[])) {
+function setSizes(next: number[]) {
   const prev = $sizes.get();
-  const next: number[] = typeof v === "function" ? v(prev) : v;
   const width = window.innerWidth;
 
   // This is a bit hacky. On destruction Corvu pops panes and removes sizes one by one.
   // So switching between pages we'd always start with empty sizes. We basically just avoid
   // shrinking the array. We also make sure the new relative dimension for element[0] is
   // within range.
-  if (
-    next.length >= prev.length &&
-    next[0] >= minSizePx / width &&
-    next[0] < maxSizePx / width
-  ) {
-    return $sizes.set(next);
+  if (next.length >= prev.length && next.length > 0) {
+    const min = minSizePx / width;
+    const max = maxSizePx / width;
+    const first = Math.min(max, Math.max(min, next[0]));
+
+    return $sizes.set([first, ...next.slice(1)]);
   }
   return prev;
 }
@@ -62,7 +61,7 @@ export function SplitView(props: {
         onSizesChange={setSizes}
         orientation="horizontal"
       >
-        <ResizablePanel>
+        <ResizablePanel class="overflow-hidden">
           <props.first horizontal={true} />
         </ResizablePanel>
 
@@ -83,7 +82,7 @@ export function SplitView(props: {
 }
 
 const minSizePx = 160;
-const maxSizePx = 300;
+const maxSizePx = 400;
 
 function initialSize(): number[] {
   const width = window.innerWidth;

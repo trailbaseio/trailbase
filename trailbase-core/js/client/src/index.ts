@@ -271,9 +271,9 @@ class ThinClient {
     }
 
     const response = await fetch(`${this.site}/${path}`, {
-      ...init,
       credentials: isDev ? "include" : "same-origin",
       headers: tokenState.headers,
+      ...init,
     });
 
     return response;
@@ -439,6 +439,8 @@ export class Client {
   public async refreshAuthToken(): Promise<void> {
     const refreshToken = Client.shouldRefresh(this._tokenState);
     if (refreshToken) {
+      // TODO: Unset token state if refresh fails with unauthorized status.
+      // TODO: In either case we should call the authChange, e.g. so that users can persist the new token.
       this._tokenState = await this.refreshTokensImpl(refreshToken);
     }
   }
@@ -516,14 +518,11 @@ function _isDev(): boolean {
 const isDev = _isDev();
 
 export function headers(tokens?: Tokens): HeadersInit {
-  const base = {
-    "Content-Type": "application/json",
-  };
-
   if (tokens) {
     const { auth_token, refresh_token, csrf_token } = tokens;
     return {
-      ...base,
+      "Content-Type": "application/json",
+
       ...(auth_token && {
         Authorization: `Bearer ${auth_token}`,
       }),
@@ -536,7 +535,9 @@ export function headers(tokens?: Tokens): HeadersInit {
     };
   }
 
-  return base;
+  return {
+    "Content-Type": "application/json",
+  };
 }
 
 export function textEncode(s: string): Uint8Array {
