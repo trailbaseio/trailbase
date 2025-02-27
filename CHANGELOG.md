@@ -1,3 +1,10 @@
+## v0.6.1
+
+* Fix config handling in the UI.
+* Improve form handling in the UI.
+* Few minor UI fixes & cleanups.
+* Update dependencies.
+
 ## v0.6.0
 
 * Support foreign record expansion. If a record API is configured allow
