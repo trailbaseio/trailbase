@@ -86,6 +86,71 @@ describe("form fields", () => {
     expect(value.required).toBe("default test");
   });
 
+  describe("nullable", () => {
+    test("set", async () => {
+      const [form, setForm] = createSignal<MyForm | undefined>();
+
+      const result = render(() => (
+        <Form
+          name="nullable"
+          setForm={setForm}
+          field={buildNullableTextFormField({ label: () => "nullable" })}
+        />
+      ));
+
+      const input: HTMLInputElement = result.getByTestId("input");
+      expect(input.disabled);
+
+      // The input field is disabled to to it's initial value being null.
+      // NOTE: The solid-ui Checkbox component wraps the input in a parent div.
+      const toggle = result.getByTestId("toggle")
+        .firstChild! as HTMLInputElement;
+      await user.click(toggle);
+      expect(toggle.value);
+
+      await user.type(input, "nullable");
+      expect(input.value, "nullable");
+
+      await user.click(result.getByTestId("sub"));
+
+      const value = form()!;
+      expect(value.nullable).toBe("nullable");
+    });
+
+    test("set and unset", async () => {
+      const [form, setForm] = createSignal<MyForm | undefined>();
+
+      const result = render(() => (
+        <Form
+          name="nullable"
+          setForm={setForm}
+          field={buildNullableTextFormField({ label: () => "nullable" })}
+        />
+      ));
+
+      const input: HTMLInputElement = result.getByTestId("input");
+      expect(input.disabled);
+
+      // The input field is disabled to to it's initial value being null.
+      // NOTE: The solid-ui Checkbox component wraps the input in a parent div.
+      const toggle = result.getByTestId("toggle")
+        .firstChild! as HTMLInputElement;
+      await user.click(toggle);
+      expect(toggle.value);
+
+      await user.type(input, "nullable");
+      expect(input.value, "nullable");
+
+      await user.click(toggle);
+      expect(!toggle.value);
+
+      await user.click(result.getByTestId("sub"));
+
+      const value = form()!;
+      expect(value.nullable).toBe(null);
+    });
+  });
+
   describe("optional nullable", () => {
     test("set", async () => {
       const [form, setForm] = createSignal<MyForm | undefined>();

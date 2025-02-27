@@ -48,9 +48,7 @@ type TextFieldOptions = {
 
 /// Note that we make not-required/optional explicit by having a checkbox, since there's
 /// a difference between empty string and not set.
-function buildTextFormFieldT<T extends string | null | undefined>(
-  opts: TextFieldOptions,
-) {
+function buildTextFormFieldT<T extends string | null>(opts: TextFieldOptions) {
   const externDisable = opts.disabled ?? false;
 
   function builder(field: () => FieldApiT<T>) {
@@ -166,11 +164,7 @@ export function buildOptionalTextFormField(opts: TextFieldOptions) {
 
 export function buildNullableTextFormField(opts: TextFieldOptions) {
   const handler = (e: Event) => (e.target as HTMLInputElement).value;
-  return buildOptionalNullableTextFormField<string | null | undefined>(
-    opts,
-    null,
-    handler,
-  );
+  return buildOptionalNullableTextFormField<string | null>(opts, null, handler);
 }
 
 export function buildSecretFormField(
@@ -321,7 +315,7 @@ function buildNullableNumberFormField(opts: NumberFieldOptions) {
     const n = parseInt((e.target as HTMLInputElement).value);
     return isNaN(n) ? null : n.toString();
   };
-  return buildOptionalNullableNumberFormField<string | null | undefined>(
+  return buildOptionalNullableNumberFormField<string | null>(
     opts,
     undefined,
     handler,
@@ -482,7 +476,7 @@ export function buildDBCellField(props: {
     if (optional) {
       return buildNullableTextFormField({ label, placeholder });
     }
-    return buildTextFormFieldT<string | null | undefined>({
+    return buildTextFormFieldT<string | null>({
       label,
       placeholder,
     });
@@ -499,7 +493,7 @@ export function buildDBCellField(props: {
   if (optional) {
     return buildNullableTextFormField({ label, placeholder });
   }
-  return buildTextFormFieldT<string | null | undefined>({ label, placeholder });
+  return buildTextFormFieldT<string | null>({ label, placeholder });
 }
 
 export const gapStyle = "gap-x-2 gap-y-1";
