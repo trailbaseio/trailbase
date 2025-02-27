@@ -25,13 +25,6 @@ import { asyncBase64Encode } from "trailbase";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -41,8 +34,6 @@ import {
   SwitchThumb,
 } from "@/components/ui/switch";
 import {
-  TbColumns,
-  TbDownload,
   TbRefresh,
   TbTable,
   TbTrash,
@@ -51,6 +42,10 @@ import {
   TbWand,
 } from "solid-icons/tb";
 
+import {
+  SchemaDialog,
+  DebugSchemaDialogButton,
+} from "@/components/tables/SchemaDownload";
 import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
 import { CreateAlterIndexForm } from "@/components/tables/CreateAlterIndex";
 import {
@@ -73,7 +68,7 @@ import {
 import { createConfigQuery, invalidateConfig } from "@/lib/config";
 import { type FormRow, RowData } from "@/lib/convert";
 import { adminFetch } from "@/lib/fetch";
-import { urlSafeBase64ToUuid, showSaveFileDialog } from "@/lib/utils";
+import { urlSafeBase64ToUuid } from "@/lib/utils";
 import { RecordApiConfig } from "@proto/config";
 import { getAllTableSchemas, dropTable, dropIndex } from "@/lib/table";
 
@@ -237,57 +232,6 @@ function imageUrl(opts: {
     return `${uri}&file_index=${index}`;
   }
   return uri;
-}
-
-function SchemaDialogButton(props: {
-  table: Table;
-  indexes: TableIndex[];
-  triggers: TableTrigger[];
-}) {
-  const columns = () => props.table.columns;
-  const indexes = () => props.indexes;
-  const triggers = () => props.triggers;
-  const fks = () => props.table.foreign_keys;
-
-  return (
-    <div class="size-[28px] flex justify-center items-center rounded hover:bg-gray-200">
-      <Dialog id="schema">
-        <DialogTrigger>
-          <TbColumns size={20} />
-        </DialogTrigger>
-
-        <DialogContent class="min-w-[80dvw]">
-          <DialogHeader>
-            <DialogTitle>Schema</DialogTitle>
-          </DialogHeader>
-
-          <div class="max-h-[80dvh] overflow-auto">
-            <div class="mx-2 flex flex-col gap-2">
-              <h2>Columns</h2>
-              <pre class="w-[70vw] overflow-x-hidden text-xs">
-                {JSON.stringify(columns(), null, 2)}
-              </pre>
-
-              <h2>Foreign Keys</h2>
-              <pre class="w-[70vw] overflow-x-hidden text-xs">
-                {JSON.stringify(fks(), null, 2)}
-              </pre>
-
-              <h2>Indexes</h2>
-              <pre class="w-[70vw] overflow-x-hidden text-xs">
-                {JSON.stringify(indexes(), null, 2)}
-              </pre>
-
-              <h2>Triggers</h2>
-              <pre class="w-[70vw] overflow-x-hidden text-xs">
-                {JSON.stringify(triggers(), null, 2)}
-              </pre>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
 }
 
 function TableHeaderRightHandButtons(props: {
@@ -463,34 +407,29 @@ function TableHeader(props: {
         </h1>
 
         <div class="flex items-center gap-1">
-          <button
-            class="p-1 rounded hover:bg-gray-200"
-            onClick={props.rowsRefetch}
-          >
-            <TbRefresh size={20} />
-          </button>
-
-          <div
-            class="p-1 rounded hover:bg-gray-200"
-            onClick={async () => {
-              // NOTE: we cannot just have a <a download /> here since admin APIs require CSRF token.
-              //
-              // Not supported by firefox: https://developer.mozilla.org/en-US/docs/Web/API/Window/showSaveFilePicker#browser_compatibility
-              // possible fallback: https://stackoverflow.com/a/67806663
-              const response = await adminFetch(`/table/${name()}/schema.json`);
-              const jsonText = await response.text();
-
-              await showSaveFileDialog({
-                contents: jsonText,
-                filename: `${name()}.json`,
-              });
-            }}
-          >
-            <TbDownload size={20} />
-          </div>
+          <Tooltip>
+            <TooltipTrigger>
+              <button
+                class="p-1 rounded hover:bg-gray-200"
+                onClick={props.rowsRefetch}
+              >
+                <TbRefresh size={20} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Refresh Data</TooltipContent>
+          </Tooltip>
 
           {hasSchema() && (
-            <SchemaDialogButton
+            <Tooltip>
+              <TooltipTrigger>
+                <SchemaDialog tableName={name()} />
+              </TooltipTrigger>
+              <TooltipContent>JSON Schema of "{name()}"</TooltipContent>
+            </Tooltip>
+          )}
+
+          {hasSchema() && import.meta.env.DEV && (
+            <DebugSchemaDialogButton
               table={table() as Table}
               indexes={props.indexes}
               triggers={props.triggers}

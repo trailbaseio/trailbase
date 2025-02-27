@@ -9,17 +9,22 @@ import {
 import { IconTypes } from "solid-icons";
 
 import { AuthButton } from "@/components/auth/AuthButton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import logo from "@/assets/logo_104.webp";
 
 const BASE = "/_/admin";
 const options = [
-  [`${BASE}/tables`, TbDatabase],
-  [`${BASE}/editor`, TbEdit],
-  [`${BASE}/auth`, TbUsers],
-  [`${BASE}/logs`, TbTimeline],
-  [`${BASE}/settings`, TbSettings],
-];
+  [`${BASE}/tables`, TbDatabase, "Table & View Browser"],
+  [`${BASE}/editor`, TbEdit, "SQL Editor"],
+  [`${BASE}/auth`, TbUsers, "User Accounts"],
+  [`${BASE}/logs`, TbTimeline, "Logs & Metrics"],
+  [`${BASE}/settings`, TbSettings, "Settings"],
+] as const;
 
 export const navBarIconSize = 22;
 export const navBarIconStyle =
@@ -35,15 +40,22 @@ export function NavBar(props: { location: Location }) {
           <img src={logo} width="42" height="42" alt="TrailBase Logo" />
         </a>
 
-        {options.map(([pathname, icon]) => {
+        {options.map(([pathname, icon, tooltip]) => {
           const active = () => props.location.pathname === pathname;
 
           return (
-            <a href={pathname as string}>
-              <div class={active() ? navBarIconActiveStyle : navBarIconStyle}>
-                {(icon as IconTypes)({ size: navBarIconSize })}
-              </div>
-            </a>
+            <Tooltip>
+              <TooltipTrigger>
+                <a href={pathname as string}>
+                  <div
+                    class={active() ? navBarIconActiveStyle : navBarIconStyle}
+                  >
+                    {(icon as IconTypes)({ size: navBarIconSize })}
+                  </div>
+                </a>
+              </TooltipTrigger>
+              <TooltipContent>{tooltip}</TooltipContent>
+            </Tooltip>
           );
         })}
       </nav>
