@@ -1,3 +1,7 @@
+## v0.6.2
+
+* Update to address broken vite-plugin-solid: https://github.com/solidjs/vite-plugin-solid/pull/195.
+
 ## v0.6.1
 
 * Fix config handling in the UI.
