@@ -1,3 +1,9 @@
+## v0.6.3
+
+* Allow downloading JSON schemas from the UI for all modes: Insert, Update, Select.
+* Add some more UI polish: tooltips, optics, and tweaks.
+* Improve UI type-safety
+
 ## v0.6.2
 
 * Update to address broken vite-plugin-solid: https://github.com/solidjs/vite-plugin-solid/pull/195.
