@@ -14,6 +14,7 @@ import {
   getDefaultValue,
   isNotNull,
   isOptional,
+  isPrimaryKeyColumn,
 } from "@/lib/schema";
 import { adminFetch } from "@/lib/fetch";
 import { SheetContainer } from "@/components/SafeSheet";
@@ -106,23 +107,22 @@ type FormRowForm = {
   row: FormRow;
 };
 
-export function InsertAlterRowForm(props: {
+export function InsertUpdateRowForm(props: {
   close: () => void;
   markDirty: () => void;
   rowsRefetch: () => void;
   schema: Table;
   row?: FormRow;
 }) {
-  const original = props.row
-    ? JSON.parse(JSON.stringify(props.row))
-    : undefined;
+  const original = props.row ? copyRow(props.row) : undefined;
+  const isUpdate = original !== undefined;
 
   const form = createForm<FormRowForm>(() => ({
     defaultValues: {
       row: props.row ?? buildDefault(props.schema),
     },
     onSubmit: async ({ value }: { value: FormRowForm }) => {
-      console.debug(`Submitting ${original ? "update" : "insert"}:`, value);
+      console.debug(`Submitting ${isUpdate ? "update" : "insert"}:`, value);
       try {
         if (original) {
           await updateRow(props.schema, value.row);
@@ -164,8 +164,8 @@ export function InsertAlterRowForm(props: {
         <div class="flex flex-col items-start gap-4 py-4">
           <For each={props.schema.columns}>
             {(col: Column) => {
+              const pk = isPrimaryKeyColumn(col);
               const notNull = isNotNull(col.options);
-              const label = `${col.name} [${col.data_type}${notNull ? "" : "?"}]`;
               const defaultValue = getDefaultValue(col.options);
 
               return (
@@ -193,10 +193,11 @@ export function InsertAlterRowForm(props: {
                     },
                   }}
                   children={buildDBCellField({
+                    name: col.name,
                     type: col.data_type,
-                    label,
-                    optional: !notNull,
-                    placeholder: defaultValue,
+                    notNull,
+                    disabled: isUpdate && pk,
+                    placeholder: defaultValue ?? "",
                   })}
                 />
               );

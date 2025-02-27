@@ -49,7 +49,7 @@ const columns: ColumnDef<LogJson>[] = [
       const timestamp = new Date(ctx.row.original.created * 1000);
       return (
         <Tooltip>
-          <TooltipTrigger>{timestamp.toUTCString()}</TooltipTrigger>
+          <TooltipTrigger as="div">{timestamp.toUTCString()}</TooltipTrigger>
 
           <TooltipContent>
             <span>{timestamp.toLocaleString()} (Local)</span>

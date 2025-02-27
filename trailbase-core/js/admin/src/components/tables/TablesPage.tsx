@@ -55,7 +55,7 @@ import {
 } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 import { DestructiveActionButton } from "@/components/DestructiveActionButton";
-import { InsertAlterRowForm } from "@/components/tables/InsertAlterRow";
+import { InsertUpdateRowForm } from "@/components/tables/InsertUpdateRow";
 import { RecordApiSettingsForm } from "@/components/tables/RecordApiSettings";
 import { SplitView } from "@/components/SplitView";
 import { SafeSheet } from "@/components/SafeSheet";
@@ -303,7 +303,7 @@ function TableHeaderRightHandButtons(props: {
                 <SheetTrigger
                   as={(props: DialogTriggerProps) => (
                     <Tooltip>
-                      <TooltipTrigger as={"div"}>
+                      <TooltipTrigger as="div">
                         <Button
                           variant="outline"
                           class="flex items-center"
@@ -408,7 +408,7 @@ function TableHeader(props: {
 
         <div class="flex items-center gap-1">
           <Tooltip>
-            <TooltipTrigger>
+            <TooltipTrigger as="div">
               <button
                 class="p-1 rounded hover:bg-gray-200"
                 onClick={props.rowsRefetch}
@@ -421,7 +421,7 @@ function TableHeader(props: {
 
           {hasSchema() && (
             <Tooltip>
-              <TooltipTrigger>
+              <TooltipTrigger as="div">
                 <SchemaDialog tableName={name()} />
               </TooltipTrigger>
               <TooltipContent>JSON Schema of "{name()}"</TooltipContent>
@@ -627,7 +627,7 @@ function RowDataTable(props: {
           return (
             <>
               <SheetContent class={sheetMaxWidth}>
-                <InsertAlterRowForm
+                <InsertUpdateRowForm
                   schema={table() as Table}
                   rowsRefetch={refetch}
                   row={editRow()}
@@ -696,7 +696,7 @@ function RowDataTable(props: {
               return (
                 <>
                   <SheetContent class={sheetMaxWidth}>
-                    <InsertAlterRowForm
+                    <InsertUpdateRowForm
                       schema={table() as Table}
                       rowsRefetch={refetch}
                       {...sheet}

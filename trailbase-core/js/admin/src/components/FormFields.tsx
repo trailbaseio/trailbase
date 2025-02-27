@@ -1,6 +1,6 @@
-import { createSignal, type JSX } from "solid-js";
+import { createSignal, type JSX, Show } from "solid-js";
 import { createForm, type FieldApi } from "@tanstack/solid-form";
-import { TbInfoCircle, TbEye } from "solid-icons/tb";
+import { TbEye } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,10 +20,10 @@ import {
   type TextFieldType,
 } from "@/components/ui/text-field";
 import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import type { ColumnDataType } from "@/lib/bindings";
 
@@ -438,52 +438,50 @@ export function unsetOrLargerThanZero() {
   };
 }
 
-function BinaryBlobHoverCard() {
-  return (
-    <HoverCard>
-      <HoverCardTrigger
-        class="size-[32px]"
-        as={Button<"button">}
-        variant="link"
-      >
-        <TbInfoCircle />
-      </HoverCardTrigger>
-
-      <HoverCardContent>
-        Binary blobs can be entered encoded as url-safe Base64.
-      </HoverCardContent>
-    </HoverCard>
-  );
-}
-
 export function buildDBCellField(props: {
+  name: string;
   type: ColumnDataType;
-  label: string;
-  optional: boolean;
-  placeholder?: string;
+  notNull: boolean;
+  disabled: boolean;
+  placeholder: string;
 }) {
+  const typeLabel = `[${props.type}${props.notNull ? "" : "?"}]`;
+
   const label = () => (
-    <div class="w-[100px] flex gap-2 items-center overflow-hidden">
-      {props.type === "Blob" && <BinaryBlobHoverCard />}
-      {props.label}
+    <div class="w-[100px] wrap gap-1 items-center overflow-hidden">
+      <span>{props.name} </span>
+
+      <Show when={props.type === "Blob"} fallback={typeLabel}>
+        <Tooltip>
+          <TooltipTrigger as="div">
+            <span class="text-primary">{typeLabel}</span>
+          </TooltipTrigger>
+
+          <TooltipContent>
+            Binary blobs can be entered encoded as url-safe Base64.
+          </TooltipContent>
+        </Tooltip>
+      </Show>
     </div>
   );
 
   const type = props.type;
-  const optional = props.optional;
+  const optional = !props.notNull;
   const placeholder = props.placeholder;
+  const disabled = props.disabled;
   if (type === "Text" || type === "Blob") {
     if (optional) {
-      return buildNullableTextFormField({ label, placeholder });
+      return buildNullableTextFormField({ label, placeholder, disabled });
     }
     return buildTextFormFieldT<string | null>({
       label,
       placeholder,
+      disabled,
     });
   }
 
   if (type === "Integer" && !optional) {
-    return buildNullableNumberFormField({ label });
+    return buildNullableNumberFormField({ label, disabled });
   }
 
   console.debug(
@@ -491,9 +489,9 @@ export function buildDBCellField(props: {
   );
 
   if (optional) {
-    return buildNullableTextFormField({ label, placeholder });
+    return buildNullableTextFormField({ label, placeholder, disabled });
   }
-  return buildTextFormFieldT<string | null>({ label, placeholder });
+  return buildTextFormFieldT<string | null>({ label, placeholder, disabled });
 }
 
 export const gapStyle = "gap-x-2 gap-y-1";

@@ -45,7 +45,7 @@ export function NavBar(props: { location: Location }) {
 
           return (
             <Tooltip>
-              <TooltipTrigger>
+              <TooltipTrigger as="div">
                 <a href={pathname as string}>
                   <div
                     class={active() ? navBarIconActiveStyle : navBarIconStyle}
