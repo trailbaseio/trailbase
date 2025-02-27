@@ -265,7 +265,7 @@ mod tests {
         &format!(
           r#"CREATE TABLE test_table (
             col0 TEXT CHECK(jsonschema('foo', col0))
-          ) strict"#
+          ) STRICT"#
         ),
         (),
       )

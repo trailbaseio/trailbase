@@ -7,6 +7,7 @@ import { createForm, type FieldApi } from "@tanstack/solid-form";
 import {
   buildTextFormField,
   buildOptionalTextFormField,
+  buildNullableTextFormField,
 } from "@/components/FormFields";
 
 const user = userEvent.setup();
@@ -93,7 +94,7 @@ describe("form fields", () => {
         <Form
           name="optionalNullable"
           setForm={setForm}
-          field={buildOptionalTextFormField({ label: () => "optional" })}
+          field={buildNullableTextFormField({ label: () => "optional" })}
         />
       ));
 
@@ -123,7 +124,7 @@ describe("form fields", () => {
         <Form
           name="optionalNullable"
           setForm={setForm}
-          field={buildOptionalTextFormField({ label: () => "optional" })}
+          field={buildNullableTextFormField({ label: () => "optional" })}
         />
       ));
 
@@ -211,9 +212,7 @@ describe("form fields", () => {
       await user.click(result.getByTestId("sub"));
 
       const value = form()!;
-      // FIXME: This should be undefined. We've circumvented the type-checking,
-      // optional should not be allowed to be null.
-      expect(value.optional).toBe(null);
+      expect(value.optional).toBeUndefined();
     });
   });
 });

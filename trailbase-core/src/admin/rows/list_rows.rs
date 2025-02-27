@@ -22,8 +22,9 @@ pub struct ListRowsResponse {
 
   pub columns: Vec<Column>,
 
-  // NOTE: use `Object` rather than object to include primitive types.
-  #[ts(type = "Object[][]")]
+  // NOTE: that we're not expanding nested JSON and are encoding Blob to
+  // base64, this is thus a just a JSON subset. See test below.
+  #[ts(type = "(string | number | boolean | null)[][]")]
   pub rows: Vec<Vec<serde_json::Value>>,
 }
 
@@ -209,4 +210,95 @@ async fn fetch_rows(
   })?;
 
   return Ok(rows_to_json_arrays(result_rows, 1024)?);
+}
+
+#[cfg(test)]
+mod tests {
+  use base64::prelude::*;
+
+  use super::*;
+  use crate::{admin::rows::list_rows::Pagination, app_state::*, listing::WhereClause};
+
+  #[tokio::test]
+  async fn test_fetch_rows() {
+    let state = test_state(None).await.unwrap();
+    let conn = state.conn();
+
+    let pattern = serde_json::from_str(
+      r#"{
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          }
+        }"#,
+    )
+    .unwrap();
+
+    trailbase_sqlite::schema::set_user_schema("foo", Some(pattern)).unwrap();
+
+    conn
+      .execute_batch(
+        r#"CREATE TABLE test_table (
+            text    TEXT NOT NULL,
+            number  INTEGER,
+            blob    BLOB NOT NULL,
+            json    TEXT CHECK(jsonschema('foo', json))
+          ) STRICT;
+
+          INSERT INTO test_table (text, number, blob, json) VALUES ('test', 5, X'FACE', '{"name": "alice"}');
+          "#,
+      )
+      .await
+      .unwrap();
+
+    let cnt: i64 = conn
+      .query_value("SELECT COUNT(*) FROM test_table", ())
+      .await
+      .unwrap()
+      .unwrap();
+    assert_eq!(cnt, 1);
+
+    state.table_metadata().invalidate_all().await.unwrap();
+
+    let (data, maybe_cols) = fetch_rows(
+      conn,
+      "test_table",
+      WhereClause {
+        clause: "TRUE".to_string(),
+        params: vec![],
+      },
+      None,
+      Pagination {
+        cursor_column: None,
+        cursor: None,
+        offset: None,
+        limit: 100,
+      },
+    )
+    .await
+    .unwrap();
+
+    let cols = maybe_cols.unwrap();
+    assert_eq!(cols.len(), 4);
+
+    let row = data.get(0).unwrap();
+
+    assert!(row.get(0).unwrap().is_string());
+    assert!(row.get(1).unwrap().is_i64());
+
+    // CHECK that blob gets serialized as padded, url-safe base64.
+    let serde_json::Value::String(b64) = row.get(2).unwrap() else {
+      panic!("Not a string: {:?}", row);
+    };
+    let blob = BASE64_URL_SAFE.decode(b64).unwrap();
+    assert_eq!(format!("{:X?}", blob), "[FA, CE]");
+
+    // CHECK that fetch_rows doesn't expand nested JSON.
+    let serde_json::Value::String(json) = row.get(3).unwrap() else {
+      panic!("Not a string: {:?}", row);
+    };
+    assert_eq!(json, r#"{"name": "alice"}"#);
+  }
 }

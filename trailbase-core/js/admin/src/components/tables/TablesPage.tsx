@@ -71,6 +71,7 @@ import {
 } from "@/components/ui/tooltip";
 
 import { createConfigQuery, invalidateConfig } from "@/lib/config";
+import { type FormRow, RowData } from "@/lib/convert";
 import { adminFetch } from "@/lib/fetch";
 import { urlSafeBase64ToUuid, showSaveFileDialog } from "@/lib/utils";
 import { RecordApiConfig } from "@proto/config";
@@ -102,14 +103,8 @@ import {
   viewSatisfiesRecordApiRequirements,
 } from "@/lib/schema";
 
-// We deliberately want to use `Object` over `object` which includes primitive types such as string.
-// eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
-type RowData = (Object | undefined)[];
-// eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
-type Row = { [key: string]: Object | undefined };
-
-function rowDataToRow(columns: Column[], row: RowData): Row {
-  const result: Row = {};
+function rowDataToRow(columns: Column[], row: RowData): FormRow {
+  const result: FormRow = {};
   for (let i = 0; i < row.length; ++i) {
     result[columns[i].name] = row[i];
   }
@@ -667,7 +662,7 @@ function RowDataTable(props: {
   state: TableState;
   rowsRefetch: () => Promise<void>;
 }) {
-  const [editRow, setEditRow] = createSignal<Row | undefined>();
+  const [editRow, setEditRow] = createSignal<FormRow | undefined>();
   const [selectedRows, setSelectedRows] = createSignal(new Set<string>());
 
   const table = () => props.state.store.selected;

@@ -46,7 +46,9 @@ type TextFieldOptions = {
   placeholder?: string;
 };
 
-export function buildTextFormFieldT<T extends string | undefined>(
+/// Note that we make not-required/optional explicit by having a checkbox, since there's
+/// a difference between empty string and not set.
+function buildTextFormFieldT<T extends string | null | undefined>(
   opts: TextFieldOptions,
 ) {
   const externDisable = opts.disabled ?? false;
@@ -68,9 +70,10 @@ export function buildTextFormFieldT<T extends string | undefined>(
             onBlur={field().handleBlur}
             autocomplete={opts.autocomplete}
             autocorrect={opts.type === "password" ? "off" : undefined}
-            onKeyUp={(e) =>
-              field().handleChange((e.target as HTMLInputElement).value as T)
-            }
+            onKeyUp={(e) => {
+              const value: string = (e.target as HTMLInputElement).value;
+              field().handleChange(value as T);
+            }}
             data-testid="input"
           />
 
@@ -87,15 +90,13 @@ export function buildTextFormFieldT<T extends string | undefined>(
   return builder;
 }
 
-/// Note that we make not-required/optional explicit by having a checkbox, since there's
-/// a difference between empty string and not set.
 export function buildTextFormField(opts: TextFieldOptions) {
   return buildTextFormFieldT<string>(opts);
 }
 
-export function buildOptionalTextFormFieldT<T extends string | undefined>(
-  opts: TextFieldOptions,
-) {
+function buildOptionalNullableTextFormField<
+  T extends string | null | undefined,
+>(opts: TextFieldOptions, unsetValue: T, handler: (e: Event) => T) {
   const externDisable = opts.disabled ?? false;
 
   function builder(field: () => FieldApiT<T>) {
@@ -121,9 +122,7 @@ export function buildOptionalTextFormFieldT<T extends string | undefined>(
               onBlur={field().handleBlur}
               autocomplete={opts.autocomplete}
               autocorrect={opts.type === "password" ? "off" : undefined}
-              onKeyUp={(e) =>
-                field().handleChange((e.target as HTMLInputElement).value as T)
-              }
+              onKeyUp={(e) => field().handleChange(handler(e))}
               data-testid="input"
             />
 
@@ -134,8 +133,10 @@ export function buildOptionalTextFormFieldT<T extends string | undefined>(
                 setEnabled(enabled);
                 // NOTE: null is critical here to actively unset a cell, undefined
                 // would merely take it out of the patch set.
-                const value = enabled ? (initialValue ?? "") : null;
-                field().handleChange(value as T);
+                const value = enabled
+                  ? ((initialValue ?? "") as T)
+                  : unsetValue;
+                field().handleChange(value);
               }}
               data-testid="toggle"
             />
@@ -155,10 +156,26 @@ export function buildOptionalTextFormFieldT<T extends string | undefined>(
 }
 
 export function buildOptionalTextFormField(opts: TextFieldOptions) {
-  return buildOptionalTextFormFieldT<string | undefined>(opts);
+  const handler = (e: Event) => (e.target as HTMLInputElement).value;
+  return buildOptionalNullableTextFormField<string | undefined>(
+    opts,
+    undefined,
+    handler,
+  );
 }
 
-export function buildSecretFormField(opts: Omit<TextFieldOptions, "type">) {
+export function buildNullableTextFormField(opts: TextFieldOptions) {
+  const handler = (e: Event) => (e.target as HTMLInputElement).value;
+  return buildOptionalNullableTextFormField<string | null | undefined>(
+    opts,
+    null,
+    handler,
+  );
+}
+
+export function buildSecretFormField(
+  opts: Omit<TextFieldOptions, "type" | "autocomplete">,
+) {
   const [type, setType] = createSignal<TextFieldType>("password");
 
   return (field: () => FieldApiT<string>) => (
@@ -175,7 +192,7 @@ export function buildSecretFormField(opts: Omit<TextFieldOptions, "type">) {
             type={type()}
             value={field().state.value}
             onBlur={field().handleBlur}
-            autocomplete={opts.autocomplete ?? "off"}
+            autocomplete={"off"}
             autocorrect="off"
             onKeyUp={(e: Event) => {
               field().handleChange((e.target as HTMLInputElement).value);
@@ -245,8 +262,15 @@ type NumberFieldOptions = {
   integer?: boolean;
 };
 
-export function buildNumberFormFieldT<T extends number | string | undefined>(
+// NOTE: Optional/nullable numbers don't need a dedicated toggle switch, since
+// the empty string can already be interpreted as an unset value, as opposed to
+// strings.
+function buildOptionalNullableNumberFormField<
+  T extends string | number | null | undefined,
+>(
   opts: NumberFieldOptions,
+  defaultValue: number | string | undefined,
+  handler: (e: Event) => T,
 ) {
   const isInt = opts.integer ?? false;
 
@@ -263,16 +287,10 @@ export function buildNumberFormFieldT<T extends number | string | undefined>(
             type="number"
             step={isInt ? "1" : undefined}
             pattern={isInt ? "d+" : undefined}
-            value={field().state.value ?? undefined}
+            value={field().state.value ?? defaultValue}
             disabled={opts?.disabled}
             onBlur={field().handleBlur}
-            onKeyUp={(e: Event) => {
-              const v = (e.target as HTMLInputElement).value;
-              if (v) {
-                const i = parseInt(v);
-                field().handleChange(i as T);
-              }
-            }}
+            onKeyUp={(e) => field().handleChange(handler(e))}
           />
 
           <div class="col-start-2 ml-2 text-sm text-muted-foreground">
@@ -286,8 +304,28 @@ export function buildNumberFormFieldT<T extends number | string | undefined>(
   };
 }
 
-export function buildNumberFormField(opts: NumberFieldOptions) {
-  return buildNumberFormFieldT<number>(opts);
+export function buildOptionalNumberFormField(opts: NumberFieldOptions) {
+  const handler = (e: Event) => {
+    const n = parseInt((e.target as HTMLInputElement).value);
+    return isNaN(n) ? undefined : n;
+  };
+  return buildOptionalNullableNumberFormField<number | undefined>(
+    opts,
+    undefined,
+    handler,
+  );
+}
+
+function buildNullableNumberFormField(opts: NumberFieldOptions) {
+  const handler = (e: Event) => {
+    const n = parseInt((e.target as HTMLInputElement).value);
+    return isNaN(n) ? null : n.toString();
+  };
+  return buildOptionalNullableNumberFormField<string | null | undefined>(
+    opts,
+    undefined,
+    handler,
+  );
 }
 
 export function buildBoolFormField(props: { label: () => JSX.Element }) {
@@ -442,13 +480,16 @@ export function buildDBCellField(props: {
   const placeholder = props.placeholder;
   if (type === "Text" || type === "Blob") {
     if (optional) {
-      return buildOptionalTextFormField({ label, placeholder });
+      return buildNullableTextFormField({ label, placeholder });
     }
-    return buildTextFormFieldT<string | undefined>({ label, placeholder });
+    return buildTextFormFieldT<string | null | undefined>({
+      label,
+      placeholder,
+    });
   }
 
   if (type === "Integer" && !optional) {
-    return buildNumberFormFieldT<string | undefined>({ label });
+    return buildNullableNumberFormField({ label });
   }
 
   console.debug(
@@ -456,9 +497,9 @@ export function buildDBCellField(props: {
   );
 
   if (optional) {
-    return buildOptionalTextFormField({ label, placeholder });
+    return buildNullableTextFormField({ label, placeholder });
   }
-  return buildTextFormFieldT<string | undefined>({ label, placeholder });
+  return buildTextFormFieldT<string | null | undefined>({ label, placeholder });
 }
 
 export const gapStyle = "gap-x-2 gap-y-1";

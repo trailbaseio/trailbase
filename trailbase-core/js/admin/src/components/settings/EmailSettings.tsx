@@ -14,7 +14,7 @@ import {
   unsetOrLargerThanZero,
   unsetOrNotEmptyValidator,
   buildTextAreaFormField,
-  buildNumberFormField,
+  buildOptionalNumberFormField,
   buildOptionalTextFormField,
 } from "@/components/FormFields";
 import type { FormType } from "@/components/FormFields";
@@ -143,7 +143,7 @@ export function EmailSettings(props: {
               </form.Field>
 
               <form.Field name="smtpPort" validators={unsetOrLargerThanZero()}>
-                {buildNumberFormField({
+                {buildOptionalNumberFormField({
                   integer: true,
                   label: textLabel("Port"),
                 })}

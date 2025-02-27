@@ -18,11 +18,11 @@ import {
 import { adminFetch } from "@/lib/fetch";
 import { SheetContainer } from "@/components/SafeSheet";
 import { showToast } from "@/components/ui/toast";
-import { copyAndConvertRow, type FormRow } from "@/lib/convert";
+import { copyRow, type FormRow } from "@/lib/convert";
 
 async function insertRow(tableName: string, row: FormRow) {
   const request: InsertRowRequest = {
-    row: copyAndConvertRow(row),
+    row: copyRow(row),
   };
 
   const response = await adminFetch(`/table/${tableName}`, {
@@ -53,13 +53,13 @@ async function updateRow(table: Table, row: FormRow) {
   const copy = {
     ...row,
   };
-  copy[pkColName] = undefined;
+  delete copy[pkColName];
 
   const request: UpdateRowRequest = {
     primary_key_column: pkColName,
     // eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
     primary_key_value: pkValue as Object,
-    row: copyAndConvertRow(copy),
+    row: copyRow(copy),
   };
 
   const response = await adminFetch(`/table/${tableName}`, {
@@ -84,7 +84,7 @@ function buildDefault(schema: Table): FormRow {
 
     switch (col.data_type) {
       case "Blob":
-        obj[col.name] = [];
+        obj[col.name] = "";
         break;
       case "Text":
         obj[col.name] = "";
@@ -172,7 +172,11 @@ export function InsertAlterRowForm(props: {
                 <form.Field
                   name={`row[${col.name}]`}
                   validators={{
-                    onChange: ({ value }: { value: string | undefined }) => {
+                    onChange: ({
+                      value,
+                    }: {
+                      value: string | number | null | undefined;
+                    }) => {
                       const required = notNull && defaultValue === undefined;
                       if (value === undefined) {
                         if (required) {

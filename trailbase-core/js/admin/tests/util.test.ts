@@ -1,15 +1,13 @@
 import { expect, test, describe } from "vitest";
-import { copyAndConvertRow } from "@/lib/convert";
-
-type UnknownRow = { [key: string]: unknown };
+import { copyRow, type FormRow } from "@/lib/convert";
 
 describe("utils", () => {
   test("coypAndConvertRow", () => {
-    const x: UnknownRow = {
+    const x: FormRow = {
       foo: "test",
       bar: "test",
     };
-    const y = copyAndConvertRow(x);
+    const y = copyRow(x);
     for (const key of Object.keys(x)) {
       expect(x[key]).toBe(y[key]);
     }

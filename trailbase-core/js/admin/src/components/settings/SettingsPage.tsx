@@ -21,7 +21,7 @@ import { showToast } from "@/components/ui/toast";
 import { Config, ServerConfig } from "@proto/config";
 import {
   notEmptyValidator,
-  buildNumberFormField,
+  buildOptionalNumberFormField,
   buildTextFormField,
   gapStyle,
 } from "@/components/FormFields";
@@ -110,7 +110,7 @@ function ServerSettings(props: CommonProps) {
 
             <div>
               <form.Field name="logsRetentionSec">
-                {buildNumberFormField({
+                {buildOptionalNumberFormField({
                   integer: true,
                   label: () => (
                     <div class={labelWidth}>Log Retention (sec)</div>
@@ -272,7 +272,7 @@ function BackupImportSettings(props: CommonProps) {
 
             <CardContent class="flex flex-col gap-1">
               <form.Field name="backupIntervalSec">
-                {buildNumberFormField({
+                {buildOptionalNumberFormField({
                   integer: true,
                   label: () => (
                     <div class={labelWidth}>

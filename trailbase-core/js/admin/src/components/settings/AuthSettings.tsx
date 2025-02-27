@@ -10,7 +10,7 @@ import {
 import { createForm } from "@tanstack/solid-form";
 
 import {
-  buildNumberFormField,
+  buildOptionalNumberFormField,
   buildSecretFormField,
   buildOptionalTextFormField,
 } from "@/components/FormFields";
@@ -299,7 +299,7 @@ function AuthSettingsForm(props: {
           <CardContent>
             <div class="flex flex-col gap-4">
               <form.Field name="authTokenTtlSec">
-                {buildNumberFormField({
+                {buildOptionalNumberFormField({
                   integer: true,
                   label: () => <div class={labelWidth}>Auth TTL [sec]</div>,
                   info: (
@@ -312,7 +312,7 @@ function AuthSettingsForm(props: {
               </form.Field>
 
               <form.Field name="refreshTokenTtlSec">
-                {buildNumberFormField({
+                {buildOptionalNumberFormField({
                   integer: true,
                   label: () => <div class={labelWidth}>Refresh TTL [sec]</div>,
                   info: (
