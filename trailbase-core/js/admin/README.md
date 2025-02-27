@@ -28,8 +28,8 @@ $ pnpm run proto
 
 , which requires the following system dependencies:
 
- * **protoc**,  e.g. via the `protobuf-compiler` Debian/Ubuntu package
- * **descriptor.proto**, e.g. via the `libprotobuf-dev` Debian/Ubuntu package.
+- **protoc**, e.g. via the `protobuf-compiler` Debian/Ubuntu package
+- **descriptor.proto**, e.g. via the `libprotobuf-dev` Debian/Ubuntu package.
 
 ## Rust-TypeScript codegen
 

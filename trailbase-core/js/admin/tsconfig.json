@@ -10,6 +10,7 @@
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
     "types": [
+      "@testing-library/jest-dom",
       "@types/wicg-file-system-access",
       "vite/client"
     ],
@@ -20,10 +21,5 @@
       "@styles/*": ["../styles/*"]
     }
   },
-  "exclude": [
-    "tailwind.config.ts",
-    "dist/",
-    "node_modules/",
-    "public/"
-  ]
+  "exclude": ["tailwind.config.ts", "dist/", "node_modules/", "public/"]
 }

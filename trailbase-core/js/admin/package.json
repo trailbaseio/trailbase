@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "format": "prettier -w src",
+    "format": "prettier -w .",
     "proto": "protoc --plugin=protoc-gen-ts=${PWD}/node_modules/ts-proto/protoc-gen-ts_proto ../../proto/*.proto -I../../proto -I/usr/include --ts_out=./proto/ --ts_opt=esModuleInterop=true,initializeFieldsAsUndefined=false",
     "check": "tsc --noEmit --skipLibCheck && eslint && vitest run",
     "test": "vitest run"
@@ -49,7 +49,10 @@
   "devDependencies": {
     "@eslint/js": "^9.21.0",
     "@iconify-json/tabler": "^1.2.16",
+    "@solidjs/testing-library": "^0.8.10",
     "@tailwindcss/typography": "^0.5.16",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/user-event": "^14.6.1",
     "@types/geojson": "^7946.0.16",
     "@types/leaflet": "^1.9.16",
     "@types/wicg-file-system-access": "^2023.10.5",

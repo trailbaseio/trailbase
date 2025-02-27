@@ -71,6 +71,7 @@ export function buildTextFormFieldT<T extends string | undefined>(
             onKeyUp={(e) =>
               field().handleChange((e.target as HTMLInputElement).value as T)
             }
+            data-testid="input"
           />
 
           <div class="col-start-2 ml-2 text-sm text-muted-foreground">
@@ -123,6 +124,7 @@ export function buildOptionalTextFormFieldT<T extends string | undefined>(
               onKeyUp={(e) =>
                 field().handleChange((e.target as HTMLInputElement).value as T)
               }
+              data-testid="input"
             />
 
             <Checkbox
@@ -135,6 +137,7 @@ export function buildOptionalTextFormFieldT<T extends string | undefined>(
                 const value = enabled ? (initialValue ?? "") : null;
                 field().handleChange(value as T);
               }}
+              data-testid="toggle"
             />
           </div>
 

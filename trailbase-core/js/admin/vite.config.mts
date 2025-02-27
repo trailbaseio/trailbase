@@ -1,18 +1,15 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from "vite";
 
-import tsconfigPaths from 'vite-tsconfig-paths';
-import solidPlugin from 'vite-plugin-solid';
+import tsconfigPaths from "vite-tsconfig-paths";
+import solidPlugin from "vite-plugin-solid";
 
 export default defineConfig({
   base: "/_/admin",
-  plugins: [
-    solidPlugin(),
-    tsconfigPaths(),
-  ],
+  plugins: [solidPlugin(), tsconfigPaths()],
   server: {
     port: 3000,
   },
   build: {
-    target: 'esnext',
+    target: "esnext",
   },
 });
