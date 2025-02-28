@@ -43,11 +43,14 @@ function pickInitiallySelectedTable(
     return undefined;
   }
 
-  for (const table of tables) {
-    if (tableName == table.name) {
-      return table;
+  if (tableName) {
+    for (const table of tables) {
+      if (tableName === table.name) {
+        return table;
+      }
     }
   }
+
   return tables[0];
 }
 
