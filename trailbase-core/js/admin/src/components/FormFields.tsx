@@ -254,6 +254,7 @@ type NumberFieldOptions = {
 
   info?: JSX.Element;
   integer?: boolean;
+  required?: boolean;
 };
 
 // NOTE: Optional/nullable numbers don't need a dedicated toggle switch, since
@@ -278,9 +279,10 @@ function buildOptionalNullableNumberFormField<
           <TextFieldLabel>{opts.label()}</TextFieldLabel>
 
           <TextFieldInput
-            type="number"
+            type={isInt ? "number" : "text"}
+            required={opts.required}
             step={isInt ? "1" : undefined}
-            pattern={isInt ? "d+" : undefined}
+            pattern={isInt ? "d+" : "[0-9]*[.,]?[0-9]*"}
             value={field().state.value ?? defaultValue}
             disabled={opts?.disabled}
             onBlur={field().handleBlur}
@@ -299,26 +301,38 @@ function buildOptionalNullableNumberFormField<
 }
 
 export function buildOptionalNumberFormField(opts: NumberFieldOptions) {
-  const handler = (e: Event) => {
+  function tryParseInt(e: Event): number | undefined {
     const n = parseInt((e.target as HTMLInputElement).value);
     return isNaN(n) ? undefined : n;
-  };
+  }
+
+  function tryParseFloat(e: Event): number | undefined {
+    const n = parseFloat((e.target as HTMLInputElement).value);
+    return isNaN(n) ? undefined : n;
+  }
+
   return buildOptionalNullableNumberFormField<number | undefined>(
     opts,
     undefined,
-    handler,
+    opts.integer ? tryParseInt : tryParseFloat,
   );
 }
 
 function buildNullableNumberFormField(opts: NumberFieldOptions) {
-  const handler = (e: Event) => {
+  function tryParseInt(e: Event): string | null {
     const n = parseInt((e.target as HTMLInputElement).value);
     return isNaN(n) ? null : n.toString();
-  };
+  }
+
+  function tryParseFloat(e: Event): string | null {
+    const n = parseFloat((e.target as HTMLInputElement).value);
+    return isNaN(n) ? null : n.toString();
+  }
+
   return buildOptionalNullableNumberFormField<string | null>(
     opts,
     undefined,
-    handler,
+    opts.integer ? tryParseInt : tryParseFloat,
   );
 }
 
@@ -438,6 +452,38 @@ export function unsetOrLargerThanZero() {
   };
 }
 
+function isInt(type: ColumnDataType): boolean {
+  switch (type) {
+    case "Integer":
+    case "Int":
+    case "Int2":
+    case "Int4":
+    case "Int8":
+    case "TinyInt":
+    case "SmallInt":
+    case "MediumInt":
+    case "BigInt":
+    case "UnignedBigInt":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function isReal(type: ColumnDataType): boolean {
+  switch (type) {
+    case "Real":
+    case "Float":
+    case "Double":
+    case "DoublePrecision":
+    case "Decimal":
+    case "Numeric":
+      return true;
+    default:
+      return false;
+  }
+}
+
 export function buildDBCellField(props: {
   name: string;
   type: ColumnDataType;
@@ -480,8 +526,22 @@ export function buildDBCellField(props: {
     });
   }
 
-  if (type === "Integer" && !optional) {
-    return buildNullableNumberFormField({ label, disabled });
+  if (isInt(type)) {
+    return buildNullableNumberFormField({
+      label,
+      disabled,
+      integer: true,
+      required: !optional,
+    });
+  }
+
+  if (isReal(type)) {
+    return buildNullableNumberFormField({
+      label,
+      disabled,
+      integer: false,
+      required: !optional,
+    });
   }
 
   console.debug(
