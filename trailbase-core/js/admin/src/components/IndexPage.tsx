@@ -93,7 +93,7 @@ export function IndexPage() {
           TrailBase is still young and evolving rapidly. You'd really help us
           out by leaving some feedback on{" "}
           <a href="https://github.com/trailbaseio/trailbase">GitHub</a> or even
-          leave a ⭐, if you like it.
+          a ⭐, if you like it.
         </p>
 
         <p>

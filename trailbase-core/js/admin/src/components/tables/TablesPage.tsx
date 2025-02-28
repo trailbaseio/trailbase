@@ -36,6 +36,7 @@ import {
 import {
   TbRefresh,
   TbTable,
+  TbTablePlus,
   TbTrash,
   TbLock,
   TbEye,
@@ -1055,6 +1056,31 @@ function TablePickerPane(props: {
     <div class={`${flexStyle()} gap-2 justify-between`}>
       {/* TODO: Maybe add a thin bottom scrollbar to make overflow more apparent */}
       <div class={`${flexStyle()} gap-2 overflow-scroll hide-scrollbars p-4`}>
+        <SafeSheet>
+          {(sheet) => {
+            return (
+              <>
+                <SheetContent class={sheetMaxWidth}>
+                  <CreateAlterTableForm
+                    schemaRefetch={props.schemaRefetch}
+                    allTables={props.allTables}
+                    setSelected={setSelectedTableName}
+                    {...sheet}
+                  />
+                </SheetContent>
+
+                <SheetTrigger
+                  as={(props: DialogTriggerProps) => (
+                    <Button class="flex gap-2" variant="secondary" {...props}>
+                      <TbTablePlus size={16} /> Add Table
+                    </Button>
+                  )}
+                />
+              </>
+            );
+          }}
+        </SafeSheet>
+
         <For each={tablesAndViews()}>
           {(item: Table | View) => {
             const hidden = hiddenTable(item);
@@ -1083,31 +1109,6 @@ function TablePickerPane(props: {
             );
           }}
         </For>
-
-        <SafeSheet
-          children={(sheet) => {
-            return (
-              <>
-                <SheetContent class={sheetMaxWidth}>
-                  <CreateAlterTableForm
-                    schemaRefetch={props.schemaRefetch}
-                    allTables={props.allTables}
-                    setSelected={setSelectedTableName}
-                    {...sheet}
-                  />
-                </SheetContent>
-
-                <SheetTrigger
-                  as={(props: DialogTriggerProps) => (
-                    <Button variant="secondary" {...props}>
-                      Add Table
-                    </Button>
-                  )}
-                />
-              </>
-            );
-          }}
-        />
       </div>
 
       <SwitchUi

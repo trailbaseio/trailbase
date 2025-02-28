@@ -161,7 +161,7 @@ export function CreateAlterTableForm(props: {
   return (
     <SheetContainer>
       <SheetHeader>
-        <SheetTitle>{original ? "Alter Table" : "Create New Table"}</SheetTitle>
+        <SheetTitle>{original ? "Alter Table" : "Add New Table"}</SheetTitle>
       </SheetHeader>
 
       <form

@@ -100,8 +100,8 @@ export function CreateAlterIndexForm(props: {
     <SheetContainer>
       <SheetHeader>
         <SheetTitle>
-          {original ? "Alter Index" : "Create New Index"} for "
-          {props.table.name}" Table
+          {original ? "Alter Index" : "Add New Index"} for "{props.table.name}"
+          Table
         </SheetTitle>
       </SheetHeader>
 
