@@ -8,11 +8,11 @@ import {
   TbSettings,
 } from "solid-icons/tb";
 
-import { Separator } from "@/components/ui/separator";
+import { Header } from "@/components/Header";
 
 function ColorPalette() {
   return (
-    <div class="w-56 grid grid-cols-2 m-4">
+    <div class="text-sm w-[400px] grid grid-cols-2 my-4">
       <div class="bg-background">Background</div>
       <div class="bg-foreground text-white">Foreground</div>
 
@@ -79,14 +79,33 @@ const elements = [
 export function IndexPage() {
   return (
     <>
-      <h1 class="m-4">Welcome to TrailBase</h1>
+      <Header title="TrailBase" />
 
-      <Separator />
+      <div class="grow m-4 prose">
+        <p>
+          Welcome to TrailBase 🚀: your open-source, sub-millisecond,
+          single-executable FireBase alternative with type-safe APIs,
+          notifications, builtin JS/TS runtime, auth &amp; admin UI built on
+          SQLite, Rust &amp; V8.
+        </p>
 
-      <div class="flex flex-col md:flex-row ">
-        <div class="grow m-4 prose flex flex-col gap-4">
-          <span>Quick overview:</span>
+        <p>
+          TrailBase is still young and evolving rapidly. You'd really help us
+          out by leaving some feedback on{" "}
+          <a href="https://github.com/trailbaseio/trailbase">GitHub</a> or even
+          leave a ⭐, if you like it.
+        </p>
 
+        <p>
+          Documentation is available at{" "}
+          <a href="https://trailbase.io/getting-started/starting-up">
+            trailbase.io
+          </a>
+          .
+        </p>
+
+        <p>
+          Quick overview:
           <For each={elements}>
             {(item) => {
               const Icon = item.icon;
@@ -97,14 +116,7 @@ export function IndexPage() {
               );
             }}
           </For>
-
-          <span>
-            TrailBase is at an early stage. Help us out and go to{" "}
-            <a href="https://github.com/trailbaseio/trailbase">GitHub</a> to
-            find open issues or report new ones. The full documentation is
-            available on <a href="https://trailbase.io">trailbase.io</a>
-          </span>
-        </div>
+        </p>
 
         {import.meta.env.DEV && <ColorPalette />}
       </div>
