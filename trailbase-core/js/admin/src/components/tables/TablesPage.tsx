@@ -66,6 +66,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Separator } from "@/components/ui/separator";
 
 import { createConfigQuery, invalidateConfig } from "@/lib/config";
 import { type FormRow, RowData } from "@/lib/convert";
@@ -98,6 +99,7 @@ import {
   type TableType,
   tableSatisfiesRecordApiRequirements,
   viewSatisfiesRecordApiRequirements,
+  hiddenName,
 } from "@/lib/schema";
 
 function rowDataToRow(columns: Column[], row: RowData): FormRow {
@@ -1050,72 +1052,17 @@ function TablePickerPane(props: {
     }
   });
 
-  const flexStyle = () => (props.horizontal ? "flex flex-col h-dvh" : "flex");
+  const horizontal = () => props.horizontal;
 
   return (
-    <div class={`${flexStyle()} gap-2 justify-between`}>
-      {/* TODO: Maybe add a thin bottom scrollbar to make overflow more apparent */}
-      <div class={`${flexStyle()} gap-2 overflow-scroll hide-scrollbars p-4`}>
-        <SafeSheet>
-          {(sheet) => {
-            return (
-              <>
-                <SheetContent class={sheetMaxWidth}>
-                  <CreateAlterTableForm
-                    schemaRefetch={props.schemaRefetch}
-                    allTables={props.allTables}
-                    setSelected={setSelectedTableName}
-                    {...sheet}
-                  />
-                </SheetContent>
-
-                <SheetTrigger
-                  as={(props: DialogTriggerProps) => (
-                    <Button class="flex gap-2" variant="secondary" {...props}>
-                      <TbTablePlus size={16} /> Add Table
-                    </Button>
-                  )}
-                />
-              </>
-            );
-          }}
-        </SafeSheet>
-
-        <For each={tablesAndViews()}>
-          {(item: Table | View) => {
-            const hidden = hiddenTable(item);
-            const type = tableType(item);
-            const selected = () => item.name === selectedTableName();
-
-            return (
-              <Button
-                variant={selected() ? "default" : "outline"}
-                onClick={() => setSelectedTableName(item.name)}
-                class="flex gap-2"
-              >
-                <span
-                  class={
-                    !selected() && hidden
-                      ? "truncate text-gray-500"
-                      : "truncate"
-                  }
-                >
-                  {item.name}
-                </span>
-                {hidden && <TbLock />}
-                {type === "view" && <TbEye />}
-                {type === "virtualTable" && <TbWand />}
-              </Button>
-            );
-          }}
-        </For>
-      </div>
-
+    <div
+      class={`${horizontal() ? "flex flex-col h-dvh" : "flex"} gap-2 overflow-scroll hide-scrollbars p-4`}
+    >
       <SwitchUi
-        class="flex items-center space-x-2 m-4"
+        class="flex items-center justify-center gap-2"
         checked={showHidden()}
         onChange={(show: boolean) => {
-          if (!show && selectedTableName()?.startsWith("_")) {
+          if (!show && hiddenName(selectedTableName() ?? "")) {
             setSelectedTableName(undefined);
           }
           console.debug("Show hidden tables:", show);
@@ -1125,8 +1072,68 @@ function TablePickerPane(props: {
         <SwitchControl>
           <SwitchThumb />
         </SwitchControl>
-        <SwitchLabel>Hidden Tables</SwitchLabel>
+
+        <SwitchLabel>Show Hidden</SwitchLabel>
       </SwitchUi>
+
+      {horizontal() && <Separator />}
+
+      <SafeSheet>
+        {(sheet) => {
+          return (
+            <>
+              <SheetContent class={sheetMaxWidth}>
+                <CreateAlterTableForm
+                  schemaRefetch={props.schemaRefetch}
+                  allTables={props.allTables}
+                  setSelected={setSelectedTableName}
+                  {...sheet}
+                />
+              </SheetContent>
+
+              <SheetTrigger
+                as={(props: DialogTriggerProps) => (
+                  <Button
+                    class="gap-2 min-w-[100px]"
+                    variant="secondary"
+                    {...props}
+                  >
+                    {horizontal() && <TbTablePlus size={16} />}
+                    Add Table
+                  </Button>
+                )}
+              />
+            </>
+          );
+        }}
+      </SafeSheet>
+
+      <For each={tablesAndViews()}>
+        {(item: Table | View) => {
+          const hidden = hiddenTable(item);
+          const type = tableType(item);
+          const selected = () => item.name === selectedTableName();
+
+          return (
+            <Button
+              variant={selected() ? "default" : "outline"}
+              onClick={() => setSelectedTableName(item.name)}
+              class="flex gap-2"
+            >
+              <span
+                class={
+                  !selected() && hidden ? "truncate text-gray-500" : "truncate"
+                }
+              >
+                {item.name}
+              </span>
+              {hidden && <TbLock />}
+              {type === "view" && <TbEye />}
+              {type === "virtualTable" && <TbWand />}
+            </Button>
+          );
+        }}
+      </For>
     </div>
   );
 }
@@ -1140,7 +1147,7 @@ function TableSplitView(props: {
     schemas: (Table | View)[],
     showHidden: boolean,
   ): (Table | View)[] {
-    return schemas.filter((s) => showHidden || !s.name.startsWith("_"));
+    return schemas.filter((s) => showHidden || !hiddenTable(s));
   }
   const allTablesAndViews = () => [
     ...props.schemas.tables,

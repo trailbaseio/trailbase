@@ -260,5 +260,9 @@ export function tableType(table: Table | View): TableType {
 }
 
 export function hiddenTable(table: Table | View): boolean {
-  return table.name.startsWith("_") || table.name.startsWith("sqlite_");
+  return hiddenName(table.name);
+}
+
+export function hiddenName(name: string): boolean {
+  return name.startsWith("_") || name.startsWith("sqlite_");
 }
