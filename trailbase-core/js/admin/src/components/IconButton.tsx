@@ -1,26 +1,39 @@
-import { Show, type JSX } from "solid-js";
+import { Show, splitProps, type ValidComponent } from "solid-js";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import * as ButtonPrimitive from "@kobalte/core/button";
+import { type PolymorphicProps } from "@kobalte/core/polymorphic";
+import { cn } from "@/lib/utils";
 
 export const iconButtonStyle =
   "grid items-center justify-center size-[32px] p-1 rounded hover:bg-gray-200";
 
-export function IconButton(props: {
-  children: JSX.Element;
-  onClick: () => void;
-  tooltip?: string;
-}) {
+type ButtonProps<T extends ValidComponent = "button"> =
+  ButtonPrimitive.ButtonRootProps<T> & {
+    class?: string | undefined;
+    tooltip?: string | undefined;
+  };
+
+export function IconButton<T extends ValidComponent = "button">(
+  props: PolymorphicProps<T, ButtonProps<T>>,
+) {
+  const [local, others] = splitProps(props as ButtonProps, [
+    "tooltip",
+    "class",
+  ]);
+
   const Button = () => (
-    <button class={iconButtonStyle} onClick={props.onClick}>
-      {props.children}
-    </button>
+    <ButtonPrimitive.Root
+      class={cn(iconButtonStyle, local.class)}
+      {...others}
+    />
   );
 
   return (
-    <Show when={props.tooltip} fallback={<Button />}>
+    <Show when={local.tooltip} fallback={<Button />}>
       <Tooltip>
         <TooltipTrigger as="div">
           <Button />

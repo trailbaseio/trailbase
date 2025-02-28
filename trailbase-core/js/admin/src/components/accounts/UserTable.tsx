@@ -8,7 +8,7 @@ import {
 } from "solid-js";
 import type { Setter } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
-import { TbCrown } from "solid-icons/tb";
+import { TbCrown, TbEdit, TbTrash } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 
 import {
@@ -29,6 +29,7 @@ import {
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/Table";
+import { IconButton } from "@/components/IconButton";
 import { Label } from "@/components/ui/label";
 import { AddUser } from "@/components/accounts/AddUser";
 import {
@@ -50,6 +51,7 @@ function buildColumns(
   setEditUser: Setter<UserJson | undefined>,
   userRefetch: () => void,
 ): ColumnDef<UserJson>[] {
+  // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
   return [
     {
       header: "id",
@@ -64,7 +66,7 @@ function buildColumns(
       accessorKey: "verified",
     },
     columnHelper.accessor("id", {
-      header: "Admin",
+      header: "admin",
       cell: (ctx) => (
         <div class="ml-[10px]">
           {ctx.row.original.admin ? <TbCrown size={20} /> : null}
@@ -72,26 +74,27 @@ function buildColumns(
       ),
     }) as ColumnDef<UserJson>,
     columnHelper.display({
-      header: "Actions",
+      header: "actions",
       cell: (ctx) => {
         const userId = ctx.row.original.id;
         return (
           <div class="flex gap-2">
-            <Button
-              variant="outline"
+            <IconButton
+              tooltip="Edit user"
               onClick={() => setEditUser(ctx.row.original)}
             >
-              edit
-            </Button>
+              <TbEdit size={20} />
+            </IconButton>
 
-            <Button
-              variant="destructive"
+            <IconButton
+              class="bg-destructive text-white"
+              tooltip="Delete user"
               onClick={() => {
                 deleteUser(userId).then(userRefetch).catch(console.error);
               }}
             >
-              delete
-            </Button>
+              <TbTrash size={20} />
+            </IconButton>
           </div>
         );
       },
