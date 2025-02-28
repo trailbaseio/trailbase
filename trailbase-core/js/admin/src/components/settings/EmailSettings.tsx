@@ -119,7 +119,7 @@ export function EmailSettings(props: {
           form.handleSubmit();
         }}
       >
-        <div id="templates" class="flex flex-col gap-4">
+        <div class="flex flex-col gap-4">
           <Card id="smtp">
             <CardHeader>
               <h2>SMTP Settings</h2>
@@ -233,7 +233,7 @@ export function EmailSettings(props: {
             </CardContent>
           </Card>
 
-          <div class="flex justify-end pt-4">
+          <div class="flex justify-end">
             <form.Subscribe
               selector={(state) => ({
                 canSubmit: state.canSubmit,

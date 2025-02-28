@@ -6,8 +6,8 @@ import {
   Switch,
   Match,
 } from "solid-js";
-import type { Component, JSXElement } from "solid-js";
-import { Route, useNavigate, type RouteSectionProps } from "@solidjs/router";
+import type { Component, JSXElement, Signal } from "solid-js";
+import { useParams, useNavigate } from "@solidjs/router";
 import { createForm } from "@tanstack/solid-form";
 
 import { Button } from "@/components/ui/button";
@@ -366,87 +366,59 @@ function BackupImportSettings(props: CommonProps) {
   );
 }
 
-function WrapSidebar<T>(
-  base: string,
-  route: string,
-  site: Site,
-): Component<RouteSectionProps<T>> {
-  const [dirty, setDirty] = createSignal(false);
+function Sidebar(props: {
+  activeRoute: string | undefined;
+  horizontal: boolean;
+  dirty: Signal<boolean>;
+}) {
+  const navigate = useNavigate();
+  const [dirty, setDirty] = props.dirty;
 
-  return (_props: RouteSectionProps) => {
-    function First(props: { horizontal: boolean }) {
-      const navigate = useNavigate();
+  return (
+    <div class={`${props.horizontal ? "flex flex-col" : "flex"} gap-2 p-4`}>
+      <For each={sites}>
+        {(s: Site) => {
+          const [dialogOpen, setDialogOpen] = createSignal(false);
+          const match = () => props.activeRoute === s.route;
 
-      const flexStyle = props.horizontal ? "flex flex-col" : "flex";
+          return (
+            <Dialog
+              id="confirm"
+              modal={true}
+              open={dialogOpen()}
+              onOpenChange={setDialogOpen}
+            >
+              <ConfirmCloseDialog
+                back={() => setDialogOpen(false)}
+                confirm={() => {
+                  setDialogOpen(false);
+                  setDirty(false);
+                  navigate("/settings/" + s.route);
+                }}
+              />
 
-      return (
-        <div class={`${flexStyle} gap-2 p-4`}>
-          <For each={Object.entries(sites)}>
-            {([r, s]) => {
-              const [dialogOpen, setDialogOpen] = createSignal(false);
+              <Button
+                class="text-nowrap"
+                variant={match() ? "default" : "outline"}
+                onClick={() => {
+                  if (!match()) {
+                    if (!dirty()) {
+                      navigate("/settings/" + s.route);
+                      return;
+                    }
 
-              return (
-                <Dialog
-                  id="confirm"
-                  modal={true}
-                  open={dialogOpen()}
-                  onOpenChange={setDialogOpen}
-                >
-                  <ConfirmCloseDialog
-                    back={() => setDialogOpen(false)}
-                    confirm={() => {
-                      setDialogOpen(false);
-                      navigate(base + r);
-                    }}
-                  />
-
-                  <Button
-                    class="text-nowrap"
-                    variant={route === r ? "default" : "outline"}
-                    onClick={() => {
-                      if (route !== r) {
-                        if (!dirty()) {
-                          navigate(base + r);
-                          return;
-                        }
-
-                        setDialogOpen(true);
-                      }
-                    }}
-                  >
-                    {s.label}
-                  </Button>
-                </Dialog>
-              );
-            }}
-          </For>
-        </div>
-      );
-    }
-
-    function Second() {
-      return (
-        <>
-          <Header title="Settings" titleSelect={site.label} />
-
-          <div class="m-4">
-            <site.child
-              markDirty={() => setDirty(true)}
-              postSubmit={() => {
-                setDirty(false);
-                showToast({
-                  title: "submitted",
-                  variant: "success",
-                });
-              }}
-            />
-          </div>
-        </>
-      );
-    }
-
-    return <SplitView first={First} second={Second} />;
-  };
+                    setDialogOpen(true);
+                  }
+                }}
+              >
+                {s.label}
+              </Button>
+            </Dialog>
+          );
+        }}
+      </For>
+    </div>
+  );
 }
 
 interface CommonProps {
@@ -455,46 +427,82 @@ interface CommonProps {
 }
 
 interface Site {
+  route: string;
   label: string;
   child: Component<CommonProps>;
 }
 
-const sites: { [k: string]: Site } = {
-  "/": {
+const sites = [
+  {
+    route: "host",
     label: "Host",
     child: ServerSettings,
   },
-  "/email": {
+  {
+    route: "email",
     label: "E-mail",
     child: EmailSettings,
   },
-  "/auth": {
+  {
+    route: "auth",
     label: "Auth",
     child: AuthSettings,
   },
-  "/schema": {
+  {
+    route: "schema",
     label: "Schemas",
     child: SchemaSettings,
   },
-  "/backup": {
+  {
+    route: "backup",
     label: "Backup",
     child: BackupImportSettings,
   },
-} as const;
+] as const;
 
-export function SettingsPages() {
-  return (
-    <>
-      <For each={Object.entries(sites)}>
-        {([route, site]) => (
-          <Route
-            path={route}
-            component={WrapSidebar("/settings", route, site)}
-          />
-        )}
-      </For>
-    </>
+export function SettingsPage() {
+  const params = useParams<{ group: string }>();
+  const [dirty, setDirty] = createSignal(false);
+
+  const activeSite = () => {
+    const g = params?.group;
+    if (g) {
+      return sites.find((s) => s.route == g) ?? sites[0];
+    }
+    return sites[0];
+  };
+
+  const First = (props: { horizontal: boolean }) => (
+    <Sidebar
+      horizontal={props.horizontal}
+      activeRoute={activeSite().route}
+      dirty={[dirty, setDirty]}
+    />
   );
+
+  function Second() {
+    const p = () =>
+      ({
+        markDirty: () => setDirty(true),
+        postSubmit: () => {
+          setDirty(false);
+          showToast({
+            title: "submitted",
+            variant: "success",
+          });
+        },
+      }) as CommonProps;
+
+    return (
+      <>
+        <Header title="Settings" titleSelect={activeSite().label} />
+
+        <div class="m-4">{activeSite().child(p())}</div>
+      </>
+    );
+  }
+
+  return <SplitView first={First} second={Second} />;
 }
 
 const backupInfo: JSXElement = (

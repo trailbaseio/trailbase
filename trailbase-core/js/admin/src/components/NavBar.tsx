@@ -23,7 +23,7 @@ const options = [
   [`${BASE}/editor`, TbEdit, "SQL Editor"],
   [`${BASE}/auth`, TbUsers, "User Accounts"],
   [`${BASE}/logs`, TbTimeline, "Logs & Metrics"],
-  [`${BASE}/settings`, TbSettings, "Settings"],
+  [`${BASE}/settings/`, TbSettings, "Settings"],
 ] as const;
 
 export const navBarIconSize = 22;

@@ -191,7 +191,7 @@ export function LogsPage() {
   const [showMap, setShowMap] = createSignal(true);
 
   return (
-    <>
+    <div class="h-dvh overflow-y-auto">
       <Header
         title="Logs"
         left={
@@ -251,7 +251,7 @@ export function LogsPage() {
           </Match>
         </Switch>
       </div>
-    </>
+    </div>
   );
 }
 

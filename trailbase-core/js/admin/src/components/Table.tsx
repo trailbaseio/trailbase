@@ -259,7 +259,7 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
                       <For each={row.getVisibleCells()}>
                         {(cell) => (
                           <TableCell>
-                            <div class="max-h-[80px] overflow-y-auto">
+                            <div class="max-h-[80px] overflow-y-auto overflow-x-hidden">
                               {flexRender(
                                 cell.column.columnDef.cell,
                                 cell.getContext(),

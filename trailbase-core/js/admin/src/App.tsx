@@ -5,7 +5,7 @@ import { useStore } from "@nanostores/solid";
 import { TablePage } from "@/components/tables/TablesPage";
 import { AccountsPage } from "@/components/accounts/AccountsPage";
 import { LoginPage } from "@/components/auth/LoginPage";
-import { SettingsPages } from "@/components/settings/SettingsPage";
+import { SettingsPage } from "@/components/settings/SettingsPage";
 import { IndexPage } from "@/components/IndexPage";
 import { NavBar } from "@/components/NavBar";
 
@@ -14,15 +14,15 @@ import { $user } from "@/lib/fetch";
 
 function Layout(props: RouteSectionProps) {
   return (
-    <div>
-      <div class="absolute inset-0 w-[58px] flex flex-col">
+    <ErrorBoundary>
+      <div class="sticky w-[58px] h-dvh flex flex-col overflow-y-scroll hide-scrollbars">
         <NavBar location={props.location} />
       </div>
 
-      <main class="absolute inset-0 left-[58px] overflow-x-hidden">
-        <ErrorBoundary>{props.children}</ErrorBoundary>
+      <main class="absolute inset-0 left-[58px] h-dvh overflow-hidden">
+        {props.children}
       </main>
-    </div>
+    </ErrorBoundary>
   );
 }
 
@@ -42,9 +42,7 @@ const App: Component = () => {
             <Route path="/auth" component={AccountsPage} />
             <Route path="/editor" component={LazyEditorPage} />
             <Route path="/logs" component={LazyLogsPage} />
-            <Route path="/settings">
-              <SettingsPages />
-            </Route>
+            <Route path="/settings/:group?" component={SettingsPage} />
 
             {/* fallback: */}
             <Route path="*" component={() => <h1>Not Found</h1>} />

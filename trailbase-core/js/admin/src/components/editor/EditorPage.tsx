@@ -368,7 +368,7 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
 
   return (
     <>
-      <Resizable orientation="vertical" class="h-full">
+      <Resizable orientation="vertical" class="overflow-hidden">
         <ResizablePanel class="flex flex-col">
           <Header
             title="Editor"

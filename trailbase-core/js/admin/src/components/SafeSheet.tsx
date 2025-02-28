@@ -98,7 +98,7 @@ export function SafeSheet(props: SafeProps) {
 export function SheetContainer(props: { children: JSXElement }) {
   const resolved = children(() => props.children);
   return (
-    <div class="h-full overflow-y-auto overflow-x-hidden mt-4 px-1 hide-scrollbars">
+    <div class="h-dvh overflow-y-auto overflow-x-hidden mt-4 px-1 hide-scrollbars">
       {resolved()}
     </div>
   );

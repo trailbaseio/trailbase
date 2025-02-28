@@ -78,7 +78,7 @@ const elements = [
 
 export function IndexPage() {
   return (
-    <>
+    <div class="h-dvh overflow-y-auto">
       <Header title="TrailBase" />
 
       <div class="grow m-4 prose">
@@ -120,6 +120,6 @@ export function IndexPage() {
 
         {import.meta.env.DEV && <ColorPalette />}
       </div>
-    </>
+    </div>
   );
 }
