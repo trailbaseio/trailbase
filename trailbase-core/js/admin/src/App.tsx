@@ -3,7 +3,7 @@ import { Router, Route, type RouteSectionProps } from "@solidjs/router";
 import { useStore } from "@nanostores/solid";
 
 import { TablesPage } from "@/components/tables/TablesPage";
-import { AccountsPage } from "@/components/auth/AccountsPage";
+import { AccountsPage } from "@/components/accounts/AccountsPage";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { SettingsPages } from "@/components/settings/SettingsPage";
 import { IndexPage } from "@/components/IndexPage";

@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { TextField, TextFieldLabel } from "@/components/ui/text-field";
 import { showToast } from "@/components/ui/toast";
 
@@ -25,6 +24,7 @@ import {
   buildTextFormField,
   gapStyle,
 } from "@/components/FormFields";
+import { Header } from "@/components/Header";
 import { ConfirmCloseDialog } from "@/components/SafeSheet";
 import { AuthSettings } from "@/components/settings/AuthSettings";
 import { SchemaSettings } from "@/components/settings/SchemaSettings";
@@ -426,14 +426,8 @@ function WrapSidebar<T>(
 
     function Second() {
       return (
-        <div class="grow overflow-x-hidden">
-          <h1 class="flex gap-4 m-4">
-            <span class="text-accent-600">Settings</span>
-            <span class="text-accent-600">&gt;</span>
-            <span>{site.label}</span>
-          </h1>
-
-          <Separator />
+        <>
+          <Header title="Settings" titleSelect={site.label} />
 
           <div class="m-4">
             <site.child
@@ -447,7 +441,7 @@ function WrapSidebar<T>(
               }}
             />
           </div>
-        </div>
+        </>
       );
     }
 

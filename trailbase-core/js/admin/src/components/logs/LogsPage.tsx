@@ -26,7 +26,8 @@ import type { FeatureCollection, Feature } from "geojson";
 import "leaflet/dist/leaflet.css";
 import * as L from "leaflet";
 
-import { Separator } from "@/components/ui/separator";
+import { Header } from "@/components/Header";
+import { IconButton } from "@/components/IconButton";
 import {
   Tooltip,
   TooltipContent,
@@ -191,24 +192,22 @@ export function LogsPage() {
 
   return (
     <>
-      <div class="m-4 flex justify-between items-center gap-2">
-        <div class="flex items-center gap-2">
-          <h1 class="text-accent-600 m-0">Logs</h1>
-
-          <button class="p-1 rounded hover:bg-gray-200" onClick={refetch}>
+      <Header
+        title="Logs"
+        left={
+          <IconButton onClick={refetch} tooltip="Refresh Logs">
             <TbRefresh size={20} />
-          </button>
-        </div>
-
-        <button
-          class={`p-1 rounded hover:bg-gray-200 ${showMap() && "bg-gray-200"}`}
-          onClick={() => setShowMap(!showMap())}
-        >
-          <TbWorld size={20} />
-        </button>
-      </div>
-
-      <Separator />
+          </IconButton>
+        }
+        right={
+          <IconButton
+            onClick={() => setShowMap((v) => !v)}
+            tooltip="Toggle World Map"
+          >
+            <TbWorld size={20} />
+          </IconButton>
+        }
+      />
 
       <div class="p-4 flex flex-col gap-4">
         <Switch fallback={<p>Loading...</p>}>

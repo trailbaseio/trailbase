@@ -2,6 +2,7 @@ import { createSignal, createResource, Switch, Match, Show } from "solid-js";
 import { adminFetch } from "@/lib/fetch";
 import { TbDownload, TbColumns, TbColumnsOff } from "solid-icons/tb";
 import { showSaveFileDialog } from "@/lib/utils";
+import { iconButtonStyle } from "@/components/IconButton";
 
 import type { Table, TableIndex, TableTrigger } from "@/lib/bindings";
 import {
@@ -19,6 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const modes = ["Insert", "Select", "Update"] as const;
 type Mode = (typeof modes)[number];
@@ -57,62 +63,65 @@ export function SchemaDialog(props: { tableName: string }) {
   });
 
   return (
-    <div class="size-[28px] flex justify-center items-center rounded hover:bg-gray-200">
-      <Dialog id="schema">
-        <DialogTrigger>
-          <TbColumns size={20} />
-        </DialogTrigger>
+    <Dialog id="schema">
+      <DialogTrigger class={iconButtonStyle}>
+        <Tooltip>
+          <TooltipTrigger as="div">
+            <TbColumns size={20} />
+          </TooltipTrigger>
+          <TooltipContent>JSON Schema of "{props.tableName}"</TooltipContent>
+        </Tooltip>
+      </DialogTrigger>
 
-        <DialogContent class="min-w-[80dvw]">
-          <DialogHeader>
-            <div class="flex items-center justify-between mr-4">
-              <DialogTitle>JSON Schema</DialogTitle>
+      <DialogContent class="min-w-[80dvw]">
+        <DialogHeader>
+          <div class="flex items-center justify-between mr-4">
+            <DialogTitle>JSON Schema</DialogTitle>
 
-              <div class="flex items-center gap-2">
-                <Show when={schema.state === "ready"}>
-                  <SchemaDownloadButton
-                    tableName={props.tableName}
-                    schema={schema()}
-                    mode={mode()}
-                  />
-                </Show>
+            <div class="flex items-center gap-2">
+              <Show when={schema.state === "ready"}>
+                <SchemaDownloadButton
+                  tableName={props.tableName}
+                  schema={schema()}
+                  mode={mode()}
+                />
+              </Show>
 
-                <Select
-                  value={mode()}
-                  onChange={setMode}
-                  options={[...modes]}
-                  placeholder="Mode"
-                  itemComponent={(props) => (
-                    <SelectItem item={props.item}>
-                      {props.item.rawValue}
-                    </SelectItem>
-                  )}
-                >
-                  <SelectTrigger aria-label="Fruit" class="w-[180px]">
-                    <SelectValue<string>>
-                      {(state) => state.selectedOption()}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent />
-                </Select>
-              </div>
+              <Select
+                value={mode()}
+                onChange={setMode}
+                options={[...modes]}
+                placeholder="Mode"
+                itemComponent={(props) => (
+                  <SelectItem item={props.item}>
+                    {props.item.rawValue}
+                  </SelectItem>
+                )}
+              >
+                <SelectTrigger aria-label="Fruit" class="w-[180px]">
+                  <SelectValue<string>>
+                    {(state) => state.selectedOption()}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent />
+              </Select>
             </div>
-          </DialogHeader>
-
-          <div class="h-[80dvh] overflow-auto">
-            <Switch>
-              <Match when={schema.error}>Error: {schema.error}</Match>
-
-              <Match when={schema.loading}>Loading...</Match>
-
-              <Match when={schema()}>
-                <pre>{JSON.stringify(schema(), null, "  ")}</pre>
-              </Match>
-            </Switch>
           </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+        </DialogHeader>
+
+        <div class="h-[80dvh] overflow-auto">
+          <Switch>
+            <Match when={schema.error}>Error: {schema.error}</Match>
+
+            <Match when={schema.loading}>Loading...</Match>
+
+            <Match when={schema()}>
+              <pre>{JSON.stringify(schema(), null, "  ")}</pre>
+            </Match>
+          </Switch>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -127,42 +136,40 @@ export function DebugSchemaDialogButton(props: {
   const fks = () => props.table.foreign_keys;
 
   return (
-    <div class="size-[28px] flex justify-center items-center rounded hover:bg-gray-200">
-      <Dialog id="schema">
-        <DialogTrigger>
-          <TbColumnsOff size={20} />
-        </DialogTrigger>
+    <Dialog id="schema">
+      <DialogTrigger class={iconButtonStyle}>
+        <TbColumnsOff size={20} />
+      </DialogTrigger>
 
-        <DialogContent class="min-w-[80dvw]">
-          <DialogHeader>
-            <DialogTitle>Schema</DialogTitle>
-          </DialogHeader>
+      <DialogContent class="min-w-[80dvw]">
+        <DialogHeader>
+          <DialogTitle>Schema</DialogTitle>
+        </DialogHeader>
 
-          <div class="max-h-[80dvh] overflow-auto">
-            <div class="mx-2 flex flex-col gap-2">
-              <h3>Columns</h3>
-              <pre class="w-[70vw] overflow-x-hidden text-xs">
-                {JSON.stringify(columns(), null, 2)}
-              </pre>
+        <div class="max-h-[80dvh] overflow-auto">
+          <div class="mx-2 flex flex-col gap-2">
+            <h3>Columns</h3>
+            <pre class="w-[70vw] overflow-x-hidden text-xs">
+              {JSON.stringify(columns(), null, 2)}
+            </pre>
 
-              <h3>Foreign Keys</h3>
-              <pre class="w-[70vw] overflow-x-hidden text-xs">
-                {JSON.stringify(fks(), null, 2)}
-              </pre>
+            <h3>Foreign Keys</h3>
+            <pre class="w-[70vw] overflow-x-hidden text-xs">
+              {JSON.stringify(fks(), null, 2)}
+            </pre>
 
-              <h3>Indexes</h3>
-              <pre class="w-[70vw] overflow-x-hidden text-xs">
-                {JSON.stringify(indexes(), null, 2)}
-              </pre>
+            <h3>Indexes</h3>
+            <pre class="w-[70vw] overflow-x-hidden text-xs">
+              {JSON.stringify(indexes(), null, 2)}
+            </pre>
 
-              <h3>Triggers</h3>
-              <pre class="w-[70vw] overflow-x-hidden text-xs">
-                {JSON.stringify(triggers(), null, 2)}
-              </pre>
-            </div>
+            <h3>Triggers</h3>
+            <pre class="w-[70vw] overflow-x-hidden text-xs">
+              {JSON.stringify(triggers(), null, 2)}
+            </pre>
           </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

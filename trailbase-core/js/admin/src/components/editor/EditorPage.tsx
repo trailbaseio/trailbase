@@ -14,9 +14,14 @@ import type { Accessor, Signal } from "solid-js";
 import type { ColumnDef } from "@tanstack/solid-table";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
-import { TbTrash, TbEdit, TbDeviceFloppy, TbHelp } from "solid-icons/tb";
+import {
+  TbTrash,
+  TbEdit,
+  TbDeviceFloppy,
+  TbHelp,
+  TbPencilPlus,
+} from "solid-icons/tb";
 
-import { Separator } from "@/components/ui/separator";
 import { EditorView, keymap, lineNumbers, gutter } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { defaultKeymap } from "@codemirror/commands";
@@ -26,6 +31,8 @@ import {
 } from "@codemirror/language";
 import { sql } from "@codemirror/lang-sql";
 
+import { iconButtonStyle, IconButton } from "@/components/IconButton";
+import { Header } from "@/components/Header";
 import { SplitView } from "@/components/SplitView";
 import {
   Resizable,
@@ -42,6 +49,11 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import { DataTable } from "@/components/Table";
 import type { QueryRequest, QueryResponse } from "@/lib/bindings";
@@ -126,6 +138,10 @@ function SideBar(props: {
   const flexStyle = () => (props.horizontal ? "flex flex-col h-dvh" : "flex");
   return (
     <div class={`${flexStyle()} m-4 gap-2`}>
+      <Button class="flex gap-2" variant="secondary" onClick={addNewScript}>
+        <TbPencilPlus size={20} /> New
+      </Button>
+
       <For each={scripts()}>
         {(_script: Script, index: Accessor<number>) => {
           const scriptName = () => scripts()[index()].name;
@@ -141,10 +157,6 @@ function SideBar(props: {
           );
         }}
       </For>
-
-      <Button variant="secondary" onClick={addNewScript}>
-        New
-      </Button>
     </div>
   );
 }
@@ -152,8 +164,8 @@ function SideBar(props: {
 function HelpDialog() {
   return (
     <Dialog id="edit-help">
-      <DialogTrigger>
-        <TbHelp />
+      <DialogTrigger class={iconButtonStyle}>
+        <TbHelp size={20} />
       </DialogTrigger>
 
       <DialogContent>
@@ -198,8 +210,13 @@ function RenameDialog(props: { selected: number; script: Script }) {
 
   return (
     <Dialog id="rename" open={open()} onOpenChange={setOpen}>
-      <DialogTrigger>
-        <TbEdit />
+      <DialogTrigger class={iconButtonStyle}>
+        <Tooltip>
+          <TooltipTrigger as="div">
+            <TbEdit size={20} />
+          </TooltipTrigger>
+          <TooltipContent>Rename script</TooltipContent>
+        </Tooltip>
       </DialogTrigger>
 
       <DialogContent>
@@ -318,62 +335,74 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
     editor?.setState(newEditorState(s.contents));
   });
 
+  const LeftButtons = () => (
+    <>
+      <RenameDialog selected={selected()} script={script()} />
+
+      <IconButton
+        tooltip="Save script"
+        onClick={() => {
+          const e = editor;
+          if (e) {
+            updateExistingScript(selected(), {
+              ...script(),
+              contents: e.state.doc.toString(),
+            });
+          }
+        }}
+      >
+        <TbDeviceFloppy size={20} />
+      </IconButton>
+
+      <IconButton
+        tooltip="Delete this script"
+        onClick={() => {
+          $scripts.set($scripts.get().toSpliced(selected(), 1));
+          setSelected(Math.max(0, selected() - 1));
+        }}
+      >
+        <TbTrash size={20} />
+      </IconButton>
+    </>
+  );
+
   return (
     <>
       <Resizable orientation="vertical" class="h-full">
-        <ResizablePanel>
-          <h1 class="m-4 flex justify-between items-center gap-4">
-            <div class="flex items-center gap-4">
-              <span class="text-accent-600">Editor</span>
-              <span class="text-accent-600">&gt;</span>
-              <span>{script().name}</span>
+        <ResizablePanel class="flex flex-col">
+          <Header
+            title="Editor"
+            titleSelect={script().name}
+            left={<LeftButtons />}
+            right={<HelpDialog />}
+          />
 
-              <RenameDialog selected={selected()} script={script()} />
+          {/* Editor */}
+          <div
+            class="grow max-h-[70dvh] mx-4 my-2 overflow-y-scroll outline outline-1 rounded"
+            ref={ref}
+          />
 
-              <TbDeviceFloppy
-                onClick={() => {
-                  const e = editor;
-                  if (e) {
-                    updateExistingScript(selected(), {
-                      ...script(),
-                      contents: e.state.doc.toString(),
-                    });
-                  }
-                }}
-              />
-            </div>
-
-            <div class="flex gap-4">
-              <HelpDialog />
-              <TbTrash
-                onClick={() => {
-                  $scripts.set($scripts.get().toSpliced(selected(), 1));
-                  setSelected(Math.max(0, selected() - 1));
-                }}
-              />
-            </div>
-          </h1>
-
-          <Separator />
-
-          <div class="p-4 flex flex-col justify-between gap-4 overflow-y-auto">
-            {/* Editor */}
-            <div class="overflow-y-scroll outline outline-1 rounded">
-              <div ref={ref} />
-            </div>
-
-            <div class="flex justify-end">
-              <Button variant="destructive" onClick={execute}>
-                Execute (Ctrl+Enter)
-              </Button>
-            </div>
+          <div class="flex justify-end px-4 pb-2">
+            <Tooltip>
+              <TooltipTrigger as="div">
+                <Button variant="destructive" onClick={execute}>
+                  Execute (Ctrl+Enter)
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Execute script on the server. No turning back.
+              </TooltipContent>
+            </Tooltip>
           </div>
         </ResizablePanel>
 
         <ResizableHandle withHandle={true} />
 
-        <ResizablePanel class="grow overflow-y-scroll hide-scrollbars p-4">
-          <View response={executionResult} />
+        <ResizablePanel class="overflow-y-scroll hide-scrollbars">
+          <div class="grow p-4">
+            <View response={executionResult} />
+          </div>
         </ResizablePanel>
       </Resizable>
     </>
@@ -419,7 +448,7 @@ type Script = {
 };
 
 const defaultScript: Script = {
-  name: "Select",
+  name: "Select Users",
   contents: "SELECT\n  *\nFROM\n  _user;",
 };
 

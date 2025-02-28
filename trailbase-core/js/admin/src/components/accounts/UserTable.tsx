@@ -30,7 +30,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/Table";
 import { Label } from "@/components/ui/label";
-import { AddUser } from "@/components/auth/AddUser";
+import { AddUser } from "@/components/accounts/AddUser";
 import {
   deleteUser,
   updateUser,

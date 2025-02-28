@@ -23,9 +23,9 @@ import { createColumnHelper } from "@tanstack/solid-table";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { asyncBase64Encode } from "trailbase";
 
+import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Separator } from "@/components/ui/separator";
 import { SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Switch as SwitchUi,
@@ -55,6 +55,7 @@ import {
 } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 import { DestructiveActionButton } from "@/components/DestructiveActionButton";
+import { IconButton } from "@/components/IconButton";
 import { InsertUpdateRowForm } from "@/components/tables/InsertUpdateRow";
 import { RecordApiSettingsForm } from "@/components/tables/RecordApiSettings";
 import { SplitView } from "@/components/SplitView";
@@ -381,10 +382,7 @@ function TableHeader(props: {
   schemaRefetch: () => Promise<void>;
   rowsRefetch: () => Promise<void>;
 }) {
-  const table = () => props.table;
-  const name = () => props.table.name;
-
-  const type = () => tableType(table());
+  const type = () => tableType(props.table);
   const hasSchema = () => type() === "table";
   const header = () => {
     switch (type()) {
@@ -397,55 +395,37 @@ function TableHeader(props: {
     }
   };
 
+  const LeftButtons = () => (
+    <>
+      <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
+        <TbRefresh size={18} />
+      </IconButton>
+
+      {hasSchema() && <SchemaDialog tableName={props.table.name} />}
+
+      {hasSchema() && import.meta.env.DEV && (
+        <DebugSchemaDialogButton
+          table={props.table as Table}
+          indexes={props.indexes}
+          triggers={props.triggers}
+        />
+      )}
+    </>
+  );
+
   return (
-    <header class="flex flex-wrap items-center justify-between mx-4">
-      <div class="h-[64px] flex items-center gap-2">
-        <h1 class="flex gap-4 m-0">
-          <span class="text-accent-600">{header()}</span>
-          <span class="text-accent-600">&gt;</span>
-          <span>{name()}</span>
-        </h1>
-
-        <div class="flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger as="div">
-              <button
-                class="p-1 rounded hover:bg-gray-200"
-                onClick={props.rowsRefetch}
-              >
-                <TbRefresh size={20} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Refresh Data</TooltipContent>
-          </Tooltip>
-
-          {hasSchema() && (
-            <Tooltip>
-              <TooltipTrigger as="div">
-                <SchemaDialog tableName={name()} />
-              </TooltipTrigger>
-              <TooltipContent>JSON Schema of "{name()}"</TooltipContent>
-            </Tooltip>
-          )}
-
-          {hasSchema() && import.meta.env.DEV && (
-            <DebugSchemaDialogButton
-              table={table() as Table}
-              indexes={props.indexes}
-              triggers={props.triggers}
-            />
-          )}
-        </div>
-      </div>
-
-      <div class="h-[64px] min-w-[280px] content-center break-after-column">
+    <Header
+      title={header()}
+      titleSelect={props.table.name}
+      left={<LeftButtons />}
+      right={
         <TableHeaderRightHandButtons
-          table={table()}
+          table={props.table}
           allTables={props.allTables}
           schemaRefetch={props.schemaRefetch}
         />
-      </div>
-    </header>
+      }
+    />
   );
 }
 
@@ -846,8 +826,6 @@ function TablePane(props: {
           await rowsRefetch();
         }}
       />
-
-      <Separator />
 
       <div class="flex flex-col gap-8 p-4">
         <Switch fallback={<>Loading...</>}>
