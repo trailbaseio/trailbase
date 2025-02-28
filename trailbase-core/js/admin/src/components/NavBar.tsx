@@ -19,7 +19,7 @@ import logo from "@/assets/logo_104.webp";
 
 const BASE = "/_/admin";
 const options = [
-  [`${BASE}/tables`, TbDatabase, "Table & View Browser"],
+  [`${BASE}/table/`, TbDatabase, "Table & View Browser"],
   [`${BASE}/editor`, TbEdit, "SQL Editor"],
   [`${BASE}/auth`, TbUsers, "User Accounts"],
   [`${BASE}/logs`, TbTimeline, "Logs & Metrics"],

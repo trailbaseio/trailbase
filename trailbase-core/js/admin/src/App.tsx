@@ -2,7 +2,7 @@ import { lazy, type Component } from "solid-js";
 import { Router, Route, type RouteSectionProps } from "@solidjs/router";
 import { useStore } from "@nanostores/solid";
 
-import { TablesPage } from "@/components/tables/TablesPage";
+import { TablePage } from "@/components/tables/TablesPage";
 import { AccountsPage } from "@/components/accounts/AccountsPage";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { SettingsPages } from "@/components/settings/SettingsPage";
@@ -38,7 +38,7 @@ const App: Component = () => {
         <ErrorBoundary>
           <Router base={"/_/admin"} root={Layout}>
             <Route path="/" component={IndexPage} />
-            <Route path="/tables" component={TablesPage} />
+            <Route path="/table/:table?" component={TablePage} />
             <Route path="/auth" component={AccountsPage} />
             <Route path="/editor" component={LazyEditorPage} />
             <Route path="/logs" component={LazyLogsPage} />

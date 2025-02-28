@@ -1,15 +1,5 @@
-import {
-  type Signal,
-  For,
-  Match,
-  Show,
-  Switch,
-  createMemo,
-  createEffect,
-  createResource,
-  createSignal,
-} from "solid-js";
-import { useSearchParams } from "@solidjs/router";
+import { For, Match, Show, Switch, createMemo, createResource } from "solid-js";
+import { useNavigate, useParams, type Navigator } from "@solidjs/router";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
@@ -69,17 +59,13 @@ function TablePickerPane(props: {
   horizontal: boolean;
   tablesAndViews: (Table | View)[];
   allTables: Table[];
-  selectedTable: Signal<Table | View | undefined>;
+  selectedTable: Table | View | undefined;
   schemaRefetch: () => Promise<void>;
 }) {
   const showHidden = useStore($showHiddenTables);
-  const tablesAndViews = createMemo(() =>
-    props.tablesAndViews.toSorted(tableCompare),
-  );
-
-  const [selectedTable, setSelectedTable] = props.selectedTable;
-
+  const selectedTable = () => props.selectedTable;
   const horizontal = () => props.horizontal;
+  const navigate = useNavigate();
 
   return (
     <div
@@ -91,7 +77,7 @@ function TablePickerPane(props: {
         onChange={(show: boolean) => {
           const current = selectedTable();
           if (!show && current && hiddenTable(current)) {
-            setSelectedTable(undefined);
+            navigateToTable(navigate, undefined);
           }
           console.debug("Show hidden tables:", show);
           $showHiddenTables.set(show);
@@ -115,11 +101,11 @@ function TablePickerPane(props: {
                   schemaRefetch={props.schemaRefetch}
                   allTables={props.allTables}
                   setSelected={(tableName: string) => {
-                    const table = tablesAndViews().find(
+                    const table = props.tablesAndViews.find(
                       (t) => t.name === tableName,
                     );
                     if (table) {
-                      setSelectedTable(table);
+                      navigateToTable(navigate, table);
                     }
                   }}
                   {...sheet}
@@ -143,7 +129,7 @@ function TablePickerPane(props: {
         }}
       </SafeSheet>
 
-      <For each={tablesAndViews()}>
+      <For each={props.tablesAndViews}>
         {(item: Table | View) => {
           const hidden = hiddenTable(item);
           const type = tableType(item);
@@ -152,8 +138,8 @@ function TablePickerPane(props: {
           return (
             <Button
               variant={selected() ? "default" : "outline"}
-              onClick={() => setSelectedTable(item)}
               class="flex gap-2"
+              onClick={() => navigateToTable(navigate, item)}
             >
               <span
                 class={
@@ -173,6 +159,10 @@ function TablePickerPane(props: {
   );
 }
 
+function navigateToTable(navigate: Navigator, table: Table | View | undefined) {
+  navigate("/table/" + (table?.name ?? ""));
+}
+
 function TableSplitView(props: {
   schemas: ListSchemasResponse;
   schemaRefetch: () => Promise<void>;
@@ -180,28 +170,24 @@ function TableSplitView(props: {
   const showHidden = useStore($showHiddenTables);
   const filteredTablesAndViews = createMemo(() => {
     const all = [...props.schemas.tables, ...props.schemas.views];
+
     const show = showHidden();
     if (show) {
-      return all;
+      return all.sort(tableCompare);
     }
-    return all.filter((t) => !hiddenTable(t));
+    return all.filter((t) => !hiddenTable(t)).sort(tableCompare);
   });
 
-  const [searchParams, setSearchParams] = useSearchParams<{ table: string }>();
-  const [selectedTable, setSelectedTable] = createSignal<
-    Table | View | undefined
-  >(pickInitiallySelectedTable(filteredTablesAndViews(), searchParams.table));
-  createEffect(() => {
-    // Update search params.
-    setSearchParams({ table: selectedTable()?.name });
-  });
+  const params = useParams<{ table: string }>();
+  const selectedTable = () =>
+    pickInitiallySelectedTable(filteredTablesAndViews(), params.table);
 
   const First = (p: { horizontal: boolean }) => (
     <TablePickerPane
       horizontal={p.horizontal}
       tablesAndViews={filteredTablesAndViews()}
       allTables={props.schemas.tables}
-      selectedTable={[selectedTable, setSelectedTable]}
+      selectedTable={selectedTable()}
       schemaRefetch={props.schemaRefetch}
     />
   );
@@ -221,8 +207,12 @@ function TableSplitView(props: {
   return <SplitView first={First} second={Second} />;
 }
 
-export function TablesPage() {
+export function TablePage() {
   const [schemaFetch, { refetch }] = createResource(getAllTableSchemas);
+  const schemaRefetch = async () => {
+    const schemas = await refetch();
+    console.debug("All table schemas re-fetched:", schemas);
+  };
 
   return (
     <Switch>
@@ -233,10 +223,7 @@ export function TablesPage() {
       <Match when={schemaFetch()}>
         <TableSplitView
           schemas={schemaFetch()!}
-          schemaRefetch={async () => {
-            const schemas = await refetch();
-            console.debug("All table schemas re-fetched:", schemas);
-          }}
+          schemaRefetch={schemaRefetch}
         />
       </Match>
     </Switch>
