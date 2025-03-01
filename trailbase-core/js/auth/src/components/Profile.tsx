@@ -50,11 +50,13 @@ function DeleteAccountButton(props: { client: Client }) {
 
           <Button
             variant="destructive"
-            onClick={async () => {
-              await props.client.deleteUser();
-              setOpen(false);
-              window.location.replace("/_/auth/login");
-            }}
+            onClick={() =>
+              (async () => {
+                await props.client.deleteUser();
+                setOpen(false);
+                window.location.replace("/_/auth/login");
+              })().catch(console.error)
+            }
           >
             Delete
           </Button>
@@ -173,7 +175,7 @@ function Avatar(props: { avatarUrl?: () => string | undefined }) {
         }}
       />
 
-      <button class="p-2 bg-gray-200" onClick={openFileDialog}>
+      <button class="bg-gray-200 p-2" onClick={openFileDialog}>
         <AvatarImage />
       </button>
 
@@ -192,11 +194,11 @@ function ProfileTable(props: {
   const user = () => props.user;
 
   return (
-    <Card class="p-8 w-[80dvw] max-w-[460px]">
-      <div class="flex justify-between items-center">
+    <Card class="w-[80dvw] max-w-[460px] p-8">
+      <div class="flex items-center justify-between">
         <h1>User Profile</h1>
 
-        <div class="flex gap-2 items-center">
+        <div class="flex items-center gap-2">
           <DeleteAccountButton client={props.client} />
 
           <a class={ICON_STYLE.join(" ")} href="/_/auth/logout">
@@ -205,17 +207,17 @@ function ProfileTable(props: {
         </div>
       </div>
 
-      <div class="w-full flex gap-4 items-center">
+      <div class="flex w-full items-center gap-4">
         <Avatar avatarUrl={props.avatarUrl} />
 
-        <div class="flex flex-col gap-2 justif">
+        <div class="flex flex-col gap-2">
           <strong>{user().email}</strong>
 
           <div>Id: {user().id}</div>
         </div>
       </div>
 
-      <div class="flex gap-2 my-4 items-end">
+      <div class="my-4 flex items-end gap-2">
         <a class={OUTLINE_BUTTON_STYLE.join(" ")} href="/_/auth/change_email">
           Change E-Mail
         </a>

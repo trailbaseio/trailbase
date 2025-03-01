@@ -20,8 +20,8 @@ const loginPageUrl = `${base}/login`;
     </div>
 
     <div
-      class="grid grid-cols-2 items-center gap-4 my-4"
-      style="grid-template-columns: auto 1fr"
+      class="my-4 grid grid-cols-2 items-center gap-4"
+      style={{ "grid-template-columns": "auto 1fr" }}
     >
       <label>Password:</label>
       <input
@@ -42,7 +42,7 @@ const loginPageUrl = `${base}/login`;
       />
     </div>
 
-    <div class="w-full flex justify-between">
+    <div class="flex w-full justify-between">
       <a class:list={BUTTON_STYLE} href={loginPageUrl}>Back</a>
 
       <button class:list={BUTTON_STYLE} type="submit"> Update Password </button>

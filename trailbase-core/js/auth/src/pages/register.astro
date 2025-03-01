@@ -10,7 +10,6 @@ import { AUTH_API, INPUT_STYLE, BUTTON_STYLE } from "@/lib/constants";
     class="flex flex-col gap-2"
     action={`${AUTH_API}/register`}
     method="post"
-    ,
     enctype="application/x-www-form-urlencoded"
   >
     <div class="hidden">
@@ -18,8 +17,8 @@ import { AUTH_API, INPUT_STYLE, BUTTON_STYLE } from "@/lib/constants";
     </div>
 
     <div
-      class="grid grid-cols-2 items-center gap-4 my-4"
-      style="grid-template-columns: auto 1fr"
+      class="my-4 grid grid-cols-2 items-center gap-4"
+      style={{ "grid-template-columns": "auto 1fr" }}
     >
       <label>E-mail:</label>
       <input
@@ -49,7 +48,7 @@ import { AUTH_API, INPUT_STYLE, BUTTON_STYLE } from "@/lib/constants";
       />
     </div>
 
-    <div class="w-full flex justify-between">
+    <div class="flex w-full justify-between">
       <a class:list={BUTTON_STYLE} href={`${import.meta.env.BASE_URL}/login`}>
         Back
       </a>

@@ -22,8 +22,8 @@ const formBaseAction = `${AUTH_API}/login`;
       </div>
 
       <div
-        class="grid grid-cols-2 items-center gap-4 my-4"
-        style="grid-template-columns: auto 1fr"
+        class="my-4 grid grid-cols-2 items-center gap-4"
+        style={{"grid-template-columns": "auto 1fr"}}
       >
         <label>User:</label>
         <input
@@ -59,7 +59,7 @@ const formBaseAction = `${AUTH_API}/login`;
       <ConfiguredOAuthProviders client:only="solid-js" />
     </div>
 
-    <div class="flex justify-center mt-4">
+    <div class="mt-4 flex justify-center">
       <a href={`${import.meta.env.BASE_URL}/reset_password/request`}>reset password</a>
     </div>
   </div>

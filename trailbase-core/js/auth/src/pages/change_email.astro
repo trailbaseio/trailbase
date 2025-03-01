@@ -20,8 +20,8 @@ const profilePageUrl = `${base}/profile`;
     </div>
 
     <div
-      class="grid grid-cols-2 items-center gap-4 my-4"
-      style="grid-template-columns: auto 1fr"
+      class="my-4 grid grid-cols-2 items-center gap-4"
+      style={{ "grid-template-columns": "auto 1fr" }}
     >
       <label>Old E-Mail:</label>
       <input
@@ -43,7 +43,7 @@ const profilePageUrl = `${base}/profile`;
     </div>
   </form>
 
-  <div class="w-full flex justify-between">
+  <div class="flex w-full justify-between">
     <a class:list={BUTTON_STYLE} href={profilePageUrl}>Back</a>
 
     <button class:list={BUTTON_STYLE} type="submit"

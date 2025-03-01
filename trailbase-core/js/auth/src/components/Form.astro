@@ -11,10 +11,10 @@ const { title } = Astro.props;
 ---
 
 <BaseLayout title={title}>
-  <div class="h-dvh w-screen flex flex-col items-center justify-center mx-auto">
+  <div class="mx-auto flex h-dvh w-screen flex-col items-center justify-center">
     <Card>
       <div class="w-full">
-        <h1 class="font-strong text-3xl">{title}</h1>
+        <h1 class="text-3xl">{title}</h1>
       </div>
 
       <slot />

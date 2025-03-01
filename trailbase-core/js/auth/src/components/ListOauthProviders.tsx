@@ -18,7 +18,7 @@ async function listConfiguredOAuthProviders(): Promise<ConfiguredOAuthProvidersR
 }
 
 export function ConfiguredOAuthProviders() {
-  let [providersFetch] = createResource(listConfiguredOAuthProviders);
+  const [providersFetch] = createResource(listConfiguredOAuthProviders);
 
   const providers = () => {
     const providers = [...(providersFetch()?.providers ?? [])];
@@ -31,14 +31,14 @@ export function ConfiguredOAuthProviders() {
   return (
     <ErrorBoundary fallback={(err, _reset) => <h2>OAuth: {err.toString()}</h2>}>
       <Suspense fallback={<div>Loading...</div>}>
-        <div class="flex flex-col w-full gap-4 items-start">
+        <div class="flex w-full flex-col items-start gap-4">
           {providers().length > 0 && <p>Or use an external provider:</p>}
 
           <For each={providers()}>
             {([name, displayName]) => {
               return (
                 <a
-                  class="w-full p-2 rounded-lg border border-gray-300/20 hover:bg-black/10 dark:hover:bg-black/20 flex flex-row items-center gap-4"
+                  class="flex w-full flex-row items-center gap-4 rounded-lg border border-gray-300/20 p-2 hover:bg-black/10 dark:hover:bg-black/20"
                   href={`${AUTH_API}/oauth/${name}/login`}
                 >
                   <span>Login with {displayName}</span>
