@@ -26,6 +26,7 @@ import type { FeatureCollection, Feature } from "geojson";
 import "leaflet/dist/leaflet.css";
 import * as L from "leaflet";
 
+import { Button } from "@/components/ui/button";
 import { Header } from "@/components/Header";
 import { IconButton } from "@/components/IconButton";
 import {
@@ -33,6 +34,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 import { DataTable, defaultPaginationState } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
@@ -189,6 +196,7 @@ export function LogsPage() {
   };
   const [logsFetch, { refetch }] = createResource(getLogsProps, getLogs);
   const [showMap, setShowMap] = createSignal(true);
+  const [showGeoipDialog, setShowGeoipDialog] = createSignal(false);
 
   return (
     <div class="h-dvh overflow-y-auto">
@@ -200,12 +208,43 @@ export function LogsPage() {
           </IconButton>
         }
         right={
-          <IconButton
-            onClick={() => setShowMap((v) => !v)}
-            tooltip="Toggle World Map"
-          >
-            <TbWorld size={20} />
-          </IconButton>
+          pagination()?.pageIndex === 0 && (
+            <Dialog
+              modal={true}
+              open={showGeoipDialog()}
+              onOpenChange={setShowGeoipDialog}
+            >
+              <DialogContent>
+                <DialogTitle>Geoip Database</DialogTitle>
+                <p>
+                  TrailBase did not report any geo information for your logs. To
+                  enable this feature, place a GeoIP database in MaxMind format
+                  under:
+                </p>
+                <span class="ml-4 font-mono">
+                  {"<traildepot>/GeoLite2-Country.mmdb"}
+                </span>
+                .
+                <DialogFooter>
+                  <Button>Got it</Button>
+                </DialogFooter>
+              </DialogContent>
+
+              <IconButton
+                disabled={logsFetch.state !== "ready"}
+                onClick={() => {
+                  if (logsFetch()?.stats?.country_codes) {
+                    setShowMap((v) => !v);
+                  } else {
+                    setShowGeoipDialog((v) => !v);
+                  }
+                }}
+                tooltip="Toggle World Map"
+              >
+                <TbWorld size={20} />
+              </IconButton>
+            </Dialog>
+          )
         }
       />
 
