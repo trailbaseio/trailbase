@@ -315,14 +315,18 @@ const Legend = L.Control.extend({
       <div class="flex flex-col rounded bg-white/70 p-1">
         <For each={grades}>
           {(grade: number, index: () => number) => {
-            const i = index();
+            const label = () => {
+              const next = grades[index() + 1];
+              return next ? ` ${grade} - ${next}` : ` ${grade}+`;
+            };
+
             return (
               <div class="flex">
                 <div
                   class="mr-1 px-2 py-1"
                   style={{ background: getColor(grade) }}
-                />{" "}
-                {grade} {i + 1 < grades.length ? `- ${grades[i + 1]}` : "+"}
+                />
+                {label()}
               </div>
             );
           }}
@@ -333,7 +337,7 @@ const Legend = L.Control.extend({
 });
 
 function WorldMap(props: { country_codes: { [key in string]?: number } }) {
-  const codes = props.country_codes;
+  const codes = () => props.country_codes;
 
   let ref: HTMLDivElement | undefined;
   let map: L.Map | undefined;
@@ -365,8 +369,9 @@ function WorldMap(props: { country_codes: { [key in string]?: number } }) {
         return <div class="rounded bg-white/70 p-2">Hover over a country</div>;
       },
       update: function (props?: Props) {
+        /* eslint-disable solid/reactivity */
         const id = props?.id;
-        const requests = codes[numericToAlpha2(id ?? "") ?? ""] ?? 0;
+        const requests = codes()[numericToAlpha2(id ?? "") ?? ""] ?? 0;
         const contents = props
           ? `<b>${props.name}</b><br />${requests} req`
           : "Hover over a country";
@@ -416,7 +421,7 @@ function WorldMap(props: { country_codes: { [key in string]?: number } }) {
     const geojson = L.geoJson(
       (countriesGeoJSON as FeatureCollection).features,
       {
-        style: (map) => mapStyle(codes, map),
+        style: (map) => mapStyle(codes(), map),
         onEachFeature,
       },
     ).addTo(m);

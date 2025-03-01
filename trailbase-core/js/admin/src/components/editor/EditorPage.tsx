@@ -146,7 +146,7 @@ function SideBar(props: {
   selectedSignal: Signal<number>;
   horizontal: boolean;
 }) {
-  // ## eslint-disable-next-line solid/reactivity
+  // eslint-disable-next-line solid/reactivity
   const [selected, setSelected] = props.selectedSignal;
   const scripts = useStore($scripts);
 
@@ -278,7 +278,7 @@ function RenameDialog(props: { selected: number; script: Script }) {
 }
 
 function EditorPanel(props: { selectedSignal: Signal<number> }) {
-  // ## eslint-disable-next-line solid/reactivity
+  // eslint-disable-next-line solid/reactivity
   const [selected, setSelected] = props.selectedSignal;
 
   const scripts = useStore($scripts);
@@ -301,11 +301,9 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
 
   createEffect(() => {
     // Subscribe to selected script changes and reset the query results.
-    selected();
-    const r = executionResult();
-    if (r && editor?.state.doc.toString() !== queryString()) {
-      mutate(undefined);
-    }
+    const index = selected();
+    console.debug(`Switched to script ${index}, clearing results`);
+    mutate(undefined);
   });
 
   const execute = () => {
@@ -365,7 +363,6 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
   });
 
   createEffect(() => {
-    console.debug("setting editor state");
     const s = script();
     editor?.setState(newEditorState(s.contents));
   });

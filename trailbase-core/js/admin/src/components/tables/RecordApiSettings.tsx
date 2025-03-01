@@ -50,6 +50,13 @@ const viewPermissions = {
   Schema: PermissionFlag.SCHEMA,
 } as const;
 
+async function asyncSqlValidator({ value }: { value: string | undefined }) {
+  console.debug("Query", value);
+  if (value) {
+    return parseSql(value);
+  }
+}
+
 function AclForm(props: {
   entity: string;
   initial?: PermissionFlag[];
@@ -607,21 +614,11 @@ export function RecordApiSettingsForm(props: {
                 each={type() === "view" ? viewAccessRules : tableAccessRules}
               >
                 {(item) => {
-                  async function onChangeAsync(props: {
-                    value: string | undefined;
-                  }) {
-                    const value = props.value;
-                    if (value) {
-                      console.debug("Query", value);
-                      return parseSql(value);
-                    }
-                  }
-
                   return (
                     <form.Field
                       name={item.field}
                       validators={{
-                        onChangeAsync,
+                        onChangeAsync: asyncSqlValidator,
                         onChangeAsyncDebounceMs: 500,
                       }}
                     >
@@ -652,6 +649,7 @@ export function RecordApiSettingsForm(props: {
 
               const newConfig = removeRecordApiConfig(c, tableName);
               setConfig(newConfig)
+                // eslint-disable-next-line solid/reactivity
                 .then(() => props.close())
                 .catch(console.error);
             }}

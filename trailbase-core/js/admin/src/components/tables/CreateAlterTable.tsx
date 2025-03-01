@@ -90,6 +90,7 @@ export function CreateAlterTableForm(props: {
   };
 
   const onSubmit = async (value: Table, dryRun: boolean) => {
+    /* eslint-disable solid/reactivity */
     console.debug("Table schema:", value);
 
     try {

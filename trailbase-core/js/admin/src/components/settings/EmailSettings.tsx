@@ -25,11 +25,9 @@ function EmailTemplate(props: {
   form: FormType<EmailConfig>;
   fieldName: string;
 }) {
-  const form = props.form;
-
   return (
     <div class="my-2 mr-1 flex flex-col gap-4">
-      <form.Field
+      <props.form.Field
         name={`${props.fieldName}.subject`}
         validators={unsetOrNotEmptyValidator()}
       >
@@ -45,9 +43,9 @@ function EmailTemplate(props: {
             </p>
           ),
         })}
-      </form.Field>
+      </props.form.Field>
 
-      <form.Field
+      <props.form.Field
         name="userVerificationTemplate.body"
         validators={unsetOrNotEmptyValidator()}
       >
@@ -74,7 +72,7 @@ function EmailTemplate(props: {
           },
           10,
         )}
-      </form.Field>
+      </props.form.Field>
     </div>
   );
 }
@@ -86,8 +84,6 @@ export function EmailSettings(props: {
   const config = createConfigQuery();
 
   const Form = (p: { config: EmailConfig }) => {
-    console.debug({ ...p.config });
-
     const form = createForm<EmailConfig>(() => ({
       defaultValues: p.config,
       onSubmit: async ({ value }) => {

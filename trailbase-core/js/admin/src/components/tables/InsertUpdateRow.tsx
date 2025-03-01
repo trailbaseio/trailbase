@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { createMemo, For } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 
 import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
@@ -114,7 +114,9 @@ export function InsertUpdateRowForm(props: {
   schema: Table;
   row?: FormRow;
 }) {
-  const original = props.row ? copyRow(props.row) : undefined;
+  const original = createMemo(() =>
+    props.row ? copyRow(props.row) : undefined,
+  );
   const isUpdate = original !== undefined;
 
   const form = createForm<FormRowForm>(() => ({
@@ -124,7 +126,8 @@ export function InsertUpdateRowForm(props: {
     onSubmit: async ({ value }: { value: FormRowForm }) => {
       console.debug(`Submitting ${isUpdate ? "update" : "insert"}:`, value);
       try {
-        if (original) {
+        const o = original();
+        if (o) {
           await updateRow(props.schema, value.row);
         } else {
           await insertRow(props.schema.name, value.row);
@@ -151,7 +154,7 @@ export function InsertUpdateRowForm(props: {
   return (
     <SheetContainer>
       <SheetHeader>
-        <SheetTitle>{original ? "Edit Row" : "Insert New Row"}</SheetTitle>
+        <SheetTitle>{original() ? "Edit Row" : "Insert New Row"}</SheetTitle>
       </SheetHeader>
 
       <form
@@ -192,14 +195,15 @@ export function InsertUpdateRowForm(props: {
                       return undefined;
                     },
                   }}
-                  children={buildDBCellField({
+                >
+                  {buildDBCellField({
                     name: col.name,
                     type: col.data_type,
                     notNull,
                     disabled: isUpdate && pk,
                     placeholder: defaultValue ?? "",
                   })}
-                />
+                </form.Field>
               );
             }}
           </For>
@@ -220,7 +224,7 @@ export function InsertUpdateRowForm(props: {
                 >
                   {state().isSubmitting
                     ? "..."
-                    : original
+                    : original()
                       ? "Update"
                       : "Insert"}
                 </Button>

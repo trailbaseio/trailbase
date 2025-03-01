@@ -1,11 +1,11 @@
 import {
+  createSignal,
+  createMemo,
   createResource,
   For,
   Suspense,
   Switch,
   Match,
-  createSignal,
-  createMemo,
 } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 
@@ -156,15 +156,17 @@ function ProviderSettingsSubForm(props: {
     undefined,
   );
 
-  const current = props.form.useStore((state) => {
-    if (state.isSubmitted) {
-      reset(state.values.namedOauthProviders[props.index].state);
-    }
+  const current = createMemo(() =>
+    props.form.useStore((state) => {
+      if (state.isSubmitted) {
+        reset(state.values.namedOauthProviders[props.index].state);
+      }
 
-    const s = state.values.namedOauthProviders[props.index].state;
-    setOnce({ ...s });
-    return s;
-  });
+      const s = state.values.namedOauthProviders[props.index].state;
+      setOnce({ ...s });
+      return s;
+    })(),
+  );
 
   const dirty = () => {
     const id = nonEmpty(current()?.clientId) !== nonEmpty(original()?.clientId);
@@ -356,16 +358,18 @@ function AuthSettingsForm(props: {
             <div>
               <Button
                 variant="default"
-                onClick={async () => {
-                  // NOTE: we cannot just have a <a download /> here since admin APIs require CSRF token.
-                  const response = await adminFetch(`/public_key`);
-                  const keyText = await response.text();
+                onClick={() =>
+                  (async () => {
+                    // NOTE: we cannot just have a <a download /> here since admin APIs require CSRF token.
+                    const response = await adminFetch(`/public_key`);
+                    const keyText = await response.text();
 
-                  await showSaveFileDialog({
-                    contents: keyText,
-                    filename: "pubkey.pep",
-                  });
-                }}
+                    await showSaveFileDialog({
+                      contents: keyText,
+                      filename: "pubkey.pep",
+                    });
+                  })().catch(console.error)
+                }
               >
                 Download Public Key
               </Button>
@@ -385,12 +389,10 @@ function AuthSettingsForm(props: {
                   <Accordion multiple={false} collapsible class="w-full">
                     <For each={props.providers.providers ?? []}>
                       {(provider, index) => {
-                        const idx: number = index();
-
                         return (
                           <ProviderSettingsSubForm
                             form={form}
-                            index={idx}
+                            index={index()}
                             provider={provider}
                           />
                         );

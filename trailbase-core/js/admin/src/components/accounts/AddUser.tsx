@@ -27,7 +27,7 @@ export function AddUser(props: {
     },
     onSubmit: async ({ value }) => {
       createUser(value)
-        // ## eslint-disable-next-line solid/reactivity
+        // eslint-disable-next-line solid/reactivity
         .then(() => {
           props.userRefetch();
           props.close();

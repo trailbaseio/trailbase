@@ -1,3 +1,4 @@
+/* eslint-disable solid/reactivity */
 import { createSignal, type Setter, type JSX } from "solid-js";
 import { describe, test, expect } from "vitest";
 import { render } from "@solidjs/testing-library";

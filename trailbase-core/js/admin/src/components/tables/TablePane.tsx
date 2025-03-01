@@ -258,14 +258,16 @@ function TableHeaderRightHandButtons(props: {
       {/* Delete table button */}
       {!hidden() && (
         <DestructiveActionButton
-          action={async () => {
-            await dropTable({
-              name: table().name,
-            });
+          action={() =>
+            (async () => {
+              await dropTable({
+                name: table().name,
+              });
 
-            invalidateConfig();
-            props.schemaRefetch();
-          }}
+              invalidateConfig();
+              await props.schemaRefetch();
+            })().catch(console.error)
+          }
           msg="Deleting a table will irreversibly delete all the data contained. Are you sure you'd like to continue?"
         >
           <div class="flex items-center gap-2">
@@ -575,7 +577,7 @@ function RowDataTable(props: {
   const table = () => props.state.store.selected;
   const mutable = () => tableType(table()) === "table" && !hiddenTable(table());
 
-  const refetch = async () => await props.rowsRefetch();
+  const rowsRefetch = () => props.rowsRefetch().catch(console.error);
   const columns = (): Column[] => props.state.response.columns;
   const totalRowCount = () => Number(props.state.response.total_row_count);
   const pkColumnIndex = () => props.state.pkColumnIndex;
@@ -597,7 +599,7 @@ function RowDataTable(props: {
               <SheetContent class={sheetMaxWidth}>
                 <InsertUpdateRowForm
                   schema={table() as Table}
-                  rowsRefetch={refetch}
+                  rowsRefetch={rowsRefetch}
                   row={editRow()}
                   {...sheet}
                 />
@@ -607,7 +609,7 @@ function RowDataTable(props: {
                 initial={props.state.store.filter ?? undefined}
                 onSubmit={(value: string) => {
                   if (value === props.state.store.filter) {
-                    refetch();
+                    rowsRefetch();
                   } else {
                     props.state.setStore("filter", (_prev) => value);
                   }
@@ -666,7 +668,7 @@ function RowDataTable(props: {
                   <SheetContent class={sheetMaxWidth}>
                     <InsertUpdateRowForm
                       schema={table() as Table}
-                      rowsRefetch={refetch}
+                      rowsRefetch={rowsRefetch}
                       {...sheet}
                     />
                   </SheetContent>
@@ -697,9 +699,10 @@ function RowDataTable(props: {
                 primary_key_column: columns()[pkColumnIndex()].name,
                 values: ids,
               })
+                // eslint-disable-next-line solid/reactivity
                 .then(() => {
                   setSelectedRows(new Set<string>());
-                  refetch();
+                  rowsRefetch();
                 })
                 .catch(console.error);
             }}
@@ -810,9 +813,11 @@ export function TablePane(props: {
         triggers={triggers()}
         allTables={props.schemas.tables}
         schemaRefetch={props.schemaRefetch}
-        rowsRefetch={async () => {
-          await rowsRefetch();
-        }}
+        rowsRefetch={() =>
+          (async () => {
+            await rowsRefetch();
+          })()
+        }
       />
 
       <div class="flex flex-col gap-8 p-4">
@@ -829,9 +834,11 @@ export function TablePane(props: {
           <Match when={state()}>
             <RowDataTable
               state={state()!}
-              rowsRefetch={async () => {
-                await rowsRefetch();
-              }}
+              rowsRefetch={() =>
+                (async () => {
+                  await rowsRefetch();
+                })()
+              }
             />
           </Match>
         </Switch>

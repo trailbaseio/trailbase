@@ -1,4 +1,4 @@
-import { createSignal, type JSX, Show } from "solid-js";
+import { createSignal, Show, type JSX } from "solid-js";
 import { createForm, type FieldApi } from "@tanstack/solid-form";
 import { TbEye } from "solid-icons/tb";
 
@@ -486,13 +486,20 @@ function isReal(type: ColumnDataType): boolean {
   }
 }
 
-export function buildDBCellField(props: {
-  name: string;
-  type: ColumnDataType;
-  notNull: boolean;
-  disabled: boolean;
-  placeholder: string;
-}) {
+// NOTE: this is a not a component but a builder:
+//   "(field: () => FieldApiT<T>) => Component"
+//
+// The unused extra arg only exists to make this clear to eslint.
+export function buildDBCellField(
+  props: {
+    name: string;
+    type: ColumnDataType;
+    notNull: boolean;
+    disabled: boolean;
+    placeholder: string;
+  },
+  _unused?: unknown,
+) {
   const typeLabel = () => `[${props.type}${props.notNull ? "" : "?"}]`;
 
   const label = () => (
@@ -517,6 +524,7 @@ export function buildDBCellField(props: {
   const optional = !props.notNull;
   const placeholder = props.placeholder;
   const disabled = props.disabled;
+
   if (type === "Text" || type === "Blob") {
     if (optional) {
       return buildNullableTextFormField({ label, placeholder, disabled });

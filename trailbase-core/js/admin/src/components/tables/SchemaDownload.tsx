@@ -54,10 +54,15 @@ function SchemaDownloadButton(props: {
 
 export function SchemaDialog(props: { tableName: string }) {
   const [mode, setMode] = createSignal<Mode>("Select");
-  const [schema] = createResource(mode, async (mode) => {
-    console.debug(`Fetching ${props.tableName}: ${mode}`);
+  const args = () => ({
+    mode: mode(),
+    tableName: props.tableName,
+  });
+
+  const [schema] = createResource(args, async ({ mode, tableName }) => {
+    console.debug(`Fetching ${tableName}: ${mode}`);
     const response = await adminFetch(
-      `/table/${props.tableName}/schema.json?mode=${mode}`,
+      `/table/${tableName}/schema.json?mode=${mode}`,
     );
     return await response.json();
   });

@@ -48,7 +48,7 @@ export function ConfirmCloseDialog(props: {
 export function SafeSheet(props: SafeProps) {
   const [local, others] = splitProps(props, ["children", "open"]);
 
-  // ## eslint-disable-next-line solid/reactivity
+  // eslint-disable-next-line solid/reactivity
   const [sheetOpen, setSheetOpen] = local.open ?? createSignal(false);
   const [dirty, setDirty] = createSignal(false);
   const [dialogOpen, setDialogOpen] = createSignal(false);

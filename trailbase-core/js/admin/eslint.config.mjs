@@ -28,8 +28,6 @@ export default [
           varsIgnorePattern: "^_",
         },
       ],
-      // FIXME
-      "solid/reactivity": "off",
     },
     languageOptions: { globals: globals.browser },
     settings: {

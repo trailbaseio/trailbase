@@ -372,6 +372,7 @@ function Sidebar(props: {
   dirty: Signal<boolean>;
 }) {
   const navigate = useNavigate();
+  // eslint-disable-next-line solid/reactivity
   const [dirty, setDirty] = props.dirty;
 
   return (

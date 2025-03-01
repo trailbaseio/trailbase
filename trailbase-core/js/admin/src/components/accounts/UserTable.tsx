@@ -117,7 +117,7 @@ function EditSheetContent(props: {
     },
     onSubmit: async ({ value }) => {
       updateUser(value)
-        // ## eslint-disable-next-line solid/reactivity
+        // eslint-disable-next-line solid/reactivity
         .then(() => props.close())
         .catch(console.error);
 
