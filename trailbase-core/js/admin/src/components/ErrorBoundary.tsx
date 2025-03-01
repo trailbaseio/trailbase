@@ -9,21 +9,25 @@ export function ErrorBoundary(props: { children: JSX.Element }) {
   // errors at runtime, e.g.in a button handler.
   return (
     <SolidErrorBoundary
-      fallback={(err, reset) => {
-        return (
-          <div class="flex flex-col gap-4 m-4">
-            {`${err}`}
+      fallback={
+        import.meta.env.DEV
+          ? undefined
+          : (err, reset) => {
+              return (
+                <div class="m-4 flex flex-col gap-4">
+                  {`${err}`}
 
-            <div>
-              <Button onClick={reset}>Reload</Button>
-            </div>
+                  <div>
+                    <Button onClick={reset}>Reload</Button>
+                  </div>
 
-            <div>
-              <Button onClick={() => client.logout()}>Re-auth</Button>
-            </div>
-          </div>
-        );
-      }}
+                  <div>
+                    <Button onClick={() => client.logout()}>Re-auth</Button>
+                  </div>
+                </div>
+              );
+            }
+      }
     >
       {props.children}
 

@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -17,16 +16,14 @@ import {
 import { navBarIconSize, navBarIconStyle } from "@/components/NavBar";
 
 function Profile(props: { user: User }) {
-  const profile = props.user;
-
   // TODO: Bring back avater.
   return (
     <div class="flex flex-col gap-2">
-      <div>E-mail: {profile.email}</div>
+      <div>E-mail: {props.user.email}</div>
 
-      <div>id: {urlSafeBase64ToUuid(profile.id)}</div>
+      <div>id: {urlSafeBase64ToUuid(props.user.id)}</div>
 
-      {import.meta.env.DEV && <div>id b64: {profile.id}</div>}
+      {import.meta.env.DEV && <div>id b64: {props.user.id}</div>}
     </div>
   );
 }
@@ -44,7 +41,6 @@ export function AuthButton() {
       <DialogContent class="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Current User</DialogTitle>
-          <DialogDescription></DialogDescription>
         </DialogHeader>
 
         <Show when={user()}>

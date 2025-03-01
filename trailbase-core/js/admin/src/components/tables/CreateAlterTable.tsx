@@ -1,4 +1,4 @@
-import { createEffect, createSignal, Index, For } from "solid-js";
+import { createEffect, createMemo, createSignal, Index, For } from "solid-js";
 import type { Accessor, JSX, JSXElement, Setter } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { Collapsible } from "@kobalte/core/collapsible";
@@ -78,9 +78,9 @@ export function CreateAlterTableForm(props: {
 }) {
   const [sql, setSql] = createSignal<string | undefined>();
 
-  const original = props.schema
-    ? JSON.parse(JSON.stringify(props.schema))
-    : undefined;
+  const original = createMemo(() =>
+    props.schema ? JSON.parse(JSON.stringify(props.schema)) : undefined,
+  );
   const newDefaultColumn = (index: number): Column => {
     return {
       name: `new_${index}`,
@@ -93,9 +93,10 @@ export function CreateAlterTableForm(props: {
     console.debug("Table schema:", value);
 
     try {
-      if (original) {
+      const o = original();
+      if (o) {
         const response = await alterTable({
-          source_schema: original,
+          source_schema: o,
           target_schema: value,
         });
         console.debug("AlterTableResponse:", response);
@@ -161,7 +162,7 @@ export function CreateAlterTableForm(props: {
   return (
     <SheetContainer>
       <SheetHeader>
-        <SheetTitle>{original ? "Alter Table" : "Add New Table"}</SheetTitle>
+        <SheetTitle>{original() ? "Alter Table" : "Add New Table"}</SheetTitle>
       </SheetHeader>
 
       <form
@@ -171,7 +172,7 @@ export function CreateAlterTableForm(props: {
           form.handleSubmit();
         }}
       >
-        <div class="flex flex-col items-start gap-4 mt-4 pr-4">
+        <div class="mt-4 flex flex-col items-start gap-4 pr-4">
           <form.Field
             name="name"
             validators={{
@@ -232,8 +233,8 @@ export function CreateAlterTableForm(props: {
           >
             {(state) => {
               return (
-                <div class="flex gap-4 items-center">
-                  {original === undefined && (
+                <div class="flex items-center gap-4">
+                  {original() === undefined && (
                     <Dialog
                       open={sql() !== undefined}
                       onOpenChange={(open: boolean) => {
@@ -267,12 +268,12 @@ export function CreateAlterTableForm(props: {
                           <pre>{sql()}</pre>
                         </div>
 
-                        <DialogFooter></DialogFooter>
+                        <DialogFooter />
                       </DialogContent>
                     </Dialog>
                   )}
 
-                  <div class="w-full flex justify-end mr-4">
+                  <div class="mr-4 flex w-full justify-end">
                     <Button
                       type="submit"
                       disabled={!state().canSubmit}
@@ -379,7 +380,7 @@ function ColumnOptionCheckField(props: {
     <TextField>
       <div
         class={`grid items-center ${gapStyle}`}
-        style="grid-template-columns: auto 1fr"
+        style={{ "grid-template-columns": "auto 1fr" }}
       >
         <L>
           <TextFieldLabel
@@ -468,7 +469,7 @@ function ColumnOptionDefaultField(props: {
     <TextField>
       <div
         class={`grid items-center ${gapStyle}`}
-        style="grid-template-columns: auto 1fr"
+        style={{ "grid-template-columns": "auto 1fr" }}
       >
         <L>
           <TextFieldLabel
@@ -529,8 +530,8 @@ function ColumnOptionFkSelect(props: {
 
   return (
     <div
-      class="w-full grid items-center gap-2"
-      style="grid-template-columns: auto 1fr"
+      class="grid w-full items-center gap-2"
+      style={{ "grid-template-columns": "auto 1fr" }}
     >
       <Label>
         <L>Foreign Key</L>
@@ -607,7 +608,7 @@ function ColumnOptionsFields(props: {
         disabled={props.disabled}
       />
 
-      <div class="flex flex-col gap-4 my-2">
+      <div class="my-2 flex flex-col gap-4">
         <div class="flex justify-end">
           <Label class="text-right text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
             NOT NULL
@@ -663,10 +664,10 @@ function ColumnSubForm(props: {
   const [fk, setFk] = createSignal<string | undefined>();
 
   const Header = () => (
-    <div class="flex justify-between items-center">
+    <div class="flex items-center justify-between">
       <h2>{name()}</h2>
 
-      <div class="flex gap-2 items-center">
+      <div class="flex items-center gap-2">
         {!disabled && (
           <div class="flex justify-end">
             <button
@@ -678,7 +679,7 @@ function ColumnSubForm(props: {
                 props.form.setFieldValue("columns", columns);
               }}
             >
-              <div class="p-1 rounded hover:bg-gray-200">
+              <div class="rounded p-1 hover:bg-gray-200">
                 <TbTrash size={20} />
               </div>
             </button>
@@ -716,7 +717,7 @@ function ColumnSubForm(props: {
           <CardContent>
             <div class="flex flex-col gap-2 py-1">
               {/* Column presets */}
-              <div class="flex gap-1 justify-between">
+              <div class="flex justify-between gap-1">
                 <Label>Presets</Label>
 
                 <div class="flex gap-1">

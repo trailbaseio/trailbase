@@ -1,3 +1,4 @@
+import { For } from "solid-js";
 import { Location } from "@solidjs/router";
 import {
   TbDatabase,
@@ -34,30 +35,32 @@ export const navBarIconActiveStyle =
 
 export function NavBar(props: { location: Location }) {
   return (
-    <div class="grow flex flex-col justify-between items-center bg-gray-100 py-2 gap-4">
+    <div class="flex grow flex-col items-center justify-between gap-4 bg-gray-100 py-2">
       <nav class="flex flex-col items-center gap-4">
         <a href={`${BASE}/`}>
           <img src={logo} width="42" height="42" alt="TrailBase Logo" />
         </a>
 
-        {options.map(([pathname, icon, tooltip]) => {
-          const active = () => props.location.pathname === pathname;
+        <For each={options}>
+          {([pathname, icon, tooltip]) => {
+            const active = () => props.location.pathname === pathname;
 
-          return (
-            <Tooltip>
-              <TooltipTrigger as="div">
-                <a href={pathname as string}>
-                  <div
-                    class={active() ? navBarIconActiveStyle : navBarIconStyle}
-                  >
-                    {(icon as IconTypes)({ size: navBarIconSize })}
-                  </div>
-                </a>
-              </TooltipTrigger>
-              <TooltipContent>{tooltip}</TooltipContent>
-            </Tooltip>
-          );
-        })}
+            return (
+              <Tooltip>
+                <TooltipTrigger as="div">
+                  <a href={pathname as string}>
+                    <div
+                      class={active() ? navBarIconActiveStyle : navBarIconStyle}
+                    >
+                      {(icon as IconTypes)({ size: navBarIconSize })}
+                    </div>
+                  </a>
+                </TooltipTrigger>
+                <TooltipContent>{tooltip}</TooltipContent>
+              </Tooltip>
+            );
+          }}
+        </For>
       </nav>
 
       <AuthButton />

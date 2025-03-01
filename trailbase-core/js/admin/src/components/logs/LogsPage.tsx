@@ -96,7 +96,7 @@ const columns: ColumnDef<LogJson>[] = [
       return (
         <Tooltip>
           <TooltipTrigger>
-            <div class="text-left text-ellipsis line-clamp-2">
+            <div class="line-clamp-2 text-ellipsis text-left">
               {ctx.row.original.user_agent}
             </div>
           </TooltipTrigger>
@@ -209,19 +209,19 @@ export function LogsPage() {
         }
       />
 
-      <div class="p-4 flex flex-col gap-4">
+      <div class="flex flex-col gap-4 p-4">
         <Switch fallback={<p>Loading...</p>}>
           <Match when={logsFetch.error}>Error {`${logsFetch.error}`}</Match>
 
           <Match when={logsFetch.state === "ready"}>
             {pagination().pageIndex === 0 && logsFetch()!.stats && (
-              <div class="flex w-full h-[300px] gap-4 mb-4">
+              <div class="mb-4 flex h-[300px] w-full gap-4">
                 <div class={showMap() ? "w-1/2 grow" : "w-full"}>
                   <LogsChart stats={logsFetch()!.stats!} />
                 </div>
 
                 {showMap() && logsFetch()!.stats?.country_codes && (
-                  <div class="w-1/2 max-w-[500px] flex items-center">
+                  <div class="flex w-1/2 max-w-[500px] items-center">
                     <WorldMap
                       country_codes={logsFetch()!.stats!.country_codes!}
                     />
@@ -312,14 +312,14 @@ const Legend = L.Control.extend({
   onAdd: (_map: L.Map) => {
     const grades = [1, 20, 50, 100, 200, 500, 1000];
     return (
-      <div class="flex flex-col bg-white bg-opacity-70 rounded p-1">
+      <div class="flex flex-col rounded bg-white/70 p-1">
         <For each={grades}>
           {(grade: number, index: () => number) => {
             const i = index();
             return (
               <div class="flex">
                 <div
-                  class="px-2 py-1 mr-1"
+                  class="mr-1 px-2 py-1"
                   style={{ background: getColor(grade) }}
                 />{" "}
                 {grade} {i + 1 < grades.length ? `- ${grades[i + 1]}` : "+"}
@@ -362,11 +362,7 @@ function WorldMap(props: { country_codes: { [key in string]?: number } }) {
     // control that shows state info on hover
     const CustomControl = L.Control.extend({
       onAdd: (_map: L.Map) => {
-        return (
-          <div class="bg-white bg-opacity-70 p-2 rounded">
-            Hover over a country
-          </div>
-        );
+        return <div class="rounded bg-white/70 p-2">Hover over a country</div>;
       },
       update: function (props?: Props) {
         const id = props?.id;
@@ -428,7 +424,7 @@ function WorldMap(props: { country_codes: { [key in string]?: number } }) {
 
   return (
     <div
-      class="rounded w-full h-[280px]"
+      class="h-[280px] w-full rounded"
       style={{ "background-color": "transparent" }}
       ref={ref}
     />
@@ -515,7 +511,7 @@ function LogsChart(props: { stats: Stats }) {
 
   return (
     <div class="h-[300px]">
-      <canvas ref={ref}></canvas>
+      <canvas ref={ref} />
     </div>
   );
 }

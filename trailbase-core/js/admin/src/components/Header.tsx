@@ -9,9 +9,9 @@ export function Header(props: {
 }) {
   return (
     <div>
-      <header class="flex flex-wrap items-center my-3 mx-4">
+      <header class="mx-4 my-3 flex flex-wrap items-center">
         {/* left */}
-        <div class="no-flex h-[40px] flex items-center gap-2">
+        <div class="flex h-[40px] flex-nowrap items-center gap-2">
           <h1 class="m-0 text-accent-600">
             <Show when={props.titleSelect} fallback={props.title}>
               {`${props.title} ‣ `}
@@ -25,7 +25,7 @@ export function Header(props: {
 
         {/* right */}
         {props.right && (
-          <div class="max-h-[40px] grow flex justify-end">{props.right}</div>
+          <div class="flex max-h-[40px] grow justify-end">{props.right}</div>
         )}
       </header>
 

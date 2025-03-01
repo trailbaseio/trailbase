@@ -129,7 +129,7 @@ export function SchemaSettings(props: {
                 can be used to enforce constraints on TEXT/JSON columns, e.g.:
               </p>
 
-              <pre class="text-sm my-2">
+              <pre class="my-2 text-sm">
                 CREATE TABLE table (<br />
                 &nbsp;&nbsp; json &nbsp;&nbsp;&nbsp;&nbsp; TEXT
                 CHECK(jsonschema('mySchema', json))

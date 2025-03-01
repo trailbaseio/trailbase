@@ -15,7 +15,7 @@ import { $user } from "@/lib/fetch";
 function Layout(props: RouteSectionProps) {
   return (
     <ErrorBoundary>
-      <div class="sticky w-[58px] h-dvh flex flex-col overflow-y-scroll hide-scrollbars">
+      <div class="hide-scrollbars sticky flex h-dvh w-[58px] flex-col overflow-y-scroll">
         <NavBar location={props.location} />
       </div>
 

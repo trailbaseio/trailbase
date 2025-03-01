@@ -1,10 +1,14 @@
 import globals from "globals";
 import pluginJs from "@eslint/js";
 import tseslint from "typescript-eslint";
+import tailwind from "eslint-plugin-tailwindcss";
+import solid from "eslint-plugin-solid/configs/recommended";
 
 export default [
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
+  solid,
+  ...tailwind.configs["flat/recommended"],
   {
     ignores: ["dist/", "node_modules/", "vite.config.mts"],
   },
@@ -24,7 +28,14 @@ export default [
           varsIgnorePattern: "^_",
         },
       ],
+      // FIXME
+      "solid/reactivity": "off",
     },
     languageOptions: { globals: globals.browser },
+    settings: {
+      tailwindcss: {
+        whitelist: ["hide-scrollbars", "collapsible.*"],
+      },
+    },
   },
 ];

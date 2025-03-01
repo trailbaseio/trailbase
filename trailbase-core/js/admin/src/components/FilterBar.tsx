@@ -17,11 +17,11 @@ export function FilterBar(props: {
   };
 
   return (
-    <div class="w-full flex flex-col">
+    <div class="flex w-full flex-col">
       <form
         class="flex w-full items-center gap-2"
+        method="dialog"
         onSubmit={onSubmit}
-        action="javascript:void(0);"
       >
         <TextField class="w-full">
           <TextFieldInput
@@ -35,7 +35,7 @@ export function FilterBar(props: {
         <Button type="button">Filter</Button>
       </form>
 
-      {props.example && <span class="text-sm mt-1 ml-2">{props.example}</span>}
+      {props.example && <span class="ml-2 mt-1 text-sm">{props.example}</span>}
     </div>
   );
 }

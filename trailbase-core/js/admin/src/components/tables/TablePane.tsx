@@ -267,7 +267,7 @@ function TableHeaderRightHandButtons(props: {
           }}
           msg="Deleting a table will irreversibly delete all the data contained. Are you sure you'd like to continue?"
         >
-          <div class="flex gap-2 items-center">
+          <div class="flex items-center gap-2">
             Delete <TbTrash />
           </div>
         </DestructiveActionButton>
@@ -341,7 +341,7 @@ function TableHeaderRightHandButtons(props: {
                 <SheetTrigger
                   as={(props: DialogTriggerProps) => (
                     <Button variant="default" {...props}>
-                      <div class="flex gap-2 items-center">
+                      <div class="flex items-center gap-2">
                         Alter <TbTable />
                       </div>
                     </Button>
@@ -609,7 +609,7 @@ function RowDataTable(props: {
                 example='e.g. "latency[lt]=2 AND status=200"'
               />
 
-              <div class="space-y-2.5 overflow-contain">
+              <div class="space-y-2.5 overflow-auto">
                 <DataTable
                   columns={() => props.state.columnDefs}
                   data={() => props.state.response.rows}
@@ -651,7 +651,7 @@ function RowDataTable(props: {
       />
 
       {mutable() && (
-        <div class="flex gap-2 my-2">
+        <div class="my-2 flex gap-2">
           {/* Insert Rows */}
           <SafeSheet
             children={(sheet) => {
@@ -812,7 +812,7 @@ export function TablePane(props: {
       <div class="flex flex-col gap-8 p-4">
         <Switch fallback={<>Loading...</>}>
           <Match when={state.error}>
-            <div class="flex flex-col gap-4 my-2">
+            <div class="my-2 flex flex-col gap-4">
               Failed to fetch rows: {`${state.error}`}
               <div>
                 <Button onClick={() => window.location.reload()}>Reload</Button>
@@ -855,7 +855,7 @@ export function TablePane(props: {
                       />
                     </SheetContent>
 
-                    <div class="space-y-2.5 overflow-contain">
+                    <div class="space-y-2.5 overflow-auto">
                       <DataTable
                         columns={() => indexColumns}
                         data={indexes}
@@ -891,7 +891,7 @@ export function TablePane(props: {
             />
 
             {!hidden() && (
-              <div class="flex gap-2 mt-2">
+              <div class="mt-2 flex gap-2">
                 <SafeSheet
                   children={(sheet) => {
                     return (

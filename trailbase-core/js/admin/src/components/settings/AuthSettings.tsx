@@ -188,14 +188,14 @@ function ProviderSettingsSubForm(props: {
   return (
     <AccordionItem value={`item-${props.provider.id}`}>
       <AccordionTrigger>
-        <div class="flex gap-2 items-center">
+        <div class="flex items-center gap-2">
           {icon()}
           <span>{props.provider.display_name}</span>
         </div>
       </AccordionTrigger>
 
       <AccordionContent>
-        <div class="flex flex-col gap-2 m-4">
+        <div class="m-4 flex flex-col gap-2">
           <props.form.Field
             name={`namedOauthProviders[${props.index}].state.clientId`}
             validators={{
@@ -219,7 +219,7 @@ function ProviderSettingsSubForm(props: {
           </props.form.Field>
         </div>
 
-        <div class="flex items-center justify-end gap-2 mr-4">
+        <div class="mr-4 flex items-center justify-end gap-2">
           <Button
             variant={"outline"}
             disabled={!dirty()}

@@ -2,6 +2,8 @@ import { createSignal, type JSX, Show } from "solid-js";
 import { createForm, type FieldApi } from "@tanstack/solid-form";
 import { TbEye } from "solid-icons/tb";
 
+import { cn } from "@/lib/utils";
+
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -55,8 +57,8 @@ function buildTextFormFieldT<T extends string | null>(opts: TextFieldOptions) {
     return (
       <TextField class="w-full">
         <div
-          class={`grid items-center ${gapStyle}`}
-          style="grid-template-columns: auto 1fr"
+          class={cn("grid items-center", gapStyle)}
+          style={{ "grid-template-columns": "auto 1fr" }}
         >
           <TextFieldLabel>{opts.label()}</TextFieldLabel>
 
@@ -106,8 +108,8 @@ function buildOptionalNullableTextFormField<
     return (
       <TextField class="w-full">
         <div
-          class={`grid items-center ${gapStyle}`}
-          style="grid-template-columns: auto 1fr"
+          class={cn("grid items-center", gapStyle)}
+          style={{ "grid-template-columns": "auto 1fr" }}
         >
           <TextFieldLabel>{opts.label()}</TextFieldLabel>
 
@@ -175,12 +177,12 @@ export function buildSecretFormField(
   return (field: () => FieldApiT<string>) => (
     <TextField class="w-full">
       <div
-        class={`grid items-center ${gapStyle}`}
-        style="grid-template-columns: auto 1fr"
+        class={cn("grid items-center", gapStyle)}
+        style={{ "grid-template-columns": "auto 1fr" }}
       >
         <TextFieldLabel>{opts.label()}</TextFieldLabel>
 
-        <div class="flex gap-2 items-center">
+        <div class="flex items-center gap-2">
           <TextFieldInput
             disabled={opts.disabled ?? false}
             type={type()}
@@ -222,8 +224,8 @@ export function buildTextAreaFormField(
     return (
       <TextField class="w-full">
         <div
-          class={`grid items-center ${gapStyle}`}
-          style="grid-template-columns: auto 1fr"
+          class={cn("grid items-center", gapStyle)}
+          style={{ "grid-template-columns": "auto 1fr" }}
         >
           <TextFieldLabel>{opts.label()}</TextFieldLabel>
 
@@ -274,7 +276,7 @@ function buildOptionalNullableNumberFormField<
       <TextField class="w-full">
         <div
           class={`grid items-center ${gapStyle}`}
-          style="grid-template-columns: auto 1fr"
+          style={{ "grid-template-columns": "auto 1fr" }}
         >
           <TextFieldLabel>{opts.label()}</TextFieldLabel>
 
@@ -338,7 +340,7 @@ function buildNullableNumberFormField(opts: NumberFieldOptions) {
 
 export function buildBoolFormField(props: { label: () => JSX.Element }) {
   return (field: () => FieldApiT<boolean>) => (
-    <div class="w-full flex gap-4 justify-end">
+    <div class="flex w-full justify-end gap-4">
       <Label class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
         {props.label()}
       </Label>
@@ -361,8 +363,8 @@ export function buildSelectField(options: string[], opts: SelectFieldOpts) {
   return (field: () => FieldApiT<string>) => {
     return (
       <div
-        class={`w-full grid items-center ${gapStyle}`}
-        style="grid-template-columns: auto 1fr"
+        class={cn("grid w-full items-center", gapStyle)}
+        style={{ "grid-template-columns": "auto 1fr" }}
       >
         <Label>{opts.label()}</Label>
 
@@ -491,16 +493,16 @@ export function buildDBCellField(props: {
   disabled: boolean;
   placeholder: string;
 }) {
-  const typeLabel = `[${props.type}${props.notNull ? "" : "?"}]`;
+  const typeLabel = () => `[${props.type}${props.notNull ? "" : "?"}]`;
 
   const label = () => (
-    <div class="w-[100px] wrap gap-1 items-center overflow-hidden">
+    <div class="flex w-[100px] flex-wrap items-center gap-1 overflow-hidden">
       <span>{props.name} </span>
 
-      <Show when={props.type === "Blob"} fallback={typeLabel}>
+      <Show when={props.type === "Blob"} fallback={typeLabel()}>
         <Tooltip>
           <TooltipTrigger as="div">
-            <span class="text-primary">{typeLabel}</span>
+            <span class="text-primary">{typeLabel()}</span>
           </TooltipTrigger>
 
           <TooltipContent>

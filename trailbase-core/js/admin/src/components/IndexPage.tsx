@@ -12,23 +12,23 @@ import { Header } from "@/components/Header";
 
 function ColorPalette() {
   return (
-    <div class="text-sm w-[400px] grid grid-cols-2 my-4">
+    <div class="my-4 grid w-[400px] grid-cols-2 text-sm">
       <div class="bg-background">Background</div>
       <div class="bg-foreground text-white">Foreground</div>
 
       <div class="bg-muted">Muted</div>
       <div class="bg-muted-foreground text-white">Muted FG</div>
 
-      <div class="bg-border -center">Border</div>
-      <div class="bg-border-input">Border Input</div>
+      <div class="bg-border">Border</div>
+      <div>N/A</div>
 
-      <div class="bg-card -center">Card</div>
-      <div class="bg-card-foreground -input text-white">Card FG</div>
+      <div class="bg-card">Card</div>
+      <div class="bg-card-foreground text-white">Card FG</div>
 
       <div class="bg-primary text-white">Primary</div>
       <div class="bg-primary-foreground">Primary FG</div>
 
-      <div class="bg-secondary-content-center">Secondary</div>
+      <div class="bg-secondary">Secondary</div>
       <div class="bg-secondary-foreground text-white">Secondary FG</div>
 
       <div class="bg-accent">Accent</div>
@@ -81,7 +81,7 @@ export function IndexPage() {
     <div class="h-dvh overflow-y-auto">
       <Header title="TrailBase" />
 
-      <div class="grow m-4 prose">
+      <div class="prose m-4 grow">
         <p>
           Welcome to TrailBase 🚀: your open-source, sub-millisecond,
           single-executable FireBase alternative with type-safe APIs,

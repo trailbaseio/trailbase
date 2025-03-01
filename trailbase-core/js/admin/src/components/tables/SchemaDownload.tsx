@@ -37,14 +37,14 @@ function SchemaDownloadButton(props: {
   return (
     <Button
       variant="default"
-      onClick={async () => {
+      onClick={() => {
         // Not supported by firefox:
         // https://developer.mozilla.org/en-US/docs/Web/API/Window/showSaveFilePicker#browser_compatibility
         // possible fallback: https://stackoverflow.com/a/67806663
-        await showSaveFileDialog({
+        showSaveFileDialog({
           contents: JSON.stringify(props.schema, null, "  "),
           filename: `${props.tableName}_${props.mode.toLowerCase()}_schema.json`,
-        });
+        }).catch(console.error);
       }}
     >
       <TbDownload size={20} />
@@ -75,7 +75,7 @@ export function SchemaDialog(props: { tableName: string }) {
 
       <DialogContent class="min-w-[80dvw]">
         <DialogHeader>
-          <div class="flex items-center justify-between mr-4">
+          <div class="mr-4 flex items-center justify-between">
             <DialogTitle>JSON Schema</DialogTitle>
 
             <div class="flex items-center gap-2">

@@ -29,16 +29,16 @@ export function LoginPage() {
   };
 
   return (
-    <div class="h-dvh flex flex-col items-center justify-center">
+    <div class="flex h-dvh flex-col items-center justify-center">
       <Card>
         <form
-          class="flex flex-col gap-4 py-12 px-8"
+          class="flex flex-col gap-4 px-8 py-12"
+          method="dialog"
           onSubmit={onSubmit}
-          action="javascript:void(0);"
         >
           <h1>Login</h1>
 
-          <TextField class="flex gap-2 items-center">
+          <TextField class="flex items-center gap-2">
             <TextFieldLabel class="w-[108px]">E-mail</TextFieldLabel>
 
             <TextFieldInput
@@ -52,7 +52,7 @@ export function LoginPage() {
             />
           </TextField>
 
-          <TextField class="flex gap-2 items-center">
+          <TextField class="flex items-center gap-2">
             <TextFieldLabel class="w-[108px]">Password</TextFieldLabel>
 
             <TextFieldInput

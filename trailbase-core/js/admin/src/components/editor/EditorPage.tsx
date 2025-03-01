@@ -119,6 +119,7 @@ function SideBar(props: {
   selectedSignal: Signal<number>;
   horizontal: boolean;
 }) {
+  // ## eslint-disable-next-line solid/reactivity
   const [selected, setSelected] = props.selectedSignal;
   const scripts = useStore($scripts);
 
@@ -182,7 +183,7 @@ function HelpDialog() {
         <p>
           Further note that there's no pagination, so whatever you query will be
           returned. Working on large data sets, you might want to{" "}
-          <span class="text-mono font-mono">LIMIT</span> your result size.
+          <span class="font-mono">LIMIT</span> your result size.
         </p>
 
         <p>
@@ -225,9 +226,9 @@ function RenameDialog(props: { selected: number; script: Script }) {
         </DialogHeader>
 
         <form
-          class="flex flex-col gap-4 py-12 px-8"
+          class="flex flex-col gap-4 px-8 py-12"
+          method="dialog"
           onSubmit={onSubmit}
-          action="javascript:void(0);"
         >
           <TextField>
             <TextFieldInput
@@ -250,6 +251,7 @@ function RenameDialog(props: { selected: number; script: Script }) {
 }
 
 function EditorPanel(props: { selectedSignal: Signal<number> }) {
+  // ## eslint-disable-next-line solid/reactivity
   const [selected, setSelected] = props.selectedSignal;
 
   const scripts = useStore($scripts);
@@ -379,7 +381,7 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
 
           {/* Editor */}
           <div
-            class="grow max-h-[70dvh] mx-4 my-2 overflow-y-scroll outline outline-1 rounded"
+            class="mx-4 my-2 max-h-[70dvh] grow overflow-y-scroll rounded outline outline-1"
             ref={ref}
           />
 
@@ -399,7 +401,7 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
 
         <ResizableHandle withHandle={true} />
 
-        <ResizablePanel class="overflow-y-scroll hide-scrollbars">
+        <ResizablePanel class="hide-scrollbars overflow-y-scroll">
           <div class="grow p-4">
             <View response={executionResult} />
           </div>
@@ -410,20 +412,22 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
 }
 
 export function EditorPage() {
-  const selectedSignal = createSignal<number>(0);
+  const [selectedSignal, setSelectedSignal] = createSignal<number>(0);
 
   return (
     <SplitView
       first={(props: { horizontal: boolean }) => {
         return (
           <SideBar
-            selectedSignal={selectedSignal}
+            selectedSignal={[selectedSignal, setSelectedSignal]}
             horizontal={props.horizontal}
           />
         );
       }}
       second={() => {
-        return <EditorPanel selectedSignal={selectedSignal} />;
+        return (
+          <EditorPanel selectedSignal={[selectedSignal, setSelectedSignal]} />
+        );
       }}
     />
   );

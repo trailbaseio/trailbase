@@ -38,7 +38,7 @@ function EmailTemplate(props: {
           info: (
             <p>
               Email's subject line. Valid template parameters:{" "}
-              <span class="font-mono bg-gray-200 rounded">
+              <span class="rounded bg-gray-200 font-mono">
                 {"{{APP_NAME}}"}
               </span>
               .
@@ -57,15 +57,15 @@ function EmailTemplate(props: {
             info: (
               <p>
                 Email's body. Valid template parameters:{" "}
-                <span class="font-mono bg-gray-200 rounded">
+                <span class="rounded bg-gray-200 font-mono">
                   {"{{ APP_NAME }}"}
                 </span>
                 ,{" "}
-                <span class="font-mono bg-gray-200 rounded">
+                <span class="rounded bg-gray-200 font-mono">
                   {"{{ SITE_URL }}"}
                 </span>
                 , and{" "}
-                <span class="font-mono bg-gray-200 rounded">
+                <span class="rounded bg-gray-200 font-mono">
                   {"{{ CODE }}"}
                 </span>
                 .

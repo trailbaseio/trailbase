@@ -117,6 +117,7 @@ function EditSheetContent(props: {
     },
     onSubmit: async ({ value }) => {
       updateUser(value)
+        // ## eslint-disable-next-line solid/reactivity
         .then(() => props.close())
         .catch(console.error);
 
@@ -155,7 +156,7 @@ function EditSheetContent(props: {
 
           <form.Field name="verified">
             {(field) => (
-              <div class="w-full flex gap-2 items-center justify-end">
+              <div class="flex w-full items-center justify-end gap-2">
                 <Label>Verified</Label>
                 <Checkbox
                   checked={field().state.value ?? false}
@@ -218,7 +219,7 @@ export function UserTable() {
         </Match>
 
         <Match when={users()}>
-          <div class="flex flex-col gap-4 items-end">
+          <div class="flex flex-col items-end gap-4">
             <FilterBar
               initial={filter()}
               onSubmit={(value: string) => {

@@ -62,8 +62,8 @@ function AclForm(props: {
   return (
     <div class="flex">
       <div
-        class="grid items-end gap-2 w-[300px]"
-        style="grid-template-columns: auto 1fr 1fr 1fr 1fr 1fr"
+        class="grid w-[300px] items-end gap-2"
+        style={{ "grid-template-columns": "auto 1fr 1fr 1fr 1fr 1fr" }}
       >
         {props.showHeader && (
           <For
@@ -71,8 +71,8 @@ function AclForm(props: {
           >
             {(key, index) => (
               <div
-                class="ml-1 col-span-1 [writing-mode:vertical-rl]"
-                style={`grid-column-start: ${index() + 2}`}
+                class="col-span-1 ml-1 [writing-mode:vertical-rl]"
+                style={{ "grid-column-start": index() + 2 }}
               >
                 {key}
               </div>
@@ -80,7 +80,7 @@ function AclForm(props: {
           </For>
         )}
 
-        <div class="col-start-1 col-span-1 w-[120px]">
+        <div class="col-span-1 col-start-1 w-[120px]">
           <Label>{props.entity}</Label>
         </div>
 
@@ -345,7 +345,7 @@ export function RecordApiSettingsForm(props: {
               <CardTitle>Record API Settings</CardTitle>
             </CardHeader>
 
-            <CardContent class="flex flex-col gap-4 my-4">
+            <CardContent class="my-4 flex flex-col gap-4">
               <form.Field
                 name="name"
                 validators={{
@@ -435,7 +435,7 @@ export function RecordApiSettingsForm(props: {
                       // TODO: Should be buildBoolFormField?
                       const v = () => field().state.value;
                       return (
-                        <div class="flex items-center justify-between gap-2 mt-2">
+                        <div class="mt-2 flex items-center justify-between gap-2">
                           <div>
                             <Label>Infer Missing User</Label>
                             <StyledHoverCard>
@@ -473,7 +473,7 @@ export function RecordApiSettingsForm(props: {
                     children={(field) => {
                       const v = () => field().state.value;
                       return (
-                        <div class="flex items-center justify-between gap-2 mt-2">
+                        <div class="mt-2 flex items-center justify-between gap-2">
                           <div>
                             <Label>Enable Subscriptions</Label>
                             <StyledHoverCard>
@@ -520,7 +520,7 @@ export function RecordApiSettingsForm(props: {
                         <For each={foreignKeys()}>
                           {([colName, item]) => {
                             return (
-                              <div class="flex items-center justify-between gap-2 mt-2">
+                              <div class="mt-2 flex items-center justify-between gap-2">
                                 <div>
                                   <Label>
                                     Expand Column ({colName} {"=>"}{" "}
@@ -568,7 +568,7 @@ export function RecordApiSettingsForm(props: {
               <CardTitle>Access</CardTitle>
             </CardHeader>
 
-            <CardContent class="flex flex-col gap-4 my-4">
+            <CardContent class="my-4 flex flex-col gap-4">
               <form.Field name="aclWorld">
                 {(field) => {
                   const v = field().state.value;

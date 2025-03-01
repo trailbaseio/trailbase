@@ -69,7 +69,7 @@ function TablePickerPane(props: {
 
   return (
     <div
-      class={`${horizontal() ? "flex flex-col h-dvh" : "flex"} gap-2 overflow-scroll hide-scrollbars p-4`}
+      class={`${horizontal() ? "flex h-dvh flex-col" : "flex"} hide-scrollbars gap-2 overflow-scroll p-4`}
     >
       <SwitchUi
         class="flex items-center justify-center gap-2"
@@ -115,7 +115,7 @@ function TablePickerPane(props: {
               <SheetTrigger
                 as={(props: DialogTriggerProps) => (
                   <Button
-                    class="gap-2 min-w-[100px]"
+                    class="min-w-[100px] gap-2"
                     variant="secondary"
                     {...props}
                   >

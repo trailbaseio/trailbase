@@ -9,17 +9,17 @@ import {
 } from "solid-js";
 import { createWritableMemo } from "@solid-primitives/memo";
 import { useSearchParams } from "@solidjs/router";
-import type { ColumnDef } from "@tanstack/solid-table";
 import {
   flexRender,
   createSolidTable,
   getCoreRowModel,
 } from "@tanstack/solid-table";
 import type {
+  ColumnDef,
   Table as TableType,
   PaginationState,
   OnChangeFn,
-} from "@tanstack/table-core";
+} from "@tanstack/solid-table";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -86,7 +86,7 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
   const [rowSelection, setRowSelection] = createSignal({});
 
   const [searchParams, setSearchParams] = useSearchParams<SearchParams>();
-  const paginationEnabled = props.onPaginationChange !== undefined;
+  const paginationEnabled = () => props.onPaginationChange !== undefined;
 
   function initPaginationState(): PaginationState {
     return {
@@ -116,40 +116,43 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
     setSearchParams({ ...paginationState() });
   });
 
-  const columns = () =>
-    props.onRowSelection
-      ? [
-          {
-            id: "select",
-            header: ({ table }) => (
-              <Checkbox
-                indeterminate={table.getIsSomePageRowsSelected()}
-                checked={table.getIsAllPageRowsSelected()}
-                onChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-                aria-label="Select all"
-              />
-            ),
-            cell: ({ row }) => (
-              <Checkbox
-                checked={row.getIsSelected()}
-                onChange={(value) => {
-                  const cb = props.onRowSelection!;
-                  cb(row.index, row.original, value);
-                  row.toggleSelected(value);
-                }}
-                aria-label="Select row"
-                onClick={(event: Event) => {
-                  // Prevent event from propagating and opening the edit row dialog.
-                  event.stopPropagation();
-                }}
-              />
-            ),
-            enableSorting: false,
-            enableHiding: false,
-          } as ColumnDef<TData, TValue>,
-          ...local.columns(),
-        ]
-      : local.columns();
+  const columns = createMemo(() => {
+    const onRowSelection = props.onRowSelection;
+    if (!onRowSelection) {
+      return local.columns();
+    }
+
+    return [
+      {
+        id: "select",
+        header: (ctx) => (
+          <Checkbox
+            indeterminate={ctx.table.getIsSomePageRowsSelected()}
+            checked={ctx.table.getIsAllPageRowsSelected()}
+            onChange={(value) => ctx.table.toggleAllPageRowsSelected(!!value)}
+            aria-label="Select all"
+          />
+        ),
+        cell: (ctx) => (
+          <Checkbox
+            checked={ctx.row.getIsSelected()}
+            onChange={(value) => {
+              onRowSelection(ctx.row.index, ctx.row.original, value);
+              ctx.row.toggleSelected(value);
+            }}
+            aria-label="Select row"
+            onClick={(event: Event) => {
+              // Prevent event from propagating and opening the edit row dialog.
+              event.stopPropagation();
+            }}
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      } as ColumnDef<TData, TValue>,
+      ...local.columns(),
+    ];
+  });
 
   const table = createMemo(() =>
     createSolidTable({
@@ -168,7 +171,7 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
       // columnResizeMode: 'onChange',
 
       // pagination {
-      manualPagination: paginationEnabled,
+      manualPagination: paginationEnabled(),
       onPaginationChange: (state) => {
         setPaginationState(state);
         const handler = props.onPaginationChange;
@@ -195,7 +198,7 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
 
   return (
     <>
-      {paginationEnabled && (
+      {paginationEnabled() && (
         <PaginationControl table={table()} rowCount={props.rowCount} />
       )}
 
@@ -259,7 +262,7 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
                       <For each={row.getVisibleCells()}>
                         {(cell) => (
                           <TableCell>
-                            <div class="max-h-[80px] overflow-y-auto overflow-x-hidden">
+                            <div class="max-h-[80px] overflow-y-auto overflow-x-hidden break-words">
                               {flexRender(
                                 cell.column.columnDef.cell,
                                 cell.getContext(),
@@ -278,7 +281,7 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
       </div>
 
       {/*
-        {paginationEnabled && (
+        {paginationEnabled() && (
           <PaginationControl table={table} rowCount={props.rowCount} />
         )}
       */}

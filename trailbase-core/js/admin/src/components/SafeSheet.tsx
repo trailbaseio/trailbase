@@ -48,7 +48,8 @@ export function ConfirmCloseDialog(props: {
 export function SafeSheet(props: SafeProps) {
   const [local, others] = splitProps(props, ["children", "open"]);
 
-  const [sheetOpen, setSheetOpen] = props.open ?? createSignal(false);
+  // ## eslint-disable-next-line solid/reactivity
+  const [sheetOpen, setSheetOpen] = local.open ?? createSignal(false);
   const [dirty, setDirty] = createSignal(false);
   const [dialogOpen, setDialogOpen] = createSignal(false);
 
@@ -98,7 +99,7 @@ export function SafeSheet(props: SafeProps) {
 export function SheetContainer(props: { children: JSXElement }) {
   const resolved = children(() => props.children);
   return (
-    <div class="h-dvh overflow-y-auto overflow-x-hidden mt-4 px-1 hide-scrollbars">
+    <div class="hide-scrollbars mt-4 h-dvh overflow-y-auto overflow-x-hidden px-1">
       {resolved()}
     </div>
   );

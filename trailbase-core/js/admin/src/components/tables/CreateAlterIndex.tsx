@@ -1,4 +1,4 @@
-import { createSignal, Index } from "solid-js";
+import { createSignal, createMemo, Index } from "solid-js";
 import type { Accessor } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 
@@ -34,9 +34,9 @@ export function CreateAlterIndexForm(props: {
 }) {
   const [sql, setSql] = createSignal<string | undefined>();
 
-  const original = props.schema
-    ? JSON.parse(JSON.stringify(props.schema))
-    : undefined;
+  const original = createMemo(() =>
+    props.schema ? JSON.parse(JSON.stringify(props.schema)) : undefined,
+  );
   const newDefaultColumn = (index: number): ColumnOrder => {
     return {
       column_name: props.table.columns[index].name,
@@ -51,9 +51,10 @@ export function CreateAlterIndexForm(props: {
     console.debug("Index schema:", value);
 
     try {
-      if (original) {
+      const o = original();
+      if (o) {
         const response = await alterIndex({
-          source_schema: original,
+          source_schema: o,
           target_schema: value,
         });
         console.debug("AlterIndexResponse:", response);
@@ -100,8 +101,8 @@ export function CreateAlterIndexForm(props: {
     <SheetContainer>
       <SheetHeader>
         <SheetTitle>
-          {original ? "Alter Index" : "Add New Index"} for "{props.table.name}"
-          Table
+          {original() ? "Alter Index" : "Add New Index"} for "{props.table.name}
+          " Table
         </SheetTitle>
       </SheetHeader>
 
@@ -135,7 +136,7 @@ export function CreateAlterIndexForm(props: {
                         <CardHeader>Index Column {i}</CardHeader>
 
                         <CardContent>
-                          <div class="w-full flex flex-col gap-4">
+                          <div class="flex w-full flex-col gap-4">
                             <form.Field name={`columns[${i}].column_name`}>
                               {buildSelectField(
                                 [...props.table.columns.map((c) => c.name)],
@@ -189,8 +190,8 @@ export function CreateAlterIndexForm(props: {
           >
             {(state) => {
               return (
-                <div class="flex gap-4 items-center">
-                  {original === undefined && (
+                <div class="flex items-center gap-4">
+                  {original() === undefined && (
                     <Dialog
                       open={sql() !== undefined}
                       onOpenChange={(open: boolean) => {
@@ -225,7 +226,7 @@ export function CreateAlterIndexForm(props: {
                           <pre>{sql()}</pre>
                         </div>
 
-                        <DialogFooter></DialogFooter>
+                        <DialogFooter />
                       </DialogContent>
                     </Dialog>
                   )}

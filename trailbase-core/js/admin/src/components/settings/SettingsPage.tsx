@@ -185,7 +185,7 @@ function ServerSettings(props: CommonProps) {
               <TextField class="w-full">
                 <div
                   class={`grid items-center ${gapStyle}`}
-                  style="grid-template-columns: auto 1fr"
+                  style={{ "grid-template-columns": "auto 1fr" }}
                 >
                   <TextFieldLabel class={width}>CPU Threads:</TextFieldLabel>
                   <span>{info()?.threads}</span>
@@ -301,13 +301,13 @@ function BackupImportSettings(props: CommonProps) {
               </p>
 
               <p class="my-2">Import, e.g.:</p>
-              <pre class="whitespace-pre-wrap ml-4">
+              <pre class="ml-4 whitespace-pre-wrap">
                 $ cat dump.sql | sqlite3 main.db
               </pre>
 
               <p class="my-2">Output, e.g.:</p>
 
-              <pre class="whitespace-pre-wrap ml-4">
+              <pre class="ml-4 whitespace-pre-wrap">
                 $ sqlite3 main.db
                 <br />
                 sqlite&gt; .output dump.db
