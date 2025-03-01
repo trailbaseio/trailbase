@@ -1,3 +1,13 @@
+## v0.6.4
+
+* Add undo history to query editor and improve error handling.
+* Cosmetic improvements of Admin UI like more consistency, more accessible buttons, ...
+* Indicate foreign keys in table headers.
+* Turn table into a route parameter and simplify state management.
+* Fix hidden table UI inconsistency.
+* Fix input validation issues in form UI.
+* Limit cell height in Table UI.
+
 ## v0.6.3
 
 * Allow downloading JSON schemas from the UI for all modes: Insert, Update, Select.
