@@ -7,9 +7,9 @@
 </p>
 
 <p align="center">
-  A <a href="https://trailbase.io/reference/benchmarks/">blazingly</a> fast,
-  open-source application server with type-safe APIs, built-in JS/ES6/TS
-  runtime, realtime, auth, and admin UI built on Rust, SQLite & V8.
+  An open, <a href="https://trailbase.io/reference/benchmarks/">blazingly fast</a>,
+  single-executable Firebase alternative with type-safe REST & realtime APIs, built-in JS/ES6/TS
+  runtime, SSR, auth and admin UI built on Rust, SQLite & V8.
 <p>
 
 <p align="center">
@@ -39,13 +39,15 @@
 <p align="center">
   <a href="https://demo.trailbase.io/_/admin" target="_blank">
     <picture>
-      <img alt="Admin UI" width="512" src="docs/src/assets/screenshot.webp" />
+      <img alt="Admin UI" width="600" src="docs/src/assets/shelve.webp" />
     </picture>
   </a>
 </p>
 
 <p align="center">
-  Try the <a href="https://demo.trailbase.io/_/admin" target="_blank">demo</a> online - Email: <em>admin@localhost</em>, password: <em>secret</em>.
+  <strong>Try the <a href="https://demo.trailbase.io/_/admin" target="_blank">demo</a> online</strong>
+  <br/>Email: <em>admin@localhost</em>
+  <br/>password: <em>secret</em>.
 </p>
 
 For more context, documentation, and a live demo, check out the website:
