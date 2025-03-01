@@ -69,6 +69,7 @@ import type {
 } from "@/lib/bindings";
 import {
   findPrimaryKeyColumnIndex,
+  getForeignKey,
   isFileUploadColumn,
   isFileUploadsColumn,
   isJSONColumn,
@@ -76,9 +77,9 @@ import {
   isUUIDv7Column,
   hiddenTable,
   tableType,
-  type TableType,
   tableSatisfiesRecordApiRequirements,
   viewSatisfiesRecordApiRequirements,
+  type TableType,
 } from "@/lib/schema";
 
 function rowDataToRow(columns: Column[], row: RowData): FormRow {
@@ -471,6 +472,7 @@ function buildColumnDefs(
   columns: Column[],
 ): ColumnDef<RowData>[] {
   return columns.map((col, idx) => {
+    const fk = getForeignKey(col.options);
     const notNull = isNotNull(col.options);
     const isJSON = isJSONColumn(col);
     const isUUIDv7 = isUUIDv7Column(col);
@@ -486,8 +488,12 @@ function buildColumnDefs(
       return col.data_type;
     })();
 
+    const typeName = notNull ? type : type + "?";
+    const fkSuffix = fk ? ` ‣ ${fk.foreign_table}[${fk.referred_columns}]` : "";
+    const header = `${col.name} [${typeName}] ${fkSuffix}`;
+
     return {
-      header: `${col.name} [${type}${notNull ? "" : "?"}]`,
+      header,
       cell: (context) =>
         renderCell(context, tableName, columns, pkColumn, {
           col: col,
