@@ -486,6 +486,10 @@ function isReal(type: ColumnDataType): boolean {
   }
 }
 
+export function isNumber(type: ColumnDataType): boolean {
+  return isInt(type) || isReal(type);
+}
+
 // NOTE: this is a not a component but a builder:
 //   "(field: () => FieldApiT<T>) => Component"
 //

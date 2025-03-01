@@ -8,7 +8,7 @@ import type { Column, Table } from "@/lib/bindings";
 import type { InsertRowRequest } from "@bindings/InsertRowRequest";
 import type { UpdateRowRequest } from "@bindings/UpdateRowRequest";
 
-import { buildDBCellField } from "@/components/FormFields";
+import { buildDBCellField, isNumber } from "@/components/FormFields";
 import {
   findPrimaryKeyColumnIndex,
   getDefaultValue,
@@ -189,7 +189,10 @@ export function InsertUpdateRowForm(props: {
                       }
 
                       // TODO: Better input validation or better typed form fields.
-                      if (value === "" && col.data_type !== "Text") {
+                      // NOTE: this is currently rather pointless, since number
+                      // field will resolve empty to null and required is handled
+                      // via the input element.
+                      if (value === "" && isNumber(col.data_type)) {
                         return `Invalid value for: ${col.data_type}`;
                       }
                       return undefined;
