@@ -22,13 +22,9 @@ import {
   TbPencilPlus,
 } from "solid-icons/tb";
 
-import { EditorView, keymap, lineNumbers, gutter } from "@codemirror/view";
+import { EditorView, lineNumbers, keymap } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
-import { defaultKeymap } from "@codemirror/commands";
-import {
-  syntaxHighlighting,
-  defaultHighlightStyle,
-} from "@codemirror/language";
+import { minimalSetup } from "codemirror";
 import { sql } from "@codemirror/lang-sql";
 
 import { iconButtonStyle, IconButton } from "@/components/IconButton";
@@ -296,25 +292,31 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
   let ref: HTMLDivElement | undefined;
   let editor: EditorView | undefined;
 
+  const customKeymap = keymap.of([
+    {
+      key: "Ctrl-Enter",
+      run: () => {
+        execute();
+        return true;
+      },
+      preventDefault: true,
+    },
+  ]);
+
   const newEditorState = (contents: string) =>
     EditorState.create({
       doc: contents,
       extensions: [
         myTheme,
-        keymap.of([
-          {
-            key: "Ctrl-Enter",
-            run: () => {
-              execute();
-              return true;
-            },
-          },
-          ...defaultKeymap,
-        ]),
+        customKeymap,
         lineNumbers(),
-        gutter({ class: "cm-mygutter" }),
+        // Let's you define your own custom CSS style for the line number gutter.
+        // gutter({ class: "cm-mygutter" }),
         sql(),
-        syntaxHighlighting(defaultHighlightStyle),
+        // NOTE: minimal setup provides a bunch of default extensions such as
+        // keymaps, undo history, default syntax highlighting ... .
+        // NOTE: should be last.
+        minimalSetup,
       ],
     });
 
