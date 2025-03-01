@@ -50,15 +50,26 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { showToast } from "@/components/ui/toast";
 
 import { DataTable } from "@/components/Table";
 import type { QueryRequest, QueryResponse } from "@/lib/bindings";
 import { adminFetch } from "@/lib/fetch";
 import { isNotNull } from "@/lib/schema";
 
+type ExecutionError = {
+  code: number;
+  message: string;
+};
+
+type ExecutionResult = {
+  data?: QueryResponse;
+  error?: ExecutionError;
+};
+
 async function executeSql(
   sql: string | undefined,
-): Promise<QueryResponse | undefined> {
+): Promise<ExecutionResult | undefined> {
   if (sql === undefined) {
     return undefined;
   }
@@ -71,18 +82,34 @@ async function executeSql(
     body: JSON.stringify({
       query: sql,
     } as QueryRequest),
+    throwOnError: false,
   });
 
-  return await response.json();
+  if (response.ok) {
+    return { data: await response.json() };
+  }
+
+  const error = {
+    code: response.status,
+    message: await response.text(),
+  } as ExecutionError;
+
+  showToast({
+    title: "Execution Error",
+    description: error.message,
+    variant: "error",
+  });
+
+  return { error };
 }
 
 type RowData = Array<object>;
 
-function View(props: { response: Accessor<QueryResponse | undefined> }) {
+function View(props: { response: Accessor<ExecutionResult | undefined> }) {
   const response = () => props.response();
 
-  const columnDefs = (): ColumnDef<RowData>[] => {
-    return (response()?.columns ?? []).map((col, idx) => {
+  function columnDefs(data: QueryResponse): ColumnDef<RowData>[] {
+    return (data.columns ?? []).map((col, idx) => {
       const notNull = isNotNull(col.options);
 
       const header = `${col.name} [${col.data_type}${notNull ? "" : "?"}]`;
@@ -91,19 +118,23 @@ function View(props: { response: Accessor<QueryResponse | undefined> }) {
         header,
       };
     });
-  };
+  }
 
   return (
     <Show when={response()} fallback={<>No Data</>}>
       <Switch>
-        <Match when={(response()?.columns?.length ?? 0) > 0}>
+        <Match when={response()?.error}>
+          Error: {response()?.error?.message}
+        </Match>
+
+        <Match when={(response()?.data?.columns?.length ?? 0) > 0}>
           <DataTable
-            columns={columnDefs}
-            data={() => response()!.rows as RowData[]}
+            columns={() => columnDefs(response()!.data!)}
+            data={() => response()!.data!.rows as RowData[]}
           />
         </Match>
 
-        <Match when={(response()?.columns?.length ?? 0) == 0}>
+        <Match when={(response()?.data?.columns?.length ?? 0) == 0}>
           No data returned by query
         </Match>
       </Switch>

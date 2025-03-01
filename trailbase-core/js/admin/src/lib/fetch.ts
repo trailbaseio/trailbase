@@ -18,9 +18,13 @@ export const client = Client.init(HOST, {
   },
 });
 
+type FetchOptions = RequestInit & {
+  throwOnError?: boolean;
+};
+
 export async function adminFetch(
   input: string,
-  init?: RequestInit,
+  init?: FetchOptions,
 ): Promise<Response> {
   if (!input.startsWith("/")) {
     throw Error("Should start with '/'");
