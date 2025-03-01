@@ -61,7 +61,9 @@ pub async fn list_tables_handler(
           continue;
         };
 
-        if let Some(create_table_statement) = sqlite3_parse_into_statement(&sql)? {
+        if let Some(create_table_statement) =
+          sqlite3_parse_into_statement(&sql).map_err(|err| Error::Internal(err.into()))?
+        {
           schemas.tables.push(create_table_statement.try_into()?);
         }
       }
@@ -75,7 +77,9 @@ pub async fn list_tables_handler(
           continue;
         };
 
-        if let Some(create_index_statement) = sqlite3_parse_into_statement(&sql)? {
+        if let Some(create_index_statement) =
+          sqlite3_parse_into_statement(&sql).map_err(|err| Error::Internal(err.into()))?
+        {
           schemas.indexes.push(create_index_statement.try_into()?);
         }
       }
@@ -86,7 +90,9 @@ pub async fn list_tables_handler(
           continue;
         };
 
-        if let Some(create_view_statement) = sqlite3_parse_into_statement(&sql)? {
+        if let Some(create_view_statement) =
+          sqlite3_parse_into_statement(&sql).map_err(|err| Error::Internal(err.into()))?
+        {
           schemas
             .views
             .push(View::from(create_view_statement, &schemas.tables)?);

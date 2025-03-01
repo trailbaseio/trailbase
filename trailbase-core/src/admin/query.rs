@@ -39,7 +39,8 @@ pub async fn query_handler(
   // fall back to execute batch which materializes all rows and invalidate anyway.
 
   // Check the statements are correct before executing anything, just to be sure.
-  let statements = sqlite3_parse_into_statements(&request.query)?;
+  let statements =
+    sqlite3_parse_into_statements(&request.query).map_err(|err| Error::BadRequest(err.into()))?;
   let mut must_invalidate_table_cache = false;
   for stmt in statements {
     use sqlite3_parser::ast::Stmt;
@@ -66,7 +67,8 @@ pub async fn query_handler(
     state.table_metadata().invalidate_all().await?;
   }
 
-  if let Some(rows) = batched_rows_result? {
+  let batched_rows = batched_rows_result.map_err(|err| Error::BadRequest(err.into()))?;
+  if let Some(rows) = batched_rows {
     let (rows, columns) = rows_to_json_arrays(rows, 1024)?;
 
     return Ok(Json(QueryResponse { columns, rows }));

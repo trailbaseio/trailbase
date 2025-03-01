@@ -4,6 +4,7 @@ use axum::response::{IntoResponse, Response};
 use log::*;
 use thiserror::Error;
 
+// FIXME: Admin APIs also deserve more explicit error handling eventually.
 #[derive(Debug, Error)]
 pub enum AdminError {
   #[error("TokioRusqlite error: {0}")]
@@ -20,8 +21,12 @@ pub enum AdminError {
   Base64Decode(#[from] base64::DecodeError),
   #[error("Already exists: {0}")]
   AlreadyExists(&'static str),
+  #[error("Bad request: {0}")]
+  BadRequest(Box<dyn std::error::Error + Send + Sync>),
   #[error("precondition failed: {0}")]
   Precondition(String),
+  #[error("Internal error: {0}")]
+  Internal(Box<dyn std::error::Error + Send + Sync>),
   #[error("Schema error: {0}")]
   Schema(#[from] crate::schema::SchemaError),
   #[error("Table lookup error: {0}")]
@@ -50,8 +55,6 @@ pub enum AdminError {
   Query(#[from] crate::records::json_to_sql::QueryError),
   #[error("File error: {0}")]
   File(#[from] crate::records::files::FileError),
-  #[error("Sql parse error: {0}")]
-  SqlParse(#[from] sqlite3_parser::lexer::sql::Error),
 }
 
 impl IntoResponse for AdminError {
@@ -60,8 +63,10 @@ impl IntoResponse for AdminError {
       // FIXME: For error types that already implement "into_response" we should just unpack them.
       // We should be able to use a generic for that.
       Self::Auth(err) => return err.into_response(),
-      Self::Deserialization(_) => (StatusCode::BAD_REQUEST, self.to_string()),
-      Self::Precondition(_) => (StatusCode::BAD_REQUEST, self.to_string()),
+      Self::Deserialization(err) => (StatusCode::BAD_REQUEST, err.to_string()),
+      Self::Precondition(_) => (StatusCode::PRECONDITION_FAILED, self.to_string()),
+      Self::BadRequest(err) => (StatusCode::BAD_REQUEST, err.to_string()),
+      Self::Internal(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
       Self::AlreadyExists(_) => (StatusCode::CONFLICT, self.to_string()),
       // NOTE: We can almost always leak the internal error (except for permission errors) since
       // these are errors for the admin apis.
