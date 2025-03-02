@@ -12,12 +12,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
-    "@types/node": "^22.13.5",
+    "@types/node": "^22.13.8",
     "eslint": "^9.21.0",
     "prettier": "^3.5.2",
     "quicktype": "^23.0.171",
     "ts-node": "^10.9.2",
-    "typescript": "^5.7.3",
+    "typescript": "^5.8.2",
     "typescript-eslint": "^8.25.0"
   },
   "dependencies": {

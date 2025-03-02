@@ -16,7 +16,7 @@
     "@astrojs/tailwind": "^5.1.5",
     "@nanostores/persistent": "^0.10.2",
     "@nanostores/solid": "^0.5.0",
-    "astro": "^5.3.1",
+    "astro": "^5.4.1",
     "astro-icon": "^1.1.5",
     "nanostores": "^0.11.4",
     "solid-icons": "^1.1.0",
@@ -24,7 +24,7 @@
     "trailbase": "workspace:*"
   },
   "devDependencies": {
-    "@astrojs/solid-js": "^5.0.4",
+    "@astrojs/solid-js": "^5.0.5",
     "@iconify-json/tabler": "^1.2.16",
     "@tailwindcss/typography": "^0.5.16",
     "@types/dateformat": "^5.0.3",
