@@ -57,8 +57,8 @@ export function LineChart(props: LineChartProps) {
   onCleanup(() => chart?.destroy());
 
   return (
-    <div class="canvas-container w-full h-full">
-      <canvas ref={ref}></canvas>
+    <div id="canvas-container" class="size-full">
+      <canvas ref={ref} />
     </div>
   );
 }

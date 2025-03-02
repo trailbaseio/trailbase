@@ -11,9 +11,5 @@
       "@root/*": ["../*"]
     }
   },
-  "exclude": [
-    "dist",
-    "node_modules",
-    "public"
-  ]
+  "exclude": ["dist", "node_modules", "public"]
 }

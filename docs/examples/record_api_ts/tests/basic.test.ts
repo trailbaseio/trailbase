@@ -25,13 +25,13 @@ test("Test code examples", async () => {
 
   {
     const record = await read(client, id);
-    expect(record).toMatchObject({ "text_not_null": "test" });
+    expect(record).toMatchObject({ text_not_null: "test" });
   }
 
   {
-    await update(client, id, { "text_not_null": "updated" });
+    await update(client, id, { text_not_null: "updated" });
     const record = await read(client, id);
-    expect(record).toMatchObject({ "text_not_null": "updated" });
+    expect(record).toMatchObject({ text_not_null: "updated" });
   }
 
   await remove(client, id);
@@ -57,7 +57,6 @@ test("Test code examples", async () => {
     }
     recordStream.cancel();
   }
-
 });
 
 test("Test list examples", async () => {

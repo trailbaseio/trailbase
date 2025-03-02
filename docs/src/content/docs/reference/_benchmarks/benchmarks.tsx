@@ -148,6 +148,13 @@ export function Duration100kInsertsChart() {
   );
 }
 
+type Percentiles = {
+  p50: number;
+  p75: number;
+  p90: number;
+  p95: number;
+};
+
 export function PocketBaseAndTrailBaseReadLatencies() {
   // 2024-10-12
   // TB: Read 1 000 000 messages, took 0:00:57.952120 (limit=64) (Dart JIT)
@@ -202,7 +209,7 @@ export function PocketBaseAndTrailBaseReadLatencies() {
     p95: 20503,
   };
 
-  const latenciesMs = (d: any) =>
+  const latenciesMs = (d: Percentiles) =>
     [d.p50, d.p75, d.p90, d.p95].map((p) => p / 1000);
 
   const data: ChartData<"bar"> = {
@@ -300,7 +307,7 @@ export function PocketBaseAndTrailBaseInsertLatencies() {
     p95: 61512,
   };
 
-  const latenciesMs = (d: any) =>
+  const latenciesMs = (d: Percentiles) =>
     [d.p50, d.p75, d.p90, d.p95].map((p) => p / 1000);
 
   const data: ChartData<"bar"> = {

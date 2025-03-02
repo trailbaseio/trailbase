@@ -6,7 +6,6 @@ linter:
     unnecessary_brace_in_string_interps: false
     unawaited_futures: true
     sort_child_properties_last: false
-
 # analyzer:
 #   exclude:
 #     - path/to/excluded/files/**
