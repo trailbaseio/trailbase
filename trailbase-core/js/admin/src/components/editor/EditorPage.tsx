@@ -105,8 +105,11 @@ async function executeSql(
 
 type RowData = Array<object>;
 
-function View(props: { response: Accessor<ExecutionResult | undefined> }) {
-  const response = () => props.response();
+function View(props: {
+  script: Script;
+  response: Accessor<ExecutionResult | undefined>;
+}) {
+  const response = () => props.response() ?? props.script.result;
 
   function columnDefs(data: QueryResponse): ColumnDef<RowData>[] {
     return (data.columns ?? []).map((col, idx) => {
@@ -155,7 +158,7 @@ function SideBar(props: {
       ...$scripts.get(),
       {
         name: "New Script",
-        contents: "SELECT COUNT(*) FROM _user;",
+        contents: defaultScript.contents,
       },
     ];
     $scripts.set(s);
@@ -282,10 +285,11 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
   const [selected, setSelected] = props.selectedSignal;
 
   const scripts = useStore($scripts);
-  const script = (): Script => {
+  const script = (idx?: number): Script => {
     const s = scripts();
-    if (selected() < s.length) {
-      return s[selected()];
+    const i = idx ?? selected();
+    if (i < s.length) {
+      return s[i];
     }
     if (s.length === 0) {
       return defaultScript;
@@ -296,7 +300,21 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
   const [queryString, setQueryString] = createSignal<string | undefined>();
   const [executionResult, { mutate, refetch }] = createResource(
     queryString,
-    executeSql,
+    async (query: string): Promise<ExecutionResult | undefined> => {
+      const result = await executeSql(query);
+
+      const idx = selected();
+      const script = scripts()[idx];
+      if (script) {
+        // Update the scripts state.
+        updateExistingScript(idx, {
+          ...script,
+          result,
+        });
+      }
+
+      return result;
+    },
   );
 
   createEffect(() => {
@@ -433,7 +451,7 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
 
         <ResizablePanel class="hide-scrollbars overflow-y-scroll">
           <div class="grow p-4">
-            <View response={executionResult} />
+            <View script={script()} response={executionResult} />
           </div>
         </ResizablePanel>
       </Resizable>
@@ -442,22 +460,20 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
 }
 
 export function EditorPage() {
-  const [selectedSignal, setSelectedSignal] = createSignal<number>(0);
+  const [selected, setSelected] = createSignal<number>(0);
 
   return (
     <SplitView
       first={(props: { horizontal: boolean }) => {
         return (
           <SideBar
-            selectedSignal={[selectedSignal, setSelectedSignal]}
+            selectedSignal={[selected, setSelected]}
             horizontal={props.horizontal}
           />
         );
       }}
       second={() => {
-        return (
-          <EditorPanel selectedSignal={[selectedSignal, setSelectedSignal]} />
-        );
+        return <EditorPanel selectedSignal={[selected, setSelected]} />;
       }}
     />
   );
@@ -479,6 +495,8 @@ const myTheme = EditorView.theme(
 type Script = {
   name: string;
   contents: string;
+
+  result?: ExecutionResult;
 };
 
 const defaultScript: Script = {
