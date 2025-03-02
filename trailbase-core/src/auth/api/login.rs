@@ -93,7 +93,7 @@ pub(crate) async fn login_handler(
           "Login Failed [{}]: {err_str}",
           err_response.status()
         ));
-        return Ok(Redirect::to(&format!("/_/auth/login/?alert={err_msg}")).into_response());
+        return Ok(Redirect::to(&format!("/_/auth/login?alert={err_msg}")).into_response());
       }
       return Ok(err_response);
     }

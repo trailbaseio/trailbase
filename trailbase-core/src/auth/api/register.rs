@@ -1,6 +1,5 @@
 use axum::{
   extract::{Form, State},
-  http::StatusCode,
   response::{IntoResponse, Redirect, Response},
 };
 use lazy_static::lazy_static;
@@ -62,13 +61,13 @@ pub async fn register_user_handler(
     &PASSWORD_OPTIONS,
   ) {
     let msg = crate::util::urlencode("Invalid password");
-    return Ok(Redirect::to(&format!("/_/auth/register/?alert={msg}")).into_response());
+    return Ok(Redirect::to(&format!("/_/auth/register?alert={msg}")).into_response());
   }
 
   let exists = user_exists(&state, &normalized_email).await?;
   if exists {
     let msg = crate::util::urlencode("E-mail already registered.");
-    return Ok(Redirect::to(&format!("/_/auth/register/?alert={msg}")).into_response());
+    return Ok(Redirect::to(&format!("/_/auth/register?alert={msg}")).into_response());
   }
 
   let email_verification_code = generate_random_string(VERIFICATION_CODE_LENGTH);
@@ -114,5 +113,9 @@ pub async fn register_user_handler(
     .await
     .map_err(|err| AuthError::Internal(err.into()))?;
 
-  return Ok((StatusCode::OK, "User registered").into_response());
+  // Success: new user registered. User still needs to verify.
+  let msg = format!(
+    "Registered {normalized_email}. Email verification is needed before sign in. Check your inbox."
+  );
+  return Ok(Redirect::to(&format!("/_/auth/login?alert={msg}")).into_response());
 }

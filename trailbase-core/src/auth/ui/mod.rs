@@ -62,7 +62,12 @@ pub struct LoginQuery {
   alert: Option<String>,
 }
 
-async fn ui_login_handler(Query(query): Query<LoginQuery>) -> Response {
+async fn ui_login_handler(Query(query): Query<LoginQuery>, user: Option<User>) -> Response {
+  if user.is_some() {
+    // Already logged in.
+    return Redirect::to("/_/auth/profile").into_response();
+  }
+
   let form_state = indoc::formatdoc!(
     r#"
     {redirect_to}
@@ -227,8 +232,16 @@ async fn ui_logout_handler(Query(query): Query<LogoutQuery>) -> Redirect {
 pub(crate) fn auth_ui_router() -> Router<crate::AppState> {
   // Static assets for auth UI .
   let serve_auth_assets = AssetService::<AuthAssets>::with_parameters(
-    // Fish for sub-directory.
-    Some(Box::new(|path| Some(format!("{path}/index.html")))),
+    // We want as little magic as possible. The only /_/auth/subpath that isn't SSR, is profile, so
+    // we when hitting /profile or /profile, we want actually want to serve the static
+    // profile/index.html.
+    Some(Box::new(|path| {
+      if path == "profile" {
+        Some(format!("{path}/index.html"))
+      } else {
+        None
+      }
+    })),
     None,
   );
 

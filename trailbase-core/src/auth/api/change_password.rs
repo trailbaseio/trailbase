@@ -101,7 +101,7 @@ pub async fn change_password_handler(
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid old password")),
     1 => Ok(Redirect::to(
-      redirect.as_deref().unwrap_or("/_/auth/profile/"),
+      redirect.as_deref().unwrap_or("/_/auth/profile"),
     )),
     _ => panic!("password changed for multiple users at once: {rows_affected}"),
   };

@@ -85,14 +85,8 @@ impl<E: RustEmbed> Future for ServeFuture<E> {
     }
 
     let path: &str = match self.request.uri().path().trim_start_matches("/") {
-      x if x.is_empty() => {
-        if let Some(ref index_file) = self.state.index_file {
-          index_file
-        } else {
-          x
-        }
-      }
-      x if x.ends_with("/") => &format!("{x}/index.html"),
+      // If path is only "/" get index file.
+      x if x.is_empty() => self.state.index_file.as_deref().unwrap_or(x),
       x => x,
     };
 

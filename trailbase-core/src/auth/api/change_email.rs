@@ -198,7 +198,7 @@ pub async fn change_email_confirm_handler(
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid verification code")),
     1 => Ok(Redirect::to(
-      redirect.as_deref().unwrap_or("/_/auth/profile/"),
+      redirect.as_deref().unwrap_or("/_/auth/profile"),
     )),
     _ => panic!("emails updated for multiple users at once: {rows_affected}"),
   };
