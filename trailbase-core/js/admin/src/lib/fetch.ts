@@ -14,6 +14,7 @@ const HOST = import.meta.env.DEV ? "http://localhost:4000" : "";
 export const client = Client.init(HOST, {
   tokens: $tokens.get() ?? undefined,
   onAuthChange: (c: Client, _user: User | undefined) => {
+    console.debug("on auth change");
     $tokens.set(c.tokens() ?? null);
   },
 });

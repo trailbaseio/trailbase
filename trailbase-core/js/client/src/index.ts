@@ -62,6 +62,36 @@ function buildTokenState(tokens?: Tokens): TokenState {
   };
 }
 
+function buildUser(state: TokenState): User | undefined {
+  const claims = state.state?.claims;
+  if (claims) {
+    return {
+      id: claims.sub,
+      email: claims.email,
+    };
+  }
+}
+
+function isExpired(state: TokenState): boolean {
+  const claims = state.state?.claims;
+  if (claims) {
+    const now = Date.now() / 1000;
+    if (claims.exp < now) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/// Returns the refresh token if should refresh.
+function shouldRefresh(tokenState: TokenState): string | undefined {
+  const state = tokenState.state;
+  if (state && state.claims.exp - 60 < Date.now() / 1000) {
+    return state.tokens?.refresh_token ?? undefined;
+  }
+}
+
 type FetchOptions = RequestInit & {
   throwOnError?: boolean;
 };
@@ -80,7 +110,7 @@ export class FetchError extends Error {
       body = await response.text();
     } catch {}
 
-    console.warn(response);
+    console.debug(response);
 
     return new FetchError(
       response.status,
@@ -300,7 +330,9 @@ export class Client {
     this._client = new ThinClient(site);
     this._authChange = opts?.onAuthChange;
 
-    this._tokenState = this.updateTokens(opts?.tokens);
+    // Note: this is a double assignment to _tokenState to ensure the linter
+    // that it's really initialized in the constructor.
+    this._tokenState = this.setTokenState(buildTokenState(opts?.tokens), true);
   }
 
   public static init(site: string, opts?: ClientOptions): Client {
@@ -322,11 +354,13 @@ export class Client {
 
         const authToken = status?.auth_token;
         if (authToken) {
-          client.updateTokens({
-            auth_token: authToken,
-            refresh_token: status.refresh_token,
-            csrf_token: status.csrf_token,
-          });
+          client.setTokenState(
+            buildTokenState({
+              auth_token: authToken,
+              refresh_token: status.refresh_token,
+              csrf_token: status.csrf_token,
+            }),
+          );
         }
       } catch (err) {
         console.debug("No valid cookies found: ", err);
@@ -334,23 +368,6 @@ export class Client {
     }
 
     return client;
-  }
-
-  private updateTokens(tokens?: Tokens): TokenState {
-    const state = buildTokenState(tokens);
-
-    this._tokenState = state;
-    this._authChange?.(this, this.user());
-
-    const claims = state.state?.claims;
-    if (claims) {
-      const now = Date.now() / 1000;
-      if (claims.exp < now) {
-        console.warn("Token expired");
-      }
-    }
-
-    return state;
   }
 
   public get site() {
@@ -361,15 +378,9 @@ export class Client {
   public tokens = (): Tokens | undefined => this._tokenState?.state?.tokens;
 
   /// Provides current user.
-  public user(): User | undefined {
-    const claims = this._tokenState.state?.claims;
-    if (claims) {
-      return {
-        id: claims.sub,
-        email: claims.email,
-      };
-    }
-  }
+  public user = (): User | undefined => buildUser(this._tokenState);
+
+  /// Construct accessor for Record API with given name.
   public records = (name: string): RecordApi => new RecordApi(this, name);
 
   public async avatarUrl(): Promise<string | undefined> {
@@ -391,7 +402,9 @@ export class Client {
       } as LoginRequest),
     });
 
-    this.updateTokens((await response.json()) as LoginResponse);
+    this.setTokenState(
+      buildTokenState((await response.json()) as LoginResponse),
+    );
   }
 
   public loginUri(redirect?: string): string {
@@ -412,9 +425,9 @@ export class Client {
         await this.fetch(`${Client._authApi}/logout`);
       }
     } catch (err) {
-      console.warn(err);
+      console.debug(err);
     }
-    this.updateTokens(undefined);
+    this.setTokenState(buildTokenState(undefined));
     return true;
   }
 
@@ -424,7 +437,7 @@ export class Client {
 
   public async deleteUser(): Promise<void> {
     await this.fetch(`${Client._authApi}/delete`);
-    this.updateTokens(undefined);
+    this.setTokenState(buildTokenState(undefined));
   }
 
   public async changeEmail(email: string): Promise<void> {
@@ -437,19 +450,10 @@ export class Client {
   }
 
   public async refreshAuthToken(): Promise<void> {
-    const refreshToken = Client.shouldRefresh(this._tokenState);
+    const refreshToken = shouldRefresh(this._tokenState);
     if (refreshToken) {
-      // TODO: Unset token state if refresh fails with unauthorized status.
-      // TODO: In either case we should call the authChange, e.g. so that users can persist the new token.
-      this._tokenState = await this.refreshTokensImpl(refreshToken);
-    }
-  }
-
-  /// Returns the refresh token if should refresh.
-  private static shouldRefresh(tokenState: TokenState): string | undefined {
-    const state = tokenState.state;
-    if (state && state.claims.exp - 60 < Date.now() / 1000) {
-      return state.tokens?.refresh_token ?? undefined;
+      // Note: refreshTokenImpl will auto-logout on 401.
+      this.setTokenState(await this.refreshTokensImpl(refreshToken));
     }
   }
 
@@ -478,16 +482,35 @@ export class Client {
     });
   }
 
+  private setTokenState(
+    state: TokenState,
+    skipCb: boolean = false,
+  ): TokenState {
+    this._tokenState = state;
+    if (!skipCb) {
+      this._authChange?.(this, buildUser(state));
+    }
+
+    if (isExpired(state)) {
+      // This can happen on initial construction, i.e. if a client is
+      // constructed from older, persisted tokens.
+      console.debug(`Set token state (expired)`);
+    }
+
+    return this._tokenState;
+  }
+
   /// Fetches data from TrailBase endpoints, e.g.:
-  //    const response = await client.fetch("api/auth/v1/status");
-  //
-  //  Unlike native fetch, will throw in case !response.ok.
+  ///    const response = await client.fetch("api/auth/v1/status");
+  ///
+  /// Unlike native fetch, will throw in case !response.ok.
   public async fetch(path: string, init?: FetchOptions): Promise<Response> {
     let tokenState = this._tokenState;
-    const refreshToken = Client.shouldRefresh(tokenState);
+    const refreshToken = shouldRefresh(tokenState);
     if (refreshToken) {
-      this._tokenState = tokenState =
-        await this.refreshTokensImpl(refreshToken);
+      tokenState = this.setTokenState(
+        await this.refreshTokensImpl(refreshToken),
+      );
     }
 
     try {

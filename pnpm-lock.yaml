@@ -405,8 +405,8 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@22.13.8)(typescript@5.8.2)))
       trailbase:
-        specifier: ^0.3.0
-        version: 0.3.0
+        specifier: file:../client
+        version: link:../client
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
@@ -529,8 +529,8 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@22.13.8)(typescript@5.8.2)))
       trailbase:
-        specifier: ^0.3.0
-        version: 0.3.0
+        specifier: file:../client
+        version: link:../client
     devDependencies:
       '@eslint/js':
         specifier: ^9.21.0
@@ -5006,9 +5006,6 @@ packages:
   tr46@5.0.0:
     resolution: {integrity: sha512-tk2G5R2KRwBd+ZN0zaEXpmzdKyOYksXwywulIX95MBODjSzMIuQnQ3m8JxgbhnL1LeVo7lqQKsYa1O3Htl7K5g==}
     engines: {node: '>=18'}
-
-  trailbase@0.3.0:
-    resolution: {integrity: sha512-QbFuljCk/5xrTO3mYEiXG0KCCUwMioi6GMwPGm6TIc+ciHJWHq43YfBOHDqs1ilWqbr9083YBgrXjl00y6jR9A==}
 
   trim-lines@3.0.1:
     resolution: {integrity: sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg==}
@@ -11142,11 +11139,6 @@ snapshots:
   tr46@5.0.0:
     dependencies:
       punycode: 2.3.1
-
-  trailbase@0.3.0:
-    dependencies:
-      jwt-decode: 4.0.0
-      uuid: 11.1.0
 
   trim-lines@3.0.1: {}
 
