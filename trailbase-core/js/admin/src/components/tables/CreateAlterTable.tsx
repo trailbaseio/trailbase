@@ -64,7 +64,7 @@ import {
   buildSelectField,
   buildTextFormField,
 } from "@/components/FormFields";
-import type { FormType, AnyFieldApi } from "@/components/FormFields";
+import type { FormApiT, AnyFieldApi } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
 import { invalidateConfig } from "@/lib/config";
 
@@ -126,31 +126,33 @@ export function CreateAlterTableForm(props: {
     }
   };
 
-  const form = createForm<Table>(() => ({
-    defaultValues: props.schema ?? {
-      name: randomName(),
-      strict: true,
-      indexes: [],
-      columns: [
-        {
-          name: "id",
-          data_type: "Blob",
-          // Column constraints: https://www.sqlite.org/syntax/column-constraint.html
-          options: [
-            { Unique: { is_primary: true } },
-            { Check: "is_uuid_v7(id)" },
-            { Default: "(uuid_v7())" },
-            "NotNull",
-          ],
-        },
-        newDefaultColumn(1),
-      ] satisfies Column[],
-      // Table constraints: https://www.sqlite.org/syntax/table-constraint.html
-      unique: [],
-      foreign_keys: [],
-      virtual_table: false,
-      temporary: false,
-    },
+  const form = createForm(() => ({
+    defaultValues:
+      props.schema ??
+      ({
+        name: randomName(),
+        strict: true,
+        indexes: [],
+        columns: [
+          {
+            name: "id",
+            data_type: "Blob",
+            // Column constraints: https://www.sqlite.org/syntax/column-constraint.html
+            options: [
+              { Unique: { is_primary: true } },
+              { Check: "is_uuid_v7(id)" },
+              { Default: "(uuid_v7())" },
+              "NotNull",
+            ],
+          },
+          newDefaultColumn(1),
+        ] satisfies Column[],
+        // Table constraints: https://www.sqlite.org/syntax/table-constraint.html
+        unique: [],
+        foreign_keys: [],
+        virtual_table: false,
+        temporary: false,
+      } as Table),
     onSubmit: async ({ value }) => await onSubmit(value, false),
   }));
 
@@ -652,7 +654,7 @@ function ColumnOptionsFields(props: {
 }
 
 function ColumnSubForm(props: {
-  form: FormType<Table>;
+  form: FormApiT<Table>;
   colIndex: number;
   column: Column;
   allTables: Table[];

@@ -351,8 +351,8 @@ importers:
         specifier: ^0.15.3
         version: 0.15.3(solid-js@1.9.5)
       '@tanstack/solid-form':
-        specifier: ^0.42.1
-        version: 0.42.1(solid-js@1.9.5)
+        specifier: ^1.0.0
+        version: 1.0.0(solid-js@1.9.5)
       '@tanstack/solid-query':
         specifier: ^5.66.11
         version: 5.66.11(solid-js@1.9.5)
@@ -1852,14 +1852,14 @@ packages:
     peerDependencies:
       tailwindcss: '>=3.0.0 || insiders || >=4.0.0-alpha.20 || >=4.0.0-beta.1'
 
-  '@tanstack/form-core@0.42.1':
-    resolution: {integrity: sha512-jTU0jyHqFceujdtPNv3jPVej1dTqBwa8TYdIyWB5BCwRVUBZEp1PiYEBkC9r92xu5fMpBiKc+JKud3eeVjuMiA==}
+  '@tanstack/form-core@1.0.0':
+    resolution: {integrity: sha512-GHYjF9m+FjXbIMpbMP1Ru8XzTJnQDva9wkw3E/fXUIPAtx0NmTGrefxUGqs7/aCT2uSqdrmzRyVFUJObemx51Q==}
 
   '@tanstack/query-core@5.66.11':
     resolution: {integrity: sha512-ZEYxgHUcohj3sHkbRaw0gYwFxjY5O6M3IXOYXEun7E1rqNhsP8fOtqjJTKPZpVHcdIdrmX4lzZctT4+pts0OgA==}
 
-  '@tanstack/solid-form@0.42.1':
-    resolution: {integrity: sha512-YSpEwhxRQvvbc6Z6TZs7BC9AA+iNb+BIkPeNb8Pzp9BLI7TwrqDG7xvbz5o+JiDeKk0ilvglmuDZNXXvqvGpsg==}
+  '@tanstack/solid-form@1.0.0':
+    resolution: {integrity: sha512-bkuT51rxdfrpuNPpkHWsf8Jc1HByDoVxoaww3Je17x9Lb1CaX068NfIuEaiXGfMH34eIy14gsFz/6D4aEmpMCA==}
     peerDependencies:
       solid-js: ^1.6.0
 
@@ -7028,15 +7028,15 @@ snapshots:
       postcss-selector-parser: 6.0.10
       tailwindcss: 3.4.17(ts-node@10.9.2(@types/node@22.13.8)(typescript@5.8.2))
 
-  '@tanstack/form-core@0.42.1':
+  '@tanstack/form-core@1.0.0':
     dependencies:
       '@tanstack/store': 0.7.0
 
   '@tanstack/query-core@5.66.11': {}
 
-  '@tanstack/solid-form@0.42.1(solid-js@1.9.5)':
+  '@tanstack/solid-form@1.0.0(solid-js@1.9.5)':
     dependencies:
-      '@tanstack/form-core': 0.42.1
+      '@tanstack/form-core': 1.0.0
       '@tanstack/solid-store': 0.7.0(solid-js@1.9.5)
       solid-js: 1.9.5
 

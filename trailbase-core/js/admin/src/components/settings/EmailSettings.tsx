@@ -17,12 +17,12 @@ import {
   buildOptionalNumberFormField,
   buildOptionalTextFormField,
 } from "@/components/FormFields";
-import type { FormType } from "@/components/FormFields";
+import type { FormApiT } from "@/components/FormFields";
 import { Config, EmailConfig } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/config";
 
 function EmailTemplate(props: {
-  form: FormType<EmailConfig>;
+  form: FormApiT<EmailConfig>;
   fieldName: string;
 }) {
   return (
@@ -84,8 +84,8 @@ export function EmailSettings(props: {
   const config = createConfigQuery();
 
   const Form = (p: { config: EmailConfig }) => {
-    const form = createForm<EmailConfig>(() => ({
-      defaultValues: p.config,
+    const form = createForm(() => ({
+      defaultValues: p.config satisfies EmailConfig,
       onSubmit: async ({ value }) => {
         const c = config.data?.config;
         if (!c) {

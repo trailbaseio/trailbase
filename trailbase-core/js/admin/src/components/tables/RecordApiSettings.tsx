@@ -297,16 +297,18 @@ export function RecordApiSettingsForm(props: {
   const currentApi = () =>
     findRecordApi(config.data!.config!, props.schema.name);
 
-  const form = createForm<RecordApiConfig>(() => {
+  const form = createForm(() => {
     const tableName = props.schema.name;
     return {
-      defaultValues: currentApi() ?? {
-        name: tableName,
-        tableName: tableName,
-        aclWorld: [],
-        aclAuthenticated: [],
-        expand: [],
-      },
+      defaultValues:
+        currentApi() ??
+        ({
+          name: tableName,
+          tableName: tableName,
+          aclWorld: [],
+          aclAuthenticated: [],
+          expand: [],
+        } as RecordApiConfig),
       onSubmit: async ({ value }: { value: RecordApiConfig }) => {
         console.debug("Add record api config:", value);
 

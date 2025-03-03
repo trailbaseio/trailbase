@@ -24,7 +24,7 @@
     "@nanostores/solid": "^0.5.0",
     "@solid-primitives/memo": "^1.4.0",
     "@solidjs/router": "^0.15.3",
-    "@tanstack/solid-form": "^0.42.1",
+    "@tanstack/solid-form": "^1.0.0",
     "@tanstack/solid-query": "^5.66.11",
     "@tanstack/solid-table": "^8.21.2",
     "@tanstack/table-core": "^8.21.2",

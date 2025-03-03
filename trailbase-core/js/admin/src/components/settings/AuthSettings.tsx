@@ -13,8 +13,9 @@ import {
   buildOptionalNumberFormField,
   buildSecretFormField,
   buildOptionalTextFormField,
+  type FormStateT,
 } from "@/components/FormFields";
-import type { FormType } from "@/components/FormFields";
+import type { FormApiT } from "@/components/FormFields";
 import {
   TbCircleCheck,
   TbCircle,
@@ -148,7 +149,7 @@ function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
 }
 
 function ProviderSettingsSubForm(props: {
-  form: FormType<AuthConfigProxy>;
+  form: FormApiT<AuthConfigProxy>;
   index: number;
   provider: OAuthProviderEntry;
 }) {
@@ -157,7 +158,7 @@ function ProviderSettingsSubForm(props: {
   );
 
   const current = createMemo(() =>
-    props.form.useStore((state) => {
+    props.form.useStore((state: FormStateT<AuthConfigProxy>) => {
       if (state.isSubmitted) {
         reset(state.values.namedOauthProviders[props.index].state);
       }
@@ -265,8 +266,8 @@ function AuthSettingsForm(props: {
     ),
   );
 
-  const form = createForm<AuthConfigProxy>(() => ({
-    defaultValues: values(),
+  const form = createForm(() => ({
+    defaultValues: values() as AuthConfigProxy,
     onSubmit: async ({ value }) => {
       const newConfig = Config.decode(Config.encode(props.config).finish());
       newConfig.auth = proxyToConfig(value);

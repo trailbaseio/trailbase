@@ -18,13 +18,13 @@ export function AddUser(props: {
   markDirty: () => void;
   userRefetch: () => void;
 }) {
-  const form = createForm<CreateUserRequest>(() => ({
+  const form = createForm(() => ({
     defaultValues: {
       email: "",
       password: "",
       verified: true,
       admin: false,
-    },
+    } as CreateUserRequest,
     onSubmit: async ({ value }) => {
       createUser(value)
         // eslint-disable-next-line solid/reactivity

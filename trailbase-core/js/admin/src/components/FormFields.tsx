@@ -1,5 +1,13 @@
+{
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+}
 import { createSignal, Show, type JSX } from "solid-js";
-import { createForm, type FieldApi } from "@tanstack/solid-form";
+import {
+  type FieldApi,
+  type FormState,
+  type FormApi,
+  type SolidFormApi,
+} from "@tanstack/solid-form";
 import { TbEye } from "solid-icons/tb";
 
 import { cn } from "@/lib/utils";
@@ -29,12 +37,17 @@ import {
 
 import type { ColumnDataType } from "@/lib/bindings";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyFieldApi = FieldApi<any, any, any, any>;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type FieldApiT<T> = FieldApi<any, any, any, any, T>;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type FormType<T> = ReturnType<typeof createForm<T, any>>;
+export { type AnyFieldApi } from "@tanstack/solid-form";
+
+// prettier-ignore
+export type FieldApiT<T> = FieldApi<any, any, T, any, any, any, any, any, any, any, any, any, any, any, any, any, any, any, any>;
+
+// prettier-ignore
+export type FormStateT<T> = FormState<T, any, any, any, any, any, any, any, any>;
+
+// prettier-ignore
+export type FormApiT<T> = FormApi<T, any, any, any, any, any, any, any, any, any> &
+  SolidFormApi<any, any, any, any, any, any, any, any, any, any>;
 
 type TextFieldOptions = {
   disabled?: boolean;

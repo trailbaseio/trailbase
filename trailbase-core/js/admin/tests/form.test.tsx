@@ -3,12 +3,13 @@ import { createSignal, type Setter, type JSX } from "solid-js";
 import { describe, test, expect } from "vitest";
 import { render } from "@solidjs/testing-library";
 import userEvent from "@testing-library/user-event";
-import { createForm, type FieldApi } from "@tanstack/solid-form";
+import { createForm, type DeepKeys } from "@tanstack/solid-form";
 
 import {
   buildTextFormField,
   buildOptionalTextFormField,
   buildNullableTextFormField,
+  type FieldApiT,
 } from "@/components/FormFields";
 
 const user = userEvent.setup();
@@ -25,7 +26,7 @@ describe("form fields", () => {
     setter: Setter<MyForm | undefined>,
     defaultValue?: MyForm,
   ) {
-    const form = createForm<MyForm>(() => ({
+    const form = createForm(() => ({
       defaultValues:
         defaultValue ??
         ({
@@ -39,12 +40,11 @@ describe("form fields", () => {
   }
 
   function Form(props: {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    name: any;
+    name: DeepKeys<MyForm>;
     setForm: Setter<MyForm | undefined>;
     defaultValue?: MyForm;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    field: (field: () => FieldApi<any, any>) => JSX.Element;
+    field: (field: () => FieldApiT<any>) => JSX.Element;
   }) {
     const form = newMyForm(props.setForm, props.defaultValue);
 

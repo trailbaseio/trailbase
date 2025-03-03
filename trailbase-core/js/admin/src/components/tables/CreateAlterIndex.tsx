@@ -80,14 +80,16 @@ export function CreateAlterIndexForm(props: {
     }
   };
 
-  const form = createForm<TableIndex>(() => ({
-    defaultValues: props.schema ?? {
-      name: `_${props.table.name}__${randomName()}_index`,
-      table_name: props.table.name,
-      columns: [newDefaultColumn(0)] as ColumnOrder[],
-      unique: false,
-      predicate: null,
-    },
+  const form = createForm(() => ({
+    defaultValues:
+      props.schema ??
+      ({
+        name: `_${props.table.name}__${randomName()}_index`,
+        table_name: props.table.name,
+        columns: [newDefaultColumn(0)] as ColumnOrder[],
+        unique: false,
+        predicate: null,
+      } as TableIndex),
     onSubmit: async ({ value }) => await onSubmit(value, false),
   }));
 

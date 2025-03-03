@@ -39,8 +39,8 @@ function ServerSettings(props: CommonProps) {
   const config = createConfigQuery();
 
   const Form = (p: { config: ServerConfig }) => {
-    const form = createForm<ServerConfig>(() => ({
-      defaultValues: p.config,
+    const form = createForm(() => ({
+      defaultValues: p.config satisfies ServerConfig,
       onSubmit: async ({ value }: { value: ServerConfig }) => {
         const c = config.data?.config;
         if (!c) {
@@ -233,8 +233,8 @@ function BackupImportSettings(props: CommonProps) {
   const config = createConfigQuery();
 
   const Form = (p: { config: ServerConfig }) => {
-    const form = createForm<ServerConfig>(() => ({
-      defaultValues: p.config,
+    const form = createForm(() => ({
+      defaultValues: p.config satisfies ServerConfig,
       onSubmit: async ({ value }: { value: ServerConfig }) => {
         const c = config.data?.config;
         if (!c) {

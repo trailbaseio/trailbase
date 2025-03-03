@@ -108,13 +108,13 @@ function EditSheetContent(props: {
   markDirty: () => void;
   refetch: () => void;
 }) {
-  const form = createForm<UpdateUserRequest>(() => ({
+  const form = createForm(() => ({
     defaultValues: {
       id: props.user.id,
       email: props.user.email,
       password: null,
       verified: props.user.verified,
-    },
+    } as UpdateUserRequest,
     onSubmit: async ({ value }) => {
       updateUser(value)
         // eslint-disable-next-line solid/reactivity

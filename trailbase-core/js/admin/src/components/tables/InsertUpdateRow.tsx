@@ -119,10 +119,10 @@ export function InsertUpdateRowForm(props: {
   );
   const isUpdate = original !== undefined;
 
-  const form = createForm<FormRowForm>(() => ({
+  const form = createForm(() => ({
     defaultValues: {
       row: props.row ?? buildDefault(props.schema),
-    },
+    } as FormRowForm,
     onSubmit: async ({ value }: { value: FormRowForm }) => {
       console.debug(`Submitting ${isUpdate ? "update" : "insert"}:`, value);
       try {
