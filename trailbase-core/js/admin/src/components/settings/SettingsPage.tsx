@@ -9,6 +9,7 @@ import {
 import type { Component, JSXElement, Signal } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
 import { createForm } from "@tanstack/solid-form";
+import { TbRefresh } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -30,9 +31,10 @@ import { AuthSettings } from "@/components/settings/AuthSettings";
 import { SchemaSettings } from "@/components/settings/SchemaSettings";
 import { EmailSettings } from "@/components/settings/EmailSettings";
 import { SplitView } from "@/components/SplitView";
+import { IconButton } from "@/components/IconButton";
 
 import type { InfoResponse } from "@bindings/InfoResponse";
-import { createConfigQuery, setConfig } from "@/lib/config";
+import { createConfigQuery, setConfig, invalidateConfig } from "@/lib/config";
 import { adminFetch } from "@/lib/fetch";
 
 function ServerSettings(props: CommonProps) {
@@ -494,9 +496,19 @@ export function SettingsPage() {
         },
       }) as CommonProps;
 
+    const Refresh = () => (
+      <IconButton onClick={invalidateConfig}>
+        <TbRefresh size={18} />
+      </IconButton>
+    );
+
     return (
       <>
-        <Header title="Settings" titleSelect={activeSite().label} />
+        <Header
+          title="Settings"
+          titleSelect={activeSite().label}
+          right={<Refresh />}
+        />
 
         <div class="m-4">{activeSite().child(p())}</div>
       </>

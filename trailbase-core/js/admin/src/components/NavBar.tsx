@@ -29,9 +29,9 @@ const options = [
 
 export const navBarIconSize = 22;
 export const navBarIconStyle =
-  "rounded-full hover:bg-accent-200 hover:bg-opacity-50 transition-all p-[10px]";
+  "rounded-full transition-all p-[10px] hover:bg-accent-200 hover:bg-opacity-50 active:scale-90";
 export const navBarIconActiveStyle =
-  "rounded-full transition-all p-[10px] bg-accent-600 text-white hover:bg-opacity-70";
+  "rounded-full transition-all p-[10px] bg-accent-600 text-white hover:bg-opacity-70 active:scale-90";
 
 export function NavBar(props: { location: Location }) {
   return (

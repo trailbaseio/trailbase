@@ -9,7 +9,7 @@ import { type PolymorphicProps } from "@kobalte/core/polymorphic";
 import { cn } from "@/lib/utils";
 
 export const iconButtonStyle =
-  "grid items-center justify-center size-[32px] p-1 rounded hover:bg-gray-200";
+  "grid items-center justify-center size-[32px] p-1 rounded hover:bg-gray-200 active:scale-90";
 
 type ButtonProps<T extends ValidComponent = "button"> =
   ButtonPrimitive.ButtonRootProps<T> & {
