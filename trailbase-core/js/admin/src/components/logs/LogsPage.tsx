@@ -204,7 +204,7 @@ export function LogsPage() {
         title="Logs"
         left={
           <IconButton onClick={refetch} tooltip="Refresh Logs">
-            <TbRefresh size={20} />
+            <TbRefresh size={18} />
           </IconButton>
         }
         right={

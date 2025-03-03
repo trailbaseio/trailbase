@@ -496,18 +496,16 @@ export function SettingsPage() {
         },
       }) as CommonProps;
 
-    const Refresh = () => (
-      <IconButton onClick={invalidateConfig}>
-        <TbRefresh size={18} />
-      </IconButton>
-    );
-
     return (
       <>
         <Header
           title="Settings"
           titleSelect={activeSite().label}
-          right={<Refresh />}
+          left={
+            <IconButton onClick={invalidateConfig}>
+              <TbRefresh size={18} />
+            </IconButton>
+          }
         />
 
         <div class="m-4">{activeSite().child(p())}</div>
