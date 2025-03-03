@@ -1,3 +1,12 @@
+## v0.6.5
+
+* Fix routing issues with auth UI.
+* Redirect /login to /profile on already logged in.
+* Redirect /register to /login?alert= on success.
+* Persist execution result in Admin SQL editor.
+* Address linter issues.
+* Update dependencies.
+
 ## v0.6.4
 
 * Add undo history to query editor and improve error handling.
