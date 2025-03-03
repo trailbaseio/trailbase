@@ -28,7 +28,7 @@
     "@iconify-json/tabler": "^1.2.16",
     "@tailwindcss/typography": "^0.5.16",
     "@types/dateformat": "^5.0.3",
-    "prettier": "^3.5.2",
+    "prettier": "^3.5.3",
     "prettier-plugin-astro": "^0.14.1",
     "quicktype": "^23.0.171",
     "sharp": "^0.33.5",
