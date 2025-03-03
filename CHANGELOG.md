@@ -1,3 +1,9 @@
+## v0.6.6
+
+* Add a dialog to avoid accidentally discarding unsaved changes in the SQL editor.
+* Polish UI: animate buttons, consistent refresh, avoid logs timestamp overflow.
+* Update Rust and JS deps.
+
 ## v0.6.5
 
 * Fix routing issues with auth UI.
