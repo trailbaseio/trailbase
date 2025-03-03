@@ -10,14 +10,21 @@ const $tokens = persistentAtom<Tokens | null>("auth_tokens", null, {
 });
 export const $user = computed($tokens, (_tokens) => client.user());
 
-const HOST = import.meta.env.DEV ? "http://localhost:4000" : "";
-export const client = Client.init(HOST, {
-  tokens: $tokens.get() ?? undefined,
-  onAuthChange: (c: Client, _user: User | undefined) => {
-    console.debug("on auth change");
-    $tokens.set(c.tokens() ?? null);
-  },
-});
+function initClient(): Client {
+  const HOST = import.meta.env.DEV ? "http://localhost:4000" : "";
+  const client = Client.init(HOST, {
+    tokens: $tokens.get() ?? undefined,
+    onAuthChange: (c: Client, _user: User | undefined) => {
+      $tokens.set(c.tokens() ?? null);
+    },
+  });
+
+  // This will also trigger a logout in case of 401.
+  client.refreshAuthToken();
+
+  return client;
+}
+export const client = initClient();
 
 type FetchOptions = RequestInit & {
   throwOnError?: boolean;
