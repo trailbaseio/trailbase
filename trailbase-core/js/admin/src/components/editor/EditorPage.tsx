@@ -7,10 +7,9 @@ import {
   createResource,
   createSignal,
   onCleanup,
-  onMount,
+  type Accessor,
 } from "solid-js";
 import { createWritableMemo } from "@solid-primitives/memo";
-import type { Accessor, Signal } from "solid-js";
 import type { ColumnDef } from "@tanstack/solid-table";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
@@ -63,6 +62,9 @@ type ExecutionError = {
 };
 
 type ExecutionResult = {
+  query: string;
+  timestamp: number;
+
   data?: QueryResponse;
   error?: ExecutionError;
 };
@@ -86,7 +88,11 @@ async function executeSql(
   });
 
   if (response.ok) {
-    return { data: await response.json() };
+    return {
+      query: sql,
+      timestamp: Date.now(),
+      data: await response.json(),
+    } as ExecutionResult;
   }
 
   const error = {
@@ -100,16 +106,16 @@ async function executeSql(
     variant: "error",
   });
 
-  return { error };
+  return { query: sql, timestamp: Date.now(), error } as ExecutionResult;
 }
 
 type RowData = Array<object>;
 
-function View(props: {
+function ResultView(props: {
   script: Script;
-  response: Accessor<ExecutionResult | undefined>;
+  response: ExecutionResult | undefined;
 }) {
-  const response = () => props.response() ?? props.script.result;
+  const response = () => props.response ?? props.script.result;
 
   function columnDefs(data: QueryResponse): ColumnDef<RowData>[] {
     return (data.columns ?? []).map((col, idx) => {
@@ -131,10 +137,17 @@ function View(props: {
         </Match>
 
         <Match when={(response()?.data?.columns?.length ?? 0) > 0}>
-          <DataTable
-            columns={() => columnDefs(response()!.data!)}
-            data={() => response()!.data!.rows as RowData[]}
-          />
+          <div class="flex flex-col gap-2">
+            <div class="flex justify-end text-sm">
+              Last executed:{" "}
+              {new Date(response()?.timestamp ?? 0).toLocaleTimeString()}
+            </div>
+
+            <DataTable
+              columns={() => columnDefs(response()!.data!)}
+              data={() => response()!.data!.rows as RowData[]}
+            />
+          </div>
         </Match>
 
         <Match when={(response()?.data?.columns?.length ?? 0) == 0}>
@@ -146,25 +159,13 @@ function View(props: {
 }
 
 function SideBar(props: {
-  selectedSignal: Signal<number>;
+  selected: number;
+  setSelected: (idx: number) => void;
   horizontal: boolean;
 }) {
-  // eslint-disable-next-line solid/reactivity
-  const [selected, setSelected] = props.selectedSignal;
   const scripts = useStore($scripts);
 
-  function addNewScript() {
-    const s = [
-      ...$scripts.get(),
-      {
-        name: "New Script",
-        contents: defaultScript.contents,
-      },
-    ];
-    $scripts.set(s);
-
-    setSelected(s.length - 1);
-  }
+  const addNewScript = () => props.setSelected(createNewScript());
 
   const flexStyle = () => (props.horizontal ? "flex flex-col h-dvh" : "flex");
   return (
@@ -174,14 +175,12 @@ function SideBar(props: {
       </Button>
 
       <For each={scripts()}>
-        {(_script: Script, index: Accessor<number>) => {
-          const scriptName = () => scripts()[index()].name;
+        {(_script: Script, i: Accessor<number>) => {
+          const scriptName = () => scripts()[i()].name;
           return (
             <Button
-              variant={selected() === index() ? "default" : "outline"}
-              onClick={() => {
-                setSelected(index());
-              }}
+              variant={props.selected === i() ? "default" : "outline"}
+              onClick={() => props.setSelected(i())}
             >
               {scriptName()}
             </Button>
@@ -280,49 +279,33 @@ function RenameDialog(props: { selected: number; script: Script }) {
   );
 }
 
-function EditorPanel(props: { selectedSignal: Signal<number> }) {
-  // eslint-disable-next-line solid/reactivity
-  const [selected, setSelected] = props.selectedSignal;
-
-  const scripts = useStore($scripts);
-  const script = (idx?: number): Script => {
-    const s = scripts();
-    const i = idx ?? selected();
-    if (i < s.length) {
-      return s[i];
-    }
-    if (s.length === 0) {
-      return defaultScript;
-    }
-    return s[s.length - 1];
-  };
-
+function EditorPanel(props: {
+  selected: number;
+  script: Script;
+  deleteScript: () => void;
+}) {
   const [queryString, setQueryString] = createSignal<string | undefined>();
+  createEffect(() => {
+    // Subscribe to selected script changes and reset the query results.
+    const index = props.selected;
+    console.debug(`Switched to script ${index}, clearing results`);
+    mutate(undefined);
+  });
+
   const [executionResult, { mutate, refetch }] = createResource(
     queryString,
     async (query: string): Promise<ExecutionResult | undefined> => {
       const result = await executeSql(query);
 
-      const idx = selected();
-      const script = scripts()[idx];
-      if (script) {
-        // Update the scripts state.
-        updateExistingScript(idx, {
-          ...script,
-          result,
-        });
-      }
+      // Update the scripts state.
+      updateExistingScript(props.selected, {
+        ...props.script,
+        result,
+      });
 
       return result;
     },
   );
-
-  createEffect(() => {
-    // Subscribe to selected script changes and reset the query results.
-    const index = selected();
-    console.debug(`Switched to script ${index}, clearing results`);
-    mutate(undefined);
-  });
 
   const execute = () => {
     const text = editor?.state.doc.toString();
@@ -367,35 +350,29 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
       ],
     });
 
-  onCleanup(() => {
-    console.debug("editor cleanup");
-    editor?.destroy();
-  });
-  onMount(() => {
+  onCleanup(() => editor?.destroy());
+
+  createEffect(() => {
+    // Every time the script contents change, recreate the editor state.
     editor?.destroy();
     editor = new EditorView({
-      state: newEditorState(script().contents),
+      state: newEditorState(props.script.contents),
       parent: ref!,
     });
     editor.focus();
   });
 
-  createEffect(() => {
-    const s = script();
-    editor?.setState(newEditorState(s.contents));
-  });
-
   const LeftButtons = () => (
     <>
-      <RenameDialog selected={selected()} script={script()} />
+      <RenameDialog selected={props.selected} script={props.script} />
 
       <IconButton
         tooltip="Save script"
         onClick={() => {
           const e = editor;
           if (e) {
-            updateExistingScript(selected(), {
-              ...script(),
+            updateExistingScript(props.selected, {
+              ...props.script,
               contents: e.state.doc.toString(),
             });
           }
@@ -404,13 +381,7 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
         <TbDeviceFloppy size={20} />
       </IconButton>
 
-      <IconButton
-        tooltip="Delete this script"
-        onClick={() => {
-          $scripts.set($scripts.get().toSpliced(selected(), 1));
-          setSelected(Math.max(0, selected() - 1));
-        }}
-      >
+      <IconButton tooltip="Delete this script" onClick={props.deleteScript}>
         <TbTrash size={20} />
       </IconButton>
     </>
@@ -422,7 +393,7 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
         <ResizablePanel class="flex flex-col">
           <Header
             title="Editor"
-            titleSelect={script().name}
+            titleSelect={props.script.name}
             left={<LeftButtons />}
             right={<HelpDialog />}
           />
@@ -451,7 +422,7 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
 
         <ResizablePanel class="hide-scrollbars overflow-y-scroll">
           <div class="grow p-4">
-            <View script={script()} response={executionResult} />
+            <ResultView script={props.script} response={executionResult()} />
           </div>
         </ResizablePanel>
       </Resizable>
@@ -460,20 +431,46 @@ function EditorPanel(props: { selectedSignal: Signal<number> }) {
 }
 
 export function EditorPage() {
+  const scripts = useStore($scripts);
   const [selected, setSelected] = createSignal<number>(0);
+
+  const script = (idx?: number): Script => {
+    const s = scripts();
+    const i = idx ?? selected();
+    if (i < s.length) {
+      return s[i];
+    }
+    if (s.length === 0) {
+      return defaultScript;
+    }
+    return s[s.length - 1];
+  };
+
+  const deleteCurrentScript = () => {
+    const idx = selected();
+    deleteScript(idx);
+    setSelected(Math.max(0, idx - 1));
+  };
 
   return (
     <SplitView
       first={(props: { horizontal: boolean }) => {
         return (
           <SideBar
-            selectedSignal={[selected, setSelected]}
+            selected={selected()}
+            setSelected={setSelected}
             horizontal={props.horizontal}
           />
         );
       }}
       second={() => {
-        return <EditorPanel selectedSignal={[selected, setSelected]} />;
+        return (
+          <EditorPanel
+            selected={selected()}
+            script={script()}
+            deleteScript={deleteCurrentScript}
+          />
+        );
       }}
     />
   );
@@ -516,6 +513,22 @@ function updateExistingScript(index: number, script: Script) {
     ...script,
   };
   $scripts.set(s);
+}
+
+function createNewScript(): number {
+  const s = [
+    ...$scripts.get(),
+    {
+      name: "New Script",
+      contents: defaultScript.contents,
+    },
+  ];
+  $scripts.set(s);
+  return s.length - 1;
+}
+
+function deleteScript(idx: number) {
+  $scripts.set($scripts.get().toSpliced(idx, 1));
 }
 
 const $scripts = persistentAtom<Script[]>("scripts", [defaultScript], {
