@@ -35,6 +35,7 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
+import { ConfirmCloseDialog } from "@/components/SafeSheet";
 import {
   Dialog,
   DialogContent,
@@ -282,6 +283,8 @@ function RenameDialog(props: { selected: number; script: Script }) {
 function EditorPanel(props: {
   selected: number;
   script: Script;
+  dirty: boolean;
+  setDirty: (dirty: boolean) => void;
   deleteScript: () => void;
 }) {
   const [queryString, setQueryString] = createSignal<string | undefined>();
@@ -294,6 +297,7 @@ function EditorPanel(props: {
 
   const [executionResult, { mutate, refetch }] = createResource(
     queryString,
+    // eslint-disable-next-line solid/reactivity
     async (query: string): Promise<ExecutionResult | undefined> => {
       const result = await executeSql(query);
 
@@ -343,6 +347,12 @@ function EditorPanel(props: {
         // Let's you define your own custom CSS style for the line number gutter.
         // gutter({ class: "cm-mygutter" }),
         sql(),
+        // eslint-disable-next-line solid/reactivity
+        EditorView.updateListener.of((v) => {
+          if (!v.changes.empty) {
+            props.setDirty(true);
+          }
+        }),
         // NOTE: minimal setup provides a bunch of default extensions such as
         // keymaps, undo history, default syntax highlighting ... .
         // NOTE: should be last.
@@ -376,6 +386,7 @@ function EditorPanel(props: {
               contents: e.state.doc.toString(),
             });
           }
+          props.setDirty(false);
         }}
       >
         <TbDeviceFloppy size={20} />
@@ -433,6 +444,12 @@ function EditorPanel(props: {
 export function EditorPage() {
   const scripts = useStore($scripts);
   const [selected, setSelected] = createSignal<number>(0);
+  const [dirty, setDirty] = createSignal<boolean>(false);
+
+  type DirtyDialogState = {
+    nextSelected: number;
+  };
+  const [dialog, setDialog] = createSignal<DirtyDialogState | undefined>();
 
   const script = (idx?: number): Script => {
     const s = scripts();
@@ -452,27 +469,61 @@ export function EditorPage() {
     setSelected(Math.max(0, idx - 1));
   };
 
+  const switchToScript = (idx: number) => {
+    if (dirty()) {
+      setDialog({ nextSelected: idx });
+    } else {
+      setSelected(idx);
+    }
+  };
+
   return (
-    <SplitView
-      first={(props: { horizontal: boolean }) => {
-        return (
-          <SideBar
-            selected={selected()}
-            setSelected={setSelected}
-            horizontal={props.horizontal}
-          />
-        );
+    <Dialog
+      id="switch-script-dialog"
+      open={dialog() !== undefined}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setDialog();
+        }
       }}
-      second={() => {
-        return (
-          <EditorPanel
-            selected={selected()}
-            script={script()}
-            deleteScript={deleteCurrentScript}
-          />
-        );
-      }}
-    />
+      modal={true}
+    >
+      <ConfirmCloseDialog
+        back={() => setDialog()}
+        confirm={() => {
+          const state = dialog();
+          if (state) {
+            setSelected(state.nextSelected);
+            setDialog();
+            setDirty(false);
+          }
+        }}
+        message="Proceeding will discard any pending changes in the current buffer. Proceed with caution."
+      />
+
+      <SplitView
+        first={(props: { horizontal: boolean }) => {
+          return (
+            <SideBar
+              selected={selected()}
+              setSelected={switchToScript}
+              horizontal={props.horizontal}
+            />
+          );
+        }}
+        second={() => {
+          return (
+            <EditorPanel
+              selected={selected()}
+              script={script()}
+              dirty={dirty()}
+              setDirty={setDirty}
+              deleteScript={deleteCurrentScript}
+            />
+          );
+        }}
+      />
+    </Dialog>
   );
 }
 

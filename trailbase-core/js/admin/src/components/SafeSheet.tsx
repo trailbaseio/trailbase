@@ -12,7 +12,7 @@ import {
 import { Sheet } from "@/components/ui/sheet";
 
 interface SafeSheetProps {
-  markDirty: () => void;
+  markDirty: (dirty?: boolean) => void;
   close: () => void;
 }
 
@@ -23,27 +23,6 @@ interface LocalProps {
 
 type SafeProps = LocalProps &
   Omit<SheetPrimitive.DialogRootProps, "open" | "onOpenChange" | "children">;
-
-export function ConfirmCloseDialog(props: {
-  back: () => void;
-  confirm: () => void;
-}) {
-  return (
-    <DialogContent>
-      <DialogTitle>Confirmation</DialogTitle>
-      Are you sure?
-      <DialogFooter>
-        <Button variant="outline" onClick={props.back}>
-          Back
-        </Button>
-
-        <Button variant="destructive" onClick={props.confirm}>
-          Discard
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  );
-}
 
 export function SafeSheet(props: SafeProps) {
   const [local, others] = splitProps(props, ["children", "open"]);
@@ -88,11 +67,37 @@ export function SafeSheet(props: SafeProps) {
 
       <Sheet open={sheetOpen()} onOpenChange={onSheetOpenChange} {...others}>
         {local.children({
-          markDirty: () => setDirty(true),
+          markDirty: (value: boolean | undefined) => setDirty(value ?? true),
           close: () => setSheetOpen(false),
         })}
       </Sheet>
     </Dialog>
+  );
+}
+
+export function ConfirmCloseDialog(props: {
+  back: () => void;
+  confirm: () => void;
+  message?: string;
+}) {
+  return (
+    <DialogContent>
+      <DialogTitle>Confirmation</DialogTitle>
+
+      <p>{props.message ?? "Are you sure?"}</p>
+
+      <DialogFooter>
+        <div class="flex w-full justify-between">
+          <Button variant="outline" onClick={props.back}>
+            Back
+          </Button>
+
+          <Button variant="destructive" onClick={props.confirm}>
+            Discard
+          </Button>
+        </div>
+      </DialogFooter>
+    </DialogContent>
   );
 }
 
