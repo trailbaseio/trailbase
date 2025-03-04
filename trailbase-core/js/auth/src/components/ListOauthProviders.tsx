@@ -47,7 +47,7 @@ export function ConfiguredOAuthProviders() {
                   class={cn("w-full", buttonVariants({ variant: "outline" }))}
                   href={`${AUTH_API}/oauth/${name}/login`}
                 >
-                  Login with {displayName}
+                  {displayName}
                 </a>
               );
             }}
