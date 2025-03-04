@@ -901,7 +901,15 @@ pub(crate) fn json_string_to_value(
     // Strict/storage types
     ColumnDataType::Any => Value::Text(value),
     ColumnDataType::Text => Value::Text(value),
-    ColumnDataType::Blob => Value::Blob(BASE64_URL_SAFE.decode(value)?),
+    ColumnDataType::Blob => Value::Blob(match (value.len(), value) {
+      // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
+      // would be more explicit rely on CHECK(...) column options.
+      // NOTE: That uuids also parse as url-safe base64, that's why we treat it as a fall-first.
+      (36, v) => uuid::Uuid::parse_str(&v)
+        .map(|v| v.into())
+        .or_else(|_| BASE64_URL_SAFE.decode(&v))?,
+      (_, v) => BASE64_URL_SAFE.decode(&v)?,
+    }),
     ColumnDataType::Integer => Value::Integer(value.parse::<i64>()?),
     ColumnDataType::Real => Value::Real(value.parse::<f64>()?),
     ColumnDataType::Numeric => Value::Integer(value.parse::<i64>()?),
@@ -1131,7 +1139,7 @@ mod tests {
   use crate::util::id_to_b64;
 
   #[tokio::test]
-  async fn test_json_to_sql() -> anyhow::Result<()> {
+  async fn test_json_to_sql() {
     #[allow(unused)]
     #[derive(JsonSchema)]
     struct TestSchema {
@@ -1161,7 +1169,8 @@ mod tests {
     let table: Table = sqlite3_parse_into_statement(&sql)
       .unwrap()
       .unwrap()
-      .try_into()?;
+      .try_into()
+      .unwrap();
 
     trailbase_sqlite::schema::set_user_schema(
       SCHEMA_NAME,
@@ -1219,11 +1228,7 @@ mod tests {
         "real": real,
       });
 
-      assert_params(Params::from(
-        &metadata,
-        json_row_from_value(value).unwrap(),
-        None,
-      )?);
+      assert_params(Params::from(&metadata, json_row_from_value(value).unwrap(), None).unwrap());
     }
 
     {
@@ -1236,11 +1241,7 @@ mod tests {
         "real": "3",
       });
 
-      assert_params(Params::from(
-        &metadata,
-        json_row_from_value(value).unwrap(),
-        None,
-      )?);
+      assert_params(Params::from(&metadata, json_row_from_value(value).unwrap(), None).unwrap());
     }
 
     {
@@ -1328,7 +1329,52 @@ mod tests {
 
       assert_params(params);
     }
+  }
 
-    return Ok(());
+  #[tokio::test]
+  async fn test_json_string_to_value() {
+    let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
+    conn
+      .execute(
+        r#"CREATE TABLE test (
+        id    BLOB NOT NULL,
+        text  TEXT
+    )"#,
+        (),
+      )
+      .await
+      .unwrap();
+
+    let id_string = "01950408-de17-7f13-8ef5-66d90b890bfd";
+    let id = uuid::Uuid::parse_str(id_string).unwrap();
+
+    conn
+      .execute(
+        "INSERT INTO test (id, text) VALUES ($1, $2);",
+        trailbase_sqlite::params!(id.into_bytes(), "mytext",),
+      )
+      .await
+      .unwrap();
+
+    let value = json_string_to_value(ColumnDataType::Blob, id_string.to_string()).unwrap();
+    let blob = match value {
+      rusqlite::types::Value::Blob(ref blob) => blob.clone(),
+      _ => panic!("Not a blob"),
+    };
+
+    assert_eq!(
+      blob.len(),
+      16,
+      "Blob: {value:?} {}",
+      String::from_utf8_lossy(&blob)
+    );
+    assert_eq!(uuid::Uuid::from_slice(&blob).unwrap(), id);
+
+    let rows = conn
+      .query("SELECT * FROM test WHERE id = $1", [value])
+      .await
+      .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<String>(1).unwrap(), "mytext");
   }
 }
