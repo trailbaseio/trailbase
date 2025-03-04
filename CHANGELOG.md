@@ -1,3 +1,8 @@
+## v0.6.8
+
+* Fix client-side merging of fetch arguments including credentials.
+* Improved auth UI styling.
+
 ## v0.6.7
 
 * Improve token life cycle for JS/TS clients including admin dash.
