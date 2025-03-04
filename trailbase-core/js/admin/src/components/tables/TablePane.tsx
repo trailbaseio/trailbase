@@ -176,9 +176,6 @@ function renderCell(
 async function deleteRows(tableName: string, request: DeleteRowsRequest) {
   const response = await adminFetch(`/table/${tableName}/rows`, {
     method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify(request),
   });
   return await response.text();

@@ -60,9 +60,6 @@ function nonEmpty(v: string | undefined): string | undefined {
 export async function adminListOAuthProviders(): Promise<OAuthProviderResponse> {
   const response = await adminFetch("/oauth_providers", {
     method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
   });
   return await response.json();
 }

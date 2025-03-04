@@ -28,9 +28,6 @@ async function insertRow(tableName: string, row: FormRow) {
 
   const response = await adminFetch(`/table/${tableName}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify(request),
   });
 
@@ -65,9 +62,6 @@ async function updateRow(table: Table, row: FormRow) {
 
   const response = await adminFetch(`/table/${tableName}`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify(request),
   });
 

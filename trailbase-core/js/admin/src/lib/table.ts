@@ -21,9 +21,6 @@ export async function createIndex(
 ): Promise<CreateIndexResponse> {
   const response = await adminFetch("/index", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify(request),
   });
   return await response.json();
@@ -34,9 +31,6 @@ export async function createTable(
 ): Promise<CreateTableResponse> {
   const response = await adminFetch("/table", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify(request),
   });
   return await response.json();
@@ -45,9 +39,6 @@ export async function createTable(
 export async function alterIndex(request: AlterIndexRequest) {
   const response = await adminFetch("/index", {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify(request),
   });
   return await response.text();
@@ -56,9 +47,6 @@ export async function alterIndex(request: AlterIndexRequest) {
 export async function alterTable(request: AlterTableRequest) {
   const response = await adminFetch("/table", {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify(request),
   });
   return await response.text();
@@ -67,9 +55,6 @@ export async function alterTable(request: AlterTableRequest) {
 export async function dropIndex(request: DropIndexRequest) {
   const response = await adminFetch("/index", {
     method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify(request),
   });
   return await response.text();
@@ -78,9 +63,6 @@ export async function dropIndex(request: DropIndexRequest) {
 export async function dropTable(request: DropTableRequest) {
   const response = await adminFetch("/table", {
     method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify(request),
   });
   return await response.text();

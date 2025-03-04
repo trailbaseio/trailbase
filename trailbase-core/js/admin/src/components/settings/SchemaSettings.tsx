@@ -18,9 +18,6 @@ import type {
 async function listSchemas(): Promise<ListJsonSchemasResponse> {
   const response = await adminFetch("/schema", {
     method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
   });
   return await response.json();
 }
@@ -28,9 +25,6 @@ async function listSchemas(): Promise<ListJsonSchemasResponse> {
 async function _updateSchema(request: UpdateJsonSchemaRequest): Promise<void> {
   await adminFetch("/schema", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify(request),
   });
 }
