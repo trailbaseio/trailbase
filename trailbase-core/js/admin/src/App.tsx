@@ -19,7 +19,7 @@ function Layout(props: RouteSectionProps) {
         <NavBar location={props.location} />
       </div>
 
-      <main class="absolute inset-0 left-[58px] h-dvh overflow-hidden">
+      <main class="absolute inset-0 left-[58px] h-dvh w-[calc(100%-58px)] overflow-hidden">
         {props.children}
       </main>
     </ErrorBoundary>

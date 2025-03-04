@@ -56,7 +56,7 @@ export function SplitView(props: {
 
     return (
       <Resizable
-        class="h-dvh w-full overflow-hidden"
+        class="overflow-hidden"
         sizes={size()}
         onSizesChange={setSizes}
         orientation="horizontal"
