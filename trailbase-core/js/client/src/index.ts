@@ -291,19 +291,27 @@ export class RecordApi {
 class ThinClient {
   constructor(public readonly site: string) {}
 
-  public async fetch(
+  async fetch(
     path: string,
-    tokenState: TokenState,
+    headers: HeadersInit,
     init?: RequestInit,
   ): Promise<Response> {
     if (path.startsWith("/")) {
       throw Error("Path starts with '/'. Relative path expected.");
     }
 
+    // NOTE: We need to merge the headers in such a complicated fashion
+    // to avoid user-provided `init` with headers unintentionally suppressing
+    // the credentials.
     const response = await fetch(`${this.site}/${path}`, {
       credentials: isDev ? "include" : "same-origin",
-      headers: tokenState.headers,
       ...init,
+      headers: init
+        ? {
+            ...headers,
+            ...init?.headers,
+          }
+        : headers,
     });
 
     return response;
@@ -379,6 +387,9 @@ export class Client {
 
   /// Provides current user.
   public user = (): User | undefined => buildUser(this._tokenState);
+
+  /// Provides current user.
+  public headers = (): HeadersInit => this._tokenState.headers;
 
   /// Construct accessor for Record API with given name.
   public records = (name: string): RecordApi => new RecordApi(this, name);
@@ -460,7 +471,7 @@ export class Client {
   private async refreshTokensImpl(refreshToken: string): Promise<TokenState> {
     const response = await this._client.fetch(
       `${Client._authApi}/refresh`,
-      this._tokenState,
+      this._tokenState.headers,
       {
         method: "POST",
         body: JSON.stringify({
@@ -514,7 +525,7 @@ export class Client {
     }
 
     try {
-      const response = await this._client.fetch(path, tokenState, init);
+      const response = await this._client.fetch(path, tokenState.headers, init);
       if (!response.ok && (init?.throwOnError ?? true)) {
         throw await FetchError.from(response);
       }
@@ -540,7 +551,7 @@ function _isDev(): boolean {
 }
 const isDev = _isDev();
 
-export function headers(tokens?: Tokens): HeadersInit {
+function headers(tokens?: Tokens): HeadersInit {
   if (tokens) {
     const { auth_token, refresh_token, csrf_token } = tokens;
     return {

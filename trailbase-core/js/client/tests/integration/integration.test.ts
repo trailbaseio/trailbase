@@ -1,20 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 
 import { expect, test } from "vitest";
-import { Client, Event, headers, urlSafeBase64Encode } from "../../src/index";
+import { Client, Event, urlSafeBase64Encode } from "../../src/index";
 import { status } from "http-status";
 import { v7 as uuidv7, parse as uuidParse } from "uuid";
-
-test("headers", () => {
-  const h0 = headers();
-  expect(Object.keys(h0).length).toBe(1);
-  const h1 = headers({
-    auth_token: "foo",
-    refresh_token: "bar",
-    csrf_token: null,
-  });
-  expect(Object.keys(h1).length).toBe(3);
-});
 
 type SimpleStrict = {
   id: string;
@@ -62,8 +51,16 @@ test("auth integration tests", async () => {
   const newTokens = client.tokens();
   expect(newTokens).not.undefined.and.not.equals(oldTokens!.auth_token);
 
+  const headers0 = client.headers();
+  expect(headers0["Content-Type"]).toContain("json");
+  expect(headers0["Authorization"].startsWith("Bearer ")).toBe(true);
+
   expect(await client.logout()).toBe(true);
   expect(client.user()).toBe(undefined);
+
+  const headers1 = client.headers();
+  expect(headers1["Content-Type"]).toContain("json");
+  expect(headers1["Authorization"]).toBeUndefined();
 });
 
 test("Record integration tests", async () => {
