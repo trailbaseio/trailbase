@@ -1,5 +1,5 @@
 import type { ValidComponent } from "solid-js"
-import { splitProps } from "solid-js"
+import { mergeProps, splitProps } from "solid-js"
 
 import type { PolymorphicProps } from "@kobalte/core"
 import * as TextFieldPrimitive from "@kobalte/core/text-field"
@@ -7,47 +7,59 @@ import { cva } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
-const TextField = TextFieldPrimitive.Root
+type TextFieldRootProps<T extends ValidComponent = "div"> =
+  TextFieldPrimitive.TextFieldRootProps<T> & {
+    class?: string | undefined
+  }
 
-export type TextFieldType =
-  | "button"
-  | "checkbox"
-  | "color"
-  | "date"
-  | "datetime-local"
-  | "email"
-  | "file"
-  | "hidden"
-  | "image"
-  | "month"
-  | "number"
-  | "password"
-  | "radio"
-  | "range"
-  | "reset"
-  | "search"
-  | "submit"
-  | "tel"
-  | "text"
-  | "time"
-  | "url"
-  | "week";
+const TextField = <T extends ValidComponent = "div">(
+  props: PolymorphicProps<T, TextFieldRootProps<T>>
+) => {
+  const [local, others] = splitProps(props as TextFieldRootProps, ["class"])
+  return <TextFieldPrimitive.Root class={cn("flex flex-col gap-1", local.class)} {...others} />
+}
 
 type TextFieldInputProps<T extends ValidComponent = "input"> =
   TextFieldPrimitive.TextFieldInputProps<T> & {
     class?: string | undefined
-    type:TextFieldType,
+    type?:
+      | "button"
+      | "checkbox"
+      | "color"
+      | "date"
+      | "datetime-local"
+      | "email"
+      | "file"
+      | "hidden"
+      | "image"
+      | "month"
+      | "number"
+      | "password"
+      | "radio"
+      | "range"
+      | "reset"
+      | "search"
+      | "submit"
+      | "tel"
+      | "text"
+      | "time"
+      | "url"
+      | "week"
   }
 
+const textFieldInputStyle =
+  "flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[invalid]:border-error-foreground data-[invalid]:text-error-foreground";
+
 const TextFieldInput = <T extends ValidComponent = "input">(
-  props: PolymorphicProps<T, TextFieldInputProps<T>>
+  rawProps: PolymorphicProps<T, TextFieldInputProps<T>>
 ) => {
+  const props = mergeProps<TextFieldInputProps<T>[]>({ type: "text" }, rawProps)
   const [local, others] = splitProps(props as TextFieldInputProps, ["type", "class"])
   return (
     <TextFieldPrimitive.Input
       type={local.type}
       class={cn(
-        "flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+        textFieldInputStyle,
         local.class
       )}
       {...others}
@@ -79,8 +91,8 @@ const labelVariants = cva(
     variants: {
       variant: {
         label: "data-[invalid]:text-destructive",
-        description: "text-destructive",
-        error: "font-normal text-muted-foreground"
+        description: "font-normal text-muted-foreground",
+        error: "text-xs text-destructive"
       }
     },
     defaultVariants: {
@@ -134,6 +146,7 @@ const TextFieldErrorMessage = <T extends ValidComponent = "div">(
 }
 
 export {
+  textFieldInputStyle,
   TextField,
   TextFieldInput,
   TextFieldTextArea,

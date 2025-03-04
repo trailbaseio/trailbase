@@ -5,7 +5,16 @@ server {
   site_url: "http://localhost:4000"
   logs_retention_sec: 604800
 }
-auth {}
+auth {
+  oauth_providers: [{
+    key: "discord"
+    value {
+      client_id: "invalid_discord_id"
+      provider_id: DISCORD
+      display_name: "Discord"
+    }
+  }]
+}
 record_apis: [{
   name: "_user_avatar"
   table_name: "_user_avatar"

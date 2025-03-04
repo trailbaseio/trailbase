@@ -1,3 +1,5 @@
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { createResource, For, Suspense, ErrorBoundary } from "solid-js";
 import type { ConfiguredOAuthProvidersResponse } from "@bindings/ConfiguredOAuthProvidersResponse";
 
@@ -32,16 +34,20 @@ export function ConfiguredOAuthProviders() {
     <ErrorBoundary fallback={(err, _reset) => <h2>OAuth: {err.toString()}</h2>}>
       <Suspense fallback={<div>Loading...</div>}>
         <div class="flex w-full flex-col items-start gap-4">
-          {providers().length > 0 && <p>Or use an external provider:</p>}
+          {providers().length > 0 && (
+            <div class="flex w-full justify-center text-muted-foreground">
+              <span>Or authenticate using:</span>
+            </div>
+          )}
 
           <For each={providers()}>
             {([name, displayName]) => {
               return (
                 <a
-                  class="flex w-full flex-row items-center gap-4 rounded-lg border border-gray-300/20 p-2 hover:bg-black/10 dark:hover:bg-black/20"
+                  class={cn("w-full", buttonVariants({ variant: "outline" }))}
                   href={`${AUTH_API}/oauth/${name}/login`}
                 >
-                  <span>Login with {displayName}</span>
+                  Login with {displayName}
                 </a>
               );
             }}

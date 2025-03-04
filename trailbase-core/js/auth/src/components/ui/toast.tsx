@@ -16,10 +16,10 @@ const toastVariants = cva(
       variant: {
         default: "border bg-background text-foreground",
         destructive:
-          "group border-destructive bg-destructive text-destructive-foreground",
-        success: "border-success-foreground bg-success text-success-foreground",
-        warning: "border-warning-foreground bg-warning text-warning-foreground",
-        error: "border-error-foreground bg-error text-error-foreground"
+          "destructive group border-destructive bg-destructive text-destructive-foreground",
+        success: "success border-success-foreground bg-success text-success-foreground",
+        warning: "warning border-warning-foreground bg-warning text-warning-foreground",
+        error: "error border-error-foreground bg-error text-error-foreground"
       }
     },
     defaultVariants: {
@@ -42,7 +42,7 @@ const Toaster = <T extends ValidComponent = "ol">(
       <ToastPrimitive.Region>
         <ToastPrimitive.List
           class={cn(
-            "fixed top-0 z-[100] flex max-h-dvh w-full flex-col-reverse gap-2 p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
+            "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse gap-2 p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
             local.class
           )}
           {...others}

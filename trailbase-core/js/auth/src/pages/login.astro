@@ -5,6 +5,7 @@ import { ConfiguredOAuthProviders } from "@/components/ListOauthProviders";
 import { AUTH_API, INPUT_STYLE, BUTTON_STYLE } from "@/lib/constants";
 
 const formBaseAction = `${AUTH_API}/login`;
+const BASE_URL = import.meta.env.BASE_URL;
 ---
 
 <Form title="Login">
@@ -14,6 +15,7 @@ const formBaseAction = `${AUTH_API}/login`;
       class="flex flex-col gap-2"
       action={formBaseAction}
       data-base_action={formBaseAction}
+      data-base_url={BASE_URL}
       method="post"
       enctype="application/x-www-form-urlencoded"
     >
@@ -22,7 +24,7 @@ const formBaseAction = `${AUTH_API}/login`;
       </div>
 
       <div
-        class="my-4 grid grid-cols-2 items-center gap-4"
+        class="grid grid-cols-2 items-center gap-4"
         style={{"grid-template-columns": "auto 1fr"}}
       >
         <label>User:</label>
@@ -31,7 +33,8 @@ const formBaseAction = `${AUTH_API}/login`;
           class={INPUT_STYLE}
           type="email"
           name="email"
-          placeholder="E-mail"
+          placeholder="Email"
+          autocomplete="username"
         />
 
         <label>Password:</label>
@@ -41,11 +44,16 @@ const formBaseAction = `${AUTH_API}/login`;
           type="password"
           name="password"
           placeholder="Password"
+          autocomplete="current-password"
         />
       </div>
 
-      <div class="flex justify-between">
-        <a type="button" href={`${import.meta.env.BASE_URL}/register`} class:list={BUTTON_STYLE}>
+      <div class="flex justify-center text-sm">
+        <a href={`${BASE_URL}/reset_password/request`}>Forgot your password? <span class="text-primary">Reset</span></a>
+      </div>
+
+      <div class="flex justify-between my-2">
+        <a type="button" href={`${BASE_URL}/register`} class:list={BUTTON_STYLE}>
           Register
         </a>
 
@@ -58,28 +66,28 @@ const formBaseAction = `${AUTH_API}/login`;
     <div class="mt-4">
       <ConfiguredOAuthProviders client:only="solid-js" />
     </div>
-
-    <div class="mt-4 flex justify-center">
-      <a href={`${import.meta.env.BASE_URL}/reset_password/request`}>reset password</a>
-    </div>
   </div>
 </Form>
 
 {
+  // For DEV we need to fix up redirects to point back to dev server.
   import.meta.env.DEV && (
     <script is:inline>
       const urlParams = new URLSearchParams(window.location.search);
       // In source order
       const form = document.forms[0];
       const baseAction = form.dataset.base_action;
+      const baseUrl = form.dataset.base_url;
 
       const redirect = urlParams.get("redirect_to");
       if (redirect) {
         form.action = `${baseAction}?redirect_to=${redirect}`;
       } else {
-        const devRedirect = `http://${window.location.host}${import.meta.env.BASE_URL}/profile`;
+        const devRedirect = `http://${window.location.host}${baseUrl}/profile`;
         form.action = `${baseAction}?redirect_to=${devRedirect}`;
       }
+
+      console.debug(`Updated form action to ${form.action}, based on redirect: ${redirect}`);
     </script>
   )
 }

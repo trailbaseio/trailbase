@@ -2,14 +2,8 @@ import { createResource, createSignal, Switch, Match } from "solid-js";
 import { TbUser, TbLogout, TbTrash } from "solid-icons/tb";
 import { Client, type User } from "trailbase";
 
-import {
-  HOST,
-  RECORD_API,
-  OUTLINE_BUTTON_STYLE,
-  ICON_STYLE,
-  DESTRUCTIVE_ICON_STYLE,
-} from "@/lib/constants";
-import { Button } from "@/components/ui/button";
+import { HOST, RECORD_API } from "@/lib/constants";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
@@ -20,11 +14,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-// import {
-//   TextField,
-//   TextFieldLabel,
-//   TextFieldInput,
-// } from "@/components/ui/text-field";
 
 function DeleteAccountButton(props: { client: Client }) {
   const [open, setOpen] = createSignal<boolean>(false);
@@ -65,58 +54,6 @@ function DeleteAccountButton(props: { client: Client }) {
     </Dialog>
   );
 }
-
-// function ChangeEmailButton(props: { oldEmail: string; client: Client }) {
-//   const [open, setOpen] = createSignal<boolean>(false);
-//   const [email, setEmail] = createSignal(props.oldEmail);
-//
-//   return (
-//     <Dialog open={open()} onOpenChange={setOpen}>
-//       <DialogTrigger>
-//         <Button variant="outline">Change E-mail</Button>
-//       </DialogTrigger>
-//
-//       <DialogContent>
-//         <DialogHeader>
-//           <DialogTitle>Change E-mail</DialogTitle>
-//         </DialogHeader>
-//
-//         <TextField class="flex items-center gap-2">
-//           <TextFieldLabel class="w-28">New E-mail</TextFieldLabel>
-//
-//           <TextFieldInput
-//             required
-//             type="email"
-//             value={email()}
-//             onKeyUp={(e: Event) => {
-//               const v = (e.currentTarget as HTMLInputElement).value;
-//               setEmail(v);
-//             }}
-//           />
-//         </TextField>
-//
-//         <DialogFooter>
-//           <Button variant="outline" onClick={() => setOpen(false)}>
-//             Back
-//           </Button>
-//
-//           <Button
-//             variant="default"
-//             disabled={email() === props.oldEmail}
-//             onClick={async () => {
-//               if (email() !== props.oldEmail) {
-//                 await props.client.changeEmail(email());
-//               }
-//               setOpen(false);
-//             }}
-//           >
-//             Send Verification E-mail
-//           </Button>
-//         </DialogFooter>
-//       </DialogContent>
-//     </Dialog>
-//   );
-// }
 
 function Avatar(props: { avatarUrl?: () => string | undefined }) {
   const url = () => props.avatarUrl?.();
@@ -218,12 +155,15 @@ function ProfileTable(props: {
       </div>
 
       <div class="my-4 flex items-end gap-2">
-        <a class={OUTLINE_BUTTON_STYLE.join(" ")} href="/_/auth/change_email">
+        <a
+          class={buttonVariants({ variant: "outline" })}
+          href="/_/auth/change_email"
+        >
           Change E-Mail
         </a>
 
         <a
-          class={OUTLINE_BUTTON_STYLE.join(" ")}
+          class={buttonVariants({ variant: "outline" })}
           href="/_/auth/change_password"
         >
           Change Password
@@ -286,3 +226,23 @@ export function Profile() {
     </ErrorBoundary>
   );
 }
+
+const ICON_STYLE = [
+  "inline-flex",
+  "items-center",
+  "justify-center",
+  "rounded-md",
+  "p-2",
+  "hover:text-primary-foreground",
+  "hover:bg-primary/90",
+];
+
+const DESTRUCTIVE_ICON_STYLE = [
+  "inline-flex",
+  "items-center",
+  "justify-center",
+  "rounded-md",
+  "p-2",
+  "hover:text-primary-foreground",
+  "hover:bg-destructive/90",
+];

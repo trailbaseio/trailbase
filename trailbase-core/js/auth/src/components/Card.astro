@@ -1,7 +1,23 @@
 ---
+interface Props {
+  title?: string;
+}
 
+const { title } = Astro.props;
 ---
 
-<div class="flex flex-col items-center justify-center rounded-md border p-8">
-  <slot />
+<!-- Style from @/components/ui/card.tsx -->
+<div class={"rounded-lg border bg-card text-card-foreground shadow-sm"}>
+  <div class="flex flex-col space-y-1.5 p-6">
+    <!-- Header -->
+    <h1 class="font-semibold leading-none tracking-tight">
+      <!-- Title -->
+      {title}
+    </h1>
+  </div>
+
+  <div class="p-6 pt-0">
+    <!-- Contents -->
+    <slot />
+  </div>
 </div>
