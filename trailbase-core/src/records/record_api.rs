@@ -271,6 +271,14 @@ impl RecordApi {
   pub fn id_to_sql(&self, id: &str) -> Result<Value, RecordError> {
     return match self.state.record_pk_column.data_type {
       ColumnDataType::Blob => {
+        // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
+        // would be more explicit rely on CHECK(...) column options.
+        if id.len() == 36 {
+          if let Ok(id) = uuid::Uuid::parse_str(id) {
+            return Ok(Value::Blob(id.into()));
+          }
+        }
+
         let record_id = b64_to_id(id).map_err(|_err| RecordError::BadRequest("Invalid id"))?;
         assert_uuidv7(&record_id);
         Ok(Value::Blob(record_id.into()))
