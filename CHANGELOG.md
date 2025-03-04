@@ -1,3 +1,7 @@
+## v0.6.7
+
+* Improve token life cycle for JS/TS clients including admin dash.
+
 ## v0.6.6
 
 * Add a dialog to avoid accidentally discarding unsaved changes in the SQL editor.
