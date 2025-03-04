@@ -38,6 +38,21 @@ import { createConfigQuery, setConfig } from "@/lib/config";
 import { adminFetch } from "@/lib/fetch";
 import { showSaveFileDialog } from "@/lib/utils";
 
+// OAuth2 provider assets.
+import discord from "@shared/assets/oauth2/discord.svg";
+import facebook from "@shared/assets/oauth2/facebook.svg";
+import gitlab from "@shared/assets/oauth2/gitlab.svg";
+import google from "@shared/assets/oauth2/google.svg";
+import microsoft from "@shared/assets/oauth2/microsoft.svg";
+
+const assets: Record<string, string> = {
+  discord: discord,
+  facebook: facebook,
+  gitlab: gitlab,
+  google: google,
+  microsoft: microsoft,
+} as const;
+
 // Using a proxy struct since tanstack only deals with arrays and not maps.
 // And rather than trying to hack it an converting on the fly, we're converting
 // once upfront from config to proxy and back on submission.
@@ -188,9 +203,16 @@ function ProviderSettingsSubForm(props: {
   return (
     <AccordionItem value={`item-${props.provider.id}`}>
       <AccordionTrigger>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-4">
           {icon()}
-          <span>{props.provider.display_name}</span>
+          <div class="flex items-center gap-2">
+            <img
+              class="size-[24px]"
+              src={assets[props.provider.name]}
+              alt={props.provider.display_name}
+            />
+            <span>{props.provider.display_name}</span>
+          </div>
         </div>
       </AccordionTrigger>
 

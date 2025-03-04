@@ -5,6 +5,23 @@ import type { ConfiguredOAuthProvidersResponse } from "@bindings/ConfiguredOAuth
 
 import { AUTH_API } from "@/lib/constants";
 
+// OAuth2 provider assets.
+import discord from "@shared/assets/oauth2/discord.svg";
+import facebook from "@shared/assets/oauth2/facebook.svg";
+import gitlab from "@shared/assets/oauth2/gitlab.svg";
+import google from "@shared/assets/oauth2/google.svg";
+import microsoft from "@shared/assets/oauth2/microsoft.svg";
+
+const assets: Record<string, string> = {
+  discord: discord.src,
+  facebook: facebook.src,
+  gitlab: gitlab.src,
+  google: google.src,
+  microsoft: microsoft.src,
+
+  fake: facebook.src,
+} as const;
+
 async function listConfiguredOAuthProviders(): Promise<ConfiguredOAuthProvidersResponse> {
   const response = await fetch(`${AUTH_API}/oauth/providers`, {
     method: "GET",
@@ -25,7 +42,7 @@ export function ConfiguredOAuthProviders() {
   const providers = () => {
     const providers = [...(providersFetch()?.providers ?? [])];
     if (import.meta.env.DEV) {
-      providers.push(["name", "Display Name"]);
+      providers.push(["fake", "Fake Provider"]);
     }
     return providers;
   };
@@ -47,7 +64,14 @@ export function ConfiguredOAuthProviders() {
                   class={cn("w-full", buttonVariants({ variant: "outline" }))}
                   href={`${AUTH_API}/oauth/${name}/login`}
                 >
-                  {displayName}
+                  <div class="flex items-center gap-2">
+                    <img
+                      class="size-[28px]"
+                      src={assets[name]}
+                      alt={displayName}
+                    />
+                    <span class="font-bold">{displayName}</span>
+                  </div>
                 </a>
               );
             }}

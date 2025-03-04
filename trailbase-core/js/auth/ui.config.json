@@ -2,7 +2,7 @@
   "$schema": "https://solid-ui.com/schema.json",
   "tsx": true,
   "tailwind": {
-    "css": "../styles/global.css",
+    "css": "../shared/global.css",
     "config": "tailwind.config.ts",
     "prefix": ""
   },
