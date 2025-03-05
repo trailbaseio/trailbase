@@ -46,46 +46,22 @@ fn parse_env_var<T: std::str::FromStr>(
 }
 
 #[cfg(test)]
-mod test_env {
-  use lazy_static::lazy_static;
-  use parking_lot::Mutex;
-  use std::collections::HashMap;
-
-  lazy_static! {
-    pub static ref ENV: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
-  }
-
-  pub(super) fn parse_env_var<T: std::str::FromStr>(
-    name: &str,
-  ) -> Result<Option<T>, <T as std::str::FromStr>::Err> {
-    if let Some(value) = ENV.lock().get(name) {
-      return Ok(Some(value.parse::<T>()?));
-    }
-    Ok(None)
-  }
-
-  pub(super) fn set(name: &str, value: Option<&str>) {
-    match value {
-      None => ENV.lock().remove(name),
-      Some(v) => ENV.lock().insert(name.to_string(), v.to_string()),
-    };
-  }
-}
-
-#[cfg(test)]
 use test_env::parse_env_var;
 
 pub(super) fn apply_parsed_env_var<T: std::str::FromStr>(
-  name: &str,
-  mut f: impl FnMut(T),
+  msg: &mut DynamicMessage,
+  field_desc: &FieldDescriptor,
+  var_name: &str,
+  f: impl Fn(T) -> prost_reflect::Value,
 ) -> Result<(), <T as std::str::FromStr>::Err> {
-  if let Some(v) = parse_env_var::<T>(name)? {
-    f(v);
+  if let Some(v) = parse_env_var::<T>(var_name)? {
+    msg.set_field(field_desc, f(v));
   }
   Ok(())
 }
 
 pub mod proto {
+  use base64::prelude::*;
   use chrono::Duration;
   use lazy_static::lazy_static;
   use prost::Message;
@@ -193,13 +169,6 @@ pub mod proto {
 
       return Ok(format!("{PREFACE}\n{text}"));
     }
-
-    pub fn hash(&self) -> u64 {
-      let encoded = self.encode_to_vec();
-      let mut s = DefaultHasher::new();
-      encoded.hash(&mut s);
-      return s.finish();
-    }
   }
 
   impl AuthConfig {
@@ -213,6 +182,15 @@ pub mod proto {
           .map_or(DEFAULT_REFRESH_TOKEN_TTL, Duration::seconds),
       );
     }
+  }
+
+  pub fn hash_config(config: &Config) -> String {
+    let encoded = config.encode_to_vec();
+    let mut s = DefaultHasher::new();
+    encoded.hash(&mut s);
+    let hash = s.finish();
+
+    return BASE64_URL_SAFE.encode(hash.to_le_bytes());
   }
 }
 
@@ -230,6 +208,15 @@ fn is_secret(field_descriptor: &FieldDescriptor) -> bool {
   return false;
 }
 
+/// Merges settings from environment variables and secrets into the base msg/config.
+///
+/// NOTE: the merging semantics are different for env variables and secrets. The former are
+/// overrides and will be set unconditionally, secrets will only be inserted for string fields
+/// where the value is `PLACEHOLDER`. This allows changing secret values, w/o them getting
+/// overridden when merging into a new config.
+///
+/// We could consider breaking the two up. We could even use serialized field descriptors as keys
+/// in secrets fiel rather than env variable names.
 fn recursively_merge_vault_and_env(
   msg: &mut DynamicMessage,
   vault: &proto::Vault,
@@ -246,8 +233,6 @@ fn recursively_merge_vault_and_env(
     let secret = is_secret(&field_descr);
 
     trace!("{var_name}: {secret}");
-
-    let mut set_field = |v: Value| msg.set_field(&field_descr, v);
 
     match field_descr.kind() {
       Kind::Message(_) => {
@@ -298,20 +283,31 @@ fn recursively_merge_vault_and_env(
         }
       }
       Kind::String => {
-        if let Ok(Some(value)) = parse_env_var(&var_name) {
-          set_field(Value::String(value));
+        // Env overrides takes priority letting user override any value whether from base config or
+        // secrets.
+        if let Some(value) = parse_env_var::<String>(&var_name).expect("infalliable") {
+          msg.set_field(&field_descr, Value::String(value));
         } else if secret {
           if let Some(stored_secret) = vault.secrets.get(&var_name) {
-            set_field(Value::String(stored_secret.to_string()));
+            match *msg.get_field(&field_descr) {
+              Value::String(ref x) if x == PLACEHOLDER => {
+                msg.set_field(&field_descr, Value::String(stored_secret.clone()));
+              }
+              _ => {
+                // The secret was replaced.
+              }
+            };
           }
         }
       }
-      Kind::Int32 => apply_parsed_env_var::<i32>(&var_name, |v| set_field(Value::I32(v)))?,
-      Kind::Uint32 => apply_parsed_env_var::<u32>(&var_name, |v| set_field(Value::U32(v)))?,
-      Kind::Int64 => apply_parsed_env_var::<i64>(&var_name, |v| set_field(Value::I64(v)))?,
-      Kind::Uint64 => apply_parsed_env_var::<u64>(&var_name, |v| set_field(Value::U64(v)))?,
-      Kind::Bool => apply_parsed_env_var::<bool>(&var_name, |v| set_field(Value::Bool(v)))?,
-      Kind::Enum(_) => apply_parsed_env_var::<i32>(&var_name, |v| set_field(Value::EnumNumber(v)))?,
+      Kind::Int32 => apply_parsed_env_var::<i32>(msg, &field_descr, &var_name, Value::I32)?,
+      Kind::Uint32 => apply_parsed_env_var::<u32>(msg, &field_descr, &var_name, Value::U32)?,
+      Kind::Int64 => apply_parsed_env_var::<i64>(msg, &field_descr, &var_name, Value::I64)?,
+      Kind::Uint64 => apply_parsed_env_var::<u64>(msg, &field_descr, &var_name, Value::U64)?,
+      Kind::Bool => apply_parsed_env_var::<bool>(msg, &field_descr, &var_name, Value::Bool)?,
+      Kind::Enum(_) => {
+        apply_parsed_env_var::<i32>(msg, &field_descr, &var_name, Value::EnumNumber)?
+      }
       _ => {
         error!("Config merging not implemented for: {field_descr:?}");
       }
@@ -321,7 +317,7 @@ fn recursively_merge_vault_and_env(
   return Ok(());
 }
 
-fn merge_vault_and_env(
+pub(crate) fn merge_vault_and_env(
   config: proto::Config,
   vault: proto::Vault,
 ) -> Result<proto::Config, ConfigError> {
@@ -330,34 +326,39 @@ fn merge_vault_and_env(
   return Ok(dyn_config.transcode_to::<proto::Config>()?);
 }
 
-fn recursively_strip_secrets(
+const PLACEHOLDER: &str = "<REDACTED>";
+
+fn recursively_redact_secrets(
   msg: &mut DynamicMessage,
   secrets: &mut HashMap<String, String>,
   parent_path: Vec<String>,
 ) -> Result<(), ConfigError> {
   for field_descr in msg.descriptor().fields() {
+    // If the field is empty, there's nothing to redact.
+    if !msg.has_field(&field_descr) {
+      continue;
+    }
+
     let path = {
       let mut path = parent_path.clone();
       path.push(field_descr.name().to_uppercase());
       path
     };
 
-    if !msg.has_field(&field_descr) {
-      continue;
-    }
-
-    let var_name = format!("TRAIL_{path}", path = path.join("_"));
     let secret = is_secret(&field_descr);
+
     match msg.get_field_mut(&field_descr) {
-      Value::Message(child) => recursively_strip_secrets(child, secrets, path)?,
+      Value::Message(child) => recursively_redact_secrets(child, secrets, path)?,
       Value::Map(child_map) => {
         for (key, value) in child_map {
           match (key, value) {
             (MapKey::String(k), Value::Message(m)) => {
+              // NOTE: We're pushing a second time here, making the path segment:
+              // "<FIELD_NAME>_<MAP_KEY>".
               let mut keyed = path.clone();
               keyed.push(k.to_uppercase());
 
-              recursively_strip_secrets(m, secrets, keyed)?
+              recursively_redact_secrets(m, secrets, keyed)?
             }
             x => {
               warn!("Unexpected message type: {x:?}");
@@ -367,8 +368,14 @@ fn recursively_strip_secrets(
       }
       Value::String(field) => {
         if secret {
-          secrets.insert(var_name, field.clone());
-          msg.clear_field(&field_descr);
+          // Insert into map.
+          secrets.insert(
+            format!("TRAIL_{path}", path = path.join("_")),
+            field.clone(),
+          );
+
+          // Then redact the field.
+          msg.set_field(&field_descr, Value::String(PLACEHOLDER.to_string()));
         }
       }
       x => {
@@ -382,12 +389,12 @@ fn recursively_strip_secrets(
   return Ok(());
 }
 
-pub(crate) fn strip_secrets(
+pub(crate) fn redact_secrets(
   config: &proto::Config,
 ) -> Result<(proto::Config, HashMap<String, String>), ConfigError> {
   let mut secrets = HashMap::<String, String>::new();
   let mut dyn_config = config.transcode_to_dynamic();
-  recursively_strip_secrets(&mut dyn_config, &mut secrets, vec![])?;
+  recursively_redact_secrets(&mut dyn_config, &mut secrets, vec![])?;
   let stripped = dyn_config.transcode_to::<proto::Config>()?;
 
   return Ok((stripped, secrets));
@@ -441,7 +448,7 @@ pub async fn load_or_init_config_textproto(
 
 fn split_config(config: &proto::Config) -> Result<(proto::Config, proto::Vault), ConfigError> {
   let mut new_vault = proto::Vault::default();
-  let (stripped_config, secrets) = strip_secrets(config)?;
+  let (stripped_config, secrets) = redact_secrets(config)?;
 
   for (key, value) in secrets {
     new_vault.secrets.insert(key, value);
@@ -627,6 +634,37 @@ pub(crate) fn validate_config(
 }
 
 #[cfg(test)]
+mod test_env {
+  use lazy_static::lazy_static;
+  use parking_lot::Mutex;
+  use std::collections::HashMap;
+
+  lazy_static! {
+    pub static ref ENV: Mutex<HashMap<String, String>> = Mutex::new(HashMap::new());
+  }
+
+  pub fn parse_env_var<T: std::str::FromStr>(
+    name: &str,
+  ) -> Result<Option<T>, <T as std::str::FromStr>::Err> {
+    if let Some(value) = ENV.lock().get(name) {
+      return Ok(Some(value.parse::<T>()?));
+    }
+    Ok(None)
+  }
+
+  pub fn set(name: &str, value: Option<&str>) {
+    match value {
+      None => ENV.lock().remove(name),
+      Some(v) => ENV.lock().insert(name.to_string(), v.to_string()),
+    };
+  }
+
+  pub fn clear() {
+    ENV.lock().clear();
+  }
+}
+
+#[cfg(test)]
 mod test {
   use std::collections::HashMap;
 
@@ -635,14 +673,13 @@ mod test {
   use crate::config::proto::{AuthConfig, Config, EmailConfig, OAuthProviderConfig};
 
   #[tokio::test]
-  async fn test_config_tests_sequentially() -> anyhow::Result<()> {
+  async fn test_config_tests_sequentially() {
     // Run sequentially to avoid concurrent tests clobbering their env variables.
     test_default_config_is_valid().await;
-    test_config_merging()?;
-    test_config_stripping()?;
-    test_config_merging_from_env_and_vault()?;
-
-    Ok(())
+    test_config_merging();
+    test_config_stripping();
+    test_config_merging_from_env_and_vault();
+    test_strip_and_merge();
   }
 
   async fn test_default_config_is_valid() {
@@ -653,7 +690,7 @@ mod test {
     validate_config(&table_metadata, &config).unwrap();
   }
 
-  fn test_config_merging() -> anyhow::Result<()> {
+  fn test_config_merging() {
     let config = proto::Config {
       email: proto::EmailConfig {
         smtp_username: Some("user".to_string()),
@@ -662,73 +699,13 @@ mod test {
       ..Default::default()
     };
     let vault = proto::Vault::default();
-    let merged = merge_vault_and_env(config.clone(), vault)?;
+    let merged = merge_vault_and_env(config.clone(), vault).unwrap();
 
     assert_eq!(config, merged);
-
-    return Ok(());
   }
 
-  fn test_config_merging_from_env_and_vault() -> anyhow::Result<()> {
-    // Set username via env var.
-    test_env::set("TRAIL_EMAIL_SMTP_USERNAME", Some("username"));
-
-    let client_secret = "secret".to_string();
-    let vault = proto::Vault {
-      secrets: HashMap::<String, String>::from([
-        (
-          "TRAIL_EMAIL_SMTP_PASSWORD".to_string(),
-          "password".to_string(),
-        ),
-        (
-          "TRAIL_AUTH_OAUTH_PROVIDERS_KEY_CLIENT_SECRET".to_string(),
-          client_secret.clone(),
-        ),
-      ]),
-    };
-
+  fn test_config_stripping() {
     let config = proto::Config {
-      auth: AuthConfig {
-        oauth_providers: HashMap::<String, OAuthProviderConfig>::from([(
-          "key".to_string(),
-          OAuthProviderConfig {
-            client_id: Some("my_client_id".to_string()),
-            ..Default::default()
-          },
-        )]),
-        ..Default::default()
-      },
-      ..Default::default()
-    };
-
-    let merged = merge_vault_and_env(config.clone(), vault)?;
-    test_env::set("TRAIL_EMAIL_SMTP_USERNAME", None);
-
-    // Update config to match what we would expect after merging.
-    let expected = {
-      let mut expected = config.clone();
-      expected.email = EmailConfig {
-        smtp_username: Some("username".to_string()),
-        smtp_password: Some("password".to_string()),
-        ..Default::default()
-      };
-      expected
-        .auth
-        .oauth_providers
-        .get_mut("key")
-        .unwrap()
-        .client_secret = Some(client_secret);
-
-      expected
-    };
-
-    assert_eq!(merged, expected);
-
-    return Ok(());
-  }
-
-  fn test_config_stripping() -> anyhow::Result<()> {
-    let mut config = proto::Config {
       email: proto::EmailConfig {
         smtp_username: Some("user".to_string()),
         smtp_password: Some("pass".to_string()),
@@ -748,17 +725,22 @@ mod test {
       ..Default::default()
     };
 
-    let (stripped, secrets) = strip_secrets(&config)?;
+    let expected = {
+      let mut expected = config.clone();
+      // Redact field
+      expected.email.smtp_password = Some(PLACEHOLDER.to_string());
+      // Redact map entry.
+      expected
+        .auth
+        .oauth_providers
+        .get_mut("key")
+        .unwrap()
+        .client_secret = Some(PLACEHOLDER.to_string());
+      expected
+    };
 
-    config.email.smtp_password = None;
-    config
-      .auth
-      .oauth_providers
-      .get_mut("key")
-      .unwrap()
-      .client_secret = None;
-
-    assert_eq!(config, stripped);
+    let (stripped, secrets) = redact_secrets(&config).unwrap();
+    assert_eq!(stripped, expected);
     assert_eq!(
       secrets.get("TRAIL_EMAIL_SMTP_PASSWORD"),
       Some(&"pass".to_string())
@@ -767,8 +749,106 @@ mod test {
       secrets.get("TRAIL_AUTH_OAUTH_PROVIDERS_KEY_CLIENT_SECRET"),
       Some(&"secret".to_string())
     );
+  }
 
-    return Ok(());
+  fn test_config_merging_from_env_and_vault() {
+    // Set username via env var.
+    let username = "secret_username";
+    test_env::set("TRAIL_EMAIL_SMTP_USERNAME", Some(username));
+
+    let password = "secret_password";
+    let client_secret = "secret".to_string();
+    let outh_map_key = "fake_provider";
+    let vault = proto::Vault {
+      secrets: HashMap::<String, String>::from([
+        (
+          "TRAIL_EMAIL_SMTP_PASSWORD".to_string(),
+          password.to_string(),
+        ),
+        (
+          format!(
+            "TRAIL_AUTH_OAUTH_PROVIDERS_{}_CLIENT_SECRET",
+            outh_map_key.to_uppercase()
+          ),
+          client_secret.clone(),
+        ),
+        (
+          format!("TRAIL_AUTH_OAUTH_PROVIDERS_MISSING_CLIENT_SECRET"),
+          "SHOULD NOT BE SET".to_string(),
+        ),
+      ]),
+    };
+
+    let config = proto::Config {
+      email: EmailConfig {
+        smtp_username: Some(PLACEHOLDER.to_string()),
+        smtp_password: Some(PLACEHOLDER.to_string()),
+        ..Default::default()
+      },
+      auth: AuthConfig {
+        oauth_providers: HashMap::<String, OAuthProviderConfig>::from([(
+          outh_map_key.to_string(),
+          OAuthProviderConfig {
+            client_id: Some("my_client_id".to_string()),
+            client_secret: Some(PLACEHOLDER.to_string()),
+            ..Default::default()
+          },
+        )]),
+        ..Default::default()
+      },
+      ..Default::default()
+    };
+
+    let merged = merge_vault_and_env(config.clone(), vault).unwrap();
+    test_env::clear();
+
+    // Build expected config with secrets.
+    let expected = {
+      let mut expected = config.clone();
+      expected.email = EmailConfig {
+        smtp_username: Some(username.to_string()),
+        smtp_password: Some(password.to_string()),
+        ..Default::default()
+      };
+      expected
+        .auth
+        .oauth_providers
+        .get_mut(outh_map_key)
+        .unwrap()
+        .client_secret = Some(client_secret);
+
+      expected
+    };
+
+    assert_eq!(merged, expected);
+  }
+
+  fn test_strip_and_merge() {
+    let config = proto::Config {
+      email: EmailConfig {
+        smtp_username: Some("secret_username".to_string()),
+        smtp_password: Some("secret_password".to_string()),
+        ..Default::default()
+      },
+      auth: AuthConfig {
+        oauth_providers: HashMap::<String, OAuthProviderConfig>::from([(
+          "fake_provider".to_string(),
+          OAuthProviderConfig {
+            client_id: Some("my_client_id".to_string()),
+            client_secret: Some("secret_client_secret".to_string()),
+            ..Default::default()
+          },
+        )]),
+        ..Default::default()
+      },
+      ..Default::default()
+    };
+
+    let (stripped, secrets) = redact_secrets(&config).unwrap();
+    let vault = proto::Vault { secrets };
+    let merged = merge_vault_and_env(stripped, vault).unwrap();
+
+    assert_eq!(config, merged);
   }
 }
 

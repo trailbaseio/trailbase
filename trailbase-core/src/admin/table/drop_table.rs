@@ -10,6 +10,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
+use crate::config::proto::hash_config;
 use crate::transaction::TransactionRecorder;
 
 #[derive(Clone, Debug, Deserialize, TS)]
@@ -60,7 +61,7 @@ pub async fn drop_table_handler(
 
   // Update configuration: remove all APIs reference the no longer existing table.
   let mut config = state.get_config();
-  let old_config_hash = config.hash();
+  let old_config_hash = hash_config(&config);
 
   config.record_apis.retain(move |c| {
     if let Some(ref table) = c.table_name {

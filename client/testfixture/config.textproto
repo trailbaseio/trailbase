@@ -10,6 +10,7 @@ auth {
     key: "discord"
     value {
       client_id: "invalid_discord_id"
+      client_secret: "<REDACTED>"
       provider_id: DISCORD
       display_name: "Discord"
     }

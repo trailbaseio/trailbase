@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::oauth::providers::{ConfiguredOAuthProviders, OAuthProviderType};
-use crate::config::proto::{Config, RecordApiConfig, S3StorageConfig};
+use crate::config::proto::{hash_config, Config, RecordApiConfig, S3StorageConfig};
 use crate::config::{validate_config, write_config_and_vault_textproto};
 use crate::constants::SITE_URL_DEFAULT;
 use crate::data_dir::DataDir;
@@ -218,27 +218,27 @@ impl AppState {
   pub async fn validate_and_update_config(
     &self,
     config: Config,
-    hash: Option<u64>,
+    hash: Option<String>,
   ) -> Result<(), crate::config::ConfigError> {
     validate_config(self.table_metadata(), &config)?;
 
     match hash {
       Some(hash) => {
         let old_config = self.state.config.load();
-        if old_config.hash() == hash {
-          let success = self
-            .state
-            .config
-            .compare_and_swap(old_config, Arc::new(config));
-
-          if !success {
-            return Err(crate::config::ConfigError::Update(
-              "Config compare-exchange failed".to_string(),
-            ));
-          }
-        } else {
+        if hash_config(&old_config) != hash {
           return Err(crate::config::ConfigError::Update(
-            "Safe config update failed: mismatching hash".to_string(),
+            "Config update failed: mismatching or stale hash".to_string(),
+          ));
+        }
+
+        let success = self
+          .state
+          .config
+          .compare_and_swap(old_config, Arc::new(config));
+
+        if !success {
+          return Err(crate::config::ConfigError::Update(
+            "Config compare-exchange failed".to_string(),
           ));
         }
       }
