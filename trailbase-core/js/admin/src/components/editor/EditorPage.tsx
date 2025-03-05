@@ -21,10 +21,11 @@ import {
   TbPencilPlus,
 } from "solid-icons/tb";
 
+import { autocompletion } from "@codemirror/autocomplete";
 import { EditorView, lineNumbers, keymap } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { minimalSetup } from "codemirror";
-import { sql } from "@codemirror/lang-sql";
+import { sql, SQLConfig, SQLNamespace, SQLite } from "@codemirror/lang-sql";
 
 import { iconButtonStyle, IconButton } from "@/components/IconButton";
 import { Header } from "@/components/Header";
@@ -51,9 +52,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { showToast } from "@/components/ui/toast";
-
 import { DataTable } from "@/components/Table";
-import type { QueryRequest, QueryResponse } from "@/lib/bindings";
+
+import { getAllTableSchemas } from "@/lib/table";
+import type {
+  QueryRequest,
+  QueryResponse,
+  ListSchemasResponse,
+} from "@/lib/bindings";
 import { adminFetch } from "@/lib/fetch";
 import { isNotNull } from "@/lib/schema";
 
@@ -108,6 +114,28 @@ async function executeSql(
 }
 
 type RowData = Array<object>;
+
+function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
+  const schema: {
+    [name: string]: SQLNamespace;
+  } = {};
+
+  for (const table of schemas.tables) {
+    schema[table.name] = {
+      self: { label: table.name, type: "keyword" },
+      children: table.columns.map((c) => c.name),
+    } satisfies SQLNamespace;
+  }
+
+  for (const view of schemas.views) {
+    schema[view.name] = {
+      self: { label: view.name, type: "keyword" },
+      children: view.columns?.map((c) => c.name) ?? [],
+    } satisfies SQLNamespace;
+  }
+
+  return schema;
+}
 
 function ResultView(props: {
   script: Script;
@@ -278,6 +306,7 @@ function RenameDialog(props: { selected: number; script: Script }) {
 }
 
 function EditorPanel(props: {
+  schemas: ListSchemasResponse;
   selected: number;
   script: Script;
   dirty: boolean;
@@ -334,8 +363,8 @@ function EditorPanel(props: {
     },
   ]);
 
-  const newEditorState = (contents: string) =>
-    EditorState.create({
+  const newEditorState = (contents: string) => {
+    return EditorState.create({
       doc: contents,
       extensions: [
         myTheme,
@@ -343,7 +372,12 @@ function EditorPanel(props: {
         lineNumbers(),
         // Let's you define your own custom CSS style for the line number gutter.
         // gutter({ class: "cm-mygutter" }),
-        sql(),
+        sql({
+          dialect: SQLite,
+          upperCaseKeywords: true,
+          schema: buildSchema(props.schemas),
+        } as SQLConfig),
+        autocompletion(),
         // eslint-disable-next-line solid/reactivity
         EditorView.updateListener.of((v) => {
           if (!v.changes.empty) {
@@ -356,6 +390,7 @@ function EditorPanel(props: {
         minimalSetup,
       ],
     });
+  };
 
   onCleanup(() => editor?.destroy());
 
@@ -443,6 +478,8 @@ export function EditorPage() {
   const [selected, setSelected] = createSignal<number>(0);
   const [dirty, setDirty] = createSignal<boolean>(false);
 
+  const [schemaFetch, { refetch: _ }] = createResource(getAllTableSchemas);
+
   type DirtyDialogState = {
     nextSelected: number;
   };
@@ -510,13 +547,24 @@ export function EditorPage() {
         }}
         second={() => {
           return (
-            <EditorPanel
-              selected={selected()}
-              script={script()}
-              dirty={dirty()}
-              setDirty={setDirty}
-              deleteScript={deleteCurrentScript}
-            />
+            <Switch fallback={"Loading..."}>
+              <Match when={schemaFetch.error}>
+                <span>
+                  Schema fetch error: {JSON.stringify(schemaFetch.latest)}
+                </span>
+              </Match>
+
+              <Match when={schemaFetch()}>
+                <EditorPanel
+                  schemas={schemaFetch()!}
+                  selected={selected()}
+                  script={script()}
+                  dirty={dirty()}
+                  setDirty={setDirty}
+                  deleteScript={deleteCurrentScript}
+                />
+              </Match>
+            </Switch>
           );
         }}
       />
