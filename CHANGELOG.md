@@ -1,3 +1,11 @@
+## v0.7.0
+
+* Schema-aware auto-completion in SQL editor.
+* Allow UUID text-encoded 16byte blobs as record ids and in filters during record listing.
+* Redact secrets in admin APIs/UI to reduce surface for potential leaks.
+* Polish auth/admin UI with image assets for external auth providers like discord, gitlab, ... .
+* Permissive `img-src` CSP in auth UI to allow displaying avatars from external auth providers.
+
 ## v0.6.8
 
 * Fix client-side merging of fetch arguments including credentials.
