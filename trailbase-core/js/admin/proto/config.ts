@@ -11,7 +11,8 @@ export const protobufPackage = "config";
 
 export enum OAuthProviderId {
   OAUTH_PROVIDER_ID_UNDEFINED = 0,
-  CUSTOM = 1,
+  TEST = 1,
+  OIDC0 = 2,
   DISCORD = 10,
   GITLAB = 11,
   GOOGLE = 12,
@@ -26,8 +27,11 @@ export function oAuthProviderIdFromJSON(object: any): OAuthProviderId {
     case "OAUTH_PROVIDER_ID_UNDEFINED":
       return OAuthProviderId.OAUTH_PROVIDER_ID_UNDEFINED;
     case 1:
-    case "CUSTOM":
-      return OAuthProviderId.CUSTOM;
+    case "TEST":
+      return OAuthProviderId.TEST;
+    case 2:
+    case "OIDC0":
+      return OAuthProviderId.OIDC0;
     case 10:
     case "DISCORD":
       return OAuthProviderId.DISCORD;
@@ -54,8 +58,10 @@ export function oAuthProviderIdToJSON(object: OAuthProviderId): string {
   switch (object) {
     case OAuthProviderId.OAUTH_PROVIDER_ID_UNDEFINED:
       return "OAUTH_PROVIDER_ID_UNDEFINED";
-    case OAuthProviderId.CUSTOM:
-      return "CUSTOM";
+    case OAuthProviderId.TEST:
+      return "TEST";
+    case OAuthProviderId.OIDC0:
+      return "OIDC0";
     case OAuthProviderId.DISCORD:
       return "DISCORD";
     case OAuthProviderId.GITLAB:
@@ -227,12 +233,15 @@ export interface EmailConfig {
 export interface OAuthProviderConfig {
   clientId?: string | undefined;
   clientSecret?: string | undefined;
-  providerId?: OAuthProviderId | undefined;
+  providerId?:
+    | OAuthProviderId
+    | undefined;
+  /** Settings for generic OpenID Connect provider. */
+  name?: string | undefined;
   displayName?: string | undefined;
   authUrl?: string | undefined;
   tokenUrl?: string | undefined;
   userApiUrl?: string | undefined;
-  pkce?: boolean | undefined;
 }
 
 export interface AuthConfig {
@@ -672,6 +681,9 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     if (message.providerId !== undefined && message.providerId !== 0) {
       writer.uint32(24).int32(message.providerId);
     }
+    if (message.name !== undefined && message.name !== "") {
+      writer.uint32(82).string(message.name);
+    }
     if (message.displayName !== undefined && message.displayName !== "") {
       writer.uint32(90).string(message.displayName);
     }
@@ -683,9 +695,6 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     }
     if (message.userApiUrl !== undefined && message.userApiUrl !== "") {
       writer.uint32(114).string(message.userApiUrl);
-    }
-    if (message.pkce !== undefined && message.pkce !== false) {
-      writer.uint32(120).bool(message.pkce);
     }
     return writer;
   },
@@ -721,6 +730,14 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
           message.providerId = reader.int32() as any;
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
         case 11: {
           if (tag !== 90) {
             break;
@@ -753,14 +770,6 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
           message.userApiUrl = reader.string();
           continue;
         }
-        case 15: {
-          if (tag !== 120) {
-            break;
-          }
-
-          message.pkce = reader.bool();
-          continue;
-        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -775,11 +784,11 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
       clientId: isSet(object.clientId) ? globalThis.String(object.clientId) : undefined,
       clientSecret: isSet(object.clientSecret) ? globalThis.String(object.clientSecret) : undefined,
       providerId: isSet(object.providerId) ? oAuthProviderIdFromJSON(object.providerId) : undefined,
+      name: isSet(object.name) ? globalThis.String(object.name) : undefined,
       displayName: isSet(object.displayName) ? globalThis.String(object.displayName) : undefined,
       authUrl: isSet(object.authUrl) ? globalThis.String(object.authUrl) : undefined,
       tokenUrl: isSet(object.tokenUrl) ? globalThis.String(object.tokenUrl) : undefined,
       userApiUrl: isSet(object.userApiUrl) ? globalThis.String(object.userApiUrl) : undefined,
-      pkce: isSet(object.pkce) ? globalThis.Boolean(object.pkce) : undefined,
     };
   },
 
@@ -794,6 +803,9 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     if (message.providerId !== undefined && message.providerId !== 0) {
       obj.providerId = oAuthProviderIdToJSON(message.providerId);
     }
+    if (message.name !== undefined && message.name !== "") {
+      obj.name = message.name;
+    }
     if (message.displayName !== undefined && message.displayName !== "") {
       obj.displayName = message.displayName;
     }
@@ -806,9 +818,6 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     if (message.userApiUrl !== undefined && message.userApiUrl !== "") {
       obj.userApiUrl = message.userApiUrl;
     }
-    if (message.pkce !== undefined && message.pkce !== false) {
-      obj.pkce = message.pkce;
-    }
     return obj;
   },
 
@@ -820,11 +829,11 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     message.clientId = object.clientId ?? "";
     message.clientSecret = object.clientSecret ?? "";
     message.providerId = object.providerId ?? 0;
+    message.name = object.name ?? "";
     message.displayName = object.displayName ?? "";
     message.authUrl = object.authUrl ?? "";
     message.tokenUrl = object.tokenUrl ?? "";
     message.userApiUrl = object.userApiUrl ?? "";
-    message.pkce = object.pkce ?? false;
     return message;
   },
 };

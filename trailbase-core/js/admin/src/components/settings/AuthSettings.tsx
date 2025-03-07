@@ -33,71 +33,43 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 import type { OAuthProviderResponse, OAuthProviderEntry } from "@/lib/bindings";
-import { AuthConfig, Config, OAuthProviderConfig } from "@proto/config";
+import {
+  AuthConfig,
+  Config,
+  OAuthProviderConfig,
+  OAuthProviderId,
+} from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/config";
 import { adminFetch } from "@/lib/fetch";
 import { showSaveFileDialog } from "@/lib/utils";
 
 // OAuth2 provider assets.
+import openIdConnect from "@shared/assets/oauth2/oidc.svg";
 import discord from "@shared/assets/oauth2/discord.svg";
 import facebook from "@shared/assets/oauth2/facebook.svg";
 import gitlab from "@shared/assets/oauth2/gitlab.svg";
 import google from "@shared/assets/oauth2/google.svg";
 import microsoft from "@shared/assets/oauth2/microsoft.svg";
 
-const assets: Record<string, string> = {
-  discord: discord,
-  facebook: facebook,
-  gitlab: gitlab,
-  google: google,
-  microsoft: microsoft,
-} as const;
+const assets = new Map<OAuthProviderId, string>([
+  [OAuthProviderId.OIDC0, openIdConnect],
+  [OAuthProviderId.DISCORD, discord],
+  [OAuthProviderId.FACEBOOK, facebook],
+  [OAuthProviderId.GITLAB, gitlab],
+  [OAuthProviderId.GOOGLE, google],
+  [OAuthProviderId.MICROSOFT, microsoft],
+]);
 
-// Using a proxy struct since tanstack only deals with arrays and not maps.
+// Using a proxy struct for oauth providers, since tanstack only deals with arrays and not maps.
 // And rather than trying to hack it an converting on the fly, we're converting
 // once upfront from config to proxy and back on submission.
-type State = {
-  clientId?: string;
-  clientSecret?: string;
-};
 type NamedOAuthProvider = {
   provider: OAuthProviderEntry;
-  state?: State;
+  state?: OAuthProviderConfig;
 };
 type AuthConfigProxy = Omit<AuthConfig, "oauthProviders"> & {
   namedOauthProviders: NamedOAuthProvider[];
 };
-
-function nonEmpty(v: string | undefined): string | undefined {
-  return v && v !== "" ? v : undefined;
-}
-
-export async function adminListOAuthProviders(): Promise<OAuthProviderResponse> {
-  const response = await adminFetch("/oauth_providers", {
-    method: "GET",
-  });
-  return await response.json();
-}
-
-function createSetOnce<T>(initial: T): [
-  () => T,
-  (v: T) => void,
-  {
-    reset: (v: T) => void;
-  },
-] {
-  let called = false;
-  const [v, setV] = createSignal<T>(initial);
-
-  const setter = (v: T) => {
-    if (!called) {
-      called = true;
-      setV(() => v);
-    }
-  };
-
-  return [v, setter, { reset: setV }];
-}
 
 function configToProxy(
   providers: Array<OAuthProviderEntry>,
@@ -149,7 +121,7 @@ function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
     if (clientId && clientSecret) {
       config.oauthProviders[p.name] = {
         providerId: p.id,
-        displayName: p.display_name,
+        // displayName: p.display_name,
         clientId,
         clientSecret,
       };
@@ -160,14 +132,45 @@ function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
   return config;
 }
 
+function nonEmpty(v: string | undefined): string | undefined {
+  return v && v !== "" ? v : undefined;
+}
+
+export async function adminListOAuthProviders(): Promise<OAuthProviderResponse> {
+  const response = await adminFetch("/oauth_providers", {
+    method: "GET",
+  });
+  return await response.json();
+}
+
+function createSetOnce<T>(initial: T): [
+  () => T,
+  (v: T) => void,
+  {
+    reset: (v: T) => void;
+  },
+] {
+  let called = false;
+  const [v, setV] = createSignal<T>(initial);
+
+  const setter = (v: T) => {
+    if (!called) {
+      called = true;
+      setV(() => v);
+    }
+  };
+
+  return [v, setter, { reset: setV }];
+}
+
 function ProviderSettingsSubForm(props: {
   form: FormApiT<AuthConfigProxy>;
   index: number;
   provider: OAuthProviderEntry;
 }) {
-  const [original, setOnce, { reset }] = createSetOnce<State | undefined>(
-    undefined,
-  );
+  const [original, setOnce, { reset }] = createSetOnce<
+    OAuthProviderConfig | undefined
+  >(undefined);
 
   const current = createMemo(() =>
     props.form.useStore((state: FormStateT<AuthConfigProxy>) => {
@@ -188,7 +191,7 @@ function ProviderSettingsSubForm(props: {
     return id || secret;
   };
 
-  const icon = () => {
+  const bullet = () => {
     if (dirty()) {
       return <TbCirclePlus color="orange" />;
     }
@@ -204,11 +207,11 @@ function ProviderSettingsSubForm(props: {
     <AccordionItem value={`item-${props.provider.id}`}>
       <AccordionTrigger>
         <div class="flex items-center gap-4">
-          {icon()}
+          {bullet()}
           <div class="flex items-center gap-2">
             <img
               class="size-[24px]"
-              src={assets[props.provider.name]}
+              src={assets.get(props.provider.id)}
               alt={props.provider.display_name}
             />
             <span>{props.provider.display_name}</span>
@@ -407,13 +410,18 @@ function AuthSettingsForm(props: {
               {(_field) => {
                 return (
                   <Accordion multiple={false} collapsible class="w-full">
-                    <For each={props.providers.providers ?? []}>
+                    <For each={values().namedOauthProviders}>
                       {(provider, index) => {
+                        // Skip OIDC provider for now until we expand the form to render the extra fields.
+                        if (provider.provider.id === OAuthProviderId.OIDC0) {
+                          return null;
+                        }
+
                         return (
                           <ProviderSettingsSubForm
                             form={form}
                             index={index()}
-                            provider={provider}
+                            provider={provider.provider}
                           />
                         );
                       }}

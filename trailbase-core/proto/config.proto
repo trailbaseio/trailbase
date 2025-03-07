@@ -27,7 +27,9 @@ message EmailConfig {
 
 enum OAuthProviderId {
   OAUTH_PROVIDER_ID_UNDEFINED = 0;
-  CUSTOM = 1;
+  TEST = 1;
+  OIDC0 = 2;
+
   DISCORD = 10;
   GITLAB = 11;
   GOOGLE = 12;
@@ -38,13 +40,18 @@ enum OAuthProviderId {
 message OAuthProviderConfig {
   optional string client_id = 1;
   optional string client_secret = 2 [ (secret) = true ];
+
   optional OAuthProviderId provider_id = 3;
 
+  // Settings for generic OpenID Connect provider. Name is implicitly provided
+  // via the `AuthConfig.oauth_provders` map key.
   optional string display_name = 11;
   optional string auth_url = 12;
   optional string token_url = 13;
   optional string user_api_url = 14;
-  optional bool pkce = 15;
+
+  // TODO: Allow turning PKCE on/off. Currently on by default.
+  // optional bool pkce = 15;
 }
 
 message AuthConfig {

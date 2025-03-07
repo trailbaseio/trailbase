@@ -79,7 +79,6 @@ impl<'c> AsyncHttpClient<'c> for WrappedReqwest {
 
 // This handler receives the ?code=<>&state=<>, uses it to get an external oauth token, gets the
 // user's information, creates a new local user if needed, and finally mints our own tokens.
-
 pub(crate) async fn callback_from_external_auth_provider(
   State(state): State<AppState>,
   Path(provider): Path<String>,

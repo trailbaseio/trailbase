@@ -3,13 +3,14 @@ use log::*;
 use prost_reflect::{
   DynamicMessage, ExtensionDescriptor, FieldDescriptor, Kind, MapKey, ReflectMessage, Value,
 };
-use proto::EmailTemplate;
+use proto::{EmailTemplate, OAuthProviderId};
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use thiserror::Error;
 use tokio::fs;
 use validator::{ValidateEmail, ValidateUrl};
 
+use crate::auth::oauth::providers::oauth_provider_registry;
 use crate::data_dir::DataDir;
 use crate::records::validate_record_api_config;
 use crate::table_metadata::TableMetadataCache;
@@ -526,17 +527,26 @@ pub(crate) fn validate_config(
     }
   }
 
-  // Check auth.
-  let mut providers = HashSet::<String>::new();
+  // Check OAuth.
   for (name, provider) in &config.auth.oauth_providers {
-    let _provider_id = match &provider.provider_id {
-      Some(id) if *id > 0 => *id,
-      _ => {
-        return ierr(format!("Provider id for: {name}"));
-      }
+    let provider_id: OAuthProviderId = provider
+      .provider_id
+      .unwrap_or(0)
+      .try_into()
+      .map_err(|_| ConfigError::Invalid("Invalid provider id".into()))?;
+    if provider_id == OAuthProviderId::OauthProviderIdUndefined {
+      return ierr(format!("Invalid id for provider: {name}"));
+    }
+
+    let Some(factory) = oauth_provider_registry
+      .iter()
+      .find(|factory| factory.id == provider_id)
+    else {
+      return ierr(format!("Missing factory for: {name}"));
     };
-    if !providers.insert(name.to_string()) {
-      return ierr(format!("Multiple providers for: {name}"));
+
+    if name != factory.factory_name {
+      return ierr(format!("Factory name mismatch for: {name}"));
     }
 
     if provider.client_secret.is_none() {
@@ -547,7 +557,19 @@ pub(crate) fn validate_config(
       return ierr(format!("Missing client id for: {name}"));
     }
 
-    // TODO: validate critical endpoint urls are present and valid.
+    if provider_id == OAuthProviderId::Oidc0 {
+      if !provider.auth_url.validate_url() {
+        return ierr(format!("Invalid auth url for: {name}"));
+      }
+
+      if !provider.token_url.validate_url() {
+        return ierr(format!("Invalid token url for: {name}"));
+      }
+
+      if !provider.user_api_url.validate_url() {
+        return ierr(format!("Invalid user api url for: {name}"));
+      }
+    }
   }
 
   // Check JSON Schema configs

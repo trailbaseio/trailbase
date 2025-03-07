@@ -335,7 +335,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       OAuthProviderConfig {
         client_id: Some("test_client_id".to_string()),
         client_secret: Some("test_client_secret".to_string()),
-        provider_id: Some(OAuthProviderId::Custom as i32),
+        provider_id: Some(OAuthProviderId::Test as i32),
         ..Default::default()
       },
     );

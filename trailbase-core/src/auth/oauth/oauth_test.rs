@@ -101,7 +101,7 @@ async fn test_oauth() {
     OAuthProviderConfig {
       client_id: Some("test_client_id".to_string()),
       client_secret: Some("test_client_secret".to_string()),
-      provider_id: Some(OAuthProviderId::Custom as i32),
+      provider_id: Some(OAuthProviderId::Test as i32),
       // TODO: Set it up to talk to a fake/mock server.
       auth_url: Some(server.server_url(auth_path).unwrap().to_string()),
       token_url: Some(server.server_url(token_path).unwrap().to_string()),

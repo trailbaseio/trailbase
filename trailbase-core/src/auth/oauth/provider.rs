@@ -57,11 +57,9 @@ pub trait OAuthProvider {
   #[allow(unused)]
   fn provider(&self) -> OAuthProviderId;
 
-  fn name(&self) -> &'static str;
+  fn name(&self) -> &str;
 
-  fn display_name(&self) -> &'static str {
-    self.name()
-  }
+  fn display_name(&self) -> &str;
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError>;
 

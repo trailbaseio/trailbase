@@ -7,7 +7,6 @@ use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::auth::AuthError;
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
-// TODO: Add name/display name and this would already be a generic CustomOAuthProvider.
 pub struct TestOAuthProvider {
   client_id: String,
   client_secret: String,
@@ -23,10 +22,10 @@ impl TestOAuthProvider {
 
   pub fn factory() -> OAuthProviderFactory {
     OAuthProviderFactory {
-      id: OAuthProviderId::Custom,
-      name: Self::NAME,
-      display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|config: &OAuthProviderConfig| {
+      id: OAuthProviderId::Test,
+      factory_name: Self::NAME,
+      factory_display_name: Self::DISPLAY_NAME,
+      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
         Ok(Box::new(TestOAuthProvider {
           client_id: config.client_id.clone().unwrap(),
           client_secret: config.client_secret.clone().unwrap(),
@@ -52,7 +51,7 @@ impl OAuthProvider for TestOAuthProvider {
     Self::NAME
   }
   fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Custom
+    OAuthProviderId::Test
   }
   fn display_name(&self) -> &'static str {
     Self::DISPLAY_NAME
@@ -86,7 +85,7 @@ impl OAuthProvider for TestOAuthProvider {
 
     return Ok(OAuthUser {
       provider_user_id: user.id,
-      provider_id: OAuthProviderId::Custom,
+      provider_id: OAuthProviderId::Test,
       email: user.email,
       verified: user.verified,
       avatar: None,

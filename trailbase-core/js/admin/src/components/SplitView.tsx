@@ -67,7 +67,7 @@ export function SplitView(props: {
 
         <ResizableHandle withHandle={true} />
 
-        <ResizablePanel class="overflow-x-hidden">
+        <ResizablePanel class="grow overflow-x-hidden">
           <props.second horizontal={true} />
         </ResizablePanel>
       </Resizable>

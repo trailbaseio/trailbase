@@ -6,21 +6,23 @@ import type { ConfiguredOAuthProvidersResponse } from "@bindings/ConfiguredOAuth
 import { AUTH_API } from "@/lib/constants";
 
 // OAuth2 provider assets.
+import openIdConnect from "@shared/assets/oauth2/oidc.svg";
 import discord from "@shared/assets/oauth2/discord.svg";
 import facebook from "@shared/assets/oauth2/facebook.svg";
 import gitlab from "@shared/assets/oauth2/gitlab.svg";
 import google from "@shared/assets/oauth2/google.svg";
 import microsoft from "@shared/assets/oauth2/microsoft.svg";
 
-const assets: Record<string, string> = {
-  discord: discord.src,
-  facebook: facebook.src,
-  gitlab: gitlab.src,
-  google: google.src,
-  microsoft: microsoft.src,
+const assets = new Map<string, string>([
+  ["discord", discord.src],
+  ["facebook", facebook.src],
+  ["gitlab", gitlab.src],
+  ["google", google.src],
+  ["microsoft", microsoft.src],
+  ["oidc0", openIdConnect.src],
 
-  fake: facebook.src,
-} as const;
+  ["fake", openIdConnect.src],
+]);
 
 async function listConfiguredOAuthProviders(): Promise<ConfiguredOAuthProvidersResponse> {
   const response = await fetch(`${AUTH_API}/oauth/providers`, {
@@ -59,17 +61,17 @@ export function ConfiguredOAuthProviders() {
 
           <For each={providers()}>
             {([name, displayName]) => {
+              const image = assets.get(name);
+
               return (
                 <a
                   class={cn("w-full", buttonVariants({ variant: "outline" }))}
                   href={`${AUTH_API}/oauth/${name}/login`}
                 >
                   <div class="flex items-center gap-2">
-                    <img
-                      class="size-[28px]"
-                      src={assets[name]}
-                      alt={displayName}
-                    />
+                    {image && (
+                      <img class="size-[28px]" src={image} alt={displayName} />
+                    )}
                     <span class="font-bold">{displayName}</span>
                   </div>
                 </a>

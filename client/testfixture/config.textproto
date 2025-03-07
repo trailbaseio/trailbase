@@ -12,7 +12,17 @@ auth {
       client_id: "invalid_discord_id"
       client_secret: "<REDACTED>"
       provider_id: DISCORD
-      display_name: "Discord"
+    }
+  }, {
+    key: "oidc0"
+    value {
+      client_id: "invalid_client_id"
+      client_secret: "<REDACTED>"
+      provider_id: OIDC0
+      display_name: "My OIDC"
+      auth_url: "https://myprovider.org/auth"
+      token_url: "https://myprovider.org/tokens"
+      user_api_url: "https://myprovider.org/user"
     }
   }]
 }

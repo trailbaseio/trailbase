@@ -61,9 +61,11 @@ impl FacebookOAuthProvider {
   pub fn factory() -> OAuthProviderFactory {
     OAuthProviderFactory {
       id: OAuthProviderId::Facebook,
-      name: Self::NAME,
-      display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|config: &OAuthProviderConfig| Ok(Box::new(Self::new(config)?))),
+      factory_name: Self::NAME,
+      factory_display_name: Self::DISPLAY_NAME,
+      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
+        Ok(Box::new(Self::new(config)?))
+      }),
     }
   }
 }

@@ -3,13 +3,13 @@ mod facebook;
 mod gitlab;
 mod google;
 mod microsoft;
+mod oidc;
 
 #[cfg(test)]
 pub(crate) mod test;
 
 use lazy_static::lazy_static;
 use log::*;
-use serde::Serialize;
 use std::collections::hash_map::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -25,41 +25,28 @@ pub enum OAuthProviderError {
 
 pub type OAuthProviderType = Box<dyn OAuthProvider + Send + Sync>;
 type OAuthFactoryType =
-  dyn Fn(&OAuthProviderConfig) -> Result<OAuthProviderType, OAuthProviderError> + Send + Sync;
+  dyn Fn(&str, &OAuthProviderConfig) -> Result<OAuthProviderType, OAuthProviderError> + Send + Sync;
 
 pub(crate) struct OAuthProviderFactory {
   pub id: OAuthProviderId,
-  pub name: &'static str,
-  pub display_name: &'static str,
+  pub factory_name: &'static str,
+  pub factory_display_name: &'static str,
   pub factory: Box<OAuthFactoryType>,
-}
-
-#[derive(Debug, Serialize, ts_rs::TS)]
-pub struct OAuthProviderEntry {
-  pub id: i32,
-  pub name: String,
-  pub display_name: String,
-}
-
-impl From<&OAuthProviderFactory> for OAuthProviderEntry {
-  fn from(val: &OAuthProviderFactory) -> Self {
-    OAuthProviderEntry {
-      id: val.id as i32,
-      name: val.name.to_string(),
-      display_name: val.display_name.to_string(),
-    }
-  }
 }
 
 lazy_static! {
   pub(crate) static ref oauth_provider_registry: Vec<OAuthProviderFactory> = vec![
+    #[cfg(test)]
+    test::TestOAuthProvider::factory(),
+    // NOTE: In the future we might want to have more than one OIDC factory.
+    oidc::OidcProvider::factory(0),
+
+    // "Social" OAuth providers.
     discord::DiscordOAuthProvider::factory(),
     gitlab::GitlabOAuthProvider::factory(),
     google::GoogleOAuthProvider::factory(),
     facebook::FacebookOAuthProvider::factory(),
     microsoft::MicrosoftOAuthProvider::factory(),
-    #[cfg(test)]
-    test::TestOAuthProvider::factory(),
   ];
 }
 
@@ -83,7 +70,8 @@ impl ConfiguredOAuthProviders {
         )));
       };
 
-      providers.insert(entry.name.to_string(), (entry.factory)(&config)?.into());
+      let provider = Arc::new((entry.factory)(&key, &config)?);
+      providers.insert(provider.name().to_string(), provider);
     }
 
     return Ok(ConfiguredOAuthProviders { providers });
@@ -96,7 +84,7 @@ impl ConfiguredOAuthProviders {
     return None;
   }
 
-  pub fn list(&self) -> Vec<(&'static str, &'static str)> {
+  pub fn list(&self) -> Vec<(&str, &str)> {
     return self
       .providers
       .values()
