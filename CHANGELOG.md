@@ -1,3 +1,9 @@
+## v0.7.1
+
+* Add generic OIDC provider. Can currently only be configured in config. Admin UI integration pending.
+* Add --demo mode to protect PII in demo setup.
+* Improve secrets redaction/merging.
+
 ## v0.7.0
 
 * Schema-aware auto-completion in SQL editor.
