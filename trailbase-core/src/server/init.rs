@@ -44,6 +44,7 @@ pub enum InitError {
 #[derive(Default)]
 pub struct InitArgs {
   pub dev: bool,
+  pub demo: bool,
   pub js_runtime_threads: Option<usize>,
 }
 
@@ -123,6 +124,7 @@ pub async fn init_app_state(
     data_dir: data_dir.clone(),
     public_dir,
     dev: args.dev,
+    demo: args.demo,
     table_metadata,
     config,
     conn,

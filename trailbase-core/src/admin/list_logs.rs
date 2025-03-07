@@ -43,7 +43,7 @@ pub struct LogJson {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct LogQuery {
+struct LogEntry {
   id: Option<[u8; 16]>,
   created: Option<f64>,
   r#type: i32,
@@ -64,8 +64,22 @@ struct LogQuery {
   data: Option<serde_json::Value>,
 }
 
-impl From<LogQuery> for LogJson {
-  fn from(value: LogQuery) -> Self {
+impl LogEntry {
+  fn redact(&mut self) {
+    fn replace_if_set(field: &mut String) {
+      if !field.is_empty() {
+        *field = "<demo>".to_string()
+      }
+    }
+
+    replace_if_set(&mut self.client_ip);
+    replace_if_set(&mut self.referer);
+    replace_if_set(&mut self.user_agent);
+  }
+}
+
+impl From<LogEntry> for LogJson {
+  fn from(value: LogEntry) -> Self {
     return LogJson {
       id: Uuid::from_bytes(value.id.unwrap()),
       created: value.created.unwrap_or(0.0),
@@ -135,7 +149,7 @@ pub async fn list_logs_handler(
     static ref DEFAULT_ORDERING: Vec<(String, Order)> =
       vec![(LOGS_TABLE_ID_COLUMN.to_string(), Order::Descending)];
   }
-  let logs = fetch_logs(
+  let mut logs = fetch_logs(
     conn,
     filter_where_clause.clone(),
     cursor,
@@ -143,6 +157,12 @@ pub async fn list_logs_handler(
     limit_or_default(limit),
   )
   .await?;
+
+  if state.demo_mode() {
+    for entry in &mut logs {
+      entry.redact();
+    }
+  }
 
   let stats = {
     let now = Utc::now();
@@ -191,7 +211,7 @@ async fn fetch_logs(
   cursor: Option<[u8; 16]>,
   order: Vec<(String, Order)>,
   limit: usize,
-) -> Result<Vec<LogQuery>, Error> {
+) -> Result<Vec<LogEntry>, Error> {
   let mut params = filter_where_clause.params;
   let mut where_clause = filter_where_clause.clause;
   params.push((
@@ -234,7 +254,7 @@ async fn fetch_logs(
     "#,
   );
 
-  return Ok(conn.query_values::<LogQuery>(&sql_query, params).await?);
+  return Ok(conn.query_values::<LogEntry>(&sql_query, params).await?);
 }
 
 #[derive(Debug, Serialize, TS)]

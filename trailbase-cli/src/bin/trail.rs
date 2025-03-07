@@ -86,6 +86,7 @@ async fn async_main() -> Result<(), BoxError> {
         admin_address: cmd.admin_address,
         public_dir: cmd.public_dir.map(|p| p.into()),
         dev: cmd.dev,
+        demo: cmd.demo,
         disable_auth_ui: cmd.disable_auth_ui,
         cors_allowed_origins: cmd.cors_allowed_origins,
         js_runtime_threads: cmd.js_runtime_threads,

@@ -22,6 +22,7 @@ struct InternalState {
   data_dir: DataDir,
   public_dir: Option<PathBuf>,
   dev: bool,
+  demo: bool,
 
   oauth: Computed<ConfiguredOAuthProviders, Config>,
   mailer: Computed<Mailer, Config>,
@@ -48,6 +49,7 @@ pub(crate) struct AppStateArgs {
   pub data_dir: DataDir,
   pub public_dir: Option<PathBuf>,
   pub dev: bool,
+  pub demo: bool,
   pub table_metadata: TableMetadataCache,
   pub config: Config,
   pub conn: trailbase_sqlite::Connection,
@@ -95,6 +97,7 @@ impl AppState {
         data_dir: args.data_dir,
         public_dir: args.public_dir,
         dev: args.dev,
+        demo: args.demo,
         oauth: Computed::new(&config, |c| {
           match ConfiguredOAuthProviders::from_config(c.auth.clone()) {
             Ok(providers) => providers,
@@ -132,6 +135,10 @@ impl AppState {
 
   pub(crate) fn dev_mode(&self) -> bool {
     return self.state.dev;
+  }
+
+  pub(crate) fn demo_mode(&self) -> bool {
+    return self.state.demo;
   }
 
   pub fn conn(&self) -> &trailbase_sqlite::Connection {
@@ -402,6 +409,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       data_dir,
       public_dir: None,
       dev: true,
+      demo: false,
       oauth: Computed::new(&config, |c| {
         ConfiguredOAuthProviders::from_config(c.auth.clone()).unwrap()
       }),

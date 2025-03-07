@@ -21,18 +21,17 @@ pub(crate) fn validate_redirects(
   first: &Option<String>,
   second: &Option<String>,
 ) -> Result<Option<String>, AuthError> {
-  let dev = state.dev_mode();
   let site = state.access_config(|c| c.server.site_url.clone());
 
   let valid = |redirect: &String| -> bool {
     if redirect.starts_with("/") {
       return true;
     }
-    if dev && redirect.starts_with("http://localhost") {
+    if state.dev_mode() && redirect.starts_with("http://localhost") {
       return true;
     }
 
-    // TODO: add a configurable white list.
+    // TODO: Add a configurable allow list.
     if let Some(site) = site {
       return redirect.starts_with(&site);
     }

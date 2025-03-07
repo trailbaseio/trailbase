@@ -51,12 +51,12 @@ pub struct ServerOptions {
   /// Optional path to static assets that will be served at the HTTP root.
   pub public_dir: Option<PathBuf>,
 
-  /// Enabling dev mode allows free-for-all access to admin APIs. This can be useful to develop the
-  /// UI behind a different server preventing auth cookie passing.
-  ///
-  /// NOTE: We might want to consider passing explicit auth headers when logging in specifically
-  /// from the dev Admin UI.
+  /// In dev mode CORS and cookies will be more permissive to allow development with externally
+  /// hosted UIs, e.g. using a dev serer.
   pub dev: bool,
+
+  // Enabling demo mode, e.g. to redact PII from Admin UI.
+  pub demo: bool,
 
   /// Disable the built-in public authentication (login, logout, ...) UI.
   pub disable_auth_ui: bool,
@@ -121,6 +121,7 @@ impl Server {
       opts.public_dir.clone(),
       InitArgs {
         dev: opts.dev,
+        demo: opts.demo,
         js_runtime_threads: opts.js_runtime_threads,
       },
     )

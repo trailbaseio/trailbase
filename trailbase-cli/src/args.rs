@@ -76,6 +76,7 @@ pub struct ServerArgs {
   #[arg(short, long, env, default_value = "127.0.0.1:4000")]
   pub address: String,
 
+  /// When set, UI and admin APIs will be served separately.
   #[arg(long, env)]
   pub admin_address: Option<String>,
 
@@ -83,10 +84,14 @@ pub struct ServerArgs {
   #[arg(long, env)]
   pub public_dir: Option<String>,
 
-  /// Sets CORS policies to permissive in order to allow cross-origin requests
-  /// when developing the UI using a separate dev server.
+  /// Use permissive CORS and cookies to allow for cross-origin requests when developing the UI
+  /// using externally hosted UI, e.g. using a dev server.
   #[arg(long)]
   pub dev: bool,
+
+  /// In demo mode, PII will be redacted from the logs.
+  #[arg(long)]
+  pub demo: bool,
 
   #[arg(long, default_value_t = false)]
   pub stderr_logging: bool,
