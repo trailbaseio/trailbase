@@ -554,10 +554,9 @@ impl IntoResponse for JsResponseError {
 /// The axum HTTP handler will then call back into the registered callback in JS.
 fn add_route_to_router(
   runtime_handle: RuntimeHandle,
-  router: Arc<Mutex<Option<Router<AppState>>>>,
   method: String,
   route: String,
-) -> Result<(), AnyError> {
+) -> Result<Router<AppState>, AnyError> {
   let method_uppercase = method.to_uppercase();
 
   let route_path = route.clone();
@@ -610,9 +609,11 @@ fn add_route_to_router(
         reply: sender,
       }))
       .await
-      .unwrap();
+      .map_err(|_err| JsResponseError::Internal("send failed".into()))?;
 
-    let js_response = receiver.await.unwrap()?;
+    let js_response = receiver
+      .await
+      .map_err(|_err| JsResponseError::Internal("receive failed".into()))??;
 
     let mut http_response = Response::builder()
       .status(js_response.status.unwrap_or(200))
@@ -633,8 +634,7 @@ fn add_route_to_router(
     return Ok(http_response);
   };
 
-  let mut router = router.lock();
-  *router = Some(router.take().unwrap().route(
+  return Ok(Router::<AppState>::new().route(
     &route,
     match method_uppercase.as_str() {
       "DELETE" => axum::routing::delete(handler),
@@ -650,8 +650,6 @@ fn add_route_to_router(
       }
     },
   ));
-
-  return Ok(());
 }
 
 fn get_arg<T>(args: &[serde_json::Value], i: usize) -> Result<T, rustyscript::Error>
@@ -686,24 +684,24 @@ async fn install_routes(
     .map(move |(index, state)| {
       let module = module.clone();
       let runtime_handle = runtime_handle_clone.clone();
+
       async move {
-        // let (sender, receiver) = oneshot::channel::<Option<Router<AppState>>>();
+        let routers = Arc::new(Mutex::new(Vec::new()));
 
-        let router = Arc::new(Mutex::new(Some(Router::<AppState>::new())));
-
-        let router_clone = router.clone();
+        let routers_clone = routers.clone();
         if let Err(err) = state
           .sender
           .send(Message::Run(Box::new(move |runtime: &mut Runtime| {
             // First install a native callback that builds an axum router.
-            let router_clone = router_clone.clone();
             runtime
               .register_function("install_route", move |args: &[serde_json::Value]| {
                 let method: String = get_arg(args, 0)?;
                 let route: String = get_arg(args, 1)?;
 
-                add_route_to_router(runtime_handle.clone(), router_clone.clone(), method, route)
+                let router = add_route_to_router(runtime_handle.clone(), method, route)
                   .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
+
+                routers_clone.lock().push(router);
 
                 Ok(serde_json::Value::Null)
               })
@@ -715,25 +713,30 @@ async fn install_routes(
         }
 
         // Then execute the script/module, i.e. statements in the file scope.
-        //
-        // TODO: SWC is very spammy (at least in debug builds). Ideally, we'd lower the tracing
-        // filter level within this scope. Haven't found a good way, thus filtering it
-        // env-filter at the CLI level. We could try to use a dedicated reload layer:
-        //   https://docs.rs/tracing-subscriber/latest/tracing_subscriber/reload/index.html
-
         let (sender, receiver) = oneshot::channel::<Result<(), AnyError>>();
-        state
-          .sender
-          .send(Message::LoadModule(module, sender))
-          .await
-          .unwrap();
-        let _ = receiver.await.unwrap();
+        match state.sender.send(Message::LoadModule(module, sender)).await {
+          Ok(_) => match receiver.await {
+            Ok(_) => {
+              let mut merged_router = Router::<AppState>::new();
+              for router in routers.lock().split_off(0) {
+                merged_router = merged_router.merge(router);
+              }
 
-        let router: Router<AppState> = router.lock().take().unwrap();
-        if router.has_routes() {
-          Some(router)
-        } else {
-          None
+              if merged_router.has_routes() {
+                Some(merged_router)
+              } else {
+                None
+              }
+            }
+            Err(err) => {
+              log::error!("Failed to await module loading: {err}");
+              None
+            }
+          },
+          Err(err) => {
+            log::error!("Failed to load module: {err}");
+            None
+          }
         }
       }
     })

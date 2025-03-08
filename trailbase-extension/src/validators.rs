@@ -15,7 +15,7 @@ use validator::ValidateEmail;
 pub(super) fn regexp(context: &Context) -> rusqlite::Result<bool> {
   type CacheType = LazyLock<Mutex<LruCache<String, Regex>>>;
   static REGEX_CACHE: CacheType =
-    LazyLock::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(128).unwrap())));
+    LazyLock::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(128).expect("infallible"))));
 
   #[cfg(debug_assertions)]
   if context.len() != 2 {

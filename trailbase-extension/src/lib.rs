@@ -1,3 +1,4 @@
+#![forbid(clippy::unwrap_used)]
 #![allow(clippy::needless_return)]
 
 use rusqlite::functions::FunctionFlags;

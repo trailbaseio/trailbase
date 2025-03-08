@@ -124,18 +124,18 @@ fn builtin_schemas() -> &'static HashMap<String, SchemaEntry> {
       (
         "std.FileUpload".to_string(),
         SchemaEntry::from(
-          serde_json::to_value(schema_for!(FileUpload)).unwrap(),
+          serde_json::to_value(schema_for!(FileUpload)).expect("infallible"),
           Some(Arc::new(validate_mime_type))
         )
-        .unwrap()
+        .expect("infallible")
       ),
       (
         "std.FileUploads".to_string(),
         SchemaEntry::from(
-          serde_json::to_value(schema_for!(FileUploads)).unwrap(),
+          serde_json::to_value(schema_for!(FileUploads)).expect("infallible"),
           None
         )
-        .unwrap(),
+        .expect("infallible"),
       )
     ]);
   }
@@ -196,7 +196,7 @@ pub fn set_user_schema(name: &str, pattern: Option<serde_json::Value>) -> Result
 }
 
 lazy_static! {
-  static ref INIT: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
+  static ref INIT: parking_lot::Mutex<bool> = parking_lot::Mutex::new(false);
 }
 
 pub fn set_user_schemas(schemas: Vec<(String, serde_json::Value)>) -> Result<(), SchemaError> {
@@ -214,13 +214,13 @@ pub fn set_user_schemas(schemas: Vec<(String, serde_json::Value)>) -> Result<(),
 
   trailbase_extension::jsonschema::set_schemas(Some(entries));
 
-  *INIT.lock().unwrap() = true;
+  *INIT.lock() = true;
 
   return Ok(());
 }
 
 pub(crate) fn try_init_schemas() {
-  let mut init = INIT.lock().unwrap();
+  let mut init = INIT.lock();
   if !*init {
     let entries = builtin_schemas()
       .iter()

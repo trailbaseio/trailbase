@@ -158,7 +158,7 @@ pub(crate) fn jsonschema_by_name_with_extra_args(context: &Context) -> rusqlite:
 pub(crate) fn jsonschema_matches(context: &Context) -> rusqlite::Result<bool> {
   type CacheType = LazyLock<Mutex<LruCache<String, Arc<Validator>>>>;
   static SCHEMA_CACHE: CacheType =
-    LazyLock::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(128).unwrap())));
+    LazyLock::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(128).expect("infallible"))));
 
   // First, get and parse the JSON contents. If it's invalid JSON to start with, there's not much
   // we can validate.
