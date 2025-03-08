@@ -20,7 +20,10 @@ const CspFragments = new Map<string, string>([
   ["frame-src", "'self'"],
   // NOTE: frame-ancestors cannot be set via the meta tag
   // ["frame-ancestors", "'none'"],
-  ["img-src", ["https:", "data:", ...(DEV ? ["localhost:*"] : [])].join(" ")],
+  [
+    "img-src",
+    ["'self'", "https:", "data:", ...(DEV ? ["localhost:*"] : [])].join(" "),
+  ],
   ["font-src", ["'self'", "data:"].join(" ")],
   // We have some inline scripts.
   ["script-src", ["'self'", "'unsafe-inline'", "blob:"].join(" ")],
