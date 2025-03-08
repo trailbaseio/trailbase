@@ -60,13 +60,34 @@ async function initTrailBase(): Promise<{ subprocess: Subprocess }> {
 
 const { subprocess } = await initTrailBase();
 
-const ctx = await createVitest("test", {
-  watch: false,
-  environment: "jsdom",
-  include: ["tests/integration/*"],
-});
-await ctx.start();
-await ctx.close();
+{
+  const ctx = await createVitest("test", {
+    watch: false,
+    environment: "jsdom",
+    include: ["tests/integration/*"],
+    exclude: [
+      "tests/integration/auth_integration.test.ts",
+      "tests/integration/v8_integration.test.ts",
+    ],
+  });
+
+  await ctx.start();
+  await ctx.close();
+}
+
+{
+  const ctx = await createVitest("test", {
+    watch: false,
+    environment: "node",
+    include: [
+      "tests/integration/auth_integration.test.ts",
+      "tests/integration/v8_integration.test.ts",
+    ],
+  });
+
+  await ctx.start();
+  await ctx.close();
+}
 
 if (subprocess.exitCode === null) {
   // Still running
