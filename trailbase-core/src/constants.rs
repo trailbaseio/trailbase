@@ -27,8 +27,6 @@ pub const DEFAULT_AUTH_TOKEN_TTL: Duration = Duration::minutes(60);
 
 pub const DEFAULT_REFRESH_TOKEN_TTL: Duration = Duration::days(30);
 
-pub const SITE_URL_DEFAULT: &str = "http://localhost:4000";
-
 pub(crate) const PASSWORD_OPTIONS: PasswordOptions = PasswordOptions::default();
 pub(crate) const VERIFICATION_CODE_LENGTH: usize = 24;
 pub(crate) const REFRESH_TOKEN_LENGTH: usize = 32;

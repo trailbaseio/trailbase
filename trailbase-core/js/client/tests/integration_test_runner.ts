@@ -25,6 +25,8 @@ async function initTrailBase(): Promise<{ subprocess: Subprocess }> {
 
   const subprocess = execa({
     cwd: root,
+    stdout: process.stdout,
+    stderr: process.stdout,
   })`cargo run -- --data-dir client/testfixture run -a 127.0.0.1:${port} --js-runtime-threads 1`;
 
   for (let i = 0; i < 100; ++i) {
@@ -68,6 +70,7 @@ await ctx.close();
 
 if (subprocess.exitCode === null) {
   // Still running
+  console.info("Shutting down TrailBase");
   subprocess.kill();
 } else {
   // Otherwise TrailBase terminated. Log output to provide a clue as to why.

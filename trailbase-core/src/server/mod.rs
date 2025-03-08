@@ -120,6 +120,7 @@ impl Server {
       opts.data_dir.clone(),
       opts.public_dir.clone(),
       InitArgs {
+        address: opts.address.clone(),
         dev: opts.dev,
         demo: opts.demo,
         js_runtime_threads: opts.js_runtime_threads,

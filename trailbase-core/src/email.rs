@@ -76,12 +76,9 @@ impl Email {
     user: &DbUser,
     email_verification_code: &str,
   ) -> Result<Self, EmailError> {
+    let site_url = state.site_url();
     let (server_config, template) =
       state.access_config(|c| (c.server.clone(), c.email.user_verification_template.clone()));
-
-    let Some(ref site_url) = server_config.site_url else {
-      return Err(EmailError::Missing("config.site_url"));
-    };
 
     let (subject_template, body_template) = match template {
       Some(EmailTemplate {
@@ -109,7 +106,7 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
-        SITE_URL => server_config.site_url,
+        SITE_URL => site_url,
         CODE => email_verification_code,
         EMAIL => user.email,
       })?;
@@ -122,12 +119,9 @@ impl Email {
     user: &DbUser,
     email_verification_code: &str,
   ) -> Result<Self, EmailError> {
+    let site_url = state.site_url();
     let (server_config, template) =
       state.access_config(|c| (c.server.clone(), c.email.change_email_template.clone()));
-
-    let Some(ref site_url) = server_config.site_url else {
-      return Err(EmailError::Missing("config.site_url"));
-    };
 
     let (subject_template, body_template) = match template {
       Some(EmailTemplate {
@@ -155,7 +149,7 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
-        SITE_URL => server_config.site_url,
+        SITE_URL => site_url,
         CODE => email_verification_code,
         EMAIL => user.email,
       })?;
@@ -168,12 +162,9 @@ impl Email {
     user: &DbUser,
     password_reset_code: &str,
   ) -> Result<Self, EmailError> {
+    let site_url = state.site_url();
     let (server_config, template) =
       state.access_config(|c| (c.server.clone(), c.email.password_reset_template.clone()));
-
-    let Some(ref site_url) = server_config.site_url else {
-      return Err(EmailError::Missing("config.site_url"));
-    };
 
     let (subject_template, body_template) = match template {
       Some(EmailTemplate {
@@ -201,7 +192,7 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
-        SITE_URL => server_config.site_url,
+        SITE_URL => site_url,
         CODE => password_reset_code,
         EMAIL => user.email,
       })?;

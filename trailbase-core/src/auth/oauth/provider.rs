@@ -45,6 +45,7 @@ pub struct OAuthUser {
   pub avatar: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct OAuthClientSettings {
   pub auth_url: Url,
   pub token_url: Url,
@@ -69,7 +70,7 @@ pub trait OAuthProvider {
       site = state.site_url(),
       name = self.name()
     ))
-    .unwrap();
+    .map_err(|err| AuthError::FailedDependency(err.into()))?;
 
     let settings = self.settings()?;
     if settings.client_id.is_empty() {

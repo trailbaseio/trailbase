@@ -2,7 +2,6 @@
 email {}
 server {
   application_name: "TrailBase"
-  site_url: "http://localhost:4000"
   logs_retention_sec: 604800
 }
 auth {
@@ -20,9 +19,9 @@ auth {
       client_secret: "<REDACTED>"
       provider_id: OIDC0
       display_name: "My OIDC"
-      auth_url: "https://myprovider.org/auth"
-      token_url: "https://myprovider.org/tokens"
-      user_api_url: "https://myprovider.org/user"
+      auth_url: "http://localhost:9088/authorize"
+      token_url: "http://localhost:9088/token"
+      user_api_url: "http://localhost:9088/userinfo"
     }
   }]
 }

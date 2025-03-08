@@ -43,6 +43,7 @@ pub enum InitError {
 
 #[derive(Default)]
 pub struct InitArgs {
+  pub address: String,
   pub dev: bool,
   pub demo: bool,
   pub js_runtime_threads: Option<usize>,
@@ -123,6 +124,7 @@ pub async fn init_app_state(
   let app_state = AppState::new(AppStateArgs {
     data_dir: data_dir.clone(),
     public_dir,
+    address: args.address,
     dev: args.dev,
     demo: args.demo,
     table_metadata,

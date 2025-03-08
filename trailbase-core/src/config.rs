@@ -73,7 +73,6 @@ pub mod proto {
   use crate::config::ConfigError;
   use crate::constants::{
     AVATAR_TABLE, DEFAULT_AUTH_TOKEN_TTL, DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT,
-    SITE_URL_DEFAULT,
   };
   use crate::email;
   use crate::DESCRIPTOR_POOL;
@@ -114,7 +113,7 @@ pub mod proto {
       let mut config = Config {
         server: ServerConfig {
           application_name: Some("TrailBase".to_string()),
-          site_url: Some(SITE_URL_DEFAULT.to_string()),
+          site_url: None,
           logs_retention_sec: Some(LOGS_RETENTION_DEFAULT.num_seconds()),
           ..Default::default()
         },

@@ -7,7 +7,6 @@ use crate::auth::jwt::JwtHelper;
 use crate::auth::oauth::providers::{ConfiguredOAuthProviders, OAuthProviderType};
 use crate::config::proto::{hash_config, Config, RecordApiConfig, S3StorageConfig};
 use crate::config::{validate_config, write_config_and_vault_textproto};
-use crate::constants::SITE_URL_DEFAULT;
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::js::RuntimeHandle;
@@ -21,6 +20,7 @@ use crate::value_notifier::{Computed, ValueNotifier};
 struct InternalState {
   data_dir: DataDir,
   public_dir: Option<PathBuf>,
+  address: String,
   dev: bool,
   demo: bool,
 
@@ -48,6 +48,7 @@ struct InternalState {
 pub(crate) struct AppStateArgs {
   pub data_dir: DataDir,
   pub public_dir: Option<PathBuf>,
+  pub address: String,
   pub dev: bool,
   pub demo: bool,
   pub table_metadata: TableMetadataCache,
@@ -96,6 +97,7 @@ impl AppState {
       state: Arc::new(InternalState {
         data_dir: args.data_dir,
         public_dir: args.public_dir,
+        address: args.address,
         dev: args.dev,
         demo: args.demo,
         oauth: Computed::new(&config, |c| {
@@ -188,10 +190,11 @@ impl AppState {
       .collect();
   }
 
+  // TODO: Turn this into a parsed url::Url.
   pub fn site_url(&self) -> String {
     self
       .access_config(|c| c.server.site_url.clone())
-      .unwrap_or_else(|| SITE_URL_DEFAULT.to_string())
+      .unwrap_or_else(|| format!("http://{}", self.state.address))
   }
 
   pub(crate) fn mailer(&self) -> Arc<Mailer> {
@@ -408,6 +411,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     state: Arc::new(InternalState {
       data_dir,
       public_dir: None,
+      address: "localhost:4000".to_string(),
       dev: true,
       demo: false,
       oauth: Computed::new(&config, |c| {

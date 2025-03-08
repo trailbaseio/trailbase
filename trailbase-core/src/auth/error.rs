@@ -75,7 +75,10 @@ impl IntoResponse for AuthError {
       Self::NotFound => (StatusCode::NOT_FOUND, None),
       Self::OAuthProviderNotFound => (StatusCode::METHOD_NOT_ALLOWED, None),
       Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, Some(msg.to_string())),
-      Self::FailedDependency(msg) => (StatusCode::FAILED_DEPENDENCY, Some(msg.to_string())),
+      Self::FailedDependency(err) if cfg!(debug_assertions) => {
+        (StatusCode::FAILED_DEPENDENCY, Some(err.to_string()))
+      }
+      Self::FailedDependency(_err) => (StatusCode::FAILED_DEPENDENCY, None),
       Self::Internal(err) if cfg!(debug_assertions) => {
         (StatusCode::INTERNAL_SERVER_ERROR, Some(err.to_string()))
       }

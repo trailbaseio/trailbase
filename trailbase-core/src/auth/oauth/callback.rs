@@ -5,10 +5,8 @@ use axum::{
 use chrono::Duration;
 use lazy_static::lazy_static;
 use oauth2::PkceCodeVerifier;
-use oauth2::{AsyncHttpClient, HttpClientError, HttpRequest, HttpResponse};
 use oauth2::{AuthorizationCode, StandardTokenResponse, TokenResponse};
 use serde::Deserialize;
-use thiserror::Error;
 use tower_cookies::Cookies;
 use trailbase_sqlite::{named_params, params};
 
@@ -29,52 +27,6 @@ use crate::AppState;
 pub struct AuthRequest {
   pub code: String,
   pub state: String,
-}
-
-#[derive(Debug, Error, Clone)]
-enum WrappedReqwestError {}
-
-#[allow(unused)]
-struct WrappedReqwest;
-
-impl<'c> AsyncHttpClient<'c> for WrappedReqwest {
-  type Error = HttpClientError<WrappedReqwestError>;
-
-  type Future = std::pin::Pin<
-    Box<dyn std::future::Future<Output = Result<HttpResponse, Self::Error>> + Send + Sync + 'c>,
-  >;
-
-  fn call(&'c self, request: HttpRequest) -> Self::Future {
-    let http_client = reqwest::ClientBuilder::new()
-      // Following redirects opens the client up to SSRF vulnerabilities.
-      .redirect(reqwest::redirect::Policy::none())
-      .build()
-      .unwrap();
-
-    let req: reqwest::Request = request.try_into().unwrap();
-    // debug!(
-    //   "BODY {:?}",
-    //   req
-    //     .body()
-    //     .and_then(|b| b.as_bytes().map(|b| String::from_utf8_lossy(b).to_string()))
-    // );
-
-    Box::pin(async move {
-      let response = http_client.execute(req).await.unwrap();
-
-      let mut builder = axum::response::Response::builder().status(response.status());
-
-      builder = builder.version(response.version());
-
-      for (name, value) in response.headers().iter() {
-        builder = builder.header(name, value);
-      }
-
-      builder
-        .body(response.bytes().await.map_err(Box::new).unwrap().to_vec())
-        .map_err(HttpClientError::Http)
-    })
-  }
 }
 
 // This handler receives the ?code=<>&state=<>, uses it to get an external oauth token, gets the
