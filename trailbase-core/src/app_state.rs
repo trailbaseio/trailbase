@@ -411,7 +411,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     state: Arc::new(InternalState {
       data_dir,
       public_dir: None,
-      address: "localhost:4000".to_string(),
+      address: "localhost:1234".to_string(),
       dev: true,
       demo: false,
       oauth: Computed::new(&config, |c| {

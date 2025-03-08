@@ -42,7 +42,7 @@ pub struct ServerOptions {
   /// Optional path to static assets that will be served at the HTTP root.
   pub data_dir: DataDir,
 
-  // Address the HTTP server binds to (Default: localhost:4000).
+  // Authority (<host>:<port>) the HTTP server binds to, e.g. "localhost:4000".
   pub address: String,
 
   // Optional address of the admin UI + API.

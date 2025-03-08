@@ -72,8 +72,8 @@ pub enum SubCommands {
 
 #[derive(Args, Clone, Debug)]
 pub struct ServerArgs {
-  /// Address the HTTP server binds to (Default: localhost:4000).
-  #[arg(short, long, env, default_value = "127.0.0.1:4000")]
+  /// Authority (<host>:<port>) the HTTP server binds to (Default: localhost:4000).
+  #[arg(short, long, env, default_value = "localhost:4000")]
   pub address: String,
 
   /// When set, UI and admin APIs will be served separately.
