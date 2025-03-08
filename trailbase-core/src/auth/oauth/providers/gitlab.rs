@@ -63,8 +63,8 @@ impl OAuthProvider for GitlabOAuthProvider {
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
     lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(GitlabOAuthProvider::AUTH_URL).unwrap();
-      static ref TOKEN_URL: Url = Url::parse(GitlabOAuthProvider::TOKEN_URL).unwrap();
+      static ref AUTH_URL: Url = Url::parse(GitlabOAuthProvider::AUTH_URL).expect("infallible");
+      static ref TOKEN_URL: Url = Url::parse(GitlabOAuthProvider::TOKEN_URL).expect("infallible");
     }
 
     return Ok(OAuthClientSettings {

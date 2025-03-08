@@ -176,8 +176,11 @@ impl ColumnOption {
         on_update,
       } => {
         format!(
-          "REFERENCES {foreign_table}({ref_col}) {on_delete} {on_update}",
-          ref_col = referred_columns.first().unwrap(),
+          "REFERENCES {foreign_table}{ref_col} {on_delete} {on_update}",
+          ref_col = match referred_columns.len() {
+            0 => "".to_string(),
+            _ => format!("({})", referred_columns.join(",")),
+          },
           on_delete = on_delete.as_ref().map_or_else(
             || "".to_string(),
             |action| format!("ON DELETE {}", action.to_fragment())

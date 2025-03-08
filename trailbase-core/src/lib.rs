@@ -1,6 +1,10 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::needless_return)]
-#![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
+#![warn(
+  clippy::await_holding_lock,
+  clippy::inefficient_to_string,
+  clippy::unwrap_used
+)]
 
 pub mod app_state;
 pub mod assets;

@@ -44,7 +44,7 @@ pub struct LogJson {
 
 #[derive(Debug, Clone, Deserialize)]
 struct LogEntry {
-  id: Option<[u8; 16]>,
+  id: [u8; 16],
   created: Option<f64>,
   r#type: i32,
 
@@ -81,7 +81,7 @@ impl LogEntry {
 impl From<LogEntry> for LogJson {
   fn from(value: LogEntry) -> Self {
     return LogJson {
-      id: Uuid::from_bytes(value.id.unwrap()),
+      id: Uuid::from_bytes(value.id),
       created: value.created.unwrap_or(0.0),
       r#type: value.r#type,
       level: value.level,
@@ -194,7 +194,7 @@ pub async fn list_logs_handler(
 
   let response = ListLogsResponse {
     total_row_count,
-    cursor: logs.last().and_then(|log| log.id.as_ref().map(id_to_b64)),
+    cursor: logs.last().map(|log| id_to_b64(&log.id)),
     entries: logs
       .into_iter()
       .map(|log| log.into())

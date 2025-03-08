@@ -80,12 +80,12 @@ impl IntoResponse for RecordError {
         .status(status)
         .header(CONTENT_TYPE, "text/plain")
         .body(Body::new(body))
-        .unwrap();
+        .unwrap_or_default();
     }
 
     return Response::builder()
       .status(status)
       .body(Body::empty())
-      .unwrap();
+      .unwrap_or_default();
   }
 }

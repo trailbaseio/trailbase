@@ -190,12 +190,10 @@ fn init_logs_db(data_dir: &DataDir) -> Result<rusqlite::Connection, InitError> {
   let conn = trailbase_sqlite::connect_sqlite(data_dir.logs_db_path().into(), None)?;
 
   // Turn off secure_deletions, i.e. don't wipe the memory with zeros.
-  conn
-    .query_row("PRAGMA secure_delete = FALSE", (), |_row| Ok(()))
-    .unwrap();
+  conn.query_row("PRAGMA secure_delete = FALSE", (), |_row| Ok(()))?;
 
   // Sync less often
-  conn.execute("PRAGMA synchronous = 1", ()).unwrap();
+  conn.execute("PRAGMA synchronous = 1", ())?;
 
   return Ok(conn);
 }

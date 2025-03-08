@@ -82,9 +82,10 @@ pub mod proto {
   lazy_static! {
     static ref CONFIG_DESCRIPTOR: MessageDescriptor = DESCRIPTOR_POOL
       .get_message_by_name("config.Config")
-      .unwrap();
-    static ref VAULT_DESCRIPTOR: MessageDescriptor =
-      DESCRIPTOR_POOL.get_message_by_name("config.Vault").unwrap();
+      .expect("infallible");
+    static ref VAULT_DESCRIPTOR: MessageDescriptor = DESCRIPTOR_POOL
+      .get_message_by_name("config.Vault")
+      .expect("infallible");
     static ref FORMAT_OPTIONS: FormatOptions = FormatOptions::new().pretty(true).expand_any(true);
   }
 
@@ -198,7 +199,7 @@ fn is_secret(field_descriptor: &FieldDescriptor) -> bool {
   lazy_static! {
     static ref SECRET_EXT_DESCRIPTOR: ExtensionDescriptor = DESCRIPTOR_POOL
       .get_extension_by_name("config.secret")
-      .unwrap();
+      .expect("infallible");
   }
 
   let options = field_descriptor.options();

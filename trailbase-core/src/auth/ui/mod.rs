@@ -11,9 +11,9 @@ use serde::Deserialize;
 use crate::assets::{cow_to_string, AssetService};
 use crate::auth::User;
 
-fn build_env() -> Environment<'static> {
+fn build_env() -> Result<Environment<'static>, minijinja::Error> {
   fn get(fname: &str) -> String {
-    let file = AuthAssets::get(fname).unwrap();
+    let file = AuthAssets::get(fname).expect("startup");
     cow_to_string(file.data)
   }
 
@@ -28,27 +28,19 @@ fn build_env() -> Environment<'static> {
 
   let mut env = Environment::new();
 
-  env.add_template("login", &login_template).unwrap();
-  env.add_template("register", &register_template).unwrap();
-  env
-    .add_template("reset_password_request", &reset_password_request_template)
-    .unwrap();
-  env
-    .add_template("reset_password_update", &reset_password_update_template)
-    .unwrap();
-  env
-    .add_template("change_password", &change_password_template)
-    .unwrap();
-  env
-    .add_template("change_email", &change_email_template)
-    .unwrap();
+  env.add_template("login", &login_template)?;
+  env.add_template("register", &register_template)?;
+  env.add_template("reset_password_request", &reset_password_request_template)?;
+  env.add_template("reset_password_update", &reset_password_update_template)?;
+  env.add_template("change_password", &change_password_template)?;
+  env.add_template("change_email", &change_email_template)?;
 
-  return env;
+  return Ok(env);
 }
 
 fn templates() -> &'static Environment<'static> {
   lazy_static! {
-    static ref env: Environment<'static> = build_env();
+    static ref env: Environment<'static> = build_env().expect("startup");
   }
 
   return &env;
@@ -80,11 +72,15 @@ async fn ui_login_handler(Query(query): Query<LoginQuery>, user: Option<User>) -
   );
 
   let ctx = context! {
-    alert => query.alert.as_deref().unwrap_or(""),
+    alert => query.alert.as_deref().unwrap_or_default(),
     state => form_state,
   };
 
-  return match templates().get_template("login").unwrap().render(ctx) {
+  return match templates()
+    .get_template("login")
+    .expect("infallible")
+    .render(ctx)
+  {
     Ok(output) => Html(output).into_response(),
     Err(err) => (
       StatusCode::INTERNAL_SERVER_ERROR,
@@ -101,8 +97,8 @@ pub struct RegisterQuery {
 }
 
 async fn ui_register_handler(Query(query): Query<RegisterQuery>) -> Response {
-  return match templates().get_template("register").unwrap().render(context! {
-    alert => query.alert.as_deref().unwrap_or(""),
+  return match templates().get_template("register").expect("infallible").render(context! {
+    alert => query.alert.as_deref().unwrap_or_default(),
     state => query.redirect_to.map(|r| format!("<input name=\"redirect_to\" type=\"hidden\" value=\"{r}\" />")),
   }) {
     Ok(output) => Html(output).into_response(),
@@ -125,9 +121,9 @@ async fn ui_reset_password_request_handler(
 ) -> Response {
   return match templates()
     .get_template("reset_password_request")
-    .unwrap()
+    .expect("infallible")
     .render(context! {
-      alert => query.alert.as_deref().unwrap_or(""),
+      alert => query.alert.as_deref().unwrap_or_default(),
       state => query.redirect_to.map(|r| format!("<input name=\"redirect_to\" type=\"hidden\" value=\"{r}\" />")),
     }) {
     Ok(output) => Html(output).into_response(),
@@ -150,9 +146,9 @@ async fn ui_reset_password_update_handler(
 ) -> Response {
   return match templates()
     .get_template("reset_password_update")
-    .unwrap()
+    .expect("infallible")
     .render(context! {
-      alert => query.alert.as_deref().unwrap_or(""),
+      alert => query.alert.as_deref().unwrap_or_default(),
       state => query.redirect_to.map(|r| format!("<input name=\"redirect_to\" type=\"hidden\" value=\"{r}\" />")),
     }) {
     Ok(output) => Html(output).into_response(),
@@ -171,8 +167,8 @@ pub struct ChangePasswordQuery {
 }
 
 async fn ui_change_password_handler(Query(query): Query<ChangePasswordQuery>) -> Response {
-  return match templates().get_template("change_password").unwrap().render(context! {
-    alert => query.alert.as_deref().unwrap_or(""),
+  return match templates().get_template("change_password").expect("infallible").render(context! {
+    alert => query.alert.as_deref().unwrap_or_default(),
     state => query.redirect_to.map(|r| format!("<input name=\"redirect_to\" type=\"hidden\" value=\"{r}\" />")),
   }) {
     Ok(output) => Html(output).into_response(),
@@ -202,9 +198,9 @@ async fn ui_change_email_handler(Query(query): Query<ChangeEmailQuery>, user: Us
 
   return match templates()
     .get_template("change_email")
-    .unwrap()
+    .expect("infallible")
     .render(context! {
-      alert => query.alert.as_deref().unwrap_or(""),
+      alert => query.alert.as_deref().unwrap_or_default(),
       state => form_state,
     }) {
     Ok(output) => Html(output).into_response(),

@@ -77,6 +77,6 @@ impl IntoResponse for AdminError {
       .status(status)
       .header(CONTENT_TYPE, "text/plain")
       .body(Body::new(msg))
-      .unwrap();
+      .unwrap_or_default();
   }
 }

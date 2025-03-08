@@ -302,7 +302,7 @@ impl RuntimeSingleton {
                   .enable_io()
                   .thread_name("v8-runtime")
                   .build()
-                  .unwrap(),
+                  .expect("startup"),
               );
 
               let mut js_runtime = match Self::init_runtime(index, tokio_runtime.clone()) {
@@ -539,13 +539,13 @@ impl IntoResponse for JsResponseError {
         .status(status)
         .header(CONTENT_TYPE, "text/plain")
         .body(Body::new(body))
-        .unwrap();
+        .unwrap_or_default();
     }
 
     return Response::builder()
       .status(status)
       .body(Body::empty())
-      .unwrap();
+      .unwrap_or_default();
   }
 }
 

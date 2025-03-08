@@ -1,5 +1,6 @@
 use axum::body::{Body, Bytes};
-use axum::http::{self, Request, Response, StatusCode};
+use axum::http::{self, Request, StatusCode};
+use axum::response::{IntoResponse, Response};
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
 use std::convert::Infallible;
@@ -63,10 +64,7 @@ pub struct ServeFuture<E: RustEmbed> {
 
 impl<E: RustEmbed> ServeFuture<E> {
   fn not_found() -> Response<Body> {
-    return Response::builder()
-      .status(StatusCode::NOT_FOUND)
-      .body(Body::from(NOT_FOUND))
-      .unwrap();
+    return (StatusCode::NOT_FOUND, NOT_FOUND).into_response();
   }
 }
 
@@ -80,7 +78,7 @@ impl<E: RustEmbed> Future for ServeFuture<E> {
           .status(StatusCode::METHOD_NOT_ALLOWED)
           .header(http::header::CONTENT_TYPE, "text/plain")
           .body(Body::from("Method not allowed"))
-          .unwrap(),
+          .unwrap_or_default(),
       ));
     }
 
@@ -112,7 +110,7 @@ impl<E: RustEmbed> Future for ServeFuture<E> {
     return Poll::Ready(Ok(
       response_builder
         .body(Body::from(cow_to_bytes(file.data)))
-        .unwrap(),
+        .unwrap_or_default(),
     ));
   }
 }

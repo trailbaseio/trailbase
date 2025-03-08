@@ -84,8 +84,8 @@ impl OAuthProvider for FacebookOAuthProvider {
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
     lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(FacebookOAuthProvider::AUTH_URL).unwrap();
-      static ref TOKEN_URL: Url = Url::parse(FacebookOAuthProvider::TOKEN_URL).unwrap();
+      static ref AUTH_URL: Url = Url::parse(FacebookOAuthProvider::AUTH_URL).expect("infallible");
+      static ref TOKEN_URL: Url = Url::parse(FacebookOAuthProvider::TOKEN_URL).expect("infallible");
     }
 
     return Ok(OAuthClientSettings {

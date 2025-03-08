@@ -12,14 +12,19 @@ pub struct AbortOnDrop {
 }
 
 impl AbortOnDrop {
-  fn add_periodic_task<F, Fut>(&mut self, period: Duration, f: F)
+  fn add_periodic_task<F, Fut>(
+    &mut self,
+    period: Duration,
+    f: F,
+  ) -> Result<(), chrono::OutOfRangeError>
   where
     F: 'static + Sync + Send + Fn() -> Fut,
     Fut: Sync + Send + Future,
   {
+    let p = period.to_std()?;
+
     let handle = tokio::spawn(async move {
-      let period = period.to_std().unwrap();
-      let mut interval = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
+      let mut interval = tokio::time::interval_at(tokio::time::Instant::now() + p, p);
       loop {
         interval.tick().await;
         f().await;
@@ -27,6 +32,8 @@ impl AbortOnDrop {
     });
 
     self.handles.push(handle.abort_handle());
+
+    return Ok(());
   }
 }
 
@@ -41,38 +48,42 @@ impl Drop for AbortOnDrop {
 pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
   let mut tasks = AbortOnDrop::default();
 
-  tasks.add_periodic_task(Duration::seconds(60), || async {
-    info!("alive");
-  });
+  tasks
+    .add_periodic_task(Duration::seconds(60), || async {
+      info!("alive");
+    })
+    .expect("startup");
 
   // Backup job.
   let conn = app_state.conn().clone();
   let backup_file = app_state.data_dir().backup_path().join("backup.db");
-  let backup_interval = app_state
+  if let Some(backup_interval) = app_state
     .access_config(|c| c.server.backup_interval_sec)
-    .map_or(Duration::zero(), Duration::seconds);
-  if !backup_interval.is_zero() {
-    tasks.add_periodic_task(backup_interval, move || {
-      let conn = conn.clone();
-      let backup_file = backup_file.clone();
+    .map(Duration::seconds)
+  {
+    tasks
+      .add_periodic_task(backup_interval, move || {
+        let conn = conn.clone();
+        let backup_file = backup_file.clone();
 
-      async move {
-        let result = conn
-          .call(|conn| {
-            return Ok(conn.backup(
-              rusqlite::DatabaseName::Main,
-              backup_file,
-              /* progress= */ None,
-            )?);
-          })
-          .await;
+        async move {
+          let result = conn
+            .call(|conn| {
+              return Ok(conn.backup(
+                rusqlite::DatabaseName::Main,
+                backup_file,
+                /* progress= */ None,
+              )?);
+            })
+            .await;
 
-        match result {
-          Ok(_) => info!("Backup complete"),
-          Err(err) => error!("Backup failed: {err}"),
-        };
-      }
-    });
+          match result {
+            Ok(_) => info!("Backup complete"),
+            Err(err) => error!("Backup failed: {err}"),
+          };
+        }
+      })
+      .expect("startup");
   }
 
   // Logs cleaner.
@@ -82,60 +93,66 @@ pub(super) fn start_periodic_tasks(app_state: &AppState) -> AbortOnDrop {
     .map_or(LOGS_RETENTION_DEFAULT, Duration::seconds);
 
   if !retention.is_zero() {
-    tasks.add_periodic_task(Duration::hours(2), move || {
-      let logs_conn = logs_conn.clone();
+    tasks
+      .add_periodic_task(retention, move || {
+        let logs_conn = logs_conn.clone();
 
-      tokio::spawn(async move {
-        let timestamp = (Utc::now() - retention).timestamp();
-        match logs_conn
-          .execute("DELETE FROM _logs WHERE created < $1", params!(timestamp))
-          .await
-        {
-          Ok(_) => info!("Successfully pruned logs"),
-          Err(err) => warn!("Failed to clean up old logs: {err}"),
-        };
+        tokio::spawn(async move {
+          let timestamp = (Utc::now() - retention).timestamp();
+          match logs_conn
+            .execute("DELETE FROM _logs WHERE created < $1", params!(timestamp))
+            .await
+          {
+            Ok(_) => info!("Successfully pruned logs"),
+            Err(err) => warn!("Failed to clean up old logs: {err}"),
+          };
+        })
       })
-    });
+      .expect("startup");
   }
 
   // Refresh token cleaner.
   let state = app_state.clone();
-  tasks.add_periodic_task(Duration::hours(12), move || {
-    let state = state.clone();
+  tasks
+    .add_periodic_task(Duration::hours(12), move || {
+      let state = state.clone();
 
-    tokio::spawn(async move {
-      let refresh_token_ttl = state
-        .access_config(|c| c.auth.refresh_token_ttl_sec)
-        .map_or(DEFAULT_REFRESH_TOKEN_TTL, Duration::seconds);
+      tokio::spawn(async move {
+        let refresh_token_ttl = state
+          .access_config(|c| c.auth.refresh_token_ttl_sec)
+          .map_or(DEFAULT_REFRESH_TOKEN_TTL, Duration::seconds);
 
-      let timestamp = (Utc::now() - refresh_token_ttl).timestamp();
+        let timestamp = (Utc::now() - refresh_token_ttl).timestamp();
 
-      match state
-        .user_conn()
-        .execute(
-          &format!("DELETE FROM '{SESSION_TABLE}' WHERE updated < $1"),
-          params!(timestamp),
-        )
-        .await
-      {
-        Ok(count) => info!("Successfully pruned {count} old sessions."),
-        Err(err) => warn!("Failed to clean up sessions: {err}"),
-      };
+        match state
+          .user_conn()
+          .execute(
+            &format!("DELETE FROM '{SESSION_TABLE}' WHERE updated < $1"),
+            params!(timestamp),
+          )
+          .await
+        {
+          Ok(count) => info!("Successfully pruned {count} old sessions."),
+          Err(err) => warn!("Failed to clean up sessions: {err}"),
+        };
+      })
     })
-  });
+    .expect("startup");
 
   // Optimizer
   let conn = app_state.conn().clone();
-  tasks.add_periodic_task(Duration::hours(24), move || {
-    let conn = conn.clone();
+  tasks
+    .add_periodic_task(Duration::hours(24), move || {
+      let conn = conn.clone();
 
-    tokio::spawn(async move {
-      match conn.execute("PRAGMA optimize", ()).await {
-        Ok(_) => info!("Successfully ran query optimizer"),
-        Err(err) => warn!("query optimizer failed: {err}"),
-      };
+      tokio::spawn(async move {
+        match conn.execute("PRAGMA optimize", ()).await {
+          Ok(_) => info!("Successfully ran query optimizer"),
+          Err(err) => warn!("query optimizer failed: {err}"),
+        };
+      })
     })
-  });
+    .expect("startup");
 
   return tasks;
 }

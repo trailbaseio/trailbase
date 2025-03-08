@@ -87,8 +87,10 @@ impl Email {
       }) => (subject, body),
       _ => {
         log::debug!("Falling back to default email verification email");
-        let d = defaults::email_validation_email();
-        (d.subject.unwrap(), d.body.unwrap())
+        (
+          defaults::EMAIL_VALIDATION_SUBJECT.to_string(),
+          defaults::EMAIL_VALIDATION_BODY.to_string(),
+        )
       }
     };
 
@@ -130,8 +132,10 @@ impl Email {
       }) => (subject, body),
       _ => {
         log::debug!("Falling back to default change email template");
-        let d = defaults::change_email_address_email();
-        (d.subject.unwrap(), d.body.unwrap())
+        (
+          defaults::CHANGE_EMAIL_SUBJECT.to_string(),
+          defaults::CHANGE_EMAIL_BODY.to_string(),
+        )
       }
     };
 
@@ -173,8 +177,10 @@ impl Email {
       }) => (subject, body),
       _ => {
         log::debug!("Falling back to default reset password email");
-        let d = defaults::password_reset_email();
-        (d.subject.unwrap(), d.body.unwrap())
+        (
+          defaults::PASSWORD_RESET_SUBJECT.to_string(),
+          defaults::PASSWORD_RESET_BODY.to_string(),
+        )
       }
     };
 
@@ -267,9 +273,8 @@ pub(crate) mod defaults {
   use crate::config::proto::EmailTemplate;
   use indoc::indoc;
 
-  pub fn email_validation_email() -> EmailTemplate {
-    const SUBJECT: &str = "Validate your Email Address for {{ APP_NAME }}";
-    const BODY: &str = indoc! {r#"
+  pub const EMAIL_VALIDATION_SUBJECT: &str = "Validate your Email Address for {{ APP_NAME }}";
+  pub const EMAIL_VALIDATION_BODY: &str = indoc! {r#"
         <html>
           <body>
             <h1>Welcome {{ EMAIL }}</h1>
@@ -288,15 +293,15 @@ pub(crate) mod defaults {
           </body>
         </html>"#};
 
+  pub fn email_validation_email() -> EmailTemplate {
     return EmailTemplate {
-      subject: Some(SUBJECT.to_string()),
-      body: Some(BODY.to_string()),
+      subject: Some(EMAIL_VALIDATION_SUBJECT.into()),
+      body: Some(EMAIL_VALIDATION_BODY.into()),
     };
   }
 
-  pub fn password_reset_email() -> EmailTemplate {
-    const SUBJECT: &str = "Reset your Password for {{ APP_NAME }}";
-    const BODY: &str = indoc! {r#"
+  pub const PASSWORD_RESET_SUBJECT: &str = "Reset your Password for {{ APP_NAME }}";
+  pub const PASSWORD_RESET_BODY: &str = indoc! {r#"
         <html>
           <body>
             <h1>Password reset</h1>
@@ -311,15 +316,15 @@ pub(crate) mod defaults {
           </body>
         </html>"#};
 
+  pub fn password_reset_email() -> EmailTemplate {
     return EmailTemplate {
-      subject: Some(SUBJECT.to_string()),
-      body: Some(BODY.to_string()),
+      subject: Some(PASSWORD_RESET_SUBJECT.into()),
+      body: Some(PASSWORD_RESET_BODY.into()),
     };
   }
 
-  pub fn change_email_address_email() -> EmailTemplate {
-    const SUBJECT: &str = "Change your Email Address for {{ APP_NAME }}";
-    const BODY: &str = indoc! {r#"
+  pub const CHANGE_EMAIL_SUBJECT: &str = "Change your Email Address for {{ APP_NAME }}";
+  pub const CHANGE_EMAIL_BODY: &str = indoc! {r#"
         <html>
           <body>
             <h1>Change E-Mail Address</h1>
@@ -334,9 +339,10 @@ pub(crate) mod defaults {
           </body>
         </html>"#};
 
+  pub fn change_email_address_email() -> EmailTemplate {
     return EmailTemplate {
-      subject: Some(SUBJECT.to_string()),
-      body: Some(BODY.to_string()),
+      subject: Some(CHANGE_EMAIL_SUBJECT.into()),
+      body: Some(CHANGE_EMAIL_BODY.into()),
     };
   }
 }

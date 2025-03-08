@@ -71,8 +71,9 @@ impl OAuthProvider for MicrosoftOAuthProvider {
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
     lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(MicrosoftOAuthProvider::AUTH_URL).unwrap();
-      static ref TOKEN_URL: Url = Url::parse(MicrosoftOAuthProvider::TOKEN_URL).unwrap();
+      static ref AUTH_URL: Url = Url::parse(MicrosoftOAuthProvider::AUTH_URL).expect("infallible");
+      static ref TOKEN_URL: Url =
+        Url::parse(MicrosoftOAuthProvider::TOKEN_URL).expect("infallible");
     }
 
     return Ok(OAuthClientSettings {

@@ -253,7 +253,7 @@ fn split_key_into_col_and_op(key: &str) -> Option<(&str, Option<&str>)> {
 lazy_static! {
   /// Regex that splits the key part of "column[op]=value", i.e. column & op.
   static ref QUALIFIER_REGEX: regex::Regex =
-    regex::Regex::new(r"^(?<key>\w*)(?:\[(?<qualifier>\w+)\])?$").unwrap();
+    regex::Regex::new(r"^(?<key>\w*)(?:\[(?<qualifier>\w+)\])?$").expect("infallible");
 }
 
 #[cfg(test)]

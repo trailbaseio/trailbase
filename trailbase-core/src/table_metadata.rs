@@ -329,9 +329,10 @@ fn extract_json_metadata(
 
   lazy_static! {
     static ref SCHEMA_RE: Regex =
-      Regex::new(r#"(?smR)jsonschema\s*\(\s*[\['"](?<name>.*)[\]'"]\s*,.+?\)"#).unwrap();
+      Regex::new(r#"(?smR)jsonschema\s*\(\s*[\['"](?<name>.*)[\]'"]\s*,.+?\)"#)
+        .expect("infallible");
     static ref MATCHES_RE: Regex =
-      Regex::new(r"(?smR)jsonschema_matches\s*\(.+?(?<pattern>\{.*\}).+?\)").unwrap();
+      Regex::new(r"(?smR)jsonschema_matches\s*\(.+?(?<pattern>\{.*\}).+?\)").expect("infallible");
   }
 
   if let Some(cap) = SCHEMA_RE.captures(check) {
@@ -403,7 +404,7 @@ fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<u
 
     for opts in &column.options {
       lazy_static! {
-        static ref UUID_V7_RE: Regex = Regex::new(r"^is_uuid_v7\s*\(").unwrap();
+        static ref UUID_V7_RE: Regex = Regex::new(r"^is_uuid_v7\s*\(").expect("infallible");
       }
 
       match &opts {

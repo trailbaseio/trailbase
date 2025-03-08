@@ -63,8 +63,8 @@ impl OAuthProvider for DiscordOAuthProvider {
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
     lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(DiscordOAuthProvider::AUTH_URL).unwrap();
-      static ref TOKEN_URL: Url = Url::parse(DiscordOAuthProvider::TOKEN_URL).unwrap();
+      static ref AUTH_URL: Url = Url::parse(DiscordOAuthProvider::AUTH_URL).expect("infallible");
+      static ref TOKEN_URL: Url = Url::parse(DiscordOAuthProvider::TOKEN_URL).expect("infallible");
     }
 
     return Ok(OAuthClientSettings {

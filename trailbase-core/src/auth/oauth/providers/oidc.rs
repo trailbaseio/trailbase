@@ -38,8 +38,8 @@ impl OidcProvider {
             .as_deref()
             .unwrap_or(factory_display_name)
             .to_string(),
-          client_id: config.client_id.clone().unwrap(),
-          client_secret: config.client_secret.clone().unwrap(),
+          client_id: config.client_id.clone().expect("startup"),
+          client_secret: config.client_secret.clone().expect("startup"),
 
           // NOTE: the following unwraps/expects are checked for by config validation.
           auth_url: config
@@ -89,8 +89,8 @@ impl OAuthProvider for OidcProvider {
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
     return Ok(OAuthClientSettings {
-      auth_url: Url::parse(&self.auth_url).unwrap(),
-      token_url: Url::parse(&self.token_url).unwrap(),
+      auth_url: Url::parse(&self.auth_url).map_err(|err| AuthError::Internal(err.into()))?,
+      token_url: Url::parse(&self.token_url).map_err(|err| AuthError::Internal(err.into()))?,
       client_id: self.client_id.clone(),
       client_secret: self.client_secret.clone(),
     });

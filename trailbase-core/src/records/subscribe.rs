@@ -32,7 +32,7 @@ type SseEvent = Result<axum::response::sse::Event, axum::Error>;
 /// Composite id uniquely identifying a subscription.
 ///
 /// If row_id is Some, this is considered to reference a subscription to a specific record.
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct SubscriptionId {
   table_name: String,
   row_id: Option<i64>,
@@ -155,19 +155,21 @@ impl ManagerState {
     return None;
   }
 
-  fn remove_subscription(&self, conn: &rusqlite::Connection, id: SubscriptionId) -> bool {
+  fn remove_subscription(&self, conn: &rusqlite::Connection, id: SubscriptionId) {
     if let Some(row_id) = id.row_id {
       let mut lock = self.record_subscriptions.write();
-      let subs = lock
+      if let Some(subs) = lock
         .get_mut(&id.table_name)
-        .and_then(|x| x.get_mut(&row_id));
-      if let Some(subs) = subs {
+        .and_then(|x| x.get_mut(&row_id))
+      {
         subs.retain(|sub| {
           return sub.subscription_id != id.sub_id;
         });
 
         if subs.is_empty() {
-          let table = lock.get_mut(&id.table_name).unwrap();
+          let Some(table) = lock.get_mut(&id.table_name) else {
+            return;
+          };
           table.remove(&row_id);
 
           if table.is_empty() {
@@ -181,8 +183,7 @@ impl ManagerState {
       }
     } else {
       let mut lock = self.table_subscriptions.write();
-      let subs = lock.get_mut(&id.table_name);
-      if let Some(subs) = subs {
+      if let Some(subs) = lock.get_mut(&id.table_name) {
         subs.retain(|sub| {
           return sub.subscription_id != id.sub_id;
         });
@@ -195,8 +196,6 @@ impl ManagerState {
         }
       }
     }
-
-    return true;
   }
 }
 
@@ -551,7 +550,10 @@ impl SubscriptionManager {
     };
 
     if empty {
-      self.add_hook().await.unwrap();
+      self
+        .add_hook()
+        .await
+        .map_err(|err| RecordError::Internal(err.into()))?;
     }
 
     return Ok(AutoCleanupEventStream {
@@ -595,7 +597,10 @@ impl SubscriptionManager {
     };
 
     if empty {
-      self.add_hook().await.unwrap();
+      self
+        .add_hook()
+        .await
+        .map_err(|err| RecordError::Internal(err.into()))?;
     }
 
     return Ok(AutoCleanupEventStream {
