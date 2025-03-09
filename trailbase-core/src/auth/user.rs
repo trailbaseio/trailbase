@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::auth::jwt::TokenClaims;
-use crate::auth::tokens::Tokens;
+use crate::auth::tokens::extract_tokens_from_request_parts;
 use crate::auth::AuthError;
 use crate::{app_state::AppState, util::b64_to_uuid};
 
@@ -82,9 +82,8 @@ impl User {
   pub(crate) fn from_token_claims(claims: TokenClaims) -> Result<Self, AuthError> {
     let uuid = b64_to_uuid(&claims.sub)
       .map_err(|_err| AuthError::UnauthorizedExt("invalid user id".into()))?;
-    if uuid.get_version_num() != 7 {
-      return Err(AuthError::UnauthorizedExt("Invalid UUID version".into()));
-    }
+    assert_eq!(uuid.get_version_num(), 7);
+
     return Ok(Self {
       id: claims.sub,
       email: claims.email,
@@ -117,7 +116,8 @@ where
   type Rejection = AuthError;
 
   async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-    let tokens = <Tokens as FromRequestParts<S>>::from_request_parts(parts, state).await?;
+    let state = AppState::from_ref(state);
+    let tokens = extract_tokens_from_request_parts(&state, parts).await?;
     return User::from_token_claims(tokens.auth_token_claims);
   }
 }
@@ -133,8 +133,8 @@ where
     parts: &mut Parts,
     state: &S,
   ) -> Result<Option<Self>, Self::Rejection> {
-    let tokens = <Tokens as OptionalFromRequestParts<S>>::from_request_parts(parts, state).await?;
-    if let Some(tokens) = tokens {
+    let state = AppState::from_ref(state);
+    if let Ok(tokens) = extract_tokens_from_request_parts(&state, parts).await {
       return Ok(Some(User::from_token_claims(tokens.auth_token_claims)?));
     }
     return Ok(None);
@@ -183,6 +183,23 @@ mod tests {
       .unwrap();
 
     let (mut parts, _body) = request.into_parts();
+
+    // Emulate the tower_cookies::CookieManagerLayer.
+    let cookies = tower_cookies::Cookies::default();
+    cookies.add(
+      tower_cookies::Cookie::parse(
+        parts
+          .headers
+          .get(header::COOKIE)
+          .unwrap()
+          .to_str()
+          .unwrap()
+          .to_string(),
+      )
+      .unwrap(),
+    );
+    parts.extensions.insert(cookies);
+
     <User as FromRequestParts<AppState>>::from_request_parts(&mut parts, &state)
       .await
       .unwrap();

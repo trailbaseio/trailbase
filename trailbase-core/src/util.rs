@@ -1,4 +1,6 @@
+use axum::http::HeaderMap;
 use base64::prelude::*;
+use reqwest::header::AsHeaderName;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -67,4 +69,25 @@ pub async fn query_one_row(
   return Err(trailbase_sqlite::Error::Rusqlite(
     rusqlite::Error::QueryReturnedNoRows,
   ));
+}
+
+#[inline]
+pub(crate) fn get_header(headers: &HeaderMap, header_name: impl AsHeaderName) -> Option<&str> {
+  if let Some(header) = headers.get(header_name) {
+    return header.to_str().ok();
+  }
+  return None;
+}
+
+#[inline]
+pub(crate) fn get_header_owned(
+  headers: &HeaderMap,
+  header_name: impl AsHeaderName,
+) -> Option<String> {
+  if let Some(header) = headers.get(header_name) {
+    if let Ok(str) = header.to_str() {
+      return Some(str.to_string());
+    }
+  }
+  return None;
 }

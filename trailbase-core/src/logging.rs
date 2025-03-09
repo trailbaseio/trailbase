@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::http::{header::HeaderMap, Request};
+use axum::http::Request;
 use axum::response::Response;
 use axum_client_ip::InsecureClientIp;
 use log::*;
@@ -12,6 +12,7 @@ use tracing::Level;
 use tracing_subscriber::layer::{Context, Layer};
 
 use crate::constants::{ADMIN_API_PATH, RECORD_API_PATH};
+use crate::util::get_header;
 use crate::AppState;
 
 // Memo to my future self.
@@ -36,39 +37,18 @@ enum LogType {
   RecordApiRequest = 3,
 }
 
-/// DB schema representation.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub(crate) struct Log {
-  pub id: Option<[u8; 16]>,
-  pub created: Option<f64>,
-  pub r#type: i32,
-
-  // NOTE: Level isn't particularly useful at the moment. It's not derived from status but rather
-  // whatever we choose for the span, i.e. `LEVEL`.
-  pub level: i16,
-  pub status: u16,
-  pub method: String,
-  pub url: String,
-
-  // milliseconds
-  pub latency: f64,
-  pub client_ip: String,
-  pub referer: String,
-  pub user_agent: String,
-
-  pub data: Option<serde_json::Value>,
-}
-
 const LEVEL: Level = Level::INFO;
 const NAME: &str = "TB::sqlog";
 
 pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
   let headers = request.headers();
+
   let host = get_header(headers, "host").unwrap_or("");
   let user_agent = get_header(headers, "user-agent").unwrap_or("");
   let referer = get_header(headers, "referer").unwrap_or("");
   let client_ip = InsecureClientIp::from(headers, request.extensions())
-    .map_or_else(|_err| String::new(), |ip| ip.0.to_string());
+    .map(|ip| ip.0.to_string())
+    .ok();
 
   let uri = request.uri();
   let request_type = {
@@ -371,13 +351,6 @@ fn as_millis_f64(d: &Duration) -> f64 {
 
   return (d.as_secs() as f64) * (MILLIS_PER_SEC as f64)
     + (d.subsec_nanos() as f64) / (NANOS_PER_MILLI);
-}
-
-#[inline]
-fn get_header<'a>(headers: &'a HeaderMap, header_name: &'static str) -> Option<&'a str> {
-  headers
-    .get(header_name)
-    .and_then(|header_value| header_value.to_str().ok())
 }
 
 #[inline]

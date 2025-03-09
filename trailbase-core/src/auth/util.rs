@@ -1,4 +1,3 @@
-use axum::http::request::Parts;
 use base64::prelude::*;
 use chrono::Duration;
 use lazy_static::lazy_static;
@@ -105,29 +104,6 @@ pub(crate) fn remove_cookie(cookies: &Cookies, key: &'static str) {
 pub(crate) fn remove_all_cookies(cookies: &Cookies) {
   for cookie in [COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, COOKIE_OAUTH_STATE] {
     remove_cookie(cookies, cookie);
-  }
-}
-
-pub(crate) fn extract_cookies_from_parts(parts: &mut Parts) -> Result<Cookies, AuthError> {
-  if let Some(cookies) = parts.extensions.get::<Cookies>() {
-    return Ok(cookies.clone());
-  };
-
-  // Fallback code for when handlers are called directly in unit tests w/o tower::Cookies
-  // middleware to parse the cookies header for us.
-  #[cfg(test)]
-  {
-    let cookies = Cookies::default();
-    for ref header in parts.headers.get_all(axum::http::header::COOKIE) {
-      cookies.add(Cookie::parse(header.to_str().unwrap().to_string()).unwrap());
-    }
-    return Ok(cookies);
-  }
-
-  #[cfg(not(test))]
-  {
-    log::error!("Failed to get Cookies");
-    return Err(AuthError::Internal("cookie error".into()));
   }
 }
 
