@@ -10,12 +10,15 @@ import type { Setter } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { TbRefresh, TbCrown, TbEdit, TbTrash } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
+import { createColumnHelper, PaginationState } from "@tanstack/solid-table";
+import type { ColumnDef } from "@tanstack/solid-table";
 
 import {
-  type ColumnDef,
-  createColumnHelper,
-  PaginationState,
-} from "@tanstack/solid-table";
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { FilterBar } from "@/components/FilterBar";
 import {
@@ -80,6 +83,8 @@ function buildColumns(
       header: "actions",
       cell: (ctx) => {
         const userId = ctx.row.original.id;
+        const email = ctx.row.original.email;
+
         return (
           <div class="flex gap-2">
             <IconButton
@@ -89,22 +94,71 @@ function buildColumns(
               <TbEdit size={20} />
             </IconButton>
 
-            <IconButton
-              class="bg-destructive text-white"
-              tooltip="Delete user"
-              onClick={() => {
-                deleteUser({ id: userId })
-                  .then(userRefetch)
-                  .catch(console.error);
-              }}
-            >
-              <TbTrash size={20} />
-            </IconButton>
+            <DeleteUserButton
+              userId={userId}
+              email={email}
+              userRefetch={userRefetch}
+            />
           </div>
         );
       },
     }),
   ];
+}
+
+function DeleteUserButton(props: {
+  userId: string;
+  email: string;
+  userRefetch: () => void;
+}) {
+  const [dialogOpen, setDialogOpen] = createSignal(false);
+
+  return (
+    <Dialog
+      id="confirm"
+      modal={true}
+      open={dialogOpen()}
+      onOpenChange={setDialogOpen}
+    >
+      <DialogContent>
+        <DialogTitle>Confirmation</DialogTitle>
+
+        <p>
+          Are you sure you want to permanently delete{" "}
+          <span class="font-bold">{props.email}</span>?
+        </p>
+
+        <DialogFooter>
+          <div class="flex w-full justify-between">
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              Back
+            </Button>
+
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setDialogOpen(false);
+
+                deleteUser({ id: props.userId })
+                  .then(props.userRefetch)
+                  .catch(console.error);
+              }}
+            >
+              Delete
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+
+      <IconButton
+        class="bg-destructive text-white"
+        tooltip="Delete user"
+        onClick={() => setDialogOpen(true)}
+      >
+        <TbTrash size={20} />
+      </IconButton>
+    </Dialog>
+  );
 }
 
 function EditSheetContent(props: {
