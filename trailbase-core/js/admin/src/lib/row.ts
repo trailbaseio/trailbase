@@ -1,4 +1,5 @@
 import { adminFetch } from "@/lib/fetch";
+import { buildListSearchParams } from "@/lib/list";
 import { findPrimaryKeyColumnIndex } from "@/lib/schema";
 import { copyRow, type FormRow } from "@/lib/convert";
 
@@ -78,42 +79,13 @@ export async function fetchRows(
   source: FetchArgs,
   { value }: { value: ListRowsResponse | undefined },
 ): Promise<ListRowsResponse> {
-  const pageIndex = source.pageIndex;
-  const limit = source.pageSize;
-  const cursors = source.cursors;
-
-  const filter = source.filter ?? "";
-  const filterQuery = filter
-    .split("AND")
-    .map((frag) => frag.trim().replaceAll(" ", ""))
-    .join("&");
-
-  const params = new URLSearchParams(filterQuery);
-  params.set("limit", limit.toString());
-
-  // Build the next UUIDv7 "cursor" from previous response and update local
-  // cursor stack. If we're paging forward we add new cursors, otherwise we're
-  // re-using previously seen cursors for consistency. We reset if we go back
-  // to the start.
-  if (pageIndex === 0) {
-    cursors.length = 0;
-  } else {
-    const index = pageIndex - 1;
-    if (index < cursors.length) {
-      // Already known page
-      params.set("cursor", cursors[index]);
-    } else {
-      // New page case: use cursor from previous response or fall back to more
-      // expensive and inconsistent offset-based pagination.
-      const cursor = value?.cursor;
-      if (cursor) {
-        cursors.push(cursor);
-        params.set("cursor", cursor);
-      } else {
-        params.set("offset", `${pageIndex * source.pageSize}`);
-      }
-    }
-  }
+  const params = buildListSearchParams({
+    filter: source.filter,
+    pageSize: source.pageSize,
+    pageIndex: source.pageIndex,
+    cursor: value?.cursor,
+    prevCursors: source.cursors,
+  });
 
   try {
     const response = await adminFetch(

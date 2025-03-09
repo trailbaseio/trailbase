@@ -9,11 +9,8 @@ import {
   onMount,
 } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
-import {
-  type ColumnDef,
-  createColumnHelper,
-  type PaginationState,
-} from "@tanstack/solid-table";
+import { createColumnHelper } from "@tanstack/solid-table";
+import type { ColumnDef, PaginationState } from "@tanstack/solid-table";
 import { Chart } from "chart.js/auto";
 import type {
   ChartData,
@@ -40,16 +37,15 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-
-import type { LogJson } from "@bindings/LogJson";
-import type { ListLogsResponse } from "@bindings/ListLogsResponse";
-import type { Stats } from "@bindings/Stats";
-
 import { DataTable, defaultPaginationState } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
-import { adminFetch } from "@/lib/fetch";
+
+import { getLogs, type GetLogsProps } from "@/lib/logs";
 
 import countriesGeoJSON from "@/assets/countries-110m.json";
+
+import type { LogJson } from "@bindings/LogJson";
+import type { Stats } from "@bindings/Stats";
 
 const columnHelper = createColumnHelper<LogJson>();
 
@@ -119,62 +115,7 @@ const columns: ColumnDef<LogJson>[] = [
   { accessorKey: "data" },
 ];
 
-type GetLogsProps = {
-  pagination: PaginationState;
-  // Filter where clause to pass to the fetch.
-  filter?: string;
-  // Keep track of the timestamp cursor to have consistency for forwards and backwards pagination.
-  cursors: string[];
-};
-
 // Value is the previous value in case this isn't the first fetch.
-async function getLogs(
-  source: GetLogsProps,
-  { value }: { value: ListLogsResponse | undefined },
-): Promise<ListLogsResponse> {
-  const pageIndex = source.pagination.pageIndex;
-  const limit = source.pagination.pageSize;
-  const filter = source.filter ?? "";
-
-  // Here we're setting the timestamp "cursor". If we're paging forward we add new cursors.
-  // otherwise we're re-using previously seen cursors for consistency. We reset if we go back
-  // to the start.
-  const cursor = (() => {
-    if (pageIndex === 0) {
-      source.cursors.length = 0;
-      return undefined;
-    }
-
-    const cursors = source.cursors;
-    const index = pageIndex - 1;
-    if (index < cursors.length) {
-      return cursors[index];
-    }
-
-    // New page case.
-    const cursor = value!.cursor;
-    if (cursor) {
-      cursors.push(cursor);
-      return cursor;
-    }
-  })();
-
-  const filterQuery = filter
-    .split("AND")
-    .map((frag) => frag.trim().replaceAll(" ", ""))
-    .join("&");
-
-  const params = new URLSearchParams(filterQuery);
-  params.set("limit", limit.toString());
-  if (cursor) {
-    params.set("cursor", cursor);
-  }
-
-  console.debug("Fetching logs for ", params);
-  const response = await adminFetch(`/logs?${params}`);
-  return await response.json();
-}
-
 export function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams<{
     filter: string;
@@ -192,7 +133,7 @@ export function LogsPage() {
   const cursors: string[] = [];
   const getLogsProps = (): GetLogsProps => {
     return {
-      pagination: pagination(),
+      ...pagination(),
       filter: filter(),
       cursors,
     };
