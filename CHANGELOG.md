@@ -1,3 +1,9 @@
+## v0.7.2
+
+* Fix and test OpenId Connect (OIDC) integration.
+* Audit and remove unwraps.
+* Fix auth img-src CSP for external avatars and dev instances.
+
 ## v0.7.1
 
 * Add generic OIDC provider. Can currently only be configured in config. Admin UI integration pending.
