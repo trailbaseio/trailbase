@@ -1,15 +1,14 @@
 import { adminFetch } from "@/lib/fetch";
-import type {
-  AlterIndexRequest,
-  AlterTableRequest,
-  CreateIndexRequest,
-  CreateIndexResponse,
-  CreateTableRequest,
-  CreateTableResponse,
-  DropIndexRequest,
-  DropTableRequest,
-  ListSchemasResponse,
-} from "@/lib/bindings";
+
+import type { AlterIndexRequest } from "@bindings/AlterIndexRequest";
+import type { AlterTableRequest } from "@bindings/AlterTableRequest";
+import type { CreateIndexRequest } from "@bindings/CreateIndexRequest";
+import type { CreateIndexResponse } from "@bindings/CreateIndexResponse";
+import type { CreateTableRequest } from "@bindings/CreateTableRequest";
+import type { CreateTableResponse } from "@bindings/CreateTableResponse";
+import type { DropIndexRequest } from "@bindings/DropIndexRequest";
+import type { DropTableRequest } from "@bindings/DropTableRequest";
+import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 
 export async function getAllTableSchemas(): Promise<ListSchemasResponse> {
   const response = await adminFetch("/tables");

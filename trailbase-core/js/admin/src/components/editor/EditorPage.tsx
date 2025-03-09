@@ -55,11 +55,9 @@ import { showToast } from "@/components/ui/toast";
 import { DataTable } from "@/components/Table";
 
 import { getAllTableSchemas } from "@/lib/table";
-import type {
-  QueryRequest,
-  QueryResponse,
-  ListSchemasResponse,
-} from "@/lib/bindings";
+import type { QueryRequest } from "@bindings/QueryRequest";
+import type { QueryResponse } from "@bindings/QueryResponse";
+import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import { adminFetch } from "@/lib/fetch";
 import { isNotNull } from "@/lib/schema";
 

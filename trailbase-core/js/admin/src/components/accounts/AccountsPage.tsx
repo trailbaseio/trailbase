@@ -39,12 +39,14 @@ import {
   fetchUsers,
   type FetchUsersArgs,
 } from "@/lib/user";
-import type { UpdateUserRequest, UserJson } from "@/lib/bindings";
 import {
   buildTextFormField,
   buildSecretFormField,
 } from "@/components/FormFields";
 import { SafeSheet, SheetContainer } from "@/components/SafeSheet";
+
+import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
+import type { UserJson } from "@bindings/UserJson";
 
 const columnHelper = createColumnHelper<UserJson>();
 
@@ -91,7 +93,9 @@ function buildColumns(
               class="bg-destructive text-white"
               tooltip="Delete user"
               onClick={() => {
-                deleteUser(userId).then(userRefetch).catch(console.error);
+                deleteUser({ id: userId })
+                  .then(userRefetch)
+                  .catch(console.error);
               }}
             >
               <TbTrash size={20} />

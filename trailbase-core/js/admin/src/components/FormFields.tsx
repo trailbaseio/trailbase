@@ -35,7 +35,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import type { ColumnDataType } from "@/lib/bindings";
+import type { ColumnDataType } from "@bindings/ColumnDataType";
 
 export { type AnyFieldApi } from "@tanstack/solid-form";
 

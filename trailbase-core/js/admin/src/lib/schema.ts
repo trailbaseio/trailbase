@@ -1,10 +1,8 @@
-import type {
-  Column,
-  ColumnOption,
-  ReferentialAction,
-  Table,
-  View,
-} from "@/lib/bindings";
+import type { Column } from "@bindings/Column";
+import type { ColumnOption } from "@bindings/ColumnOption";
+import type { ReferentialAction } from "@bindings/ReferentialAction";
+import type { Table } from "@bindings/Table";
+import type { View } from "@bindings/View";
 
 export function isNotNull(options: ColumnOption[]): boolean {
   return options.findIndex((o: ColumnOption) => o === "NotNull") >= 0;

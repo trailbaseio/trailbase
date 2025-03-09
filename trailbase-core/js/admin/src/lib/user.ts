@@ -1,9 +1,9 @@
-import type {
-  UpdateUserRequest,
-  CreateUserRequest,
-  ListUsersResponse,
-} from "@/lib/bindings";
 import { adminFetch } from "@/lib/fetch";
+
+import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
+import type { CreateUserRequest } from "@bindings/CreateUserRequest";
+import type { ListUsersResponse } from "@bindings/ListUsersResponse";
+import type { DeleteUserRequest } from "@bindings/DeleteUserRequest";
 
 export async function createUser(request: CreateUserRequest) {
   await adminFetch("/user", {
@@ -12,13 +12,10 @@ export async function createUser(request: CreateUserRequest) {
   });
 }
 
-export async function deleteUser(id: string): Promise<void> {
-  // TODO: We should probably have a dedicated delete/disable user endpoint?
-  await adminFetch("/table/_user", {
+export async function deleteUser(request: DeleteUserRequest): Promise<void> {
+  await adminFetch("/user", {
     method: "DELETE",
-    body: JSON.stringify({
-      id: id,
-    }),
+    body: JSON.stringify(request),
   });
 }
 

@@ -9,11 +9,10 @@ import {
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 import { adminFetch } from "@/lib/fetch";
-import type {
-  UpdateJsonSchemaRequest,
-  ListJsonSchemasResponse,
-  JsonSchema,
-} from "@/lib/bindings";
+
+import type { UpdateJsonSchemaRequest } from "@bindings/UpdateJsonSchemaRequest";
+import type { ListJsonSchemasResponse } from "@bindings/ListJsonSchemasResponse";
+import type { JsonSchema } from "@bindings/JsonSchema";
 
 async function listSchemas(): Promise<ListJsonSchemasResponse> {
   const response = await adminFetch("/schema", {

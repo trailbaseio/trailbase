@@ -52,6 +52,7 @@ pub fn router() -> Router<AppState> {
     .route("/user", get(user::list_users_handler))
     .route("/user", post(user::create_user_handler))
     .route("/user", patch(user::update_user_handler))
+    .route("/user", delete(user::delete_user_handler))
     // Schema actions
     .route("/schema", get(schema::list_schemas_handler))
     .route("/schema", post(schema::update_schema_handler))

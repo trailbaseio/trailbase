@@ -16,7 +16,6 @@ import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { showToast } from "@/components/ui/toast";
 
 import { alterIndex, createIndex } from "@/lib/table";
-import type { ColumnOrder, Table, TableIndex } from "@/lib/bindings";
 import {
   buildTextFormField,
   buildBoolFormField,
@@ -24,6 +23,10 @@ import {
 } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
 import { randomName } from "@/lib/name";
+
+import type { ColumnOrder } from "@bindings/ColumnOrder";
+import type { Table } from "@bindings/Table";
+import type { TableIndex } from "@bindings/TableIndex";
 
 export function CreateAlterIndexForm(props: {
   close: () => void;

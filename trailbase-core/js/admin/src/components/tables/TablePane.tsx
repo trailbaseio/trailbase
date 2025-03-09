@@ -54,19 +54,7 @@ import { adminFetch } from "@/lib/fetch";
 import { urlSafeBase64ToUuid } from "@/lib/utils";
 import { RecordApiConfig } from "@proto/config";
 import { dropTable, dropIndex } from "@/lib/table";
-
-import type {
-  Column,
-  DeleteRowsRequest,
-  FileUpload,
-  FileUploads,
-  ListRowsResponse,
-  ListSchemasResponse,
-  Table,
-  TableIndex,
-  TableTrigger,
-  View,
-} from "@/lib/bindings";
+import { deleteRows, fetchRows, type FetchArgs } from "@/lib/row";
 import {
   findPrimaryKeyColumnIndex,
   getForeignKey,
@@ -81,6 +69,23 @@ import {
   viewSatisfiesRecordApiRequirements,
   type TableType,
 } from "@/lib/schema";
+
+import type { Column } from "@bindings/Column";
+import type { ListRowsResponse } from "@bindings/ListRowsResponse";
+import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
+import type { Table } from "@bindings/Table";
+import type { TableIndex } from "@bindings/TableIndex";
+import type { TableTrigger } from "@bindings/TableTrigger";
+import type { View } from "@bindings/View";
+
+type FileUpload = {
+  id: string;
+  filename: string | undefined;
+  content_type: string | undefined;
+  mime_type: string | string;
+};
+
+type FileUploads = FileUpload[];
 
 function rowDataToRow(columns: Column[], row: RowData): FormRow {
   const result: FormRow = {};
@@ -171,14 +176,6 @@ function renderCell(
   }
 
   return value;
-}
-
-async function deleteRows(tableName: string, request: DeleteRowsRequest) {
-  const response = await adminFetch(`/table/${tableName}/rows`, {
-    method: "DELETE",
-    body: JSON.stringify(request),
-  });
-  return await response.text();
 }
 
 function Image(props: { url: string; mime: string }) {
@@ -420,14 +417,6 @@ type TableStore = {
   pagination: PaginationState;
 };
 
-type FetchArgs = {
-  tableName: string;
-  filter: string | null;
-  pageSize: number;
-  pageIndex: number;
-  cursors: string[];
-};
-
 type TableState = {
   store: Store<TableStore>;
   setStore: SetStoreFunction<TableStore>;
@@ -508,60 +497,6 @@ function buildColumnDefs(
       accessorFn: (row: RowData) => row[idx],
     };
   });
-}
-
-async function fetchRows(
-  source: FetchArgs,
-  { value }: { value: ListRowsResponse | undefined },
-): Promise<ListRowsResponse> {
-  const pageIndex = source.pageIndex;
-  const limit = source.pageSize;
-  const cursors = source.cursors;
-
-  const filter = source.filter ?? "";
-  const filterQuery = filter
-    .split("AND")
-    .map((frag) => frag.trim().replaceAll(" ", ""))
-    .join("&");
-
-  const params = new URLSearchParams(filterQuery);
-  params.set("limit", limit.toString());
-
-  // Build the next UUIDv7 "cursor" from previous response and update local
-  // cursor stack. If we're paging forward we add new cursors, otherwise we're
-  // re-using previously seen cursors for consistency. We reset if we go back
-  // to the start.
-  if (pageIndex === 0) {
-    cursors.length = 0;
-  } else {
-    const index = pageIndex - 1;
-    if (index < cursors.length) {
-      // Already known page
-      params.set("cursor", cursors[index]);
-    } else {
-      // New page case: use cursor from previous response or fall back to more
-      // expensive and inconsistent offset-based pagination.
-      const cursor = value?.cursor;
-      if (cursor) {
-        cursors.push(cursor);
-        params.set("cursor", cursor);
-      } else {
-        params.set("offset", `${pageIndex * source.pageSize}`);
-      }
-    }
-  }
-
-  try {
-    const response = await adminFetch(
-      `/table/${source.tableName}/rows?${params}`,
-    );
-    return (await response.json()) as ListRowsResponse;
-  } catch (err) {
-    if (value) {
-      return value;
-    }
-    throw err;
-  }
 }
 
 function RowDataTable(props: {

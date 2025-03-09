@@ -1,8 +1,10 @@
 mod create_user;
+mod delete_user;
 mod list_users;
 mod update_user;
 
 pub use create_user::{create_user_handler, CreateUserRequest};
+pub(super) use delete_user::delete_user_handler;
 pub(super) use list_users::list_users_handler;
 pub(super) use update_user::update_user_handler;
 

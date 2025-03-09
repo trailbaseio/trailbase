@@ -30,7 +30,7 @@ pub async fn delete_row_handler(
 ) -> Result<Response, Error> {
   delete_row(
     &state,
-    table_name,
+    &table_name,
     &request.primary_key_column,
     request.value,
   )
@@ -38,13 +38,13 @@ pub async fn delete_row_handler(
   return Ok((StatusCode::OK, "deleted").into_response());
 }
 
-async fn delete_row(
+pub(crate) async fn delete_row(
   state: &AppState,
-  table_name: String,
+  table_name: &str,
   pk_col: &str,
   value: serde_json::Value,
 ) -> Result<(), Error> {
-  let Some(table_metadata) = state.table_metadata().get(&table_name) else {
+  let Some(table_metadata) = state.table_metadata().get(table_name) else {
     return Err(Error::Precondition(format!("Table {table_name} not found")));
   };
 
@@ -90,7 +90,7 @@ pub async fn delete_rows_handler(
   } = request;
 
   for value in values {
-    delete_row(&state, table_name.clone(), &primary_key_column, value).await?;
+    delete_row(&state, &table_name, &primary_key_column, value).await?;
   }
 
   return Ok((StatusCode::OK, "deleted all").into_response());

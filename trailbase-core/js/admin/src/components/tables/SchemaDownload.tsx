@@ -4,7 +4,10 @@ import { TbDownload, TbColumns, TbColumnsOff } from "solid-icons/tb";
 import { showSaveFileDialog } from "@/lib/utils";
 import { iconButtonStyle } from "@/components/IconButton";
 
-import type { Table, TableIndex, TableTrigger } from "@/lib/bindings";
+import type { Table } from "@bindings/Table";
+import type { TableIndex } from "@bindings/TableIndex";
+import type { TableTrigger } from "@bindings/TableTrigger";
+
 import {
   Dialog,
   DialogContent,

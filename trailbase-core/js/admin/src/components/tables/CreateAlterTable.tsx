@@ -52,21 +52,21 @@ import {
 import { createTable, alterTable } from "@/lib/table";
 import { cn } from "@/lib/utils";
 import { randomName } from "@/lib/name";
-import type {
-  Column,
-  ColumnDataType,
-  ColumnOption,
-  Table,
-} from "@/lib/bindings";
 import {
   buildBoolFormField,
   gapStyle,
   buildSelectField,
   buildTextFormField,
 } from "@/components/FormFields";
-import type { FormApiT, AnyFieldApi } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
 import { invalidateConfig } from "@/lib/config";
+
+import type { FormApiT, AnyFieldApi } from "@/components/FormFields";
+
+import type { Column } from "@bindings/Column";
+import type { ColumnDataType } from "@bindings/ColumnDataType";
+import type { ColumnOption } from "@bindings/ColumnOption";
+import type { Table } from "@bindings/Table";
 
 export function CreateAlterTableForm(props: {
   close: () => void;

@@ -28,7 +28,6 @@ import {
   RecordApiConfig,
 } from "@proto/config";
 import { SheetContainer } from "@/components/SafeSheet";
-import type { ForeignKey, Table, View } from "@/lib/bindings";
 import {
   buildTextFormField,
   buildOptionalTextFormField,
@@ -36,6 +35,10 @@ import {
 import { createConfigQuery, setConfig } from "@/lib/config";
 import { parseSql } from "@/lib/parse";
 import { tableType, getForeignKey } from "@/lib/schema";
+
+import type { ForeignKey } from "@bindings/ForeignKey";
+import type { Table } from "@bindings/Table";
+import type { View } from "@bindings/View";
 
 const tablePermissions = {
   Create: PermissionFlag.CREATE,

@@ -10,8 +10,9 @@ import {
   buildSecretFormField,
   notEmptyValidator,
 } from "@/components/FormFields";
-import type { CreateUserRequest } from "@/lib/bindings";
 import { createUser } from "@/lib/user";
+
+import type { CreateUserRequest } from "@bindings/CreateUserRequest";
 
 export function AddUser(props: {
   close: () => void;

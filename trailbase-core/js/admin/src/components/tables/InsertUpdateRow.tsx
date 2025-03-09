@@ -4,69 +4,20 @@ import { createForm } from "@tanstack/solid-form";
 import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 
-import type { Column, Table } from "@/lib/bindings";
-import type { InsertRowRequest } from "@bindings/InsertRowRequest";
-import type { UpdateRowRequest } from "@bindings/UpdateRowRequest";
+import type { Column } from "@bindings/Column";
+import type { Table } from "@bindings/Table";
 
 import { buildDBCellField, isNumber } from "@/components/FormFields";
 import {
-  findPrimaryKeyColumnIndex,
   getDefaultValue,
   isNotNull,
   isOptional,
   isPrimaryKeyColumn,
 } from "@/lib/schema";
-import { adminFetch } from "@/lib/fetch";
 import { SheetContainer } from "@/components/SafeSheet";
 import { showToast } from "@/components/ui/toast";
 import { copyRow, type FormRow } from "@/lib/convert";
-
-async function insertRow(tableName: string, row: FormRow) {
-  const request: InsertRowRequest = {
-    row: copyRow(row),
-  };
-
-  const response = await adminFetch(`/table/${tableName}`, {
-    method: "POST",
-    body: JSON.stringify(request),
-  });
-
-  return await response.text();
-}
-
-async function updateRow(table: Table, row: FormRow) {
-  const tableName = table.name;
-  const primaryKeyColumIndex = findPrimaryKeyColumnIndex(table.columns);
-  if (primaryKeyColumIndex < 0) {
-    throw Error("No primary key column found.");
-  }
-  const pkColName = table.columns[primaryKeyColumIndex].name;
-
-  const pkValue = row[pkColName];
-  if (pkValue === undefined) {
-    throw Error("Row is missing primary key.");
-  }
-
-  // Update cannot change the PK value.
-  const copy = {
-    ...row,
-  };
-  delete copy[pkColName];
-
-  const request: UpdateRowRequest = {
-    primary_key_column: pkColName,
-    // eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
-    primary_key_value: pkValue as Object,
-    row: copyRow(copy),
-  };
-
-  const response = await adminFetch(`/table/${tableName}`, {
-    method: "PATCH",
-    body: JSON.stringify(request),
-  });
-
-  return await response.text();
-}
+import { updateRow, insertRow } from "@/lib/row";
 
 function buildDefault(schema: Table): FormRow {
   const obj: FormRow = {};
@@ -124,7 +75,7 @@ export function InsertUpdateRowForm(props: {
         if (o) {
           await updateRow(props.schema, value.row);
         } else {
-          await insertRow(props.schema.name, value.row);
+          await insertRow(props.schema, value.row);
         }
 
         props.rowsRefetch();

@@ -21,9 +21,11 @@ import { SafeSheet } from "@/components/SafeSheet";
 import { Separator } from "@/components/ui/separator";
 
 import { getAllTableSchemas } from "@/lib/table";
-
-import type { ListSchemasResponse, Table, View } from "@/lib/bindings";
 import { hiddenTable, tableType } from "@/lib/schema";
+
+import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
+import type { Table } from "@bindings/Table";
+import type { View } from "@bindings/View";
 
 function pickInitiallySelectedTable(
   tables: (Table | View)[],

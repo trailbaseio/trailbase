@@ -32,7 +32,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
-import type { OAuthProviderResponse, OAuthProviderEntry } from "@/lib/bindings";
 import {
   AuthConfig,
   Config,
@@ -42,6 +41,9 @@ import {
 import { createConfigQuery, setConfig } from "@/lib/config";
 import { adminFetch } from "@/lib/fetch";
 import { showSaveFileDialog } from "@/lib/utils";
+
+import type { OAuthProviderResponse } from "@bindings/OAuthProviderResponse";
+import type { OAuthProviderEntry } from "@bindings/OAuthProviderEntry";
 
 // OAuth2 provider assets.
 import openIdConnect from "@shared/assets/oauth2/oidc.svg";

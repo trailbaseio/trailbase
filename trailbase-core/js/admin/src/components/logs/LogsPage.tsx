@@ -41,9 +41,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
+import type { LogJson } from "@bindings/LogJson";
+import type { ListLogsResponse } from "@bindings/ListLogsResponse";
+import type { Stats } from "@bindings/Stats";
+
 import { DataTable, defaultPaginationState } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
-import type { LogJson, ListLogsResponse, Stats } from "@/lib/bindings";
 import { adminFetch } from "@/lib/fetch";
 
 import countriesGeoJSON from "@/assets/countries-110m.json";
