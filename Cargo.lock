@@ -6542,7 +6542,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase"
-version = "0.0.4"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -6659,7 +6659,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-extension"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -6715,7 +6715,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-sqlite"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "crossbeam-channel",
  "infer",

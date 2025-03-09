@@ -1,6 +1,6 @@
 [package]
 name = "trailbase"
-version = "0.0.4"
+version = "0.1.0"
 edition = "2021"
 license = "OSL-3.0"
 description = "Package to use TrailBase as a framework"

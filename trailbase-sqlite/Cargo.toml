@@ -1,6 +1,6 @@
 [package]
 name = "trailbase-sqlite"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 license = "OSL-3.0"
 description = "SQLite facilities used by TrailBase"

@@ -55,7 +55,7 @@ rusqlite = { version = "^0.33.0", default-features = false, features = [
     "preupdate_hook",
 ] }
 trailbase-sqlean = { path = "vendor/sqlean", version = "0.0.2" }
-trailbase-extension = { path = "trailbase-extension", version = "0.1.1" }
-trailbase-sqlite = { path = "trailbase-sqlite", version = "0.1.1" }
-trailbase = { path = "trailbase-core", version = "0.0.4" }
+trailbase-extension = { path = "trailbase-extension", version = "0.2.0" }
+trailbase-sqlite = { path = "trailbase-sqlite", version = "0.2.0" }
+trailbase = { path = "trailbase-core", version = "0.1.0" }
 uuid = { version = "=1.12.1", default-features = false, features = ["std", "v4", "v7"] }
