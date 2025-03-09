@@ -84,6 +84,10 @@ pub async fn delete_rows_handler(
   Path(table_name): Path<String>,
   Json(request): Json<DeleteRowsRequest>,
 ) -> Result<Response, Error> {
+  if state.demo_mode() && table_name.starts_with("_") {
+    return Err(Error::Precondition("Disallowed in demo".into()));
+  }
+
   let DeleteRowsRequest {
     primary_key_column,
     values,

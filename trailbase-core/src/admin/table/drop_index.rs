@@ -23,6 +23,9 @@ pub async fn drop_index_handler(
   Json(request): Json<DropIndexRequest>,
 ) -> Result<Response, Error> {
   let index_name = request.name;
+  if state.demo_mode() && index_name.starts_with("_") {
+    return Err(Error::Precondition("Disallowed in demo".into()));
+  }
 
   let migration_path = state.data_dir().migrations_path();
   let conn = state.conn();

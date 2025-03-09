@@ -29,6 +29,10 @@ pub async fn alter_table_handler(
   State(state): State<AppState>,
   Json(request): Json<AlterTableRequest>,
 ) -> Result<Response, Error> {
+  if state.demo_mode() && request.source_schema.name.starts_with("_") {
+    return Err(Error::Precondition("Disallowed in demo".into()));
+  }
+
   let source_schema = request.source_schema;
   let source_table_name = source_schema.name.clone();
 

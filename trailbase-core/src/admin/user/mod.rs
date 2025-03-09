@@ -1,3 +1,9 @@
+use trailbase_sqlite::params;
+use uuid::Uuid;
+
+use crate::constants::USER_TABLE;
+use crate::AppState;
+
 mod create_user;
 mod delete_user;
 mod list_users;
@@ -7,6 +13,26 @@ pub use create_user::{create_user_handler, CreateUserRequest};
 pub(super) use delete_user::delete_user_handler;
 pub(super) use list_users::list_users_handler;
 pub(super) use update_user::update_user_handler;
+
+pub async fn is_demo_admin(state: &AppState, id: &Uuid) -> bool {
+  assert!(state.demo_mode());
+
+  let userid: [u8; 16] = id.into_bytes();
+  return match state
+    .user_conn()
+    .query_value(
+      &format!("SELECT EXISTS(SELECT * FROM {USER_TABLE} WHERE id=$1 AND email='admin@localhost')"),
+      params!(userid),
+    )
+    .await
+  {
+    Ok(value) => value.unwrap_or(true),
+    Err(err) => {
+      log::error!("{err}");
+      true
+    }
+  };
+}
 
 #[cfg(test)]
 pub(crate) use create_user::create_user_for_test;

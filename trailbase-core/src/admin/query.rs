@@ -41,7 +41,10 @@ pub async fn query_handler(
   // Check the statements are correct before executing anything, just to be sure.
   let statements =
     sqlite3_parse_into_statements(&request.query).map_err(|err| Error::BadRequest(err.into()))?;
+
   let mut must_invalidate_table_cache = false;
+  let mut mutation = false;
+
   for stmt in statements {
     use sqlite3_parser::ast::Stmt;
 
@@ -53,11 +56,21 @@ pub async fn query_handler(
       | Stmt::CreateVirtualTable { .. }
       | Stmt::CreateView { .. } => {
         must_invalidate_table_cache = true;
+        mutation = true;
       }
-      _ => {
+      Stmt::Select { .. } => {
         // Do nothing.
       }
+      _ => {
+        mutation = true;
+      }
     }
+  }
+
+  if state.demo_mode() && mutation {
+    return Err(Error::Precondition(
+      "Demo disallows mutation queries".into(),
+    ));
   }
 
   let batched_rows_result = state.conn().execute_batch(&request.query).await;

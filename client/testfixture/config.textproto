@@ -6,13 +6,6 @@ server {
 }
 auth {
   oauth_providers: [{
-    key: "discord"
-    value {
-      client_id: "invalid_discord_id"
-      client_secret: "<REDACTED>"
-      provider_id: DISCORD
-    }
-  }, {
     key: "oidc0"
     value {
       client_id: "invalid_client_id"
@@ -22,6 +15,13 @@ auth {
       auth_url: "http://localhost:9088/authorize"
       token_url: "http://localhost:9088/token"
       user_api_url: "http://localhost:9088/userinfo"
+    }
+  }, {
+    key: "discord"
+    value {
+      client_id: "invalid_discord_id"
+      client_secret: "<REDACTED>"
+      provider_id: DISCORD
     }
   }]
 }

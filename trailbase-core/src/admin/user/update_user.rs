@@ -9,6 +9,7 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::admin::user::is_demo_admin;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::auth::password::hash_password;
@@ -28,8 +29,9 @@ pub async fn update_user_handler(
   State(state): State<AppState>,
   Json(request): Json<UpdateUserRequest>,
 ) -> Result<Response, Error> {
-  let conn = state.user_conn();
-  let user_id_bytes = request.id.into_bytes();
+  if state.demo_mode() && is_demo_admin(&state, &request.id).await {
+    return Err(Error::Precondition("Updating demo admin forbidden".into()));
+  }
 
   let hashed_password = match &request.password {
     Some(pw) => Some(hash_password(pw)?),
@@ -50,10 +52,12 @@ pub async fn update_user_handler(
 
   let email = request.email.clone();
   let verified = request.verified;
-  conn
+  state
+    .user_conn()
     .call(move |conn| {
       let tx = conn.transaction()?;
 
+      let user_id_bytes: [u8; 16] = request.id.into_bytes();
       if let Some(email) = email {
         tx.execute(&UPDATE_EMAIL_QUERY, params![email, user_id_bytes])?;
       }

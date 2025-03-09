@@ -23,8 +23,10 @@ pub async fn drop_table_handler(
   State(state): State<AppState>,
   Json(request): Json<DropTableRequest>,
 ) -> Result<Response, Error> {
-  let conn = state.conn();
   let table_name = &request.name;
+  if state.demo_mode() && table_name.starts_with("_") {
+    return Err(Error::Precondition("Disallowed in demo".into()));
+  }
 
   let entity_type: &str;
   if state.table_metadata().get(table_name).is_some() {
@@ -40,7 +42,8 @@ pub async fn drop_table_handler(
   let writer = {
     let table_name = table_name.clone();
     let migration_path = state.data_dir().migrations_path();
-    conn
+    state
+      .conn()
       .call(move |conn| {
         let mut tx = TransactionRecorder::new(
           conn,
@@ -75,7 +78,7 @@ pub async fn drop_table_handler(
 
   // Write migration file and apply it right away.
   if let Some(writer) = writer {
-    let _report = writer.write(conn).await?;
+    let _report = writer.write(state.conn()).await?;
   }
 
   state.table_metadata().invalidate_all().await?;

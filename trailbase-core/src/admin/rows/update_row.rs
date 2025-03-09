@@ -29,6 +29,10 @@ pub async fn update_row_handler(
   Path(table_name): Path<String>,
   Json(request): Json<UpdateRowRequest>,
 ) -> Result<(), Error> {
+  if state.demo_mode() && table_name.starts_with("_") {
+    return Err(Error::Precondition("Disallowed in demo".into()));
+  }
+
   let Some(table_metadata) = state.table_metadata().get(&table_name) else {
     return Err(Error::Precondition(format!("Table {table_name} not found")));
   };
