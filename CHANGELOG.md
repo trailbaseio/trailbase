@@ -1,3 +1,15 @@
+## v0.7.3
+
+* Cleanup logs DB schema and log ids of authenticated users.
+* Allow setting the name and INTEGER type for PKs in create table form.
+* Fix reactivity for FK settings in create/alter table forms.
+* Add confirmation dialog for user deletions.
+* Limit mutations in `--demo` mode.
+  * Dedicated admin delete user endpoint.
+* Unified parameter building for listing records, users and logs.
+* Cleanup backend auth code and query API.
+* Update dependencies including rusqlite.
+
 ## v0.7.2
 
 * Fix and test OpenId Connect (OIDC) integration.
