@@ -34,8 +34,8 @@
     "check": "tsc --noEmit --skipLibCheck && eslint"
   },
   "devDependencies": {
-    "@eslint/js": "^9.21.0",
-    "eslint": "^9.21.0",
+    "@eslint/js": "^9.22.0",
+    "eslint": "^9.22.0",
     "execa": "^9.5.2",
     "globals": "^16.0.0",
     "http-status": "^2.1.0",
@@ -44,9 +44,9 @@
     "prettier": "^3.5.3",
     "tinybench": "^3.1.1",
     "typescript": "^5.8.2",
-    "typescript-eslint": "^8.25.0",
-    "vite-node": "^3.0.7",
-    "vitest": "^3.0.7"
+    "typescript-eslint": "^8.26.0",
+    "vite-node": "^3.0.8",
+    "vitest": "^3.0.8"
   },
   "dependencies": {
     "jwt-decode": "^4.0.0",

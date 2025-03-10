@@ -7,13 +7,13 @@
     "manual-test": "vitest run # Not hermetic, don't run @CI"
   },
   "devDependencies": {
-    "@eslint/js": "^9.21.0",
-    "@types/node": "^22.13.8",
-    "eslint": "^9.21.0",
+    "@eslint/js": "^9.22.0",
+    "@types/node": "^22.13.10",
+    "eslint": "^9.22.0",
     "prettier": "^3.5.3",
     "typescript": "^5.8.2",
-    "typescript-eslint": "^8.25.0",
-    "vitest": "^3.0.7"
+    "typescript-eslint": "^8.26.0",
+    "vitest": "^3.0.8"
   },
   "dependencies": {
     "trailbase": "workspace:*"
