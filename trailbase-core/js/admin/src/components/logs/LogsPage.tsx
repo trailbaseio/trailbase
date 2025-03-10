@@ -65,24 +65,6 @@ const columns: ColumnDef<LogJson>[] = [
       );
     },
   }),
-  {
-    accessorKey: "type",
-    cell: (ctx) => {
-      const type = ctx.row.original.type;
-      if (type === 2) {
-        return "HTTP";
-      } else if (type === 1) {
-        return "Admin API";
-      } else if (type === 3) {
-        return "Record API";
-      }
-      return type;
-    },
-  },
-  columnHelper.display({
-    header: "Level",
-    cell: (ctx) => <>{levelToName.get(ctx.row.original.level)}</>,
-  }),
   { accessorKey: "status" },
   { accessorKey: "method" },
   { accessorKey: "url" },
@@ -112,7 +94,7 @@ const columns: ColumnDef<LogJson>[] = [
       );
     },
   },
-  { accessorKey: "data" },
+  { accessorKey: "user_id" },
 ];
 
 // Value is the previous value in case this isn't the first fetch.
@@ -503,15 +485,5 @@ function LogsChart(props: { stats: Stats }) {
     </div>
   );
 }
-
-const logLevels: Array<[number, string]> = [
-  [4, "TRACE"],
-  [3, "DEBUG"],
-  [2, "INFO"],
-  [1, "WARN"],
-  [0, "ERROR"],
-] as const;
-
-const levelToName: Map<number, string> = new Map(logLevels);
 
 export default LogsPage;

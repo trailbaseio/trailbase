@@ -47,12 +47,6 @@ impl DbUser {
     assert_eq!(uuid.get_version_num(), 7);
     return uuid;
   }
-
-  // TODO: remove.
-  #[cfg(test)]
-  pub(crate) fn get_id(&self) -> Uuid {
-    self.uuid()
-  }
 }
 
 /// Representing an authenticated and *valid* user, as opposed to DbUser, which is merely an entry
@@ -118,7 +112,12 @@ where
   async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
     let state = AppState::from_ref(state);
     let tokens = extract_tokens_from_request_parts(&state, parts).await?;
-    return User::from_token_claims(tokens.auth_token_claims);
+
+    let user = User::from_token_claims(tokens.auth_token_claims)?;
+
+    tracing::Span::current().record("user_id", user.uuid.to_u128_le());
+
+    return Ok(user);
   }
 }
 
@@ -134,8 +133,13 @@ where
     state: &S,
   ) -> Result<Option<Self>, Self::Rejection> {
     let state = AppState::from_ref(state);
+
     if let Ok(tokens) = extract_tokens_from_request_parts(&state, parts).await {
-      return Ok(Some(User::from_token_claims(tokens.auth_token_claims)?));
+      let user = User::from_token_claims(tokens.auth_token_claims)?;
+
+      tracing::Span::current().record("user_id", user.uuid.to_u128_le());
+
+      return Ok(Some(user));
     }
     return Ok(None);
   }

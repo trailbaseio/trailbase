@@ -15,53 +15,48 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::constants::{LOGS_RETENTION_DEFAULT, LOGS_TABLE_ID_COLUMN};
 use crate::listing::{
-  build_filter_where_clause, limit_or_default, parse_query, Order, QueryParseResult, WhereClause,
+  build_filter_where_clause, limit_or_default, parse_query, Cursor, Order, QueryParseResult,
+  WhereClause,
 };
 use crate::table_metadata::{lookup_and_parse_table_schema, TableMetadata};
-use crate::util::id_to_b64;
 
 #[derive(Debug, Serialize, TS)]
 pub struct LogJson {
-  pub id: Uuid,
-
+  pub id: i64,
   pub created: f64,
-  pub r#type: i32,
 
-  pub level: i32,
   pub status: u16,
   pub method: String,
   pub url: String,
 
   pub latency_ms: f64,
   pub client_ip: String,
+  /// Optional two-letter country code.
   pub client_cc: Option<String>,
   pub referer: String,
   pub user_agent: String,
-
-  #[ts(type = "Object | undefined")]
-  pub data: Option<serde_json::Value>,
+  pub user_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct LogEntry {
-  id: [u8; 16],
-  created: Option<f64>,
-  r#type: i32,
+  id: i64,
+  created: f64,
 
-  level: i32,
   status: u16,
   method: String,
   url: String,
 
-  // milliseconds
+  // Latency in fractional milliseconds.
   latency: f64,
   client_ip: String,
+  /// Optional two-letter country code.
   client_cc: Option<String>,
 
   referer: String,
   user_agent: String,
-
-  data: Option<serde_json::Value>,
+  user_id: Option<[u8; 16]>,
+  // data: Option<Vec<u8>>,
 }
 
 impl LogEntry {
@@ -81,10 +76,8 @@ impl LogEntry {
 impl From<LogEntry> for LogJson {
   fn from(value: LogEntry) -> Self {
     return LogJson {
-      id: Uuid::from_bytes(value.id),
-      created: value.created.unwrap_or(0.0),
-      r#type: value.r#type,
-      level: value.level,
+      id: value.id,
+      created: value.created,
       status: value.status,
       method: value.method,
       url: value.url,
@@ -93,7 +86,7 @@ impl From<LogEntry> for LogJson {
       client_cc: value.client_cc,
       referer: value.referer,
       user_agent: value.user_agent,
-      data: value.data,
+      user_id: value.user_id.map(|blob| Uuid::from_bytes(blob).to_string()),
     };
   }
 }
@@ -146,6 +139,8 @@ pub async fn list_logs_handler(
     static ref DEFAULT_ORDERING: Vec<(String, Order)> =
       vec![(LOGS_TABLE_ID_COLUMN.to_string(), Order::Descending)];
   }
+
+  let first_page = cursor.is_none();
   let mut logs = fetch_logs(
     conn,
     filter_where_clause.clone(),
@@ -175,7 +170,6 @@ pub async fn list_logs_handler(
       interval: Duration::seconds(600),
     };
 
-    let first_page = cursor.is_none();
     match first_page {
       true => {
         let stats = fetch_aggregate_stats(conn, &args).await;
@@ -191,7 +185,7 @@ pub async fn list_logs_handler(
 
   let response = ListLogsResponse {
     total_row_count,
-    cursor: logs.last().map(|log| id_to_b64(&log.id)),
+    cursor: logs.last().map(|log| log.id.to_string()),
     entries: logs
       .into_iter()
       .map(|log| log.into())
@@ -205,7 +199,7 @@ pub async fn list_logs_handler(
 async fn fetch_logs(
   conn: &trailbase_sqlite::Connection,
   filter_where_clause: WhereClause,
-  cursor: Option<[u8; 16]>,
+  cursor: Option<Cursor>,
   order: Vec<(String, Order)>,
   limit: usize,
 ) -> Result<Vec<LogEntry>, Error> {
@@ -217,10 +211,7 @@ async fn fetch_logs(
   ));
 
   if let Some(cursor) = cursor {
-    params.push((
-      Cow::Borrowed(":cursor"),
-      trailbase_sqlite::Value::Blob(cursor.to_vec()),
-    ));
+    params.push((Cow::Borrowed(":cursor"), cursor.into()));
     where_clause = format!("{where_clause} AND log.id < :cursor",);
   }
 

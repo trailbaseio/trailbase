@@ -180,10 +180,8 @@ pub async fn force_password_reset(
       format!("UPDATE '{USER_TABLE}' SET password_hash = $1 WHERE email = $2 RETURNING id");
   }
 
-  return Ok(
-    user_conn
-      .query_value(&UPDATE_PASSWORD_QUERY, params!(hashed_password, email))
-      .await?
-      .ok_or(AuthError::NotFound)?,
-  );
+  return user_conn
+    .query_value(&UPDATE_PASSWORD_QUERY, params!(hashed_password, email))
+    .await?
+    .ok_or(AuthError::NotFound);
 }

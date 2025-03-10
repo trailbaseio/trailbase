@@ -72,17 +72,46 @@ impl Qualifier {
   }
 }
 
-#[derive(PartialEq, PartialOrd, Debug, Clone)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Order {
   Ascending,
   Descending,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Cursor {
+  Blob(Vec<u8>),
+  Integer(i64),
+}
+
+impl Cursor {
+  fn parse(value: &str) -> Option<Cursor> {
+    if let Ok(id) = b64_to_id(value) {
+      return Some(Cursor::Blob(id.into()));
+    }
+
+    if let Ok(num) = value.parse::<i64>() {
+      return Some(Cursor::Integer(num));
+    }
+
+    return None;
+  }
+}
+
+impl From<Cursor> for rusqlite::types::Value {
+  fn from(cursor: Cursor) -> Self {
+    return match cursor {
+      Cursor::Blob(v) => Self::Blob(v),
+      Cursor::Integer(v) => Self::Integer(v),
+    };
+  }
 }
 
 #[derive(Default, Debug)]
 pub struct QueryParseResult {
   // Pagination parameters.
   pub limit: Option<usize>,
-  pub cursor: Option<[u8; 16]>,
+  pub cursor: Option<Cursor>,
   pub offset: Option<usize>,
   pub count: Option<bool>,
   pub expand: Option<Vec<String>>,
@@ -127,7 +156,7 @@ pub fn parse_query(query: Option<&str>) -> Result<QueryParseResult, String> {
   for (key, value) in form_urlencoded::parse(query.as_bytes()) {
     match key.as_ref() {
       "limit" => result.limit = value.parse::<usize>().ok(),
-      "cursor" => result.cursor = b64_to_id(value.as_ref()).ok(),
+      "cursor" => result.cursor = Cursor::parse(value.as_ref()),
       "offset" => result.offset = value.parse::<usize>().ok(),
       "count" => result.count = parse_bool(&value),
       "expand" => result.expand = Some(value.split(",").map(|s| s.to_owned()).collect()),
@@ -284,7 +313,7 @@ mod tests {
     assert!(parse_query(Some("")).is_ok());
 
     {
-      let cursor: [u8; 16] = [0; 16];
+      let cursor: [u8; 16] = [5; 16];
       // Note that "+" is encoded as %2b, otherwise it's interpreted as a space. That's barely an
       // inconvenience since + is implied and "-" is fine, so there's no real reason to supply "+"
       // explicitly.
@@ -295,7 +324,7 @@ mod tests {
       let result = parse_query(query.as_deref()).unwrap();
 
       assert_eq!(result.limit, Some(10));
-      assert_eq!(result.cursor, Some(cursor));
+      assert_eq!(result.cursor, Some(Cursor::Blob(cursor.to_vec())));
       assert_eq!(
         result.order.unwrap(),
         vec![

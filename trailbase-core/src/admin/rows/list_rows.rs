@@ -8,7 +8,8 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::listing::{
-  build_filter_where_clause, limit_or_default, parse_query, Order, QueryParseResult, WhereClause,
+  build_filter_where_clause, limit_or_default, parse_query, Cursor, Order, QueryParseResult,
+  WhereClause,
 };
 use crate::records::sql_to_json::rows_to_json_arrays;
 use crate::schema::Column;
@@ -91,6 +92,7 @@ pub async fn list_rows_handler(
     let row = rows.last()?;
     assert!(row.len() > col_idx);
     match &row[col_idx] {
+      serde_json::Value::Number(n) if n.is_i64() => Some(n.to_string()),
       serde_json::Value::String(id) => {
         // Should be a base64 encoded [u8; 16] id.
         Some(id.clone())
@@ -129,7 +131,7 @@ pub async fn list_rows_handler(
 
 struct Pagination<'a> {
   cursor_column: Option<&'a Column>,
-  cursor: Option<[u8; 16]>,
+  cursor: Option<Cursor>,
   offset: Option<usize>,
   limit: usize,
 }
@@ -158,10 +160,7 @@ async fn fetch_rows(
   ]);
 
   if let Some(cursor) = pagination.cursor {
-    params.push((
-      Cow::Borrowed(":cursor"),
-      trailbase_sqlite::Value::Blob(cursor.to_vec()),
-    ));
+    params.push((Cow::Borrowed(":cursor"), cursor.into()));
     clause = format!("{clause} AND _row_.id < :cursor",);
   }
 

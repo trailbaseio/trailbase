@@ -41,6 +41,7 @@ pub(crate) use create_user::create_user_for_test;
 mod tests {
   use axum::{extract::State, Json};
   use std::sync::Arc;
+  use trailbase_sqlite::params;
   use uuid::Uuid;
 
   use crate::app_state::{test_state, TestStateOptions};
@@ -85,7 +86,7 @@ mod tests {
       .user_conn()
       .execute(
         &format!("DELETE FROM '{USER_TABLE}' WHERE id = $1"),
-        (user.get_id().as_bytes().to_vec(),),
+        params!(*user.uuid().as_bytes()),
       )
       .await
       .unwrap();

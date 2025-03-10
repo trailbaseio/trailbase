@@ -14,7 +14,8 @@ use crate::app_state::AppState;
 use crate::auth::user::DbUser;
 use crate::constants::{USER_TABLE, USER_TABLE_ID_COLUMN};
 use crate::listing::{
-  build_filter_where_clause, limit_or_default, parse_query, Order, QueryParseResult, WhereClause,
+  build_filter_where_clause, limit_or_default, parse_query, Cursor, Order, QueryParseResult,
+  WhereClause,
 };
 use crate::util::id_to_b64;
 
@@ -116,7 +117,7 @@ pub async fn list_users_handler(
 async fn fetch_users(
   conn: &trailbase_sqlite::Connection,
   filter_where_clause: WhereClause,
-  cursor: Option<[u8; 16]>,
+  cursor: Option<Cursor>,
   order: Vec<(String, Order)>,
   limit: usize,
 ) -> Result<Vec<DbUser>, Error> {
@@ -129,10 +130,7 @@ async fn fetch_users(
   ));
 
   if let Some(cursor) = cursor {
-    params.push((
-      Cow::Borrowed(":cursor"),
-      trailbase_sqlite::Value::Blob(cursor.to_vec()),
-    ));
+    params.push((Cow::Borrowed(":cursor"), cursor.into()));
     where_clause = format!("{where_clause} AND _row_.id < :cursor",);
   }
 

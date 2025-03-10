@@ -103,7 +103,7 @@ pub async fn list_records_handler(
 
   let clause_with_cursor = match cursor {
     Some(cursor) => {
-      params.push((Cow::Borrowed(":cursor"), Value::Blob(cursor.to_vec())));
+      params.push((Cow::Borrowed(":cursor"), cursor.into()));
       format!("{clause} AND _ROW_.id < :cursor")
     }
     None => clause.clone(),

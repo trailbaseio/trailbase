@@ -10,8 +10,8 @@ use tracing::field::Field;
 use tracing::span::{Attributes, Id, Record, Span};
 use tracing::Level;
 use tracing_subscriber::layer::{Context, Layer};
+use uuid::Uuid;
 
-use crate::constants::{ADMIN_API_PATH, RECORD_API_PATH};
 use crate::util::get_header;
 use crate::AppState;
 
@@ -43,42 +43,23 @@ const NAME: &str = "TB::sqlog";
 pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
   let headers = request.headers();
 
-  let host = get_header(headers, "host").unwrap_or("");
-  let user_agent = get_header(headers, "user-agent").unwrap_or("");
-  let referer = get_header(headers, "referer").unwrap_or("");
   let client_ip = InsecureClientIp::from(headers, request.extensions())
     .map(|ip| ip.0.to_string())
     .ok();
-
-  let uri = request.uri();
-  let request_type = {
-    lazy_static::lazy_static! {
-      static ref ADMIN: String = format!("/{ADMIN_API_PATH}");
-      static ref RECORD : String = format!("/{RECORD_API_PATH}");
-    }
-
-    let path = uri.path();
-    if path.starts_with(ADMIN.as_str()) {
-      LogType::AdminRequest
-    } else if path.starts_with(RECORD.as_str()) {
-      LogType::RecordApiRequest
-    } else {
-      LogType::HttpRequest
-    }
-  } as i32;
 
   // NOTE: "%" means print using fmt::Display, and "?" means fmt::Debug.
   return tracing::span!(
       LEVEL,
       NAME,
-      request_type,
       method = %request.method(),
       uri = %request.uri(),
       version = ?request.version(),
-      host,
+      host = get_header(headers, "host"),
       client_ip,
-      user_agent,
-      referer,
+      user_agent = get_header(headers, "user-agent"),
+      referer = get_header(headers, "referer"),
+      // Reserve placeholders that may be recorded later.
+      user_id = tracing::field::Empty,
       latency_ms = tracing::field::Empty,
       status = tracing::field::Empty,
       length = tracing::field::Empty,
@@ -162,20 +143,23 @@ impl SqliteLogLayer {
     conn: &rusqlite::Connection,
     log: Box<LogFieldStorage>,
   ) -> Result<(), rusqlite::Error> {
+    #[cfg(test)]
+    if !log.fields.is_empty() {
+      log::warn!("Dangling fields: {:?}", log.fields);
+    }
+
     lazy_static::lazy_static! {
       static ref QUERY: String = indoc::formatdoc! {"
         INSERT INTO
-          _logs (type, level, status, method, url, latency, client_ip, referer, user_agent)
+          _logs (status, method, url, latency, client_ip, referer, user_agent, user_id)
         VALUES
-          ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ($1, $2, $3, $4, $5, $6, $7, $8)
       "};
     }
 
     let mut stmt = conn.prepare_cached(&QUERY)?;
     stmt.execute((
       // TODO: we're yet not writing extra JSON data to the data field.
-      log.r#type,
-      log.level,
       log.status,
       log.method,
       log.uri,
@@ -183,6 +167,11 @@ impl SqliteLogLayer {
       log.client_ip,
       log.referer,
       log.user_agent,
+      if log.user_id > 0 {
+        rusqlite::types::Value::Blob(Uuid::from_u128(log.user_id).into_bytes().to_vec())
+      } else {
+        rusqlite::types::Value::Null
+      },
     ))?;
 
     return Ok(());
@@ -218,9 +207,7 @@ where
     }
 
     let mut extensions = span.extensions_mut();
-    if let Some(mut storage) = extensions.remove::<LogFieldStorage>() {
-      storage.level = level_to_int(metadata.level());
-
+    if let Some(storage) = extensions.remove::<LogFieldStorage>() {
       self.write_log(storage);
     } else {
       error!("span already closed/consumed?!");
@@ -257,17 +244,14 @@ where
 #[derive(Debug, Default, Clone)]
 struct LogFieldStorage {
   // Request fields/properties.
-  r#type: i64,
   method: String,
   uri: String,
   client_ip: String,
   host: String,
   referer: String,
   user_agent: String,
+  user_id: u128,
   version: String,
-
-  // Log level.
-  level: i64,
 
   // Response fields/properties
   status: u64,
@@ -293,7 +277,6 @@ impl tracing::field::Visit for LogJsonVisitor<'_> {
   fn record_i64(&mut self, field: &Field, int: i64) {
     match field.name() {
       "length" => self.0.length = int,
-      "request_type" => self.0.r#type = int,
       name => {
         self.0.fields.insert(name.into(), int.into());
       }
@@ -305,6 +288,15 @@ impl tracing::field::Visit for LogJsonVisitor<'_> {
       "status" => self.0.status = uint,
       name => {
         self.0.fields.insert(name.into(), uint.into());
+      }
+    };
+  }
+
+  fn record_u128(&mut self, field: &Field, int: u128) {
+    match field.name() {
+      "user_id" => self.0.user_id = int,
+      name => {
+        self.0.fields.insert(name.into(), int.to_string().into());
       }
     };
   }
@@ -351,15 +343,4 @@ fn as_millis_f64(d: &Duration) -> f64 {
 
   return (d.as_secs() as f64) * (MILLIS_PER_SEC as f64)
     + (d.subsec_nanos() as f64) / (NANOS_PER_MILLI);
-}
-
-#[inline]
-fn level_to_int(level: &tracing::Level) -> i64 {
-  match *level {
-    tracing::Level::TRACE => 4,
-    tracing::Level::DEBUG => 3,
-    tracing::Level::INFO => 2,
-    tracing::Level::WARN => 1,
-    tracing::Level::ERROR => 0,
-  }
 }
