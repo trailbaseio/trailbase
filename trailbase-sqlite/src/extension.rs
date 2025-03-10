@@ -128,4 +128,62 @@ mod test {
       .query_row("SELECT vec_f32('[0, 1, 2, 3]')", (), |_row| Ok(()))
       .unwrap();
   }
+
+  #[tokio::test]
+  async fn test_uuids() {
+    let conn = crate::Connection::from_conn(connect_sqlite(None, None).unwrap()).unwrap();
+
+    conn
+      .execute(
+        r#"CREATE TABLE test (
+        id    BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
+        text  TEXT
+      )"#,
+        (),
+      )
+      .await
+      .unwrap();
+
+    // V4 fails
+    assert!(conn
+      .execute(
+        "INSERT INTO test (id) VALUES (?1) ",
+        crate::params!(uuid::Uuid::new_v4().into_bytes())
+      )
+      .await
+      .is_err());
+
+    // V7 succeeds
+    let id = uuid::Uuid::now_v7();
+    assert!(conn
+      .execute(
+        "INSERT INTO test (id) VALUES (?1) ",
+        crate::params!(id.into_bytes())
+      )
+      .await
+      .is_ok());
+
+    let read_id: uuid::Uuid = conn
+      .query_value("SELECT id FROM test LIMIT 1", ())
+      .await
+      .unwrap()
+      .unwrap();
+
+    assert_eq!(id, read_id);
+
+    let blob: Vec<u8> = conn
+      .query_value("SELECT id FROM test LIMIT 1", ())
+      .await
+      .unwrap()
+      .unwrap();
+
+    assert_eq!(id, Uuid::from_slice(&blob).unwrap());
+
+    let arr = conn
+      .query_value::<[u8; 16]>("SELECT id FROM test LIMIT 1", ())
+      .await;
+
+    // FIXME: serde_rusqlite doesn't seem to be able to serialize blobs into [u8; N].
+    assert!(arr.is_err());
+  }
 }

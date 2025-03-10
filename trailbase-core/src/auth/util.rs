@@ -150,11 +150,13 @@ pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, AuthErro
     static ref QUERY: String =
       format!(r#"SELECT EXISTS(SELECT 1 FROM "{USER_TABLE}" WHERE email = $1)"#);
   };
-  let row =
-    crate::util::query_one_row(state.user_conn(), &QUERY, params!(email.to_string())).await?;
-  return row
-    .get::<bool>(0)
-    .map_err(|err| AuthError::Internal(err.into()));
+  return Ok(
+    state
+      .user_conn()
+      .query_value(&QUERY, params!(email.to_string()))
+      .await?
+      .ok_or_else(|| AuthError::Internal("query should return".into()))?,
+  );
 }
 
 pub(crate) async fn is_admin(state: &AppState, user: &User) -> bool {

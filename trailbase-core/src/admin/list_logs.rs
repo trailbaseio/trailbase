@@ -131,19 +131,16 @@ pub async fn list_logs_handler(
   let table_metadata = TableMetadata::new(table.clone(), &[table]);
   let filter_where_clause = build_filter_where_clause(&table_metadata, filter_params)?;
 
-  let total_row_count = {
-    let row = crate::util::query_one_row(
-      conn,
+  let total_row_count: i64 = conn
+    .query_value(
       &format!(
-        "SELECT COUNT(*) FROM {LOGS_TABLE_NAME} WHERE {clause}",
-        clause = filter_where_clause.clause
+        "SELECT COUNT(*) FROM {LOGS_TABLE_NAME} WHERE {where_clause}",
+        where_clause = filter_where_clause.clause
       ),
       filter_where_clause.params.clone(),
     )
-    .await?;
-
-    row.get::<i64>(0)?
-  };
+    .await?
+    .unwrap_or(-1);
 
   lazy_static! {
     static ref DEFAULT_ORDERING: Vec<(String, Order)> =

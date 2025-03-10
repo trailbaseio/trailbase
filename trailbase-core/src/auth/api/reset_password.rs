@@ -180,14 +180,10 @@ pub async fn force_password_reset(
       format!("UPDATE '{USER_TABLE}' SET password_hash = $1 WHERE email = $2 RETURNING id");
   }
 
-  let id: [u8; 16] = crate::util::query_one_row(
-    user_conn,
-    &UPDATE_PASSWORD_QUERY,
-    params!(hashed_password, email),
-  )
-  .await?
-  .get(0)
-  .map_err(|_err| AuthError::NotFound)?;
-
-  return Ok(Uuid::from_bytes(id));
+  return Ok(
+    user_conn
+      .query_value(&UPDATE_PASSWORD_QUERY, params!(hashed_password, email))
+      .await?
+      .ok_or(AuthError::NotFound)?,
+  );
 }

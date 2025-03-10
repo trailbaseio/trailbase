@@ -9,6 +9,7 @@ use oauth2::{AuthorizationCode, StandardTokenResponse, TokenResponse};
 use serde::Deserialize;
 use tower_cookies::Cookies;
 use trailbase_sqlite::{named_params, params};
+use uuid::Uuid;
 
 use crate::auth::oauth::state::{OAuthState, ResponseType};
 use crate::auth::oauth::OAuthUser;
@@ -206,7 +207,7 @@ pub(crate) async fn callback_from_external_auth_provider(
 async fn create_user_for_external_provider(
   conn: &trailbase_sqlite::Connection,
   user: &OAuthUser,
-) -> Result<uuid::Uuid, AuthError> {
+) -> Result<Uuid, AuthError> {
   if !user.verified {
     return Err(AuthError::Unauthorized);
   }
@@ -223,24 +224,21 @@ async fn create_user_for_external_provider(
     );
   }
 
-  let row = crate::util::query_one_row(
-    conn,
-    &QUERY,
-    named_params! {
-        ":provider_id": user.provider_id as i64,
-        ":provider_user_id": user.provider_user_id.clone(),
-        ":verified": user.verified as i64,
-        ":email": user.email.clone(),
-        ":avatar": user.avatar.clone(),
-    },
-  )
-  .await?;
+  let id: Uuid = conn
+    .query_value(
+      &QUERY,
+      named_params! {
+          ":provider_id": user.provider_id as i64,
+          ":provider_user_id": user.provider_user_id.clone(),
+          ":verified": user.verified as i64,
+          ":email": user.email.clone(),
+          ":avatar": user.avatar.clone(),
+      },
+    )
+    .await?
+    .ok_or_else(|| AuthError::Internal("query should return".into()))?;
 
-  return Ok(uuid::Uuid::from_bytes(
-    row
-      .get::<[u8; 16]>(0)
-      .map_err(|err| AuthError::Internal(err.into()))?,
-  ));
+  return Ok(id);
 }
 
 async fn user_by_provider_id(
@@ -258,7 +256,6 @@ async fn user_by_provider_id(
       &QUERY,
       params!(provider_id as i64, provider_user_id.to_string()),
     )
-    .await
-    .map_err(|err| AuthError::Internal(err.into()))?
+    .await?
     .ok_or_else(|| AuthError::NotFound);
 }

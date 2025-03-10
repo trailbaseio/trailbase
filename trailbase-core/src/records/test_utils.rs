@@ -3,7 +3,6 @@ mod tests {
   use trailbase_sqlite::params;
 
   use crate::records::json_to_sql::JsonRow;
-  use crate::util::query_one_row;
   use crate::AppState;
 
   pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), anyhow::Error> {
@@ -90,15 +89,15 @@ mod tests {
     conn: &trailbase_sqlite::Connection,
     name: &str,
   ) -> Result<[u8; 16], anyhow::Error> {
-    let room: [u8; 16] = query_one_row(
-      conn,
-      "INSERT INTO room (name) VALUES ($1) RETURNING id",
-      params!(name.to_string()),
-    )
-    .await?
-    .get(0)?;
+    let room: uuid::Uuid = conn
+      .query_value(
+        "INSERT INTO room (name) VALUES ($1) RETURNING id",
+        params!(name.to_string()),
+      )
+      .await?
+      .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
 
-    return Ok(room);
+    return Ok(room.into_bytes());
   }
 
   pub async fn add_user_to_room(
@@ -121,15 +120,15 @@ mod tests {
     room: [u8; 16],
     message: &str,
   ) -> Result<[u8; 16], anyhow::Error> {
-    return Ok(
-      query_one_row(
-        conn,
+    let id: uuid::Uuid = conn
+      .query_value(
         "INSERT INTO message (_owner, room, data) VALUES ($1, $2, $3) RETURNING id",
         params!(user, room, message.to_string()),
       )
       .await?
-      .get(0)?,
-    );
+      .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+
+    return Ok(id.into_bytes());
   }
 
   pub fn json_row_from_value(value: serde_json::Value) -> Result<JsonRow, anyhow::Error> {

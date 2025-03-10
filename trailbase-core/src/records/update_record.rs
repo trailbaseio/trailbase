@@ -80,15 +80,15 @@ mod test {
   use crate::records::test_utils::*;
   use crate::records::*;
   use crate::test::unpack_json_response;
-  use crate::util::{b64_to_id, id_to_b64, query_one_row};
+  use crate::util::{b64_to_id, id_to_b64};
 
   #[tokio::test]
-  async fn test_record_api_update() -> Result<(), anyhow::Error> {
-    let state = test_state(None).await?;
+  async fn test_record_api_update() {
+    let state = test_state(None).await.unwrap();
     let conn = state.conn();
 
-    create_chat_message_app_tables(&state).await?;
-    let room = add_room(conn, "room0").await?;
+    create_chat_message_app_tables(&state).await.unwrap();
+    let room = add_room(conn, "room0").await.unwrap();
     let password = "Secret!1!!";
 
     // Register message table and api with moderator read access.
@@ -116,23 +116,30 @@ mod test {
         ..Default::default()
       },
     )
-    .await?;
+    .await
+    .unwrap();
 
     let user_x_email = "user_x@test.com";
     let user_x = create_user_for_test(&state, user_x_email, password)
-      .await?
+      .await
+      .unwrap()
       .into_bytes();
 
-    let user_x_token = login_with_password(&state, user_x_email, password).await?;
+    let user_x_token = login_with_password(&state, user_x_email, password)
+      .await
+      .unwrap();
 
-    add_user_to_room(conn, user_x, room).await?;
+    add_user_to_room(conn, user_x, room).await.unwrap();
 
     let user_y_email = "user_y@foo.baz";
     let _user_y = create_user_for_test(&state, user_y_email, password)
-      .await?
+      .await
+      .unwrap()
       .into_bytes();
 
-    let user_y_token = login_with_password(&state, user_y_email, password).await?;
+    let user_y_token = login_with_password(&state, user_y_email, password)
+      .await
+      .unwrap();
 
     let create_json = serde_json::json!({
       "_owner": id_to_b64(&user_x),
@@ -147,9 +154,11 @@ mod test {
         User::from_auth_token(&state, &user_x_token.auth_token),
         Either::Json(json_row_from_value(create_json).unwrap().into()),
       )
-      .await?,
+      .await
+      .unwrap(),
     )
-    .await?;
+    .await
+    .unwrap();
 
     assert_eq!(create_response.ids.len(), 1);
     let b64_id = create_response.ids[0].clone();
@@ -170,13 +179,14 @@ mod test {
 
       assert!(update_response.is_ok(), "{b64_id} {update_response:?}");
 
-      let message_text: String = query_one_row(
-        conn,
-        "SELECT data FROM message WHERE id = $1",
-        params!(b64_to_id(&b64_id)?),
-      )
-      .await?
-      .get(0)?;
+      let message_text: String = conn
+        .query_value(
+          "SELECT data FROM message WHERE id = $1",
+          params!(b64_to_id(&b64_id).unwrap()),
+        )
+        .await
+        .unwrap()
+        .unwrap();
       assert_eq!(updated_message_text, message_text);
     }
 
@@ -195,7 +205,5 @@ mod test {
 
       assert!(update_response.is_err(), "{b64_id} {update_response:?}");
     }
-
-    return Ok(());
   }
 }

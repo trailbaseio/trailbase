@@ -58,19 +58,6 @@ pub(crate) fn assert_uuidv7_version(uuid: &Uuid) {
 #[cfg(not(debug_assertions))]
 pub(crate) fn assert_uuidv7_version(_uuid: &Uuid) {}
 
-pub async fn query_one_row(
-  conn: &trailbase_sqlite::Connection,
-  sql: &str,
-  params: impl trailbase_sqlite::Params + Send + 'static,
-) -> Result<trailbase_sqlite::Row, trailbase_sqlite::Error> {
-  if let Some(row) = conn.query_row(sql, params).await? {
-    return Ok(row);
-  }
-  return Err(trailbase_sqlite::Error::Rusqlite(
-    rusqlite::Error::QueryReturnedNoRows,
-  ));
-}
-
 #[inline]
 pub(crate) fn get_header(headers: &HeaderMap, header_name: impl AsHeaderName) -> Option<&str> {
   if let Some(header) = headers.get(header_name) {

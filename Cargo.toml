@@ -58,4 +58,4 @@ trailbase-sqlean = { path = "vendor/sqlean", version = "0.0.2" }
 trailbase-extension = { path = "trailbase-extension", version = "0.2.0" }
 trailbase-sqlite = { path = "trailbase-sqlite", version = "0.2.0" }
 trailbase = { path = "trailbase-core", version = "0.1.0" }
-uuid = { version = "=1.12.1", default-features = false, features = ["std", "v4", "v7"] }
+uuid = { version = "=1.12.1", default-features = false, features = ["std", "v4", "v7", "serde"] }

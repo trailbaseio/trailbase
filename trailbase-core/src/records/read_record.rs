@@ -251,14 +251,14 @@ mod test {
   use crate::records::test_utils::*;
   use crate::records::*;
   use crate::test::unpack_json_response;
-  use crate::util::{id_to_b64, query_one_row};
+  use crate::util::id_to_b64;
 
   #[tokio::test]
-  async fn ignores_extra_sql_parameters_test() -> Result<(), anyhow::Error> {
+  async fn ignores_extra_sql_parameters_test() {
     // This test is actually just testing our SQL driver and making sure that we can overprovision
     // arguments. Specifically, we want to provide :user and :id arguments even if they're not
     // consumed by a user-provided access query.
-    let state = test_state(None).await?;
+    let state = test_state(None).await.unwrap();
     let conn = state.user_conn();
 
     const EMAIL: &str = "foo@bar.baz";
@@ -267,20 +267,21 @@ mod test {
         &format!(r#"INSERT INTO "{USER_TABLE}" (email) VALUES ($1)"#),
         trailbase_sqlite::params!(EMAIL),
       )
-      .await?;
+      .await
+      .unwrap();
 
-    query_one_row(
-      conn,
-      &format!(r#"SELECT * from "{USER_TABLE}" WHERE email = :email"#),
-      trailbase_sqlite::named_params! {
-        ":email": EMAIL,
-        ":unused": "unused",
-        ":foo": 42,
-      },
-    )
-    .await?;
-
-    return Ok(());
+    conn
+      .query_row(
+        &format!(r#"SELECT * from "{USER_TABLE}" WHERE email = :email"#),
+        trailbase_sqlite::named_params! {
+          ":email": EMAIL,
+          ":unused": "unused",
+          ":foo": 42,
+        },
+      )
+      .await
+      .unwrap()
+      .unwrap();
   }
 
   #[tokio::test]

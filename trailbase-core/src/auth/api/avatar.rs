@@ -20,16 +20,24 @@ async fn get_avatar_url(state: &AppState, user: &DbUser) -> Option<String> {
       format!(r#"SELECT EXISTS(SELECT user FROM "{AVATAR_TABLE}" WHERE user = $1)"#);
   };
 
-  if let Ok(row) = crate::util::query_one_row(state.user_conn(), &QUERY, params!(user.id)).await {
-    let has_avatar: bool = row.get(0).unwrap_or(false);
-    if has_avatar {
-      let site = state.site_url();
-      let record_user_id = id_to_b64(&user.id);
-      let col_name = "file";
-      return Some(format!(
-        "{site}/{RECORD_API_PATH}/{AVATAR_TABLE}/{record_user_id}/file/{col_name}"
-      ));
-    }
+  let has_avatar = state
+    .user_conn()
+    .query_value(&QUERY, params!(user.id))
+    .await
+    .map_err(|err| {
+      log::debug!("avatar query broken?");
+      return err;
+    })
+    .unwrap_or_default()
+    .unwrap_or(false);
+
+  if has_avatar {
+    let site = state.site_url();
+    let record_user_id = id_to_b64(&user.id);
+    let col_name = "file";
+    return Some(format!(
+      "{site}/{RECORD_API_PATH}/{AVATAR_TABLE}/{record_user_id}/file/{col_name}"
+    ));
   }
 
   return None;

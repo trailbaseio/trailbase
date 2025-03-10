@@ -137,13 +137,14 @@ pub async fn init_app_state(
   });
 
   if new_db {
-    let num_admins: i64 = crate::util::query_one_row(
-      app_state.user_conn(),
-      &format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE admin = TRUE"),
-      (),
-    )
-    .await?
-    .get(0)?;
+    let num_admins: i64 = app_state
+      .user_conn()
+      .query_value(
+        &format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE admin = TRUE"),
+        (),
+      )
+      .await?
+      .unwrap_or(0);
 
     if num_admins == 0 {
       let email = "admin@localhost".to_string();

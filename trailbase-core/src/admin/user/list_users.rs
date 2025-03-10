@@ -79,17 +79,16 @@ pub async fn list_users_handler(
   // string.
   let filter_where_clause = build_filter_where_clause(&*table_metadata, filter_params)?;
 
-  let total_row_count = {
-    let where_clause = &filter_where_clause.clause;
-    let row = crate::util::query_one_row(
-      conn,
-      &format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE {where_clause}"),
+  let total_row_count: i64 = conn
+    .query_value(
+      &format!(
+        "SELECT COUNT(*) FROM {USER_TABLE} WHERE {where_clause}",
+        where_clause = filter_where_clause.clause
+      ),
       filter_where_clause.params.clone(),
     )
-    .await?;
-
-    row.get::<i64>(0)?
-  };
+    .await?
+    .unwrap_or(-1);
 
   lazy_static! {
     static ref DEFAULT_ORDERING: Vec<(String, Order)> =

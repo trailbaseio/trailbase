@@ -69,12 +69,12 @@ mod test {
   use crate::util::{b64_to_id, id_to_b64};
 
   #[tokio::test]
-  async fn test_record_api_delete() -> Result<(), anyhow::Error> {
-    let state = test_state(None).await?;
+  async fn test_record_api_delete() {
+    let state = test_state(None).await.unwrap();
     let conn = state.conn();
 
-    create_chat_message_app_tables(&state).await?;
-    let room = add_room(conn, "room0").await?;
+    create_chat_message_app_tables(&state).await.unwrap();
+    let room = add_room(conn, "room0").await.unwrap();
     let password = "Secret!1!!";
 
     // Register message table as api with moderator read access.
@@ -100,54 +100,61 @@ mod test {
         ..Default::default()
       },
     )
-    .await?;
+    .await
+    .unwrap();
 
     let user_x_email = "user_x@test.com";
     let user_x = create_user_for_test(&state, user_x_email, password)
-      .await?
+      .await
+      .unwrap()
       .into_bytes();
 
-    let user_x_token = login_with_password(&state, user_x_email, password).await?;
+    let user_x_token = login_with_password(&state, user_x_email, password)
+      .await
+      .unwrap();
 
-    add_user_to_room(conn, user_x, room).await?;
+    add_user_to_room(conn, user_x, room).await.unwrap();
 
     let user_y_email = "user_y@foo.baz";
     let _user_y = create_user_for_test(&state, user_y_email, password)
-      .await?
+      .await
+      .unwrap()
       .into_bytes();
 
-    let user_y_token = login_with_password(&state, user_y_email, password).await?;
+    let user_y_token = login_with_password(&state, user_y_email, password)
+      .await
+      .unwrap();
 
     {
       // User X can delete their own message.
-      let id = add_message(&state, &user_x, &user_x_token.auth_token, &room).await?;
-      delete_message(&state, &user_x_token.auth_token, &id).await?;
-      assert_eq!(message_exists(conn, &id).await?, false);
+      let id = add_message(&state, &user_x, &user_x_token.auth_token, &room)
+        .await
+        .unwrap();
+      delete_message(&state, &user_x_token.auth_token, &id)
+        .await
+        .unwrap();
+      assert_eq!(message_exists(conn, &id).await, false);
     }
 
     {
       // User Y cannot delete X's message.
-      let id = add_message(&state, &user_x, &user_x_token.auth_token, &room).await?;
+      let id = add_message(&state, &user_x, &user_x_token.auth_token, &room)
+        .await
+        .unwrap();
       let response = delete_message(&state, &user_y_token.auth_token, &id).await;
       assert!(response.is_err());
-      assert_eq!(message_exists(conn, &id).await?, true);
+      assert_eq!(message_exists(conn, &id).await, true);
     }
-
-    return Ok(());
   }
 
-  async fn message_exists(
-    conn: &trailbase_sqlite::Connection,
-    id: &[u8; 16],
-  ) -> Result<bool, anyhow::Error> {
-    let count: i64 = crate::util::query_one_row(
-      conn,
-      "SELECT COUNT(*) FROM message WHERE id = $1",
-      params!(*id),
-    )
-    .await?
-    .get(0)?;
-    return Ok(count > 0);
+  async fn message_exists(conn: &trailbase_sqlite::Connection, id: &[u8; 16]) -> bool {
+    let count: i64 = conn
+      .query_value("SELECT COUNT(*) FROM message WHERE id = $1", params!(*id))
+      .await
+      .unwrap()
+      .unwrap();
+
+    return count > 0;
   }
 
   async fn add_message(

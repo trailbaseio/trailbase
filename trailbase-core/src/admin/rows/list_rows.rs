@@ -65,14 +65,11 @@ pub async fn list_rows_handler(
   let total_row_count = {
     let where_clause = &filter_where_clause.clause;
     let count_query = format!("SELECT COUNT(*) FROM '{table_name}' WHERE {where_clause}");
-    let row = crate::util::query_one_row(
-      state.conn(),
-      &count_query,
-      filter_where_clause.params.clone(),
-    )
-    .await?;
-
-    row.get::<i64>(0)?
+    state
+      .conn()
+      .query_value::<i64>(&count_query, filter_where_clause.params.clone())
+      .await?
+      .unwrap_or(-1)
   };
 
   let cursor_column = table_or_view_metadata.record_pk_column();

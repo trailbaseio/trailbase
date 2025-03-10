@@ -560,13 +560,13 @@ pub async fn lookup_and_parse_table_schema(
   table_name: &str,
 ) -> Result<Table, TableLookupError> {
   // Then get the actual table.
-  let sql: String = crate::util::query_one_row(
-    conn,
-    &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1"),
-    params!(table_name.to_string()),
-  )
-  .await?
-  .get(0)?;
+  let sql: String = conn
+    .query_value(
+      &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1"),
+      params!(table_name.to_string()),
+    )
+    .await?
+    .ok_or_else(|| trailbase_sqlite::Error::Rusqlite(rusqlite::Error::QueryReturnedNoRows))?;
 
   let Some(stmt) = sqlite3_parse_into_statement(&sql)? else {
     return Err(TableLookupError::Missing);
