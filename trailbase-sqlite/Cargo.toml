@@ -18,7 +18,7 @@ rusqlite = { workspace = true }
 schemars = "0.8.21"
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "1.0.122"
-serde_rusqlite = "0.37.0"
+serde_rusqlite = "0.38.0"
 trailbase-sqlean = { workspace = true }
 sqlite-vec = "0.1.6"
 thiserror = "2.0.1"
