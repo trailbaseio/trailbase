@@ -96,7 +96,7 @@ function columnTypeField(
     return (
       <SelectField
         label={() => <L>Type</L>}
-        disabled={fk() !== undefined}
+        disabled={disabled || fk() !== undefined}
         options={columnDataTypes}
         value={field().state.value}
         onChange={field().handleChange}
@@ -567,6 +567,143 @@ export function ColumnSubForm(props: {
   );
 }
 
+export function PrimaryKeyColumnSubForm(props: {
+  form: FormApiT<Table>;
+  colIndex: number;
+  column: Column;
+  allTables: Table[];
+  disabled: boolean;
+}): JSX.Element {
+  const disabled = () => props.disabled;
+  const [name, setName] = createWritableMemo(() => props.column.name);
+  const [expanded, setExpanded] = createWritableMemo(
+    () => props.column.name !== "id",
+  );
+
+  const [fk, setFk] = createSignal<string | undefined>();
+
+  const Header = () => (
+    <div class="flex items-center justify-between">
+      <h2>{name()}</h2>
+
+      <div class="flex items-center gap-2">
+        <Badge class="p-1">Primary Key</Badge>
+
+        <TbChevronDown
+          size={20}
+          style={{
+            "justify-self": "center",
+            "align-self": "center",
+            transition: "rotate",
+            rotate: expanded() ? "180deg" : "",
+            "transition-duration": "300ms",
+            "transition-timing-function": transitionTimingFunc,
+          }}
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <Card>
+      <Collapsible
+        class="collapsible"
+        open={expanded()}
+        onOpenChange={setExpanded}
+      >
+        <CardHeader>
+          <Collapsible.Trigger class="collapsible__trigger">
+            <Header />
+          </Collapsible.Trigger>
+        </CardHeader>
+
+        <Collapsible.Content class="collapsible__content">
+          <CardContent>
+            <div class="flex flex-col gap-2 py-1">
+              {/* Column presets */}
+              {!disabled() && (
+                <div class="flex justify-between gap-1">
+                  <Label>Presets</Label>
+
+                  <div class="flex gap-1">
+                    <For each={primaryKeyPresets}>
+                      {([name, preset]) => (
+                        <Badge
+                          class="p-1"
+                          onClick={() => {
+                            const columns = [
+                              ...props.form.state.values.columns,
+                            ];
+                            const column = columns[props.colIndex];
+
+                            const v = preset(column.name);
+
+                            column.data_type = v.data_type;
+                            column.options = v.options;
+
+                            props.form.setFieldValue("columns", columns);
+                          }}
+                        >
+                          {name}
+                        </Badge>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              )}
+
+              {/* Column name field */}
+              <props.form.Field
+                name={`columns[${props.colIndex}].name`}
+                defaultValue={name()}
+                validators={{
+                  onChange: ({ value }: { value: string | undefined }) => {
+                    setName(value ?? "<missing>");
+                    return value ? undefined : "Column name missing";
+                  },
+                }}
+              >
+                {buildTextFormField({
+                  label: () => <L>Name</L>,
+                  disabled: disabled(),
+                })}
+              </props.form.Field>
+
+              {/* Column type field */}
+              <props.form.Field
+                name={`columns[${props.colIndex}].data_type`}
+                children={columnTypeField(
+                  /*disabled=*/ true,
+                  fk,
+                  props.allTables,
+                )}
+              />
+
+              {/* Column options: pk, not null, ... */}
+              <props.form.Field
+                name={`columns[${props.colIndex}].options`}
+                children={(field) => {
+                  return (
+                    <ColumnOptionsFields
+                      column={props.column}
+                      value={field().state.value}
+                      onChange={field().handleChange}
+                      allTables={props.allTables}
+                      disabled={true}
+                      fk={fk()}
+                      setFk={setFk}
+                    />
+                  );
+                }}
+              />
+            </div>
+          </CardContent>
+        </Collapsible.Content>
+      </Collapsible>
+    </Card>
+  );
+}
+
 function L(props: { children: JSX.Element }) {
   return <div class="w-[100px]">{props.children}</div>;
 }
@@ -577,6 +714,32 @@ type Preset = {
   data_type: ColumnDataType;
   options: ColumnOption[];
 };
+
+export const primaryKeyPresets: [string, (colName: string) => Preset][] = [
+  [
+    "UUIDv7",
+    (colName: string) => {
+      return {
+        data_type: "Blob",
+        options: [
+          { Unique: { is_primary: true } },
+          { Check: `is_uuid_v7(${colName})` },
+          { Default: "(uuid_v7())" },
+          "NotNull",
+        ],
+      };
+    },
+  ],
+  [
+    "INTEGER",
+    (_colName: string) => {
+      return {
+        data_type: "Integer",
+        options: [{ Unique: { is_primary: true } }, "NotNull"],
+      };
+    },
+  ],
+];
 
 const presets: [string, (colName: string) => Preset][] = [
   [

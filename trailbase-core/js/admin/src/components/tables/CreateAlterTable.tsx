@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Index } from "solid-js";
+import { createMemo, createSignal, Index, Switch, Match } from "solid-js";
 import type { Accessor } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 
@@ -21,7 +21,11 @@ import {
   buildTextFormField,
 } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
-import { ColumnSubForm } from "@/components/tables/CreateAlterColumnForm";
+import {
+  PrimaryKeyColumnSubForm,
+  ColumnSubForm,
+  primaryKeyPresets,
+} from "@/components/tables/CreateAlterColumnForm";
 import { invalidateConfig } from "@/lib/config";
 
 import type { Column } from "@bindings/Column";
@@ -96,14 +100,7 @@ export function CreateAlterTableForm(props: {
         columns: [
           {
             name: "id",
-            data_type: "Blob",
-            // Column constraints: https://www.sqlite.org/syntax/column-constraint.html
-            options: [
-              { Unique: { is_primary: true } },
-              { Check: "is_uuid_v7(id)" },
-              { Default: "(uuid_v7())" },
-              "NotNull",
-            ],
+            ...primaryKeyPresets[0][1]("id"),
           },
           newDefaultColumn(1),
         ] satisfies Column[],
@@ -151,7 +148,7 @@ export function CreateAlterTableForm(props: {
 
           <form.Field
             name="strict"
-            children={buildBoolFormField({ label: () => "STRICT typing" })}
+            children={buildBoolFormField({ label: () => "STRICT (type-safe)" })}
           />
 
           {/* columns */}
@@ -162,14 +159,28 @@ export function CreateAlterTableForm(props: {
               <div class="w-full">
                 <div class="flex flex-col gap-2">
                   <Index each={field().state.value}>
-                    {(c: Accessor<Column>, i) => (
-                      <ColumnSubForm
-                        form={form}
-                        colIndex={i}
-                        column={c()}
-                        allTables={props.allTables}
-                        disabled={i === 0}
-                      />
+                    {(c: Accessor<Column>, i: number) => (
+                      <Switch>
+                        <Match when={i === 0}>
+                          <PrimaryKeyColumnSubForm
+                            form={form}
+                            colIndex={i}
+                            column={c()}
+                            allTables={props.allTables}
+                            disabled={original() !== undefined}
+                          />
+                        </Match>
+
+                        <Match when={i !== 0}>
+                          <ColumnSubForm
+                            form={form}
+                            colIndex={i}
+                            column={c()}
+                            allTables={props.allTables}
+                            disabled={false}
+                          />
+                        </Match>
+                      </Switch>
                     )}
                   </Index>
                 </div>
