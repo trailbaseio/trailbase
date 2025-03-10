@@ -49,7 +49,7 @@ lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-ru
 log = "^0.4.21"
 minijinja = { version = "2.1.2", default-features = false, features= ["serde"] }
 oauth2 = { version = "5.0.0-alpha.4", default-features = false, features = ["reqwest", "rustls-tls"] }
-object_store = { version = "0.11.0", default-features = false, features = ["aws"] }
+object_store = { version = "0.12.0", default-features = false, features = ["aws", "fs"] }
 parking_lot = { version = "0.12.3", default-features = false }
 pin-project-lite = "0.2.16"
 prost = { version = "^0.13.4", default-features = false }
