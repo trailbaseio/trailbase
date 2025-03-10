@@ -375,35 +375,57 @@ interface SelectFieldOpts {
 export function buildSelectField(options: string[], opts: SelectFieldOpts) {
   return (field: () => FieldApiT<string>) => {
     return (
-      <div
-        class={cn("grid w-full items-center", gapStyle)}
-        style={{ "grid-template-columns": "auto 1fr" }}
-      >
-        <Label>{opts.label()}</Label>
-
-        <Select
-          required={true}
-          multiple={false}
-          value={field().state.value}
-          onBlur={field().handleBlur}
-          onChange={(v: string | null) => field().handleChange(v!)}
-          options={options}
-          itemComponent={(props) => (
-            <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
-          )}
-          disabled={opts?.disabled}
-        >
-          <SelectTrigger>
-            <SelectValue<string>>
-              {(state) => state.selectedOption()}
-            </SelectValue>
-          </SelectTrigger>
-
-          <SelectContent />
-        </Select>
-      </div>
+      <SelectField
+        label={opts.label}
+        disabled={opts.disabled}
+        options={options}
+        value={field().state.value}
+        onChange={(v: string | null) => {
+          if (v) {
+            field().handleChange(v);
+          }
+        }}
+        handleBlur={field().handleBlur}
+      />
     );
   };
+}
+
+export function SelectField(
+  props: {
+    options: string[];
+    value: string;
+    onChange: (v: string | null) => void;
+    handleBlur: () => void;
+  } & SelectFieldOpts,
+) {
+  return (
+    <div
+      class={cn("grid w-full items-center", gapStyle)}
+      style={{ "grid-template-columns": "auto 1fr" }}
+    >
+      <Label>{props.label()}</Label>
+
+      <Select
+        required={true}
+        multiple={false}
+        value={props.value}
+        onBlur={props.handleBlur}
+        onChange={props.onChange}
+        options={props.options}
+        itemComponent={(props) => (
+          <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+        )}
+        disabled={props?.disabled}
+      >
+        <SelectTrigger>
+          <SelectValue<string>>{(state) => state.selectedOption()}</SelectValue>
+        </SelectTrigger>
+
+        <SelectContent />
+      </Select>
+    </div>
+  );
 }
 
 function FieldInfo<T>(props: { field: FieldApiT<T> }) {
