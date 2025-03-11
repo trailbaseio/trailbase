@@ -1,5 +1,6 @@
 import type { Component, ComponentProps } from "solid-js"
 import { splitProps } from "solid-js"
+import * as ButtonPrimitive from "@kobalte/core/button";
 
 import type { VariantProps } from "class-variance-authority"
 import { cva } from "class-variance-authority"
@@ -44,5 +45,24 @@ const Badge: Component<BadgeProps> = (props) => {
   )
 }
 
-export type { BadgeProps }
-export { Badge, badgeVariants }
+type ButtonBadgeProps = ComponentProps<"button"> &
+  VariantProps<typeof badgeVariants> & {
+    round?: boolean
+  }
+
+const ButtonBadge: Component<BadgeProps> = (props) => {
+  const [local, others] = splitProps(props, ["class", "variant", "round"])
+  return (
+    <ButtonPrimitive.Root
+      class={cn(
+        badgeVariants({ variant: local.variant }),
+        local.round ? "rounded-full" : "rounded-md",
+        local.class
+      )}
+      {...others}
+    />
+  )
+}
+
+export type { BadgeProps, ButtonBadgeProps }
+export { Badge, ButtonBadge, badgeVariants }

@@ -4,7 +4,7 @@ import { Collapsible } from "@kobalte/core/collapsible";
 import { TbChevronDown, TbTrash, TbInfoCircle } from "solid-icons/tb";
 import { createWritableMemo } from "@solid-primitives/memo";
 
-import { Badge } from "@/components/ui/badge";
+import { Badge, ButtonBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -359,14 +359,17 @@ function ColumnOptionsFields(props: {
   onChange: (v: ColumnOption[]) => void;
   allTables: Table[];
   disabled: boolean;
+  pk: boolean;
   fk: string | undefined;
   setFk: Setter<string | undefined>;
 }) {
   // Column options: (not|null), (default), (unique), (fk), (check), (comment), (onupdate).
   return (
     <>
-      <ColumnOptionFkSelect {...props} />
+      {/* FOREIGN KEY constraint */}
+      {!props.pk && <ColumnOptionFkSelect {...props} />}
 
+      {/* DEFAULT constraint */}
       <ColumnOptionDefaultField
         column={props.column}
         value={props.value}
@@ -374,6 +377,7 @@ function ColumnOptionsFields(props: {
         disabled={props.disabled || props.fk !== undefined}
       />
 
+      {/* CHECK constraint */}
       <ColumnOptionCheckField
         column={props.column}
         value={props.value}
@@ -381,24 +385,24 @@ function ColumnOptionsFields(props: {
         disabled={props.disabled || props.fk !== undefined}
       />
 
-      <div class="my-2 flex flex-col gap-4">
-        <div class="flex justify-end">
-          <Label class="text-right text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-            NOT NULL
-          </Label>
+      {/* NOT NULL constraint */}
+      <div class="flex justify-end py-1">
+        <Label class="text-right text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+          NOT NULL
+        </Label>
 
-          <div class="flex justify-end">
-            <Checkbox
-              disabled={props.disabled}
-              checked={isNotNull(props.value)}
-              onChange={(value) =>
-                props.onChange(setNotNull(props.value, value))
-              }
-            />
-          </div>
+        <div class="flex justify-end">
+          <Checkbox
+            disabled={props.disabled}
+            checked={isNotNull(props.value)}
+            onChange={(value) => props.onChange(setNotNull(props.value, value))}
+          />
         </div>
+      </div>
 
-        <div class="flex justify-end">
+      {/* UNIQUE (pk) constraint */}
+      {!props.pk && (
+        <div class="flex justify-end py-1">
           <Label class="text-right text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
             UNIQUE {getUnique(props.value)?.is_primary && "(PRIMARY KEY)"}
           </Label>
@@ -418,7 +422,7 @@ function ColumnOptionsFields(props: {
             />
           </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
@@ -498,8 +502,8 @@ export function ColumnSubForm(props: {
                 <div class="flex gap-1">
                   <For each={presets}>
                     {([name, preset]) => (
-                      <Badge
-                        class="p-1"
+                      <ButtonBadge
+                        class="p-1 active:scale-90"
                         onClick={() => {
                           const columns = [...props.form.state.values.columns];
                           const column = columns[props.colIndex];
@@ -513,7 +517,7 @@ export function ColumnSubForm(props: {
                         }}
                       >
                         {name}
-                      </Badge>
+                      </ButtonBadge>
                     )}
                   </For>
                 </div>
@@ -553,6 +557,7 @@ export function ColumnSubForm(props: {
                       onChange={field().handleChange}
                       allTables={props.allTables}
                       disabled={disabled()}
+                      pk={false}
                       fk={fk()}
                       setFk={setFk}
                     />
@@ -628,8 +633,8 @@ export function PrimaryKeyColumnSubForm(props: {
                   <div class="flex gap-1">
                     <For each={primaryKeyPresets}>
                       {([name, preset]) => (
-                        <Badge
-                          class="p-1"
+                        <ButtonBadge
+                          class="p-1 active:scale-90"
                           onClick={() => {
                             const columns = [
                               ...props.form.state.values.columns,
@@ -645,7 +650,7 @@ export function PrimaryKeyColumnSubForm(props: {
                           }}
                         >
                           {name}
-                        </Badge>
+                        </ButtonBadge>
                       )}
                     </For>
                   </div>
@@ -690,6 +695,7 @@ export function PrimaryKeyColumnSubForm(props: {
                       onChange={field().handleChange}
                       allTables={props.allTables}
                       disabled={true}
+                      pk={true}
                       fk={fk()}
                       setFk={setFk}
                     />
