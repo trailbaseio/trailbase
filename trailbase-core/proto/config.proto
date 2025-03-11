@@ -95,6 +95,34 @@ message ServerConfig {
   optional S3StorageConfig s3_storage_config = 13;
 }
 
+enum SystemCronJobId {
+  SYSTEM_CRON_JOB_ID_UNDEFINED = 0;
+  BACKUP = 1;
+  HEARTBEAT = 2;
+  LOG_CLEANER = 3;
+  AUTH_CLEANER = 4;
+  QUERY_OPTIMIZER = 5;
+}
+
+message SystemCronJob {
+  /// Identifies the system cron job by its id.
+  optional SystemCronJobId id = 1;
+
+  /// Cron spec (sec, min, hour, day of month, month, day of week, year).
+  optional string spec = 2;
+
+  /// Disable the system job.
+  optional bool disable_job = 3;
+}
+
+message CronConfig {
+  /// System jobs overrides.
+  ///
+  /// NOTE: This is technically a map from id to config, however enums are not
+  /// allowed as map keys.
+  repeated SystemCronJob system_jobs = 1;
+}
+
 /// Sqlite specific (as opposed to standard SQL) constrained-violation
 /// resolution strategy upon insert.
 enum ConflictResolutionStrategy {
@@ -194,6 +222,7 @@ message Config {
   required EmailConfig email = 2;
   required ServerConfig server = 3;
   required AuthConfig auth = 4;
+  required CronConfig cron = 5;
 
   repeated RecordApiConfig record_apis = 11;
 

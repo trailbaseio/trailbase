@@ -1,4 +1,5 @@
 mod config;
+mod cron;
 mod error;
 mod info;
 mod jwt;
@@ -69,4 +70,6 @@ pub fn router() -> Router<AppState> {
     )
     .route("/public_key", get(jwt::get_public_key))
     .route("/info", get(info::info_handler))
+    .route("/tasks", get(cron::list_tasks_handler))
+    .route("/task/run", post(cron::run_tasks_handler))
 }

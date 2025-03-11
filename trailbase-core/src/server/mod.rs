@@ -30,7 +30,6 @@ use crate::constants::{ADMIN_API_PATH, HEADER_CSRF_TOKEN};
 use crate::data_dir::DataDir;
 use crate::logging;
 use crate::records;
-use crate::scheduler;
 
 pub use init::{init_app_state, InitArgs, InitError};
 
@@ -168,8 +167,6 @@ impl Server {
   }
 
   pub async fn serve(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let _raii_tasks = scheduler::start_periodic_tasks(&self.state);
-
     // NOTE: We panic if  a key/cert that was explicitly specified cannot be loaded.
     let data_dir = self.state.data_dir();
     let tls_key = self.tls_key.as_ref().map_or_else(

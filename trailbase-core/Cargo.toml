@@ -33,6 +33,7 @@ axum-extra = { version = "^0.10.0", default-features = false, features = ["proto
 base64 = { version = "0.22.1", default-features = false }
 bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
+cron = "0.15.0"
 ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
 form_urlencoded = "1.2.1"

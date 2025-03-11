@@ -12,6 +12,7 @@ use crate::email::Mailer;
 use crate::js::RuntimeHandle;
 use crate::records::subscribe::SubscriptionManager;
 use crate::records::RecordApi;
+use crate::scheduler::{build_task_registry_from_config, TaskRegistry};
 use crate::table_metadata::TableMetadataCache;
 use crate::value_notifier::{Computed, ValueNotifier};
 
@@ -25,6 +26,7 @@ struct InternalState {
   demo: bool,
 
   oauth: Computed<ConfiguredOAuthProviders, Config>,
+  tasks: Computed<TaskRegistry, Config>,
   mailer: Computed<Mailer, Config>,
   record_apis: Computed<Vec<(String, RecordApi)>, Config>,
   config: ValueNotifier<Config>,
@@ -88,10 +90,19 @@ impl AppState {
         .collect::<Vec<_>>();
     });
 
-    let runtime = args
-      .js_runtime_threads
-      .map_or_else(RuntimeHandle::new, RuntimeHandle::new_with_threads);
-    runtime.set_connection(args.conn.clone());
+    let runtime = {
+      let runtime = args
+        .js_runtime_threads
+        .map_or_else(RuntimeHandle::new, RuntimeHandle::new_with_threads);
+      runtime.set_connection(args.conn.clone());
+      runtime
+    };
+
+    let tasks_input = (
+      args.data_dir.clone(),
+      args.conn.clone(),
+      args.logs_conn.clone(),
+    );
 
     AppState {
       state: Arc::new(InternalState {
@@ -106,6 +117,16 @@ impl AppState {
             Err(err) => {
               error!("Failed to derive configure oauth providers from config: {err}");
               ConfiguredOAuthProviders::default()
+            }
+          }
+        }),
+        tasks: Computed::new(&config, move |c| {
+          let (ref data_dir, ref conn, ref logs_conn) = tasks_input;
+          match build_task_registry_from_config(c, data_dir, conn, logs_conn) {
+            Ok(tasks) => tasks,
+            Err(err) => {
+              error!("Failed to build TaskRegistry for cron jobs: {err}");
+              TaskRegistry::new()
             }
           }
         }),
@@ -173,6 +194,10 @@ impl AppState {
 
   pub(crate) fn objectstore(&self) -> &(dyn ObjectStore + Send + Sync) {
     return &*self.state.object_store;
+  }
+
+  pub(crate) fn tasks(&self) -> Arc<TaskRegistry> {
+    return self.state.tasks.load().clone();
   }
 
   pub(crate) fn get_oauth_provider(&self, name: &str) -> Option<Arc<OAuthProviderType>> {
@@ -417,6 +442,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       oauth: Computed::new(&config, |c| {
         ConfiguredOAuthProviders::from_config(c.auth.clone()).unwrap()
       }),
+      tasks: Computed::new(&config, |_c| TaskRegistry::new()),
       mailer: build_mailer(&config, options.and_then(|o| o.mailer)),
       record_apis: record_apis.clone(),
       config,
