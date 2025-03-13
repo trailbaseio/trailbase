@@ -196,6 +196,7 @@ impl JobRegistry {
       jobs.get(&id)?.clone()
     };
 
+    log::debug!("Running job {id}: {}", job.name());
     return Some(job.run_now().await);
   }
 }

@@ -1,6 +1,6 @@
 import { createResource, Switch, Match, Index } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
-import { TbPlayerPlay, TbHistory } from "solid-icons/tb";
+import { TbPlayerPlay } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/IconButton";
@@ -23,7 +23,7 @@ import {
 import { type FieldApiT, notEmptyValidator } from "@/components/FormFields";
 import { Config, JobsConfig, SystemJob } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/config";
-import { listJobs } from "@/lib/jobs";
+import { listJobs, runJob } from "@/lib/jobs";
 import type { Job } from "@bindings/Job";
 
 type JobProxy = {
@@ -264,14 +264,21 @@ export function JobSettingsImpl(props: {
                         <div class="flex h-full items-center">
                           <IconButton
                             onClick={() => {
-                              props.refetchJobs();
+                              const id = proxy().job?.id;
+                              if (id) {
+                                (async () => {
+                                  const result = await runJob({ id });
+                                  console.info(
+                                    "execution result: ",
+                                    result.error,
+                                  );
+
+                                  props.refetchJobs();
+                                })().catch(console.error);
+                              }
                             }}
                           >
                             <TbPlayerPlay size={20} />
-                          </IconButton>
-
-                          <IconButton onClick={() => {}}>
-                            <TbHistory size={20} />
                           </IconButton>
                         </div>
                       </TableCell>
