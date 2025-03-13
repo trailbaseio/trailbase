@@ -6,6 +6,7 @@ use prost_reflect::{
 use proto::{EmailTemplate, OAuthProviderId};
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
+use std::str::FromStr;
 use thiserror::Error;
 use tokio::fs;
 use validator::{ValidateEmail, ValidateUrl};
@@ -652,6 +653,21 @@ pub(crate) fn validate_config(
     validate_template(email.user_verification_template.as_ref())?;
     validate_template(email.change_email_template.as_ref())?;
     validate_template(email.password_reset_template.as_ref())?;
+  }
+
+  // Check job config.
+  for job in &config.jobs.system_jobs {
+    let Some(ref id) = job.id else {
+      return ierr("Job is missing id.");
+    };
+
+    let Some(ref schedule) = job.schedule else {
+      return ierr(format!("Job '{id}' is missing schedule."));
+    };
+
+    if let Err(err) = cron::Schedule::from_str(schedule) {
+      return ierr(format!("Schedule of job '{id}' not valid cron: {err}"));
+    }
   }
 
   return Ok(());

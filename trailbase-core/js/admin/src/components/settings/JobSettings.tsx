@@ -20,11 +20,25 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { type FieldApiT, notEmptyValidator } from "@/components/FormFields";
+import { type FieldApiT, FieldInfo } from "@/components/FormFields";
 import { Config, JobsConfig, SystemJob } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/config";
 import { listJobs, runJob } from "@/lib/jobs";
 import type { Job } from "@bindings/Job";
+
+const cronRegex =
+  /^(@(yearly|monthly|weekly|daily|hourly|))|((((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*)\s*){6,7})$/;
+
+function isValidCronSpec() {
+  return {
+    onChange: ({ value }: { value: string }): string | undefined => {
+      const matches = cronRegex.test(value);
+      if (!matches) {
+        return `Not a valid cron spec`;
+      }
+    },
+  };
+}
 
 type JobProxy = {
   /// Set to false if the loaded config contained the job.
@@ -214,23 +228,27 @@ export function JobSettingsImpl(props: {
                       <TableCell>
                         <form.Field
                           name={`jobs[${i}].config.schedule`}
-                          validators={notEmptyValidator()}
+                          validators={isValidCronSpec()}
                         >
                           {(field: () => FieldApiT<string | undefined>) => {
                             return (
-                              <TextField>
-                                <TextFieldInput
-                                  type="text"
-                                  value={field().state.value}
-                                  onBlur={field().handleBlur}
-                                  autocomplete="off"
-                                  onKeyUp={(e: Event) => {
-                                    field().handleChange(
-                                      (e.target as HTMLInputElement).value,
-                                    );
-                                  }}
-                                />
-                              </TextField>
+                              <>
+                                <TextField>
+                                  <TextFieldInput
+                                    type="text"
+                                    value={field().state.value}
+                                    onBlur={field().handleBlur}
+                                    autocomplete="off"
+                                    onKeyUp={(e: Event) => {
+                                      field().handleChange(
+                                        (e.target as HTMLInputElement).value,
+                                      );
+                                    }}
+                                  />
+                                </TextField>
+
+                                <FieldInfo field={field()} />
+                              </>
                             );
                           }}
                         </form.Field>

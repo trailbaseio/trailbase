@@ -449,6 +449,7 @@ pub fn build_job_registry_from_config(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use cron::TimeUnitSpec;
 
   #[test]
   fn test_cron() {
@@ -458,6 +459,19 @@ mod tests {
 
     let expression = "*/40    *     *         *            *         *          *";
     Schedule::from_str(expression).unwrap();
+
+    let expression = "   1    2     3         4            5         6";
+    let schedule = Schedule::from_str(expression).unwrap();
+    assert!(schedule.seconds().includes(1));
+    assert!(schedule.minutes().includes(2));
+    assert!(schedule.hours().includes(3));
+    assert!(schedule.days_of_month().includes(4));
+    assert!(schedule.months().includes(5));
+    assert!(schedule.days_of_week().includes(6));
+    assert!(schedule.years().includes(1984));
+
+    let expression = "*/40    *     *         *            *";
+    assert!(Schedule::from_str(expression).is_err());
   }
 
   #[tokio::test]

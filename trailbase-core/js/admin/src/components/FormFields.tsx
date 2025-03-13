@@ -428,7 +428,7 @@ export function SelectField(
   );
 }
 
-function FieldInfo<T>(props: { field: FieldApiT<T> }) {
+export function FieldInfo<T>(props: { field: FieldApiT<T> }) {
   return (
     <>
       {props.field.state.meta.errors ? (
