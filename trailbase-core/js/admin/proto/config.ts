@@ -78,6 +78,63 @@ export function oAuthProviderIdToJSON(object: OAuthProviderId): string {
   }
 }
 
+export enum SystemJobId {
+  SYSTEM_JOB_ID_UNDEFINED = 0,
+  BACKUP = 1,
+  HEARTBEAT = 2,
+  LOG_CLEANER = 3,
+  AUTH_CLEANER = 4,
+  QUERY_OPTIMIZER = 5,
+  UNRECOGNIZED = -1,
+}
+
+export function systemJobIdFromJSON(object: any): SystemJobId {
+  switch (object) {
+    case 0:
+    case "SYSTEM_JOB_ID_UNDEFINED":
+      return SystemJobId.SYSTEM_JOB_ID_UNDEFINED;
+    case 1:
+    case "BACKUP":
+      return SystemJobId.BACKUP;
+    case 2:
+    case "HEARTBEAT":
+      return SystemJobId.HEARTBEAT;
+    case 3:
+    case "LOG_CLEANER":
+      return SystemJobId.LOG_CLEANER;
+    case 4:
+    case "AUTH_CLEANER":
+      return SystemJobId.AUTH_CLEANER;
+    case 5:
+    case "QUERY_OPTIMIZER":
+      return SystemJobId.QUERY_OPTIMIZER;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return SystemJobId.UNRECOGNIZED;
+  }
+}
+
+export function systemJobIdToJSON(object: SystemJobId): string {
+  switch (object) {
+    case SystemJobId.SYSTEM_JOB_ID_UNDEFINED:
+      return "SYSTEM_JOB_ID_UNDEFINED";
+    case SystemJobId.BACKUP:
+      return "BACKUP";
+    case SystemJobId.HEARTBEAT:
+      return "HEARTBEAT";
+    case SystemJobId.LOG_CLEANER:
+      return "LOG_CLEANER";
+    case SystemJobId.AUTH_CLEANER:
+      return "AUTH_CLEANER";
+    case SystemJobId.QUERY_OPTIMIZER:
+      return "QUERY_OPTIMIZER";
+    case SystemJobId.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
 /**
  * / Sqlite specific (as opposed to standard SQL) constrained-violation
  * / resolution strategy upon insert.
@@ -236,8 +293,10 @@ export interface OAuthProviderConfig {
   providerId?:
     | OAuthProviderId
     | undefined;
-  /** Settings for generic OpenID Connect provider. */
-  name?: string | undefined;
+  /**
+   * Settings for generic OpenID Connect provider. Name is implicitly provided
+   * via the `AuthConfig.oauth_provders` map key.
+   */
   displayName?: string | undefined;
   authUrl?: string | undefined;
   tokenUrl?: string | undefined;
@@ -301,6 +360,29 @@ export interface ServerConfig {
     | undefined;
   /** / If present will use S3 setup over local file-system based storage. */
   s3StorageConfig?: S3StorageConfig | undefined;
+}
+
+export interface SystemJob {
+  /** / Identifies the system job by its id. */
+  id?:
+    | SystemJobId
+    | undefined;
+  /** / Cron spec: shorthand or 7-components: (sec, min, hour, day of month, / month, day of week, year). */
+  schedule?:
+    | string
+    | undefined;
+  /** / Disable the system job. */
+  disabled?: boolean | undefined;
+}
+
+export interface JobsConfig {
+  /**
+   * / System jobs overrides.
+   * /
+   * / NOTE: This is technically a map from id to config, however enums are not
+   * / allowed as map keys.
+   */
+  systemJobs: SystemJob[];
 }
 
 export interface RecordApiConfig {
@@ -384,6 +466,7 @@ export interface Config {
   email: EmailConfig | undefined;
   server: ServerConfig | undefined;
   auth: AuthConfig | undefined;
+  jobs: JobsConfig | undefined;
   recordApis: RecordApiConfig[];
   schemas: JsonSchemaConfig[];
 }
@@ -681,9 +764,6 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     if (message.providerId !== undefined && message.providerId !== 0) {
       writer.uint32(24).int32(message.providerId);
     }
-    if (message.name !== undefined && message.name !== "") {
-      writer.uint32(82).string(message.name);
-    }
     if (message.displayName !== undefined && message.displayName !== "") {
       writer.uint32(90).string(message.displayName);
     }
@@ -728,14 +808,6 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
           }
 
           message.providerId = reader.int32() as any;
-          continue;
-        }
-        case 10: {
-          if (tag !== 82) {
-            break;
-          }
-
-          message.name = reader.string();
           continue;
         }
         case 11: {
@@ -784,7 +856,6 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
       clientId: isSet(object.clientId) ? globalThis.String(object.clientId) : undefined,
       clientSecret: isSet(object.clientSecret) ? globalThis.String(object.clientSecret) : undefined,
       providerId: isSet(object.providerId) ? oAuthProviderIdFromJSON(object.providerId) : undefined,
-      name: isSet(object.name) ? globalThis.String(object.name) : undefined,
       displayName: isSet(object.displayName) ? globalThis.String(object.displayName) : undefined,
       authUrl: isSet(object.authUrl) ? globalThis.String(object.authUrl) : undefined,
       tokenUrl: isSet(object.tokenUrl) ? globalThis.String(object.tokenUrl) : undefined,
@@ -802,9 +873,6 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     }
     if (message.providerId !== undefined && message.providerId !== 0) {
       obj.providerId = oAuthProviderIdToJSON(message.providerId);
-    }
-    if (message.name !== undefined && message.name !== "") {
-      obj.name = message.name;
     }
     if (message.displayName !== undefined && message.displayName !== "") {
       obj.displayName = message.displayName;
@@ -829,7 +897,6 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     message.clientId = object.clientId ?? "";
     message.clientSecret = object.clientSecret ?? "";
     message.providerId = object.providerId ?? 0;
-    message.name = object.name ?? "";
     message.displayName = object.displayName ?? "";
     message.authUrl = object.authUrl ?? "";
     message.tokenUrl = object.tokenUrl ?? "";
@@ -1282,6 +1349,160 @@ export const ServerConfig: MessageFns<ServerConfig> = {
   },
 };
 
+function createBaseSystemJob(): SystemJob {
+  return {};
+}
+
+export const SystemJob: MessageFns<SystemJob> = {
+  encode(message: SystemJob, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== undefined && message.id !== 0) {
+      writer.uint32(8).int32(message.id);
+    }
+    if (message.schedule !== undefined && message.schedule !== "") {
+      writer.uint32(18).string(message.schedule);
+    }
+    if (message.disabled !== undefined && message.disabled !== false) {
+      writer.uint32(24).bool(message.disabled);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SystemJob {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSystemJob();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 8) {
+            break;
+          }
+
+          message.id = reader.int32() as any;
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.schedule = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.disabled = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SystemJob {
+    return {
+      id: isSet(object.id) ? systemJobIdFromJSON(object.id) : undefined,
+      schedule: isSet(object.schedule) ? globalThis.String(object.schedule) : undefined,
+      disabled: isSet(object.disabled) ? globalThis.Boolean(object.disabled) : undefined,
+    };
+  },
+
+  toJSON(message: SystemJob): unknown {
+    const obj: any = {};
+    if (message.id !== undefined && message.id !== 0) {
+      obj.id = systemJobIdToJSON(message.id);
+    }
+    if (message.schedule !== undefined && message.schedule !== "") {
+      obj.schedule = message.schedule;
+    }
+    if (message.disabled !== undefined && message.disabled !== false) {
+      obj.disabled = message.disabled;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SystemJob>, I>>(base?: I): SystemJob {
+    return SystemJob.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SystemJob>, I>>(object: I): SystemJob {
+    const message = createBaseSystemJob();
+    message.id = object.id ?? 0;
+    message.schedule = object.schedule ?? "";
+    message.disabled = object.disabled ?? false;
+    return message;
+  },
+};
+
+function createBaseJobsConfig(): JobsConfig {
+  return { systemJobs: [] };
+}
+
+export const JobsConfig: MessageFns<JobsConfig> = {
+  encode(message: JobsConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.systemJobs) {
+      SystemJob.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): JobsConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseJobsConfig();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.systemJobs.push(SystemJob.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): JobsConfig {
+    return {
+      systemJobs: globalThis.Array.isArray(object?.systemJobs)
+        ? object.systemJobs.map((e: any) => SystemJob.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: JobsConfig): unknown {
+    const obj: any = {};
+    if (message.systemJobs?.length) {
+      obj.systemJobs = message.systemJobs.map((e) => SystemJob.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<JobsConfig>, I>>(base?: I): JobsConfig {
+    return JobsConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<JobsConfig>, I>>(object: I): JobsConfig {
+    const message = createBaseJobsConfig();
+    message.systemJobs = object.systemJobs?.map((e) => SystemJob.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 function createBaseRecordApiConfig(): RecordApiConfig {
   return { aclWorld: [], aclAuthenticated: [], expand: [] };
 }
@@ -1645,7 +1866,7 @@ export const JsonSchemaConfig: MessageFns<JsonSchemaConfig> = {
 };
 
 function createBaseConfig(): Config {
-  return { email: undefined, server: undefined, auth: undefined, recordApis: [], schemas: [] };
+  return { email: undefined, server: undefined, auth: undefined, jobs: undefined, recordApis: [], schemas: [] };
 }
 
 export const Config: MessageFns<Config> = {
@@ -1658,6 +1879,9 @@ export const Config: MessageFns<Config> = {
     }
     if (message.auth !== undefined) {
       AuthConfig.encode(message.auth, writer.uint32(34).fork()).join();
+    }
+    if (message.jobs !== undefined) {
+      JobsConfig.encode(message.jobs, writer.uint32(42).fork()).join();
     }
     for (const v of message.recordApis) {
       RecordApiConfig.encode(v!, writer.uint32(90).fork()).join();
@@ -1699,6 +1923,14 @@ export const Config: MessageFns<Config> = {
           message.auth = AuthConfig.decode(reader, reader.uint32());
           continue;
         }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.jobs = JobsConfig.decode(reader, reader.uint32());
+          continue;
+        }
         case 11: {
           if (tag !== 90) {
             break;
@@ -1729,6 +1961,7 @@ export const Config: MessageFns<Config> = {
       email: isSet(object.email) ? EmailConfig.fromJSON(object.email) : undefined,
       server: isSet(object.server) ? ServerConfig.fromJSON(object.server) : undefined,
       auth: isSet(object.auth) ? AuthConfig.fromJSON(object.auth) : undefined,
+      jobs: isSet(object.jobs) ? JobsConfig.fromJSON(object.jobs) : undefined,
       recordApis: globalThis.Array.isArray(object?.recordApis)
         ? object.recordApis.map((e: any) => RecordApiConfig.fromJSON(e))
         : [],
@@ -1748,6 +1981,9 @@ export const Config: MessageFns<Config> = {
     }
     if (message.auth !== undefined) {
       obj.auth = AuthConfig.toJSON(message.auth);
+    }
+    if (message.jobs !== undefined) {
+      obj.jobs = JobsConfig.toJSON(message.jobs);
     }
     if (message.recordApis?.length) {
       obj.recordApis = message.recordApis.map((e) => RecordApiConfig.toJSON(e));
@@ -1771,6 +2007,9 @@ export const Config: MessageFns<Config> = {
       : undefined;
     message.auth = (object.auth !== undefined && object.auth !== null)
       ? AuthConfig.fromPartial(object.auth)
+      : undefined;
+    message.jobs = (object.jobs !== undefined && object.jobs !== null)
+      ? JobsConfig.fromPartial(object.jobs)
       : undefined;
     message.recordApis = object.recordApis?.map((e) => RecordApiConfig.fromPartial(e)) || [];
     message.schemas = object.schemas?.map((e) => JsonSchemaConfig.fromPartial(e)) || [];

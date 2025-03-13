@@ -12,7 +12,7 @@ use crate::email::Mailer;
 use crate::js::RuntimeHandle;
 use crate::records::subscribe::SubscriptionManager;
 use crate::records::RecordApi;
-use crate::scheduler::{build_task_registry_from_config, TaskRegistry};
+use crate::scheduler::{build_job_registry_from_config, JobRegistry};
 use crate::table_metadata::TableMetadataCache;
 use crate::value_notifier::{Computed, ValueNotifier};
 
@@ -26,7 +26,7 @@ struct InternalState {
   demo: bool,
 
   oauth: Computed<ConfiguredOAuthProviders, Config>,
-  tasks: Computed<TaskRegistry, Config>,
+  jobs: Computed<JobRegistry, Config>,
   mailer: Computed<Mailer, Config>,
   record_apis: Computed<Vec<(String, RecordApi)>, Config>,
   config: ValueNotifier<Config>,
@@ -71,24 +71,26 @@ impl AppState {
   pub(crate) fn new(args: AppStateArgs) -> Self {
     let config = ValueNotifier::new(args.config);
 
-    let table_metadata_clone = args.table_metadata.clone();
-    let conn_clone = args.conn.clone();
+    let record_apis = {
+      let table_metadata_clone = args.table_metadata.clone();
+      let conn_clone = args.conn.clone();
 
-    let record_apis = Computed::new(&config, move |c| {
-      return c
-        .record_apis
-        .iter()
-        .filter_map(|config| {
-          match build_record_api(conn_clone.clone(), &table_metadata_clone, config.clone()) {
-            Ok(api) => Some((api.api_name().to_string(), api)),
-            Err(err) => {
-              error!("{err}");
-              None
+      Computed::new(&config, move |c| {
+        return c
+          .record_apis
+          .iter()
+          .filter_map(|config| {
+            match build_record_api(conn_clone.clone(), &table_metadata_clone, config.clone()) {
+              Ok(api) => Some((api.api_name().to_string(), api)),
+              Err(err) => {
+                error!("{err}");
+                None
+              }
             }
-          }
-        })
-        .collect::<Vec<_>>();
-    });
+          })
+          .collect::<Vec<_>>();
+      })
+    };
 
     let runtime = {
       let runtime = args
@@ -98,7 +100,7 @@ impl AppState {
       runtime
     };
 
-    let tasks_input = (
+    let jobs_input = (
       args.data_dir.clone(),
       args.conn.clone(),
       args.logs_conn.clone(),
@@ -112,6 +114,7 @@ impl AppState {
         dev: args.dev,
         demo: args.demo,
         oauth: Computed::new(&config, |c| {
+          log::debug!("building oauth from config");
           match ConfiguredOAuthProviders::from_config(c.auth.clone()) {
             Ok(providers) => providers,
             Err(err) => {
@@ -120,17 +123,18 @@ impl AppState {
             }
           }
         }),
-        tasks: Computed::new(&config, move |c| {
-          let (ref data_dir, ref conn, ref logs_conn) = tasks_input;
-          match build_task_registry_from_config(c, data_dir, conn, logs_conn) {
-            Ok(tasks) => tasks,
+        jobs: Computed::new(&config, move |c| {
+          log::debug!("building jobs from config");
+          let (ref data_dir, ref conn, ref logs_conn) = jobs_input;
+          match build_job_registry_from_config(c, data_dir, conn, logs_conn) {
+            Ok(jobs) => jobs,
             Err(err) => {
-              error!("Failed to build TaskRegistry for cron jobs: {err}");
-              TaskRegistry::new()
+              error!("Failed to build JobRegistry for cron jobs: {err}");
+              JobRegistry::new()
             }
           }
         }),
-        mailer: build_mailer(&config, None),
+        mailer: Computed::new(&config, Mailer::new_from_config),
         record_apis: record_apis.clone(),
         config,
         conn: args.conn.clone(),
@@ -196,8 +200,8 @@ impl AppState {
     return &*self.state.object_store;
   }
 
-  pub(crate) fn tasks(&self) -> Arc<TaskRegistry> {
-    return self.state.tasks.load().clone();
+  pub(crate) fn jobs(&self) -> Arc<JobRegistry> {
+    return self.state.jobs.load().clone();
   }
 
   pub(crate) fn get_oauth_provider(&self, name: &str) -> Option<Arc<OAuthProviderType>> {
@@ -293,19 +297,6 @@ impl AppState {
   pub(crate) fn script_runtime(&self) -> RuntimeHandle {
     return self.state.runtime.clone();
   }
-}
-
-fn build_mailer(
-  config: &ValueNotifier<Config>,
-  mailer: Option<Mailer>,
-) -> Computed<Mailer, Config> {
-  return Computed::new(config, move |c| {
-    if let Some(mailer) = mailer.clone() {
-      return mailer;
-    }
-
-    return Mailer::new_from_config(c);
-  });
 }
 
 #[cfg(test)]
@@ -429,8 +420,17 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       .collect::<Vec<_>>();
   });
 
-  let runtime = RuntimeHandle::new();
-  runtime.set_connection(conn.clone());
+  let runtime = {
+    let runtime = RuntimeHandle::new();
+    runtime.set_connection(conn.clone());
+    runtime
+  };
+
+  fn build_mailer(c: &ValueNotifier<Config>, mailer: Option<Mailer>) -> Computed<Mailer, Config> {
+    return Computed::new(c, move |c| {
+      return mailer.clone().unwrap_or_else(|| Mailer::new_from_config(c));
+    });
+  }
 
   return Ok(AppState {
     state: Arc::new(InternalState {
@@ -442,7 +442,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       oauth: Computed::new(&config, |c| {
         ConfiguredOAuthProviders::from_config(c.auth.clone()).unwrap()
       }),
-      tasks: Computed::new(&config, |_c| TaskRegistry::new()),
+      jobs: Computed::new(&config, |_c| JobRegistry::new()),
       mailer: build_mailer(&config, options.and_then(|o| o.mailer)),
       record_apis: record_apis.clone(),
       config,

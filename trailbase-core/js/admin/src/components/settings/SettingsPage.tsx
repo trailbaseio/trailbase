@@ -30,6 +30,7 @@ import { ConfirmCloseDialog } from "@/components/SafeSheet";
 import { AuthSettings } from "@/components/settings/AuthSettings";
 import { SchemaSettings } from "@/components/settings/SchemaSettings";
 import { EmailSettings } from "@/components/settings/EmailSettings";
+import { JobSettings } from "@/components/settings/JobSettings";
 import { SplitView } from "@/components/SplitView";
 import { IconButton } from "@/components/IconButton";
 
@@ -119,7 +120,7 @@ function ServerSettings(props: CommonProps) {
                   ),
                   info: (
                     <p>
-                      A background task periodically cleans up logs older than
+                      A background job periodically cleans up logs older than
                       above retention period. Setting the retention to zero
                       turns off the cleanup and logs will be retained
                       indefinitely.
@@ -181,7 +182,7 @@ function ServerSettings(props: CommonProps) {
 
         <CardContent class="flex flex-col gap-4">
           <Switch>
-            <Match when={info.error}>info.error</Match>
+            <Match when={info.error}>{info.error}</Match>
             <Match when={info.loading}>Loading...</Match>
             <Match when={info()}>
               <TextField class="w-full">
@@ -460,6 +461,11 @@ const sites = [
     route: "backup",
     label: "Backup",
     child: BackupImportSettings,
+  },
+  {
+    route: "jobs",
+    label: "Jobs",
+    child: JobSettings,
   },
 ] as const;
 
