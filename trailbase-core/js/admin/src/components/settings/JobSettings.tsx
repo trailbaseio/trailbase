@@ -1,10 +1,11 @@
 import { createResource, Switch, Match, Index } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
-import { TbPlayerPlay } from "solid-icons/tb";
+import { TbPlayerPlay, TbInfoCircle } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
-import { IconButton } from "@/components/IconButton";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { IconButton } from "@/components/IconButton";
 import {
   Table,
   TableBody,
@@ -120,7 +121,7 @@ function extractConfig(proxy: FormProxy): JobsConfig {
   };
 }
 
-export function JobSettingsImpl(props: {
+function JobSettingsImpl(props: {
   markDirty: () => void;
   postSubmit: () => void;
   config: Config;
@@ -156,160 +157,200 @@ export function JobSettingsImpl(props: {
         form.handleSubmit();
       }}
     >
-      <Table>
-        <TableHeader>
-          <TableHead>Id</TableHead>
-          <TableHead>Name</TableHead>
-          <TableHead>Schedule</TableHead>
-          <TableHead>Next</TableHead>
-          <TableHead>Last</TableHead>
-          <TableHead>Enabled</TableHead>
-          <TableHead>Action</TableHead>
-        </TableHeader>
+      <Card>
+        <CardHeader>
+          <h2>Periodic Jobs</h2>
+        </CardHeader>
 
-        <TableBody>
-          <form.Field name="jobs" mode="array">
-            {(field) => (
-              <Index each={field().state.value}>
-                {(proxy: () => JobProxy, i: number) => {
-                  const next = () => {
-                    const timestamp = proxy().job?.next;
-                    if (!timestamp) return null;
+        <CardContent>
+          <Table>
+            <TableHeader>
+              {/*
+              <TableHead>Id</TableHead>
+              */}
+              <TableHead>Name</TableHead>
+              <TableHead>
+                <Tooltip>
+                  <TooltipTrigger as="div">
+                    <div class="flex items-center gap-2">
+                      Schedule <TbInfoCircle />
+                    </div>
+                  </TooltipTrigger>
 
-                    const t = new Date(Number(timestamp) * 1000);
+                  <TooltipContent>
+                    <p>6/7-component cron spec:</p>
+                    <p class="break-keep font-bold">
+                      second minute hour day-of-month month day-of-week [year]
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TableHead>
+              <TableHead>Next Run</TableHead>
+              <TableHead>Last Run</TableHead>
+              <TableHead>Enabled</TableHead>
+              <TableHead>Action</TableHead>
+            </TableHeader>
 
-                    return (
-                      <Tooltip>
-                        <TooltipTrigger as="div">
-                          <div class="w-[128px] text-sm">{t.toUTCString()}</div>
-                        </TooltipTrigger>
+            <TableBody>
+              <form.Field name="jobs" mode="array">
+                {(field) => (
+                  <Index each={field().state.value}>
+                    {(proxy: () => JobProxy, i: number) => {
+                      const next = () => {
+                        const timestamp = proxy().job?.next;
+                        if (!timestamp) return null;
 
-                        <TooltipContent>
-                          {t.toLocaleString()} (Local)
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  };
+                        const t = new Date(Number(timestamp) * 1000);
 
-                  const latest = () => {
-                    const latest = proxy().job?.latest;
-                    if (!latest) return null;
-
-                    const [startTimestamp, durationMillis, error] = latest;
-                    const t = new Date(Number(startTimestamp) * 1000);
-
-                    return (
-                      <div
-                        classList={{
-                          "text-red-600": error !== null,
-                        }}
-                      >
-                        <Tooltip>
-                          <TooltipTrigger as="div">
-                            <div class="w-[128px] text-sm">
-                              {t.toUTCString()}
-                            </div>
-                          </TooltipTrigger>
-
-                          <TooltipContent>
-                            <p>Start: {t.toLocaleString()} (Local)</p>
-                            <p>Duration: {Number(durationMillis) / 1000}s</p>
-                            <p>Error: {error ?? "none"}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                    );
-                  };
-
-                  return (
-                    <TableRow>
-                      <TableCell>{proxy().config.id}</TableCell>
-
-                      <TableCell>{proxy().job?.name}</TableCell>
-
-                      <TableCell>
-                        <form.Field
-                          name={`jobs[${i}].config.schedule`}
-                          validators={isValidCronSpec()}
-                        >
-                          {(field: () => FieldApiT<string | undefined>) => {
-                            return (
-                              <>
-                                <TextField>
-                                  <TextFieldInput
-                                    type="text"
-                                    value={field().state.value}
-                                    onBlur={field().handleBlur}
-                                    autocomplete="off"
-                                    onKeyUp={(e: Event) => {
-                                      field().handleChange(
-                                        (e.target as HTMLInputElement).value,
-                                      );
-                                    }}
-                                  />
-                                </TextField>
-
-                                <FieldInfo field={field()} />
-                              </>
-                            );
-                          }}
-                        </form.Field>
-                      </TableCell>
-
-                      <TableCell>{next()}</TableCell>
-
-                      <TableCell>{latest()}</TableCell>
-
-                      <TableCell>
-                        <form.Field name={`jobs[${i}].config.disabled`}>
-                          {(field: () => FieldApiT<boolean>) => {
-                            const enabled = () =>
-                              !(field().state.value ?? false);
-                            return (
-                              <div class="flex items-center justify-center">
-                                <Checkbox
-                                  checked={enabled()}
-                                  onBlur={field().handleBlur}
-                                  onChange={(enabled: boolean) =>
-                                    field().handleChange(!enabled)
-                                  }
-                                />
+                        return (
+                          <Tooltip>
+                            <TooltipTrigger as="div">
+                              <div class="flex items-center gap-2">
+                                <TbInfoCircle />
+                                <div class="w-[128px] text-sm">
+                                  {t.toUTCString()}
+                                </div>
                               </div>
-                            );
-                          }}
-                        </form.Field>
-                      </TableCell>
+                            </TooltipTrigger>
 
-                      <TableCell>
-                        <div class="flex h-full items-center">
-                          <IconButton
-                            onClick={() => {
-                              const id = proxy().job?.id;
-                              if (id) {
-                                (async () => {
-                                  const result = await runJob({ id });
-                                  console.info(
-                                    "execution result: ",
-                                    result.error,
-                                  );
+                            <TooltipContent>
+                              {t.toLocaleString()} (Local)
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      };
 
-                                  props.refetchJobs();
-                                })().catch(console.error);
-                              }
+                      const latest = () => {
+                        const latest = proxy().job?.latest;
+                        if (!latest) return null;
+
+                        const [startTimestamp, durationMillis, error] = latest;
+                        const t = new Date(Number(startTimestamp) * 1000);
+
+                        return (
+                          <div
+                            classList={{
+                              "text-red-600": error !== null,
                             }}
                           >
-                            <TbPlayerPlay size={20} />
-                          </IconButton>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                }}
-              </Index>
-            )}
-          </form.Field>
-        </TableBody>
-      </Table>
+                            <Tooltip>
+                              <TooltipTrigger as="div">
+                                <div class="flex items-center gap-2">
+                                  <TbInfoCircle />
+                                  <div class="w-[128px] text-sm">
+                                    {" "}
+                                    {t.toUTCString()}{" "}
+                                  </div>
+                                </div>
+                              </TooltipTrigger>
+
+                              <TooltipContent>
+                                <p>Start: {t.toLocaleString()} (Local)</p>
+                                <p>
+                                  Duration: {Number(durationMillis) / 1000}s
+                                </p>
+                                <p>Error: {error ?? "none"}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        );
+                      };
+
+                      return (
+                        <TableRow>
+                          {/*
+                          <TableCell>{proxy().config.id}</TableCell>
+                          */}
+
+                          <TableCell>{proxy().job?.name}</TableCell>
+
+                          <TableCell>
+                            <form.Field
+                              name={`jobs[${i}].config.schedule`}
+                              validators={isValidCronSpec()}
+                            >
+                              {(field: () => FieldApiT<string | undefined>) => {
+                                return (
+                                  <>
+                                    <TextField>
+                                      <TextFieldInput
+                                        type="text"
+                                        value={field().state.value}
+                                        onBlur={field().handleBlur}
+                                        autocomplete="off"
+                                        onKeyUp={(e: Event) => {
+                                          field().handleChange(
+                                            (e.target as HTMLInputElement)
+                                              .value,
+                                          );
+                                        }}
+                                      />
+                                    </TextField>
+
+                                    <FieldInfo field={field()} />
+                                  </>
+                                );
+                              }}
+                            </form.Field>
+                          </TableCell>
+
+                          <TableCell>{next()}</TableCell>
+
+                          <TableCell>{latest()}</TableCell>
+
+                          <TableCell>
+                            <form.Field name={`jobs[${i}].config.disabled`}>
+                              {(field: () => FieldApiT<boolean>) => {
+                                const enabled = () =>
+                                  !(field().state.value ?? false);
+                                return (
+                                  <div class="flex items-center justify-center">
+                                    <Checkbox
+                                      checked={enabled()}
+                                      onBlur={field().handleBlur}
+                                      onChange={(enabled: boolean) =>
+                                        field().handleChange(!enabled)
+                                      }
+                                    />
+                                  </div>
+                                );
+                              }}
+                            </form.Field>
+                          </TableCell>
+
+                          <TableCell>
+                            <div class="flex h-full items-center">
+                              <IconButton
+                                tooltip="Run now"
+                                onClick={() => {
+                                  const id = proxy().job?.id;
+                                  if (id) {
+                                    (async () => {
+                                      const result = await runJob({ id });
+                                      console.info(
+                                        "execution result: ",
+                                        result.error,
+                                      );
+
+                                      props.refetchJobs();
+                                    })().catch(console.error);
+                                  }
+                                }}
+                              >
+                                <TbPlayerPlay size={20} />
+                              </IconButton>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }}
+                  </Index>
+                )}
+              </form.Field>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <div class="flex justify-end pt-4">
         <form.Subscribe
