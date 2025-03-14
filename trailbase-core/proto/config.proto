@@ -87,10 +87,6 @@ message ServerConfig {
   ///  reruns. Default: 7 days.
   optional int64 logs_retention_sec = 11;
 
-  /// Interval at which backups are persisted. Setting it to 0 will disable
-  /// backups. Default: 0.
-  optional int64 backup_interval_sec = 12;
-
   /// If present will use S3 setup over local file-system based storage.
   optional S3StorageConfig s3_storage_config = 13;
 }

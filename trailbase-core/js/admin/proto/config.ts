@@ -351,13 +351,6 @@ export interface ServerConfig {
   logsRetentionSec?:
     | number
     | undefined;
-  /**
-   * / Interval at which backups are persisted. Setting it to 0 will disable
-   * / backups. Default: 0.
-   */
-  backupIntervalSec?:
-    | number
-    | undefined;
   /** / If present will use S3 setup over local file-system based storage. */
   s3StorageConfig?: S3StorageConfig | undefined;
 }
@@ -1238,9 +1231,6 @@ export const ServerConfig: MessageFns<ServerConfig> = {
     if (message.logsRetentionSec !== undefined && message.logsRetentionSec !== 0) {
       writer.uint32(88).int64(message.logsRetentionSec);
     }
-    if (message.backupIntervalSec !== undefined && message.backupIntervalSec !== 0) {
-      writer.uint32(96).int64(message.backupIntervalSec);
-    }
     if (message.s3StorageConfig !== undefined) {
       S3StorageConfig.encode(message.s3StorageConfig, writer.uint32(106).fork()).join();
     }
@@ -1278,14 +1268,6 @@ export const ServerConfig: MessageFns<ServerConfig> = {
           message.logsRetentionSec = longToNumber(reader.int64());
           continue;
         }
-        case 12: {
-          if (tag !== 96) {
-            break;
-          }
-
-          message.backupIntervalSec = longToNumber(reader.int64());
-          continue;
-        }
         case 13: {
           if (tag !== 106) {
             break;
@@ -1308,7 +1290,6 @@ export const ServerConfig: MessageFns<ServerConfig> = {
       applicationName: isSet(object.applicationName) ? globalThis.String(object.applicationName) : undefined,
       siteUrl: isSet(object.siteUrl) ? globalThis.String(object.siteUrl) : undefined,
       logsRetentionSec: isSet(object.logsRetentionSec) ? globalThis.Number(object.logsRetentionSec) : undefined,
-      backupIntervalSec: isSet(object.backupIntervalSec) ? globalThis.Number(object.backupIntervalSec) : undefined,
       s3StorageConfig: isSet(object.s3StorageConfig) ? S3StorageConfig.fromJSON(object.s3StorageConfig) : undefined,
     };
   },
@@ -1324,9 +1305,6 @@ export const ServerConfig: MessageFns<ServerConfig> = {
     if (message.logsRetentionSec !== undefined && message.logsRetentionSec !== 0) {
       obj.logsRetentionSec = Math.round(message.logsRetentionSec);
     }
-    if (message.backupIntervalSec !== undefined && message.backupIntervalSec !== 0) {
-      obj.backupIntervalSec = Math.round(message.backupIntervalSec);
-    }
     if (message.s3StorageConfig !== undefined) {
       obj.s3StorageConfig = S3StorageConfig.toJSON(message.s3StorageConfig);
     }
@@ -1341,7 +1319,6 @@ export const ServerConfig: MessageFns<ServerConfig> = {
     message.applicationName = object.applicationName ?? "";
     message.siteUrl = object.siteUrl ?? "";
     message.logsRetentionSec = object.logsRetentionSec ?? 0;
-    message.backupIntervalSec = object.backupIntervalSec ?? 0;
     message.s3StorageConfig = (object.s3StorageConfig !== undefined && object.s3StorageConfig !== null)
       ? S3StorageConfig.fromPartial(object.s3StorageConfig)
       : undefined;

@@ -13,7 +13,9 @@ pub struct Job {
 
   pub enabled: bool,
   pub next: Option<i64>,
-  pub latest: Option<(i64, Option<String>)>,
+  /// Optional metadata from latest run: start timestamp in seconds since epoch, duration in
+  /// milliseconds and error output.
+  pub latest: Option<(i64, i64, Option<String>)>,
 }
 
 #[derive(Debug, Serialize, TS)]
@@ -30,17 +32,19 @@ pub async fn list_jobs_handler(
     .jobs
     .lock()
     .values()
-    .map(|t| {
-      let latest = t.latest().map(|l| (l.0.timestamp(), l.1));
-      let enabled = t.running();
+    .map(|job| {
+      let latest = job
+        .latest()
+        .map(|l| (l.0.timestamp(), l.1.num_milliseconds(), l.2));
+      let enabled = job.running();
 
       return Job {
-        id: t.id,
-        name: t.name(),
-        schedule: t.schedule().to_string(),
+        id: job.id,
+        name: job.name(),
+        schedule: job.schedule().to_string(),
 
         enabled,
-        next: t.next_run().map(|t| t.timestamp()),
+        next: job.next_run().map(|t| t.timestamp()),
         latest,
       };
     })

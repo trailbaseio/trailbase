@@ -181,7 +181,7 @@ export function JobSettingsImpl(props: {
                     return (
                       <Tooltip>
                         <TooltipTrigger as="div">
-                          <div class="w-[128px]">{t.toUTCString()}</div>
+                          <div class="w-[128px] text-sm">{t.toUTCString()}</div>
                         </TooltipTrigger>
 
                         <TooltipContent>
@@ -195,8 +195,8 @@ export function JobSettingsImpl(props: {
                     const latest = proxy().job?.latest;
                     if (!latest) return null;
 
-                    const [timestamp, error] = latest;
-                    const t = new Date(Number(timestamp) * 1000);
+                    const [startTimestamp, durationMillis, error] = latest;
+                    const t = new Date(Number(startTimestamp) * 1000);
 
                     return (
                       <div
@@ -206,13 +206,15 @@ export function JobSettingsImpl(props: {
                       >
                         <Tooltip>
                           <TooltipTrigger as="div">
-                            <div class="w-[128px]">{t.toUTCString()}</div>
+                            <div class="w-[128px] text-sm">
+                              {t.toUTCString()}
+                            </div>
                           </TooltipTrigger>
 
                           <TooltipContent>
-                            <p>{t.toLocaleString()} (Local)</p>
-
-                            <p>{error ?? "No error"}</p>
+                            <p>Start: {t.toLocaleString()} (Local)</p>
+                            <p>Duration: {Number(durationMillis) / 1000}s</p>
+                            <p>Error: {error ?? "none"}</p>
                           </TooltipContent>
                         </Tooltip>
                       </div>

@@ -18,7 +18,12 @@ use crate::DataDir;
 
 type CallbackError = Box<dyn std::error::Error + Sync + Send>;
 type CallbackFunction = dyn Fn() -> BoxFuture<'static, Result<(), CallbackError>> + Sync + Send;
-type LatestCallbackExecution = Option<(DateTime<Utc>, Option<CallbackError>)>;
+
+pub struct ExecutionResult {
+  pub start_time: DateTime<Utc>,
+  pub end_time: DateTime<Utc>,
+  pub error: Option<CallbackError>,
+}
 
 static JOB_ID_COUNTER: AtomicI32 = AtomicI32::new(1024);
 
@@ -45,13 +50,7 @@ struct JobState {
   callback: Arc<CallbackFunction>,
 
   handle: Option<tokio::task::AbortHandle>,
-  latest: LatestCallbackExecution,
-}
-
-impl JobState {
-  fn report_result(&mut self, result: Option<CallbackError>) {
-    self.latest = Some((Utc::now(), result))
-  }
+  latest: Option<ExecutionResult>,
 }
 
 #[derive(Clone)]
@@ -75,9 +74,9 @@ impl Job {
   }
 
   fn start(&self) {
-    let state = self.state.clone();
+    let job = self.clone();
     let (name, schedule) = {
-      let lock = state.lock();
+      let lock = job.state.lock();
       if let Some(ref handle) = lock.handle {
         log::warn!("starting an already running job");
         handle.abort();
@@ -86,28 +85,42 @@ impl Job {
       (lock.name.clone(), lock.schedule.clone())
     };
 
-    let handle = tokio::spawn(async move {
-      loop {
-        let now = Utc::now();
-        let Some(next) = schedule.upcoming(Utc).next() else {
-          break;
-        };
-        let Ok(duration) = (next - now).to_std() else {
-          log::warn!("Invalid duration for '{name}': {next:?}");
-          continue;
-        };
+    self.state.lock().handle = Some(
+      tokio::spawn(async move {
+        loop {
+          let Some(next) = schedule.upcoming(Utc).next() else {
+            break;
+          };
+          let Ok(duration) = (next - Utc::now()).to_std() else {
+            log::warn!("Invalid duration for '{name}': {next:?}");
+            continue;
+          };
 
-        tokio::time::sleep(duration).await;
+          tokio::time::sleep(duration).await;
 
-        let callback = state.lock().callback.clone();
-        let result = callback().await;
-        state.lock().report_result(result.err());
-      }
+          let _ = job.run_now().await;
+        }
 
-      log::info!("Exited job: '{name}'");
+        log::info!("Exited job: '{name}'");
+      })
+      .abort_handle(),
+    );
+  }
+
+  async fn run_now(&self) -> Result<(), String> {
+    let callback = self.state.lock().callback.clone();
+
+    let start_time = Utc::now();
+    let result = callback().await;
+    let end_time = Utc::now();
+
+    let result_str = result.as_ref().map_err(|err| err.to_string()).copied();
+    self.state.lock().latest = Some(ExecutionResult {
+      start_time,
+      end_time,
+      error: result.err(),
     });
-
-    self.state.lock().handle = Some(handle.abort_handle());
+    return result_str;
   }
 
   pub fn next_run(&self) -> Option<DateTime<Utc>> {
@@ -116,19 +129,6 @@ impl Job {
       return lock.schedule.upcoming(Utc).next();
     }
     return None;
-  }
-
-  async fn run_now(&self) -> Result<(), String> {
-    let callback = self.state.lock().callback.clone();
-    let error = callback().await.err();
-
-    let error_str = error.as_ref().map(|err| err.to_string());
-    self.state.lock().report_result(error);
-
-    if let Some(err) = error_str {
-      return Err(err);
-    }
-    return Ok(());
   }
 
   fn stop(&self) {
@@ -143,13 +143,15 @@ impl Job {
     return self.state.lock().handle.is_some();
   }
 
-  pub fn latest(&self) -> Option<(DateTime<Utc>, Option<String>)> {
-    return self
-      .state
-      .lock()
-      .latest
-      .as_ref()
-      .map(|result| (result.0, result.1.as_ref().map(|err| err.to_string())));
+  pub fn latest(&self) -> Option<(DateTime<Utc>, Duration, Option<String>)> {
+    if let Some(ref result) = self.state.lock().latest {
+      return Some((
+        result.start_time,
+        result.end_time - result.start_time,
+        result.error.as_ref().map(|err| err.to_string()),
+      ));
+    }
+    return None;
   }
 
   pub fn name(&self) -> String {
@@ -511,7 +513,7 @@ mod tests {
     let first = jobs.keys().next().unwrap();
 
     let latest = jobs.get(first).unwrap().latest();
-    let (_timestamp, err_string) = latest.unwrap();
+    let (_start_time, _duration, err_string) = latest.unwrap();
     assert_eq!(err_string, Some("result".to_string()));
   }
 }

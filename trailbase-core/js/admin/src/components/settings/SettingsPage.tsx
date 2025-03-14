@@ -6,7 +6,7 @@ import {
   Switch,
   Match,
 } from "solid-js";
-import type { Component, JSXElement, Signal } from "solid-js";
+import type { Component, Signal } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
 import { createForm } from "@tanstack/solid-form";
 import { TbRefresh } from "solid-icons/tb";
@@ -14,7 +14,6 @@ import { TbRefresh } from "solid-icons/tb";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { TextField, TextFieldLabel } from "@/components/ui/text-field";
 import { showToast } from "@/components/ui/toast";
 
@@ -268,26 +267,6 @@ function BackupImportSettings(props: CommonProps) {
         }}
       >
         <div class="flex flex-col gap-4">
-          <Card>
-            <CardHeader>
-              <h2>Backup Settings</h2>
-            </CardHeader>
-
-            <CardContent class="flex flex-col gap-1">
-              <form.Field name="backupIntervalSec">
-                {buildOptionalNumberFormField({
-                  integer: true,
-                  label: () => (
-                    <div class={labelWidth}>
-                      <Label>Backup interval (s)</Label>
-                    </div>
-                  ),
-                  info: backupInfo,
-                })}
-              </form.Field>
-            </CardContent>
-          </Card>
-
           <Card class="text-sm">
             <CardHeader>
               <h2>Data Import {"&"} Export</h2>
@@ -295,23 +274,24 @@ function BackupImportSettings(props: CommonProps) {
 
             <CardContent>
               <p class="mt-2">
-                Data import and export from and to Sql via the UI is not yet
-                supported, however with TrailBase not relying on specific
-                metadata you can use all the usual suspects around sqlite and
-                the data will show up in the table editor. If you import your
-                data into a table with strict typing and an UUIDv7 primary
-                column you'll also be able to expose the data via restful APIs.
+                Data import and export is not yet supported via the UI, however
+                one can use any of the usual suspects like
+                <span class="font-mono">sqlite3</span>. This is thanks to
+                TrailBase non-invasive nature and not needing special metadata.
+                Any table <span class="font-mono">STRICT</span> typing and{" "}
+                <span class="font-mono">INTEGER</span> or UUIDv7 primary key
+                column, can be exposed via APIs.
               </p>
 
               <p class="my-2">Import, e.g.:</p>
               <pre class="ml-4 whitespace-pre-wrap">
-                $ cat dump.sql | sqlite3 main.db
+                $ cat import_data.sql | sqlite3 traildepot/data/main.db
               </pre>
 
-              <p class="my-2">Output, e.g.:</p>
+              <p class="my-2">Export, e.g.:</p>
 
               <pre class="ml-4 whitespace-pre-wrap">
-                $ sqlite3 main.db
+                $ sqlite3 traildepot/data/main.db
                 <br />
                 sqlite&gt; .output dump.db
                 <br />
@@ -458,14 +438,14 @@ const sites = [
     child: SchemaSettings,
   },
   {
-    route: "backup",
-    label: "Backup",
-    child: BackupImportSettings,
-  },
-  {
     route: "jobs",
     label: "Jobs",
     child: JobSettings,
+  },
+  {
+    route: "import",
+    label: "Import & Export",
+    child: BackupImportSettings,
   },
 ] as const;
 
@@ -521,16 +501,5 @@ export function SettingsPage() {
 
   return <SplitView first={First} second={Second} />;
 }
-
-const backupInfo: JSXElement = (
-  <p class="text-sm">
-    Setting the backup interval to zero will disable periodic backups on next
-    server start. Backups will lock the database for the duration of the backup,
-    which is typically fine for small data sets. However, we recommend a more
-    continuous disaster recovery solution such as{" "}
-    <a href="https://litestream.io/">Litestream</a> to avoid locking and avoid
-    losing changes made between backups.
-  </p>
-);
 
 const labelWidth = "w-40";
