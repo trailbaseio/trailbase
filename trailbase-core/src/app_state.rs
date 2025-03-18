@@ -92,19 +92,14 @@ impl AppState {
       })
     };
 
-    let runtime = {
-      let runtime = args
-        .js_runtime_threads
-        .map_or_else(RuntimeHandle::new, RuntimeHandle::new_with_threads);
-      runtime.set_connection(args.conn.clone());
-      runtime
-    };
-
     let jobs_input = (
       args.data_dir.clone(),
       args.conn.clone(),
       args.logs_conn.clone(),
     );
+
+    let runtime = build_js_runtime(args.conn.clone(), args.js_runtime_threads);
+    let runtime_clone = runtime.clone();
 
     AppState {
       state: Arc::new(InternalState {
@@ -125,14 +120,18 @@ impl AppState {
         }),
         jobs: Computed::new(&config, move |c| {
           log::debug!("building jobs from config");
+
           let (ref data_dir, ref conn, ref logs_conn) = jobs_input;
-          match build_job_registry_from_config(c, data_dir, conn, logs_conn) {
-            Ok(jobs) => jobs,
-            Err(err) => {
+          let job_registry = build_job_registry_from_config(c, data_dir, conn, logs_conn)
+            .unwrap_or_else(|err| {
               error!("Failed to build JobRegistry for cron jobs: {err}");
-              JobRegistry::new()
-            }
-          }
+              return JobRegistry::new();
+            });
+
+          // TODO: Add support for JS registered cron jobs.
+          let _ = &runtime_clone;
+
+          return job_registry;
         }),
         mailer: Computed::new(&config, Mailer::new_from_config),
         record_apis: record_apis.clone(),
@@ -420,12 +419,6 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       .collect::<Vec<_>>();
   });
 
-  let runtime = {
-    let runtime = RuntimeHandle::new();
-    runtime.set_connection(conn.clone());
-    runtime
-  };
-
   fn build_mailer(c: &ValueNotifier<Config>, mailer: Option<Mailer>) -> Computed<Mailer, Config> {
     return Computed::new(c, move |c| {
       return mailer.clone().unwrap_or_else(|| Mailer::new_from_config(c));
@@ -450,12 +443,24 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       logs_conn,
       jwt: jwt::test_jwt_helper(),
       table_metadata: table_metadata.clone(),
-      subscription_manager: SubscriptionManager::new(conn, table_metadata, record_apis),
+      subscription_manager: SubscriptionManager::new(conn.clone(), table_metadata, record_apis),
       object_store,
-      runtime,
+      runtime: build_js_runtime(conn, None),
       cleanup: vec![Box::new(temp_dir)],
     }),
   });
+}
+
+fn build_js_runtime(conn: trailbase_sqlite::Connection, threads: Option<usize>) -> RuntimeHandle {
+  let runtime = if let Some(threads) = threads {
+    RuntimeHandle::new_with_threads(threads)
+  } else {
+    RuntimeHandle::new()
+  };
+
+  runtime.set_connection(conn);
+
+  return runtime;
 }
 
 fn build_record_api(

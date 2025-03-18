@@ -1401,7 +1401,7 @@ export function jsonHandler(
   };
 }
 
-const callbacks = new Map<string, CallbackType>();
+const routerCallbacks = new Map<string, CallbackType>();
 
 function isolateId(): number {
   return rustyscript.functions.isolate_id();
@@ -1418,7 +1418,7 @@ export function addRoute(
     console.debug("JS: Added route:", method, route);
   }
 
-  callbacks.set(`${method}:${route}`, callback);
+  routerCallbacks.set(`${method}:${route}`, callback);
 }
 
 export async function dispatch(
@@ -1431,7 +1431,7 @@ export async function dispatch(
   body: Uint8Array,
 ): Promise<ResponseType> {
   const key = `${method}:${route}`;
-  const cb: CallbackType | undefined = callbacks.get(key);
+  const cb: CallbackType | undefined = routerCallbacks.get(key);
   if (!cb) {
     throw Error(`Missing callback: ${key}`);
   }
@@ -1449,6 +1449,7 @@ export async function dispatch(
 
 globalThis.__dispatch = dispatch;
 
+/// Installs a periodic callback in a single isolate and returns a cleanup function.
 export function addPeriodicCallback(
   milliseconds: number,
   cb: (cancel: () => void) => void,
@@ -1469,6 +1470,7 @@ export function addPeriodicCallback(
   return () => clearInterval(handle);
 }
 
+/// Queries the SQLite database.
 export async function query(
   queryStr: string,
   params: unknown[],
@@ -1476,6 +1478,7 @@ export async function query(
   return await rustyscript.async_functions.query(queryStr, params);
 }
 
+/// Executes given query against SQLite database.
 export async function execute(
   queryStr: string,
   params: unknown[],

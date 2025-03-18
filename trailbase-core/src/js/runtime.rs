@@ -667,23 +667,13 @@ async fn install_routes(
   runtime_handle: RuntimeHandle,
   module: Module,
 ) -> Result<Option<Router<AppState>>, AnyError> {
-  if runtime_handle.runtime.n_threads == 0 {
-    log::info!(
-      "JS threads set to zero. Skipping initialization for JS module: {:?}",
-      module.filename()
-    );
-    return Ok(None);
-  }
-  let module = module.clone();
-
-  let runtime_handle_clone = runtime_handle.clone();
   let receivers: Vec<_> = runtime_handle
     .state()
     .iter()
     .enumerate()
     .map(move |(index, state)| {
       let module = module.clone();
-      let runtime_handle = runtime_handle_clone.clone();
+      let runtime_handle = runtime_handle.clone();
 
       async move {
         let routers = Arc::new(Mutex::new(Vec::new()));
@@ -692,7 +682,7 @@ async fn install_routes(
         if let Err(err) = state
           .sender
           .send(Message::Run(Box::new(move |runtime: &mut Runtime| {
-            // First install a native callback that builds an axum router.
+            // First install a native callback that builds an axum router from js.
             runtime
               .register_function("install_route", move |args: &[serde_json::Value]| {
                 let method: String = get_arg(args, 0)?;
@@ -744,13 +734,20 @@ async fn install_routes(
 
   let mut receivers = futures_util::future::join_all(receivers).await;
 
-  // Note: We only return the first router assuming that js route registration is deterministic.
+  // Note: We only return the first router assuming that js route registration is consistent across
+  // all isolates.
   return Ok(receivers.swap_remove(0));
 }
 
 pub(crate) async fn load_routes_from_js_modules(
   state: &AppState,
 ) -> Result<Option<Router<AppState>>, AnyError> {
+  let runtime_handle = state.script_runtime();
+  if runtime_handle.runtime.n_threads == 0 {
+    log::info!("JS threads set to zero. Skipping initialization for JS modules");
+    return Ok(None);
+  }
+
   let scripts_dir = state.data_dir().root().join("scripts");
 
   let modules = match rustyscript::Module::load_dir(scripts_dir.clone()) {
