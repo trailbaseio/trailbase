@@ -1,3 +1,14 @@
+## v0.8.0
+
+* Add support for periodic cron jobs:
+ * Add dashboard to admin UI to inspect, configure and trigger cron jobs.
+ * Users can register their own cron jobs from the JS runtime.
+ * Replace internal periodic tasks with cron jobs to increase configurability,
+   discoverabilty, and avoid drift.
+ * BREAKING: removed `backup_interval_sec` from proto config. When explicitly specified,
+   users will need to remove it from their `<traildepot>/config.textproto` and set an
+   appropriate cron schedule instead.
+
 ## v0.7.3
 
 * Cleanup logs DB schema and log ids of authenticated users.

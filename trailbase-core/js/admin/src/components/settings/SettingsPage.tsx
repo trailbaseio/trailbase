@@ -231,7 +231,7 @@ function ServerSettings(props: CommonProps) {
   );
 }
 
-function BackupImportSettings(props: CommonProps) {
+function ImportSettings(props: CommonProps) {
   const config = createConfigQuery();
 
   const Form = (p: { config: ServerConfig }) => {
@@ -269,18 +269,19 @@ function BackupImportSettings(props: CommonProps) {
         <div class="flex flex-col gap-4">
           <Card class="text-sm">
             <CardHeader>
-              <h2>Data Import {"&"} Export</h2>
+              <h2>Import {"&"} Export</h2>
             </CardHeader>
 
             <CardContent>
               <p class="mt-2">
-                Data import and export is not yet supported via the UI, however
-                one can use any of the usual suspects like
-                <span class="font-mono">sqlite3</span>. This is thanks to
-                TrailBase non-invasive nature and not needing special metadata.
-                Any table <span class="font-mono">STRICT</span> typing and{" "}
+                Importing and exporting data via the UI is not yet supported,
+                however one can simply use the{" "}
+                <span class="font-mono">sqlite3</span> command-line utility.
+                Thanks to TrailBase's non-invasive nature, i.e. not requiring
+                special metadata, any table with{" "}
+                <span class="font-mono">STRICT</span> typing and an{" "}
                 <span class="font-mono">INTEGER</span> or UUIDv7 primary key
-                column, can be exposed via APIs.
+                column can be exposed via APIs.
               </p>
 
               <p class="my-2">Import, e.g.:</p>
@@ -433,19 +434,19 @@ const sites = [
     child: AuthSettings,
   },
   {
-    route: "schema",
-    label: "Schemas",
-    child: SchemaSettings,
-  },
-  {
     route: "jobs",
     label: "Jobs",
     child: JobSettings,
   },
   {
-    route: "import",
-    label: "Import & Export",
-    child: BackupImportSettings,
+    route: "schema",
+    label: "Schemas",
+    child: SchemaSettings,
+  },
+  {
+    route: "data",
+    label: "Data",
+    child: ImportSettings,
   },
 ] as const;
 
