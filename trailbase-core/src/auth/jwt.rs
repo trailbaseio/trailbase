@@ -1,10 +1,10 @@
 use crate::rand::generate_random_string;
 use crate::util::uuid_to_b64;
+use argon2::password_hash::rand_core::OsRng;
 use ed25519_dalek::pkcs8::spki::der::pem::LineEnding;
 use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use jsonwebtoken::{errors::Error as JwtError, DecodingKey, EncodingKey, Header, Validation};
-use rand::rngs::OsRng;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use thiserror::Error;

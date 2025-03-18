@@ -71,14 +71,30 @@ pub mod api {
 }
 
 pub(crate) mod rand {
-  use rand::{distributions::Alphanumeric, prelude::*, rngs::OsRng};
+  use rand::{
+    distr::{Alphanumeric, SampleString},
+    CryptoRng,
+  };
 
   pub(crate) fn generate_random_string(length: usize) -> String {
-    let csprng = OsRng {};
-    return csprng
-      .sample_iter(&Alphanumeric)
-      .take(length)
-      .map(char::from)
-      .collect();
+    let mut rng = rand::rng();
+    let _: &dyn CryptoRng = &rng;
+
+    return Alphanumeric.sample_string(&mut rng, length);
+  }
+
+  #[cfg(test)]
+  mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_random_string() {
+      let n = 20;
+      let first = generate_random_string(20);
+      assert_eq!(n, first.len());
+      let second = generate_random_string(20);
+      assert_eq!(n, second.len());
+      assert_ne!(first, second);
+    }
   }
 }
