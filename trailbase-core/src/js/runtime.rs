@@ -5,7 +5,8 @@ use axum::response::{IntoResponse, Response};
 use axum::Router;
 use parking_lot::Mutex;
 use rustyscript::{
-  deno_core::PollEventLoopOptions, init_platform, js_value::Promise, json_args, Module, Runtime,
+  deno_core::PollEventLoopOptions, init_platform, js_value::Promise, json_args, Error as RSError,
+  Module, Runtime,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::from_value;
@@ -478,7 +479,6 @@ impl RuntimeHandle {
     return &self.runtime.state;
   }
 
-  #[allow(unused)]
   async fn call_function<T>(
     &self,
     module: Option<Module>,
@@ -663,10 +663,13 @@ where
   return from_value::<T>(arg.clone()).map_err(|err| Error::Runtime(err.to_string()));
 }
 
-async fn install_routes(
-  runtime_handle: RuntimeHandle,
+async fn install_routes_and_jobs(
+  state: &AppState,
   module: Module,
 ) -> Result<Option<Router<AppState>>, AnyError> {
+  let runtime_handle = state.script_runtime();
+  let jobs = state.jobs();
+
   let receivers: Vec<_> = runtime_handle
     .state()
     .iter()
@@ -674,28 +677,76 @@ async fn install_routes(
     .map(move |(index, state)| {
       let module = module.clone();
       let runtime_handle = runtime_handle.clone();
+      let jobs = jobs.clone();
 
       async move {
         let routers = Arc::new(Mutex::new(Vec::new()));
 
+        let runtime_handle_clone = runtime_handle.clone();
         let routers_clone = routers.clone();
         if let Err(err) = state
           .sender
           .send(Message::Run(Box::new(move |runtime: &mut Runtime| {
-            // First install a native callback that builds an axum router from js.
+            // First install a native callbacks.
+            //
+            // Register native callback for building axum router.
             runtime
               .register_function("install_route", move |args: &[serde_json::Value]| {
                 let method: String = get_arg(args, 0)?;
                 let route: String = get_arg(args, 1)?;
 
-                let router = add_route_to_router(runtime_handle.clone(), method, route)
+                let router = add_route_to_router(runtime_handle_clone.clone(), method, route)
                   .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
                 routers_clone.lock().push(router);
 
-                Ok(serde_json::Value::Null)
+                return Ok(serde_json::Value::Null);
               })
-              .expect("Failed to register 'route' function");
+              .expect("Failed to register 'install_route' function");
+
+            // Register native callback for registering cron jobs.
+            runtime
+              .register_function("install_job", move |args: &[serde_json::Value]| {
+                let id: i32 = get_arg(args, 0)?;
+                let id_value = serde_json::to_value(id)?;
+
+                let name: String = get_arg(args, 1)?;
+                let default_spec: String = get_arg(args, 2)?;
+                let schedule = cron::Schedule::from_str(&default_spec).map_err(|err| {
+                  return RSError::Runtime(err.to_string());
+                })?;
+
+                let runtime_handle = runtime_handle.clone();
+                let Some(job) = jobs.new_job(
+                  Some(id),
+                  name,
+                  schedule,
+                  crate::scheduler::build_callback(move || {
+                    let runtime_handle = runtime_handle.clone();
+                    let id_value = id_value.clone();
+
+                    return async move {
+                      log::debug!("dispatch job: {id}");
+
+                      if let Some(msg) = runtime_handle
+                        .call_function::<Option<String>>(None, "__dispatchCron", vec![id_value])
+                        .await?
+                      {
+                        return Err(msg.into());
+                      }
+
+                      Ok::<_, AnyError>(())
+                    };
+                  }),
+                ) else {
+                  return Err(RSError::Runtime("Failed to add job".to_string()));
+                };
+
+                job.start();
+
+                return Ok(serde_json::Value::Null);
+              })
+              .expect("Failed to register 'install_job' function");
           })))
           .await
         {
@@ -703,26 +754,19 @@ async fn install_routes(
         }
 
         // Then execute the script/module, i.e. statements in the file scope.
-        let (sender, receiver) = oneshot::channel::<Result<(), AnyError>>();
-        match state.sender.send(Message::LoadModule(module, sender)).await {
-          Ok(_) => match receiver.await {
-            Ok(_) => {
-              let mut merged_router = Router::<AppState>::new();
-              for router in routers.lock().split_off(0) {
-                merged_router = merged_router.merge(router);
-              }
-
-              if merged_router.has_routes() {
-                Some(merged_router)
-              } else {
-                None
-              }
+        match await_loading_module(state, module).await {
+          Ok(()) => {
+            let mut merged_router = Router::<AppState>::new();
+            for router in routers.lock().split_off(0) {
+              merged_router = merged_router.merge(router);
             }
-            Err(err) => {
-              log::error!("Failed to await module loading: {err}");
+
+            if merged_router.has_routes() {
+              Some(merged_router)
+            } else {
               None
             }
-          },
+          }
           Err(err) => {
             log::error!("Failed to load module: {err}");
             None
@@ -739,7 +783,23 @@ async fn install_routes(
   return Ok(receivers.swap_remove(0));
 }
 
-pub(crate) async fn load_routes_from_js_modules(
+async fn await_loading_module(state: &State, module: Module) -> Result<(), AnyError> {
+  let (sender, receiver) = oneshot::channel::<Result<(), AnyError>>();
+
+  state
+    .sender
+    .send(Message::LoadModule(module, sender))
+    .await?;
+
+  let _ = receiver.await.map_err(|err| {
+    log::error!("Failed to await module loading: {err}");
+    return err;
+  })?;
+
+  return Ok(());
+}
+
+pub(crate) async fn load_routes_and_jobs_from_js_modules(
   state: &AppState,
 ) -> Result<Option<Router<AppState>>, AnyError> {
   let runtime_handle = state.script_runtime();
@@ -761,9 +821,8 @@ pub(crate) async fn load_routes_from_js_modules(
   let mut js_router = Router::new();
   for module in modules {
     let fname = module.filename().to_owned();
-    let router = install_routes(state.script_runtime(), module).await?;
 
-    if let Some(router) = router {
+    if let Some(router) = install_routes_and_jobs(state, module).await? {
       js_router = js_router.merge(router);
     } else {
       log::debug!("Skipping js module '{fname:?}': no routes");

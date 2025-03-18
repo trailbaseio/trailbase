@@ -135,7 +135,7 @@ impl Server {
 
     #[cfg(feature = "v8")]
     let custom_routes = {
-      let js_routes = crate::js::load_routes_from_js_modules(&state)
+      let js_routes = crate::js::load_routes_and_jobs_from_js_modules(&state)
         .await
         .map_err(|err| InitError::ScriptError(err.to_string()))?;
 

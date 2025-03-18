@@ -73,7 +73,7 @@ impl Job {
     };
   }
 
-  fn start(&self) {
+  pub fn start(&self) {
     let job = self.clone();
     let (name, schedule) = {
       let lock = job.state.lock();

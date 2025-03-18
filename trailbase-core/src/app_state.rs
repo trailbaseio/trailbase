@@ -99,7 +99,6 @@ impl AppState {
     );
 
     let runtime = build_js_runtime(args.conn.clone(), args.js_runtime_threads);
-    let runtime_clone = runtime.clone();
 
     AppState {
       state: Arc::new(InternalState {
@@ -122,16 +121,12 @@ impl AppState {
           log::debug!("building jobs from config");
 
           let (ref data_dir, ref conn, ref logs_conn) = jobs_input;
-          let job_registry = build_job_registry_from_config(c, data_dir, conn, logs_conn)
-            .unwrap_or_else(|err| {
+          return build_job_registry_from_config(c, data_dir, conn, logs_conn).unwrap_or_else(
+            |err| {
               error!("Failed to build JobRegistry for cron jobs: {err}");
               return JobRegistry::new();
-            });
-
-          // TODO: Add support for JS registered cron jobs.
-          let _ = &runtime_clone;
-
-          return job_registry;
+            },
+          );
         }),
         mailer: Computed::new(&config, Mailer::new_from_config),
         record_apis: record_apis.clone(),

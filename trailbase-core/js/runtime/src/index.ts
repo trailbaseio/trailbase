@@ -9,6 +9,8 @@ declare global {
     body: Uint8Array,
   ): Promise<ResponseType>;
 
+  function __dispatchCron(id: number): Promise<string | undefined>;
+
   var rustyscript: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     functions: any;
@@ -1412,8 +1414,7 @@ export function addRoute(
   route: string,
   callback: CallbackType,
 ) {
-  const id = isolateId();
-  if (id === 0) {
+  if (isolateId() === 0) {
     rustyscript.functions.install_route(method, route);
     console.debug("JS: Added route:", method, route);
   }
@@ -1421,7 +1422,7 @@ export function addRoute(
   routerCallbacks.set(`${method}:${route}`, callback);
 }
 
-export async function dispatch(
+async function dispatch(
   method: Method,
   route: string,
   uri: string,
@@ -1449,6 +1450,48 @@ export async function dispatch(
 
 globalThis.__dispatch = dispatch;
 
+let cronId = 1000;
+const cronCallbacks = new Map<number, () => void | Promise<void>>();
+
+/// Installs a Cron job that is registered to be orchestrated from native code.
+export function addCronCallback(
+  name: string,
+  schedule: string,
+  cb: () => void | Promise<void>,
+) {
+  const cronRegex =
+    /^(@(yearly|monthly|weekly|daily|hourly|))|((((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*)\s*){6,7})$/;
+
+  const matches = cronRegex.test(schedule);
+  if (!matches) {
+    throw Error(`Not a valid 6/7-component cron schedule: ${schedule}`);
+  }
+
+  const id = cronId++;
+
+  if (isolateId() === 0) {
+    rustyscript.functions.install_job(id, name, schedule);
+    console.debug("JS: add cron callback", id, name);
+  }
+
+  cronCallbacks.set(id, cb);
+}
+
+async function dispatchCron(id: number): Promise<string | undefined> {
+  const cb: (() => void | Promise<void>) | undefined = cronCallbacks.get(id);
+  if (!cb) {
+    throw Error(`Missing cron callback: ${id}`);
+  }
+
+  try {
+    await cb();
+  } catch (err) {
+    return `${err}`;
+  }
+}
+
+globalThis.__dispatchCron = dispatchCron;
+
 /// Installs a periodic callback in a single isolate and returns a cleanup function.
 export function addPeriodicCallback(
   milliseconds: number,
@@ -1458,8 +1501,7 @@ export function addPeriodicCallback(
   // very simple but doesn't use other workers. This has nice properties in
   // terms of state management and hopefully work-stealing will alleviate the
   // issue, i.e. workers will pick up the slack in terms of incoming requests.
-  const id = isolateId();
-  if (id !== 0) {
+  if (isolateId() !== 0) {
     return () => {};
   }
 
@@ -1510,7 +1552,7 @@ export function parsePath(path: string): ParsedPath {
 /// @return {string}
 ///
 /// source: https://github.com/samthor/fast-text-encoding
-export function decodeFallback(bytes: Uint8Array): string {
+function decodeFallback(bytes: Uint8Array): string {
   var inputIndex = 0;
 
   // Create a working buffer for UTF-16 code points, but don't generate one
@@ -1592,7 +1634,7 @@ export function decodeFallback(bytes: Uint8Array): string {
 /// @return {Uint8Array}
 ////
 /// source: https://github.com/samthor/fast-text-encoding
-export function encodeFallback(string: string): Uint8Array {
+function encodeFallback(string: string): Uint8Array {
   var pos = 0;
   var len = string.length;
 

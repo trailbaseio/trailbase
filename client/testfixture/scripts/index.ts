@@ -1,5 +1,6 @@
 import {
   addRoute,
+  addCronCallback,
   addPeriodicCallback,
   parsePath,
   query,
@@ -110,6 +111,13 @@ class Completer<T> {
 }
 
 const completer = new Completer<string>();
+
+addCronCallback(
+  "JS-registered Job",
+  "@daily",
+  async () => {
+    console.log("JS-registered cron job reporting for duty 🚀");
+  });
 
 addPeriodicCallback(100, (cancel) => {
   completer.complete("resolved");
