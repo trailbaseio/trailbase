@@ -17,7 +17,7 @@
     "@astrojs/starlight-tailwind": "^3.0.0",
     "@astrojs/tailwind": "^5.1.5",
     "@iconify-json/tabler": "^1.2.17",
-    "astro": "^5.4.2",
+    "astro": "^5.5.2",
     "astro-icon": "^1.1.5",
     "chart.js": "^4.4.8",
     "chartjs-chart-error-bars": "^4.4.4",
@@ -41,6 +41,6 @@
     "prettier": "^3.5.3",
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-tailwindcss": "^0.6.11",
-    "typescript-eslint": "^8.26.0"
+    "typescript-eslint": "^8.26.1"
   }
 }
