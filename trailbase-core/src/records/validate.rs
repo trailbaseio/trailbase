@@ -54,7 +54,7 @@ pub(crate) fn validate_record_api_config(
 
   let Some(columns) = metadata.columns() else {
     return ierr(&format!(
-      "View for api '{name}' is not a \"simple\" view, i.e unable to infer colum types to guarantee type-safety"
+      "View for api '{name}' is not a \"simple\" view, i.e unable to infer column types to guarantee type-safety"
     ));
   };
 
