@@ -1,7 +1,7 @@
 {
   "name": "trailbase",
-  "description": "Official TrailBase client",
-  "version": "0.3.2",
+  "description": "Official TrailBase Client",
+  "version": "0.3.3",
   "license": "OSL-3.0",
   "type": "module",
   "main": "./src/index.ts",
