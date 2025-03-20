@@ -10,7 +10,7 @@ RUN pnpm install --no-frozen-lockfile
 RUN pnpm build
 
 
-FROM trailbase/trailbase:0.2.2 AS base
+FROM trailbase/trailbase:latest AS base
 USER root
 RUN apk add --no-cache sqlite
 
