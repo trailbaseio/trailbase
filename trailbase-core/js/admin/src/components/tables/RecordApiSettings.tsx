@@ -400,22 +400,30 @@ export function RecordApiSettingsForm(props: {
                           </StyledHoverCard>
                         </div>
 
-                        <Select<ConflictResolutionStrategy>
+                        <Select
                           multiple={false}
                           placeholder="Select group..."
                           defaultValue={field().state.value}
                           options={[
+                            ConflictResolutionStrategy.CONFLICT_RESOLUTION_STRATEGY_UNDEFINED,
                             ConflictResolutionStrategy.ABORT,
                             ConflictResolutionStrategy.ROLLBACK,
                             ConflictResolutionStrategy.FAIL,
                             ConflictResolutionStrategy.IGNORE,
                             ConflictResolutionStrategy.REPLACE,
                           ]}
-                          optionValue={ConflictResolutionSrategyToString}
                           onChange={(
                             strategy: ConflictResolutionStrategy | null,
                           ) => {
-                            field().handleChange(strategy ?? undefined);
+                            if (
+                              strategy === null ||
+                              strategy ==
+                                ConflictResolutionStrategy.CONFLICT_RESOLUTION_STRATEGY_UNDEFINED
+                            ) {
+                              field().handleChange(undefined);
+                            } else {
+                              field().handleChange(strategy);
+                            }
                           }}
                           itemComponent={(props) => (
                             <SelectItem item={props.item}>
