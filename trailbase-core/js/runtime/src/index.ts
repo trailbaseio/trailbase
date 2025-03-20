@@ -1450,7 +1450,6 @@ async function dispatch(
 
 globalThis.__dispatch = dispatch;
 
-let cronId = 1000;
 const cronCallbacks = new Map<number, () => void | Promise<void>>();
 
 /// Installs a Cron job that is registered to be orchestrated from native code.
@@ -1467,14 +1466,11 @@ export function addCronCallback(
     throw Error(`Not a valid 6/7-component cron schedule: ${schedule}`);
   }
 
-  const id = cronId++;
-
   if (isolateId() === 0) {
-    rustyscript.functions.install_job(id, name, schedule);
+    const id = rustyscript.functions.install_job(name, schedule);
     console.debug("JS: add cron callback", id, name);
+    cronCallbacks.set(id, cb);
   }
-
-  cronCallbacks.set(id, cb);
 }
 
 async function dispatchCron(id: number): Promise<string | undefined> {

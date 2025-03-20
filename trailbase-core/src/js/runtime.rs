@@ -57,7 +57,7 @@ struct DispatchArgs {
   user: Option<JsUser>,
   body: bytes::Bytes,
 
-  reply: tokio::sync::oneshot::Sender<Result<JsResponse, JsResponseError>>,
+  reply: oneshot::Sender<Result<JsResponse, JsResponseError>>,
 }
 
 enum Message {
@@ -67,9 +67,9 @@ enum Message {
     Option<Module>,
     &'static str,
     Vec<serde_json::Value>,
-    tokio::sync::oneshot::Sender<Result<serde_json::Value, AnyError>>,
+    oneshot::Sender<Result<serde_json::Value, AnyError>>,
   ),
-  LoadModule(Module, tokio::sync::oneshot::Sender<Result<(), AnyError>>),
+  LoadModule(Module, oneshot::Sender<Result<(), AnyError>>),
 }
 
 struct State {
@@ -104,7 +104,7 @@ impl Drop for RuntimeSingleton {
 struct Completer {
   name: String,
   promise: Promise<JsResponse>,
-  reply: tokio::sync::oneshot::Sender<Result<JsResponse, JsResponseError>>,
+  reply: oneshot::Sender<Result<JsResponse, JsResponseError>>,
 }
 
 impl Completer {
@@ -479,6 +479,7 @@ impl RuntimeHandle {
     return &self.runtime.state;
   }
 
+  #[allow(unused)]
   async fn call_function<T>(
     &self,
     module: Option<Module>,
@@ -488,15 +489,26 @@ impl RuntimeHandle {
   where
     T: serde::de::DeserializeOwned,
   {
-    let (sender, receiver) = tokio::sync::oneshot::channel::<Result<serde_json::Value, AnyError>>();
-    self
-      .runtime
-      .sender
-      .send(Message::CallFunction(module, name, args, sender))
-      .await?;
-
-    return Ok(serde_json::from_value::<T>(receiver.await??)?);
+    // Use sender shared by all isolates for round robin.
+    return call_function::<T>(&self.runtime.sender, module, name, args).await;
   }
+}
+
+async fn call_function<T>(
+  sender: &async_channel::Sender<Message>,
+  module: Option<Module>,
+  name: &'static str,
+  args: Vec<serde_json::Value>,
+) -> Result<T, AnyError>
+where
+  T: serde::de::DeserializeOwned,
+{
+  let (resp_sender, resp_receiver) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
+  sender
+    .send(Message::CallFunction(module, name, args, resp_sender))
+    .await?;
+
+  return Ok(serde_json::from_value::<T>(resp_receiver.await??)?);
 }
 
 pub fn json_value_to_param(
@@ -592,7 +604,7 @@ fn add_route_to_router(
       csrf: u.csrf_token,
     });
 
-    let (sender, receiver) = tokio::sync::oneshot::channel::<Result<JsResponse, JsResponseError>>();
+    let (sender, receiver) = oneshot::channel::<Result<JsResponse, JsResponseError>>();
 
     log::debug!("dispatch {method} {uri}");
     runtime_handle
@@ -707,30 +719,36 @@ async fn install_routes_and_jobs(
             // Register native callback for registering cron jobs.
             runtime
               .register_function("install_job", move |args: &[serde_json::Value]| {
-                let id: i32 = get_arg(args, 0)?;
-                let id_value = serde_json::to_value(id)?;
+                let id_value = Arc::new(Mutex::new(serde_json::Value::Null));
 
-                let name: String = get_arg(args, 1)?;
-                let default_spec: String = get_arg(args, 2)?;
+                let name: String = get_arg(args, 0)?;
+                let default_spec: String = get_arg(args, 1)?;
                 let schedule = cron::Schedule::from_str(&default_spec).map_err(|err| {
                   return RSError::Runtime(err.to_string());
                 })?;
 
+                let id_value_clone = id_value.clone();
                 let runtime_handle = runtime_handle.clone();
                 let Some(job) = jobs.new_job(
-                  Some(id),
+                  None,
                   name,
                   schedule,
                   crate::scheduler::build_callback(move || {
                     let runtime_handle = runtime_handle.clone();
-                    let id_value = id_value.clone();
+                    let id_value = id_value_clone.lock().clone();
 
                     return async move {
-                      log::debug!("dispatch job: {id}");
+                      let Some(first_isolate) = runtime_handle.state().first() else {
+                        return Err("missing isolate".into());
+                      };
 
-                      if let Some(msg) = runtime_handle
-                        .call_function::<Option<String>>(None, "__dispatchCron", vec![id_value])
-                        .await?
+                      if let Some(msg) = call_function::<Option<String>>(
+                        &first_isolate.sender,
+                        None,
+                        "__dispatchCron",
+                        vec![id_value],
+                      )
+                      .await?
                       {
                         return Err(msg.into());
                       }
@@ -742,9 +760,12 @@ async fn install_routes_and_jobs(
                   return Err(RSError::Runtime("Failed to add job".to_string()));
                 };
 
+                let id = serde_json::Value::Number(job.id.into());
+                *id_value.lock() = id.clone();
+
                 job.start();
 
-                return Ok(serde_json::Value::Null);
+                return Ok(id);
               })
               .expect("Failed to register 'install_job' function");
           })))
@@ -903,10 +924,10 @@ mod tests {
     let module = Module::new(
       "module.js",
       r#"
-              export function test_fun() {
-                return "test0";
-              }
-            "#,
+        export function test_fun() {
+          return "test0";
+        }
+      "#,
     );
 
     let result = handle
@@ -978,12 +999,12 @@ mod tests {
     let module = Module::new(
       "module.ts",
       r#"
-              import { execute } from "trailbase:main";
+        import { execute } from "trailbase:main";
 
-              export async function test_execute(queryStr: string) : Promise<number> {
-                return await execute(queryStr, []);
-              }
-            "#,
+        export async function test_execute(queryStr: string) : Promise<number> {
+          return await execute(queryStr, []);
+        }
+      "#,
     );
 
     let _result = handle
