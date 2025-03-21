@@ -1,3 +1,9 @@
+## v0.8.1
+
+* Derive job id in native code for JS/TS jobs.
+* Fix conflict resolution selector in admin UI's API settings.
+* Fix primary key card collapsing in create table form.
+
 ## v0.8.0
 
 * Add support for periodic cron jobs:
