@@ -67,6 +67,17 @@ Default users:
 
 ## Instructions
 
+### Get up and running with Docker Compose in under 2 minutes
+
+```bash
+cd $REPO/examples/blog
+docker compose build
+docker compose up
+# Visit https://localhost and ignore the SSL error
+```
+
+### Building each piece of this example project
+
 Generally speaking, there are roughly 2.5 moving parts to run the example, i.e:
 we have to build the web UI, start the TrailBase server, and optionally start
 the Flutter app. Once you have `cargo`, `pnpm`, and `flutter` installed, you
