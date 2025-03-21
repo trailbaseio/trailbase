@@ -436,9 +436,7 @@ export function ColumnSubForm(props: {
 }): JSX.Element {
   const disabled = () => props.disabled;
   const [name, setName] = createWritableMemo(() => props.column.name);
-  const [expanded, setExpanded] = createWritableMemo(
-    () => props.column.name !== "id",
-  );
+  const [expanded, setExpanded] = createSignal(true);
 
   const [fk, setFk] = createSignal<string | undefined>();
 
