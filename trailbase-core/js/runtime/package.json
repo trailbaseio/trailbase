@@ -6,15 +6,19 @@
   "type": "module",
   "homepage": "https://trailbase.io",
   "scripts": {
-    "build": "tsc",
-    "check": "tsc --noEmit --skipLibCheck && eslint",
-    "format": "prettier -w src"
+    "build": "vite build",
+    "check": "tsc --noEmit --skipLibCheck && eslint && vitest run",
+    "format": "prettier -w src",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
     "eslint": "^9.22.0",
     "prettier": "^3.5.3",
     "typescript": "^5.8.2",
-    "typescript-eslint": "^8.26.1"
+    "typescript-eslint": "^8.26.1",
+    "vite": "^6.2.2",
+    "vite-plugin-dts": "^4.5.3",
+    "vitest": "^3.0.9"
   }
 }

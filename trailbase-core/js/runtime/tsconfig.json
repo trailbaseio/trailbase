@@ -9,10 +9,14 @@
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": false,
     "moduleResolution": "bundler",
-    "outDir": "dist"
+    "outDir": "dist",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
   "exclude": [
     "dist/**",
+    "node_modules/",
     "types/**"
   ]
 }
