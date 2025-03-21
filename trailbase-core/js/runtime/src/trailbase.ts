@@ -615,7 +615,7 @@ export function addRoute(
   routerCallbacks.set(`${method}:${route}`, callback);
 }
 
-async function dispatch(
+export async function dispatch(
   method: Method,
   route: string,
   uri: string,
