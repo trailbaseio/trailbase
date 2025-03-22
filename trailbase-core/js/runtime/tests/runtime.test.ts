@@ -1,7 +1,7 @@
 import { test, expect } from "vitest";
 
-import { addPeriodicCallback, parsePath, query, execute, stringHandler, addRoute, dispatch } from "../src/trailbase";
-import type { Method, StringRequestType } from "../src/trailbase";
+import { addPeriodicCallback, parsePath, query, execute, stringHandler, htmlHandler, jsonHandler, addRoute, dispatch, HttpError } from "../src/trailbase";
+import type { Method, RequestType, StringRequestType, CallbackType } from "../src/trailbase";
 import { decodeFallback, encodeFallback } from "../src/util";
 
 globalThis.rustyscript = {
@@ -87,7 +87,46 @@ test("routes functions", async () => {
   const uri = "http://127.0.0.1";
   dispatch("GET", "/test", uri, [], [], undefined, encodeFallback("test"));
 
-  const result : StringRequestType = await promise;
+  const result: StringRequestType = await promise;
 
   expect(result.uri).toEqual(uri);
+});
+
+test("string handler", async () => {
+  const req = {
+    uri: "http://test.gov",
+    params: {},
+    headers: {},
+  } satisfies RequestType;
+
+  {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const handler: CallbackType = stringHandler((_req) => "test");
+    const response = (await handler(req))!;
+    expect(decodeFallback(response.body!)).toEqual("test");
+  }
+
+  {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const handler: CallbackType = stringHandler((_req) => {
+      throw new HttpError(418);
+    });
+    expect((await handler(req))!.status).toEqual(418);
+  }
+
+  {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const handler: CallbackType = htmlHandler((_req) => {
+      throw new HttpError(418);
+    });
+    expect((await handler(req))!.status).toEqual(418);
+  }
+
+  {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const handler: CallbackType = jsonHandler((_req) => {
+      throw new HttpError(418);
+    });
+    expect((await handler(req))!.status).toEqual(418);
+  }
 });
