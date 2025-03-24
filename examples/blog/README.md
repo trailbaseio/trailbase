@@ -1,4 +1,4 @@
-# TrailBase Example: A Blog with Web and Flutter UIs
+# Example Blog with Web and Flutter UIs
 
 <p align="center">
   <picture align="center">
@@ -18,31 +18,30 @@
   </picture>
 </p>
 
-The blog example presents some of TrailBase's capabilities in an easily easily
+<p align="center">
+  Screenshots of Web and Flutter UI.
+</p>
+
+The blog example demonstrates some of TrailBase's capabilities in an easily
 digestible fashion:
 
-* Building UI Apps both for web and cross-platform using Flutter.
+* Support multiple platforms, e.g. a web and cross-platform Flutter UI.
 * End-to-end type-safe APIs based on JSON schemas and code-generation
-  supporting most popular languages.
+  supporting virtually any language.
 * Authentication flows with social OAuth and password sign-in for web and Flutter.
-* Authorization: world readable, user editable, and moderator manageable articles.
-* Different API types:
-  * Table and View-based APIs for custom user profiles associating users with a
-    username to keep their email addresses private as well as associating
-    articles with usernames.
-  * Virtual-table-based query API to expose `is_editor` authorization.
-* Migrations to bootstrap the database with schemas and dummy content.
-* The web UI is implemented as a reader-side SPA and static HTML page for blog
+* Authorization for world readable and author editable articles.
+* Username-based profiles to keep user's email addresses private using view-based APIs.
+* Migrations to bootstrap schemas and content.
+* The web UI is implemented as a reader-side SPA and static HTML forms for blog
   authors to demonstrate both styles.
 
 ## Getting Started
 
-To get the blog up and running with self-signed SSL certificates in under 2
-minutes, simply run:
+To get the blog up and running in under 2 minutes, simply run:
 
 ```bash
-cd examples/blog
-docker compose up --build -d
+$ cd examples/blog
+$ docker compose up --build -d
 ```
 
 Afterwards check out the blog at [http://localhost](http://localhost). You'll
@@ -55,27 +54,26 @@ You can write new blog posts using the predefined user:
 
 You can also check out the admin dashboard at
 [http://localhost/_/admin](http://localhost/_/admin) using the predefined
-admin:
+admin user:
 
   * email: `admin@localhost`
   * password: `secret`
 
 For context, the above `docker compose` invocation started two services:
 
- * TrailBase itself hosting the web UI, and
- * a [Caddy](https://github.com/caddyserver/caddy) reverse-proxy to
-   automatically terminate TLS using self-signed certificates demonstrating a
-   production-ready setup.
+ * TrailBase itself hosting the web UI
+ * And a [Caddy](https://github.com/caddyserver/caddy) reverse-proxy to
+   automatically terminate TLS providing a more production-ready setup.
 
 To shut everything back down, simply run:
 
 ```bash
-docker compose down
+$ docker compose down
 ```
 
 ## Detailed Instructions
 
-If you don't want to use the docker compose setup above, build from scratch, or
+If you don't want to use the `docker compose` setup above, build from scratch, or
 run the the Flutter app, only a few simple steps are needed.
 If you have `cargo`, `pnpm`, and `flutter` installed, you can simply run:
 
@@ -84,11 +82,11 @@ If you have `cargo`, `pnpm`, and `flutter` installed, you can simply run:
 $ pnpm --dir web build
 
 # Build and start TrailBase:
-$ cargo run --bin trail -- run --public web/dist
+$ cargo run -- run --public-dir web/dist
 
-# Build and start the Flutter app:
+# Build and start the Flutter app on a specified device, e.g. Chrome, Linux, Emulator.
 $ cd flutter
-$ flutter run -d <Device, e.g.: Linux, Chrome, Mobile Emulator, ...>
+$ flutter run -d Chrome
 ```
 
 In case you'd like to re-generate the language bindings for the type-safe APIs

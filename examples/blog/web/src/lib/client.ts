@@ -15,14 +15,20 @@ export function removeTokens() {
 
 export const $user = atom<User | undefined>();
 
+function onAuthChange(c: Client) {
+  $tokens.set(c.tokens() ?? null);
+  $user.set(c.user());
+}
+
 export const $client = computed([], () =>
   task(async () => {
-    return Client.tryFromCookies(HOST, {
+    const client = await Client.tryFromCookies(HOST, {
       tokens: $tokens.get() ?? undefined,
-      onAuthChange: (c: Client, user?: User) => {
-        $tokens.set(c.tokens() ?? null);
-        $user.set(user);
-      },
+      onAuthChange,
     });
+
+    onAuthChange(client);
+
+    return client;
   }),
 );

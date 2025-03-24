@@ -30,20 +30,20 @@ pub fn sqlite3_extension_init(db: rusqlite::Connection) -> rusqlite::Result<rusq
     is_uuid_v7,
   )?;
   db.create_scalar_function(
-    "uuid_v7_text",
-    0,
+    "uuid_text",
+    1,
     FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_INNOCUOUS,
-    uuid_v7_text,
+    uuid_text,
   )?;
 
   db.create_scalar_function("uuid_v7", 0, FunctionFlags::SQLITE_INNOCUOUS, uuid_v7)?;
   db.create_scalar_function(
-    "parse_uuid",
+    "uuid_parse",
     1,
     FunctionFlags::SQLITE_UTF8
       | FunctionFlags::SQLITE_DETERMINISTIC
       | FunctionFlags::SQLITE_INNOCUOUS,
-    parse_uuid,
+    uuid_parse,
   )?;
 
   db.create_scalar_function(

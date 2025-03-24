@@ -12,12 +12,12 @@ function UserBadge(props: { user: User | undefined }) {
   const [avatar] = createResource(client, async (c) => await c?.avatarUrl());
 
   const Fallback = () => (
-    <TbUser class="p-1 size-6 bg-pacamara-secondary inline-block rounded-full dark:text-white" />
+    <TbUser class="inline-block size-6 rounded-full bg-pacamara-secondary p-1 dark:text-white" />
   );
 
   return (
     <Suspense fallback={<p>...</p>}>
-      <div class="flex gap-2 items-center ">
+      <div class="flex items-center gap-2 ">
         <Switch fallback={<Fallback />}>
           <Match when={avatar.error}>
             <Fallback />
@@ -25,7 +25,7 @@ function UserBadge(props: { user: User | undefined }) {
 
           <Match when={avatar()}>
             <img
-              class="size-6 inline-block rounded-full"
+              class="inline-block size-6 rounded-full"
               src={avatar()!}
               alt="avatar"
             />
@@ -45,7 +45,15 @@ export function AuthButton() {
   return (
     <Switch>
       <Match when={!user()}>
-        <a href={client()?.loginUri("/") ?? "/_/auth/login"}>Log in</a>
+        <a
+          href={
+            client()?.loginUri(
+              import.meta.env.DEV ? window.location.origin : undefined,
+            ) ?? `/_/auth/login`
+          }
+        >
+          Log in
+        </a>
       </Match>
 
       <Match when={user()}>

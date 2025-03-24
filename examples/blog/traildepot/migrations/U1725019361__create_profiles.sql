@@ -20,14 +20,14 @@ CREATE TRIGGER _profiles__updated_trigger AFTER UPDATE ON profiles FOR EACH ROW
     UPDATE profiles SET updated = UNIXEPOCH() WHERE user = OLD.user;
   END;
 
--- Compile username, avatar_url, and editor_priviledges into a single read-only
--- API for convenience.
+-- Compile username, avatar_url, and is_editor into a single convenient
+-- read-only API.
 CREATE VIEW profiles_view AS
   SELECT
     p.*,
     -- TrailBase requires top-level cast to determine result type and generate JSON schemas.
     CAST(CASE
-      WHEN avatar.file IS NOT NULL THEN CONCAT('/api/records/v1/_user_avatar/', uuid_url_safe_b64(p.user), '/file/file')
+      WHEN avatar.file IS NOT NULL THEN CONCAT('/api/records/v1/_user_avatar/', uuid_text(p.user), '/file/file')
       ELSE NULL
     END AS TEXT) AS avatar_url,
     -- TrailBase requires top-level cast to determine result type and generate JSON schemas.

@@ -3,10 +3,16 @@ use rusqlite::types::ValueRef;
 use rusqlite::Error;
 use uuid::Uuid;
 
+/// Checks that argument is a valid UUID blob or null.
+///
+/// Null is explicitly allowed to enable use as CHECK constraint in nullable columns.
 pub(super) fn is_uuid(context: &Context) -> rusqlite::Result<bool> {
   return Ok(unpack_uuid_or_null(context).is_ok());
 }
 
+/// Checks that argument is a valid UUIDv7 blob or null.
+///
+/// Null is explicitly allowed to enable use as CHECK constraint in nullable columns.
 pub(super) fn is_uuid_v7(context: &Context) -> rusqlite::Result<bool> {
   return Ok(match unpack_uuid_or_null(context)? {
     Some(uuid) => uuid.get_version_num() == 7,
@@ -14,36 +20,31 @@ pub(super) fn is_uuid_v7(context: &Context) -> rusqlite::Result<bool> {
   });
 }
 
-#[inline]
-fn unpack_uuid_or_null(context: &Context<'_>) -> rusqlite::Result<Option<Uuid>> {
+/// Creates a new UUIDv7 blob.
+pub(super) fn uuid_v7(_context: &Context) -> rusqlite::Result<Vec<u8>> {
+  return Ok(Uuid::now_v7().as_bytes().to_vec());
+}
+
+/// Format UUID blob as string-encoded UUID.
+pub(super) fn uuid_text(context: &Context) -> rusqlite::Result<String> {
   #[cfg(debug_assertions)]
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
 
   return match context.get_raw(0) {
-    ValueRef::Null => Ok(None),
-    ValueRef::Blob(b) => match Uuid::from_slice(b) {
-      Ok(uuid) => Ok(Some(uuid)),
-      Err(err) => Err(Error::UserFunctionError(
-        format!("Failed to read uuid: {err}").into(),
-      )),
-    },
-    _ => Err(Error::UserFunctionError(
-      "Expected BLOB column type.".into(),
+    ValueRef::Blob(blob) => {
+      let uuid = Uuid::from_slice(blob).map_err(|err| Error::UserFunctionError(err.into()))?;
+      Ok(uuid.to_string())
+    }
+    arg => Err(Error::UserFunctionError(
+      format!("Expected UUID blob, got {}", arg.data_type()).into(),
     )),
   };
 }
 
-pub(super) fn uuid_v7_text(_context: &Context) -> rusqlite::Result<String> {
-  return Ok(Uuid::now_v7().to_string());
-}
-
-pub(super) fn uuid_v7(_context: &Context) -> rusqlite::Result<Vec<u8>> {
-  return Ok(Uuid::now_v7().as_bytes().to_vec());
-}
-
-pub(super) fn parse_uuid(context: &Context) -> rusqlite::Result<Vec<u8>> {
+/// Parse UUID from string-encoded UUID.
+pub(super) fn uuid_parse(context: &Context) -> rusqlite::Result<Vec<u8>> {
   #[cfg(debug_assertions)]
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
@@ -58,6 +59,25 @@ pub(super) fn parse_uuid(context: &Context) -> rusqlite::Result<Vec<u8>> {
     }
     arg => Err(Error::UserFunctionError(
       format!("Expected text, got {}", arg.data_type()).into(),
+    )),
+  };
+}
+
+#[inline]
+fn unpack_uuid_or_null(context: &Context<'_>) -> rusqlite::Result<Option<Uuid>> {
+  #[cfg(debug_assertions)]
+  if context.len() != 1 {
+    return Err(Error::InvalidParameterCount(context.len(), 1));
+  }
+
+  return match context.get_raw(0) {
+    ValueRef::Null => Ok(None),
+    ValueRef::Blob(blob) => {
+      let uuid = Uuid::from_slice(blob).map_err(|err| Error::UserFunctionError(err.into()))?;
+      Ok(Some(uuid))
+    }
+    _ => Err(Error::UserFunctionError(
+      "Expected BLOB column type.".into(),
     )),
   };
 }
@@ -114,13 +134,25 @@ mod tests {
       let uuid = Uuid::now_v7();
       let row = conn
         .query_row(
-          "INSERT INTO test (uuid, uuid_v7) VALUES (parse_uuid($1), parse_uuid($1)) RETURNING uuid",
+          "INSERT INTO test (uuid, uuid_v7) VALUES (uuid_parse($1), uuid_parse($1)) RETURNING uuid",
           [uuid.to_string()],
           |row| -> rusqlite::Result<[u8; 16]> { Ok(row.get(0)?) },
         )
         .unwrap();
 
       assert_eq!(Uuid::from_slice(&row).unwrap(), uuid);
+    }
+
+    {
+      let row = conn
+        .query_row(
+          "SELECT uuid_parse(uuid_text(uuid_v7()))",
+          [],
+          |row| -> rusqlite::Result<[u8; 16]> { Ok(row.get(0)?) },
+        )
+        .unwrap();
+
+      assert_eq!(Uuid::from_slice(&row).unwrap().get_version_num(), 7);
     }
   }
 }

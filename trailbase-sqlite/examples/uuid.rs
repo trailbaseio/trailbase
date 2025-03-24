@@ -5,7 +5,7 @@ use trailbase_sqlite::connect_sqlite;
 fn main() {
   let conn = connect_sqlite(None, None).unwrap();
 
-  let mut stmt = conn.prepare("SELECT (uuid_v7_text())").unwrap();
+  let mut stmt = conn.prepare("SELECT (uuid_text(uuid_v7()))").unwrap();
 
   let uuid: String = stmt.query_row((), |row| row.get(0)).unwrap();
 
