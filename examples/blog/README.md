@@ -31,6 +31,8 @@ digestible fashion:
 * Authentication flows with social OAuth and password sign-in for web and Flutter.
 * Authorization for world readable and author editable articles.
 * Username-based profiles to keep user's email addresses private using view-based APIs.
+* Bundle static assets into a custom Docker container.
+* SSL/TLS termination using a reverse-proxy.
 * Migrations to bootstrap schemas and content.
 * The web UI is implemented as a reader-side SPA and static HTML forms for blog
   authors to demonstrate both styles.
@@ -101,9 +103,9 @@ $ make --always-make types
 
 ```
 .
-├── Caddyfile           # Example reverse proxy for TLS termination
+├── Caddyfile           # Example reverse-proxy for TLS termination
 ├── Dockerfile          # Example for bundling web app
-├── docker-compose.yml  # Example setup with reverse proxy
+├── docker-compose.yml  # Example setup with reverse-proxy
 ├── flutter             #
 │   ├── lib             # Flutter app lives here
 │   └── ...             # Most other files a default cross-platform setup
