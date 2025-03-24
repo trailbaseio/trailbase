@@ -1,5 +1,3 @@
-# example.com
-
 localhost
 encode gzip zstd
 reverse_proxy blog:4000

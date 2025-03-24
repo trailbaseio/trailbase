@@ -1,20 +1,8 @@
 services:
 
   blog:
-    # NOTE: We have to build relative to root to have a build context that
-    # includes both: the trailbase server source and the demo wepapp sources.
-    # build: ../..
-    # TODO: Build from "." once the Dockerfile can pull a base image from
-    # dockerhub. We still need an example Dockerfile to build the UI.
-    build:
-      context: ../..
-      dockerfile: examples/blog/Dockerfile
+    build: .
     restart: unless-stopped
-    environment:
-      TRAIL_INITIAL_PASSWORD: secret
-      ADDRESS: 0.0.0.0:4000
-      PUBLIC_DIR: ./public
-      DATA_DIR: ./traildepot
     volumes:
       - ./traildepot:/app/traildepot
 

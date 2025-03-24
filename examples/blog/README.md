@@ -18,27 +18,86 @@
   </picture>
 </p>
 
-The main goal of this example is to be easily digestible while show-casing many
-of TrailBase's capabilities both for web and cross-platform Flutter:
+The blog example presents some of TrailBase's capabilities in an easily easily
+digestible fashion:
 
-* Bootstrapping the database including schemas and dummy content though migration.
-* End-to-end type-safety through code-generated data models for TypeScript,
-  Dart and many more based on JSON Schema.
-* Builtin web authentication flow (including OAuth) on web and Flutter as well
-  as a custom password-based login in Flutter.
-* API authorization: world readable, user editable, and moderator manageable articles.
+* Building UI Apps both for web and cross-platform using Flutter.
+* End-to-end type-safe APIs based on JSON schemas and code-generation
+  supporting most popular languages.
+* Authentication flows with social OAuth and password sign-in for web and Flutter.
+* Authorization: world readable, user editable, and moderator manageable articles.
 * Different API types:
- * Table and View-based APIs for custom user profiles associating users with a
-   username and keep their email addresses private as well as associating
-   articles with usernames.
- * Virtual-table-based query API to expose `is_editor` authorization.
-* The web client illustrates two different styles: a consumer SPA and an
-  HTML-only form-based authoring UI.
+  * Table and View-based APIs for custom user profiles associating users with a
+    username to keep their email addresses private as well as associating
+    articles with usernames.
+  * Virtual-table-based query API to expose `is_editor` authorization.
+* Migrations to bootstrap the database with schemas and dummy content.
+* The web UI is implemented as a reader-side SPA and static HTML page for blog
+  authors to demonstrate both styles.
 
-Default users:
+## Getting Started
 
- * (email: `admin@localhost`, password: `secret`) - access to admin dash.
- * (email: `editor@localhost`, password: `secret`) - permission to write and alter blog posts.
+To get the blog up and running with self-signed SSL certificates in under 2
+minutes, simply run:
+
+```bash
+cd examples/blog
+docker compose up --build -d
+```
+
+Afterwards check out the blog at [http://localhost](http://localhost). You'll
+be automatically forwarded to HTTPS and will need to accept the self-signed
+certificate.
+You can write new blog posts using the predefined user:
+
+  * email: `editor@localhost`
+  * password: `secret`
+
+You can also check out the admin dashboard at
+[http://localhost/_/admin](http://localhost/_/admin) using the predefined
+admin:
+
+  * email: `admin@localhost`
+  * password: `secret`
+
+For context, the above `docker compose` invocation started two services:
+
+ * TrailBase itself hosting the web UI, and
+ * a [Caddy](https://github.com/caddyserver/caddy) reverse-proxy to
+   automatically terminate TLS using self-signed certificates demonstrating a
+   production-ready setup.
+
+To shut everything back down, simply run:
+
+```bash
+docker compose down
+```
+
+## Detailed Instructions
+
+If you don't want to use the docker compose setup above, build from scratch, or
+run the the Flutter app, only a few simple steps are needed.
+If you have `cargo`, `pnpm`, and `flutter` installed, you can simply run:
+
+```bash
+# Build the Blog's web UI:
+$ pnpm --dir web build
+
+# Build and start TrailBase:
+$ cargo run --bin trail -- run --public web/dist
+
+# Build and start the Flutter app:
+$ cd flutter
+$ flutter run -d <Device, e.g.: Linux, Chrome, Mobile Emulator, ...>
+```
+
+In case you'd like to re-generate the language bindings for the type-safe APIs
+or generate new bindings for a different language, check out the `Makefile` or
+run:
+
+```bash
+$ make --always-make types
+```
 
 ## Directory Structure
 
@@ -65,39 +124,6 @@ Default users:
     └── ...
 ```
 
-## Instructions
-
-Generally speaking, there are roughly 2.5 moving parts to run the example, i.e:
-we have to build the web UI, start the TrailBase server, and optionally start
-the Flutter app. Once you have `cargo`, `pnpm`, and `flutter` installed, you
-can simply run:
-
-```bash
-# From within the blog examples base directory
-$ cd $REPO/examples/blog
-
-# build and bundle the web app:
-$ pnpm --dir web build
-
-# Start TrailBase:
-cargo run --bin trail -- run --public web/dist
-
-# Start Flutter app:
-$ cd flutter
-$ flutter run -d <Device, e.g.: Linux, Chrome, Mobile Emulator, ...>
-```
-
-You can also try the code generation:
-
-```bash
-# Optionally delete the checked-in JSON schemas and code first
-$ make clean_types
-
-# Genarate JSON Schema and codegen types from DB schema (this requires that
-# you start TrailBase first to initialize the DB)
-$ make --always-make types
-```
-
 ## Reference
 
-* The styling is based on: https://github.com/palmiak/pacamara-astro 🙏
+* The styling is based on: [palmiak/pacamara-astro](https://github.com/palmiak/pacamara-astro) 🙏
