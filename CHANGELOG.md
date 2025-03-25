@@ -1,3 +1,10 @@
+## v0.8.2
+
+* Quote table/index/column names during "CREATE TABLE/INDEX" parsing and construction.
+* Improve auth UI: more consistent shadcn styling and explicit tab orders.
+* UUID decode sqlite extension and more consistent extension names.
+* Update deps.
+
 ## v0.8.1
 
 * Derive job id in native code for JS/TS jobs.
