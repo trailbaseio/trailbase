@@ -1,0 +1,20 @@
+---
+import { mergeProps, splitProps } from "solid-js";
+import type { HTMLAttributes } from "astro/types";
+
+import { cn } from "@/lib/utils";
+import { textFieldInputStyle } from "@/components/ui/text-field";
+
+type Props = HTMLAttributes<"input"> & {
+  class?: string | undefined;
+};
+
+const props = mergeProps<Props[]>({ type: "text" }, Astro.props);
+const [local, others] = splitProps(props as Props, ["type", "class"]);
+---
+
+<input
+  type={local.type}
+  class={cn(textFieldInputStyle, local.class)}
+  {...others}
+/>

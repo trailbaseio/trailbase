@@ -147,6 +147,7 @@ const TextFieldErrorMessage = <T extends ValidComponent = "div">(
 
 export {
   textFieldInputStyle,
+  labelVariants,
   TextField,
   TextFieldInput,
   TextFieldTextArea,

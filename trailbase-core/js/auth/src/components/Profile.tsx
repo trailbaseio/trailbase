@@ -138,7 +138,7 @@ function ProfileTable(props: {
         <div class="flex items-center gap-2">
           <DeleteAccountButton client={props.client} />
 
-          <a class={ICON_STYLE.join(" ")} href="/_/auth/logout">
+          <a class={ICON_STYLE.join(" ")} href={`${HOST}/_/auth/logout`}>
             <TbLogout />
           </a>
         </div>

@@ -1,8 +1,12 @@
 ---
 import Form from "@/components/Form.astro";
-import { ConfiguredOAuthProviders } from "@/components/ListOauthProviders";
+import Button from "@/components/Button.astro";
+import TextFieldInput from "@/components/TextFieldInput.astro";
+import TextFieldLabel from "@/components/TextFieldLabel.astro";
 
-import { AUTH_API, INPUT_STYLE, BUTTON_STYLE } from "@/lib/constants";
+import { ConfiguredOAuthProviders } from "@/components/ListOauthProviders";
+import { buttonVariants } from "@/components/ui/button";
+import { AUTH_API } from "@/lib/constants";
 
 const formBaseAction = `${AUTH_API}/login`;
 const BASE_URL = import.meta.env.BASE_URL;
@@ -27,20 +31,20 @@ const BASE_URL = import.meta.env.BASE_URL;
         class="grid grid-cols-2 items-center gap-4"
         style={{"grid-template-columns": "auto 1fr"}}
       >
-        <label>User:</label>
-        <input
+        <TextFieldLabel>User:</TextFieldLabel>
+        <TextFieldInput
           required
-          class={INPUT_STYLE}
+          tabindex="1"
           type="email"
           name="email"
           placeholder="Email"
           autocomplete="username"
         />
 
-        <label>Password:</label>
-        <input
+        <TextFieldLabel>Password:</TextFieldLabel>
+        <TextFieldInput
           required
-          class={INPUT_STYLE}
+          tabindex="2"
           type="password"
           name="password"
           placeholder="Password"
@@ -48,18 +52,19 @@ const BASE_URL = import.meta.env.BASE_URL;
         />
       </div>
 
-      <div class="flex justify-center text-sm">
-        <a href={`${BASE_URL}/reset_password/request`}>Forgot your password? <span class="text-primary">Reset</span></a>
+      <div class="flex justify-center gap-1 text-sm">
+        <span>Forgot your password?</span>
+        <a tabindex="5" href={`${BASE_URL}/reset_password/request`} class="text-primary">Reset</a>
       </div>
 
       <div class="my-2 flex justify-between">
-        <a type="button" href={`${BASE_URL}/register`} class:list={BUTTON_STYLE}>
+        <a tabindex="4" type="button" href={`${BASE_URL}/register`} class:list={buttonVariants({ variant: "default" })}>
           Register
         </a>
 
-        <button class:list={BUTTON_STYLE} type="submit">
+        <Button tabindex="3" variant="default" type="submit">
           Sign In
-        </button>
+        </Button>
       </div>
     </form>
 

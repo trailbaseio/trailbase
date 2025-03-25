@@ -1,0 +1,25 @@
+---
+import { splitProps } from "solid-js";
+import type { HTMLAttributes } from "astro/types";
+import type { VariantProps } from "class-variance-authority";
+
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+type Props = HTMLAttributes<"button"> &
+  VariantProps<typeof buttonVariants> & {
+    class?: string | undefined;
+  };
+
+const [local, others] = splitProps(Astro.props, ["variant", "size", "class"]);
+---
+
+<button
+  class={cn(
+    buttonVariants({ variant: local.variant, size: local.size }),
+    local.class,
+  )}
+  {...others}
+>
+  <slot />
+</button>

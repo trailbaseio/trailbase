@@ -1,7 +1,12 @@
 ---
 import Form from "@/components/Form.astro";
+import Button from "@/components/Button.astro";
+import TextFieldInput from "@/components/TextFieldInput.astro";
+import TextFieldLabel from "@/components/TextFieldLabel.astro";
 
-import { AUTH_API, INPUT_STYLE, BUTTON_STYLE } from "@/lib/constants";
+import { textFieldInputStyle } from "@/components/ui/text-field";
+import { buttonVariants } from "@/components/ui/button";
+import { AUTH_API } from "@/lib/constants";
 
 const base = import.meta.env.BASE_URL;
 const profilePageUrl = `${base}/profile`;
@@ -23,19 +28,21 @@ const profilePageUrl = `${base}/profile`;
       class="my-4 grid grid-cols-2 items-center gap-4"
       style={{ "grid-template-columns": "auto 1fr" }}
     >
-      <label>Old E-Mail:</label>
-      <input
+      <TextFieldLabel>Old E-Mail:</TextFieldLabel>
+      <TextFieldInput
         required
-        class={INPUT_STYLE}
+        tabindex="1"
+        class={textFieldInputStyle}
         type="email"
         name="old_email"
         placeholder="Email"
       />
 
-      <label>New E-Mail:</label>
-      <input
+      <TextFieldLabel>New E-Mail:</TextFieldLabel>
+      <TextFieldInput
         required
-        class={INPUT_STYLE}
+        tabindex="2"
+        class={textFieldInputStyle}
         type="email"
         name="new_email"
         placeholder="Email"
@@ -44,10 +51,13 @@ const profilePageUrl = `${base}/profile`;
   </form>
 
   <div class="flex w-full justify-between">
-    <a class:list={BUTTON_STYLE} href={profilePageUrl}>Back</a>
-
-    <button class:list={BUTTON_STYLE} type="submit"
-      >Send Email Verification</button
+    <a
+      class:list={buttonVariants({ variant: "outline" })}
+      href={profilePageUrl}
     >
+      Back
+    </a>
+
+    <Button tabindex="3" type="submit">Send Email Verification</Button>
   </div>
 </Form>

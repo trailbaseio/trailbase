@@ -1,7 +1,11 @@
 ---
 import Form from "@/components/Form.astro";
+import Button from "@/components/Button.astro";
+import TextFieldInput from "@/components/TextFieldInput.astro";
+import TextFieldLabel from "@/components/TextFieldLabel.astro";
 
-import { AUTH_API, INPUT_STYLE, BUTTON_STYLE } from "@/lib/constants";
+import { buttonVariants } from "@/components/ui/button";
+import { AUTH_API } from "@/lib/constants";
 ---
 
 <Form title="Register">
@@ -20,28 +24,28 @@ import { AUTH_API, INPUT_STYLE, BUTTON_STYLE } from "@/lib/constants";
       class="my-4 grid grid-cols-2 items-center gap-4"
       style={{ "grid-template-columns": "auto 1fr" }}
     >
-      <label>Email:</label>
-      <input
+      <TextFieldLabel>Email:</TextFieldLabel>
+      <TextFieldInput
         required
-        class={INPUT_STYLE}
+        tabindex="1"
         type="text"
         name="email"
         placeholder="Email"
       />
 
-      <label>Password:</label>
-      <input
+      <TextFieldLabel>Password:</TextFieldLabel>
+      <TextFieldInput
         required
-        class={INPUT_STYLE}
+        tabindex="2"
         type="password"
         name="password"
         placeholder="Password"
       />
 
-      <label>Confirm Password:</label>
-      <input
+      <TextFieldLabel>Confirm Password:</TextFieldLabel>
+      <TextFieldInput
         required
-        class={INPUT_STYLE}
+        tabindex="3"
         type="password"
         name="password_repeat"
         placeholder="Password Confirm"
@@ -49,11 +53,14 @@ import { AUTH_API, INPUT_STYLE, BUTTON_STYLE } from "@/lib/constants";
     </div>
 
     <div class="flex w-full justify-between">
-      <a class:list={BUTTON_STYLE} href={`${import.meta.env.BASE_URL}/login`}>
+      <a
+        class:list={buttonVariants({ variant: "outline" })}
+        href={`${import.meta.env.BASE_URL}/login`}
+      >
         Back
       </a>
 
-      <button class:list={BUTTON_STYLE} type="submit"> Register </button>
+      <Button tabindex="4" variant="default" type="submit">Register</Button>
     </div>
   </form>
 </Form>

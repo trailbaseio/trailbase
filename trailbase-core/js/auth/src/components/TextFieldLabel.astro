@@ -1,0 +1,17 @@
+---
+import { splitProps } from "solid-js";
+import type { HTMLAttributes } from "astro/types";
+
+import { cn } from "@/lib/utils";
+import { labelVariants } from "@/components/ui/text-field";
+
+type Props = HTMLAttributes<"label"> & {
+  class?: string | undefined;
+};
+
+const [local, others] = splitProps(Astro.props as Props, ["class"]);
+---
+
+<label class={cn(labelVariants(), local.class)} {...others}>
+  <slot />
+</label>
