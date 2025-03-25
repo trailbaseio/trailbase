@@ -285,14 +285,14 @@ mod test {
   }
 
   #[tokio::test]
-  async fn test_record_api_read() -> Result<(), anyhow::Error> {
-    let state = test_state(None).await?;
+  async fn test_record_api_read() {
+    let state = test_state(None).await.unwrap();
     let conn = state.conn();
 
     // Add tables and record api before inserting data.
-    create_chat_message_app_tables(&state).await?;
-    let room0 = add_room(conn, "room0").await?;
-    let room1 = add_room(conn, "room1").await?;
+    create_chat_message_app_tables(&state).await.unwrap();
+    let room0 = add_room(conn, "room0").await.unwrap();
+    let room1 = add_room(conn, "room1").await.unwrap();
     let password = "Secret!1!!";
 
     // Register message table as record api with moderator read access.
@@ -309,31 +309,39 @@ mod test {
         ..Default::default()
     },
   )
-  .await?;
+  .await.unwrap();
 
     let user_x_email = "user_x@test.com";
     let user_x = create_user_for_test(&state, user_x_email, password)
-      .await?
+      .await
+      .unwrap()
       .into_bytes();
 
-    add_user_to_room(conn, user_x, room0).await?;
-    add_user_to_room(conn, user_x, room1).await?;
+    add_user_to_room(conn, user_x, room0).await.unwrap();
+    add_user_to_room(conn, user_x, room1).await.unwrap();
 
-    let user_x_token = login_with_password(&state, user_x_email, password).await?;
+    let user_x_token = login_with_password(&state, user_x_email, password)
+      .await
+      .unwrap();
 
     let user_y_email = "user_y@foo.baz";
     let user_y = create_user_for_test(&state, user_y_email, password)
-      .await?
+      .await
+      .unwrap()
       .into_bytes();
 
-    add_user_to_room(conn, user_y, room0).await?;
+    add_user_to_room(conn, user_y, room0).await.unwrap();
 
-    let user_y_token = login_with_password(&state, user_y_email, password).await?;
+    let user_y_token = login_with_password(&state, user_y_email, password)
+      .await
+      .unwrap();
 
     // Finally, create some messages and try to access them.
     {
       // Post to room0. X, Y, and mod should be able to read it.
-      let message_id = send_message(conn, user_x, room0, "from user_x to room0").await?;
+      let message_id = send_message(conn, user_x, room0, "from user_x to room0")
+        .await
+        .unwrap();
 
       // No creds, no read
       assert!(read_record_handler(
@@ -372,7 +380,9 @@ mod test {
 
     {
       // Post to room1. Only X, and mod should be able to read it. User Y is not a member
-      let message_id = send_message(conn, user_x, room1, "from user_x to room1").await?;
+      let message_id = send_message(conn, user_x, room1, "from user_x to room1")
+        .await
+        .unwrap();
 
       // User Y
       let response = read_record_handler(
@@ -384,33 +394,32 @@ mod test {
       .await;
       assert!(response.is_err(), "{response:?}");
     }
-
-    return Ok(());
   }
 
-  async fn create_test_record_api(state: &AppState, api_name: &str) -> Result<(), anyhow::Error> {
+  async fn create_test_record_api(state: &AppState, api_name: &str) {
     let conn = state.conn();
     conn
       .execute(
         &format!(
-          r#"CREATE TABLE 'test_table' (
+          r#"CREATE TABLE 'table' (
             id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
             file         TEXT CHECK(jsonschema('std.FileUpload', file)),
             files        TEXT CHECK(jsonschema('std.FileUploads', files)),
             -- Add a "keyword" column to ensure escaping is correct
             [index]      TEXT NOT NULL DEFAULT('')
-          ) strict"#
+          ) STRICT"#
         ),
         (),
       )
-      .await?;
+      .await
+      .unwrap();
 
-    state.table_metadata().invalidate_all().await?;
+    state.table_metadata().invalidate_all().await.unwrap();
 
     add_record_api(
       &state,
       api_name,
-      "test_table",
+      "table",
       Acls {
         world: vec![
           PermissionFlag::Create,
@@ -421,37 +430,97 @@ mod test {
       },
       AccessRules::default(),
     )
-    .await?;
-
-    return Ok(());
+    .await
+    .unwrap();
   }
 
   // NOTE: would ideally be in a create_record test instead.
   #[tokio::test]
-  async fn test_empty_create_record() -> Result<(), anyhow::Error> {
-    let state = test_state(None).await?;
+  async fn test_empty_create_record() {
+    let state = test_state(None).await.unwrap();
 
     const API_NAME: &str = "test_api";
-    create_test_record_api(&state, API_NAME).await?;
+    create_test_record_api(&state, API_NAME).await;
 
-    let _ = create_record_handler(
-      State(state.clone()),
-      Path(API_NAME.to_string()),
-      Query(CreateRecordQuery::default()),
-      None,
-      Either::Json(JsonRow::new().into()),
+    let create_response: CreateRecordResponse = unpack_json_response(
+      create_record_handler(
+        State(state.clone()),
+        Path(API_NAME.to_string()),
+        Query(CreateRecordQuery::default()),
+        None,
+        Either::Json(JsonRow::new().into()),
+      )
+      .await
+      .unwrap(),
     )
     .await
     .unwrap();
 
-    return Ok(());
+    let record_path = (API_NAME.to_string(), create_response.ids[0].clone());
+
+    let Json(_) = read_record_handler(
+      State(state),
+      Path(record_path),
+      Query(ReadRecordQuery::default()),
+      None,
+    )
+    .await
+    .unwrap();
   }
 
   #[tokio::test]
-  async fn test_single_file_upload_download_e2e() -> Result<(), anyhow::Error> {
-    let state = test_state(None).await?;
+  async fn test_escaping_keywords_for_create_record() {
+    const API_NAME: &str = "table";
+    let state = test_state(None).await.unwrap();
+    create_test_record_api(&state, API_NAME).await;
+
+    let column_value = "test";
+    let create_response: CreateRecordResponse = unpack_json_response(
+      create_record_handler(
+        State(state.clone()),
+        Path(API_NAME.to_string()),
+        Query(CreateRecordQuery::default()),
+        None,
+        Either::Json(
+          json_row_from_value(serde_json::json!({
+            "index": column_value.to_string(),
+          }))
+          .unwrap()
+          .into(),
+        ),
+      )
+      .await
+      .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    let record_path = (API_NAME.to_string(), create_response.ids[0].clone());
+
+    let Json(value) = read_record_handler(
+      State(state),
+      Path(record_path),
+      Query(ReadRecordQuery::default()),
+      None,
+    )
+    .await
+    .unwrap();
+
+    let serde_json::Value::Object(map) = value else {
+      panic!("Not a map");
+    };
+
+    assert_eq!(
+      *map.get("index").unwrap(),
+      serde_json::Value::String(column_value.to_string())
+    );
+  }
+
+  #[tokio::test]
+  async fn test_single_file_upload_download_e2e() {
+    let state = test_state(None).await.unwrap();
     const API_NAME: &str = "test_api";
-    create_test_record_api(&state, API_NAME).await?;
+    create_test_record_api(&state, API_NAME).await;
 
     let bytes: Vec<u8> = vec![42, 5, 42, 5];
     let file_column = "file";
@@ -474,11 +543,13 @@ mod test {
           .into(),
         ),
       )
-      .await?,
+      .await
+      .unwrap(),
     )
-    .await?;
+    .await
+    .unwrap();
 
-    let record_path = Path((API_NAME.to_string(), create_response.ids[0].clone()));
+    let record_path = (API_NAME.to_string(), create_response.ids[0].clone());
 
     let Json(value) = read_record_handler(
       State(state.clone()),
@@ -486,13 +557,14 @@ mod test {
       Query(ReadRecordQuery::default()),
       None,
     )
-    .await?;
+    .await
+    .unwrap();
 
     let serde_json::Value::Object(map) = value else {
       panic!("Not a map");
     };
 
-    let file_upload: FileUpload = serde_json::from_value(map.get("file").unwrap().clone())?;
+    let file_upload: FileUpload = serde_json::from_value(map.get("file").unwrap().clone()).unwrap();
     assert_eq!(file_upload.original_filename(), Some("bar"));
     assert_eq!(file_upload.content_type(), Some("baz"));
 
@@ -507,9 +579,12 @@ mod test {
       Path(record_file_path.clone()),
       None,
     )
-    .await?;
+    .await
+    .unwrap();
 
-    let body = axum::body::to_bytes(read_response.into_body(), usize::MAX).await?;
+    let body = axum::body::to_bytes(read_response.into_body(), usize::MAX)
+      .await
+      .unwrap();
     assert_eq!(body.to_vec(), bytes);
 
     let _ = delete_record_handler(State(state.clone()), Path(record_path.clone()), None)
@@ -517,8 +592,10 @@ mod test {
       .unwrap();
 
     let mut dir_cnt = 0;
-    let mut read_dir = tokio::fs::read_dir(state.data_dir().uploads_path()).await?;
-    while let Some(entry) = read_dir.next_entry().await? {
+    let mut read_dir = tokio::fs::read_dir(state.data_dir().uploads_path())
+      .await
+      .unwrap();
+    while let Some(entry) = read_dir.next_entry().await.unwrap() {
       log::error!("{entry:?}");
       dir_cnt += 1;
     }
@@ -531,15 +608,13 @@ mod test {
     )
     .await
     .is_err());
-
-    return Ok(());
   }
 
   #[tokio::test]
-  async fn test_multiple_file_upload_download_e2e() -> Result<(), anyhow::Error> {
-    let state = test_state(None).await?;
+  async fn test_multiple_file_upload_download_e2e() {
+    let state = test_state(None).await.unwrap();
     const API_NAME: &str = "test_api";
-    create_test_record_api(&state, API_NAME).await?;
+    create_test_record_api(&state, API_NAME).await;
 
     let bytes1: Vec<u8> = vec![0, 1, 1, 2];
     let bytes2: Vec<u8> = vec![42, 5, 42, 5];
@@ -572,9 +647,11 @@ mod test {
           .into(),
         ),
       )
-      .await?,
+      .await
+      .unwrap(),
     )
-    .await?;
+    .await
+    .unwrap();
 
     let record_path = Path((API_NAME.to_string(), resp.ids[0].clone()));
 
@@ -584,13 +661,15 @@ mod test {
       Query(ReadRecordQuery::default()),
       None,
     )
-    .await?;
+    .await
+    .unwrap();
 
     let serde_json::Value::Object(map) = value else {
       panic!("Not a map");
     };
 
-    let file_uploads: Vec<FileUpload> = serde_json::from_value(map.get("files").unwrap().clone())?;
+    let file_uploads: Vec<FileUpload> =
+      serde_json::from_value(map.get("files").unwrap().clone()).unwrap();
 
     for (index, bytes) in [(0, bytes1), (1, bytes2)] {
       let f = &file_uploads[index];
@@ -606,37 +685,39 @@ mod test {
 
       let response =
         get_uploaded_files_from_record_handler(State(state.clone()), record_file_path, None)
-          .await?;
+          .await
+          .unwrap();
 
-      let body = axum::body::to_bytes(response.into_body(), usize::MAX).await?;
+      let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
       assert_eq!(body.to_vec(), bytes);
     }
-
-    return Ok(());
   }
 
   #[tokio::test]
-  async fn test_read_record_from_view() -> Result<(), anyhow::Error> {
-    let state = test_state(None).await?;
+  async fn test_read_record_from_view() {
+    let state = test_state(None).await.unwrap();
     let conn = state.conn();
 
     // Add tables and record api before inserting data.
-    create_chat_message_app_tables(&state).await?;
+    create_chat_message_app_tables(&state).await.unwrap();
 
     // Create view
     let table_name = "message";
-    let view_name = "message_view";
+    let view_name = "view";
     conn
       .execute(
-        &format!("CREATE VIEW {view_name} AS SELECT * FROM {table_name}"),
+        &format!("CREATE VIEW '{view_name}' AS SELECT * FROM {table_name}"),
         (),
       )
-      .await?;
+      .await
+      .unwrap();
 
-    state.table_metadata().invalidate_all().await?;
+    state.table_metadata().invalidate_all().await.unwrap();
 
-    let room0 = add_room(conn, "room0").await?;
-    let room1 = add_room(conn, "room1").await?;
+    let room0 = add_room(conn, "room0").await.unwrap();
+    let room1 = add_room(conn, "room1").await.unwrap();
     let password = "Secret!1!!";
 
     add_record_api(
@@ -652,20 +733,25 @@ mod test {
         ..Default::default()
     },
   )
-  .await?;
+  .await.unwrap();
 
     let user_x_email = "user_x@test.com";
     let user_x = create_user_for_test(&state, user_x_email, password)
-      .await?
+      .await
+      .unwrap()
       .into_bytes();
 
-    add_user_to_room(conn, user_x, room0).await?;
-    add_user_to_room(conn, user_x, room1).await?;
+    add_user_to_room(conn, user_x, room0).await.unwrap();
+    add_user_to_room(conn, user_x, room1).await.unwrap();
 
-    let user_x_token = login_with_password(&state, user_x_email, password).await?;
+    let user_x_token = login_with_password(&state, user_x_email, password)
+      .await
+      .unwrap();
 
     // Post to room0. X, Y, and mod should be able to read it.
-    let message_id = send_message(conn, user_x, room0, "from user_x to room0").await?;
+    let message_id = send_message(conn, user_x, room0, "from user_x to room0")
+      .await
+      .unwrap();
 
     // User X
     let response = read_record_handler(
@@ -676,7 +762,5 @@ mod test {
     )
     .await;
     assert!(response.is_ok(), "{response:?}");
-
-    return Ok(());
   }
 }
