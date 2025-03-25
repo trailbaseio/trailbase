@@ -1,7 +1,7 @@
 use log::*;
 use serde::{Deserialize, Serialize};
 use sqlite3_parser::ast::{
-  fmt::ToTokens, ColumnDefinition, CreateTableBody, FromClause, Name, SelectTable, Stmt,
+  fmt::ToTokens, ColumnDefinition, CreateTableBody, Expr, FromClause, Name, SelectTable, Stmt,
   TableOptions,
 };
 use std::collections::HashMap;
@@ -323,17 +323,22 @@ pub struct Column {
 
 impl Column {
   fn to_fragment(&self) -> String {
-    return format!(
-      "{name} {data_type} {options}",
-      name = self.name,
-      data_type = format!("{:?}", self.data_type).to_uppercase(),
-      options = self
-        .options
-        .iter()
-        .map(|o| o.to_fragment())
-        .collect::<Vec<_>>()
-        .join(" "),
-    );
+    let options: Vec<String> = self.options.iter().map(|o| o.to_fragment()).collect();
+
+    return if options.is_empty() {
+      format!(
+        "'{name}' {data_type}",
+        name = self.name,
+        data_type = format!("{:?}", self.data_type).to_uppercase(),
+      )
+    } else {
+      format!(
+        "'{name}' {data_type} {options}",
+        name = self.name,
+        data_type = format!("{:?}", self.data_type).to_uppercase(),
+        options = options.join(" "),
+      )
+    };
   }
 }
 
@@ -398,11 +403,11 @@ impl Table {
     column_defs_and_table_constraints.extend(fk_table_constraints);
 
     return format!(
-      "CREATE{temporary} TABLE {name} ({col_defs_and_constraints}) {strict}",
+      "CREATE{temporary} TABLE '{name}' ({col_defs_and_constraints}){strict}",
       temporary = if self.temporary { " TEMPORARY" } else { "" },
       name = self.name,
       col_defs_and_constraints = column_defs_and_table_constraints.join(", "),
-      strict = if self.strict { "STRICT" } else { "" },
+      strict = if self.strict { " STRICT" } else { "" },
     );
   }
 }
@@ -427,16 +432,17 @@ impl TableIndex {
       .iter()
       .map(|c| {
         format!(
-          "{} {}",
-          c.column_name,
-          c.ascending
+          "{name} {order}",
+          name = c.column_name,
+          order = c
+            .ascending
             .map_or("", |asc| if asc { "ASC" } else { "DESC" })
         )
       })
       .collect();
 
     return format!(
-      "CREATE {unique} INDEX {if_not_exists} {name} ON {table_name} ({indexed_columns}) {predicate}",
+      "CREATE {unique} INDEX {if_not_exists} '{name}' ON '{table_name}' ({indexed_columns}) {predicate}",
       unique = if self.unique { "UNIQUE" } else { "" },
       if_not_exists = if self.if_not_exists {
         "IF NOT EXISTS"
@@ -526,7 +532,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
 
                   Some(ForeignKey {
                     name: constraint.name.as_ref().map(|name| name.to_string()),
-                    foreign_table: clause.tbl_name.to_string(),
+                    foreign_table: unquote(clause.tbl_name.clone()),
                     columns: columns.iter().map(|c| c.col_name.to_string()).collect(),
                     referred_columns: clause.columns.as_ref().map_or_else(Vec::new, |columns| {
                       columns.iter().map(|c| c.col_name.to_string()).collect()
@@ -565,10 +571,10 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
               col_type,
               constraints,
             } = def;
-
             assert_eq!(name, col_name);
 
             let name = unquote(col_name);
+            assert!(!name.is_empty());
 
             let data_type: ColumnDataType = match col_type {
               Some(x) => x.into(),
@@ -598,12 +604,8 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
         // sqlite> SELECT sql FROM main.sqlite_schema;
         //   CREATE TABLE "bar" (x text)
         //
-        // TODO: factor our QualifiedNamed conversion.
-        let table_name = tbl_name
-          .name
-          .to_string()
-          .trim_matches(|c| c == '"' || c == '\'')
-          .to_string();
+        // TODO: factor out QualifiedNamed conversion.
+        let table_name = unquote(tbl_name.name);
 
         Ok(Table {
           name: table_name,
@@ -620,7 +622,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
         args: _args,
         ..
       } => Ok(Table {
-        name: tbl_name.name.to_string(),
+        name: unquote(tbl_name.name),
         strict: false,
         columns: vec![],
         foreign_keys: vec![],
@@ -637,7 +639,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
 
 impl From<sqlite3_parser::ast::Type> for ColumnDataType {
   fn from(data_type: sqlite3_parser::ast::Type) -> Self {
-    return ColumnDataType::from_type_name(data_type.name.as_str()).unwrap_or(ColumnDataType::Null);
+    return ColumnDataType::from_type_name(&data_type.name).unwrap_or(ColumnDataType::Null);
   }
 }
 
@@ -697,12 +699,12 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for TableIndex {
         columns,
         where_clause,
       } => Ok(TableIndex {
-        name: idx_name.to_string(),
-        table_name: tbl_name.to_string(),
+        name: unquote(idx_name.name),
+        table_name: unquote(tbl_name),
         columns: columns
           .into_iter()
           .map(|order_expr| ColumnOrder {
-            column_name: order_expr.expr.to_string(),
+            column_name: unquote_expr(order_expr.expr),
             ascending: order_expr
               .order
               .map(|order| order == sqlite3_parser::ast::SortOrder::Asc),
@@ -1030,7 +1032,7 @@ fn try_extract_column_mapping(
 fn unquote(name: Name) -> String {
   let n = name.0.as_bytes();
   if n.is_empty() {
-    return String::new();
+    return name.0;
   }
 
   return match n[0] {
@@ -1042,13 +1044,18 @@ fn unquote(name: Name) -> String {
   };
 }
 
+fn unquote_expr(expr: Expr) -> String {
+  return match expr {
+    Expr::Name(n) => unquote(n),
+    x => x.to_string(),
+  };
+}
+
 #[cfg(test)]
 mod tests {
-  use anyhow::Error;
-  use lazy_static::lazy_static;
-
   use super::*;
   use crate::constants::USER_TABLE;
+  use crate::table_metadata::sqlite3_parse_into_statement;
 
   #[test]
   fn test_unquote() {
@@ -1057,11 +1064,35 @@ mod tests {
     assert_eq!(unquote(Name("\"[]\"".to_string())), "[]");
   }
 
+  #[test]
+  fn test_create_table_statement_quoting() {
+    let statement = format!(
+      r#"
+      CREATE TABLE "table" (
+          'index'       TEXT,
+          `delete`      TEXT,
+          [create]      TEXT
+      ) STRICT;
+      "#
+    );
+
+    let parsed = sqlite3_parse_into_statement(&statement).unwrap().unwrap();
+
+    let table: Table = parsed.try_into().unwrap();
+    assert_eq!(table.name, "table");
+    let sql = table.create_table_statement();
+
+    assert_eq!(
+      "CREATE TABLE 'table' ('index' TEXT, 'delete' TEXT, 'create' TEXT) STRICT",
+      sql
+    );
+    sqlite3_parse_into_statement(&sql).unwrap().unwrap();
+  }
+
   #[tokio::test]
   async fn test_statement_to_table_schema_and_back() {
-    lazy_static! {
-      static ref SQL: String = format!(
-        r#"
+    let statement = format!(
+      r#"
       CREATE TABLE test (
           id                           BLOB PRIMARY KEY DEFAULT (uuid_v7()) NOT NULL,
           user                         BLOB DEFAULT '' REFERENCES _user(id),
@@ -1075,20 +1106,17 @@ mod tests {
 
           UNIQUE (email),
           FOREIGN KEY(user_id) REFERENCES {USER_TABLE}(id) ON DELETE CASCADE
-      ) strict;
+      ) STRICT;
       "#
-      );
-    }
+    );
 
     {
       // First Make sure the query is actually valid, as opposed to "only" parsable.
       let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
-      conn.execute(&SQL, ()).await.unwrap();
+      conn.execute(&statement, ()).await.unwrap();
     }
 
-    let statement1 = crate::table_metadata::sqlite3_parse_into_statement(&SQL)
-      .unwrap()
-      .unwrap();
+    let statement1 = sqlite3_parse_into_statement(&statement).unwrap().unwrap();
     let table1: Table = statement1.clone().try_into().unwrap();
 
     let sql = table1.create_table_statement();
@@ -1098,9 +1126,7 @@ mod tests {
       conn.execute(&sql, ()).await.unwrap();
     }
 
-    let statement2 = crate::table_metadata::sqlite3_parse_into_statement(&sql)
-      .unwrap()
-      .unwrap();
+    let statement2 = sqlite3_parse_into_statement(&sql).unwrap().unwrap();
 
     let table2: Table = statement2.clone().try_into().unwrap();
 
@@ -1109,25 +1135,20 @@ mod tests {
   }
 
   #[test]
-  fn test_statement_to_table_index_and_back() -> Result<(), Error> {
+  fn test_statement_to_table_index_and_back() {
     const SQL: &str =
-      "CREATE UNIQUE INDEX IF NOT EXISTS __user__email_index ON _user (email) WHERE email != '';";
+      "CREATE UNIQUE INDEX IF NOT EXISTS 'index' ON 'table' ('create') WHERE 'create' != '';";
 
-    let statement1 = crate::table_metadata::sqlite3_parse_into_statement(SQL)
+    let statement1 = sqlite3_parse_into_statement(SQL).unwrap().unwrap();
+    let index1: TableIndex = statement1.clone().try_into().unwrap();
+
+    let statement2 = sqlite3_parse_into_statement(&index1.create_index_statement())
       .unwrap()
       .unwrap();
-    let index1: TableIndex = statement1.clone().try_into()?;
-
-    let statement2 =
-      crate::table_metadata::sqlite3_parse_into_statement(&index1.create_index_statement())
-        .unwrap()
-        .unwrap();
-    let index2: TableIndex = statement2.clone().try_into()?;
+    let index2: TableIndex = statement2.clone().try_into().unwrap();
 
     assert_eq!(statement1, statement2);
     assert_eq!(index1, index2);
-
-    Ok(())
   }
 
   #[test]
@@ -1141,23 +1162,17 @@ mod tests {
       END
     "#;
 
-    crate::table_metadata::sqlite3_parse_into_statement(SQL)
-      .unwrap()
-      .unwrap();
+    sqlite3_parse_into_statement(SQL).unwrap().unwrap();
   }
 
   #[test]
   fn test_parse_create_index() {
     let sql = "CREATE UNIQUE INDEX index_name ON table_name(a ASC, b DESC) WHERE x > 0";
-    let stmt = crate::table_metadata::sqlite3_parse_into_statement(sql)
-      .unwrap()
-      .unwrap();
+    let stmt = sqlite3_parse_into_statement(sql).unwrap().unwrap();
     let index: TableIndex = stmt.clone().try_into().unwrap();
 
     let sql1 = index.create_index_statement();
-    let stmt1 = crate::table_metadata::sqlite3_parse_into_statement(&sql1)
-      .unwrap()
-      .unwrap();
+    let stmt1 = sqlite3_parse_into_statement(&sql1).unwrap().unwrap();
 
     assert_eq!(stmt, stmt1);
   }
@@ -1166,9 +1181,7 @@ mod tests {
   fn test_view_column_extraction() {
     let sql = "SELECT user, *, a.*, p.user AS foo FROM articles AS a LEFT JOIN profiles AS p ON p.user = a.author";
     let sqlite3_parser::ast::Stmt::Select(select) =
-      crate::table_metadata::sqlite3_parse_into_statement(sql)
-        .unwrap()
-        .unwrap()
+      sqlite3_parse_into_statement(sql).unwrap().unwrap()
     else {
       panic!("Not a select");
     };

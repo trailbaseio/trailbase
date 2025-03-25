@@ -188,7 +188,7 @@ async fn fetch_rows(
     r#"
       SELECT _row_.*
       FROM
-        (SELECT * FROM {table_or_view_name}) as _row_
+        (SELECT * FROM '{table_or_view_name}') as _row_
       WHERE
         {clause}
       ORDER BY
