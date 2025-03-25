@@ -1,7 +1,8 @@
 use log::*;
 use serde::{Deserialize, Serialize};
 use sqlite3_parser::ast::{
-  fmt::ToTokens, CreateTableBody, FromClause, SelectTable, Stmt, TableOptions,
+  fmt::ToTokens, ColumnDefinition, CreateTableBody, FromClause, Name, SelectTable, Stmt,
+  TableOptions,
 };
 use std::collections::HashMap;
 use thiserror::Error;
@@ -558,12 +559,16 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
 
         let columns: Vec<_> = columns
           .into_iter()
-          .map(|(_name, def)| {
-            let sqlite3_parser::ast::ColumnDefinition {
+          .map(|(name, def): (Name, ColumnDefinition)| {
+            let ColumnDefinition {
               col_name,
               col_type,
               constraints,
             } = def;
+
+            assert_eq!(name, col_name);
+
+            let name = unquote(col_name);
 
             let data_type: ColumnDataType = match col_type {
               Some(x) => x.into(),
@@ -576,7 +581,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
               .collect();
 
             return Column {
-              name: col_name.to_string(),
+              name,
               data_type,
               options,
             };
@@ -1022,6 +1027,21 @@ fn try_extract_column_mapping(
   return Ok(Some(mapping));
 }
 
+fn unquote(name: Name) -> String {
+  let n = name.0.as_bytes();
+  if n.is_empty() {
+    return String::new();
+  }
+
+  return match n[0] {
+    b'"' | b'`' | b'\'' | b'[' => {
+      assert!(n.len() > 2);
+      name.0[1..n.len() - 1].to_string()
+    }
+    _ => name.0,
+  };
+}
+
 #[cfg(test)]
 mod tests {
   use anyhow::Error;
@@ -1029,6 +1049,13 @@ mod tests {
 
   use super::*;
   use crate::constants::USER_TABLE;
+
+  #[test]
+  fn test_unquote() {
+    assert_eq!(unquote(Name("".to_string())), "");
+    assert_eq!(unquote(Name("['``']".to_string())), "'``'");
+    assert_eq!(unquote(Name("\"[]\"".to_string())), "[]");
+  }
 
   #[tokio::test]
   async fn test_statement_to_table_schema_and_back() {

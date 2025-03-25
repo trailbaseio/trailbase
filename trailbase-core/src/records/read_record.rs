@@ -98,7 +98,7 @@ pub async fn read_record_handler(
       )
       .map_err(|err| RecordError::Internal(err.into()))?
     }
-    _ => {
+    Some(_) | None => {
       let Some(row) = SelectQueryBuilder::run(
         &state,
         api.table_name(),
@@ -396,7 +396,9 @@ mod test {
           r#"CREATE TABLE 'test_table' (
             id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
             file         TEXT CHECK(jsonschema('std.FileUpload', file)),
-            files        TEXT CHECK(jsonschema('std.FileUploads', files))
+            files        TEXT CHECK(jsonschema('std.FileUploads', files)),
+            -- Add a "keyword" column to ensure escaping is correct
+            [index]      TEXT NOT NULL DEFAULT('')
           ) strict"#
         ),
         (),
