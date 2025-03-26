@@ -2,8 +2,8 @@ use itertools::Itertools;
 use log::*;
 use serde::{Deserialize, Serialize};
 use sqlite3_parser::ast::{
-  fmt::ToTokens, ColumnDefinition, CreateTableBody, Expr, FromClause, Literal, Name, SelectTable,
-  Stmt, TableConstraint, TableOptions,
+  fmt::ToTokens, ColumnDefinition, CreateTableBody, Expr, FromClause, Literal, Name, QualifiedName,
+  SelectTable, Stmt, TableConstraint, TableOptions,
 };
 use std::collections::HashMap;
 use thiserror::Error;
@@ -36,33 +36,38 @@ pub struct ForeignKey {
   pub columns: Vec<String>,
   pub foreign_table: String,
   pub referred_columns: Vec<String>,
+
+  // Only "ON DELETE" and "ON UPDATE" are supported in foreign key clause, i.e. no "ON INSERT":
+  //   https://www.sqlite.org/syntax/foreign-key-clause.html
   pub on_delete: Option<ReferentialAction>,
   pub on_update: Option<ReferentialAction>,
+  // TODO: Missing DEFERRABLE.
 }
 
 impl ForeignKey {
   fn to_fragment(&self) -> String {
-    return format!(
-      "{name} FOREIGN KEY ({cols}) REFERENCES '{foreign_table}'{ref_col} {on_delete} {on_update}",
-      name = self
-        .name
-        .as_ref()
-        .map_or_else(|| "".to_string(), |n| format!("CONSTRAINT {n}")),
-      cols = quote(&self.columns),
-      foreign_table = self.foreign_table,
-      ref_col = match self.referred_columns.len() {
-        0 => "".to_string(),
-        _ => format!("({})", quote(&self.referred_columns)),
-      },
-      on_delete = self.on_delete.as_ref().map_or_else(
-        || "".to_string(),
-        |action| format!("ON DELETE {}", action.to_fragment())
-      ),
-      on_update = self.on_update.as_ref().map_or_else(
-        || "".to_string(),
-        |action| format!("ON UPDATE {}", action.to_fragment())
-      ),
+    let cols = quote(&self.columns);
+    let foreign_table = &self.foreign_table;
+    let ref_col = match self.referred_columns.len() {
+      0 => "".to_string(),
+      _ => format!("({})", quote(&self.referred_columns)),
+    };
+
+    let on_delete = self.on_delete.as_ref().map_or_else(
+      || "".to_string(),
+      |action| format!("ON DELETE {}", action.to_fragment()),
     );
+    let on_update = self.on_update.as_ref().map_or_else(
+      || "".to_string(),
+      |action| format!("ON UPDATE {}", action.to_fragment()),
+    );
+
+    return if let Some(ref name) = self.name {
+      format!(
+      "CONSTRAINT '{name}' FOREIGN KEY ({cols}) REFERENCES '{foreign_table}'{ref_col} {on_delete} {on_update}")
+    } else {
+      format!("FOREIGN KEY ({cols}) REFERENCES '{foreign_table}'{ref_col} {on_delete} {on_update}")
+    };
   }
 }
 
@@ -71,22 +76,31 @@ impl ForeignKey {
 #[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
 pub struct UniqueConstraint {
   pub name: Option<String>,
+
   /// Identifiers of the columns that are unique.
-  /// TODO: Should be indexed/ordered column.
+  ///
+  /// TODO: Should be indexed/ordered column, e.g. ASC/DESC:
+  ///   https://www.sqlite.org/syntax/indexed-column.html
   pub columns: Vec<String>,
+
+  pub conflict_clause: Option<ConflictResolution>,
 }
 
 impl UniqueConstraint {
   fn to_fragment(&self) -> String {
-    return format!(
-      "{name}UNIQUE ({cols}) {conflict_clause}",
-      name = self
-        .name
-        .as_ref()
-        .map_or_else(|| "".to_string(), |n| format!("CONSTRAINT '{n}' ")),
-      cols = quote(&self.columns),
-      conflict_clause = "",
-    );
+    let cols = quote(&self.columns);
+
+    return match (self.name.as_ref(), &self.conflict_clause.as_ref()) {
+      (Some(name), Some(resolution)) => format!(
+        "CONSTRAINT '{name}' UNIQUE ({cols}) ON CONFLICT {}",
+        resolution.to_fragment()
+      ),
+      (Some(name), None) => format!("CONSTRAINT '{name}' UNIQUE ({cols})"),
+      (None, Some(resolution)) => {
+        format!("UNIQUE ({cols}) ON CONFLICT {}", resolution.to_fragment())
+      }
+      (None, None) => format!("UNIQUE ({cols})"),
+    };
   }
 }
 
@@ -95,6 +109,47 @@ pub struct ColumnOrder {
   pub column_name: String,
   pub ascending: Option<bool>,
   pub nulls_first: Option<bool>,
+}
+
+/// Conflict resolution types
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+pub enum ConflictResolution {
+  /// `ROLLBACK`
+  Rollback,
+  /// `ABORT`
+  Abort, // default
+  /// `FAIL`
+  Fail,
+  /// `IGNORE`
+  Ignore,
+  /// `REPLACE`
+  Replace,
+}
+
+impl From<sqlite3_parser::ast::ResolveType> for ConflictResolution {
+  fn from(res: sqlite3_parser::ast::ResolveType) -> Self {
+    use sqlite3_parser::ast::ResolveType;
+    match res {
+      ResolveType::Rollback => ConflictResolution::Rollback,
+      ResolveType::Abort => ConflictResolution::Abort,
+      ResolveType::Fail => ConflictResolution::Fail,
+      ResolveType::Ignore => ConflictResolution::Ignore,
+      ResolveType::Replace => ConflictResolution::Replace,
+    }
+  }
+}
+
+impl ConflictResolution {
+  // https://www.sqlite.org/syntax/conflict-clause.html
+  fn to_fragment(&self) -> &'static str {
+    return match self {
+      Self::Rollback => "ROLLBACK",
+      Self::Abort => "ABORT",
+      Self::Fail => "FAIL",
+      Self::Ignore => "IGNORE",
+      Self::Replace => "REPLACE",
+    };
+  }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
@@ -146,6 +201,8 @@ pub enum ColumnOption {
   // NOTE: Unique { is_primary: true} means PrimaryKey.
   Unique {
     is_primary: bool,
+    conflict_clause: Option<ConflictResolution>,
+    // TODO: Missing ASC/DESC & AUTOINCREMENT for PK.
   },
   ForeignKey {
     foreign_table: String,
@@ -167,13 +224,15 @@ impl ColumnOption {
       Self::Null => "NULL".to_string(),
       Self::NotNull => "NOT NULL".to_string(),
       Self::Default(v) => format!("DEFAULT {v}"),
-      Self::Unique { is_primary } => {
-        if *is_primary {
-          "PRIMARY KEY".to_string()
-        } else {
-          "UNIQUE".to_string()
-        }
-      }
+      Self::Unique {
+        is_primary,
+        conflict_clause,
+      } => match (*is_primary, conflict_clause.as_ref()) {
+        (true, Some(res)) => format!("PRIMARY KEY ON CONFLICT {}", res.to_fragment()),
+        (true, None) => "PRIMARY KEY".to_string(),
+        (false, Some(res)) => format!("UNIQUE ON CONFLICT {}", res.to_fragment()),
+        (false, None) => "UNIQUE".to_string(),
+      },
       Self::ForeignKey {
         foreign_table,
         referred_columns,
@@ -185,7 +244,6 @@ impl ColumnOption {
           ref_col = match referred_columns.len() {
             0 => "".to_string(),
             _ => format!("({})", quote(referred_columns)),
-            //_ => format!("({})", referred_columns.join(", ")),
           },
           on_delete = on_delete.as_ref().map_or_else(
             || "".to_string(),
@@ -349,10 +407,9 @@ impl Column {
 
 impl Column {
   pub fn is_primary(&self) -> bool {
-    self
-      .options
-      .iter()
-      .any(|opt| matches!(opt, ColumnOption::Unique { is_primary } if *is_primary ))
+    self.options.iter().any(
+      |opt| matches!(opt, ColumnOption::Unique { is_primary, conflict_clause: _ } if *is_primary ),
+    )
   }
 }
 
@@ -514,10 +571,16 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
                 TableConstraint::ForeignKey {
                   columns,
                   clause,
-                  deref_clause: _,
+                  deref_clause,
                 } => {
+                  if let Some(ref clause) = deref_clause {
+                    // TOOD: Parse DEFERRABLE.
+                    log::warn!("Unsupported DEFERRABLE in FK clause: {clause:?}");
+                  }
+
                   let mut on_delete: Option<ReferentialAction> = None;
                   let mut on_update: Option<ReferentialAction> = None;
+
                   for arg in &clause.args {
                     use sqlite3_parser::ast::RefArg;
 
@@ -528,21 +591,31 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
                       RefArg::OnUpdate(action) => {
                         on_update = Some((*action).into());
                       }
-                      _ => {}
+                      RefArg::OnInsert(action) => {
+                        log::error!("Unexpected ON INSERT in FK clause: {action:?}");
+                      }
+                      RefArg::Match(name) => {
+                        // SQL supports FK MATCH clause, which is *not* supported by sqlite:
+                        //   https://www.sqlite.org/foreignkeys.html#fk_unsupported
+                        log::warn!("Unsupported MATCH in FK clause: {name:?}");
+                      }
                     }
                   }
 
                   Some(ForeignKey {
-                    name: constraint.name.as_ref().map(|name| unquote(name.clone())),
-                    foreign_table: unquote(clause.tbl_name.clone()),
+                    name: constraint
+                      .name
+                      .as_ref()
+                      .map(|name| unquote_name(name.clone())),
+                    foreign_table: unquote_name(clause.tbl_name.clone()),
                     columns: columns
                       .iter()
-                      .map(|c| unquote(c.col_name.clone()))
+                      .map(|c| unquote_name(c.col_name.clone()))
                       .collect(),
                     referred_columns: clause.columns.as_ref().map_or_else(Vec::new, |columns| {
                       columns
                         .iter()
-                        .map(|c| unquote(c.col_name.clone()))
+                        .map(|c| unquote_name(c.col_name.clone()))
                         .collect()
                     }),
                     on_update,
@@ -558,13 +631,17 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
               .filter_map(|constraint| match &constraint.constraint {
                 TableConstraint::Unique {
                   columns,
-                  conflict_clause: _,
+                  conflict_clause,
                 } => Some(UniqueConstraint {
-                  name: constraint.name.as_ref().map(|name| unquote(name.clone())),
+                  name: constraint
+                    .name
+                    .as_ref()
+                    .map(|name| unquote_name(name.clone())),
                   columns: columns
                     .iter()
                     .map(|c| unquote_expr(c.expr.clone()))
                     .collect(),
+                  conflict_clause: conflict_clause.map(|c| c.into()),
                 }),
                 _ => None,
               })
@@ -584,7 +661,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
             } = def;
             assert_eq!(name, col_name);
 
-            let name = unquote(col_name);
+            let name = unquote_name(col_name);
             assert!(!name.is_empty());
 
             let data_type: ColumnDataType = match col_type {
@@ -605,21 +682,8 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
           })
           .collect();
 
-        // WARN: SQLite escaping is weird, altering a table adds double quote escaping and
-        // sqlite3_parser unlike sqlparser, doesn't parse out the escaping.
-        //
-        // sqlite> CREATE TABLE foo (x text);
-        // sqlite> SELECT sql FROM main.sqlite_schema;
-        //   CREATE TABLE foo (x text)
-        // sqlite> ALTER TABLE foo RENAME TO bar
-        // sqlite> SELECT sql FROM main.sqlite_schema;
-        //   CREATE TABLE "bar" (x text)
-        //
-        // TODO: factor out QualifiedNamed conversion.
-        let table_name = unquote(tbl_name.name);
-
         Ok(Table {
-          name: table_name,
+          name: unquote_qualified(tbl_name),
           strict: options.contains(TableOptions::STRICT),
           columns,
           foreign_keys,
@@ -633,7 +697,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
         args: _args,
         ..
       } => Ok(Table {
-        name: unquote(tbl_name.name),
+        name: unquote_qualified(tbl_name),
         strict: false,
         columns: vec![],
         foreign_keys: vec![],
@@ -660,9 +724,17 @@ impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
 
     return match constraint {
       Constraint::PrimaryKey {
-        conflict_clause: _, ..
-      } => ColumnOption::Unique { is_primary: true },
-      Constraint::Unique(_) => ColumnOption::Unique { is_primary: false },
+        conflict_clause,
+        order: _,
+        auto_increment: _,
+      } => ColumnOption::Unique {
+        is_primary: true,
+        conflict_clause: conflict_clause.map(|c| c.into()),
+      },
+      Constraint::Unique(conflict_clause) => ColumnOption::Unique {
+        is_primary: false,
+        conflict_clause: conflict_clause.map(|c| c.into()),
+      },
       Constraint::Check(expr) => {
         // NOTE: This is not using unquote on purpose, since this is not an identifier.
         ColumnOption::Check(expr.to_string())
@@ -671,8 +743,11 @@ impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
         let columns = clause.columns.unwrap_or(vec![]);
 
         ColumnOption::ForeignKey {
-          foreign_table: unquote(clause.tbl_name),
-          referred_columns: columns.into_iter().map(|c| unquote(c.col_name)).collect(),
+          foreign_table: unquote_name(clause.tbl_name),
+          referred_columns: columns
+            .into_iter()
+            .map(|c| unquote_name(c.col_name))
+            .collect(),
           on_delete: None,
           on_update: None,
         }
@@ -714,8 +789,8 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for TableIndex {
         columns,
         where_clause,
       } => Ok(TableIndex {
-        name: unquote(idx_name.name),
-        table_name: unquote(tbl_name),
+        name: unquote_name(idx_name.name),
+        table_name: unquote_name(tbl_name),
         columns: columns
           .into_iter()
           .map(|order_expr| ColumnOrder {
@@ -774,7 +849,7 @@ impl View {
         };
 
         Ok(View {
-          name: unquote(view_name.name),
+          name: unquote_qualified(view_name),
           columns,
           query: SelectFormatter(*select).to_string(),
           temporary,
@@ -788,15 +863,12 @@ impl View {
   }
 }
 
-fn to_entry(
-  qn: sqlite3_parser::ast::QualifiedName,
-  alias: Option<sqlite3_parser::ast::As>,
-) -> (String, String) {
+fn to_entry(qn: QualifiedName, alias: Option<sqlite3_parser::ast::As>) -> (String, String) {
   return (
     alias
       .and_then(|alias| {
         if let sqlite3_parser::ast::As::As(name) = alias {
-          return Some(unquote(name));
+          return Some(unquote_name(name));
         }
         None
       })
@@ -917,7 +989,7 @@ fn try_extract_column_mapping(
         }
       }
       ResultColumn::TableStar(name) => {
-        let name = unquote(name);
+        let name = unquote_name(name);
         let Some(table_name) = table_names.get(&name) else {
           return Err(SchemaError::Precondition(
             format!("Missing alias: {name}").into(),
@@ -947,7 +1019,7 @@ fn try_extract_column_mapping(
           let name = alias
             .and_then(|alias| {
               if let sqlite3_parser::ast::As::As(name) = alias {
-                return Some(unquote(name));
+                return Some(unquote_name(name));
               }
               None
             })
@@ -966,8 +1038,8 @@ fn try_extract_column_mapping(
           });
         }
         Expr::Qualified(qualifier, name) => {
-          let qualifier = unquote(qualifier);
-          let col_name = unquote(name);
+          let qualifier = unquote_name(qualifier);
+          let col_name = unquote_name(name);
 
           let Some(table_name) = table_names.get(&qualifier) else {
             return Err(SchemaError::Precondition(
@@ -985,7 +1057,7 @@ fn try_extract_column_mapping(
           let name = alias
             .and_then(|alias| {
               if let sqlite3_parser::ast::As::As(name) = alias {
-                return Some(unquote(name));
+                return Some(unquote_name(name));
               }
               None
             })
@@ -1017,7 +1089,7 @@ fn try_extract_column_mapping(
 
           let Some(name) = alias.and_then(|alias| {
             if let sqlite3_parser::ast::As::As(name) = alias {
-              return Some(unquote(name));
+              return Some(unquote_name(name));
             }
             None
           }) else {
@@ -1047,7 +1119,8 @@ fn try_extract_column_mapping(
   return Ok(Some(mapping));
 }
 
-fn quote(column_names: &[String]) -> String {
+#[inline]
+pub(crate) fn quote(column_names: &[String]) -> String {
   let mut s = String::new();
   for (i, name) in column_names.iter().enumerate() {
     if i > 0 {
@@ -1077,8 +1150,13 @@ fn unquote_string(s: String) -> String {
   };
 }
 
-fn unquote(name: Name) -> String {
+fn unquote_name(name: Name) -> String {
   return unquote_string(name.0);
+}
+
+fn unquote_qualified(name: QualifiedName) -> String {
+  // FIXME: unquoting of qualified name.
+  return unquote_name(name.name);
 }
 
 fn unquote_id(id: sqlite3_parser::ast::Id) -> String {
@@ -1087,7 +1165,7 @@ fn unquote_id(id: sqlite3_parser::ast::Id) -> String {
 
 fn unquote_expr(expr: Expr) -> String {
   return match expr {
-    Expr::Name(n) => unquote(n),
+    Expr::Name(n) => unquote_name(n),
     Expr::Id(id) => unquote_id(id),
     Expr::Literal(Literal::String(s)) => unquote_string(s),
     x => x.to_string(),
@@ -1100,10 +1178,17 @@ mod tests {
   use crate::table_metadata::sqlite3_parse_into_statement;
 
   #[test]
+  fn test_quote() {
+    assert_eq!("", quote(&vec![]));
+    assert_eq!("''", quote(&vec!["".to_string()]));
+    assert_eq!("'foo', ''", quote(&vec!["foo".to_string(), "".to_string()]));
+  }
+
+  #[test]
   fn test_unquote() {
-    assert_eq!(unquote(Name("".to_string())), "");
-    assert_eq!(unquote(Name("['``']".to_string())), "'``'");
-    assert_eq!(unquote(Name("\"[]\"".to_string())), "[]");
+    assert_eq!(unquote_name(Name("".to_string())), "");
+    assert_eq!(unquote_name(Name("['``']".to_string())), "'``'");
+    assert_eq!(unquote_name(Name("\"[]\"".to_string())), "[]");
   }
 
   #[test]
@@ -1142,7 +1227,7 @@ mod tests {
           user_id                      BLOB,
           email                        TEXT NOT NULL,
           email_visibility             INTEGER DEFAULT FALSE NOT NULL,
-          username                     TEXT,
+          username                     TEXT UNIQUE ON CONFLICT ABORT,
           age                          INTEGER,
           double_age                   INTEGER GENERATED ALWAYS AS (2 * 'age') VIRTUAL,
           triple_age                   INTEGER AS (3 * age) STORED,
@@ -1150,8 +1235,9 @@ mod tests {
           [index]                      TEXT,
 
           UNIQUE (email),
-          UNIQUE ([index]) ON CONFLICT FAIL,
-          CONSTRAINT optional_tbl_constraint_name CHECK(username != ''),
+          -- optional constraint name:
+          CONSTRAINT `unique` UNIQUE ([index]) ON CONFLICT FAIL,
+          CHECK(username != ''),
           FOREIGN KEY(user_id) REFERENCES 'table'('index') ON DELETE CASCADE
       ) STRICT;
       "#
@@ -1243,7 +1329,10 @@ mod tests {
             name: "user".to_string(),
             data_type: ColumnDataType::Blob,
             options: vec![
-              ColumnOption::Unique { is_primary: true },
+              ColumnOption::Unique {
+                is_primary: true,
+                conflict_clause: None,
+              },
               ColumnOption::ForeignKey {
                 foreign_table: "_user".to_string(),
                 referred_columns: vec!["id".to_string()],
@@ -1270,7 +1359,10 @@ mod tests {
           Column {
             name: "id".to_string(),
             data_type: ColumnDataType::Blob,
-            options: vec![ColumnOption::Unique { is_primary: true }],
+            options: vec![ColumnOption::Unique {
+              is_primary: true,
+              conflict_clause: None,
+            }],
           },
           Column {
             name: "author".to_string(),

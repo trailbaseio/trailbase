@@ -415,7 +415,9 @@ function ColumnOptionsFields(props: {
                 props.onChange(
                   setUnique(
                     props.value,
-                    value ? { is_primary: false } : undefined,
+                    value
+                      ? { is_primary: false, conflict_clause: null }
+                      : undefined,
                   ),
                 );
               }}
@@ -724,7 +726,7 @@ export const primaryKeyPresets: [string, (colName: string) => Preset][] = [
       return {
         data_type: "Blob",
         options: [
-          { Unique: { is_primary: true } },
+          { Unique: { is_primary: true, conflict_clause: null } },
           { Check: `is_uuid_v7(${colName})` },
           { Default: "(uuid_v7())" },
           "NotNull",
@@ -737,7 +739,10 @@ export const primaryKeyPresets: [string, (colName: string) => Preset][] = [
     (_colName: string) => {
       return {
         data_type: "Integer",
-        options: [{ Unique: { is_primary: true } }, "NotNull"],
+        options: [
+          { Unique: { is_primary: true, conflict_clause: null } },
+          "NotNull",
+        ],
       };
     },
   ],

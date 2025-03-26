@@ -1,6 +1,7 @@
 import type { Column } from "@bindings/Column";
 import type { ColumnOption } from "@bindings/ColumnOption";
 import type { ReferentialAction } from "@bindings/ReferentialAction";
+import type { ConflictResolution } from "@bindings/ConflictResolution";
 import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
 
@@ -116,7 +117,10 @@ export function setForeignKey(
   return newOpts;
 }
 
-export type Unique = { is_primary: boolean };
+export type Unique = {
+  is_primary: boolean;
+  conflict_clause: ConflictResolution | null;
+};
 
 export function getUnique(options: ColumnOption[]): Unique | undefined {
   return options.reduce<Unique | undefined>((acc, cur: ColumnOption) => {

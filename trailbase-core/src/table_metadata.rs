@@ -386,7 +386,7 @@ fn find_user_id_foreign_key_columns(columns: &[Column]) -> Vec<usize> {
 fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<usize> {
   let primary_key_col_index = columns.iter().position(|col| {
     for opt in &col.options {
-      if let ColumnOption::Unique { is_primary } = opt {
+      if let ColumnOption::Unique { is_primary, .. } = opt {
         return *is_primary;
       }
     }
@@ -435,7 +435,7 @@ fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<u
               ColumnOption::Check(expr) if UUID_V7_RE.is_match(expr) => {
                 return Some(index);
               }
-              ColumnOption::Unique { is_primary } if *is_primary => {
+              ColumnOption::Unique { is_primary, .. } if *is_primary => {
                 is_pk = true;
               }
               _ => {}
@@ -823,7 +823,7 @@ pub(crate) fn build_json_schema_recursive(
             }
           }
         }
-        ColumnOption::Unique { is_primary } => {
+        ColumnOption::Unique { is_primary, .. } => {
           // According to the SQL standard, PRIMARY KEY should always imply NOT NULL.
           // Unfortunately, due to a bug in some early versions, this is not the case in SQLite.
           // Unless the column is an INTEGER PRIMARY KEY or the table is a WITHOUT ROWID table or a

@@ -154,7 +154,10 @@ mod tests {
         columns: vec![Column {
           name: pk_col.clone(),
           data_type: ColumnDataType::Blob,
-          options: vec![ColumnOption::Unique { is_primary: true }],
+          options: vec![ColumnOption::Unique {
+            is_primary: true,
+            conflict_clause: None,
+          }],
         }],
         foreign_keys: vec![],
         unique: vec![],

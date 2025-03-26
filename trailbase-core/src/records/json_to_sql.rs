@@ -662,7 +662,7 @@ impl InsertQueryBuilder {
     let query = if !column_names.is_empty() {
       format!(
         r#"INSERT {conflict_clause} INTO "{table_name}" ({col_names}) VALUES ({placeholders}) {return_fragment}"#,
-        col_names = Self::build_col_names(column_names),
+        col_names = crate::schema::quote(column_names),
         placeholders = params.placeholders(),
       )
     } else {
@@ -671,21 +671,6 @@ impl InsertQueryBuilder {
     };
 
     return Ok((query, params.named_params, params.files));
-  }
-
-  #[inline]
-  fn build_col_names(column_names: &[String]) -> String {
-    let mut s = String::new();
-    for (i, name) in column_names.iter().enumerate() {
-      if i > 0 {
-        s.push_str(", \"");
-      } else {
-        s.push('"');
-      }
-      s.push_str(name);
-      s.push('"');
-    }
-    return s;
   }
 
   #[inline]

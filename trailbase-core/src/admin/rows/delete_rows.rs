@@ -133,7 +133,10 @@ mod tests {
               name: pk_col.clone(),
               data_type: ColumnDataType::Blob,
               options: vec![
-                ColumnOption::Unique { is_primary: true },
+                ColumnOption::Unique {
+                  is_primary: true,
+                  conflict_clause: None,
+                },
                 ColumnOption::Check(format!("(is_uuid_v7({pk_col}))")),
                 ColumnOption::Default("(uuid_v7())".to_string()),
               ],
