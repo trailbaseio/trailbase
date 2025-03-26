@@ -62,13 +62,13 @@ impl JsonColumnMetadata {
 pub struct JsonMetadata {
   pub columns: Vec<Option<JsonColumnMetadata>>,
 
-  file_upload_columns: Vec<usize>,
-  file_uploads_columns: Vec<usize>,
+  // Contains both, 'std.FileUpload' and 'std.FileUpload'.
+  file_column_indexes: Vec<usize>,
 }
 
 impl JsonMetadata {
   pub fn has_file_columns(&self) -> bool {
-    return !self.file_upload_columns.is_empty() || !self.file_uploads_columns.is_empty();
+    return !self.file_column_indexes.is_empty();
   }
 
   fn from_table(table: &Table) -> Self {
@@ -80,34 +80,13 @@ impl JsonMetadata {
   }
 
   fn from_columns(columns: &[Column]) -> Self {
-    let mut file_upload_columns: Vec<usize> = vec![];
-    let mut file_uploads_columns: Vec<usize> = vec![];
+    let columns: Vec<_> = columns.iter().map(build_json_metadata).collect();
 
-    let columns = columns
-      .iter()
-      .enumerate()
-      .map(|(index, col)| {
-        let json_metadata = build_json_metadata(col);
-        if let Some(ref json_metadata) = json_metadata {
-          match json_metadata {
-            JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
-              file_upload_columns.push(index);
-            }
-            JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
-              file_uploads_columns.push(index);
-            }
-            _ => {}
-          };
-        }
-
-        return json_metadata;
-      })
-      .collect();
+    let file_column_indexes = find_file_column_indexes(&columns);
 
     return Self {
       columns,
-      file_upload_columns,
-      file_uploads_columns,
+      file_column_indexes,
     };
   }
 }
@@ -328,7 +307,28 @@ fn extract_json_metadata(
   return Ok(None);
 }
 
-fn find_user_id_foreign_key_columns(columns: &[Column]) -> Vec<usize> {
+pub(crate) fn find_file_column_indexes(
+  json_column_metadata: &[Option<JsonColumnMetadata>],
+) -> Vec<usize> {
+  let mut indexes: Vec<usize> = vec![];
+  for (index, column) in json_column_metadata.iter().enumerate() {
+    if let Some(ref metadata) = column {
+      match metadata {
+        JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
+          indexes.push(index);
+        }
+        JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
+          indexes.push(index);
+        }
+        _ => {}
+      };
+    }
+  }
+
+  return indexes;
+}
+
+pub(crate) fn find_user_id_foreign_key_columns(columns: &[Column]) -> Vec<usize> {
   let mut indexes: Vec<usize> = vec![];
   for (index, col) in columns.iter().enumerate() {
     for opt in &col.options {
@@ -466,17 +466,14 @@ impl TableMetadataCache {
     // Install file column triggers. This ain't pretty, this might be better on construction and
     // schema changes.
     for metadata in table_metadata_map.values() {
-      let mut columns: Vec<usize> = vec![];
-      columns.extend(&metadata.json_metadata.file_upload_columns);
-      columns.extend(&metadata.json_metadata.file_uploads_columns);
-
-      for idx in columns {
+      for idx in &metadata.json_metadata.file_column_indexes {
         let table_name = &metadata.schema.name;
-        let col = &metadata.schema.columns[idx];
+        let col = &metadata.schema.columns[*idx];
         let column_name = &col.name;
 
         conn.execute_batch(&indoc::formatdoc!(
           r#"
+          DROP TRIGGER IF EXISTS __{table_name}__{column_name}__update_trigger;
           CREATE TRIGGER IF NOT EXISTS __{table_name}__{column_name}__update_trigger AFTER UPDATE ON "{table_name}"
             WHEN OLD."{column_name}" IS NOT NULL AND OLD."{column_name}" != NEW."{column_name}"
             BEGIN
@@ -484,6 +481,7 @@ impl TableMetadataCache {
                 ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
             END;
 
+          DROP TRIGGER IF EXISTS __{table_name}__{column_name}__delete_trigger;
           CREATE TRIGGER IF NOT EXISTS __{table_name}__{column_name}__delete_trigger AFTER DELETE ON "{table_name}"
             --FOR EACH ROW
             WHEN OLD."{column_name}" IS NOT NULL

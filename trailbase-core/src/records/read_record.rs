@@ -160,7 +160,7 @@ pub async fn get_uploaded_file_from_record_handler(
   };
 
   let (_index, pk_column) = api.record_pk_column();
-  let Some(index) = api.columns().iter().position(|c| c.name == column_name) else {
+  let Some(index) = api.column_index_by_name(&column_name) else {
     return Err(RecordError::BadRequest("Invalid field/column name"));
   };
 
@@ -219,7 +219,7 @@ pub async fn get_uploaded_files_from_record_handler(
   };
 
   let (_index, pk_column) = api.record_pk_column();
-  let Some(index) = api.columns().iter().position(|c| c.name == column_name) else {
+  let Some(index) = api.column_index_by_name(&column_name) else {
     return Err(RecordError::BadRequest("Invalid field/column name"));
   };
 
@@ -744,19 +744,19 @@ mod test {
     let password = "Secret!1!!";
 
     add_record_api(
-    &state,
-    "messages_api",
-    view_name,
+      &state,
+      "messages_api",
+      view_name,
       Acls {
         authenticated: vec![PermissionFlag::Create, PermissionFlag::Read],
         ..Default::default()
       },
-    AccessRules {
-      read: Some("(_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND user = _USER_.id))".to_string()),
-        ..Default::default()
-    },
-  )
-  .await.unwrap();
+      AccessRules {
+        read: Some("(_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND user = _USER_.id))".to_string()),
+          ..Default::default()
+      },
+    )
+    .await.unwrap();
 
     let user_x_email = "user_x@test.com";
     let user_x = create_user_for_test(&state, user_x_email, password)

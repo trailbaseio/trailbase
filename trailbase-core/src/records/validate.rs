@@ -39,8 +39,16 @@ pub(crate) fn validate_record_api_config(
 
   let metadata: std::sync::Arc<dyn TableOrViewMetadata> =
     if let Some(metadata) = tables.get(table_name) {
+      if metadata.schema.temporary {
+        return ierr("Record APIs must not reference TEMPORARY tables");
+      }
+
       metadata
     } else if let Some(metadata) = tables.get_view(table_name) {
+      if metadata.schema.temporary {
+        return ierr("Record APIs must not reference TEMPORARY views");
+      }
+
       metadata
     } else {
       return ierr(&format!("Missing table or view for API: {name}"));
@@ -54,7 +62,7 @@ pub(crate) fn validate_record_api_config(
 
   let Some(columns) = metadata.columns() else {
     return ierr(&format!(
-      "View for api '{name}' is not a \"simple\" view, i.e unable to infer column types to guarantee type-safety"
+      "View for api '{name}' is not a \"simple\" view, i.e unable to infer types for strong type-safety"
     ));
   };
 

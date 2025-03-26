@@ -479,9 +479,9 @@ fn build_record_api(
   };
 
   if let Some(table_metadata) = table_metadata_cache.get(table_name) {
-    return RecordApi::from_table(conn, (*table_metadata).clone(), config);
+    return RecordApi::from_table(conn, &table_metadata, config);
   } else if let Some(view) = table_metadata_cache.get_view(table_name) {
-    return RecordApi::from_view(conn, (*view).clone(), config);
+    return RecordApi::from_view(conn, &view, config);
   }
 
   return Err(format!("RecordApi references missing table: {config:?}"));

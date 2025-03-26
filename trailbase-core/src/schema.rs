@@ -88,7 +88,6 @@ impl Check {
   }
 }
 
-// TODO: Our table constraints are generally very incomplete:
 // https://www.sqlite.org/syntax/table-constraint.html.
 #[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
 pub struct UniqueConstraint {
@@ -420,13 +419,25 @@ impl Column {
       )
     };
   }
-}
 
-impl Column {
+  pub fn is_not_null(&self) -> bool {
+    return self
+      .options
+      .iter()
+      .any(|opt| matches!(opt, ColumnOption::NotNull));
+  }
+
+  pub fn has_default(&self) -> bool {
+    return self
+      .options
+      .iter()
+      .any(|opt| matches!(opt, ColumnOption::Default(_)));
+  }
+
   pub fn is_primary(&self) -> bool {
-    self.options.iter().any(
+    return self.options.iter().any(
       |opt| matches!(opt, ColumnOption::Unique { is_primary, conflict_clause: _ } if *is_primary ),
-    )
+    );
   }
 }
 

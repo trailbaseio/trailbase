@@ -11,22 +11,121 @@ use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
 use crate::records::params::{prefix_colon, LazyParams};
 use crate::records::{Permission, RecordError};
 use crate::schema::{Column, ColumnDataType};
-use crate::table_metadata::{JsonColumnMetadata, TableMetadata, TableOrViewMetadata, ViewMetadata};
+use crate::table_metadata::{
+  find_file_column_indexes, find_user_id_foreign_key_columns, JsonColumnMetadata, TableMetadata,
+  TableOrViewMetadata, ViewMetadata,
+};
 use crate::util::{assert_uuidv7, b64_to_id};
 
-/// FILTER CONTROL.
-///
-/// Open question: right now we use the read_access rule also for listing. It could be nice to
-/// allow different access rules. On the other hand, this could also lead to setups where you can
-/// list records you cannot read (the other way round might be more sensible).
-/// On the other hand, different permissions could also be modeled as multiple apis on the same
-/// table.
-///
-/// Independently, listing a user's own items might be a common task. Should we support a magic
-/// filter "mine" or is "owner_col=<my_user_id>" good enough?
 #[derive(Clone)]
 pub struct RecordApi {
   state: Arc<RecordApiState>,
+}
+
+struct RecordApiSchema {
+  /// Schema metadata
+  table_name: String,
+  is_table: bool,
+  record_pk_column: (usize, Column),
+  columns: Vec<Column>,
+  json_column_metadata: Vec<Option<JsonColumnMetadata>>,
+  has_file_columns: bool,
+  user_id_columns: Vec<usize>,
+
+  // Helpers
+  name_to_index: HashMap<String, usize>,
+  named_params_template: NamedParams,
+}
+
+impl RecordApiSchema {
+  fn from_table(table_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
+    assert_eq!(config.table_name.as_deref(), Some(table_metadata.name()));
+
+    let Some((pk_index, pk_column)) = table_metadata.record_pk_column() else {
+      return Err("RecordApi requires integer/UUIDv7 primary key column".into());
+    };
+    let record_pk_column = (pk_index, pk_column.clone());
+
+    let (columns, json_column_metadata) = filter_columns(
+      config,
+      &table_metadata.schema.columns,
+      &table_metadata.json_metadata.columns,
+    );
+
+    let has_file_columns = !find_file_column_indexes(&json_column_metadata).is_empty();
+    let user_id_columns = find_user_id_foreign_key_columns(&columns);
+
+    let name_to_index = HashMap::<String, usize>::from_iter(
+      columns
+        .iter()
+        .enumerate()
+        .map(|(index, col)| (col.name.clone(), index)),
+    );
+
+    let named_params_template: NamedParams = columns
+      .iter()
+      .map(|column| {
+        (
+          Cow::Owned(prefix_colon(&column.name)),
+          trailbase_sqlite::Value::Null,
+        )
+      })
+      .collect();
+
+    return Ok(Self {
+      table_name: table_metadata.name().to_string(),
+      is_table: true,
+      record_pk_column,
+      columns,
+      json_column_metadata,
+      has_file_columns,
+      user_id_columns,
+      name_to_index,
+      named_params_template,
+    });
+  }
+
+  pub fn from_view(view_metadata: &ViewMetadata, config: &RecordApiConfig) -> Result<Self, String> {
+    assert_eq!(config.table_name.as_deref(), Some(view_metadata.name()));
+
+    let Some((pk_index, pk_column)) = view_metadata.record_pk_column() else {
+      return Err(format!(
+        "RecordApi requires integer/UUIDv7 primary key column: {config:?}"
+      ));
+    };
+    let record_pk_column = (pk_index, pk_column.clone());
+
+    let Some(ref columns) = view_metadata.schema.columns else {
+      return Err("RecordApi requires schema".to_string());
+    };
+    let Some(json_metadata) = view_metadata.json_metadata() else {
+      return Err("RecordApi requires json metadata".to_string());
+    };
+
+    let (columns, json_column_metadata) = filter_columns(config, columns, &json_metadata.columns);
+
+    let has_file_columns = !find_file_column_indexes(&json_column_metadata).is_empty();
+    let user_id_columns = find_user_id_foreign_key_columns(&columns);
+
+    let name_to_index = HashMap::<String, usize>::from_iter(
+      columns
+        .iter()
+        .enumerate()
+        .map(|(index, col)| (col.name.clone(), index)),
+    );
+
+    return Ok(Self {
+      table_name: view_metadata.name().to_string(),
+      is_table: false,
+      record_pk_column,
+      columns,
+      json_column_metadata,
+      has_file_columns,
+      user_id_columns,
+      name_to_index,
+      named_params_template: NamedParams::new(),
+    });
+  }
 }
 
 struct RecordApiState {
@@ -34,17 +133,7 @@ struct RecordApiState {
   conn: trailbase_sqlite::Connection,
 
   /// Schema metadata
-  table_name: String,
-  is_table: bool,
-  record_pk_column: (usize, Column),
-  columns: Vec<Column>,
-  json_metadata: Vec<Option<JsonColumnMetadata>>,
-  has_file_columns: bool,
-  user_id_columns: Vec<usize>,
-
-  // Helpers
-  name_to_index: HashMap<String, usize>,
-  named_params_template: NamedParams,
+  schema: RecordApiSchema,
 
   // Below properties are filled from `proto::RecordApiConfig`.
   api_name: String,
@@ -59,6 +148,10 @@ struct RecordApiState {
   create_access_rule: Option<String>,
   create_access_query: Option<String>,
 
+  // Open question: right now the read_access rule is also used for listing. It might be nice to
+  // allow different permissions, however there's a risk of listing records w/o read access.
+  // Arguably, this could always be modeled as two APIs with different permissions on the same
+  // table.
   read_access_rule: Option<String>,
   read_access_query: Option<String>,
   subscription_read_access_query: Option<String>,
@@ -89,124 +182,34 @@ impl RecordApiState {
 impl RecordApi {
   pub fn from_table(
     conn: trailbase_sqlite::Connection,
-    table_metadata: TableMetadata,
+    table_metadata: &TableMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
-    let Some(ref table_name) = config.table_name else {
-      return Err(format!(
-        "RecordApi misses table_name configuration: {config:?}"
-      ));
-    };
-    if table_name != table_metadata.name() {
-      return Err(format!(
-        "Expected table name '{table_name}', got: {}",
-        table_metadata.name()
-      ));
-    }
+    assert_eq!(config.table_name.as_deref(), Some(table_metadata.name()));
 
-    let Some((pk_index, pk_column)) = table_metadata.record_pk_column() else {
-      return Err(format!(
-        "RecordApi requires integer/UUIDv7 primary key column: {config:?}"
-      ));
-    };
-    let record_pk_column = (pk_index, pk_column.clone());
-    let columns = table_metadata.schema.columns.clone();
-    let json_metadata = table_metadata.json_metadata.columns.clone();
-    let has_file_columns = table_metadata.json_metadata.has_file_columns();
-    let user_id_columns = table_metadata.user_id_columns.clone();
+    let schema = RecordApiSchema::from_table(table_metadata, &config)?;
 
-    let named_params_template: NamedParams = table_metadata
-      .schema
-      .columns
-      .iter()
-      .map(|column| {
-        (
-          Cow::Owned(prefix_colon(&column.name)),
-          trailbase_sqlite::Value::Null,
-        )
-      })
-      .collect();
-
-    return Self::from_impl(
-      conn,
-      table_name.to_string(),
-      true,
-      record_pk_column,
-      columns,
-      json_metadata,
-      has_file_columns,
-      user_id_columns,
-      config,
-      named_params_template,
-    );
+    return Self::from_impl(conn, schema, config);
   }
 
   pub fn from_view(
     conn: trailbase_sqlite::Connection,
-    view_metadata: ViewMetadata,
+    view_metadata: &ViewMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
-    let Some(ref table_name) = config.table_name else {
-      return Err(format!(
-        "RecordApi misses table_name configuration: {config:?}"
-      ));
-    };
-    if table_name != view_metadata.name() {
-      return Err(format!(
-        "Expected table name '{table_name}', got: {}",
-        view_metadata.name()
-      ));
-    }
+    assert_eq!(config.table_name.as_deref(), Some(view_metadata.name()));
 
-    if view_metadata.schema.temporary {
-      return Err(format!(
-        "RecordAPIs cannot point to temporary view: {table_name}",
-      ));
-    }
+    let schema = RecordApiSchema::from_view(view_metadata, &config)?;
 
-    let Some((pk_index, pk_column)) = view_metadata.record_pk_column() else {
-      return Err(format!(
-        "RecordApi requires integer/UUIDv7 primary key column: {config:?}"
-      ));
-    };
-    let record_pk_column = (pk_index, pk_column.clone());
-    let Some(columns) = view_metadata.schema.columns.clone() else {
-      return Err("RecordApi requires schema".to_string());
-    };
-    let Some(json_metadata) = view_metadata.json_metadata() else {
-      return Err("RecordApi requires json metadata".to_string());
-    };
-    let json_columns = json_metadata.columns.clone();
-    let has_file_columns = json_metadata.has_file_columns();
-
-    return Self::from_impl(
-      conn,
-      table_name.to_string(),
-      false,
-      record_pk_column,
-      columns,
-      json_columns,
-      has_file_columns,
-      vec![],
-      config,
-      NamedParams::new(),
-    );
+    return Self::from_impl(conn, schema, config);
   }
 
-  #[allow(clippy::too_many_arguments)]
   fn from_impl(
     conn: trailbase_sqlite::Connection,
-    table_name: String,
-    is_table: bool,
-    record_pk_column: (usize, Column),
-    columns: Vec<Column>,
-    json_metadata: Vec<Option<JsonColumnMetadata>>,
-    has_file_columns: bool,
-    user_id_columns: Vec<usize>,
+    schema: RecordApiSchema,
     config: RecordApiConfig,
-    named_params_template: NamedParams,
   ) -> Result<Self, String> {
-    assert_eq!(columns.len(), json_metadata.len());
+    assert_eq!(schema.columns.len(), schema.json_column_metadata.len());
 
     let Some(api_name) = config.name.clone() else {
       return Err(format!("RecordApi misses name: {config:?}"));
@@ -215,13 +218,13 @@ impl RecordApi {
     let (read_access_query, subscription_read_access_query) = match &config.read_access_rule {
       Some(rule) => {
         let read_access_query =
-          build_read_delete_schema_query(&table_name, &record_pk_column.1.name, rule);
+          build_read_delete_schema_query(&schema.table_name, &schema.record_pk_column.1.name, rule);
 
-        let subscription_read_access_query = if is_table {
+        let subscription_read_access_query = if schema.is_table {
           Some(
             SubscriptionRecordReadTemplate {
               read_access_rule: rule,
-              column_names: columns.iter().map(|c| c.name.as_str()).collect(),
+              column_names: schema.columns.iter().map(|c| c.name.as_str()).collect(),
             }
             .render()
             .map_err(|err| err.to_string())?,
@@ -235,20 +238,18 @@ impl RecordApi {
       None => (None, None),
     };
 
-    let delete_access_query = config
-      .delete_access_rule
-      .as_ref()
-      .map(|rule| build_read_delete_schema_query(&table_name, &record_pk_column.1.name, rule));
+    let delete_access_query = config.delete_access_rule.as_ref().map(|rule| {
+      build_read_delete_schema_query(&schema.table_name, &schema.record_pk_column.1.name, rule)
+    });
 
-    let schema_access_query = config
-      .schema_access_rule
-      .as_ref()
-      .map(|rule| build_read_delete_schema_query(&table_name, &record_pk_column.1.name, rule));
+    let schema_access_query = config.schema_access_rule.as_ref().map(|rule| {
+      build_read_delete_schema_query(&schema.table_name, &schema.record_pk_column.1.name, rule)
+    });
 
     let create_access_query = match &config.create_access_rule {
       Some(rule) => {
-        if is_table {
-          Some(build_create_access_query(&columns, rule)?)
+        if schema.is_table {
+          Some(build_create_access_query(&schema.columns, rule)?)
         } else {
           None
         }
@@ -258,11 +259,11 @@ impl RecordApi {
 
     let update_access_query = match &config.update_access_rule {
       Some(rule) => {
-        if is_table {
+        if schema.is_table {
           Some(build_update_access_query(
-            &table_name,
-            &columns,
-            &record_pk_column.1.name,
+            &schema.table_name,
+            &schema.columns,
+            &schema.record_pk_column.1.name,
             rule,
           )?)
         } else {
@@ -272,27 +273,10 @@ impl RecordApi {
       None => None,
     };
 
-    let name_to_index = HashMap::<String, usize>::from_iter(
-      columns
-        .iter()
-        .enumerate()
-        .map(|(index, col)| (col.name.clone(), index)),
-    );
-
     return Ok(RecordApi {
       state: Arc::new(RecordApiState {
         conn,
-        table_name,
-        is_table,
-        record_pk_column,
-        columns,
-        json_metadata,
-        has_file_columns,
-        user_id_columns,
-
-        // Helpers
-        name_to_index,
-        named_params_template,
+        schema,
 
         // proto::RecordApiConfig properties below:
         api_name,
@@ -352,17 +336,17 @@ impl RecordApi {
 
   #[inline]
   pub fn table_name(&self) -> &str {
-    return &self.state.table_name;
+    return &self.state.schema.table_name;
   }
 
   #[inline]
   pub fn has_file_columns(&self) -> bool {
-    return self.state.has_file_columns;
+    return self.state.schema.has_file_columns;
   }
 
   #[inline]
   pub fn user_id_columns(&self) -> &[usize] {
-    return &self.state.user_id_columns;
+    return &self.state.schema.user_id_columns;
   }
 
   #[inline]
@@ -372,31 +356,31 @@ impl RecordApi {
 
   #[inline]
   pub fn record_pk_column(&self) -> &(usize, Column) {
-    return &self.state.record_pk_column;
+    return &self.state.schema.record_pk_column;
   }
 
   #[inline]
   pub fn columns(&self) -> &[Column] {
-    return &self.state.columns;
+    return &self.state.schema.columns;
   }
 
   #[inline]
   pub fn json_column_metadata(&self) -> &[Option<JsonColumnMetadata>] {
-    return &self.state.json_metadata;
+    return &self.state.schema.json_column_metadata;
   }
 
   #[inline]
   pub fn is_table(&self) -> bool {
-    return self.state.is_table;
+    return self.state.schema.is_table;
   }
 
   #[inline]
   pub fn column_index_by_name(&self, key: &str) -> Option<usize> {
-    return self.state.name_to_index.get(key).copied();
+    return self.state.schema.name_to_index.get(key).copied();
   }
 
   pub fn id_to_sql(&self, id: &str) -> Result<Value, RecordError> {
-    return match self.state.record_pk_column.1.data_type {
+    return match self.state.schema.record_pk_column.1.data_type {
       ColumnDataType::Blob => {
         // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
         // would be more explicit rely on CHECK(...) column options.
@@ -606,7 +590,7 @@ impl RecordApi {
         // NOTE: We cannot have access queries access missing _REQ_.props. So we need to inject an
         // explicit NULL value for all missing fields on the request. Can we make this cheaper,
         // either by pre-processing the access query or improving construction?
-        let mut named_params = self.state.named_params_template.clone();
+        let mut named_params = self.state.schema.named_params_template.clone();
 
         // 'outer: for (placeholder, value) in &request_params.named_params {
         //   for (p, ref mut v) in named_params.iter_mut() {
@@ -752,6 +736,15 @@ fn convert_acl(acl: &Vec<i32>) -> u8 {
 enum Entity {
   World = 0,
   Authenticated = 1,
+}
+
+fn filter_columns(
+  _config: &RecordApiConfig,
+  columns: &[Column],
+  json_column_metadata: &[Option<JsonColumnMetadata>],
+) -> (Vec<Column>, Vec<Option<JsonColumnMetadata>>) {
+  assert_eq!(columns.len(), json_column_metadata.len());
+  return (columns.to_vec(), json_column_metadata.to_vec());
 }
 
 #[cfg(test)]
