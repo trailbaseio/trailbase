@@ -149,6 +149,7 @@ mod tests {
           ],
           foreign_keys: vec![],
           unique: vec![],
+          checks: vec![],
           virtual_table: false,
           temporary: false,
         },

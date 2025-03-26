@@ -107,6 +107,7 @@ export function CreateAlterTableForm(props: {
         // Table constraints: https://www.sqlite.org/syntax/table-constraint.html
         unique: [],
         foreign_keys: [],
+        checks: [],
         virtual_table: false,
         temporary: false,
       } as Table),
