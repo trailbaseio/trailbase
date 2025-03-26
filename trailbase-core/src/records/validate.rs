@@ -27,10 +27,10 @@ pub(crate) fn validate_record_api_config(
 ) -> Result<String, ConfigError> {
   let ierr = |msg: &str| Err(ConfigError::Invalid(msg.to_string()));
 
-  let Some(ref name) = api_config.name else {
+  let Some(ref api_name) = api_config.name else {
     return ierr("RecordApi config misses name.");
   };
-  validate_record_api_name(name)?;
+  validate_record_api_name(api_name)?;
 
   let Some(ref table_name) = api_config.table_name else {
     return ierr("RecordApi config misses table name.");
@@ -50,28 +50,52 @@ pub(crate) fn validate_record_api_config(
 
       metadata
     } else {
-      return ierr(&format!("Missing table or view for API: {name}"));
+      return ierr(&format!("Missing table or view for API: {api_name}"));
     };
 
-  if metadata.record_pk_column().is_none() {
+  let Some((pk_index, _)) = metadata.record_pk_column() else {
     return ierr(&format!(
-      "Table for api '{name}' is missing valid integer/uuidv7 primary key column."
-    ));
-  }
-
-  let Some(columns) = metadata.columns() else {
-    return ierr(&format!(
-      "View for api '{name}' is not a \"simple\" view, i.e unable to infer types for strong type-safety"
+      "Table for api '{api_name}' is missing valid integer/uuidv7 primary key column."
     ));
   };
 
+  let Some(columns) = metadata.columns() else {
+    return ierr(&format!(
+      "View for api '{api_name}' is not a \"simple\" view, i.e unable to infer types for strong type-safety"
+    ));
+  };
+
+  for excluded_column_name in &api_config.excluded_columns {
+    let Some(excluded_index) = columns
+      .iter()
+      .position(|col| col.name == *excluded_column_name)
+    else {
+      return ierr(&format!(
+        "Excluded column '{excluded_column_name}' in API '{api_name}' not found.",
+      ));
+    };
+
+    if excluded_index == pk_index {
+      return ierr(&format!(
+        "PK column '{excluded_column_name}' cannot be excluded from API '{api_name}'.",
+      ));
+    }
+
+    let excluded_column = &columns[excluded_index];
+    if excluded_column.is_not_null() && !excluded_column.has_default() {
+      return ierr(&format!(
+        "Cannot exclude column '{excluded_column_name}' from API '{api_name}', which is NOT NULL and w/o DEFAULT",
+      ));
+    }
+  }
+
   for expand in &api_config.expand {
     if expand.starts_with("_") {
-      return ierr(&format!("{name} expands hidden column: {expand}"));
+      return ierr(&format!("{api_name} expands hidden column: {expand}"));
     }
 
     let Some(column) = columns.iter().find(|c| c.name == *expand) else {
-      return ierr(&format!("{name} expands missing column: {expand}"));
+      return ierr(&format!("{api_name} expands missing column: {expand}"));
     };
 
     let Some(ColumnOption::ForeignKey {
@@ -83,24 +107,26 @@ pub(crate) fn validate_record_api_config(
       .iter()
       .find_or_first(|o| matches!(o, ColumnOption::ForeignKey { .. }))
     else {
-      return ierr(&format!("{name} expands non-foreign-key column: {expand}"));
+      return ierr(&format!(
+        "{api_name} expands non-foreign-key column: {expand}"
+      ));
     };
 
     if foreign_table_name.starts_with("_") {
       return ierr(&format!(
-        "{name} expands reference '{expand}' to hidden table: {foreign_table_name}"
+        "{api_name} expands reference '{expand}' to hidden table: {foreign_table_name}"
       ));
     }
 
     let Some(foreign_table) = tables.get(foreign_table_name) else {
       return ierr(&format!(
-        "{name} reference missing table: {foreign_table_name}"
+        "{api_name} reference missing table: {foreign_table_name}"
       ));
     };
 
     let Some((_idx, foreign_pk_column)) = foreign_table.record_pk_column() else {
       return ierr(&format!(
-        "{name} references pk-less table: {foreign_table_name}"
+        "{api_name} references pk-less table: {foreign_table_name}"
       ));
     };
 
@@ -109,13 +135,13 @@ pub(crate) fn validate_record_api_config(
       1 => {
         if referred_columns[0] != foreign_pk_column.name {
           return ierr(&format!(
-            "{name}.{expand} expands non-primary-key reference"
+            "{api_name}.{expand} expands non-primary-key reference"
           ));
         }
       }
       _ => {
         return ierr(&format!(
-          "Composite keys cannot be expanded for {name}.{expand}"
+          "Composite keys cannot be expanded for {api_name}.{expand}"
         ));
       }
     };
@@ -132,5 +158,5 @@ pub(crate) fn validate_record_api_config(
     validate_rule(rule).map_err(ConfigError::Invalid)?;
   }
 
-  return Ok(name.to_owned());
+  return Ok(api_name.to_owned());
 }

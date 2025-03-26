@@ -180,6 +180,14 @@ message RecordApiConfig {
   repeated PermissionFlag acl_world = 7;
   repeated PermissionFlag acl_authenticated = 8;
 
+  /// Columns excluded from this API.
+  ///
+  /// Excluded columns are completely inaccessible via this API. This is
+  /// different from columns with names prefixed by "_", which are considered
+  /// hidden. This means they can still be inserted, updated and access checked
+  /// unlike excluded columns.
+  repeated string excluded_columns = 10;
+
   /// Access rules to be evaluated on request. Expected to be valid SQL
   /// expression, where `SELECT <expr>` returns a unary boolean.
   ///

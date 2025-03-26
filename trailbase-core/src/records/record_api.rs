@@ -791,12 +791,32 @@ enum Entity {
 }
 
 fn filter_columns(
-  _config: &RecordApiConfig,
+  config: &RecordApiConfig,
   columns: &[Column],
   json_column_metadata: &[Option<JsonColumnMetadata>],
 ) -> (Vec<Column>, Vec<Option<JsonColumnMetadata>>) {
   assert_eq!(columns.len(), json_column_metadata.len());
-  return (columns.to_vec(), json_column_metadata.to_vec());
+  if config.excluded_columns.is_empty() {
+    return (columns.to_vec(), json_column_metadata.to_vec());
+  }
+
+  let excluded_indexes = config
+    .excluded_columns
+    .iter()
+    .filter_map(|name| columns.iter().position(|col| col.name == *name));
+  assert_eq!(
+    excluded_indexes.clone().count(),
+    config.excluded_columns.len()
+  );
+
+  let mut columns_vec = columns.to_vec();
+  let mut json_column_metadata_vec = json_column_metadata.to_vec();
+  for idx in excluded_indexes.rev() {
+    columns_vec.remove(idx);
+    json_column_metadata_vec.remove(idx);
+  }
+
+  return (columns_vec, json_column_metadata_vec);
 }
 
 #[cfg(test)]

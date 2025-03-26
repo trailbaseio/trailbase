@@ -264,7 +264,7 @@ mod test {
   use crate::app_state::*;
   use crate::auth::api::login::login_with_password;
   use crate::auth::user::User;
-  use crate::config::proto::PermissionFlag;
+  use crate::config::proto::{PermissionFlag, RecordApiConfig};
   use crate::constants::USER_TABLE;
   use crate::extract::Either;
   use crate::records::create_record::{
@@ -792,5 +792,103 @@ mod test {
     )
     .await;
     assert!(response.is_ok(), "{response:?}");
+  }
+
+  #[tokio::test]
+  async fn test_record_api_with_excluded_columns() {
+    let state = test_state(None).await.unwrap();
+
+    const API_NAME: &str = "test_api";
+
+    state
+      .conn()
+      .execute(
+        format!(
+          r#"CREATE TABLE 'table' (
+            pid          INTEGER PRIMARY KEY,
+            [drop]       TEXT NOT NULL,
+            [index]      TEXT NOT NULL DEFAULT('')
+          ) STRICT"#
+        ),
+        (),
+      )
+      .await
+      .unwrap();
+
+    state.table_metadata().invalidate_all().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some(API_NAME.to_string()),
+        table_name: Some("table".to_string()),
+        acl_world: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
+        excluded_columns: vec!["index".to_string()],
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    let value = serde_json::json!({
+      "pid": 1,
+      "drop": "foo".to_string(),
+    });
+
+    let create_response: CreateRecordResponse = unpack_json_response(
+      create_record_handler(
+        State(state.clone()),
+        Path(API_NAME.to_string()),
+        Query(CreateRecordQuery::default()),
+        None,
+        Either::Json(json_row_from_value(value.clone()).unwrap().into()),
+      )
+      .await
+      .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(create_response.ids[0], "1");
+
+    let Json(json) = read_record_handler(
+      State(state.clone()),
+      Path((API_NAME.to_string(), create_response.ids[0].clone())),
+      Query(ReadRecordQuery::default()),
+      None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(json, value);
+
+    // Providing a value for the hidden column should be ignored
+    create_record_handler(
+      State(state.clone()),
+      Path(API_NAME.to_string()),
+      Query(CreateRecordQuery::default()),
+      None,
+      Either::Json(
+        json_row_from_value(serde_json::json!({
+          "pid": 2,
+          "drop": "foo".to_string(),
+          "index": "INACCESSIBLE".to_string(),
+        }))
+        .unwrap()
+        .into(),
+      ),
+    )
+    .await
+    .unwrap();
+
+    let index: String = state
+      .conn()
+      .read_query_row_f(r#"SELECT "index" from "table" WHERE pid = 2"#, (), |row| {
+        row.get(0)
+      })
+      .await
+      .unwrap()
+      .unwrap();
+    assert_eq!(index, "");
   }
 }

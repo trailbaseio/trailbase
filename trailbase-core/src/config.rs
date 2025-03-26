@@ -146,6 +146,7 @@ pub mod proto {
           PermissionFlag::Update as i32,
           PermissionFlag::Delete as i32,
         ],
+        excluded_columns: vec![],
         read_access_rule: None,
         create_access_rule: Some("_REQ_.user IS NULL OR _REQ_.user = _USER_.id".to_string()),
         update_access_rule: Some("_ROW_.user = _USER_.id".to_string()),
