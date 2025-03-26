@@ -2,8 +2,9 @@ use itertools::Itertools;
 use log::*;
 use serde::{Deserialize, Serialize};
 use sqlite3_parser::ast::{
-  fmt::ToTokens, ColumnDefinition, CreateTableBody, Expr, FromClause, Literal, Name, QualifiedName,
-  SelectTable, Stmt, TableConstraint, TableOptions,
+  fmt::ToTokens, ColumnDefinition, CreateTableBody, DeferSubclause, Expr, ForeignKeyClause,
+  FromClause, IndexedColumn, Literal, Name, QualifiedName, SelectTable, Stmt, TableConstraint,
+  TableOptions,
 };
 use std::collections::HashMap;
 use thiserror::Error;
@@ -562,96 +563,48 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
           ));
         };
 
-        let (foreign_keys, unique) = match constraints {
-          None => (vec![], vec![]),
-          Some(constraints) => {
-            let foreign_keys: Vec<ForeignKey> = constraints
-              .iter()
-              .filter_map(|constraint| match &constraint.constraint {
-                TableConstraint::ForeignKey {
-                  columns,
-                  clause,
-                  deref_clause,
-                } => {
-                  if let Some(ref clause) = deref_clause {
-                    // TOOD: Parse DEFERRABLE.
-                    log::warn!("Unsupported DEFERRABLE in FK clause: {clause:?}");
-                  }
+        let mut foreign_keys: Vec<ForeignKey> = vec![];
+        let mut unique: Vec<UniqueConstraint> = vec![];
 
-                  let mut on_delete: Option<ReferentialAction> = None;
-                  let mut on_update: Option<ReferentialAction> = None;
+        for constraint in constraints.unwrap_or_default() {
+          match constraint.constraint {
+            TableConstraint::ForeignKey {
+              columns,
+              clause,
+              deref_clause,
+            } => {
+              foreign_keys.push(build_foreign_key(
+                constraint.name,
+                Some(columns),
+                clause,
+                deref_clause,
+              ));
+            }
+            TableConstraint::Unique {
+              columns,
+              conflict_clause,
+            } => {
+              let name = constraint.name.map(|name| unquote_name(name.clone()));
 
-                  for arg in &clause.args {
-                    use sqlite3_parser::ast::RefArg;
-
-                    match arg {
-                      RefArg::OnDelete(action) => {
-                        on_delete = Some((*action).into());
-                      }
-                      RefArg::OnUpdate(action) => {
-                        on_update = Some((*action).into());
-                      }
-                      RefArg::OnInsert(action) => {
-                        log::error!("Unexpected ON INSERT in FK clause: {action:?}");
-                      }
-                      RefArg::Match(name) => {
-                        // SQL supports FK MATCH clause, which is *not* supported by sqlite:
-                        //   https://www.sqlite.org/foreignkeys.html#fk_unsupported
-                        log::warn!("Unsupported MATCH in FK clause: {name:?}");
-                      }
-                    }
-                  }
-
-                  Some(ForeignKey {
-                    name: constraint
-                      .name
-                      .as_ref()
-                      .map(|name| unquote_name(name.clone())),
-                    foreign_table: unquote_name(clause.tbl_name.clone()),
-                    columns: columns
-                      .iter()
-                      .map(|c| unquote_name(c.col_name.clone()))
-                      .collect(),
-                    referred_columns: clause.columns.as_ref().map_or_else(Vec::new, |columns| {
-                      columns
-                        .iter()
-                        .map(|c| unquote_name(c.col_name.clone()))
-                        .collect()
-                    }),
-                    on_update,
-                    on_delete,
-                  })
-                }
-                _ => None,
-              })
-              .collect();
-
-            let unique: Vec<UniqueConstraint> = constraints
-              .iter()
-              .filter_map(|constraint| match &constraint.constraint {
-                TableConstraint::Unique {
-                  columns,
-                  conflict_clause,
-                } => Some(UniqueConstraint {
-                  name: constraint
-                    .name
-                    .as_ref()
-                    .map(|name| unquote_name(name.clone())),
-                  columns: columns
-                    .iter()
-                    .map(|c| unquote_expr(c.expr.clone()))
-                    .collect(),
-                  conflict_clause: conflict_clause.map(|c| c.into()),
-                }),
-                _ => None,
-              })
-              .collect();
-
-            (foreign_keys, unique)
+              unique.push(UniqueConstraint {
+                name,
+                columns: columns
+                  .iter()
+                  .map(|c| unquote_expr(c.expr.clone()))
+                  .collect(),
+                conflict_clause: conflict_clause.map(|c| c.into()),
+              });
+            }
+            TableConstraint::PrimaryKey { .. } => {
+              log::warn!("PK table constraint not implemented. Use column constraints.");
+            }
+            TableConstraint::Check(expr) => {
+              log::warn!("CHECK table constraint not yet implemented: {expr:?}");
+            }
           }
-        };
+        }
 
-        let columns: Vec<_> = columns
+        let columns: Vec<Column> = columns
           .into_iter()
           .map(|(name, def): (Name, ColumnDefinition)| {
             let ColumnDefinition {
@@ -706,7 +659,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
         temporary: false,
       }),
       _ => Err(SchemaError::Precondition(
-        format!("expected 'CREATE TABLE', got: {value:?}").into(),
+        format!("expected 'CREATE [VIRTUAL] TABLE', got: {value:?}").into(),
       )),
     };
   }
@@ -739,17 +692,17 @@ impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
         // NOTE: This is not using unquote on purpose, since this is not an identifier.
         ColumnOption::Check(expr.to_string())
       }
-      Constraint::ForeignKey { clause, .. } => {
-        let columns = clause.columns.unwrap_or(vec![]);
+      Constraint::ForeignKey {
+        clause,
+        deref_clause,
+      } => {
+        let fk = build_foreign_key(None, None, clause, deref_clause);
 
         ColumnOption::ForeignKey {
-          foreign_table: unquote_name(clause.tbl_name),
-          referred_columns: columns
-            .into_iter()
-            .map(|c| unquote_name(c.col_name))
-            .collect(),
-          on_delete: None,
-          on_update: None,
+          foreign_table: fk.foreign_table,
+          referred_columns: fk.referred_columns,
+          on_delete: fk.on_delete,
+          on_update: fk.on_update,
         }
       }
       Constraint::NotNull { .. } => ColumnOption::NotNull,
@@ -890,6 +843,68 @@ struct ColumnMapping {
 
   #[allow(unused)]
   referred_column: Option<ReferredColumn>,
+}
+
+fn build_foreign_key(
+  name: Option<Name>,
+  columns: Option<Vec<IndexedColumn>>,
+  clause: ForeignKeyClause,
+  deref_clause: Option<DeferSubclause>,
+) -> ForeignKey {
+  if let Some(ref clause) = deref_clause {
+    // TOOD: Parse DEFERRABLE.
+    log::warn!("Unsupported DEFERRABLE in FK clause: {clause:?}");
+  }
+
+  let (on_update, on_delete) = unparse_fk_trigger(&clause.args);
+
+  return ForeignKey {
+    name: name.map(unquote_name),
+    foreign_table: unquote_name(clause.tbl_name.clone()),
+    columns: columns
+      .unwrap_or_default()
+      .into_iter()
+      .map(|c| unquote_name(c.col_name))
+      .collect(),
+    referred_columns: clause
+      .columns
+      .unwrap_or_default()
+      .into_iter()
+      .map(|c| unquote_name(c.col_name))
+      .collect(),
+    on_update,
+    on_delete,
+  };
+}
+
+fn unparse_fk_trigger(
+  args: &Vec<sqlite3_parser::ast::RefArg>,
+) -> (Option<ReferentialAction>, Option<ReferentialAction>) {
+  use sqlite3_parser::ast::RefArg;
+
+  let mut on_update: Option<ReferentialAction> = None;
+  let mut on_delete: Option<ReferentialAction> = None;
+
+  for arg in args {
+    match arg {
+      RefArg::OnDelete(action) => {
+        on_delete = Some((*action).into());
+      }
+      RefArg::OnUpdate(action) => {
+        on_update = Some((*action).into());
+      }
+      RefArg::OnInsert(action) => {
+        log::error!("Unexpected ON INSERT in FK clause: {action:?}");
+      }
+      RefArg::Match(name) => {
+        // SQL supports FK MATCH clause, which is *not* supported by sqlite:
+        //   https://www.sqlite.org/foreignkeys.html#fk_unsupported
+        log::warn!("Unsupported MATCH in FK clause: {name:?}");
+      }
+    }
+  }
+
+  return (on_update, on_delete);
 }
 
 fn try_extract_column_mapping(
@@ -1216,6 +1231,14 @@ mod tests {
     sqlite3_parse_into_statement(&sql).unwrap().unwrap();
   }
 
+  struct StmtFormatter(Stmt);
+
+  impl std::fmt::Display for StmtFormatter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      self.0.to_fmt(f)
+    }
+  }
+
   #[tokio::test]
   async fn test_statement_to_table_schema_and_back() {
     let statement = format!(
@@ -1263,8 +1286,12 @@ mod tests {
 
     let table2: Table = statement2.clone().try_into().unwrap();
 
-    // assert_eq!(statement1, statement2);
-    assert_eq!(table1, table2, "generatate stmt: {sql}");
+    // let sql2 = StmtFormatter(statement2.clone()).to_string();
+    // let sql1 = StmtFormatter(statement1.clone()).to_string();
+    // // NOTE: Ideally we'd just compare the parsed sqlite3_parser ASTs, however it doesn't
+    // properly // parse out escape characters, so `statement1` and `statement2` will be escaped
+    // differently. assert_eq!(statement1, statement2, "Got: {sql2}\nExpected: {sql1}");
+    assert_eq!(table1, table2, "generated stmt: {sql}");
   }
 
   #[test]
