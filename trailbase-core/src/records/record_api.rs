@@ -791,12 +791,30 @@ enum Entity {
 }
 
 fn filter_columns(
-  _config: &RecordApiConfig,
+  config: &RecordApiConfig,
   columns: &[Column],
   json_column_metadata: &[Option<JsonColumnMetadata>],
 ) -> (Vec<Column>, Vec<Option<JsonColumnMetadata>>) {
   assert_eq!(columns.len(), json_column_metadata.len());
-  return (columns.to_vec(), json_column_metadata.to_vec());
+
+  let hidden_columns = &config.hidden_columns;
+  if hidden_columns.is_empty() {
+    return (columns.to_vec(), json_column_metadata.to_vec());
+  }
+
+  let len = columns.len();
+  let mut c = Vec::<Column>::with_capacity(len);
+  let mut j = Vec::<Option<JsonColumnMetadata>>::with_capacity(len);
+
+  for (col, json) in std::iter::zip(columns, json_column_metadata) {
+    let found = hidden_columns.iter().any(|h| *h == col.name);
+    if !found {
+      c.push(col.clone());
+      j.push(json.clone());
+    }
+  }
+
+  return (c, j);
 }
 
 #[cfg(test)]

@@ -53,17 +53,44 @@ pub(crate) fn validate_record_api_config(
       return ierr(&format!("Missing table or view for API: {name}"));
     };
 
-  if metadata.record_pk_column().is_none() {
+  let Some((pk_index, _)) = metadata.record_pk_column() else {
     return ierr(&format!(
       "Table for api '{name}' is missing valid integer/uuidv7 primary key column."
     ));
-  }
+  };
 
   let Some(columns) = metadata.columns() else {
     return ierr(&format!(
       "View for api '{name}' is not a \"simple\" view, i.e unable to infer types for strong type-safety"
     ));
   };
+
+  for hidden_column_name in &api_config.hidden_columns {
+    let Some(hidden_index) = columns
+      .iter()
+      .position(|col| col.name == *hidden_column_name)
+    else {
+      return ierr(&format!(
+        "Hidden column '{hidden_column_name}' in API '{name}' not found.",
+        name = api_config.name()
+      ));
+    };
+
+    if hidden_index == pk_index {
+      return ierr(&format!(
+        "PK column '{hidden_column_name}' cannot be hidden for API '{name}'.",
+        name = api_config.name()
+      ));
+    }
+
+    let hidden_column = &columns[hidden_index];
+    if hidden_column.is_not_null() && !hidden_column.has_default() {
+      return ierr(&format!(
+        "Cannot hide column '{hidden_column_name}' for API '{name}', which is NOT NULL and has no default",
+        name = api_config.name()
+      ));
+    }
+  }
 
   for expand in &api_config.expand {
     if expand.starts_with("_") {

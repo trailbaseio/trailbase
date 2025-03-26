@@ -180,6 +180,9 @@ message RecordApiConfig {
   repeated PermissionFlag acl_world = 7;
   repeated PermissionFlag acl_authenticated = 8;
 
+  /// Hidden columns. By default only columns prefixed with "_" are hidden.
+  repeated string hidden_columns = 10;
+
   /// Access rules to be evaluated on request. Expected to be valid SQL
   /// expression, where `SELECT <expr>` returns a unary boolean.
   ///
