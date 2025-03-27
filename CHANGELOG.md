@@ -1,3 +1,13 @@
+## v0.8.3
+
+* Support more SQL constructs:
+  * Conflict clause in table and column unique constraints.
+  * FK triggers in column constraints.
+  * CHECK table constraints.
+* Fix: pagination cursors in list queries for arbitrary PKs.
+* Sanitize expand and order column names in list queries.
+* Update dependencies.
+
 ## v0.8.2
 
 * Quote table/index/column names during "CREATE TABLE/INDEX" parsing and construction.
@@ -14,13 +24,13 @@
 ## v0.8.0
 
 * Add support for periodic cron jobs:
- * Add dashboard to admin UI to inspect, configure and trigger cron jobs.
- * Users can register their own cron jobs from the JS runtime.
- * Replace internal periodic tasks with cron jobs to increase configurability,
-   discoverabilty, and avoid drift.
- * BREAKING: removed `backup_interval_sec` from proto config. When explicitly specified,
-   users will need to remove it from their `<traildepot>/config.textproto` and set an
-   appropriate cron schedule instead.
+  * Add dashboard to admin UI to inspect, configure and trigger cron jobs.
+  * Users can register their own cron jobs from the JS runtime.
+  * Replace internal periodic tasks with cron jobs to increase configurability,
+    discoverabilty, and avoid drift.
+  * BREAKING: removed `backup_interval_sec` from proto config. When explicitly specified,
+    users will need to remove it from their `<traildepot>/config.textproto` and set an
+    appropriate cron schedule instead.
 
 ## v0.7.3
 
