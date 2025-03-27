@@ -12,12 +12,12 @@ mod tests {
       .execute_batch(
         r#"
           CREATE TABLE room (
-            id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
+            rid          BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(rid)) DEFAULT(uuid_v7()),
             name         TEXT
           ) STRICT;
 
           CREATE TABLE message (
-            id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT (uuid_v7()),
+            mid          BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(mid)) DEFAULT (uuid_v7()),
             _owner       BLOB NOT NULL,
             room         BLOB NOT NULL,
             data         TEXT NOT NULL DEFAULT 'empty',
@@ -25,14 +25,14 @@ mod tests {
             -- on user delete, toombstone it.
             FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
             -- On chatroom delete, delete message
-            FOREIGN KEY(room) REFERENCES room(id) ON DELETE CASCADE
+            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE
           ) STRICT;
 
           CREATE TABLE room_members (
             user         BLOB NOT NULL,
             room         BLOB NOT NULL,
 
-            FOREIGN KEY(room) REFERENCES room(id) ON DELETE CASCADE,
+            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
             FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
           ) STRICT;
         "#,
@@ -53,12 +53,12 @@ mod tests {
       .execute_batch(
         r#"
           CREATE TABLE room (
-            id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
+            rid          BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(rid)) DEFAULT(uuid_v7()),
             name         TEXT
           ) STRICT;
 
           CREATE TABLE message (
-            id           INTEGER PRIMARY KEY,
+            mid          INTEGER PRIMARY KEY,
             _owner       BLOB NOT NULL,
             room         BLOB NOT NULL,
             data         TEXT NOT NULL DEFAULT 'empty',
@@ -66,14 +66,14 @@ mod tests {
             -- on user delete, toombstone it.
             FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
             -- On chatroom delete, delete message
-            FOREIGN KEY(room) REFERENCES room(id) ON DELETE CASCADE
+            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE
           ) STRICT;
 
           CREATE TABLE room_members (
             user         BLOB NOT NULL,
             room         BLOB NOT NULL,
 
-            FOREIGN KEY(room) REFERENCES room(id) ON DELETE CASCADE,
+            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
             FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
           ) STRICT;
         "#,
@@ -91,7 +91,7 @@ mod tests {
   ) -> Result<[u8; 16], anyhow::Error> {
     let room: uuid::Uuid = conn
       .query_value(
-        "INSERT INTO room (name) VALUES ($1) RETURNING id",
+        "INSERT INTO room (name) VALUES ($1) RETURNING rid",
         params!(name.to_string()),
       )
       .await?
@@ -122,7 +122,7 @@ mod tests {
   ) -> Result<[u8; 16], anyhow::Error> {
     let id: uuid::Uuid = conn
       .query_value(
-        "INSERT INTO message (_owner, room, data) VALUES ($1, $2, $3) RETURNING id",
+        "INSERT INTO message (_owner, room, data) VALUES ($1, $2, $3) RETURNING mid",
         params!(user, room, message.to_string()),
       )
       .await?

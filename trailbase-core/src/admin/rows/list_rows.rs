@@ -159,9 +159,9 @@ async fn fetch_rows(
     ),
   ]);
 
-  if let Some(cursor) = pagination.cursor {
+  if let (Some(cursor), Some(pk_column)) = (pagination.cursor, pagination.cursor_column) {
     params.push((Cow::Borrowed(":cursor"), cursor.into()));
-    clause = format!("{clause} AND _ROW_.id < :cursor",);
+    clause = format!(r#"{clause} AND _ROW_."{}" < :cursor"#, pk_column.name);
   }
 
   let order_clause = match order {
@@ -179,7 +179,7 @@ async fn fetch_rows(
       .collect::<Vec<_>>()
       .join(", "),
     None => match pagination.cursor_column {
-      Some(col) => format!("{col_name} DESC", col_name = col.name),
+      Some(col) => format!(r#""{col_name}" DESC"#, col_name = col.name),
       None => "NULL".to_string(),
     },
   };

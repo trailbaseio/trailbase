@@ -57,7 +57,7 @@ pub async fn list_records_handler(
   let Some(columns) = metadata.columns() else {
     return Err(RecordError::Internal("missing columns".into()));
   };
-  let Some((pk_index, _pk_column)) = metadata.record_pk_column() else {
+  let Some((pk_index, pk_column)) = metadata.record_pk_column() else {
     return Err(RecordError::Internal("missing pk column".into()));
   };
 
@@ -102,9 +102,10 @@ pub async fn list_records_handler(
   }
 
   let clause_with_cursor = match cursor {
+    // FIXME
     Some(cursor) => {
       params.push((Cow::Borrowed(":cursor"), cursor.into()));
-      format!("{clause} AND _ROW_.id < :cursor")
+      format!(r#"{clause} AND _ROW_."{}" < :cursor"#, pk_column.name)
     }
     None => clause.clone(),
   };
@@ -319,7 +320,7 @@ mod tests {
   #[allow(unused)]
   #[derive(Deserialize)]
   struct Message {
-    id: String,
+    mid: String,
     _owner: Option<String>,
     room: String,
     data: String,
@@ -409,14 +410,15 @@ mod tests {
             serde_json::Value::Object(ref obj) => {
               let keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
               assert_eq!(3, keys.len(), "Got: {:?}", keys);
-              assert_eq!(keys, vec!["id", "room", "data"])
+              assert_eq!(keys, vec!["mid", "room", "data"])
             }
             _ => panic!("expected object, got {v:?}"),
           };
 
           let message = serde_json::from_value::<Message>(v).unwrap();
           assert_eq!(None, message._owner);
-          message.data
+
+          return message.data;
         })
         .collect();
 
@@ -449,7 +451,7 @@ mod tests {
             serde_json::Value::Object(ref obj) => {
               let keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
               assert_eq!(3, keys.len(), "Got: {:?}", keys);
-              assert_eq!(keys, vec!["id", "room", "data"])
+              assert_eq!(keys, vec!["mid", "room", "data"])
             }
             _ => panic!("expected object, got {v:?}"),
           };
@@ -538,7 +540,7 @@ mod tests {
       let arr_asc = list_records(
         &state,
         Some(&user_y_token.auth_token),
-        Some(format!("order={}", urlencode("+id"))),
+        Some(format!("order={}", urlencode("+mid"))),
       )
       .await
       .unwrap()
@@ -548,7 +550,7 @@ mod tests {
       let arr_desc = list_records(
         &state,
         Some(&user_y_token.auth_token),
-        Some("order=-id".to_string()),
+        Some("order=-mid".to_string()),
       )
       .await
       .unwrap()

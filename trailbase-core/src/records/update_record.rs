@@ -182,7 +182,7 @@ mod test {
 
       let message_text: String = conn
         .query_value(
-          "SELECT data FROM message WHERE id = $1",
+          "SELECT data FROM message WHERE mid = $1",
           params!(b64_to_id(&b64_id).unwrap()),
         )
         .await
