@@ -149,6 +149,9 @@ pub async fn list_records_handler(
   };
 
   let get_total_count = count.unwrap_or(false);
+  let selects = selects.map_or(EMPTY, |v| format!(", {}", v.join(", ")));
+  let joins = joins.map_or(EMPTY, |j| j.join(" "));
+
   let query = if get_total_count {
     formatdoc!(
       r#"
@@ -162,8 +165,8 @@ pub async fn list_records_handler(
       )
 
       SELECT
-        _ROW_.*,
-        {selects}
+        _ROW_.*
+        {selects},
         total_count._value_
       FROM
         '{table_name}' as _ROW_ {joins},
@@ -174,9 +177,7 @@ pub async fn list_records_handler(
       ORDER BY
         {order_clause}
       LIMIT :limit
-      "#,
-      selects = selects.map_or(EMPTY, |v| format!("{}, ", v.join(", "))),
-      joins = joins.map_or(EMPTY, |j| j.join(" ")),
+      "#
     )
   } else {
     formatdoc!(
@@ -192,9 +193,7 @@ pub async fn list_records_handler(
       ORDER BY
         {order_clause}
       LIMIT :limit
-      "#,
-      selects = selects.map_or(EMPTY, |v| format!(", {}", v.join(", "))),
-      joins = joins.map_or(EMPTY, |j| j.join(" ")),
+      "#
     )
   };
 

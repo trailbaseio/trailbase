@@ -94,10 +94,11 @@ impl Expansions {
     let mut indexes = vec![(root_table.schema.columns.len(), root_table.clone())];
 
     for (idx, col_name) in expand.iter().enumerate() {
-      if col_name.as_ref().is_empty() {
+      let col_name = col_name.as_ref();
+      if col_name.is_empty() {
         continue;
       }
-      let Some((column, _col_metadata)) = root_table.column_by_name(col_name.as_ref()) else {
+      let Some((column, _col_metadata)) = root_table.column_by_name(col_name) else {
         return Err(RecordError::ApiRequiresTable);
       };
 
@@ -126,13 +127,11 @@ impl Expansions {
       // TODO: Check that `referred_columns` and foreign_pk_column are the same. It's already
       // validated as part of config validation.
 
-      joins.push(format!(
-        r#"LEFT JOIN "{foreign_table_name}" AS F{idx} ON {col_name} = F{idx}.{foreign_pk_column}"#,
-        col_name = prefix.map_or_else(
-          || col_name.as_ref().to_owned(),
-          |p| format!("{p}.{}", col_name.as_ref())
-        ),
-      ));
+      joins.push(if let Some(ref prefix) =  prefix {
+        format!(r#"LEFT JOIN "{foreign_table_name}" AS F{idx} ON {prefix}."{col_name}" = F{idx}."{foreign_pk_column}""#)
+      } else {
+        format!(r#"LEFT JOIN "{foreign_table_name}" AS F{idx} ON "{col_name}" = F{idx}."{foreign_pk_column}""#)
+      });
       indexes.push((foreign_table.schema.columns.len(), foreign_table));
     }
 
@@ -180,8 +179,13 @@ impl SelectQueryBuilder {
     expand: &[&str],
   ) -> Result<Vec<(Arc<TableMetadata>, trailbase_sqlite::Row)>, RecordError> {
     let table_metadata = state.table_metadata();
-    let Expansions { indexes, joins, .. } =
-      Expansions::build(table_metadata, table_name, expand, None)?;
+    let Expansions {
+      indexes,
+      joins,
+      selects,
+    } = Expansions::build(table_metadata, table_name, expand, None)?;
+
+    assert!(selects.is_none());
 
     let sql = format!(
       r#"SELECT * FROM "{table_name}" AS R {} WHERE R.{pk_column} = $1"#,
