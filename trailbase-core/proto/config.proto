@@ -198,8 +198,9 @@ message RecordApiConfig {
   optional string delete_access_rule = 14;
   optional string schema_access_rule = 15;
 
-  /// A list of foreign key columns that can be expanded on read/list, i.e. the
-  /// foreign record will be inlined into the response.
+  /// A list of foreign key columns that *can* be expanded on read/list, i.e.
+  /// the foreign record will be inlined into the response. By default nothing
+  /// is expanded.
   ///
   /// Only columns and foreign tables with names not starting with "_", i.e. are
   /// allowed to be expanded.

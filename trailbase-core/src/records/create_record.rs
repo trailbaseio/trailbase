@@ -15,6 +15,10 @@ use crate::schema::ColumnDataType;
 
 #[derive(Clone, Debug, Default, Deserialize, IntoParams)]
 pub struct CreateRecordQuery {
+  /// Redirect user to this address upon successful record creation.
+  /// This only exists to support insertions via static HTML form actions.
+  ///
+  /// We may want to have a different on-error redirect to better support the static HTML use-case.
   pub redirect_to: Option<String>,
 }
 

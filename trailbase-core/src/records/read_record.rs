@@ -5,17 +5,18 @@ use axum::{
 };
 use serde::Deserialize;
 
+use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::records::files::read_file_into_response;
 use crate::records::query_builder::{
   GetFileQueryBuilder, GetFilesQueryBuilder, SelectQueryBuilder,
 };
-use crate::records::sql_to_json::row_to_json;
+use crate::records::sql_to_json::{row_to_json, row_to_json_expand};
 use crate::records::{Permission, RecordError};
-use crate::{app_state::AppState, records::sql_to_json::row_to_json_expand};
 
 #[derive(Debug, Default, Deserialize)]
 pub struct ReadRecordQuery {
+  /// To allow expanding foreign keys.
   pub expand: Option<String>,
 }
 
@@ -53,16 +54,21 @@ pub async fn read_record_handler(
 
   return Ok(Json(match query.expand {
     Some(query_expand) if !query_expand.is_empty() => {
-      let Some(mut expand) = api.expand().cloned() else {
+      let Some(expand) = api.expand() else {
         return Err(RecordError::BadRequest("Invalid expansion"));
       };
 
+      // Input validation, i.e. only accept columns that are also configured.
       let query_expand: Vec<_> = query_expand.split(",").collect();
       for col_name in &query_expand {
         if !query_expand.contains(col_name) {
           return Err(RecordError::BadRequest("Invalid expansion"));
         }
       }
+
+      // Alloc a map from column name to value that's pre-filled with with Value::Null for all
+      // expandable columns.
+      let mut expand = expand.clone();
 
       let mut rows = SelectQueryBuilder::run_expanded(
         &state,
