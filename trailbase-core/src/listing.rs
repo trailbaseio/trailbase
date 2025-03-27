@@ -317,11 +317,11 @@ mod tests {
       // Note that "+" is encoded as %2b, otherwise it's interpreted as a space. That's barely an
       // inconvenience since + is implied and "-" is fine, so there's no real reason to supply "+"
       // explicitly.
-      let query = Some(format!(
+      let query = format!(
         "limit=10&cursor={cursor}&order=%2bcol0,-col1,col2",
         cursor = id_to_b64(&cursor)
-      ));
-      let result = parse_query(query.as_deref()).unwrap();
+      );
+      let result = parse_query(Some(&query)).unwrap();
 
       assert_eq!(result.limit, Some(10));
       assert_eq!(result.cursor, Some(Cursor::Blob(cursor.to_vec())));

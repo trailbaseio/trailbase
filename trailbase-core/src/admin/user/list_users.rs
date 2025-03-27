@@ -131,14 +131,14 @@ async fn fetch_users(
 
   if let Some(cursor) = cursor {
     params.push((Cow::Borrowed(":cursor"), cursor.into()));
-    where_clause = format!("{where_clause} AND _row_.id < :cursor",);
+    where_clause = format!("{where_clause} AND _ROW_.id < :cursor",);
   }
 
   let order_clause = order
     .iter()
     .map(|(col, ord)| {
       format!(
-        "_row_.{col} {}",
+        r#"_ROW_."{col}" {}"#,
         match ord {
           Order::Descending => "DESC",
           Order::Ascending => "ASC",
@@ -150,9 +150,9 @@ async fn fetch_users(
 
   let sql_query = format!(
     r#"
-      SELECT _row_.*
+      SELECT _ROW_.*
       FROM
-        (SELECT * FROM {USER_TABLE}) as _row_
+        (SELECT * FROM {USER_TABLE}) as _ROW_
       WHERE
         {where_clause}
       ORDER BY

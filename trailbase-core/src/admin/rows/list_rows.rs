@@ -161,7 +161,7 @@ async fn fetch_rows(
 
   if let Some(cursor) = pagination.cursor {
     params.push((Cow::Borrowed(":cursor"), cursor.into()));
-    clause = format!("{clause} AND _row_.id < :cursor",);
+    clause = format!("{clause} AND _ROW_.id < :cursor",);
   }
 
   let order_clause = match order {
@@ -169,7 +169,7 @@ async fn fetch_rows(
       .iter()
       .map(|(col, ord)| {
         format!(
-          "_row_.{col} {}",
+          r#"_ROW_."{col}" {}"#,
           match ord {
             Order::Descending => "DESC",
             Order::Ascending => "ASC",
@@ -186,9 +186,9 @@ async fn fetch_rows(
 
   let query = format!(
     r#"
-      SELECT _row_.*
+      SELECT _ROW_.*
       FROM
-        (SELECT * FROM '{table_or_view_name}') as _row_
+        (SELECT * FROM '{table_or_view_name}') as _ROW_
       WHERE
         {clause}
       ORDER BY

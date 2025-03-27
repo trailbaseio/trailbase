@@ -114,7 +114,7 @@ pub async fn list_records_handler(
     .iter()
     .map(|(col, ord)| {
       format!(
-        "_ROW_.{col} {}",
+        r#"_ROW_."{col}" {}"#,
         match ord {
           Order::Descending => "DESC",
           Order::Ascending => "ASC",
@@ -307,6 +307,7 @@ mod tests {
   use crate::records::Acls;
   use crate::records::{add_record_api, AccessRules, RecordError};
   use crate::util::id_to_b64;
+  use crate::util::urlencode;
 
   fn is_auth_err(error: &RecordError) -> bool {
     return match error {
@@ -537,7 +538,7 @@ mod tests {
       let arr_asc = list_records(
         &state,
         Some(&user_y_token.auth_token),
-        Some("order=+id".to_string()),
+        Some(format!("order={}", urlencode("+id"))),
       )
       .await
       .unwrap()

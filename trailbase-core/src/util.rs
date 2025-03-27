@@ -78,3 +78,13 @@ pub(crate) fn get_header_owned(
   }
   return None;
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_urlencode() {
+    assert_eq!(urlencode("+col0,-col1"), "%2Bcol0%2C-col1");
+  }
+}
