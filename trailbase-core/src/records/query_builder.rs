@@ -74,9 +74,6 @@ pub(crate) struct Expansions {
   pub indexes: Vec<(usize, Arc<TableMetadata>)>,
   /// The actual join statements.
   pub joins: Vec<String>,
-
-  /// Select clauses in case the joins are aliased, i.e. a `prefix` is given.
-  pub selects: Option<Vec<String>>,
 }
 
 impl Expansions {
@@ -90,8 +87,14 @@ impl Expansions {
       return Err(RecordError::ApiRequiresTable);
     };
 
-    let mut joins = vec![];
-    let mut indexes = vec![(root_table.schema.columns.len(), root_table.clone())];
+    let len = expand.len();
+
+    let mut joins = Vec::<String>::with_capacity(len);
+    let mut indexes = {
+      let mut indexes = Vec::<(usize, Arc<TableMetadata>)>::with_capacity(len + 1);
+      indexes.push((root_table.schema.columns.len(), root_table.clone()));
+      indexes
+    };
 
     for (idx, col_name) in expand.iter().enumerate() {
       let col_name = col_name.as_ref();
@@ -135,21 +138,7 @@ impl Expansions {
       indexes.push((foreign_table.schema.columns.len(), foreign_table));
     }
 
-    let selects = if prefix.is_none() {
-      None
-    } else {
-      Some(
-        (0..joins.len())
-          .map(|idx| format!("F{idx}.*"))
-          .collect::<Vec<_>>(),
-      )
-    };
-
-    return Ok(Expansions {
-      indexes,
-      joins,
-      selects,
-    });
+    return Ok(Expansions { indexes, joins });
   }
 }
 
@@ -179,16 +168,11 @@ impl SelectQueryBuilder {
     expand: &[&str],
   ) -> Result<Vec<(Arc<TableMetadata>, trailbase_sqlite::Row)>, RecordError> {
     let table_metadata = state.table_metadata();
-    let Expansions {
-      indexes,
-      joins,
-      selects,
-    } = Expansions::build(table_metadata, table_name, expand, None)?;
-
-    assert!(selects.is_none());
+    let Expansions { indexes, joins } =
+      Expansions::build(table_metadata, table_name, expand, None)?;
 
     let sql = format!(
-      r#"SELECT * FROM "{table_name}" AS R {} WHERE R.{pk_column} = $1"#,
+      r#"SELECT * FROM "{table_name}" AS R {} WHERE R."{pk_column}" = $1"#,
       joins.join(" ")
     );
 

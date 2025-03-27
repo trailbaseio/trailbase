@@ -54,6 +54,8 @@ pub async fn list_records_handler(
   // on the table, i.e. no access -> empty results.
   api.check_table_level_access(Permission::Read, user.as_ref())?;
 
+  let table_name = api.table_name();
+
   let metadata = api.metadata();
   let Some(columns) = metadata.columns() else {
     return Err(RecordError::Internal("missing columns".into()));
@@ -74,9 +76,19 @@ pub async fn list_records_handler(
     return RecordError::BadRequest("Invalid query");
   })?;
 
+  // NOTE: We're using the read access rule to filter the rows as opposed to yes/no early access
+  // blocking as for read-record.
+  //
+  // TODO: Should this be a separate access rule? Maybe one wants users to access a specific
+  // record but not list all the records.
+  let read_access_clause: &str = api
+    .access_rule(Permission::Read)
+    .as_deref()
+    .unwrap_or("TRUE");
+
   // Where clause contains column filters and cursor depending on what's present.
   let WhereClause {
-    mut clause,
+    clause: filter_clause,
     mut params,
   } = build_filter_where_clause(metadata, filter_params)
     .map_err(|_err| RecordError::BadRequest("Invalid filter params"))?;
@@ -93,22 +105,11 @@ pub async fn list_records_handler(
     ),
   ]);
 
-  // NOTE: We're using the read access rule to filter the rows as opposed to yes/no early access
-  // blocking as for read-record.
-  //
-  // TODO: Should this be a separate access rule? Maybe one wants users to access a specific
-  // record but not list all the records.
-  if let Some(read_access) = api.access_rule(Permission::Read) {
-    clause = format!("({read_access}) AND ({clause})");
-  }
-
-  let clause_with_cursor = match cursor {
-    // FIXME
-    Some(cursor) => {
-      params.push((Cow::Borrowed(":cursor"), cursor.into()));
-      format!(r#"{clause} AND _ROW_."{}" < :cursor"#, pk_column.name)
-    }
-    None => clause.clone(),
+  let cursor_clause = if let Some(cursor) = cursor {
+    params.push((Cow::Borrowed(":cursor"), cursor.into()));
+    format!(r#"_ROW_."{}" < :cursor"#, pk_column.name)
+  } else {
+    "TRUE".to_string()
   };
 
   let order_clause = order
@@ -125,10 +126,8 @@ pub async fn list_records_handler(
     })
     .join(", ");
 
-  let table_name = api.table_name();
-
-  let (indexes, joins, selects) = match query_expand {
-    Some(ref expand) if !expand.is_empty() => {
+  let (indexes, joins, num_joins) = match query_expand {
+    Some(ref expand) => {
       let Some(config_expand) = api.expand() else {
         return Err(RecordError::BadRequest("Invalid expansion"));
       };
@@ -139,43 +138,41 @@ pub async fn list_records_handler(
         }
       }
 
-      let Expansions {
-        indexes,
-        joins,
-        selects,
-      } = Expansions::build(state.table_metadata(), table_name, expand, Some("_ROW_"))?;
+      let Expansions { indexes, joins } =
+        Expansions::build(state.table_metadata(), table_name, expand, Some("_ROW_"))?;
 
-      (Some(indexes), Some(joins), selects)
+      (Some(indexes), Cow::Owned(joins.join(" ")), joins.len())
     }
-    _ => (None, None, None),
+    None => (None, Cow::Borrowed(""), 0),
   };
 
-  let get_total_count = count.unwrap_or(false);
-  let selects = selects.map_or(EMPTY, |v| format!(", {}", v.join(", ")));
-  let joins = joins.map_or(EMPTY, |j| j.join(" "));
-
-  let query = if get_total_count {
+  // `joins` may be something like:
+  //   "LEFT JOIN 'foreign_table' AS F0 ON _ROW_.fk = F0.id"
+  let join_selects = (0..num_joins).map(|i| format!(", F{i}.*")).join("");
+  // NOTE: the _value_ underscore is load-bearing to strip it from result based on "_" prefix.
+  let query = if count == Some(true) {
     formatdoc!(
       r#"
-      WITH total_count AS (
-        SELECT COUNT(*) AS _value_
-        FROM
-          '{table_name}' as _ROW_,
-          (SELECT :__user_id AS id) AS _USER_
-        WHERE
-          {clause}
-      )
+      WITH
+        total_count AS (
+          SELECT COUNT(*) AS _value_
+          FROM
+            '{table_name}' as _ROW_,
+            (SELECT :__user_id AS id) AS _USER_
+          WHERE
+            ({read_access_clause}) AND ({filter_clause})
+        )
 
       SELECT
         _ROW_.*
-        {selects},
+        {join_selects},
         total_count._value_
       FROM
         '{table_name}' as _ROW_ {joins},
         (SELECT :__user_id AS id) AS _USER_,
         total_count
       WHERE
-        {clause_with_cursor}
+        ({read_access_clause}) AND ({filter_clause}) AND ({cursor_clause})
       ORDER BY
         {order_clause}
       LIMIT :limit
@@ -186,12 +183,12 @@ pub async fn list_records_handler(
       r#"
       SELECT
         _ROW_.*
-        {selects}
+        {join_selects}
       FROM
         '{table_name}' AS _ROW_ {joins},
         (SELECT :__user_id AS id) AS _USER_
       WHERE
-        {clause_with_cursor}
+        ({read_access_clause}) AND ({filter_clause}) AND ({cursor_clause})
       ORDER BY
         {order_clause}
       LIMIT :limit
@@ -199,6 +196,7 @@ pub async fn list_records_handler(
     )
   };
 
+  // Execute the query.
   let rows = state.conn().query(&query, params).await?;
   let Some(last_row) = rows.last() else {
     // Rows are empty:
@@ -218,7 +216,7 @@ pub async fn list_records_handler(
     _ => None,
   };
 
-  let total_count = if get_total_count {
+  let total_count = if count == Some(true) {
     let Some(rusqlite::types::Value::Integer(count)) = rows[0].last() else {
       return Err(RecordError::Internal(
         format!("expected count, got {:?}", rows[0].last()).into(),
@@ -228,10 +226,6 @@ pub async fn list_records_handler(
   } else {
     None
   };
-
-  fn filter(col_name: &str) -> bool {
-    return !col_name.starts_with("_");
-  }
 
   let records = if let (Some(query_expand), Some(indexes)) = (query_expand, indexes) {
     rows
@@ -257,7 +251,7 @@ pub async fn list_records_handler(
             &metadata.schema.columns,
             metadata.column_metadata(),
             &row,
-            filter,
+            column_filter,
           )
           .map_err(|err| RecordError::Internal(err.into()))?;
 
@@ -269,7 +263,7 @@ pub async fn list_records_handler(
           columns,
           metadata.column_metadata(),
           &result[0].1,
-          filter,
+          column_filter,
           Some(&expand),
         )
         .map_err(|err| RecordError::Internal(err.into()));
@@ -280,7 +274,7 @@ pub async fn list_records_handler(
       columns,
       metadata.column_metadata(),
       rows,
-      filter,
+      column_filter,
       api.expand(),
     )
     .map_err(|err| RecordError::Internal(err.into()))?
@@ -293,7 +287,10 @@ pub async fn list_records_handler(
   }));
 }
 
-const EMPTY: String = String::new();
+#[inline]
+fn column_filter(col_name: &str) -> bool {
+  return !col_name.starts_with("_");
+}
 
 #[cfg(test)]
 mod tests {

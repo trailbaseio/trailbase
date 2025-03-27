@@ -169,40 +169,42 @@ pub fn parse_and_sanitize_query(query: Option<&str>) -> Result<QueryParseResult,
       "offset" => result.offset = value.parse::<usize>().ok(),
       "count" => result.count = parse_bool(&value),
       "expand" => {
-        result.expand = Some(
-          value
-            .split(",")
-            .map(|s| {
-              let column_name = s.to_owned();
+        let column_names = value
+          .split(",")
+          .map(|s| {
+            if !sanitize_column_name(s) {
+              return Err(s);
+            }
 
-              if !sanitize_column_name(&column_name) {
-                return Err(column_name);
-              }
+            return Ok(s.to_string());
+          })
+          .collect::<Result<Vec<_>, _>>()?;
 
-              return Ok(column_name);
-            })
-            .collect::<Result<Vec<_>, _>>()?,
-        )
+        if !column_names.is_empty() {
+          result.expand = Some(column_names);
+        }
       }
       "order" => {
-        result.order = Some(
-          value
-            .split(",")
-            .map(|v| {
-              let col_order = match v.trim() {
-                x if x.starts_with("-") => (v[1..].to_string(), Order::Descending),
-                x if x.starts_with("+") => (v[1..].to_string(), Order::Ascending),
-                x => (x.to_string(), Order::Ascending),
-              };
+        let col_order = value
+          .split(",")
+          .map(|v| {
+            let col_order = match v.trim() {
+              x if x.starts_with("-") => (v[1..].to_string(), Order::Descending),
+              x if x.starts_with("+") => (v[1..].to_string(), Order::Ascending),
+              x => (x.to_string(), Order::Ascending),
+            };
 
-              if !sanitize_column_name(&col_order.0) {
-                return Err(col_order.0);
-              }
+            if !sanitize_column_name(&col_order.0) {
+              return Err(col_order.0);
+            }
 
-              return Ok(col_order);
-            })
-            .collect::<Result<Vec<_>, _>>()?,
-        )
+            return Ok(col_order);
+          })
+          .collect::<Result<Vec<_>, _>>()?;
+
+        if !col_order.is_empty() {
+          result.order = Some(col_order);
+        }
       }
       key => {
         // Key didn't match any of the predefined list operations (limit, cursor, order, ...), we
