@@ -8,7 +8,8 @@ use utoipa::{IntoParams, ToSchema};
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::json_to_sql::{InsertQueryBuilder, JsonRow, LazyParams, Params};
+use crate::records::params::{JsonRow, LazyParams, Params};
+use crate::records::query_builder::InsertQueryBuilder;
 use crate::records::{Permission, RecordError};
 use crate::schema::ColumnDataType;
 

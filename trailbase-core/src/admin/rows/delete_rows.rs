@@ -9,8 +9,8 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::records::json_to_sql::simple_json_value_to_param;
-use crate::records::json_to_sql::DeleteQueryBuilder;
+use crate::records::params::simple_json_value_to_param;
+use crate::records::query_builder::DeleteQueryBuilder;
 
 #[derive(Debug, Serialize, Deserialize, Default, TS)]
 #[ts(export)]

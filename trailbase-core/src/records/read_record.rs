@@ -7,7 +7,9 @@ use serde::Deserialize;
 
 use crate::auth::user::User;
 use crate::records::files::read_file_into_response;
-use crate::records::json_to_sql::{GetFileQueryBuilder, GetFilesQueryBuilder, SelectQueryBuilder};
+use crate::records::query_builder::{
+  GetFileQueryBuilder, GetFilesQueryBuilder, SelectQueryBuilder,
+};
 use crate::records::sql_to_json::row_to_json;
 use crate::records::{Permission, RecordError};
 use crate::{app_state::AppState, records::sql_to_json::row_to_json_expand};
@@ -247,7 +249,7 @@ mod test {
     create_record_handler, CreateRecordQuery, CreateRecordResponse,
   };
   use crate::records::delete_record::delete_record_handler;
-  use crate::records::json_to_sql::JsonRow;
+  use crate::records::params::JsonRow;
   use crate::records::test_utils::*;
   use crate::records::*;
   use crate::test::unpack_json_response;

@@ -8,8 +8,8 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::records::files::read_file_into_response;
-use crate::records::json_to_sql::simple_json_value_to_param;
-use crate::records::json_to_sql::{GetFileQueryBuilder, GetFilesQueryBuilder};
+use crate::records::params::simple_json_value_to_param;
+use crate::records::query_builder::{GetFileQueryBuilder, GetFilesQueryBuilder};
 
 #[derive(Debug, Deserialize, TS)]
 #[ts(export)]

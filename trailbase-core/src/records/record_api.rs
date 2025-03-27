@@ -7,7 +7,7 @@ use trailbase_sqlite::{NamedParamRef, NamedParams, NamedParamsRef, Params as _, 
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
-use crate::records::json_to_sql::{LazyParams, Params};
+use crate::records::params::{LazyParams, Params};
 use crate::records::{Permission, RecordError};
 use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{TableMetadata, TableOrViewMetadata, ViewMetadata};
@@ -648,7 +648,7 @@ fn build_request_params(table_metadata: &TableMetadata, request_params: &Params)
       continue;
     };
 
-    named_params[col_index].1 = request_params.named_params()[param_index].1.clone();
+    named_params[col_index].1 = request_params.named_params[param_index].1.clone();
   }
 
   return named_params;

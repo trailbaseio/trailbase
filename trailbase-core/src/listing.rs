@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use thiserror::Error;
 
-use crate::records::json_to_sql::json_string_to_value;
+use crate::records::params::json_string_to_value;
 use crate::table_metadata::TableOrViewMetadata;
 use crate::util::b64_to_id;
 

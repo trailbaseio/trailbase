@@ -38,7 +38,7 @@ pub enum AdminError {
   #[error("Schema error: {0}")]
   SchemaError(#[from] trailbase_sqlite::schema::SchemaError),
   #[error("Json -> SQL Params error: {0}")]
-  Params(#[from] crate::records::json_to_sql::ParamsError),
+  Params(#[from] crate::records::params::ParamsError),
   #[error("Config error: {0}")]
   Config(#[from] crate::config::ConfigError),
   #[error("Auth error: {0}")]
@@ -52,7 +52,7 @@ pub enum AdminError {
   #[error("Email error: {0}")]
   Email(#[from] crate::email::EmailError),
   #[error("Query error: {0}")]
-  Query(#[from] crate::records::json_to_sql::QueryError),
+  Query(#[from] crate::records::query_builder::QueryError),
   #[error("File error: {0}")]
   File(#[from] crate::records::files::FileError),
 }

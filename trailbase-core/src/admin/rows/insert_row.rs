@@ -5,7 +5,8 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::records::json_to_sql::{InsertQueryBuilder, JsonRow, Params};
+use crate::records::params::{JsonRow, Params};
+use crate::records::query_builder::InsertQueryBuilder;
 use crate::records::sql_to_json::row_to_json_array;
 
 #[derive(Debug, Serialize, Deserialize, Default, TS)]

@@ -13,7 +13,7 @@ use crate::auth::user::User;
 use crate::listing::{
   build_filter_where_clause, limit_or_default, parse_query, Order, QueryParseResult, WhereClause,
 };
-use crate::records::json_to_sql::Expansions;
+use crate::records::query_builder::Expansions;
 use crate::records::sql_to_json::{row_to_json, row_to_json_expand, rows_to_json_expand};
 use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;

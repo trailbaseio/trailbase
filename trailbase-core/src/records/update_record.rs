@@ -3,7 +3,8 @@ use axum::extract::{Path, State};
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::json_to_sql::{JsonRow, LazyParams, UpdateQueryBuilder};
+use crate::records::params::{JsonRow, LazyParams};
+use crate::records::query_builder::UpdateQueryBuilder;
 use crate::records::{Permission, RecordError};
 
 /// Update existing record.

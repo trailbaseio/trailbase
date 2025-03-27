@@ -2,7 +2,7 @@
 mod tests {
   use trailbase_sqlite::params;
 
-  use crate::records::json_to_sql::JsonRow;
+  use crate::records::params::JsonRow;
   use crate::AppState;
 
   pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), anyhow::Error> {

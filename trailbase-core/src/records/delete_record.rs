@@ -6,7 +6,7 @@ use axum::{
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::records::json_to_sql::DeleteQueryBuilder;
+use crate::records::query_builder::DeleteQueryBuilder;
 use crate::records::{Permission, RecordError};
 
 /// Delete record.
