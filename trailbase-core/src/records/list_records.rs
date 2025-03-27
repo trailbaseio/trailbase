@@ -11,7 +11,8 @@ use trailbase_sqlite::Value;
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::listing::{
-  build_filter_where_clause, limit_or_default, parse_query, Order, QueryParseResult, WhereClause,
+  build_filter_where_clause, limit_or_default, parse_and_sanitize_query, Order, QueryParseResult,
+  WhereClause,
 };
 use crate::records::query_builder::Expansions;
 use crate::records::sql_to_json::{row_to_json, row_to_json_expand, rows_to_json_expand};
@@ -62,14 +63,14 @@ pub async fn list_records_handler(
   };
 
   let QueryParseResult {
-    params: filter_params,
-    cursor,
     limit,
-    order,
+    cursor,
     count,
     expand: query_expand,
+    order,
+    params: filter_params,
     ..
-  } = parse_query(raw_url_query.as_deref()).map_err(|_err| {
+  } = parse_and_sanitize_query(raw_url_query.as_deref()).map_err(|_err| {
     return RecordError::BadRequest("Invalid query");
   })?;
 

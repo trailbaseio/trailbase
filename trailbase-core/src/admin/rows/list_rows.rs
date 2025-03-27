@@ -8,8 +8,8 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::listing::{
-  build_filter_where_clause, limit_or_default, parse_query, Cursor, Order, QueryParseResult,
-  WhereClause,
+  build_filter_where_clause, limit_or_default, parse_and_sanitize_query, Cursor, Order,
+  QueryParseResult, WhereClause,
 };
 use crate::records::sql_to_json::rows_to_json_arrays;
 use crate::schema::Column;
@@ -41,7 +41,7 @@ pub async fn list_rows_handler(
     order,
     offset,
     ..
-  } = parse_query(raw_url_query.as_deref())
+  } = parse_and_sanitize_query(raw_url_query.as_deref())
     .map_err(|err| Error::Precondition(format!("Invalid query '{err}': {raw_url_query:?}")))?;
 
   let (table_metadata, table_or_view_metadata): (

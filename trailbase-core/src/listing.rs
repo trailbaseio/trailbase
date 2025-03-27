@@ -139,11 +139,20 @@ fn parse_bool(s: &str) -> Option<bool> {
   };
 }
 
+#[inline]
+fn sanitize_column_name(name: &str) -> bool {
+  // Assuming that all uses are quoted correctly, it should be enough to discard names containing
+  // (", ', `, [, ]), however we're conservative here.
+  return name
+    .chars()
+    .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_');
+}
+
 /// Parses out list-related query params including pagination (limit, cursort), order, and filters.
 ///
 /// An example query may look like:
 ///  ?cursor=[0:16]&limit=50&order=price,-date&price[lte]=100&date[gte]=<timestamp>.
-pub fn parse_query(query: Option<&str>) -> Result<QueryParseResult, String> {
+pub fn parse_and_sanitize_query(query: Option<&str>) -> Result<QueryParseResult, String> {
   let mut result: QueryParseResult = Default::default();
   let Some(query) = query else {
     return Ok(result);
@@ -159,33 +168,51 @@ pub fn parse_query(query: Option<&str>) -> Result<QueryParseResult, String> {
       "cursor" => result.cursor = Cursor::parse(value.as_ref()),
       "offset" => result.offset = value.parse::<usize>().ok(),
       "count" => result.count = parse_bool(&value),
-      "expand" => result.expand = Some(value.split(",").map(|s| s.to_owned()).collect()),
-      "order" => {
-        let order: Vec<(String, Order)> = value
-          .split(",")
-          .map(|v| {
-            return match v {
-              x if x.starts_with("-") => (v[1..].to_string(), Order::Descending),
-              x if x.starts_with("+") => (v[1..].to_string(), Order::Ascending),
-              x => (x.to_string(), Order::Ascending),
-            };
-          })
-          .collect();
+      "expand" => {
+        result.expand = Some(
+          value
+            .split(",")
+            .map(|s| {
+              let column_name = s.to_owned();
 
-        result.order = Some(order);
+              if !sanitize_column_name(&column_name) {
+                return Err(column_name);
+              }
+
+              return Ok(column_name);
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        )
+      }
+      "order" => {
+        result.order = Some(
+          value
+            .split(",")
+            .map(|v| {
+              let col_order = match v.trim() {
+                x if x.starts_with("-") => (v[1..].to_string(), Order::Descending),
+                x if x.starts_with("+") => (v[1..].to_string(), Order::Ascending),
+                x => (x.to_string(), Order::Ascending),
+              };
+
+              if !sanitize_column_name(&col_order.0) {
+                return Err(col_order.0);
+              }
+
+              return Ok(col_order);
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        )
       }
       key => {
-        // Key didn't match any of the predefined list operations (limit, cursor, order), we thus
-        // assume it's a column filter. We try to split any qualifier/operation, e.g.
+        // Key didn't match any of the predefined list operations (limit, cursor, order, ...), we
+        // thus assume it's a column filter. We try to split any qualifier/operation, e.g.
         // column[op]=value.
         let Some((k, maybe_op)) = split_key_into_col_and_op(key) else {
           return Err(key.to_string());
         };
 
-        if !k
-          .chars()
-          .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_')
-        {
+        if !sanitize_column_name(k) {
           return Err(key.to_string());
         }
 
@@ -289,6 +316,7 @@ lazy_static! {
 mod tests {
   use super::*;
   use crate::util::id_to_b64;
+  use crate::util::urlencode;
 
   #[test]
   fn test_op_splitting_regex() {
@@ -309,8 +337,8 @@ mod tests {
 
   #[test]
   fn test_query_parsing() {
-    assert!(parse_query(None).is_ok());
-    assert!(parse_query(Some("")).is_ok());
+    assert!(parse_and_sanitize_query(None).is_ok());
+    assert!(parse_and_sanitize_query(Some("")).is_ok());
 
     {
       let cursor: [u8; 16] = [5; 16];
@@ -321,7 +349,7 @@ mod tests {
         "limit=10&cursor={cursor}&order=%2bcol0,-col1,col2",
         cursor = id_to_b64(&cursor)
       );
-      let result = parse_query(Some(&query)).unwrap();
+      let result = parse_and_sanitize_query(Some(&query)).unwrap();
 
       assert_eq!(result.limit, Some(10));
       assert_eq!(result.cursor, Some(Cursor::Blob(cursor.to_vec())));
@@ -337,7 +365,7 @@ mod tests {
 
     {
       let query = Some("baz=23&bar[like]=foo");
-      let result = parse_query(query).unwrap();
+      let result = parse_and_sanitize_query(query).unwrap();
 
       assert_eq!(
         result.params.as_ref().unwrap().get("baz").unwrap(),
@@ -358,16 +386,22 @@ mod tests {
     {
       // foo,bar is an invalid key.
       let query = Some("baz=23&foo,bar&foo_bar");
-      assert_eq!(parse_query(query).err(), Some("foo,bar".to_string()));
+      assert_eq!(
+        parse_and_sanitize_query(query).err(),
+        Some("foo,bar".to_string())
+      );
 
       let query = Some("baz=23&foo_bar");
-      assert_eq!(parse_query(query).err(), Some("foo_bar".to_string()));
+      assert_eq!(
+        parse_and_sanitize_query(query).err(),
+        Some("foo_bar".to_string())
+      );
     }
 
     {
       // Check whitespaces
       let query = Some("foo=a+b&bar=a%20b");
-      let result = parse_query(query).unwrap();
+      let result = parse_and_sanitize_query(query).unwrap();
 
       assert_eq!(
         result.params.as_ref().unwrap().get("foo").unwrap(),
@@ -387,7 +421,7 @@ mod tests {
 
     {
       let query = Some("col_0[gte]=10&col_0[lte]=100");
-      let result = parse_query(query).unwrap();
+      let result = parse_and_sanitize_query(query).unwrap();
 
       assert_eq!(
         result.params.as_ref().unwrap().get("col_0"),
@@ -411,7 +445,7 @@ mod tests {
       // Test both encodings: "+" and %20 for " ".
       let value = "with+white%20spaces";
       let query = Some(format!("text={value}"));
-      let result = parse_query(query.as_deref()).unwrap();
+      let result = parse_and_sanitize_query(query.as_deref()).unwrap();
 
       assert_eq!(
         result.params.as_ref().unwrap().get("text"),
@@ -423,6 +457,17 @@ mod tests {
         "{:?}",
         result.params
       );
+    }
+
+    {
+      // Sanitizing
+      assert!(
+        parse_and_sanitize_query(Some(&format!("order={}", urlencode("col'; inject")))).is_err()
+      );
+      assert!(
+        parse_and_sanitize_query(Some(&format!("expand={}", urlencode("col'; inject")))).is_err()
+      );
+      assert!(parse_and_sanitize_query(Some(&urlencode("col'; inject"))).is_err());
     }
   }
 }

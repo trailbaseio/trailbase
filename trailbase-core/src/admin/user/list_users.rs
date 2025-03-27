@@ -14,8 +14,8 @@ use crate::app_state::AppState;
 use crate::auth::user::DbUser;
 use crate::constants::{USER_TABLE, USER_TABLE_ID_COLUMN};
 use crate::listing::{
-  build_filter_where_clause, limit_or_default, parse_query, Cursor, Order, QueryParseResult,
-  WhereClause,
+  build_filter_where_clause, limit_or_default, parse_and_sanitize_query, Cursor, Order,
+  QueryParseResult, WhereClause,
 };
 use crate::util::id_to_b64;
 
@@ -70,7 +70,7 @@ pub async fn list_users_handler(
     limit,
     order,
     ..
-  } = parse_query(raw_url_query.as_deref())
+  } = parse_and_sanitize_query(raw_url_query.as_deref())
     .map_err(|err| Error::Precondition(format!("Invalid query '{err}': {raw_url_query:?}")))?;
 
   let Some(table_metadata) = state.table_metadata().get(USER_TABLE) else {

@@ -15,8 +15,8 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::constants::{LOGS_RETENTION_DEFAULT, LOGS_TABLE_ID_COLUMN};
 use crate::listing::{
-  build_filter_where_clause, limit_or_default, parse_query, Cursor, Order, QueryParseResult,
-  WhereClause,
+  build_filter_where_clause, limit_or_default, parse_and_sanitize_query, Cursor, Order,
+  QueryParseResult, WhereClause,
 };
 use crate::table_metadata::{lookup_and_parse_table_schema, TableMetadata};
 
@@ -115,7 +115,7 @@ pub async fn list_logs_handler(
     limit,
     order,
     ..
-  } = parse_query(raw_url_query.as_deref())
+  } = parse_and_sanitize_query(raw_url_query.as_deref())
     .map_err(|err| Error::Precondition(format!("Invalid query '{err}': {raw_url_query:?}")))?;
 
   // NOTE: We cannot use state.table_metadata() here, since we're working on the logs database.
