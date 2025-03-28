@@ -1,5 +1,4 @@
 use base64::prelude::*;
-use itertools::Itertools;
 use log::*;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -145,9 +144,9 @@ impl Params {
     return &self.file_col_names;
   }
 
-  pub(crate) fn placeholders(&self) -> String {
-    return self.named_params.iter().map(|(k, _v)| k).join(", ");
-  }
+  // pub(crate) fn placeholders(&self) -> String {
+  //   return self.named_params.iter().map(|(k, _v)| k).join(", ");
+  // }
 
   #[inline]
   fn column_by_name<'a>(

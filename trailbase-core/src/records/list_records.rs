@@ -1,23 +1,23 @@
+use askama::Template;
 use axum::{
   extract::{Path, RawQuery, State},
   Json,
 };
-use indoc::formatdoc;
 use itertools::Itertools;
 use serde::Serialize;
 use std::borrow::Cow;
 use trailbase_sqlite::Value;
 
-use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::listing::{
   build_filter_where_clause, limit_or_default, parse_and_sanitize_query, Order, QueryParseResult,
   WhereClause,
 };
-use crate::records::query_builder::Expansions;
+use crate::records::query_builder::ExpandedTable;
 use crate::records::sql_to_json::{row_to_json, row_to_json_expand, rows_to_json_expand};
 use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;
+use crate::{app_state::AppState, records::query_builder::expand_tables};
 
 /// JSON response containing the listed records.
 #[derive(Debug, Serialize)]
@@ -30,6 +30,19 @@ pub struct ListResponse {
   pub total_count: Option<usize>,
   /// Actual record data for records matching the query.
   pub records: Vec<serde_json::Value>,
+}
+
+#[derive(Template)]
+#[template(escape = "none", path = "list_record_query.sql")]
+struct ListRecordQueryTemplate<'a> {
+  table_name: &'a str,
+  read_access_clause: &'a str,
+  filter_clause: &'a str,
+  // TODO: Consider expanding the cursor and order clause directly in the template.
+  cursor_clause: &'a str,
+  order_clause: &'a str,
+  expanded_tables: &'a [ExpandedTable],
+  count: bool,
 }
 
 /// Lists records matching the given filters
@@ -123,7 +136,7 @@ pub async fn list_records_handler(
     })
     .join(", ");
 
-  let (indexes, joins, num_joins) = match query_expand {
+  let expanded_tables = match query_expand {
     Some(ref expand) => {
       let Some(config_expand) = api.expand() else {
         return Err(RecordError::BadRequest("Invalid expansion"));
@@ -135,63 +148,24 @@ pub async fn list_records_handler(
         }
       }
 
-      let Expansions { indexes, joins } =
-        Expansions::build(state.table_metadata(), table_name, expand, Some("_ROW_"))?;
-
-      (Some(indexes), Cow::Owned(joins.join(" ")), joins.len())
+      expand_tables(state.table_metadata(), table_name, expand)?
     }
-    None => (None, Cow::Borrowed(""), 0),
+    None => vec![],
   };
 
-  // `joins` may be something like:
-  //   "LEFT JOIN 'foreign_table' AS F0 ON _ROW_.fk = F0.id"
-  let join_selects = (0..num_joins).map(|i| format!(", F{i}.*")).join("");
-  // NOTE: the _value_ underscore is load-bearing to strip it from result based on "_" prefix.
-  let query = if count == Some(true) {
-    formatdoc!(
-      r#"
-      WITH
-        total_count AS (
-          SELECT COUNT(*) AS _value_
-          FROM
-            '{table_name}' as _ROW_,
-            (SELECT :__user_id AS id) AS _USER_
-          WHERE
-            ({read_access_clause}) AND ({filter_clause})
-        )
-
-      SELECT
-        _ROW_.*
-        {join_selects},
-        total_count._value_
-      FROM
-        '{table_name}' as _ROW_ {joins},
-        (SELECT :__user_id AS id) AS _USER_,
-        total_count
-      WHERE
-        ({read_access_clause}) AND ({filter_clause}) AND ({cursor_clause})
-      ORDER BY
-        {order_clause}
-      LIMIT :limit
-      "#
-    )
-  } else {
-    formatdoc!(
-      r#"
-      SELECT
-        _ROW_.*
-        {join_selects}
-      FROM
-        '{table_name}' AS _ROW_ {joins},
-        (SELECT :__user_id AS id) AS _USER_
-      WHERE
-        ({read_access_clause}) AND ({filter_clause}) AND ({cursor_clause})
-      ORDER BY
-        {order_clause}
-      LIMIT :limit
-      "#
-    )
-  };
+  // NOTE: the `total_count._value_` underscore is load-bearing to strip it from result based on
+  // "_" prefix.
+  let query = ListRecordQueryTemplate {
+    table_name,
+    read_access_clause,
+    filter_clause: &filter_clause,
+    cursor_clause: &cursor_clause,
+    order_clause: &order_clause,
+    expanded_tables: &expanded_tables,
+    count: count.unwrap_or(false),
+  }
+  .render()
+  .map_err(|err| RecordError::Internal(err.into()))?;
 
   // Execute the query.
   let rows = state.conn().query(&query, params).await?;
@@ -224,49 +198,7 @@ pub async fn list_records_handler(
     None
   };
 
-  let records = if let (Some(query_expand), Some(indexes)) = (query_expand, indexes) {
-    rows
-      .into_iter()
-      .map(|row| {
-        let Some(mut expand) = api.expand().cloned() else {
-          return Err(RecordError::Internal(
-            "Expansion config must be some".into(),
-          ));
-        };
-
-        let mut curr = row;
-        let mut result = Vec::with_capacity(indexes.len());
-        for (idx, metadata) in &indexes {
-          let next = curr.split_off(*idx);
-          result.push((metadata, curr));
-          curr = next;
-        }
-
-        let foreign_rows = result.split_off(1);
-        for (col_name, (metadata, row)) in std::iter::zip(&query_expand, foreign_rows) {
-          let foreign_value = row_to_json(
-            &metadata.schema.columns,
-            metadata.column_metadata(),
-            &row,
-            column_filter,
-          )
-          .map_err(|err| RecordError::Internal(err.into()))?;
-
-          let result = expand.insert(col_name.to_string(), foreign_value);
-          assert!(result.is_some());
-        }
-
-        return row_to_json_expand(
-          columns,
-          metadata.column_metadata(),
-          &result[0].1,
-          column_filter,
-          Some(&expand),
-        )
-        .map_err(|err| RecordError::Internal(err.into()));
-      })
-      .collect::<Result<Vec<_>, RecordError>>()?
-  } else {
+  let records = if expanded_tables.is_empty() {
     rows_to_json_expand(
       columns,
       metadata.column_metadata(),
@@ -275,6 +207,46 @@ pub async fn list_records_handler(
       api.expand(),
     )
     .map_err(|err| RecordError::Internal(err.into()))?
+  } else {
+    rows
+      .into_iter()
+      .map(|mut row| {
+        // Allocate new empty expansion map.
+        let Some(mut expand) = api.expand().cloned() else {
+          return Err(RecordError::Internal(
+            "Expansion config must be some".into(),
+          ));
+        };
+
+        let mut curr = row.split_off(metadata.column_metadata().len());
+
+        for expanded in &expanded_tables {
+          let next = curr.split_off(expanded.num_columns);
+
+          let foreign_value = row_to_json(
+            &expanded.metadata.schema.columns,
+            expanded.metadata.column_metadata(),
+            &curr,
+            column_filter,
+          )
+          .map_err(|err| RecordError::Internal(err.into()))?;
+
+          let result = expand.insert(expanded.local_column_name.clone(), foreign_value);
+          assert!(result.is_some());
+
+          curr = next;
+        }
+
+        return row_to_json_expand(
+          columns,
+          metadata.column_metadata(),
+          &row,
+          column_filter,
+          Some(&expand),
+        )
+        .map_err(|err| RecordError::Internal(err.into()));
+      })
+      .collect::<Result<Vec<_>, RecordError>>()?
   };
 
   return Ok(Json(ListResponse {
@@ -302,8 +274,34 @@ mod tests {
   use crate::records::test_utils::*;
   use crate::records::Acls;
   use crate::records::{add_record_api, AccessRules, RecordError};
+  use crate::table_metadata::sqlite3_parse_into_statement;
   use crate::util::id_to_b64;
   use crate::util::urlencode;
+
+  fn sanitize_template(template: &str) {
+    assert!(sqlite3_parse_into_statement(template).is_ok(), "{template}");
+    // assert!(!template.contains("\n"), "{template}");
+    assert!(!template.contains("   "), "{template}");
+  }
+
+  #[test]
+  fn test_list_records_template() {
+    {
+      let query = ListRecordQueryTemplate {
+        table_name: "table",
+        read_access_clause: "TRUE",
+        filter_clause: "TRUE",
+        cursor_clause: "TRUE",
+        order_clause: "NULL",
+        expanded_tables: &[],
+        count: false,
+      }
+      .render()
+      .unwrap();
+
+      sanitize_template(&query);
+    }
+  }
 
   fn is_auth_err(error: &RecordError) -> bool {
     return match error {
