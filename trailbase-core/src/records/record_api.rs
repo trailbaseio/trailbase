@@ -3,7 +3,7 @@ use log::*;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
-use trailbase_sqlite::{NamedParamRef, NamedParams, NamedParamsRef, Params as _, Value};
+use trailbase_sqlite::{NamedParamRef, NamedParams, Params as _, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
@@ -297,24 +297,24 @@ impl RecordApi {
   }
 
   #[inline]
-  pub fn access_rule(&self, p: Permission) -> &Option<String> {
+  pub fn access_rule(&self, p: Permission) -> Option<&str> {
     return match p {
-      Permission::Create => &self.state.create_access_rule,
-      Permission::Read => &self.state.read_access_rule,
-      Permission::Update => &self.state.update_access_rule,
-      Permission::Delete => &self.state.delete_access_rule,
-      Permission::Schema => &self.state.schema_access_rule,
+      Permission::Create => self.state.create_access_rule.as_deref(),
+      Permission::Read => self.state.read_access_rule.as_deref(),
+      Permission::Update => self.state.update_access_rule.as_deref(),
+      Permission::Delete => self.state.delete_access_rule.as_deref(),
+      Permission::Schema => self.state.schema_access_rule.as_deref(),
     };
   }
 
   #[inline]
-  fn access_query(&self, p: Permission) -> &Option<String> {
+  fn access_query(&self, p: Permission) -> Option<&str> {
     return match p {
-      Permission::Create => &self.state.create_access_query,
-      Permission::Read => &self.state.read_access_query,
-      Permission::Update => &self.state.update_access_query,
-      Permission::Delete => &self.state.delete_access_query,
-      Permission::Schema => &self.state.schema_access_query,
+      Permission::Create => self.state.create_access_query.as_deref(),
+      Permission::Read => self.state.read_access_query.as_deref(),
+      Permission::Update => self.state.update_access_query.as_deref(),
+      Permission::Delete => self.state.delete_access_query.as_deref(),
+      Permission::Schema => self.state.schema_access_query.as_deref(),
     };
   }
 
@@ -344,16 +344,27 @@ impl RecordApi {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
-    let Some(access_query) = self.access_query(p) else {
+    let Some(access_query) = self.access_query(p).to_owned() else {
       return Ok(());
     };
-    let access_query = access_query.clone();
+
     let params = self.build_named_params(p, record_id, request_params, user)?;
+    let access_query = access_query.to_string();
 
     match self
       .state
       .conn
-      .call(move |conn| Self::query_access(conn, &access_query, params))
+      .call(move |conn| {
+        let mut stmt = conn.prepare_cached(&access_query)?;
+        params.bind(&mut stmt)?;
+
+        let mut rows = stmt.raw_query();
+        if let Some(row) = rows.next()? {
+          return Ok(row.get(0)?);
+        }
+
+        return Err(rusqlite::Error::QueryReturnedNoRows.into());
+      })
       .await
     {
       Ok(allowed) => {
@@ -373,36 +384,36 @@ impl RecordApi {
   }
 
   /// Check if the given user (if any) can access a record given the request and the operation.
-  #[allow(unused)]
-  pub fn check_record_level_read_access(
+  pub(crate) fn check_record_level_read_access_for_subscriptions(
     &self,
     conn: &rusqlite::Connection,
-    p: Permission,
     record: &[(&str, rusqlite::types::ValueRef<'_>)],
     user: Option<&User>,
   ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
-    self.check_table_level_access(p, user)?;
+    self.check_table_level_access(Permission::Read, user)?;
 
-    let Some(access_rule) = self.access_rule(p) else {
+    let Some(access_rule) = self.access_rule(Permission::Read) else {
       return Ok(());
     };
 
-    let (query, params) = build_query_and_params_for_record_read(access_rule, user, record);
+    let mut stmt = build_statement_for_record_read(conn, access_rule, user, record)
+      .map_err(|_err| RecordError::Forbidden)?;
 
-    match Self::query_access_ref(conn, &query, &params) {
-      Ok(allowed) => {
-        if allowed {
+    match stmt.raw_query().next() {
+      Ok(Some(row)) => {
+        if row.get(0).unwrap_or(false) {
           return Ok(());
         }
       }
+      Ok(None) => {}
       Err(err) => {
         warn!("RLA query failed: {err}");
 
         #[cfg(test)]
         panic!("RLA query failed: {err}");
       }
-    };
+    }
 
     return Err(RecordError::Forbidden);
   }
@@ -420,40 +431,6 @@ impl RecordApi {
     }
 
     return Err(RecordError::Forbidden);
-  }
-
-  #[inline]
-  fn query_access(
-    conn: &rusqlite::Connection,
-    access_query: &str,
-    params: NamedParams,
-  ) -> Result<bool, trailbase_sqlite::Error> {
-    let mut stmt = conn.prepare_cached(access_query)?;
-    params.bind(&mut stmt)?;
-
-    let mut rows = stmt.raw_query();
-    if let Some(row) = rows.next()? {
-      return Ok(row.get(0)?);
-    }
-
-    return Err(rusqlite::Error::QueryReturnedNoRows.into());
-  }
-
-  #[inline]
-  fn query_access_ref(
-    conn: &rusqlite::Connection,
-    access_query: &str,
-    params: NamedParamsRef,
-  ) -> Result<bool, trailbase_sqlite::Error> {
-    let mut stmt = conn.prepare_cached(access_query)?;
-    params.bind(&mut stmt)?;
-
-    let mut rows = stmt.raw_query();
-    if let Some(row) = rows.next()? {
-      return Ok(row.get(0)?);
-    }
-
-    return Err(rusqlite::Error::QueryReturnedNoRows.into());
   }
 
   #[inline]
@@ -479,63 +456,59 @@ impl RecordApi {
           return Err(RecordError::ApiRequiresTable);
         };
 
-        build_request_params(
-          table_metadata,
-          request_params
-            .expect("params for update & create")
-            .params()
-            .map_err(|err| RecordError::Internal(err.into()))?,
-        )
+        let request_params = request_params
+          .ok_or_else(|| RecordError::Internal("missing req params".into()))?
+          .params()
+          .map_err(|err| RecordError::Internal(err.into()))?;
+
+        build_request_params(table_metadata, request_params)
       }
       Permission::Read | Permission::Delete | Permission::Schema => NamedParams::with_capacity(2),
     };
 
-    params.extend_from_slice(&[
-      (
-        Cow::Borrowed(":__user_id"),
-        user.map_or(Value::Null, |u| Value::Blob(u.uuid.into())),
-      ),
-      (
-        Cow::Borrowed(":__record_id"),
-        record_id.map_or(Value::Null, |id| id.clone()),
-      ),
-    ]);
+    params.push((
+      Cow::Borrowed(":__user_id"),
+      user.map_or(Value::Null, |u| Value::Blob(u.uuid.into())),
+    ));
+    params.push((
+      Cow::Borrowed(":__record_id"),
+      record_id.map_or(Value::Null, |id| id.clone()),
+    ));
 
     return Ok(params);
   }
 }
 
-fn build_query_and_params_for_record_read<'a>(
+fn build_statement_for_record_read<'a>(
+  conn: &'a rusqlite::Connection,
   access_rule: &str,
   user: Option<&User>,
   record: &[(&str, rusqlite::types::ValueRef<'a>)],
-) -> (String, Vec<NamedParamRef<'a>>) {
-  let row = record
-    .iter()
-    .map(|(name, _value)| {
-      return format!(":__v_{name} AS {name}");
-    })
-    .collect::<Vec<_>>()
-    .join(", ");
-
-  let mut params: Vec<_> = record
-    .iter()
-    .map(|(name, value)| {
-      return (
-        Cow::Owned(format!(":__v_{name}")),
-        rusqlite::types::ToSqlOutput::Borrowed(*value),
-      );
-    })
-    .collect();
-
-  static NULL: rusqlite::types::ToSqlOutput<'static> =
-    rusqlite::types::ToSqlOutput::Owned(Value::Null);
+) -> rusqlite::Result<rusqlite::CachedStatement<'a>> {
+  let len = record.len();
+  let mut params = Vec::<NamedParamRef<'a>>::with_capacity(len + 1);
   params.push((
     Cow::Borrowed(":__user_id"),
-    user.map_or(NULL.clone(), |u| {
-      rusqlite::types::ToSqlOutput::Owned(Value::Blob(u.uuid.into()))
-    }),
+    user.map_or_else(
+      || NULL.clone(),
+      |u| rusqlite::types::ToSqlOutput::Owned(Value::Blob(u.uuid.into())),
+    ),
   ));
+
+  let mut row = String::new();
+  for (i, (name, value)) in record.iter().enumerate() {
+    let placeholder = format!(":v{i}");
+    if i > 0 {
+      row += &format!(r#", {placeholder} AS '{name}'"#);
+    } else {
+      row += &format!(r#"{placeholder} AS '{name}'"#);
+    }
+
+    params.push((
+      Cow::Owned(placeholder),
+      rusqlite::types::ToSqlOutput::Borrowed(*value),
+    ));
+  }
 
   // Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
   let query = indoc::formatdoc!(
@@ -548,7 +521,9 @@ fn build_query_and_params_for_record_read<'a>(
       "#
   );
 
-  return (query, params);
+  let mut stmt = conn.prepare_cached(&query)?;
+  params.bind(&mut stmt)?;
+  return Ok(stmt);
 }
 
 /// Build access query for record reads, deletes and query access.
@@ -628,18 +603,21 @@ fn build_update_access_query(
 }
 
 /// Build SQL named parameters from request fields.
+#[inline]
 fn build_request_params(table_metadata: &TableMetadata, request_params: &Params) -> NamedParams {
-  // NOTE: This has gotten pretty wild. We cannot have access queries access missing _REQ_.props.
-  // So we need to inject an explicit NULL value for all missing fields on the request.
-  // Can we make this cheaper, either by pre-processing the access query or improving construction?
-  // For example, could we build a transaction-scoped temp view with positional placeholders to
-  // save some string ops?
-  let mut named_params: NamedParams = table_metadata
-    .schema
-    .columns
-    .iter()
-    .map(|c| (Cow::Owned(format!(r#":{}"#, c.name)), Value::Null))
-    .collect();
+  // NOTE: We cannot have access queries access missing _REQ_.props. So we need to inject an
+  // explicit NULL value for all missing fields on the request. Can we make this cheaper, either by
+  // pre-processing the access query or improving construction?
+  let mut named_params = table_metadata.named_params_template.clone();
+
+  // 'outer: for (placeholder, value) in &request_params.named_params {
+  //   for (p, ref mut v) in named_params.iter_mut() {
+  //     if *placeholder == *p {
+  //       *v = value.clone();
+  //       continue 'outer;
+  //     }
+  //   }
+  // }
 
   for (param_index, col_name) in request_params.column_names().iter().enumerate() {
     let Some(col_index) = table_metadata.column_index_by_name(col_name) else {
@@ -661,6 +639,9 @@ fn convert_acl(acl: &Vec<i32>) -> u8 {
   }
   return value;
 }
+
+static NULL: rusqlite::types::ToSqlOutput<'static> =
+  rusqlite::types::ToSqlOutput::Owned(Value::Null);
 
 // Note: ACLs and entities are only enforced on the table-level, this owner (row-level concept) is
 // not here.

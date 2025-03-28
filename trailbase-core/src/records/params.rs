@@ -511,7 +511,7 @@ pub(crate) fn json_string_to_value(
 }
 
 #[inline]
-fn prefix_colon(s: &str) -> String {
+pub(crate) fn prefix_colon(s: &str) -> String {
   let mut new = String::with_capacity(s.len() + 1);
   new.push(':');
   new.push_str(s);

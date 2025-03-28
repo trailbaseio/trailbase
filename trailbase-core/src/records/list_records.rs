@@ -81,10 +81,7 @@ pub async fn list_records_handler(
   //
   // TODO: Should this be a separate access rule? Maybe one wants users to access a specific
   // record but not list all the records.
-  let read_access_clause: &str = api
-    .access_rule(Permission::Read)
-    .as_deref()
-    .unwrap_or("TRUE");
+  let read_access_clause: &str = api.access_rule(Permission::Read).unwrap_or("TRUE");
 
   // Where clause contains column filters and cursor depending on what's present.
   let WhereClause {

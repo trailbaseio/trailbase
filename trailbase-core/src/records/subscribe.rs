@@ -268,7 +268,7 @@ impl SubscriptionManager {
       };
 
       if let Err(_err) =
-        api.check_record_level_read_access(conn, Permission::Read, record, sub.user.as_ref())
+        api.check_record_level_read_access_for_subscriptions(conn, record, sub.user.as_ref())
       {
         if record_subscriptions {
           // This can happen if the record api configuration has changed since originally

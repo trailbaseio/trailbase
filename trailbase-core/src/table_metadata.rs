@@ -6,13 +6,15 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlite3_parser::ast::Stmt;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use trailbase_sqlite::params;
+use trailbase_sqlite::{params, NamedParams};
 
 use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
-use crate::schema::{Column, ColumnDataType, ColumnOption, ForeignKey, SchemaError, Table, View};
+use crate::records::params::prefix_colon;
+use crate::schema::{Column, ColumnDataType, ColumnOption, SchemaError, Table, View};
 
 // TODO: Can we merge this with trailbase_sqlite::schema::SchemaError?
 #[derive(Debug, Clone, Error)]
@@ -78,10 +80,8 @@ pub struct TableMetadata {
   pub file_upload_columns: Vec<usize>,
   pub file_uploads_columns: Vec<usize>,
 
-  // Only non-composite keys.
-  #[allow(unused)]
-  foreign_ids: Vec<(usize, ForeignKey)>,
   // TODO: Add triggers once sqlparser supports a sqlite "CREATE TRIGGER" statements.
+  pub(crate) named_params_template: NamedParams,
 }
 
 impl TableMetadata {
@@ -90,7 +90,6 @@ impl TableMetadata {
   /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
   /// key relationships.
   pub(crate) fn new(table: Table, tables: &[Table]) -> Self {
-    let mut foreign_ids: Vec<(usize, ForeignKey)> = vec![];
     let mut file_upload_columns: Vec<usize> = vec![];
     let mut file_uploads_columns: Vec<usize> = vec![];
     let mut name_to_index = HashMap::<String, usize>::new();
@@ -101,28 +100,6 @@ impl TableMetadata {
       .enumerate()
       .map(|(index, col)| {
         name_to_index.insert(col.name.clone(), index);
-
-        for opt in &col.options {
-          if let ColumnOption::ForeignKey {
-            foreign_table,
-            referred_columns,
-            on_delete,
-            on_update,
-          } = opt
-          {
-            foreign_ids.push((
-              index,
-              ForeignKey {
-                name: None,
-                foreign_table: foreign_table.clone(),
-                columns: vec![col.name.clone()],
-                referred_columns: referred_columns.clone(),
-                on_delete: on_delete.clone(),
-                on_update: on_update.clone(),
-              },
-            ));
-          }
-        }
 
         let json_metadata = build_json_metadata(col);
         if let Some(ref json_metadata) = json_metadata {
@@ -146,6 +123,17 @@ impl TableMetadata {
     let record_pk_column = find_record_pk_column_index(&table.columns, tables);
     let user_id_columns = find_user_id_foreign_key_columns(&table.columns);
 
+    let named_params_template: NamedParams = table
+      .columns
+      .iter()
+      .map(|column| {
+        (
+          Cow::Owned(prefix_colon(&column.name)),
+          trailbase_sqlite::Value::Null,
+        )
+      })
+      .collect();
+
     return TableMetadata {
       schema: table,
       metadata,
@@ -154,7 +142,7 @@ impl TableMetadata {
       user_id_columns,
       file_upload_columns,
       file_uploads_columns,
-      foreign_ids,
+      named_params_template,
     };
   }
 
