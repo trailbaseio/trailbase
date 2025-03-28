@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { client } from "@/lib/fetch";
 
 import { showToast } from "@/components/ui/toast";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -13,6 +14,9 @@ import {
 export function LoginPage() {
   const [username, setUsername] = createSignal("");
   const [password, setPassword] = createSignal("");
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const message = urlParams.get("loginMessage");
 
   const onSubmit = async () => {
     try {
@@ -69,6 +73,12 @@ export function LoginPage() {
           <div class="flex justify-end">
             <Button type="submit">Log in</Button>
           </div>
+
+          {message && (
+            <div class="flex justify-center">
+              <Badge variant="warning">{message}</Badge>
+            </div>
+          )}
         </form>
       </Card>
     </div>
