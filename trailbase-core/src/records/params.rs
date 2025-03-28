@@ -145,9 +145,9 @@ impl Params {
     return &self.file_col_names;
   }
 
-  pub(crate) fn placeholders(&self) -> String {
-    return self.named_params.iter().map(|(k, _v)| k).join(", ");
-  }
+  // pub(crate) fn placeholders(&self) -> String {
+  //   return self.named_params.iter().map(|(k, _v)| k).join(", ");
+  // }
 
   #[inline]
   fn column_by_name<'a>(

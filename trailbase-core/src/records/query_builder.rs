@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use log::*;
 use object_store::ObjectStore;
+use sailfish::TemplateSimple;
 use std::borrow::Cow;
 use std::sync::Arc;
 use trailbase_sqlite::schema::{FileUpload, FileUploads};
@@ -260,6 +261,15 @@ impl GetFilesQueryBuilder {
   }
 }
 
+#[derive(TemplateSimple)]
+#[template(path = "create_record_query.sql", escape = false)]
+struct CreateRecordQueryTemplate<'a> {
+  table_name: &'a str,
+  conflict_clause: &'a str,
+  column_names: &'a [String],
+  returning: Option<&'a str>,
+}
+
 pub(crate) struct InsertQueryBuilder;
 
 impl InsertQueryBuilder {
@@ -388,28 +398,14 @@ impl InsertQueryBuilder {
       conflict_resolution.unwrap_or(ConflictResolutionStrategy::Undefined),
     );
 
-    let return_fragment: Cow<'_, str> = match return_column_name {
-      Some(return_column_name) => {
-        if return_column_name == "*" {
-          Cow::Borrowed(r#"RETURNING *"#)
-        } else {
-          format!(r#"RETURNING "{return_column_name}""#).into()
-        }
-      }
-      None => Cow::Borrowed(""),
-    };
-
-    let column_names = params.column_names();
-    let query = if !column_names.is_empty() {
-      format!(
-        r#"INSERT {conflict_clause} INTO "{table_name}" ({col_names}) VALUES ({placeholders}) {return_fragment}"#,
-        col_names = crate::schema::quote(column_names),
-        placeholders = params.placeholders(),
-      )
-    } else {
-      // The insert empty record case, i.e. "{}".
-      format!(r#"INSERT {conflict_clause} INTO "{table_name}" DEFAULT VALUES {return_fragment}"#)
-    };
+    let query = CreateRecordQueryTemplate {
+      table_name,
+      conflict_clause,
+      column_names: params.column_names(),
+      returning: return_column_name,
+    }
+    .render_once()
+    .unwrap();
 
     return Ok((query, params.named_params, params.files));
   }

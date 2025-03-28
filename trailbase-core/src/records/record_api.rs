@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use log::*;
+use sailfish::TemplateSimple;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -7,7 +8,7 @@ use trailbase_sqlite::{NamedParamRef, NamedParams, Params as _, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
-use crate::records::params::{LazyParams, Params};
+use crate::records::params::{prefix_colon, LazyParams, Params};
 use crate::records::{Permission, RecordError};
 use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{TableMetadata, TableOrViewMetadata, ViewMetadata};
@@ -79,6 +80,19 @@ struct RecordApiState {
 
   schema_access_rule: Option<String>,
   schema_access_query: Option<String>,
+}
+
+impl RecordApiState {
+  #[inline]
+  fn cached_access_query(&self, p: Permission) -> Option<&str> {
+    return match p {
+      Permission::Create => self.create_access_query.as_deref(),
+      Permission::Read => self.read_access_query.as_deref(),
+      Permission::Update => self.update_access_query.as_deref(),
+      Permission::Delete => self.delete_access_query.as_deref(),
+      Permission::Schema => self.schema_access_query.as_deref(),
+    };
+  }
 }
 
 impl RecordApi {
@@ -308,17 +322,6 @@ impl RecordApi {
   }
 
   #[inline]
-  fn access_query(&self, p: Permission) -> Option<&str> {
-    return match p {
-      Permission::Create => self.state.create_access_query.as_deref(),
-      Permission::Read => self.state.read_access_query.as_deref(),
-      Permission::Update => self.state.update_access_query.as_deref(),
-      Permission::Delete => self.state.delete_access_query.as_deref(),
-      Permission::Schema => self.state.schema_access_query.as_deref(),
-    };
-  }
-
-  #[inline]
   pub fn insert_autofill_missing_user_id_columns(&self) -> bool {
     return self.state.insert_autofill_missing_user_id_columns;
   }
@@ -344,17 +347,19 @@ impl RecordApi {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
-    let Some(access_query) = self.access_query(p).to_owned() else {
+    let Some(access_query) = self.state.cached_access_query(p) else {
       return Ok(());
     };
 
     let params = self.build_named_params(p, record_id, request_params, user)?;
+    // let state = self.state.clone();
     let access_query = access_query.to_string();
 
     match self
       .state
       .conn
       .call(move |conn| {
+        // let access_query = state.cached_access_query(p).unwrap();
         let mut stmt = conn.prepare_cached(&access_query)?;
         params.bind(&mut stmt)?;
 
@@ -397,7 +402,7 @@ impl RecordApi {
       return Ok(());
     };
 
-    let mut stmt = build_statement_for_record_read(conn, access_rule, user, record)
+    let mut stmt = build_statement_for_subscription_record_read(conn, access_rule, user, record)
       .map_err(|_err| RecordError::Forbidden)?;
 
     match stmt.raw_query().next() {
@@ -479,7 +484,14 @@ impl RecordApi {
   }
 }
 
-fn build_statement_for_record_read<'a>(
+#[derive(TemplateSimple)]
+#[template(path = "subscription_record_read.sql", escape = false)]
+struct SubscriptionRecordReadTemplate<'a> {
+  access_rule: &'a str,
+  column_names: Vec<&'a str>,
+}
+
+fn build_statement_for_subscription_record_read<'a>(
   conn: &'a rusqlite::Connection,
   access_rule: &str,
   user: Option<&User>,
@@ -495,31 +507,21 @@ fn build_statement_for_record_read<'a>(
     ),
   ));
 
-  let mut row = String::new();
-  for (i, (name, value)) in record.iter().enumerate() {
-    let placeholder = format!(":v{i}");
-    if i > 0 {
-      row += &format!(r#", {placeholder} AS '{name}'"#);
-    } else {
-      row += &format!(r#"{placeholder} AS '{name}'"#);
-    }
-
+  let mut column_names = Vec::<&str>::with_capacity(record.len());
+  for (name, value) in record.iter() {
+    column_names.push(name);
     params.push((
-      Cow::Owned(placeholder),
+      Cow::Owned(prefix_colon(name)),
       rusqlite::types::ToSqlOutput::Borrowed(*value),
     ));
   }
 
-  // Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
-  let query = indoc::formatdoc!(
-    r#"
-        SELECT
-          ({access_rule})
-        FROM
-          (SELECT :__user_id AS id) AS _USER_,
-          (SELECT {row}) AS _ROW_
-      "#
-  );
+  let query = SubscriptionRecordReadTemplate {
+    access_rule,
+    column_names,
+  }
+  .render_once()
+  .unwrap();
 
   let mut stmt = conn.prepare_cached(&query)?;
   params.bind(&mut stmt)?;
@@ -545,29 +547,30 @@ fn build_read_delete_schema_query(
   );
 }
 
+#[derive(TemplateSimple)]
+#[template(path = "create_record_access_query.sql", escape = false)]
+struct CreateRecordAccessQueryTemplate<'a> {
+  create_access_rule: &'a str,
+  column_names: Vec<&'a str>,
+}
+
 /// Build access query for record creation.
 ///
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
 fn build_create_access_query(table_metadata: &TableMetadata, create_access_rule: &str) -> String {
-  let column_sub_select = format!(
-    "SELECT {placeholders}",
-    placeholders = table_metadata
-      .schema
-      .columns
-      .iter()
-      .map(|col| format!(r#":{name} AS '{name}'"#, name = col.name))
-      .join(", ")
-  );
+  let column_names: Vec<&str> = table_metadata
+    .schema
+    .columns
+    .iter()
+    .map(|c| c.name.as_str())
+    .collect();
 
-  return indoc::formatdoc!(
-    r#"
-      SELECT
-        ({create_access_rule})
-      FROM
-        (SELECT :__user_id AS id) AS _USER_,
-        ({column_sub_select}) AS _REQ_
-    "#,
-  );
+  return CreateRecordAccessQueryTemplate {
+    create_access_rule,
+    column_names,
+  }
+  .render_once()
+  .unwrap();
 }
 
 /// Build access query for record updates.
