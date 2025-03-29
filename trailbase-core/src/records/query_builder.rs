@@ -1,10 +1,7 @@
-use askama::filters::Escaper;
 use askama::Template;
 use itertools::Itertools;
 use log::*;
 use object_store::ObjectStore;
-use sailfish::TemplateSimple;
-use std::borrow::Cow;
 use std::sync::Arc;
 use trailbase_sqlite::schema::{FileUpload, FileUploads};
 use trailbase_sqlite::{NamedParams, Params as _, Value};
@@ -69,80 +66,83 @@ impl From<crate::records::files::FileError> for QueryError {
   }
 }
 
-pub(crate) struct Expansions {
-  /// Contains the indexes on where to cut the resulting Row.
-  ///
-  /// The joins will lead to a row schema that looks something like:
-  ///   (root_table..., foreign_table0..., foreign_table1...).
-  pub indexes: Vec<(usize, Arc<TableMetadata>)>,
-  /// The actual join statements.
-  pub joins: Vec<String>,
+pub(crate) struct ExpandedTable {
+  pub metadata: Arc<TableMetadata>,
+  pub local_column_name: String,
+  pub num_columns: usize,
+
+  pub foreign_table_name: String,
+  pub foreign_column_name: String,
 }
 
-impl Expansions {
-  pub(crate) fn build<T: AsRef<str>>(
-    table_metadata: &TableMetadataCache,
-    table_name: &str,
-    expand: &[T],
-    prefix: Option<&str>,
-  ) -> Result<Expansions, RecordError> {
-    let Some(root_table) = table_metadata.get(table_name) else {
+pub(crate) fn expand_tables<T: AsRef<str>>(
+  table_metadata: &TableMetadataCache,
+  table_name: &str,
+  expand: &[T],
+) -> Result<Vec<ExpandedTable>, RecordError> {
+  let Some(root_table) = table_metadata.get(table_name) else {
+    return Err(RecordError::ApiRequiresTable);
+  };
+
+  let mut expanded_tables = Vec::<ExpandedTable>::with_capacity(expand.len());
+
+  for col_name in expand {
+    let col_name = col_name.as_ref();
+    if col_name.is_empty() {
+      continue;
+    }
+    let Some((column, _col_metadata)) = root_table.column_by_name(col_name) else {
       return Err(RecordError::ApiRequiresTable);
     };
 
-    let len = expand.len();
-
-    let mut joins = Vec::<String>::with_capacity(len);
-    let mut indexes = {
-      let mut indexes = Vec::<(usize, Arc<TableMetadata>)>::with_capacity(len + 1);
-      indexes.push((root_table.schema.columns.len(), root_table.clone()));
-      indexes
+    // FIXME: This doesn't expand FKs expressed as table constraints.
+    let Some(ColumnOption::ForeignKey {
+      foreign_table: foreign_table_name,
+      referred_columns: _,
+      ..
+    }) = column
+      .options
+      .iter()
+      .find_or_first(|o| matches!(o, ColumnOption::ForeignKey { .. }))
+    else {
+      return Err(RecordError::ApiRequiresTable);
     };
 
-    for (idx, col_name) in expand.iter().enumerate() {
-      let col_name = col_name.as_ref();
-      if col_name.is_empty() {
-        continue;
-      }
-      let Some((column, _col_metadata)) = root_table.column_by_name(col_name) else {
-        return Err(RecordError::ApiRequiresTable);
-      };
+    let Some(foreign_table) = table_metadata.get(foreign_table_name) else {
+      return Err(RecordError::ApiRequiresTable);
+    };
 
-      let Some(ColumnOption::ForeignKey {
-        foreign_table: foreign_table_name,
-        referred_columns: _,
-        ..
-      }) = column
-        .options
-        .iter()
-        .find_or_first(|o| matches!(o, ColumnOption::ForeignKey { .. }))
-      else {
-        return Err(RecordError::ApiRequiresTable);
-      };
+    let Some(foreign_pk_column_idx) = foreign_table.record_pk_column else {
+      return Err(RecordError::ApiRequiresTable);
+    };
 
-      let Some(foreign_table) = table_metadata.get(foreign_table_name) else {
-        return Err(RecordError::ApiRequiresTable);
-      };
+    let foreign_pk_column = &foreign_table.schema.columns[foreign_pk_column_idx].name;
 
-      let Some(foreign_pk_column_idx) = foreign_table.record_pk_column else {
-        return Err(RecordError::ApiRequiresTable);
-      };
+    // TODO: Check that `referred_columns` and foreign_pk_column are the same. It's already
+    // validated as part of config validation.
 
-      let foreign_pk_column = &foreign_table.schema.columns[foreign_pk_column_idx].name;
+    let num_columns = foreign_table.schema.columns.len();
+    let foreign_table_name = foreign_table_name.to_string();
+    let foreign_column_name = foreign_pk_column.to_string();
 
-      // TODO: Check that `referred_columns` and foreign_pk_column are the same. It's already
-      // validated as part of config validation.
-
-      joins.push(if let Some(ref prefix) =  prefix {
-        format!(r#"LEFT JOIN "{foreign_table_name}" AS F{idx} ON {prefix}."{col_name}" = F{idx}."{foreign_pk_column}""#)
-      } else {
-        format!(r#"LEFT JOIN "{foreign_table_name}" AS F{idx} ON "{col_name}" = F{idx}."{foreign_pk_column}""#)
-      });
-      indexes.push((foreign_table.schema.columns.len(), foreign_table));
-    }
-
-    return Ok(Expansions { indexes, joins });
+    expanded_tables.push(ExpandedTable {
+      metadata: foreign_table,
+      local_column_name: col_name.to_string(),
+      num_columns,
+      foreign_table_name,
+      foreign_column_name,
+    });
   }
+
+  return Ok(expanded_tables);
+}
+
+#[derive(Template)]
+#[template(escape = "none", path = "read_record_query_expanded.sql")]
+struct ReadRecordExpandedQueryTemplate<'a> {
+  table_name: &'a str,
+  pk_column_name: &'a str,
+  expanded_tables: &'a [ExpandedTable],
 }
 
 pub(crate) struct SelectQueryBuilder;
@@ -171,23 +171,33 @@ impl SelectQueryBuilder {
     expand: &[&str],
   ) -> Result<Vec<(Arc<TableMetadata>, trailbase_sqlite::Row)>, RecordError> {
     let table_metadata = state.table_metadata();
-    let Expansions { indexes, joins } =
-      Expansions::build(table_metadata, table_name, expand, None)?;
+    // let Expansions { indexes, joins } =
+    //   Expansions::build(table_metadata, table_name, expand, None)?;
 
-    let sql = format!(
-      r#"SELECT * FROM "{table_name}" AS R {} WHERE R."{pk_column}" = $1"#,
-      joins.join(" ")
-    );
+    let Some(main_table) = table_metadata.get(table_name) else {
+      return Err(RecordError::ApiRequiresTable);
+    };
 
-    let Some(row) = state.conn().query_row(&sql, [pk_value]).await? else {
+    let expanded_tables = expand_tables(table_metadata, table_name, expand)?;
+    let sql = ReadRecordExpandedQueryTemplate {
+      table_name,
+      pk_column_name: pk_column,
+      expanded_tables: &expanded_tables,
+    }
+    .render()
+    .unwrap();
+
+    let Some(mut row) = state.conn().query_row(&sql, [pk_value]).await? else {
       return Ok(vec![]);
     };
 
-    let mut curr = row;
-    let mut result = Vec::with_capacity(indexes.len());
-    for (idx, metadata) in indexes {
-      let next = curr.split_off(idx);
-      result.push((metadata, curr));
+    let mut result = Vec::with_capacity(expanded_tables.len() + 1);
+    let mut curr = row.split_off(main_table.schema.columns.len());
+    result.push((main_table, row));
+
+    for expanded in expanded_tables {
+      let next = curr.split_off(expanded.num_columns);
+      result.push((expanded.metadata, curr));
       curr = next;
     }
 
@@ -263,18 +273,9 @@ impl GetFilesQueryBuilder {
   }
 }
 
-#[derive(TemplateSimple)]
-#[template(path = "create_record_query.sql", escape = false)]
-struct CreateRecordQueryTemplate<'a> {
-  table_name: &'a str,
-  conflict_clause: &'a str,
-  column_names: &'a [String],
-  returning: Option<&'a str>,
-}
-
 #[derive(Template)]
-#[template(escape = "none", path = "create_record_query2.sql")]
-struct CreateRecordQueryTemplate2<'a> {
+#[template(escape = "none", path = "create_record_query.sql")]
+struct CreateRecordQueryTemplate<'a> {
   table_name: &'a str,
   conflict_clause: &'a str,
   column_names: &'a [String],
@@ -409,15 +410,7 @@ impl InsertQueryBuilder {
       conflict_resolution.unwrap_or(ConflictResolutionStrategy::Undefined),
     );
 
-    // let query = CreateRecordQueryTemplate {
-    //   table_name,
-    //   conflict_clause,
-    //   column_names: params.column_names(),
-    //   returning: return_column_name,
-    // }
-    // .render_once()
-    // .unwrap();
-    let query = CreateRecordQueryTemplate2 {
+    let query = CreateRecordQueryTemplate {
       table_name,
       conflict_clause,
       column_names: params.column_names(),
@@ -601,4 +594,58 @@ async fn write_file(
   writer.complete().await?;
 
   return Ok(());
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::table_metadata::sqlite3_parse_into_statement;
+
+  fn sanitize_template(template: &str) {
+    assert!(sqlite3_parse_into_statement(template).is_ok(), "{template}");
+    assert!(!template.contains("\n"), "{template}");
+    assert!(!template.contains("   "), "{template}");
+  }
+
+  #[test]
+  fn test_create_record_template() {
+    {
+      let query = CreateRecordQueryTemplate {
+        table_name: "table",
+        conflict_clause: "OR ABORT",
+        column_names: &["index".to_string(), "trigger".to_string()],
+        returning: Some("index"),
+      }
+      .render()
+      .unwrap();
+
+      sanitize_template(&query);
+    }
+
+    {
+      let query = CreateRecordQueryTemplate {
+        table_name: "table",
+        conflict_clause: "",
+        column_names: &[],
+        returning: Some("*"),
+      }
+      .render()
+      .unwrap();
+
+      sanitize_template(&query);
+    }
+
+    {
+      let query = CreateRecordQueryTemplate {
+        table_name: "table",
+        conflict_clause: "",
+        column_names: &["index".to_string()],
+        returning: None,
+      }
+      .render()
+      .unwrap();
+
+      sanitize_template(&query);
+    }
+  }
 }
