@@ -1,0 +1,3 @@
+[general]
+dirs = ["templates", "js/auth/dist"]
+whitespace = "preserve"

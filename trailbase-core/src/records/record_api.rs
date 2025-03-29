@@ -487,7 +487,7 @@ impl RecordApi {
 #[derive(Template)]
 #[template(escape = "none", path = "subscription_record_read.sql")]
 struct SubscriptionRecordReadTemplate<'a> {
-  access_rule: &'a str,
+  read_access_rule: &'a str,
   column_names: Vec<&'a str>,
 }
 
@@ -517,7 +517,7 @@ fn build_statement_for_subscription_record_read<'a>(
   }
 
   let query = SubscriptionRecordReadTemplate {
-    access_rule,
+    read_access_rule: access_rule,
     column_names,
   }
   .render()

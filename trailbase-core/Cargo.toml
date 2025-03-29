@@ -25,7 +25,7 @@ v8 = ["dep:rustyscript", ]
 [dependencies]
 arc-swap = "1.7.1"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
-askama = { version = "0.13.0", default-features = false, features = ["derive", "std"] }
+askama = { version = "0.13.0", default-features = false, features = ["derive", "std", "config"] }
 async-channel = "2.3.1"
 async-trait = "0.1.80"
 axum = { version = "^0.8.1", features = ["multipart"] }

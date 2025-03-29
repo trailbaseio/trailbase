@@ -16,7 +16,7 @@ const { title } = Astro.props;
       <slot />
     </Card>
 
-    {"{% if alert %}"}
+    {"{% if !alert.is_empty() %}"}
     <AlertBox message="{{ alert }}" />
     {"{% endif %}"}
   </div>

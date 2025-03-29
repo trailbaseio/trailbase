@@ -1,5 +1,5 @@
 SELECT
-  ({{ access_rule }})
+  ({{ read_access_rule }})
 FROM
   (SELECT :__user_id AS id) AS _USER_,
   (SELECT
