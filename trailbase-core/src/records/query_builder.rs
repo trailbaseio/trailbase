@@ -1,3 +1,5 @@
+use askama::filters::Escaper;
+use askama::Template;
 use itertools::Itertools;
 use log::*;
 use object_store::ObjectStore;
@@ -270,6 +272,15 @@ struct CreateRecordQueryTemplate<'a> {
   returning: Option<&'a str>,
 }
 
+#[derive(Template)]
+#[template(escape = "none", path = "create_record_query2.sql")]
+struct CreateRecordQueryTemplate2<'a> {
+  table_name: &'a str,
+  conflict_clause: &'a str,
+  column_names: &'a [String],
+  returning: Option<&'a str>,
+}
+
 pub(crate) struct InsertQueryBuilder;
 
 impl InsertQueryBuilder {
@@ -398,13 +409,21 @@ impl InsertQueryBuilder {
       conflict_resolution.unwrap_or(ConflictResolutionStrategy::Undefined),
     );
 
-    let query = CreateRecordQueryTemplate {
+    // let query = CreateRecordQueryTemplate {
+    //   table_name,
+    //   conflict_clause,
+    //   column_names: params.column_names(),
+    //   returning: return_column_name,
+    // }
+    // .render_once()
+    // .unwrap();
+    let query = CreateRecordQueryTemplate2 {
       table_name,
       conflict_clause,
       column_names: params.column_names(),
       returning: return_column_name,
     }
-    .render_once()
+    .render()
     .unwrap();
 
     return Ok((query, params.named_params, params.files));
