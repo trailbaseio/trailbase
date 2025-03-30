@@ -70,6 +70,7 @@ struct RecordApiState {
 
   read_access_rule: Option<String>,
   read_access_query: Option<String>,
+  subscription_read_access_query: Option<String>,
 
   update_access_rule: Option<String>,
   update_access_query: Option<String>,
@@ -173,9 +174,27 @@ impl RecordApi {
       return Err(format!("RecordApi misses name: {config:?}"));
     };
 
-    let read_access_query = config.read_access_rule.as_ref().map(|rule| {
-      build_read_delete_schema_query(metadata.table_name(), &record_pk_column.name, rule)
-    });
+    let (read_access_query, subscription_read_access_query) = match &config.read_access_rule {
+      Some(rule) => {
+        let read_access_query =
+          build_read_delete_schema_query(metadata.table_name(), &record_pk_column.name, rule);
+
+        let subscription_read_access_query = match metadata {
+          RecordApiMetadata::Table(ref m) => Some(
+            SubscriptionRecordReadTemplate {
+              read_access_rule: rule,
+              column_names: m.schema.columns.iter().map(|c| c.name.as_str()).collect(),
+            }
+            .render()
+            .map_err(|err| err.to_string())?,
+          ),
+          _ => None,
+        };
+
+        (Some(read_access_query), subscription_read_access_query)
+      }
+      None => (None, None),
+    };
 
     let delete_access_query = config.delete_access_rule.as_ref().map(|rule| {
       build_read_delete_schema_query(metadata.table_name(), &record_pk_column.name, rule)
@@ -245,6 +264,7 @@ impl RecordApi {
 
         read_access_rule: config.read_access_rule,
         read_access_query,
+        subscription_read_access_query,
 
         update_access_rule: config.update_access_rule,
         update_access_query,
@@ -401,11 +421,11 @@ impl RecordApi {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(Permission::Read, user)?;
 
-    let Some(access_rule) = self.access_rule(Permission::Read) else {
+    let Some(ref access_query) = self.state.subscription_read_access_query else {
       return Ok(());
     };
 
-    let mut stmt = build_statement_for_subscription_record_read(conn, access_rule, user, record)?;
+    let mut stmt = build_statement_for_subscription_record_read(conn, access_query, user, record)?;
 
     match stmt.raw_query().next() {
       Ok(Some(row)) => {
@@ -499,12 +519,11 @@ struct SubscriptionRecordReadTemplate<'a> {
 
 fn build_statement_for_subscription_record_read<'a>(
   conn: &'a rusqlite::Connection,
-  access_rule: &str,
+  access_query: &str,
   user: Option<&User>,
   record: &[(&str, rusqlite::types::ValueRef<'a>)],
 ) -> Result<rusqlite::CachedStatement<'a>, RecordError> {
-  let len = record.len();
-  let mut params = Vec::<NamedParamRef<'a>>::with_capacity(len + 1);
+  let mut params = Vec::<NamedParamRef<'a>>::with_capacity(record.len() + 1);
   params.push((
     Cow::Borrowed(":__user_id"),
     user.map_or_else(
@@ -513,24 +532,15 @@ fn build_statement_for_subscription_record_read<'a>(
     ),
   ));
 
-  let mut column_names = Vec::<&str>::with_capacity(record.len());
   for (name, value) in record.iter() {
-    column_names.push(name);
     params.push((
       Cow::Owned(prefix_colon(name)),
       rusqlite::types::ToSqlOutput::Borrowed(*value),
     ));
   }
 
-  let query = SubscriptionRecordReadTemplate {
-    read_access_rule: access_rule,
-    column_names,
-  }
-  .render()
-  .map_err(|_err| RecordError::Forbidden)?;
-
   let mut stmt = conn
-    .prepare_cached(&query)
+    .prepare_cached(access_query)
     .map_err(|_err| RecordError::Forbidden)?;
   params
     .bind(&mut stmt)
