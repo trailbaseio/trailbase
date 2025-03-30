@@ -1,3 +1,10 @@
+## v0.8.4
+
+* Add a `?loginMessage=` query parameter to admin login page.
+* Move query construction for more complex queries to askama templates and add more tests.
+* Move subscription-access query construction from hook-time to RecordApi build-time.
+* Use askama for auth UI.
+
 ## v0.8.3
 
 * Support more SQL constructs:
