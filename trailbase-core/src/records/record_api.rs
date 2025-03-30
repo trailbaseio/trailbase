@@ -1,5 +1,4 @@
 use askama::Template;
-use itertools::Itertools;
 use log::*;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -194,12 +193,15 @@ impl RecordApi {
       None => None,
     };
 
-    let update_access_query = config.update_access_rule.as_ref().and_then(|rule| {
-      if let RecordApiMetadata::Table(ref m) = metadata {
-        return Some(build_update_access_query(m, &record_pk_column.name, rule));
-      }
-      return None;
-    });
+    let update_access_query = match &config.update_access_rule {
+      Some(rule) => match metadata {
+        RecordApiMetadata::Table(ref m) => {
+          Some(build_update_access_query(m, &record_pk_column.name, rule)?)
+        }
+        _ => None,
+      },
+      None => None,
+    };
 
     return Ok(RecordApi {
       state: Arc::new(RecordApiState {
@@ -485,7 +487,11 @@ impl RecordApi {
 }
 
 #[derive(Template)]
-#[template(escape = "none", path = "subscription_record_read.sql")]
+#[template(
+  escape = "none",
+  whitespace = "minimize",
+  path = "subscription_record_read.sql"
+)]
 struct SubscriptionRecordReadTemplate<'a> {
   read_access_rule: &'a str,
   column_names: Vec<&'a str>,
@@ -552,7 +558,11 @@ fn build_read_delete_schema_query(
 }
 
 #[derive(Template)]
-#[template(escape = "none", path = "create_record_access_query.sql")]
+#[template(
+  escape = "none",
+  whitespace = "minimize",
+  path = "create_record_access_query.sql"
+)]
 struct CreateRecordAccessQueryTemplate<'a> {
   create_access_rule: &'a str,
   column_names: Vec<&'a str>,
@@ -580,6 +590,19 @@ fn build_create_access_query(
   .map_err(|err| err.to_string());
 }
 
+#[derive(Template)]
+#[template(
+  escape = "none",
+  whitespace = "minimize",
+  path = "update_record_access_query.sql"
+)]
+struct UpdateRecordAccessQueryTemplate<'a> {
+  update_access_rule: &'a str,
+  table_name: &'a str,
+  pk_column_name: &'a str,
+  column_names: Vec<&'a str>,
+}
+
 /// Build access query for record updates.
 ///
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
@@ -587,29 +610,23 @@ fn build_update_access_query(
   table_metadata: &TableMetadata,
   pk_column_name: &str,
   update_access_rule: &str,
-) -> String {
+) -> Result<String, String> {
   let table_name = table_metadata.name();
+  let column_names: Vec<&str> = table_metadata
+    .schema
+    .columns
+    .iter()
+    .map(|c| c.name.as_str())
+    .collect();
 
-  let column_sub_select = format!(
-    "SELECT {placeholders}",
-    placeholders = table_metadata
-      .schema
-      .columns
-      .iter()
-      .map(|col| format!(r#":{name} AS '{name}'"#, name = col.name))
-      .join(", ")
-  );
-
-  return indoc::formatdoc!(
-    r#"
-      SELECT
-        ({update_access_rule})
-      FROM
-        (SELECT :__user_id AS id) AS _USER_,
-        ({column_sub_select}) AS _REQ_,
-        (SELECT * FROM "{table_name}" WHERE "{pk_column_name}" = :__record_id) AS _ROW_
-    "#,
-  );
+  return UpdateRecordAccessQueryTemplate {
+    update_access_rule,
+    table_name,
+    pk_column_name,
+    column_names,
+  }
+  .render()
+  .map_err(|err| err.to_string());
 }
 
 /// Build SQL named parameters from request fields.
@@ -664,8 +681,95 @@ enum Entity {
 
 #[cfg(test)]
 mod tests {
-  use super::convert_acl;
+  use super::*;
+
+  use crate::table_metadata::sqlite3_parse_into_statement;
   use crate::{config::proto::PermissionFlag, records::Permission};
+
+  fn sanitize_template(template: &str) {
+    assert!(sqlite3_parse_into_statement(template).is_ok(), "{template}");
+    assert!(!template.contains("   "), "{template}");
+    assert!(!template.contains("\n\n"), "{template}");
+  }
+
+  #[test]
+  fn test_create_record_access_query_template() {
+    {
+      let query = CreateRecordAccessQueryTemplate {
+        create_access_rule: "_USER_.id = X'05'",
+        column_names: vec![],
+      }
+      .render()
+      .unwrap();
+
+      sanitize_template(&query);
+    }
+
+    {
+      let query = CreateRecordAccessQueryTemplate {
+        create_access_rule: r#"_USER_.id = X'05' AND "index" = 'secret'"#,
+        column_names: vec!["index"],
+      }
+      .render()
+      .unwrap();
+
+      sanitize_template(&query);
+    }
+  }
+
+  #[test]
+  fn test_update_record_access_query_template() {
+    {
+      let query = UpdateRecordAccessQueryTemplate {
+        update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = 'secret'"#,
+        table_name: "table",
+        pk_column_name: "index",
+        column_names: vec![],
+      }
+      .render()
+      .unwrap();
+
+      sanitize_template(&query);
+    }
+
+    {
+      let query = UpdateRecordAccessQueryTemplate {
+        update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = _REQ_."index""#,
+        table_name: "table",
+        pk_column_name: "index",
+        column_names: vec!["index"],
+      }
+      .render()
+      .unwrap();
+
+      sanitize_template(&query);
+    }
+  }
+
+  #[test]
+  fn test_subscription_record_read_template() {
+    {
+      let query = SubscriptionRecordReadTemplate {
+        read_access_rule: "TRUE",
+        column_names: vec![],
+      }
+      .render()
+      .unwrap();
+
+      sanitize_template(&query);
+    }
+
+    {
+      let query = SubscriptionRecordReadTemplate {
+        read_access_rule: r#"_USER_.id = X'05' AND "index" = 'secret'"#,
+        column_names: vec!["index"],
+      }
+      .render()
+      .unwrap();
+
+      sanitize_template(&query);
+    }
+  }
 
   fn has_access(flags: u8, p: Permission) -> bool {
     return (flags & (p as u8)) > 0;

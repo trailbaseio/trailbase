@@ -1,4 +1,4 @@
-{% if count %}
+{%- if count -%}
 WITH
   total_count AS (
     SELECT COUNT(*) AS _value_
@@ -9,29 +9,29 @@ WITH
       ({{ read_access_clause }})
       AND ({{ filter_clause }})
   )
-{% endif %}
+{% endif -%}
 
 SELECT
   _ROW_.*
-{% for expanded in expanded_tables %}
+{%- for expanded in expanded_tables -%}
   , F{{ loop.index0 }}.*
-{% endfor %}
-{% if count %}
+{%- endfor -%}
+{% if count -%}
   , total_count._value_
-{% endif %}
+{%- endif %}
 FROM
   (SELECT :__user_id AS id) AS _USER_,
-{% if count %}
+{%- if count %}
   total_count,
-{% endif %}
+{%- endif %}
   "{{ table_name }}" AS _ROW_
-{% for expanded in expanded_tables %}
-  LEFT JOIN "{{ expanded.foreign_table_name }}" AS F{{ loop.index0 }} ON _ROW_."{{ expanded.local_column_name }}" = F{{ loop.index0 }}."{{ expanded.foreign_column_name }}"
-{% endfor %}
+{%- for expanded in expanded_tables %}
+    LEFT JOIN "{{ expanded.foreign_table_name }}" AS F{{ loop.index0 }} ON _ROW_."{{ expanded.local_column_name }}" = F{{ loop.index0 }}."{{ expanded.foreign_column_name }}"
+{%- endfor %}
 WHERE
   ({{ read_access_clause }})
   AND ({{ filter_clause }})
   AND ({{ cursor_clause }})
 ORDER BY
   {{ order_clause }}
-LIMIT :limit
+LIMIT :__limit

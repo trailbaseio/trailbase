@@ -106,7 +106,7 @@ pub async fn list_records_handler(
   // User properties
   params.extend_from_slice(&[
     (
-      Cow::Borrowed(":limit"),
+      Cow::Borrowed(":__limit"),
       Value::Integer(limit_or_default(limit) as i64),
     ),
     (
@@ -264,6 +264,8 @@ fn column_filter(col_name: &str) -> bool {
 #[cfg(test)]
 mod tests {
   use serde::Deserialize;
+  use std::borrow::Cow;
+  use trailbase_sqlite::Value;
 
   use super::*;
   use crate::admin::user::*;
@@ -271,35 +273,98 @@ mod tests {
   use crate::auth::api::login::login_with_password;
   use crate::auth::user::User;
   use crate::config::proto::PermissionFlag;
+  use crate::records::query_builder::expand_tables;
   use crate::records::test_utils::*;
   use crate::records::Acls;
   use crate::records::{add_record_api, AccessRules, RecordError};
   use crate::table_metadata::sqlite3_parse_into_statement;
+  use crate::table_metadata::TableMetadataCache;
   use crate::util::id_to_b64;
   use crate::util::urlencode;
 
   fn sanitize_template(template: &str) {
     assert!(sqlite3_parse_into_statement(template).is_ok(), "{template}");
-    // assert!(!template.contains("\n"), "{template}");
-    assert!(!template.contains("   "), "{template}");
+    assert!(!template.contains("\n\n"), "{template}");
   }
 
   #[test]
   fn test_list_records_template() {
-    {
-      let query = ListRecordQueryTemplate {
-        table_name: "table",
-        read_access_clause: "TRUE",
-        filter_clause: "TRUE",
-        cursor_clause: "TRUE",
-        order_clause: "NULL",
-        expanded_tables: &[],
-        count: false,
-      }
-      .render()
+    let query = ListRecordQueryTemplate {
+      table_name: "table",
+      read_access_clause: "TRUE",
+      filter_clause: "TRUE",
+      cursor_clause: "TRUE",
+      order_clause: "NULL",
+      expanded_tables: &[],
+      count: false,
+    }
+    .render()
+    .unwrap();
+
+    sanitize_template(&query);
+  }
+
+  #[tokio::test]
+  async fn test_list_records_template_with_expansions() {
+    let state = test_state(None).await.unwrap();
+    let conn = state.conn();
+
+    conn
+      .execute(
+        r#"CREATE TABLE "other" (
+              "index" INTEGER PRIMARY KEY
+            ) STRICT"#,
+        (),
+      )
+      .await
       .unwrap();
 
-      sanitize_template(&query);
+    conn
+      .execute(
+        r#"CREATE TABLE "table" (
+              tid     INTEGER PRIMARY KEY,
+              "drop"  TEXT,
+              "index" INTEGER REFERENCES "other"("index")
+            ) STRICT"#,
+        (),
+      )
+      .await
+      .unwrap();
+
+    let cache = TableMetadataCache::new(conn.clone()).await.unwrap();
+    let expanded_tables = expand_tables(&cache, "table", &["index"]).unwrap();
+
+    assert_eq!(expanded_tables.len(), 1);
+    assert_eq!(expanded_tables[0].local_column_name, "index");
+    assert_eq!(expanded_tables[0].foreign_table_name, "other");
+    assert_eq!(expanded_tables[0].foreign_column_name, "index");
+
+    let query = ListRecordQueryTemplate {
+      table_name: "table",
+      read_access_clause: "_USER_.id != X'F000'",
+      filter_clause: "TRUE",
+      cursor_clause: "TRUE",
+      order_clause: "tid",
+      expanded_tables: &expanded_tables,
+      count: true,
+    }
+    .render()
+    .unwrap();
+
+    sanitize_template(&query);
+
+    let params = vec![
+      (Cow::Borrowed(":__limit"), Value::Integer(100)),
+      (
+        Cow::Borrowed(":__user_id"),
+        Value::Blob(uuid::Uuid::now_v7().into()),
+      ),
+    ];
+
+    let result = conn.query(&query, params).await;
+
+    if let Err(err) = result {
+      panic!("QUERY: {query}\nERROR: {err}");
     }
   }
 

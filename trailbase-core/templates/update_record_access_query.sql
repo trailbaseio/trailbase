@@ -1,7 +1,8 @@
 SELECT
-  ({{ create_access_rule }})
+  ({{ update_access_rule }})
 FROM
-  (SELECT :__user_id AS id) AS _USER_
+  (SELECT :__user_id AS id) AS _USER_,
+  (SELECT * FROM "{{ table_name }}" WHERE "{{ pk_column_name }}" = :__record_id) AS _ROW_
   {% if !column_names.is_empty() -%}
   , (SELECT
     {%- for name in column_names -%}

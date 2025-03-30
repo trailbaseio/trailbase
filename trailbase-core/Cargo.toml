@@ -85,7 +85,7 @@ trailbase-sqlite = { workspace = true }
 ts-rs = { version = "10", features = ["uuid-impl", "serde-json-impl"] }
 url = "^2.4.1"
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
-uuid = { version = "1.7.0", default-features = false, features = ["std", "v7"] }
+uuid = { workspace = true }
 validator = { version = "0.20.0", default-features = false }
 
 [build-dependencies]
