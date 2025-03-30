@@ -1,5 +1,6 @@
 use askama::Template;
 use log::*;
+use rusqlite::types::ToSqlOutput;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -412,6 +413,10 @@ impl RecordApi {
   }
 
   /// Check if the given user (if any) can access a record given the request and the operation.
+  ///
+  /// NOTE: We could inline this in `SubscriptionManager::broker_subscriptions` and reduce some
+  /// redundant work over sql parameter construction.
+  #[inline]
   pub(crate) fn check_record_level_read_access_for_subscriptions(
     &self,
     conn: &rusqlite::Connection,
@@ -425,7 +430,32 @@ impl RecordApi {
       return Ok(());
     };
 
-    let mut stmt = build_statement_for_subscription_record_read(conn, access_query, user, record)?;
+    let params = {
+      let mut params = Vec::<NamedParamRef<'_>>::with_capacity(record.len() + 1);
+      params.push((
+        Cow::Borrowed(":__user_id"),
+        user.map_or_else(
+          || ToSqlOutput::Owned(Value::Null),
+          |u| ToSqlOutput::Owned(Value::Blob(u.uuid.into())),
+        ),
+      ));
+
+      params.extend(record.iter().map(|(name, value)| {
+        (
+          Cow::Owned(prefix_colon(name)),
+          ToSqlOutput::Borrowed(*value),
+        )
+      }));
+
+      params
+    };
+
+    let mut stmt = conn
+      .prepare_cached(access_query)
+      .map_err(|_err| RecordError::Forbidden)?;
+    params
+      .bind(&mut stmt)
+      .map_err(|_err| RecordError::Forbidden)?;
 
     match stmt.raw_query().next() {
       Ok(Some(row)) => {
@@ -515,37 +545,6 @@ impl RecordApi {
 struct SubscriptionRecordReadTemplate<'a> {
   read_access_rule: &'a str,
   column_names: Vec<&'a str>,
-}
-
-fn build_statement_for_subscription_record_read<'a>(
-  conn: &'a rusqlite::Connection,
-  access_query: &str,
-  user: Option<&User>,
-  record: &[(&str, rusqlite::types::ValueRef<'a>)],
-) -> Result<rusqlite::CachedStatement<'a>, RecordError> {
-  let mut params = Vec::<NamedParamRef<'a>>::with_capacity(record.len() + 1);
-  params.push((
-    Cow::Borrowed(":__user_id"),
-    user.map_or_else(
-      || NULL.clone(),
-      |u| rusqlite::types::ToSqlOutput::Owned(Value::Blob(u.uuid.into())),
-    ),
-  ));
-
-  for (name, value) in record.iter() {
-    params.push((
-      Cow::Owned(prefix_colon(name)),
-      rusqlite::types::ToSqlOutput::Borrowed(*value),
-    ));
-  }
-
-  let mut stmt = conn
-    .prepare_cached(access_query)
-    .map_err(|_err| RecordError::Forbidden)?;
-  params
-    .bind(&mut stmt)
-    .map_err(|_err| RecordError::Forbidden)?;
-  return Ok(stmt);
 }
 
 /// Build access query for record reads, deletes and query access.
@@ -676,9 +675,6 @@ fn convert_acl(acl: &Vec<i32>) -> u8 {
   }
   return value;
 }
-
-static NULL: rusqlite::types::ToSqlOutput<'static> =
-  rusqlite::types::ToSqlOutput::Owned(Value::Null);
 
 // Note: ACLs and entities are only enforced on the table-level, this owner (row-level concept) is
 // not here.

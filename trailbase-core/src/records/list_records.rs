@@ -97,6 +97,7 @@ pub async fn list_records_handler(
   let read_access_clause: &str = api.access_rule(Permission::Read).unwrap_or("TRUE");
 
   // Where clause contains column filters and cursor depending on what's present.
+  // NOTE: This will also drop any filters for unknown columns, thus avoiding SQL injections.
   let WhereClause {
     clause: filter_clause,
     mut params,
@@ -142,6 +143,7 @@ pub async fn list_records_handler(
         return Err(RecordError::BadRequest("Invalid expansion"));
       };
 
+      // NOTE: This will drop any unknown expand column, thus avoiding SQL injections.
       for col_name in expand {
         if !config_expand.contains_key(col_name) {
           return Err(RecordError::BadRequest("Invalid expansion"));
