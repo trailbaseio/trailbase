@@ -37,7 +37,10 @@
 # TrailBase
 
 <p align="center">
-  <a href="https://demo.trailbase.io/_/admin" target="_blank">
+  <a
+    href="https://demo.trailbase.io/_/admin?loginMessage=E-mail:%20admin@localhost%20%E2%80%A2%20Password:%20secret"
+    target="_blank"
+  >
     <picture>
       <img alt="Admin UI" width="600" src="docs/src/assets/shelve.webp" />
     </picture>
@@ -45,7 +48,12 @@
 </p>
 
 <p align="center">
-  <strong>Try the <a href="https://demo.trailbase.io/_/admin" target="_blank">demo</a> online</strong>
+  <strong>
+    Try the
+    <a href="https://demo.trailbase.io/_/admin?loginMessage=E-mail:%20admin@localhost%20%E2%80%A2%20Password:%20secret" target="_blank">
+      demo
+    </a> online
+  </strong>
   <br/>Email: <em>admin@localhost</em>
   <br/>password: <em>secret</em>.
 </p>
