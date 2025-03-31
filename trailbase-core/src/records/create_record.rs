@@ -38,10 +38,12 @@ fn extract_record(value: serde_json::Value) -> Result<JsonRow, RecordError> {
   });
 }
 
+type RecordAndFiles = (JsonRow, Option<Vec<FileUploadInput>>);
+
 #[inline]
-fn extract_records(value: serde_json::Value) -> Result<Vec<JsonRow>, RecordError> {
+fn extract_records(value: serde_json::Value) -> Result<Vec<RecordAndFiles>, RecordError> {
   return match value {
-    serde_json::Value::Object(record) => Ok(vec![record]),
+    serde_json::Value::Object(record) => Ok(vec![(record, None)]),
     serde_json::Value::Array(records) => {
       if records.len() > 1024 {
         return Err(RecordError::BadRequest("Bulk creation exceeds limit: 1024"));
@@ -56,7 +58,7 @@ fn extract_records(value: serde_json::Value) -> Result<Vec<JsonRow>, RecordError
             ));
           };
 
-          Ok(record)
+          return Ok((record, None));
         })
         .collect()
     }
@@ -104,11 +106,8 @@ pub async fn create_record_handler(
     .table_metadata()
     .ok_or_else(|| RecordError::ApiRequiresTable)?;
 
-  let record_and_files: Vec<(JsonRow, Option<Vec<FileUploadInput>>)> = match either_request {
-    Either::Json(value) => extract_records(value)?
-      .into_iter()
-      .map(|r| (r, None))
-      .collect(),
+  let record_and_files: Vec<RecordAndFiles> = match either_request {
+    Either::Json(value) => extract_records(value)?,
     Either::Multipart(value, files) => vec![(extract_record(value)?, Some(files))],
     Either::Form(value) => vec![(extract_record(value)?, None)],
   };
@@ -117,6 +116,8 @@ pub async fn create_record_handler(
   for (record, files) in record_and_files {
     let mut lazy_params = LazyParams::new(table_metadata, record, files);
 
+    // NOTE: We're currently serializing the async checks, we could parallelize them however it's
+    // unclear if this would be much faster.
     api
       .check_record_level_access(
         Permission::Create,
@@ -131,23 +132,15 @@ pub async fn create_record_handler(
     };
 
     if api.insert_autofill_missing_user_id_columns() {
-      let column_names = params.column_names();
-      let missing_columns = table_metadata
-        .user_id_columns
-        .iter()
-        .filter_map(|index| {
-          let col = &table_metadata.schema.columns[*index];
-          if column_names.iter().any(|c| c == &col.name) {
-            return None;
-          }
-          return Some(col.name.clone());
-        })
-        .collect::<Vec<_>>();
+      if let Some(ref user) = user {
+        for column_index in &table_metadata.user_id_columns {
+          let col = &table_metadata.schema.columns[*column_index];
 
-      if !missing_columns.is_empty() {
-        if let Some(ref user) = user {
-          for col in missing_columns {
-            params.push_param(col, trailbase_sqlite::Value::Blob(user.uuid.into()));
+          if !params.column_names().iter().any(|c| c == &col.name) {
+            params.push_param(
+              col.name.clone(),
+              trailbase_sqlite::Value::Blob(user.uuid.into()),
+            );
           }
         }
       }
@@ -160,7 +153,7 @@ pub async fn create_record_handler(
   let data_type = pk_column.data_type;
   let record_ids = match params_list.len() {
     0 => {
-      return Err(RecordError::Internal("".into()));
+      return Err(RecordError::BadRequest("no values provided"));
     }
     1 => {
       let record_id = InsertQueryBuilder::run(

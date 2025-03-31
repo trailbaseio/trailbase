@@ -65,7 +65,7 @@ pub(crate) fn expand_tables<T: AsRef<str>>(
       return Err(RecordError::ApiRequiresTable);
     };
 
-    // FIXME: This doesn't expand FKs expressed as table constraints.
+    // FIXME: This only expand FKs expressed as column constraints missing table constraints.
     let Some(ColumnOption::ForeignKey {
       foreign_table: foreign_table_name,
       referred_columns: _,
@@ -262,6 +262,14 @@ impl InsertQueryBuilder {
     return_column_name: Option<&str>,
     extractor: impl Fn(&rusqlite::Row) -> Result<T, trailbase_sqlite::Error> + Send + 'static,
   ) -> Result<T, QueryError> {
+    // FIXME: This may orphan objectstore files. If a conflict resolution is given that allows
+    // updates, prior file columns may be overridden and their contents get orphaned, thus
+    // effectively leaking storage.
+    //
+    // We could either check for conflicts first in a transaction, similar to what we do for
+    // updates or have a periodic cleanup job. A permanently installed pre-update-hook doesn't seem
+    // to work, since insert events only provide access to the new values and not conflicting
+    // values.
     let (query, named_params, mut files) =
       Self::build_insert_query(params, conflict_resolution, return_column_name)?;
 
