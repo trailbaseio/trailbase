@@ -115,8 +115,9 @@ pub async fn change_email_request_handler(
   return match rows_affected {
     0 => Err(AuthError::BadRequest("failed to change email")),
     1 => {
-      let email = Email::change_email_address_email(&state, &db_user, &email_verification_code)
-        .map_err(|err| AuthError::Internal(err.into()))?;
+      let email =
+        Email::change_email_address_email(&state, &db_user.email, &email_verification_code)
+          .map_err(|err| AuthError::Internal(err.into()))?;
       email
         .send()
         .await

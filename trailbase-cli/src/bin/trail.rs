@@ -299,11 +299,10 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Email(cmd)) => {
       init_logger(false);
 
-      let (to, subject, body) = (cmd.to.clone(), cmd.subject.clone(), cmd.body.clone());
-
       let (_new_db, state) =
         init_app_state(DataDir(args.data_dir), None, InitArgs::default()).await?;
-      let email = Email::new(&state, to, subject, body)?;
+
+      let email = Email::new(&state, &cmd.to, cmd.subject, cmd.body)?;
       email.send().await?;
 
       let c = state.get_config().email;

@@ -89,7 +89,7 @@ pub async fn reset_password_request_handler(
   return match rows_affected {
     0 => Err(AuthError::Conflict),
     1 => {
-      let email = Email::password_reset_email(&state, &user, &password_reset_code)
+      let email = Email::password_reset_email(&state, &user.email, &password_reset_code)
         .map_err(|err| AuthError::Internal(err.into()))?;
       email
         .send()

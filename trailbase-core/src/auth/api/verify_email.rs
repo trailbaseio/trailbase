@@ -75,7 +75,7 @@ pub async fn request_email_verification_handler(
   return match rows_affected {
     0 => Err(AuthError::Conflict),
     1 => {
-      let email = Email::verification_email(&state, &user, &email_verification_code)
+      let email = Email::verification_email(&state, &user.email, &email_verification_code)
         .map_err(|err| AuthError::Internal(err.into()))?;
       email
         .send()

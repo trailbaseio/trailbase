@@ -1,3 +1,4 @@
+use lettre::address::AddressError;
 use lettre::message::{header::ContentType, Body, Mailbox, Message};
 use lettre::transport::smtp;
 use lettre::{AsyncSendmailTransport, AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
@@ -5,14 +6,13 @@ use minijinja::{context, Environment};
 use std::sync::Arc;
 use thiserror::Error;
 
-use crate::auth::user::DbUser;
 use crate::config::proto::{Config, EmailTemplate};
 use crate::AppState;
 
 #[derive(Debug, Error)]
 pub enum EmailError {
   #[error("Email address error: {0}")]
-  Address(#[from] lettre::address::AddressError),
+  Address(#[from] AddressError),
   #[error("Missing error: {0}")]
   Missing(&'static str),
   #[error("Senda error: {0}")]
@@ -38,14 +38,23 @@ pub struct Email {
 impl Email {
   pub fn new(
     state: &AppState,
-    to: String,
+    to: &str,
+    subject: String,
+    body: String,
+  ) -> Result<Self, EmailError> {
+    return Self::new_internal(state, to.parse()?, subject, body);
+  }
+
+  fn new_internal(
+    state: &AppState,
+    to: Mailbox,
     subject: String,
     body: String,
   ) -> Result<Self, EmailError> {
     return Ok(Self {
       mailer: state.mailer().clone(),
       from: get_sender(state)?,
-      to: to.parse()?,
+      to,
       subject,
       body,
     });
@@ -73,9 +82,11 @@ impl Email {
 
   pub(crate) fn verification_email(
     state: &AppState,
-    user: &DbUser,
+    email: &str,
     email_verification_code: &str,
   ) -> Result<Self, EmailError> {
+    let to: Mailbox = email.parse()?;
+
     let site_url = state.site_url();
     let (server_config, template) =
       state.access_config(|c| (c.server.clone(), c.email.user_verification_template.clone()));
@@ -96,12 +107,12 @@ impl Email {
 
     let verification_url = format!("{site_url}/verify_email/confirm/{email_verification_code}");
 
-    let env = Environment::new();
+    let env = Environment::empty();
     let subject = env
       .template_from_named_str("subject", &subject_template)?
       .render(context! {
         APP_NAME => server_config.application_name,
-        EMAIL => user.email,
+        EMAIL => email,
       })?;
     let body = env
       .template_from_named_str("body", &body_template)?
@@ -110,17 +121,18 @@ impl Email {
         VERIFICATION_URL => verification_url,
         SITE_URL => site_url,
         CODE => email_verification_code,
-        EMAIL => user.email,
+        EMAIL => email,
       })?;
 
-    return Email::new(state, user.email.clone(), subject, body);
+    return Email::new_internal(state, to, subject, body);
   }
 
   pub(crate) fn change_email_address_email(
     state: &AppState,
-    user: &DbUser,
+    email: &str,
     email_verification_code: &str,
   ) -> Result<Self, EmailError> {
+    let to: Mailbox = email.parse()?;
     let site_url = state.site_url();
     let (server_config, template) =
       state.access_config(|c| (c.server.clone(), c.email.change_email_template.clone()));
@@ -141,12 +153,12 @@ impl Email {
 
     let verification_url = format!("{site_url}/change_email/confirm/{email_verification_code}");
 
-    let env = Environment::new();
+    let env = Environment::empty();
     let subject = env
       .template_from_named_str("subject", &subject_template)?
       .render(context! {
         APP_NAME => server_config.application_name,
-        EMAIL => user.email,
+        EMAIL => email,
       })?;
     let body = env
       .template_from_named_str("body", &body_template)?
@@ -155,17 +167,18 @@ impl Email {
         VERIFICATION_URL => verification_url,
         SITE_URL => site_url,
         CODE => email_verification_code,
-        EMAIL => user.email,
+        EMAIL => email,
       })?;
 
-    return Email::new(state, user.email.clone(), subject, body);
+    return Email::new_internal(state, to, subject, body);
   }
 
   pub(crate) fn password_reset_email(
     state: &AppState,
-    user: &DbUser,
+    email: &str,
     password_reset_code: &str,
   ) -> Result<Self, EmailError> {
+    let to: Mailbox = email.parse()?;
     let site_url = state.site_url();
     let (server_config, template) =
       state.access_config(|c| (c.server.clone(), c.email.password_reset_template.clone()));
@@ -186,12 +199,12 @@ impl Email {
 
     let verification_url = format!("{site_url}/reset_password/update/{password_reset_code}");
 
-    let env = Environment::new();
+    let env = Environment::empty();
     let subject = env
       .template_from_named_str("subject", &subject_template)?
       .render(context! {
         APP_NAME => server_config.application_name,
-        EMAIL => user.email,
+        EMAIL => email,
       })?;
     let body = env
       .template_from_named_str("body", &body_template)?
@@ -200,10 +213,10 @@ impl Email {
         VERIFICATION_URL => verification_url,
         SITE_URL => site_url,
         CODE => password_reset_code,
-        EMAIL => user.email,
+        EMAIL => email,
       })?;
 
-    return Email::new(state, user.email.clone(), subject, body);
+    return Email::new_internal(state, to, subject, body);
   }
 }
 
@@ -273,7 +286,7 @@ pub(crate) mod defaults {
   use crate::config::proto::EmailTemplate;
   use indoc::indoc;
 
-  pub const EMAIL_VALIDATION_SUBJECT: &str = "Validate your Email Address for {{ APP_NAME }}";
+  pub const EMAIL_VALIDATION_SUBJECT: &str = "Verify your Email Address for {{ APP_NAME }}";
   pub const EMAIL_VALIDATION_BODY: &str = indoc! {r#"
         <html>
           <body>
@@ -304,7 +317,7 @@ pub(crate) mod defaults {
   pub const PASSWORD_RESET_BODY: &str = indoc! {r#"
         <html>
           <body>
-            <h1>Password reset</h1>
+            <h1>Password Reset</h1>
 
             <p>
               Click the link below to reset your password.
@@ -349,11 +362,14 @@ pub(crate) mod defaults {
 
 #[cfg(test)]
 pub mod testing {
-  use std::sync::{Arc, Mutex};
-
   use lettre::address::Envelope;
   use lettre::transport::smtp::response::{Category, Code, Detail, Response, Severity};
   use lettre::AsyncTransport;
+  use parking_lot::Mutex;
+  use std::sync::Arc;
+
+  use super::*;
+  use crate::app_state::test_state;
 
   #[derive(Clone)]
   pub struct TestAsyncSmtpTransport {
@@ -376,7 +392,7 @@ pub mod testing {
     }
 
     pub fn get_logs(&self) -> Vec<(Envelope, String)> {
-      return self.log.lock().unwrap().clone();
+      return self.log.lock().clone();
     }
   }
 
@@ -389,10 +405,34 @@ pub mod testing {
       self
         .log
         .lock()
-        .unwrap()
         .push((envelope.clone(), String::from_utf8_lossy(email).into()));
 
       return Ok(self.response.clone());
+    }
+  }
+
+  #[tokio::test]
+  async fn test_template_rendering() {
+    let state = test_state(None).await.unwrap();
+
+    let code = "verification_code0123.";
+    {
+      let email = Email::verification_email(&state, "foo@bar.org", code).unwrap();
+      assert_eq!(email.subject, "Verify your Email Address for TrailBase");
+      assert!(email.body.contains("Welcome foo@bar.org"));
+      assert!(email.body.contains(code));
+    }
+
+    {
+      let email = Email::change_email_address_email(&state, "foo@bar.org", code).unwrap();
+      assert_eq!(email.subject, "Change your Email Address for TrailBase");
+      assert!(email.body.contains(code));
+    }
+
+    {
+      let email = Email::password_reset_email(&state, "foo@bar.org", code).unwrap();
+      assert_eq!(email.subject, "Reset your Password for TrailBase");
+      assert!(email.body.contains(code));
     }
   }
 }

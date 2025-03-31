@@ -81,7 +81,7 @@ pub async fn create_user_handler(
   };
 
   if let Some(email_verification_code) = email_verification_code {
-    Email::verification_email(&state, &user, &email_verification_code)?
+    Email::verification_email(&state, &user.email, &email_verification_code)?
       .send()
       .await?;
   }

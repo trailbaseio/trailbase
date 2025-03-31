@@ -48,7 +48,7 @@ jsonschema = { version = "0.29.0", default-features = false }
 jsonwebtoken = { version = "^9.3.0", default-features = false, features = ["use_pem"] }
 lazy_static = "1.4.0"
 lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
-minijinja = { version = "2.1.2", default-features = false, features= ["serde"] }
+minijinja = { version = "2.1.2", default-features = false }
 oauth2 = { version = "5.0.0-alpha.4", default-features = false, features = ["reqwest", "rustls-tls"] }
 object_store = { version = "0.12.0", default-features = false, features = ["aws", "fs"] }
 parking_lot = { version = "0.12.3", default-features = false }

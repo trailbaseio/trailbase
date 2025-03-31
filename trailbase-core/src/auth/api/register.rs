@@ -106,7 +106,7 @@ pub async fn register_user_handler(
     return Err(AuthError::Internal("Failed to get user".into()));
   };
 
-  let email = Email::verification_email(&state, &user, &email_verification_code)
+  let email = Email::verification_email(&state, &user.email, &email_verification_code)
     .map_err(|err| AuthError::Internal(err.into()))?;
   email
     .send()
