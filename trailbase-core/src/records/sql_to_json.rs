@@ -2,8 +2,8 @@ use crate::schema::ColumnOption;
 use std::collections::HashMap;
 
 use base64::prelude::*;
-use log::*;
 use thiserror::Error;
+use tracing::*;
 
 use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::ColumnMetadata;

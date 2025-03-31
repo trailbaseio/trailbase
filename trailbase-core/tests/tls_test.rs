@@ -1,5 +1,6 @@
 use rcgen::{generate_simple_self_signed, CertifiedKey};
 use tokio_rustls::rustls::pki_types::{pem::PemObject, PrivateKeyDer};
+use tracing::*;
 use trailbase::{DataDir, Server, ServerOptions};
 
 #[test]
@@ -57,7 +58,7 @@ fn test_https_serving() {
           .send()
           .await;
 
-        log::debug!("{response:?}");
+        debug!("{response:?}");
 
         if let Ok(response) = response {
           assert_eq!(response.text().await.unwrap(), "Ok");

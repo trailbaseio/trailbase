@@ -16,6 +16,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::oneshot;
+use tracing::*;
 
 use crate::assets::cow_to_string;
 use crate::auth::user::User;
@@ -95,7 +96,7 @@ impl Drop for RuntimeSingleton {
     if let Some(handle) = self.handle.take() {
       self.state.clear();
       if handle.join().is_err() {
-        log::error!("Failed to join main rt thread");
+        error!("Failed to join main rt thread");
       }
     }
   }
@@ -120,7 +121,7 @@ impl Completer {
       .map_err(|err| JsResponseError::Internal(err.into()));
 
     if self.reply.send(value).is_err() {
-      log::error!("Completer send failed for : {}", self.name);
+      error!("Completer send failed for : {}", self.name);
     }
   }
 }
@@ -157,7 +158,7 @@ impl RuntimeSingleton {
               .send(Err(JsResponseError::Internal(err.into())))
               .is_err()
             {
-              log::error!("dispatch sending error failed");
+              error!("dispatch sending error failed");
             }
             return Ok(());
           }
@@ -182,13 +183,13 @@ impl RuntimeSingleton {
           .map_err(|err| err.into());
 
         if sender.send(result).is_err() {
-          log::error!("Sending of js function call reply failed");
+          error!("Sending of js function call reply failed");
         }
       }
       Message::LoadModule(module, sender) => {
         runtime.load_module_async(&module).await?;
         if sender.send(Ok(())).is_err() {
-          log::error!("Load module send failed");
+          error!("Load module send failed");
         }
       }
     }
@@ -232,7 +233,7 @@ impl RuntimeSingleton {
         tokio::select! {
           result = runtime.await_event_loop(OPTS, DURATION), if pending => {
             if let Err(err) = result{
-              log::error!("JS event loop: {err}");
+              error!("JS event loop: {err}");
             }
           },
           msg = private_recv.recv() => {
@@ -240,7 +241,7 @@ impl RuntimeSingleton {
               panic!("private channel closed");
             };
             if let Err(err) = Self::handle_message(runtime, msg, &mut completers).await {
-              log::error!("Handle private message: {err}");
+              error!("Handle private message: {err}");
             }
           },
           msg = shared_recv.recv() => {
@@ -248,7 +249,7 @@ impl RuntimeSingleton {
               panic!("private channel closed");
             };
             if let Err(err) = Self::handle_message(runtime, msg, &mut completers).await {
-              log::error!("Handle shared message: {err}");
+              error!("Handle shared message: {err}");
             }
           },
         }
@@ -261,14 +262,14 @@ impl RuntimeSingleton {
       Some(n) => n,
       None => std::thread::available_parallelism().map_or_else(
         |err| {
-          log::error!("Failed to get number of threads: {err}");
+          error!("Failed to get number of threads: {err}");
           return 1;
         },
         |x| x.get(),
       ),
     };
 
-    log::info!("Starting v8 JavaScript runtime with {n_threads} workers.");
+    info!("Starting v8 JavaScript runtime with {n_threads} workers.");
 
     let (shared_sender, shared_receiver) = async_channel::unbounded::<Message>();
 
@@ -320,7 +321,7 @@ impl RuntimeSingleton {
 
         for (idx, thread) in threads.into_iter().enumerate() {
           if let Err(err) = thread.join() {
-            log::error!("Failed to join worker: {idx}: {err:?}");
+            error!("Failed to join worker: {idx}: {err:?}");
           }
         }
       }))
@@ -445,7 +446,7 @@ impl RuntimeHandle {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
-        log::debug!("connection already set");
+        debug!("connection already set");
       } else {
         lock.replace(conn.clone());
       }
@@ -457,7 +458,7 @@ impl RuntimeHandle {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
-        log::debug!("connection already set");
+        debug!("connection already set");
       }
       lock.replace(conn.clone());
     }
@@ -606,7 +607,7 @@ fn add_route_to_router(
 
     let (sender, receiver) = oneshot::channel::<Result<JsResponse, JsResponseError>>();
 
-    log::debug!("dispatch {method} {uri}");
+    debug!("dispatch {method} {uri}");
     runtime_handle
       .runtime
       .sender
@@ -789,7 +790,7 @@ async fn install_routes_and_jobs(
             }
           }
           Err(err) => {
-            log::error!("Failed to load module: {err}");
+            error!("Failed to load module: {err}");
             None
           }
         }
@@ -813,7 +814,7 @@ async fn await_loading_module(state: &State, module: Module) -> Result<(), AnyEr
     .await?;
 
   let _ = receiver.await.map_err(|err| {
-    log::error!("Failed to await module loading: {err}");
+    error!("Failed to await module loading: {err}");
     return err;
   })?;
 
@@ -825,7 +826,7 @@ pub(crate) async fn load_routes_and_jobs_from_js_modules(
 ) -> Result<Option<Router<AppState>>, AnyError> {
   let runtime_handle = state.script_runtime();
   if runtime_handle.runtime.n_threads == 0 {
-    log::info!("JS threads set to zero. Skipping initialization for JS modules");
+    info!("JS threads set to zero. Skipping initialization for JS modules");
     return Ok(None);
   }
 
@@ -834,7 +835,7 @@ pub(crate) async fn load_routes_and_jobs_from_js_modules(
   let modules = match rustyscript::Module::load_dir(scripts_dir.clone()) {
     Ok(modules) => modules,
     Err(err) => {
-      log::debug!("Skip loading js modules from '{scripts_dir:?}': {err}");
+      debug!("Skip loading js modules from '{scripts_dir:?}': {err}");
       return Ok(None);
     }
   };
@@ -846,7 +847,7 @@ pub(crate) async fn load_routes_and_jobs_from_js_modules(
     if let Some(router) = install_routes_and_jobs(state, module).await? {
       js_router = js_router.merge(router);
     } else {
-      log::debug!("Skipping js module '{fname:?}': no routes");
+      debug!("Skipping js module '{fname:?}': no routes");
     }
   }
 
@@ -869,7 +870,7 @@ pub(crate) async fn write_js_runtime_files(data_dir: &DataDir) {
   )
   .await
   {
-    log::warn!("Failed to write 'trailbase.js': {err}");
+    warn!("Failed to write 'trailbase.js': {err}");
   }
 
   if let Err(err) = tokio::fs::write(
@@ -883,7 +884,7 @@ pub(crate) async fn write_js_runtime_files(data_dir: &DataDir) {
   )
   .await
   {
-    log::warn!("Failed to write 'trailbase.d.ts': {err}");
+    warn!("Failed to write 'trailbase.d.ts': {err}");
   }
 }
 

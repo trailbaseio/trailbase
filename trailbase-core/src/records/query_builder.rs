@@ -1,8 +1,8 @@
 use askama::Template;
 use itertools::Itertools;
-use log::*;
 use object_store::ObjectStore;
 use std::sync::Arc;
+use tracing::*;
 use trailbase_sqlite::schema::{FileUpload, FileUploads};
 use trailbase_sqlite::{NamedParams, Params as _, Value};
 

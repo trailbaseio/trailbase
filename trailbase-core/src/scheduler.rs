@@ -1,7 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 use cron::Schedule;
 use futures_util::future::BoxFuture;
-use log::*;
 use parking_lot::Mutex;
 use std::collections::{hash_map::Entry, HashMap};
 use std::future::Future;
@@ -10,6 +9,7 @@ use std::sync::{
   atomic::{AtomicI32, Ordering},
   Arc,
 };
+use tracing::*;
 use trailbase_sqlite::{params, Connection};
 
 use crate::config::proto::{Config, SystemJob, SystemJobId};
@@ -78,7 +78,7 @@ impl Job {
     let (name, schedule) = {
       let lock = job.state.lock();
       if let Some(ref handle) = lock.handle {
-        log::warn!("starting an already running job");
+        warn!("starting an already running job");
         handle.abort();
       }
 
@@ -92,7 +92,7 @@ impl Job {
             break;
           };
           let Ok(duration) = (next - Utc::now()).to_std() else {
-            log::warn!("Invalid duration for '{name}': {next:?}");
+            warn!("Invalid duration for '{name}': {next:?}");
             continue;
           };
 
@@ -101,7 +101,7 @@ impl Job {
           let _ = job.run_now().await;
         }
 
-        log::info!("Exited job: '{name}'");
+        info!("Exited job: '{name}'");
       })
       .abort_handle(),
     );
@@ -198,7 +198,7 @@ impl JobRegistry {
       jobs.get(&id)?.clone()
     };
 
-    log::debug!("Running job {id}: {}", job.name());
+    debug!("Running job {id}: {}", job.name());
     return Some(job.run_now().await);
   }
 }
@@ -436,11 +436,11 @@ pub fn build_job_registry_from_config(
           }
         }
         None => {
-          log::error!("Duplicate job definition for '{name}'");
+          error!("Duplicate job definition for '{name}'");
         }
       },
       Err(err) => {
-        log::error!("Invalid time spec for '{name}': {err}");
+        error!("Invalid time spec for '{name}': {err}");
       }
     };
   }

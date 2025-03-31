@@ -1,8 +1,8 @@
 use lazy_static::lazy_static;
-use log::*;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use thiserror::Error;
+use tracing::*;
 
 use crate::records::params::json_string_to_value;
 use crate::table_metadata::TableOrViewMetadata;

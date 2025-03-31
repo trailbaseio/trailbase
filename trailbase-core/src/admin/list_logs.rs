@@ -4,10 +4,10 @@ use axum::{
 };
 use chrono::{DateTime, Duration, Utc};
 use lazy_static::lazy_static;
-use log::*;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use tracing::*;
 use ts_rs::TS;
 use uuid::Uuid;
 

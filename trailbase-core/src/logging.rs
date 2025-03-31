@@ -2,13 +2,13 @@ use axum::body::Body;
 use axum::http::Request;
 use axum::response::Response;
 use axum_client_ip::InsecureClientIp;
-use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::Duration;
 use tracing::field::Field;
 use tracing::span::{Attributes, Id, Record, Span};
 use tracing::Level;
+use tracing::*;
 use tracing_subscriber::layer::{Context, Layer};
 use uuid::Uuid;
 
@@ -145,7 +145,7 @@ impl SqliteLogLayer {
   ) -> Result<(), rusqlite::Error> {
     #[cfg(test)]
     if !log.fields.is_empty() {
-      log::warn!("Dangling fields: {:?}", log.fields);
+      tracing::warn!("Dangling fields: {:?}", log.fields);
     }
 
     lazy_static::lazy_static! {

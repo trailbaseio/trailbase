@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use log::*;
 use serde::{Deserialize, Serialize};
 use sqlite3_parser::ast::{
   fmt::ToTokens, ColumnDefinition, CreateTableBody, DeferSubclause, Expr, ForeignKeyClause,
@@ -8,6 +7,7 @@ use sqlite3_parser::ast::{
 };
 use std::collections::HashMap;
 use thiserror::Error;
+use tracing::*;
 use ts_rs::TS;
 
 #[derive(Debug, Error)]
@@ -603,7 +603,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
               });
             }
             TableConstraint::PrimaryKey { .. } => {
-              log::warn!("PK table constraint not implemented. Use column constraints.");
+              warn!("PK table constraint not implemented. Use column constraints.");
             }
           }
         }
@@ -1086,7 +1086,7 @@ fn build_foreign_key(
 ) -> ForeignKey {
   if let Some(ref clause) = deref_clause {
     // TOOD: Parse DEFERRABLE.
-    log::warn!("Unsupported DEFERRABLE in FK clause: {clause:?}");
+    warn!("Unsupported DEFERRABLE in FK clause: {clause:?}");
   }
 
   let (on_update, on_delete) = unparse_fk_trigger(&clause.args);
@@ -1127,12 +1127,12 @@ fn unparse_fk_trigger(
         on_update = Some((*action).into());
       }
       RefArg::OnInsert(action) => {
-        log::error!("Unexpected ON INSERT in FK clause: {action:?}");
+        error!("Unexpected ON INSERT in FK clause: {action:?}");
       }
       RefArg::Match(name) => {
         // SQL supports FK MATCH clause, which is *not* supported by sqlite:
         //   https://www.sqlite.org/foreignkeys.html#fk_unsupported
-        log::warn!("Unsupported MATCH in FK clause: {name:?}");
+        warn!("Unsupported MATCH in FK clause: {name:?}");
       }
     }
   }

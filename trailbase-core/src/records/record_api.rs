@@ -1,9 +1,9 @@
 use askama::Template;
-use log::*;
 use rusqlite::types::ToSqlOutput;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::*;
 use trailbase_sqlite::{NamedParamRef, NamedParams, Params as _, Value};
 
 use crate::auth::user::User;

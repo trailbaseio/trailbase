@@ -6,8 +6,8 @@ use axum::{
   response::{IntoResponse, Response},
   Json,
 };
-use log::*;
 use serde::Deserialize;
+use tracing::*;
 use ts_rs::TS;
 
 use crate::app_state::AppState;

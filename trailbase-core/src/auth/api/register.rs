@@ -98,7 +98,7 @@ pub async fn register_user_handler(
     .await
     .map_err(|_err| {
       #[cfg(debug_assertions)]
-      log::debug!("Failed to create user {normalized_email}: {_err}");
+      tracing::debug!("Failed to create user {normalized_email}: {_err}");
       // The insert will fail if the user is already registered
       AuthError::Conflict
     })?

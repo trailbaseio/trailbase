@@ -603,8 +603,7 @@ mod test {
     let mut read_dir = tokio::fs::read_dir(state.data_dir().uploads_path())
       .await
       .unwrap();
-    while let Some(entry) = read_dir.next_entry().await.unwrap() {
-      log::error!("{entry:?}");
+    while let Some(_entry) = read_dir.next_entry().await.unwrap() {
       dir_cnt += 1;
     }
     assert_eq!(dir_cnt, 0);

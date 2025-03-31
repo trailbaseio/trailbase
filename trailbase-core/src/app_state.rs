@@ -1,7 +1,7 @@
-use log::*;
 use object_store::ObjectStore;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tracing::*;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::oauth::providers::{ConfiguredOAuthProviders, OAuthProviderType};
@@ -108,7 +108,7 @@ impl AppState {
         dev: args.dev,
         demo: args.demo,
         oauth: Computed::new(&config, |c| {
-          log::debug!("building oauth from config");
+          debug!("building oauth from config");
           match ConfiguredOAuthProviders::from_config(c.auth.clone()) {
             Ok(providers) => providers,
             Err(err) => {
@@ -118,7 +118,7 @@ impl AppState {
           }
         }),
         jobs: Computed::new(&config, move |c| {
-          log::debug!("building jobs from config");
+          debug!("building jobs from config");
 
           let (ref data_dir, ref conn, ref logs_conn) = jobs_input;
           return build_job_registry_from_config(c, data_dir, conn, logs_conn).unwrap_or_else(

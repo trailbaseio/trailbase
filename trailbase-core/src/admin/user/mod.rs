@@ -28,7 +28,7 @@ pub async fn is_demo_admin(state: &AppState, id: &Uuid) -> bool {
   {
     Ok(value) => value.unwrap_or(true),
     Err(err) => {
-      log::error!("{err}");
+      tracing::error!("{err}");
       true
     }
   };

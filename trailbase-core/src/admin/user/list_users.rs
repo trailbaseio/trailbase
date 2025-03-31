@@ -3,9 +3,9 @@ use axum::{
   Json,
 };
 use lazy_static::lazy_static;
-use log::*;
 use serde::Serialize;
 use std::borrow::Cow;
+use tracing::*;
 use ts_rs::TS;
 use uuid::Uuid;
 

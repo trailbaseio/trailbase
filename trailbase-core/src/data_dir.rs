@@ -1,6 +1,6 @@
-use log::*;
 use std::path::PathBuf;
 use tokio::{fs, io::AsyncWriteExt};
+use tracing::*;
 
 /// The base data directory where the sqlite database, config, etc. will be stored.
 #[derive(Debug, Clone)]

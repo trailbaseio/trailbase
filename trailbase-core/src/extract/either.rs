@@ -3,10 +3,10 @@ use axum::http::header::CONTENT_TYPE;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use log::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use thiserror::Error;
+use tracing::*;
 use trailbase_sqlite::schema::FileUploadInput;
 
 use crate::extract::multipart::{parse_multipart, Rejection as MultipartRejection};

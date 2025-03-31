@@ -20,6 +20,7 @@ use tokio_rustls::{
 };
 use tower_cookies::CookieManagerLayer;
 use tower_http::{cors, limit::RequestBodyLimitLayer, services::ServeDir, trace::TraceLayer};
+use tracing::*;
 
 use crate::admin;
 use crate::app_state::AppState;
@@ -109,7 +110,7 @@ impl Server {
     O: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Sync + Send>>>,
   {
     let version_info = rustc_tools_util::get_version_info!();
-    log::info!(
+    info!(
       "Initializing server version: {hash} {date}",
       hash = version_info.commit_hash.unwrap_or_default(),
       date = version_info.commit_date.unwrap_or_default(),
@@ -198,7 +199,7 @@ impl Server {
       set.spawn(async move { Self::start_listen(&addr, router, tls_key, tls_cert).await });
     }
 
-    log::info!(
+    info!(
       "listening on http://{addr} 🚀 (Admin UI http://{admin_addr}/_/admin/)",
       addr = self.main_router.0,
       admin_addr = self
@@ -223,7 +224,7 @@ impl Server {
         let tcp_listener = match tokio::net::TcpListener::bind(addr).await {
           Ok(listener) => listener,
           Err(err) => {
-            log::error!("Failed to listen on: {addr}: {err}");
+            error!("Failed to listen on: {addr}: {err}");
             std::process::exit(1);
           }
         };
@@ -242,7 +243,7 @@ impl Server {
           .with_graceful_shutdown(shutdown_signal())
           .await
         {
-          log::error!("Failed to start server: {err}");
+          error!("Failed to start server: {err}");
           std::process::exit(1);
         }
       }
@@ -250,7 +251,7 @@ impl Server {
         let listener = match tokio::net::TcpListener::bind(addr).await {
           Ok(listener) => listener,
           Err(err) => {
-            log::error!("Failed to listen on: {addr}: {err}");
+            error!("Failed to listen on: {addr}: {err}");
             std::process::exit(1);
           }
         };
@@ -259,7 +260,7 @@ impl Server {
           .with_graceful_shutdown(shutdown_signal())
           .await
         {
-          log::error!("Failed to start server: {err}");
+          error!("Failed to start server: {err}");
           std::process::exit(1);
         }
       }
@@ -421,7 +422,7 @@ fn build_cors(opts: &ServerOptions) -> cors::CorsLayer {
   let wildcard = origin_strs.iter().any(|s| s == "*");
 
   let origins = if wildcard {
-    log::info!("CORS: allow any origin");
+    info!("CORS: allow any origin");
     // cors::AllowOrigin::any()
     cors::AllowOrigin::mirror_request()
   } else {
@@ -429,7 +430,7 @@ fn build_cors(opts: &ServerOptions) -> cors::CorsLayer {
       match HeaderValue::from_str(o.as_str()) {
         Ok(value) => Some(value),
         Err(err) => {
-          log::error!("Invalid CORS origin {o}: {err}");
+          error!("Invalid CORS origin {o}: {err}");
           None
         }
       }

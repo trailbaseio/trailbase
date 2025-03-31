@@ -23,6 +23,7 @@ use tokio::sync::watch;
 use tokio_rustls::TlsAcceptor;
 use tower::ServiceExt as _;
 use tower_service::Service;
+use tracing::*;
 
 /// Types that can listen for connections.
 pub trait Listener: Send + 'static {
@@ -79,7 +80,7 @@ async fn handle_accept_error(e: io::Error) {
   // > and then the listener will sleep for 1 second.
   //
   // hyper allowed customizing this but axum does not.
-  log::warn!("accept error: {e}");
+  warn!("accept error: {e}");
   tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 }
 
@@ -381,7 +382,7 @@ where
       let signal_tx = Arc::new(signal_tx);
       tokio::spawn(async move {
         signal.await;
-        log::trace!("received graceful shutdown signal. Telling tasks to shutdown");
+        trace!("received graceful shutdown signal. Telling tasks to shutdown");
         drop(signal_rx);
       });
 
@@ -396,14 +397,14 @@ where
             tuple
           },
             _ = signal_tx.closed() => {
-                log::trace!("signal received, not accepting new connections");
+                trace!("signal received, not accepting new connections");
                 break;
             }
         };
 
         let io = TokioIo::new(io);
 
-        log::trace!("connection {remote_addr:?} accepted");
+        trace!("connection {remote_addr:?} accepted");
 
         poll_fn(|cx| make_service.poll_ready(cx))
           .await
@@ -439,12 +440,12 @@ where
             tokio::select! {
                 result = conn.as_mut() => {
                     if let Err(_err) = result {
-                        log::trace!("failed to serve connection: {_err:#}");
+                        trace!("failed to serve connection: {_err:#}");
                     }
                     break;
                 }
                 _ = &mut signal_closed => {
-                    log::trace!("signal received in task, starting graceful shutdown");
+                    trace!("signal received in task, starting graceful shutdown");
                     conn.as_mut().graceful_shutdown();
                 }
             }
@@ -457,7 +458,7 @@ where
       drop(close_rx);
       drop(listener);
 
-      log::trace!(
+      trace!(
         "waiting for {} task(s) to finish",
         close_tx.receiver_count()
       );

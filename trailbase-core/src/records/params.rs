@@ -1,7 +1,7 @@
 use base64::prelude::*;
-use log::*;
 use std::collections::HashSet;
 use std::sync::Arc;
+use tracing::*;
 use trailbase_sqlite::schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{NamedParams, Value};
 

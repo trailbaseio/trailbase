@@ -15,6 +15,7 @@ use std::sync::{
   Arc,
 };
 use std::task::{Context, Poll};
+use tracing::*;
 use trailbase_sqlite::connection::{extract_record_values, extract_row_id};
 
 use crate::auth::user::User;
@@ -50,7 +51,7 @@ struct CleanupSubscription {
 impl Drop for CleanupSubscription {
   fn drop(&mut self) {
     if self.receiver.upgrade().is_none() {
-      log::debug!("Subscription cleaned up already by the sender side.");
+      debug!("Subscription cleaned up already by the sender side.");
       return;
     }
 
@@ -285,7 +286,7 @@ impl SubscriptionManager {
       match sub.sender.try_send(event.clone()) {
         Ok(_) => {}
         Err(async_channel::TrySendError::Full(ev)) => {
-          log::warn!("Channel full, dropping event: {ev:?}");
+          warn!("Channel full, dropping event: {ev:?}");
         }
         Err(async_channel::TrySendError::Closed(_ev)) => {
           dead_subscriptions.push(idx);
@@ -313,7 +314,7 @@ impl SubscriptionManager {
     // If table_metadata is missing, the config/schema must have changed, thus removing the
     // subscriptions.
     let Some(table_metadata) = table_metadata else {
-      log::warn!("Table not found: {table_name}. Removing subscriptions");
+      warn!("Table not found: {table_name}. Removing subscriptions");
 
       let mut record_subs = s.record_subscriptions.write();
       record_subs.remove(table_name);
@@ -458,13 +459,13 @@ impl SubscriptionManager {
           let action: RecordAction = match action {
             Action::SQLITE_UPDATE | Action::SQLITE_INSERT | Action::SQLITE_DELETE => action.into(),
             a => {
-              log::error!("Unknown action: {a:?}");
+              error!("Unknown action: {a:?}");
               return;
             }
           };
 
           let Some(rowid) = extract_row_id(case) else {
-            log::error!("Failed to extract row id");
+            error!("Failed to extract row id");
             return;
           };
 
@@ -481,7 +482,7 @@ impl SubscriptionManager {
           }
 
           let Some(record_values) = extract_record_values(case) else {
-            log::error!("Failed to extract values");
+            error!("Failed to extract values");
             return;
           };
 

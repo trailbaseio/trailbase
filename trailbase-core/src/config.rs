@@ -1,5 +1,4 @@
 use lazy_static::lazy_static;
-use log::*;
 use prost_reflect::{
   DynamicMessage, ExtensionDescriptor, FieldDescriptor, Kind, MapKey, ReflectMessage, Value,
 };
@@ -9,6 +8,7 @@ use std::convert::TryFrom;
 use std::str::FromStr;
 use thiserror::Error;
 use tokio::fs;
+use tracing::*;
 use validator::{ValidateEmail, ValidateUrl};
 
 use crate::auth::oauth::providers::oauth_provider_registry;
