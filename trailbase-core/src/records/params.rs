@@ -140,14 +140,6 @@ impl Params {
     return &self.col_names;
   }
 
-  pub(crate) fn file_column_names(&self) -> &[String] {
-    return &self.file_col_names;
-  }
-
-  // pub(crate) fn placeholders(&self) -> String {
-  //   return self.named_params.iter().map(|(k, _v)| k).join(", ");
-  // }
-
   #[inline]
   fn column_by_name<'a>(
     metadata: &'a TableMetadata,

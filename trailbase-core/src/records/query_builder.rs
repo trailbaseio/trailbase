@@ -8,7 +8,7 @@ use trailbase_sqlite::{NamedParams, Params as _, Value};
 
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
-use crate::records::files::delete_files_in_row;
+use crate::records::files::delete_pending_files;
 use crate::records::params::{FileMetadataContents, Params};
 use crate::schema::{Column, ColumnOption};
 use crate::table_metadata::{
@@ -276,9 +276,8 @@ impl InsertQueryBuilder {
     // We're storing any files to the object store first to make sure the DB entry is valid right
     // after commit and not racily pointing to soon-to-be-written files.
     if !files.is_empty() {
-      let objectstore = state.objectstore();
       for (metadata, content) in &mut files {
-        write_file(objectstore, metadata, content).await?;
+        write_file(state.objectstore(), metadata, content).await?;
       }
     }
 
@@ -296,18 +295,19 @@ impl InsertQueryBuilder {
       })
       .await;
 
-    if result.is_err() && !files.is_empty() {
-      let objectstore = state.objectstore();
-
-      for (metadata, _files) in &files {
-        let path = object_store::path::Path::from(metadata.path());
-        if let Err(err) = objectstore.delete(&path).await {
-          warn!("Failed to cleanup file after failed insertion (leak): {err}");
+    return match result {
+      Ok(result) => Ok(result),
+      Err(err) => {
+        for (metadata, _files) in &files {
+          let path = object_store::path::Path::from(metadata.path());
+          if let Err(err) = state.objectstore().delete(&path).await {
+            warn!("Failed to cleanup file after failed insertion (leak): {err}");
+          }
         }
-      }
-    }
 
-    return Ok(result?);
+        Err(err.into())
+      }
+    };
   }
 
   pub(crate) async fn run_bulk<T: Send + 'static>(
@@ -331,9 +331,8 @@ impl InsertQueryBuilder {
     // We're storing any files to the object store first to make sure the DB entry is valid right
     // after commit and not racily pointing to soon-to-be-written files.
     if !all_files.is_empty() {
-      let objectstore = state.objectstore();
       for (metadata, content) in &mut all_files {
-        write_file(objectstore, metadata, content).await?;
+        write_file(state.objectstore(), metadata, content).await?;
       }
     }
 
@@ -363,18 +362,19 @@ impl InsertQueryBuilder {
       })
       .await;
 
-    if result.is_err() && !all_files.is_empty() {
-      let objectstore = state.objectstore();
-
-      for (metadata, _files) in &all_files {
-        let path = object_store::path::Path::from(metadata.path());
-        if let Err(err) = objectstore.delete(&path).await {
-          warn!("Failed to cleanup file after failed insertion (leak): {err}");
+    return match result {
+      Ok(result) => Ok(result),
+      Err(err) => {
+        for (metadata, _files) in &all_files {
+          let path = object_store::path::Path::from(metadata.path());
+          if let Err(err) = state.objectstore().delete(&path).await {
+            warn!("Failed to cleanup file after failed insertion (leak): {err}");
+          }
         }
-      }
-    }
 
-    return Ok(result?);
+        Err(err.into())
+      }
+    };
   }
 
   fn build_insert_query(
@@ -414,6 +414,15 @@ impl InsertQueryBuilder {
   }
 }
 
+#[derive(Template)]
+#[template(escape = "none", path = "update_record_query.sql")]
+struct UpdateRecordQueryTemplate<'a> {
+  table_name: &'a str,
+  column_names: &'a [String],
+  pk_column_name: &'a str,
+  returning: Option<&'a str>,
+}
+
 pub(crate) struct UpdateQueryBuilder;
 
 impl UpdateQueryBuilder {
@@ -435,99 +444,41 @@ impl UpdateQueryBuilder {
     // We're storing to object store before writing the entry to the DB.
     let mut files = std::mem::take(&mut params.files);
     if !files.is_empty() {
-      let objectstore = state.objectstore();
       for (metadata, content) in &mut files {
-        write_file(objectstore, metadata, content).await?;
+        write_file(state.objectstore(), metadata, content).await?;
       }
     }
 
-    async fn row_update(
-      conn: &trailbase_sqlite::Connection,
-      table_name: &str,
-      params: Params,
-      pk_column: &str,
-      pk_value: Value,
-    ) -> Result<Option<trailbase_sqlite::Row>, QueryError> {
-      let setters: String = {
-        let col_names = params.column_names();
-        assert_eq!(col_names.len(), params.named_params.len());
-
-        std::iter::zip(col_names, &params.named_params)
-          .map(|(col_name, (placeholder, _value))| format!(r#""{col_name}" = {placeholder}"#))
-          .join(", ")
-      };
-
-      let pk_column = pk_column.to_string();
-      let table_name = table_name.to_string();
-      let files_row = conn
-        .call(move |conn| {
-          let tx = conn.transaction()?;
-
-          // First, fetch updated file column contents so we can delete the files after updating the
-          // column.
-          let file_col_names = params.file_column_names();
-          let files_row = if file_col_names.is_empty() {
-            None
-          } else {
-            let file_columns = file_col_names.join(", ");
-
-            let mut stmt = tx.prepare(&format!(
-              r#"SELECT {file_columns} FROM "{table_name}" WHERE "{pk_column}" = :{pk_column}"#
-            ))?;
-
-            use trailbase_sqlite::Params;
-            [(":pk_column", pk_value)].bind(&mut stmt)?;
-
-            let mut rows = stmt.raw_query();
-            if let Some(row) = rows.next()? {
-              Some(trailbase_sqlite::Row::from_row(row, None)?)
-            } else {
-              None
-            }
-          };
-
-          // Update the column.
-          {
-            let mut stmt = tx.prepare(&format!(
-              r#"UPDATE "{table_name}" SET {setters} WHERE "{pk_column}" = :{pk_column}"#
-            ))?;
-            use trailbase_sqlite::Params;
-            params.named_params.bind(&mut stmt)?;
-
-            stmt.raw_execute()?;
-          }
-
-          tx.commit()?;
-
-          return Ok(files_row);
-        })
-        .await?;
-
-      return Ok(files_row);
+    let query = UpdateRecordQueryTemplate {
+      table_name,
+      column_names: params.column_names(),
+      pk_column_name: pk_column,
+      returning: Some("_rowid_"),
     }
+    .render()
+    .map_err(|err| QueryError::Internal(err.into()))?;
 
-    let files_row = match row_update(state.conn(), table_name, params, pk_column, pk_value).await {
-      Ok(files_row) => files_row,
+    let result = state
+      .conn()
+      .query_value::<i64>(&query, params.named_params)
+      .await;
+
+    match result {
+      Ok(Some(rowid)) => {
+        delete_pending_files(state, metadata, rowid).await?;
+      }
+      Ok(None) => {}
       Err(err) => {
-        if !files.is_empty() {
-          let store = state.objectstore();
-          for (metadata, _content) in &files {
-            let path = object_store::path::Path::from(metadata.path());
-            if let Err(err) = store.delete(&path).await {
-              warn!("Failed to cleanup file after failed insertion (leak): {err}");
-            }
+        for (metadata, _content) in &files {
+          let path = object_store::path::Path::from(metadata.path());
+          if let Err(err) = state.objectstore().delete(&path).await {
+            warn!("Failed to cleanup file after failed insertion (leak): {err}");
           }
         }
 
-        return Err(err);
+        return Err(err.into());
       }
     };
-
-    // Finally, if everything else went well delete files from columns that were updated and are no
-    // longer referenced.
-    if let Some(files_row) = files_row {
-      delete_files_in_row(state, metadata, files_row).await?;
-    }
 
     return Ok(());
   }
@@ -541,22 +492,21 @@ impl DeleteQueryBuilder {
     metadata: &TableMetadata,
     pk_column: &str,
     pk_value: Value,
-  ) -> Result<(), QueryError> {
+  ) -> Result<i64, QueryError> {
     let table_name = metadata.name();
 
-    let row = state
+    let rowid: i64 = state
       .conn()
-      .query_row(
-        &format!(r#"DELETE FROM "{table_name}" WHERE "{pk_column}" = $1 RETURNING *"#),
+      .query_value(
+        &format!(r#"DELETE FROM "{table_name}" WHERE "{pk_column}" = $1 RETURNING _rowid_"#),
         [pk_value],
       )
       .await?
       .ok_or_else(|| QueryError::NotFound)?;
 
-    // Finally, delete files.
-    delete_files_in_row(state, metadata, row).await?;
+    delete_pending_files(state, metadata, rowid).await?;
 
-    return Ok(());
+    return Ok(rowid);
   }
 }
 

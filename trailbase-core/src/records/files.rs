@@ -2,12 +2,14 @@ use axum::body::Body;
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use object_store::ObjectStore;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::*;
+use trailbase_sqlite::params;
 use trailbase_sqlite::schema::{FileUpload, FileUploads};
 
 use crate::app_state::AppState;
-use crate::table_metadata::{JsonColumnMetadata, TableOrViewMetadata};
+use crate::table_metadata::TableMetadata;
 
 #[derive(Debug, Error)]
 pub enum FileError {
@@ -17,6 +19,8 @@ pub enum FileError {
   IO(#[from] std::io::Error),
   #[error("Json serialization error: {0}")]
   JsonSerialization(#[from] serde_json::Error),
+  #[error("SQL error: {0}")]
+  Sql(#[from] trailbase_sqlite::Error),
 }
 
 pub(crate) async fn read_file_into_response(
@@ -51,52 +55,57 @@ pub(crate) async fn read_file_into_response(
   };
 }
 
-pub(crate) async fn delete_files_in_row(
-  state: &AppState,
-  metadata: &(dyn TableOrViewMetadata + Send + Sync),
-  row: trailbase_sqlite::Row,
-) -> Result<(), FileError> {
-  for i in 0..row.column_count() {
-    let Some(col_name) = row.column_name(i) else {
-      warn!("Missing name: {i}");
-      continue;
-    };
-    let Some((_column, column_metadata)) = metadata.column_by_name(col_name) else {
-      warn!("Missing column: {col_name}");
-      continue;
-    };
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct FileDeletionsDb {
+  id: i64,
+  deleted: i64,
+  attempts: i64,
+  errors: Option<String>,
+  table_name: String,
+  record_rowid: i64,
+  column_name: String,
+  json: String,
+}
 
-    if let Some(json) = &column_metadata.json {
-      let store = state.objectstore();
-      match json {
-        JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
-          if let Ok(json) = row.get::<String>(i) {
-            let file: FileUpload = serde_json::from_str(&json)?;
-            delete_file(store, file).await?;
-          }
-        }
-        JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
-          if let Ok(json) = row.get::<String>(i) {
-            let file_uploads: FileUploads = serde_json::from_str(&json)?;
-            for file in file_uploads.0 {
-              delete_file(store, file).await?;
-            }
-          }
-        }
-        _ => {}
+pub(crate) async fn delete_pending_files(
+  state: &AppState,
+  metadata: &TableMetadata,
+  rowid: i64,
+) -> Result<(), FileError> {
+  if metadata.file_upload_columns.is_empty() && metadata.file_uploads_columns.is_empty() {
+    return Ok(());
+  }
+
+  let table_name = &metadata.schema.name;
+  let rows: Vec<FileDeletionsDb> = state
+    .conn()
+    .query_values(
+      "SELECT * FROM _file_deletions WHERE table_name = ?1 AND record_rowid = ?2",
+      params!(table_name.to_string(), rowid),
+    )
+    .await?;
+
+  if rows.is_empty() {
+    return Ok(());
+  }
+
+  // FIXME: handle errors, push attempt count and write back to pending deletions.
+  let store = state.objectstore();
+  for pending_deletion in rows {
+    let json = &pending_deletion.json;
+    if let Ok(file) = serde_json::from_str::<FileUpload>(json) {
+      delete_file(store, file).await?;
+    } else if let Ok(files) = serde_json::from_str::<FileUploads>(json) {
+      for file in files.0 {
+        delete_file(store, file).await?;
       }
+    } else {
+      error!("Pending file deletion w/o parsable contents: {json}");
     }
   }
 
   return Ok(());
 }
-
-// async fn maybe_delete_files_in_column(
-//   state: &AppState,
-//   column: &ColumnMetadata,
-// ) -> Result<(), object_store::Error> {
-//   return Ok(());
-// }
 
 async fn delete_file(store: &dyn ObjectStore, file: FileUpload) -> Result<(), object_store::Error> {
   return store

@@ -58,7 +58,7 @@ impl FileUploadInput {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FileUpload {
-  // The file's unique is from with the path is derived.
+  /// The file's unique id from which the objectstore path is derived.
   id: String,
 
   /// The file's original file name.

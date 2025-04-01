@@ -460,7 +460,8 @@ pub struct TableMetadataCache {
 
 impl TableMetadataCache {
   pub async fn new(conn: trailbase_sqlite::Connection) -> Result<Self, TableLookupError> {
-    let (table_map, tables) = Self::build_tables(&conn).await?;
+    let tables = lookup_and_parse_all_table_schemas(&conn).await?;
+    let table_map = Self::build_tables(&conn, &tables).await?;
     let views = Self::build_views(&conn, &tables).await?;
 
     return Ok(TableMetadataCache {
@@ -474,16 +475,47 @@ impl TableMetadataCache {
 
   async fn build_tables(
     conn: &trailbase_sqlite::Connection,
-  ) -> Result<(HashMap<String, Arc<TableMetadata>>, Vec<Table>), TableLookupError> {
-    let tables = lookup_and_parse_all_table_schemas(conn).await?;
-    let build = |table: &Table| {
-      (
-        table.name.clone(),
-        Arc::new(TableMetadata::new(table.clone(), &tables)),
-      )
-    };
+    tables: &[Table],
+  ) -> Result<HashMap<String, Arc<TableMetadata>>, TableLookupError> {
+    let table_metadata_map: HashMap<String, Arc<TableMetadata>> = tables
+      .iter()
+      .cloned()
+      .map(|t: Table| (t.name.clone(), Arc::new(TableMetadata::new(t, tables))))
+      .collect();
 
-    return Ok((tables.iter().map(build).collect(), tables));
+    // Install file column triggers. This ain't pretty, this might be better on construction and
+    // schema changes.
+    for metadata in table_metadata_map.values() {
+      let mut columns: Vec<usize> = vec![];
+      columns.extend(&metadata.file_upload_columns);
+      columns.extend(&metadata.file_uploads_columns);
+
+      for idx in columns {
+        let table_name = &metadata.schema.name;
+        let col = &metadata.schema.columns[idx];
+        let column_name = &col.name;
+
+        conn.execute_batch(&indoc::formatdoc!(
+          r#"
+          CREATE TRIGGER IF NOT EXISTS __{table_name}__{column_name}__update_trigger AFTER UPDATE ON "{table_name}"
+            WHEN OLD."{column_name}" IS NOT NULL AND OLD."{column_name}" != NEW."{column_name}"
+            BEGIN
+              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+            END;
+
+          CREATE TRIGGER IF NOT EXISTS __{table_name}__{column_name}__delete_trigger AFTER DELETE ON "{table_name}"
+            --FOR EACH ROW
+            WHEN OLD."{column_name}" IS NOT NULL
+            BEGIN
+              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+            END;
+          "#)).await?;
+      }
+    }
+
+    return Ok(table_metadata_map);
   }
 
   async fn build_views(
@@ -513,9 +545,11 @@ impl TableMetadataCache {
 
   pub async fn invalidate_all(&self) -> Result<(), TableLookupError> {
     debug!("Rebuilding TableMetadataCache");
-    let (table_map, tables) = Self::build_tables(&self.state.conn).await?;
+    let conn = &self.state.conn;
+    let tables = lookup_and_parse_all_table_schemas(conn).await?;
+    let table_map = Self::build_tables(conn, &tables).await?;
     *self.state.tables.write() = table_map;
-    *self.state.views.write() = Self::build_views(&self.state.conn, &tables).await?;
+    *self.state.views.write() = Self::build_views(conn, &tables).await?;
     Ok(())
   }
 }
