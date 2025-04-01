@@ -89,18 +89,54 @@ pub(crate) async fn delete_pending_files(
     return Ok(());
   }
 
-  // FIXME: handle errors, push attempt count and write back to pending deletions.
-  let store = state.objectstore();
+  let mut errors: Vec<FileDeletionsDb> = vec![];
+  let mut delete = async |row: &FileDeletionsDb, file: FileUpload| {
+    if let Err(err) = delete_file(state.objectstore(), file).await {
+      let mut pending_deletion = row.clone();
+      pending_deletion.attempts += 1;
+      pending_deletion.errors = Some(err.to_string());
+      errors.push(pending_deletion);
+    }
+  };
+
   for pending_deletion in rows {
     let json = &pending_deletion.json;
+
     if let Ok(file) = serde_json::from_str::<FileUpload>(json) {
-      delete_file(store, file).await?;
+      delete(&pending_deletion, file).await;
     } else if let Ok(files) = serde_json::from_str::<FileUploads>(json) {
       for file in files.0 {
-        delete_file(store, file).await?;
+        delete(&pending_deletion, file).await;
       }
     } else {
       error!("Pending file deletion w/o parsable contents: {json}");
+    }
+  }
+
+  // Add errors back to try again later.
+  for error in errors {
+    if let Err(err) = state
+      .conn()
+      .execute(
+        r#"
+      INSERT INTO _file_deletions
+        (deleted, attempts, errors, table_name, record_row_id, column_name, json)
+      VALUES
+        (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+      "#,
+        params!(
+          error.deleted,
+          error.attempts,
+          error.errors,
+          error.table_name,
+          error.record_rowid,
+          error.column_name,
+          error.json,
+        ),
+      )
+      .await
+    {
+      warn!("Failed to restore pending file: {err}");
     }
   }
 
