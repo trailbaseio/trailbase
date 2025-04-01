@@ -98,6 +98,7 @@ enum SystemJobId {
   LOG_CLEANER = 3;
   AUTH_CLEANER = 4;
   QUERY_OPTIMIZER = 5;
+  FILE_DELETIONS = 6;
 }
 
 message SystemJob {

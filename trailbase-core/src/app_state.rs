@@ -38,7 +38,7 @@ struct InternalState {
 
   table_metadata: TableMetadataCache,
   subscription_manager: SubscriptionManager,
-  object_store: Box<dyn ObjectStore + Send + Sync>,
+  object_store: Arc<dyn ObjectStore + Send + Sync>,
 
   runtime: RuntimeHandle,
 
@@ -92,10 +92,12 @@ impl AppState {
       })
     };
 
+    let object_store: Arc<dyn ObjectStore + Send + Sync> = args.object_store.into();
     let jobs_input = (
       args.data_dir.clone(),
       args.conn.clone(),
       args.logs_conn.clone(),
+      object_store.clone(),
     );
 
     let runtime = build_js_runtime(args.conn.clone(), args.js_runtime_threads);
@@ -120,13 +122,19 @@ impl AppState {
         jobs: Computed::new(&config, move |c| {
           debug!("building jobs from config");
 
-          let (ref data_dir, ref conn, ref logs_conn) = jobs_input;
-          return build_job_registry_from_config(c, data_dir, conn, logs_conn).unwrap_or_else(
-            |err| {
-              error!("Failed to build JobRegistry for cron jobs: {err}");
-              return JobRegistry::new();
-            },
-          );
+          let (data_dir, conn, logs_conn, object_store) = &jobs_input;
+
+          return build_job_registry_from_config(
+            c,
+            data_dir,
+            conn,
+            logs_conn,
+            object_store.clone(),
+          )
+          .unwrap_or_else(|err| {
+            error!("Failed to build JobRegistry for cron jobs: {err}");
+            return JobRegistry::new();
+          });
         }),
         mailer: Computed::new(&config, Mailer::new_from_config),
         record_apis: record_apis.clone(),
@@ -136,7 +144,7 @@ impl AppState {
         jwt: args.jwt,
         table_metadata: args.table_metadata.clone(),
         subscription_manager: SubscriptionManager::new(args.conn, args.table_metadata, record_apis),
-        object_store: args.object_store,
+        object_store,
         runtime,
         #[cfg(test)]
         cleanup: vec![],
@@ -393,8 +401,9 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       }),
     )
     .unwrap()
+    .into()
   } else {
-    build_objectstore(&data_dir, None).unwrap()
+    build_objectstore(&data_dir, None).unwrap().into()
   };
 
   let record_apis = Computed::new(&config, move |c| {

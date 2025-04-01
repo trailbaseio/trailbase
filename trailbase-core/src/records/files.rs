@@ -56,7 +56,7 @@ pub(crate) async fn read_file_into_response(
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct FileDeletionsDb {
+pub(crate) struct FileDeletionsDb {
   id: i64,
   deleted: i64,
   attempts: i64,
@@ -85,13 +85,23 @@ pub(crate) async fn delete_pending_files(
     )
     .await?;
 
-  if rows.is_empty() {
+  delete_pending_files_impl(state.conn(), state.objectstore(), rows).await?;
+
+  return Ok(());
+}
+
+pub(crate) async fn delete_pending_files_impl(
+  conn: &trailbase_sqlite::Connection,
+  store: &dyn ObjectStore,
+  pending_deletions: Vec<FileDeletionsDb>,
+) -> Result<(), FileError> {
+  if pending_deletions.is_empty() {
     return Ok(());
   }
 
   let mut errors: Vec<FileDeletionsDb> = vec![];
   let mut delete = async |row: &FileDeletionsDb, file: FileUpload| {
-    if let Err(err) = delete_file(state.objectstore(), file).await {
+    if let Err(err) = delete_file(store, file).await {
       let mut pending_deletion = row.clone();
       pending_deletion.attempts += 1;
       pending_deletion.errors = Some(err.to_string());
@@ -99,7 +109,7 @@ pub(crate) async fn delete_pending_files(
     }
   };
 
-  for pending_deletion in rows {
+  for pending_deletion in pending_deletions {
     let json = &pending_deletion.json;
 
     if let Ok(file) = serde_json::from_str::<FileUpload>(json) {
@@ -115,8 +125,7 @@ pub(crate) async fn delete_pending_files(
 
   // Add errors back to try again later.
   for error in errors {
-    if let Err(err) = state
-      .conn()
+    if let Err(err) = conn
       .execute(
         r#"
       INSERT INTO _file_deletions

@@ -14,6 +14,7 @@ use trailbase_sqlite::{params, Connection};
 
 use crate::config::proto::{Config, SystemJob, SystemJobId};
 use crate::constants::{DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT, SESSION_TABLE};
+use crate::records::files::{delete_pending_files_impl, FileDeletionsDb, FileError};
 use crate::DataDir;
 
 type CallbackError = Box<dyn std::error::Error + Sync + Send>;
@@ -241,6 +242,7 @@ fn build_job(
   config: &Config,
   conn: &Connection,
   logs_conn: &Connection,
+  object_store: Arc<dyn object_store::ObjectStore + Send + Sync>,
 ) -> DefaultSystemJob {
   return match id {
     SystemJobId::Undefined => DefaultSystemJob {
@@ -391,7 +393,55 @@ fn build_job(
         }),
       }
     }
+    SystemJobId::FileDeletions => {
+      let conn = conn.clone();
+
+      DefaultSystemJob {
+        name: "File Deletions",
+        default: SystemJob {
+          id: Some(id as i32),
+          schedule: Some("@hourly".into()),
+          disabled: Some(false),
+        },
+        callback: build_callback(move || {
+          let conn = conn.clone();
+          let object_store = object_store.clone();
+          return async move {
+            let _ = tokio::spawn(async move {
+              if let Err(err) = delete_pending_files_job(&conn, &*object_store).await {
+                warn!("Failed to delete files: {err}");
+              }
+            })
+            .await;
+            return Ok::<(), trailbase_sqlite::Error>(());
+          };
+        }),
+      }
+    }
   };
+}
+
+async fn delete_pending_files_job(
+  conn: &trailbase_sqlite::Connection,
+  object_store: &(dyn object_store::ObjectStore + Send + Sync),
+) -> Result<(), FileError> {
+  let rows: Vec<FileDeletionsDb> = match conn
+    .query_values(
+      "SELECT * FROM _file_deletions WHERE deleted < (UNIXEPOCH() - 900)",
+      (),
+    )
+    .await
+  {
+    Ok(rows) => rows,
+    Err(err) => {
+      warn!("Failed to delete files: {err}");
+      return Err(err.into());
+    }
+  };
+
+  delete_pending_files_impl(conn, object_store, rows).await?;
+
+  return Ok(());
 }
 
 pub fn build_job_registry_from_config(
@@ -399,6 +449,7 @@ pub fn build_job_registry_from_config(
   data_dir: &DataDir,
   conn: &Connection,
   logs_conn: &Connection,
+  object_store: Arc<dyn object_store::ObjectStore + Send + Sync>,
 ) -> Result<JobRegistry, CallbackError> {
   let job_ids = [
     SystemJobId::Backup,
@@ -406,6 +457,7 @@ pub fn build_job_registry_from_config(
     SystemJobId::LogCleaner,
     SystemJobId::AuthCleaner,
     SystemJobId::QueryOptimizer,
+    SystemJobId::FileDeletions,
   ];
 
   let jobs = JobRegistry::new();
@@ -414,7 +466,14 @@ pub fn build_job_registry_from_config(
       name,
       default,
       callback,
-    } = build_job(job_id, data_dir, config, conn, logs_conn);
+    } = build_job(
+      job_id,
+      data_dir,
+      config,
+      conn,
+      logs_conn,
+      object_store.clone(),
+    );
 
     let config = config
       .jobs
@@ -515,5 +574,14 @@ mod tests {
     let latest = jobs.get(first).unwrap().latest();
     let (_start_time, _duration, err_string) = latest.unwrap();
     assert_eq!(err_string, Some("result".to_string()));
+  }
+
+  #[tokio::test]
+  async fn test_delete_pending_files_job() {
+    let state = crate::app_state::test_state(None).await.unwrap();
+
+    delete_pending_files_job(state.conn(), state.objectstore())
+      .await
+      .unwrap();
   }
 }
