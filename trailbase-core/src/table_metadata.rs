@@ -166,6 +166,11 @@ impl TableMetadata {
   pub fn column_metadata(&self) -> &Vec<ColumnMetadata> {
     return &self.metadata;
   }
+
+  #[inline]
+  pub fn has_file_columns(&self) -> bool {
+    return !self.file_upload_columns.is_empty() || !self.file_uploads_columns.is_empty();
+  }
 }
 
 /// A data class describing a sqlite View and future, additional meta data useful for TrailBase.

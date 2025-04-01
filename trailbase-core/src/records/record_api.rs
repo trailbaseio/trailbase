@@ -655,7 +655,7 @@ fn build_request_params(table_metadata: &TableMetadata, request_params: &Params)
   //   }
   // }
 
-  for (param_index, col_name) in request_params.column_names().iter().enumerate() {
+  for (param_index, col_name) in request_params.column_names.iter().enumerate() {
     let Some(col_index) = table_metadata.column_index_by_name(col_name) else {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.

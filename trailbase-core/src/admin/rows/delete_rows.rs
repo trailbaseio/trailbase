@@ -103,6 +103,8 @@ pub async fn delete_rows_handler(
 #[cfg(test)]
 mod tests {
   use axum::extract::{Json, Path, RawQuery, State};
+  use serde::Deserialize;
+  use uuid::Uuid;
 
   use super::*;
   use crate::admin::rows::insert_row::insert_row;
@@ -112,13 +114,19 @@ mod tests {
   use crate::app_state::*;
   use crate::records::test_utils::json_row_from_value;
   use crate::schema::{Column, ColumnDataType, ColumnOption, Table};
-  use crate::util::{b64_to_uuid, uuid_to_b64};
+  use crate::util::uuid_to_b64;
 
   // TODO: This full-lifecycle test should probably live outside the scope of delete_row.
   #[tokio::test]
   async fn test_insert_update_delete_rows() {
     let state = test_state(None).await.unwrap();
     let conn = state.conn();
+
+    #[derive(Deserialize)]
+    struct TestTable {
+      myid: Vec<u8>,
+      col0: Option<String>,
+    }
 
     let table_name = "test_table".to_string();
     let pk_col = "myid".to_string();
@@ -159,8 +167,8 @@ mod tests {
     .await
     .unwrap();
 
-    let insert = |value: &str| {
-      insert_row(
+    let insert = async |value: &str| {
+      let row_id = insert_row(
         &state,
         table_name.clone(),
         json_row_from_value(serde_json::json!({
@@ -168,26 +176,28 @@ mod tests {
         }))
         .unwrap(),
       )
-    };
+      .await
+      .unwrap();
 
-    let get_id = |row: Vec<serde_json::Value>| {
-      return match &row[0] {
-        serde_json::Value::String(str) => b64_to_uuid(str).unwrap(),
-        x => {
-          panic!("unexpected type: {x:?}");
-        }
-      };
+      return state
+        .conn()
+        .query_value::<TestTable>(
+          &format!("SELECT * FROM {table_name} WHERE _rowid_ = ?1"),
+          trailbase_sqlite::params!(row_id),
+        )
+        .await
+        .unwrap();
     };
 
     let id0 = {
       let row = insert("row0").await.unwrap();
-      assert_eq!(&row[1], "row0");
-      get_id(row)
+      assert_eq!(row.col0.unwrap(), "row0");
+      Uuid::from_slice(&row.myid).unwrap()
     };
     let id1 = {
       let row = insert("row1").await.unwrap();
-      assert_eq!(&row[1], "row1");
-      get_id(row)
+      assert_eq!(row.col0.unwrap(), "row1");
+      Uuid::from_slice(&row.myid).unwrap()
     };
 
     let count = || async {

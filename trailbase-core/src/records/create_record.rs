@@ -11,7 +11,6 @@ use crate::extract::Either;
 use crate::records::params::{JsonRow, LazyParams, Params};
 use crate::records::query_builder::InsertQueryBuilder;
 use crate::records::{Permission, RecordError};
-use crate::schema::ColumnDataType;
 
 #[derive(Clone, Debug, Default, Deserialize, IntoParams)]
 pub struct CreateRecordQuery {
@@ -69,13 +68,11 @@ fn extract_records(value: serde_json::Value) -> Result<Vec<RecordAndFiles>, Reco
 }
 
 #[inline]
-fn extract_record_id(
-  data_type: ColumnDataType,
-  row: &rusqlite::Row,
-) -> Result<String, trailbase_sqlite::Error> {
-  return match data_type {
-    ColumnDataType::Blob => Ok(BASE64_URL_SAFE.encode(row.get::<_, [u8; 16]>(0)?)),
-    ColumnDataType::Integer => Ok(row.get::<_, i64>(0)?.to_string()),
+fn extract_record_id(value: rusqlite::types::Value) -> Result<String, trailbase_sqlite::Error> {
+  return match value {
+    rusqlite::types::Value::Blob(blob) => Ok(BASE64_URL_SAFE.encode(blob)),
+    rusqlite::types::Value::Text(text) => Ok(text),
+    rusqlite::types::Value::Integer(i) => Ok(i.to_string()),
     _ => Err(trailbase_sqlite::Error::Other(
       "Unexpected data type".into(),
     )),
@@ -136,7 +133,7 @@ pub async fn create_record_handler(
         for column_index in &table_metadata.user_id_columns {
           let col = &table_metadata.schema.columns[*column_index];
 
-          if !params.column_names().iter().any(|c| c == &col.name) {
+          if !params.column_names.iter().any(|c| c == &col.name) {
             params.push_param(
               col.name.clone(),
               trailbase_sqlite::Value::Blob(user.uuid.into()),
@@ -150,33 +147,39 @@ pub async fn create_record_handler(
   }
 
   let pk_column = api.record_pk_column();
-  let data_type = pk_column.data_type;
-  let record_ids = match params_list.len() {
+  let record_ids: Vec<String> = match params_list.len() {
     0 => {
       return Err(RecordError::BadRequest("no values provided"));
     }
     1 => {
       let record_id = InsertQueryBuilder::run(
         &state,
+        table_metadata,
         params_list.swap_remove(0),
         api.insert_conflict_resolution_strategy(),
-        Some(&pk_column.name),
-        move |row| extract_record_id(data_type, row),
+        &pk_column.name,
       )
       .await
       .map_err(|err| RecordError::Internal(err.into()))?;
 
-      vec![record_id]
+      vec![extract_record_id(record_id)?]
     }
-    _ => InsertQueryBuilder::run_bulk(
-      &state,
-      params_list,
-      api.insert_conflict_resolution_strategy(),
-      Some(&pk_column.name),
-      move |row| extract_record_id(data_type, row),
-    )
-    .await
-    .map_err(|err| RecordError::Internal(err.into()))?,
+    _ => {
+      let record_ids = InsertQueryBuilder::run_bulk(
+        &state,
+        table_metadata,
+        params_list,
+        api.insert_conflict_resolution_strategy(),
+        &pk_column.name,
+      )
+      .await
+      .map_err(|err| RecordError::Internal(err.into()))?;
+
+      record_ids
+        .into_iter()
+        .map(extract_record_id)
+        .collect::<Result<Vec<_>, _>>()?
+    }
   };
 
   if let Some(redirect_to) = create_record_query.redirect_to {

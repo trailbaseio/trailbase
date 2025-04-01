@@ -10,8 +10,7 @@ INSERT {{ conflict_clause }} INTO "{{ table_name }}"
   {%- endfor -%}
 )
 {%- endif -%}
-{%- match returning -%}
-  {%- when Some with ("*") %} RETURNING *
-  {%- when Some with (value) %} RETURNING "{{ value }}"
-  {%- when None -%}
-{%- endmatch -%}
+{%- for col in returning -%}
+  {%- if loop.first %} RETURNING {% endif -%}
+  {%- if !loop.first %},{% endif %}"{{ col }}"
+{%- endfor -%}

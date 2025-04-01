@@ -249,29 +249,25 @@ struct CreateRecordQueryTemplate<'a> {
   table_name: &'a str,
   conflict_clause: &'a str,
   column_names: &'a [String],
-  returning: Option<&'a str>,
+  returning: &'a [&'a str],
 }
 
 pub(crate) struct InsertQueryBuilder;
 
 impl InsertQueryBuilder {
-  pub(crate) async fn run<T: Send + 'static>(
+  pub(crate) async fn run(
     state: &AppState,
+    metadata: &TableMetadata,
     params: Params,
     conflict_resolution: Option<ConflictResolutionStrategy>,
-    return_column_name: Option<&str>,
-    extractor: impl Fn(&rusqlite::Row) -> Result<T, trailbase_sqlite::Error> + Send + 'static,
-  ) -> Result<T, QueryError> {
-    // FIXME: This may orphan objectstore files. If a conflict resolution is given that allows
-    // updates, prior file columns may be overridden and their contents get orphaned, thus
-    // effectively leaking storage.
-    //
-    // We could either check for conflicts first in a transaction, similar to what we do for
-    // updates or have a periodic cleanup job. A permanently installed pre-update-hook doesn't seem
-    // to work, since insert events only provide access to the new values and not conflicting
-    // values.
-    let (query, named_params, mut files) =
-      Self::build_insert_query(params, conflict_resolution, return_column_name)?;
+    return_column_name: &str,
+  ) -> Result<rusqlite::types::Value, QueryError> {
+    let (query, named_params, mut files) = Self::build_insert_query(
+      metadata.name(),
+      params,
+      conflict_resolution,
+      Some(return_column_name),
+    )?;
 
     // We're storing any files to the object store first to make sure the DB entry is valid right
     // after commit and not racily pointing to soon-to-be-written files.
@@ -281,7 +277,7 @@ impl InsertQueryBuilder {
       }
     }
 
-    let result = state
+    let result: Result<(i64, rusqlite::types::Value), trailbase_sqlite::Error> = state
       .conn()
       .call(move |conn| {
         let mut stmt = conn.prepare(&query)?;
@@ -289,14 +285,22 @@ impl InsertQueryBuilder {
         let mut result = stmt.raw_query();
 
         return match result.next()? {
-          Some(row) => Ok(extractor(row)?),
+          Some(row) => Ok((row.get(0)?, row.get(1)?)),
           _ => Err(rusqlite::Error::QueryReturnedNoRows.into()),
         };
       })
       .await;
 
     return match result {
-      Ok(result) => Ok(result),
+      Ok((rowid, return_value)) => {
+        if Some(ConflictResolutionStrategy::Replace) == conflict_resolution
+          && metadata.has_file_columns()
+        {
+          delete_pending_files(state, metadata, rowid).await?;
+        }
+
+        Ok(return_value)
+      }
       Err(err) => {
         for (metadata, _files) in &files {
           let path = object_store::path::Path::from(metadata.path());
@@ -310,19 +314,23 @@ impl InsertQueryBuilder {
     };
   }
 
-  pub(crate) async fn run_bulk<T: Send + 'static>(
+  pub(crate) async fn run_bulk(
     state: &AppState,
+    metadata: &TableMetadata,
     params_list: Vec<Params>,
     conflict_resolution: Option<ConflictResolutionStrategy>,
-    return_column_name: Option<&str>,
-    extractor: impl Fn(&rusqlite::Row) -> Result<T, trailbase_sqlite::Error> + Send + 'static,
-  ) -> Result<Vec<T>, QueryError> {
+    return_column_name: &str,
+  ) -> Result<Vec<rusqlite::types::Value>, QueryError> {
     let mut all_files: FileMetadataContents = vec![];
     let mut query_and_params: Vec<(String, NamedParams)> = vec![];
 
     for params in params_list {
-      let (query, named_params, mut files) =
-        Self::build_insert_query(params, conflict_resolution, return_column_name)?;
+      let (query, named_params, mut files) = Self::build_insert_query(
+        metadata.name(),
+        params,
+        conflict_resolution,
+        Some(return_column_name),
+      )?;
 
       all_files.append(&mut files);
       query_and_params.push((query, named_params));
@@ -339,7 +347,7 @@ impl InsertQueryBuilder {
     let result = state
       .conn()
       .call(move |conn| {
-        let mut rows = Vec::<T>::with_capacity(query_and_params.len());
+        let mut rows = Vec::<(i64, rusqlite::types::Value)>::with_capacity(query_and_params.len());
 
         let tx = conn.transaction()?;
 
@@ -349,7 +357,7 @@ impl InsertQueryBuilder {
           let mut result = stmt.raw_query();
 
           match result.next()? {
-            Some(row) => rows.push(extractor(row)?),
+            Some(row) => rows.push((row.get(0)?, row.get(1)?)),
             _ => {
               return Err(rusqlite::Error::QueryReturnedNoRows.into());
             }
@@ -363,7 +371,16 @@ impl InsertQueryBuilder {
       .await;
 
     return match result {
-      Ok(result) => Ok(result),
+      Ok(result) => {
+        if Some(ConflictResolutionStrategy::Replace) == conflict_resolution
+          && metadata.has_file_columns()
+        {
+          for (rowid, _) in &result {
+            delete_pending_files(state, metadata, *rowid).await?;
+          }
+        }
+        Ok(result.into_iter().map(|(_rowid, v)| v).collect())
+      }
       Err(err) => {
         for (metadata, _files) in &all_files {
           let path = object_store::path::Path::from(metadata.path());
@@ -378,21 +395,26 @@ impl InsertQueryBuilder {
   }
 
   fn build_insert_query(
+    table_name: &str,
     params: Params,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: Option<&str>,
   ) -> Result<(String, NamedParams, FileMetadataContents), QueryError> {
-    let table_name = params.table_name();
-
     let conflict_clause = Self::conflict_resolution_clause(
       conflict_resolution.unwrap_or(ConflictResolutionStrategy::Undefined),
     );
 
+    let returning: &[&str] = if let Some(return_column_name) = return_column_name {
+      &["_rowid_", return_column_name]
+    } else {
+      &["_rowid_"]
+    };
+
     let query = CreateRecordQueryTemplate {
       table_name,
       conflict_clause,
-      column_names: params.column_names(),
-      returning: return_column_name,
+      column_names: &params.column_names,
+      returning,
     }
     .render()
     .map_err(|err| QueryError::Internal(err.into()))?;
@@ -434,8 +456,7 @@ impl UpdateQueryBuilder {
     pk_value: Value,
   ) -> Result<(), QueryError> {
     let table_name = metadata.name();
-    assert_eq!(params.table_name(), table_name);
-    if params.column_names().is_empty() {
+    if params.column_names.is_empty() {
       return Ok(());
     }
 
@@ -451,7 +472,7 @@ impl UpdateQueryBuilder {
 
     let query = UpdateRecordQueryTemplate {
       table_name,
-      column_names: params.column_names(),
+      column_names: &params.column_names,
       pk_column_name: pk_column,
       returning: Some("_rowid_"),
     }
@@ -542,7 +563,7 @@ mod tests {
         table_name: "table",
         conflict_clause: "OR ABORT",
         column_names: &["index".to_string(), "trigger".to_string()],
-        returning: Some("index"),
+        returning: &["index"],
       }
       .render()
       .unwrap();
@@ -555,7 +576,7 @@ mod tests {
         table_name: "table",
         conflict_clause: "",
         column_names: &[],
-        returning: Some("*"),
+        returning: &["*"],
       }
       .render()
       .unwrap();
@@ -568,7 +589,7 @@ mod tests {
         table_name: "table",
         conflict_clause: "",
         column_names: &["index".to_string()],
-        returning: None,
+        returning: &[],
       }
       .render()
       .unwrap();

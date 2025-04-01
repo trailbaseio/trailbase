@@ -58,8 +58,6 @@ pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;
 
 #[derive(Default)]
 pub struct Params {
-  table_name: String,
-
   /// List of named params with their respective placeholders, e.g.:
   ///   '(":col_name": Value::Text("hi"))'.
   pub(super) named_params: NamedParams,
@@ -68,13 +66,10 @@ pub struct Params {
   ///
   /// NOTE: This is a super-set of all columns and also includes the file_col_names below.
   /// NOTE: We could also infer them from placeholder names by stripping the leading ":".
-  col_names: Vec<String>,
+  pub(super) column_names: Vec<String>,
 
   /// List of files and contents to be written to an object store.
   pub(super) files: FileMetadataContents,
-  /// Subset of `col_names` containing only file columns. Useful for building Update/Delete queries
-  /// to remove the files from the object store afterwards.
-  file_col_names: Vec<String>,
 }
 
 impl Params {
@@ -102,7 +97,6 @@ impl Params {
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Result<Self, ParamsError> {
     let mut params = Params {
-      table_name: metadata.name().to_string(),
       ..Default::default()
     };
 
@@ -118,7 +112,6 @@ impl Params {
         // Note: files provided as a multipart form upload are handled below. They need more
         // special handling to establish the field.name to column mapping.
         params.files.append(json_files);
-        params.file_col_names.push(key.to_string());
       }
 
       params.push_param(key, param);
@@ -130,14 +123,6 @@ impl Params {
     }
 
     return Ok(params);
-  }
-
-  pub fn table_name(&self) -> &str {
-    return &self.table_name;
-  }
-
-  pub(crate) fn column_names(&self) -> &[String] {
-    return &self.col_names;
   }
 
   #[inline]
@@ -162,7 +147,7 @@ impl Params {
 
   pub fn push_param(&mut self, col: String, value: Value) {
     self.named_params.push((prefix_colon(&col).into(), value));
-    self.col_names.push(col);
+    self.column_names.push(col);
   }
 
   fn append_multipart_files(
@@ -208,15 +193,13 @@ impl Params {
           self
             .named_params
             .push((prefix_colon(&col.name).into(), value));
-          self.col_names.push(col.name.to_string());
-          self.file_col_names.push(col.name.to_string());
+          self.column_names.push(col.name.to_string());
         }
         "std.FileUploads" => {
           self
             .named_params
             .push((prefix_colon(&col.name).into(), value));
-          self.col_names.push(col.name.to_string());
-          self.file_col_names.push(col.name.to_string());
+          self.column_names.push(col.name.to_string());
         }
         _ => {
           return Err(ParamsError::Column("Mismatching JSON schema"));
