@@ -10,7 +10,6 @@ use trailbase_sqlite::schema::{FileUpload, FileUploads};
 
 use crate::app_state::AppState;
 use crate::records::params::FileMetadataContents;
-use crate::table_metadata::TableMetadata;
 
 #[derive(Debug, Error)]
 pub enum FileError {
@@ -70,14 +69,9 @@ pub(crate) struct FileDeletionsDb {
 
 pub(crate) async fn delete_pending_files(
   state: &AppState,
-  metadata: &TableMetadata,
+  table_name: &str,
   rowid: i64,
 ) -> Result<(), FileError> {
-  if !metadata.json_metadata.has_file_columns() {
-    return Ok(());
-  }
-
-  let table_name = &metadata.schema.name;
   let rows: Vec<FileDeletionsDb> = state
     .conn()
     .query_values(

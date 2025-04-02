@@ -14,21 +14,6 @@ use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{JsonColumnMetadata, TableMetadata, TableOrViewMetadata, ViewMetadata};
 use crate::util::{assert_uuidv7, b64_to_id};
 
-enum RecordApiMetadata {
-  Table(TableMetadata),
-  View(ViewMetadata),
-}
-
-impl RecordApiMetadata {
-  #[inline]
-  fn table_name(&self) -> &str {
-    match &self {
-      RecordApiMetadata::Table(table) => &table.schema.name,
-      RecordApiMetadata::View(view) => &view.schema.name,
-    }
-  }
-}
-
 /// FILTER CONTROL.
 ///
 /// Open question: right now we use the read_access rule also for listing. It could be nice to
@@ -49,11 +34,17 @@ struct RecordApiState {
   conn: trailbase_sqlite::Connection,
 
   /// Schema metadata
-  metadata: RecordApiMetadata,
+  table_name: String,
+  is_table: bool,
   record_pk_column: (usize, Column),
   columns: Vec<Column>,
   json_metadata: Vec<Option<JsonColumnMetadata>>,
   has_file_columns: bool,
+  user_id_columns: Vec<usize>,
+
+  // Helpers
+  name_to_index: HashMap<String, usize>,
+  named_params_template: NamedParams,
 
   // Below properties are filled from `proto::RecordApiConfig`.
   api_name: String,
@@ -62,6 +53,7 @@ struct RecordApiState {
   insert_autofill_missing_user_id_columns: bool,
   enable_subscriptions: bool,
 
+  // Foreign key expansion configuration. Affects schema.
   expand: Option<HashMap<String, serde_json::Value>>,
 
   create_access_rule: Option<String>,
@@ -79,8 +71,6 @@ struct RecordApiState {
 
   schema_access_rule: Option<String>,
   schema_access_query: Option<String>,
-
-  named_params_template: NamedParams,
 }
 
 impl RecordApiState {
@@ -123,6 +113,7 @@ impl RecordApi {
     let columns = table_metadata.schema.columns.clone();
     let json_metadata = table_metadata.json_metadata.columns.clone();
     let has_file_columns = table_metadata.json_metadata.has_file_columns();
+    let user_id_columns = table_metadata.user_id_columns.clone();
 
     let named_params_template: NamedParams = table_metadata
       .schema
@@ -138,11 +129,13 @@ impl RecordApi {
 
     return Self::from_impl(
       conn,
-      RecordApiMetadata::Table(table_metadata),
+      table_name.to_string(),
+      true,
       record_pk_column,
       columns,
       json_metadata,
       has_file_columns,
+      user_id_columns,
       config,
       named_params_template,
     );
@@ -188,11 +181,13 @@ impl RecordApi {
 
     return Self::from_impl(
       conn,
-      RecordApiMetadata::View(view_metadata),
+      table_name.to_string(),
+      false,
       record_pk_column,
       columns,
       json_columns,
       has_file_columns,
+      vec![],
       config,
       NamedParams::new(),
     );
@@ -201,11 +196,13 @@ impl RecordApi {
   #[allow(clippy::too_many_arguments)]
   fn from_impl(
     conn: trailbase_sqlite::Connection,
-    metadata: RecordApiMetadata,
+    table_name: String,
+    is_table: bool,
     record_pk_column: (usize, Column),
     columns: Vec<Column>,
     json_metadata: Vec<Option<JsonColumnMetadata>>,
     has_file_columns: bool,
+    user_id_columns: Vec<usize>,
     config: RecordApiConfig,
     named_params_template: NamedParams,
   ) -> Result<Self, String> {
@@ -218,18 +215,19 @@ impl RecordApi {
     let (read_access_query, subscription_read_access_query) = match &config.read_access_rule {
       Some(rule) => {
         let read_access_query =
-          build_read_delete_schema_query(metadata.table_name(), &record_pk_column.1.name, rule);
+          build_read_delete_schema_query(&table_name, &record_pk_column.1.name, rule);
 
-        let subscription_read_access_query = match metadata {
-          RecordApiMetadata::Table(ref m) => Some(
+        let subscription_read_access_query = if is_table {
+          Some(
             SubscriptionRecordReadTemplate {
               read_access_rule: rule,
-              column_names: m.schema.columns.iter().map(|c| c.name.as_str()).collect(),
+              column_names: columns.iter().map(|c| c.name.as_str()).collect(),
             }
             .render()
             .map_err(|err| err.to_string())?,
-          ),
-          _ => None,
+          )
+        } else {
+          None
         };
 
         (Some(read_access_query), subscription_read_access_query)
@@ -237,42 +235,64 @@ impl RecordApi {
       None => (None, None),
     };
 
-    let delete_access_query = config.delete_access_rule.as_ref().map(|rule| {
-      build_read_delete_schema_query(metadata.table_name(), &record_pk_column.1.name, rule)
-    });
+    let delete_access_query = config
+      .delete_access_rule
+      .as_ref()
+      .map(|rule| build_read_delete_schema_query(&table_name, &record_pk_column.1.name, rule));
 
-    let schema_access_query = config.schema_access_rule.as_ref().map(|rule| {
-      build_read_delete_schema_query(metadata.table_name(), &record_pk_column.1.name, rule)
-    });
+    let schema_access_query = config
+      .schema_access_rule
+      .as_ref()
+      .map(|rule| build_read_delete_schema_query(&table_name, &record_pk_column.1.name, rule));
 
     let create_access_query = match &config.create_access_rule {
-      Some(rule) => match metadata {
-        RecordApiMetadata::Table(ref m) => Some(build_create_access_query(m, rule)?),
-        _ => None,
-      },
+      Some(rule) => {
+        if is_table {
+          Some(build_create_access_query(&columns, rule)?)
+        } else {
+          None
+        }
+      }
       None => None,
     };
 
     let update_access_query = match &config.update_access_rule {
-      Some(rule) => match metadata {
-        RecordApiMetadata::Table(ref m) => Some(build_update_access_query(
-          m,
-          &record_pk_column.1.name,
-          rule,
-        )?),
-        _ => None,
-      },
+      Some(rule) => {
+        if is_table {
+          Some(build_update_access_query(
+            &table_name,
+            &columns,
+            &record_pk_column.1.name,
+            rule,
+          )?)
+        } else {
+          None
+        }
+      }
       None => None,
     };
+
+    let name_to_index = HashMap::<String, usize>::from_iter(
+      columns
+        .iter()
+        .enumerate()
+        .map(|(index, col)| (col.name.clone(), index)),
+    );
 
     return Ok(RecordApi {
       state: Arc::new(RecordApiState {
         conn,
-        metadata,
+        table_name,
+        is_table,
         record_pk_column,
         columns,
         json_metadata,
         has_file_columns,
+        user_id_columns,
+
+        // Helpers
+        name_to_index,
+        named_params_template,
 
         // proto::RecordApiConfig properties below:
         api_name,
@@ -321,8 +341,6 @@ impl RecordApi {
 
         schema_access_rule: config.schema_access_rule,
         schema_access_query,
-
-        named_params_template,
       }),
     });
   }
@@ -334,13 +352,17 @@ impl RecordApi {
 
   #[inline]
   pub fn table_name(&self) -> &str {
-    return self.state.metadata.table_name();
+    return &self.state.table_name;
   }
 
-  #[allow(unused)]
   #[inline]
   pub fn has_file_columns(&self) -> bool {
     return self.state.has_file_columns;
+  }
+
+  #[inline]
+  pub fn user_id_columns(&self) -> &[usize] {
+    return &self.state.user_id_columns;
   }
 
   #[inline]
@@ -363,11 +385,14 @@ impl RecordApi {
     return &self.state.json_metadata;
   }
 
-  pub fn table_metadata(&self) -> Option<&TableMetadata> {
-    match &self.state.metadata {
-      RecordApiMetadata::Table(table) => Some(table),
-      RecordApiMetadata::View(_view) => None,
-    }
+  #[inline]
+  pub fn is_table(&self) -> bool {
+    return self.state.is_table;
+  }
+
+  #[inline]
+  pub fn column_index_by_name(&self, key: &str) -> Option<usize> {
+    return self.state.name_to_index.get(key).copied();
   }
 
   pub fn id_to_sql(&self, id: &str) -> Result<Value, RecordError> {
@@ -424,7 +449,7 @@ impl RecordApi {
     &self,
     p: Permission,
     record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_>>,
+    request_params: Option<&mut LazyParams<'_, RecordApi>>,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
@@ -561,7 +586,7 @@ impl RecordApi {
     &self,
     p: Permission,
     record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_>>,
+    request_params: Option<&mut LazyParams<'_, RecordApi>>,
     user: Option<&User>,
   ) -> Result<NamedParams, RecordError> {
     // We need to inject context like: record id, user, request, and row into the access
@@ -569,7 +594,7 @@ impl RecordApi {
     let mut params = match p {
       Permission::Create | Permission::Update => {
         // Create and update cannot write to views.
-        let Some(table_metadata) = self.table_metadata() else {
+        if !self.is_table() {
           return Err(RecordError::ApiRequiresTable);
         };
 
@@ -593,7 +618,7 @@ impl RecordApi {
         // }
 
         for (param_index, col_name) in request_params.column_names.iter().enumerate() {
-          let Some(col_index) = table_metadata.column_index_by_name(col_name) else {
+          let Some(col_index) = self.column_index_by_name(col_name) else {
             // We simply skip unknown columns, this could simply be malformed input or version skew.
             // This is similar in spirit to protobuf's unknown fields behavior.
             continue;
@@ -665,15 +690,10 @@ struct CreateRecordAccessQueryTemplate<'a> {
 ///
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
 fn build_create_access_query(
-  table_metadata: &TableMetadata,
+  columns: &[Column],
   create_access_rule: &str,
 ) -> Result<String, String> {
-  let column_names: Vec<&str> = table_metadata
-    .schema
-    .columns
-    .iter()
-    .map(|c| c.name.as_str())
-    .collect();
+  let column_names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
 
   return CreateRecordAccessQueryTemplate {
     create_access_rule,
@@ -700,17 +720,12 @@ struct UpdateRecordAccessQueryTemplate<'a> {
 ///
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
 fn build_update_access_query(
-  table_metadata: &TableMetadata,
+  table_name: &str,
+  columns: &[Column],
   pk_column_name: &str,
   update_access_rule: &str,
 ) -> Result<String, String> {
-  let table_name = table_metadata.name();
-  let column_names: Vec<&str> = table_metadata
-    .schema
-    .columns
-    .iter()
-    .map(|c| c.name.as_str())
-    .collect();
+  let column_names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
 
   return UpdateRecordAccessQueryTemplate {
     update_access_rule,

@@ -26,9 +26,9 @@ pub async fn update_record_handler(
     return Err(RecordError::ApiNotFound);
   };
 
-  let table_metadata = api
-    .table_metadata()
-    .ok_or_else(|| RecordError::ApiRequiresTable)?;
+  if !api.is_table() {
+    return Err(RecordError::ApiRequiresTable);
+  }
 
   let record_id = api.id_to_sql(&record)?;
 
@@ -38,7 +38,7 @@ pub async fn update_record_handler(
     Either::Form(value) => (value, None),
   };
 
-  let mut lazy_params = LazyParams::new(table_metadata, request, multipart_files);
+  let mut lazy_params = LazyParams::new(&api, request, multipart_files);
   api
     .check_record_level_access(
       Permission::Update,
@@ -52,12 +52,13 @@ pub async fn update_record_handler(
 
   UpdateQueryBuilder::run(
     &state,
-    table_metadata,
+    api.table_name(),
+    &pk_column.name,
+    record_id,
+    api.has_file_columns(),
     lazy_params
       .consume()
       .map_err(|err| RecordError::Internal(err.into()))?,
-    &pk_column.name,
-    record_id,
   )
   .await
   .map_err(|err| RecordError::Internal(err.into()))?;

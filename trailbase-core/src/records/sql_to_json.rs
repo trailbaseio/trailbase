@@ -235,7 +235,7 @@ mod tests {
 
   use super::*;
   use crate::app_state::*;
-  use crate::table_metadata::{lookup_and_parse_table_schema, TableMetadata, TableOrViewMetadata};
+  use crate::table_metadata::{lookup_and_parse_table_schema, TableMetadata};
 
   #[tokio::test]
   async fn test_read_rows() {
@@ -297,8 +297,8 @@ mod tests {
 
     let rows = conn.query("SELECT * FROM test_table", ()).await.unwrap();
     let parsed = rows_to_json(
-      metadata.columns().unwrap(),
-      &metadata.json_metadata().unwrap().columns,
+      &metadata.schema.columns,
+      &metadata.json_metadata.columns,
       rows,
       |_| true,
     )

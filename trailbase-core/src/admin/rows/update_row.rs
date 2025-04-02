@@ -37,9 +37,15 @@ pub async fn update_row_handler(
   };
 
   let pk_col = &request.primary_key_column;
-  let Some((_index, column)) = table_metadata.column_by_name(pk_col) else {
+  let Some((index, column)) = table_metadata.column_by_name(pk_col) else {
     return Err(Error::Precondition(format!("Missing column: {pk_col}")));
   };
+
+  if let Some(pk_index) = table_metadata.record_pk_column {
+    if index != pk_index {
+      return Err(Error::Precondition(format!("Pk column mismatch: {pk_col}")));
+    }
+  }
 
   if !column.is_primary() {
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
@@ -47,10 +53,11 @@ pub async fn update_row_handler(
 
   UpdateQueryBuilder::run(
     &state,
-    &table_metadata,
-    Params::from(&table_metadata, request.row, None)?,
+    table_metadata.name(),
     &column.name,
     simple_json_value_to_param(column.data_type, request.primary_key_value)?,
+    table_metadata.json_metadata.has_file_columns(),
+    Params::from(&*table_metadata, request.row, None)?,
   )
   .await?;
 

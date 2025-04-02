@@ -5,6 +5,7 @@ use tracing::*;
 use trailbase_sqlite::schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{NamedParams, Value};
 
+use crate::records::RecordApi;
 use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{self, JsonColumnMetadata, TableMetadata};
 
@@ -56,6 +57,31 @@ pub(crate) type FileMetadataContents = Vec<(FileUpload, Vec<u8>)>;
 
 pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;
 
+pub trait SchemaAccessor {
+  fn column_by_name(&self, field_name: &str) -> Option<(&Column, Option<&JsonColumnMetadata>)>;
+}
+
+impl SchemaAccessor for TableMetadata {
+  #[inline]
+  fn column_by_name(&self, field_name: &str) -> Option<(&Column, Option<&JsonColumnMetadata>)> {
+    return self
+      .column_by_name(field_name)
+      .map(|(index, col)| (col, self.json_metadata.columns[index].as_ref()));
+  }
+}
+
+impl SchemaAccessor for RecordApi {
+  #[inline]
+  fn column_by_name(&self, field_name: &str) -> Option<(&Column, Option<&JsonColumnMetadata>)> {
+    return self.column_index_by_name(field_name).map(|index| {
+      return (
+        &self.columns()[index],
+        self.json_column_metadata()[index].as_ref(),
+      );
+    });
+  }
+}
+
 #[derive(Default)]
 pub struct Params {
   /// List of named params with their respective placeholders, e.g.:
@@ -91,8 +117,8 @@ impl Params {
   /// The optional files parameter is there to receive files in case the input JSON was extracted
   /// form a multipart/form. In that case files are handled separately and not embedded in the JSON
   /// value itself in contrast to when the original request was an actual JSON request.
-  pub fn from(
-    metadata: &TableMetadata,
+  pub fn from<S: SchemaAccessor>(
+    accessor: &S,
     json: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Result<Self, ParamsError> {
@@ -103,7 +129,7 @@ impl Params {
     for (key, value) in json {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
-      let Some((col, json_meta)) = Self::column_by_name(metadata, &key) else {
+      let Some((col, json_meta)) = accessor.column_by_name(&key) else {
         continue;
       };
 
@@ -119,20 +145,10 @@ impl Params {
 
     // Note: files provided as part of a JSON request are handled above.
     if let Some(multipart_files) = multipart_files {
-      params.append_multipart_files(metadata, multipart_files)?;
+      params.append_multipart_files(accessor, multipart_files)?;
     }
 
     return Ok(params);
-  }
-
-  #[inline]
-  fn column_by_name<'a>(
-    metadata: &'a TableMetadata,
-    field_name: &str,
-  ) -> Option<(&'a Column, Option<&'a JsonColumnMetadata>)> {
-    return metadata
-      .column_by_name(field_name)
-      .map(|(index, col)| (col, metadata.json_metadata.columns[index].as_ref()));
   }
 
   pub fn push_param(&mut self, col: String, value: Value) {
@@ -140,17 +156,17 @@ impl Params {
     self.column_names.push(col);
   }
 
-  fn append_multipart_files(
+  fn append_multipart_files<S: SchemaAccessor>(
     &mut self,
-    metadata: &TableMetadata,
+    accessor: &S,
     multipart_files: Vec<FileUploadInput>,
   ) -> Result<(), ParamsError> {
     let files: Vec<(String, FileUpload, Vec<u8>)> = multipart_files
       .into_iter()
       .map(|file| {
-        let (col_name, metadata, content) = file.consume()?;
+        let (col_name, file_metadata, content) = file.consume()?;
         return match col_name {
-          Some(col_name) => Ok((col_name, metadata, content)),
+          Some(col_name) => Ok((col_name, file_metadata, content)),
           None => Err(ParamsError::Column(
             "Multipart form upload missing name property",
           )),
@@ -163,7 +179,7 @@ impl Params {
     for (field_name, file_metadata, _content) in &files {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
-      let Some((col, json_meta)) = Self::column_by_name(metadata, field_name) else {
+      let Some((col, json_meta)) = accessor.column_by_name(field_name) else {
         continue;
       };
 
@@ -200,7 +216,7 @@ impl Params {
     self.files.append(
       &mut files
         .into_iter()
-        .map(|(_, metadata, content)| (metadata, content))
+        .map(|(_, file_metadata, content)| (file_metadata, content))
         .collect(),
     );
 
@@ -216,25 +232,25 @@ impl Params {
 ///
 /// NOTE: Table level access checking could probably happen even sooner before we process multipart
 /// streams at all.
-pub struct LazyParams<'a> {
+pub struct LazyParams<'a, S: SchemaAccessor> {
   // Input
+  accessor: &'a S,
   json_row: JsonRow,
-  metadata: &'a TableMetadata,
   multipart_files: Option<Vec<FileUploadInput>>,
 
   // Output
   params: Option<Result<Params, ParamsError>>,
 }
 
-impl<'a> LazyParams<'a> {
+impl<'a, S: SchemaAccessor> LazyParams<'a, S> {
   pub fn new(
-    metadata: &'a TableMetadata,
+    accessor: &'a S,
     json_row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Self {
     LazyParams {
+      accessor,
       json_row,
-      metadata,
       multipart_files,
       params: None,
     }
@@ -250,7 +266,7 @@ impl<'a> LazyParams<'a> {
 
     let params = self
       .params
-      .insert(Params::from(self.metadata, json_row, multipart_files));
+      .insert(Params::from(self.accessor, json_row, multipart_files));
     return params.as_ref().map_err(|err| err.clone());
   }
 
@@ -258,7 +274,7 @@ impl<'a> LazyParams<'a> {
     if let Some(params) = self.params {
       return params;
     }
-    return Params::from(self.metadata, self.json_row, self.multipart_files);
+    return Params::from(self.accessor, self.json_row, self.multipart_files);
   }
 }
 

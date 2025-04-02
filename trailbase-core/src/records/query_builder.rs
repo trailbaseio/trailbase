@@ -138,8 +138,6 @@ impl SelectQueryBuilder {
     expand: &[&str],
   ) -> Result<Vec<(Arc<TableMetadata>, trailbase_sqlite::Row)>, RecordError> {
     let table_metadata = state.table_metadata();
-    // let Expansions { indexes, joins } =
-    //   Expansions::build(table_metadata, table_name, expand, None)?;
 
     let Some(main_table) = table_metadata.get(table_name) else {
       return Err(RecordError::ApiRequiresTable);
@@ -256,13 +254,14 @@ pub(crate) struct InsertQueryBuilder;
 impl InsertQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
-    metadata: &TableMetadata,
-    params: Params,
+    table_name: &str,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: &str,
+    has_file_columns: bool,
+    params: Params,
   ) -> Result<rusqlite::types::Value, QueryError> {
     let (query, named_params, files) = Self::build_insert_query(
-      metadata.name(),
+      table_name,
       params,
       conflict_resolution,
       Some(return_column_name),
@@ -293,10 +292,8 @@ impl InsertQueryBuilder {
     // Successful write, do not cleanup written files.
     file_manager.release();
 
-    if Some(ConflictResolutionStrategy::Replace) == conflict_resolution
-      && metadata.json_metadata.has_file_columns()
-    {
-      delete_pending_files(state, metadata, rowid).await?;
+    if Some(ConflictResolutionStrategy::Replace) == conflict_resolution && has_file_columns {
+      delete_pending_files(state, table_name, rowid).await?;
     }
 
     return Ok(return_value);
@@ -304,17 +301,18 @@ impl InsertQueryBuilder {
 
   pub(crate) async fn run_bulk(
     state: &AppState,
-    metadata: &TableMetadata,
-    params_list: Vec<Params>,
+    table_name: &str,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: &str,
+    has_file_columns: bool,
+    params_list: Vec<Params>,
   ) -> Result<Vec<rusqlite::types::Value>, QueryError> {
     let mut all_files: FileMetadataContents = vec![];
     let mut query_and_params: Vec<(String, NamedParams)> = vec![];
 
     for params in params_list {
       let (query, named_params, mut files) = Self::build_insert_query(
-        metadata.name(),
+        table_name,
         params,
         conflict_resolution,
         Some(return_column_name),
@@ -361,11 +359,9 @@ impl InsertQueryBuilder {
     // Successful write, do not cleanup written files.
     file_manager.release();
 
-    if Some(ConflictResolutionStrategy::Replace) == conflict_resolution
-      && metadata.json_metadata.has_file_columns()
-    {
+    if Some(ConflictResolutionStrategy::Replace) == conflict_resolution && has_file_columns {
       for (rowid, _) in &result {
-        delete_pending_files(state, metadata, *rowid).await?;
+        delete_pending_files(state, table_name, *rowid).await?;
       }
     }
 
@@ -420,12 +416,12 @@ pub(crate) struct UpdateQueryBuilder;
 impl UpdateQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
-    metadata: &TableMetadata,
-    mut params: Params,
+    table_name: &str,
     pk_column: &str,
     pk_value: Value,
+    has_file_columns: bool,
+    mut params: Params,
   ) -> Result<(), QueryError> {
-    let table_name = metadata.name();
     if params.column_names.is_empty() {
       return Ok(());
     }
@@ -458,8 +454,10 @@ impl UpdateQueryBuilder {
     // Successful write, do not cleanup written files.
     file_manager.release();
 
-    if let Some(rowid) = rowid {
-      delete_pending_files(state, metadata, rowid).await?;
+    if has_file_columns {
+      if let Some(rowid) = rowid {
+        delete_pending_files(state, table_name, rowid).await?;
+      }
     }
 
     return Ok(());
@@ -471,12 +469,11 @@ pub(crate) struct DeleteQueryBuilder;
 impl DeleteQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
-    metadata: &TableMetadata,
+    table_name: &str,
     pk_column: &str,
     pk_value: Value,
+    has_file_columns: bool,
   ) -> Result<i64, QueryError> {
-    let table_name = metadata.name();
-
     let rowid: i64 = state
       .conn()
       .query_value(
@@ -486,7 +483,9 @@ impl DeleteQueryBuilder {
       .await?
       .ok_or_else(|| QueryError::NotFound)?;
 
-    delete_pending_files(state, metadata, rowid).await?;
+    if has_file_columns {
+      delete_pending_files(state, table_name, rowid).await?;
+    }
 
     return Ok(rowid);
   }

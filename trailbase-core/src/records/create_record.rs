@@ -99,9 +99,9 @@ pub async fn create_record_handler(
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
-  let table_metadata = api
-    .table_metadata()
-    .ok_or_else(|| RecordError::ApiRequiresTable)?;
+  if !api.is_table() {
+    return Err(RecordError::ApiRequiresTable);
+  }
 
   let record_and_files: Vec<RecordAndFiles> = match either_request {
     Either::Json(value) => extract_records(value)?,
@@ -111,7 +111,7 @@ pub async fn create_record_handler(
 
   let mut params_list: Vec<Params> = Vec::with_capacity(record_and_files.len());
   for (record, files) in record_and_files {
-    let mut lazy_params = LazyParams::new(table_metadata, record, files);
+    let mut lazy_params = LazyParams::new(&api, record, files);
 
     // NOTE: We're currently serializing the async checks, we could parallelize them however it's
     // unclear if this would be much faster.
@@ -130,8 +130,8 @@ pub async fn create_record_handler(
 
     if api.insert_autofill_missing_user_id_columns() {
       if let Some(ref user) = user {
-        for column_index in &table_metadata.user_id_columns {
-          let col = &table_metadata.schema.columns[*column_index];
+        for column_index in api.user_id_columns() {
+          let col = &api.columns()[*column_index];
 
           if !params.column_names.iter().any(|c| c == &col.name) {
             params.push_param(
@@ -154,10 +154,11 @@ pub async fn create_record_handler(
     1 => {
       let record_id = InsertQueryBuilder::run(
         &state,
-        table_metadata,
-        params_list.swap_remove(0),
+        api.table_name(),
         api.insert_conflict_resolution_strategy(),
         &pk_column.name,
+        api.has_file_columns(),
+        params_list.swap_remove(0),
       )
       .await
       .map_err(|err| RecordError::Internal(err.into()))?;
@@ -167,10 +168,11 @@ pub async fn create_record_handler(
     _ => {
       let record_ids = InsertQueryBuilder::run_bulk(
         &state,
-        table_metadata,
-        params_list,
+        api.table_name(),
         api.insert_conflict_resolution_strategy(),
         &pk_column.name,
+        api.has_file_columns(),
+        params_list,
       )
       .await
       .map_err(|err| RecordError::Internal(err.into()))?;

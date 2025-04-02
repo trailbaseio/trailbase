@@ -35,10 +35,11 @@ pub(crate) async fn insert_row(
 
   let rowid_value = InsertQueryBuilder::run(
     state,
-    &table_metadata,
-    Params::from(&table_metadata, json_row, None)?,
+    table_metadata.name(),
     None,
     "_rowid_",
+    table_metadata.json_metadata.has_file_columns(),
+    Params::from(&*table_metadata, json_row, None)?,
   )
   .await?;
 

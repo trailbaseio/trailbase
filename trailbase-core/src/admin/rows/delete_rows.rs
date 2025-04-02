@@ -58,9 +58,10 @@ pub(crate) async fn delete_row(
 
   DeleteQueryBuilder::run(
     state,
-    &table_metadata,
+    table_metadata.name(),
     pk_col,
     simple_json_value_to_param(column.data_type, value)?,
+    table_metadata.json_metadata.has_file_columns(),
   )
   .await?;
 

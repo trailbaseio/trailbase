@@ -25,10 +25,9 @@ pub async fn delete_record_handler(
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
-
-  let table_metadata = api
-    .table_metadata()
-    .ok_or_else(|| RecordError::ApiRequiresTable)?;
+  if !api.is_table() {
+    return Err(RecordError::ApiRequiresTable);
+  }
 
   let record_id = api.id_to_sql(&record)?;
 
@@ -38,9 +37,15 @@ pub async fn delete_record_handler(
 
   let (_index, pk_column) = api.record_pk_column();
 
-  DeleteQueryBuilder::run(&state, table_metadata, &pk_column.name, record_id)
-    .await
-    .map_err(|err| RecordError::Internal(err.into()))?;
+  DeleteQueryBuilder::run(
+    &state,
+    api.table_name(),
+    &pk_column.name,
+    record_id,
+    api.has_file_columns(),
+  )
+  .await
+  .map_err(|err| RecordError::Internal(err.into()))?;
 
   return Ok((StatusCode::OK, "deleted").into_response());
 }
