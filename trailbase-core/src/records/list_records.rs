@@ -36,6 +36,7 @@ pub struct ListResponse {
 #[template(escape = "none", path = "list_record_query.sql")]
 struct ListRecordQueryTemplate<'a> {
   table_name: &'a str,
+  column_names: &'a [&'a str],
   read_access_clause: &'a str,
   filter_clause: &'a str,
   // TODO: Consider expanding the cursor and order clause directly in the template.
@@ -150,8 +151,10 @@ pub async fn list_records_handler(
 
   // NOTE: the `total_count._value_` underscore is load-bearing to strip it from result based on
   // "_" prefix.
+  let column_names: Vec<_> = api.columns().iter().map(|c| c.name.as_str()).collect();
   let query = ListRecordQueryTemplate {
     table_name,
+    column_names: &column_names,
     read_access_clause,
     filter_clause: &filter_clause,
     cursor_clause: &cursor_clause,
@@ -286,6 +289,7 @@ mod tests {
   fn test_list_records_template() {
     let query = ListRecordQueryTemplate {
       table_name: "table",
+      column_names: &["a", "index"],
       read_access_clause: "TRUE",
       filter_clause: "TRUE",
       cursor_clause: "TRUE",
@@ -336,6 +340,7 @@ mod tests {
 
     let query = ListRecordQueryTemplate {
       table_name: "table",
+      column_names: &["tid", "drop", "index"],
       read_access_clause: "_USER_.id != X'F000'",
       filter_clause: "TRUE",
       cursor_clause: "TRUE",

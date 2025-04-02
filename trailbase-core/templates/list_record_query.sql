@@ -12,7 +12,9 @@ WITH
 {% endif -%}
 
 SELECT
-  _ROW_.*
+{% for name in column_names -%}
+  {%- if !loop.first %},{% endif %}_ROW_."{{ name }}"
+{%- endfor %}
 {%- for expanded in expanded_tables -%}
   , F{{ loop.index0 }}.*
 {%- endfor -%}

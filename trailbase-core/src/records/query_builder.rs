@@ -108,8 +108,17 @@ pub(crate) fn expand_tables<T: AsRef<str>>(
 #[template(escape = "none", path = "read_record_query_expanded.sql")]
 struct ReadRecordExpandedQueryTemplate<'a> {
   table_name: &'a str,
+  column_names: &'a [&'a str],
   pk_column_name: &'a str,
   expanded_tables: &'a [ExpandedTable],
+}
+
+#[derive(Template)]
+#[template(escape = "none", path = "read_record_query.sql")]
+struct ReadRecordQueryTemplate<'a> {
+  table_name: &'a str,
+  column_names: &'a [&'a str],
+  pk_column_name: &'a str,
 }
 
 pub(crate) struct SelectQueryBuilder;
@@ -118,21 +127,25 @@ impl SelectQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
     table_name: &str,
+    column_names: &[&str],
     pk_column: &str,
     pk_value: Value,
-  ) -> Result<Option<trailbase_sqlite::Row>, trailbase_sqlite::Error> {
-    return state
-      .conn()
-      .query_row(
-        &format!(r#"SELECT * FROM "{table_name}" WHERE "{pk_column}" = $1"#),
-        [pk_value],
-      )
-      .await;
+  ) -> Result<Option<trailbase_sqlite::Row>, RecordError> {
+    let sql = ReadRecordQueryTemplate {
+      table_name,
+      column_names,
+      pk_column_name: pk_column,
+    }
+    .render()
+    .map_err(|err| RecordError::Internal(err.into()))?;
+
+    return Ok(state.conn().query_row(&sql, [pk_value]).await?);
   }
 
   pub(crate) async fn run_expanded(
     state: &AppState,
     table_name: &str,
+    column_names: &[&str],
     pk_column: &str,
     pk_value: Value,
     expand: &[&str],
@@ -146,6 +159,7 @@ impl SelectQueryBuilder {
     let expanded_tables = expand_tables(table_metadata, table_name, expand)?;
     let sql = ReadRecordExpandedQueryTemplate {
       table_name,
+      column_names,
       pk_column_name: pk_column,
       expanded_tables: &expanded_tables,
     }
@@ -157,7 +171,7 @@ impl SelectQueryBuilder {
     };
 
     let mut result = Vec::with_capacity(expanded_tables.len() + 1);
-    let mut curr = row.split_off(main_table.schema.columns.len());
+    let mut curr = row.split_off(column_names.len());
     result.push((main_table, row));
 
     for expanded in expanded_tables {

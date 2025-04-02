@@ -45,6 +45,7 @@ pub async fn read_record_handler(
     .await?;
 
   let (_index, pk_column) = api.record_pk_column();
+  let column_names: Vec<_> = api.columns().iter().map(|c| c.name.as_str()).collect();
 
   return Ok(Json(match query.expand {
     Some(query_expand) if !query_expand.is_empty() => {
@@ -67,6 +68,7 @@ pub async fn read_record_handler(
       let mut rows = SelectQueryBuilder::run_expanded(
         &state,
         api.table_name(),
+        &column_names,
         &pk_column.name,
         record_id,
         &query_expand,
@@ -101,8 +103,14 @@ pub async fn read_record_handler(
       .map_err(|err| RecordError::Internal(err.into()))?
     }
     Some(_) | None => {
-      let Some(row) =
-        SelectQueryBuilder::run(&state, api.table_name(), &pk_column.name, record_id).await?
+      let Some(row) = SelectQueryBuilder::run(
+        &state,
+        api.table_name(),
+        &column_names,
+        &pk_column.name,
+        record_id,
+      )
+      .await?
       else {
         return Err(RecordError::RecordNotFound);
       };
