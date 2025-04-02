@@ -1,6 +1,6 @@
 [package]
 name = "trailbase-client"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "OSL-3.0"
 description = "Client for accessing TrailBase's record APIs"
@@ -15,12 +15,12 @@ exclude = [
 eventsource-stream = "0.2.3"
 futures = "0.3.31"
 jsonwebtoken = { version = "9.3.0", default-features = false }
-log = "0.4.25"
 parking_lot = "0.12.3"
-reqwest = { version = "0.12.8", features = ["json", "stream"] }
+reqwest = { version = "0.12.8", features = ["stream"] }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.135"
 thiserror = "2.0.11"
+tracing = "0.1.41"
 url = "2.5.4"
 
 [dev-dependencies]

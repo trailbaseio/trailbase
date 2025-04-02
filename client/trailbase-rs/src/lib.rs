@@ -3,33 +3,55 @@
 //! TrailBase is a sub-millisecond, open-source application server with type-safe APIs, built-in
 //! JS/ES6/TS runtime, realtime, auth, and admin UI built on Rust, SQLite & V8.
 
+#![forbid(unsafe_code, clippy::unwrap_used)]
 #![allow(clippy::needless_return)]
+#![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use eventsource_stream::Eventsource;
 pub use futures::Stream;
 use futures::StreamExt;
 use parking_lot::RwLock;
-use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::Method;
+use reqwest::header::{self, HeaderMap, HeaderValue};
+use reqwest::{Method, StatusCode};
 use std::borrow::Cow;
 use std::sync::Arc;
 use thiserror::Error;
+use tracing::*;
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
+// TODO: Don't leak internals and make this non_exhaustive.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
+  #[error("HTTP status: {0}")]
+  HttpStatus(StatusCode),
+
+  #[error("MissingRefreshToken")]
+  MissingRefreshToken,
+
+  #[error("RecordSerialization: {0}")]
+  RecordSerialization(serde_json::Error),
+
+  #[error("InvalidToken: {0}")]
+  InvalidToken(jsonwebtoken::errors::Error),
+
+  #[error("InvalidUrl: {0}")]
+  InvalidUrl(url::ParseError),
+
+  // NOTE: This error is leaky but comprehensively unpacking reqwest is unsustainable.
   #[error("Reqwest: {0}")]
-  Reqwest(#[from] reqwest::Error),
-  #[error("JSON: {0}")]
-  Json(#[from] serde_json::Error),
-  #[error("JWT: {0}")]
-  Jwt(#[from] jsonwebtoken::errors::Error),
-  #[error("Url: {0}")]
-  Url(#[from] url::ParseError),
-  #[error("Precondition: {0}")]
-  Precondition(&'static str),
+  OtherReqwest(reqwest::Error),
+}
+
+impl From<reqwest::Error> for Error {
+  fn from(err: reqwest::Error) -> Self {
+    match err.status() {
+      Some(code) => Self::HttpStatus(code),
+      _ => Self::OtherReqwest(err),
+    }
+  }
 }
 
 /// Represents the currently logged-in user.
@@ -175,7 +197,8 @@ impl ThinClient {
     let request = {
       let mut builder = self.client.request(method, url).headers(headers);
       if let Some(ref body) = body {
-        builder = builder.body(serde_json::to_string(body)?);
+        let json = serde_json::to_string(body).map_err(Error::RecordSerialization)?;
+        builder = builder.body(json);
       }
       builder.build()?
     };
@@ -200,7 +223,9 @@ fn decode_auth_token<T: DeserializeOwned>(token: &str) -> Result<T, Error> {
   let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::EdDSA);
   validation.insecure_disable_signature_validation();
 
-  return Ok(jsonwebtoken::decode::<T>(token, &decoding_key, &validation).map(|data| data.claims)?);
+  return jsonwebtoken::decode::<T>(token, &decoding_key, &validation)
+    .map(|data| data.claims)
+    .map_err(Error::InvalidToken);
 }
 
 #[derive(Clone)]
@@ -276,7 +301,7 @@ impl RecordApi {
       )
       .await?;
 
-    return Ok(response.json().await?);
+    return json(response).await;
   }
 
   pub async fn read<'a, T: DeserializeOwned>(
@@ -301,7 +326,7 @@ impl RecordApi {
       )
       .await?;
 
-    return Ok(response.json().await?);
+    return json(response).await;
   }
 
   pub async fn create<T: Serialize>(&self, record: T) -> Result<String, Error> {
@@ -328,7 +353,7 @@ impl RecordApi {
       pub ids: Vec<String>,
     }
 
-    return Ok(response.json::<RecordIdResponse>().await?.ids);
+    return Ok(json::<RecordIdResponse>(response).await?.ids);
   }
 
   pub async fn update<'a, T: Serialize>(
@@ -418,7 +443,7 @@ impl TokenState {
     return TokenState {
       state: tokens.and_then(|tokens| {
         let Ok(jwt_token) = decode_auth_token::<JwtTokenClaims>(&tokens.auth_token) else {
-          log::error!("Failed to decode auth token.");
+          error!("Failed to decode auth token.");
           return None;
         };
         return Some((tokens.clone(), jwt_token));
@@ -475,17 +500,14 @@ impl ClientState {
     };
   }
 
-  fn extract_headers_refresh_token(&self) -> Result<(HeaderMap, String), Error> {
+  fn extract_headers_refresh_token(&self) -> Option<(HeaderMap, String)> {
     let tokens = self.tokens.read();
-    let Some(ref state) = tokens.state else {
-      return Err(Error::Precondition("Not logged int?"));
-    };
+    let state = tokens.state.as_ref()?;
 
-    let Some(ref refresh_token) = state.0.refresh_token else {
-      return Err(Error::Precondition("Missing refresh token"));
-    };
-
-    return Ok((tokens.headers.clone(), refresh_token.clone()));
+    if let Some(ref refresh_token) = state.0.refresh_token {
+      return Some((tokens.headers.clone(), refresh_token.clone()));
+    }
+    return None;
   }
 
   async fn refresh_tokens(
@@ -516,7 +538,7 @@ impl ClientState {
       csrf_token: Option<String>,
     }
 
-    let refresh_response: RefreshResponse = response.json().await?;
+    let refresh_response: RefreshResponse = json(response).await?;
     return Ok(TokenState::build(Some(&Tokens {
       auth_token: refresh_response.auth_token,
       refresh_token: Some(refresh_token),
@@ -536,7 +558,7 @@ impl Client {
       state: Arc::new(ClientState {
         client: ThinClient {
           client: reqwest::Client::new(),
-          url: url::Url::parse(site)?,
+          url: url::Url::parse(site).map_err(Error::InvalidUrl)?,
         },
         site: site.to_string(),
         tokens: RwLock::new(TokenState::build(tokens.as_ref())),
@@ -570,7 +592,10 @@ impl Client {
   }
 
   pub async fn refresh(&self) -> Result<(), Error> {
-    let (headers, refresh_token) = self.state.extract_headers_refresh_token()?;
+    let Some((headers, refresh_token)) = self.state.extract_headers_refresh_token() else {
+      return Err(Error::MissingRefreshToken);
+    };
+
     let new_tokens =
       ClientState::refresh_tokens(&self.state.client, headers, refresh_token).await?;
 
@@ -595,7 +620,7 @@ impl Client {
       )
       .await?;
 
-    let tokens: Tokens = response.json().await?;
+    let tokens: Tokens = json(response).await?;
     self.update_tokens(Some(&tokens));
     return Ok(tokens);
   }
@@ -607,7 +632,7 @@ impl Client {
     }
 
     let response_or = match self.state.extract_headers_refresh_token() {
-      Ok((_headers, refresh_token)) => {
+      Some((_headers, refresh_token)) => {
         self
           .state
           .fetch(
@@ -645,7 +670,7 @@ impl Client {
     if let Some(ref s) = state.state {
       let now = now();
       if s.1.exp < now as i64 {
-        log::warn!("Token expired");
+        warn!("Token expired");
       }
     }
 
@@ -654,21 +679,24 @@ impl Client {
 }
 
 fn build_headers(tokens: Option<&Tokens>) -> HeaderMap {
-  let mut base = HeaderMap::new();
-  base.insert("Content-Type", HeaderValue::from_static("application/json"));
+  let mut base = HeaderMap::with_capacity(5);
+  base.insert(
+    header::CONTENT_TYPE,
+    HeaderValue::from_static("application/json"),
+  );
 
   if let Some(tokens) = tokens {
     if let Ok(value) = HeaderValue::from_str(&format!("Bearer {}", tokens.auth_token)) {
-      base.insert("Authorization", value);
+      base.insert(header::AUTHORIZATION, value);
     } else {
-      log::error!("Failed to build bearer token.");
+      error!("Failed to build bearer token.");
     }
 
     if let Some(ref refresh) = tokens.refresh_token {
       if let Ok(value) = HeaderValue::from_str(refresh) {
         base.insert("Refresh-Token", value);
       } else {
-        log::error!("Failed to build refresh token header.");
+        error!("Failed to build refresh token header.");
       }
     }
 
@@ -676,7 +704,7 @@ fn build_headers(tokens: Option<&Tokens>) -> HeaderMap {
       if let Ok(value) = HeaderValue::from_str(csrf) {
         base.insert("CSRF-Token", value);
       } else {
-        log::error!("Failed to build refresh token header.");
+        error!("Failed to build refresh token header.");
       }
     }
   }
@@ -689,6 +717,12 @@ fn now() -> u64 {
     .duration_since(std::time::UNIX_EPOCH)
     .expect("Duration since epoch")
     .as_secs();
+}
+
+#[inline]
+async fn json<T: DeserializeOwned>(resp: reqwest::Response) -> Result<T, Error> {
+  let full = resp.bytes().await?;
+  return serde_json::from_slice(&full).map_err(Error::RecordSerialization);
 }
 
 const AUTH_API: &str = "api/auth/v1";
