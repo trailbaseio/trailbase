@@ -514,7 +514,7 @@ impl SubscriptionManager {
     user: Option<User>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
     let table_name = api.table_name().to_string();
-    let pk_column = &api.record_pk_column().name;
+    let pk_column = &api.record_pk_column().1.name;
 
     let Some(row) = self
       .state

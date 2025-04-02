@@ -234,18 +234,12 @@ impl ViewMetadata {
 }
 
 pub trait TableOrViewMetadata {
-  fn column_by_name(&self, key: &str) -> Option<(usize, &Column)>;
-
   fn record_pk_column(&self) -> Option<(usize, &Column)>;
   fn json_metadata(&self) -> Option<&JsonMetadata>;
   fn columns(&self) -> Option<&[Column]>;
 }
 
 impl TableOrViewMetadata for TableMetadata {
-  fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
-    self.column_by_name(key)
-  }
-
   fn columns(&self) -> Option<&[Column]> {
     return Some(&self.schema.columns);
   }
@@ -261,10 +255,6 @@ impl TableOrViewMetadata for TableMetadata {
 }
 
 impl TableOrViewMetadata for ViewMetadata {
-  fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
-    self.column_by_name(key)
-  }
-
   fn columns(&self) -> Option<&[Column]> {
     return self.schema.columns.as_deref();
   }

@@ -11,7 +11,7 @@ use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
 use crate::records::params::{prefix_colon, LazyParams};
 use crate::records::{Permission, RecordError};
 use crate::schema::{Column, ColumnDataType};
-use crate::table_metadata::{TableMetadata, TableOrViewMetadata, ViewMetadata};
+use crate::table_metadata::{JsonColumnMetadata, TableMetadata, TableOrViewMetadata, ViewMetadata};
 use crate::util::{assert_uuidv7, b64_to_id};
 
 enum RecordApiMetadata {
@@ -25,14 +25,6 @@ impl RecordApiMetadata {
     match &self {
       RecordApiMetadata::Table(table) => &table.schema.name,
       RecordApiMetadata::View(view) => &view.schema.name,
-    }
-  }
-
-  #[inline]
-  fn metadata(&self) -> &(dyn TableOrViewMetadata + Send + Sync) {
-    match &self {
-      RecordApiMetadata::Table(table) => table,
-      RecordApiMetadata::View(view) => view,
     }
   }
 }
@@ -53,9 +45,15 @@ pub struct RecordApi {
 }
 
 struct RecordApiState {
+  /// Database connection for access checks.
   conn: trailbase_sqlite::Connection,
+
+  /// Schema metadata
   metadata: RecordApiMetadata,
-  record_pk_column: Column,
+  record_pk_column: (usize, Column),
+  columns: Vec<Column>,
+  json_metadata: Vec<Option<JsonColumnMetadata>>,
+  has_file_columns: bool,
 
   // Below properties are filled from `proto::RecordApiConfig`.
   api_name: String,
@@ -116,11 +114,15 @@ impl RecordApi {
       ));
     }
 
-    let Some((_index, record_pk_column)) = table_metadata.record_pk_column() else {
+    let Some((pk_index, pk_column)) = table_metadata.record_pk_column() else {
       return Err(format!(
         "RecordApi requires integer/UUIDv7 primary key column: {config:?}"
       ));
     };
+    let record_pk_column = (pk_index, pk_column.clone());
+    let columns = table_metadata.schema.columns.clone();
+    let json_metadata = table_metadata.json_metadata.columns.clone();
+    let has_file_columns = table_metadata.json_metadata.has_file_columns();
 
     let named_params_template: NamedParams = table_metadata
       .schema
@@ -136,8 +138,11 @@ impl RecordApi {
 
     return Self::from_impl(
       conn,
-      record_pk_column.clone(),
       RecordApiMetadata::Table(table_metadata),
+      record_pk_column,
+      columns,
+      json_metadata,
+      has_file_columns,
       config,
       named_params_template,
     );
@@ -166,28 +171,46 @@ impl RecordApi {
       ));
     }
 
-    let Some((_index, record_pk_column)) = view_metadata.record_pk_column() else {
+    let Some((pk_index, pk_column)) = view_metadata.record_pk_column() else {
       return Err(format!(
         "RecordApi requires integer/UUIDv7 primary key column: {config:?}"
       ));
     };
+    let record_pk_column = (pk_index, pk_column.clone());
+    let Some(columns) = view_metadata.schema.columns.clone() else {
+      return Err("RecordApi requires schema".to_string());
+    };
+    let Some(json_metadata) = view_metadata.json_metadata() else {
+      return Err("RecordApi requires json metadata".to_string());
+    };
+    let json_columns = json_metadata.columns.clone();
+    let has_file_columns = json_metadata.has_file_columns();
 
     return Self::from_impl(
       conn,
-      record_pk_column.clone(),
       RecordApiMetadata::View(view_metadata),
+      record_pk_column,
+      columns,
+      json_columns,
+      has_file_columns,
       config,
       NamedParams::new(),
     );
   }
 
+  #[allow(clippy::too_many_arguments)]
   fn from_impl(
     conn: trailbase_sqlite::Connection,
-    record_pk_column: Column,
     metadata: RecordApiMetadata,
+    record_pk_column: (usize, Column),
+    columns: Vec<Column>,
+    json_metadata: Vec<Option<JsonColumnMetadata>>,
+    has_file_columns: bool,
     config: RecordApiConfig,
     named_params_template: NamedParams,
   ) -> Result<Self, String> {
+    assert_eq!(columns.len(), json_metadata.len());
+
     let Some(api_name) = config.name.clone() else {
       return Err(format!("RecordApi misses name: {config:?}"));
     };
@@ -195,7 +218,7 @@ impl RecordApi {
     let (read_access_query, subscription_read_access_query) = match &config.read_access_rule {
       Some(rule) => {
         let read_access_query =
-          build_read_delete_schema_query(metadata.table_name(), &record_pk_column.name, rule);
+          build_read_delete_schema_query(metadata.table_name(), &record_pk_column.1.name, rule);
 
         let subscription_read_access_query = match metadata {
           RecordApiMetadata::Table(ref m) => Some(
@@ -215,11 +238,11 @@ impl RecordApi {
     };
 
     let delete_access_query = config.delete_access_rule.as_ref().map(|rule| {
-      build_read_delete_schema_query(metadata.table_name(), &record_pk_column.name, rule)
+      build_read_delete_schema_query(metadata.table_name(), &record_pk_column.1.name, rule)
     });
 
     let schema_access_query = config.schema_access_rule.as_ref().map(|rule| {
-      build_read_delete_schema_query(metadata.table_name(), &record_pk_column.name, rule)
+      build_read_delete_schema_query(metadata.table_name(), &record_pk_column.1.name, rule)
     });
 
     let create_access_query = match &config.create_access_rule {
@@ -232,9 +255,11 @@ impl RecordApi {
 
     let update_access_query = match &config.update_access_rule {
       Some(rule) => match metadata {
-        RecordApiMetadata::Table(ref m) => {
-          Some(build_update_access_query(m, &record_pk_column.name, rule)?)
-        }
+        RecordApiMetadata::Table(ref m) => Some(build_update_access_query(
+          m,
+          &record_pk_column.1.name,
+          rule,
+        )?),
         _ => None,
       },
       None => None,
@@ -245,6 +270,10 @@ impl RecordApi {
         conn,
         metadata,
         record_pk_column,
+        columns,
+        json_metadata,
+        has_file_columns,
+
         // proto::RecordApiConfig properties below:
         api_name,
 
@@ -308,14 +337,30 @@ impl RecordApi {
     return self.state.metadata.table_name();
   }
 
+  #[allow(unused)]
   #[inline]
-  pub fn metadata(&self) -> &(dyn TableOrViewMetadata + Send + Sync) {
-    return self.state.metadata.metadata();
+  pub fn has_file_columns(&self) -> bool {
+    return self.state.has_file_columns;
   }
 
   #[inline]
   pub(crate) fn expand(&self) -> Option<&HashMap<String, serde_json::Value>> {
     return self.state.expand.as_ref();
+  }
+
+  #[inline]
+  pub fn record_pk_column(&self) -> &(usize, Column) {
+    return &self.state.record_pk_column;
+  }
+
+  #[inline]
+  pub fn columns(&self) -> &[Column] {
+    return &self.state.columns;
+  }
+
+  #[inline]
+  pub fn json_column_metadata(&self) -> &[Option<JsonColumnMetadata>] {
+    return &self.state.json_metadata;
   }
 
   pub fn table_metadata(&self) -> Option<&TableMetadata> {
@@ -326,7 +371,7 @@ impl RecordApi {
   }
 
   pub fn id_to_sql(&self, id: &str) -> Result<Value, RecordError> {
-    return match self.state.record_pk_column.data_type {
+    return match self.state.record_pk_column.1.data_type {
       ColumnDataType::Blob => {
         // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
         // would be more explicit rely on CHECK(...) column options.
@@ -346,11 +391,6 @@ impl RecordApi {
       )),
       _ => Err(RecordError::BadRequest("Invalid id")),
     };
-  }
-
-  #[inline]
-  pub fn record_pk_column(&self) -> &Column {
-    return &self.state.record_pk_column;
   }
 
   #[inline]

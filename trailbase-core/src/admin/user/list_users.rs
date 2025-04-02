@@ -78,7 +78,8 @@ pub async fn list_users_handler(
   };
   // Where clause contains column filters and cursor depending on what's present in the url query
   // string.
-  let filter_where_clause = build_filter_where_clause(&*table_metadata, filter_params)?;
+  let filter_where_clause =
+    build_filter_where_clause(&table_metadata.schema.columns, filter_params)?;
 
   let total_row_count: i64 = conn
     .query_value(

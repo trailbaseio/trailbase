@@ -122,7 +122,8 @@ pub async fn list_logs_handler(
   // We could cache, however this is just the admin logs handler.
   let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME).await?;
   let table_metadata = TableMetadata::new(table.clone(), &[table]);
-  let filter_where_clause = build_filter_where_clause(&table_metadata, filter_params)?;
+  let filter_where_clause =
+    build_filter_where_clause(&table_metadata.schema.columns, filter_params)?;
 
   let total_row_count: i64 = conn
     .query_value(

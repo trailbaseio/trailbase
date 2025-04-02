@@ -36,14 +36,11 @@ pub async fn delete_record_handler(
     .check_record_level_access(Permission::Delete, Some(&record_id), None, user.as_ref())
     .await?;
 
-  DeleteQueryBuilder::run(
-    &state,
-    table_metadata,
-    &api.record_pk_column().name,
-    record_id,
-  )
-  .await
-  .map_err(|err| RecordError::Internal(err.into()))?;
+  let (_index, pk_column) = api.record_pk_column();
+
+  DeleteQueryBuilder::run(&state, table_metadata, &pk_column.name, record_id)
+    .await
+    .map_err(|err| RecordError::Internal(err.into()))?;
 
   return Ok((StatusCode::OK, "deleted").into_response());
 }

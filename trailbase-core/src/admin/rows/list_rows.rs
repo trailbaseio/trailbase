@@ -61,7 +61,16 @@ pub async fn list_rows_handler(
 
   // Where clause contains column filters and cursor depending on what's present in the url query
   // string.
-  let filter_where_clause = build_filter_where_clause(&*table_or_view_metadata, filter_params)?;
+  let filter_where_clause = if let Some(columns) = table_or_view_metadata.columns() {
+    build_filter_where_clause(columns, filter_params)?
+  } else {
+    debug!("Filter clauses currently not supported for complex views");
+
+    WhereClause {
+      clause: "TRUE".to_string(),
+      params: vec![],
+    }
+  };
 
   let total_row_count = {
     let where_clause = &filter_where_clause.clause;

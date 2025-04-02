@@ -68,17 +68,7 @@ pub async fn list_records_handler(
   api.check_table_level_access(Permission::Read, user.as_ref())?;
 
   let table_name = api.table_name();
-
-  let metadata = api.metadata();
-  let Some(columns) = metadata.columns() else {
-    return Err(RecordError::Internal("missing columns".into()));
-  };
-  let Some(json_metadata) = metadata.json_metadata() else {
-    return Err(RecordError::Internal("missing json metadata".into()));
-  };
-  let Some((pk_index, pk_column)) = metadata.record_pk_column() else {
-    return Err(RecordError::Internal("missing pk column".into()));
-  };
+  let (pk_index, pk_column) = api.record_pk_column();
 
   let QueryParseResult {
     limit,
@@ -104,7 +94,7 @@ pub async fn list_records_handler(
   let WhereClause {
     clause: filter_clause,
     mut params,
-  } = build_filter_where_clause(metadata, filter_params)
+  } = build_filter_where_clause(api.columns(), filter_params)
     .map_err(|_err| RecordError::BadRequest("Invalid filter params"))?;
 
   // User properties
@@ -127,7 +117,7 @@ pub async fn list_records_handler(
   };
 
   let order_clause = order
-    .unwrap_or_else(|| vec![(api.record_pk_column().name.clone(), Order::Descending)])
+    .unwrap_or_else(|| vec![(pk_column.name.clone(), Order::Descending)])
     .iter()
     .map(|(col, ord)| {
       format!(
@@ -183,8 +173,8 @@ pub async fn list_records_handler(
     }));
   };
 
-  assert!(pk_index < last_row.len());
-  let cursor = match &last_row[pk_index] {
+  assert!(*pk_index < last_row.len());
+  let cursor = match &last_row[*pk_index] {
     rusqlite::types::Value::Blob(blob) => {
       uuid::Uuid::from_slice(blob).as_ref().map(uuid_to_b64).ok()
     }
@@ -205,8 +195,8 @@ pub async fn list_records_handler(
 
   let records = if expanded_tables.is_empty() {
     rows_to_json_expand(
-      columns,
-      &json_metadata.columns,
+      api.columns(),
+      api.json_column_metadata(),
       rows,
       column_filter,
       api.expand(),
@@ -223,7 +213,7 @@ pub async fn list_records_handler(
           ));
         };
 
-        let mut curr = row.split_off(columns.len());
+        let mut curr = row.split_off(api.columns().len());
 
         for expanded in &expanded_tables {
           let next = curr.split_off(expanded.num_columns);
@@ -243,8 +233,8 @@ pub async fn list_records_handler(
         }
 
         return row_to_json_expand(
-          columns,
-          &json_metadata.columns,
+          api.columns(),
+          api.json_column_metadata(),
           &row,
           column_filter,
           Some(&expand),

@@ -48,13 +48,15 @@ pub async fn update_record_handler(
     )
     .await?;
 
+  let (_index, pk_column) = api.record_pk_column();
+
   UpdateQueryBuilder::run(
     &state,
     table_metadata,
     lazy_params
       .consume()
       .map_err(|err| RecordError::Internal(err.into()))?,
-    &api.record_pk_column().name,
+    &pk_column.name,
     record_id,
   )
   .await

@@ -28,9 +28,6 @@ pub async fn json_schema_handler(
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
-  let Some(columns) = api.metadata().columns() else {
-    return Err(RecordError::Internal("Missing schema".into()));
-  };
 
   api
     .check_record_level_access(Permission::Schema, None, None, user.as_ref())
@@ -47,12 +44,12 @@ pub async fn json_schema_handler(
       };
 
       let (_schema, json) =
-        build_json_schema_recursive(api.table_name(), columns, mode, Some(expand))
+        build_json_schema_recursive(api.table_name(), api.columns(), mode, Some(expand))
           .map_err(|err| RecordError::Internal(err.into()))?;
       return Ok(Json(json));
     }
     _ => {
-      let (_schema, json) = build_json_schema(api.table_name(), columns, mode)
+      let (_schema, json) = build_json_schema(api.table_name(), api.columns(), mode)
         .map_err(|err| RecordError::Internal(err.into()))?;
       return Ok(Json(json));
     }

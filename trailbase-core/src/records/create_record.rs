@@ -146,7 +146,7 @@ pub async fn create_record_handler(
     params_list.push(params);
   }
 
-  let pk_column = api.record_pk_column();
+  let (_index, pk_column) = api.record_pk_column();
   let record_ids: Vec<String> = match params_list.len() {
     0 => {
       return Err(RecordError::BadRequest("no values provided"));

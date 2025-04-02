@@ -5,7 +5,7 @@ use thiserror::Error;
 use tracing::*;
 
 use crate::records::params::json_string_to_value;
-use crate::table_metadata::TableOrViewMetadata;
+use crate::schema::Column;
 use crate::util::b64_to_id;
 
 #[derive(Debug, Error)]
@@ -247,7 +247,7 @@ pub struct WhereClause {
 }
 
 pub fn build_filter_where_clause(
-  table_metadata: &dyn TableOrViewMetadata,
+  columns: &[Column],
   filter_params: Option<HashMap<String, Vec<QueryParam>>>,
 ) -> Result<WhereClause, WhereClauseError> {
   let mut where_clauses = Vec::<String>::with_capacity(16);
@@ -263,7 +263,7 @@ pub fn build_filter_where_clause(
 
       // IMPORTANT: We only include parameters with known columns to avoid building an invalid
       // query early and forbid injections.
-      let Some((_index, col)) = table_metadata.column_by_name(&column_name) else {
+      let Some(col) = columns.iter().find(|c| c.name == column_name) else {
         return Err(WhereClauseError::UnrecognizedParam(format!(
           "Unrecognized parameter: {column_name}"
         )));
