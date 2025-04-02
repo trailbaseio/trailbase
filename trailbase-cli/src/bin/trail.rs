@@ -170,15 +170,19 @@ async fn async_main() -> Result<(), BoxError> {
       if let Some(table) = table_metadata.get(table_name) {
         let (_validator, schema) = trailbase::api::build_json_schema(
           table.name(),
-          &*table,
+          &table.schema.columns,
           cmd.mode.unwrap_or(JsonSchemaModeArg::Insert).into(),
         )?;
 
         println!("{}", serde_json::to_string_pretty(&schema)?);
       } else if let Some(view) = table_metadata.get_view(table_name) {
+        let Some(ref columns) = view.schema.columns else {
+          return Err(format!("Could not derive schema for complex view: '{table_name}'").into());
+        };
+
         let (_validator, schema) = trailbase::api::build_json_schema(
           view.name(),
-          &*view,
+          columns,
           cmd.mode.unwrap_or(JsonSchemaModeArg::Insert).into(),
         )?;
 

@@ -21,11 +21,9 @@ pub async fn get_table_schema_handler(
     return Err(Error::Precondition(format!("Table {table_name} not found")));
   };
 
-  // TOOD: Allow controlling the schema mode to generate different types for insert, select, and
-  // update.
   let (_schema, json) = build_json_schema(
     table_metadata.name(),
-    &*table_metadata,
+    &table_metadata.schema.columns,
     query.mode.unwrap_or(JsonSchemaMode::Insert),
   )?;
 

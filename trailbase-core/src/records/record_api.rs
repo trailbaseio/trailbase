@@ -8,7 +8,7 @@ use trailbase_sqlite::{NamedParamRef, NamedParams, Params as _, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
-use crate::records::params::{prefix_colon, LazyParams, Params};
+use crate::records::params::{prefix_colon, LazyParams};
 use crate::records::{Permission, RecordError};
 use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{TableMetadata, TableOrViewMetadata, ViewMetadata};
@@ -81,6 +81,8 @@ struct RecordApiState {
 
   schema_access_rule: Option<String>,
   schema_access_query: Option<String>,
+
+  named_params_template: NamedParams,
 }
 
 impl RecordApiState {
@@ -120,11 +122,24 @@ impl RecordApi {
       ));
     };
 
+    let named_params_template: NamedParams = table_metadata
+      .schema
+      .columns
+      .iter()
+      .map(|column| {
+        (
+          Cow::Owned(prefix_colon(&column.name)),
+          trailbase_sqlite::Value::Null,
+        )
+      })
+      .collect();
+
     return Self::from_impl(
       conn,
       record_pk_column.clone(),
       RecordApiMetadata::Table(table_metadata),
       config,
+      named_params_template,
     );
   }
 
@@ -162,6 +177,7 @@ impl RecordApi {
       record_pk_column.clone(),
       RecordApiMetadata::View(view_metadata),
       config,
+      NamedParams::new(),
     );
   }
 
@@ -170,6 +186,7 @@ impl RecordApi {
     record_pk_column: Column,
     metadata: RecordApiMetadata,
     config: RecordApiConfig,
+    named_params_template: NamedParams,
   ) -> Result<Self, String> {
     let Some(api_name) = config.name.clone() else {
       return Err(format!("RecordApi misses name: {config:?}"));
@@ -275,6 +292,8 @@ impl RecordApi {
 
         schema_access_rule: config.schema_access_rule,
         schema_access_query,
+
+        named_params_template,
       }),
     });
   }
@@ -509,6 +528,7 @@ impl RecordApi {
     // check. Below we're building the query and binding the context as params accordingly.
     let mut params = match p {
       Permission::Create | Permission::Update => {
+        // Create and update cannot write to views.
         let Some(table_metadata) = self.table_metadata() else {
           return Err(RecordError::ApiRequiresTable);
         };
@@ -518,7 +538,31 @@ impl RecordApi {
           .params()
           .map_err(|err| RecordError::Internal(err.into()))?;
 
-        build_request_params(table_metadata, request_params)
+        // NOTE: We cannot have access queries access missing _REQ_.props. So we need to inject an
+        // explicit NULL value for all missing fields on the request. Can we make this cheaper,
+        // either by pre-processing the access query or improving construction?
+        let mut named_params = self.state.named_params_template.clone();
+
+        // 'outer: for (placeholder, value) in &request_params.named_params {
+        //   for (p, ref mut v) in named_params.iter_mut() {
+        //     if *placeholder == *p {
+        //       *v = value.clone();
+        //       continue 'outer;
+        //     }
+        //   }
+        // }
+
+        for (param_index, col_name) in request_params.column_names.iter().enumerate() {
+          let Some(col_index) = table_metadata.column_index_by_name(col_name) else {
+            // We simply skip unknown columns, this could simply be malformed input or version skew.
+            // This is similar in spirit to protobuf's unknown fields behavior.
+            continue;
+          };
+
+          named_params[col_index].1 = request_params.named_params[param_index].1.clone();
+        }
+
+        named_params
       }
       Permission::Read | Permission::Delete | Permission::Schema => NamedParams::with_capacity(2),
     };
@@ -636,36 +680,6 @@ fn build_update_access_query(
   }
   .render()
   .map_err(|err| err.to_string());
-}
-
-/// Build SQL named parameters from request fields.
-#[inline]
-fn build_request_params(table_metadata: &TableMetadata, request_params: &Params) -> NamedParams {
-  // NOTE: We cannot have access queries access missing _REQ_.props. So we need to inject an
-  // explicit NULL value for all missing fields on the request. Can we make this cheaper, either by
-  // pre-processing the access query or improving construction?
-  let mut named_params = table_metadata.named_params_template.clone();
-
-  // 'outer: for (placeholder, value) in &request_params.named_params {
-  //   for (p, ref mut v) in named_params.iter_mut() {
-  //     if *placeholder == *p {
-  //       *v = value.clone();
-  //       continue 'outer;
-  //     }
-  //   }
-  // }
-
-  for (param_index, col_name) in request_params.column_names.iter().enumerate() {
-    let Some(col_index) = table_metadata.column_index_by_name(col_name) else {
-      // We simply skip unknown columns, this could simply be malformed input or version skew. This
-      // is similar in spirit to protobuf's unknown fields behavior.
-      continue;
-    };
-
-    named_params[col_index].1 = request_params.named_params[param_index].1.clone();
-  }
-
-  return named_params;
 }
 
 fn convert_acl(acl: &Vec<i32>) -> u8 {

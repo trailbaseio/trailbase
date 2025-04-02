@@ -10,9 +10,7 @@ use crate::records::error::RecordError;
 use crate::records::files::{delete_pending_files, FileManager};
 use crate::records::params::{FileMetadataContents, Params};
 use crate::schema::{Column, ColumnOption};
-use crate::table_metadata::{
-  ColumnMetadata, JsonColumnMetadata, TableMetadata, TableMetadataCache,
-};
+use crate::table_metadata::{JsonColumnMetadata, TableMetadata, TableMetadataCache};
 use crate::AppState;
 
 #[derive(Debug, thiserror::Error)]
@@ -60,7 +58,7 @@ pub(crate) fn expand_tables<T: AsRef<str>>(
     if col_name.is_empty() {
       continue;
     }
-    let Some((column, _col_metadata)) = root_table.column_by_name(col_name) else {
+    let Some((_index, column)) = root_table.column_by_name(col_name) else {
       return Err(RecordError::ApiRequiresTable);
     };
 
@@ -180,13 +178,14 @@ impl GetFileQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
     table_name: &str,
-    file_column: (&Column, &ColumnMetadata),
+    file_column: &Column,
+    json_metadata: &JsonColumnMetadata,
     pk_column: &str,
     pk_value: Value,
   ) -> Result<FileUpload, QueryError> {
-    return match &file_column.1.json {
-      Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUpload" => {
-        let column_name = &file_column.0.name;
+    return match &json_metadata {
+      JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
+        let column_name = &file_column.name;
 
         let Some(row) = state
           .conn()
@@ -214,13 +213,14 @@ impl GetFilesQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
     table_name: &str,
-    file_column: (&Column, &ColumnMetadata),
+    file_column: &Column,
+    json_metadata: &JsonColumnMetadata,
     pk_column: &str,
     pk_value: Value,
   ) -> Result<FileUploads, QueryError> {
-    return match &file_column.1.json {
-      Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUploads" => {
-        let column_name = &file_column.0.name;
+    return match &json_metadata {
+      JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
+        let column_name = &file_column.name;
 
         let Some(row) = state
           .conn()
@@ -294,7 +294,7 @@ impl InsertQueryBuilder {
     file_manager.release();
 
     if Some(ConflictResolutionStrategy::Replace) == conflict_resolution
-      && metadata.has_file_columns()
+      && metadata.json_metadata.has_file_columns()
     {
       delete_pending_files(state, metadata, rowid).await?;
     }
@@ -362,7 +362,7 @@ impl InsertQueryBuilder {
     file_manager.release();
 
     if Some(ConflictResolutionStrategy::Replace) == conflict_resolution
-      && metadata.has_file_columns()
+      && metadata.json_metadata.has_file_columns()
     {
       for (rowid, _) in &result {
         delete_pending_files(state, metadata, *rowid).await?;

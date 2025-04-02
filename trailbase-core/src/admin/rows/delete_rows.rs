@@ -48,7 +48,7 @@ pub(crate) async fn delete_row(
     return Err(Error::Precondition(format!("Table {table_name} not found")));
   };
 
-  let Some((column, _col_meta)) = table_metadata.column_by_name(pk_col) else {
+  let Some((_index, column)) = table_metadata.column_by_name(pk_col) else {
     return Err(Error::Precondition(format!("Missing column: {pk_col}")));
   };
 

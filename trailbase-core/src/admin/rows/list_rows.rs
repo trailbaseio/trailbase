@@ -118,7 +118,7 @@ pub async fn list_rows_handler(
       _ => {
         // VIEW-case
         if let Some(columns) = table_or_view_metadata.columns() {
-          columns.clone()
+          columns.to_vec()
         } else {
           debug!("Falling back to inferred cols for view: '{table_name}'");
           columns.unwrap_or_else(Vec::new)

@@ -6,7 +6,7 @@ use thiserror::Error;
 use tracing::*;
 
 use crate::schema::{Column, ColumnDataType};
-use crate::table_metadata::ColumnMetadata;
+use crate::table_metadata::JsonColumnMetadata;
 
 #[derive(Debug, Error)]
 pub enum JsonError {
@@ -46,11 +46,11 @@ pub(crate) fn valueref_to_json(
 /// Serialize SQL row to json.
 pub fn row_to_json(
   columns: &[Column],
-  column_metadata: &[ColumnMetadata],
+  json_metadata: &[Option<JsonColumnMetadata>],
   row: &trailbase_sqlite::Row,
   column_filter: fn(&str) -> bool,
 ) -> Result<serde_json::Value, JsonError> {
-  return row_to_json_expand(columns, column_metadata, row, column_filter, None);
+  return row_to_json_expand(columns, json_metadata, row, column_filter, None);
 }
 
 #[inline]
@@ -63,7 +63,7 @@ fn is_foreign_key(options: &[ColumnOption]) -> bool {
 /// Serialize SQL row to json.
 pub fn row_to_json_expand(
   columns: &[Column],
-  column_metadata: &[ColumnMetadata],
+  json_metadata: &[Option<JsonColumnMetadata>],
   row: &trailbase_sqlite::Row,
   column_filter: fn(&str) -> bool,
   expand: Option<&HashMap<String, serde_json::Value>>,
@@ -78,7 +78,7 @@ pub fn row_to_json_expand(
       }
 
       assert!(i < columns.len());
-      assert!(i < column_metadata.len());
+      assert!(i < json_metadata.len());
       let column = &columns[i];
       assert_eq!(column_name, column.name);
 
@@ -118,8 +118,8 @@ pub fn row_to_json_expand(
       }
 
       if let rusqlite::types::Value::Text(str) = &value {
-        let metadata = &column_metadata[i];
-        if metadata.json.is_some() {
+        let metadata = &json_metadata[i];
+        if metadata.is_some() {
           return match serde_json::from_str(str) {
             Ok(json) => Some(Ok((column_name.to_string(), json))),
             Err(err) => Some(Err(err.into())),
@@ -140,27 +140,27 @@ pub fn row_to_json_expand(
 /// Turns rows into a list of json objects.
 pub fn rows_to_json(
   columns: &[Column],
-  column_metadata: &[ColumnMetadata],
+  json_metadata: &[Option<JsonColumnMetadata>],
   rows: trailbase_sqlite::Rows,
   column_filter: fn(&str) -> bool,
 ) -> Result<Vec<serde_json::Value>, JsonError> {
   return rows
     .iter()
-    .map(|row| row_to_json_expand(columns, column_metadata, row, column_filter, None))
+    .map(|row| row_to_json_expand(columns, json_metadata, row, column_filter, None))
     .collect::<Result<Vec<_>, JsonError>>();
 }
 
 /// Turns rows into a list of json objects.
 pub fn rows_to_json_expand(
   columns: &[Column],
-  column_metadata: &[ColumnMetadata],
+  json_metadata: &[Option<JsonColumnMetadata>],
   rows: trailbase_sqlite::Rows,
   column_filter: fn(&str) -> bool,
   expand: Option<&HashMap<String, serde_json::Value>>,
 ) -> Result<Vec<serde_json::Value>, JsonError> {
   return rows
     .iter()
-    .map(|row| row_to_json_expand(columns, column_metadata, row, column_filter, expand))
+    .map(|row| row_to_json_expand(columns, json_metadata, row, column_filter, expand))
     .collect::<Result<Vec<_>, JsonError>>();
 }
 
@@ -298,7 +298,7 @@ mod tests {
     let rows = conn.query("SELECT * FROM test_table", ()).await.unwrap();
     let parsed = rows_to_json(
       metadata.columns().unwrap(),
-      metadata.column_metadata(),
+      &metadata.json_metadata().unwrap().columns,
       rows,
       |_| true,
     )

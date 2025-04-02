@@ -5,15 +5,13 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlite3_parser::ast::Stmt;
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::*;
-use trailbase_sqlite::{params, NamedParams};
+use trailbase_sqlite::params;
 
 use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
-use crate::records::params::prefix_colon;
 use crate::schema::{Column, ColumnDataType, ColumnOption, SchemaError, Table, View};
 
 // TODO: Can we merge this with trailbase_sqlite::schema::SchemaError?
@@ -61,46 +59,34 @@ impl JsonColumnMetadata {
 }
 
 #[derive(Debug, Clone)]
-pub struct ColumnMetadata {
-  pub json: Option<JsonColumnMetadata>,
+pub struct JsonMetadata {
+  pub columns: Vec<Option<JsonColumnMetadata>>,
+
+  file_upload_columns: Vec<usize>,
+  file_uploads_columns: Vec<usize>,
 }
 
-/// A data class describing a sqlite Table and additional meta data useful for TrailBase.
-///
-/// An example of TrailBase idiosyncrasies are UUIDv7 columns, which are a bespoke concept.
-#[derive(Debug, Clone)]
-pub struct TableMetadata {
-  pub schema: Table,
+impl JsonMetadata {
+  pub fn has_file_columns(&self) -> bool {
+    return !self.file_upload_columns.is_empty() || !self.file_uploads_columns.is_empty();
+  }
 
-  metadata: Vec<ColumnMetadata>,
-  name_to_index: HashMap<String, usize>,
+  fn from_table(table: &Table) -> Self {
+    return Self::from_columns(&table.columns);
+  }
 
-  pub record_pk_column: Option<usize>,
-  pub user_id_columns: Vec<usize>,
-  pub file_upload_columns: Vec<usize>,
-  pub file_uploads_columns: Vec<usize>,
+  fn from_view(view: &View) -> Option<Self> {
+    return view.columns.as_ref().map(|cols| Self::from_columns(cols));
+  }
 
-  // TODO: Add triggers once sqlparser supports a sqlite "CREATE TRIGGER" statements.
-  pub(crate) named_params_template: NamedParams,
-}
-
-impl TableMetadata {
-  /// Build a new TableMetadata instance containing TrailBase/RecordApi specific information.
-  ///
-  /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
-  /// key relationships.
-  pub(crate) fn new(table: Table, tables: &[Table]) -> Self {
+  fn from_columns(columns: &[Column]) -> Self {
     let mut file_upload_columns: Vec<usize> = vec![];
     let mut file_uploads_columns: Vec<usize> = vec![];
-    let mut name_to_index = HashMap::<String, usize>::new();
 
-    let metadata: Vec<ColumnMetadata> = table
-      .columns
+    let columns = columns
       .iter()
       .enumerate()
       .map(|(index, col)| {
-        name_to_index.insert(col.name.clone(), index);
-
         let json_metadata = build_json_metadata(col);
         if let Some(ref json_metadata) = json_metadata {
           match json_metadata {
@@ -114,62 +100,77 @@ impl TableMetadata {
           };
         }
 
-        return ColumnMetadata {
-          json: json_metadata,
-        };
+        return json_metadata;
       })
       .collect();
+
+    return Self {
+      columns,
+      file_upload_columns,
+      file_uploads_columns,
+    };
+  }
+}
+
+/// A data class describing a sqlite Table and additional meta data useful for TrailBase.
+///
+/// An example of TrailBase idiosyncrasies are UUIDv7 columns, which are a bespoke concept.
+#[derive(Debug, Clone)]
+pub struct TableMetadata {
+  pub schema: Table,
+
+  /// If and which column on this table qualifies as a record PK column, i.e. integer or UUIDv7.
+  pub record_pk_column: Option<usize>,
+  /// If and which columns on this table reference _user(id).
+  pub user_id_columns: Vec<usize>,
+  /// Metadata for CHECK(json_schema()) columns.
+  pub json_metadata: JsonMetadata,
+
+  name_to_index: HashMap<String, usize>,
+  // TODO: Add triggers once sqlparser supports a sqlite "CREATE TRIGGER" statements.
+}
+
+impl TableMetadata {
+  /// Build a new TableMetadata instance containing TrailBase/RecordApi specific information.
+  ///
+  /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
+  /// key relationships.
+  pub(crate) fn new(table: Table, tables: &[Table]) -> Self {
+    let name_to_index = HashMap::<String, usize>::from_iter(
+      table
+        .columns
+        .iter()
+        .enumerate()
+        .map(|(index, col)| (col.name.clone(), index)),
+    );
 
     let record_pk_column = find_record_pk_column_index(&table.columns, tables);
     let user_id_columns = find_user_id_foreign_key_columns(&table.columns);
-
-    let named_params_template: NamedParams = table
-      .columns
-      .iter()
-      .map(|column| {
-        (
-          Cow::Owned(prefix_colon(&column.name)),
-          trailbase_sqlite::Value::Null,
-        )
-      })
-      .collect();
+    let json_metadata = JsonMetadata::from_table(&table);
 
     return TableMetadata {
       schema: table,
-      metadata,
       name_to_index,
       record_pk_column,
       user_id_columns,
-      file_upload_columns,
-      file_uploads_columns,
-      named_params_template,
+      json_metadata,
     };
   }
 
   #[inline]
   pub fn name(&self) -> &str {
-    &self.schema.name
+    return &self.schema.name;
   }
 
   #[inline]
   pub fn column_index_by_name(&self, key: &str) -> Option<usize> {
-    self.name_to_index.get(key).copied()
+    return self.name_to_index.get(key).copied();
   }
 
   #[inline]
-  pub fn column_by_name(&self, key: &str) -> Option<(&Column, &ColumnMetadata)> {
+  pub fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
     let index = self.column_index_by_name(key)?;
-    return Some((&self.schema.columns[index], &self.metadata[index]));
-  }
-
-  #[inline]
-  pub fn column_metadata(&self) -> &Vec<ColumnMetadata> {
-    return &self.metadata;
-  }
-
-  #[inline]
-  pub fn has_file_columns(&self) -> bool {
-    return !self.file_upload_columns.is_empty() || !self.file_uploads_columns.is_empty();
+    return Some((index, &self.schema.columns[index]));
   }
 }
 
@@ -178,10 +179,9 @@ impl TableMetadata {
 pub struct ViewMetadata {
   pub schema: View,
 
-  metadata: Vec<ColumnMetadata>,
   name_to_index: HashMap<String, usize>,
-
   record_pk_column: Option<usize>,
+  json_metadata: Option<JsonMetadata>,
 }
 
 impl ViewMetadata {
@@ -190,35 +190,28 @@ impl ViewMetadata {
   /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
   /// key relationships.
   pub(crate) fn new(view: View, tables: &[Table]) -> Self {
-    let mut name_to_index = HashMap::<String, usize>::new();
-    let metadata: Vec<ColumnMetadata> = {
-      if let Some(ref columns) = view.columns {
+    let name_to_index = if let Some(ref columns) = view.columns {
+      HashMap::<String, usize>::from_iter(
         columns
           .iter()
           .enumerate()
-          .map(|(index, col)| {
-            name_to_index.insert(col.name.clone(), index);
-            return ColumnMetadata {
-              json: build_json_metadata(col),
-            };
-          })
-          .collect()
-      } else {
-        debug!("Building ViewMetadata for complex view thus missing column information.");
-        vec![]
-      }
+          .map(|(index, col)| (col.name.clone(), index)),
+      )
+    } else {
+      HashMap::<String, usize>::new()
     };
 
     let record_pk_column = view
       .columns
       .as_ref()
       .and_then(|c| find_record_pk_column_index(c, tables));
+    let json_metadata = JsonMetadata::from_view(&view);
 
     return ViewMetadata {
       schema: view,
-      metadata,
       name_to_index,
       record_pk_column,
+      json_metadata,
     };
   }
 
@@ -233,40 +226,32 @@ impl ViewMetadata {
   }
 
   #[inline]
-  pub fn column_by_name(&self, key: &str) -> Option<(&Column, &ColumnMetadata)> {
+  pub fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
     let index = self.column_index_by_name(key)?;
     let cols = self.schema.columns.as_ref()?;
-    return Some((&cols[index], &self.metadata[index]));
-  }
-
-  #[inline]
-  pub fn column_metadata(&self) -> &Vec<ColumnMetadata> {
-    return &self.metadata;
+    return Some((index, &cols[index]));
   }
 }
 
 pub trait TableOrViewMetadata {
-  // Used by RecordAPI.
-  fn column_by_name(&self, key: &str) -> Option<(&Column, &ColumnMetadata)>;
+  fn column_by_name(&self, key: &str) -> Option<(usize, &Column)>;
 
-  // Impl detail: only used by admin and list
-  fn columns(&self) -> Option<&Vec<Column>>;
-
-  fn column_metadata(&self) -> &Vec<ColumnMetadata>;
   fn record_pk_column(&self) -> Option<(usize, &Column)>;
+  fn json_metadata(&self) -> Option<&JsonMetadata>;
+  fn columns(&self) -> Option<&[Column]>;
 }
 
 impl TableOrViewMetadata for TableMetadata {
-  fn column_by_name(&self, key: &str) -> Option<(&Column, &ColumnMetadata)> {
+  fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
     self.column_by_name(key)
   }
 
-  fn columns(&self) -> Option<&Vec<Column>> {
-    Some(&self.schema.columns)
+  fn columns(&self) -> Option<&[Column]> {
+    return Some(&self.schema.columns);
   }
 
-  fn column_metadata(&self) -> &Vec<ColumnMetadata> {
-    return self.column_metadata();
+  fn json_metadata(&self) -> Option<&JsonMetadata> {
+    return Some(&self.json_metadata);
   }
 
   fn record_pk_column(&self) -> Option<(usize, &Column)> {
@@ -276,16 +261,16 @@ impl TableOrViewMetadata for TableMetadata {
 }
 
 impl TableOrViewMetadata for ViewMetadata {
-  fn column_by_name(&self, key: &str) -> Option<(&Column, &ColumnMetadata)> {
+  fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
     self.column_by_name(key)
   }
 
-  fn columns(&self) -> Option<&Vec<Column>> {
-    return self.schema.columns.as_ref();
+  fn columns(&self) -> Option<&[Column]> {
+    return self.schema.columns.as_deref();
   }
 
-  fn column_metadata(&self) -> &Vec<ColumnMetadata> {
-    return self.column_metadata();
+  fn json_metadata(&self) -> Option<&JsonMetadata> {
+    return self.json_metadata.as_ref();
   }
 
   fn record_pk_column(&self) -> Option<(usize, &Column)> {
@@ -492,8 +477,8 @@ impl TableMetadataCache {
     // schema changes.
     for metadata in table_metadata_map.values() {
       let mut columns: Vec<usize> = vec![];
-      columns.extend(&metadata.file_upload_columns);
-      columns.extend(&metadata.file_uploads_columns);
+      columns.extend(&metadata.json_metadata.file_upload_columns);
+      columns.extend(&metadata.json_metadata.file_uploads_columns);
 
       for idx in columns {
         let table_name = &metadata.schema.name;
@@ -795,10 +780,10 @@ fn column_data_type_to_json_type(data_type: ColumnDataType) -> Value {
 /// don't benefit from type-safety anyway.
 pub fn build_json_schema(
   table_or_view_name: &str,
-  metadata: &(dyn TableOrViewMetadata + Send + Sync),
+  columns: &[Column],
   mode: JsonSchemaMode,
 ) -> Result<(Validator, serde_json::Value), JsonSchemaError> {
-  return build_json_schema_recursive(table_or_view_name, metadata, mode, None);
+  return build_json_schema_recursive(table_or_view_name, columns, mode, None);
 }
 
 pub(crate) struct Expand<'a> {
@@ -810,19 +795,13 @@ pub(crate) struct Expand<'a> {
 /// able to reference views.
 pub(crate) fn build_json_schema_recursive(
   table_or_view_name: &str,
-  metadata: &(dyn TableOrViewMetadata + Send + Sync),
+  columns: &[Column],
   mode: JsonSchemaMode,
   expand: Option<Expand<'_>>,
 ) -> Result<(Validator, serde_json::Value), JsonSchemaError> {
   let mut properties = serde_json::Map::new();
   let mut defs = serde_json::Map::new();
   let mut required_cols: Vec<String> = vec![];
-
-  let Some(columns) = metadata.columns() else {
-    return Err(JsonSchemaError::NotFound(
-      "Column defs not found".to_string(),
-    ));
-  };
 
   for col in columns {
     let mut found_def = false;
@@ -887,7 +866,8 @@ pub(crate) fn build_json_schema_recursive(
                 continue;
               };
 
-              let (_validator, schema) = build_json_schema(foreign_table, &*table, mode)?;
+              let (_validator, schema) =
+                build_json_schema(foreign_table, &table.schema.columns, mode)?;
               defs.insert(
                 col.name.clone(),
                 serde_json::json!({
@@ -1111,7 +1091,7 @@ mod tests {
 
     let (schema, _) = build_json_schema(
       table_metadata.name(),
-      &table_metadata,
+      &table_metadata.schema.columns,
       JsonSchemaMode::Insert,
     )
     .unwrap();
@@ -1178,7 +1158,7 @@ mod tests {
 
     let (validator, schema) = build_json_schema_recursive(
       table_name,
-      &*test_table_metadata,
+      &test_table_metadata.schema.columns,
       JsonSchemaMode::Select,
       Some(Expand {
         table_metadata: state.table_metadata(),

@@ -35,7 +35,7 @@ pub async fn read_files_handler(
   };
   let pk_col = &request.pk_column;
 
-  let Some((col, _col_meta)) = table_metadata.column_by_name(pk_col) else {
+  let Some((_index, col)) = table_metadata.column_by_name(pk_col) else {
     return Err(Error::Precondition(format!("Missing column: {pk_col}")));
   };
 
@@ -43,8 +43,18 @@ pub async fn read_files_handler(
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
   }
 
-  let Some(file_col_metadata) = table_metadata.column_by_name(&request.file_column_name) else {
-    return Err(Error::Precondition(format!("Missing column: {pk_col}")));
+  let Some((index, file_col_metadata)) = table_metadata.column_by_name(&request.file_column_name)
+  else {
+    return Err(Error::Precondition(format!(
+      "Missing column: {}",
+      request.file_column_name
+    )));
+  };
+  let Some(file_col_json_metadata) = table_metadata.json_metadata.columns[index].as_ref() else {
+    return Err(Error::Precondition(format!(
+      "Not a JSON column: {}",
+      request.file_column_name
+    )));
   };
 
   let pk_value = simple_json_value_to_param(col.data_type, request.pk_value)?;
@@ -54,6 +64,7 @@ pub async fn read_files_handler(
       &state,
       &table_name,
       file_col_metadata,
+      file_col_json_metadata,
       &request.pk_column,
       pk_value,
     )
@@ -69,6 +80,7 @@ pub async fn read_files_handler(
       &state,
       &table_name,
       file_col_metadata,
+      file_col_json_metadata,
       &request.pk_column,
       pk_value,
     )

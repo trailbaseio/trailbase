@@ -37,7 +37,7 @@ pub async fn update_row_handler(
   };
 
   let pk_col = &request.primary_key_column;
-  let Some((column, _col_meta)) = table_metadata.column_by_name(pk_col) else {
+  let Some((_index, column)) = table_metadata.column_by_name(pk_col) else {
     return Err(Error::Precondition(format!("Missing column: {pk_col}")));
   };
 

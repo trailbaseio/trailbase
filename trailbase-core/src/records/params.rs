@@ -6,7 +6,7 @@ use trailbase_sqlite::schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{NamedParams, Value};
 
 use crate::schema::{Column, ColumnDataType};
-use crate::table_metadata::{self, ColumnMetadata, JsonColumnMetadata, TableMetadata};
+use crate::table_metadata::{self, JsonColumnMetadata, TableMetadata};
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ParamsError {
@@ -103,11 +103,11 @@ impl Params {
     for (key, value) in json {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
-      let Some((col, col_meta)) = Self::column_by_name(metadata, &key) else {
+      let Some((col, json_meta)) = Self::column_by_name(metadata, &key) else {
         continue;
       };
 
-      let (param, mut json_files) = extract_params_and_files_from_json(col, col_meta, value)?;
+      let (param, mut json_files) = extract_params_and_files_from_json(col, json_meta, value)?;
       if let Some(json_files) = json_files.as_mut() {
         // Note: files provided as a multipart form upload are handled below. They need more
         // special handling to establish the field.name to column mapping.
@@ -129,20 +129,10 @@ impl Params {
   fn column_by_name<'a>(
     metadata: &'a TableMetadata,
     field_name: &str,
-  ) -> Option<(&'a Column, &'a ColumnMetadata)> {
-    #[cfg(debug_assertions)]
-    {
-      let Some(col) = metadata.column_by_name(field_name) else {
-        info!(
-        "Skipping field '{field_name}' in request: no matching column. This is just an FYI in dev builds and not an issue."
-      );
-        return None;
-      };
-      return Some(col);
-    }
-
-    #[cfg(not(debug_assertions))]
-    return metadata.column_by_name(field_name);
+  ) -> Option<(&'a Column, Option<&'a JsonColumnMetadata>)> {
+    return metadata
+      .column_by_name(field_name)
+      .map(|(index, col)| (col, metadata.json_metadata.columns[index].as_ref()));
   }
 
   pub fn push_param(&mut self, col: String, value: Value) {
@@ -173,11 +163,11 @@ impl Params {
     for (field_name, file_metadata, _content) in &files {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
-      let Some((col, col_meta)) = Self::column_by_name(metadata, field_name) else {
+      let Some((col, json_meta)) = Self::column_by_name(metadata, field_name) else {
         continue;
       };
 
-      let Some(JsonColumnMetadata::SchemaName(schema_name)) = &col_meta.json else {
+      let Some(JsonColumnMetadata::SchemaName(schema_name)) = &json_meta else {
         return Err(ParamsError::Column("Expected json column"));
       };
 
@@ -274,7 +264,7 @@ impl<'a> LazyParams<'a> {
 
 fn extract_params_and_files_from_json(
   col: &Column,
-  col_meta: &ColumnMetadata,
+  json_meta: Option<&JsonColumnMetadata>,
   value: serde_json::Value,
 ) -> Result<(Value, Option<FileMetadataContents>), ParamsError> {
   let col_name = &col.name;
@@ -287,7 +277,7 @@ fn extract_params_and_files_from_json(
         )));
       }
 
-      let Some(json) = &col_meta.json else {
+      let Some(ref json) = json_meta else {
         return Err(ParamsError::NestedObject(format!(
           "Plain text column w/o JSON: {col_name}"
         )));
@@ -317,7 +307,7 @@ fn extract_params_and_files_from_json(
       match col.data_type {
         ColumnDataType::Blob => return Ok((try_json_array_to_blob(arr)?, None)),
         ColumnDataType::Text => {
-          if let Some(ref json) = col_meta.json {
+          if let Some(ref json) = json_meta {
             match json {
               JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
                 let file_upload_vec: Vec<FileUploadInput> = serde_json::from_value(value)?;

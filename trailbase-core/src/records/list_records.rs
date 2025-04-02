@@ -73,6 +73,9 @@ pub async fn list_records_handler(
   let Some(columns) = metadata.columns() else {
     return Err(RecordError::Internal("missing columns".into()));
   };
+  let Some(json_metadata) = metadata.json_metadata() else {
+    return Err(RecordError::Internal("missing json metadata".into()));
+  };
   let Some((pk_index, pk_column)) = metadata.record_pk_column() else {
     return Err(RecordError::Internal("missing pk column".into()));
   };
@@ -203,7 +206,7 @@ pub async fn list_records_handler(
   let records = if expanded_tables.is_empty() {
     rows_to_json_expand(
       columns,
-      metadata.column_metadata(),
+      &json_metadata.columns,
       rows,
       column_filter,
       api.expand(),
@@ -220,14 +223,14 @@ pub async fn list_records_handler(
           ));
         };
 
-        let mut curr = row.split_off(metadata.column_metadata().len());
+        let mut curr = row.split_off(columns.len());
 
         for expanded in &expanded_tables {
           let next = curr.split_off(expanded.num_columns);
 
           let foreign_value = row_to_json(
             &expanded.metadata.schema.columns,
-            expanded.metadata.column_metadata(),
+            &expanded.metadata.json_metadata.columns,
             &curr,
             column_filter,
           )
@@ -241,7 +244,7 @@ pub async fn list_records_handler(
 
         return row_to_json_expand(
           columns,
-          metadata.column_metadata(),
+          &json_metadata.columns,
           &row,
           column_filter,
           Some(&expand),

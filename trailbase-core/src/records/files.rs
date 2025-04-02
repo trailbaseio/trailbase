@@ -73,7 +73,7 @@ pub(crate) async fn delete_pending_files(
   metadata: &TableMetadata,
   rowid: i64,
 ) -> Result<(), FileError> {
-  if metadata.file_upload_columns.is_empty() && metadata.file_uploads_columns.is_empty() {
+  if !metadata.json_metadata.has_file_columns() {
     return Ok(());
   }
 

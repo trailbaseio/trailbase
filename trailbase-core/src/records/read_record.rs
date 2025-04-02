@@ -39,7 +39,10 @@ pub async fn read_record_handler(
   };
   let metadata = api.metadata();
   let Some(columns) = metadata.columns() else {
-    return Err(RecordError::ApiNotFound);
+    return Err(RecordError::Internal("missing columns".into()));
+  };
+  let Some(json_metadata) = metadata.json_metadata() else {
+    return Err(RecordError::Internal("missing json metadata".into()));
   };
 
   let record_id = api.id_to_sql(&record)?;
@@ -87,7 +90,7 @@ pub async fn read_record_handler(
       for (col_name, (metadata, row)) in std::iter::zip(query_expand, foreign_rows) {
         let foreign_value = row_to_json(
           &metadata.schema.columns,
-          metadata.column_metadata(),
+          &json_metadata.columns,
           &row,
           filter,
         )
@@ -99,7 +102,7 @@ pub async fn read_record_handler(
 
       row_to_json_expand(
         columns,
-        metadata.column_metadata(),
+        &json_metadata.columns,
         &rows[0].1,
         filter,
         Some(&expand),
@@ -118,14 +121,8 @@ pub async fn read_record_handler(
         return Err(RecordError::RecordNotFound);
       };
 
-      row_to_json_expand(
-        columns,
-        metadata.column_metadata(),
-        &row,
-        filter,
-        api.expand(),
-      )
-      .map_err(|err| RecordError::Internal(err.into()))?
+      row_to_json_expand(columns, &json_metadata.columns, &row, filter, api.expand())
+        .map_err(|err| RecordError::Internal(err.into()))?
     }
   }));
 }
@@ -152,6 +149,10 @@ pub async fn get_uploaded_file_from_record_handler(
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
+  let metadata = api.metadata();
+  let Some(json_metadata) = metadata.json_metadata() else {
+    return Err(RecordError::Internal("missing json metadata".into()));
+  };
 
   let record_id = api.id_to_sql(&record)?;
 
@@ -162,14 +163,18 @@ pub async fn get_uploaded_file_from_record_handler(
     return Err(RecordError::Forbidden);
   };
 
-  let Some(column) = api.metadata().column_by_name(&column_name) else {
+  let Some((index, column)) = metadata.column_by_name(&column_name) else {
     return Err(RecordError::BadRequest("Invalid field/column name"));
+  };
+  let Some(column_json_metadata) = &json_metadata.columns[index] else {
+    return Err(RecordError::BadRequest("Invalid column"));
   };
 
   let file_upload = GetFileQueryBuilder::run(
     &state,
     api.table_name(),
     column,
+    column_json_metadata,
     &api.record_pk_column().name,
     record_id,
   )
@@ -204,6 +209,10 @@ pub async fn get_uploaded_files_from_record_handler(
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
+  let metadata = api.metadata();
+  let Some(json_metadata) = metadata.json_metadata() else {
+    return Err(RecordError::Internal("missing json metadata".into()));
+  };
 
   let record_id = api.id_to_sql(&record)?;
 
@@ -214,14 +223,18 @@ pub async fn get_uploaded_files_from_record_handler(
     return Err(RecordError::Forbidden);
   };
 
-  let Some(column) = api.metadata().column_by_name(&column_name) else {
+  let Some((index, column)) = metadata.column_by_name(&column_name) else {
     return Err(RecordError::BadRequest("Invalid field/column name"));
+  };
+  let Some(column_json_metadata) = &json_metadata.columns[index] else {
+    return Err(RecordError::BadRequest("Invalid column"));
   };
 
   let mut file_uploads = GetFilesQueryBuilder::run(
     &state,
     api.table_name(),
     column,
+    column_json_metadata,
     &api.record_pk_column().name,
     record_id,
   )

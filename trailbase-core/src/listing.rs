@@ -263,7 +263,7 @@ pub fn build_filter_where_clause(
 
       // IMPORTANT: We only include parameters with known columns to avoid building an invalid
       // query early and forbid injections.
-      let Some((col, _col_meta)) = table_metadata.column_by_name(&column_name) else {
+      let Some((_index, col)) = table_metadata.column_by_name(&column_name) else {
         return Err(WhereClauseError::UnrecognizedParam(format!(
           "Unrecognized parameter: {column_name}"
         )));
