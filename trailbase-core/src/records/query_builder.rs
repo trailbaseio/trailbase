@@ -1,6 +1,5 @@
 use askama::Template;
 use itertools::Itertools;
-use object_store::ObjectStore;
 use std::sync::Arc;
 use tracing::*;
 use trailbase_sqlite::schema::{FileUpload, FileUploads};
@@ -8,7 +7,7 @@ use trailbase_sqlite::{NamedParams, Params as _, Value};
 
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
-use crate::records::files::delete_pending_files;
+use crate::records::files::{delete_pending_files, FileManager};
 use crate::records::params::{FileMetadataContents, Params};
 use crate::schema::{Column, ColumnOption};
 use crate::table_metadata::{
@@ -262,7 +261,7 @@ impl InsertQueryBuilder {
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: &str,
   ) -> Result<rusqlite::types::Value, QueryError> {
-    let (query, named_params, mut files) = Self::build_insert_query(
+    let (query, named_params, files) = Self::build_insert_query(
       metadata.name(),
       params,
       conflict_resolution,
@@ -271,13 +270,13 @@ impl InsertQueryBuilder {
 
     // We're storing any files to the object store first to make sure the DB entry is valid right
     // after commit and not racily pointing to soon-to-be-written files.
-    if !files.is_empty() {
-      for (metadata, content) in &mut files {
-        write_file(state.objectstore(), metadata, content).await?;
-      }
-    }
+    let mut file_manager = if files.is_empty() {
+      FileManager::empty()
+    } else {
+      FileManager::write(state, files).await?
+    };
 
-    let result: Result<(i64, rusqlite::types::Value), trailbase_sqlite::Error> = state
+    let (rowid, return_value): (i64, rusqlite::types::Value) = state
       .conn()
       .call(move |conn| {
         let mut stmt = conn.prepare(&query)?;
@@ -289,29 +288,18 @@ impl InsertQueryBuilder {
           _ => Err(rusqlite::Error::QueryReturnedNoRows.into()),
         };
       })
-      .await;
+      .await?;
 
-    return match result {
-      Ok((rowid, return_value)) => {
-        if Some(ConflictResolutionStrategy::Replace) == conflict_resolution
-          && metadata.has_file_columns()
-        {
-          delete_pending_files(state, metadata, rowid).await?;
-        }
+    // Successful write, do not cleanup written files.
+    file_manager.release();
 
-        Ok(return_value)
-      }
-      Err(err) => {
-        for (metadata, _files) in &files {
-          let path = object_store::path::Path::from(metadata.path());
-          if let Err(err) = state.objectstore().delete(&path).await {
-            warn!("Failed to cleanup file after failed insertion (leak): {err}");
-          }
-        }
+    if Some(ConflictResolutionStrategy::Replace) == conflict_resolution
+      && metadata.has_file_columns()
+    {
+      delete_pending_files(state, metadata, rowid).await?;
+    }
 
-        Err(err.into())
-      }
-    };
+    return Ok(return_value);
   }
 
   pub(crate) async fn run_bulk(
@@ -338,13 +326,13 @@ impl InsertQueryBuilder {
 
     // We're storing any files to the object store first to make sure the DB entry is valid right
     // after commit and not racily pointing to soon-to-be-written files.
-    if !all_files.is_empty() {
-      for (metadata, content) in &mut all_files {
-        write_file(state.objectstore(), metadata, content).await?;
-      }
-    }
+    let mut file_manager = if all_files.is_empty() {
+      FileManager::empty()
+    } else {
+      FileManager::write(state, all_files).await?
+    };
 
-    let result = state
+    let result: Vec<(i64, rusqlite::types::Value)> = state
       .conn()
       .call(move |conn| {
         let mut rows = Vec::<(i64, rusqlite::types::Value)>::with_capacity(query_and_params.len());
@@ -368,30 +356,20 @@ impl InsertQueryBuilder {
 
         return Ok(rows);
       })
-      .await;
+      .await?;
 
-    return match result {
-      Ok(result) => {
-        if Some(ConflictResolutionStrategy::Replace) == conflict_resolution
-          && metadata.has_file_columns()
-        {
-          for (rowid, _) in &result {
-            delete_pending_files(state, metadata, *rowid).await?;
-          }
-        }
-        Ok(result.into_iter().map(|(_rowid, v)| v).collect())
-      }
-      Err(err) => {
-        for (metadata, _files) in &all_files {
-          let path = object_store::path::Path::from(metadata.path());
-          if let Err(err) = state.objectstore().delete(&path).await {
-            warn!("Failed to cleanup file after failed insertion (leak): {err}");
-          }
-        }
+    // Successful write, do not cleanup written files.
+    file_manager.release();
 
-        Err(err.into())
+    if Some(ConflictResolutionStrategy::Replace) == conflict_resolution
+      && metadata.has_file_columns()
+    {
+      for (rowid, _) in &result {
+        delete_pending_files(state, metadata, *rowid).await?;
       }
-    };
+    }
+
+    return Ok(result.into_iter().map(|(_rowid, v)| v).collect());
   }
 
   fn build_insert_query(
@@ -400,9 +378,14 @@ impl InsertQueryBuilder {
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: Option<&str>,
   ) -> Result<(String, NamedParams, FileMetadataContents), QueryError> {
-    let conflict_clause = Self::conflict_resolution_clause(
-      conflict_resolution.unwrap_or(ConflictResolutionStrategy::Undefined),
-    );
+    let conflict_clause = match conflict_resolution {
+      Some(ConflictResolutionStrategy::Abort) => "OR ABORT",
+      Some(ConflictResolutionStrategy::Rollback) => "OR ROLLBACK",
+      Some(ConflictResolutionStrategy::Fail) => "OR FAIL",
+      Some(ConflictResolutionStrategy::Ignore) => "OR IGNORE",
+      Some(ConflictResolutionStrategy::Replace) => "OR REPLACE",
+      _ => "",
+    };
 
     let returning: &[&str] = if let Some(return_column_name) = return_column_name {
       &["_rowid_", return_column_name]
@@ -420,19 +403,6 @@ impl InsertQueryBuilder {
     .map_err(|err| QueryError::Internal(err.into()))?;
 
     return Ok((query, params.named_params, params.files));
-  }
-
-  #[inline]
-  fn conflict_resolution_clause(config: ConflictResolutionStrategy) -> &'static str {
-    type C = ConflictResolutionStrategy;
-    return match config {
-      C::Undefined => "",
-      C::Abort => "OR ABORT",
-      C::Rollback => "OR ROLLBACK",
-      C::Fail => "OR FAIL",
-      C::Ignore => "OR IGNORE",
-      C::Replace => "OR REPLACE",
-    };
   }
 }
 
@@ -462,13 +432,14 @@ impl UpdateQueryBuilder {
 
     params.push_param(pk_column.to_string(), pk_value.clone());
 
-    // We're storing to object store before writing the entry to the DB.
-    let mut files = std::mem::take(&mut params.files);
-    if !files.is_empty() {
-      for (metadata, content) in &mut files {
-        write_file(state.objectstore(), metadata, content).await?;
-      }
-    }
+    // We're storing any files to the object store first to make sure the DB entry is valid right
+    // after commit and not racily pointing to soon-to-be-written files.
+    let files = std::mem::take(&mut params.files);
+    let mut file_manager = if files.is_empty() {
+      FileManager::empty()
+    } else {
+      FileManager::write(state, files).await?
+    };
 
     let query = UpdateRecordQueryTemplate {
       table_name,
@@ -479,27 +450,17 @@ impl UpdateQueryBuilder {
     .render()
     .map_err(|err| QueryError::Internal(err.into()))?;
 
-    let result = state
+    let rowid: Option<i64> = state
       .conn()
-      .query_value::<i64>(&query, params.named_params)
-      .await;
+      .query_value(&query, params.named_params)
+      .await?;
 
-    match result {
-      Ok(Some(rowid)) => {
-        delete_pending_files(state, metadata, rowid).await?;
-      }
-      Ok(None) => {}
-      Err(err) => {
-        for (metadata, _content) in &files {
-          let path = object_store::path::Path::from(metadata.path());
-          if let Err(err) = state.objectstore().delete(&path).await {
-            warn!("Failed to cleanup file after failed insertion (leak): {err}");
-          }
-        }
+    // Successful write, do not cleanup written files.
+    file_manager.release();
 
-        return Err(err.into());
-      }
-    };
+    if let Some(rowid) = rowid {
+      delete_pending_files(state, metadata, rowid).await?;
+    }
 
     return Ok(());
   }
@@ -529,20 +490,6 @@ impl DeleteQueryBuilder {
 
     return Ok(rowid);
   }
-}
-
-async fn write_file(
-  store: &dyn ObjectStore,
-  metadata: &FileUpload,
-  data: &mut Vec<u8>,
-) -> Result<(), object_store::Error> {
-  let path = object_store::path::Path::from(metadata.path());
-
-  let mut writer = store.put_multipart(&path).await?;
-  writer.put_part(std::mem::take(data).into()).await?;
-  writer.complete().await?;
-
-  return Ok(());
 }
 
 #[cfg(test)]

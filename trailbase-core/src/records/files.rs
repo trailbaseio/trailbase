@@ -9,6 +9,7 @@ use trailbase_sqlite::params;
 use trailbase_sqlite::schema::{FileUpload, FileUploads};
 
 use crate::app_state::AppState;
+use crate::records::params::FileMetadataContents;
 use crate::table_metadata::TableMetadata;
 
 #[derive(Debug, Error)]
@@ -95,19 +96,29 @@ pub(crate) async fn delete_pending_files_impl(
   store: &dyn ObjectStore,
   pending_deletions: Vec<FileDeletionsDb>,
 ) -> Result<(), FileError> {
+  const ATTEMPTS_LIMIT: i64 = 10;
   if pending_deletions.is_empty() {
     return Ok(());
   }
 
   let mut errors: Vec<FileDeletionsDb> = vec![];
-  let mut delete = async |row: &FileDeletionsDb, file: FileUpload| {
-    if let Err(err) = delete_file(store, file).await {
-      let mut pending_deletion = row.clone();
-      pending_deletion.attempts += 1;
-      pending_deletion.errors = Some(err.to_string());
-      errors.push(pending_deletion);
-    }
-  };
+  let mut delete =
+    async |row: &FileDeletionsDb, file: FileUpload| match delete_file(store, &file).await {
+      Err(object_store::Error::NotFound { .. }) | Err(object_store::Error::InvalidPath { .. }) => {
+        info!("Dropping further deletion attempts for invalid file: {file:?}");
+      }
+      Err(err) => {
+        if row.attempts < ATTEMPTS_LIMIT {
+          let mut pending_deletion = row.clone();
+          pending_deletion.attempts += 1;
+          pending_deletion.errors = Some(err.to_string());
+          errors.push(pending_deletion);
+        } else {
+          info!("Abandoning deletion of {file:?} after {ATTEMPTS_LIMIT} failed attemps: {err}");
+        }
+      }
+      Ok(_) => {}
+    };
 
   for pending_deletion in pending_deletions {
     let json = &pending_deletion.json;
@@ -152,8 +163,78 @@ pub(crate) async fn delete_pending_files_impl(
   return Ok(());
 }
 
-async fn delete_file(store: &dyn ObjectStore, file: FileUpload) -> Result<(), object_store::Error> {
+async fn delete_file(
+  store: &dyn ObjectStore,
+  file: &FileUpload,
+) -> Result<(), object_store::Error> {
   return store
     .delete(&object_store::path::Path::from(file.path()))
     .await;
+}
+
+pub(crate) struct FileManager {
+  cleanup: Option<Box<dyn FnOnce() + Send + Sync>>,
+}
+
+impl FileManager {
+  pub(crate) fn empty() -> Self {
+    return Self { cleanup: None };
+  }
+
+  pub(crate) async fn write(
+    state: &AppState,
+    files: FileMetadataContents,
+  ) -> Result<Self, object_store::Error> {
+    let mut written_files = Vec::<FileUpload>::with_capacity(files.len());
+    for (metadata, contents) in files {
+      // TODO: We could write files in parallel.
+      write_file(state.objectstore(), &metadata, contents).await?;
+      written_files.push(metadata);
+    }
+
+    let cleanup: Option<Box<dyn FnOnce() + Send + Sync>> = if written_files.is_empty() {
+      None
+    } else {
+      let state = state.clone();
+      Some(Box::new(move || {
+        tokio::spawn(async move {
+          let store = state.objectstore();
+          for file in written_files {
+            let path = object_store::path::Path::from(file.path());
+            if let Err(err) = store.delete(&path).await {
+              warn!("Failed to cleanup just written file: {err}");
+            }
+          }
+        });
+      }))
+    };
+
+    return Ok(Self { cleanup });
+  }
+
+  pub(crate) fn release(&mut self) {
+    self.cleanup = None;
+  }
+}
+
+impl Drop for FileManager {
+  fn drop(&mut self) {
+    if let Some(f) = std::mem::take(&mut self.cleanup) {
+      f();
+    }
+  }
+}
+
+async fn write_file(
+  store: &dyn ObjectStore,
+  metadata: &FileUpload,
+  data: Vec<u8>,
+) -> Result<(), object_store::Error> {
+  let path = object_store::path::Path::from(metadata.path());
+
+  let mut writer = store.put_multipart(&path).await?;
+  writer.put_part(data.into()).await?;
+  writer.complete().await?;
+
+  return Ok(());
 }
