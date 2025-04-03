@@ -292,7 +292,7 @@ impl InsertQueryBuilder {
     let (rowid, return_value): (i64, rusqlite::types::Value) = state
       .conn()
       .call(move |conn| {
-        let mut stmt = conn.prepare(&query)?;
+        let mut stmt = conn.prepare_cached(&query)?;
         named_params.bind(&mut stmt)?;
         let mut result = stmt.raw_query();
 
@@ -352,7 +352,7 @@ impl InsertQueryBuilder {
         let tx = conn.transaction()?;
 
         for (query, named_params) in query_and_params {
-          let mut stmt = tx.prepare(&query)?;
+          let mut stmt = tx.prepare_cached(&query)?;
           named_params.bind(&mut stmt)?;
           let mut result = stmt.raw_query();
 

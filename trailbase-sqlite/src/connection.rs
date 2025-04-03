@@ -100,7 +100,7 @@ impl Connection {
     let sql = sql.to_string();
     return self
       .call(move |conn: &mut rusqlite::Connection| {
-        let mut stmt = conn.prepare(&sql)?;
+        let mut stmt = conn.prepare_cached(&sql)?;
         params.bind(&mut stmt)?;
         let rows = stmt.raw_query();
         Ok(Rows::from_rows(rows)?)
@@ -116,7 +116,7 @@ impl Connection {
     let sql = sql.to_string();
     return self
       .call(move |conn: &mut rusqlite::Connection| {
-        let mut stmt = conn.prepare(&sql)?;
+        let mut stmt = conn.prepare_cached(&sql)?;
         params.bind(&mut stmt)?;
         let mut rows = stmt.raw_query();
         if let Some(row) = rows.next()? {
@@ -135,7 +135,7 @@ impl Connection {
     let sql = sql.to_string();
     return self
       .call(move |conn: &mut rusqlite::Connection| {
-        let mut stmt = conn.prepare(&sql)?;
+        let mut stmt = conn.prepare_cached(&sql)?;
         params.bind(&mut stmt)?;
         let mut rows = stmt.raw_query();
         if let Some(row) = rows.next()? {
@@ -154,7 +154,7 @@ impl Connection {
     let sql = sql.to_string();
     return self
       .call(move |conn: &mut rusqlite::Connection| {
-        let mut stmt = conn.prepare(&sql)?;
+        let mut stmt = conn.prepare_cached(&sql)?;
         params.bind(&mut stmt)?;
         let mut rows = stmt.raw_query();
 
@@ -172,7 +172,7 @@ impl Connection {
     let sql = sql.to_string();
     return self
       .call(move |conn: &mut rusqlite::Connection| {
-        let mut stmt = conn.prepare(&sql)?;
+        let mut stmt = conn.prepare_cached(&sql)?;
         params.bind(&mut stmt)?;
         Ok(stmt.raw_execute()?)
       })
