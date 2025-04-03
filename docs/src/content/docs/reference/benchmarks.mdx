@@ -24,7 +24,7 @@ We can expect it to go fast but how fast exactly? Let's compare it to a few
 amazing, and certainly more weathered alternatives such as SupaBase,
 PocketBase, and vanilla SQLite.
 
-<Aside type="note" title="Update: TrailBase v0.3+">
+<Aside type="note" title="Update: TrailBase v0.8.3+">
   The SQLite execution model changed with v0.3.0 providing further, significant
   improvements.
 </Aside>
@@ -78,8 +78,8 @@ bound on the cost incurred by IPC leaving the process boundary[^3] and adding
 features like authorization, i.e. more table look-ups.
 
 Looking at the other, more similar setups, the measurement suggests that for
-this test TrailBase can insert 100k records 100+ times faster than Payload[^4],
-more than 20 times faster than SupaBase[^5], and comfortably 7 times faster
+this test TrailBase can insert 100k records 170 times faster than Payload[^4],
+almost 40 times faster than SupaBase[^5], and comfortably 11 times faster
 than PocketBase [^1].
 
 The total time of inserting a large batch of data tells only part of the story.
@@ -149,10 +149,17 @@ definitely seems to be in use.
 
 Let's take a closer look at latency distributions. To keep things manageable
 we'll focus on PocketBase and TrailBase, which are architecturally simpler and
-more comparable.
+more comparable. Further, we'll focus on PocketBase's Dart client, which was
+slightly faster than the equivalent JS client.
 
-For TrailBase, median latencies for reads were 17x (C#) and insertions almost 7x faster.
-The latter is well in line with the throughput results we've seen above.
+Comparing the Dart clients, both median read and insert latencies were about 5x
+lower for TrailBase.
+Curiously, TrailBase is fast enough that we're being bottlenecked by the client
+runtime. The minimum latency you can expect from Dart and Node.js is around
+3-5ms.
+Looking at other runtimes, TrailBase's read latencies for C# were 21x lower
+compared to PocketBase and 39x for Rust.
+Insertion latencies were 8x lower for C# and 64x for Rust.
 
 <div class="flex justify-center h-[340px] w-[90%]">
   <div class="w-[50%]">
@@ -164,13 +171,7 @@ The latter is well in line with the throughput results we've seen above.
   </div>
 </div>
 
-Latencies are generally lower for TrailBase. Maybe interestingly the insert
-latencies for the Dart and C# client are fairly similar, while reads with Dart
-take about 3 times longer compared to C#. TrailBase is fast enough that we're
-being bottlenecked on the client. The minimum latency you can expect from Dart
-and Node.js is around 3-5ms.
-This likely means that the bottleneck for PocketBase is on the server-side.
-
+Latencies are generally lower for TrailBase.
 With sub-millisecond read latencies at full tilt, TrailBase is in the same
 ballpark as something like Redis, however this is primary data and **not a
 cache!**

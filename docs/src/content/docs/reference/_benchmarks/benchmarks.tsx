@@ -5,7 +5,7 @@ import { LineChart } from "@/components/LineChart.tsx";
 import { ScatterChart } from "@/components/ScatterChart.tsx";
 
 import { data as supabaseUtilization } from "./supabase_utilization";
-import insertTrailBase from "./insert_tb.json";
+import insertTrailBase from "./insert_tb_2025-04-03.json";
 import insertPocketBase from "./insert_pb_2025-02-05.json";
 import fibTrailBase from "./fib_tb.json";
 import fibPocketBase from "./fib_pb.json";
@@ -86,15 +86,15 @@ const durations100k = {
     backgroundColor: colors.trailbase0,
   },
   trailbase_dart_aot: {
-    // AOT
+    // TB: Inserted 100000 messages, took 0:00:07.104429 (limit=64) 2025-04-03
     label: "TrailBase Dart",
     data: [7.0869],
     backgroundColor: colors.trailbase1,
   },
   trailbase_dart_jit: {
-    // JIT
+    // TB: Inserted 100000 messages, took 0:00:08.050607 (limit=64) 2025-04-03
     label: "TrailBase Dart",
-    data: [8.0667],
+    data: [8.0506],
     backgroundColor: colors.trailbase1,
   },
   // {
@@ -107,10 +107,18 @@ const durations100k = {
   //   data: [8.5249],
   //   backgroundColor: colors.trailbase2,
   // },
-  trailbase_dart_dotnet: {
+  trailbase_dotnet: {
     // Inserted 100000 messages, took 00:00:05.7071809 (limit=64) (C#)
+    // Inserted 100000 messages, took 00:00:04.3672948 (limit=64) (C#) 2025-04-03
     label: "TrailBase C#",
-    data: [5.7071],
+    data: [4.3673],
+    backgroundColor: colors.trailbase2,
+  },
+  // TB: Inserted 100000 rows in 3.855656919s (2025-04-03)
+  trailbase_rust: {
+    // Inserted 100000 messages, took 00:00:05.7071809 (limit=64) (C#)
+    label: "TrailBase Rust",
+    data: [3.8556],
     backgroundColor: colors.trailbase2,
   },
   drizzle: {
@@ -130,7 +138,8 @@ export function Duration100kInsertsChart() {
       durations100k.pocketbase_dart_jit,
       durations100k.trailbase_ts,
       durations100k.trailbase_dart_aot,
-      durations100k.trailbase_dart_dotnet,
+      durations100k.trailbase_dotnet,
+      durations100k.trailbase_rust,
       durations100k.drizzle,
     ] as ChartDataset<"bar">[],
   };
@@ -166,29 +175,49 @@ export function PocketBaseAndTrailBaseReadLatencies() {
   // };
   // 2024-12-04
   // TB: Read 1 000 000 messages, took 0:00:55.025486 (limit=64) (Dart AOT)
+  //
+  // 2025-04-03
+  // Read 1000000 messages, took 0:00:55.674628 (limit=64) (Dart AOT)
+  // Latencies:
+  //         p50=3362us
+  //         p75=3597us
+  //         p90=4003us
+  //         p95=4307us
   const readTrailbaseMicroS = {
-    p50: 3291,
-    p75: 3590,
-    p90: 4027,
-    p95: 4428,
+    p50: 3362,
+    p75: 3597,
+    p90: 4003,
+    p95: 4307,
   };
 
   // 2024-12-05
   // TB: Read 1 000 000 messages, took 00:00:21.8387601 (limit=64) (C#)
+  //
+  // TB: Read 1000000 messages, took 00:00:20.6719154 (limit=64) 2025-04-03
+  // Latencies:
+  //       p50=784.1us
+  //       p75=1328.4us
+  //       p90=2059.1us
+  //       p95=2656.6us
   const readTrailbaseDotnetMicroS = {
-    p50: 947.5,
-    p75: 1240.9,
-    p90: 1553.3,
-    p95: 1895.4,
+    p50: 784.1,
+    p75: 1328.4,
+    p90: 2059.1,
+    p95: 2656.6,
   };
 
-  // 2025-01-18
-  // TB: Read 1 000 000 messages, took 00:00:21.8387601 (limit=64) (C#)
+  // 2025-04-03
+  // TB: Read 1000000 rows in 18.319852573s
+  // Latencies:
+  //         p50=259.522µs
+  //         p75=301.269µs
+  //         p90=347.464µs
+  //         p95=381.137µs
   const readTrailbaseRustMicroS = {
-    p50: 379.254,
-    p75: 438.446,
-    p90: 506.493,
-    p95: 554.533,
+    p50: 259.522,
+    p75: 301.269,
+    p90: 347.464,
+    p95: 381.137,
   };
 
   // 2024-10-12
@@ -264,29 +293,50 @@ export function PocketBaseAndTrailBaseInsertLatencies() {
   // };
   // 2024-12-04
   // TB: Inserted 10 000 messages, took 0:00:00.863628 (limit=64) (Dart AOT)
+  //
+  // 2025-04-03
+  // Inserted 10000 messages, took 0:00:00.753518 (limit=64) (Dart AOT)
+  // Latencies:
+  //         p50=4470us
+  //         p75=5029us
+  //         p90=5618us
+  //         p95=6406us
+  //
   const insertTrailbaseMicroS = {
-    p50: 5070,
-    p75: 5695,
-    p90: 6615,
-    p95: 7371,
+    p50: 4470,
+    p75: 5029,
+    p90: 5618,
+    p95: 6406,
   };
 
   // 2024-12-05
   // TB: Inserted 10 000 messages, took 00:00:00.5542653 (limit=64) (C#)
+  //
+  // TB: Inserted 10000 messages, took 00:00:00.4230439 (limit=64) (C#) 2025-04-03
+  // Latencies:
+  //       p50=2652.8us
+  //       p75=2880us
+  //       p90=3113.8us
+  //       p95=3479.8us
   const insertTrailbaseDotnetMicroS = {
-    p50: 3348.9,
-    p75: 3810,
-    p90: 4246.5,
-    p95: 4489.9,
+    p50: 2652.8,
+    p75: 2880,
+    p90: 3113.8,
+    p95: 2479.8,
   };
 
-  // 2025-01-18
-  // TB: Inserted 10 000 rows in 873.530967ms
+  // 2025-03-04
+  // TB: Inserted 10000 rows in 376.664587ms
+  // Latencies:
+  //         p50=567.222µs
+  //         p75=636.6µs
+  //         p90=703.655µs
+  //         p95=742.587µs
   const insertTrailbaseRustMicroS = {
-    p50: 808.301,
-    p75: 897.399,
-    p90: 1001.876,
-    p95: 1071.336,
+    p50: 567.222,
+    p75: 636.6,
+    p90: 703.655,
+    p95: 742.587,
   };
 
   // 2024-10-12
@@ -454,6 +504,7 @@ export function PocketBaseAndTrailBaseUsageChart() {
   const pocketbaseUtilization = insertPocketBase as Datum[];
 
   const trailbaseTimeOffset = -0.35 * 1000;
+  const pocketbaseTimeOffset = -1.3 * 1000;
 
   const data: ChartData<"scatter"> = {
     datasets: [
@@ -483,7 +534,7 @@ export function PocketBaseAndTrailBaseUsageChart() {
         yAxisID: "yLeft",
         label: "PocketBase CPU",
         data: pocketbaseUtilization.map((datum) => ({
-          x: datum.elapsed,
+          x: datum.elapsed + pocketbaseTimeOffset,
           y: datum.cpu,
         })),
         borderColor: colors.pocketbase0,
@@ -494,7 +545,7 @@ export function PocketBaseAndTrailBaseUsageChart() {
         yAxisID: "yRight",
         label: "PocketBase RSS",
         data: pocketbaseUtilization.map((datum) => ({
-          x: datum.elapsed,
+          x: datum.elapsed + pocketbaseTimeOffset,
           y: datum.rss,
         })),
         borderColor: colors.pocketbase1,
