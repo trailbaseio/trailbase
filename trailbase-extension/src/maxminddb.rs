@@ -1,5 +1,5 @@
-use maxminddb::{MaxMindDBError, Reader};
-use parking_lot::Mutex;
+use arc_swap::ArcSwap;
+use maxminddb::{MaxMindDbError, Reader};
 use rusqlite::functions::Context;
 use rusqlite::types::ValueRef;
 use rusqlite::Error;
@@ -7,16 +7,19 @@ use std::net::IpAddr;
 use std::path::Path;
 use std::sync::LazyLock;
 
-static READER: LazyLock<Mutex<Option<Reader<Vec<u8>>>>> = LazyLock::new(|| Mutex::new(None));
+type MaxMindReader = Reader<Vec<u8>>;
 
-pub fn load_geoip_db(path: impl AsRef<Path>) -> Result<(), MaxMindDBError> {
+static READER: LazyLock<ArcSwap<Option<MaxMindReader>>> =
+  LazyLock::new(|| ArcSwap::from_pointee(None));
+
+pub fn load_geoip_db(path: impl AsRef<Path>) -> Result<(), MaxMindDbError> {
   let reader = Reader::open_readfile(path)?;
-  *READER.lock() = Some(reader);
+  READER.swap(Some(reader).into());
   return Ok(());
 }
 
 pub fn has_geoip_db() -> bool {
-  return READER.lock().is_some();
+  return READER.load().is_some();
 }
 
 pub(crate) fn geoip_country(context: &Context) -> rusqlite::Result<Option<String>> {
@@ -37,12 +40,14 @@ pub(crate) fn geoip_country(context: &Context) -> rusqlite::Result<Option<String
         Error::UserFunctionError(format!("Parsing ip '{text:?}' failed: {err}").into())
       })?;
 
-      let cc: Option<String> = READER.lock().as_ref().and_then(|reader| {
-        let country: maxminddb::geoip2::Country = reader.lookup(client_ip).ok()?;
-        return Some(country.country?.iso_code?.to_owned());
-      });
+      if let Some(ref reader) = **READER.load() {
+        use maxminddb::geoip2::Country;
+        if let Ok(country) = reader.lookup::<Country>(client_ip) {
+          return Ok(country.and_then(|c| Some(c.country?.iso_code?.to_string())));
+        }
+      }
 
-      Ok(cc)
+      Ok(None)
     }
     arg => Err(Error::UserFunctionError(
       format!("Expected text, got {}", arg.data_type()).into(),

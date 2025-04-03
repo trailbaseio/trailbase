@@ -12,11 +12,12 @@ readme = "../README.md"
 crate-type=["cdylib", "rlib"]
 
 [dependencies]
+arc-swap = "1.7.1"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash", "rand"] }
 base64 = { version = "0.22.1", default-features = false }
 jsonschema = { version = "0.29.0", default-features = false }
 lru = { version = "0.13.0", default-features = false }
-maxminddb = "0.25.0"
+maxminddb = "0.26.0"
 parking_lot = { version = "0.12.3", default-features = false }
 rand = "^0.9.0"
 rand_core = { version = "*", features = ["getrandom"] }
