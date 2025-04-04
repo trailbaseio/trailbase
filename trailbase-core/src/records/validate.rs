@@ -1,10 +1,9 @@
 use itertools::Itertools;
 
 use crate::config::{proto, ConfigError};
+use crate::records::record_api::validate_rule;
 use crate::schema::ColumnOption;
-use crate::table_metadata::{
-  sqlite3_parse_into_statements, TableMetadataCache, TableOrViewMetadata,
-};
+use crate::table_metadata::{TableMetadataCache, TableOrViewMetadata};
 
 fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
   if name.is_empty() {
@@ -130,11 +129,7 @@ pub(crate) fn validate_record_api_config(
     &api_config.schema_access_rule,
   ];
   for rule in rules.into_iter().flatten() {
-    let _stmt = sqlite3_parse_into_statements(&format!("SELECT ({rule})"))
-      .map_err(|err| ConfigError::Invalid(format!("'{rule}' not a valid SQL expression: {err}")))?;
-
-    // TODO: Add better validation to make sure access rule isn't just a statement but also returns
-    // a single boolean value.
+    validate_rule(rule).map_err(ConfigError::Invalid)?;
   }
 
   return Ok(name.to_owned());

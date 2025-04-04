@@ -12,8 +12,8 @@ use crate::records::params::{prefix_colon, LazyParams};
 use crate::records::{Permission, RecordError};
 use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{
-  find_file_column_indexes, find_user_id_foreign_key_columns, JsonColumnMetadata, TableMetadata,
-  TableOrViewMetadata, ViewMetadata,
+  find_file_column_indexes, find_user_id_foreign_key_columns, sqlite3_parse_into_statement,
+  JsonColumnMetadata, TableMetadata, TableOrViewMetadata, ViewMetadata,
 };
 use crate::util::{assert_uuidv7, b64_to_id};
 
@@ -145,9 +145,6 @@ struct RecordApiState {
   // Foreign key expansion configuration. Affects schema.
   expand: Option<HashMap<String, serde_json::Value>>,
 
-  create_access_rule: Option<String>,
-  create_access_query: Option<String>,
-
   // Open question: right now the read_access rule is also used for listing. It might be nice to
   // allow different permissions, however there's a risk of listing records w/o read access.
   // Arguably, this could always be modeled as two APIs with different permissions on the same
@@ -156,13 +153,9 @@ struct RecordApiState {
   read_access_query: Option<String>,
   subscription_read_access_query: Option<String>,
 
-  update_access_rule: Option<String>,
+  create_access_query: Option<String>,
   update_access_query: Option<String>,
-
-  delete_access_rule: Option<String>,
   delete_access_query: Option<String>,
-
-  schema_access_rule: Option<String>,
   schema_access_query: Option<String>,
 }
 
@@ -310,20 +303,15 @@ impl RecordApi {
         // Access rules.
         //
         // Create:
-        create_access_rule: config.create_access_rule,
-        create_access_query,
 
+        // The raw read rule is needed to construct list queries.
         read_access_rule: config.read_access_rule,
         read_access_query,
         subscription_read_access_query,
 
-        update_access_rule: config.update_access_rule,
+        create_access_query,
         update_access_query,
-
-        delete_access_rule: config.delete_access_rule,
         delete_access_query,
-
-        schema_access_rule: config.schema_access_rule,
         schema_access_query,
       }),
     });
@@ -403,14 +391,8 @@ impl RecordApi {
   }
 
   #[inline]
-  pub fn access_rule(&self, p: Permission) -> Option<&str> {
-    return match p {
-      Permission::Create => self.state.create_access_rule.as_deref(),
-      Permission::Read => self.state.read_access_rule.as_deref(),
-      Permission::Update => self.state.update_access_rule.as_deref(),
-      Permission::Delete => self.state.delete_access_rule.as_deref(),
-      Permission::Schema => self.state.schema_access_rule.as_deref(),
-    };
+  pub fn read_access_rule(&self) -> Option<&str> {
+    return self.state.read_access_rule.as_deref();
   }
 
   #[inline]
@@ -629,6 +611,59 @@ impl RecordApi {
   }
 }
 
+pub(crate) fn validate_rule(rule: &str) -> Result<(), String> {
+  let stmt = sqlite3_parse_into_statement(&format!("SELECT {rule}"))
+    .map_err(|err| format!("'{rule}' not a valid SQL expression: {err}"))?;
+
+  let Some(sqlite3_parser::ast::Stmt::Select(select)) = stmt else {
+    panic!("Expected SELECT");
+  };
+
+  let sqlite3_parser::ast::OneSelect::Select { mut columns, .. } = select.body.select else {
+    panic!("Expected SELECT");
+  };
+
+  if columns.len() != 1 {
+    return Err("Expected single column".to_string());
+  }
+
+  let sqlite3_parser::ast::ResultColumn::Expr(expr, _) = columns.swap_remove(0) else {
+    return Err("Expected expr".to_string());
+  };
+
+  validate_expr_recursively(&expr)?;
+
+  return Ok(());
+}
+
+fn validate_expr_recursively(expr: &sqlite3_parser::ast::Expr) -> Result<(), String> {
+  use sqlite3_parser::ast;
+
+  match &expr {
+    ast::Expr::IsNull(inner) => {
+      validate_expr_recursively(inner)?;
+    }
+    ast::Expr::InTable { lhs, rhs, .. } => {
+      match rhs {
+        ast::QualifiedName {
+          name: ast::Name(name),
+          ..
+        } if name == "_FIELDS_" => {
+          if !matches!(**lhs, ast::Expr::Literal(ast::Literal::String(_))) {
+            return Err(format!("Expected literal string: {lhs:?}"));
+          }
+        }
+        _ => {}
+      };
+
+      validate_expr_recursively(lhs)?;
+    }
+    _ => {}
+  }
+
+  return Ok(());
+}
+
 #[derive(Template)]
 #[template(
   escape = "none",
@@ -651,7 +686,7 @@ fn build_read_delete_schema_query(
   return indoc::formatdoc!(
     r#"
       SELECT
-        ({access_rule})
+        CAST(({access_rule}) AS INTEGER)
       FROM
         (SELECT :__user_id AS id) AS _USER_,
         (SELECT * FROM "{table_name}" WHERE "{pk_column_name}" = :__record_id) AS _ROW_
@@ -867,5 +902,16 @@ mod tests {
       assert!(has_access(acl, Permission::Delete));
       assert!(has_access(acl, Permission::Update), "ACL: {acl}");
     }
+  }
+
+  #[test]
+  fn test_validate_rule() {
+    assert!(validate_rule("").is_err());
+    assert!(validate_rule("1, 1").is_err());
+    assert!(validate_rule("1").is_ok());
+
+    validate_rule("_USER_.id IS NOT NULL").unwrap();
+    validate_rule("_USER_.id IS NOT NULL AND _ROW_.userid = _USER_.id").unwrap();
+    validate_rule("_USER_.id IS NOT NULL AND _REQ_.field IS NOT NULL").unwrap();
   }
 }

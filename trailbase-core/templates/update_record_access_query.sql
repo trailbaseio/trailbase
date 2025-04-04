@@ -1,5 +1,5 @@
 SELECT
-  ({{ update_access_rule }})
+  CAST(({{ update_access_rule }}) AS INTEGER)
 FROM
   (SELECT :__user_id AS id) AS _USER_,
   (SELECT * FROM "{{ table_name }}" WHERE "{{ pk_column_name }}" = :__record_id) AS _ROW_
