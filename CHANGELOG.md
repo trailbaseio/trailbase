@@ -1,3 +1,19 @@
+## v0.9.0
+
+* Performance:
+  * Read and write latency improved both by ~30% 🔥.
+  * Memory footprint dropped by ~20% in our insert benchmarks.
+  * Build narrower INSERT queries.
+  * Use more cached statements.
+* Overhaul object-store/S3 file life-cycle/cleanup.
+  * Use triggers + persistent deletion log.
+  * Retry cleanups on transient object store isues.
+  * Fix issue with zombie files on UPSERTs.
+* Decouple record APIs form underlying TABLE/VIEW schemas.
+* Fix leaky abstractions by pushing tracing initialization into server
+  initialization and more strictly separate from logging.
+* Update dependencies.
+
 ## v0.8.4
 
 * Add a `?loginMessage=` query parameter to admin login page.
