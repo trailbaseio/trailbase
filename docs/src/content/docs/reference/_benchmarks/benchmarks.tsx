@@ -122,7 +122,7 @@ const durations100k = {
     backgroundColor: colors.trailbase2,
   },
   drizzle: {
-    label: "Drizzel SQLite (Node.js)",
+    label: "Drizzle SQLite (Node.js)",
     data: [8.803],
     backgroundColor: colors.drizzle,
   },
