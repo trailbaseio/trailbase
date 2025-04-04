@@ -589,6 +589,7 @@ impl RecordApi {
         //   }
         // }
 
+        let mut fields = Vec::<String>::with_capacity(request_params.column_names.len());
         for (param_index, col_name) in request_params.column_names.iter().enumerate() {
           let Some(col_index) = self.column_index_by_name(col_name) else {
             // We simply skip unknown columns, this could simply be malformed input or version skew.
@@ -597,7 +598,13 @@ impl RecordApi {
           };
 
           named_params[col_index].1 = request_params.named_params[param_index].1.clone();
+          fields.push(format!(r#""{col_name}""#));
         }
+
+        named_params.push((
+          Cow::Borrowed(":__fields"),
+          Value::Text(format!("[{}]", fields.join(","))),
+        ));
 
         named_params
       }
