@@ -891,4 +891,84 @@ mod test {
       .unwrap();
     assert_eq!(index, "");
   }
+
+  #[tokio::test]
+  async fn test_field_presence_acls() {
+    const TABLE_NAME: &str = "table";
+    const API_NAME: &str = "table";
+    let state = test_state(None).await.unwrap();
+    let conn = state.conn();
+    conn
+      .execute(
+        format!(
+          r#"CREATE TABLE '{TABLE_NAME}' (
+             id           INTEGER PRIMARY KEY NOT NULL,
+             col0         TEXT NOT NULL DEFAULT(''),
+             col1         TEXT NOT NULL DEFAULT('')
+           ) STRICT"#
+        ),
+        (),
+      )
+      .await
+      .unwrap();
+
+    state.table_metadata().invalidate_all().await.unwrap();
+
+    add_record_api(
+      &state,
+      API_NAME,
+      TABLE_NAME,
+      Acls {
+        world: vec![
+          PermissionFlag::Create,
+          PermissionFlag::Update,
+          PermissionFlag::Read,
+          PermissionFlag::Delete,
+        ],
+        ..Default::default()
+      },
+      AccessRules {
+        // update: Some("('col0' in _REQ_FIELDS_)".to_string()),
+        create: Some("('col0' NOT IN _REQ_FIELDS_)".to_string()),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    create_record_handler(
+      State(state.clone()),
+      Path(API_NAME.to_string()),
+      Query(CreateRecordQuery::default()),
+      None,
+      Either::Json(
+        json_row_from_value(serde_json::json!({
+          "col1": "value".to_string(),
+          "NON_EXISTANT": "value".to_string(),
+        }))
+        .unwrap()
+        .into(),
+      ),
+    )
+    .await
+    .unwrap();
+
+    assert!(
+      create_record_handler(
+        State(state.clone()),
+        Path(API_NAME.to_string()),
+        Query(CreateRecordQuery::default()),
+        None,
+        Either::Json(
+          json_row_from_value(serde_json::json!({
+            "col0": "value".to_string(),
+          }))
+          .unwrap()
+          .into(),
+        ),
+      )
+      .await
+      .is_err()
+    );
+  }
 }

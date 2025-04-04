@@ -589,6 +589,7 @@ impl RecordApi {
         //   }
         // }
 
+        let mut fields = Vec::<String>::with_capacity(request_params.column_names.len());
         for (param_index, col_name) in request_params.column_names.iter().enumerate() {
           let Some(col_index) = self.column_index_by_name(col_name) else {
             // We simply skip unknown columns, this could simply be malformed input or version skew.
@@ -597,7 +598,13 @@ impl RecordApi {
           };
 
           named_params[col_index].1 = request_params.named_params[param_index].1.clone();
+          fields.push(format!(r#""{col_name}""#));
         }
+
+        named_params.push((
+          Cow::Borrowed(":__fields"),
+          Value::Text(format!("[{}]", fields.join(","))),
+        ));
 
         named_params
       }
@@ -653,21 +660,21 @@ fn validate_expr_recursively(expr: &sqlite3_parser::ast::Expr) -> Result<(), Str
     ast::Expr::IsNull(inner) => {
       validate_expr_recursively(inner)?;
     }
-    // ast::Expr::InTable { lhs, rhs, .. } => {
-    //   match rhs {
-    //     ast::QualifiedName {
-    //       name: ast::Name(name),
-    //       ..
-    //     } if name == "_FIELDS_" => {
-    //       if !matches!(**lhs, ast::Expr::Literal(ast::Literal::String(_))) {
-    //         return Err(format!("Expected literal string: {lhs:?}"));
-    //       }
-    //     }
-    //     _ => {}
-    //   };
-    //
-    //   validate_expr_recursively(lhs)?;
-    // }
+    ast::Expr::InTable { lhs, rhs, .. } => {
+      match rhs {
+        ast::QualifiedName {
+          name: ast::Name(name),
+          ..
+        } if name == "_REQ_FIELDS_" => {
+          if !matches!(**lhs, ast::Expr::Literal(ast::Literal::String(_))) {
+            return Err(format!("Expected literal string: {lhs:?}"));
+          }
+        }
+        _ => {}
+      };
+
+      validate_expr_recursively(lhs)?;
+    }
     _ => {}
   }
 
@@ -950,5 +957,8 @@ mod tests {
     validate_rule("_USER_.id IS NOT NULL").unwrap();
     validate_rule("_USER_.id IS NOT NULL AND _ROW_.userid = _USER_.id").unwrap();
     validate_rule("_USER_.id IS NOT NULL AND _REQ_.field IS NOT NULL").unwrap();
+
+    assert!(validate_rule("'field' IN _REQ_FIELDS_").is_ok());
+    assert!(validate_rule("field IN _REQ_FIELDS_").is_err());
   }
 }

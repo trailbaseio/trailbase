@@ -1,3 +1,4 @@
+WITH _REQ_FIELDS_(_) AS (SELECT value FROM (json_each(:__fields)))
 SELECT
   CAST(({{ create_access_rule }}) AS INTEGER)
 FROM
