@@ -1,6 +1,6 @@
+use log::*;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use tracing::*;
 
 use crate::migrations;
 

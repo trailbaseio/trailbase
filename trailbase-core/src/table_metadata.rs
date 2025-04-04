@@ -1,6 +1,7 @@
 use fallible_iterator::FallibleIterator;
 use jsonschema::Validator;
 use lazy_static::lazy_static;
+use log::*;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -8,7 +9,6 @@ use sqlite3_parser::ast::Stmt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::*;
 use trailbase_sqlite::params;
 
 use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};

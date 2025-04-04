@@ -4,8 +4,8 @@ use axum::{
   response::{IntoResponse, Response},
   Json,
 };
+use log::*;
 use serde::Deserialize;
-use tracing::*;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -52,7 +52,7 @@ pub async fn drop_table_handler(
         )?;
 
         let query = format!("DROP {entity_type} IF EXISTS {table_name}");
-        info!("dropping table: {query}");
+        debug!("dropping table: {query}");
         tx.execute(&query)?;
 
         return tx

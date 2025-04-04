@@ -1390,7 +1390,6 @@ dependencies = [
  "axum 0.8.3",
  "env_logger",
  "tokio",
- "tracing-subscriber",
  "trailbase",
 ]
 
@@ -6629,18 +6628,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e672c95779cf947c5311f83787af4fa8fffd12fb27e4993211a84bdfd9610f9c"
 dependencies = [
  "once_cell",
- "valuable",
-]
-
-[[package]]
-name = "tracing-log"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
-dependencies = [
- "log",
- "once_cell",
- "tracing-core",
 ]
 
 [[package]]
@@ -6654,7 +6641,6 @@ dependencies = [
  "smallvec",
  "thread_local",
  "tracing-core",
- "tracing-log",
 ]
 
 [[package]]
@@ -6751,7 +6737,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tracing-subscriber",
  "trailbase",
  "trailbase-sqlite",
  "utoipa",
@@ -6842,6 +6827,7 @@ dependencies = [
  "infer",
  "jsonschema",
  "lazy_static",
+ "log",
  "parking_lot",
  "rusqlite",
  "schemars",
@@ -6851,7 +6837,6 @@ dependencies = [
  "sqlite-vec",
  "thiserror 2.0.12",
  "tokio",
- "tracing",
  "trailbase-extension",
  "trailbase-sqlean",
  "uuid",
@@ -7160,12 +7145,6 @@ dependencies = [
  "serde_json",
  "url",
 ]
-
-[[package]]
-name = "valuable"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "value-bag"

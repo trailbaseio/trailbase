@@ -7,6 +7,7 @@ use futures_util::{pin_mut, FutureExt};
 use hyper::body::Incoming;
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::{server::conn::auto::Builder, service::TowerToHyperService};
+use log::*;
 use std::{
   convert::Infallible,
   fmt::Debug,
@@ -23,7 +24,6 @@ use tokio::sync::watch;
 use tokio_rustls::TlsAcceptor;
 use tower::ServiceExt as _;
 use tower_service::Service;
-use tracing::*;
 
 /// Types that can listen for connections.
 pub trait Listener: Send + 'static {

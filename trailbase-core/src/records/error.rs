@@ -1,8 +1,8 @@
 use axum::body::Body;
 use axum::http::{header::CONTENT_TYPE, StatusCode};
 use axum::response::{IntoResponse, Response};
+use log::*;
 use thiserror::Error;
-use tracing::*;
 
 /// Publicly visible errors of record APIs.
 ///

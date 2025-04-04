@@ -6,8 +6,8 @@ use axum::{
   response::{IntoResponse, Response},
   Json,
 };
+use log::*;
 use serde::Deserialize;
-use tracing::*;
 use ts_rs::TS;
 
 use crate::app_state::AppState;
@@ -167,7 +167,7 @@ mod tests {
       },
       dry_run: Some(false),
     };
-    info!(
+    debug!(
       "Create Table: {}",
       create_table_request.schema.create_table_statement()
     );
@@ -202,7 +202,7 @@ mod tests {
         ],
       });
 
-      info!("{}", target_schema.create_table_statement());
+      debug!("{}", target_schema.create_table_statement());
 
       let alter_table_request = AlterTableRequest {
         source_schema: create_table_request.schema.clone(),
@@ -224,7 +224,7 @@ mod tests {
 
       target_schema.name = "bar".to_string();
 
-      info!("{}", target_schema.create_table_statement());
+      debug!("{}", target_schema.create_table_statement());
 
       let alter_table_request = AlterTableRequest {
         source_schema: create_table_request.schema.clone(),

@@ -25,7 +25,7 @@ async fn get_avatar_url(state: &AppState, user: &DbUser) -> Option<String> {
     .query_value(&QUERY, params!(user.id))
     .await
     .map_err(|err| {
-      tracing::debug!("avatar query broken?");
+      log::debug!("avatar query broken?");
       return err;
     })
     .unwrap_or_default()

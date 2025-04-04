@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
+use log::*;
 use parking_lot::Mutex;
 use std::path::PathBuf;
-use tracing::*;
 use trailbase_refinery_core::Migration;
 
 mod main {

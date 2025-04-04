@@ -97,7 +97,7 @@ impl Email {
         body: Some(body),
       }) => (subject, body),
       _ => {
-        tracing::debug!("Falling back to default email verification email");
+        log::debug!("Falling back to default email verification email");
         (
           defaults::EMAIL_VALIDATION_SUBJECT.to_string(),
           defaults::EMAIL_VALIDATION_BODY.to_string(),
@@ -143,7 +143,7 @@ impl Email {
         body: Some(body),
       }) => (subject, body),
       _ => {
-        tracing::debug!("Falling back to default change email template");
+        log::debug!("Falling back to default change email template");
         (
           defaults::CHANGE_EMAIL_SUBJECT.to_string(),
           defaults::CHANGE_EMAIL_BODY.to_string(),
@@ -189,7 +189,7 @@ impl Email {
         body: Some(body),
       }) => (subject, body),
       _ => {
-        tracing::debug!("Falling back to default reset password email");
+        log::debug!("Falling back to default reset password email");
         (
           defaults::PASSWORD_RESET_SUBJECT.to_string(),
           defaults::PASSWORD_RESET_BODY.to_string(),

@@ -4,6 +4,7 @@ use axum::{
   response::sse::{Event, KeepAlive, Sse},
 };
 use futures_util::Stream;
+use log::*;
 use parking_lot::RwLock;
 use pin_project_lite::pin_project;
 use rusqlite::hooks::{Action, PreUpdateCase};
@@ -15,7 +16,6 @@ use std::sync::{
   Arc,
 };
 use std::task::{Context, Poll};
-use tracing::*;
 use trailbase_sqlite::connection::{extract_record_values, extract_row_id};
 
 use crate::auth::user::User;

@@ -9,10 +9,10 @@ mod oidc;
 pub(crate) mod test;
 
 use lazy_static::lazy_static;
+use log::*;
 use std::collections::hash_map::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::*;
 
 use crate::auth::oauth::OAuthProvider;
 use crate::config::proto::{AuthConfig, OAuthProviderConfig, OAuthProviderId};

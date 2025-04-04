@@ -5,7 +5,6 @@ use axum::{
 use lazy_static::lazy_static;
 use serde::Serialize;
 use std::borrow::Cow;
-use tracing::*;
 use ts_rs::TS;
 use uuid::Uuid;
 
@@ -161,8 +160,6 @@ async fn fetch_users(
       LIMIT :limit
     "#,
   );
-
-  info!("PARAMS: {params:?}\nQUERY: {sql_query}");
 
   let users = conn.query_values::<DbUser>(&sql_query, params).await?;
   return Ok(users);

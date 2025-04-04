@@ -3,6 +3,7 @@ use axum::extract::{RawPathParams, Request};
 use axum::http::{header::CONTENT_TYPE, request::Parts, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Router;
+use log::*;
 use parking_lot::Mutex;
 use rustyscript::{
   deno_core::PollEventLoopOptions, init_platform, js_value::Promise, json_args, Error as RSError,
@@ -16,7 +17,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::oneshot;
-use tracing::*;
+use tracing_subscriber::prelude::*;
 
 use crate::assets::cow_to_string;
 use crate::auth::user::User;
@@ -289,6 +290,15 @@ impl RuntimeSingleton {
 
     let handle = if n_threads > 0 {
       Some(std::thread::spawn(move || {
+        // swc_ecma_codegen is very spammy (or at least used to be):
+        //   https://github.com/swc-project/swc/pull/9604
+        tracing_subscriber::Registry::default()
+          .with(tracing_subscriber::filter::Targets::new().with_target(
+            "tracing::span",
+            tracing_subscriber::filter::LevelFilter::WARN,
+          ))
+          .set_default();
+
         init_platform(n_threads as u32, true);
 
         let threads: Vec<_> = receivers
@@ -831,7 +841,6 @@ pub(crate) async fn load_routes_and_jobs_from_js_modules(
   }
 
   let scripts_dir = state.data_dir().root().join("scripts");
-
   let modules = match rustyscript::Module::load_dir(scripts_dir.clone()) {
     Ok(modules) => modules,
     Err(err) => {
@@ -922,6 +931,9 @@ mod tests {
   async fn test_runtime_javascript() {
     let handle = RuntimeHandle::new();
 
+    tracing_subscriber::Registry::default()
+      .with(tracing_subscriber::filter::LevelFilter::WARN)
+      .set_default();
     let module = Module::new(
       "module.js",
       r#"
@@ -952,6 +964,9 @@ mod tests {
     let handle = RuntimeHandle::new();
     handle.override_connection(conn);
 
+    tracing_subscriber::Registry::default()
+      .with(tracing_subscriber::filter::LevelFilter::WARN)
+      .set_default();
     let module = Module::new(
       "module.ts",
       r#"
@@ -997,6 +1012,9 @@ mod tests {
     let handle = RuntimeHandle::new();
     handle.override_connection(conn.clone());
 
+    tracing_subscriber::Registry::default()
+      .with(tracing_subscriber::filter::LevelFilter::WARN)
+      .set_default();
     let module = Module::new(
       "module.ts",
       r#"

@@ -228,7 +228,7 @@ pub(crate) async fn reauth_with_refresh_token(
     //  3. User explicitly logged out, which will delete **all** sessions for that user.
     //  4. Database was overwritten, e.g. by tests or periodic reset for the demo.
     #[cfg(debug_assertions)]
-    tracing::debug!("Refresh token not found");
+    log::debug!("Refresh token not found");
 
     return Err(AuthError::Unauthorized);
   };

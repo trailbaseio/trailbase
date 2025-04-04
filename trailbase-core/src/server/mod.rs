@@ -8,6 +8,7 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{RequestExt, Router};
+use log::*;
 use rust_embed::RustEmbed;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -20,7 +21,7 @@ use tokio_rustls::{
 };
 use tower_cookies::CookieManagerLayer;
 use tower_http::{cors, limit::RequestBodyLimitLayer, services::ServeDir, trace::TraceLayer};
-use tracing::*;
+use tracing_subscriber::{filter, prelude::*};
 
 use crate::admin;
 use crate::app_state::AppState;
@@ -50,6 +51,10 @@ pub struct ServerOptions {
 
   /// Optional path to static assets that will be served at the HTTP root.
   pub public_dir: Option<PathBuf>,
+
+  /// We trace the request->response flow to generate a server log. Setting this to true will also
+  /// log an event to stderr.
+  pub log_responses: bool,
 
   /// In dev mode CORS and cookies will be more permissive to allow development with externally
   /// hosted UIs, e.g. using a dev serer.
@@ -128,6 +133,34 @@ impl Server {
     )
     .await?;
 
+    // Initialize tracing subscribers/layers.
+    //
+    // A few notes in case initialization below panics. The `log` and `tracing` crates/systems are
+    // mostly independent. Both like to be initialized only once given their global nature. There
+    // is a `.try_init()`, which has not effect when already initialized.
+    //
+    // Here we specifically only initialize `tracing`, since we critically rely on the
+    // `SqliteLogLayer`. We leave `log` initialization to the program level.
+    //
+    // No problem thus far. However, if the `tracing_subscriber` crate is built with the default
+    // feature `tracing-log`, initializing `tracing` will also initialize the `log` crate. So this
+    // approach will only work if built w/o `tracing-log`. Otherwise, initializing `log` before
+    // will lead to a panic here. We do *not* want to use a `.try_init()` here, otherwise may
+    // silently miss `SqliteLogLayer`.
+    if opts.log_responses {
+      tracing_subscriber::Registry::default()
+        .with(logging::SqliteLogLayer::new(&state))
+        .with(tracing_subscriber::fmt::layer().compact().with_filter(
+          // Response log events are emitted at the INFO level, see `logging.rs`
+          filter::Targets::new().with_default(filter::LevelFilter::INFO),
+        ))
+        .init();
+    } else {
+      tracing_subscriber::Registry::default()
+        .with(logging::SqliteLogLayer::new(&state))
+        .init();
+    }
+
     if new_data_dir {
       on_first_init(state.clone())
         .await
@@ -187,6 +220,8 @@ impl Server {
       Some,
     );
 
+    let has_tls = tls_key.is_some() && tls_cert.is_some();
+
     let mut set = JoinSet::new();
     {
       let (addr, router) = self.main_router.clone();
@@ -200,7 +235,8 @@ impl Server {
     }
 
     info!(
-      "listening on http://{addr} 🚀 (Admin UI http://{admin_addr}/_/admin/)",
+      "Listening on {proto}://{addr} 🚀 (Admin UI http://{admin_addr}/_/admin/)",
+      proto = if has_tls { "https" } else { "http" },
       addr = self.main_router.0,
       admin_addr = self
         .admin_router

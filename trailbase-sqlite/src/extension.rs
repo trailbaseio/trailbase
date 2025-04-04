@@ -17,7 +17,7 @@ extern "C" fn init_trailbase_extensions(
   //   https://github.com/nalgeon/sqlean/blob/main/docs/define.md
   let status = unsafe { trailbase_sqlean::define_init(db as *mut trailbase_sqlean::sqlite3) };
   if status != 0 {
-    tracing::error!("Failed to load sqlean::define",);
+    log::error!("Failed to load sqlean::define",);
     return status;
   }
 

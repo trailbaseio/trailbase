@@ -8,26 +8,22 @@ use std::time::Duration;
 use tracing::field::Field;
 use tracing::span::{Attributes, Id, Record, Span};
 use tracing::Level;
-use tracing::*;
 use tracing_subscriber::layer::{Context, Layer};
 use uuid::Uuid;
 
 use crate::util::get_header;
 use crate::AppState;
 
-// Memo to my future self.
+// NOTE: Tracing is quite sweet but also utterly decoupled. There are several moving parts.
 //
-// Tracing is quite sweet but also utterly decoupled. There are several moving parts.
-//
-//  * There's a tracing layer installed into the axum/tower server, which declares *what*
-//    information goes into traces, i.e. which fields go into spans and events. An event (e.g.
-//    on-request, on-response) can comprise a list of spans.
-//  * There's a central tracing_subscriber::registry(), where one can register subscribers like an
-//    stderr, file, or sqlite logger, that define how traces are being processed.
-//  * Finally, we have a task to receive logs from our sqlite tracing subscribers and write them to
-//    the database.
-//  * We have a period task to wipe logs past their retention.
-//
+//  * In `server/mod.rs` we install some tower/axum middleware: `tower_http::trace::TraceLayer` to
+//    install hooks for managing tracing spans, events, ... .
+//  * These hooks (in this file) are where we define *what* gets put into a trace span and what
+//    events are emitted.
+//  * Independently, we install the `SqliteLogLayer` as a tracing subscriber listening for above
+//    events, building request-response log entries and ultimately sending them to a writer task.
+//  * The writer task receives the request-response log entries writes them to the logs database.
+//  * Lastly, there's also a period task to wipe expired logs past their retention.
 #[repr(i64)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 enum LogType {
@@ -77,7 +73,7 @@ pub(super) fn sqlite_logger_on_response(response: &Response<Body>, latency: Dura
   span.record("status", response.status().as_u16());
   span.record("length", length.and_then(|l| l.parse::<i64>().ok()));
 
-  // Log an event that can actually be seen, e.g. when a stderr logger is installed.
+  // Log an event that can actually be seen, e.g. when a tracing->fmt/stderr layer is installed.
   tracing::event!(LEVEL, "response sent");
 }
 
@@ -121,7 +117,7 @@ impl SqliteLogLayer {
           .await;
 
         if let Err(err) = result {
-          warn!("Failed to send logs: {err}");
+          log::warn!("Failed to send logs: {err}");
         }
       }
     });
@@ -145,7 +141,7 @@ impl SqliteLogLayer {
   ) -> Result<(), rusqlite::Error> {
     #[cfg(test)]
     if !log.fields.is_empty() {
-      tracing::warn!("Dangling fields: {:?}", log.fields);
+      log::warn!("Dangling fields: {:?}", log.fields);
     }
 
     lazy_static::lazy_static! {
@@ -210,7 +206,7 @@ where
     if let Some(storage) = extensions.remove::<LogFieldStorage>() {
       self.write_log(storage);
     } else {
-      error!("span already closed/consumed?!");
+      log::error!("span already closed/consumed?!");
     }
   }
 

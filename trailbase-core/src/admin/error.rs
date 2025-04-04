@@ -1,8 +1,8 @@
 use axum::body::Body;
 use axum::http::{header::CONTENT_TYPE, StatusCode};
 use axum::response::{IntoResponse, Response};
+use log::*;
 use thiserror::Error;
-use tracing::*;
 
 // FIXME: Admin APIs also deserve more explicit error handling eventually.
 #[derive(Debug, Error)]

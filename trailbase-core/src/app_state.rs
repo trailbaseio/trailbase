@@ -1,7 +1,7 @@
+use log::*;
 use object_store::ObjectStore;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::*;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::oauth::providers::{ConfiguredOAuthProviders, OAuthProviderType};
@@ -317,7 +317,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   use crate::migrations::{apply_logs_migrations, apply_main_migrations, apply_user_migrations};
 
   let _ = env_logger::try_init_from_env(env_logger::Env::new().default_filter_or(
-    "info,refinery_core=warn,trailbase_refinery_core=warn,tracing::span=warn,swc_ecma_codegen=off",
+    "info,refinery_core=warn,trailbase_refinery_core=warn,log::span=warn,swc_ecma_codegen=off",
   ));
 
   let temp_dir = temp_dir::TempDir::new()?;

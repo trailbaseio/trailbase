@@ -88,10 +88,9 @@ async fn test_record_apis() {
   add_user_to_room(conn, user_x, room).await.unwrap();
 
   // Set up logging: declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
-  tracing_subscriber::registry()
+  tracing_subscriber::Registry::default()
     .with(trailbase::logging::SqliteLogLayer::new(app.state()))
-    .try_init()
-    .unwrap();
+    .set_default();
 
   {
     let server = TestServer::new(app.router().clone()).unwrap();

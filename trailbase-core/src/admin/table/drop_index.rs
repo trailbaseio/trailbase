@@ -4,8 +4,8 @@ use axum::{
   response::{IntoResponse, Response},
   Json,
 };
+use log::*;
 use serde::Deserialize;
-use tracing::*;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -35,7 +35,7 @@ pub async fn drop_index_handler(
         TransactionRecorder::new(conn, migration_path, format!("drop_index_{index_name}"))?;
 
       let query = format!("DROP INDEX IF EXISTS {}", index_name);
-      info!("dropping index: {query}");
+      debug!("dropping index: {query}");
       tx.execute(&query)?;
 
       return tx

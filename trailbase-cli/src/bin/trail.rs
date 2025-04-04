@@ -9,7 +9,6 @@ use log::*;
 use serde::Deserialize;
 use std::rc::Rc;
 use tokio::{fs, io::AsyncWriteExt};
-use tracing_subscriber::{filter, prelude::*};
 use trailbase::{
   api::{self, init_app_state, Email, InitArgs, TokenClaims},
   constants::USER_TABLE,
@@ -26,17 +25,16 @@ fn init_logger(dev: bool) {
   // SWC is very spammy in in debug builds and complaints about source maps when compiling
   // typescript to javascript. Since we don't care about source maps and didn't find a better
   // option to mute the errors, turn it off in debug builds.
-  #[cfg(debug_assertions)]
   const DEFAULT: &str =
     "info,refinery_core=warn,trailbase_refinery_core=warn,tracing::span=warn,swc_ecma_codegen=off";
-  #[cfg(not(debug_assertions))]
-  const DEFAULT: &str = "info,refinery_core=warn,trailbase_refinery_core=warn,tracing::span=warn";
 
-  env_logger::init_from_env(if dev {
+  env_logger::Builder::from_env(if dev {
     env_logger::Env::new().default_filter_or(format!("{DEFAULT},trailbase=debug"))
   } else {
     env_logger::Env::new().default_filter_or(DEFAULT)
-  });
+  })
+  .format_timestamp_micros()
+  .init();
 }
 
 #[derive(Deserialize)]
@@ -78,13 +76,12 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Run(cmd)) => {
       init_logger(cmd.dev);
 
-      let stderr_logging = cmd.dev || cmd.stderr_logging;
-
       let app = Server::init(ServerOptions {
         data_dir,
         address: cmd.address,
         admin_address: cmd.admin_address,
         public_dir: cmd.public_dir.map(|p| p.into()),
+        log_responses: cmd.dev || cmd.stderr_logging,
         dev: cmd.dev,
         demo: cmd.demo,
         disable_auth_ui: cmd.disable_auth_ui,
@@ -94,33 +91,6 @@ async fn async_main() -> Result<(), BoxError> {
         tls_cert: None,
       })
       .await?;
-
-      // This declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
-      //
-      // NOTE: the try_init() will actually fail because the tracing system was already initialized
-      // by the env_logger above.
-      // FIXME: Without the sqlite logger here, logging is broken despite us trying to initialize
-      // in app.server() as well.
-      let layer = tracing_subscriber::registry().with(
-        trailbase::logging::SqliteLogLayer::new(app.state()).with_filter(filter::LevelFilter::INFO),
-      );
-
-      if stderr_logging {
-        let _ = layer
-          .with(
-            tracing_subscriber::fmt::layer().compact().with_filter(
-              // Limit messages to INFO and above except for request handling logs.
-              filter::Targets::new()
-                .with_target("tower_http::trace::on_response", filter::LevelFilter::DEBUG)
-                .with_target("tower_http::trace::on_request", filter::LevelFilter::DEBUG)
-                .with_target("tower_http::trace::make_span", filter::LevelFilter::DEBUG)
-                .with_default(filter::LevelFilter::INFO),
-            ),
-          )
-          .try_init();
-      } else {
-        let _ = layer.try_init();
-      }
 
       app.serve().await?;
     }

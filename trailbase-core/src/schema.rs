@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use log::*;
 use serde::{Deserialize, Serialize};
 use sqlite3_parser::ast::{
   fmt::ToTokens, ColumnDefinition, CreateTableBody, DeferSubclause, Expr, ForeignKeyClause,
@@ -7,7 +8,6 @@ use sqlite3_parser::ast::{
 };
 use std::collections::HashMap;
 use thiserror::Error;
-use tracing::*;
 use ts_rs::TS;
 
 #[derive(Debug, Error)]

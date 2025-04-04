@@ -3,7 +3,6 @@ use axum::{
   response::{Html, IntoResponse, Response},
   routing::{get, Router},
 };
-use tracing_subscriber::{filter, prelude::*};
 use trailbase::{AppState, DataDir, Server, ServerOptions, User};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -31,6 +30,7 @@ async fn main() -> Result<(), BoxError> {
       address: "localhost:4004".to_string(),
       admin_address: None,
       public_dir: None,
+      log_responses: true,
       dev: false,
       disable_auth_ui: false,
       cors_allowed_origins: vec![],
@@ -44,23 +44,6 @@ async fn main() -> Result<(), BoxError> {
     },
   )
   .await?;
-
-  // This declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
-  let _layer = tracing_subscriber::registry()
-    .with(
-      trailbase::logging::SqliteLogLayer::new(app.state()).with_filter(filter::LevelFilter::INFO),
-    )
-    .with(
-      tracing_subscriber::fmt::layer().compact().with_filter(
-        // Limit messages to INFO and above except for request handling logs.
-        filter::Targets::new()
-          .with_target("tower_http::trace::on_response", filter::LevelFilter::DEBUG)
-          .with_target("tower_http::trace::on_request", filter::LevelFilter::DEBUG)
-          .with_target("tower_http::trace::make_span", filter::LevelFilter::DEBUG)
-          .with_default(filter::LevelFilter::INFO),
-      ),
-    )
-    .try_init();
 
   app.serve().await?;
 

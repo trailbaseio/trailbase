@@ -1,6 +1,7 @@
 use chrono::{DateTime, Duration, Utc};
 use cron::Schedule;
 use futures_util::future::BoxFuture;
+use log::*;
 use parking_lot::Mutex;
 use std::collections::{hash_map::Entry, HashMap};
 use std::future::Future;
@@ -9,7 +10,6 @@ use std::sync::{
   atomic::{AtomicI32, Ordering},
   Arc,
 };
-use tracing::*;
 use trailbase_sqlite::{params, Connection};
 
 use crate::config::proto::{Config, SystemJob, SystemJobId};

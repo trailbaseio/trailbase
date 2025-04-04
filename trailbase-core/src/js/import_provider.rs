@@ -17,7 +17,7 @@ impl ImportProvider for ImportProviderImpl {
     _referrer: &str,
     _kind: ResolutionKind,
   ) -> Option<Result<ModuleSpecifier, Error>> {
-    tracing::trace!("resolve: {specifier:?}");
+    log::trace!("resolve: {specifier:?}");
 
     // Specifier is just a URL.
     match specifier.scheme() {
@@ -37,7 +37,7 @@ impl ImportProvider for ImportProviderImpl {
     _is_dyn_import: bool,
     _requested_module_type: RequestedModuleType,
   ) -> Option<Result<String, Error>> {
-    tracing::trace!("import: {specifier:?}");
+    log::trace!("import: {specifier:?}");
 
     match specifier.scheme() {
       "trailbase" => {

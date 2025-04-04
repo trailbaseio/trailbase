@@ -1,10 +1,10 @@
 use axum::body::Body;
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
+use log::*;
 use object_store::ObjectStore;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::*;
 use trailbase_sqlite::params;
 use trailbase_sqlite::schema::{FileUpload, FileUploads};
 
