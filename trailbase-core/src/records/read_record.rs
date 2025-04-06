@@ -798,7 +798,7 @@ mod test {
     let conn = state.conn();
     conn
       .execute(
-        &format!(
+        format!(
           r#"CREATE TABLE '{TABLE_NAME}' (
             id           INTEGER PRIMARY KEY NOT NULL,
             col0         TEXT NOT NULL DEFAULT(''),
