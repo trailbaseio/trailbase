@@ -39,7 +39,7 @@ import {
   StatusCodes
 } from "../trailbase.js";
 
-addRoute("GET", "/test/:table", stringHandler(async (req) => {
+addRoute("GET", "/test/{table}", stringHandler(async (req) => {
   const table = req.params["table"];
   if (table) {
     const rows = await query(`SELECT COUNT(*) FROM ${table}`, [])
