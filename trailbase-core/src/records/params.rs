@@ -506,6 +506,7 @@ mod tests {
   use trailbase_schema::sqlite::{sqlite3_parse_into_statement, Table};
 
   use super::*;
+  use crate::constants::USER_TABLE;
   use crate::records::test_utils::json_row_from_value;
   use crate::table_metadata::TableMetadata;
   use crate::util::id_to_b64;
@@ -598,7 +599,7 @@ mod tests {
     .unwrap();
     trailbase_extension::jsonschema::get_schema(SCHEMA_NAME).unwrap();
 
-    let metadata = TableMetadata::new(table.clone(), &[table]);
+    let metadata = TableMetadata::new(table.clone(), &[table], USER_TABLE);
 
     let id: [u8; 16] = uuid::Uuid::now_v7().as_bytes().clone();
     let blob: Vec<u8> = [0; 128].to_vec();

@@ -4,6 +4,7 @@
 
 pub mod error;
 pub mod file;
+pub mod metadata;
 pub mod registry;
 pub mod sqlite;
 

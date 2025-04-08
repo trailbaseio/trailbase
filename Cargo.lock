@@ -6825,6 +6825,7 @@ dependencies = [
  "lazy_static",
  "log",
  "parking_lot",
+ "regex",
  "schemars",
  "serde",
  "serde_json",

@@ -234,6 +234,7 @@ mod tests {
 
   use super::*;
   use crate::app_state::*;
+  use crate::constants::USER_TABLE;
   use crate::table_metadata::{lookup_and_parse_table_schema, TableMetadata};
 
   #[tokio::test]
@@ -274,7 +275,7 @@ mod tests {
     let table = lookup_and_parse_table_schema(conn, "test_table")
       .await
       .unwrap();
-    let metadata = TableMetadata::new(table.clone(), &[table]);
+    let metadata = TableMetadata::new(table.clone(), &[table], USER_TABLE);
 
     let insert = |json: serde_json::Value| async move {
       conn

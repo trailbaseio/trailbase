@@ -4,17 +4,18 @@ use rusqlite::types::ToSqlOutput;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
+use trailbase_schema::metadata::{
+  find_file_column_indexes, find_user_id_foreign_key_columns, JsonColumnMetadata, TableMetadata,
+  TableOrViewMetadata, ViewMetadata,
+};
 use trailbase_schema::sqlite::{sqlite3_parse_into_statement, Column, ColumnDataType};
 use trailbase_sqlite::{NamedParamRef, NamedParams, Params as _, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
+use crate::constants::USER_TABLE;
 use crate::records::params::{prefix_colon, LazyParams};
 use crate::records::{Permission, RecordError};
-use crate::table_metadata::{
-  find_file_column_indexes, find_user_id_foreign_key_columns, JsonColumnMetadata, TableMetadata,
-  TableOrViewMetadata, ViewMetadata,
-};
 use crate::util::{assert_uuidv7, b64_to_id};
 
 #[derive(Clone)]
@@ -53,7 +54,7 @@ impl RecordApiSchema {
     );
 
     let has_file_columns = !find_file_column_indexes(&json_column_metadata).is_empty();
-    let user_id_columns = find_user_id_foreign_key_columns(&columns);
+    let user_id_columns = find_user_id_foreign_key_columns(&columns, USER_TABLE);
 
     let name_to_index = HashMap::<String, usize>::from_iter(
       columns
@@ -105,7 +106,7 @@ impl RecordApiSchema {
     let (columns, json_column_metadata) = filter_columns(config, columns, &json_metadata.columns);
 
     let has_file_columns = !find_file_column_indexes(&json_column_metadata).is_empty();
-    let user_id_columns = find_user_id_foreign_key_columns(&columns);
+    let user_id_columns = find_user_id_foreign_key_columns(&columns, USER_TABLE);
 
     let name_to_index = HashMap::<String, usize>::from_iter(
       columns
