@@ -1,0 +1,3 @@
+[general]
+dirs = ["templates", "../trailbase-assets/js/auth/dist"]
+whitespace = "preserve"

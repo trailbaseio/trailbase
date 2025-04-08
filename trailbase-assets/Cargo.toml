@@ -1,0 +1,24 @@
+[package]
+name = "trailbase-assets"
+version = "0.1.0"
+edition = "2021"
+license = "OSL-3.0"
+description = "Assets for the TrailBase framework"
+homepage = "https://trailbase.io"
+repository = "https://github.com/trailbaseio/trailbase"
+readme = "../README.md"
+exclude = [
+  "**/node_modules/",
+  "**/dist/",
+]
+
+[dependencies]
+askama = { workspace = true }
+axum = { workspace = true }
+log = "0.4.27"
+rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
+tower-service = { version = "0.3.3", default-features = false }
+
+[build-dependencies]
+env_logger = "0.11.8"
+log = "0.4.27"

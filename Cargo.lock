@@ -6691,7 +6691,6 @@ dependencies = [
  "regex",
  "reqwest",
  "rusqlite",
- "rust-embed",
  "rustc_tools_util",
  "rustyscript",
  "schemars",
@@ -6712,6 +6711,7 @@ dependencies = [
  "tower-service",
  "tracing",
  "tracing-subscriber",
+ "trailbase-assets",
  "trailbase-extension",
  "trailbase-refinery-core",
  "trailbase-refinery-macros",
@@ -6722,6 +6722,18 @@ dependencies = [
  "utoipa",
  "uuid",
  "validator",
+]
+
+[[package]]
+name = "trailbase-assets"
+version = "0.1.0"
+dependencies = [
+ "askama",
+ "axum 0.8.3",
+ "env_logger",
+ "log",
+ "rust-embed",
+ "tower-service",
 ]
 
 [[package]]

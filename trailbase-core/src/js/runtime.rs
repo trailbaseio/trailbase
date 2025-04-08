@@ -18,11 +18,11 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::oneshot;
 use tracing_subscriber::prelude::*;
+use trailbase_assets::JsRuntimeAssets;
 
-use crate::assets::cow_to_string;
 use crate::auth::user::User;
-use crate::js::import_provider::JsRuntimeAssets;
 use crate::records::sql_to_json::rows_to_json_arrays;
+use crate::util::cow_to_string;
 use crate::{AppState, DataDir};
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;

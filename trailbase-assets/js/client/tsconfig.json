@@ -11,7 +11,7 @@
     "outDir": "./dist",
     "paths": {
       "@/*": ["./src/*"],
-      "@bindings/*": ["../../bindings/*"]
+      "@bindings/*": ["../../../trailbase-core/bindings/*"]
     }
   },
   "include": [

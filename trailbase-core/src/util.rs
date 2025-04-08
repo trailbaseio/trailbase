@@ -1,6 +1,7 @@
 use axum::http::HeaderMap;
 use base64::prelude::*;
 use reqwest::header::AsHeaderName;
+use std::borrow::Cow;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -77,6 +78,13 @@ pub(crate) fn get_header_owned(
     }
   }
   return None;
+}
+
+pub fn cow_to_string(cow: Cow<'static, [u8]>) -> String {
+  match cow {
+    Cow::Borrowed(x) => String::from_utf8_lossy(x).to_string(),
+    Cow::Owned(x) => String::from_utf8_lossy(&x).to_string(),
+  }
 }
 
 #[cfg(test)]

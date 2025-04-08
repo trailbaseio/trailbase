@@ -1,11 +1,10 @@
-use rust_embed::RustEmbed;
 use rustyscript::deno_core::{
   anyhow::{anyhow, Error},
   ModuleSpecifier, RequestedModuleType, ResolutionKind,
 };
 use rustyscript::module_loader::ImportProvider;
 
-use crate::assets::cow_to_string;
+use crate::util::cow_to_string;
 
 #[derive(Default)]
 pub(crate) struct ImportProviderImpl;
@@ -42,7 +41,7 @@ impl ImportProvider for ImportProviderImpl {
     match specifier.scheme() {
       "trailbase" => {
         return Some(Ok(cow_to_string(
-          JsRuntimeAssets::get("index.js")
+          trailbase_assets::JsRuntimeAssets::get("index.js")
             .expect("Failed to read rt/index.js")
             .data,
         )));
@@ -53,7 +52,3 @@ impl ImportProvider for ImportProviderImpl {
     }
   }
 }
-
-#[derive(RustEmbed, Clone)]
-#[folder = "js/runtime/dist/"]
-pub(crate) struct JsRuntimeAssets;

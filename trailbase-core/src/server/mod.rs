@@ -9,7 +9,6 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{RequestExt, Router};
 use log::*;
-use rust_embed::RustEmbed;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::signal;
@@ -22,10 +21,10 @@ use tokio_rustls::{
 use tower_cookies::CookieManagerLayer;
 use tower_http::{cors, limit::RequestBodyLimitLayer, services::ServeDir, trace::TraceLayer};
 use tracing_subscriber::{filter, prelude::*};
+use trailbase_assets::AssetService;
 
 use crate::admin;
 use crate::app_state::AppState;
-use crate::assets::AssetService;
 use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
 use crate::constants::{ADMIN_API_PATH, HEADER_CSRF_TOKEN};
@@ -314,7 +313,7 @@ impl Server {
       )
       .nest_service(
         "/_/admin",
-        AssetService::<AdminAssets>::with_parameters(
+        AssetService::<trailbase_assets::AdminAssets>::with_parameters(
           // SPA-style fallback.
           Some(Box::new(|_| Some("index.html".to_string()))),
           Some("index.html".to_string()),
@@ -532,7 +531,3 @@ async fn shutdown_signal() {
     },
   }
 }
-
-#[derive(RustEmbed, Clone)]
-#[folder = "js/admin/dist/"]
-struct AdminAssets;

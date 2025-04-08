@@ -4,17 +4,21 @@ members = [
   "client/trailbase-rs",
   "docs/examples/record_api_rs",
   "examples/custom-binary",
+  "trailbase-assets",
   "trailbase-cli",
   "trailbase-core",
-  "trailbase-extension", "trailbase-schema",
+  "trailbase-extension",
+  "trailbase-schema",
   "trailbase-sqlite",
   "vendor/sqlean",
 ]
 default-members = [
   "client/trailbase-rs",
+  "trailbase-assets",
   "trailbase-cli",
   "trailbase-core",
   "trailbase-extension",
+  "trailbase-schema",
   "trailbase-sqlite",
 ]
 exclude = [
@@ -40,10 +44,13 @@ codegen-units = 1
 opt-level = 1
 
 [workspace.dependencies]
-trailbase-refinery-core = { path = "vendor/refinery/refinery_core", version = "0.8.16", default-features = false, features = ["rusqlite-bundled"] }
-trailbase-refinery-macros = { path = "vendor/refinery/refinery_macros", version = "0.8.15" }
+askama = { version = "0.13.0", default-features = false, features = ["derive", "std", "config"] }
+axum = { version = "^0.8.1", features = ["multipart"] }
 libsqlite3-sys = { version = "0.32.0", features = ["bundled"] }
 rusqlite = { version = "^0.34.0", default-features = false, features = ["bundled", "column_decltype", "load_extension", "modern_sqlite", "functions", "limits", "backup", "hooks", "preupdate_hook"] }
+trailbase-refinery-core = { path = "vendor/refinery/refinery_core", version = "0.8.16", default-features = false, features = ["rusqlite-bundled"] }
+trailbase-refinery-macros = { path = "vendor/refinery/refinery_macros", version = "0.8.15" }
+trailbase-assets = { path = "trailbase-assets", version = "0.1.0" }
 trailbase-sqlean = { path = "vendor/sqlean", version = "0.0.2" }
 trailbase-extension = { path = "trailbase-extension", version = "0.2.0" }
 trailbase-schema = { path = "trailbase-schema", version = "0.1.0" }

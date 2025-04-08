@@ -122,13 +122,6 @@ fn cow_to_bytes(cow: Cow<'static, [u8]>) -> Bytes {
   }
 }
 
-pub fn cow_to_string(cow: Cow<'static, [u8]>) -> String {
-  match cow {
-    Cow::Borrowed(x) => String::from_utf8_lossy(x).to_string(),
-    Cow::Owned(x) => String::from_utf8_lossy(&x).to_string(),
-  }
-}
-
 const NOT_FOUND: &str = r#"
 <!DOCTYPE html>
 <html>

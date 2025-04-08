@@ -4,53 +4,14 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::routing::get;
 use axum::Router;
 use reqwest::StatusCode;
-use rust_embed::RustEmbed;
 use serde::Deserialize;
+use trailbase_assets::auth::{
+  ChangeEmailTemplate, ChangePasswordTemplate, LoginTemplate, RegisterTemplate,
+  ResetPasswordRequestTemplate, ResetPasswordUpdateTemplate,
+};
+use trailbase_assets::AssetService;
 
-use crate::assets::AssetService;
 use crate::auth::User;
-
-#[derive(Template)]
-#[template(path = "login/index.html")]
-struct LoginTemplate<'a> {
-  state: String,
-  alert: &'a str,
-}
-
-#[derive(Template)]
-#[template(path = "register/index.html")]
-struct RegisterTemplate<'a> {
-  state: String,
-  alert: &'a str,
-}
-
-#[derive(Template)]
-#[template(path = "reset_password/request/index.html")]
-struct ResetPasswordRequestTemplate<'a> {
-  state: String,
-  alert: &'a str,
-}
-
-#[derive(Template)]
-#[template(path = "reset_password/update/index.html")]
-struct ResetPasswordUpdateTemplate<'a> {
-  state: String,
-  alert: &'a str,
-}
-
-#[derive(Template)]
-#[template(path = "change_password/index.html")]
-struct ChangePasswordTemplate<'a> {
-  state: String,
-  alert: &'a str,
-}
-
-#[derive(Template)]
-#[template(path = "change_email/index.html")]
-struct ChangeEmailTemplate<'a> {
-  state: String,
-  alert: &'a str,
-}
 
 #[derive(Debug, Default, Deserialize)]
 pub struct LoginQuery {
@@ -236,7 +197,7 @@ async fn ui_logout_handler(Query(query): Query<LogoutQuery>) -> Redirect {
 /// HTML endpoints of core auth functionality.
 pub(crate) fn auth_ui_router() -> Router<crate::AppState> {
   // Static assets for auth UI .
-  let serve_auth_assets = AssetService::<AuthAssets>::with_parameters(
+  let serve_auth_assets = AssetService::<trailbase_assets::AuthAssets>::with_parameters(
     // We want as little magic as possible. The only /_/auth/subpath that isn't SSR, is profile, so
     // we when hitting /profile or /profile, we want actually want to serve the static
     // profile/index.html.
@@ -280,7 +241,3 @@ fn redirect_to(redirect_to: Option<&String>) -> String {
   }
   return "".to_string();
 }
-
-#[derive(RustEmbed, Clone)]
-#[folder = "js/auth/dist/"]
-struct AuthAssets;

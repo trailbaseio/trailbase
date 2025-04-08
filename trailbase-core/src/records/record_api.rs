@@ -641,24 +641,28 @@ fn validate_expr_recursively(expr: &sqlite3_parser::ast::Expr) -> Result<(), Str
   use sqlite3_parser::ast;
 
   match &expr {
+    ast::Expr::Binary(lhs, _op, rhs) => {
+      validate_expr_recursively(lhs)?;
+      validate_expr_recursively(rhs)?;
+    }
     ast::Expr::IsNull(inner) => {
       validate_expr_recursively(inner)?;
     }
-    ast::Expr::InTable { lhs, rhs, .. } => {
-      match rhs {
-        ast::QualifiedName {
-          name: ast::Name(name),
-          ..
-        } if name == "_FIELDS_" => {
-          if !matches!(**lhs, ast::Expr::Literal(ast::Literal::String(_))) {
-            return Err(format!("Expected literal string: {lhs:?}"));
-          }
-        }
-        _ => {}
-      };
-
-      validate_expr_recursively(lhs)?;
-    }
+    // ast::Expr::InTable { lhs, rhs, .. } => {
+    //   match rhs {
+    //     ast::QualifiedName {
+    //       name: ast::Name(name),
+    //       ..
+    //     } if name == "_FIELDS_" => {
+    //       if !matches!(**lhs, ast::Expr::Literal(ast::Literal::String(_))) {
+    //         return Err(format!("Expected literal string: {lhs:?}"));
+    //       }
+    //     }
+    //     _ => {}
+    //   };
+    //
+    //   validate_expr_recursively(lhs)?;
+    // }
     _ => {}
   }
 

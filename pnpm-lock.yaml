@@ -98,7 +98,7 @@ importers:
     dependencies:
       trailbase:
         specifier: workspace:*
-        version: link:../../../trailbase-core/js/client
+        version: link:../../../trailbase-assets/js/client
     devDependencies:
       '@eslint/js':
         specifier: ^9.23.0
@@ -254,7 +254,7 @@ importers:
         version: 1.9.5
       trailbase:
         specifier: workspace:*
-        version: link:../../trailbase-core/js/client
+        version: link:../../trailbase-assets/js/client
     devDependencies:
       '@eslint/js':
         specifier: ^9.23.0
@@ -309,7 +309,7 @@ importers:
         version: 5.6.0
       trailbase:
         specifier: workspace:*
-        version: link:../../trailbase-core/js/client
+        version: link:../../trailbase-assets/js/client
     devDependencies:
       '@eslint/js':
         specifier: ^9.23.0
@@ -336,7 +336,7 @@ importers:
         specifier: ^8.29.0
         version: 8.29.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2)
 
-  trailbase-core/js/admin:
+  trailbase-assets/js/admin:
     dependencies:
       '@bufbuild/protobuf':
         specifier: ^2.2.5
@@ -514,7 +514,7 @@ importers:
         specifier: ^3.1.1
         version: 3.1.1(@types/debug@4.1.12)(@types/node@22.14.0)(happy-dom@15.11.7)(jiti@2.4.2)(jsdom@26.0.0)(lightningcss@1.29.1)(yaml@2.7.1)
 
-  trailbase-core/js/auth:
+  trailbase-assets/js/auth:
     dependencies:
       '@astrojs/check':
         specifier: ^0.9.4
@@ -602,7 +602,7 @@ importers:
         specifier: ^8.29.0
         version: 8.29.0(eslint@9.23.0(jiti@2.4.2))(typescript@5.8.2)
 
-  trailbase-core/js/client:
+  trailbase-assets/js/client:
     dependencies:
       jwt-decode:
         specifier: ^4.0.0
@@ -651,7 +651,7 @@ importers:
         specifier: ^3.1.1
         version: 3.1.1(@types/debug@4.1.12)(@types/node@22.14.0)(happy-dom@15.11.7)(jiti@2.4.2)(jsdom@26.0.0)(lightningcss@1.29.1)(yaml@2.7.1)
 
-  trailbase-core/js/runtime:
+  trailbase-assets/js/runtime:
     devDependencies:
       '@eslint/js':
         specifier: ^9.23.0
