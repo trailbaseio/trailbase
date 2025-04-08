@@ -1,106 +1,12 @@
 use jsonschema::Validator;
 use lazy_static::lazy_static;
-use schemars::{schema_for, JsonSchema};
-use serde::{Deserialize, Serialize};
+use schemars::schema_for;
 use std::collections::HashMap;
 use std::sync::Arc;
-use thiserror::Error;
-use trailbase_extension::jsonschema::{SchemaEntry, ValidationError};
-use uuid::Uuid;
+use trailbase_extension::jsonschema::SchemaEntry;
 
-#[derive(Debug, Clone, Error)]
-pub enum SchemaError {
-  #[error("JSONSchema validation error: {0}")]
-  JsonSchema(Arc<ValidationError>),
-  #[error("Cannot update builtin schemas")]
-  BuiltinSchema,
-  #[error("Missing name")]
-  MissingName,
-}
-
-/// File input schema used both for multipart-form uploads (in which case the name is mapped to
-/// column names) and JSON where the column name is extracted from the corresponding key of the
-/// parent object.
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct FileUploadInput {
-  /// The name of the form's file control.
-  pub name: Option<String>,
-
-  /// The file's file name.
-  pub filename: Option<String>,
-
-  /// The file's content type.
-  pub content_type: Option<String>,
-
-  /// The file's data
-  pub data: Vec<u8>,
-}
-
-impl FileUploadInput {
-  pub fn consume(self) -> Result<(Option<String>, FileUpload, Vec<u8>), SchemaError> {
-    // We don't trust user provided type, we check ourselves.
-    let mime_type = infer::get(&self.data).map(|t| t.mime_type().to_string());
-
-    return Ok((
-      self.name,
-      FileUpload::new(
-        uuid::Uuid::new_v4(),
-        self.filename,
-        self.content_type,
-        mime_type,
-      ),
-      self.data,
-    ));
-  }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct FileUpload {
-  /// The file's unique id from which the objectstore path is derived.
-  id: String,
-
-  /// The file's original file name.
-  filename: Option<String>,
-
-  /// The file's user-provided content type.
-  content_type: Option<String>,
-
-  /// The file's inferred mime type. Not user provided.
-  mime_type: Option<String>,
-}
-
-impl FileUpload {
-  pub fn new(
-    id: Uuid,
-    filename: Option<String>,
-    content_type: Option<String>,
-    mime_type: Option<String>,
-  ) -> Self {
-    Self {
-      id: id.to_string(),
-      filename,
-      content_type,
-      mime_type,
-    }
-  }
-
-  pub fn path(&self) -> &str {
-    &self.id
-  }
-
-  pub fn content_type(&self) -> Option<&str> {
-    self.content_type.as_deref()
-  }
-
-  pub fn original_filename(&self) -> Option<&str> {
-    self.filename.as_deref()
-  }
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct FileUploads(pub Vec<FileUpload>);
+use crate::error::Error;
+use crate::file::{FileUpload, FileUploads};
 
 fn builtin_schemas() -> &'static HashMap<String, SchemaEntry> {
   fn validate_mime_type(value: &serde_json::Value, extra_args: Option<&str>) -> bool {
@@ -179,14 +85,14 @@ pub fn get_schemas() -> Vec<Schema> {
     .collect();
 }
 
-pub fn set_user_schema(name: &str, pattern: Option<serde_json::Value>) -> Result<(), SchemaError> {
+pub fn set_user_schema(name: &str, pattern: Option<serde_json::Value>) -> Result<(), Error> {
   let builtins = builtin_schemas();
   if builtins.contains_key(name) {
-    return Err(SchemaError::BuiltinSchema);
+    return Err(Error::BuiltinSchema);
   }
 
   if let Some(p) = pattern {
-    let entry = SchemaEntry::from(p, None).map_err(|err| SchemaError::JsonSchema(Arc::new(err)))?;
+    let entry = SchemaEntry::from(p, None).map_err(|err| Error::JsonSchema(Arc::new(err)))?;
     trailbase_extension::jsonschema::set_schema(name, Some(entry));
   } else {
     trailbase_extension::jsonschema::set_schema(name, None);
@@ -199,7 +105,7 @@ lazy_static! {
   static ref INIT: parking_lot::Mutex<bool> = parking_lot::Mutex::new(false);
 }
 
-pub fn set_user_schemas(schemas: Vec<(String, serde_json::Value)>) -> Result<(), SchemaError> {
+pub fn set_user_schemas(schemas: Vec<(String, serde_json::Value)>) -> Result<(), Error> {
   let mut entries: Vec<(String, SchemaEntry)> = vec![];
   for (name, entry) in builtin_schemas() {
     entries.push((name.clone(), entry.clone()));
@@ -208,7 +114,7 @@ pub fn set_user_schemas(schemas: Vec<(String, serde_json::Value)>) -> Result<(),
   for (name, schema) in schemas {
     entries.push((
       name,
-      SchemaEntry::from(schema, None).map_err(|err| SchemaError::JsonSchema(Arc::new(err)))?,
+      SchemaEntry::from(schema, None).map_err(|err| Error::JsonSchema(Arc::new(err)))?,
     ));
   }
 
@@ -219,8 +125,9 @@ pub fn set_user_schemas(schemas: Vec<(String, serde_json::Value)>) -> Result<(),
   return Ok(());
 }
 
-pub(crate) fn try_init_schemas() {
+pub fn try_init_schemas() {
   let mut init = INIT.lock();
+
   if !*init {
     let entries = builtin_schemas()
       .iter()

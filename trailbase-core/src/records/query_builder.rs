@@ -2,7 +2,7 @@ use askama::Template;
 use itertools::Itertools;
 use log::*;
 use std::sync::Arc;
-use trailbase_sqlite::schema::{FileUpload, FileUploads};
+use trailbase_schema::{FileUpload, FileUploads};
 use trailbase_sqlite::{NamedParams, Params as _, Value};
 
 use crate::config::proto::ConflictResolutionStrategy;

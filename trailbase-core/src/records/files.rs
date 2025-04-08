@@ -5,8 +5,8 @@ use log::*;
 use object_store::ObjectStore;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use trailbase_schema::{FileUpload, FileUploads};
 use trailbase_sqlite::params;
-use trailbase_sqlite::schema::{FileUpload, FileUploads};
 
 use crate::app_state::AppState;
 use crate::records::params::FileMetadataContents;

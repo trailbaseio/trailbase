@@ -44,7 +44,9 @@ enum Message {
 }
 
 #[derive(Clone, Default)]
-pub struct Options {}
+pub struct Options {
+  busy_timeout: std::time::Duration,
+}
 
 /// A handle to call functions in background thread.
 #[derive(Clone)]
@@ -55,11 +57,17 @@ pub struct Connection {
 impl Connection {
   pub fn new<E>(
     c: impl Fn() -> std::result::Result<rusqlite::Connection, E>,
-    _opt: Option<Options>,
+    opt: Option<Options>,
   ) -> std::result::Result<Self, E> {
-    let conn = c()?;
     let (sender, receiver) = crossbeam_channel::unbounded::<Message>();
+
+    let conn = c()?;
+    if let Some(timeout) = opt.map(|o| o.busy_timeout) {
+      conn.busy_timeout(timeout).expect("busy timeout failed");
+    }
+
     std::thread::spawn(move || event_loop(conn, receiver));
+
     return Ok(Self { sender });
   }
 

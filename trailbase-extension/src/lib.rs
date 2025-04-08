@@ -2,8 +2,7 @@
 #![allow(clippy::needless_return)]
 
 use rusqlite::functions::FunctionFlags;
-
-use uuid::*;
+use std::path::PathBuf;
 
 pub mod jsonschema;
 pub mod maxminddb;
@@ -12,7 +11,75 @@ pub mod password;
 mod uuid;
 mod validators;
 
-pub fn sqlite3_extension_init(db: rusqlite::Connection) -> rusqlite::Result<rusqlite::Connection> {
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+  #[error("Rusqlite error: {0}")]
+  Rusqlite(#[from] rusqlite::Error),
+  #[error("Other error: {0}")]
+  Other(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
+}
+
+#[allow(unsafe_code)]
+pub fn connect_sqlite(
+  path: Option<PathBuf>,
+  extensions: Option<Vec<PathBuf>>,
+) -> Result<rusqlite::Connection, Error> {
+  let status =
+    unsafe { rusqlite::ffi::sqlite3_auto_extension(Some(init_sqlean_and_vector_search)) };
+  if status != 0 {
+    return Err(Error::Other("Failed to load extensions".into()));
+  }
+
+  let conn = sqlite3_extension_init(if let Some(p) = path {
+    use rusqlite::OpenFlags;
+    let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
+      | OpenFlags::SQLITE_OPEN_CREATE
+      | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+
+    rusqlite::Connection::open_with_flags(p, flags)?
+  } else {
+    rusqlite::Connection::open_in_memory()?
+  })?;
+
+  const CONFIG: &[&str] = &[
+    "PRAGMA busy_timeout       = 10000",
+    "PRAGMA journal_mode       = WAL",
+    "PRAGMA journal_size_limit = 200000000",
+    // Sync the file system less often.
+    "PRAGMA synchronous        = NORMAL",
+    "PRAGMA foreign_keys       = ON",
+    "PRAGMA temp_store         = MEMORY",
+    "PRAGMA cache_size         = -16000",
+    // TODO: Maybe worth exploring once we have a benchmark, based on
+    // https://phiresky.github.io/blog/2020/sqlite-performance-tuning/.
+    // "PRAGMA mmap_size          = 30000000000",
+    // "PRAGMA page_size          = 32768",
+
+    // Safety feature around application-defined functions recommended by
+    // https://sqlite.org/appfunc.html
+    "PRAGMA trusted_schema     = OFF",
+  ];
+
+  // NOTE: we're querying here since some pragmas return data.
+  for pragma in CONFIG {
+    let mut stmt = conn.prepare(pragma)?;
+    let mut rows = stmt.query([])?;
+    rows.next()?;
+  }
+
+  if let Some(extensions) = extensions {
+    for path in extensions {
+      unsafe { conn.load_extension(path, None)? }
+    }
+  }
+
+  // Initial optimize.
+  conn.execute("PRAGMA optimize = 0x10002", ())?;
+
+  return Ok(conn);
+}
+
+fn sqlite3_extension_init(db: rusqlite::Connection) -> rusqlite::Result<rusqlite::Connection> {
   // WARN: Be careful with declaring INNOCUOUS. This allows these "app-defined functions" to run
   // even when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
   // GENERATED cols, ... as opposed to just top-level SELECTs.
@@ -21,29 +88,29 @@ pub fn sqlite3_extension_init(db: rusqlite::Connection) -> rusqlite::Result<rusq
     "is_uuid",
     1,
     FunctionFlags::SQLITE_DETERMINISTIC | FunctionFlags::SQLITE_INNOCUOUS,
-    is_uuid,
+    uuid::is_uuid,
   )?;
   db.create_scalar_function(
     "is_uuid_v7",
     1,
     FunctionFlags::SQLITE_DETERMINISTIC | FunctionFlags::SQLITE_INNOCUOUS,
-    is_uuid_v7,
+    uuid::is_uuid_v7,
   )?;
   db.create_scalar_function(
     "uuid_text",
     1,
     FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_INNOCUOUS,
-    uuid_text,
+    uuid::uuid_text,
   )?;
 
-  db.create_scalar_function("uuid_v7", 0, FunctionFlags::SQLITE_INNOCUOUS, uuid_v7)?;
+  db.create_scalar_function("uuid_v7", 0, FunctionFlags::SQLITE_INNOCUOUS, uuid::uuid_v7)?;
   db.create_scalar_function(
     "uuid_parse",
     1,
     FunctionFlags::SQLITE_UTF8
       | FunctionFlags::SQLITE_DETERMINISTIC
       | FunctionFlags::SQLITE_INNOCUOUS,
-    uuid_parse,
+    uuid::uuid_parse,
   )?;
 
   db.create_scalar_function(
@@ -119,8 +186,109 @@ pub fn sqlite3_extension_init(db: rusqlite::Connection) -> rusqlite::Result<rusq
   return Ok(db);
 }
 
+#[allow(unsafe_code)]
+#[no_mangle]
+extern "C" fn init_sqlean_and_vector_search(
+  db: *mut rusqlite::ffi::sqlite3,
+  _pz_err_msg: *mut *mut std::os::raw::c_char,
+  _p_api: *const rusqlite::ffi::sqlite3_api_routines,
+) -> ::std::os::raw::c_int {
+  // Add sqlite-vec extension.
+  unsafe {
+    sqlite_vec::sqlite3_vec_init();
+  }
+
+  // Init sqlean's stored procedures: "define", see:
+  //   https://github.com/nalgeon/sqlean/blob/main/docs/define.md
+  let status = unsafe { trailbase_sqlean::define_init(db as *mut trailbase_sqlean::sqlite3) };
+  if status != 0 {
+    log::error!("Failed to load sqlean::define",);
+    return status;
+  }
+
+  return status;
+}
+
 #[cfg(test)]
-pub(crate) fn connect() -> Result<rusqlite::Connection, rusqlite::Error> {
-  let db = rusqlite::Connection::open_in_memory()?;
-  return Ok(sqlite3_extension_init(db)?);
+mod test {
+  use super::*;
+
+  use ::uuid::Uuid;
+
+  #[test]
+  fn test_connect_and_extensions() {
+    let conn = connect_sqlite(None, None).unwrap();
+
+    let row = conn
+      .query_row(
+        "SELECT (uuid_v7())",
+        (),
+        |row| -> rusqlite::Result<[u8; 16]> { row.get(0) },
+      )
+      .unwrap();
+
+    let uuid = Uuid::from_bytes(row);
+    assert_eq!(uuid.get_version_num(), 7);
+
+    // sqlean: Define a stored procedure, use it, and remove it.
+    conn
+      .query_row("SELECT define('sumn', ':n * (:n + 1) / 2')", (), |_row| {
+        Ok(())
+      })
+      .unwrap();
+
+    let value: i64 = conn
+      .query_row("SELECT sumn(5)", (), |row| row.get(0))
+      .unwrap();
+    assert_eq!(value, 15);
+
+    conn
+      .query_row("SELECT undefine('sumn')", (), |_row| Ok(()))
+      .unwrap();
+
+    // sqlite-vec
+    conn
+      .query_row("SELECT vec_f32('[0, 1, 2, 3]')", (), |_row| Ok(()))
+      .unwrap();
+  }
+
+  #[test]
+  fn test_uuids() {
+    let conn = connect_sqlite(None, None).unwrap();
+
+    conn
+      .execute(
+        r#"CREATE TABLE test (
+        id    BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
+        text  TEXT
+      )"#,
+        (),
+      )
+      .unwrap();
+
+    // V4 fails
+    assert!(conn
+      .execute(
+        "INSERT INTO test (id) VALUES (?1) ",
+        rusqlite::params!(Uuid::new_v4().into_bytes())
+      )
+      .is_err());
+
+    // V7 succeeds
+    let id = Uuid::now_v7();
+    assert!(conn
+      .execute(
+        "INSERT INTO test (id) VALUES (?1) ",
+        rusqlite::params!(id.into_bytes())
+      )
+      .is_ok());
+
+    let read_id: Uuid = conn
+      .query_row("SELECT id FROM test LIMIT 1", [], |row| {
+        Ok(Uuid::from_bytes(row.get::<_, [u8; 16]>(0)?))
+      })
+      .unwrap();
+
+    assert_eq!(id, read_id);
+  }
 }

@@ -257,7 +257,7 @@ fn prefix_filter(col_name: &str) -> bool {
 mod test {
   use axum::extract::{Path, Query, State};
   use axum::Json;
-  use trailbase_sqlite::{schema::FileUpload, schema::FileUploadInput};
+  use trailbase_schema::{FileUpload, FileUploadInput};
 
   use super::*;
   use crate::admin::user::*;

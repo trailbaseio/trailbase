@@ -2,7 +2,7 @@ use base64::prelude::*;
 use log::*;
 use std::collections::HashSet;
 use std::sync::Arc;
-use trailbase_sqlite::schema::{FileUpload, FileUploadInput, FileUploads};
+use trailbase_schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{NamedParams, Value};
 
 use crate::records::RecordApi;
@@ -36,7 +36,7 @@ pub enum ParamsError {
   #[error("Json serialization error: {0}")]
   JsonSerialization(Arc<serde_json::Error>),
   #[error("Json schema error: {0}")]
-  Schema(#[from] trailbase_sqlite::schema::SchemaError),
+  Schema(#[from] trailbase_schema::Error),
   #[error("ObjectStore error: {0}")]
   Storage(Arc<object_store::Error>),
 }
@@ -591,7 +591,7 @@ mod tests {
       .try_into()
       .unwrap();
 
-    trailbase_sqlite::schema::set_user_schema(
+    trailbase_schema::registry::set_user_schema(
       SCHEMA_NAME,
       Some(serde_json::to_value(schema).unwrap()),
     )

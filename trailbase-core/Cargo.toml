@@ -79,8 +79,10 @@ tower-http = { version = "^0.6.0", default-features = false, features = ["cors",
 tower-service = { version = "0.3.3", default-features = false }
 tracing = { version = "0.1.40", default-features = false }
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["smallvec", "std", "fmt", "ansi"] }
+trailbase-extension = { workspace = true }
 trailbase-refinery-core = { workspace = true }
 trailbase-refinery-macros = { workspace = true }
+trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true }
 ts-rs = { version = "10", features = ["uuid-impl", "serde-json-impl"] }
 url = "^2.4.1"

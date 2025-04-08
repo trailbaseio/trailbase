@@ -6716,6 +6716,7 @@ dependencies = [
  "trailbase-extension",
  "trailbase-refinery-core",
  "trailbase-refinery-macros",
+ "trailbase-schema",
  "trailbase-sqlite",
  "ts-rs",
  "url",
@@ -6769,6 +6770,7 @@ dependencies = [
  "argon2",
  "base64 0.22.1",
  "jsonschema",
+ "log",
  "lru",
  "maxminddb",
  "parking_lot",
@@ -6777,6 +6779,9 @@ dependencies = [
  "regex",
  "rusqlite",
  "serde_json",
+ "sqlite-vec",
+ "thiserror 2.0.12",
+ "trailbase-sqlean",
  "uuid",
  "validator",
 ]
@@ -6810,6 +6815,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "trailbase-schema"
+version = "0.1.0"
+dependencies = [
+ "infer",
+ "jsonschema",
+ "lazy_static",
+ "parking_lot",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
+ "trailbase-extension",
+ "uuid",
+]
+
+[[package]]
 name = "trailbase-sqlean"
 version = "0.0.2"
 dependencies = [
@@ -6824,21 +6846,14 @@ name = "trailbase-sqlite"
 version = "0.2.0"
 dependencies = [
  "crossbeam-channel",
- "infer",
- "jsonschema",
- "lazy_static",
- "log",
  "parking_lot",
  "rusqlite",
- "schemars",
  "serde",
  "serde_json",
  "serde_rusqlite",
- "sqlite-vec",
  "thiserror 2.0.12",
  "tokio",
  "trailbase-extension",
- "trailbase-sqlean",
  "uuid",
 ]
 

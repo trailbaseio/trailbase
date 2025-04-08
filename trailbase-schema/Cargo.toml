@@ -1,23 +1,17 @@
 [package]
-name = "trailbase-sqlite"
-version = "0.2.0"
+name = "trailbase-schema"
+version = "0.1.0"
 edition = "2021"
-license = "OSL-3.0"
-description = "Async SQLite connection for TrailBase"
-homepage = "https://trailbase.io"
-repository = "https://github.com/trailbaseio/trailbase"
-readme = "../README.md"
 
 [dependencies]
-crossbeam-channel = "0.5.13"
+infer = "0.19.0"
+jsonschema = { version = "0.29.0", default-features = false }
+lazy_static = "1.5.0"
 parking_lot = { version = "0.12.3", default-features = false }
-rusqlite = { workspace = true }
+schemars = "0.8.21"
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "1.0.122"
-serde_rusqlite = "0.38.0"
 thiserror = "2.0.1"
 tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "sync"] }
-
-[dev-dependencies]
 trailbase-extension = { workspace = true }
 uuid = { workspace = true }

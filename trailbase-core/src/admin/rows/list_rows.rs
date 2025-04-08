@@ -241,7 +241,7 @@ mod tests {
     )
     .unwrap();
 
-    trailbase_sqlite::schema::set_user_schema("foo", Some(pattern)).unwrap();
+    trailbase_schema::registry::set_user_schema("foo", Some(pattern)).unwrap();
 
     conn
       .execute_batch(

@@ -36,7 +36,7 @@ pub enum AdminError {
   #[error("SQL -> Json error: {0}")]
   Json(#[from] crate::records::sql_to_json::JsonError),
   #[error("Schema error: {0}")]
-  SchemaError(#[from] trailbase_sqlite::schema::SchemaError),
+  SchemaError(#[from] trailbase_schema::Error),
   #[error("Json -> SQL Params error: {0}")]
   Params(#[from] crate::records::params::ParamsError),
   #[error("Config error: {0}")]

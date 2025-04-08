@@ -15,6 +15,8 @@ use crate::table_metadata::TableMetadataCache;
 
 #[derive(Debug, Error)]
 pub enum InitError {
+  #[error("SQLite extension error: {0}")]
+  SqliteExtension(#[from] trailbase_extension::Error),
   #[error("TB SQLite error: {0}")]
   Sqlite(#[from] trailbase_sqlite::Error),
   #[error("Rusqlite error: {0}")]
@@ -36,7 +38,7 @@ pub enum InitError {
   #[error("Table error: {0}")]
   TableError(#[from] crate::table_metadata::TableLookupError),
   #[error("Schema error: {0}")]
-  SchemaError(#[from] trailbase_sqlite::schema::SchemaError),
+  SchemaError(#[from] trailbase_schema::Error),
   #[error("Script error: {0}")]
   ScriptError(String),
   #[error("ObjectStore error: {0}")]
@@ -79,7 +81,7 @@ pub async fn init_app_state(
     let new_db_clone = new_db.clone();
     let conn = trailbase_sqlite::Connection::new(
       || -> Result<_, InitError> {
-        let mut conn = trailbase_sqlite::connect_sqlite(Some(data_dir.main_db_path()), None)?;
+        let mut conn = crate::connection::connect_sqlite(Some(data_dir.main_db_path()), None)?;
         *(new_db_clone.lock()) |=
           apply_main_migrations(&mut conn, Some(data_dir.migrations_path()))?;
         return Ok(conn);
@@ -97,7 +99,7 @@ pub async fn init_app_state(
   let config = load_or_init_config_textproto(&data_dir, &table_metadata).await?;
 
   debug!("Initializing JSON schemas from config");
-  trailbase_sqlite::schema::set_user_schemas(
+  trailbase_schema::registry::set_user_schemas(
     config
       .schemas
       .iter()
@@ -129,7 +131,7 @@ pub async fn init_app_state(
 
   // Init geoip if present.
   let geoip_db_path = data_dir.root().join("GeoLite2-Country.mmdb");
-  if let Err(err) = trailbase_sqlite::geoip::load_geoip_db(geoip_db_path.clone()) {
+  if let Err(err) = trailbase_extension::maxminddb::load_geoip_db(geoip_db_path.clone()) {
     debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
   }
 
@@ -206,7 +208,7 @@ pub async fn init_app_state(
 }
 
 fn init_logs_db(data_dir: &DataDir) -> Result<rusqlite::Connection, InitError> {
-  let conn = trailbase_sqlite::connect_sqlite(data_dir.logs_db_path().into(), None)?;
+  let conn = crate::connection::connect_sqlite(data_dir.logs_db_path().into(), None)?;
 
   // Turn off secure_deletions, i.e. don't wipe the memory with zeros.
   conn.query_row("PRAGMA secure_delete = FALSE", (), |_row| Ok(()))?;

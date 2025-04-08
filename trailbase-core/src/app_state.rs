@@ -326,7 +326,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let conn = {
     trailbase_sqlite::Connection::new(
       || -> anyhow::Result<rusqlite::Connection> {
-        let mut conn = trailbase_sqlite::connect_sqlite(None, None)?;
+        let mut conn = crate::connection::connect_sqlite(None, None)?;
         apply_user_migrations(&mut conn)?;
         let _new_db = apply_main_migrations(&mut conn, None)?;
         return Ok(conn);
@@ -338,7 +338,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let logs_conn = {
     trailbase_sqlite::Connection::new(
       || -> anyhow::Result<rusqlite::Connection> {
-        let mut conn = trailbase_sqlite::connect_sqlite(None, None)?;
+        let mut conn = crate::connection::connect_sqlite(None, None)?;
         apply_logs_migrations(&mut conn)?;
         return Ok(conn);
       },
@@ -373,7 +373,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     // races between concurrent tests. The registry needs to be global for the sqlite extensions
     // to access (unless we find a better way to bind the two).
     for schema in &config.schemas {
-      trailbase_sqlite::schema::set_user_schema(
+      trailbase_schema::registry::set_user_schema(
         schema.name.as_ref().unwrap(),
         Some(serde_json::to_value(schema.schema.as_ref().unwrap()).unwrap()),
       )

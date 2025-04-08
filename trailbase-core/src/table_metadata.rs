@@ -37,7 +37,7 @@ impl JsonColumnMetadata {
   pub fn validate(&self, value: &serde_json::Value) -> Result<(), JsonSchemaError> {
     match self {
       Self::SchemaName(name) => {
-        let Some(schema) = trailbase_sqlite::schema::get_compiled_schema(name) else {
+        let Some(schema) = trailbase_schema::registry::get_compiled_schema(name) else {
           return Err(JsonSchemaError::NotFound(name.to_string()));
         };
         schema
@@ -284,8 +284,8 @@ fn extract_json_metadata(
 
   if let Some(cap) = SCHEMA_RE.captures(check) {
     let name = &cap["name"];
-    let Some(_schema) = trailbase_sqlite::schema::get_schema(name) else {
-      let schemas: Vec<String> = trailbase_sqlite::schema::get_schemas()
+    let Some(_schema) = trailbase_schema::registry::get_schema(name) else {
+      let schemas: Vec<String> = trailbase_schema::registry::get_schemas()
         .iter()
         .map(|s| s.name.clone())
         .collect();
@@ -804,7 +804,7 @@ pub(crate) fn build_json_schema_recursive(
           if let Some(json_metadata) = extract_json_metadata(&ColumnOption::Check(check.clone()))? {
             match json_metadata {
               JsonColumnMetadata::SchemaName(name) => {
-                let Some(schema) = trailbase_sqlite::schema::get_schema(&name) else {
+                let Some(schema) = trailbase_schema::registry::get_schema(&name) else {
                   return Err(JsonSchemaError::NotFound(name.to_string()));
                 };
                 defs.insert(col.name.clone(), schema.schema);
@@ -937,7 +937,7 @@ mod tests {
   use axum::extract::{Json, Path, Query, RawQuery, State};
   use indoc::indoc;
   use serde_json::json;
-  use trailbase_sqlite::schema::FileUpload;
+  use trailbase_schema::FileUpload;
 
   use super::*;
   use crate::app_state::*;

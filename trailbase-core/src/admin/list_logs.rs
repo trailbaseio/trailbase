@@ -335,7 +335,7 @@ async fn fetch_aggregate_stats(
     ));
   }
 
-  if trailbase_sqlite::geoip::has_geoip_db() {
+  if trailbase_extension::maxminddb::has_geoip_db() {
     let cc_query = format!(
       r#"
     SELECT
@@ -384,7 +384,7 @@ mod tests {
   async fn test_aggregate_rate_computation() {
     let conn = trailbase_sqlite::Connection::new(
       move || -> anyhow::Result<_> {
-        let mut conn_sync = trailbase_sqlite::connect_sqlite(None, None).unwrap();
+        let mut conn_sync = crate::connection::connect_sqlite(None, None).unwrap();
         apply_logs_migrations(&mut conn_sync).unwrap();
         return Ok(conn_sync);
       },

@@ -3,8 +3,8 @@ use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use trailbase_schema::FileUpload;
 use trailbase_sqlite::params;
-use trailbase_sqlite::schema::FileUpload;
 use uuid::Uuid;
 
 use crate::app_state::AppState;

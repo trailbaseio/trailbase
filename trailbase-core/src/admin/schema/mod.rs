@@ -2,7 +2,7 @@ use axum::extract::{Json, State};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use trailbase_sqlite::schema::{get_schemas, set_user_schema};
+use trailbase_schema::registry::{get_schemas, set_user_schema};
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
@@ -22,8 +22,8 @@ pub struct ListJsonSchemasResponse {
   schemas: Vec<JsonSchema>,
 }
 
-impl From<trailbase_sqlite::schema::Schema> for JsonSchema {
-  fn from(value: trailbase_sqlite::schema::Schema) -> Self {
+impl From<trailbase_schema::registry::Schema> for JsonSchema {
+  fn from(value: trailbase_schema::registry::Schema) -> Self {
     return JsonSchema {
       name: value.name,
       schema: value.schema.to_string(),

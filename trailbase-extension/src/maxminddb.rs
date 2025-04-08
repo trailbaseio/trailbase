@@ -62,7 +62,7 @@ mod tests {
   #[test]
   fn test_explicit_jsonschema() {
     let ip = "89.160.20.112";
-    let conn = crate::connect().unwrap();
+    let conn = crate::connect_sqlite(None, None).unwrap();
 
     let cc: Option<String> = conn
       .query_row(&format!("SELECT geoip_country('{ip}')"), (), |row| {

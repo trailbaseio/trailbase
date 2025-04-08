@@ -12,6 +12,7 @@ pub mod util;
 
 mod admin;
 mod auth;
+mod connection;
 mod data_dir;
 mod email;
 mod extract;
@@ -59,11 +60,10 @@ pub mod openapi {
 }
 
 pub mod api {
-  pub use trailbase_sqlite::connect_sqlite;
-
   pub use crate::admin::user::{create_user_handler, CreateUserRequest};
   pub use crate::auth::api::login::login_with_password;
   pub use crate::auth::{force_password_reset, JwtHelper, TokenClaims};
+  pub use crate::connection::connect_sqlite;
   pub use crate::email::{Email, EmailError};
   pub use crate::migrations::new_unique_migration_filename;
   pub use crate::server::{init_app_state, InitArgs};

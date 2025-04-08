@@ -89,7 +89,7 @@ mod tests {
 
   #[test]
   fn test_uuid() {
-    let conn = crate::connect().unwrap();
+    let conn = crate::connect_sqlite(None, None).unwrap();
 
     let create_table = r#"
         CREATE TABLE test (

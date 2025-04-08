@@ -7,7 +7,7 @@ use log::*;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use thiserror::Error;
-use trailbase_sqlite::schema::FileUploadInput;
+use trailbase_schema::FileUploadInput;
 
 use crate::extract::multipart::{parse_multipart, Rejection as MultipartRejection};
 
