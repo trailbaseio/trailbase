@@ -176,7 +176,7 @@ pub(crate) async fn callback_from_external_auth_provider(
       let rows_affected = state
         .user_conn()
         .execute(
-          &QUERY,
+          &*QUERY,
           named_params! {
             ":authorization_code": authorization_code.clone(),
             ":pkce_code_challenge": oauth_state.user_pkce_code_challenge,
@@ -225,8 +225,8 @@ async fn create_user_for_external_provider(
   }
 
   let id: Uuid = conn
-    .query_value(
-      &QUERY,
+    .write_query_value(
+      &*QUERY,
       named_params! {
           ":provider_id": user.provider_id as i64,
           ":provider_user_id": user.provider_user_id.clone(),
@@ -252,8 +252,8 @@ async fn user_by_provider_id(
   };
 
   return conn
-    .query_value::<DbUser>(
-      &QUERY,
+    .read_query_value::<DbUser>(
+      &*QUERY,
       params!(provider_id as i64, provider_user_id.to_string()),
     )
     .await?

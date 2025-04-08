@@ -81,7 +81,7 @@ pub async fn reset_password_request_handler(
   let rows_affected = state
     .user_conn()
     .execute(
-      &UPDATE_CODE_QUERY,
+      &*UPDATE_CODE_QUERY,
       params!(password_reset_code.clone(), user.id),
     )
     .await?;
@@ -154,7 +154,7 @@ pub async fn reset_password_update_handler(
   let rows_affected = state
     .user_conn()
     .execute(
-      &UPDATE_PASSWORD_QUERY,
+      &*UPDATE_PASSWORD_QUERY,
       params!(hashed_password, password_reset_code),
     )
     .await?;
@@ -181,7 +181,7 @@ pub async fn force_password_reset(
   }
 
   return user_conn
-    .query_value(&UPDATE_PASSWORD_QUERY, params!(hashed_password, email))
+    .write_query_value(&*UPDATE_PASSWORD_QUERY, params!(hashed_password, email))
     .await?
     .ok_or(AuthError::NotFound);
 }

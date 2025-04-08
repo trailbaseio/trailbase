@@ -516,20 +516,18 @@ impl SubscriptionManager {
     let table_name = api.table_name().to_string();
     let pk_column = &api.record_pk_column().1.name;
 
-    let Some(row) = self
+    let Some(row_id): Option<i64> = self
       .state
       .conn
-      .query_row(
-        &format!(r#"SELECT _rowid_ FROM "{table_name}" WHERE "{pk_column}" = $1"#),
+      .read_query_row_f(
+        format!(r#"SELECT _rowid_ FROM "{table_name}" WHERE "{pk_column}" = $1"#),
         [record],
+        |row| row.get(0),
       )
       .await?
     else {
       return Err(RecordError::RecordNotFound);
     };
-    let row_id: i64 = row
-      .get(0)
-      .map_err(|err| RecordError::Internal(err.into()))?;
 
     let (sender, receiver) = async_channel::bounded::<Event>(16);
 
@@ -753,14 +751,13 @@ mod tests {
     let record_id_raw = 0;
     let record_id = trailbase_sqlite::Value::Integer(record_id_raw);
     let rowid: i64 = conn
-      .query_row(
+      .query_row_f(
         "INSERT INTO test (id, text) VALUES ($1, 'foo') RETURNING _rowid_",
         [record_id],
+        |row| row.get(0),
       )
       .await
       .unwrap()
-      .unwrap()
-      .get(0)
       .unwrap();
 
     assert_eq!(rowid, record_id_raw);
@@ -781,7 +778,7 @@ mod tests {
 
     // This should do nothing since nobody is subscribed to id = 5.
     let _ = conn
-      .query_row(
+      .execute(
         "INSERT INTO test (id, text) VALUES ($1, 'baz')",
         [trailbase_sqlite::Value::Integer(5)],
       )
@@ -824,7 +821,10 @@ mod tests {
     }
 
     // Implicitly await for scheduled cleanups to go through.
-    conn.query("SELECT 1", ()).await.unwrap();
+    conn
+      .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
+      .await
+      .unwrap();
 
     assert_eq!(0, manager.num_record_subscriptions());
   }
@@ -847,7 +847,7 @@ mod tests {
 
       let record_id_raw = 0;
       conn
-        .query_row(
+        .execute(
           "INSERT INTO test (id, text) VALUES ($1, 'foo')",
           params!(record_id_raw),
         )
@@ -904,7 +904,10 @@ mod tests {
     }
 
     // Implicitly await for scheduled cleanups to go through.
-    conn.query("SELECT 1", ()).await.unwrap();
+    conn
+      .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
+      .await
+      .unwrap();
 
     assert_eq!(0, manager.num_table_subscriptions());
   }
@@ -917,14 +920,13 @@ mod tests {
     let record_id_raw = 0;
     let record_id = trailbase_sqlite::Value::Integer(record_id_raw);
     let rowid: i64 = conn
-      .query_row(
+      .query_row_f(
         "INSERT INTO test (id, text) VALUES ($1, 'foo') RETURNING _rowid_",
         [record_id],
+        |row| row.get(0),
       )
       .await
       .unwrap()
-      .unwrap()
-      .get(0)
       .unwrap();
 
     assert_eq!(rowid, record_id_raw);
@@ -942,7 +944,10 @@ mod tests {
     drop(sse);
 
     // Implicitly await for the cleanup to be scheduled on the sqlite executor.
-    conn.query("SELECT 1", ()).await.unwrap();
+    conn
+      .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
+      .await
+      .unwrap();
 
     assert_eq!(0, manager.num_record_subscriptions());
   }
@@ -1024,17 +1029,16 @@ mod tests {
     let record_id_raw = 0;
     let record_id = trailbase_sqlite::Value::Integer(record_id_raw);
     let _rowid: i64 = conn
-      .query_row(
+      .query_row_f(
         "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo') RETURNING _rowid_",
         [
           record_id.clone(),
           trailbase_sqlite::Value::Blob(user_x.to_vec()),
         ],
+        |row| row.get(0),
       )
       .await
       .unwrap()
-      .unwrap()
-      .get(0)
       .unwrap();
 
     // Assert user_x can subscribe to their record.
@@ -1120,7 +1124,7 @@ mod tests {
 
       let record_id_raw = 1;
       conn
-        .query_row(
+        .execute(
           "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo')",
           [
             trailbase_sqlite::Value::Integer(record_id_raw),
@@ -1158,7 +1162,10 @@ mod tests {
     }
 
     // Implicitly await for scheduled cleanups to go through.
-    conn.query("SELECT 1", ()).await.unwrap();
+    conn
+      .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
+      .await
+      .unwrap();
 
     assert_eq!(0, manager.num_table_subscriptions());
   }
@@ -1180,15 +1187,17 @@ mod tests {
     let user_x = User::from_auth_token(&state, &user_x_token.auth_token);
 
     let record_id = 0;
-    let _ = conn
-      .query_row(
+    let _rowid: i64 = conn
+      .query_row_f(
         "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo') RETURNING _rowid_",
         [
           trailbase_sqlite::Value::Integer(record_id),
           trailbase_sqlite::Value::Blob(user_x_id.into()),
         ],
+        |row| row.get(0),
       )
       .await
+      .unwrap()
       .unwrap();
 
     let manager = state.subscription_manager();
@@ -1243,7 +1252,10 @@ mod tests {
       }
     }
 
-    conn.query("SELECT 1", ()).await.unwrap();
+    conn
+      .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
+      .await
+      .unwrap();
 
     // Make sure the subscription was cleaned up after the access error.
     assert!(stream.receiver.is_closed());

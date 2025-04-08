@@ -125,7 +125,7 @@ pub(crate) async fn login_handler(
     let rows_affected = state
       .user_conn()
       .execute(
-        &QUERY,
+        &*QUERY,
         named_params! {
           ":authorization_code": authorization_code.clone(),
           ":pkce_code_challenge": pkce_code_challenge,

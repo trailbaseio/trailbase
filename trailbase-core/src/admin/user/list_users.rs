@@ -81,12 +81,13 @@ pub async fn list_users_handler(
     build_filter_where_clause(&table_metadata.schema.columns, filter_params)?;
 
   let total_row_count: i64 = conn
-    .query_value(
-      &format!(
+    .read_query_row_f(
+      format!(
         "SELECT COUNT(*) FROM {USER_TABLE} WHERE {where_clause}",
         where_clause = filter_where_clause.clause
       ),
       filter_where_clause.params.clone(),
+      |row| row.get(0),
     )
     .await?
     .unwrap_or(-1);
@@ -161,6 +162,6 @@ async fn fetch_users(
     "#,
   );
 
-  let users = conn.query_values::<DbUser>(&sql_query, params).await?;
+  let users = conn.read_query_values::<DbUser>(sql_query, params).await?;
   return Ok(users);
 }

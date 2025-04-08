@@ -65,8 +65,8 @@ async fn test_auth_registration_reset_and_change_email() {
     // Then steal the verification code from the DB and verify.
     let email_verification_code = {
       let db_user = conn
-        .query_value::<DbUser>(
-          &format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
+        .read_query_value::<DbUser>(
+          format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
           (email.clone(),),
         )
         .await
@@ -104,8 +104,8 @@ async fn test_auth_registration_reset_and_change_email() {
 
     let (verified, user) = {
       let db_user = conn
-        .query_value::<DbUser>(
-          &format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
+        .read_query_value::<DbUser>(
+          format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
           (email.clone(),),
         )
         .await
@@ -144,7 +144,11 @@ async fn test_auth_registration_reset_and_change_email() {
       .unwrap();
 
     let session_exists: bool = conn
-      .query_value(&session_exists_query, (user.uuid.into_bytes().to_vec(),))
+      .read_query_row_f(
+        session_exists_query.clone(),
+        (user.uuid.into_bytes().to_vec(),),
+        |row| row.get(0),
+      )
       .await
       .unwrap()
       .unwrap();
@@ -209,9 +213,10 @@ async fn test_auth_registration_reset_and_change_email() {
 
     // Steal the reset code.
     let reset_code: String = conn
-      .query_value(
-        &format!("SELECT password_reset_code FROM {USER_TABLE} WHERE id = $1"),
+      .read_query_row_f(
+        format!("SELECT password_reset_code FROM {USER_TABLE} WHERE id = $1"),
         params!(user.uuid.into_bytes().to_vec()),
+        |row| row.get(0),
       )
       .await
       .unwrap()
@@ -267,9 +272,10 @@ async fn test_auth_registration_reset_and_change_email() {
     .unwrap();
 
     let session_exists: bool = conn
-      .query_value(
-        &session_exists_query,
+      .read_query_row_f(
+        session_exists_query,
         params!(user.uuid.into_bytes().to_vec()),
+        |row| row.get(0),
       )
       .await
       .unwrap()
@@ -320,9 +326,10 @@ async fn test_auth_registration_reset_and_change_email() {
 
     // Steal the verification code.
     let email_verification_code: String = conn
-      .query_value(
-        &format!(r#"SELECT email_verification_code FROM "{USER_TABLE}" WHERE id = $1"#),
+      .read_query_row_f(
+        format!(r#"SELECT email_verification_code FROM "{USER_TABLE}" WHERE id = $1"#),
         params!(user.uuid.into_bytes()),
+        |row| row.get(0),
       )
       .await
       .unwrap()
@@ -352,9 +359,10 @@ async fn test_auth_registration_reset_and_change_email() {
     .expect(&format!("CODE: '{email_verification_code}'"));
 
     let db_email: String = conn
-      .query_value(
-        &format!(r#"SELECT email FROM "{USER_TABLE}" WHERE id = $1"#),
+      .read_query_row_f(
+        format!(r#"SELECT email FROM "{USER_TABLE}" WHERE id = $1"#),
         params!(user.uuid.into_bytes()),
+        |row| row.get(0),
       )
       .await
       .unwrap()
@@ -407,9 +415,10 @@ async fn test_auth_registration_reset_and_change_email() {
       .unwrap();
 
     let user_exists: bool = conn
-      .query_value(
-        &format!(r#"SELECT EXISTS(SELECT * FROM "{USER_TABLE}" WHERE id = $1)"#),
+      .read_query_row_f(
+        format!(r#"SELECT EXISTS(SELECT * FROM "{USER_TABLE}" WHERE id = $1)"#),
         params!(user.uuid.into_bytes()),
+        |row| row.get(0),
       )
       .await
       .unwrap()

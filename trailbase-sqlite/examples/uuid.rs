@@ -8,7 +8,7 @@ async fn main() {
   let conn = Connection::new(|| connect_sqlite(None, None), None).expect("in memory connection");
 
   let uuid: Option<String> = conn
-    .query_value("SELECT (uuid_text(uuid_v7()))", ())
+    .read_query_value("SELECT (uuid_text(uuid_v7()))", ())
     .await
     .unwrap();
 

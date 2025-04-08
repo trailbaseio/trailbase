@@ -271,9 +271,10 @@ mod test {
 
     let value: Option<i64> = state
       .conn()
-      .query_value(
+      .read_query_row_f(
         "SELECT value FROM simple WHERE owner = ?1",
         trailbase_sqlite::params!(user_x),
+        |row| row.get(0),
       )
       .await
       .unwrap();
@@ -418,7 +419,7 @@ mod test {
       // Bulk inserts are rolled back in a transaction is second insert fails.
       let count_before: usize = state
         .conn()
-        .query_value("SELECT COUNT(*) FROM message", ())
+        .read_query_row_f("SELECT COUNT(*) FROM message", (), |row| row.get(0))
         .await
         .unwrap()
         .unwrap();
@@ -444,7 +445,7 @@ mod test {
 
       let count_after: usize = state
         .conn()
-        .query_value("SELECT COUNT(*) FROM message", ())
+        .read_query_row_f("SELECT COUNT(*) FROM message", (), |row| row.get(0))
         .await
         .unwrap()
         .unwrap();

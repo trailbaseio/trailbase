@@ -102,7 +102,7 @@ pub async fn change_email_request_handler(
   let rows_affected = state
     .user_conn()
     .execute(
-      &QUERY,
+      &*QUERY,
       named_params! {
         ":new_email": request.new_email,
         ":old_email": request.old_email,
@@ -188,7 +188,7 @@ pub async fn change_email_confirm_handler(
   let rows_affected = state
     .user_conn()
     .execute(
-      &QUERY,
+      &*QUERY,
       named_params! {
         ":new_email": new_email,
         ":email_verification_code": email_verification_code,

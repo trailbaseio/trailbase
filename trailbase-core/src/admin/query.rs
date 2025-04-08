@@ -72,7 +72,7 @@ pub async fn query_handler(
     ));
   }
 
-  let batched_rows_result = state.conn().execute_batch(&request.query).await;
+  let batched_rows_result = state.conn().execute_batch(request.query).await;
 
   // In the fallback case we always need to invalidate the cache.
   if must_invalidate_table_cache {

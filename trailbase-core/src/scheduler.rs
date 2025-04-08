@@ -355,7 +355,7 @@ fn build_job(
 
             user_conn
               .execute(
-                &format!("DELETE FROM '{SESSION_TABLE}' WHERE updated < $1"),
+                format!("DELETE FROM '{SESSION_TABLE}' WHERE updated < $1"),
                 params!(timestamp),
               )
               .await
@@ -426,7 +426,7 @@ async fn delete_pending_files_job(
   object_store: &(dyn object_store::ObjectStore + Send + Sync),
 ) -> Result<(), FileError> {
   let rows: Vec<FileDeletionsDb> = match conn
-    .query_values(
+    .read_query_values(
       "SELECT * FROM _file_deletions WHERE deleted < (UNIXEPOCH() - 900)",
       (),
     )

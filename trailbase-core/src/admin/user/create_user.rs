@@ -65,8 +65,8 @@ pub async fn create_user_handler(
 
   let Some(user) = state
     .user_conn()
-    .query_value::<DbUser>(
-      &INSERT_USER_QUERY,
+    .write_query_value::<DbUser>(
+      &*INSERT_USER_QUERY,
       named_params! {
         ":email": normalized_email,
         ":password_hash": hashed_password,

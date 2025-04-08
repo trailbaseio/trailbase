@@ -22,7 +22,7 @@ async fn get_avatar_url(state: &AppState, user: &DbUser) -> Option<String> {
 
   let has_avatar = state
     .user_conn()
-    .query_value(&QUERY, params!(user.id))
+    .read_query_row_f(&*QUERY, params!(user.id), |row| row.get::<_, bool>(0))
     .await
     .map_err(|err| {
       log::debug!("avatar query broken?");
@@ -203,12 +203,13 @@ mod tests {
 
     let user_x_token = login_with_password(&state, email, password).await.unwrap();
 
+    lazy_static! {
+      static ref QUERY: String = format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#);
+    };
+
     let db_user = state
       .user_conn()
-      .query_value::<DbUser>(
-        &format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
-        (email,),
-      )
+      .read_query_value::<DbUser>(&*QUERY, (email,))
       .await
       .unwrap()
       .unwrap();

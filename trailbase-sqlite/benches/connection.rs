@@ -10,6 +10,14 @@ pub trait AsyncConnection: Send + Sync {
     params: impl Into<Vec<Value>> + Send,
   ) -> impl std::future::Future<Output = Result<T, BenchmarkError>> + Send;
 
+  fn async_read_query<T: FromSql + Send + 'static>(
+    &self,
+    sql: impl Into<String> + Send,
+    params: impl Into<Vec<Value>> + Send,
+  ) -> impl std::future::Future<Output = Result<T, BenchmarkError>> + Send {
+    return self.async_query(sql, params);
+  }
+
   fn async_execute(
     &self,
     sql: impl Into<String> + Send,
@@ -23,25 +31,24 @@ impl AsyncConnection for Connection {
     sql: impl Into<String> + Send,
     params: impl Into<Vec<Value>> + Send,
   ) -> Result<T, BenchmarkError> {
-    let sql: String = sql.into();
-    let params: Vec<Value> = params.into();
     return Ok(
       self
-        .call(
-          move |conn: &mut rusqlite::Connection| -> Result<_, trailbase_sqlite::Error> {
-            let mut stmt = conn.prepare_cached(&sql)?;
-            for (idx, v) in params.into_iter().enumerate() {
-              stmt.raw_bind_parameter(idx + 1, v)?;
-            }
-            let mut rows = stmt.raw_query();
-            if let Ok(Some(row)) = rows.next() {
-              return Ok(row.get::<_, T>(0)?);
-            }
+        .query_row_f(sql.into(), params.into(), |row| row.get::<_, T>(0))
+        .await?
+        .unwrap(),
+    );
+  }
 
-            return Err(rusqlite::Error::QueryReturnedNoRows.into());
-          },
-        )
-        .await?,
+  async fn async_read_query<T: FromSql + Send + 'static>(
+    &self,
+    sql: impl Into<String> + Send,
+    params: impl Into<Vec<Value>> + Send,
+  ) -> Result<T, BenchmarkError> {
+    return Ok(
+      self
+        .read_query_row_f(sql.into(), params.into(), |row| row.get::<_, T>(0))
+        .await?
+        .unwrap(),
     );
   }
 
@@ -50,23 +57,8 @@ impl AsyncConnection for Connection {
     sql: impl Into<String> + Send,
     params: impl Into<Vec<Value>> + Send,
   ) -> Result<(), BenchmarkError> {
-    let sql: String = sql.into();
-    let params: Vec<Value> = params.into();
-    return Ok(
-      self
-        .call(
-          move |conn: &mut rusqlite::Connection| -> Result<_, trailbase_sqlite::Error> {
-            let mut stmt = conn.prepare_cached(&sql)?;
-            for (idx, v) in params.into_iter().enumerate() {
-              stmt.raw_bind_parameter(idx + 1, v)?;
-            }
-            let _ = stmt.raw_execute();
-
-            return Ok(());
-          },
-        )
-        .await?,
-    );
+    self.execute(sql.into(), params.into()).await?;
+    return Ok(());
   }
 }
 

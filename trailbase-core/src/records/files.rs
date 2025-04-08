@@ -74,7 +74,7 @@ pub(crate) async fn delete_pending_files(
 ) -> Result<(), FileError> {
   let rows: Vec<FileDeletionsDb> = state
     .conn()
-    .query_values(
+    .read_query_values(
       "SELECT * FROM _file_deletions WHERE table_name = ?1 AND record_rowid = ?2",
       params!(table_name.to_string(), rowid),
     )

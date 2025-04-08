@@ -61,7 +61,7 @@ impl TableMetadataCache {
         let col = &metadata.schema.columns[*idx];
         let column_name = &col.name;
 
-        conn.execute_batch(&indoc::formatdoc!(
+        conn.execute_batch(indoc::formatdoc!(
           r#"
           DROP TRIGGER IF EXISTS __{table_name}__{column_name}__update_trigger;
           CREATE TRIGGER IF NOT EXISTS __{table_name}__{column_name}__update_trigger AFTER UPDATE ON "{table_name}"
@@ -169,9 +169,10 @@ pub async fn lookup_and_parse_table_schema(
 ) -> Result<Table, TableLookupError> {
   // Then get the actual table.
   let sql: String = conn
-    .query_value(
-      &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1"),
+    .read_query_row_f(
+      format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1"),
       params!(table_name.to_string()),
+      |row| row.get(0),
     )
     .await?
     .ok_or_else(|| trailbase_sqlite::Error::Rusqlite(rusqlite::Error::QueryReturnedNoRows))?;
@@ -188,8 +189,8 @@ pub async fn lookup_and_parse_all_table_schemas(
 ) -> Result<Vec<Table>, TableLookupError> {
   // Then get the actual table.
   let rows = conn
-    .query(
-      &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table'"),
+    .read_query_rows(
+      format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table'"),
       (),
     )
     .await?;
@@ -226,8 +227,8 @@ pub async fn lookup_and_parse_all_view_schemas(
 ) -> Result<Vec<View>, TableLookupError> {
   // Then get the actual table.
   let rows = conn
-    .query(
-      &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'view'"),
+    .read_query_rows(
+      format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'view'"),
       (),
     )
     .await?;
@@ -269,7 +270,7 @@ mod tests {
     let table_name = "test_table";
     conn
       .execute(
-        &format!(
+        format!(
           r#"CREATE TABLE {table_name} (
             id INTEGER PRIMARY KEY,
             fk INTEGER REFERENCES foreign_table(id)
@@ -345,7 +346,7 @@ mod tests {
 
     conn
       .execute(
-        &format!("INSERT INTO {table_name} (id, fk) VALUES (1, 1);"),
+        format!("INSERT INTO {table_name} (id, fk) VALUES (1, 1);"),
         (),
       )
       .await
@@ -474,8 +475,8 @@ mod tests {
       let conn = state.conn();
       move |sql: &str| {
         let conn = conn.clone();
-        let owned = sql.to_owned();
-        return async move { conn.execute(&owned, ()).await };
+        let owned = sql.to_string();
+        return async move { conn.execute(owned, ()).await };
       }
     };
 

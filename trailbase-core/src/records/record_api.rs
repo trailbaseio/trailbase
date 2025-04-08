@@ -151,24 +151,24 @@ struct RecordApiState {
   // Arguably, this could always be modeled as two APIs with different permissions on the same
   // table.
   read_access_rule: Option<String>,
-  read_access_query: Option<String>,
+  read_access_query: Option<Arc<str>>,
   subscription_read_access_query: Option<String>,
 
-  create_access_query: Option<String>,
-  update_access_query: Option<String>,
-  delete_access_query: Option<String>,
-  schema_access_query: Option<String>,
+  create_access_query: Option<Arc<str>>,
+  update_access_query: Option<Arc<str>>,
+  delete_access_query: Option<Arc<str>>,
+  schema_access_query: Option<Arc<str>>,
 }
 
 impl RecordApiState {
   #[inline]
-  fn cached_access_query(&self, p: Permission) -> Option<&str> {
+  fn cached_access_query(&self, p: Permission) -> Option<Arc<str>> {
     return match p {
-      Permission::Create => self.create_access_query.as_deref(),
-      Permission::Read => self.read_access_query.as_deref(),
-      Permission::Update => self.update_access_query.as_deref(),
-      Permission::Delete => self.delete_access_query.as_deref(),
-      Permission::Schema => self.schema_access_query.as_deref(),
+      Permission::Create => self.create_access_query.clone(),
+      Permission::Read => self.read_access_query.clone(),
+      Permission::Update => self.update_access_query.clone(),
+      Permission::Delete => self.delete_access_query.clone(),
+      Permission::Schema => self.schema_access_query.clone(),
     };
   }
 }
@@ -427,28 +427,33 @@ impl RecordApi {
     };
 
     let params = self.build_named_params(p, record_id, request_params, user)?;
-    // let state = self.state.clone();
-    let access_query = access_query.to_string();
 
-    match self
+    // NOTE: Avoid slushing between sqlite threads with regard to an allowed follow-on action.
+    // let allowed_result = match p {
+    //   Permission::Read | Permission::Schema => {
+    //     self
+    //       .state
+    //       .conn
+    //       .read_query_row_f(access_query, params, |row| row.get(0))
+    //       .await
+    //   }
+    //   _ => {
+    //     self
+    //       .state
+    //       .conn
+    //       .query_row_f(access_query, params, |row| row.get(0))
+    //       .await
+    //   }
+    // };
+    let allowed_result = self
       .state
       .conn
-      .call(move |conn| {
-        // let access_query = state.cached_access_query(p).unwrap();
-        let mut stmt = conn.prepare_cached(&access_query)?;
-        params.bind(&mut stmt)?;
+      .read_query_row_f(access_query, params, |row| row.get(0))
+      .await;
 
-        let mut rows = stmt.raw_query();
-        if let Some(row) = rows.next()? {
-          return Ok(row.get(0)?);
-        }
-
-        return Err(rusqlite::Error::QueryReturnedNoRows.into());
-      })
-      .await
-    {
+    match allowed_result {
       Ok(allowed) => {
-        if allowed {
+        if allowed.unwrap_or(false) {
           return Ok(());
         }
       }
@@ -687,7 +692,7 @@ fn build_read_delete_schema_query(
   table_name: &str,
   pk_column_name: &str,
   access_rule: &str,
-) -> String {
+) -> Arc<str> {
   return indoc::formatdoc!(
     r#"
       SELECT
@@ -696,7 +701,8 @@ fn build_read_delete_schema_query(
         (SELECT :__user_id AS id) AS _USER_,
         (SELECT * FROM "{table_name}" WHERE "{pk_column_name}" = :__record_id) AS _ROW_
     "#
-  );
+  )
+  .into();
 }
 
 #[derive(Template)]
@@ -716,15 +722,18 @@ struct CreateRecordAccessQueryTemplate<'a> {
 fn build_create_access_query(
   columns: &[Column],
   create_access_rule: &str,
-) -> Result<String, String> {
+) -> Result<Arc<str>, String> {
   let column_names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
 
-  return CreateRecordAccessQueryTemplate {
-    create_access_rule,
-    column_names,
-  }
-  .render()
-  .map_err(|err| err.to_string());
+  return Ok(
+    CreateRecordAccessQueryTemplate {
+      create_access_rule,
+      column_names,
+    }
+    .render()
+    .map_err(|err| err.to_string())?
+    .into(),
+  );
 }
 
 #[derive(Template)]
@@ -748,17 +757,20 @@ fn build_update_access_query(
   columns: &[Column],
   pk_column_name: &str,
   update_access_rule: &str,
-) -> Result<String, String> {
+) -> Result<Arc<str>, String> {
   let column_names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
 
-  return UpdateRecordAccessQueryTemplate {
-    update_access_rule,
-    table_name,
-    pk_column_name,
-    column_names,
-  }
-  .render()
-  .map_err(|err| err.to_string());
+  return Ok(
+    UpdateRecordAccessQueryTemplate {
+      update_access_rule,
+      table_name,
+      pk_column_name,
+      column_names,
+    }
+    .render()
+    .map_err(|err| err.to_string())?
+    .into(),
+  );
 }
 
 fn convert_acl(acl: &Vec<i32>) -> u8 {

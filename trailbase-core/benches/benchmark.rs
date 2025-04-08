@@ -60,13 +60,13 @@ async fn add_room(
   name: &str,
 ) -> Result<[u8; 16], anyhow::Error> {
   let room: [u8; 16] = conn
-    .query_row(
+    .query_row_f(
       "INSERT INTO room (name) VALUES ($1) RETURNING id",
       params!(name.to_string()),
+      |row| row.get(0),
     )
     .await?
-    .unwrap()
-    .get(0)?;
+    .unwrap();
 
   return Ok(room);
 }
@@ -111,11 +111,10 @@ async fn setup_app() -> Result<Setup, anyhow::Error> {
   })
   .await?;
 
-  let state = app.state();
-  let conn = state.conn();
+  let conn = app.state.conn();
 
   create_chat_message_app_tables(conn).await?;
-  state.refresh_table_cache().await?;
+  app.state.refresh_table_cache().await?;
 
   let room = add_room(conn, "room0").await?;
   let password = "Secret!1!!";
@@ -124,7 +123,7 @@ async fn setup_app() -> Result<Setup, anyhow::Error> {
     r#"(SELECT 1 FROM room_members WHERE user = _USER_.id AND room = _REQ_.room)"#;
 
   add_record_api_config(
-    &state,
+    &app.state,
     RecordApiConfig {
       name: Some("messages_api".to_string()),
       table_name: Some("message".to_string()),
@@ -137,7 +136,7 @@ async fn setup_app() -> Result<Setup, anyhow::Error> {
 
   let email = "user_x@bar.com";
   let user_x = create_user_handler(
-    State(state.clone()),
+    State(app.state.clone()),
     Json(CreateUserRequest {
       email: email.to_string(),
       password: password.to_string(),
@@ -149,7 +148,7 @@ async fn setup_app() -> Result<Setup, anyhow::Error> {
   .id
   .into_bytes();
 
-  let user_x_token = login_with_password(&state, email, password)
+  let user_x_token = login_with_password(&app.state, email, password)
     .await?
     .auth_token;
 
@@ -208,7 +207,7 @@ fn create_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, 
     let tasks = (0..iters).map(|_i| {
       let body = body.clone();
       let auth = format!("Bearer {user_x_token}");
-      let mut router = setup.app.router().clone();
+      let mut router = setup.app.main_router.1.clone();
 
       return runtime.spawn(async move {
         let response = router
@@ -244,7 +243,7 @@ fn benchmark_group(c: &mut Criterion) {
 
   let setup = runtime.block_on(async {
     let setup = setup_app().await.unwrap();
-    let mut router = setup.app.router().clone();
+    let mut router = setup.app.main_router.1.clone();
 
     ServiceExt::<Request<Body>>::ready(&mut router)
       .await

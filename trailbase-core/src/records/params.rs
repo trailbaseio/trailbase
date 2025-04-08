@@ -551,7 +551,7 @@ mod tests {
     assert_eq!(uuid::Uuid::from_slice(&blob).unwrap(), id);
 
     let rows = conn
-      .query("SELECT * FROM test WHERE id = $1", [value])
+      .read_query_rows("SELECT * FROM test WHERE id = $1", [value])
       .await
       .unwrap();
     assert_eq!(rows.len(), 1);

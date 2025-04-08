@@ -72,12 +72,14 @@ pub async fn list_rows_handler(
     }
   };
 
-  let total_row_count = {
+  let total_row_count: i64 = {
     let where_clause = &filter_where_clause.clause;
     let count_query = format!("SELECT COUNT(*) FROM '{table_name}' WHERE {where_clause}");
     state
       .conn()
-      .query_value::<i64>(&count_query, filter_where_clause.params.clone())
+      .read_query_row_f(count_query, filter_where_clause.params.clone(), |row| {
+        row.get(0)
+      })
       .await?
       .unwrap_or(-1)
   };
@@ -207,12 +209,15 @@ async fn fetch_rows(
     "#,
   );
 
-  let result_rows = conn.query(&query, params).await.map_err(|err| {
-    #[cfg(debug_assertions)]
-    error!("QUERY: {query}\n\t=> {err}");
+  let result_rows = conn
+    .read_query_rows(query.clone(), params)
+    .await
+    .map_err(|err| {
+      #[cfg(debug_assertions)]
+      error!("QUERY: {query}\n\t=> {err}");
 
-    return err;
-  })?;
+      return err;
+    })?;
 
   return Ok(rows_to_json_arrays(result_rows, 1024)?);
 }
@@ -259,7 +264,7 @@ mod tests {
       .unwrap();
 
     let cnt: i64 = conn
-      .query_value("SELECT COUNT(*) FROM test_table", ())
+      .read_query_row_f("SELECT COUNT(*) FROM test_table", (), |row| row.get(0))
       .await
       .unwrap()
       .unwrap();

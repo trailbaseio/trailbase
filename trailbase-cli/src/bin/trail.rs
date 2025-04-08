@@ -55,8 +55,8 @@ async fn get_user_by_email(
   email: &str,
 ) -> Result<DbUser, BoxError> {
   if let Some(user) = conn
-    .query_value::<DbUser>(
-      &format!("SELECT * FROM {USER_TABLE} WHERE email = $1"),
+    .read_query_value::<DbUser>(
+      format!("SELECT * FROM {USER_TABLE} WHERE email = $1"),
       (email.to_string(),),
     )
     .await?
@@ -165,7 +165,7 @@ async fn async_main() -> Result<(), BoxError> {
       match cmd {
         Some(AdminSubCommands::List) => {
           let users = conn
-            .query_values::<DbUser>(&format!("SELECT * FROM {USER_TABLE} WHERE admin > 0"), ())
+            .read_query_values::<DbUser>(format!("SELECT * FROM {USER_TABLE} WHERE admin > 0"), ())
             .await?;
 
           println!("{: >36}\temail\tcreated\tupdated", "id");
@@ -183,7 +183,7 @@ async fn async_main() -> Result<(), BoxError> {
         Some(AdminSubCommands::Demote { email }) => {
           conn
             .execute(
-              &format!("UPDATE {USER_TABLE} SET admin = FALSE WHERE email = $1"),
+              format!("UPDATE {USER_TABLE} SET admin = FALSE WHERE email = $1"),
               (email.clone(),),
             )
             .await?;
@@ -193,7 +193,7 @@ async fn async_main() -> Result<(), BoxError> {
         Some(AdminSubCommands::Promote { email }) => {
           conn
             .execute(
-              &format!("UPDATE {USER_TABLE} SET admin = TRUE WHERE email = $1"),
+              format!("UPDATE {USER_TABLE} SET admin = TRUE WHERE email = $1"),
               (email.clone(),),
             )
             .await?;

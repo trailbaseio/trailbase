@@ -385,7 +385,7 @@ impl RuntimeSingleton {
         };
 
         let rows = conn
-          .query(&query, params)
+          .write_query_rows(query, params)
           .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
@@ -414,7 +414,7 @@ impl RuntimeSingleton {
         };
 
         let rows_affected = conn
-          .execute(&query, params)
+          .execute(query, params)
           .await
           .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
@@ -1035,12 +1035,11 @@ mod tests {
       .await
       .unwrap();
 
-    let row = conn
-      .query_row("SELECT COUNT(*) FROM test", ())
+    let count: i64 = conn
+      .read_query_row_f("SELECT COUNT(*) FROM test", (), |row| row.get(0))
       .await
       .unwrap()
       .unwrap();
-    let count: i64 = row.get(0).unwrap();
     assert_eq!(0, count);
   }
 }

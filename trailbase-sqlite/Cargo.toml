@@ -16,6 +16,7 @@ harness = false
 
 [dependencies]
 crossbeam-channel = "0.5.13"
+log = { version = "^0.4.21", default-features = false }
 parking_lot = { version = "0.12.3", default-features = false }
 rusqlite = { workspace = true }
 serde = { version = "^1.0.203", features = ["derive"] }

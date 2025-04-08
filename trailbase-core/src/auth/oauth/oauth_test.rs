@@ -182,15 +182,16 @@ async fn test_oauth() {
   let location = unpack_redirect(internal_redirect);
   assert_eq!(location, "/_/auth/profile");
 
-  let row = state
+  let value: String = state
     .user_conn()
-    .query_row(
-      &format!(r#"SELECT email FROM "{USER_TABLE}" WHERE provider_user_id = $1"#),
+    .read_query_row_f(
+      format!(r#"SELECT email FROM "{USER_TABLE}" WHERE provider_user_id = $1"#),
       (external_user_id,),
+      |row| row.get(0),
     )
     .await
     .unwrap()
     .unwrap();
 
-  assert_eq!(row.get::<String>(0).unwrap(), external_user_email);
+  assert_eq!(value, external_user_email);
 }

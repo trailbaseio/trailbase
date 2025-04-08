@@ -262,7 +262,7 @@ mod tests {
     trailbase_schema::registry::set_user_schema("foo", Some(pattern)).unwrap();
     conn
       .execute(
-        &format!(
+        format!(
           r#"CREATE TABLE test_table (
             col0 TEXT CHECK(jsonschema('foo', col0))
           ) STRICT"#
@@ -280,7 +280,7 @@ mod tests {
     let insert = |json: serde_json::Value| async move {
       conn
         .execute(
-          &format!(
+          format!(
             "INSERT INTO test_table (col0) VALUES ('{}')",
             json.to_string()
           ),
@@ -295,7 +295,10 @@ mod tests {
     })});
     insert(object.clone()).await.unwrap();
 
-    let rows = conn.query("SELECT * FROM test_table", ()).await.unwrap();
+    let rows = conn
+      .read_query_rows("SELECT * FROM test_table", ())
+      .await
+      .unwrap();
     let parsed = rows_to_json(
       &metadata.schema.columns,
       &metadata.json_metadata.columns,

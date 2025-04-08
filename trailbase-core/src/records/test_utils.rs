@@ -89,15 +89,16 @@ mod tests {
     conn: &trailbase_sqlite::Connection,
     name: &str,
   ) -> Result<[u8; 16], anyhow::Error> {
-    let room: uuid::Uuid = conn
-      .query_value(
+    let room: [u8; 16] = conn
+      .query_row_f(
         "INSERT INTO room (name) VALUES ($1) RETURNING rid",
         params!(name.to_string()),
+        |row| row.get(0),
       )
       .await?
       .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
 
-    return Ok(room.into_bytes());
+    return Ok(room);
   }
 
   pub async fn add_user_to_room(
@@ -120,15 +121,16 @@ mod tests {
     room: [u8; 16],
     message: &str,
   ) -> Result<[u8; 16], anyhow::Error> {
-    let id: uuid::Uuid = conn
-      .query_value(
+    let id: [u8; 16] = conn
+      .query_row_f(
         "INSERT INTO message (_owner, room, data) VALUES ($1, $2, $3) RETURNING mid",
         params!(user, room, message.to_string()),
+        |row| row.get(0),
       )
       .await?
       .ok_or(rusqlite::Error::QueryReturnedNoRows)?;
 
-    return Ok(id.into_bytes());
+    return Ok(id);
   }
 
   pub fn json_row_from_value(value: serde_json::Value) -> Result<JsonRow, anyhow::Error> {

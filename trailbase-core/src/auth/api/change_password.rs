@@ -89,7 +89,7 @@ pub async fn change_password_handler(
   let rows_affected = state
     .user_conn()
     .execute(
-      &QUERY,
+      &*QUERY,
       named_params! {
         ":user_id": user.uuid.into_bytes().to_vec(),
         ":new_password_hash": new_password_hash,

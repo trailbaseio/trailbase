@@ -184,7 +184,7 @@ pub(crate) async fn mint_new_tokens(
   state
     .user_conn()
     .execute(
-      &QUERY,
+      &*QUERY,
       params!(user_id.into_bytes().to_vec(), refresh_token.clone(),),
     )
     .await?;
@@ -216,8 +216,8 @@ pub(crate) async fn reauth_with_refresh_token(
 
   let Some(db_user) = state
     .user_conn()
-    .query_value::<DbUser>(
-      &QUERY,
+    .read_query_value::<DbUser>(
+      &*QUERY,
       params!(refresh_token, refresh_token_ttl.num_seconds()),
     )
     .await?

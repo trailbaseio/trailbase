@@ -166,7 +166,7 @@ pub async fn list_records_handler(
   .map_err(|err| RecordError::Internal(err.into()))?;
 
   // Execute the query.
-  let rows = state.conn().query(&query, params).await?;
+  let rows = state.conn().read_query_rows(query, params).await?;
   let Some(last_row) = rows.last() else {
     // Rows are empty:
     return Ok(Json(ListResponse {
@@ -361,10 +361,9 @@ mod tests {
       ),
     ];
 
-    let result = conn.query(&query, params).await;
-
+    let result = conn.read_query_rows(query, params).await;
     if let Err(err) = result {
-      panic!("QUERY: {query}\nERROR: {err}");
+      panic!("ERROR: {err}");
     }
   }
 

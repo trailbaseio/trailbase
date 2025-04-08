@@ -86,7 +86,14 @@ pub async fn init_app_state(
           apply_main_migrations(&mut conn, Some(data_dir.migrations_path()))?;
         return Ok(conn);
       },
-      None,
+      Some(trailbase_sqlite::connection::Options {
+        n_read_threads: if let Ok(n) = std::thread::available_parallelism() {
+          n.get().clamp(2, 4)
+        } else {
+          4
+        },
+        ..Default::default()
+      }),
     )?;
 
     let new_db: bool = *new_db.lock();
@@ -159,9 +166,10 @@ pub async fn init_app_state(
   if new_db {
     let num_admins: i64 = app_state
       .user_conn()
-      .query_value(
-        &format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE admin = TRUE"),
+      .read_query_row_f(
+        format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE admin = TRUE"),
         (),
+        |row| row.get(0),
       )
       .await?
       .unwrap_or(0);
@@ -173,7 +181,7 @@ pub async fn init_app_state(
       app_state
         .user_conn()
         .execute(
-          &format!(
+          format!(
             r#"
         INSERT INTO {USER_TABLE}
           (email, password_hash, verified, admin)

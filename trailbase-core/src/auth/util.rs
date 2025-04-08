@@ -119,7 +119,7 @@ pub async fn get_user_by_email(
     static ref QUERY: String = format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#);
   };
   let db_user = user_conn
-    .query_value::<DbUser>(&QUERY, params!(email.to_string()))
+    .read_query_value::<DbUser>(&*QUERY, params!(email.to_string()))
     .await
     .map_err(|_err| AuthError::UnauthorizedExt("user not found by email".into()))?;
 
@@ -138,7 +138,7 @@ async fn get_user_by_id(
     static ref QUERY: String = format!(r#"SELECT * FROM "{USER_TABLE}" WHERE id = $1"#);
   };
   let db_user = user_conn
-    .query_value::<DbUser>(&QUERY, params!(id.into_bytes()))
+    .read_query_value::<DbUser>(&*QUERY, params!(id.into_bytes()))
     .await
     .map_err(|_err| AuthError::UnauthorizedExt("User not found by id".into()))?;
 
@@ -152,7 +152,7 @@ pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, AuthErro
   };
   return state
     .user_conn()
-    .query_value(&QUERY, params!(email.to_string()))
+    .read_query_row_f(&*QUERY, params!(email.to_string()), |row| row.get(0))
     .await?
     .ok_or_else(|| AuthError::Internal("query should return".into()));
 }
@@ -164,13 +164,15 @@ pub(crate) async fn is_admin(state: &AppState, user: &User) -> bool {
 
   let Ok(Some(row)) = state
     .user_conn()
-    .query_row(&QUERY, params!(user.uuid.as_bytes().to_vec()))
+    .read_query_row_f(&*QUERY, params!(user.uuid.as_bytes().to_vec()), |row| {
+      row.get(0)
+    })
     .await
   else {
     return false;
   };
 
-  return row.get::<bool>(0).unwrap_or(false);
+  return row;
 }
 
 pub(crate) async fn delete_all_sessions_for_user(
@@ -185,7 +187,7 @@ pub(crate) async fn delete_all_sessions_for_user(
     state
       .user_conn()
       .execute(
-        &QUERY,
+        &*QUERY,
         [trailbase_sqlite::Value::Blob(user_id.into_bytes().to_vec())],
       )
       .await?,
@@ -203,7 +205,7 @@ pub(crate) async fn delete_session(
   return Ok(
     state
       .user_conn()
-      .execute(&QUERY, params!(refresh_token))
+      .execute(&*QUERY, params!(refresh_token))
       .await?,
   );
 }

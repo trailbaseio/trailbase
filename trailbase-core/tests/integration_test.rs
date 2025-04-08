@@ -198,18 +198,19 @@ async fn test_record_apis() {
   }
 
   let logs_count: i64 = logs_conn
-    .query_row("SELECT COUNT(*) FROM _logs", ())
+    .read_query_row_f("SELECT COUNT(*) FROM _logs", (), |row| row.get(0))
     .await
     .unwrap()
-    .unwrap()
-    .get(0)
     .unwrap();
   assert!(logs_count > 0);
 
-  let row = logs_conn
-    .query_row(
+  let (fetched_ip, latency, status): (String, f64, i64) = logs_conn
+    .read_query_row_f(
       "SELECT client_ip, latency, status FROM _logs WHERE client_ip = $1",
       trailbase_sqlite::params!(client_ip),
+      |row| -> Result<_, rusqlite::Error> {
+        return Ok((row.get(0)?, row.get(1)?, row.get(2)?));
+      },
     )
     .await
     .unwrap()
@@ -217,9 +218,9 @@ async fn test_record_apis() {
 
   // We're also testing stiching here, since client_ip is recorded on_request and latency/status
   // on_response.
-  assert_eq!(row.get::<String>(0).unwrap(), client_ip);
-  assert!(row.get::<f64>(1).unwrap() > 0.0);
-  assert_eq!(row.get::<i64>(2).unwrap(), 200);
+  assert_eq!(fetched_ip, client_ip);
+  assert!(latency > 0.0);
+  assert_eq!(status, 200);
 }
 
 pub async fn create_chat_message_app_tables(
@@ -265,13 +266,13 @@ pub async fn add_room(
   name: &str,
 ) -> Result<[u8; 16], anyhow::Error> {
   let room: [u8; 16] = conn
-    .query_row(
+    .query_row_f(
       "INSERT INTO room (name) VALUES ($1) RETURNING id",
       params!(name.to_string()),
+      |row| row.get::<_, [u8; 16]>(0),
     )
     .await?
-    .unwrap()
-    .get(0)?;
+    .unwrap();
 
   return Ok(room);
 }
