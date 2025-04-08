@@ -1,11 +1,10 @@
-use crate::schema::ColumnOption;
-use std::collections::HashMap;
-
 use base64::prelude::*;
 use log::*;
+use std::collections::HashMap;
 use thiserror::Error;
+use trailbase_schema::sqlite::ColumnOption;
+use trailbase_schema::sqlite::{Column, ColumnDataType};
 
-use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::JsonColumnMetadata;
 
 #[derive(Debug, Error)]

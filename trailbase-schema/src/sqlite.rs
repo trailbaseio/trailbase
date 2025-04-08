@@ -1,3 +1,4 @@
+use fallible_iterator::FallibleIterator;
 use itertools::Itertools;
 use log::*;
 use serde::{Deserialize, Serialize};
@@ -16,6 +17,67 @@ pub enum SchemaError {
   MissingName,
   #[error("Precondition failed: {0}")]
   Precondition(Box<dyn std::error::Error + Send + Sync>),
+}
+
+pub fn sqlite3_parse_into_statements(
+  sql: &str,
+) -> Result<Vec<Stmt>, sqlite3_parser::lexer::sql::Error> {
+  use sqlite3_parser::ast::Cmd;
+
+  // According to sqlite3_parser's docs they're working to remove panics in some edge cases.
+  // Meanwhile we'll trap them here. We haven't seen any in practice yet.
+  let outer_result = std::panic::catch_unwind(|| {
+    let mut parser = sqlite3_parser::lexer::sql::Parser::new(sql.as_bytes());
+
+    let mut statements: Vec<Stmt> = vec![];
+    while let Some(cmd) = parser.next()? {
+      match cmd {
+        Cmd::Stmt(stmt) => {
+          statements.push(stmt);
+        }
+        Cmd::Explain(_) | Cmd::ExplainQueryPlan(_) => {}
+      }
+    }
+    return Ok(statements);
+  });
+
+  return match outer_result {
+    Ok(inner_result) => inner_result,
+    Err(_panic_err) => {
+      error!("Parser panicked");
+      return Err(sqlite3_parser::lexer::sql::Error::UnrecognizedToken(None));
+    }
+  };
+}
+
+pub fn sqlite3_parse_into_statement(
+  sql: &str,
+) -> Result<Option<Stmt>, sqlite3_parser::lexer::sql::Error> {
+  use sqlite3_parser::ast::Cmd;
+
+  // According to sqlite3_parser's docs they're working to remove panics in some edge cases.
+  // Meanwhile we'll trap them here. We haven't seen any in practice yet.
+  let outer_result = std::panic::catch_unwind(|| {
+    let mut parser = sqlite3_parser::lexer::sql::Parser::new(sql.as_bytes());
+
+    while let Some(cmd) = parser.next()? {
+      match cmd {
+        Cmd::Stmt(stmt) => {
+          return Ok(Some(stmt));
+        }
+        Cmd::Explain(_) | Cmd::ExplainQueryPlan(_) => {}
+      }
+    }
+    return Ok(None);
+  });
+
+  return match outer_result {
+    Ok(inner_result) => inner_result,
+    Err(_panic_err) => {
+      error!("Parser panicked");
+      return Err(sqlite3_parser::lexer::sql::Error::UnrecognizedToken(None));
+    }
+  };
 }
 
 // This file contains table schema and index representations. Originally, they were mostly
@@ -462,7 +524,7 @@ pub struct Table {
 }
 
 impl Table {
-  pub(crate) fn create_table_statement(&self) -> String {
+  pub fn create_table_statement(&self) -> String {
     if self.virtual_table {
       // https://www.sqlite.org/lang_createvtab.html
       panic!("Not implemented");
@@ -505,7 +567,7 @@ pub struct TableIndex {
 }
 
 impl TableIndex {
-  pub(crate) fn create_index_statement(&self) -> String {
+  pub fn create_index_statement(&self) -> String {
     let indexed_columns = self
       .columns
       .iter()
@@ -1207,7 +1269,6 @@ fn unquote_expr(expr: Expr) -> String {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::table_metadata::sqlite3_parse_into_statement;
 
   #[test]
   fn test_quote() {
@@ -1285,8 +1346,8 @@ mod tests {
 
     {
       // First Make sure the query is actually valid, as opposed to "only" parsable.
-      let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
-      conn.execute(&statement, ()).await.unwrap();
+      let conn = trailbase_extension::connect_sqlite(None, None).unwrap();
+      conn.execute(&statement, ()).unwrap();
     }
 
     let statement1 = sqlite3_parse_into_statement(&statement).unwrap().unwrap();
@@ -1295,8 +1356,8 @@ mod tests {
     let sql = table1.create_table_statement();
     {
       // Same as above, make sure the constructed query is valid as opposed to "only" parsable.
-      let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
-      conn.execute(&sql, ()).await.unwrap();
+      let conn = trailbase_extension::connect_sqlite(None, None).unwrap();
+      conn.execute(&sql, ()).unwrap();
     }
 
     let statement2 = sqlite3_parse_into_statement(&sql).unwrap().unwrap();

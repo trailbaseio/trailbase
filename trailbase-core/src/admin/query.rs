@@ -1,12 +1,11 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
+use trailbase_schema::sqlite::{sqlite3_parse_into_statements, Column};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::records::sql_to_json::rows_to_json_arrays;
-use crate::schema::Column;
-use crate::table_metadata::sqlite3_parse_into_statements;
 
 #[derive(Debug, Default, Serialize, TS)]
 #[ts(export)]

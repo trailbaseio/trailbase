@@ -6669,7 +6669,6 @@ dependencies = [
  "futures-util",
  "hyper",
  "hyper-util",
- "indexmap 2.9.0",
  "indoc",
  "itertools 0.14.0",
  "jsonschema",
@@ -6818,16 +6817,22 @@ dependencies = [
 name = "trailbase-schema"
 version = "0.1.0"
 dependencies = [
+ "fallible-iterator",
+ "indexmap 2.9.0",
  "infer",
+ "itertools 0.14.0",
  "jsonschema",
  "lazy_static",
+ "log",
  "parking_lot",
  "schemars",
  "serde",
  "serde_json",
+ "sqlite3-parser",
  "thiserror 2.0.12",
  "tokio",
  "trailbase-extension",
+ "ts-rs",
  "uuid",
 ]
 

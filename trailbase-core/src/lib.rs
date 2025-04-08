@@ -20,7 +20,6 @@ mod js;
 mod listing;
 mod migrations;
 mod scheduler;
-mod schema;
 mod server;
 mod table_metadata;
 mod transaction;

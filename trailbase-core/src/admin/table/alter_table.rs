@@ -8,10 +8,10 @@ use axum::{
 };
 use log::*;
 use serde::Deserialize;
+use trailbase_schema::sqlite::Table;
 use ts_rs::TS;
 
 use crate::app_state::AppState;
-use crate::schema::Table;
 use crate::transaction::TransactionRecorder;
 use crate::{admin::AdminError as Error, transaction::MigrationWriter};
 
@@ -136,10 +136,11 @@ pub async fn alter_table_handler(
 
 #[cfg(test)]
 mod tests {
+  use trailbase_schema::sqlite::{Column, ColumnDataType, ColumnOption, Table};
+
   use super::*;
   use crate::admin::table::{create_table_handler, CreateTableRequest};
   use crate::app_state::*;
-  use crate::schema::{Column, ColumnDataType, ColumnOption, Table};
 
   #[tokio::test]
   async fn test_alter_table() -> Result<(), anyhow::Error> {

@@ -41,14 +41,13 @@ form_urlencoded = "1.2.1"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 hyper = "1.6.0"
 hyper-util = "0.1.7"
-indexmap = "2.6.0"
 indoc = "2.0.5"
 itertools = "0.14.0"
 jsonschema = { version = "0.29.0", default-features = false }
 jsonwebtoken = { version = "^9.3.0", default-features = false, features = ["use_pem"] }
 lazy_static = "1.4.0"
 lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
-log = { version = "^0.4.21", defeault-features = false }
+log = { version = "^0.4.21", default-features = false }
 minijinja = { version = "2.1.2", default-features = false }
 oauth2 = { version = "5.0.0-alpha.4", default-features = false, features = ["reqwest", "rustls-tls"] }
 object_store = { version = "0.12.0", default-features = false, features = ["aws", "fs"] }

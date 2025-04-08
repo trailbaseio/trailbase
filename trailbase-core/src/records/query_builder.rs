@@ -2,6 +2,7 @@ use askama::Template;
 use itertools::Itertools;
 use log::*;
 use std::sync::Arc;
+use trailbase_schema::sqlite::{Column, ColumnOption};
 use trailbase_schema::{FileUpload, FileUploads};
 use trailbase_sqlite::{NamedParams, Params as _, Value};
 
@@ -9,7 +10,6 @@ use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
 use crate::records::files::{delete_pending_files, FileManager};
 use crate::records::params::{FileMetadataContents, Params};
-use crate::schema::{Column, ColumnOption};
 use crate::table_metadata::{JsonColumnMetadata, TableMetadata, TableMetadataCache};
 use crate::AppState;
 
@@ -508,7 +508,7 @@ impl DeleteQueryBuilder {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::table_metadata::sqlite3_parse_into_statement;
+  use trailbase_schema::sqlite::sqlite3_parse_into_statement;
 
   fn sanitize_template(template: &str) {
     assert!(sqlite3_parse_into_statement(template).is_ok(), "{template}");

@@ -1,10 +1,10 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
+use trailbase_schema::sqlite::TableIndex;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::schema::TableIndex;
 use crate::transaction::TransactionRecorder;
 
 #[derive(Clone, Debug, Deserialize, TS)]

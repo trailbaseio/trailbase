@@ -105,6 +105,7 @@ pub async fn delete_rows_handler(
 mod tests {
   use axum::extract::{Json, Path, RawQuery, State};
   use serde::Deserialize;
+  use trailbase_schema::sqlite::{Column, ColumnDataType, ColumnOption, Table};
   use uuid::Uuid;
 
   use super::*;
@@ -114,7 +115,6 @@ mod tests {
   use crate::admin::table::{create_table_handler, CreateTableRequest};
   use crate::app_state::*;
   use crate::records::test_utils::json_row_from_value;
-  use crate::schema::{Column, ColumnDataType, ColumnOption, Table};
   use crate::util::uuid_to_b64;
 
   // TODO: This full-lifecycle test should probably live outside the scope of delete_row.

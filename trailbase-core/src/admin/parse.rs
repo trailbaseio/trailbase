@@ -1,11 +1,11 @@
 use axum::{extract::State, Json};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
+use trailbase_schema::sqlite::sqlite3_parse_into_statements;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::table_metadata::sqlite3_parse_into_statements;
 
 #[derive(Debug, Deserialize, Serialize, TS)]
 pub enum Mode {

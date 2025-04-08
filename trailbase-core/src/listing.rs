@@ -3,9 +3,9 @@ use log::*;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use thiserror::Error;
+use trailbase_schema::sqlite::Column;
 
 use crate::records::params::json_string_to_value;
-use crate::schema::Column;
 use crate::util::b64_to_id;
 
 #[derive(Debug, Error)]

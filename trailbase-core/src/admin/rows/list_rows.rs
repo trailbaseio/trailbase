@@ -3,6 +3,7 @@ use log::*;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::sync::Arc;
+use trailbase_schema::sqlite::Column;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -12,7 +13,6 @@ use crate::listing::{
   QueryParseResult, WhereClause,
 };
 use crate::records::sql_to_json::rows_to_json_arrays;
-use crate::schema::Column;
 use crate::table_metadata::{TableMetadata, TableOrViewMetadata};
 
 #[derive(Debug, Serialize, TS)]

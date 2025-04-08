@@ -4,16 +4,16 @@ use rusqlite::types::ToSqlOutput;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
+use trailbase_schema::sqlite::{sqlite3_parse_into_statement, Column, ColumnDataType};
 use trailbase_sqlite::{NamedParamRef, NamedParams, Params as _, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
 use crate::records::params::{prefix_colon, LazyParams};
 use crate::records::{Permission, RecordError};
-use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{
-  find_file_column_indexes, find_user_id_foreign_key_columns, sqlite3_parse_into_statement,
-  JsonColumnMetadata, TableMetadata, TableOrViewMetadata, ViewMetadata,
+  find_file_column_indexes, find_user_id_foreign_key_columns, JsonColumnMetadata, TableMetadata,
+  TableOrViewMetadata, ViewMetadata,
 };
 use crate::util::{assert_uuidv7, b64_to_id};
 
@@ -784,9 +784,9 @@ fn filter_columns(
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use trailbase_schema::sqlite::sqlite3_parse_into_statement;
 
-  use crate::table_metadata::sqlite3_parse_into_statement;
+  use super::*;
   use crate::{config::proto::PermissionFlag, records::Permission};
 
   fn sanitize_template(template: &str) {

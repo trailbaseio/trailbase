@@ -1,13 +1,12 @@
 use axum::{extract::State, Json};
 use log::*;
 use serde::{Deserialize, Serialize};
+use trailbase_schema::sqlite::{sqlite3_parse_into_statement, Table, TableIndex, View};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
+use crate::app_state::AppState;
 use crate::constants::SQLITE_SCHEMA_TABLE;
-use crate::schema::{Table, View};
-use crate::table_metadata::sqlite3_parse_into_statement;
-use crate::{app_state::AppState, schema::TableIndex};
 
 // TODO: Rudimentary unparsed trigger representation, since sqlparser didn't currently support
 // parsing sqlite triggers. Now we're using sqlite3_parser and should return structured data

@@ -1,8 +1,8 @@
 use itertools::Itertools;
+use trailbase_schema::sqlite::ColumnOption;
 
 use crate::config::{proto, ConfigError};
 use crate::records::record_api::validate_rule;
-use crate::schema::ColumnOption;
 use crate::table_metadata::{TableMetadataCache, TableOrViewMetadata};
 
 fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {

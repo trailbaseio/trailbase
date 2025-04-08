@@ -28,7 +28,7 @@ pub enum AdminError {
   #[error("Internal error: {0}")]
   Internal(Box<dyn std::error::Error + Send + Sync>),
   #[error("Schema error: {0}")]
-  Schema(#[from] crate::schema::SchemaError),
+  Schema(#[from] trailbase_schema::sqlite::SchemaError),
   #[error("Table lookup error: {0}")]
   TableLookup(#[from] crate::table_metadata::TableLookupError),
   #[error("DB Migration error: {0}")]

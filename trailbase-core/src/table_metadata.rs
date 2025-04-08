@@ -5,14 +5,15 @@ use log::*;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlite3_parser::ast::Stmt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
+use trailbase_schema::sqlite::{
+  sqlite3_parse_into_statement, Column, ColumnDataType, ColumnOption, SchemaError, Table, View,
+};
 use trailbase_sqlite::params;
 
 use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
-use crate::schema::{Column, ColumnDataType, ColumnOption, SchemaError, Table, View};
 
 // TODO: Can we merge this with trailbase_sqlite::schema::SchemaError?
 #[derive(Debug, Clone, Error)]
@@ -575,67 +576,6 @@ pub async fn lookup_and_parse_table_schema(
   return Ok(stmt.try_into()?);
 }
 
-pub(crate) fn sqlite3_parse_into_statements(
-  sql: &str,
-) -> Result<Vec<Stmt>, sqlite3_parser::lexer::sql::Error> {
-  use sqlite3_parser::ast::Cmd;
-
-  // According to sqlite3_parser's docs they're working to remove panics in some edge cases.
-  // Meanwhile we'll trap them here. We haven't seen any in practice yet.
-  let outer_result = std::panic::catch_unwind(|| {
-    let mut parser = sqlite3_parser::lexer::sql::Parser::new(sql.as_bytes());
-
-    let mut statements: Vec<Stmt> = vec![];
-    while let Some(cmd) = parser.next()? {
-      match cmd {
-        Cmd::Stmt(stmt) => {
-          statements.push(stmt);
-        }
-        Cmd::Explain(_) | Cmd::ExplainQueryPlan(_) => {}
-      }
-    }
-    return Ok(statements);
-  });
-
-  return match outer_result {
-    Ok(inner_result) => inner_result,
-    Err(_panic_err) => {
-      error!("Parser panicked");
-      return Err(sqlite3_parser::lexer::sql::Error::UnrecognizedToken(None));
-    }
-  };
-}
-
-pub(crate) fn sqlite3_parse_into_statement(
-  sql: &str,
-) -> Result<Option<Stmt>, sqlite3_parser::lexer::sql::Error> {
-  use sqlite3_parser::ast::Cmd;
-
-  // According to sqlite3_parser's docs they're working to remove panics in some edge cases.
-  // Meanwhile we'll trap them here. We haven't seen any in practice yet.
-  let outer_result = std::panic::catch_unwind(|| {
-    let mut parser = sqlite3_parser::lexer::sql::Parser::new(sql.as_bytes());
-
-    while let Some(cmd) = parser.next()? {
-      match cmd {
-        Cmd::Stmt(stmt) => {
-          return Ok(Some(stmt));
-        }
-        Cmd::Explain(_) | Cmd::ExplainQueryPlan(_) => {}
-      }
-    }
-    return Ok(None);
-  });
-
-  return match outer_result {
-    Ok(inner_result) => inner_result,
-    Err(_panic_err) => {
-      error!("Parser panicked");
-      return Err(sqlite3_parser::lexer::sql::Error::UnrecognizedToken(None));
-    }
-  };
-}
-
 pub async fn lookup_and_parse_all_table_schemas(
   conn: &trailbase_sqlite::Connection,
 ) -> Result<Vec<Table>, TableLookupError> {
@@ -939,13 +879,14 @@ mod tests {
   use serde_json::json;
   use trailbase_schema::FileUpload;
 
+  use trailbase_schema::sqlite::{sqlite3_parse_into_statements, ColumnOption};
+
   use super::*;
   use crate::app_state::*;
   use crate::config::proto::{PermissionFlag, RecordApiConfig};
   use crate::records::list_records::list_records_handler;
   use crate::records::read_record::{read_record_handler, ReadRecordQuery};
   use crate::records::*;
-  use crate::schema::ColumnOption;
 
   #[tokio::test]
   async fn test_parse_table_schema() {

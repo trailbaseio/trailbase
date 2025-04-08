@@ -5,6 +5,7 @@
 pub mod error;
 pub mod file;
 pub mod registry;
+pub mod sqlite;
 
 pub use error::Error;
 pub use file::{FileUpload, FileUploadInput, FileUploads};

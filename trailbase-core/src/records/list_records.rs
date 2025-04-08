@@ -263,6 +263,7 @@ fn column_filter(col_name: &str) -> bool {
 mod tests {
   use serde::Deserialize;
   use std::borrow::Cow;
+  use trailbase_schema::sqlite::sqlite3_parse_into_statement;
   use trailbase_sqlite::Value;
 
   use super::*;
@@ -275,7 +276,6 @@ mod tests {
   use crate::records::test_utils::*;
   use crate::records::Acls;
   use crate::records::{add_record_api, AccessRules, RecordError};
-  use crate::table_metadata::sqlite3_parse_into_statement;
   use crate::table_metadata::TableMetadataCache;
   use crate::util::id_to_b64;
   use crate::util::urlencode;

@@ -2,11 +2,11 @@ use base64::prelude::*;
 use log::*;
 use std::collections::HashSet;
 use std::sync::Arc;
+use trailbase_schema::sqlite::{Column, ColumnDataType};
 use trailbase_schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{NamedParams, Value};
 
 use crate::records::RecordApi;
-use crate::schema::{Column, ColumnDataType};
 use crate::table_metadata::{self, JsonColumnMetadata, TableMetadata};
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -503,11 +503,11 @@ mod tests {
   use base64::prelude::*;
   use schemars::{schema_for, JsonSchema};
   use serde_json::json;
+  use trailbase_schema::sqlite::{sqlite3_parse_into_statement, Table};
 
   use super::*;
   use crate::records::test_utils::json_row_from_value;
-  use crate::schema::Table;
-  use crate::table_metadata::{sqlite3_parse_into_statement, TableMetadata};
+  use crate::table_metadata::TableMetadata;
   use crate::util::id_to_b64;
 
   #[tokio::test]
