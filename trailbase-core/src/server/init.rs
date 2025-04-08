@@ -1,5 +1,7 @@
 use log::*;
+use parking_lot::Mutex;
 use std::path::PathBuf;
+use std::sync::Arc;
 use thiserror::Error;
 
 use crate::app_state::{build_objectstore, AppState, AppStateArgs};
@@ -59,18 +61,34 @@ pub async fn init_app_state(
 
   // Then open or init new databases.
   let logs_conn = {
-    let mut conn = init_logs_db(&data_dir)?;
-    apply_logs_migrations(&mut conn)?;
-    trailbase_sqlite::Connection::from_conn(conn)?
+    trailbase_sqlite::Connection::new(
+      || -> Result<_, InitError> {
+        let mut conn = init_logs_db(&data_dir)?;
+        apply_logs_migrations(&mut conn)?;
+        return Ok(conn);
+      },
+      None,
+    )?
   };
 
   // Open or init the main db. Note that we derive whether a new DB was initialized based on
   // whether the V1 migration had to be applied. Should be fairly robust.
-  let (conn, new_db) = {
-    let mut conn = trailbase_sqlite::connect_sqlite(Some(data_dir.main_db_path()), None)?;
-    let new_db = apply_main_migrations(&mut conn, Some(data_dir.migrations_path()))?;
+  let (conn, new_db): (trailbase_sqlite::Connection, bool) = {
+    let new_db = Arc::new(Mutex::new(false));
 
-    (trailbase_sqlite::Connection::from_conn(conn)?, new_db)
+    let new_db_clone = new_db.clone();
+    let conn = trailbase_sqlite::Connection::new(
+      || -> Result<_, InitError> {
+        let mut conn = trailbase_sqlite::connect_sqlite(Some(data_dir.main_db_path()), None)?;
+        *(new_db_clone.lock()) |=
+          apply_main_migrations(&mut conn, Some(data_dir.migrations_path()))?;
+        return Ok(conn);
+      },
+      None,
+    )?;
+
+    let new_db: bool = *new_db.lock();
+    (conn, new_db)
   };
 
   let table_metadata = TableMetadataCache::new(conn.clone()).await?;

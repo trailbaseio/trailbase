@@ -130,10 +130,10 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Schema(cmd)) => {
       init_logger(false);
 
-      let conn = trailbase_sqlite::Connection::from_conn(api::connect_sqlite(
-        Some(data_dir.main_db_path()),
+      let conn = trailbase_sqlite::Connection::new(
+        || api::connect_sqlite(Some(data_dir.main_db_path()), None),
         None,
-      )?)?;
+      )?;
       let table_metadata = api::TableMetadataCache::new(conn.clone()).await?;
 
       let table_name = &cmd.table;
@@ -177,10 +177,10 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Admin { cmd }) => {
       init_logger(false);
 
-      let conn = trailbase_sqlite::Connection::from_conn(api::connect_sqlite(
-        Some(data_dir.main_db_path()),
+      let conn = trailbase_sqlite::Connection::new(
+        || api::connect_sqlite(Some(data_dir.main_db_path()), None),
         None,
-      )?)?;
+      )?;
 
       match cmd {
         Some(AdminSubCommands::List) => {
@@ -231,10 +231,10 @@ async fn async_main() -> Result<(), BoxError> {
       init_logger(false);
 
       let data_dir = DataDir(args.data_dir);
-      let conn = trailbase_sqlite::Connection::from_conn(api::connect_sqlite(
-        Some(data_dir.main_db_path()),
+      let conn = trailbase_sqlite::Connection::new(
+        || api::connect_sqlite(Some(data_dir.main_db_path()), None),
         None,
-      )?)?;
+      )?;
 
       match cmd {
         Some(UserSubCommands::ResetPassword { email, password }) => {

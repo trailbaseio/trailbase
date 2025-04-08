@@ -43,6 +43,9 @@ enum Message {
   Close(oneshot::Sender<std::result::Result<(), rusqlite::Error>>),
 }
 
+#[derive(Clone, Default)]
+pub struct Options {}
+
 /// A handle to call functions in background thread.
 #[derive(Clone)]
 pub struct Connection {
@@ -50,7 +53,11 @@ pub struct Connection {
 }
 
 impl Connection {
-  pub fn from_conn(conn: rusqlite::Connection) -> Result<Self> {
+  pub fn new<E>(
+    c: impl Fn() -> std::result::Result<rusqlite::Connection, E>,
+    _opt: Option<Options>,
+  ) -> std::result::Result<Self, E> {
+    let conn = c()?;
     let (sender, receiver) = crossbeam_channel::unbounded::<Message>();
     std::thread::spawn(move || event_loop(conn, receiver));
     return Ok(Self { sender });
@@ -62,7 +69,7 @@ impl Connection {
   ///
   /// Will return `Err` if the underlying SQLite open call fails.
   pub fn open_in_memory() -> Result<Self> {
-    return Self::from_conn(rusqlite::Connection::open_in_memory()?);
+    return Self::new(|| Ok(rusqlite::Connection::open_in_memory()?), None);
   }
 
   /// Call a function in background thread and get the result

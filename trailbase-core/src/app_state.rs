@@ -324,18 +324,26 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
 
   let conn = {
-    let mut conn = trailbase_sqlite::connect_sqlite(None, None)?;
-    apply_user_migrations(&mut conn)?;
-    let _new_db = apply_main_migrations(&mut conn, None)?;
-
-    trailbase_sqlite::Connection::from_conn(conn)?
+    trailbase_sqlite::Connection::new(
+      || -> anyhow::Result<rusqlite::Connection> {
+        let mut conn = trailbase_sqlite::connect_sqlite(None, None)?;
+        apply_user_migrations(&mut conn)?;
+        let _new_db = apply_main_migrations(&mut conn, None)?;
+        return Ok(conn);
+      },
+      None,
+    )?
   };
 
   let logs_conn = {
-    let mut conn = trailbase_sqlite::connect_sqlite(None, None)?;
-    apply_logs_migrations(&mut conn)?;
-
-    trailbase_sqlite::Connection::from_conn(conn)?
+    trailbase_sqlite::Connection::new(
+      || -> anyhow::Result<rusqlite::Connection> {
+        let mut conn = trailbase_sqlite::connect_sqlite(None, None)?;
+        apply_logs_migrations(&mut conn)?;
+        return Ok(conn);
+      },
+      None,
+    )?
   };
 
   let table_metadata = TableMetadataCache::new(conn.clone()).await?;

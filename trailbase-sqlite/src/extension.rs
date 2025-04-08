@@ -131,7 +131,7 @@ mod test {
 
   #[tokio::test]
   async fn test_uuids() {
-    let conn = crate::Connection::from_conn(connect_sqlite(None, None).unwrap()).unwrap();
+    let conn = crate::Connection::new(|| connect_sqlite(None, None), None).unwrap();
 
     conn
       .execute(
