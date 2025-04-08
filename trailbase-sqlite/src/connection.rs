@@ -43,15 +43,30 @@ enum Message {
   Close(oneshot::Sender<std::result::Result<(), rusqlite::Error>>),
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Options {
-  busy_timeout: std::time::Duration,
+  pub busy_timeout: std::time::Duration,
+  pub n_threads: usize,
+}
+
+impl Default for Options {
+  fn default() -> Self {
+    return Self {
+      busy_timeout: std::time::Duration::from_secs(5),
+      n_threads: 1,
+    };
+  }
+}
+
+struct ConnectionState {
+  shared: Sender<Message>,
+  private: Vec<Sender<Message>>,
 }
 
 /// A handle to call functions in background thread.
 #[derive(Clone)]
 pub struct Connection {
-  sender: Sender<Message>,
+  state: Arc<ConnectionState>,
 }
 
 impl Connection {
@@ -59,16 +74,31 @@ impl Connection {
     c: impl Fn() -> std::result::Result<rusqlite::Connection, E>,
     opt: Option<Options>,
   ) -> std::result::Result<Self, E> {
-    let (sender, receiver) = crossbeam_channel::unbounded::<Message>();
+    let (shared_sender, shared_receiver) = crossbeam_channel::unbounded::<Message>();
 
-    let conn = c()?;
-    if let Some(timeout) = opt.map(|o| o.busy_timeout) {
-      conn.busy_timeout(timeout).expect("busy timeout failed");
-    }
+    let n_threads = opt.as_ref().map_or(1, |o| o.n_threads);
+    let private_senders = (0..n_threads)
+      .map(|_| {
+        let shared_receiver = shared_receiver.clone();
+        let (sender, receiver) = crossbeam_channel::unbounded::<Message>();
 
-    std::thread::spawn(move || event_loop(conn, receiver));
+        let conn = c()?;
+        if let Some(timeout) = opt.as_ref().map(|o| o.busy_timeout) {
+          conn.busy_timeout(timeout).expect("busy timeout failed");
+        }
 
-    return Ok(Self { sender });
+        std::thread::spawn(move || event_loop(conn, shared_receiver, receiver));
+
+        return Ok::<Sender<Message>, E>(sender);
+      })
+      .collect::<std::result::Result<Vec<Sender<Message>>, E>>()?;
+
+    return Ok(Self {
+      state: Arc::new(ConnectionState {
+        shared: shared_sender,
+        private: private_senders,
+      }),
+    });
   }
 
   /// Open a new connection to an in-memory SQLite database.
@@ -86,27 +116,36 @@ impl Connection {
   /// # Failure
   ///
   /// Will return `Err` if the database connection has been closed.
+  #[inline]
   pub async fn call<F, R>(&self, function: F) -> Result<R>
+  where
+    F: FnOnce(&mut rusqlite::Connection) -> Result<R> + Send + 'static,
+    R: Send + 'static,
+  {
+    return Self::call_impl(&self.state.shared, function).await;
+  }
+
+  #[inline]
+  async fn call_impl<F, R>(s: &Sender<Message>, function: F) -> Result<R>
   where
     F: FnOnce(&mut rusqlite::Connection) -> Result<R> + Send + 'static,
     R: Send + 'static,
   {
     let (sender, receiver) = oneshot::channel::<Result<R>>();
 
-    self
-      .sender
-      .send(Message::Run(Box::new(move |conn| {
-        let value = function(conn);
-        let _ = sender.send(value);
-      })))
-      .map_err(|_| Error::ConnectionClosed)?;
+    s.send(Message::Run(Box::new(move |conn| {
+      let value = function(conn);
+      let _ = sender.send(value);
+    })))
+    .map_err(|_| Error::ConnectionClosed)?;
 
     receiver.await.map_err(|_| Error::ConnectionClosed)?
   }
 
   pub fn call_and_forget(&self, function: impl FnOnce(&rusqlite::Connection) + Send + 'static) {
     let _ = self
-      .sender
+      .state
+      .shared
       .send(Message::Run(Box::new(move |conn| function(conn))));
   }
 
@@ -232,12 +271,28 @@ impl Connection {
     &self,
     hook: Option<impl (Fn(Action, &str, &str, &PreUpdateCase)) + Send + Sync + 'static>,
   ) -> Result<()> {
-    return self
-      .call(|conn| {
-        conn.preupdate_hook(hook);
+    let arc_hook = hook.map(|h| Arc::new(h));
+
+    for private in &self.state.private {
+      let arc_hook = arc_hook.clone();
+      Self::call_impl(private, move |conn| {
+        conn
+          .preupdate_hook(arc_hook.map(|h| {
+            move |a: Action, db: &str, table: &str, c: &PreUpdateCase| h(a, db, table, c)
+          }));
         return Ok(());
       })
-      .await;
+      .await?;
+    }
+
+    return Ok(());
+
+    // return self
+    //   .call(|conn| {
+    //     conn.preupdate_hook(hook);
+    //     return Ok(());
+    //   })
+    //   .await;
   }
 
   /// Close the database connection.
@@ -259,7 +314,7 @@ impl Connection {
   pub async fn close(self) -> Result<()> {
     let (sender, receiver) = oneshot::channel::<std::result::Result<(), rusqlite::Error>>();
 
-    if let Err(crossbeam_channel::SendError(_)) = self.sender.send(Message::Close(sender)) {
+    if let Err(crossbeam_channel::SendError(_)) = self.state.shared.send(Message::Close(sender)) {
       // If the channel is closed on the other side, it means the connection closed successfully
       // This is a safeguard against calling close on a `Copy` of the connection
       return Ok(());
@@ -281,20 +336,47 @@ impl Debug for Connection {
   }
 }
 
-fn event_loop(mut conn: rusqlite::Connection, receiver: Receiver<Message>) {
+fn event_loop(
+  mut conn: rusqlite::Connection,
+  shared: Receiver<Message>,
+  private: Receiver<Message>,
+) {
   const BUG_TEXT: &str = "bug in trailbase-sqlite, please report";
 
-  while let Ok(message) = receiver.recv() {
-    match message {
-      Message::Run(f) => f(&mut conn),
-      Message::Close(ch) => {
-        match conn.close() {
-          Ok(v) => ch.send(Ok(v)).expect(BUG_TEXT),
-          Err((_conn, e)) => ch.send(Err(e)).expect(BUG_TEXT),
-        };
+  loop {
+    crossbeam_channel::select! {
+      recv(shared) -> message => {
+        match message {
+          Ok(Message::Run(f)) => f(&mut conn),
+          Ok(Message::Close(ch)) => {
+            match conn.close() {
+              Ok(v) => ch.send(Ok(v)).expect(BUG_TEXT),
+              Err((_conn, e)) => ch.send(Err(e)).expect(BUG_TEXT),
+            };
 
-        return;
-      }
+            return;
+          }
+          Err(_) => {
+            return;
+          },
+        }
+      },
+      recv(private) -> message=> {
+        match message {
+          Ok(Message::Run(f)) => f(&mut conn),
+          Ok(Message::Close(ch)) => {
+            match conn.close() {
+              Ok(v) => ch.send(Ok(v)).expect(BUG_TEXT),
+              Err((_conn, e)) => ch.send(Err(e)).expect(BUG_TEXT),
+            };
+
+            return;
+          }
+          Err(_) => {
+            return;
+          },
+        }
+      },
     }
   }
 }

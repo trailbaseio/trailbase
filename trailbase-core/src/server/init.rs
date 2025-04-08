@@ -86,7 +86,10 @@ pub async fn init_app_state(
           apply_main_migrations(&mut conn, Some(data_dir.migrations_path()))?;
         return Ok(conn);
       },
-      None,
+      Some(trailbase_sqlite::connection::Options {
+        n_threads: 6,
+        ..Default::default()
+      }),
     )?;
 
     let new_db: bool = *new_db.lock();
