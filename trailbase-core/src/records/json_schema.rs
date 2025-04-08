@@ -1,10 +1,12 @@
 use axum::extract::{Json, Path, Query, State};
 use serde::Deserialize;
+use trailbase_schema::json_schema::{
+  build_json_schema, build_json_schema_expanded, Expand, JsonSchemaMode,
+};
 
+use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::records::{Permission, RecordError};
-use crate::table_metadata::{build_json_schema, build_json_schema_recursive, Expand};
-use crate::{api::JsonSchemaMode, app_state::AppState};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct JsonSchemaQuery {
@@ -39,12 +41,12 @@ pub async fn json_schema_handler(
     (Some(config_expand), JsonSchemaMode::Select) => {
       let foreign_key_columns = config_expand.keys().map(|k| k.as_str()).collect::<Vec<_>>();
       let expand = Expand {
-        table_metadata: state.table_metadata(),
+        tables: &state.table_metadata().tables(),
         foreign_key_columns,
       };
 
       let (_schema, json) =
-        build_json_schema_recursive(api.table_name(), api.columns(), mode, Some(expand))
+        build_json_schema_expanded(api.table_name(), api.columns(), mode, Some(expand))
           .map_err(|err| RecordError::Internal(err.into()))?;
       return Ok(Json(json));
     }

@@ -1,15 +1,9 @@
 use fallible_iterator::FallibleIterator;
-use jsonschema::Validator;
 use log::*;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use trailbase_schema::metadata::extract_json_metadata;
-use trailbase_schema::sqlite::{
-  sqlite3_parse_into_statement, Column, ColumnDataType, ColumnOption, SchemaError, Table, View,
-};
+use trailbase_schema::sqlite::{sqlite3_parse_into_statement, SchemaError, Table, View};
 use trailbase_sqlite::params;
 
 pub use trailbase_schema::metadata::{
@@ -19,14 +13,14 @@ pub use trailbase_schema::metadata::{
 use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
 
 struct TableMetadataCacheState {
-  conn: trailbase_sqlite::Connection,
-  tables: parking_lot::RwLock<HashMap<String, Arc<TableMetadata>>>,
-  views: parking_lot::RwLock<HashMap<String, Arc<ViewMetadata>>>,
+  tables: HashMap<String, Arc<TableMetadata>>,
+  views: HashMap<String, Arc<ViewMetadata>>,
 }
 
 #[derive(Clone)]
 pub struct TableMetadataCache {
-  state: Arc<TableMetadataCacheState>,
+  conn: trailbase_sqlite::Connection,
+  state: Arc<parking_lot::RwLock<TableMetadataCacheState>>,
 }
 
 impl TableMetadataCache {
@@ -36,11 +30,11 @@ impl TableMetadataCache {
     let views = Self::build_views(&conn, &tables).await?;
 
     return Ok(TableMetadataCache {
-      state: Arc::new(TableMetadataCacheState {
-        conn,
-        tables: parking_lot::RwLock::new(table_map),
-        views: parking_lot::RwLock::new(views),
-      }),
+      conn,
+      state: Arc::new(parking_lot::RwLock::new(TableMetadataCacheState {
+        tables: table_map,
+        views,
+      })),
     });
   }
 
@@ -109,30 +103,48 @@ impl TableMetadataCache {
     return Ok(views.into_iter().filter_map(build).collect());
   }
 
+  // TODO: rename to get_table or split cache.
   pub fn get(&self, table_name: &str) -> Option<Arc<TableMetadata>> {
-    self.state.tables.read().get(table_name).cloned()
+    self.state.read().tables.get(table_name).cloned()
   }
 
   pub fn get_view(&self, view_name: &str) -> Option<Arc<ViewMetadata>> {
-    self.state.views.read().get(view_name).cloned()
+    self.state.read().views.get(view_name).cloned()
+  }
+
+  pub(crate) fn tables(&self) -> Vec<TableMetadata> {
+    return self
+      .state
+      .read()
+      .tables
+      .values()
+      .map(|t| (**t).clone())
+      .collect();
   }
 
   pub async fn invalidate_all(&self) -> Result<(), TableLookupError> {
     debug!("Rebuilding TableMetadataCache");
-    let conn = &self.state.conn;
+    let conn = &self.conn;
+
     let tables = lookup_and_parse_all_table_schemas(conn).await?;
     let table_map = Self::build_tables(conn, &tables).await?;
-    *self.state.tables.write() = table_map;
-    *self.state.views.write() = Self::build_views(conn, &tables).await?;
+    let views = Self::build_views(conn, &tables).await?;
+
+    *self.state.write() = TableMetadataCacheState {
+      tables: table_map,
+      views,
+    };
+
     Ok(())
   }
 }
 
 impl std::fmt::Debug for TableMetadataCache {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let state = self.state.read();
     f.debug_struct("TableMetadataCache")
-      .field("tables", &self.state.tables.read().keys())
-      .field("views", &self.state.views.read().keys())
+      .field("tables", &state.tables.keys())
+      .field("views", &state.views.keys())
       .finish()
   }
 }
@@ -229,411 +241,17 @@ pub async fn lookup_and_parse_all_view_schemas(
   return Ok(views);
 }
 
-/// Influeces the generated JSON schema. In `Insert` mode columns with default values will be
-/// optional.
-#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
-pub enum JsonSchemaMode {
-  /// Insert mode.
-  Insert,
-  /// Read/Select mode.
-  Select,
-  /// Update mode.
-  Update,
-}
-
-fn column_data_type_to_json_type(data_type: ColumnDataType) -> Value {
-  return match data_type {
-    ColumnDataType::Null => Value::String("null".into()),
-    ColumnDataType::Any => Value::Array(vec![
-      "number".into(),
-      "string".into(),
-      "boolean".into(),
-      "object".into(),
-      "array".into(),
-      "null".into(),
-    ]),
-    ColumnDataType::Text => Value::String("string".into()),
-    // We encode all blobs as url-safe Base64.
-    ColumnDataType::Blob => Value::String("string".into()),
-    ColumnDataType::Integer => Value::String("integer".into()),
-    ColumnDataType::Real => Value::String("number".into()),
-    ColumnDataType::Numeric => Value::String("number".into()),
-    // JSON types
-    ColumnDataType::JSON => Value::String("object".into()),
-    ColumnDataType::JSONB => Value::String("object".into()),
-    // Affine types
-    //
-    // Integers:
-    ColumnDataType::Int => Value::String("number".into()),
-    ColumnDataType::TinyInt => Value::String("number".into()),
-    ColumnDataType::SmallInt => Value::String("number".into()),
-    ColumnDataType::MediumInt => Value::String("number".into()),
-    ColumnDataType::BigInt => Value::String("number".into()),
-    ColumnDataType::UnignedBigInt => Value::String("number".into()),
-    ColumnDataType::Int2 => Value::String("number".into()),
-    ColumnDataType::Int4 => Value::String("number".into()),
-    ColumnDataType::Int8 => Value::String("number".into()),
-    // Text:
-    ColumnDataType::Character => Value::String("string".into()),
-    ColumnDataType::Varchar => Value::String("string".into()),
-    ColumnDataType::VaryingCharacter => Value::String("string".into()),
-    ColumnDataType::NChar => Value::String("string".into()),
-    ColumnDataType::NativeCharacter => Value::String("string".into()),
-    ColumnDataType::NVarChar => Value::String("string".into()),
-    ColumnDataType::Clob => Value::String("string".into()),
-    // Real:
-    ColumnDataType::Double => Value::String("number".into()),
-    ColumnDataType::DoublePrecision => Value::String("number".into()),
-    ColumnDataType::Float => Value::String("number".into()),
-    // Numeric:
-    ColumnDataType::Boolean => Value::String("boolean".into()),
-    ColumnDataType::Decimal => Value::String("number".into()),
-    ColumnDataType::Date => Value::String("number".into()),
-    ColumnDataType::DateTime => Value::String("number".into()),
-  };
-}
-
-/// Builds a JSON Schema definition for the given table.
-///
-/// NOTE: insert and select require different types to model default values, i.e. a column with a
-/// default value is optional during insert but guaranteed during reads.
-///
-/// NOTE: We're not currently respecting the RecordApi `autofill_missing_user_id_columns`
-/// setting. Not sure we should since this is more a feature for no-JS, HTTP-only apps, which
-/// don't benefit from type-safety anyway.
-pub fn build_json_schema(
-  table_or_view_name: &str,
-  columns: &[Column],
-  mode: JsonSchemaMode,
-) -> Result<(Validator, serde_json::Value), JsonSchemaError> {
-  return build_json_schema_recursive(table_or_view_name, columns, mode, None);
-}
-
-pub(crate) struct Expand<'a> {
-  pub(crate) table_metadata: &'a TableMetadataCache,
-  pub(crate) foreign_key_columns: Vec<&'a str>,
-}
-
-/// NOTE: Foreign keys can only reference tables not view, so the inline schemas don't need to be
-/// able to reference views.
-pub(crate) fn build_json_schema_recursive(
-  table_or_view_name: &str,
-  columns: &[Column],
-  mode: JsonSchemaMode,
-  expand: Option<Expand<'_>>,
-) -> Result<(Validator, serde_json::Value), JsonSchemaError> {
-  let mut properties = serde_json::Map::new();
-  let mut defs = serde_json::Map::new();
-  let mut required_cols: Vec<String> = vec![];
-
-  for col in columns {
-    let mut found_def = false;
-    let mut not_null = false;
-    let mut default = false;
-
-    for opt in &col.options {
-      match opt {
-        ColumnOption::NotNull => not_null = true,
-        ColumnOption::Default(_) => default = true,
-        ColumnOption::Check(check) => {
-          if let Some(json_metadata) = extract_json_metadata(&ColumnOption::Check(check.clone()))? {
-            match json_metadata {
-              JsonColumnMetadata::SchemaName(name) => {
-                let Some(schema) = trailbase_schema::registry::get_schema(&name) else {
-                  return Err(JsonSchemaError::NotFound(name.to_string()));
-                };
-                defs.insert(col.name.clone(), schema.schema);
-                found_def = true;
-              }
-              JsonColumnMetadata::Pattern(pattern) => {
-                defs.insert(col.name.clone(), pattern.clone());
-                found_def = true;
-              }
-            }
-          }
-        }
-        ColumnOption::Unique { is_primary, .. } => {
-          // According to the SQL standard, PRIMARY KEY should always imply NOT NULL.
-          // Unfortunately, due to a bug in some early versions, this is not the case in SQLite.
-          // Unless the column is an INTEGER PRIMARY KEY or the table is a WITHOUT ROWID table or a
-          // STRICT table or the column is declared NOT NULL, SQLite allows NULL values in a
-          // PRIMARY KEY column
-          // source: https://www.sqlite.org/lang_createtable.html
-          if *is_primary {
-            if col.data_type == ColumnDataType::Integer {
-              not_null = true;
-            }
-
-            default = true;
-          }
-        }
-        ColumnOption::ForeignKey {
-          foreign_table,
-          referred_columns: _,
-          ..
-        } => {
-          if let (Some(expand), JsonSchemaMode::Select) = (&expand, mode) {
-            for metadata in &expand.foreign_key_columns {
-              if metadata != foreign_table {
-                continue;
-              }
-
-              // TODO: Implement nesting.
-              let Some(table) = expand.table_metadata.get(foreign_table) else {
-                warn!("Failed to find table: {foreign_table}");
-                continue;
-              };
-
-              let Some((_idx, pk_column)) = table.record_pk_column() else {
-                warn!("Missing pk column for table: {foreign_table}");
-                continue;
-              };
-
-              let (_validator, schema) =
-                build_json_schema(foreign_table, &table.schema.columns, mode)?;
-              defs.insert(
-                col.name.clone(),
-                serde_json::json!({
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": column_data_type_to_json_type(pk_column.data_type),
-                    },
-                    "data": schema,
-                  },
-                  "required": ["id"],
-                }),
-              );
-              found_def = true;
-            }
-          }
-        }
-        _ => {}
-      }
-    }
-
-    match mode {
-      JsonSchemaMode::Insert => {
-        if not_null && !default {
-          required_cols.push(col.name.clone());
-        }
-      }
-      JsonSchemaMode::Select => {
-        if not_null {
-          required_cols.push(col.name.clone());
-        }
-      }
-      JsonSchemaMode::Update => {}
-    }
-
-    if found_def {
-      let name = &col.name;
-      properties.insert(
-        name.clone(),
-        serde_json::json!({
-          "$ref": format!("#/$defs/{name}")
-        }),
-      );
-    } else {
-      properties.insert(
-        col.name.clone(),
-        serde_json::json!({
-          "type": column_data_type_to_json_type(col.data_type),
-        }),
-      );
-    }
-  }
-
-  let schema = if defs.is_empty() {
-    serde_json::json!({
-      "title": table_or_view_name,
-      "type": "object",
-      "properties": serde_json::Value::Object(properties),
-      "required": serde_json::json!(required_cols),
-    })
-  } else {
-    serde_json::json!({
-      "title": table_or_view_name,
-      "type": "object",
-      "properties": serde_json::Value::Object(properties),
-      "required": serde_json::json!(required_cols),
-      "$defs": serde_json::Value::Object(defs),
-    })
-  };
-
-  return Ok((
-    Validator::new(&schema).map_err(|err| JsonSchemaError::SchemaCompile(err.to_string()))?,
-    schema,
-  ));
-}
-
 #[cfg(test)]
 mod tests {
   use axum::extract::{Json, Path, Query, RawQuery, State};
-  use indoc::indoc;
   use serde_json::json;
-  use trailbase_schema::sqlite::ColumnOption;
-  use trailbase_schema::FileUpload;
+  use trailbase_schema::json_schema::{build_json_schema_expanded, Expand, JsonSchemaMode};
 
-  use super::*;
   use crate::app_state::*;
   use crate::config::proto::{PermissionFlag, RecordApiConfig};
   use crate::records::list_records::list_records_handler;
   use crate::records::read_record::{read_record_handler, ReadRecordQuery};
   use crate::records::*;
-
-  #[tokio::test]
-  async fn test_parse_table_schema() {
-    let state = test_state(None).await.unwrap();
-    let conn = state.conn();
-
-    let check = indoc! {r#"
-        jsonschema_matches ('{
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "name": {
-              "type": "string"
-            },
-            "age": {
-              "type": "integer",
-              "minimum": 0
-            }
-          },
-          "required": ["name", "age"]
-        }', col0)"#
-    };
-
-    conn
-      .execute(
-        &format!(
-          r#"CREATE TABLE test_table (
-            col0 TEXT CHECK({check}),
-            col1 TEXT CHECK(jsonschema('std.FileUpload', col1)),
-            col2 TEXT,
-            col3 TEXT CHECK(jsonschema('std.FileUpload', col3, 'image/jpeg, image/png'))
-          ) STRICT"#
-        ),
-        (),
-      )
-      .await
-      .unwrap();
-
-    let insert = |col: &'static str, json: serde_json::Value| async move {
-      conn
-        .execute(
-          &format!(
-            "INSERT INTO test_table ({col}) VALUES ('{}')",
-            json.to_string()
-          ),
-          (),
-        )
-        .await
-    };
-
-    assert!(insert("col2", json!({"name": 42})).await.unwrap() > 0);
-    assert!(
-      insert(
-        "col1",
-        serde_json::to_value(FileUpload::new(
-          uuid::Uuid::now_v7(),
-          Some("filename".to_string()),
-          None,
-          None
-        ))
-        .unwrap()
-      )
-      .await
-      .unwrap()
-        > 0
-    );
-    assert!(insert("col1", json!({"foo": "/foo"})).await.is_err());
-    assert!(insert("col0", json!({"name": 42})).await.is_err());
-    assert!(insert("col0", json!({"name": "Alice"})).await.is_err());
-    assert!(
-      insert("col0", json!({"name": "Alice", "age": 23}))
-        .await
-        .unwrap()
-        > 0
-    );
-    assert!(insert(
-      "col0",
-      json!({"name": "Alice", "age": 23, "additional": 42})
-    )
-    .await
-    .is_err());
-
-    assert!(insert("col3", json!({"foo": "/foo"})).await.is_err());
-    assert!(insert(
-      "col3",
-      json!({
-          "id": uuid::Uuid::now_v7().to_string(),
-          // Missing mime-type.
-      })
-    )
-    .await
-    .is_err());
-    assert!(insert("col3", json!({"mime_type": "invalid"}))
-      .await
-      .is_err());
-    assert!(insert(
-      "col3",
-      json!({
-        "id": uuid::Uuid::now_v7().to_string(),
-        "mime_type": "image/png"
-      })
-    )
-    .await
-    .is_ok());
-
-    let cnt: i64 = conn
-      .query_row("SELECT COUNT(*) FROM test_table", ())
-      .await
-      .unwrap()
-      .unwrap()
-      .get(0)
-      .unwrap();
-
-    assert_eq!(cnt, 4);
-
-    let table = lookup_and_parse_table_schema(conn, "test_table")
-      .await
-      .unwrap();
-    let col = table.columns.first().unwrap();
-    let check_expr = col
-      .options
-      .iter()
-      .filter_map(|c| match c {
-        ColumnOption::Check(check) => Some(check),
-        _ => None,
-      })
-      .collect::<Vec<_>>()[0];
-
-    assert_eq!(check_expr, check);
-    let table_metadata = TableMetadata::new(table.clone(), &[table], USER_TABLE);
-
-    let (schema, _) = build_json_schema(
-      table_metadata.name(),
-      &table_metadata.schema.columns,
-      JsonSchemaMode::Insert,
-    )
-    .unwrap();
-    assert!(schema.is_valid(&json!({
-      "col2": "test",
-    })));
-
-    assert!(schema.is_valid(&json!({
-      "col0": json!({
-        "name": "Alice", "age": 23,
-      }),
-    })));
-
-    assert!(!schema.is_valid(&json!({
-      "col0": json!({
-        "name": 42, "age": "23",
-      }),
-    })));
-  }
 
   #[tokio::test]
   async fn test_expanded_foreign_key() {
@@ -679,12 +297,12 @@ mod tests {
 
     let test_table_metadata = state.table_metadata().get(table_name).unwrap();
 
-    let (validator, schema) = build_json_schema_recursive(
+    let (validator, schema) = build_json_schema_expanded(
       table_name,
       &test_table_metadata.schema.columns,
       JsonSchemaMode::Select,
       Some(Expand {
-        table_metadata: state.table_metadata(),
+        tables: &state.table_metadata().tables(),
         foreign_key_columns: vec!["foreign_table"],
       }),
     )

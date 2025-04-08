@@ -5,7 +5,8 @@ use serde::Deserialize;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::table_metadata::{build_json_schema, JsonSchemaMode};
+
+use trailbase_schema::json_schema::{build_json_schema, JsonSchemaMode};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct GetTableSchemaParams {
@@ -21,6 +22,8 @@ pub async fn get_table_schema_handler(
     return Err(Error::Precondition(format!("Table {table_name} not found")));
   };
 
+  // FIXME: With ForeignKey expansion the schema depends on a specific record api and not just a
+  // table schema.
   let (_schema, json) = build_json_schema(
     table_metadata.name(),
     &table_metadata.schema.columns,

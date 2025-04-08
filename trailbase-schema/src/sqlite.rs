@@ -1267,6 +1267,26 @@ fn unquote_expr(expr: Expr) -> String {
 }
 
 #[cfg(test)]
+pub fn lookup_and_parse_table_schema(
+  conn: &rusqlite::Connection,
+  table_name: &str,
+) -> anyhow::Result<Table> {
+  const SQLITE_SCHEMA_TABLE: &str = "main.sqlite_schema";
+
+  let sql: String = conn.query_row(
+    &format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1"),
+    rusqlite::params!(table_name),
+    |row| row.get(0),
+  )?;
+
+  let Some(stmt) = sqlite3_parse_into_statement(&sql)? else {
+    anyhow::bail!("Not a statement");
+  };
+
+  return Ok(stmt.try_into()?);
+}
+
+#[cfg(test)]
 mod tests {
   use super::*;
 

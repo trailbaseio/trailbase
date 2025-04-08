@@ -22,3 +22,8 @@ tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "s
 trailbase-extension = { workspace = true }
 ts-rs = { version = "10", features = ["uuid-impl", "serde-json-impl"] }
 uuid = { workspace = true }
+
+[dev-dependencies]
+anyhow = "1.0.97"
+indoc = "2.0.6"
+rusqlite = { workspace = true }

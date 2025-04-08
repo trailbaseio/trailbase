@@ -66,7 +66,9 @@ pub mod api {
   pub use crate::email::{Email, EmailError};
   pub use crate::migrations::new_unique_migration_filename;
   pub use crate::server::{init_app_state, InitArgs};
-  pub use crate::table_metadata::{build_json_schema, JsonSchemaMode, TableMetadataCache};
+  pub use crate::table_metadata::TableMetadataCache;
+
+  pub use trailbase_schema::json_schema::{build_json_schema, JsonSchemaMode};
 }
 
 pub(crate) mod rand {
