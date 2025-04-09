@@ -1,3 +1,11 @@
+## v0.9.1
+
+* Consistently expanded JSON schemas for specific APIs everywhere (UI & CLI).
+* Improved foreign table id lookup during schema evaluation.
+* Stricter SQL validation in admin UI.
+* Break up sqlite and core creates into two additional crates: schema & assets.
+* Update dependencies.
+
 ## v0.9.0
 
 * Performance:
