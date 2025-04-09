@@ -12,7 +12,9 @@ async function fetchParse(request: ParseRequest): Promise<ParseResponse> {
   return await response.json();
 }
 
-export async function parseSql(sql: string): Promise<undefined | string> {
+export async function parseSqlExpression(
+  sql: string,
+): Promise<undefined | string> {
   const response = await fetchParse({
     query: urlSafeBase64Encode(sql),
     mode: "Expression",

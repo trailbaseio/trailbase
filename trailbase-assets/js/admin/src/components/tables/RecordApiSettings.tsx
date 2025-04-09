@@ -33,7 +33,7 @@ import {
   buildOptionalTextFormField,
 } from "@/components/FormFields";
 import { createConfigQuery, setConfig } from "@/lib/config";
-import { parseSql } from "@/lib/parse";
+import { parseSqlExpression } from "@/lib/parse";
 import { tableType, getForeignKey } from "@/lib/schema";
 
 import type { ForeignKey } from "@bindings/ForeignKey";
@@ -56,7 +56,7 @@ const viewPermissions = {
 async function asyncSqlValidator({ value }: { value: string | undefined }) {
   console.debug("Query", value);
   if (value) {
-    return parseSql(value);
+    return parseSqlExpression(value);
   }
 }
 

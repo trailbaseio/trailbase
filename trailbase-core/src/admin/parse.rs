@@ -1,13 +1,13 @@
 use axum::{extract::State, Json};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
-use trailbase_schema::sqlite::sqlite3_parse_into_statements;
+use trailbase_schema::sqlite::sqlite3_parse_into_statement;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 
-#[derive(Debug, Deserialize, Serialize, TS)]
+#[derive(Debug, Deserialize, PartialEq, Serialize, TS)]
 pub enum Mode {
   Expression,
   Statement,
@@ -37,21 +37,22 @@ pub async fn parse_handler(
   State(_state): State<AppState>,
   Json(request): Json<ParseRequest>,
 ) -> Result<Json<ParseResponse>, Error> {
-  let query = String::from_utf8_lossy(&BASE64_URL_SAFE.decode(request.query)?).to_string();
-
-  let result = match request.mode.unwrap_or(Mode::Expression) {
-    Mode::Statement => sqlite3_parse_into_statements(&query),
-    Mode::Expression => sqlite3_parse_into_statements(&format!("SELECT ({query})")),
+  let mode = request.mode.unwrap_or(Mode::Expression);
+  let decoded = String::from_utf8_lossy(&BASE64_URL_SAFE.decode(request.query)?).to_string();
+  let query: String = match mode {
+    Mode::Statement => decoded,
+    Mode::Expression => format!("SELECT {decoded}"),
   };
 
-  return match result.err() {
-    None => Ok(Json(ParseResponse {
-      ok: true,
-      message: None,
-    })),
-    Some(err) => Ok(Json(ParseResponse {
+  if let Err(err) = sqlite3_parse_into_statement(&query) {
+    return Ok(Json(ParseResponse {
       ok: false,
       message: Some(err.to_string()),
-    })),
-  };
+    }));
+  }
+
+  return Ok(Json(ParseResponse {
+    ok: true,
+    message: None,
+  }));
 }
