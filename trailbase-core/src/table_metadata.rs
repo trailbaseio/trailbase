@@ -315,11 +315,11 @@ mod tests {
         "type": "object",
         "properties": {
           "id": { "type": "integer" },
-          "fk": { "$ref": "#/$defs/fk" },
+          "fk": { "$ref": "#/$defs/foreign_table" },
         },
         "required": ["id"],
         "$defs": {
-          "fk": {
+          "foreign_table": {
             "type": "object",
             "properties": {
               "id" : { "type": "integer"},

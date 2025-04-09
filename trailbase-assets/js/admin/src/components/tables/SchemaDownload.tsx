@@ -1,9 +1,18 @@
-import { createSignal, createResource, Switch, Match, Show } from "solid-js";
+import {
+  createMemo,
+  createSignal,
+  createResource,
+  Switch,
+  Match,
+  Show,
+} from "solid-js";
+import { createWritableMemo } from "@solid-primitives/memo";
 import { adminFetch } from "@/lib/fetch";
 import { TbDownload, TbColumns, TbColumnsOff } from "solid-icons/tb";
 import { showSaveFileDialog } from "@/lib/utils";
 import { iconButtonStyle } from "@/components/IconButton";
 
+import { RecordApiConfig } from "@proto/config";
 import type { Table } from "@bindings/Table";
 import type { TableIndex } from "@bindings/TableIndex";
 import type { TableTrigger } from "@bindings/TableTrigger";
@@ -33,7 +42,7 @@ const modes = ["Insert", "Select", "Update"] as const;
 type Mode = (typeof modes)[number];
 
 function SchemaDownloadButton(props: {
-  tableName: string;
+  apiName: string;
   mode: Mode;
   schema: object;
 }) {
@@ -46,7 +55,7 @@ function SchemaDownloadButton(props: {
         // possible fallback: https://stackoverflow.com/a/67806663
         showSaveFileDialog({
           contents: JSON.stringify(props.schema, null, "  "),
-          filename: `${props.tableName}_${props.mode.toLowerCase()}_schema.json`,
+          filename: `${props.apiName}_${props.mode.toLowerCase()}_schema.json`,
         }).catch(console.error);
       }}
     >
@@ -55,17 +64,23 @@ function SchemaDownloadButton(props: {
   );
 }
 
-export function SchemaDialog(props: { tableName: string }) {
+export function SchemaDialog(props: {
+  tableName: string;
+  apis: RecordApiConfig[];
+}) {
   const [mode, setMode] = createSignal<Mode>("Select");
+  const apiNames = createMemo(() => props.apis.map((api) => api.name));
+  const [api, setApi] = createWritableMemo(() => apiNames()[0] ?? "");
+
   const args = () => ({
     mode: mode(),
-    tableName: props.tableName,
+    apiName: api(),
   });
 
-  const [schema] = createResource(args, async ({ mode, tableName }) => {
-    console.debug(`Fetching ${tableName}: ${mode}`);
+  const [schema] = createResource(args, async ({ mode, apiName }) => {
+    console.debug(`Fetching ${apiName}: ${mode}`);
     const response = await adminFetch(
-      `/table/${tableName}/schema.json?mode=${mode}`,
+      `/schema/${apiName}/schema.json?mode=${mode}`,
     );
     return await response.json();
   });
@@ -77,7 +92,8 @@ export function SchemaDialog(props: { tableName: string }) {
           <TooltipTrigger as="div">
             <TbColumns size={20} />
           </TooltipTrigger>
-          <TooltipContent>JSON Schema of "{props.tableName}"</TooltipContent>
+
+          <TooltipContent>JSON Schemas of "{props.tableName}"</TooltipContent>
         </Tooltip>
       </DialogTrigger>
 
@@ -89,11 +105,30 @@ export function SchemaDialog(props: { tableName: string }) {
             <div class="flex items-center gap-2">
               <Show when={schema.state === "ready"}>
                 <SchemaDownloadButton
-                  tableName={props.tableName}
+                  apiName={api()}
                   schema={schema()}
                   mode={mode()}
                 />
               </Show>
+
+              <Select
+                value={api()}
+                onChange={setApi}
+                options={[...apiNames()]}
+                placeholder="API"
+                itemComponent={(props) => (
+                  <SelectItem item={props.item}>
+                    {props.item.rawValue}
+                  </SelectItem>
+                )}
+              >
+                <SelectTrigger aria-label="Apis" class="w-[180px]">
+                  <SelectValue>
+                    {(state) => `API: ${state.selectedOption()}`}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent />
+              </Select>
 
               <Select
                 value={mode()}
@@ -106,9 +141,9 @@ export function SchemaDialog(props: { tableName: string }) {
                   </SelectItem>
                 )}
               >
-                <SelectTrigger aria-label="Fruit" class="w-[180px]">
-                  <SelectValue<string>>
-                    {(state) => state.selectedOption()}
+                <SelectTrigger aria-label="Mode" class="w-[180px]">
+                  <SelectValue>
+                    {(state) => `Mode: ${state.selectedOption()}`}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent />

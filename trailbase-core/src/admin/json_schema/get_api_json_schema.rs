@@ -2,33 +2,30 @@ use axum::extract::{Path, Query, State};
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
+use trailbase_schema::json_schema::JsonSchemaMode;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-
-use trailbase_schema::json_schema::{build_json_schema, JsonSchemaMode};
+use crate::records::json_schema::build_api_json_schema;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct GetTableSchemaParams {
   mode: Option<JsonSchemaMode>,
 }
 
-pub async fn get_table_schema_handler(
+pub async fn get_api_json_schema_handler(
   State(state): State<AppState>,
-  Path(table_name): Path<String>,
+  Path(record_api_name): Path<String>,
   Query(query): Query<GetTableSchemaParams>,
 ) -> Result<Response, Error> {
-  let Some(table_metadata) = state.table_metadata().get(&table_name) else {
-    return Err(Error::Precondition(format!("Table {table_name} not found")));
+  let Some(api) = state.lookup_record_api(&record_api_name) else {
+    return Err(Error::Precondition(format!(
+      "API {record_api_name} not found"
+    )));
   };
 
-  // FIXME: With ForeignKey expansion the schema depends on a specific record api and not just a
-  // table schema.
-  let (_schema, json) = build_json_schema(
-    table_metadata.name(),
-    &table_metadata.schema.columns,
-    query.mode.unwrap_or(JsonSchemaMode::Insert),
-  )?;
+  let json =
+    build_api_json_schema(&state, &api, query.mode).map_err(|err| Error::Internal(err.into()))?;
 
   let mut response = serde_json::to_string_pretty(&json)?.into_response();
   response.headers_mut().insert(

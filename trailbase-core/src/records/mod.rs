@@ -8,7 +8,7 @@ pub(crate) mod create_record;
 pub(crate) mod delete_record;
 mod error;
 pub(crate) mod files;
-mod json_schema;
+pub(crate) mod json_schema;
 pub(crate) mod list_records;
 pub(crate) mod params;
 pub mod query_builder;

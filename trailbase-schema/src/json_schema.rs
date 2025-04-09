@@ -27,13 +27,14 @@ pub enum JsonSchemaMode {
 /// setting. Not sure we should since this is more a feature for no-JS, HTTP-only apps, which
 /// don't benefit from type-safety anyway.
 pub fn build_json_schema(
-  table_or_view_name: &str,
+  title: &str,
   columns: &[Column],
   mode: JsonSchemaMode,
 ) -> Result<(Validator, serde_json::Value), JsonSchemaError> {
-  return build_json_schema_expanded(table_or_view_name, columns, mode, None);
+  return build_json_schema_expanded(title, columns, mode, None);
 }
 
+#[derive(Debug)]
 pub struct Expand<'a> {
   pub tables: &'a [TableMetadata],
   pub foreign_key_columns: Vec<&'a str>,
@@ -42,7 +43,7 @@ pub struct Expand<'a> {
 /// NOTE: Foreign keys can only reference tables not view, so the inline schemas don't need to be
 /// able to reference views.
 pub fn build_json_schema_expanded(
-  table_or_view_name: &str,
+  title: &str,
   columns: &[Column],
   mode: JsonSchemaMode,
   expand: Option<Expand<'_>>,
@@ -52,7 +53,7 @@ pub fn build_json_schema_expanded(
   let mut required_cols: Vec<String> = vec![];
 
   for col in columns {
-    let mut found_def = false;
+    let mut def_name: Option<String> = None;
     let mut not_null = false;
     let mut default = false;
 
@@ -62,17 +63,18 @@ pub fn build_json_schema_expanded(
         ColumnOption::Default(_) => default = true,
         ColumnOption::Check(check) => {
           if let Some(json_metadata) = extract_json_metadata(&ColumnOption::Check(check.clone()))? {
+            let new_def_name = &col.name;
             match json_metadata {
               JsonColumnMetadata::SchemaName(name) => {
                 let Some(schema) = crate::registry::get_schema(&name) else {
                   return Err(JsonSchemaError::NotFound(name.to_string()));
                 };
-                defs.insert(col.name.clone(), schema.schema);
-                found_def = true;
+                defs.insert(new_def_name.clone(), schema.schema);
+                def_name = Some(new_def_name.clone());
               }
               JsonColumnMetadata::Pattern(pattern) => {
-                defs.insert(col.name.clone(), pattern.clone());
-                found_def = true;
+                defs.insert(new_def_name.clone(), pattern.clone());
+                def_name = Some(new_def_name.clone());
               }
             }
           }
@@ -98,49 +100,54 @@ pub fn build_json_schema_expanded(
           ..
         } => {
           if let (Some(expand), JsonSchemaMode::Select) = (&expand, mode) {
-            for metadata in &expand.foreign_key_columns {
-              if metadata != foreign_table {
-                continue;
-              }
+            let column_is_expanded = expand
+              .foreign_key_columns
+              .iter()
+              .any(|column_name| *column_name != col.name);
+            if !column_is_expanded {
+              continue;
+            }
 
-              if referred_columns.len() != 1 {
-                warn!("Skipping. Expected single reffered column : {referred_columns:?}");
-                continue;
-              }
+            let Some(table) = expand.tables.iter().find(|t| t.name() == foreign_table) else {
+              warn!("Failed to find table: {foreign_table}");
+              continue;
+            };
 
-              // TODO: Implement nesting.
-              let Some(table) = expand.tables.iter().find(|t| t.name() == foreign_table) else {
-                warn!("Failed to find table: {foreign_table}");
-                continue;
-              };
-
-              let Some(column) = table
+            let Some(pk_column) = (match referred_columns.len() {
+              0 => crate::metadata::find_pk_column_index(&table.schema.columns)
+                .map(|idx| &table.schema.columns[idx]),
+              1 => table
                 .schema
                 .columns
                 .iter()
-                .find(|c| c.name == referred_columns[0])
-              else {
-                warn!("Failed to find column: {}", referred_columns[0]);
+                .find(|c| c.name == referred_columns[0]),
+              _ => {
+                warn!("Skipping. Expected single referred column : {referred_columns:?}");
                 continue;
-              };
+              }
+            }) else {
+              warn!("Failed to find pk column for {}", table.name());
+              continue;
+            };
 
-              let (_validator, schema) =
-                build_json_schema(foreign_table, &table.schema.columns, mode)?;
-              defs.insert(
-                col.name.clone(),
-                serde_json::json!({
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": column_data_type_to_json_type(column.data_type),
-                    },
-                    "data": schema,
+            let (_validator, schema) =
+              build_json_schema(foreign_table, &table.schema.columns, mode)?;
+
+            let new_def_name = foreign_table.clone();
+            defs.insert(
+              new_def_name.clone(),
+              serde_json::json!({
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": column_data_type_to_json_type(pk_column.data_type),
                   },
-                  "required": ["id"],
-                }),
-              );
-              found_def = true;
-            }
+                  "data": schema,
+                },
+                "required": ["id"],
+              }),
+            );
+            def_name = Some(new_def_name);
           }
         }
         _ => {}
@@ -161,34 +168,30 @@ pub fn build_json_schema_expanded(
       JsonSchemaMode::Update => {}
     }
 
-    if found_def {
-      let name = &col.name;
-      properties.insert(
-        name.clone(),
+    properties.insert(
+      col.name.clone(),
+      if let Some(def_name) = def_name {
         serde_json::json!({
-          "$ref": format!("#/$defs/{name}")
-        }),
-      );
-    } else {
-      properties.insert(
-        col.name.clone(),
+          "$ref": format!("#/$defs/{def_name}")
+        })
+      } else {
         serde_json::json!({
           "type": column_data_type_to_json_type(col.data_type),
-        }),
-      );
-    }
+        })
+      },
+    );
   }
 
   let schema = if defs.is_empty() {
     serde_json::json!({
-      "title": table_or_view_name,
+      "title": title,
       "type": "object",
       "properties": serde_json::Value::Object(properties),
       "required": serde_json::json!(required_cols),
     })
   } else {
     serde_json::json!({
-      "title": table_or_view_name,
+      "title": title,
       "type": "object",
       "properties": serde_json::Value::Object(properties),
       "required": serde_json::json!(required_cols),

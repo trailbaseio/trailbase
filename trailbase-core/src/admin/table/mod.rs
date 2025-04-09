@@ -2,12 +2,10 @@
 mod alter_index;
 mod create_index;
 mod drop_index;
-mod get_table_schema;
 
 pub(super) use alter_index::alter_index_handler;
 pub(super) use create_index::create_index_handler;
 pub(super) use drop_index::drop_index_handler;
-pub(super) use get_table_schema::get_table_schema_handler;
 
 // Tables
 mod alter_table;

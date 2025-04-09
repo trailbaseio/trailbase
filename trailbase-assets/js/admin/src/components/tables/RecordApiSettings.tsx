@@ -228,21 +228,42 @@ function ConflictResolutionSrategyToString(
   }
 }
 
+export function getRecordApis(
+  config: Config | undefined,
+  tableName: string,
+): RecordApiConfig[] {
+  return (config?.recordApis ?? []).filter(
+    (api) => api.tableName === tableName,
+  );
+}
+
+export function hasRecordApis(
+  config: Config | undefined,
+  tableName: string,
+): boolean {
+  for (const api of config?.recordApis ?? []) {
+    if (api.tableName === tableName) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function findRecordApi(
   config: Config | undefined,
   tableName: string,
 ): RecordApiConfig | undefined {
-  if (!config) {
-    return undefined;
-  }
+  const apis = getRecordApis(config, tableName);
 
-  for (const api of config.recordApis) {
-    if (api.tableName == tableName) {
-      return api;
-    }
+  switch (apis.length) {
+    case 0:
+      return undefined;
+    case 1:
+      return apis[0];
+    default:
+      console.warn("Multiple APIs not yet supported in UI, picking first.");
+      return apis[0];
   }
-
-  return undefined;
 }
 
 function StyledHoverCard(props: { children: JSXElement }) {
@@ -298,7 +319,7 @@ export function RecordApiSettingsForm(props: {
 
   // FIXME: We don't currently handle the "multiple APIs for a single table" case.
   const currentApi = () =>
-    findRecordApi(config.data!.config!, props.schema.name);
+    findRecordApi(config.data!.config, props.schema.name);
 
   const form = createForm(() => {
     const tableName = props.schema.name;

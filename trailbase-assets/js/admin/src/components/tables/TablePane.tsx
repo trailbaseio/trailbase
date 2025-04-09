@@ -40,7 +40,11 @@ import { FilterBar } from "@/components/FilterBar";
 import { DestructiveActionButton } from "@/components/DestructiveActionButton";
 import { IconButton } from "@/components/IconButton";
 import { InsertUpdateRowForm } from "@/components/tables/InsertUpdateRow";
-import { RecordApiSettingsForm } from "@/components/tables/RecordApiSettings";
+import {
+  RecordApiSettingsForm,
+  hasRecordApis,
+  getRecordApis,
+} from "@/components/tables/RecordApiSettings";
 import { SafeSheet } from "@/components/SafeSheet";
 import {
   Tooltip,
@@ -52,7 +56,6 @@ import { createConfigQuery, invalidateConfig } from "@/lib/config";
 import { type FormRow, RowData } from "@/lib/convert";
 import { adminFetch } from "@/lib/fetch";
 import { urlSafeBase64ToUuid } from "@/lib/utils";
-import { RecordApiConfig } from "@proto/config";
 import { dropTable, dropIndex } from "@/lib/table";
 import { deleteRows, fetchRows, type FetchArgs } from "@/lib/row";
 import {
@@ -212,6 +215,21 @@ function imageUrl(opts: {
   return uri;
 }
 
+function tableOrViewSatisfiesRecordApiRequirements(
+  table: Table | View,
+  allTables: Table[],
+): boolean {
+  const type = tableType(table);
+
+  if (type === "table") {
+    return tableSatisfiesRecordApiRequirements(table as Table, allTables);
+  } else if (type === "view") {
+    return viewSatisfiesRecordApiRequirements(table as View, allTables);
+  }
+
+  return false;
+}
+
 function TableHeaderRightHandButtons(props: {
   table: Table | View;
   allTables: Table[];
@@ -220,32 +238,12 @@ function TableHeaderRightHandButtons(props: {
   const table = () => props.table;
   const hidden = () => hiddenTable(table());
   const type = () => tableType(table());
-
-  const satisfiesRecordApi = createMemo(() => {
-    const t = type();
-    if (t === "table") {
-      return tableSatisfiesRecordApiRequirements(
-        props.table as Table,
-        props.allTables,
-      );
-    } else if (t === "view") {
-      return viewSatisfiesRecordApiRequirements(
-        props.table as View,
-        props.allTables,
-      );
-    }
-
-    return false;
-  });
+  const satisfiesRecordApi = createMemo(() =>
+    tableOrViewSatisfiesRecordApiRequirements(props.table, props.allTables),
+  );
 
   const config = createConfigQuery();
-  const recordApi = (): RecordApiConfig | undefined => {
-    for (const c of config.data?.config?.recordApis ?? []) {
-      if (c.tableName === table().name) {
-        return c;
-      }
-    }
-  };
+  const hasRecordApi = () => hasRecordApis(config?.data?.config, table().name);
 
   return (
     <div class="flex items-center justify-end gap-2">
@@ -293,7 +291,7 @@ function TableHeaderRightHandButtons(props: {
                           API
                           <Checkbox
                             disabled={!satisfiesRecordApi()}
-                            checked={recordApi() !== undefined}
+                            checked={hasRecordApi()}
                           />
                         </Button>
                       </TooltipTrigger>
@@ -353,6 +351,40 @@ function TableHeaderRightHandButtons(props: {
   );
 }
 
+function TableHeaderLeftButtons(props: {
+  table: Table | View;
+  indexes: TableIndex[];
+  triggers: TableTrigger[];
+  allTables: Table[];
+  rowsRefetch: () => Promise<void>;
+}) {
+  const type = () => tableType(props.table);
+  const config = createConfigQuery();
+  const apis = createMemo(() =>
+    getRecordApis(config?.data?.config, props.table.name),
+  );
+
+  return (
+    <>
+      <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
+        <TbRefresh size={18} />
+      </IconButton>
+
+      {apis().length > 0 && (
+        <SchemaDialog tableName={props.table.name} apis={apis()} />
+      )}
+
+      {import.meta.env.DEV && type() === "table" && (
+        <DebugSchemaDialogButton
+          table={props.table as Table}
+          indexes={props.indexes}
+          triggers={props.triggers}
+        />
+      )}
+    </>
+  );
+}
+
 function TableHeader(props: {
   table: Table | View;
   indexes: TableIndex[];
@@ -361,10 +393,8 @@ function TableHeader(props: {
   schemaRefetch: () => Promise<void>;
   rowsRefetch: () => Promise<void>;
 }) {
-  const type = () => tableType(props.table);
-  const hasSchema = () => type() === "table";
-  const header = () => {
-    switch (type()) {
+  const headerTitle = () => {
+    switch (tableType(props.table)) {
       case "view":
         return "View";
       case "virtualTable":
@@ -374,29 +404,19 @@ function TableHeader(props: {
     }
   };
 
-  const LeftButtons = () => (
-    <>
-      <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
-        <TbRefresh size={18} />
-      </IconButton>
-
-      {hasSchema() && <SchemaDialog tableName={props.table.name} />}
-
-      {hasSchema() && import.meta.env.DEV && (
-        <DebugSchemaDialogButton
-          table={props.table as Table}
-          indexes={props.indexes}
-          triggers={props.triggers}
-        />
-      )}
-    </>
-  );
-
   return (
     <Header
-      title={header()}
+      title={headerTitle()}
       titleSelect={props.table.name}
-      left={<LeftButtons />}
+      left={
+        <TableHeaderLeftButtons
+          table={props.table}
+          indexes={props.indexes}
+          triggers={props.triggers}
+          allTables={props.allTables}
+          rowsRefetch={props.rowsRefetch}
+        />
+      }
       right={
         <TableHeaderRightHandButtons
           table={props.table}

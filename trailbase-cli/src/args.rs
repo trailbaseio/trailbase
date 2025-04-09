@@ -112,7 +112,7 @@ pub struct ServerArgs {
 #[derive(Args, Clone, Debug)]
 pub struct JsonSchemaArgs {
   /// Name of the table to infer the JSON Schema from.
-  pub table: String,
+  pub api: String,
 
   /// Use-case for the type that determines which columns/fields will be required [Default:
   /// Insert].

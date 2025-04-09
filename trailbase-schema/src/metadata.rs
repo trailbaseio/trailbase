@@ -348,11 +348,8 @@ pub fn find_user_id_foreign_key_columns(columns: &[Column], user_table_name: &st
   return indexes;
 }
 
-/// Finds suitable Integer or UUIDv7 primary key columns, if present.
-///
-/// Cursors require certain properties like a stable, time-sortable primary key.
-fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<usize> {
-  let primary_key_col_index = columns.iter().position(|col| {
+pub(crate) fn find_pk_column_index(columns: &[Column]) -> Option<usize> {
+  return columns.iter().position(|col| {
     for opt in &col.options {
       if let ColumnOption::Unique { is_primary, .. } = opt {
         return *is_primary;
@@ -360,67 +357,71 @@ fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<u
     }
     return false;
   });
+}
 
-  if let Some(index) = primary_key_col_index {
-    let column = &columns[index];
+/// Finds suitable Integer or UUIDv7 primary key columns, if present.
+///
+/// Cursors require certain properties like a stable, time-sortable primary key.
+fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<usize> {
+  let index = find_pk_column_index(columns)?;
+  let column = &columns[index];
 
-    if column.data_type == ColumnDataType::Integer {
-      // TODO: We should detect the "integer pk" desc case and at least warn:
-      // https://www.sqlite.org/lang_createtable.html#rowid.
-      return Some(index);
+  if column.data_type == ColumnDataType::Integer {
+    // TODO: We should detect the "integer pk" desc case and at least warn:
+    // https://www.sqlite.org/lang_createtable.html#rowid.
+    return Some(index);
+  }
+
+  for opts in &column.options {
+    lazy_static! {
+      static ref UUID_V7_RE: Regex = Regex::new(r"^is_uuid_v7\s*\(").expect("infallible");
     }
 
-    for opts in &column.options {
-      lazy_static! {
-        static ref UUID_V7_RE: Regex = Regex::new(r"^is_uuid_v7\s*\(").expect("infallible");
-      }
+    match &opts {
+      // Check if the referenced column is a uuidv7 column.
+      ColumnOption::ForeignKey {
+        foreign_table,
+        referred_columns,
+        ..
+      } => {
+        let Some(referred_table) = tables.iter().find(|t| t.name == *foreign_table) else {
+          error!("Failed to get foreign key schema for {foreign_table}");
+          continue;
+        };
 
-      match &opts {
-        // Check if the referenced column is a uuidv7 column.
-        ColumnOption::ForeignKey {
-          foreign_table,
-          referred_columns,
-          ..
-        } => {
-          let Some(referred_table) = tables.iter().find(|t| t.name == *foreign_table) else {
-            error!("Failed to get foreign key schema for {foreign_table}");
-            continue;
-          };
-
-          if referred_columns.len() != 1 {
-            return None;
-          }
-          let referred_column = &referred_columns[0];
-
-          let col = referred_table
-            .columns
-            .iter()
-            .find(|c| c.name == *referred_column)?;
-
-          let mut is_pk = false;
-          for opt in &col.options {
-            match opt {
-              ColumnOption::Check(expr) if UUID_V7_RE.is_match(expr) => {
-                return Some(index);
-              }
-              ColumnOption::Unique { is_primary, .. } if *is_primary => {
-                is_pk = true;
-              }
-              _ => {}
-            }
-          }
-
-          if is_pk && col.data_type == ColumnDataType::Integer {
-            return Some(index);
-          }
-
+        if referred_columns.len() != 1 {
           return None;
         }
-        ColumnOption::Check(expr) if UUID_V7_RE.is_match(expr) => {
+        let referred_column = &referred_columns[0];
+
+        let col = referred_table
+          .columns
+          .iter()
+          .find(|c| c.name == *referred_column)?;
+
+        let mut is_pk = false;
+        for opt in &col.options {
+          match opt {
+            ColumnOption::Check(expr) if UUID_V7_RE.is_match(expr) => {
+              return Some(index);
+            }
+            ColumnOption::Unique { is_primary, .. } if *is_primary => {
+              is_pk = true;
+            }
+            _ => {}
+          }
+        }
+
+        if is_pk && col.data_type == ColumnDataType::Integer {
           return Some(index);
         }
-        _ => {}
+
+        return None;
       }
+      ColumnOption::Check(expr) if UUID_V7_RE.is_match(expr) => {
+        return Some(index);
+      }
+      _ => {}
     }
   }
 

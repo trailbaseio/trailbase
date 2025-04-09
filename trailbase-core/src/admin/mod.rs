@@ -2,13 +2,13 @@ mod config;
 mod error;
 mod info;
 mod jobs;
+mod json_schema;
 mod jwt;
 mod list_logs;
 mod oauth_providers;
 mod parse;
 mod query;
 pub(crate) mod rows;
-mod schema;
 mod table;
 pub(crate) mod user;
 
@@ -37,10 +37,6 @@ pub fn router() -> Router<AppState> {
     .route("/index", patch(table::alter_index_handler))
     .route("/index", delete(table::drop_index_handler))
     // Table actions.
-    .route(
-      "/table/{table_name}/schema.json",
-      get(table::get_table_schema_handler),
-    )
     .route("/table", post(table::create_table_handler))
     .route("/table", delete(table::drop_table_handler))
     .route("/table", patch(table::alter_table_handler))
@@ -55,8 +51,12 @@ pub fn router() -> Router<AppState> {
     .route("/user", patch(user::update_user_handler))
     .route("/user", delete(user::delete_user_handler))
     // Schema actions
-    .route("/schema", get(schema::list_schemas_handler))
-    .route("/schema", post(schema::update_schema_handler))
+    .route("/schema", get(json_schema::list_schemas_handler))
+    .route("/schema", post(json_schema::update_schema_handler))
+    .route(
+      "/schema/{record_api_name}/schema.json",
+      get(json_schema::get_api_json_schema_handler),
+    )
     // Logs
     .route("/logs", get(list_logs::list_logs_handler))
     // Query execution handler for the UI editor

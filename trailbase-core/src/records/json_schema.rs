@@ -1,4 +1,5 @@
 use axum::extract::{Json, Path, Query, State};
+use log::*;
 use serde::Deserialize;
 use trailbase_schema::json_schema::{
   build_json_schema, build_json_schema_expanded, Expand, JsonSchemaMode,
@@ -6,7 +7,7 @@ use trailbase_schema::json_schema::{
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::records::{Permission, RecordError};
+use crate::records::{Permission, RecordApi, RecordError};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct JsonSchemaQuery {
@@ -35,25 +36,34 @@ pub async fn json_schema_handler(
     .check_record_level_access(Permission::Schema, None, None, user.as_ref())
     .await?;
 
-  let mode = request.mode.unwrap_or(JsonSchemaMode::Insert);
+  return Ok(Json(build_api_json_schema(&state, &api, request.mode)?));
+}
 
-  match (api.expand(), mode) {
-    (Some(config_expand), JsonSchemaMode::Select) => {
-      let foreign_key_columns = config_expand.keys().map(|k| k.as_str()).collect::<Vec<_>>();
-      let expand = Expand {
-        tables: &state.table_metadata().tables(),
-        foreign_key_columns,
-      };
+pub fn build_api_json_schema(
+  state: &AppState,
+  api: &RecordApi,
+  mode: Option<JsonSchemaMode>,
+) -> Result<serde_json::Value, RecordError> {
+  let mode = mode.unwrap_or(JsonSchemaMode::Insert);
 
-      let (_schema, json) =
-        build_json_schema_expanded(api.table_name(), api.columns(), mode, Some(expand))
-          .map_err(|err| RecordError::Internal(err.into()))?;
-      return Ok(Json(json));
-    }
-    _ => {
-      let (_schema, json) = build_json_schema(api.table_name(), api.columns(), mode)
+  if let (Some(config_expand), JsonSchemaMode::Select) = (api.expand(), mode) {
+    let all_tables = state.table_metadata().tables();
+    let foreign_key_columns = config_expand.keys().map(|k| k.as_str()).collect::<Vec<_>>();
+    let expand = Expand {
+      tables: &all_tables,
+      foreign_key_columns,
+    };
+
+    debug!("expanded: {expand:?}");
+
+    let (_schema, json) =
+      build_json_schema_expanded(api.api_name(), api.columns(), mode, Some(expand))
         .map_err(|err| RecordError::Internal(err.into()))?;
-      return Ok(Json(json));
-    }
+    return Ok(json);
   }
+
+  let (_schema, json) = build_json_schema(api.api_name(), api.columns(), mode)
+    .map_err(|err| RecordError::Internal(err.into()))?;
+
+  return Ok(json);
 }

@@ -10,14 +10,12 @@ use serde::Deserialize;
 use std::rc::Rc;
 use tokio::{fs, io::AsyncWriteExt};
 use trailbase::{
-  api::{self, init_app_state, Email, InitArgs, TokenClaims},
+  api::{self, init_app_state, Email, InitArgs, JsonSchemaMode, TokenClaims},
   constants::USER_TABLE,
   DataDir, Server, ServerOptions,
 };
 
-use trailbase_cli::{
-  AdminSubCommands, DefaultCommandLineArgs, JsonSchemaModeArg, SubCommands, UserSubCommands,
-};
+use trailbase_cli::{AdminSubCommands, DefaultCommandLineArgs, SubCommands, UserSubCommands};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -130,36 +128,18 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Schema(cmd)) => {
       init_logger(false);
 
-      let conn = trailbase_sqlite::Connection::new(
-        || api::connect_sqlite(Some(data_dir.main_db_path()), None),
-        None,
-      )?;
-      let table_metadata = api::TableMetadataCache::new(conn.clone()).await?;
+      let (_new_db, state) =
+        init_app_state(DataDir(args.data_dir), None, InitArgs::default()).await?;
 
-      let table_name = &cmd.table;
-      if let Some(table) = table_metadata.get(table_name) {
-        let (_validator, schema) = trailbase::api::build_json_schema(
-          table.name(),
-          &table.schema.columns,
-          cmd.mode.unwrap_or(JsonSchemaModeArg::Insert).into(),
-        )?;
+      let api_name = &cmd.api;
+      let Some(api) = state.lookup_record_api(api_name) else {
+        return Err(format!("Could not find api: '{api_name}'").into());
+      };
 
-        println!("{}", serde_json::to_string_pretty(&schema)?);
-      } else if let Some(view) = table_metadata.get_view(table_name) {
-        let Some(ref columns) = view.schema.columns else {
-          return Err(format!("Could not derive schema for complex view: '{table_name}'").into());
-        };
+      let mode: Option<JsonSchemaMode> = cmd.mode.map(|m| m.into());
+      let json_schema = trailbase::api::build_api_json_schema(&state, &api, mode)?;
 
-        let (_validator, schema) = trailbase::api::build_json_schema(
-          view.name(),
-          columns,
-          cmd.mode.unwrap_or(JsonSchemaModeArg::Insert).into(),
-        )?;
-
-        println!("{}", serde_json::to_string_pretty(&schema)?);
-      } else {
-        return Err(format!("Could not find table: '{table_name}'").into());
-      }
+      println!("{}", serde_json::to_string_pretty(&json_schema)?);
     }
     Some(SubCommands::Migration { suffix }) => {
       init_logger(false);

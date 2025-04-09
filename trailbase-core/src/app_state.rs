@@ -236,7 +236,7 @@ impl AppState {
     return &self.state.jwt;
   }
 
-  pub(crate) fn lookup_record_api(&self, name: &str) -> Option<RecordApi> {
+  pub fn lookup_record_api(&self, name: &str) -> Option<RecordApi> {
     for (record_api_name, record_api) in self.state.record_apis.load().iter() {
       if record_api_name == name {
         return Some(record_api.clone());

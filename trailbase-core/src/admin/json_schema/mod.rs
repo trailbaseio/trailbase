@@ -1,3 +1,7 @@
+mod get_api_json_schema;
+
+pub(super) use get_api_json_schema::get_api_json_schema_handler;
+
 use axum::extract::{Json, State};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
