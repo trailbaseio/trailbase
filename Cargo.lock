@@ -6866,12 +6866,16 @@ dependencies = [
 name = "trailbase-sqlite"
 version = "0.2.0"
 dependencies = [
+ "criterion",
  "crossbeam-channel",
+ "env_logger",
+ "log",
  "parking_lot",
  "rusqlite",
  "serde",
  "serde_json",
  "serde_rusqlite",
+ "tempfile",
  "thiserror 2.0.12",
  "tokio",
  "trailbase-extension",

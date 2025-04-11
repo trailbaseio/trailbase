@@ -8,6 +8,10 @@ homepage = "https://trailbase.io"
 repository = "https://github.com/trailbaseio/trailbase"
 readme = "../README.md"
 
+[[bench]]
+name = "benchmark"
+harness = false
+
 [dependencies]
 crossbeam-channel = "0.5.13"
 parking_lot = { version = "0.12.3", default-features = false }
@@ -19,5 +23,9 @@ thiserror = "2.0.1"
 tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "sync"] }
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+env_logger = "0.11.8"
+log = "0.4.27"
+tempfile = "3.19.1"
 trailbase-extension = { workspace = true }
 uuid = { workspace = true }
