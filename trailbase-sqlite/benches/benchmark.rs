@@ -2,7 +2,8 @@
 
 use criterion::{criterion_group, criterion_main, Bencher, Criterion};
 use log::*;
-use rusqlite::types::Value;
+use parking_lot::Mutex;
+use rusqlite::types::{ToSql, Value};
 use std::path::PathBuf;
 use std::time::Instant;
 use trailbase_sqlite::Connection;
@@ -86,6 +87,76 @@ impl AsyncConnection for Connection {
   }
 }
 
+/// Only meant for reference. This implementation is ill-suited since it can clog-up the tokio
+/// runtime with sync sqlite calls.
+struct SharedRusqlite(Mutex<rusqlite::Connection>);
+
+impl AsyncConnection for SharedRusqlite {
+  async fn async_execute(
+    &self,
+    sql: impl Into<String>,
+    params: impl Into<Vec<Value>>,
+  ) -> Result<(), BenchmarkError> {
+    let params: Vec<Value> = params.into();
+    let p: Vec<&dyn ToSql> = params.iter().map(|v| v as &dyn ToSql).collect();
+
+    self.0.lock().execute(&sql.into(), p.as_slice())?;
+
+    return Ok(());
+  }
+}
+
+/// Only meant for reference. This implementation is ill-suited since it can clog-up the tokio
+/// runtime with sync sqlite calls.
+/// Additionally, the simple thread_local setup only allows for one connection at the time.
+struct ThreadLocalRusqlite(Box<dyn (Fn() -> rusqlite::Connection)>, u64);
+
+impl ThreadLocalRusqlite {
+  #[inline]
+  fn call<T>(
+    &self,
+    f: impl FnOnce(&mut rusqlite::Connection) -> rusqlite::Result<T>,
+  ) -> rusqlite::Result<T> {
+    use std::cell::{OnceCell, RefCell};
+    thread_local! {
+      static CELL : OnceCell<RefCell<(rusqlite::Connection, u64)>> = OnceCell::new();
+    }
+
+    return CELL.with(|cell| {
+      fn init(s: &ThreadLocalRusqlite) -> (rusqlite::Connection, u64) {
+        return (s.0(), s.1);
+      }
+
+      let ref_cell = cell.get_or_init(|| RefCell::new(init(self)));
+      {
+        let (conn, id): &mut (rusqlite::Connection, u64) = &mut ref_cell.borrow_mut();
+        if *id == self.1 {
+          return f(conn);
+        }
+      }
+
+      // Reinitialize: new benchmark run with different DB folder.
+      ref_cell.replace(init(self));
+      let (conn, _): &mut (rusqlite::Connection, u64) = &mut ref_cell.borrow_mut();
+      return f(conn);
+    });
+  }
+}
+
+impl AsyncConnection for ThreadLocalRusqlite {
+  async fn async_execute(
+    &self,
+    sql: impl Into<String>,
+    params: impl Into<Vec<Value>>,
+  ) -> Result<(), BenchmarkError> {
+    let params: Vec<Value> = params.into();
+    let p: Vec<&dyn ToSql> = params.iter().map(|v| v as &dyn ToSql).collect();
+
+    self.call(move |conn| conn.execute(&sql.into(), p.as_slice()))?;
+    return Ok(());
+  }
+}
+
 struct AsyncBenchmarkSetup<C: AsyncConnection> {
   #[allow(unused)]
   dir: tempfile::TempDir, // with RAII cleanup.
@@ -119,6 +190,8 @@ fn async_insert_benchmark<C: AsyncConnection>(
 ) {
   let setup = AsyncBenchmarkSetup::setup(f).unwrap();
 
+  debug!("Set up: {:?}", setup.dir.path());
+
   setup
     .runtime
     .block_on(
@@ -149,12 +222,16 @@ fn async_insert_benchmark<C: AsyncConnection>(
   });
 }
 
-fn all_benchmarks_group(c: &mut Criterion) {
-  env_logger::Builder::from_env(env_logger::Env::new().default_filter_or("info"))
+fn try_init_logger() {
+  let _ = env_logger::Builder::from_env(env_logger::Env::new().default_filter_or("info"))
     .format_timestamp_micros()
-    .init();
+    .try_init();
+}
 
-  info!("Running benchmarks");
+fn insert_benchmarks_group(c: &mut Criterion) {
+  try_init_logger();
+
+  info!("Running insertion benchmarks");
 
   c.bench_function("trailbase-sqlite insert", |b| {
     async_insert_benchmark(b, async |fname| {
@@ -166,7 +243,29 @@ fn all_benchmarks_group(c: &mut Criterion) {
       )?);
     })
   });
+
+  c.bench_function("shared/locked rusqlite insert", |b| {
+    async_insert_benchmark(b, async |fname| {
+      Ok(SharedRusqlite(Mutex::new(rusqlite::Connection::open(
+        &fname,
+      )?)))
+    })
+  });
+
+  let id = std::sync::atomic::AtomicU64::new(0);
+  c.bench_function("TL/pool rusqlite insert", |b| {
+    async_insert_benchmark(b, async |fname| {
+      let id = id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+      debug!("New ThreadLocalRusqlite: {id}");
+
+      Ok(ThreadLocalRusqlite(
+        Box::new(move || rusqlite::Connection::open(&fname).unwrap()),
+        id,
+      ))
+    })
+  });
 }
 
-criterion_group!(benches, all_benchmarks_group);
+criterion_group!(benches, insert_benchmarks_group);
+
 criterion_main!(benches);
