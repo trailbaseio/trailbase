@@ -3,25 +3,25 @@ use parking_lot::Mutex;
 use rusqlite::types::{FromSql, ToSql, Value};
 use trailbase_sqlite::Connection;
 
-pub trait AsyncConnection {
-  async fn async_query<T: FromSql + Send + 'static>(
+pub trait AsyncConnection: Send + Sync {
+  fn async_query<T: FromSql + Send + 'static>(
     &self,
-    sql: impl Into<String>,
-    params: impl Into<Vec<Value>>,
-  ) -> Result<T, BenchmarkError>;
+    sql: impl Into<String> + Send,
+    params: impl Into<Vec<Value>> + Send,
+  ) -> impl std::future::Future<Output = Result<T, BenchmarkError>> + Send;
 
-  async fn async_execute(
+  fn async_execute(
     &self,
-    sql: impl Into<String>,
-    params: impl Into<Vec<Value>>,
-  ) -> Result<(), BenchmarkError>;
+    sql: impl Into<String> + Send,
+    params: impl Into<Vec<Value>> + Send,
+  ) -> impl std::future::Future<Output = Result<(), BenchmarkError>> + Send;
 }
 
 impl AsyncConnection for Connection {
   async fn async_query<T: FromSql + Send + 'static>(
     &self,
-    sql: impl Into<String>,
-    params: impl Into<Vec<Value>>,
+    sql: impl Into<String> + Send,
+    params: impl Into<Vec<Value>> + Send,
   ) -> Result<T, BenchmarkError> {
     let sql: String = sql.into();
     let params: Vec<Value> = params.into();
@@ -47,8 +47,8 @@ impl AsyncConnection for Connection {
 
   async fn async_execute(
     &self,
-    sql: impl Into<String>,
-    params: impl Into<Vec<Value>>,
+    sql: impl Into<String> + Send,
+    params: impl Into<Vec<Value>> + Send,
   ) -> Result<(), BenchmarkError> {
     let sql: String = sql.into();
     let params: Vec<Value> = params.into();
@@ -77,8 +77,8 @@ pub struct SharedRusqlite(pub Mutex<rusqlite::Connection>);
 impl AsyncConnection for SharedRusqlite {
   async fn async_query<T: FromSql + Send + 'static>(
     &self,
-    sql: impl Into<String>,
-    params: impl Into<Vec<Value>>,
+    sql: impl Into<String> + Send,
+    params: impl Into<Vec<Value>> + Send,
   ) -> Result<T, BenchmarkError> {
     let params: Vec<Value> = params.into();
     let p: Vec<&dyn ToSql> = params.iter().map(|v| v as &dyn ToSql).collect();
@@ -93,8 +93,8 @@ impl AsyncConnection for SharedRusqlite {
 
   async fn async_execute(
     &self,
-    sql: impl Into<String>,
-    params: impl Into<Vec<Value>>,
+    sql: impl Into<String> + Send,
+    params: impl Into<Vec<Value>> + Send,
   ) -> Result<(), BenchmarkError> {
     let params: Vec<Value> = params.into();
     let p: Vec<&dyn ToSql> = params.iter().map(|v| v as &dyn ToSql).collect();
@@ -108,7 +108,10 @@ impl AsyncConnection for SharedRusqlite {
 /// Only meant for reference. This implementation is ill-suited since it can clog-up the tokio
 /// runtime with sync sqlite calls.
 /// Additionally, the simple thread_local setup only allows for one connection at the time.
-pub struct ThreadLocalRusqlite(pub Box<dyn (Fn() -> rusqlite::Connection)>, pub u64);
+pub struct ThreadLocalRusqlite(
+  pub Box<dyn (Fn() -> rusqlite::Connection) + Send + Sync>,
+  pub u64,
+);
 
 impl ThreadLocalRusqlite {
   #[inline]
@@ -145,8 +148,8 @@ impl ThreadLocalRusqlite {
 impl AsyncConnection for ThreadLocalRusqlite {
   async fn async_query<T: FromSql + Send + 'static>(
     &self,
-    sql: impl Into<String>,
-    params: impl Into<Vec<Value>>,
+    sql: impl Into<String> + Send,
+    params: impl Into<Vec<Value>> + Send,
   ) -> Result<T, BenchmarkError> {
     let params: Vec<Value> = params.into();
     let p: Vec<&dyn ToSql> = params.iter().map(|v| v as &dyn ToSql).collect();
@@ -158,8 +161,8 @@ impl AsyncConnection for ThreadLocalRusqlite {
 
   async fn async_execute(
     &self,
-    sql: impl Into<String>,
-    params: impl Into<Vec<Value>>,
+    sql: impl Into<String> + Send,
+    params: impl Into<Vec<Value>> + Send,
   ) -> Result<(), BenchmarkError> {
     let params: Vec<Value> = params.into();
     let p: Vec<&dyn ToSql> = params.iter().map(|v| v as &dyn ToSql).collect();

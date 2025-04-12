@@ -8,6 +8,7 @@ use log::*;
 use parking_lot::Mutex;
 use rusqlite::types::Value;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 use trailbase_sqlite::Connection;
 
@@ -23,31 +24,36 @@ fn try_init_logger() {
 struct AsyncBenchmarkSetup<C: AsyncConnection> {
   #[allow(unused)]
   dir: tempfile::TempDir, // with RAII cleanup.
-  conn: C,
   runtime: tokio::runtime::Runtime,
+  conn: C,
 }
 
 impl<C: AsyncConnection> AsyncBenchmarkSetup<C> {
   fn setup(
-    f: impl AsyncFnOnce(PathBuf) -> Result<C, BenchmarkError>,
+    builder: impl AsyncFnOnce(PathBuf) -> Result<C, BenchmarkError>,
   ) -> Result<Self, BenchmarkError> {
+    let tmp_dir = tempfile::TempDir::new().unwrap();
+    let fname = tmp_dir.path().join("main.sqlite");
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
       .enable_all()
       .build()
       .unwrap();
-
-    let tmp_dir = tempfile::TempDir::new().unwrap();
-    let fname = tmp_dir.path().join("main.sqlite");
+    let conn = runtime.block_on(builder(fname))?;
 
     return Ok(Self {
       dir: tmp_dir,
-      conn: runtime.block_on(f(fname))?,
       runtime,
+      conn,
     });
+  }
+
+  fn fname(&self) -> PathBuf {
+    return self.dir.path().join("main.sqlite");
   }
 }
 
-fn async_insert_benchmark<C: AsyncConnection>(
+fn async_insert_benchmark<C: AsyncConnection + 'static>(
   b: &mut Bencher,
   f: impl AsyncFnOnce(PathBuf) -> Result<C, BenchmarkError>,
 ) {
@@ -64,22 +70,28 @@ fn async_insert_benchmark<C: AsyncConnection>(
     )
     .unwrap();
 
-  b.to_async(&setup.runtime).iter_custom(async |iter: u64| {
-    const N: u64 = 100;
+  let conn = Arc::new(setup.conn);
 
+  const N: u64 = 100;
+  b.to_async(&setup.runtime).iter_custom(async |iters: u64| {
     let start = Instant::now();
-    for i in 0..iter {
-      for j in i * N..(i + 1) * N {
-        setup
-          .conn
-          .async_execute(
-            format!("INSERT INTO 'table' (a) VALUES (?1)"),
-            [Value::Integer(j as i64)],
-          )
-          .await
-          .unwrap();
-      }
-    }
+
+    let tasks = (0..iters).map(|i| {
+      let conn = conn.clone();
+      return setup.runtime.spawn(async move {
+        for j in i * N..(i + 1) * N {
+          conn
+            .async_execute(
+              format!("INSERT INTO 'table' (a) VALUES (?1)"),
+              [Value::Integer(j as i64)],
+            )
+            .await
+            .unwrap();
+        }
+      });
+    });
+
+    futures_util::future::join_all(tasks).await;
 
     return start.elapsed();
   });
@@ -93,9 +105,7 @@ fn insert_benchmark_group(c: &mut Criterion) {
   c.bench_function("trailbase-sqlite insert", |b| {
     async_insert_benchmark(b, async |fname| {
       return Ok(Connection::new(
-        || {
-          return rusqlite::Connection::open(&fname);
-        },
+        || rusqlite::Connection::open(&fname),
         None,
       )?);
     })
@@ -123,7 +133,7 @@ fn insert_benchmark_group(c: &mut Criterion) {
   });
 }
 
-fn async_read_benchmark<C: AsyncConnection>(
+fn async_read_benchmark<C: AsyncConnection + 'static>(
   b: &mut Bencher,
   f: impl AsyncFnOnce(PathBuf) -> Result<C, BenchmarkError>,
   fname: &Path,
@@ -134,18 +144,27 @@ fn async_read_benchmark<C: AsyncConnection>(
     .build()
     .unwrap();
 
-  let conn = runtime.block_on(f(fname.to_path_buf())).unwrap();
+  let conn = Arc::new(runtime.block_on(f(fname.to_path_buf())).unwrap());
 
-  b.to_async(&runtime).iter(async || {
-    for i in 0..n {
-      let _a: i64 = conn
-        .async_query(
-          "SELECT id FROM 'read_table' WHERE id = ?1",
-          [Value::Integer(i as i64)],
-        )
-        .await
-        .unwrap();
-    }
+  b.to_async(&runtime).iter_custom(async |iters| {
+    let start = Instant::now();
+
+    let tasks = (0..iters).map(|i| {
+      let conn = conn.clone();
+      return runtime.spawn(async move {
+        conn
+          .async_query::<i64>(
+            "SELECT id FROM 'read_table' WHERE id = ?1",
+            [Value::Integer((i as usize % n) as i64)],
+          )
+          .await
+          .unwrap()
+      });
+    });
+
+    futures_util::future::join_all(tasks).await;
+
+    return start.elapsed();
   });
 }
 
@@ -182,9 +201,7 @@ fn read_benchmark_group(c: &mut Criterion) {
       b,
       async |fname| {
         return Ok(Connection::new(
-          || {
-            return rusqlite::Connection::open(&fname);
-          },
+          || rusqlite::Connection::open(&fname),
           None,
         )?);
       },
@@ -225,5 +242,171 @@ fn read_benchmark_group(c: &mut Criterion) {
   });
 }
 
-criterion_group!(benches, insert_benchmark_group, read_benchmark_group);
+fn async_mixed_benchmark<C: AsyncConnection + 'static>(
+  b: &mut Bencher,
+  assets: Arc<AsyncBenchmarkSetup<C>>,
+  n: usize,
+) {
+  async fn fast_read_query<C: AsyncConnection>(conn: &C, i: usize) -> i64 {
+    return conn
+      .async_query(
+        "SELECT prop FROM 'A' WHERE id = ?1",
+        [Value::Integer(i as i64)],
+      )
+      .await
+      .unwrap();
+  }
+
+  async fn slow_read_query<C: AsyncConnection>(conn: &C, i: usize) -> i64 {
+    return conn
+      .async_query(
+        "SELECT A.id, B.id FROM A LEFT JOIN Bridge ON A.id = Bridge.a LEFT JOIN B ON Bridge.b = B.id WHERE A.id = ?1",
+        [Value::Integer(i as i64)],
+      )
+      .await
+      .unwrap();
+  }
+
+  async fn write_query<C: AsyncConnection>(conn: &C) {
+    conn
+      .async_execute(
+        "INSERT INTO 'write_table' (payload) VALUES (?1)",
+        [Value::Blob([0; 256].into())],
+      )
+      .await
+      .unwrap();
+  }
+
+  b.to_async(&assets.runtime).iter_custom(async |iters| {
+    let start = Instant::now();
+
+    let tasks = (0..iters).map(|i| {
+      let assets_clone = assets.clone();
+      return assets.runtime.spawn(async move {
+        match i % 10 {
+          0 | 6 => {
+            slow_read_query(&assets_clone.conn, (i as usize) % n).await;
+          }
+          5 | 9 => {
+            write_query(&assets_clone.conn).await;
+          }
+          _ => {
+            fast_read_query(&assets_clone.conn, (i as usize) % n).await;
+          }
+        }
+      });
+    });
+
+    futures_util::future::join_all(tasks).await;
+
+    return start.elapsed();
+  });
+}
+
+fn mixed_benchmark_group(c: &mut Criterion) {
+  try_init_logger();
+
+  info!("Running mixed benchmarks");
+
+  const N: usize = 5000;
+
+  fn setup<C: AsyncConnection>(
+    builder: impl AsyncFnOnce(PathBuf) -> Result<C, BenchmarkError>,
+  ) -> AsyncBenchmarkSetup<C> {
+    let assets = AsyncBenchmarkSetup::setup(builder).unwrap();
+
+    let conn = rusqlite::Connection::open(&assets.fname()).unwrap();
+    conn
+      .execute_batch(
+        r#"
+          CREATE TABLE 'write_table' (id INTEGER PRIMARY KEY NOT NULL, payload BLOB) STRICT;
+
+          CREATE TABLE 'A' (id INTEGER PRIMARY KEY NOT NULL, prop INTEGER NOT NULL UNIQUE) STRICT;
+          CREATE TABLE 'B' (id INTEGER PRIMARY KEY NOT NULL, prop INTEGER NOT NULL UNIQUE) STRICT;
+
+          CREATE TABLE 'Bridge' (
+            a INTEGER NOT NULL REFERENCES A(prop),
+            b INTEGER NOT NULL REFERENCES B(prop)
+          ) STRICT;
+        "#,
+      )
+      .unwrap();
+
+    for i in 0..N {
+      conn
+        .execute(
+          "INSERT INTO 'A' (id, prop) VALUES (?1, ?1)",
+          rusqlite::params!(i),
+        )
+        .unwrap();
+      conn
+        .execute(
+          "INSERT INTO 'B' (id, prop) VALUES (?1, ?1)",
+          rusqlite::params!(i),
+        )
+        .unwrap();
+
+      conn
+        .execute(
+          "INSERT INTO 'Bridge' (a, b) VALUES (?1, ?1)",
+          rusqlite::params!(i),
+        )
+        .unwrap();
+    }
+
+    return assets;
+  }
+
+  {
+    let assets = Arc::new(setup(async |fname| {
+      return Ok(Connection::new(
+        || rusqlite::Connection::open(&fname),
+        None,
+      )?);
+    }));
+
+    c.bench_function("trailbase-sqlite mixed", |b| {
+      let assets = assets.clone();
+      async_mixed_benchmark(b, assets, N);
+    });
+  }
+
+  {
+    let assets = Arc::new(setup(async |fname| {
+      Ok(SharedRusqlite(Mutex::new(rusqlite::Connection::open(
+        &fname,
+      )?)))
+    }));
+
+    c.bench_function("shared/locked rusqlite mixed", |b| {
+      let assets = assets.clone();
+      async_mixed_benchmark(b, assets, N);
+    });
+  }
+
+  {
+    let id = std::sync::atomic::AtomicU64::new(0);
+    let assets = Arc::new(setup(async |fname| {
+      let id = id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+      debug!("New ThreadLocalRusqlite: {id}");
+
+      Ok(ThreadLocalRusqlite(
+        Box::new(move || rusqlite::Connection::open(&fname).unwrap()),
+        id,
+      ))
+    }));
+
+    c.bench_function("TL/pool rusqlite mixed", |b| {
+      let assets = assets.clone();
+      async_mixed_benchmark(b, assets, N);
+    });
+  }
+}
+
+criterion_group!(
+  benches,
+  insert_benchmark_group,
+  read_benchmark_group,
+  mixed_benchmark_group
+);
 criterion_main!(benches);

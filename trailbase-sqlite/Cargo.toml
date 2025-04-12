@@ -27,6 +27,7 @@ tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "s
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 env_logger = "0.11.8"
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 log = "0.4.27"
 tempfile = "3.19.1"
 trailbase-extension = { workspace = true }
