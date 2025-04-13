@@ -6872,6 +6872,7 @@ dependencies = [
  "futures-util",
  "log",
  "parking_lot",
+ "rand 0.9.0",
  "rusqlite",
  "serde",
  "serde_json",

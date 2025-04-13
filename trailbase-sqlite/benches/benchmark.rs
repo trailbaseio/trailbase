@@ -3,13 +3,14 @@
 pub mod connection;
 pub mod error;
 
-use criterion::{criterion_group, criterion_main, Bencher, Criterion};
+use criterion::{criterion_group, criterion_main, Bencher, Criterion, Throughput};
 use log::*;
 use parking_lot::Mutex;
+use rand::Rng;
 use rusqlite::types::Value;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use trailbase_sqlite::Connection;
 
 use crate::connection::{AsyncConnection, SharedRusqlite, ThreadLocalRusqlite};
@@ -102,7 +103,12 @@ fn insert_benchmark_group(c: &mut Criterion) {
 
   info!("Running insertion benchmarks");
 
-  c.bench_function("trailbase-sqlite insert", |b| {
+  let mut group = c.benchmark_group("Insert");
+  group.measurement_time(Duration::from_secs(10));
+  group.sample_size(500);
+  group.throughput(Throughput::Elements(1));
+
+  group.bench_function("trailbase-sqlite", |b| {
     async_insert_benchmark(b, async |fname| {
       return Ok(Connection::new(
         || rusqlite::Connection::open(&fname),
@@ -111,7 +117,7 @@ fn insert_benchmark_group(c: &mut Criterion) {
     })
   });
 
-  c.bench_function("shared/locked rusqlite insert", |b| {
+  group.bench_function("locked-rusqlite", |b| {
     async_insert_benchmark(b, async |fname| {
       Ok(SharedRusqlite(Mutex::new(rusqlite::Connection::open(
         &fname,
@@ -120,7 +126,7 @@ fn insert_benchmark_group(c: &mut Criterion) {
   });
 
   let id = std::sync::atomic::AtomicU64::new(0);
-  c.bench_function("TL/pool rusqlite insert", |b| {
+  group.bench_function("TL-rusqlite", |b| {
     async_insert_benchmark(b, async |fname| {
       let id = id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
       debug!("New ThreadLocalRusqlite: {id}");
@@ -177,7 +183,7 @@ fn read_benchmark_group(c: &mut Criterion) {
   let fname = tmp_dir.path().join("main.sqlite");
 
   // Setup
-  const N: usize = 5000;
+  const N: usize = 20000;
   {
     let conn = rusqlite::Connection::open(&fname).unwrap();
     conn
@@ -196,7 +202,12 @@ fn read_benchmark_group(c: &mut Criterion) {
     }
   }
 
-  c.bench_function("trailbase-sqlite read", |b| {
+  let mut group = c.benchmark_group("Read");
+  group.measurement_time(Duration::from_secs(10));
+  group.sample_size(500);
+  group.throughput(Throughput::Elements(1));
+
+  group.bench_function("trailbase-sqlite", |b| {
     async_read_benchmark(
       b,
       async |fname| {
@@ -210,7 +221,7 @@ fn read_benchmark_group(c: &mut Criterion) {
     )
   });
 
-  c.bench_function("shared/locked rusqlite read", |b| {
+  group.bench_function("locked-rusqlite", |b| {
     async_read_benchmark(
       b,
       async |fname| {
@@ -224,7 +235,7 @@ fn read_benchmark_group(c: &mut Criterion) {
   });
 
   let id = std::sync::atomic::AtomicU64::new(0);
-  c.bench_function("TL/pool rusqlite read", |b| {
+  group.bench_function("TL-rusqlite", |b| {
     async_read_benchmark(
       b,
       async |fname| {
@@ -245,23 +256,20 @@ fn read_benchmark_group(c: &mut Criterion) {
 fn async_mixed_benchmark<C: AsyncConnection + 'static>(
   b: &mut Bencher,
   assets: Arc<AsyncBenchmarkSetup<C>>,
-  n: usize,
+  n: i64,
 ) {
-  async fn fast_read_query<C: AsyncConnection>(conn: &C, i: usize) -> i64 {
-    return conn
-      .async_query(
-        "SELECT prop FROM 'A' WHERE id = ?1",
-        [Value::Integer(i as i64)],
-      )
+  async fn fast_read_query<C: AsyncConnection>(conn: &C, i: i64) {
+    conn
+      .async_query::<i64>("SELECT prop FROM 'A' WHERE id = ?1", [Value::Integer(i)])
       .await
       .unwrap();
   }
 
-  async fn slow_read_query<C: AsyncConnection>(conn: &C, i: usize) -> i64 {
-    return conn
-      .async_query(
+  async fn slow_read_query<C: AsyncConnection>(conn: &C, i: i64) {
+    conn
+      .async_query::<i64>(
         "SELECT A.id, B.id FROM A LEFT JOIN Bridge ON A.id = Bridge.a LEFT JOIN B ON Bridge.b = B.id WHERE A.id = ?1",
-        [Value::Integer(i as i64)],
+        [Value::Integer(i)],
       )
       .await
       .unwrap();
@@ -278,23 +286,28 @@ fn async_mixed_benchmark<C: AsyncConnection + 'static>(
   }
 
   b.to_async(&assets.runtime).iter_custom(async |iters| {
+    let mut rng = rand::rng();
     let start = Instant::now();
 
     let tasks = (0..iters).map(|i| {
       let assets_clone = assets.clone();
-      return assets.runtime.spawn(async move {
-        match i % 10 {
-          0 | 6 => {
-            slow_read_query(&assets_clone.conn, (i as usize) % n).await;
-          }
-          5 | 9 => {
-            write_query(&assets_clone.conn).await;
-          }
-          _ => {
-            fast_read_query(&assets_clone.conn, (i as usize) % n).await;
-          }
+      return match i % 10 {
+        0 | 6 => {
+          let idx: i64 = rng.random_range(0..n);
+          assets.runtime.spawn(async move {
+            slow_read_query(&assets_clone.conn, idx).await;
+          })
         }
-      });
+        5 | 9 => assets.runtime.spawn(async move {
+          write_query(&assets_clone.conn).await;
+        }),
+        _ => {
+          let idx: i64 = rng.random_range(0..n);
+          assets.runtime.spawn(async move {
+            fast_read_query(&assets_clone.conn, idx).await;
+          })
+        }
+      };
     });
 
     futures_util::future::join_all(tasks).await;
@@ -308,7 +321,7 @@ fn mixed_benchmark_group(c: &mut Criterion) {
 
   info!("Running mixed benchmarks");
 
-  const N: usize = 5000;
+  const N: i64 = 5000;
 
   fn setup<C: AsyncConnection>(
     builder: impl AsyncFnOnce(PathBuf) -> Result<C, BenchmarkError>,
@@ -321,41 +334,32 @@ fn mixed_benchmark_group(c: &mut Criterion) {
         r#"
           CREATE TABLE 'write_table' (id INTEGER PRIMARY KEY NOT NULL, payload BLOB) STRICT;
 
-          CREATE TABLE 'A' (id INTEGER PRIMARY KEY NOT NULL, prop INTEGER NOT NULL UNIQUE) STRICT;
-          CREATE TABLE 'B' (id INTEGER PRIMARY KEY NOT NULL, prop INTEGER NOT NULL UNIQUE) STRICT;
+          CREATE TABLE 'A' (id INTEGER PRIMARY KEY NOT NULL, prop INTEGER NOT NULL) STRICT;
+          CREATE TABLE 'B' (id INTEGER PRIMARY KEY NOT NULL, prop INTEGER NOT NULL) STRICT;
 
           CREATE TABLE 'Bridge' (
-            a INTEGER NOT NULL REFERENCES A(prop),
-            b INTEGER NOT NULL REFERENCES B(prop)
+            a INTEGER NOT NULL,  -- Technically 'REFERENCES A(prop)' but dodging unique/index requirement
+            b INTEGER NOT NULL   -- Technically 'REFERENCES B(prop)' but dodging unique/index requirement
           ) STRICT;
         "#,
       )
       .unwrap();
 
     for i in 0..N {
-      conn
-        .execute(
-          "INSERT INTO 'A' (id, prop) VALUES (?1, ?1)",
-          rusqlite::params!(i),
-        )
-        .unwrap();
-      conn
-        .execute(
-          "INSERT INTO 'B' (id, prop) VALUES (?1, ?1)",
-          rusqlite::params!(i),
-        )
-        .unwrap();
+      let exec = |query: &str| conn.execute(query, rusqlite::params!(i)).unwrap();
 
-      conn
-        .execute(
-          "INSERT INTO 'Bridge' (a, b) VALUES (?1, ?1)",
-          rusqlite::params!(i),
-        )
-        .unwrap();
+      exec("INSERT INTO 'A' (id, prop) VALUES (?1, ?1)");
+      exec("INSERT INTO 'B' (id, prop) VALUES (?1, ?1)");
+      exec("INSERT INTO 'Bridge' (a, b) VALUES (?1, ?1)");
     }
 
     return assets;
   }
+
+  let mut group = c.benchmark_group("QueryMix");
+  group.measurement_time(Duration::from_secs(10));
+  group.sample_size(500);
+  group.throughput(Throughput::Elements(1));
 
   {
     let assets = Arc::new(setup(async |fname| {
@@ -365,7 +369,7 @@ fn mixed_benchmark_group(c: &mut Criterion) {
       )?);
     }));
 
-    c.bench_function("trailbase-sqlite mixed", |b| {
+    group.bench_function("trailbase-sqlite", |b| {
       let assets = assets.clone();
       async_mixed_benchmark(b, assets, N);
     });
@@ -378,7 +382,7 @@ fn mixed_benchmark_group(c: &mut Criterion) {
       )?)))
     }));
 
-    c.bench_function("shared/locked rusqlite mixed", |b| {
+    group.bench_function("locked-rusqlite", |b| {
       let assets = assets.clone();
       async_mixed_benchmark(b, assets, N);
     });
@@ -396,7 +400,7 @@ fn mixed_benchmark_group(c: &mut Criterion) {
       ))
     }));
 
-    c.bench_function("TL/pool rusqlite mixed", |b| {
+    group.bench_function("TL-rusqlite", |b| {
       let assets = assets.clone();
       async_mixed_benchmark(b, assets, N);
     });

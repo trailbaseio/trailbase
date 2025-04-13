@@ -29,6 +29,7 @@ criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 env_logger = "0.11.8"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 log = "0.4.27"
+rand = "0.9.0"
 tempfile = "3.19.1"
 trailbase-extension = { workspace = true }
 uuid = { workspace = true }
