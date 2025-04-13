@@ -54,7 +54,7 @@ object_store = { version = "0.12.0", default-features = false, features = ["aws"
 parking_lot = { version = "0.12.3", default-features = false }
 pin-project-lite = "0.2.16"
 prost = { version = "^0.13.4", default-features = false }
-prost-reflect = { version = "^0.14.3", default-features = false, features = ["derive", "text-format"] }
+prost-reflect = { version = "^0.15.0", default-features = false, features = ["derive", "text-format"] }
 rand = "^0.9.0"
 regex = "1.11.0"
 reqwest = { version = "0.12.8", default-features = false, features = ["rustls-tls", "json"] }
@@ -93,7 +93,7 @@ validator = { version = "0.20.0", default-features = false }
 env_logger = "^0.11.3"
 log = "^0.4.21"
 prost-build = "0.13.1"
-prost-reflect-build = "0.14.0"
+prost-reflect-build = "0.15.0"
 rustc_tools_util = "^0.4.2"
 
 [dev-dependencies]

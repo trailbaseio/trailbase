@@ -17,7 +17,7 @@ argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "p
 base64 = { version = "0.22.1", default-features = false }
 jsonschema = { version = "0.29.0", default-features = false }
 log = "0.4.27"
-lru = { version = "0.13.0", default-features = false }
+lru = { version = "0.14.0", default-features = false }
 maxminddb = "0.26.0"
 parking_lot = { version = "0.12.3", default-features = false }
 rand = "^0.9.0"
