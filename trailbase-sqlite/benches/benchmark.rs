@@ -1,4 +1,4 @@
-#![allow(clippy::needless_return, async_fn_in_trait)]
+#![allow(clippy::needless_return)]
 
 pub mod connection;
 pub mod error;

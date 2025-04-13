@@ -1,12 +1,12 @@
 #![allow(clippy::needless_return)]
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Bencher, Criterion, Throughput};
 
 use axum::body::Body;
 use axum::extract::{Json, State};
 use axum::http::{self, Request};
 use base64::prelude::*;
-use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tower::{Service, ServiceExt};
 
 use trailbase::api::{create_user_handler, login_with_password, CreateUserRequest};
@@ -162,15 +162,66 @@ async fn setup_app() -> Result<SetupResult, anyhow::Error> {
   });
 }
 
-fn criterion_benchmark(c: &mut Criterion) {
-  let runtime = tokio::runtime::Builder::new_current_thread()
+fn create_message_benchmark(
+  b: &mut Bencher,
+  runtime: &tokio::runtime::Runtime,
+  setup: &SetupResult,
+) {
+  let (body, user_x_token) = {
+    let request = serde_json::json!({
+      "_owner": BASE64_URL_SAFE.encode(setup.user_x),
+      "room": BASE64_URL_SAFE.encode(setup.room),
+      "data": "user_x message to room",
+    });
+
+    let body = serde_json::to_vec(&request).unwrap();
+
+    (body, setup.user_x_token.clone())
+  };
+
+  b.to_async(runtime).iter_custom(async |iters| {
+    let start = Instant::now();
+
+    let tasks = (0..iters).map(|_i| {
+      let body = body.clone();
+      let auth = format!("Bearer {user_x_token}");
+      let mut router = setup.app.router().clone();
+
+      return runtime.spawn(async move {
+        let response = router
+          .call(
+            Request::builder()
+              .method(http::Method::POST)
+              .uri(&format!("/{RECORD_API_PATH}/messages_api"))
+              .header(http::header::CONTENT_TYPE, "application/json")
+              .header(http::header::AUTHORIZATION, &auth)
+              .body(Body::from(body))
+              .unwrap(),
+          )
+          .await
+          .unwrap();
+
+        if response.status() != http::StatusCode::OK {
+          panic!("Got non-Ok response");
+        }
+      });
+    });
+
+    futures_util::future::join_all(tasks).await;
+
+    return start.elapsed();
+  });
+}
+
+fn benchmark_group(c: &mut Criterion) {
+  let runtime = tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
     .build()
     .unwrap();
 
-  let mut setup: Option<SetupResult> = None;
-  runtime.block_on(async {
-    let result = setup_app().await.unwrap();
-    let mut router = result.app.router().clone();
+  let setup = runtime.block_on(async {
+    let setup = setup_app().await.unwrap();
+    let mut router = setup.app.router().clone();
 
     ServiceExt::<Request<Body>>::ready(&mut router)
       .await
@@ -191,61 +242,22 @@ fn criterion_benchmark(c: &mut Criterion) {
       .await
       .unwrap();
 
-    assert_eq!(bytes.to_vec(), b"Ok");
+    if bytes.to_vec() != b"Ok" {
+      panic!("Expected 'Ok'");
+    }
 
-    setup = Some(result);
+    setup
   });
 
-  let setup = Arc::new(Mutex::new(setup.take().unwrap()));
+  let mut group = c.benchmark_group("Chat");
+  group.measurement_time(Duration::from_secs(25));
+  group.sample_size(250);
+  group.throughput(Throughput::Elements(1));
 
-  c.bench_function("iter create message", move |b| {
-    let mut bencher = b.to_async(&runtime);
-
-    let setup = setup.clone();
-
-    let (body, user_x_token) = {
-      let s = setup.lock().unwrap();
-      let request = serde_json::json!({
-        "_owner": BASE64_URL_SAFE.encode(s.user_x),
-        "room": BASE64_URL_SAFE.encode(s.room),
-        "data": "user_x message to room",
-      });
-
-      let body = serde_json::to_vec(&request).unwrap();
-
-      (body, s.user_x_token.clone())
-    };
-
-    bencher.iter(move || {
-      let setup = setup.clone();
-      let body = body.clone();
-      let auth = format!("Bearer {user_x_token}");
-
-      async move {
-        let mut router = setup.lock().unwrap().app.router().clone();
-        let response = router
-          .call(
-            Request::builder()
-              .method(http::Method::POST)
-              .uri(&format!("/{RECORD_API_PATH}/messages_api"))
-              .header(http::header::CONTENT_TYPE, "application/json")
-              .header(http::header::AUTHORIZATION, &auth)
-              .body(Body::from(body))
-              .unwrap(),
-          )
-          .await
-          .unwrap();
-
-        if response.status() != http::StatusCode::OK {
-          let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-          assert!(false, "{body:?}");
-        }
-      }
-    });
+  group.bench_function("create-messages", |b| {
+    create_message_benchmark(b, &runtime, &setup)
   });
 }
 
-criterion_group!(benches, criterion_benchmark);
+criterion_group!(benches, benchmark_group);
 criterion_main!(benches);
