@@ -8,5 +8,5 @@ publish = false
 anyhow = "1.0.95"
 futures = "0.3.31"
 serde_json = "1.0.137"
-tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true }
 trailbase-client = { path = "../../../client/trailbase-rs/" }

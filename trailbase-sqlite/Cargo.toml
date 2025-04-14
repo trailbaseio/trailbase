@@ -22,11 +22,11 @@ serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "1.0.122"
 serde_rusqlite = "0.38.0"
 thiserror = "2.0.1"
-tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "sync"] }
+tokio = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
-env_logger = "0.11.8"
+env_logger = { workspace = true }
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 log = "0.4.27"
 rand = "0.9.0"

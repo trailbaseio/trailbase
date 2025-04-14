@@ -70,7 +70,7 @@ sha2 = "0.10.8"
 sqlformat = "0.3.1"
 sqlite3-parser = "0.14.0"
 thiserror = "2.0.1"
-tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "signal", "time"] }
+tokio = { workspace = true }
 tokio-rustls = { version = "0.26.1", default-features = false }
 tower = "0.5.0"
 tower-cookies = "0.11.0"
@@ -91,8 +91,6 @@ uuid = { workspace = true }
 validator = { version = "0.20.0", default-features = false }
 
 [build-dependencies]
-env_logger = "^0.11.3"
-log = "^0.4.21"
 prost-build = "0.13.1"
 prost-reflect-build = "0.15.0"
 rustc_tools_util = "^0.4.2"
@@ -101,7 +99,7 @@ rustc_tools_util = "^0.4.2"
 anyhow = "^1.0.86"
 axum-test = "17.0.1"
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
-env_logger = "^0.11.3"
+env_logger = { workspace = true }
 trailbase-extension = { workspace = true }
 quoted_printable = "0.5.1"
 schemars = "0.8.21"

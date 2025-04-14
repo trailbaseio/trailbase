@@ -20,5 +20,5 @@ rust-embed = { version = "8.4.0", default-features = false, features = ["mime-gu
 tower-service = { version = "0.3.3", default-features = false }
 
 [build-dependencies]
-env_logger = "0.11.8"
+env_logger = { workspace = true }
 log = "0.4.27"

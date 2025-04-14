@@ -27,8 +27,6 @@ fn build_protos() -> Result<()> {
 }
 
 fn main() -> Result<()> {
-  env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-
   rustc_tools_util::setup_version_info!();
 
   build_protos()?;
