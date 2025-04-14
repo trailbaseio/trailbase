@@ -35,7 +35,12 @@ fn integration_tests() {
 async fn test_record_apis() {
   let data_dir = temp_dir::TempDir::new().unwrap();
 
-  let app = Server::init(ServerOptions {
+  let Server {
+    state,
+    main_router,
+    admin_router,
+    tls,
+  } = Server::init(ServerOptions {
     data_dir: DataDir(data_dir.path().to_path_buf()),
     address: "".to_string(),
     admin_address: None,
@@ -49,7 +54,9 @@ async fn test_record_apis() {
   .await
   .unwrap();
 
-  let state = app.state();
+  assert!(admin_router.is_none());
+  assert!(tls.is_none());
+
   let conn = state.conn();
   let logs_conn = state.logs_conn();
 
@@ -89,11 +96,11 @@ async fn test_record_apis() {
 
   // Set up logging: declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
   tracing_subscriber::Registry::default()
-    .with(trailbase::logging::SqliteLogLayer::new(app.state()))
+    .with(trailbase::logging::SqliteLogLayer::new(&state))
     .set_default();
 
   {
-    let server = TestServer::new(app.router().clone()).unwrap();
+    let server = TestServer::new(main_router.1).unwrap();
 
     {
       // User X can post to a JSON message.

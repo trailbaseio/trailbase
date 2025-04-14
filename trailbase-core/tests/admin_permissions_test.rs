@@ -13,7 +13,12 @@ fn test_admin_permissions() {
   let data_dir = temp_dir::TempDir::new().unwrap();
 
   let _ = runtime.block_on(async move {
-    let app = Server::init(ServerOptions {
+    let Server {
+      state: _,
+      main_router,
+      admin_router,
+      tls,
+    } = Server::init(ServerOptions {
       data_dir: DataDir(data_dir.path().to_path_buf()),
       address: "".to_string(),
       admin_address: None,
@@ -27,7 +32,10 @@ fn test_admin_permissions() {
     .await
     .unwrap();
 
-    let server = TestServer::new(app.router().clone()).unwrap();
+    assert!(admin_router.is_none());
+    assert!(tls.is_none());
+
+    let server = TestServer::new(main_router.1).unwrap();
 
     assert_eq!(
       server.get("/api/healthcheck").await.status_code(),

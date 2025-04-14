@@ -78,22 +78,20 @@ pub struct ServerOptions {
 }
 
 pub struct Server {
-  state: AppState,
+  pub state: AppState,
 
   // Routers.
-  main_router: (String, Router),
-  admin_router: Option<(String, Router)>,
+  pub main_router: (String, Router),
+  pub admin_router: Option<(String, Router)>,
 
-  /// TLS certificate path.
-  pub tls_cert: Option<CertificateDer<'static>>,
-  /// TLS key path.
-  pub tls_key: Option<PrivateKeyDer<'static>>,
+  // TLS/SSL
+  pub tls: Option<(CertificateDer<'static>, PrivateKeyDer<'static>)>,
 }
 
 impl Server {
   /// Initializes the server. Will create a new data directory on first start.
   pub async fn init(opts: ServerOptions) -> Result<Self, InitError> {
-    return Self::init_with_custom_routes_and_initializer(opts, None, |_| async { Ok(()) }).await;
+    return Self::init_with_custom_initializer(opts, |_| async { Ok(()) }).await;
   }
 
   /// Initializes the server in a more customizable manner. Will create a new data directory on
@@ -105,14 +103,10 @@ impl Server {
   /// Note, however, that for a multi-stage deployment (dev, test, staging, prod, ...) or prod
   /// setups migrations are a more robust approach to consistent and continuous management of
   /// schemas.
-  pub async fn init_with_custom_routes_and_initializer<O>(
+  pub async fn init_with_custom_initializer(
     opts: ServerOptions,
-    custom_routes: Option<Router<AppState>>,
-    on_first_init: impl FnOnce(AppState) -> O,
-  ) -> Result<Self, InitError>
-  where
-    O: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Sync + Send>>>,
-  {
+    on_first_init: impl AsyncFnOnce(AppState) -> Result<(), Box<dyn std::error::Error + Sync + Send>>,
+  ) -> Result<Self, InitError> {
     let version_info = rustc_tools_util::get_version_info!();
     info!(
       "Initializing server version: {hash} {date}",
@@ -167,50 +161,31 @@ impl Server {
     }
 
     #[cfg(feature = "v8")]
-    let custom_routes = {
-      let js_routes = crate::js::load_routes_and_jobs_from_js_modules(&state)
+    let js_routes: Option<Router<AppState>> =
+      crate::js::load_routes_and_jobs_from_js_modules(&state)
         .await
         .map_err(|err| InitError::ScriptError(err.to_string()))?;
 
-      if let Some(js_routes) = js_routes {
-        Some(custom_routes.unwrap_or_default().merge(js_routes))
-      } else {
-        custom_routes
-      }
-    };
-
-    let main_router = Self::build_main_router(&state, &opts, custom_routes).await;
-    let admin_router = Self::build_independent_admin_router(&state, &opts);
+    #[cfg(not(feature = "v8"))]
+    let js_routes: Option<Router<AppState>> = None;
 
     Ok(Self {
-      state,
-      main_router,
-      admin_router,
-      tls_key: opts.tls_key,
-      tls_cert: opts.tls_cert,
+      state: state.clone(),
+      main_router: Self::build_main_router(&state, &opts, js_routes).await,
+      admin_router: Self::build_independent_admin_router(&state, &opts),
+      tls: Self::load_tls(&opts),
     })
   }
 
-  pub fn state(&self) -> &AppState {
-    return &self.state;
+  pub async fn serve(self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    return serve(self.main_router, self.admin_router, self.tls).await;
   }
 
-  pub fn router(&self) -> &Router<()> {
-    return &self.main_router.1;
-  }
-
-  pub async fn serve(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // NOTE: We panic if  a key/cert that was explicitly specified cannot be loaded.
-    let data_dir = self.state.data_dir();
-    let tls_key = self.tls_key.as_ref().map_or_else(
-      || {
-        std::fs::read(data_dir.secrets_path().join("certs").join("key.pem"))
-          .ok()
-          .and_then(|key| PrivateKeyDer::from_pem_slice(&key).ok())
-      },
-      |key| Some(key.clone_key()),
-    );
-    let tls_cert = self.tls_cert.clone().map_or_else(
+  pub fn load_tls(
+    opts: &ServerOptions,
+  ) -> Option<(CertificateDer<'static>, PrivateKeyDer<'static>)> {
+    let data_dir = &opts.data_dir;
+    let tls_cert = opts.tls_cert.clone().map_or_else(
       || {
         std::fs::read(data_dir.secrets_path().join("certs").join("cert.pem"))
           .ok()
@@ -218,87 +193,26 @@ impl Server {
       },
       Some,
     );
-
-    let has_tls = tls_key.is_some() && tls_cert.is_some();
-
-    let mut set = JoinSet::new();
-    {
-      let (addr, router) = self.main_router.clone();
-      let (tls_key, tls_cert) = (tls_key.as_ref().map(|k| k.clone_key()), tls_cert.clone());
-
-      set.spawn(async move { Self::start_listen(&addr, router, tls_key, tls_cert).await });
-    }
-
-    if let Some((addr, router)) = self.admin_router.clone() {
-      set.spawn(async move { Self::start_listen(&addr, router, tls_key, tls_cert).await });
-    }
-
-    info!(
-      "Listening on {proto}://{addr} 🚀 (Admin UI http://{admin_addr}/_/admin/)",
-      proto = if has_tls { "https" } else { "http" },
-      addr = self.main_router.0,
-      admin_addr = self
-        .admin_router
-        .as_ref()
-        .map_or_else(|| &self.main_router.0, |(addr, _)| addr)
+    let tls_key = opts.tls_key.as_ref().map_or_else(
+      || {
+        std::fs::read(data_dir.secrets_path().join("certs").join("key.pem"))
+          .ok()
+          .and_then(|key| PrivateKeyDer::from_pem_slice(&key).ok())
+      },
+      |key| Some(key.clone_key()),
     );
 
-    set.join_all().await;
-
-    return Ok(());
-  }
-
-  async fn start_listen(
-    addr: &str,
-    router: Router<()>,
-    tls_key: Option<PrivateKeyDer<'static>>,
-    tls_cert: Option<CertificateDer<'static>>,
-  ) {
-    match (tls_key, tls_cert) {
-      (Some(key), Some(cert)) => {
-        let tcp_listener = match tokio::net::TcpListener::bind(addr).await {
-          Ok(listener) => listener,
-          Err(err) => {
-            error!("Failed to listen on: {addr}: {err}");
-            std::process::exit(1);
-          }
-        };
-
-        let server_config = ServerConfig::builder()
-          .with_no_client_auth()
-          .with_single_cert(vec![cert], key)
-          .expect("Failed to build server config");
-
-        let listener = serve::TlsListener {
-          listener: tcp_listener,
-          acceptor: TlsAcceptor::from(Arc::new(server_config)),
-        };
-
-        if let Err(err) = serve::serve(listener, router.clone())
-          .with_graceful_shutdown(shutdown_signal())
-          .await
-        {
-          error!("Failed to start server: {err}");
-          std::process::exit(1);
-        }
+    return match (tls_cert, tls_key) {
+      (Some(cert), Some(key)) => Some((cert, key)),
+      (Some(_cert), None) => {
+        warn!("TLS cert provided but key missing");
+        None
       }
-      _ => {
-        let listener = match tokio::net::TcpListener::bind(addr).await {
-          Ok(listener) => listener,
-          Err(err) => {
-            error!("Failed to listen on: {addr}: {err}");
-            std::process::exit(1);
-          }
-        };
-
-        if let Err(err) = serve::serve(listener, router.clone())
-          .with_graceful_shutdown(shutdown_signal())
-          .await
-        {
-          error!("Failed to start server: {err}");
-          std::process::exit(1);
-        }
+      (None, Some(_key)) => {
+        warn!("TLS key provided but cert missing");
+        None
       }
+      (None, None) => None,
     };
   }
 
@@ -530,4 +444,96 @@ async fn shutdown_signal() {
       tokio::spawn(timer());
     },
   }
+}
+
+pub async fn serve(
+  main_router: (String, Router),
+  admin_router: Option<(String, Router)>,
+  tls: Option<(CertificateDer<'static>, PrivateKeyDer<'static>)>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  let has_tls = tls.is_some();
+  let addr = main_router.0.clone();
+  let admin_addr = admin_router
+    .as_ref()
+    .map_or_else(|| addr.clone(), |(addr, _)| addr.clone());
+
+  let set = {
+    let mut set = JoinSet::new();
+
+    if let Some((addr, router)) = admin_router {
+      let tls_clone = tls
+        .as_ref()
+        .map(|(cert, key)| (cert.clone(), key.clone_key()));
+      set.spawn(async move { start_listen(&addr, router, tls_clone).await });
+    }
+
+    {
+      let (addr, router) = main_router;
+      set.spawn(async move { start_listen(&addr, router, tls).await });
+    }
+
+    set
+  };
+
+  info!(
+    "Listening on {protocol}://{addr} 🚀 (Admin UI http://{admin_addr}/_/admin/)",
+    protocol = if has_tls { "https" } else { "http" },
+  );
+
+  set.join_all().await;
+
+  return Ok(());
+}
+
+async fn start_listen(
+  addr: &str,
+  router: Router<()>,
+  tls: Option<(CertificateDer<'static>, PrivateKeyDer<'static>)>,
+) {
+  match tls {
+    Some((cert, key)) => {
+      let tcp_listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(listener) => listener,
+        Err(err) => {
+          error!("Failed to listen on: {addr}: {err}");
+          std::process::exit(1);
+        }
+      };
+
+      let server_config = ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(vec![cert], key)
+        .expect("Failed to build server config");
+
+      let listener = serve::TlsListener {
+        listener: tcp_listener,
+        acceptor: TlsAcceptor::from(Arc::new(server_config)),
+      };
+
+      if let Err(err) = serve::serve(listener, router.clone())
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+      {
+        error!("Failed to start server: {err}");
+        std::process::exit(1);
+      }
+    }
+    _ => {
+      let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(listener) => listener,
+        Err(err) => {
+          error!("Failed to listen on: {addr}: {err}");
+          std::process::exit(1);
+        }
+      };
+
+      if let Err(err) = serve::serve(listener, router.clone())
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+      {
+        error!("Failed to start server: {err}");
+        std::process::exit(1);
+      }
+    }
+  };
 }
