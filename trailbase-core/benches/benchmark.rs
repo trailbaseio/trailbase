@@ -6,6 +6,7 @@ use axum::body::Body;
 use axum::extract::{Json, State};
 use axum::http::{self, Request};
 use base64::prelude::*;
+use hyper::StatusCode;
 use std::time::{Duration, Instant};
 use tower::{Service, ServiceExt};
 
@@ -84,7 +85,7 @@ async fn add_user_to_room(
   return Ok(());
 }
 
-struct SetupResult {
+struct Setup {
   app: Server,
 
   room: [u8; 16],
@@ -101,7 +102,7 @@ pub(crate) async fn add_record_api_config(
   return Ok(state.validate_and_update_config(config, None).await?);
 }
 
-async fn setup_app() -> Result<SetupResult, anyhow::Error> {
+async fn setup_app() -> Result<Setup, anyhow::Error> {
   let data_dir = temp_dir::TempDir::new()?;
 
   let app = Server::init(ServerOptions {
@@ -154,7 +155,7 @@ async fn setup_app() -> Result<SetupResult, anyhow::Error> {
 
   add_user_to_room(conn, user_x, room).await?;
 
-  return Ok(SetupResult {
+  return Ok(Setup {
     app,
     room,
     user_x,
@@ -162,11 +163,33 @@ async fn setup_app() -> Result<SetupResult, anyhow::Error> {
   });
 }
 
-fn create_message_benchmark(
-  b: &mut Bencher,
-  runtime: &tokio::runtime::Runtime,
-  setup: &SetupResult,
-) {
+async fn check_health(router: &mut axum::Router<()>) -> Result<(), anyhow::Error> {
+  let response = router
+    .call(
+      Request::builder()
+        .method(http::Method::GET)
+        .uri("/api/healthcheck")
+        .body(Body::from(vec![]))
+        .unwrap(),
+    )
+    .await?;
+
+  if response.status() != StatusCode::OK {
+    anyhow::bail!("Expected 'Ok' status");
+  }
+
+  let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+    .await
+    .unwrap();
+
+  if bytes.to_vec() != b"Ok" {
+    anyhow::bail!("Expected 'Ok'");
+  }
+
+  return Ok(());
+}
+
+fn create_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, setup: &Setup) {
   let (body, user_x_token) = {
     let request = serde_json::json!({
       "_owner": BASE64_URL_SAFE.encode(setup.user_x),
@@ -227,34 +250,27 @@ fn benchmark_group(c: &mut Criterion) {
       .await
       .unwrap();
 
-    let response = router
-      .call(
-        Request::builder()
-          .method(http::Method::GET)
-          .uri("/api/healthcheck")
-          .body(Body::from(vec![]))
-          .unwrap(),
-      )
-      .await
-      .unwrap();
-
-    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-      .await
-      .unwrap();
-
-    if bytes.to_vec() != b"Ok" {
-      panic!("Expected 'Ok'");
-    }
+    // Start server and make sure healthcheck returns Ok;
+    check_health(&mut router).await.unwrap();
 
     setup
   });
 
-  let mut group = c.benchmark_group("Chat");
-  group.measurement_time(Duration::from_secs(25));
-  group.sample_size(250);
+  let mut group = c.benchmark_group("ChatCreateMessages");
+  group.measurement_time(Duration::from_secs(20));
+  group.sample_size(100);
   group.throughput(Throughput::Elements(1));
 
-  group.bench_function("create-messages", |b| {
+  group.bench_function("single-threaded", |b| {
+    let current_thread_runtime = tokio::runtime::Builder::new_current_thread()
+      .enable_all()
+      .build()
+      .unwrap();
+
+    create_message_benchmark(b, &current_thread_runtime, &setup)
+  });
+
+  group.bench_function("parallel", |b| {
     create_message_benchmark(b, &runtime, &setup)
   });
 }

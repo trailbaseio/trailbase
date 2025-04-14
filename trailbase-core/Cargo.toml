@@ -13,6 +13,7 @@ exclude = [
   "**/node_modules/",
   "**/dist/",
 ]
+autobenches = false
 
 [[bench]]
 name = "benchmark"
