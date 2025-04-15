@@ -661,7 +661,7 @@ export function addCronCallback(
 
   if (isolateId() === 0) {
     const id = rustyscript.functions.install_job(name, schedule);
-    console.debug("JS: add cron callback", id, name);
+    console.debug(`JS: Added cron job (id=${id}): "${name}"`);
     cronCallbacks.set(id, cb);
   }
 }

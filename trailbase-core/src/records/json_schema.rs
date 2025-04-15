@@ -1,5 +1,4 @@
 use axum::extract::{Json, Path, Query, State};
-use log::*;
 use serde::Deserialize;
 use trailbase_schema::json_schema::{
   build_json_schema, build_json_schema_expanded, Expand, JsonSchemaMode,
@@ -53,8 +52,6 @@ pub fn build_api_json_schema(
       tables: &all_tables,
       foreign_key_columns,
     };
-
-    debug!("expanded: {expand:?}");
 
     let (_schema, json) =
       build_json_schema_expanded(api.api_name(), api.columns(), mode, Some(expand))

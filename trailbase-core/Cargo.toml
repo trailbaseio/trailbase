@@ -77,7 +77,7 @@ tower-cookies = "0.11.0"
 tower-http = { version = "^0.6.0", default-features = false, features = ["cors", "trace", "fs", "limit"] }
 tower-service = { version = "0.3.3", default-features = false }
 tracing = { version = "0.1.40", default-features = false }
-tracing-subscriber = { version = "0.3.18", default-features = false, features = ["smallvec", "std", "fmt", "ansi"] }
+tracing-subscriber = { version = "0.3.18", default-features = false, features = ["smallvec", "std", "fmt", "json"] }
 trailbase-assets = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-refinery-core = { workspace = true }

@@ -114,9 +114,9 @@ const completer = new Completer<string>();
 
 addCronCallback(
   "JS-registered Job",
-  "@daily",
+  "@hourly",
   async () => {
-    console.log("JS-registered cron job reporting for duty 🚀");
+    console.info("JS-registered cron job reporting for duty 🚀");
   });
 
 addPeriodicCallback(100, (cancel) => {

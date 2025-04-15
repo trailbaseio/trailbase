@@ -34,7 +34,8 @@ enum LogType {
 }
 
 const LEVEL: Level = Level::INFO;
-const NAME: &str = "TB::sqlog";
+const NAME: &str = "http_span";
+const TARGET: &str = "http_reply";
 
 pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
   let headers = request.headers();
@@ -68,13 +69,19 @@ pub(super) fn sqlite_logger_on_request(_req: &Request<Body>, _span: &Span) {
 }
 
 pub(super) fn sqlite_logger_on_response(response: &Response<Body>, latency: Duration, span: &Span) {
-  let length = get_header(response.headers(), "content-length");
   span.record("latency_ms", as_millis_f64(&latency));
   span.record("status", response.status().as_u16());
+
+  let length = get_header(response.headers(), "content-length");
   span.record("length", length.and_then(|l| l.parse::<i64>().ok()));
 
   // Log an event that can actually be seen, e.g. when a tracing->fmt/stderr layer is installed.
-  tracing::event!(LEVEL, "response sent");
+  tracing::event!(
+    target: TARGET,
+    parent: span,
+    LEVEL,
+    field = None::<i64>
+  );
 }
 
 pub struct SqliteLogLayer {

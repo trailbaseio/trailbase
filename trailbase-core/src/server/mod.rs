@@ -143,10 +143,15 @@ impl Server {
     if opts.log_responses {
       tracing_subscriber::Registry::default()
         .with(logging::SqliteLogLayer::new(&state))
-        .with(tracing_subscriber::fmt::layer().compact().with_filter(
-          // Response log events are emitted at the INFO level, see `logging.rs`
-          filter::Targets::new().with_default(filter::LevelFilter::INFO),
-        ))
+        .with(
+          tracing_subscriber::fmt::layer()
+            .json()
+            .with_span_list(false)
+            .with_filter(
+              // Response log events are emitted at the INFO level, see `logging.rs`
+              filter::Targets::new().with_default(filter::LevelFilter::INFO),
+            ),
+        )
         .init();
     } else {
       tracing_subscriber::Registry::default()
