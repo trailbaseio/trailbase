@@ -1,3 +1,13 @@
+## v0.9.2
+
+* Overhaul SQLite execution model to allow for parallel reads. This should help
+  reduce latency long-tail with slow queries.
+  * And add more benchmarks.
+* Log request/response logs to stdout in JSON format.
+* Always re-create traildepot/.gitignore. Previously gated on creating the root
+  path, which was never the case for docker users.
+* Update dependencies.
+
 ## v0.9.1
 
 * Consistently expanded JSON schemas for specific APIs everywhere (UI & CLI).
