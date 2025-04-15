@@ -68,28 +68,31 @@ impl DataDir {
 
   pub(crate) async fn ensure_directory_structure(&self) -> std::io::Result<()> {
     // First create directory structure.
-    let root = self.root();
-    if !fs::try_exists(root).await.unwrap_or(false) {
-      fs::create_dir_all(root).await?;
-
-      // Create .gitignore file.
-      let mut gitignore = fs::File::create_new(root.join(".gitignore")).await?;
-      gitignore.write_all(GIT_IGNORE.as_bytes()).await?;
-
-      info!("Initialized fresh data dir: {:?}", root);
-    }
-
+    let mut initialized = false;
     for dir in self.directories() {
       if !fs::try_exists(&dir).await.unwrap_or(false) {
+        initialized = true;
         fs::create_dir_all(dir).await?;
       }
+    }
+
+    // Create .gitignore file but do not override
+    let gitignore_path = self.root().join(".gitignore");
+    if !fs::try_exists(&gitignore_path).await.unwrap_or(false) {
+      initialized = true;
+      let mut gitignore = fs::File::create_new(&gitignore_path).await?;
+      gitignore.write_all(GIT_IGNORE.as_bytes()).await?;
+    }
+
+    if initialized {
+      info!("Initialized or repaired depot: {:?}", self.root());
     }
 
     Ok(())
   }
 }
 
-const GIT_IGNORE: &str = r#"
+const GIT_IGNORE: &str = r#"# Deployment-specific directories:
 backups/
 data/
 secrets/
