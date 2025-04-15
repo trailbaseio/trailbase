@@ -19,10 +19,18 @@ export default defineConfig({
     starlight({
       title: "TrailBase",
       customCss: ["./src/tailwind.css"],
-      social: {
-        github: "https://github.com/trailbaseio/trailbase",
-        discord: "https://discord.gg/X8cWs7YC22",
-      },
+      social: [
+        {
+          icon: "github",
+          label: "GitHub",
+          href: "https://github.com/trailbaseio/trailbase",
+        },
+        {
+          icon: "discord",
+          label: "Discord",
+          href: "https://discord.gg/X8cWs7YC22",
+        },
+      ],
       plugins: [
         starlightLinksValidator({
           exclude: ["http://localhost:4000/", "http://localhost:4000/**/*"],
