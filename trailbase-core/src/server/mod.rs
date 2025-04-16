@@ -52,7 +52,7 @@ pub struct ServerOptions {
   pub public_dir: Option<PathBuf>,
 
   /// We trace the request->response flow to generate a server log. Setting this to true will also
-  /// log an event to stderr.
+  /// log an event to stdout.
   pub log_responses: bool,
 
   /// In dev mode CORS and cookies will be more permissive to allow development with externally
@@ -149,25 +149,14 @@ impl Server {
     let filter_layer = filter::Targets::new()
       .with_default(filter::LevelFilter::OFF)
       .with_target(crate::logging::EVENT_TARGET, crate::logging::LEVEL);
-    if opts.log_responses {
-      tracing_subscriber::Registry::default()
-        .with(filter_layer)
-        .with(logging::SqliteLogLayer::new(&state, opts.log_responses))
-        .with(
-          // NOTE: Using the generic fmt::json() logger here means that the output format is
-          // tightly coupled to the internal span structure. It would probably make more sense to
-          // have the SqliteLogLayer output a more stable json format.
-          tracing_subscriber::fmt::layer()
-            .json()
-            .with_span_list(false),
-        )
-        .init();
-    } else {
-      tracing_subscriber::Registry::default()
-        .with(filter_layer)
-        .with(logging::SqliteLogLayer::new(&state, opts.log_responses))
-        .init();
-    }
+
+    tracing_subscriber::Registry::default()
+      .with(filter_layer)
+      .with(logging::SqliteLogLayer::new(
+        &state,
+        /* log-to-stdout= */ opts.log_responses,
+      ))
+      .init();
 
     if new_data_dir {
       on_first_init(state.clone())

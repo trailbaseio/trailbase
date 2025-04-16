@@ -5,6 +5,7 @@ use axum_client_ip::InsecureClientIp;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::Duration;
+use tokio::io::AsyncWriteExt;
 use tracing::field::Field;
 use tracing::span::{Attributes, Id, Record, Span};
 use tracing::Level;
@@ -13,6 +14,131 @@ use uuid::Uuid;
 
 use crate::util::get_header;
 use crate::AppState;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+enum HttpMethod {
+  Unknown,
+  Options,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Head,
+  Trace,
+  Connect,
+  Patch,
+}
+
+impl HttpMethod {
+  fn as_str(&self) -> &'static str {
+    return match self {
+      HttpMethod::Options => axum::http::Method::OPTIONS.as_str(),
+      HttpMethod::Get => axum::http::Method::GET.as_str(),
+      HttpMethod::Post => axum::http::Method::POST.as_str(),
+      HttpMethod::Put => axum::http::Method::PUT.as_str(),
+      HttpMethod::Delete => axum::http::Method::DELETE.as_str(),
+      HttpMethod::Head => axum::http::Method::HEAD.as_str(),
+      HttpMethod::Trace => axum::http::Method::TRACE.as_str(),
+      HttpMethod::Connect => axum::http::Method::CONNECT.as_str(),
+      HttpMethod::Patch => axum::http::Method::PATCH.as_str(),
+      _ => "Unknown",
+    };
+  }
+}
+
+impl Default for HttpMethod {
+  fn default() -> Self {
+    return Self::Unknown;
+  }
+}
+
+impl std::fmt::Display for HttpMethod {
+  fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+    return fmt.write_str(self.as_str());
+  }
+}
+
+impl From<&axum::http::Method> for HttpMethod {
+  fn from(value: &axum::http::Method) -> Self {
+    return match *value {
+      axum::http::Method::OPTIONS => HttpMethod::Options,
+      axum::http::Method::GET => HttpMethod::Get,
+      axum::http::Method::POST => HttpMethod::Post,
+      axum::http::Method::PUT => HttpMethod::Put,
+      axum::http::Method::DELETE => HttpMethod::Delete,
+      axum::http::Method::HEAD => HttpMethod::Head,
+      axum::http::Method::TRACE => HttpMethod::Trace,
+      axum::http::Method::CONNECT => HttpMethod::Connect,
+      axum::http::Method::PATCH => HttpMethod::Patch,
+      _ => HttpMethod::Unknown,
+    };
+  }
+}
+
+impl From<&str> for HttpMethod {
+  fn from(value: &str) -> Self {
+    return match value {
+      "OPTIONS" => HttpMethod::Options,
+      "GET" => HttpMethod::Get,
+      "POST" => HttpMethod::Post,
+      "PUT" => HttpMethod::Put,
+      "DELETE" => HttpMethod::Delete,
+      "HEAD" => HttpMethod::Head,
+      "TRACE" => HttpMethod::Trace,
+      "CONNECT" => HttpMethod::Connect,
+      "PATCH" => HttpMethod::Patch,
+      _ => HttpMethod::Unknown,
+    };
+  }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+enum HttpVersion {
+  Unknown,
+  Http09,
+  Http10,
+  Http11,
+  Http20,
+  Http30,
+}
+
+impl Default for HttpVersion {
+  fn default() -> Self {
+    return Self::Unknown;
+  }
+}
+
+impl HttpVersion {
+  fn as_str(&self) -> &'static str {
+    return match self {
+      Self::Http09 => "HTTP/0.9",
+      Self::Http10 => "HTTP/1.0",
+      Self::Http11 => "HTTP/1.1",
+      Self::Http20 => "HTTP/2.0",
+      Self::Http30 => "HTTP/3.0",
+      Self::Unknown => "HTTP/?",
+    };
+  }
+}
+
+impl std::fmt::Display for HttpVersion {
+  fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+    return fmt.write_str(self.as_str());
+  }
+}
+
+impl From<&str> for HttpVersion {
+  fn from(value: &str) -> Self {
+    return match value {
+      "HTTP/0.9" => Self::Http09,
+      "HTTP/1.0" => Self::Http10,
+      "HTTP/1.1" => Self::Http11,
+      "HTTP/2.0" => Self::Http20,
+      "HTTP/3.0" => Self::Http30,
+      _ => HttpVersion::Unknown,
+    };
+  }
+}
 
 // NOTE: Tracing is quite sweet but also utterly decoupled. There are several moving parts.
 //
@@ -160,14 +286,16 @@ impl SqliteLogLayer {
   // then writes to Sqlite.
   #[inline]
   fn write_log(&self, storage: LogFieldStorage) {
-    // TODO: Ideally we'd write a structured JSON log somewhere here as opposed to using the
-    // fmt::json() trace layer, which exposes the internal span structure in its output format.
-    // if self.json_stdout {
-    //   if let Ok(mut buf) = serde_json::to_vec(&storage) {
-    //     buf.push(b'\n');
-    //     let _ = tokio::spawn(async move { tokio::io::stdout().write_all(&buf).await });
-    //   }
-    // }
+    if self.json_stdout {
+      let json: JsonLog = (&storage).into();
+      tokio::spawn(async move {
+        let mut buf: Vec<u8> = Vec::with_capacity(480);
+        if serde_json::to_writer(&mut buf, &json).is_ok() {
+          buf.push(b'\n');
+          let _ = tokio::io::stdout().write_all(&buf).await;
+        }
+      });
+    }
 
     if let Err(err) = self.sender.send(Box::new(storage)) {
       panic!("Sending logs failed: {err}");
@@ -195,12 +323,17 @@ impl SqliteLogLayer {
 
     let mut stmt = conn.prepare_cached(&QUERY)?;
     stmt.execute((
-      storage.timestamp,
+      as_seconds_f64(
+        storage
+          .timestamp
+          .signed_duration_since(chrono::DateTime::UNIX_EPOCH),
+      ),
       storage.status,
-      storage.method,
+      storage.method.as_str(),
       storage.uri,
       storage.latency_ms,
-      storage.client_ip,
+      // client_ip is defined as NOT NULL in the schema :/.
+      storage.client_ip.unwrap_or_default(),
       storage.referer,
       storage.user_agent,
       if storage.user_id > 0 {
@@ -225,7 +358,7 @@ where
     let span = ctx.span(id).expect("span must exist in on_new_span");
 
     let mut storage = LogFieldStorage::default();
-    attrs.record(&mut LogJsonVisitor(&mut storage));
+    attrs.record(&mut LogVisitor(&mut storage));
     span.extensions_mut().insert(storage);
   }
 
@@ -249,13 +382,10 @@ where
       return;
     };
 
-    storage.timestamp = std::time::SystemTime::now()
-      .duration_since(std::time::UNIX_EPOCH)
-      .ok()
-      .map(|d| d.as_secs_f64());
+    storage.timestamp = chrono::Utc::now();
 
     // Collect the remaining data from the event itself.
-    event.record(&mut LogJsonVisitor(&mut storage));
+    event.record(&mut LogVisitor(&mut storage));
 
     // Then write.
     self.write_log(storage);
@@ -270,24 +400,24 @@ where
     if !values.is_empty() {
       let mut extensions = span.extensions_mut();
       if let Some(storage) = extensions.get_mut::<LogFieldStorage>() {
-        values.record(&mut LogJsonVisitor(storage));
+        values.record(&mut LogVisitor(storage));
       }
     }
   }
 }
 
 /// HTTP Request/Response properties to be logged.
-#[derive(Debug, Default, Clone, Serialize)]
+#[derive(Debug, Default, Clone)]
 struct LogFieldStorage {
-  timestamp: Option<f64>,
-  method: String,
+  timestamp: chrono::DateTime<chrono::Utc>,
+  method: HttpMethod,
   uri: String,
-  client_ip: String,
+  client_ip: Option<String>,
   host: String,
   referer: String,
   user_agent: String,
   user_id: u128,
-  version: String,
+  version: HttpVersion,
 
   // Response fields/properties
   status: u64,
@@ -298,9 +428,55 @@ struct LogFieldStorage {
   fields: serde_json::Map<String, serde_json::Value>,
 }
 
-struct LogJsonVisitor<'a>(&'a mut LogFieldStorage);
+/// Defines the JSON output format for stdout logging.
+#[derive(Debug, Default, Clone, Serialize)]
+struct JsonLog {
+  /// Response timestamp in seconds since epoch with fractional milliseconds.
+  timestamp: String,
+  /// HTTP method (e.g. GET, POST).
+  method: HttpMethod,
+  /// HTTP version.
+  version: HttpVersion,
+  /// Host part.
+  host: String,
+  /// Request URI.
+  uri: String,
+  /// HTTP Referer
+  referer: String,
+  /// HTTP User agent.
+  user_agent: String,
+  /// User id.
+  user: u128,
+  /// Client ip address.
+  client_ip: Option<String>,
 
-impl tracing::field::Visit for LogJsonVisitor<'_> {
+  // HTTP response status code.
+  status: u64,
+  // latency in milliseconds with fractional microseconds.
+  latency_ms: f64,
+}
+
+impl From<&LogFieldStorage> for JsonLog {
+  fn from(storage: &LogFieldStorage) -> Self {
+    return Self {
+      timestamp: storage.timestamp.to_rfc3339(),
+      method: storage.method.clone(),
+      version: storage.version.clone(),
+      host: storage.host.clone(),
+      uri: storage.uri.clone(),
+      referer: storage.referer.clone(),
+      user_agent: storage.user_agent.clone(),
+      user: storage.user_id,
+      client_ip: storage.client_ip.clone(),
+      status: storage.status,
+      latency_ms: storage.latency_ms,
+    };
+  }
+}
+
+struct LogVisitor<'a>(&'a mut LogFieldStorage);
+
+impl tracing::field::Visit for LogVisitor<'_> {
   fn record_f64(&mut self, field: &Field, double: f64) {
     match field.name() {
       "latency_ms" => self.0.latency_ms = double,
@@ -343,7 +519,7 @@ impl tracing::field::Visit for LogJsonVisitor<'_> {
 
   fn record_str(&mut self, field: &Field, s: &str) {
     match field.name() {
-      "client_ip" => self.0.client_ip = s.to_string(),
+      "client_ip" => self.0.client_ip = Some(s.to_string()),
       "host" => self.0.host = s.to_string(),
       "referer" => self.0.referer = s.to_string(),
       "user_agent" => self.0.user_agent = s.to_string(),
@@ -355,9 +531,9 @@ impl tracing::field::Visit for LogJsonVisitor<'_> {
 
   fn record_debug(&mut self, field: &Field, dbg: &dyn std::fmt::Debug) {
     match field.name() {
-      "method" => self.0.method = format!("{:?}", dbg),
+      "method" => self.0.method = format!("{:?}", dbg).as_str().into(),
       "uri" => self.0.uri = format!("{:?}", dbg),
-      "version" => self.0.version = format!("{:?}", dbg),
+      "version" => self.0.version = format!("{:?}", dbg).as_str().into(),
       _name => {
         // Skip "messages" and other fields, we only log structured data.
       }
@@ -379,4 +555,31 @@ fn as_millis_f64(d: &Duration) -> f64 {
 
   return (d.as_secs() as f64) * (MILLIS_PER_SEC as f64)
     + (d.subsec_nanos() as f64) / (NANOS_PER_MILLI);
+}
+
+#[inline]
+fn as_seconds_f64(d: chrono::Duration) -> f64 {
+  const NANOS_PER_SECOND: f64 = 1_000_000_000.0;
+  return (d.num_seconds() as f64) + (d.subsec_nanos() as f64) / (NANOS_PER_SECOND);
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::time::Duration;
+
+  #[test]
+  fn test_as_seconds_f64() {
+    let duration = chrono::Duration::new(1, 250_000_000).unwrap();
+    assert_eq!(1.25, as_seconds_f64(duration));
+  }
+
+  #[test]
+  fn test_as_millis_f64() {
+    let duration = Duration::new(1, 1_000_000_000);
+    assert_eq!(2000.0, as_millis_f64(&duration));
+
+    let duration = Duration::new(1, 250_000_000);
+    assert_eq!(1250.0, as_millis_f64(&duration));
+  }
 }
