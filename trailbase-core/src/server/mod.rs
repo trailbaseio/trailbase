@@ -135,26 +135,33 @@ impl Server {
     // Here we specifically only initialize `tracing`, since we critically rely on the
     // `SqliteLogLayer`. We leave `log` initialization to the program level.
     //
-    // No problem thus far. However, if the `tracing_subscriber` crate is built with the default
-    // feature `tracing-log`, initializing `tracing` will also initialize the `log` crate. So this
-    // approach will only work if built w/o `tracing-log`. Otherwise, initializing `log` before
-    // will lead to a panic here. We do *not* want to use a `.try_init()` here, otherwise may
-    // silently miss `SqliteLogLayer`.
+    // The current setup prevents users from initializing tracing themselves. This is only relevant
+    // for the frameworks-use-case. If we wanted to allow it, we could check that if already
+    // initialized, the "logging::SqliteLogLayer" is present.
+    //
+    // If the `tracing_subscriber` crate is built with the default feature `tracing-log`,
+    // initializing `tracing` will also initialize the `log` crate. So this approach will only
+    // work if built w/o `tracing-log`. Otherwise, initializing `log` before will lead to a panic
+    // here. We do *not* want to use a `.try_init()` here, otherwise may silently miss
+    // `SqliteLogLayer`.
+    //
+    // Response log events are emitted at the INFO level, see `logging.rs`
+    let filter_layer = filter::Targets::new()
+      .with_default(filter::LevelFilter::OFF)
+      .with_target(crate::logging::TARGET, crate::logging::LEVEL);
     if opts.log_responses {
       tracing_subscriber::Registry::default()
+        .with(filter_layer)
         .with(logging::SqliteLogLayer::new(&state))
         .with(
           tracing_subscriber::fmt::layer()
             .json()
-            .with_span_list(false)
-            .with_filter(
-              // Response log events are emitted at the INFO level, see `logging.rs`
-              filter::Targets::new().with_default(filter::LevelFilter::INFO),
-            ),
+            .with_span_list(false),
         )
         .init();
     } else {
       tracing_subscriber::Registry::default()
+        .with(filter_layer)
         .with(logging::SqliteLogLayer::new(&state))
         .init();
     }

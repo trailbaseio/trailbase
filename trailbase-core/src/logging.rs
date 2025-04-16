@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::http::Request;
+use axum::http::{header, Request};
 use axum::response::Response;
 use axum_client_ip::InsecureClientIp;
 use serde::{Deserialize, Serialize};
@@ -33,9 +33,9 @@ enum LogType {
   RecordApiRequest = 3,
 }
 
-const LEVEL: Level = Level::INFO;
 const NAME: &str = "http_span";
-const TARGET: &str = "http_reply";
+pub(crate) const TARGET: &str = "http_reply";
+pub(crate) const LEVEL: Level = Level::INFO;
 
 pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
   let headers = request.headers();
@@ -46,6 +46,7 @@ pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
 
   // NOTE: "%" means print using fmt::Display, and "?" means fmt::Debug.
   return tracing::span!(
+      target: TARGET,
       LEVEL,
       NAME,
       method = %request.method(),
@@ -72,8 +73,12 @@ pub(super) fn sqlite_logger_on_response(response: &Response<Body>, latency: Dura
   span.record("latency_ms", as_millis_f64(&latency));
   span.record("status", response.status().as_u16());
 
-  let length = get_header(response.headers(), "content-length");
-  span.record("length", length.and_then(|l| l.parse::<i64>().ok()));
+  // NOTE: The `tower::Limited` body may provide for a more robust implementation when the header
+  // is not set. If the tower layer runs beforre this event, we could probably just have our own
+  // `RequestBodyLimitLayer` implementation logging the content length there.
+  if let Some(header) = get_header(response.headers(), header::CONTENT_LENGTH) {
+    span.record("length", header.parse::<i64>().ok());
+  }
 
   // Log an event that can actually be seen, e.g. when a tracing->fmt/stderr layer is installed.
   tracing::event!(
