@@ -148,12 +148,15 @@ impl Server {
     // Response log events are emitted at the INFO level, see `logging.rs`
     let filter_layer = filter::Targets::new()
       .with_default(filter::LevelFilter::OFF)
-      .with_target(crate::logging::TARGET, crate::logging::LEVEL);
+      .with_target(crate::logging::EVENT_TARGET, crate::logging::LEVEL);
     if opts.log_responses {
       tracing_subscriber::Registry::default()
         .with(filter_layer)
-        .with(logging::SqliteLogLayer::new(&state))
+        .with(logging::SqliteLogLayer::new(&state, opts.log_responses))
         .with(
+          // NOTE: Using the generic fmt::json() logger here means that the output format is
+          // tightly coupled to the internal span structure. It would probably make more sense to
+          // have the SqliteLogLayer output a more stable json format.
           tracing_subscriber::fmt::layer()
             .json()
             .with_span_list(false),
@@ -162,7 +165,7 @@ impl Server {
     } else {
       tracing_subscriber::Registry::default()
         .with(filter_layer)
-        .with(logging::SqliteLogLayer::new(&state))
+        .with(logging::SqliteLogLayer::new(&state, opts.log_responses))
         .init();
     }
 

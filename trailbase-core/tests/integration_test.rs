@@ -96,7 +96,7 @@ async fn test_record_apis() {
 
   // Set up logging: declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
   tracing_subscriber::Registry::default()
-    .with(trailbase::logging::SqliteLogLayer::new(&state))
+    .with(trailbase::logging::SqliteLogLayer::new(&state, false))
     .set_default();
 
   {

@@ -50,6 +50,7 @@ import type { Stats } from "@bindings/Stats";
 const columnHelper = createColumnHelper<LogJson>();
 
 const columns: ColumnDef<LogJson>[] = [
+  // NOTE: ISO string contains milliseconds.
   columnHelper.display({
     header: "Created",
     cell: (ctx) => {
@@ -57,10 +58,17 @@ const columns: ColumnDef<LogJson>[] = [
       return (
         <Tooltip>
           <TooltipTrigger as="div">
-            <div class="w-[128px]">{timestamp.toUTCString()}</div>
+            <div class="w-[128px]">
+              {timestamp.toISOString().replace(/T/, " ")}
+            </div>
           </TooltipTrigger>
 
-          <TooltipContent>{timestamp.toLocaleString()} (Local)</TooltipContent>
+          <TooltipContent>
+            {timestamp.toLocaleString(undefined, {
+              timeZoneName: "short",
+              hour12: false,
+            })}
+          </TooltipContent>
         </Tooltip>
       );
     },

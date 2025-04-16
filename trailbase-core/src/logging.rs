@@ -33,8 +33,9 @@ enum LogType {
   RecordApiRequest = 3,
 }
 
-const NAME: &str = "http_span";
-pub(crate) const TARGET: &str = "http_reply";
+const SPAN_NAME: &str = "http_span";
+const EVENT_NAME: &str = "http_event";
+pub(crate) const EVENT_TARGET: &str = "http_target";
 pub(crate) const LEVEL: Level = Level::INFO;
 
 pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
@@ -46,9 +47,9 @@ pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
 
   // NOTE: "%" means print using fmt::Display, and "?" means fmt::Debug.
   return tracing::span!(
-      target: TARGET,
+      target: EVENT_TARGET,
       LEVEL,
-      NAME,
+      SPAN_NAME,
       method = %request.method(),
       uri = %request.uri(),
       version = ?request.version(),
@@ -80,21 +81,36 @@ pub(super) fn sqlite_logger_on_response(response: &Response<Body>, latency: Dura
     span.record("length", header.parse::<i64>().ok());
   }
 
-  // Log an event that can actually be seen, e.g. when a tracing->fmt/stderr layer is installed.
+  // NOTE: We could hand-craft an event w/o using the macro, we could attach less unused metadata
+  // like module, code line, ... . Same goes for span!() above.
+  //
+  // let metadata = span.metadata().expect("metadata");
+  // tracing::Event::child_of(
+  //   span.id(),
+  //   metadata,
+  //   // &tracing::valueset! { metadata.fields(), EVENT_TARGET, EVENT_NAME, file, line,
+  // module_path, ?params },   &tracing::valueset! { metadata.fields(), EVENT_TARGET, EVENT_NAME
+  // }, );
+
+  // Log the event that gets picked up by `SqilteLogLayer` and written out.
   tracing::event!(
-    target: TARGET,
+    name: EVENT_NAME,
+    target: EVENT_TARGET,
     parent: span,
     LEVEL,
-    field = None::<i64>
+    {}
   );
 }
 
 pub struct SqliteLogLayer {
   sender: tokio::sync::mpsc::UnboundedSender<Box<LogFieldStorage>>,
+
+  #[allow(unused)]
+  json_stdout: bool,
 }
 
 impl SqliteLogLayer {
-  pub fn new(state: &AppState) -> Self {
+  pub fn new(state: &AppState, json_stdout: bool) -> Self {
     // NOTE: We're boxing the channel contents to lower the growth rate of back-stopped unbound
     // channels. The underlying container doesn't seem to every shrink :/.
     //
@@ -115,7 +131,7 @@ impl SqliteLogLayer {
             if logs.len() > 1 {
               let tx = conn.transaction()?;
               for log in logs {
-                SqliteLogLayer::insert_log(&tx, log)?;
+                Self::insert_log(&tx, log)?;
               }
               tx.commit()?;
             } else {
@@ -134,14 +150,26 @@ impl SqliteLogLayer {
       }
     });
 
-    return SqliteLogLayer { sender };
+    return SqliteLogLayer {
+      sender,
+      json_stdout,
+    };
   }
 
   // The writer runs in a separate Task in the background and receives Logs via a channel, which it
   // then writes to Sqlite.
   #[inline]
-  fn write_log(&self, log: LogFieldStorage) {
-    if let Err(err) = self.sender.send(Box::new(log)) {
+  fn write_log(&self, storage: LogFieldStorage) {
+    // TODO: Ideally we'd write a structured JSON log somewhere here as opposed to using the
+    // fmt::json() trace layer, which exposes the internal span structure in its output format.
+    // if self.json_stdout {
+    //   if let Ok(mut buf) = serde_json::to_vec(&storage) {
+    //     buf.push(b'\n');
+    //     let _ = tokio::spawn(async move { tokio::io::stdout().write_all(&buf).await });
+    //   }
+    // }
+
+    if let Err(err) = self.sender.send(Box::new(storage)) {
       panic!("Sending logs failed: {err}");
     }
   }
@@ -149,37 +177,38 @@ impl SqliteLogLayer {
   #[inline]
   fn insert_log(
     conn: &rusqlite::Connection,
-    log: Box<LogFieldStorage>,
+    storage: Box<LogFieldStorage>,
   ) -> Result<(), rusqlite::Error> {
     #[cfg(test)]
-    if !log.fields.is_empty() {
-      log::warn!("Dangling fields: {:?}", log.fields);
+    if !storage.fields.is_empty() {
+      log::warn!("Dangling fields: {:?}", storage.fields);
     }
 
     lazy_static::lazy_static! {
       static ref QUERY: String = indoc::formatdoc! {"
         INSERT INTO
-          _logs (status, method, url, latency, client_ip, referer, user_agent, user_id)
+          _logs (created, status, method, url, latency, client_ip, referer, user_agent, user_id)
         VALUES
-          ($1, $2, $3, $4, $5, $6, $7, $8)
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       "};
     }
 
     let mut stmt = conn.prepare_cached(&QUERY)?;
     stmt.execute((
-      // TODO: we're yet not writing extra JSON data to the data field.
-      log.status,
-      log.method,
-      log.uri,
-      log.latency_ms,
-      log.client_ip,
-      log.referer,
-      log.user_agent,
-      if log.user_id > 0 {
-        rusqlite::types::Value::Blob(Uuid::from_u128(log.user_id).into_bytes().to_vec())
+      storage.timestamp,
+      storage.status,
+      storage.method,
+      storage.uri,
+      storage.latency_ms,
+      storage.client_ip,
+      storage.referer,
+      storage.user_agent,
+      if storage.user_id > 0 {
+        rusqlite::types::Value::Blob(Uuid::from_u128(storage.user_id).into_bytes().to_vec())
       } else {
         rusqlite::types::Value::Null
       },
+      // TODO: we're yet not writing extra JSON data to the data field.
     ))?;
 
     return Ok(());
@@ -200,26 +229,36 @@ where
     span.extensions_mut().insert(storage);
   }
 
-  // Then the (request->response) span "__tbreq" is closed, write out the logs.
-  fn on_close(&self, id: Id, ctx: Context<'_, S>) {
-    let Some(span) = ctx.span(&id) else {
+  // Add events to field storage.
+  fn on_event(&self, event: &tracing::Event<'_>, ctx: Context<'_, S>) {
+    // Is it a response log event?
+    if event.metadata().target() != EVENT_TARGET {
+      return;
+    }
+    assert_eq!(event.metadata().name(), EVENT_NAME);
+
+    let Some(span) = ctx.event_span(event) else {
+      log::warn!("orphaned '{EVENT_TARGET}' event");
       return;
     };
-    let metadata = span.metadata();
-    if metadata.name() != NAME {
-      // TODO: If we're in a child of the request-response-span, we should recursively merge field
-      // storages into their parents in on_close. This becomes relevant if we want to allow
-      // user-defined spans and custom fields logged to Log::data. Alternatively, we could traverse
-      // up to the spans to fill the root storage in on_record & on_event.
-      return;
-    }
+    assert_eq!(span.name(), SPAN_NAME);
 
     let mut extensions = span.extensions_mut();
-    if let Some(storage) = extensions.remove::<LogFieldStorage>() {
-      self.write_log(storage);
-    } else {
-      log::error!("span already closed/consumed?!");
-    }
+    let Some(mut storage) = extensions.remove::<LogFieldStorage>() else {
+      log::warn!("LogFieldStorage ext missing. Already consumed?");
+      return;
+    };
+
+    storage.timestamp = std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .ok()
+      .map(|d| d.as_secs_f64());
+
+    // Collect the remaining data from the event itself.
+    event.record(&mut LogJsonVisitor(&mut storage));
+
+    // Then write.
+    self.write_log(storage);
   }
 
   // When span.record() is called, add to field storage.
@@ -235,23 +274,12 @@ where
       }
     }
   }
-
-  // Add events to field storage.
-  fn on_event(&self, event: &tracing::Event<'_>, ctx: Context<'_, S>) {
-    let Some(span) = ctx.event_span(event) else {
-      return;
-    };
-
-    let mut extensions = span.extensions_mut();
-    if let Some(storage) = extensions.get_mut::<LogFieldStorage>() {
-      event.record(&mut LogJsonVisitor(storage));
-    }
-  }
 }
 
-#[derive(Debug, Default, Clone)]
+/// HTTP Request/Response properties to be logged.
+#[derive(Debug, Default, Clone, Serialize)]
 struct LogFieldStorage {
-  // Request fields/properties.
+  timestamp: Option<f64>,
   method: String,
   uri: String,
   client_ip: String,
