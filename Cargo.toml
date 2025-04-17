@@ -30,10 +30,17 @@ exclude = [
 [profile.release]
 panic = "unwind"
 opt-level = 3
-# PGO doesn't work with LTO: https://github.com/llvm/llvm-project/issues/57501
-# lto = "off"
-lto = true
-codegen-units = 1
+# LTO is fun. A few observations:
+# * PGO doesn't work with LTO: https://github.com/llvm/llvm-project/issues/57501
+# * Cranelift doesn't work with LTO: missing symbols during linking.
+# * Setting `lto` to true or "fat" has a significant impact on build times
+#   manifesting as `LLVM_passes` and `finish_ongoing_codegen` in the build
+#   timings. Also increasing the `codegen-units` doesn't seem to have an effect
+#   in "fat"-mode.
+# * In TB benchmarks "fat" did not perform better than "thin" LTO.
+lto = "thin" # ("off", "thin", "fat")
+codegen-units = 16
+strip = "debuginfo"
 
 # Workaround for https://github.com/gwenn/lemon-rs/issues/78. sqlite3-parser
 # requires 1+MB stack frames to parse trivial SQL statements, which is larger
