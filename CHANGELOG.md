@@ -1,3 +1,14 @@
+## v0.9.3
+
+* Custom JSON stdout request logger to have a stable format as opposed to
+  depending on the span/event structure, which is an implementation detail.
+* Show response timestamps in dashboard with millisecond resolution.
+* Log response timestamp explicitly.
+* Improve logs writer performance: no transaction needed, improved statement
+  caching.
+* Improve incremental release build times by ~70% switching from "fat" to "thin" LTO.
+* Update dependencies.
+
 ## v0.9.2
 
 * Overhaul SQLite execution model to allow for parallel reads. This should help
