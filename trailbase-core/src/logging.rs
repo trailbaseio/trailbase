@@ -2,6 +2,7 @@ use axum::body::Body;
 use axum::http::{header, Request};
 use axum::response::Response;
 use axum_client_ip::InsecureClientIp;
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::Duration;
@@ -229,7 +230,7 @@ pub(super) fn sqlite_logger_on_response(response: &Response<Body>, latency: Dura
 }
 
 pub struct SqliteLogLayer {
-  sender: tokio::sync::mpsc::UnboundedSender<Box<LogFieldStorage>>,
+  sender: async_channel::Sender<Box<LogFieldStorage>>,
 
   #[allow(unused)]
   json_stdout: bool,
@@ -240,31 +241,27 @@ impl SqliteLogLayer {
     // NOTE: We're boxing the channel contents to lower the growth rate of back-stopped unbound
     // channels. The underlying container doesn't seem to every shrink :/.
     //
-    // TODO: should we use a bounded receiver to create back-pressure?
-    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+    // TODO: We could consider a bounded receiver to create back-pressure?
+    let (sender, receiver) = async_channel::unbounded();
 
     let conn = state.logs_conn().clone();
-    let rt = tokio::runtime::Handle::current();
-    rt.spawn(async move {
-      const LIMIT: usize = 128;
-      let mut buffer = Vec::<Box<LogFieldStorage>>::with_capacity(LIMIT);
+    tokio::spawn(async move {
+      futures_util::pin_mut!(receiver);
 
-      while receiver.recv_many(&mut buffer, LIMIT).await > 0 {
-        let logs = std::mem::take(&mut buffer);
+      loop {
+        const LIMIT: usize = 128;
+        let logs: Vec<_> = receiver
+          .as_mut()
+          .ready_chunks(LIMIT)
+          .next()
+          .await
+          .expect("non empty");
 
+        // NOTE: awaiting the `conn.call()` is the secret to batching, since we won't read from the
+        // channel until the database write is complete.
         let result = conn
           .call(move |conn| {
-            if logs.len() > 1 {
-              let tx = conn.transaction()?;
-              for log in logs {
-                Self::insert_log(&tx, log)?;
-              }
-              tx.commit()?;
-            } else {
-              for log in logs {
-                Self::insert_log(conn, log)?
-              }
-            }
+            Self::insert_logs(conn, logs)?;
 
             Ok(())
           })
@@ -297,21 +294,16 @@ impl SqliteLogLayer {
       });
     }
 
-    if let Err(err) = self.sender.send(Box::new(storage)) {
+    if let Err(err) = self.sender.force_send(Box::new(storage)) {
       panic!("Sending logs failed: {err}");
     }
   }
 
-  #[inline]
-  fn insert_log(
+  #[allow(clippy::vec_box)]
+  fn insert_logs(
     conn: &rusqlite::Connection,
-    storage: Box<LogFieldStorage>,
+    logs: Vec<Box<LogFieldStorage>>,
   ) -> Result<(), rusqlite::Error> {
-    #[cfg(test)]
-    if !storage.fields.is_empty() {
-      log::warn!("Dangling fields: {:?}", storage.fields);
-    }
-
     lazy_static::lazy_static! {
       static ref QUERY: String = indoc::formatdoc! {"
         INSERT INTO
@@ -322,27 +314,35 @@ impl SqliteLogLayer {
     }
 
     let mut stmt = conn.prepare_cached(&QUERY)?;
-    stmt.execute((
-      as_seconds_f64(
-        storage
-          .timestamp
-          .signed_duration_since(chrono::DateTime::UNIX_EPOCH),
-      ),
-      storage.status,
-      storage.method.as_str(),
-      storage.uri,
-      storage.latency_ms,
-      // client_ip is defined as NOT NULL in the schema :/.
-      storage.client_ip.unwrap_or_default(),
-      storage.referer,
-      storage.user_agent,
-      if storage.user_id > 0 {
-        rusqlite::types::Value::Blob(Uuid::from_u128(storage.user_id).into_bytes().to_vec())
-      } else {
-        rusqlite::types::Value::Null
-      },
-      // TODO: we're yet not writing extra JSON data to the data field.
-    ))?;
+
+    for log in logs {
+      #[cfg(test)]
+      if !log.fields.is_empty() {
+        log::warn!("Dangling fields: {:?}", log.fields);
+      }
+
+      stmt.execute((
+        as_seconds_f64(
+          log
+            .timestamp
+            .signed_duration_since(chrono::DateTime::UNIX_EPOCH),
+        ),
+        log.status,
+        log.method.as_str(),
+        log.uri,
+        log.latency_ms,
+        // client_ip is defined as NOT NULL in the schema :/.
+        log.client_ip.unwrap_or_default(),
+        log.referer,
+        log.user_agent,
+        if log.user_id > 0 {
+          rusqlite::types::Value::Blob(Uuid::from_u128(log.user_id).into())
+        } else {
+          rusqlite::types::Value::Null
+        },
+        // TODO: we're yet not writing extra JSON data to the data field.
+      ))?;
+    }
 
     return Ok(());
   }
