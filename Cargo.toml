@@ -4,6 +4,7 @@ members = [
   "client/trailbase-rs",
   "docs/examples/record_api_rs",
   "examples/custom-binary",
+  "trailbase-apalis",
   "trailbase-assets",
   "trailbase-cli",
   "trailbase-core",
@@ -14,6 +15,7 @@ members = [
 ]
 default-members = [
   "client/trailbase-rs",
+  "trailbase-apalis",
   "trailbase-assets",
   "trailbase-cli",
   "trailbase-core",
