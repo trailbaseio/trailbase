@@ -13,6 +13,8 @@ use apalis_core::{error::Error, request::State, response::Response};
 
 /// The context of the sql job
 pub mod context;
+/// Util for fetching rows
+pub mod from_row;
 
 /// Sqlite Storage for apalis.
 /// Uses a transaction and min(rowid)
@@ -199,18 +201,15 @@ macro_rules! sql_storage_tests {
         .unwrap();
 
       let (job_id, res) = storage.execute_next().await.unwrap();
+
       assert_eq!(res, Err("AbortError: Invalid character.".to_owned()));
       apalis_core::sleep(Duration::from_secs(1)).await;
-      let job = storage
-        .fetch_by_id(&job_id)
-        .await
-        .unwrap()
-        .expect("No job found");
+      let job = storage.fetch_by_id(&job_id).await.unwrap().unwrap();
       let ctx = job.parts.context;
       assert_eq!(*ctx.status(), State::Killed);
       // assert!(ctx.done_at().is_some());
       assert_eq!(
-        ctx.last_error().clone().unwrap(),
+        ctx.last_error().clone().expect("error"),
         "{\"Err\":\"AbortError: Invalid character.\"}"
       );
     }
@@ -221,12 +220,16 @@ macro_rules! sql_storage_tests {
       storage
         .push(email_service::example_good_email())
         .await
-        .unwrap();
+        .expect("email");
 
-      let (job_id, res) = storage.execute_next().await.unwrap();
+      let (job_id, res) = storage.execute_next().await.expect("exec next");
       assert_eq!(res, Ok("()".to_owned()));
       apalis_core::sleep(Duration::from_secs(1)).await;
-      let job = storage.fetch_by_id(&job_id).await.unwrap().unwrap();
+      let job = storage
+        .fetch_by_id(&job_id)
+        .await
+        .expect("result")
+        .expect("job");
       let ctx = job.parts.context;
       assert_eq!(*ctx.status(), State::Done);
       assert!(ctx.done_at().is_some());
