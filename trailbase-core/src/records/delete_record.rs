@@ -63,7 +63,7 @@ mod test {
   use crate::config::proto::PermissionFlag;
   use crate::extract::Either;
   use crate::records::create_record::{
-    create_record_handler, CreateRecordQuery, CreateRecordResponse,
+    CreateRecordQuery, CreateRecordResponse, create_record_handler,
   };
   use crate::records::test_utils::*;
   use crate::records::*;

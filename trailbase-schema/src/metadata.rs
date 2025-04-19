@@ -310,7 +310,7 @@ pub fn find_file_column_indexes(json_column_metadata: &[Option<JsonColumnMetadat
   let mut indexes: Vec<usize> = vec![];
 
   for (index, column) in json_column_metadata.iter().enumerate() {
-    if let Some(ref metadata) = column {
+    if let Some(metadata) = column {
       match metadata {
         JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
           indexes.push(index);
@@ -431,7 +431,7 @@ fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<u
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::sqlite::{sqlite3_parse_into_statement, Table};
+  use crate::sqlite::{Table, sqlite3_parse_into_statement};
 
   #[test]
   fn test_parse_create_view() {

@@ -5,9 +5,9 @@ use trailbase_sqlite::params;
 use ts_rs::TS;
 use utoipa::ToSchema;
 
+use crate::auth::AuthError;
 use crate::auth::tokens::mint_new_tokens;
 use crate::auth::util::derive_pkce_code_challenge;
-use crate::auth::AuthError;
 use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::{app_state::AppState, auth::user::DbUser};
 

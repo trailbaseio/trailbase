@@ -1,6 +1,6 @@
 use axum::{
-  routing::{delete, get, patch, post},
   Router,
+  routing::{delete, get, patch, post},
 };
 use utoipa::OpenApi;
 
@@ -24,9 +24,9 @@ pub(crate) use error::RecordError;
 pub use record_api::RecordApi;
 pub(crate) use validate::validate_record_api_config;
 
+use crate::AppState;
 use crate::config::proto::PermissionFlag;
 use crate::constants::RECORD_API_PATH;
-use crate::AppState;
 
 #[derive(OpenApi)]
 #[openapi(

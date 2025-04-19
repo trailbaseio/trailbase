@@ -9,8 +9,8 @@ use trailbase_sqlite::params;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
-use crate::auth::util::{user_by_email, validate_redirects};
 use crate::auth::AuthError;
+use crate::auth::util::{user_by_email, validate_redirects};
 use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;
 use crate::rand::generate_random_string;

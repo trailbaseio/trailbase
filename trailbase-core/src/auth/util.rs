@@ -3,17 +3,17 @@ use chrono::Duration;
 use lazy_static::lazy_static;
 use sha2::{Digest, Sha256};
 use tower_cookies::{
-  cookie::{self, SameSite},
   Cookie, Cookies,
+  cookie::{self, SameSite},
 };
 use trailbase_sqlite::params;
 
-use crate::auth::user::{DbUser, User};
+use crate::AppState;
 use crate::auth::AuthError;
+use crate::auth::user::{DbUser, User};
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, SESSION_TABLE, USER_TABLE,
 };
-use crate::AppState;
 
 pub(crate) fn validate_redirects(
   state: &AppState,

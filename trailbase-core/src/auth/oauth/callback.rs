@@ -11,18 +11,18 @@ use tower_cookies::Cookies;
 use trailbase_sqlite::{named_params, params};
 use uuid::Uuid;
 
-use crate::auth::oauth::state::{OAuthState, ResponseType};
+use crate::AppState;
+use crate::auth::AuthError;
 use crate::auth::oauth::OAuthUser;
-use crate::auth::tokens::{mint_new_tokens, FreshTokens};
+use crate::auth::oauth::state::{OAuthState, ResponseType};
+use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
 use crate::auth::util::{new_cookie, remove_cookie, user_by_id, validate_redirects};
-use crate::auth::AuthError;
 use crate::config::proto::OAuthProviderId;
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, USER_TABLE, VERIFICATION_CODE_LENGTH,
 };
 use crate::rand::generate_random_string;
-use crate::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct AuthRequest {

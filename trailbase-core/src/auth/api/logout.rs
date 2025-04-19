@@ -8,12 +8,12 @@ use tower_cookies::Cookies;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
+use crate::AppState;
+use crate::auth::AuthError;
 use crate::auth::user::User;
 use crate::auth::util::{
   delete_all_sessions_for_user, delete_session, remove_all_cookies, validate_redirects,
 };
-use crate::auth::AuthError;
-use crate::AppState;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub struct LogoutQuery {

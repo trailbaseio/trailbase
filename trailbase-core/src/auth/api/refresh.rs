@@ -4,8 +4,8 @@ use ts_rs::TS;
 use utoipa::ToSchema;
 
 use crate::app_state::AppState;
-use crate::auth::tokens::reauth_with_refresh_token;
 use crate::auth::AuthError;
+use crate::auth::tokens::reauth_with_refresh_token;
 
 #[derive(Debug, Deserialize, ToSchema, TS)]
 #[ts(export)]

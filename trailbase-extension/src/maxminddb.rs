@@ -1,8 +1,8 @@
 use arc_swap::ArcSwap;
 use maxminddb::{MaxMindDbError, Reader};
+use rusqlite::Error;
 use rusqlite::functions::Context;
 use rusqlite::types::ValueRef;
-use rusqlite::Error;
 use std::net::IpAddr;
 use std::path::Path;
 use std::sync::LazyLock;

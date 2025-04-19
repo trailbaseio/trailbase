@@ -1,4 +1,4 @@
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 use trailbase_schema::sqlite::Table;
 use ts_rs::TS;

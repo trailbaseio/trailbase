@@ -1,4 +1,4 @@
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
 use trailbase_schema::sqlite::sqlite3_parse_into_statement;

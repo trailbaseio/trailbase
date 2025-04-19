@@ -3,8 +3,8 @@ use rusqlite::hooks::PreUpdateCase;
 use serde::Deserialize;
 use std::borrow::Cow;
 
-use crate::connection::{extract_row_id, Connection, Error, Options};
-use crate::{named_params, params, Value, ValueType};
+use crate::connection::{Connection, Error, Options, extract_row_id};
+use crate::{Value, ValueType, named_params, params};
 use rusqlite::ErrorCode;
 
 #[tokio::test]

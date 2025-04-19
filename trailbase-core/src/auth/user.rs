@@ -5,9 +5,9 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::auth::AuthError;
 use crate::auth::jwt::TokenClaims;
 use crate::auth::tokens::extract_tokens_from_request_parts;
-use crate::auth::AuthError;
 use crate::{app_state::AppState, util::b64_to_uuid};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -149,7 +149,7 @@ where
 mod tests {
   use super::*;
   use axum::body::Body;
-  use axum::http::{header, Request};
+  use axum::http::{Request, header};
 
   use crate::admin::user::create_user_for_test;
   use crate::app_state::test_state;

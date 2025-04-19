@@ -2,8 +2,8 @@
 mod tests {
   use trailbase_sqlite::params;
 
-  use crate::records::params::JsonRow;
   use crate::AppState;
+  use crate::records::params::JsonRow;
 
   pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), anyhow::Error> {
     // Create a messages, chat room and members tables.

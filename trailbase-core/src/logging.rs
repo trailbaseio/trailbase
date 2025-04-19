@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::http::{header, Request};
+use axum::http::{Request, header};
 use axum::response::Response;
 use axum_client_ip::InsecureClientIp;
 use futures_util::StreamExt;
@@ -7,14 +7,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
+use tracing::Level;
 use tracing::field::Field;
 use tracing::span::{Attributes, Id, Record, Span};
-use tracing::Level;
 use tracing_subscriber::layer::{Context, Layer};
 use uuid::Uuid;
 
-use crate::util::get_header;
 use crate::AppState;
+use crate::util::get_header;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 enum HttpMethod {

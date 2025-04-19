@@ -1,8 +1,8 @@
 use jsonschema::Validator;
 use lru::LruCache;
 use parking_lot::Mutex;
-use rusqlite::functions::Context;
 use rusqlite::Error;
+use rusqlite::functions::Context;
 use std::collections::HashMap;
 use std::ffi;
 use std::num::NonZeroUsize;
@@ -235,12 +235,14 @@ mod tests {
     }
 
     {
-      assert!(conn
-        .execute(
-          r#"INSERT INTO test (text0, text1) VALUES ('{"name": "foo", "age": -5}', '"text"')"#,
-          params!(),
-        )
-        .is_err());
+      assert!(
+        conn
+          .execute(
+            r#"INSERT INTO test (text0, text1) VALUES ('{"name": "foo", "age": -5}', '"text"')"#,
+            params!(),
+          )
+          .is_err()
+      );
     }
   }
 
@@ -299,11 +301,13 @@ mod tests {
       )
       .unwrap();
 
-    assert!(conn
-      .execute(
-        r#"INSERT INTO test (text0) VALUES ('{"name": "WRONG_PREFIX_foo"}')"#,
-        params!(),
-      )
-      .is_err());
+    assert!(
+      conn
+        .execute(
+          r#"INSERT INTO test (text0) VALUES ('{"name": "WRONG_PREFIX_foo"}')"#,
+          params!(),
+        )
+        .is_err()
+    );
   }
 }

@@ -187,7 +187,7 @@ fn sqlite3_extension_init(db: rusqlite::Connection) -> rusqlite::Result<rusqlite
 }
 
 #[allow(unsafe_code)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn init_sqlean_and_vector_search(
   db: *mut rusqlite::ffi::sqlite3,
   _pz_err_msg: *mut *mut std::os::raw::c_char,
@@ -267,21 +267,25 @@ mod test {
       .unwrap();
 
     // V4 fails
-    assert!(conn
-      .execute(
-        "INSERT INTO test (id) VALUES (?1) ",
-        rusqlite::params!(Uuid::new_v4().into_bytes())
-      )
-      .is_err());
+    assert!(
+      conn
+        .execute(
+          "INSERT INTO test (id) VALUES (?1) ",
+          rusqlite::params!(Uuid::new_v4().into_bytes())
+        )
+        .is_err()
+    );
 
     // V7 succeeds
     let id = Uuid::now_v7();
-    assert!(conn
-      .execute(
-        "INSERT INTO test (id) VALUES (?1) ",
-        rusqlite::params!(id.into_bytes())
-      )
-      .is_ok());
+    assert!(
+      conn
+        .execute(
+          "INSERT INTO test (id) VALUES (?1) ",
+          rusqlite::params!(id.into_bytes())
+        )
+        .is_ok()
+    );
 
     let read_id: Uuid = conn
       .query_row("SELECT id FROM test LIMIT 1", [], |row| {

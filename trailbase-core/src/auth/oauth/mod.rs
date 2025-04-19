@@ -9,8 +9,8 @@ mod state;
 #[cfg(test)]
 mod oauth_test;
 
-use axum::routing::get;
 use axum::Router;
+use axum::routing::get;
 
 pub(crate) use provider::{OAuthClientSettings, OAuthProvider, OAuthUser};
 

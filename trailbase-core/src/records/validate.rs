@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use trailbase_schema::sqlite::ColumnOption;
 
-use crate::config::{proto, ConfigError};
+use crate::config::{ConfigError, proto};
 use crate::records::record_api::validate_rule;
 use crate::table_metadata::{TableMetadataCache, TableOrViewMetadata};
 

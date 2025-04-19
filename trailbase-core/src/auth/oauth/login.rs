@@ -8,11 +8,11 @@ use serde::Deserialize;
 use tower_cookies::Cookies;
 use utoipa::IntoParams;
 
+use crate::AppState;
+use crate::auth::AuthError;
 use crate::auth::oauth::state::{OAuthState, ResponseType};
 use crate::auth::util::{new_cookie_opts, validate_redirects};
-use crate::auth::AuthError;
 use crate::constants::COOKIE_OAUTH_STATE;
-use crate::AppState;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub(crate) struct LoginQuery {

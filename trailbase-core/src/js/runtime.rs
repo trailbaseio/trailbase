@@ -1,13 +1,13 @@
+use axum::Router;
 use axum::body::Body;
 use axum::extract::{RawPathParams, Request};
-use axum::http::{header::CONTENT_TYPE, request::Parts, HeaderName, HeaderValue, StatusCode};
+use axum::http::{HeaderName, HeaderValue, StatusCode, header::CONTENT_TYPE, request::Parts};
 use axum::response::{IntoResponse, Response};
-use axum::Router;
 use log::*;
 use parking_lot::Mutex;
 use rustyscript::{
-  deno_core::PollEventLoopOptions, init_platform, js_value::Promise, json_args, Error as RSError,
-  Module, Runtime,
+  Error as RSError, Module, Runtime, deno_core::PollEventLoopOptions, init_platform,
+  js_value::Promise, json_args,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::from_value;

@@ -1,7 +1,7 @@
 use askama::Template;
 use axum::{
-  extract::{Path, RawQuery, State},
   Json,
+  extract::{Path, RawQuery, State},
 };
 use itertools::Itertools;
 use serde::Serialize;
@@ -10,8 +10,8 @@ use trailbase_sqlite::Value;
 
 use crate::auth::user::User;
 use crate::listing::{
-  build_filter_where_clause, limit_or_default, parse_and_sanitize_query, Order, QueryParseResult,
-  WhereClause,
+  Order, QueryParseResult, WhereClause, build_filter_where_clause, limit_or_default,
+  parse_and_sanitize_query,
 };
 use crate::records::query_builder::ExpandedTable;
 use crate::records::sql_to_json::{row_to_json, row_to_json_expand, rows_to_json_expand};
@@ -272,10 +272,10 @@ mod tests {
   use crate::auth::api::login::login_with_password;
   use crate::auth::user::User;
   use crate::config::proto::PermissionFlag;
+  use crate::records::Acls;
   use crate::records::query_builder::expand_tables;
   use crate::records::test_utils::*;
-  use crate::records::Acls;
-  use crate::records::{add_record_api, AccessRules, RecordError};
+  use crate::records::{AccessRules, RecordError, add_record_api};
   use crate::table_metadata::TableMetadataCache;
   use crate::util::id_to_b64;
   use crate::util::urlencode;

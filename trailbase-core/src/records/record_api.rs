@@ -5,16 +5,16 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use trailbase_schema::metadata::{
-  find_file_column_indexes, find_user_id_foreign_key_columns, JsonColumnMetadata, TableMetadata,
-  TableOrViewMetadata, ViewMetadata,
+  JsonColumnMetadata, TableMetadata, TableOrViewMetadata, ViewMetadata, find_file_column_indexes,
+  find_user_id_foreign_key_columns,
 };
-use trailbase_schema::sqlite::{sqlite3_parse_into_statement, Column, ColumnDataType};
+use trailbase_schema::sqlite::{Column, ColumnDataType, sqlite3_parse_into_statement};
 use trailbase_sqlite::{NamedParamRef, NamedParams, Params as _, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
 use crate::constants::USER_TABLE;
-use crate::records::params::{prefix_colon, LazyParams};
+use crate::records::params::{LazyParams, prefix_colon};
 use crate::records::{Permission, RecordError};
 use crate::util::{assert_uuidv7, b64_to_id};
 

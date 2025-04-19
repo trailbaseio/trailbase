@@ -1,7 +1,7 @@
 use axum::extract::{Json, Path, Query, State};
 use serde::Deserialize;
 use trailbase_schema::json_schema::{
-  build_json_schema, build_json_schema_expanded, Expand, JsonSchemaMode,
+  Expand, JsonSchemaMode, build_json_schema, build_json_schema_expanded,
 };
 
 use crate::app_state::AppState;

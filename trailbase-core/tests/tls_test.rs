@@ -1,5 +1,5 @@
-use rcgen::{generate_simple_self_signed, CertifiedKey};
-use tokio_rustls::rustls::pki_types::{pem::PemObject, PrivateKeyDer};
+use rcgen::{CertifiedKey, generate_simple_self_signed};
+use tokio_rustls::rustls::pki_types::{PrivateKeyDer, pem::PemObject};
 use tracing::*;
 use trailbase::{DataDir, Server, ServerOptions};
 

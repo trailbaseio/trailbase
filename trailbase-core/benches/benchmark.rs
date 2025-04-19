@@ -1,6 +1,6 @@
 #![allow(clippy::needless_return)]
 
-use criterion::{criterion_group, criterion_main, Bencher, Criterion, Throughput};
+use criterion::{Bencher, Criterion, Throughput, criterion_group, criterion_main};
 
 use axum::body::Body;
 use axum::extract::{Json, State};
@@ -10,10 +10,10 @@ use hyper::StatusCode;
 use std::time::{Duration, Instant};
 use tower::{Service, ServiceExt};
 
-use trailbase::api::{create_user_handler, login_with_password, CreateUserRequest};
+use trailbase::AppState;
+use trailbase::api::{CreateUserRequest, create_user_handler, login_with_password};
 use trailbase::config::proto::{PermissionFlag, RecordApiConfig};
 use trailbase::constants::RECORD_API_PATH;
-use trailbase::AppState;
 use trailbase::{DataDir, Server, ServerOptions};
 use trailbase_sqlite::params;
 

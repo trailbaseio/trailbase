@@ -14,7 +14,7 @@ mod drop_table;
 
 pub(crate) use alter_table::alter_table_handler;
 #[allow(unused)]
-pub(crate) use create_table::{create_table_handler, CreateTableRequest};
+pub(crate) use create_table::{CreateTableRequest, create_table_handler};
 pub(crate) use drop_table::drop_table_handler;
 
 // Lists both Tables and Indexes

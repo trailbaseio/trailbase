@@ -1,7 +1,7 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use trailbase::api::JsonSchemaMode;
 use trailbase::DataDir;
+use trailbase::api::JsonSchemaMode;
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
 pub enum JsonSchemaModeArg {

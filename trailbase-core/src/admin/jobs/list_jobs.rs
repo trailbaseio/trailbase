@@ -1,9 +1,9 @@
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use serde::Serialize;
 use ts_rs::TS;
 
-use crate::admin::AdminError as Error;
 use crate::AppState;
+use crate::admin::AdminError as Error;
 
 #[derive(Debug, Serialize, TS)]
 pub struct Job {

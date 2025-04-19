@@ -1,15 +1,15 @@
 use askama::Template;
+use axum::Router;
 use axum::extract::Query;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::routing::get;
-use axum::Router;
 use reqwest::StatusCode;
 use serde::Deserialize;
+use trailbase_assets::AssetService;
 use trailbase_assets::auth::{
   ChangeEmailTemplate, ChangePasswordTemplate, LoginTemplate, RegisterTemplate,
   ResetPasswordRequestTemplate, ResetPasswordUpdateTemplate,
 };
-use trailbase_assets::AssetService;
 
 use crate::auth::User;
 

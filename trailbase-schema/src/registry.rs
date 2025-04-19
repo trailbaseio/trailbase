@@ -14,7 +14,7 @@ fn builtin_schemas() -> &'static HashMap<String, SchemaEntry> {
       return true;
     };
 
-    if let serde_json::Value::Object(ref map) = value {
+    if let serde_json::Value::Object(map) = value {
       if let Some(serde_json::Value::String(mime_type)) = map.get("mime_type") {
         if valid_mime_types.contains(mime_type) {
           return true;
@@ -168,18 +168,20 @@ mod tests {
     {
       let schema = get_schema("std.FileUploads").unwrap();
       let compiled_schema = Validator::new(&schema.schema).unwrap();
-      assert!(compiled_schema
-        .validate(&json!([
-          {
-            "id": "foo0",
-            "mime_type": "my_foo0",
-          },
-          {
-            "id": "foo1",
-            "mime_type": "my_foo1",
-          },
-        ]))
-        .is_ok());
+      assert!(
+        compiled_schema
+          .validate(&json!([
+            {
+              "id": "foo0",
+              "mime_type": "my_foo0",
+            },
+            {
+              "id": "foo1",
+              "mime_type": "my_foo1",
+            },
+          ]))
+          .is_ok()
+      );
     }
   }
 }

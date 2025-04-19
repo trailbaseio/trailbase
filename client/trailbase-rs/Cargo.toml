@@ -1,7 +1,7 @@
 [package]
 name = "trailbase-client"
 version = "0.4.0"
-edition = "2021"
+edition = "2024"
 license = "OSL-3.0"
 description = "Client for accessing TrailBase's record APIs"
 homepage = "https://trailbase.io"

@@ -3,9 +3,9 @@ use itertools::Itertools;
 use log::*;
 use serde::{Deserialize, Serialize};
 use sqlite3_parser::ast::{
-  fmt::ToTokens, ColumnDefinition, CreateTableBody, DeferSubclause, Expr, ForeignKeyClause,
-  FromClause, IndexedColumn, Literal, Name, QualifiedName, SelectTable, Stmt, TableConstraint,
-  TableOptions,
+  ColumnDefinition, CreateTableBody, DeferSubclause, Expr, ForeignKeyClause, FromClause,
+  IndexedColumn, Literal, Name, QualifiedName, SelectTable, Stmt, TableConstraint, TableOptions,
+  fmt::ToTokens,
 };
 use std::collections::HashMap;
 use thiserror::Error;
@@ -127,7 +127,8 @@ impl ForeignKey {
 
     return if let Some(ref name) = self.name {
       format!(
-      "CONSTRAINT '{name}' FOREIGN KEY ({cols}) REFERENCES '{foreign_table}'{ref_col} {on_delete} {on_update}")
+        "CONSTRAINT '{name}' FOREIGN KEY ({cols}) REFERENCES '{foreign_table}'{ref_col} {on_delete} {on_update}"
+      )
     } else {
       format!("FOREIGN KEY ({cols}) REFERENCES '{foreign_table}'{ref_col} {on_delete} {on_update}")
     };
@@ -1531,7 +1532,9 @@ mod tests {
         .iter()
         .map(|m| m.referred_column.as_ref().unwrap().column_name.as_str())
         .collect::<Vec<_>>(),
-      ["user", "id", "author", "body", "user", "username", "id", "author", "body", "user"]
+      [
+        "user", "id", "author", "body", "user", "username", "id", "author", "body", "user"
+      ]
     );
 
     assert_eq!(
@@ -1539,7 +1542,9 @@ mod tests {
         .iter()
         .map(|m| m.column.name.as_str())
         .collect::<Vec<_>>(),
-      ["user", "id", "author", "body", "user", "username", "id", "author", "body", "foo"]
+      [
+        "user", "id", "author", "body", "user", "username", "id", "author", "body", "foo"
+      ]
     );
   }
 }

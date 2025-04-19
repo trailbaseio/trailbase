@@ -9,10 +9,10 @@ use utoipa::ToSchema;
 use validator::ValidateEmail;
 
 use crate::app_state::AppState;
+use crate::auth::AuthError;
 use crate::auth::password::{hash_password, validate_passwords};
 use crate::auth::user::DbUser;
 use crate::auth::util::user_exists;
-use crate::auth::AuthError;
 use crate::constants::{PASSWORD_OPTIONS, USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;
 use crate::rand::generate_random_string;

@@ -1,9 +1,9 @@
 use argon2::{
-  password_hash::{rand_core::OsRng, SaltString},
   Argon2, PasswordHasher,
+  password_hash::{SaltString, rand_core::OsRng},
 };
-use rusqlite::functions::Context;
 use rusqlite::Error;
+use rusqlite::functions::Context;
 
 pub fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
   let salt = SaltString::generate(&mut OsRng);

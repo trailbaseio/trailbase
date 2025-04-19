@@ -235,7 +235,7 @@ mod tests {
   use super::*;
   use crate::app_state::*;
   use crate::constants::USER_TABLE;
-  use crate::table_metadata::{lookup_and_parse_table_schema, TableMetadata};
+  use crate::table_metadata::{TableMetadata, lookup_and_parse_table_schema};
 
   #[tokio::test]
   async fn test_read_rows() {

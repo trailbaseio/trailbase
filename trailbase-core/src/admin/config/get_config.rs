@@ -4,7 +4,7 @@ use axum_extra::protobuf::Protobuf;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::config::{
-  proto::{hash_config, GetConfigResponse},
+  proto::{GetConfigResponse, hash_config},
   redact_secrets,
 };
 

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 
-use crate::app_state::{build_objectstore, AppState, AppStateArgs};
+use crate::app_state::{AppState, AppStateArgs, build_objectstore};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;

@@ -1,12 +1,12 @@
 use crate::context::SqlContext;
-use crate::{calculate_status, Config, SqlError};
+use crate::{Config, SqlError, calculate_status};
 use apalis_core::backend::{BackendExpose, Stat, WorkerState};
 use apalis_core::codec::json::JsonCodec;
 use apalis_core::error::Error;
 use apalis_core::layers::{Ack, AckLayer};
+use apalis_core::poller::Poller;
 use apalis_core::poller::controller::Controller;
 use apalis_core::poller::stream::BackendStream;
-use apalis_core::poller::Poller;
 use apalis_core::request::{Parts, Request, RequestStream, State};
 use apalis_core::response::Response;
 use apalis_core::storage::Storage;
@@ -18,7 +18,7 @@ use async_stream::try_stream;
 use chrono::{DateTime, Utc};
 use futures::{FutureExt, Stream, StreamExt, TryFutureExt, TryStreamExt};
 use log::error;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::any::type_name;
 use std::convert::TryInto;
 use std::fmt;
@@ -28,7 +28,7 @@ use std::{marker::PhantomData, time::Duration};
 
 pub use trailbase_sqlite::Connection;
 
-use crate::from_row::{from_row, SqlRequest};
+use crate::from_row::{SqlRequest, from_row};
 
 /// Represents a [Storage] that persists to Sqlite
 pub struct SqliteStorage<T, C = JsonCodec<String>> {
@@ -221,7 +221,8 @@ where
     worker: &Worker<Context>,
     interval: Duration,
     buffer_size: usize,
-  ) -> impl Stream<Item = Result<Option<Request<T, SqlContext>>, trailbase_sqlite::Error>> {
+  ) -> impl Stream<Item = Result<Option<Request<T, SqlContext>>, trailbase_sqlite::Error>> + use<T, C>
+  {
     const FETCH_QUERY : &str = "SELECT id FROM Jobs
           WHERE (status = 'Pending' OR (status = 'Failed' AND attempts < max_attempts)) AND run_at < ?1 AND job_type = ?2 ORDER BY priority DESC LIMIT ?3";
 
@@ -287,7 +288,7 @@ where
     &mut self,
     job: Request<Self::Job, SqlContext>,
   ) -> Result<Parts<SqlContext>, Self::Error> {
-    const QUERY : &str = "INSERT INTO Jobs VALUES (?1, ?2, ?3, 'Pending', 0, ?4, strftime('%s','now'), NULL, NULL, NULL, NULL, ?5)";
+    const QUERY: &str = "INSERT INTO Jobs VALUES (?1, ?2, ?3, 'Pending', 0, ?4, strftime('%s','now'), NULL, NULL, NULL, NULL, ?5)";
     let (task, parts) = job.take_parts();
     let raw = C::encode(&task).map_err(|e| trailbase_sqlite::Error::Other(e.into()))?;
     let job_type = self.config.namespace.clone();
@@ -313,7 +314,7 @@ where
     &mut self,
     job: Request<Self::Compact, SqlContext>,
   ) -> Result<Parts<SqlContext>, Self::Error> {
-    const QUERY :&str  = "INSERT INTO Jobs VALUES (?1, ?2, ?3, 'Pending', 0, ?4, strftime('%s','now'), NULL, NULL, NULL, NULL, ?5)";
+    const QUERY: &str = "INSERT INTO Jobs VALUES (?1, ?2, ?3, 'Pending', 0, ?4, strftime('%s','now'), NULL, NULL, NULL, NULL, ?5)";
     let (task, parts) = job.take_parts();
     let raw = C::encode(&task).map_err(|e| trailbase_sqlite::Error::Other(e.into()))?;
 
@@ -388,7 +389,7 @@ where
   }
 
   async fn len(&mut self) -> Result<i64, Self::Error> {
-    const QUERY : &str = "SELECT COUNT(*) AS count FROM Jobs WHERE (status = 'Pending' OR (status = 'Failed' AND attempts < max_attempts))";
+    const QUERY: &str = "SELECT COUNT(*) AS count FROM Jobs WHERE (status = 'Pending' OR (status = 'Failed' AND attempts < max_attempts))";
 
     let count: Option<i64> = self
       .conn
@@ -405,8 +406,7 @@ where
   ) -> Result<(), Self::Error> {
     let task_id = job.parts.task_id;
 
-    const QUERY : &str =
-                "UPDATE Jobs SET status = 'Failed', done_at = NULL, lock_by = NULL, lock_at = NULL, run_at = ?2 WHERE id = ?1";
+    const QUERY: &str = "UPDATE Jobs SET status = 'Failed', done_at = NULL, lock_by = NULL, lock_at = NULL, run_at = ?2 WHERE id = ?1";
 
     let wait: i64 = wait.as_secs() as i64;
     let now: i64 = Utc::now().timestamp();
@@ -434,8 +434,7 @@ where
     let priority = *ctx.priority();
     let job_id = job.parts.task_id;
 
-    const QUERY : &str =
-                "UPDATE Jobs SET status = ?1, attempts = ?2, done_at = ?3, lock_by = ?4, lock_at = ?5, last_error = ?6, priority = ?7 WHERE id = ?8";
+    const QUERY: &str = "UPDATE Jobs SET status = ?1, attempts = ?2, done_at = ?3, lock_by = ?4, lock_at = ?5, last_error = ?6, priority = ?7 WHERE id = ?8";
 
     self
       .conn
@@ -478,8 +477,7 @@ impl<T, C> SqliteStorage<T, C> {
     worker_id: &WorkerId,
     job_id: &TaskId,
   ) -> Result<(), trailbase_sqlite::Error> {
-    const QUERY : &str =
-                "UPDATE Jobs SET status = 'Pending', done_at = NULL, lock_by = NULL WHERE id = ?1 AND lock_by = ?2";
+    const QUERY: &str = "UPDATE Jobs SET status = 'Pending', done_at = NULL, lock_by = NULL WHERE id = ?1 AND lock_by = ?2";
 
     self
       .conn
@@ -497,8 +495,7 @@ impl<T, C> SqliteStorage<T, C> {
     worker_id: &WorkerId,
     job_id: &TaskId,
   ) -> Result<(), trailbase_sqlite::Error> {
-    const QUERY : &str =
-                "UPDATE Jobs SET status = 'Killed', done_at = strftime('%s','now') WHERE id = ?1 AND lock_by = ?2";
+    const QUERY: &str = "UPDATE Jobs SET status = 'Killed', done_at = strftime('%s','now') WHERE id = ?1 AND lock_by = ?2";
 
     self
       .conn
@@ -632,8 +629,7 @@ impl<T: Sync + Send, C: Send, Res: Serialize + Sync> Ack<T, Res, C> for SqliteSt
     res: &Response<Res>,
   ) -> Result<(), trailbase_sqlite::Error> {
     let conn = self.conn.clone();
-    const QUERY : &str =
-                "UPDATE Jobs SET status = ?4, attempts = ?5, done_at = strftime('%s','now'), last_error = ?3 WHERE id = ?1 AND lock_by = ?2";
+    const QUERY: &str = "UPDATE Jobs SET status = ?4, attempts = ?5, done_at = strftime('%s','now'), last_error = ?3 WHERE id = ?1 AND lock_by = ?2";
     let result = serde_json::to_string(&res.inner.as_ref().map_err(|r| r.to_string()))
       .map_err(|e| trailbase_sqlite::Error::Other(e.into()))?;
 
@@ -703,7 +699,7 @@ impl<J: 'static + Serialize + DeserializeOwned + Unpin + Send + Sync> BackendExp
   }
 
   async fn list_jobs(&self, status: &State, page: i32) -> Result<Vec<Self::Request>, Self::Error> {
-    const FETCH_QUERY : &str = "SELECT * FROM Jobs WHERE status = ? AND job_type = ? ORDER BY done_at DESC, run_at DESC LIMIT 10 OFFSET ?";
+    const FETCH_QUERY: &str = "SELECT * FROM Jobs WHERE status = ? AND job_type = ? ORDER BY done_at DESC, run_at DESC LIMIT 10 OFFSET ?";
 
     let status = status.to_string();
     let res: Vec<SqlRequest<String>> = self
@@ -730,8 +726,7 @@ impl<J: 'static + Serialize + DeserializeOwned + Unpin + Send + Sync> BackendExp
   }
 
   async fn list_workers(&self) -> Result<Vec<Worker<WorkerState>>, Self::Error> {
-    const FETCH_QUERY : &str =
-            "SELECT id, layers, last_seen FROM Workers WHERE worker_type = ? ORDER BY last_seen DESC LIMIT 20 OFFSET ?";
+    const FETCH_QUERY: &str = "SELECT id, layers, last_seen FROM Workers WHERE worker_type = ? ORDER BY last_seen DESC LIMIT 20 OFFSET ?";
 
     let res: Vec<(String, String, i64)> = self
       .conn
@@ -757,8 +752,8 @@ mod tests {
 
   use apalis_core::generic_storage_test;
   use apalis_core::request::State;
-  use apalis_core::test_utils::apalis_test_service_fn;
   use apalis_core::test_utils::TestWrapper;
+  use apalis_core::test_utils::apalis_test_service_fn;
   use futures::StreamExt;
   use std::io;
 

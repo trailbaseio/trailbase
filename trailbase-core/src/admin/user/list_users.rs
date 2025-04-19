@@ -1,6 +1,6 @@
 use axum::{
-  extract::{RawQuery, State},
   Json,
+  extract::{RawQuery, State},
 };
 use lazy_static::lazy_static;
 use serde::Serialize;
@@ -13,8 +13,8 @@ use crate::app_state::AppState;
 use crate::auth::user::DbUser;
 use crate::constants::{USER_TABLE, USER_TABLE_ID_COLUMN};
 use crate::listing::{
-  build_filter_where_clause, limit_or_default, parse_and_sanitize_query, Cursor, Order,
-  QueryParseResult, WhereClause,
+  Cursor, Order, QueryParseResult, WhereClause, build_filter_where_clause, limit_or_default,
+  parse_and_sanitize_query,
 };
 use crate::util::id_to_b64;
 

@@ -1,6 +1,6 @@
 use rustyscript::deno_core::{
-  anyhow::{anyhow, Error},
   ModuleSpecifier, RequestedModuleType, ResolutionKind,
+  anyhow::{Error, anyhow},
 };
 use rustyscript::module_loader::ImportProvider;
 

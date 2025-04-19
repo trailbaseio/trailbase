@@ -1,6 +1,6 @@
+use rusqlite::Error;
 use rusqlite::functions::Context;
 use rusqlite::types::ValueRef;
-use rusqlite::Error;
 use uuid::Uuid;
 
 /// Checks that argument is a valid UUID blob or null.
@@ -113,21 +113,25 @@ mod tests {
     }
 
     {
-      assert!(conn
-        .execute(
-          "INSERT INTO test (uuid, uuid_v7) VALUES ($1, NULL)",
-          params!(b"")
-        )
-        .is_err());
+      assert!(
+        conn
+          .execute(
+            "INSERT INTO test (uuid, uuid_v7) VALUES ($1, NULL)",
+            params!(b"")
+          )
+          .is_err()
+      );
     }
 
     {
-      assert!(conn
-        .execute(
-          "INSERT INTO test (uuid, uuid_v7) VALUES (NULL, $1)",
-          params!(Vec::<u8>::from([0, 0, 1, 2, 3, 4, 5, 6]))
-        )
-        .is_err());
+      assert!(
+        conn
+          .execute(
+            "INSERT INTO test (uuid, uuid_v7) VALUES (NULL, $1)",
+            params!(Vec::<u8>::from([0, 0, 1, 2, 3, 4, 5, 6]))
+          )
+          .is_err()
+      );
     }
 
     {

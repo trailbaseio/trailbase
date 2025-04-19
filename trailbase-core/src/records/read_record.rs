@@ -1,7 +1,7 @@
 use axum::{
+  Json,
   extract::{Path, Query, State},
   response::Response,
-  Json,
 };
 use serde::Deserialize;
 
@@ -255,8 +255,8 @@ fn prefix_filter(col_name: &str) -> bool {
 
 #[cfg(test)]
 mod test {
-  use axum::extract::{Path, Query, State};
   use axum::Json;
+  use axum::extract::{Path, Query, State};
   use trailbase_schema::{FileUpload, FileUploadInput};
 
   use super::*;
@@ -268,7 +268,7 @@ mod test {
   use crate::constants::USER_TABLE;
   use crate::extract::Either;
   use crate::records::create_record::{
-    create_record_handler, CreateRecordQuery, CreateRecordResponse,
+    CreateRecordQuery, CreateRecordResponse, create_record_handler,
   };
   use crate::records::delete_record::delete_record_handler;
   use crate::records::params::JsonRow;
@@ -371,14 +371,16 @@ mod test {
         .unwrap();
 
       // No creds, no read
-      assert!(read_record_handler(
-        State(state.clone()),
-        Path(("messages_api".to_string(), id_to_b64(&message_id),)),
-        Query(ReadRecordQuery::default()),
-        None
-      )
-      .await
-      .is_err());
+      assert!(
+        read_record_handler(
+          State(state.clone()),
+          Path(("messages_api".to_string(), id_to_b64(&message_id),)),
+          Query(ReadRecordQuery::default()),
+          None
+        )
+        .await
+        .is_err()
+      );
 
       {
         // User X
@@ -627,13 +629,15 @@ mod test {
     }
     assert_eq!(dir_cnt, 0);
 
-    assert!(get_uploaded_file_from_record_handler(
-      State(state.clone()),
-      Path(record_file_path.clone()),
-      None,
-    )
-    .await
-    .is_err());
+    assert!(
+      get_uploaded_file_from_record_handler(
+        State(state.clone()),
+        Path(record_file_path.clone()),
+        None,
+      )
+      .await
+      .is_err()
+    );
   }
 
   #[tokio::test]

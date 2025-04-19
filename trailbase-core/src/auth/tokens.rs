@@ -8,10 +8,10 @@ use tower_cookies::Cookies;
 use trailbase_sqlite::params;
 
 use crate::app_state::AppState;
+use crate::auth::AuthError;
 use crate::auth::jwt::TokenClaims;
 use crate::auth::user::DbUser;
 use crate::auth::util::new_cookie;
-use crate::auth::AuthError;
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, HEADER_REFRESH_TOKEN, REFRESH_TOKEN_LENGTH,
   SESSION_TABLE, USER_TABLE,

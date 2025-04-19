@@ -3,7 +3,7 @@
 //! Ripped straight from axum::serve to add rustls support.
 
 use axum::{body::Body, extract::Request, response::Response};
-use futures_util::{pin_mut, FutureExt};
+use futures_util::{FutureExt, pin_mut};
 use hyper::body::Incoming;
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::{server::conn::auto::Builder, service::TowerToHyperService};
@@ -11,7 +11,7 @@ use log::*;
 use std::{
   convert::Infallible,
   fmt::Debug,
-  future::{poll_fn, Future, IntoFuture},
+  future::{Future, IntoFuture, poll_fn},
   io,
   marker::PhantomData,
   net::SocketAddr,
@@ -527,16 +527,16 @@ mod private {
 #[cfg(test)]
 mod tests {
   use std::{
-    future::{pending, IntoFuture as _},
+    future::{IntoFuture as _, pending},
     net::{IpAddr, Ipv4Addr},
   };
 
   use axum::http::StatusCode;
   use axum::{
-    body::{to_bytes, Body},
+    Router,
+    body::{Body, to_bytes},
     extract::Request,
     routing::get,
-    Router,
   };
   use hyper_util::rt::TokioIo;
   use tokio::{
@@ -544,7 +544,7 @@ mod tests {
     net::TcpListener,
   };
 
-  use super::{serve, Listener};
+  use super::{Listener, serve};
 
   #[allow(dead_code, unused_must_use)]
   async fn if_it_compiles_it_works() {

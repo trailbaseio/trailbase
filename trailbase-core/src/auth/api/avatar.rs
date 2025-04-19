@@ -1,5 +1,5 @@
 use axum::extract::{Json, Path, State};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Redirect, Response};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
@@ -8,9 +8,9 @@ use trailbase_sqlite::params;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
+use crate::auth::AuthError;
 use crate::auth::user::DbUser;
 use crate::auth::util::user_by_id;
-use crate::auth::AuthError;
 use crate::constants::{AVATAR_TABLE, RECORD_API_PATH};
 use crate::util::{assert_uuidv7_version, id_to_b64};
 
@@ -118,7 +118,7 @@ mod tests {
   use crate::constants::{AVATAR_TABLE, USER_TABLE};
   use crate::extract::Either;
   use crate::records::create_record::{
-    create_record_handler, CreateRecordQuery, CreateRecordResponse,
+    CreateRecordQuery, CreateRecordResponse, create_record_handler,
   };
   use crate::records::read_record::get_uploaded_file_from_record_handler;
   use crate::test::unpack_json_response;
@@ -262,13 +262,15 @@ mod tests {
     );
 
     // Test non png/jpeg types will be rejected
-    assert!(upload_avatar(
-      &state,
-      User::from_auth_token(&state, &user_x_token.auth_token),
-      b"<html><body>Body 0</body></html>",
-    )
-    .await
-    .is_err());
+    assert!(
+      upload_avatar(
+        &state,
+        User::from_auth_token(&state, &user_x_token.auth_token),
+        b"<html><body>Body 0</body></html>",
+      )
+      .await
+      .is_err()
+    );
 
     let avatar_response = get_avatar_url_handler(
       State(state.clone()),

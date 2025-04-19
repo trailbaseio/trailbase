@@ -6,12 +6,12 @@ use trailbase_schema::sqlite::{Column, ColumnOption};
 use trailbase_schema::{FileUpload, FileUploads};
 use trailbase_sqlite::{NamedParams, Params as _, Value};
 
+use crate::AppState;
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
-use crate::records::files::{delete_pending_files, FileManager};
+use crate::records::files::{FileManager, delete_pending_files};
 use crate::records::params::{FileMetadataContents, Params};
 use crate::table_metadata::{JsonColumnMetadata, TableMetadata, TableMetadataCache};
-use crate::AppState;
 
 #[derive(Debug, thiserror::Error)]
 pub enum QueryError {

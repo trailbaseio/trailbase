@@ -1,4 +1,4 @@
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use serde::Serialize;
 use ts_rs::TS;
 

@@ -1,16 +1,16 @@
 use axum::{
+  Json,
   extract::State,
   http::StatusCode,
   response::{IntoResponse, Response},
-  Json,
 };
 use lazy_static::lazy_static;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::admin::user::is_demo_admin;
 use crate::admin::AdminError as Error;
+use crate::admin::user::is_demo_admin;
 use crate::app_state::AppState;
 use crate::auth::password::hash_password;
 use crate::constants::USER_TABLE;

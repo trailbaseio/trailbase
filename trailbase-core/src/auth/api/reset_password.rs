@@ -16,10 +16,10 @@ use crate::email::Email;
 use crate::extract::Either;
 use crate::rand::generate_random_string;
 
+use crate::auth::AuthError;
 use crate::auth::api::register::validate_and_normalize_email_address;
 use crate::auth::password::{hash_password, validate_passwords};
 use crate::auth::util::user_by_email;
-use crate::auth::AuthError;
 
 const TTL_SEC: i64 = 3600;
 const RATE_LIMIT_SEC: i64 = 4 * 3600;

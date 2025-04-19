@@ -2,9 +2,9 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+use crate::auth::AuthError;
 use crate::auth::oauth::providers::OAuthProviderFactory;
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::auth::AuthError;
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
 // TODO: Add name/display name and this would already be a generic CustomOAuthProvider.

@@ -1,7 +1,7 @@
 use axum::{
   extract::{FromRef, State},
   response::{Html, IntoResponse, Response},
-  routing::{get, Router},
+  routing::{Router, get},
 };
 use trailbase::{AppState, DataDir, Server, ServerOptions, User};
 

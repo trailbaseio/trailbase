@@ -1,8 +1,8 @@
 use axum::{
+  Json,
   extract::{Path, State},
   http::StatusCode,
   response::{IntoResponse, Response},
-  Json,
 };
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -111,8 +111,8 @@ mod tests {
   use super::*;
   use crate::admin::rows::insert_row::insert_row;
   use crate::admin::rows::list_rows::list_rows_handler;
-  use crate::admin::rows::update_row::{update_row_handler, UpdateRowRequest};
-  use crate::admin::table::{create_table_handler, CreateTableRequest};
+  use crate::admin::rows::update_row::{UpdateRowRequest, update_row_handler};
+  use crate::admin::table::{CreateTableRequest, create_table_handler};
   use crate::app_state::*;
   use crate::records::test_utils::json_row_from_value;
   use crate::util::uuid_to_b64;

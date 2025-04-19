@@ -5,14 +5,14 @@ use std::sync::Arc;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::oauth::providers::{ConfiguredOAuthProviders, OAuthProviderType};
-use crate::config::proto::{hash_config, Config, RecordApiConfig, S3StorageConfig};
+use crate::config::proto::{Config, RecordApiConfig, S3StorageConfig, hash_config};
 use crate::config::{validate_config, write_config_and_vault_textproto};
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::js::RuntimeHandle;
-use crate::records::subscribe::SubscriptionManager;
 use crate::records::RecordApi;
-use crate::scheduler::{build_job_registry_from_config, JobRegistry};
+use crate::records::subscribe::SubscriptionManager;
+use crate::scheduler::{JobRegistry, build_job_registry_from_config};
 use crate::table_metadata::TableMetadataCache;
 use crate::value_notifier::{Computed, ValueNotifier};
 

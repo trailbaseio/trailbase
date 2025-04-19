@@ -3,9 +3,9 @@ use lazy_static::lazy_static;
 use serde::Deserialize;
 use url::Url;
 
+use crate::auth::AuthError;
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::auth::AuthError;
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
 pub(crate) struct GitlabOAuthProvider {

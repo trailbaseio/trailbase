@@ -16,8 +16,8 @@ pub use error::AdminError;
 
 use crate::app_state::AppState;
 use axum::{
-  routing::{delete, get, patch, post},
   Router,
+  routing::{delete, get, patch, post},
 };
 
 pub fn router() -> Router<AppState> {

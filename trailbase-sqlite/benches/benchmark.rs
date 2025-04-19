@@ -3,7 +3,7 @@
 pub mod connection;
 pub mod error;
 
-use criterion::{criterion_group, criterion_main, Bencher, Criterion, Throughput};
+use criterion::{Bencher, Criterion, Throughput, criterion_group, criterion_main};
 use log::*;
 use parking_lot::Mutex;
 use rand::Rng;

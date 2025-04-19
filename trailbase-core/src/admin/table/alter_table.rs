@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 
 use axum::{
+  Json,
   extract::State,
   http::StatusCode,
   response::{IntoResponse, Response},
-  Json,
 };
 use log::*;
 use serde::Deserialize;
@@ -139,7 +139,7 @@ mod tests {
   use trailbase_schema::sqlite::{Column, ColumnDataType, ColumnOption, Table};
 
   use super::*;
-  use crate::admin::table::{create_table_handler, CreateTableRequest};
+  use crate::admin::table::{CreateTableRequest, create_table_handler};
   use crate::app_state::*;
 
   #[tokio::test]

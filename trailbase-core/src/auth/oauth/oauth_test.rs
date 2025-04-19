@@ -1,12 +1,12 @@
 use axum::extract::{Form, Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect};
-use axum::routing::{get, post, Router};
+use axum::routing::{Router, get, post};
 use axum_test::{TestServer, TestServerConfig};
 use serde::{Deserialize, Serialize};
 use tower_cookies::Cookies;
 
-use crate::app_state::{test_state, TestStateOptions};
+use crate::app_state::{TestStateOptions, test_state};
 use crate::auth::oauth::providers::test::{TestOAuthProvider, TestUser};
 use crate::auth::oauth::state::OAuthState;
 use crate::auth::oauth::{callback, list_providers, login};

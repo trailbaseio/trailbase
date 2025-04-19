@@ -14,9 +14,9 @@ use std::sync::Arc;
 use tokio::signal;
 use tokio::task::JoinSet;
 use tokio_rustls::{
-  rustls::pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer},
-  rustls::ServerConfig,
   TlsAcceptor,
+  rustls::ServerConfig,
+  rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
 };
 use tower_cookies::CookieManagerLayer;
 use tower_http::{cors, limit::RequestBodyLimitLayer, services::ServeDir, trace::TraceLayer};
@@ -32,7 +32,7 @@ use crate::data_dir::DataDir;
 use crate::logging;
 use crate::records;
 
-pub use init::{init_app_state, InitArgs, InitError};
+pub use init::{InitArgs, InitError, init_app_state};
 
 /// A set of options to configure serving behaviors. Changing any of these options
 /// requires a server restart, which makes them a natural fit for being exposed as command line

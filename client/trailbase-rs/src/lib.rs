@@ -396,10 +396,10 @@ impl RecordApi {
     return Ok(());
   }
 
-  pub async fn subscribe<'a>(
+  pub async fn subscribe<'a, T: RecordId<'a>>(
     &self,
-    id: impl RecordId<'a>,
-  ) -> Result<impl Stream<Item = DbEvent>, Error> {
+    id: T,
+  ) -> Result<impl Stream<Item = DbEvent> + use<T>, Error> {
     // TODO: Might have to add HeaderValue::from_static("text/event-stream").
     let response = self
       .client

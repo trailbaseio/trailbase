@@ -1,6 +1,6 @@
 use axum::{
-  extract::{RawQuery, State},
   Json,
+  extract::{RawQuery, State},
 };
 use chrono::{DateTime, Duration, Utc};
 use lazy_static::lazy_static;
@@ -15,10 +15,10 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::constants::{LOGS_RETENTION_DEFAULT, LOGS_TABLE_ID_COLUMN};
 use crate::listing::{
-  build_filter_where_clause, limit_or_default, parse_and_sanitize_query, Cursor, Order,
-  QueryParseResult, WhereClause,
+  Cursor, Order, QueryParseResult, WhereClause, build_filter_where_clause, limit_or_default,
+  parse_and_sanitize_query,
 };
-use crate::table_metadata::{lookup_and_parse_table_schema, TableMetadata};
+use crate::table_metadata::{TableMetadata, lookup_and_parse_table_schema};
 
 #[derive(Debug, Serialize, TS)]
 pub struct LogJson {

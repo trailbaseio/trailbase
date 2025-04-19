@@ -10,9 +10,9 @@ use serde::Deserialize;
 use std::rc::Rc;
 use tokio::{fs, io::AsyncWriteExt};
 use trailbase::{
-  api::{self, init_app_state, Email, InitArgs, JsonSchemaMode, TokenClaims},
-  constants::USER_TABLE,
   DataDir, Server, ServerOptions,
+  api::{self, Email, InitArgs, JsonSchemaMode, TokenClaims, init_app_state},
+  constants::USER_TABLE,
 };
 
 use trailbase_cli::{AdminSubCommands, DefaultCommandLineArgs, SubCommands, UserSubCommands};

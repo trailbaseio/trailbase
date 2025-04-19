@@ -4,25 +4,25 @@ use tower_cookies::Cookies;
 use trailbase_sqlite::params;
 
 use crate::api::TokenClaims;
-use crate::app_state::{test_state, TestStateOptions};
+use crate::app_state::{TestStateOptions, test_state};
 use crate::auth::api::change_email;
 use crate::auth::api::change_email::ChangeEmailConfigQuery;
 use crate::auth::api::change_password::{
-  change_password_handler, ChangePasswordQuery, ChangePasswordRequest,
+  ChangePasswordQuery, ChangePasswordRequest, change_password_handler,
 };
 use crate::auth::api::delete::delete_handler;
 use crate::auth::api::login::login_with_password;
-use crate::auth::api::logout::{logout_handler, LogoutQuery};
-use crate::auth::api::refresh::{refresh_handler, RefreshRequest};
-use crate::auth::api::register::{register_user_handler, RegisterUserRequest};
+use crate::auth::api::logout::{LogoutQuery, logout_handler};
+use crate::auth::api::refresh::{RefreshRequest, refresh_handler};
+use crate::auth::api::register::{RegisterUserRequest, register_user_handler};
 use crate::auth::api::reset_password::{
-  reset_password_request_handler, reset_password_update_handler, ResetPasswordRequest,
-  ResetPasswordUpdateRequest,
+  ResetPasswordRequest, ResetPasswordUpdateRequest, reset_password_request_handler,
+  reset_password_update_handler,
 };
-use crate::auth::api::verify_email::{verify_email_handler, VerifyEmailQuery};
+use crate::auth::api::verify_email::{VerifyEmailQuery, verify_email_handler};
 use crate::auth::user::{DbUser, User};
 use crate::constants::*;
-use crate::email::{testing::TestAsyncSmtpTransport, Mailer};
+use crate::email::{Mailer, testing::TestAsyncSmtpTransport};
 use crate::extract::Either;
 
 #[tokio::test]
@@ -90,9 +90,11 @@ async fn test_auth_registration_reset_and_change_email() {
     );
 
     // Check that log in pre-verification fails.
-    assert!(login_with_password(&state, &email, &password)
-      .await
-      .is_err());
+    assert!(
+      login_with_password(&state, &email, &password)
+        .await
+        .is_err()
+    );
 
     let _ = verify_email_handler(
       State(state.clone()),
@@ -130,9 +132,11 @@ async fn test_auth_registration_reset_and_change_email() {
     .await;
     assert!(response.is_err());
 
-    assert!(login_with_password(&state, &email, "Wrong Password")
-      .await
-      .is_err());
+    assert!(
+      login_with_password(&state, &email, "Wrong Password")
+        .await
+        .is_err()
+    );
 
     let tokens = login_with_password(&state, &email, &password)
       .await
@@ -200,14 +204,16 @@ async fn test_auth_registration_reset_and_change_email() {
     assert_eq!(mailer.get_logs().len(), 2);
 
     // Test rate limiting.
-    assert!(reset_password_request_handler(
-      State(state.clone()),
-      Either::Json(ResetPasswordRequest {
-        email: email.clone()
-      }),
-    )
-    .await
-    .is_err());
+    assert!(
+      reset_password_request_handler(
+        State(state.clone()),
+        Either::Json(ResetPasswordRequest {
+          email: email.clone()
+        }),
+      )
+      .await
+      .is_err()
+    );
 
     assert_eq!(mailer.get_logs().len(), 2);
 
@@ -248,9 +254,11 @@ async fn test_auth_registration_reset_and_change_email() {
     .unwrap();
 
     {
-      assert!(login_with_password(&state, &email, &password)
-        .await
-        .is_err());
+      assert!(
+        login_with_password(&state, &email, &password)
+          .await
+          .is_err()
+      );
 
       let tokens = login_with_password(&state, &email, &new_password)
         .await
@@ -297,17 +305,19 @@ async fn test_auth_registration_reset_and_change_email() {
     // Change Email flow.
 
     // Form requests require old email
-    assert!(change_email::change_email_request_handler(
-      State(state.clone()),
-      user.clone(),
-      Either::Form(change_email::ChangeEmailRequest {
-        csrf_token: user.csrf_token.clone(),
-        old_email: None,
-        new_email: new_email.clone(),
-      }),
-    )
-    .await
-    .is_err());
+    assert!(
+      change_email::change_email_request_handler(
+        State(state.clone()),
+        user.clone(),
+        Either::Form(change_email::ChangeEmailRequest {
+          csrf_token: user.csrf_token.clone(),
+          old_email: None,
+          new_email: new_email.clone(),
+        }),
+      )
+      .await
+      .is_err()
+    );
 
     change_email::change_email_request_handler(
       State(state.clone()),
@@ -370,9 +380,11 @@ async fn test_auth_registration_reset_and_change_email() {
 
     assert_eq!(new_email, db_email);
 
-    assert!(login_with_password(&state, &email, &reset_password)
-      .await
-      .is_err());
+    assert!(
+      login_with_password(&state, &email, &reset_password)
+        .await
+        .is_err()
+    );
     let _ = login_with_password(&state, &new_email, &reset_password)
       .await
       .unwrap();
@@ -396,12 +408,16 @@ async fn test_auth_registration_reset_and_change_email() {
     .await
     .unwrap();
 
-    assert!(login_with_password(&state, &new_email, &password)
-      .await
-      .is_err());
-    assert!(login_with_password(&state, &new_email, &old_password)
-      .await
-      .is_err());
+    assert!(
+      login_with_password(&state, &new_email, &password)
+        .await
+        .is_err()
+    );
+    assert!(
+      login_with_password(&state, &new_email, &old_password)
+        .await
+        .is_err()
+    );
 
     let _ = login_with_password(&state, &new_email, &new_password)
       .await

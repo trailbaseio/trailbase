@@ -3,7 +3,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::metadata::{extract_json_metadata, JsonColumnMetadata, JsonSchemaError, TableMetadata};
+use crate::metadata::{JsonColumnMetadata, JsonSchemaError, TableMetadata, extract_json_metadata};
 use crate::sqlite::{Column, ColumnDataType, ColumnOption};
 
 /// Influeces the generated JSON schema. In `Insert` mode columns with default values will be
@@ -261,8 +261,8 @@ fn column_data_type_to_json_type(data_type: ColumnDataType) -> Value {
 mod tests {
   use serde_json::json;
 
-  use crate::sqlite::{lookup_and_parse_table_schema, ColumnOption};
   use crate::FileUpload;
+  use crate::sqlite::{ColumnOption, lookup_and_parse_table_schema};
 
   use super::*;
 
@@ -332,30 +332,36 @@ mod tests {
     assert!(insert("col0", json!({"name": 42})).is_err());
     assert!(insert("col0", json!({"name": "Alice"})).is_err());
     assert!(insert("col0", json!({"name": "Alice", "age": 23})).unwrap() > 0);
-    assert!(insert(
-      "col0",
-      json!({"name": "Alice", "age": 23, "additional": 42})
-    )
-    .is_err());
+    assert!(
+      insert(
+        "col0",
+        json!({"name": "Alice", "age": 23, "additional": 42})
+      )
+      .is_err()
+    );
 
     assert!(insert("col3", json!({"foo": "/foo"})).is_err());
-    assert!(insert(
-      "col3",
-      json!({
-          "id": uuid::Uuid::now_v7().to_string(),
-          // Missing mime-type.
-      })
-    )
-    .is_err());
+    assert!(
+      insert(
+        "col3",
+        json!({
+            "id": uuid::Uuid::now_v7().to_string(),
+            // Missing mime-type.
+        })
+      )
+      .is_err()
+    );
     assert!(insert("col3", json!({"mime_type": "invalid"})).is_err());
-    assert!(insert(
-      "col3",
-      json!({
-        "id": uuid::Uuid::now_v7().to_string(),
-        "mime_type": "image/png"
-      })
-    )
-    .is_ok());
+    assert!(
+      insert(
+        "col3",
+        json!({
+          "id": uuid::Uuid::now_v7().to_string(),
+          "mime_type": "image/png"
+        })
+      )
+      .is_ok()
+    );
 
     let cnt: i64 = conn
       .query_row("SELECT COUNT(*) FROM test_table", (), |row| row.get(0))

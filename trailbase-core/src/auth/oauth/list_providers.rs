@@ -1,10 +1,10 @@
-use axum::extract::State;
 use axum::Json;
+use axum::extract::State;
 use serde::Serialize;
 use ts_rs::TS;
 
-use crate::auth::AuthError;
 use crate::AppState;
+use crate::auth::AuthError;
 
 #[derive(Debug, Serialize, TS)]
 #[ts(export)]

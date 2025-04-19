@@ -58,14 +58,14 @@ pub mod openapi {
 }
 
 pub mod api {
-  pub use crate::admin::user::{create_user_handler, CreateUserRequest};
+  pub use crate::admin::user::{CreateUserRequest, create_user_handler};
   pub use crate::auth::api::login::login_with_password;
-  pub use crate::auth::{force_password_reset, JwtHelper, TokenClaims};
+  pub use crate::auth::{JwtHelper, TokenClaims, force_password_reset};
   pub use crate::connection::connect_sqlite;
   pub use crate::email::{Email, EmailError};
   pub use crate::migrations::new_unique_migration_filename;
   pub use crate::records::json_schema::build_api_json_schema;
-  pub use crate::server::{init_app_state, serve, InitArgs};
+  pub use crate::server::{InitArgs, init_app_state, serve};
   pub use crate::table_metadata::TableMetadataCache;
 
   pub use trailbase_schema::json_schema::JsonSchemaMode;
@@ -73,8 +73,8 @@ pub mod api {
 
 pub(crate) mod rand {
   use rand::{
-    distr::{Alphanumeric, SampleString},
     CryptoRng,
+    distr::{Alphanumeric, SampleString},
   };
 
   pub(crate) fn generate_random_string(length: usize) -> String {

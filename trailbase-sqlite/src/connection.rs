@@ -11,7 +11,7 @@ use tokio::sync::oneshot;
 
 use crate::error::Error;
 pub use crate::params::Params;
-use crate::rows::{columns, Column};
+use crate::rows::{Column, columns};
 pub use crate::rows::{Row, Rows};
 
 #[macro_export]

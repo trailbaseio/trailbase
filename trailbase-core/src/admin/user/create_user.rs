@@ -1,4 +1,4 @@
-use axum::{extract::State, Json};
+use axum::{Json, extract::State};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use trailbase_sqlite::named_params;

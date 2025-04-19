@@ -1,15 +1,15 @@
 use trailbase_sqlite::params;
 use uuid::Uuid;
 
-use crate::constants::USER_TABLE;
 use crate::AppState;
+use crate::constants::USER_TABLE;
 
 mod create_user;
 mod delete_user;
 mod list_users;
 mod update_user;
 
-pub use create_user::{create_user_handler, CreateUserRequest};
+pub use create_user::{CreateUserRequest, create_user_handler};
 pub(super) use delete_user::delete_user_handler;
 pub(super) use list_users::list_users_handler;
 pub(super) use update_user::update_user_handler;
@@ -39,15 +39,15 @@ pub(crate) use create_user::create_user_for_test;
 
 #[cfg(test)]
 mod tests {
-  use axum::{extract::State, Json};
+  use axum::{Json, extract::State};
   use std::sync::Arc;
   use trailbase_sqlite::params;
   use uuid::Uuid;
 
-  use crate::app_state::{test_state, TestStateOptions};
+  use crate::app_state::{TestStateOptions, test_state};
   use crate::auth::util::user_by_email;
   use crate::constants::USER_TABLE;
-  use crate::email::{testing::TestAsyncSmtpTransport, Mailer};
+  use crate::email::{Mailer, testing::TestAsyncSmtpTransport};
 
   use super::create_user::*;
 

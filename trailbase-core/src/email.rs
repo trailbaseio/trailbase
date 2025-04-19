@@ -1,13 +1,13 @@
 use lettre::address::AddressError;
-use lettre::message::{header::ContentType, Body, Mailbox, Message};
+use lettre::message::{Body, Mailbox, Message, header::ContentType};
 use lettre::transport::smtp;
 use lettre::{AsyncSendmailTransport, AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
-use minijinja::{context, Environment};
+use minijinja::{Environment, context};
 use std::sync::Arc;
 use thiserror::Error;
 
-use crate::config::proto::{Config, EmailTemplate};
 use crate::AppState;
+use crate::config::proto::{Config, EmailTemplate};
 
 #[derive(Debug, Error)]
 pub enum EmailError {
@@ -362,9 +362,9 @@ pub(crate) mod defaults {
 
 #[cfg(test)]
 pub mod testing {
+  use lettre::AsyncTransport;
   use lettre::address::Envelope;
   use lettre::transport::smtp::response::{Category, Code, Detail, Response, Severity};
-  use lettre::AsyncTransport;
   use parking_lot::Mutex;
   use std::sync::Arc;
 

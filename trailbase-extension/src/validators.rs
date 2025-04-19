@@ -1,9 +1,9 @@
 use lru::LruCache;
 use parking_lot::Mutex;
 use regex::Regex;
+use rusqlite::Error;
 use rusqlite::functions::Context;
 use rusqlite::types::ValueRef;
-use rusqlite::Error;
 use std::num::NonZeroUsize;
 use std::sync::LazyLock;
 use validator::ValidateEmail;

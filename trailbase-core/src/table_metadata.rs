@@ -3,7 +3,7 @@ use log::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use trailbase_schema::sqlite::{sqlite3_parse_into_statement, SchemaError, Table, View};
+use trailbase_schema::sqlite::{SchemaError, Table, View, sqlite3_parse_into_statement};
 use trailbase_sqlite::params;
 
 pub use trailbase_schema::metadata::{
@@ -246,12 +246,12 @@ pub async fn lookup_and_parse_all_view_schemas(
 mod tests {
   use axum::extract::{Json, Path, Query, RawQuery, State};
   use serde_json::json;
-  use trailbase_schema::json_schema::{build_json_schema_expanded, Expand, JsonSchemaMode};
+  use trailbase_schema::json_schema::{Expand, JsonSchemaMode, build_json_schema_expanded};
 
   use crate::app_state::*;
   use crate::config::proto::{PermissionFlag, RecordApiConfig};
   use crate::records::list_records::list_records_handler;
-  use crate::records::read_record::{read_record_handler, ReadRecordQuery};
+  use crate::records::read_record::{ReadRecordQuery, read_record_handler};
   use crate::records::*;
 
   #[tokio::test]

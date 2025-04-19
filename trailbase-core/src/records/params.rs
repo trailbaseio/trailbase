@@ -501,9 +501,9 @@ pub(crate) fn prefix_colon(s: &str) -> String {
 #[cfg(test)]
 mod tests {
   use base64::prelude::*;
-  use schemars::{schema_for, JsonSchema};
+  use schemars::{JsonSchema, schema_for};
   use serde_json::json;
-  use trailbase_schema::sqlite::{sqlite3_parse_into_statement, Table};
+  use trailbase_schema::sqlite::{Table, sqlite3_parse_into_statement};
 
   use super::*;
   use crate::constants::USER_TABLE;

@@ -1,16 +1,16 @@
 use axum::extract::{Json, State};
 use axum::http::StatusCode;
-use axum_test::multipart::MultipartForm;
 use axum_test::TestServer;
+use axum_test::multipart::MultipartForm;
 use tower_cookies::Cookie;
 use tracing_subscriber::prelude::*;
 use trailbase_sqlite::params;
 
-use trailbase::api::{create_user_handler, login_with_password, CreateUserRequest};
+use trailbase::AppState;
+use trailbase::api::{CreateUserRequest, create_user_handler, login_with_password};
 use trailbase::config::proto::{PermissionFlag, RecordApiConfig};
 use trailbase::constants::{COOKIE_AUTH_TOKEN, RECORD_API_PATH};
 use trailbase::util::id_to_b64;
-use trailbase::AppState;
 use trailbase::{DataDir, Server, ServerOptions};
 
 pub(crate) async fn add_record_api_config(

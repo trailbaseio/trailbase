@@ -11,11 +11,11 @@ use thiserror::Error;
 use tokio::fs;
 use validator::{ValidateEmail, ValidateUrl};
 
+use crate::DESCRIPTOR_POOL;
 use crate::auth::oauth::providers::oauth_provider_registry;
 use crate::data_dir::DataDir;
 use crate::records::validate_record_api_config;
 use crate::table_metadata::TableMetadataCache;
-use crate::DESCRIPTOR_POOL;
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -71,12 +71,12 @@ pub mod proto {
   use prost_reflect::{DynamicMessage, MessageDescriptor, ReflectMessage};
   use std::hash::{DefaultHasher, Hash, Hasher};
 
+  use crate::DESCRIPTOR_POOL;
   use crate::config::ConfigError;
   use crate::constants::{
     AVATAR_TABLE, DEFAULT_AUTH_TOKEN_TTL, DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT,
   };
   use crate::email;
-  use crate::DESCRIPTOR_POOL;
 
   include!(concat!(env!("OUT_DIR"), "/config.rs"));
 

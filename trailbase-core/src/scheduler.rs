@@ -3,19 +3,19 @@ use cron::Schedule;
 use futures_util::future::BoxFuture;
 use log::*;
 use parking_lot::Mutex;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 use std::future::Future;
 use std::str::FromStr;
 use std::sync::{
-  atomic::{AtomicI32, Ordering},
   Arc,
+  atomic::{AtomicI32, Ordering},
 };
-use trailbase_sqlite::{params, Connection};
+use trailbase_sqlite::{Connection, params};
 
+use crate::DataDir;
 use crate::config::proto::{Config, SystemJob, SystemJobId};
 use crate::constants::{DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT, SESSION_TABLE};
-use crate::records::files::{delete_pending_files_impl, FileDeletionsDb, FileError};
-use crate::DataDir;
+use crate::records::files::{FileDeletionsDb, FileError, delete_pending_files_impl};
 
 type CallbackError = Box<dyn std::error::Error + Sync + Send>;
 type CallbackFunction = dyn Fn() -> BoxFuture<'static, Result<(), CallbackError>> + Sync + Send;

@@ -5,9 +5,9 @@ use lazy_static::lazy_static;
 use tower_cookies::Cookies;
 
 use crate::app_state::AppState;
+use crate::auth::AuthError;
 use crate::auth::user::User;
 use crate::auth::util::{delete_all_sessions_for_user, remove_all_cookies};
-use crate::auth::AuthError;
 use crate::constants::USER_TABLE;
 
 /// Get public profile of the given user.

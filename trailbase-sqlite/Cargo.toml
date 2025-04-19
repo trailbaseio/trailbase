@@ -1,7 +1,7 @@
 [package]
 name = "trailbase-sqlite"
 version = "0.2.0"
-edition = "2021"
+edition = "2024"
 license = "OSL-3.0"
 description = "Async SQLite connection for TrailBase"
 homepage = "https://trailbase.io"

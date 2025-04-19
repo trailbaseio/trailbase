@@ -12,19 +12,19 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::{
-  atomic::{AtomicI64, Ordering},
   Arc,
+  atomic::{AtomicI64, Ordering},
 };
 use std::task::{Context, Poll};
 use trailbase_sqlite::connection::{extract_record_values, extract_row_id};
 
+use crate::AppState;
 use crate::auth::user::User;
-use crate::records::sql_to_json::valueref_to_json;
 use crate::records::RecordApi;
+use crate::records::sql_to_json::valueref_to_json;
 use crate::records::{Permission, RecordError};
 use crate::table_metadata::{TableMetadata, TableMetadataCache};
 use crate::value_notifier::Computed;
-use crate::AppState;
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
 
@@ -692,7 +692,7 @@ mod tests {
   use crate::app_state::test_state;
   use crate::auth::api::login::login_with_password;
   use crate::config::proto::RecordApiConfig;
-  use crate::records::{add_record_api_config, PermissionFlag};
+  use crate::records::{PermissionFlag, add_record_api_config};
   use crate::util::uuid_to_b64;
 
   async fn decode_db_event(event: Event) -> DbEvent {
@@ -1149,12 +1149,14 @@ mod tests {
       };
 
       // User y should *not* have received the insert event.
-      assert!(tokio::time::timeout(
-        tokio::time::Duration::from_millis(300),
-        user_y_subscription.receiver.clone().count()
-      )
-      .await
-      .is_err());
+      assert!(
+        tokio::time::timeout(
+          tokio::time::Duration::from_millis(300),
+          user_y_subscription.receiver.clone().count()
+        )
+        .await
+        .is_err()
+      );
       assert_eq!(
         user_y_subscription.receiver.try_recv().err().unwrap(),
         TryRecvError::Empty

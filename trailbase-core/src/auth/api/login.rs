@@ -1,8 +1,8 @@
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
+  Json,
   extract::{Query, State},
   response::{IntoResponse, Redirect, Response},
-  Json,
 };
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
@@ -12,11 +12,11 @@ use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
+use crate::auth::AuthError;
 use crate::auth::api::register::validate_and_normalize_email_address;
-use crate::auth::tokens::{mint_new_tokens, Tokens};
+use crate::auth::tokens::{Tokens, mint_new_tokens};
 use crate::auth::user::DbUser;
 use crate::auth::util::{new_cookie, user_by_email, validate_redirects};
-use crate::auth::AuthError;
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, USER_TABLE, VERIFICATION_CODE_LENGTH,
 };

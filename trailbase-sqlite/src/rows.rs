@@ -1,4 +1,4 @@
-use rusqlite::{types, Statement};
+use rusqlite::{Statement, types};
 use std::fmt::Debug;
 use std::ops::Index;
 use std::str::FromStr;

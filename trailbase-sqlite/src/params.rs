@@ -1,5 +1,5 @@
 use rusqlite::types::ToSqlOutput;
-use rusqlite::{types, Result, Statement};
+use rusqlite::{Result, Statement, types};
 use std::borrow::Cow;
 
 pub type NamedParams = Vec<(Cow<'static, str>, types::Value)>;
