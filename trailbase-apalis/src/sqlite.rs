@@ -192,7 +192,23 @@ async fn fetch_next(
     )
     .await?;
 
-  Ok(job)
+  if job.is_none() {
+    let job: Option<SqlRequest<String>> = conn
+      .query_row_f(
+        "Select * from Jobs where id = ?1 AND lock_by = ?2 AND job_type = ?3",
+        trailbase_sqlite::params!(
+          id.to_string(),
+          worker_id.to_string(),
+          config.namespace.clone()
+        ),
+        from_row,
+      )
+      .await?;
+
+    return Ok(job);
+  }
+
+  return Ok(job);
 }
 
 impl<T, C> SqliteStorage<T, C>
@@ -736,14 +752,15 @@ impl<J: 'static + Serialize + DeserializeOwned + Unpin + Send + Sync> BackendExp
 
 #[cfg(test)]
 mod tests {
-
+  use super::*;
   use crate::sql_storage_tests;
 
-  use super::*;
+  use apalis_core::generic_storage_test;
   use apalis_core::request::State;
-  use futures::StreamExt;
-
+  use apalis_core::test_utils::apalis_test_service_fn;
   use apalis_core::test_utils::TestWrapper;
+  use futures::StreamExt;
+  use std::io;
 
   mod email_service {
     use apalis_core::error::Error;
@@ -803,7 +820,7 @@ mod tests {
 
   use email_service::Email;
 
-  // generic_storage_test!(setup);
+  generic_storage_test!(setup);
   sql_storage_tests!(setup::<Email>, SqliteStorage<Email>, Email);
 
   /// migrate DB and return a storage instance.
