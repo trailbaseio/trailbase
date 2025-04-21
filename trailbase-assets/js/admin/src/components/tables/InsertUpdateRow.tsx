@@ -62,14 +62,14 @@ export function InsertUpdateRowForm(props: {
   const original = createMemo(() =>
     props.row ? copyRow(props.row) : undefined,
   );
-  const isUpdate = original !== undefined;
+  const isUpdate = () => original() !== undefined;
 
   const form = createForm(() => ({
     defaultValues: {
       row: props.row ?? buildDefault(props.schema),
     } as FormRowForm,
     onSubmit: async ({ value }: { value: FormRowForm }) => {
-      console.debug(`Submitting ${isUpdate ? "update" : "insert"}:`, value);
+      console.debug(`Submitting ${isUpdate() ? "update" : "insert"}:`, value);
       try {
         const o = original();
         if (o) {
@@ -147,9 +147,10 @@ export function InsertUpdateRowForm(props: {
                   {buildDBCellField({
                     name: col.name,
                     type: col.data_type,
-                    notNull,
-                    disabled: isUpdate && pk,
-                    placeholder: defaultValue ?? "",
+                    notNull: notNull,
+                    isPk: pk,
+                    isUpdate: isUpdate(),
+                    defaultValue,
                   })}
                 </form.Field>
               );

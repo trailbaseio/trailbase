@@ -534,8 +534,9 @@ export function buildDBCellField(
     name: string;
     type: ColumnDataType;
     notNull: boolean;
-    disabled: boolean;
-    placeholder: string;
+    isPk: boolean;
+    isUpdate: boolean;
+    defaultValue: string | undefined;
   },
   _unused?: unknown,
 ) {
@@ -560,9 +561,12 @@ export function buildDBCellField(
   );
 
   const type = props.type;
-  const optional = !props.notNull;
-  const placeholder = props.placeholder;
-  const disabled = props.disabled;
+  const optional =
+    !props.notNull ||
+    props.defaultValue !== undefined ||
+    (props.isPk && isInt(type));
+  const placeholder = props.defaultValue || "";
+  const disabled = props.isUpdate && props.isPk;
 
   if (type === "Text" || type === "Blob") {
     if (optional) {
