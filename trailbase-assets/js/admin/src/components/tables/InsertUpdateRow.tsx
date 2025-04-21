@@ -7,13 +7,12 @@ import { Button } from "@/components/ui/button";
 import type { Column } from "@bindings/Column";
 import type { Table } from "@bindings/Table";
 
-import { buildDBCellField, isNumber } from "@/components/FormFields";
 import {
-  getDefaultValue,
-  isNotNull,
-  isOptional,
-  isPrimaryKeyColumn,
-} from "@/lib/schema";
+  buildDBCellField,
+  isNumber,
+  isOptionalFormField,
+} from "@/components/FormFields";
+import { getDefaultValue, isNotNull, isPrimaryKeyColumn } from "@/lib/schema";
 import { SheetContainer } from "@/components/SafeSheet";
 import { showToast } from "@/components/ui/toast";
 import { copyRow, type FormRow } from "@/lib/convert";
@@ -22,9 +21,17 @@ import { updateRow, insertRow } from "@/lib/row";
 function buildDefault(schema: Table): FormRow {
   const obj: FormRow = {};
   for (const col of schema.columns) {
-    const optional = isOptional(col.options);
+    const isPk = isPrimaryKeyColumn(col);
+    const notNull = isNotNull(col.options);
+    const defaultValue = getDefaultValue(col.options);
+
+    const optional = isOptionalFormField({
+      type: col.data_type,
+      notNull,
+      isPk,
+      defaultValue,
+    });
     if (optional) {
-      // obj[col.name] = undefined;
       continue;
     }
 
@@ -112,7 +119,7 @@ export function InsertUpdateRowForm(props: {
         <div class="flex flex-col items-start gap-4 py-4">
           <For each={props.schema.columns}>
             {(col: Column) => {
-              const pk = isPrimaryKeyColumn(col);
+              const isPk = isPrimaryKeyColumn(col);
               const notNull = isNotNull(col.options);
               const defaultValue = getDefaultValue(col.options);
 
@@ -125,11 +132,17 @@ export function InsertUpdateRowForm(props: {
                     }: {
                       value: string | number | null | undefined;
                     }) => {
-                      const required = notNull && defaultValue === undefined;
                       if (value === undefined) {
-                        if (required) {
+                        const optional = isOptionalFormField({
+                          type: col.data_type,
+                          notNull,
+                          isPk,
+                          defaultValue,
+                        });
+                        if (!optional) {
                           return `Missing value for ${col.name}`;
                         }
+
                         return undefined;
                       }
 
@@ -148,7 +161,7 @@ export function InsertUpdateRowForm(props: {
                     name: col.name,
                     type: col.data_type,
                     notNull: notNull,
-                    isPk: pk,
+                    isPk,
                     isUpdate: isUpdate(),
                     defaultValue,
                   })}

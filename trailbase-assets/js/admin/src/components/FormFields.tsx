@@ -525,6 +525,19 @@ export function isNumber(type: ColumnDataType): boolean {
   return isInt(type) || isReal(type);
 }
 
+export function isOptionalFormField(opts: {
+  type: ColumnDataType;
+  notNull: boolean;
+  isPk: boolean;
+  defaultValue: string | undefined;
+}): boolean {
+  return (
+    !opts.notNull ||
+    opts.defaultValue !== undefined ||
+    (opts.isPk && isInt(opts.type))
+  );
+}
+
 // NOTE: this is a not a component but a builder:
 //   "(field: () => FieldApiT<T>) => Component"
 //
@@ -561,10 +574,12 @@ export function buildDBCellField(
   );
 
   const type = props.type;
-  const optional =
-    !props.notNull ||
-    props.defaultValue !== undefined ||
-    (props.isPk && isInt(type));
+  const optional = isOptionalFormField({
+    type,
+    notNull: props.notNull,
+    isPk: props.isPk,
+    defaultValue: props.defaultValue,
+  });
   const placeholder = props.defaultValue || "";
   const disabled = props.isUpdate && props.isPk;
 
