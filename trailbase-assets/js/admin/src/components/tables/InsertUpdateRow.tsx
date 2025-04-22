@@ -7,49 +7,69 @@ import { Button } from "@/components/ui/button";
 import type { Column } from "@bindings/Column";
 import type { Table } from "@bindings/Table";
 
+import { buildDBCellField } from "@/components/FormFields";
 import {
-  buildDBCellField,
-  isNumber,
-  isOptionalFormField,
-} from "@/components/FormFields";
-import { getDefaultValue, isNotNull, isPrimaryKeyColumn } from "@/lib/schema";
+  getDefaultValue,
+  isInt,
+  isNotNull,
+  isPrimaryKeyColumn,
+  isReal,
+} from "@/lib/schema";
 import { SheetContainer } from "@/components/SafeSheet";
 import { showToast } from "@/components/ui/toast";
-import { copyRow, type FormRow } from "@/lib/convert";
+import {
+  copyRow,
+  preProcessInsertValue,
+  preProcessUpdateValue,
+  type FormRow,
+} from "@/lib/convert";
 import { updateRow, insertRow } from "@/lib/row";
+import { isNullableColumn } from "@/lib/schema";
 
 function buildDefault(schema: Table): FormRow {
   const obj: FormRow = {};
   for (const col of schema.columns) {
+    const type = col.data_type;
     const isPk = isPrimaryKeyColumn(col);
     const notNull = isNotNull(col.options);
     const defaultValue = getDefaultValue(col.options);
-
-    const optional = isOptionalFormField({
+    const nullable = isNullableColumn({
       type: col.data_type,
       notNull,
       isPk,
-      defaultValue,
     });
-    if (optional) {
+
+    /// If there's no default and the column is nullable we default to null.
+    if (defaultValue === undefined) {
+      if (nullable) {
+        obj[col.name] = null;
+        continue;
+      }
+    } else {
+      // If there is a default, we leave the form field empty and show the default as a textinput placeholder.
+      obj[col.name] = "";
       continue;
     }
 
-    switch (col.data_type) {
-      case "Blob":
-        obj[col.name] = "";
-        break;
-      case "Text":
-        obj[col.name] = "";
-        break;
-      case "Real":
-        obj[col.name] = 0.0;
-        break;
-      case "Integer":
-        obj[col.name] = 0;
-        break;
-      case "Null":
-        break;
+    // If there's neither a default nor is the column nullable, we fall back to generic defaults.
+    // They may be invalid based on CHECK constraints.
+    if (type === "Blob") {
+      obj[col.name] = "";
+      break;
+    } else if (type === "Text") {
+      obj[col.name] = "";
+      break;
+    } else if (isInt(type)) {
+      obj[col.name] = 0;
+      break;
+    } else if (isReal(type)) {
+      obj[col.name] = 0.0;
+      break;
+    } else if (type === "Null") {
+      obj[col.name] = null;
+      break;
+    } else {
+      console.debug(`No fallback for: ${col.name}`);
     }
   }
   return obj;
@@ -66,20 +86,19 @@ export function InsertUpdateRowForm(props: {
   schema: Table;
   row?: FormRow;
 }) {
-  const original = createMemo(() =>
-    props.row ? copyRow(props.row) : undefined,
+  const defaultValues = createMemo(() =>
+    props.row ? copyRow(props.row) : buildDefault(props.schema),
   );
-  const isUpdate = () => original() !== undefined;
+  const isUpdate = () => props.row !== undefined;
 
   const form = createForm(() => ({
     defaultValues: {
-      row: props.row ?? buildDefault(props.schema),
+      row: defaultValues(),
     } as FormRowForm,
     onSubmit: async ({ value }: { value: FormRowForm }) => {
       console.debug(`Submitting ${isUpdate() ? "update" : "insert"}:`, value);
       try {
-        const o = original();
-        if (o) {
+        if (isUpdate()) {
           await updateRow(props.schema, value.row);
         } else {
           await insertRow(props.schema, value.row);
@@ -106,7 +125,7 @@ export function InsertUpdateRowForm(props: {
   return (
     <SheetContainer>
       <SheetHeader>
-        <SheetTitle>{original() ? "Edit Row" : "Insert New Row"}</SheetTitle>
+        <SheetTitle>{isUpdate() ? "Edit Row" : "Insert New Row"}</SheetTitle>
       </SheetHeader>
 
       <form
@@ -130,28 +149,16 @@ export function InsertUpdateRowForm(props: {
                     onChange: ({
                       value,
                     }: {
-                      value: string | number | null | undefined;
+                      value: string | number | null;
                     }) => {
-                      if (value === undefined) {
-                        const optional = isOptionalFormField({
-                          type: col.data_type,
-                          notNull,
-                          isPk,
-                          defaultValue,
-                        });
-                        if (!optional) {
-                          return `Missing value for ${col.name}`;
+                      try {
+                        if (isUpdate()) {
+                          preProcessUpdateValue(col, value);
+                        } else {
+                          preProcessInsertValue(col, value);
                         }
-
-                        return undefined;
-                      }
-
-                      // TODO: Better input validation or better typed form fields.
-                      // NOTE: this is currently rather pointless, since number
-                      // field will resolve empty to null and required is handled
-                      // via the input element.
-                      if (value === "" && isNumber(col.data_type)) {
-                        return `Invalid value for: ${col.data_type}`;
+                      } catch (e) {
+                        return `Invalid value for ${col.name}: ${e}`;
                       }
                       return undefined;
                     },
@@ -186,7 +193,7 @@ export function InsertUpdateRowForm(props: {
                 >
                   {state().isSubmitting
                     ? "..."
-                    : original()
+                    : isUpdate()
                       ? "Update"
                       : "Insert"}
                 </Button>

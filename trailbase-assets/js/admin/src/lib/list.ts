@@ -15,12 +15,15 @@ export function buildListSearchParams({
   cursor,
   prevCursors,
 }: ListArgs): URLSearchParams {
-  const params = new URLSearchParams(
-    filter
-      ?.split("AND")
-      .map((frag: string) => frag.trim().replaceAll(" ", ""))
-      .join("&"),
-  );
+  // TODO: Avoid dis- and then re-assembling filter params here.
+  // TODO: support OR.
+  // TODO: parse more loosely, e.g. AND vs and vs &&.
+  const filterParams = filter
+    ?.split(/AND/)
+    .map((frag: string) => frag.trim())
+    .join("&");
+  console.log("PARAMS", filterParams);
+  const params = new URLSearchParams(filterParams);
 
   params.set("limit", pageSize.toString());
 

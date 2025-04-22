@@ -1,7 +1,8 @@
 import type { Column } from "@bindings/Column";
+import type { ColumnDataType } from "@bindings/ColumnDataType";
 import type { ColumnOption } from "@bindings/ColumnOption";
-import type { ReferentialAction } from "@bindings/ReferentialAction";
 import type { ConflictResolution } from "@bindings/ConflictResolution";
+import type { ReferentialAction } from "@bindings/ReferentialAction";
 import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
 
@@ -267,4 +268,90 @@ export function hiddenTable(table: Table | View): boolean {
 
 export function hiddenName(name: string): boolean {
   return name.startsWith("_") || name.startsWith("sqlite_");
+}
+
+export function isInt(type: ColumnDataType): boolean {
+  switch (type) {
+    case "Integer":
+    case "Int":
+    case "Int2":
+    case "Int4":
+    case "Int8":
+    case "TinyInt":
+    case "SmallInt":
+    case "MediumInt":
+    case "BigInt":
+    case "UnignedBigInt":
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function isReal(type: ColumnDataType): boolean {
+  switch (type) {
+    case "Real":
+    case "Float":
+    case "Double":
+    case "DoublePrecision":
+    case "Decimal":
+    case "Numeric":
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function isNumber(type: ColumnDataType): boolean {
+  return isInt(type) || isReal(type);
+}
+
+export function isNullableColumn(opts: {
+  type: ColumnDataType;
+  notNull: boolean;
+  isPk: boolean;
+}): boolean {
+  // The column is optional, if nulls are allowed.
+  if (!opts.notNull) {
+    return true;
+  }
+
+  // Or if it's an integer primary key.
+  if (opts.isPk && isInt(opts.type)) {
+    return true;
+  }
+
+  return false;
+}
+
+export function unescapeLiteral(value: string): string {
+  if (value === "") {
+    return value;
+  }
+
+  const first = value[0];
+  switch (first) {
+    case "'":
+    case '"':
+    case "`":
+    case "[":
+      return value.substring(1, value.length - 1);
+    default:
+      return value;
+  }
+}
+
+export function unescapeLiteralBlob(value: string): string | undefined {
+  if (value === "") {
+    return undefined;
+  }
+
+  const first = value[0];
+  switch (first) {
+    case "X":
+    case "x":
+      return value.substring(2, value.length - 1);
+    default:
+      return value;
+  }
 }

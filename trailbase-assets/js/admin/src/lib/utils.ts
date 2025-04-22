@@ -8,6 +8,16 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export function tryParseInt(value: string): number | undefined {
+  const n = parseInt(value);
+  return isNaN(n) ? undefined : n;
+}
+
+export function tryParseFloat(value: string): number | undefined {
+  const n = parseFloat(value);
+  return isNaN(n) ? undefined : n;
+}
+
 export function urlSafeBase64ToUuid(id: string): string {
   return uuidStringify(
     Uint8Array.from(urlSafeBase64Decode(id), (c) => c.charCodeAt(0)),
