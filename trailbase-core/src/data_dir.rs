@@ -27,6 +27,10 @@ impl DataDir {
     return self.data_path().join("logs.db");
   }
 
+  pub fn queue_db_path(&self) -> PathBuf {
+    return self.data_path().join("queue.db");
+  }
+
   pub fn data_path(&self) -> PathBuf {
     return self.0.join("data/");
   }

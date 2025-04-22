@@ -18,6 +18,7 @@ mod extract;
 mod js;
 mod listing;
 mod migrations;
+mod queue;
 mod scheduler;
 mod server;
 mod table_metadata;
@@ -61,7 +62,7 @@ pub mod api {
   pub use crate::admin::user::{CreateUserRequest, create_user_handler};
   pub use crate::auth::api::login::login_with_password;
   pub use crate::auth::{JwtHelper, TokenClaims, force_password_reset};
-  pub use crate::connection::connect_sqlite;
+  pub use crate::connection::{Connection, init_main_db};
   pub use crate::email::{Email, EmailError};
   pub use crate::migrations::new_unique_migration_filename;
   pub use crate::records::json_schema::build_api_json_schema;

@@ -61,6 +61,7 @@ rusqlite = { version = "0.34.0", default-features = false, features = ["bundled"
 tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "signal", "time", "sync"] }
 trailbase-refinery-core = { path = "vendor/refinery/refinery_core", version = "0.8.16", default-features = false, features = ["rusqlite-bundled"] }
 trailbase-refinery-macros = { path = "vendor/refinery/refinery_macros", version = "0.8.15" }
+trailbase-apalis = { path = "trailbase-apalis", version = "0.1.0" }
 trailbase-assets = { path = "trailbase-assets", version = "0.1.0" }
 trailbase-sqlean = { path = "vendor/sqlean", version = "0.0.2" }
 trailbase-extension = { path = "trailbase-extension", version = "0.2.0" }

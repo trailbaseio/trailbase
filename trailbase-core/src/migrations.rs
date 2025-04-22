@@ -90,27 +90,6 @@ pub(crate) fn apply_main_migrations(
   return Ok(new_db);
 }
 
-#[cfg(test)]
-pub(crate) fn apply_user_migrations(
-  user_conn: &mut rusqlite::Connection,
-) -> Result<(), trailbase_refinery_core::Error> {
-  let mut runner = main::migrations::runner();
-  runner.set_migration_table_name(MIGRATION_TABLE_NAME);
-
-  let report = runner.run(user_conn).map_err(|err| {
-    error!("User migrations: {err}");
-    return err;
-  })?;
-
-  if cfg!(test) {
-    debug!("user migrations: {report:?}");
-  } else {
-    info!("user migrations: {report:?}");
-  }
-
-  return Ok(());
-}
-
 pub(crate) fn apply_logs_migrations(
   logs_conn: &mut rusqlite::Connection,
 ) -> Result<(), trailbase_refinery_core::Error> {

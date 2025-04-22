@@ -50,10 +50,7 @@ impl DbUser {
   }
 }
 
-async fn get_user_by_email(
-  conn: &trailbase_sqlite::Connection,
-  email: &str,
-) -> Result<DbUser, BoxError> {
+async fn get_user_by_email(conn: &api::Connection, email: &str) -> Result<DbUser, BoxError> {
   if let Some(user) = conn
     .read_query_value::<DbUser>(
       format!("SELECT * FROM {USER_TABLE} WHERE email = $1"),
@@ -157,10 +154,7 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Admin { cmd }) => {
       init_logger(false);
 
-      let conn = trailbase_sqlite::Connection::new(
-        || api::connect_sqlite(Some(data_dir.main_db_path()), None),
-        None,
-      )?;
+      let (conn, _) = api::init_main_db(Some(&data_dir), None)?;
 
       match cmd {
         Some(AdminSubCommands::List) => {
@@ -211,10 +205,7 @@ async fn async_main() -> Result<(), BoxError> {
       init_logger(false);
 
       let data_dir = DataDir(args.data_dir);
-      let conn = trailbase_sqlite::Connection::new(
-        || api::connect_sqlite(Some(data_dir.main_db_path()), None),
-        None,
-      )?;
+      let (conn, _) = api::init_main_db(Some(&data_dir), None)?;
 
       match cmd {
         Some(UserSubCommands::ResetPassword { email, password }) => {

@@ -10,6 +10,7 @@ use crate::config::{validate_config, write_config_and_vault_textproto};
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::js::RuntimeHandle;
+use crate::queue::QueueStorage;
 use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
@@ -31,8 +32,9 @@ struct InternalState {
   record_apis: Computed<Vec<(String, RecordApi)>, Config>,
   config: ValueNotifier<Config>,
 
-  logs_conn: trailbase_sqlite::Connection,
   conn: trailbase_sqlite::Connection,
+  logs_conn: trailbase_sqlite::Connection,
+  queue: QueueStorage,
 
   jwt: JwtHelper,
 
@@ -57,6 +59,7 @@ pub(crate) struct AppStateArgs {
   pub config: Config,
   pub conn: trailbase_sqlite::Connection,
   pub logs_conn: trailbase_sqlite::Connection,
+  pub queue: QueueStorage,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore + Send + Sync>,
   pub js_runtime_threads: Option<usize>,
@@ -141,6 +144,7 @@ impl AppState {
         config,
         conn: args.conn.clone(),
         logs_conn: args.logs_conn,
+        queue: args.queue,
         jwt: args.jwt,
         table_metadata: args.table_metadata.clone(),
         subscription_manager: SubscriptionManager::new(args.conn, args.table_metadata, record_apis),
@@ -180,6 +184,10 @@ impl AppState {
 
   pub fn logs_conn(&self) -> &trailbase_sqlite::Connection {
     return &self.state.logs_conn;
+  }
+
+  pub fn queue(&self) -> &QueueStorage {
+    return &self.state.queue;
   }
 
   pub fn version(&self) -> rustc_tools_util::VersionInfo {
@@ -314,7 +322,6 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   use crate::auth::oauth::providers::test::TestOAuthProvider;
   use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
   use crate::config::validate_config;
-  use crate::migrations::{apply_logs_migrations, apply_main_migrations, apply_user_migrations};
 
   let _ = env_logger::try_init_from_env(env_logger::Env::new().default_filter_or(
     "info,refinery_core=warn,trailbase_refinery_core=warn,log::span=warn,swc_ecma_codegen=off",
@@ -323,28 +330,9 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let temp_dir = temp_dir::TempDir::new()?;
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
 
-  let conn = {
-    trailbase_sqlite::Connection::new(
-      || -> anyhow::Result<rusqlite::Connection> {
-        let mut conn = crate::connection::connect_sqlite(None, None)?;
-        apply_user_migrations(&mut conn)?;
-        let _new_db = apply_main_migrations(&mut conn, None)?;
-        return Ok(conn);
-      },
-      None,
-    )?
-  };
-
-  let logs_conn = {
-    trailbase_sqlite::Connection::new(
-      || -> anyhow::Result<rusqlite::Connection> {
-        let mut conn = crate::connection::connect_sqlite(None, None)?;
-        apply_logs_migrations(&mut conn)?;
-        return Ok(conn);
-      },
-      None,
-    )?
-  };
+  let (conn, new) = crate::connection::init_main_db(None, None)?;
+  assert!(new);
+  let logs_conn = crate::connection::init_logs_db(None)?;
 
   let table_metadata = TableMetadataCache::new(conn.clone()).await?;
 
@@ -453,6 +441,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       config,
       conn: conn.clone(),
       logs_conn,
+      queue: crate::queue::init_queue_storage(None).await.unwrap(),
       jwt: jwt::test_jwt_helper(),
       table_metadata: table_metadata.clone(),
       subscription_manager: SubscriptionManager::new(conn.clone(), table_metadata, record_apis),

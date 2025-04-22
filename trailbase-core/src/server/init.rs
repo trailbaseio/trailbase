@@ -1,30 +1,21 @@
 use log::*;
-use parking_lot::Mutex;
 use std::path::PathBuf;
-use std::sync::Arc;
 use thiserror::Error;
 
 use crate::app_state::{AppState, AppStateArgs, build_objectstore};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;
-use crate::migrations::{apply_logs_migrations, apply_main_migrations};
 use crate::rand::generate_random_string;
 use crate::server::DataDir;
 use crate::table_metadata::TableMetadataCache;
 
 #[derive(Debug, Error)]
 pub enum InitError {
-  #[error("SQLite extension error: {0}")]
-  SqliteExtension(#[from] trailbase_extension::Error),
-  #[error("TB SQLite error: {0}")]
+  #[error("SQLite error: {0}")]
   Sqlite(#[from] trailbase_sqlite::Error),
-  #[error("Rusqlite error: {0}")]
-  Rusqlite(#[from] rusqlite::Error),
-  #[error("RusqliteFromSql error: {0}")]
-  FromSql(#[from] rusqlite::types::FromSqlError),
-  #[error("DB Migration error: {0}")]
-  Migration(#[from] trailbase_refinery_core::Error),
+  #[error("Connection error: {0}")]
+  Connection(#[from] crate::connection::ConnectionError),
   #[error("IO error: {0}")]
   IO(#[from] std::io::Error),
   #[error("Config error: {0}")]
@@ -43,6 +34,8 @@ pub enum InitError {
   ScriptError(String),
   #[error("ObjectStore error: {0}")]
   ObjectStore(#[from] object_store::Error),
+  #[error("Queue error: {0}")]
+  Queue(#[from] crate::queue::QueueError),
 }
 
 #[derive(Default)]
@@ -62,43 +55,14 @@ pub async fn init_app_state(
   data_dir.ensure_directory_structure().await?;
 
   // Then open or init new databases.
-  let logs_conn = {
-    trailbase_sqlite::Connection::new(
-      || -> Result<_, InitError> {
-        let mut conn = init_logs_db(&data_dir)?;
-        apply_logs_migrations(&mut conn)?;
-        return Ok(conn);
-      },
-      None,
-    )?
-  };
+  let logs_conn = crate::connection::init_logs_db(Some(&data_dir))?;
+
+  // TODO: At this early stage we're using an in-memory db. Go persistent before rolling out.
+  let queue = crate::queue::init_queue_storage(None).await?;
 
   // Open or init the main db. Note that we derive whether a new DB was initialized based on
   // whether the V1 migration had to be applied. Should be fairly robust.
-  let (conn, new_db): (trailbase_sqlite::Connection, bool) = {
-    let new_db = Arc::new(Mutex::new(false));
-
-    let new_db_clone = new_db.clone();
-    let conn = trailbase_sqlite::Connection::new(
-      || -> Result<_, InitError> {
-        let mut conn = crate::connection::connect_sqlite(Some(data_dir.main_db_path()), None)?;
-        *(new_db_clone.lock()) |=
-          apply_main_migrations(&mut conn, Some(data_dir.migrations_path()))?;
-        return Ok(conn);
-      },
-      Some(trailbase_sqlite::connection::Options {
-        n_read_threads: if let Ok(n) = std::thread::available_parallelism() {
-          n.get().clamp(2, 4)
-        } else {
-          4
-        },
-        ..Default::default()
-      }),
-    )?;
-
-    let new_db: bool = *new_db.lock();
-    (conn, new_db)
-  };
+  let (conn, new_db) = crate::connection::init_main_db(Some(&data_dir), None)?;
 
   let table_metadata = TableMetadataCache::new(conn.clone()).await?;
 
@@ -158,6 +122,7 @@ pub async fn init_app_state(
     config,
     conn,
     logs_conn,
+    queue,
     jwt,
     object_store,
     js_runtime_threads: args.js_runtime_threads,
@@ -213,16 +178,4 @@ pub async fn init_app_state(
   }
 
   return Ok((new_db, app_state));
-}
-
-fn init_logs_db(data_dir: &DataDir) -> Result<rusqlite::Connection, InitError> {
-  let conn = crate::connection::connect_sqlite(data_dir.logs_db_path().into(), None)?;
-
-  // Turn off secure_deletions, i.e. don't wipe the memory with zeros.
-  conn.query_row("PRAGMA secure_delete = FALSE", (), |_row| Ok(()))?;
-
-  // Sync less often
-  conn.execute("PRAGMA synchronous = 1", ())?;
-
-  return Ok(conn);
 }

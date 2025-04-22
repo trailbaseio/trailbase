@@ -389,7 +389,8 @@ mod tests {
   async fn test_aggregate_rate_computation() {
     let conn = trailbase_sqlite::Connection::new(
       move || -> anyhow::Result<_> {
-        let mut conn_sync = crate::connection::connect_sqlite(None, None).unwrap();
+        let mut conn_sync =
+          crate::connection::connect_rusqlite_without_default_extensions_and_schemas(None).unwrap();
         apply_logs_migrations(&mut conn_sync).unwrap();
         return Ok(conn_sync);
       },

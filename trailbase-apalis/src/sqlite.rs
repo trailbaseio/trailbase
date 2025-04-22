@@ -74,7 +74,7 @@ impl SqliteStorage<()> {
       .execute_batch(
         r#"
       PRAGMA journal_mode = 'WAL';
-      PRAGMA temp_store = 2;
+      PRAGMA temp_store = MEMORY;
       PRAGMA synchronous = NORMAL;
       PRAGMA cache_size = 64000;
     "#,

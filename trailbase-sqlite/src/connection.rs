@@ -71,7 +71,29 @@ impl Connection {
     builder: impl Fn() -> std::result::Result<rusqlite::Connection, E>,
     opt: Option<Options>,
   ) -> std::result::Result<Self, E> {
-    let n_read_threads = {
+    let spawn = |receiver: Receiver<Message>| -> std::result::Result<Option<String>, E> {
+      let conn = builder()?;
+      let name = conn.path().and_then(|s| {
+        // Returns empty string for in-memory databases.
+        if s.is_empty() {
+          None
+        } else {
+          Some(s.to_string())
+        }
+      });
+      if let Some(timeout) = opt.as_ref().map(|o| o.busy_timeout) {
+        conn.busy_timeout(timeout).expect("busy timeout failed");
+      }
+
+      std::thread::spawn(move || event_loop(conn, receiver));
+
+      return Ok(name);
+    };
+
+    let (shared_write_sender, shared_write_receiver) = crossbeam_channel::unbounded::<Message>();
+    let name = spawn(shared_write_receiver)?;
+
+    let n_read_threads = if name.is_some() {
       let n_read_threads = match opt.as_ref().map_or(0, |o| o.n_read_threads) {
         1 => {
           warn!(
@@ -92,22 +114,10 @@ impl Connection {
       }
 
       n_read_threads
+    } else {
+      // We cannot share an in-memory database across threads, they're all independent.
+      0
     };
-
-    let spawn = |receiver: Receiver<Message>| -> std::result::Result<String, E> {
-      let conn = builder()?;
-      let name = conn.path().unwrap_or_default().to_string();
-      if let Some(timeout) = opt.as_ref().map(|o| o.busy_timeout) {
-        conn.busy_timeout(timeout).expect("busy timeout failed");
-      }
-
-      std::thread::spawn(move || event_loop(conn, receiver));
-
-      return Ok(name);
-    };
-
-    let (shared_write_sender, shared_write_receiver) = crossbeam_channel::unbounded::<Message>();
-    let name = spawn(shared_write_receiver)?;
 
     let shared_read_sender = if n_read_threads > 0 {
       let (shared_read_sender, shared_read_receiver) = crossbeam_channel::unbounded::<Message>();
@@ -119,7 +129,10 @@ impl Connection {
       shared_write_sender.clone()
     };
 
-    debug!("Opened SQLite DB '{name}' with {n_read_threads} dedicated reader threads");
+    debug!(
+      "Opened SQLite DB '{name}' with {n_read_threads} dedicated reader threads",
+      name = name.as_deref().unwrap_or("<in-memory>")
+    );
 
     return Ok(Self {
       reader: shared_read_sender,

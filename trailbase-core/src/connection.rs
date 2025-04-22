@@ -1,10 +1,100 @@
+use parking_lot::Mutex;
 use std::path::PathBuf;
+use thiserror::Error;
 
-pub fn connect_sqlite(
+use crate::data_dir::DataDir;
+use crate::migrations::{apply_logs_migrations, apply_main_migrations};
+
+pub use trailbase_sqlite::Connection;
+
+#[derive(Debug, Error)]
+pub enum ConnectionError {
+  #[error("SQLite ext error: {0}")]
+  SqliteExtension(#[from] trailbase_extension::Error),
+  #[error("Rusqlite error: {0}")]
+  Rusqlite(#[from] rusqlite::Error),
+  #[error("Migration error: {0}")]
+  Migration(#[from] trailbase_refinery_core::Error),
+}
+
+/// Initializes a new SQLite Connection with all the default extensions, migrations and settings
+/// applied.
+///
+/// Returns a Connection and whether the DB was newly created..
+pub fn init_main_db(
+  data_dir: Option<&DataDir>,
+  extensions: Option<Vec<PathBuf>>,
+) -> Result<(Connection, bool), ConnectionError> {
+  let new_db = Mutex::new(false);
+
+  let main_path = data_dir.map(|d| d.main_db_path());
+  let migrations_path = data_dir.map(|d| d.migrations_path());
+
+  let conn = trailbase_sqlite::Connection::new(
+    || -> Result<_, ConnectionError> {
+      let mut conn = connect_rusqlite(main_path.clone(), extensions.clone())?;
+
+      *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
+
+      return Ok(conn);
+    },
+    Some(trailbase_sqlite::connection::Options {
+      n_read_threads: match (data_dir, std::thread::available_parallelism()) {
+        (None, _) => 0,
+        (Some(_), Ok(n)) => n.get().clamp(2, 4),
+        (Some(_), Err(_)) => 4,
+      },
+      ..Default::default()
+    }),
+  )?;
+
+  return Ok((conn, *new_db.lock()));
+}
+
+pub(crate) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {
+  let path = data_dir.map(|d| d.logs_db_path());
+
+  return trailbase_sqlite::Connection::new(
+    || -> Result<_, ConnectionError> {
+      let mut conn = connect_rusqlite_without_default_extensions_and_schemas(path.clone())?;
+
+      // Turn off secure_deletions, i.e. don't wipe the memory with zeros.
+      conn.query_row("PRAGMA secure_delete = FALSE", (), |_row| Ok(()))?;
+
+      // Sync less often
+      conn.execute("PRAGMA synchronous = 1", ())?;
+
+      apply_logs_migrations(&mut conn)?;
+      return Ok(conn);
+    },
+    None,
+  );
+}
+
+pub(crate) fn connect_rusqlite(
   path: Option<PathBuf>,
   extensions: Option<Vec<PathBuf>>,
 ) -> Result<rusqlite::Connection, trailbase_extension::Error> {
   trailbase_schema::registry::try_init_schemas();
 
   return trailbase_extension::connect_sqlite(path, extensions);
+}
+
+pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
+  path: Option<PathBuf>,
+) -> Result<rusqlite::Connection, rusqlite::Error> {
+  let conn = if let Some(p) = path {
+    use rusqlite::OpenFlags;
+    let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
+      | OpenFlags::SQLITE_OPEN_CREATE
+      | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+
+    rusqlite::Connection::open_with_flags(p, flags)?
+  } else {
+    rusqlite::Connection::open_in_memory()?
+  };
+
+  trailbase_extension::apply_default_pragmas(&conn)?;
+
+  return Ok(conn);
 }

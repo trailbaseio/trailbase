@@ -19,6 +19,36 @@ pub enum Error {
   Other(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
 }
 
+pub fn apply_default_pragmas(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
+  const CONFIG: &[&str] = &[
+    "PRAGMA busy_timeout       = 10000",
+    "PRAGMA journal_mode       = WAL",
+    "PRAGMA journal_size_limit = 200000000",
+    // Sync the file system less often.
+    "PRAGMA synchronous        = NORMAL",
+    "PRAGMA foreign_keys       = ON",
+    "PRAGMA temp_store         = MEMORY",
+    "PRAGMA cache_size         = -16000",
+    // TODO: Maybe worth exploring once we have a benchmark, based on
+    // https://phiresky.github.io/blog/2020/sqlite-performance-tuning/.
+    // "PRAGMA mmap_size          = 30000000000",
+    // "PRAGMA page_size          = 32768",
+
+    // Safety feature around application-defined functions recommended by
+    // https://sqlite.org/appfunc.html
+    "PRAGMA trusted_schema     = OFF",
+  ];
+
+  // NOTE: we're querying here since some pragmas return data.
+  for pragma in CONFIG {
+    let mut stmt = conn.prepare(pragma)?;
+    let mut rows = stmt.query([])?;
+    let _maybe_row = rows.next()?;
+  }
+
+  return Ok(());
+}
+
 #[allow(unsafe_code)]
 pub fn connect_sqlite(
   path: Option<PathBuf>,
