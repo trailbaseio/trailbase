@@ -25,6 +25,7 @@ auth {
     }
   }]
 }
+jobs {}
 record_apis: [{
   name: "_user_avatar"
   table_name: "_user_avatar"

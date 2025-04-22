@@ -182,6 +182,38 @@ impl Server {
   }
 
   pub async fn serve(self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Install a HUP/hangup signal handler to reload config.
+    #[cfg(unix)]
+    {
+      let state = self.state.clone();
+      tokio::spawn(async move {
+        // An infinite stream of hangup signals.
+        let mut stream = signal::unix::signal(signal::unix::SignalKind::hangup()).expect("startup");
+
+        loop {
+          stream.recv().await;
+          log::info!("Received HUP signal. Reloading config.");
+
+          match crate::config::load_or_init_config_textproto(
+            state.data_dir(),
+            state.table_metadata(),
+          )
+          .await
+          {
+            Ok(config) => {
+              if let Err(err) = state.validate_and_update_config(config, None).await {
+                log::error!("Failed to reload config: {err}");
+              }
+            }
+            Err(err) => {
+              log::error!("Failed to reload config: {err}");
+            }
+          }
+        }
+      });
+    }
+
+    // Finally start serving.
     return serve(self.main_router, self.admin_router, self.tls).await;
   }
 
