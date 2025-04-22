@@ -1,3 +1,14 @@
+## v0.9.4
+
+* Overhaul insert/update row/record form:
+  * Integer primary keys are nullable.
+  * Explicit nullability for numbers.
+  * Ignore defaults for update path.
+  * Don't pre-fill defaults.
+* Install SIGHUP handler for config reload.
+* Update to Rust edition 2024.
+* Update dependencies.
+
 ## v0.9.3
 
 * Custom JSON stdout request logger to have a stable format as opposed to
