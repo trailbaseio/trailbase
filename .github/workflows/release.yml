@@ -49,7 +49,9 @@ jobs:
           default: true
       - name: Rust Build
         run: |
-          RUSTFLAGS="-C target-feature=+crt-static" cargo build --target x86_64-unknown-linux-gnu --release --bin trail && \
+          RUSTFLAGS="-C target-feature=+crt-static" \
+            CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+            cargo build --target x86_64-unknown-linux-gnu --release --bin trail && \
             zip -r -j trailbase_${{  github.ref_name }}_x86_64_linux.zip target/x86_64-unknown-linux-gnu/release/trail CHANGELOG.md LICENSE
 
       - name: Release binaries
@@ -82,7 +84,8 @@ jobs:
           default: true
       - name: Rust Build
         run: |
-          cargo build --target aarch64-apple-darwin --release --bin trail && \
+          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+            cargo build --target aarch64-apple-darwin --release --bin trail && \
             zip -r -j trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip target/aarch64-apple-darwin/release/trail CHANGELOG.md LICENSE
 
       - name: Release binaries
@@ -115,7 +118,8 @@ jobs:
           default: true
       - name: Rust Build
         run: |
-          cargo build --target x86_64-apple-darwin --release --bin trail && \
+          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+            cargo build --target x86_64-apple-darwin --release --bin trail && \
             zip -r -j trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip target/x86_64-apple-darwin/release/trail CHANGELOG.md LICENSE
 
       - name: Release binaries
@@ -143,7 +147,8 @@ jobs:
       - name: Rust Build
         shell: bash
         run: |
-          cargo build --target x86_64-pc-windows-msvc --release --bin trail && \
+          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+            cargo build --target x86_64-pc-windows-msvc --release --bin trail && \
             zip -r -j trailbase_${{  github.ref_name }}_x86_64_windows.zip target/x86_64-pc-windows-msvc/release/trail.exe CHANGELOG.md LICENSE
 
       - name: Release binaries
