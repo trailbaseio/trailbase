@@ -15,7 +15,6 @@ members = [
 ]
 default-members = [
   "client/trailbase-rs",
-  "trailbase-apalis",
   "trailbase-assets",
   "trailbase-cli",
   "trailbase-core",

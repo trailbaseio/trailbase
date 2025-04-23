@@ -6686,6 +6686,7 @@ name = "trailbase"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "apalis",
  "arc-swap",
  "argon2",
  "askama",

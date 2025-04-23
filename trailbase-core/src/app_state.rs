@@ -10,7 +10,7 @@ use crate::config::{validate_config, write_config_and_vault_textproto};
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::js::RuntimeHandle;
-use crate::queue::QueueStorage;
+use crate::queue::Queue;
 use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
@@ -34,7 +34,7 @@ struct InternalState {
 
   conn: trailbase_sqlite::Connection,
   logs_conn: trailbase_sqlite::Connection,
-  queue: QueueStorage,
+  queue: Queue,
 
   jwt: JwtHelper,
 
@@ -59,7 +59,7 @@ pub(crate) struct AppStateArgs {
   pub config: Config,
   pub conn: trailbase_sqlite::Connection,
   pub logs_conn: trailbase_sqlite::Connection,
-  pub queue: QueueStorage,
+  pub queue: Queue,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore + Send + Sync>,
   pub js_runtime_threads: Option<usize>,
@@ -186,7 +186,7 @@ impl AppState {
     return &self.state.logs_conn;
   }
 
-  pub fn queue(&self) -> &QueueStorage {
+  pub fn queue(&self) -> &Queue {
     return &self.state.queue;
   }
 
@@ -441,7 +441,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       config,
       conn: conn.clone(),
       logs_conn,
-      queue: crate::queue::init_queue_storage(None).await.unwrap(),
+      queue: Queue::new(None).await.unwrap(),
       jwt: jwt::test_jwt_helper(),
       table_metadata: table_metadata.clone(),
       subscription_manager: SubscriptionManager::new(conn.clone(), table_metadata, record_apis),
