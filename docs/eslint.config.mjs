@@ -6,13 +6,16 @@ import solid from "eslint-plugin-solid/configs/recommended";
 import astro from "eslint-plugin-astro";
 
 export default [
+  {
+    ignores: ["dist/", "node_modules/", ".astro/", "src/env.d.ts"],
+  },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
-  solid,
   ...tailwind.configs["flat/recommended"],
   ...astro.configs.recommended,
   {
-    ignores: ["dist/", "node_modules/", ".astro/", "src/env.d.ts"],
+    files: ["**/*.{js,jsx,ts,tsx}"],
+    ...solid,
   },
   {
     files: ["**/*.{js,mjs,cjs,mts,ts,tsx,jsx,astro}"],

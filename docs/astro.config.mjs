@@ -86,6 +86,9 @@ export default defineConfig({
           },
         },
       ],
+      components: {
+        Footer: "./src/components/Footer.astro",
+      },
     }),
     tailwind({
       // Disable the default base styles:

@@ -39,6 +39,7 @@ hero:
 import { Image } from "astro:assets";
 import { Aside, Card, CardGrid } from "@astrojs/starlight/components";
 import SplitCard from "@/components/SplitCard.astro";
+import Footer from "@/components/Footer.astro";
 
 import Roadmap from "./_roadmap.md";
 
@@ -189,21 +190,5 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
       <Roadmap />
     </Aside>
 
-  </div>
-</div>
-
-{/* Hero page footer */}
-
-<div class="h-[30px]" />
-<div class="w-full mt-[28px] h-[1px] bg-accent-200" />
-
-<div class="w-full flex justify-end">
-  <div class="flex flex-col items-end mr-4">
-    <a class="no-underline" href="/contact">
-      Contact
-    </a>
-    <a class="no-underline" href="/license">
-      License
-    </a>
   </div>
 </div>

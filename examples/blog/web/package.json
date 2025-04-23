@@ -16,7 +16,7 @@
     "@astrojs/tailwind": "^5.1.5",
     "@nanostores/persistent": "^1.0.0",
     "@nanostores/solid": "^0.5.0",
-    "astro": "^5.7.4",
+    "astro": "^5.7.5",
     "astro-icon": "^1.1.5",
     "nanostores": "^1.0.1",
     "solid-icons": "^1.1.0",
@@ -24,7 +24,7 @@
     "trailbase": "^0.3.3"
   },
   "devDependencies": {
-    "@astrojs/solid-js": "^5.0.8",
+    "@astrojs/solid-js": "^5.0.9",
     "@eslint/js": "^9.25.1",
     "@iconify-json/tabler": "^1.2.17",
     "@tailwindcss/typography": "^0.5.16",
@@ -36,7 +36,7 @@
     "globals": "^16.0.0",
     "prettier": "^3.5.3",
     "prettier-plugin-astro": "^0.14.1",
-    "quicktype": "^23.0.171",
+    "quicktype": "^23.0.172",
     "sharp": "^0.34.1",
     "tailwindcss": "^3.4.17",
     "typescript-eslint": "^8.31.0"
