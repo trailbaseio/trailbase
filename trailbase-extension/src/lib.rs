@@ -54,12 +54,14 @@ pub fn connect_sqlite(
   path: Option<PathBuf>,
   extensions: Option<Vec<PathBuf>>,
 ) -> Result<rusqlite::Connection, Error> {
+  // First load C extensions like sqlean and vector search.
   let status =
     unsafe { rusqlite::ffi::sqlite3_auto_extension(Some(init_sqlean_and_vector_search)) };
   if status != 0 {
     return Err(Error::Other("Failed to load extensions".into()));
   }
 
+  // Then open database and load trailbase_extensions.
   let conn = sqlite3_extension_init(if let Some(p) = path {
     use rusqlite::OpenFlags;
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
@@ -71,37 +73,14 @@ pub fn connect_sqlite(
     rusqlite::Connection::open_in_memory()?
   })?;
 
-  const CONFIG: &[&str] = &[
-    "PRAGMA busy_timeout       = 10000",
-    "PRAGMA journal_mode       = WAL",
-    "PRAGMA journal_size_limit = 200000000",
-    // Sync the file system less often.
-    "PRAGMA synchronous        = NORMAL",
-    "PRAGMA foreign_keys       = ON",
-    "PRAGMA temp_store         = MEMORY",
-    "PRAGMA cache_size         = -16000",
-    // TODO: Maybe worth exploring once we have a benchmark, based on
-    // https://phiresky.github.io/blog/2020/sqlite-performance-tuning/.
-    // "PRAGMA mmap_size          = 30000000000",
-    // "PRAGMA page_size          = 32768",
-
-    // Safety feature around application-defined functions recommended by
-    // https://sqlite.org/appfunc.html
-    "PRAGMA trusted_schema     = OFF",
-  ];
-
-  // NOTE: we're querying here since some pragmas return data.
-  for pragma in CONFIG {
-    let mut stmt = conn.prepare(pragma)?;
-    let mut rows = stmt.query([])?;
-    rows.next()?;
-  }
-
+  // Load user-provided extensions.
   if let Some(extensions) = extensions {
     for path in extensions {
       unsafe { conn.load_extension(path, None)? }
     }
   }
+
+  apply_default_pragmas(&conn)?;
 
   // Initial optimize.
   conn.execute("PRAGMA optimize = 0x10002", ())?;
@@ -109,7 +88,7 @@ pub fn connect_sqlite(
   return Ok(conn);
 }
 
-fn sqlite3_extension_init(db: rusqlite::Connection) -> rusqlite::Result<rusqlite::Connection> {
+pub fn sqlite3_extension_init(db: rusqlite::Connection) -> rusqlite::Result<rusqlite::Connection> {
   // WARN: Be careful with declaring INNOCUOUS. This allows these "app-defined functions" to run
   // even when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
   // GENERATED cols, ... as opposed to just top-level SELECTs.

@@ -32,7 +32,9 @@ pub fn init_main_db(
 
   let conn = trailbase_sqlite::Connection::new(
     || -> Result<_, ConnectionError> {
-      let mut conn = connect_rusqlite(main_path.clone(), extensions.clone())?;
+      trailbase_schema::registry::try_init_schemas();
+
+      let mut conn = trailbase_extension::connect_sqlite(main_path.clone(), extensions.clone())?;
 
       *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
 
@@ -56,7 +58,10 @@ pub(crate) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, Con
 
   return trailbase_sqlite::Connection::new(
     || -> Result<_, ConnectionError> {
-      let mut conn = connect_rusqlite_without_default_extensions_and_schemas(path.clone())?;
+      // NOTE: The logs db needs the trailbase extensions for the maxminddb geoip lookup.
+      let mut conn = trailbase_extension::sqlite3_extension_init(
+        connect_rusqlite_without_default_extensions_and_schemas(path.clone())?,
+      )?;
 
       // Turn off secure_deletions, i.e. don't wipe the memory with zeros.
       conn.query_row("PRAGMA secure_delete = FALSE", (), |_row| Ok(()))?;
@@ -69,15 +74,6 @@ pub(crate) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, Con
     },
     None,
   );
-}
-
-pub(crate) fn connect_rusqlite(
-  path: Option<PathBuf>,
-  extensions: Option<Vec<PathBuf>>,
-) -> Result<rusqlite::Connection, trailbase_extension::Error> {
-  trailbase_schema::registry::try_init_schemas();
-
-  return trailbase_extension::connect_sqlite(path, extensions);
 }
 
 pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
@@ -95,6 +91,9 @@ pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
   };
 
   trailbase_extension::apply_default_pragmas(&conn)?;
+
+  // Initial optimize.
+  conn.execute("PRAGMA optimize = 0x10002", ())?;
 
   return Ok(conn);
 }
