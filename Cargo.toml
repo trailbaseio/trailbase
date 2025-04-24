@@ -40,6 +40,8 @@ opt-level = 3
 #   timings. Also increasing the `codegen-units` doesn't seem to have an effect
 #   in "fat"-mode.
 # * In TB benchmarks "fat" did not perform better than "thin" LTO.
+# * However, both "fat" LTO and "codegen-units = 1" reduced binary size. We're
+#   still using it in github releases.
 lto = "thin" # ("off", "thin", "fat")
 codegen-units = 16
 strip = "debuginfo"
@@ -53,7 +55,7 @@ strip = "debuginfo"
 opt-level = 1
 
 [workspace.dependencies]
-askama = { version = "0.13.0", default-features = false, features = ["derive", "std", "config"] }
+askama = { version = "0.14.0", default-features = false, features = ["derive", "std", "config"] }
 axum = { version = "^0.8.1", features = ["multipart"] }
 env_logger = { version = "^0.11.8", default-features = false, features = ["auto-color", "humantime"] }
 libsqlite3-sys = { version = "0.32.0", features = ["bundled"] }
