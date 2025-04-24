@@ -1,3 +1,16 @@
+## v0.10.0
+
+* Finer-grained access control over exposed APIs on a per-column basis:
+  * Columns can be explicitly excluded via a `excluded_columns` config option
+    rendering them inaccessible for both: reads and writes. This is different
+    from columns prefixed with "_", which are only hidden from read operations.
+  * A new `_REQ_FIELDS_` table is availble during access checks for `UPDATE` and
+    `CREATE` endpoints allowing to check for field presence in requests, e.g.
+    `'field' IN _REQ_FIELDS_`. A field in `_REQ`_ will be `NULL` whether it was
+    absent or explicitly passed as `null`.
+* Early message queue work (WIP).
+* Updated dependencies.
+
 ## v0.9.4
 
 * Overhaul insert/update row/record form:

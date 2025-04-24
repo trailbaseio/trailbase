@@ -69,8 +69,8 @@ matrix of who and what) and custom SQL access rules of the nature:
 Generally, the ACLs are checked first and then the access rules are evaluated
 when present.
 
-For example, to validate that the requestor provided a secret key and is member
-of a group "mygroup":
+For example, to validate that the requester provided a secret key and is member
+of a group `'mygroup'`:
 
 ```sql
 (_REQ_.secret = 'foo' AND EXISTS(
@@ -81,10 +81,16 @@ of a group "mygroup":
   ))
 ```
 
-* `_REQ_` is an injected sub-query containing the request fields. It is
-  available in access rules for `CREATE` and `UPDATE` operations.
+* `_REQ_` is an injected sub-query containing a user request's fields. It is
+  available in the access rules for `CREATE` and `UPDATE` operations.
+  Fields that were either absent in the request or explicitly passed as `null`,
+  will be `NULL`.
+* To check for the presence of a specific field in a `CREATE` or `UPDATE`
+  request, you can use `'field' IN _REQ__FIELDS_`. Note that `_REQ_FIELDS_` may
+  only contain fields with a corresponding column in the underlying table or
+  view.
 * Similarly, `_ROW_` is a sub-query of the target record. It is available in
-  access rules for `READ`, `UPDATE`, and `DELETE` operations.
+  the access rules for `READ`, `UPDATE`, and `DELETE` operations.
 * Lastly, `_USER_.id` references the id of the currently authenticated user and
   `NULL` otherwise.
 
