@@ -6,7 +6,7 @@ import sitemap from "@astrojs/sitemap";
 import solid from "@astrojs/solid-js";
 import starlight from "@astrojs/starlight";
 import starlightLinksValidator from "starlight-links-validator";
-import tailwind from "@astrojs/tailwind";
+import tailwindcss from "@tailwindcss/vite";
 
 // https://astro.build/config
 export default defineConfig({
@@ -18,7 +18,7 @@ export default defineConfig({
     solid(),
     starlight({
       title: "TrailBase",
-      customCss: ["./src/tailwind.css"],
+      customCss: ["./src/styles/global.css"],
       social: [
         {
           icon: "github",
@@ -90,9 +90,8 @@ export default defineConfig({
         Footer: "./src/components/Footer.astro",
       },
     }),
-    tailwind({
-      // Disable the default base styles:
-      applyBaseStyles: false,
-    }),
   ],
+  vite: {
+    plugins: [tailwindcss()],
+  },
 });

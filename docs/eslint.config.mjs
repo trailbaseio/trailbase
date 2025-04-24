@@ -1,21 +1,27 @@
 import globals from "globals";
-import pluginJs from "@eslint/js";
-import tseslint from "typescript-eslint";
-import tailwind from "eslint-plugin-tailwindcss";
-import solid from "eslint-plugin-solid/configs/recommended";
-import astro from "eslint-plugin-astro";
+
+import jsPlugin from "@eslint/js";
+import tsPlugin from "typescript-eslint";
+import tailwindPlugin from "eslint-plugin-tailwindcss";
+import solidPlugin from "eslint-plugin-solid/configs/recommended";
+import astroPlugin from "eslint-plugin-astro";
+
+console.info(
+  "TODO: Tailwind v4 eslint missing (https://github.com/francoismassart/eslint-plugin-tailwindcss/issues/325): ",
+  Object.keys(tailwindPlugin),
+);
 
 export default [
   {
     ignores: ["dist/", "node_modules/", ".astro/", "src/env.d.ts"],
   },
-  pluginJs.configs.recommended,
-  ...tseslint.configs.recommended,
-  ...tailwind.configs["flat/recommended"],
-  ...astro.configs.recommended,
+  jsPlugin.configs.recommended,
+  ...tsPlugin.configs.recommended,
+  // tailwindPlugin.configs["flat/recommended"],
+  ...astroPlugin.configs.recommended,
   {
     files: ["**/*.{js,jsx,ts,tsx}"],
-    ...solid,
+    ...solidPlugin,
   },
   {
     files: ["**/*.{js,mjs,cjs,mts,ts,tsx,jsx,astro}"],
