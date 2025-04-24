@@ -589,21 +589,18 @@ impl RecordApi {
         //   }
         // }
 
-        let mut fields = Vec::<String>::with_capacity(request_params.column_names.len());
-        for (param_index, col_name) in request_params.column_names.iter().enumerate() {
-          let Some(col_index) = self.column_index_by_name(col_name) else {
-            // We simply skip unknown columns, this could simply be malformed input or version skew.
-            // This is similar in spirit to protobuf's unknown fields behavior.
-            continue;
-          };
-
-          named_params[col_index].1 = request_params.named_params[param_index].1.clone();
-          fields.push(format!(r#""{col_name}""#));
+        assert_eq!(
+          request_params.column_names.len(),
+          request_params.column_indexes.len()
+        );
+        for (index, column_index) in request_params.column_indexes.iter().enumerate() {
+          // Override the default NULL value with the request value.
+          named_params[*column_index].1 = request_params.named_params[index].1.clone();
         }
 
         named_params.push((
           Cow::Borrowed(":__fields"),
-          Value::Text(format!("[{}]", fields.join(","))),
+          Value::Text(serde_json::to_string(&request_params.column_names).expect("json array")),
         ));
 
         named_params

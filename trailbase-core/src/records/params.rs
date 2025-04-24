@@ -58,23 +58,35 @@ pub(crate) type FileMetadataContents = Vec<(FileUpload, Vec<u8>)>;
 pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;
 
 pub trait SchemaAccessor {
-  fn column_by_name(&self, field_name: &str) -> Option<(&Column, Option<&JsonColumnMetadata>)>;
+  fn column_by_name(
+    &self,
+    field_name: &str,
+  ) -> Option<(usize, &Column, Option<&JsonColumnMetadata>)>;
 }
 
+/// Implementation to build insert/update Params for admin APIs.
 impl SchemaAccessor for TableMetadata {
   #[inline]
-  fn column_by_name(&self, field_name: &str) -> Option<(&Column, Option<&JsonColumnMetadata>)> {
+  fn column_by_name(
+    &self,
+    field_name: &str,
+  ) -> Option<(usize, &Column, Option<&JsonColumnMetadata>)> {
     return self
       .column_by_name(field_name)
-      .map(|(index, col)| (col, self.json_metadata.columns[index].as_ref()));
+      .map(|(index, col)| (index, col, self.json_metadata.columns[index].as_ref()));
   }
 }
 
+/// Implementation to build insert/update Params for record APIs.
 impl SchemaAccessor for RecordApi {
   #[inline]
-  fn column_by_name(&self, field_name: &str) -> Option<(&Column, Option<&JsonColumnMetadata>)> {
+  fn column_by_name(
+    &self,
+    field_name: &str,
+  ) -> Option<(usize, &Column, Option<&JsonColumnMetadata>)> {
     return self.column_index_by_name(field_name).map(|index| {
       return (
+        index,
         &self.columns()[index],
         self.json_column_metadata()[index].as_ref(),
       );
@@ -82,20 +94,21 @@ impl SchemaAccessor for RecordApi {
   }
 }
 
-#[derive(Default)]
+/// Represents a record provided by the user via request, i.e. a create or update record request.
+///
+/// To construct a `Params`, the request will be transformed, i.e. fields for unknown columns will
+/// be filtered out and the json values will be translated into SQLite values.
 pub struct Params {
   /// List of named params with their respective placeholders, e.g.:
   ///   '(":col_name": Value::Text("hi"))'.
   pub(super) named_params: NamedParams,
 
-  /// List of columns that are targeted by the params. Useful for building Insert/Update queries.
-  ///
-  /// NOTE: This is a super-set of all columns and also includes the file_col_names below.
-  /// NOTE: We could also infer them from placeholder names by stripping the leading ":".
-  pub(super) column_names: Vec<String>,
-
   /// List of files and contents to be written to an object store.
   pub(super) files: FileMetadataContents,
+
+  /// Metadata for mapping `named_params` back to SQL schema to construct Insert/Update queries.
+  pub(super) column_names: Vec<String>,
+  pub(super) column_indexes: Vec<usize>,
 }
 
 impl Params {
@@ -122,14 +135,18 @@ impl Params {
     json: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Result<Self, ParamsError> {
+    let len = json.len();
     let mut params = Params {
-      ..Default::default()
+      named_params: NamedParams::with_capacity(len),
+      files: FileMetadataContents::default(),
+      column_names: Vec::with_capacity(len),
+      column_indexes: Vec::with_capacity(len),
     };
 
     for (key, value) in json {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
-      let Some((col, json_meta)) = accessor.column_by_name(&key) else {
+      let Some((index, col, json_meta)) = accessor.column_by_name(&key) else {
         continue;
       };
 
@@ -140,7 +157,9 @@ impl Params {
         params.files.append(json_files);
       }
 
-      params.push_param(key, param);
+      params.named_params.push((prefix_colon(&key).into(), param));
+      params.column_names.push(key);
+      params.column_indexes.push(index);
     }
 
     // Note: files provided as part of a JSON request are handled above.
@@ -149,11 +168,6 @@ impl Params {
     }
 
     return Ok(params);
-  }
-
-  pub fn push_param(&mut self, col: String, value: Value) {
-    self.named_params.push((prefix_colon(&col).into(), value));
-    self.column_names.push(col);
   }
 
   fn append_multipart_files<S: SchemaAccessor>(
@@ -179,7 +193,7 @@ impl Params {
     for (field_name, file_metadata, _content) in &files {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
-      let Some((col, json_meta)) = accessor.column_by_name(field_name) else {
+      let Some((index, col, json_meta)) = accessor.column_by_name(field_name) else {
         continue;
       };
 
@@ -200,12 +214,14 @@ impl Params {
             .named_params
             .push((prefix_colon(&col.name).into(), value));
           self.column_names.push(col.name.to_string());
+          self.column_indexes.push(index);
         }
         "std.FileUploads" => {
           self
             .named_params
             .push((prefix_colon(&col.name).into(), value));
           self.column_names.push(col.name.to_string());
+          self.column_indexes.push(index);
         }
         _ => {
           return Err(ParamsError::Column("Mismatching JSON schema"));
@@ -224,7 +240,7 @@ impl Params {
   }
 }
 
-/// A lazy representation of SQL query parameters derived from the request json to shared between
+/// A lazy representation of SQL query parameters derived from the request json to share between
 /// handler and the policy engine.
 ///
 /// If the request gets rejected by the policy we want to avoid parsing the request JSON and if the
@@ -238,8 +254,8 @@ pub struct LazyParams<'a, S: SchemaAccessor> {
   json_row: JsonRow,
   multipart_files: Option<Vec<FileUploadInput>>,
 
-  // Output
-  params: Option<Result<Params, ParamsError>>,
+  // Cached evaluate params. We could use a OnceCell but we don't need the synchronisation.
+  result: Option<Result<Params, ParamsError>>,
 }
 
 impl<'a, S: SchemaAccessor> LazyParams<'a, S> {
@@ -252,29 +268,27 @@ impl<'a, S: SchemaAccessor> LazyParams<'a, S> {
       accessor,
       json_row,
       multipart_files,
-      params: None,
+      result: None,
     }
   }
 
   pub fn params(&mut self) -> Result<&'_ Params, ParamsError> {
-    if let Some(ref params) = self.params {
-      return params.as_ref().map_err(|err| err.clone());
-    }
+    let result = self.result.get_or_insert_with(|| {
+      Params::from(
+        self.accessor,
+        std::mem::take(&mut self.json_row),
+        std::mem::take(&mut self.multipart_files),
+      )
+    });
 
-    let json_row = std::mem::take(&mut self.json_row);
-    let multipart_files = std::mem::take(&mut self.multipart_files);
-
-    let params = self
-      .params
-      .insert(Params::from(self.accessor, json_row, multipart_files));
-    return params.as_ref().map_err(|err| err.clone());
+    return result.as_ref().map_err(|err| err.clone());
   }
 
-  pub fn consume(self) -> Result<Params, ParamsError> {
-    if let Some(params) = self.params {
-      return params;
-    }
-    return Params::from(self.accessor, self.json_row, self.multipart_files);
+  pub fn consume(mut self) -> Result<Params, ParamsError> {
+    return self
+      .result
+      .take()
+      .unwrap_or_else(|| Params::from(self.accessor, self.json_row, self.multipart_files));
   }
 }
 

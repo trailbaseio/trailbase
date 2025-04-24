@@ -11,6 +11,7 @@ use crate::extract::Either;
 use crate::records::params::{JsonRow, LazyParams, Params};
 use crate::records::query_builder::InsertQueryBuilder;
 use crate::records::{Permission, RecordError};
+use crate::util::uuid_to_b64;
 
 #[derive(Clone, Debug, Default, Deserialize, IntoParams)]
 pub struct CreateRecordQuery {
@@ -103,14 +104,28 @@ pub async fn create_record_handler(
     return Err(RecordError::ApiRequiresTable);
   }
 
-  let record_and_files: Vec<RecordAndFiles> = match either_request {
+  let records_and_files: Vec<RecordAndFiles> = match either_request {
     Either::Json(value) => extract_records(value)?,
     Either::Multipart(value, files) => vec![(extract_record(value)?, Some(files))],
     Either::Form(value) => vec![(extract_record(value)?, None)],
   };
 
-  let mut params_list: Vec<Params> = Vec::with_capacity(record_and_files.len());
-  for (record, files) in record_and_files {
+  let mut params_list: Vec<Params> = Vec::with_capacity(records_and_files.len());
+  for (mut record, files) in records_and_files {
+    if api.insert_autofill_missing_user_id_columns() {
+      if let Some(ref user) = user {
+        for column_index in api.user_id_columns() {
+          let col_name = &api.columns()[*column_index].name;
+          if !record.contains_key(col_name) {
+            record.insert(
+              col_name.to_owned(),
+              serde_json::Value::String(uuid_to_b64(&user.uuid)),
+            );
+          }
+        }
+      }
+    }
+
     let mut lazy_params = LazyParams::new(&api, record, files);
 
     // NOTE: We're currently serializing the async checks, we could parallelize them however it's
@@ -124,26 +139,11 @@ pub async fn create_record_handler(
       )
       .await?;
 
-    let Ok(mut params) = lazy_params.consume() else {
-      return Err(RecordError::BadRequest("Parameter conversion"));
-    };
-
-    if api.insert_autofill_missing_user_id_columns() {
-      if let Some(ref user) = user {
-        for column_index in api.user_id_columns() {
-          let col = &api.columns()[*column_index];
-
-          if !params.column_names.iter().any(|c| c == &col.name) {
-            params.push_param(
-              col.name.clone(),
-              trailbase_sqlite::Value::Blob(user.uuid.into()),
-            );
-          }
-        }
-      }
-    }
-
-    params_list.push(params);
+    params_list.push(
+      lazy_params
+        .consume()
+        .map_err(|_| RecordError::BadRequest("Parameter conversion"))?,
+    );
   }
 
   let (_index, pk_column) = api.record_pk_column();

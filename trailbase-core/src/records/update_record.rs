@@ -32,11 +32,21 @@ pub async fn update_record_handler(
 
   let record_id = api.id_to_sql(&record)?;
 
-  let (request, multipart_files) = match either_request {
+  let (mut request, multipart_files) = match either_request {
     Either::Json(value) => (value, None),
     Either::Multipart(value, files) => (value, Some(files)),
     Either::Form(value) => (value, None),
   };
+
+  let (_index, pk_column) = api.record_pk_column();
+  if let Some(existing) = request.insert(
+    pk_column.name.clone(),
+    serde_json::Value::String(record.clone()),
+  ) {
+    if existing != record {
+      return Err(RecordError::BadRequest("primary key mismatch"));
+    }
+  }
 
   let mut lazy_params = LazyParams::new(&api, request, multipart_files);
   api
@@ -48,13 +58,10 @@ pub async fn update_record_handler(
     )
     .await?;
 
-  let (_index, pk_column) = api.record_pk_column();
-
   UpdateQueryBuilder::run(
     &state,
     api.table_name(),
     &pk_column.name,
-    record_id,
     api.has_file_columns(),
     lazy_params
       .consume()

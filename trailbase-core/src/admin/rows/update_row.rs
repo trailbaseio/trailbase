@@ -5,7 +5,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::records::params::{JsonRow, Params, simple_json_value_to_param};
+use crate::records::params::{JsonRow, Params};
 use crate::records::query_builder::UpdateQueryBuilder;
 
 #[derive(Debug, Serialize, Deserialize, Default, TS)]
@@ -51,13 +51,22 @@ pub async fn update_row_handler(
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
   }
 
+  let mut row = request.row;
+  if let Some(existing) = row.insert(
+    request.primary_key_column,
+    request.primary_key_value.clone(),
+  ) {
+    if existing != request.primary_key_value {
+      return Err(Error::BadRequest("pk mistmatch".into()));
+    }
+  }
+
   UpdateQueryBuilder::run(
     &state,
     table_metadata.name(),
     &column.name,
-    simple_json_value_to_param(column.data_type, request.primary_key_value)?,
     table_metadata.json_metadata.has_file_columns(),
-    Params::from(&*table_metadata, request.row, None)?,
+    Params::from(&*table_metadata, row, None)?,
   )
   .await?;
 

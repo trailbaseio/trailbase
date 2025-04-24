@@ -426,15 +426,14 @@ impl UpdateQueryBuilder {
     state: &AppState,
     table_name: &str,
     pk_column: &str,
-    pk_value: Value,
     has_file_columns: bool,
     mut params: Params,
   ) -> Result<(), QueryError> {
-    if params.column_names.is_empty() {
+    if params.column_names.len() < 2 {
+      // Only the primary key. Nothing to do.
+      assert!(params.column_names.is_empty() || params.column_names[0] == pk_column);
       return Ok(());
     }
-
-    params.push_param(pk_column.to_string(), pk_value.clone());
 
     // We're storing any files to the object store first to make sure the DB entry is valid right
     // after commit and not racily pointing to soon-to-be-written files.
