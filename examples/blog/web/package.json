@@ -36,7 +36,7 @@
     "globals": "^16.0.0",
     "prettier": "^3.5.3",
     "prettier-plugin-astro": "^0.14.1",
-    "quicktype": "^23.0.172",
+    "quicktype": "^23.0.175",
     "sharp": "^0.34.1",
     "tailwindcss": "^3.4.17",
     "typescript-eslint": "^8.31.0"
