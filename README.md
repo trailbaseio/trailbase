@@ -161,8 +161,8 @@ TrailBase is free software under the terms of the [OSL-3.0](LICENSE).
 We chose this license over more popular, similar copyleft licenses such as
 AGPLv3 due to its narrower definition of derivative work that only covers
 modifications to TrailBase itself. This is similar to GPL's classpath or LGPL's
-linkage exception allowing the use of TrailBase as a framework without
-inflicting licensing requirements on original work layered on top.
+linkage exception allowing the use of TrailBase as a framework and JS runtime
+without inflicting licensing requirements on your original work.
 That said, we ain't lawyers. The author of the license provides a more thorough
 [explanation](https://rosenlaw.com/OSL3.0-explained.htm). If you have any
 concerns or advice for us, please reach out.

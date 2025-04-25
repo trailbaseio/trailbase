@@ -82,6 +82,8 @@ this test TrailBase can insert 100k records 170 times faster than Payload[^4],
 almost 40 times faster than SupaBase[^5], and comfortably 11 times faster
 than PocketBase [^1].
 
+### Utilization
+
 The total time of inserting a large batch of data tells only part of the story.
 Let's have a look at resource consumption to get an intuition for provisioning
 or footprint requirements, i.e. what kind of machine one would need:
@@ -145,7 +147,7 @@ Most of the CPUs seem to be consumed by *supabase-rest*, the API frontend, with
 postgres itself hovering at only about 0.7 cores. Also, *supabase-analytics*
 definitely seems to be in use.
 
-## Latency and Read Performance
+## Read and Write Latency
 
 Let's take a closer look at latency distributions. To keep things manageable
 we'll focus on PocketBase and TrailBase, which are architecturally simpler and
@@ -185,7 +187,7 @@ being roughly 3 times slower than p50.
 Slower insertions can take north of 100ms. This may be related to GC pauses,
 scheduling, or more generally the same CPU variability we observed earlier.
 
-## File System Performance
+## File System
 
 File systems play an important role for the performance of storage systems,
 we'll therefore take a quick at their impact on SQLite/TrailBase's performance.
@@ -228,7 +230,7 @@ disc space and feature sets. For example, CoW snapshots may or may not be
 important to you.
 
 
-## JavaScript Performance
+## JavaScript
 
 The benchmark sets up a custom HTTP endpoint `/fibonacci?n=<N>` using the same
 slow recursive Fibonacci

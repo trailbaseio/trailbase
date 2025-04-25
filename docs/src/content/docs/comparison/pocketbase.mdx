@@ -3,92 +3,156 @@ title: PocketBase
 description: Comparing TrailBase & PocketBase.
 ---
 
-Firstly, PocketBase is amazing! It based the trail for single-executable,
-SQLite application bases, is incredibly easy-to-use, and a polished
-experience. Gani, the person behind it, is a mad scientist.
+import { Aside } from "@astrojs/starlight/components";
+import GettingTrailBase from "../getting-started/_getting_trailbase.md";
 
-At the surface-level there are a lot of similarities between PocketBase and
-TrailBase. In this comparison, we'll dive a little deeper and have a closer
-look at the technical as well as philosophical differences between the two.
+Firstly, PocketBase is amazing! It paved the way for single-executable
+application bases, is incredibly easy-to-use, and a polished
+experience. Gani, the person behind it, is a mad scientist 🙏.
 
-### Goals & Aspirations
+From a distance PocketBase and TrailBase are both single-executables providing
+almost identical feature sets: REST APIs, realtime updates, authentication, file
+storage, JavaScript (JS) runtimes, admin dashboard..., all on top of SQLite.
+
+For the sake of this comparison, we'll dive a little deeper to have a closer
+look at their differences both technically and philosophically.
+
+## Goals
 
 TrailBase was born out of admiration for PocketBase trying to move the needle
 in a few areas:
 
-- Less abstraction, embracing standards (SQL[^1], JWT, UUID), and untethered access
-  to SQLite[^2] including features such as recursive CTEs, virtual tables
-  and vector search.
-  The goal is to not get in your way and avoid lock-in by bespoke solutions
-  making it easier adopt TrailBase either fully or as piece-meal as well as
-  getting rid of it based on your product needs.
-- Be just as easy to self-host and be even easier to manage a fleet of
-  deployments across integration tests, development, and production by separating
-  data, configuration, and secrets.
-- Super-powers through SQLite extensions (regex, GIS, ...) including your own [^3].
-- Be lightweight enough to rival plain SQLite performance at least for
+- Less abstraction and embracing standards (SQL[^1], ES6 Node-like JS runtime,
+  JWT, UUID) to not get in your way, avoid lock-in and making it easier to
+  adopt TrailBase either fully or as piece-meal as well as getting rid of it if
+  necessary.
+- Untethered access to SQLite[^2] including features such as recursive CTEs,
+  virtual tables and extensions, e.g., providing vector search and geoip out of
+  the box[^3], unlocking more use-cases and standard solutions to well-known
+  problems.
+- Be lightweight and fast to rival in-process SQLite performance at least for
   higher-level languages.
-- Be simple and flexible enough to be an attractive alternative to plain SQLite
-  for serving **and** data analysis use-cases.
+- Be just as easy to self-host with aspirations to be even easier to manage a
+  fleet of deployments across integration tests, development, and production.
+  We'd also like to eventually takle replication.
+- Be simple, flexible and portable enough to support data analysis use-cases.
+  Imagine a self-contained data science project that ships an interactive UI
+  with vector search and custom JS extensions alongside its data.
 
-### Differences
+## Differences
 
-It's worth noting that PocketBase and TrailBase have a lot in common: they are
-both single static binaries providing CRUD plus realtime APIs, JavaScript
-runtimes, authentication and file storage on top of SQLite.
-That said and for the sake of this article, let's look at some of the
-differences and extra features that PocketBase provides:
-
-- PocketBase can also be used as a Go framework, i.e. instead of using the
-  binary release one can build a custom binary with custom endpoints.
-  Similarly you can use Rust to do the same with TrailBase.
-
-Likewise, TrailBase has a few nifty tricks up its sleeve:
-
-- Language independent type-safety via JSON Schemas with strict typing
-  being enforced all the way down to the database level[^4].
-- TrailBase's JavaScript runtime supports full ES6, TypeScript transpilation,
-  and is built on V8 making it [~40x faster](/reference/benchmarks/#javascript-performance).
-  Supporting ES makes it easier to integrate popular JS frameworks for SSR.
-- First-class access to all of SQLite's features and capabilities.
-- A simple auth UI.
-- Stateless JWT auth-tokens for simple, hermetic authentication in other
-  backends.
-- Efficient and stable cursor-based pagination.
-- An admin UI that "works" on small screens and mobile :)
+Beyond goals and intentions, let's look at some of the more practical differences:
 
 ### Language & Performance
 
-Another difference is that PocketBase is written in Go, while TrailBase uses
-Rust. Beyond feelings this may matter to you when using them as a "framework"
-or modifying the core.
+PocketBase being written in Go and TrailBase in Rust may be the most instantly
+visible difference.
+Preference aside, this will likely matter more to folks who want to use
+either as a framework rather than the standalone binary or modifying the core.
 
-In practice, both languages are speedy options with a rich ecosystem.
-That said, Rust's lack of a runtime and lower FFI overhead should make it the
-more performant choice.
-Measuring we found a significant gap with TrailBase's APIs being roughly
-[10x and JS runtime 40x faster](/reference/benchmarks/).
-This is the result of SQLite of first-class JS engines being so quick that even
-small overheads weight heavily.
+In practice, both languages are solid, speedy options with rich ecosystems.
+Though Rust's lack of a runtime and lower FFI overhead gives it the edge in
+terms of performance.
+Measuring we found that TrailBase's APIs are roughly [10x faster](/reference/benchmarks/).
+This may sound like a lot but is the result of SQLite itself being extremely
+fast meaning that even small overheads weigh heavily.
+
+Independently, TrailBase choice of V8 as its JS runtime allows code to run
+roughly 40x faster.
+
+### Framework Use
+
+Both PocketBase and TrailBase allow customization using their built-in JS
+runtimes. However, some users may want even more control and built their own
+binaries using only bits and pieces.
+This is what we refer to as library or framework use. For this use-case
+language preference and prior experience of you and your team will likely matter
+a lot more with PocketBase written in Go and TrailBase in Rust.
+
+Framework use is something PocketBase has allowed for a long time and is really
+great at.
+TrailBase technically allows it too, but at this point it really feels more
+like an afterthought while we focus on the standalone experience.
+Expect TrailBase to improve significantly in this area.
+
+### Features
+
+When we look more deeply into the seemingly identical features sets, many and
+constantly evolving differences are starting to surface.
+In lieu of enumerating them all, let's look at some examples.
+
+Auth is an area where PocketBase's maturity clearly shows: while it uses
+simpler session-based auth, as opposed to stateless JWT auth-tokens, it
+supports multi-factor auth and a larger set of social OAuth providers.
+This is an area where TrailBase needs to improve but maybe stateless tokens is
+just what you're after 😅.
+
+Despite being the new kid on the block, TrailBase has a few nifty tricks up its
+sleeve:
+
+- Language independent bindings via JSON-schema with strict type-safety
+  being enforced from the client all the way to the database[^4].
+- A more Node-like JS runtime with full ES6 support, built-in TypeScript
+  transpilation, and V8 performance unlocking more of the JS ecosystem and enabling
+  [server-side rendering (SSR)](https://github.com/trailbaseio/trailbase/tree/main/examples/collab-clicker-ssr)
+  with any popular JS framework.
+- Untethered access to SQLite with all its features and capabilities.
+- A wider set of first-class client libraries beyond JS/TS and Dart, including
+  C#, Python and Rust.
+- Ships with a simple pre-built auth UI to get you started. You can always
+  graduate to your own.
+- Efficient and stable cursor-based pagination as opposed to `OFFSET`.
+- An admin UI that "works" on small mobile screens 😅.
+
+### Contributing & Licensing
+
+Both PocketBase and TrailBase are truly open-source: they accept contributions
+and are distributed under [OSI-approved](https://opensource.org/licenses) licenses.
+PocketBase is distributed under the permissive MIT license, while TrailBase
+uses the OSL-3.0 copyleft license.
+We chose this license over more popular, similar copyleft licenses such as
+AGPLv3 due to its narrower definition of derivative work that only covers
+modifications to TrailBase itself. This is similar to GPL's classpath or LGPL's
+linkage exception allowing the use of TrailBase as a framework and JS runtime
+without inflicting licensing requirements on your original work.
+
+## Final Words
+
+PocketBase is great and both PocketBase and TrailBase are constantly evolving
+making it hard to give clear guidance on which to pick when.
+If you can afford the luxury, I'd recommend to give them both a quick spin.
+After all they're both incredibly quick and easy to deploy.
+
+In the end, if you're looking for mileage or framework use-cases you're likely
+better off with PocketBase.
+Otherwise it may be worth giving TrailBase a closer look, especially when
+flexibility and performance matter.
+
+<Aside type="note" title="Getting TrailBase">
+  <GettingTrailBase />
+</Aside>
 
 <div class="h-[30px]" />
 
 ---
 
-[^1]: Maybe more in line with SupaBase's philosophy. We suspect that PocketBase
-  relies on schema metadata by construction requiring alterations to be
-  mediated through PocketBase APIs to stay in sync.
+[^1]:
+    We believe that SQL a ubiquitous evergreen technology, which in of itself
+    is already a high-level abstraction for efficient, unified cross-database
+    access.
+    ORMs, on the other hand, often look great in examples but many fall apart
+    for more complex tasks. They're certainly bespoke, non-transferable
+    knowledge, and lead to vendor lock-in.
 
-[^2]: We believe that SQL a ubiquitous evergreen technology, which in of itself
-  is already a high-level abstraction for efficient, unified cross-database
-  access.
-  Even higher-level abstractions, such as ORMs, often look nice for simple
-  examples but quickly fall flat for more complex ones. They're certainly
-  bespoke, non-transferable knowledge, and increase vendor lock-in.
+[^2]:
+    Maybe more in line with SupaBase's philosophy. We suspect that PocketBase
+    relies on schema metadata by construction requiring alterations to be
+    mediated through PocketBase to keep everything in sync.
 
 [^3]:
     All extensions can be built into a small, standalone shared library and
-    imported by vanilla SQLite avoiding vendor lock-in.
+    imported by vanilla SQLite to avoid vendor lock-in.
 
-[^4]: SQLite is not strictly typed by default. Instead column types merely a
-    type affinity for value conversions.
+[^4]:
+    Note that SQLite is not strictly typed by default. Instead column types
+    merely a type affinity for value conversions.
