@@ -110,26 +110,35 @@ pub async fn list_records_handler(
     ),
   ]);
 
-  let cursor_clause = if let Some(cursor) = cursor {
-    params.push((Cow::Borrowed(":cursor"), cursor.into()));
-    format!(r#"_ROW_."{}" < :cursor"#, pk_column.name)
-  } else {
-    "TRUE".to_string()
-  };
+  fn fmt_order(col: &str, order: Order) -> String {
+    return format!(
+      r#"_ROW_."{col}" {}"#,
+      match order {
+        Order::Descending => "DESC",
+        Order::Ascending => "ASC",
+      }
+    );
+  }
 
-  let order_clause = order
-    .unwrap_or_else(|| vec![(pk_column.name.clone(), Order::Descending)])
-    .iter()
-    .map(|(col, ord)| {
-      format!(
-        r#"_ROW_."{col}" {}"#,
-        match ord {
-          Order::Descending => "DESC",
-          Order::Ascending => "ASC",
+  let mut pk_order = Order::Descending;
+  let order_clause = order.map(|o| {
+    o.into_iter()
+      .map(|(col, ord)| {
+        if col == pk_column.name {
+          pk_order = ord.clone();
         }
-      )
-    })
-    .join(", ");
+        return fmt_order(&col, ord);
+      })
+      .join(",")
+  });
+
+  let cursor_clause = cursor.map(|cursor| {
+    params.push((Cow::Borrowed(":cursor"), cursor.into()));
+    return match pk_order {
+      Order::Descending => format!(r#"_ROW_."{}" < :cursor"#, pk_column.name),
+      Order::Ascending => format!(r#"_ROW_."{}" > :cursor"#, pk_column.name),
+    };
+  });
 
   let expanded_tables = match query_expand {
     Some(ref expand) => {
@@ -157,8 +166,8 @@ pub async fn list_records_handler(
     column_names: &column_names,
     read_access_clause,
     filter_clause: &filter_clause,
-    cursor_clause: &cursor_clause,
-    order_clause: &order_clause,
+    cursor_clause: cursor_clause.as_deref().unwrap_or("TRUE"),
+    order_clause: &order_clause.unwrap_or_else(|| fmt_order(&pk_column.name, Order::Descending)),
     expanded_tables: &expanded_tables,
     count: count.unwrap_or(false),
   }
