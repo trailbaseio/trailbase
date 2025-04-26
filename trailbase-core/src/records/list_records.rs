@@ -384,7 +384,7 @@ mod tests {
   }
 
   #[allow(unused)]
-  #[derive(Deserialize)]
+  #[derive(Deserialize, Debug, PartialEq)]
   struct Message {
     mid: String,
     _owner: Option<String>,
@@ -481,7 +481,7 @@ mod tests {
             _ => panic!("expected object, got {v:?}"),
           };
 
-          let message = serde_json::from_value::<Message>(v).unwrap();
+          let message = to_message(v);
           assert_eq!(None, message._owner);
 
           return message.data;
@@ -522,7 +522,7 @@ mod tests {
             _ => panic!("expected object, got {v:?}"),
           };
 
-          let message = serde_json::from_value::<Message>(v).unwrap();
+          let message = to_message(v);
           assert_eq!(None, message._owner);
           message.data
         })
@@ -543,12 +543,7 @@ mod tests {
       .unwrap();
 
       assert_eq!(resp0.records.len(), 1);
-      assert_eq!(
-        "user_y to room0",
-        serde_json::from_value::<Message>(resp0.records[0].clone())
-          .unwrap()
-          .data
-      );
+      assert_eq!("user_y to room0", to_message(resp0.records[0].clone()).data);
       assert_eq!(resp0.total_count, Some(2));
 
       let cursor = resp0.cursor.unwrap();
@@ -561,12 +556,7 @@ mod tests {
       .unwrap();
 
       assert_eq!(resp1.records.len(), 1);
-      assert_eq!(
-        "user_x to room0",
-        serde_json::from_value::<Message>(resp1.records[0].clone())
-          .unwrap()
-          .data
-      );
+      assert_eq!("user_x to room0", to_message(resp1.records[0].clone()).data);
       assert_eq!(resp1.total_count, Some(2));
       let cursor = resp1.cursor.unwrap();
 
@@ -613,6 +603,10 @@ mod tests {
       .records;
       assert_eq!(arr_asc.len(), 3);
 
+      // The following assertion would be flaky in case the UUIDv7 message IDs were minted in the
+      // same time slot.
+      // assert!(to_message(arr_asc[0].clone()).mid < to_message(arr_asc[1].clone()).mid);
+
       let arr_desc = list_records(
         &state,
         Some(&user_y_token.auth_token),
@@ -624,6 +618,94 @@ mod tests {
       assert_eq!(arr_desc.len(), 3);
 
       assert_eq!(arr_asc, arr_desc.into_iter().rev().collect::<Vec<_>>());
+
+      // Ordering and cursor work well together.
+      let cursor_middle = to_message(arr_asc[1].clone()).mid;
+
+      let mut cursored_desc = list_records(
+        &state,
+        Some(&user_y_token.auth_token),
+        Some(format!(
+          "order={}&cursor={cursor_middle}",
+          urlencode("-mid")
+        )),
+      )
+      .await
+      .unwrap()
+      .records;
+
+      assert_eq!(cursored_desc.len(), 1);
+      assert_eq!(
+        to_message(cursored_desc.swap_remove(0)),
+        to_message(arr_asc[0].clone())
+      );
+
+      let mut cursored_asc = list_records(
+        &state,
+        Some(&user_y_token.auth_token),
+        Some(format!(
+          "order={}&cursor={cursor_middle}",
+          urlencode("+mid")
+        )),
+      )
+      .await
+      .unwrap()
+      .records;
+
+      assert_eq!(cursored_asc.len(), 1);
+      assert_eq!(
+        to_message(cursored_asc.swap_remove(0)),
+        to_message(arr_asc[2].clone())
+      );
+
+      // Ordering and cursor work well together when PK is not primary order cirteria.
+      let cursor_first = to_message(arr_asc[0].clone()).mid;
+
+      // With ascending room id
+      let cursored_asc_asc = list_records(
+        &state,
+        Some(&user_y_token.auth_token),
+        Some(format!(
+          "order={}&cursor={cursor_first}",
+          urlencode("+room,+mid")
+        )),
+      )
+      .await
+      .unwrap()
+      .records;
+
+      assert_eq!(cursored_asc_asc.len(), 2);
+      assert_eq!(
+        to_message(cursored_asc_asc[0].clone()),
+        to_message(arr_asc[1].clone())
+      );
+      assert_eq!(
+        to_message(cursored_asc_asc[1].clone()),
+        to_message(arr_asc[2].clone())
+      );
+
+      // With descending room id
+      let cursored_desc_asc = list_records(
+        &state,
+        Some(&user_y_token.auth_token),
+        Some(format!(
+          "order={}&cursor={cursor_first}",
+          urlencode("-room,+mid")
+        )),
+      )
+      .await
+      .unwrap()
+      .records;
+
+      assert_eq!(cursored_desc_asc.len(), 2);
+      assert_eq!(
+        to_message(cursored_desc_asc[0].clone()),
+        to_message(arr_asc[2].clone())
+      );
+      assert_eq!(
+        to_message(cursored_desc_asc[1].clone()),
+        to_message(arr_asc[1].clone())
+      );
     }
 
     {
@@ -666,5 +748,9 @@ mod tests {
 
     let response: ListResponse = json_response.0;
     return Ok(response);
+  }
+
+  fn to_message(v: serde_json::Value) -> Message {
+    return serde_json::from_value::<Message>(v).unwrap();
   }
 }
