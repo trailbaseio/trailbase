@@ -109,6 +109,29 @@ pub async fn list_records_handler(
     ),
   ]);
 
+  let cursor_clause = if let Some(cursor) = cursor {
+    let mut pk_order = Order::Descending;
+    if let Some(ref order) = order {
+      if let Some((col, ord)) = order.first() {
+        if *col != pk_column.name {
+          return Err(RecordError::BadRequest(
+            "Cannot cursor on queries where the primary order criterion is not the primary key",
+          ));
+        }
+
+        pk_order = ord.clone();
+      }
+    }
+
+    params.push((Cow::Borrowed(":cursor"), cursor.into()));
+    match pk_order {
+      Order::Descending => Some(format!(r#"_ROW_."{}" < :cursor"#, pk_column.name)),
+      Order::Ascending => Some(format!(r#"_ROW_."{}" > :cursor"#, pk_column.name)),
+    }
+  } else {
+    None
+  };
+
   fn fmt_order(col: &str, order: Order) -> String {
     return format!(
       r#"_ROW_."{col}" {}"#,
@@ -119,25 +142,15 @@ pub async fn list_records_handler(
     );
   }
 
-  let mut pk_order = Order::Descending;
-  let order_clause = order.map(|o| {
-    o.into_iter()
-      .map(|(col, ord)| {
-        if col == pk_column.name {
-          pk_order = ord.clone();
-        }
-        return fmt_order(&col, ord);
-      })
-      .join(",")
-  });
-
-  let cursor_clause = cursor.map(|cursor| {
-    params.push((Cow::Borrowed(":cursor"), cursor.into()));
-    return match pk_order {
-      Order::Descending => format!(r#"_ROW_."{}" < :cursor"#, pk_column.name),
-      Order::Ascending => format!(r#"_ROW_."{}" > :cursor"#, pk_column.name),
-    };
-  });
+  let order_clause = order.map_or_else(
+    || fmt_order(&pk_column.name, Order::Descending),
+    |order| {
+      order
+        .into_iter()
+        .map(|(col, ord)| fmt_order(&col, ord))
+        .join(",")
+    },
+  );
 
   let expanded_tables = match query_expand {
     Some(ref expand) => {
@@ -166,7 +179,7 @@ pub async fn list_records_handler(
     read_access_clause,
     filter_clause: &filter_clause,
     cursor_clause: cursor_clause.as_deref(),
-    order_clause: &order_clause.unwrap_or_else(|| fmt_order(&pk_column.name, Order::Descending)),
+    order_clause: &order_clause,
     expanded_tables: &expanded_tables,
     count: count.unwrap_or(false),
   }
@@ -628,7 +641,7 @@ mod tests {
       .records;
       assert_eq!(arr_asc.len(), 3);
 
-      // Ordering by 'table';
+      // Ordering by 'table', which needs proper escaping;
       let arr_table_asc = list_records(
         &state,
         Some(&user_y_token.auth_token),
@@ -694,53 +707,19 @@ mod tests {
         to_message(arr_asc[2].clone())
       );
 
-      // Ordering and cursor work well together when PK is not primary order cirteria.
+      // Ordering and cursor return an error when PK is not primary order cirteria.
       let cursor_first = to_message(arr_asc[0].clone()).mid;
-
-      // With ascending room id
-      let cursored_asc_asc = list_records(
-        &state,
-        Some(&user_y_token.auth_token),
-        Some(format!(
-          "order={}&cursor={cursor_first}",
-          urlencode("+room,+mid")
-        )),
-      )
-      .await
-      .unwrap()
-      .records;
-
-      assert_eq!(cursored_asc_asc.len(), 2);
-      assert_eq!(
-        to_message(cursored_asc_asc[0].clone()),
-        to_message(arr_asc[1].clone())
-      );
-      assert_eq!(
-        to_message(cursored_asc_asc[1].clone()),
-        to_message(arr_asc[2].clone())
-      );
-
-      // With descending room id
-      let cursored_desc_asc = list_records(
-        &state,
-        Some(&user_y_token.auth_token),
-        Some(format!(
-          "order={}&cursor={cursor_first}",
-          urlencode("-room,+mid")
-        )),
-      )
-      .await
-      .unwrap()
-      .records;
-
-      assert_eq!(cursored_desc_asc.len(), 2);
-      assert_eq!(
-        to_message(cursored_desc_asc[0].clone()),
-        to_message(arr_asc[2].clone())
-      );
-      assert_eq!(
-        to_message(cursored_desc_asc[1].clone()),
-        to_message(arr_asc[1].clone())
+      assert!(
+        list_records(
+          &state,
+          Some(&user_y_token.auth_token),
+          Some(format!(
+            "order={}&cursor={cursor_first}",
+            urlencode("+room,+mid")
+          )),
+        )
+        .await
+        .is_err()
       );
     }
 
