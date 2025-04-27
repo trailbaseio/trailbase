@@ -75,6 +75,7 @@ pub struct Tokens {
 pub struct Pagination {
   pub cursor: Option<String>,
   pub limit: Option<usize>,
+  pub offset: Option<usize>,
 }
 
 impl Pagination {
@@ -82,6 +83,7 @@ impl Pagination {
     return Pagination {
       limit: limit.into(),
       cursor: cursor.into(),
+      offset: None,
     };
   }
 

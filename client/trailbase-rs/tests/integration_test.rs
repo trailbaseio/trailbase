@@ -79,14 +79,14 @@ struct SimpleStrict {
   text_not_null: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct Profile {
   id: String,
   user: String,
   name: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 struct Post {
   id: String,
   author: String,
@@ -94,20 +94,20 @@ struct Post {
   body: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 struct ProfileReference {
   id: String,
   data: Option<Profile>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 struct PostReference {
   id: String,
   data: Option<Post>,
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 struct Comment {
   id: i64,
   body: String,
@@ -292,7 +292,7 @@ async fn expand_foreign_records_test() {
   {
     let comments: ListResponse<Comment> = api
       .list(ListArguments {
-        pagination: Pagination::with_limit(1),
+        pagination: Pagination::with_limit(2),
         order: Some(&["-id"]),
         expand: Some(&["author", "post"]),
         ..Default::default()
@@ -300,13 +300,32 @@ async fn expand_foreign_records_test() {
       .await
       .unwrap();
 
-    assert_eq!(1, comments.records.len());
-    let comment = &comments.records[0];
+    assert_eq!(2, comments.records.len());
+    let first = &comments.records[0];
 
-    assert_eq!(2, comment.id);
-    assert_eq!("second comment", comment.body);
-    assert_eq!("SecondUser", comment.author.data.as_ref().unwrap().name);
-    assert_eq!("first post", comment.post.data.as_ref().unwrap().title);
+    assert_eq!(2, first.id);
+    assert_eq!("second comment", first.body);
+    assert_eq!("SecondUser", first.author.data.as_ref().unwrap().name);
+    assert_eq!("first post", first.post.data.as_ref().unwrap().title);
+
+    let second = &comments.records[0];
+
+    let offset_comments: ListResponse<Comment> = api
+      .list(ListArguments {
+        pagination: Pagination {
+          limit: Some(1),
+          offset: Some(1),
+          ..Default::default()
+        },
+        order: Some(&["-id"]),
+        expand: Some(&["author", "post"]),
+        ..Default::default()
+      })
+      .await
+      .unwrap();
+
+    assert_eq!(1, offset_comments.records.len());
+    assert_eq!(*second, offset_comments.records[0]);
   }
 }
 

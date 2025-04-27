@@ -7,7 +7,7 @@ pub async fn list(client: &Client) -> anyhow::Result<ListResponse<serde_json::Va
       .list(ListArguments {
         pagination: Pagination {
           limit: Some(3),
-          cursor: None,
+          ..Default::default()
         },
         order: Some(&["rank"]),
         filters: Some(&["watch_time[lt]=120", "description[like]=%love%"]),
