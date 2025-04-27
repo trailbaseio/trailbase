@@ -1,5 +1,6 @@
-use crossbeam_channel::{Receiver, Sender};
+use kanal::{Receiver, Sender};
 use log::*;
+use parking_lot::RwLock;
 use rusqlite::fallible_iterator::FallibleIterator;
 use rusqlite::hooks::{Action, PreUpdateCase};
 use rusqlite::types::Value;
@@ -34,13 +35,18 @@ macro_rules! named_params {
     };
 }
 
+struct LockedConnections(RwLock<Vec<rusqlite::Connection>>);
+
+// NOTE: We must never access the same connection concurrently even as &Connection, due to
+// Statement cache. We can ensure this by uniquely assigning one connection to each thread.
+unsafe impl Sync for LockedConnections {}
+
 /// The result returned on method calls in this crate.
 pub type Result<T> = std::result::Result<T, Error>;
 
-type CallFn = Box<dyn FnOnce(&mut rusqlite::Connection) + Send + 'static>;
-
 enum Message {
-  Run(CallFn),
+  RunMut(Box<dyn FnOnce(&mut rusqlite::Connection) + Send + 'static>),
+  RunConst(Box<dyn FnOnce(&rusqlite::Connection) + Send + 'static>),
   Close(oneshot::Sender<std::result::Result<(), rusqlite::Error>>),
 }
 
@@ -71,27 +77,23 @@ impl Connection {
     builder: impl Fn() -> std::result::Result<rusqlite::Connection, E>,
     opt: Option<Options>,
   ) -> std::result::Result<Self, E> {
-    let spawn = |receiver: Receiver<Message>| -> std::result::Result<Option<String>, E> {
+    let new_conn = || -> std::result::Result<rusqlite::Connection, E> {
       let conn = builder()?;
-      let name = conn.path().and_then(|s| {
-        // Returns empty string for in-memory databases.
-        if s.is_empty() {
-          None
-        } else {
-          Some(s.to_string())
-        }
-      });
       if let Some(timeout) = opt.as_ref().map(|o| o.busy_timeout) {
         conn.busy_timeout(timeout).expect("busy timeout failed");
       }
-
-      std::thread::spawn(move || event_loop(conn, receiver));
-
-      return Ok(name);
+      return Ok(conn);
     };
 
-    let (shared_write_sender, shared_write_receiver) = crossbeam_channel::unbounded::<Message>();
-    let name = spawn(shared_write_receiver)?;
+    let conn = new_conn()?;
+    let name = conn.path().and_then(|s| {
+      // Returns empty string for in-memory databases.
+      if s.is_empty() {
+        None
+      } else {
+        Some(s.to_string())
+      }
+    });
 
     let n_read_threads = if name.is_some() {
       let n_read_threads = match opt.as_ref().map_or(0, |o| o.n_read_threads) {
@@ -119,10 +121,26 @@ impl Connection {
       0
     };
 
-    let shared_read_sender = if n_read_threads > 0 {
-      let (shared_read_sender, shared_read_receiver) = crossbeam_channel::unbounded::<Message>();
+    let conns = {
+      let mut conns = vec![conn];
       for _ in 0..n_read_threads {
-        spawn(shared_read_receiver.clone())?;
+        conns.push(new_conn()?);
+      }
+
+      Arc::new(LockedConnections(RwLock::new(conns)))
+    };
+
+    // Spawn writer.
+    let (shared_write_sender, shared_write_receiver) = kanal::unbounded::<Message>();
+    let conns_clone = conns.clone();
+    std::thread::spawn(move || event_loop(0, conns_clone, shared_write_receiver));
+
+    let shared_read_sender = if n_read_threads > 0 {
+      let (shared_read_sender, shared_read_receiver) = kanal::unbounded::<Message>();
+      for i in 0..n_read_threads {
+        let shared_read_receiver = shared_read_receiver.clone();
+        let conns_clone = conns.clone();
+        std::thread::spawn(move || event_loop(i, conns_clone, shared_read_receiver));
       }
       shared_read_sender
     } else {
@@ -166,7 +184,7 @@ impl Connection {
 
     self
       .writer
-      .send(Message::Run(Box::new(move |conn| {
+      .send(Message::RunMut(Box::new(move |conn| {
         if !sender.is_closed() {
           let _ = sender.send(function(conn));
         }
@@ -180,7 +198,7 @@ impl Connection {
   pub fn call_and_forget(&self, function: impl FnOnce(&rusqlite::Connection) + Send + 'static) {
     let _ = self
       .writer
-      .send(Message::Run(Box::new(move |conn| function(conn))));
+      .send(Message::RunMut(Box::new(move |conn| function(conn))));
   }
 
   #[inline]
@@ -193,7 +211,7 @@ impl Connection {
 
     self
       .reader
-      .send(Message::Run(Box::new(move |conn| {
+      .send(Message::RunConst(Box::new(move |conn| {
         if !sender.is_closed() {
           let _ = sender.send(function(conn));
         }
@@ -421,7 +439,7 @@ impl Connection {
     // Returns true if connection was successfully closed.
     let closer = async |s: &Sender<Message>| -> std::result::Result<bool, rusqlite::Error> {
       let (sender, receiver) = oneshot::channel::<std::result::Result<(), rusqlite::Error>>();
-      if let Err(crossbeam_channel::SendError(_)) = s.send(Message::Close(sender)) {
+      if s.send(Message::Close(sender)).is_err() {
         // If the channel is closed on the other side, it means the connection closed successfully
         // This is a safeguard against calling close on a `Copy` of the connection
         return Ok(false);
@@ -472,13 +490,28 @@ impl Debug for Connection {
   }
 }
 
-fn event_loop(mut conn: rusqlite::Connection, receiver: Receiver<Message>) {
+fn event_loop(id: usize, conns: Arc<LockedConnections>, receiver: Receiver<Message>) {
   const BUG_TEXT: &str = "bug in trailbase-sqlite, please report";
 
   while let Ok(message) = receiver.recv() {
     match message {
-      Message::Run(f) => f(&mut conn),
+      Message::RunConst(f) => {
+        let lock = conns.0.read();
+        f(&lock[id])
+      }
+      Message::RunMut(f) => {
+        let mut lock = conns.0.write();
+        f(&mut lock[0])
+      }
       Message::Close(ch) => {
+        let mut lock = conns.0.write();
+        let conns: &mut Vec<rusqlite::Connection> = &mut lock;
+        if conns.is_empty() {
+          break;
+        }
+
+        let conn = conns.swap_remove(0);
+
         match conn.close() {
           Ok(v) => ch.send(Ok(v)).expect(BUG_TEXT),
           Err((_conn, e)) => ch.send(Err(e)).expect(BUG_TEXT),

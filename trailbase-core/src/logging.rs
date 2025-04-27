@@ -2,7 +2,6 @@ use axum::body::Body;
 use axum::http::{Request, header};
 use axum::response::Response;
 use axum_client_ip::InsecureClientIp;
-use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::Duration;
@@ -230,7 +229,7 @@ pub(super) fn sqlite_logger_on_response(response: &Response<Body>, latency: Dura
 }
 
 pub struct SqliteLogLayer {
-  sender: async_channel::Sender<Box<LogFieldStorage>>,
+  sender: kanal::Sender<Box<LogFieldStorage>>,
 
   #[allow(unused)]
   json_stdout: bool,
@@ -242,33 +241,38 @@ impl SqliteLogLayer {
     // channels. The underlying container doesn't seem to every shrink :/.
     //
     // TODO: We could consider a bounded receiver to create back-pressure?
-    let (sender, receiver) = async_channel::unbounded();
+    let (sender, receiver) = kanal::unbounded();
 
     let conn = state.logs_conn().clone();
     tokio::spawn(async move {
-      futures_util::pin_mut!(receiver);
+      let receiver = receiver.as_async();
 
+      let mut n: usize = 1;
       loop {
-        const LIMIT: usize = 128;
-        let logs: Vec<_> = receiver
-          .as_mut()
-          .ready_chunks(LIMIT)
-          .next()
-          .await
-          .expect("non empty");
+        let Ok(first) = receiver.recv().await else {
+          log::info!("Logs channel closed");
+          return;
+        };
+        let mut buffer = Vec::with_capacity((1.2 * (n as f64)).ceil() as usize);
+        buffer.push(first);
+        n = receiver.drain_into(&mut buffer).unwrap_or(0) + 1;
 
         // NOTE: awaiting the `conn.call()` is the secret to batching, since we won't read from the
         // channel until the database write is complete.
         let result = conn
           .call(move |conn| {
-            Self::insert_logs(conn, logs)?;
-
+            Self::insert_logs(conn, buffer)?;
             Ok(())
           })
           .await;
 
         if let Err(err) = result {
           log::warn!("Failed to send logs: {err}");
+        }
+
+        // Rate limit wake ups letting us batch more writes
+        if n < 256 {
+          tokio::time::sleep(tokio::time::Duration::from_micros(500)).await;
         }
       }
     });
@@ -294,9 +298,17 @@ impl SqliteLogLayer {
       });
     }
 
-    if let Err(err) = self.sender.force_send(Box::new(storage)) {
-      panic!("Sending logs failed: {err}");
-    }
+    match self.sender.try_send(Box::new(storage)) {
+      Ok(success) => {
+        // NOTE: Should always succeed for unbound channel.
+        if !success {
+          panic!("Failed to send logs");
+        }
+      }
+      Err(err) => {
+        panic!("Sending logs failed: {err}");
+      }
+    };
   }
 
   #[allow(clippy::vec_box)]

@@ -429,27 +429,27 @@ impl RecordApi {
     let params = self.build_named_params(p, record_id, request_params, user)?;
 
     // NOTE: Avoid slushing between sqlite threads with regard to an allowed follow-on action.
-    // let allowed_result = match p {
-    //   Permission::Read | Permission::Schema => {
-    //     self
-    //       .state
-    //       .conn
-    //       .read_query_row_f(access_query, params, |row| row.get(0))
-    //       .await
-    //   }
-    //   _ => {
-    //     self
-    //       .state
-    //       .conn
-    //       .query_row_f(access_query, params, |row| row.get(0))
-    //       .await
-    //   }
-    // };
-    let allowed_result = self
-      .state
-      .conn
-      .read_query_row_f(access_query, params, |row| row.get(0))
-      .await;
+    let allowed_result = match p {
+      Permission::Read | Permission::Schema => {
+        self
+          .state
+          .conn
+          .read_query_row_f(access_query, params, |row| row.get(0))
+          .await
+      }
+      _ => {
+        self
+          .state
+          .conn
+          .query_row_f(access_query, params, |row| row.get(0))
+          .await
+      }
+    };
+    // let allowed_result = self
+    //   .state
+    //   .conn
+    //   .read_query_row_f(access_query, params, |row| row.get(0))
+    //   .await;
 
     match allowed_result {
       Ok(allowed) => {

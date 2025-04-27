@@ -167,7 +167,7 @@ type Percentiles = {
 export function PocketBaseAndTrailBaseReadLatencies() {
   // 2024-10-12
   // TB: Read 1 000 000 messages, took 0:00:57.952120 (limit=64) (Dart JIT)
-  // const readTrailbaseMicroS = {
+  // const readTrailbaseDartMicroS = {
   //   p50: 3504,
   //   p75: 3947,
   //   p90: 4393,
@@ -183,7 +183,7 @@ export function PocketBaseAndTrailBaseReadLatencies() {
   //         p75=3597us
   //         p90=4003us
   //         p95=4307us
-  const readTrailbaseMicroS = {
+  const readTrailbaseDartMicroS = {
     p50: 3362,
     p75: 3597,
     p90: 4003,
@@ -251,7 +251,7 @@ export function PocketBaseAndTrailBaseReadLatencies() {
       },
       {
         label: "TrailBase",
-        data: latenciesMs(readTrailbaseMicroS),
+        data: latenciesMs(readTrailbaseDartMicroS),
         backgroundColor: colors.trailbase1,
       },
       {
@@ -285,7 +285,7 @@ export function PocketBaseAndTrailBaseReadLatencies() {
 export function PocketBaseAndTrailBaseInsertLatencies() {
   // 2024-10-12
   // TB: Inserted 10 000 messages, took 0:00:01.654810 (limit=64) (Dart JIT)
-  // const insertTrailbaseMicroS = {
+  // const insertTrailbaseDartMicroS = {
   //   p50: 8107,
   //   p75: 10897,
   //   p90: 15327,
@@ -301,8 +301,7 @@ export function PocketBaseAndTrailBaseInsertLatencies() {
   //         p75=5029us
   //         p90=5618us
   //         p95=6406us
-  //
-  const insertTrailbaseMicroS = {
+  const insertTrailbaseDartMicroS = {
     p50: 4470,
     p75: 5029,
     p90: 5618,
@@ -370,7 +369,7 @@ export function PocketBaseAndTrailBaseInsertLatencies() {
       },
       {
         label: "TrailBase",
-        data: latenciesMs(insertTrailbaseMicroS),
+        data: latenciesMs(insertTrailbaseDartMicroS),
         backgroundColor: colors.trailbase1,
       },
       {

@@ -1,7 +1,6 @@
 #![forbid(clippy::unwrap_used)]
 #![allow(clippy::needless_return)]
 #![warn(
-  unsafe_code,
   clippy::await_holding_lock,
   clippy::empty_enum,
   clippy::enum_glob_use,
