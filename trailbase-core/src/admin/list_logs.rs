@@ -148,7 +148,7 @@ pub async fn list_logs_handler(
     filter_where_clause.clone(),
     cursor,
     order.unwrap_or_else(|| DEFAULT_ORDERING.clone()),
-    limit_or_default(limit),
+    limit_or_default(limit).map_err(|err| Error::BadRequest(err.into()))?,
   )
   .await?;
 

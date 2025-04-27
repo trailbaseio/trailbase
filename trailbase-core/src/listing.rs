@@ -124,11 +124,17 @@ pub struct QueryParseResult {
   pub params: Option<HashMap<String, Vec<QueryParam>>>,
 }
 
-pub fn limit_or_default(limit: Option<usize>) -> usize {
+pub fn limit_or_default(limit: Option<usize>) -> Result<usize, &'static str> {
   const DEFAULT_LIMIT: usize = 50;
   const MAX_LIMIT: usize = 256;
 
-  return std::cmp::min(limit.unwrap_or(DEFAULT_LIMIT), MAX_LIMIT);
+  if let Some(limit) = limit {
+    if limit > MAX_LIMIT {
+      return Err("limit exceeds max limit of 256");
+    }
+    return Ok(limit);
+  }
+  return Ok(limit.unwrap_or(DEFAULT_LIMIT));
 }
 
 fn parse_bool(s: &str) -> Option<bool> {
