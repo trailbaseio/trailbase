@@ -39,3 +39,6 @@ WHERE
 ORDER BY
   {{ order_clause }}
 LIMIT :__limit
+{%- if offset %}
+OFFSET :__offset
+{%- endif -%}

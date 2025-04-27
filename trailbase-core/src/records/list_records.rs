@@ -43,6 +43,7 @@ struct ListRecordQueryTemplate<'a> {
   order_clause: &'a str,
   expanded_tables: &'a [ExpandedTable],
   count: bool,
+  offset: bool,
 }
 
 /// Lists records matching the given filters
@@ -77,7 +78,7 @@ pub async fn list_records_handler(
     expand: query_expand,
     order,
     params: filter_params,
-    ..
+    offset,
   } = parse_and_sanitize_query(raw_url_query.as_deref()).map_err(|_err| {
     return RecordError::BadRequest("Invalid query");
   })?;
@@ -108,6 +109,17 @@ pub async fn list_records_handler(
       user.map_or(Value::Null, |u| Value::Blob(u.uuid.into())),
     ),
   ]);
+
+  if let Some(offset) = offset {
+    params.push((
+      Cow::Borrowed(":__offset"),
+      Value::Integer(
+        offset
+          .try_into()
+          .map_err(|_| RecordError::BadRequest("Invalid offset"))?,
+      ),
+    ));
+  }
 
   let cursor_clause = if let Some(cursor) = cursor {
     let mut pk_order = Order::Descending;
@@ -182,6 +194,7 @@ pub async fn list_records_handler(
     order_clause: &order_clause,
     expanded_tables: &expanded_tables,
     count: count.unwrap_or(false),
+    offset: offset.is_some(),
   }
   .render()
   .map_err(|err| RecordError::Internal(err.into()))?;
@@ -318,6 +331,7 @@ mod tests {
         order_clause: "NULL",
         expanded_tables: &[],
         count: false,
+        offset: false,
       }
       .render()
       .unwrap(),
@@ -333,6 +347,7 @@ mod tests {
         order_clause: "'index' ASC",
         expanded_tables: &[],
         count: true,
+        offset: true,
       }
       .render()
       .unwrap(),
@@ -383,6 +398,7 @@ mod tests {
       order_clause: "tid",
       expanded_tables: &expanded_tables,
       count: true,
+      offset: false,
     }
     .render()
     .unwrap();
@@ -627,6 +643,29 @@ mod tests {
       .unwrap()
       .records;
       assert!(arr_asc.len() > 0);
+    }
+
+    {
+      // Offset
+      let result0 = list_records(
+        &state,
+        Some(&user_y_token.auth_token),
+        Some(format!("offset=0")),
+      )
+      .await
+      .unwrap()
+      .records;
+      assert_eq!(result0.len(), 3);
+
+      let result1 = list_records(
+        &state,
+        Some(&user_y_token.auth_token),
+        Some(format!("offset=1")),
+      )
+      .await
+      .unwrap()
+      .records;
+      assert_eq!(result1.len(), 2);
     }
 
     {
