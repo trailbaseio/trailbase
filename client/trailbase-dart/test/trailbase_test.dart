@@ -55,6 +55,24 @@ class Author {
       : id = json['id'],
         user = json['user'],
         name = json['name'];
+
+  @override
+  bool operator ==(Object rhs) {
+    return rhs is Author &&
+        rhs.id == id &&
+        rhs.user == user &&
+        rhs.name == name;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(id, user, name);
+  }
+
+  @override
+  String toString() {
+    return 'Author(${id}, ${user}, ${name})';
+  }
 }
 
 class Post {
@@ -68,6 +86,20 @@ class Post {
         author = json['author'],
         title = json['title'],
         body = json['body'];
+
+  @override
+  bool operator ==(Object rhs) {
+    return rhs is Post &&
+        rhs.id == id &&
+        rhs.author == author &&
+        rhs.title == title &&
+        rhs.body == body;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(id, author, title, body);
+  }
 }
 
 class Comment {
@@ -98,6 +130,23 @@ class Comment {
           authorId: json['author']['id'],
           authorProfile: json['author']['data'],
         );
+
+  @override
+  bool operator ==(Object rhs) {
+    return rhs is Comment &&
+        rhs.id == id &&
+        rhs.body == body &&
+        rhs.post == post &&
+        rhs.author == author;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(id, body, post, author);
+  }
+
+  @override
+  String toString() => 'Comment(${id}, ${body}, ${post}, ${author})';
 }
 
 Future<Client> connect() async {
@@ -308,14 +357,26 @@ Future<void> main() async {
         final response = await api.list(
           expand: ['author', 'post'],
           order: ['-id'],
-          pagination: Pagination(limit: 1),
+          pagination: Pagination(limit: 2),
         );
 
-        final comment = Comment.fromJson(response.records[0]);
-        expect(comment.id, equals(2));
-        expect(comment.body, equals('second comment'));
-        expect(comment.author.$2?.name, equals('SecondUser'));
-        expect(comment.post.$2?.title, equals('first post'));
+        expect(response.records.length, equals(2));
+        final first = Comment.fromJson(response.records[0]);
+        expect(first.id, equals(2));
+        expect(first.body, equals('second comment'));
+        expect(first.author.$2?.name, equals('SecondUser'));
+        expect(first.post.$2?.title, equals('first post'));
+
+        final second = Comment.fromJson(response.records[1]);
+
+        final offsetResponse = await api.list(
+          expand: ['author', 'post'],
+          order: ['-id'],
+          pagination: Pagination(limit: 1, offset: 1),
+        );
+
+        expect(offsetResponse.records.length, equals(1));
+        expect(Comment.fromJson(offsetResponse.records[0]), equals(second));
       }
     });
 

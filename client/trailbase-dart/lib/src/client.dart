@@ -101,10 +101,12 @@ class _TokenState {
 class Pagination {
   final String? cursor;
   final int? limit;
+  final int? offset;
 
   const Pagination({
     this.cursor,
     this.limit,
+    this.offset,
   });
 }
 
@@ -302,6 +304,9 @@ class RecordApi {
 
       final limit = pagination.limit;
       if (limit != null) params['limit'] = limit.toString();
+
+      final offset = pagination.offset;
+      if (offset != null) params['offset'] = offset;
     }
 
     if (order != null) params['order'] = order.join(',');
