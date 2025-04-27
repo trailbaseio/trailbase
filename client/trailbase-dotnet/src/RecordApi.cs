@@ -73,11 +73,14 @@ public class Pagination {
   public int? limit { get; }
   /// <summary>Offset cursor.</summary>
   public string? cursor { get; }
+  /// <summary>Numeric offset parameter. Prefer cursor when possible.</summary>
+  public int? offset { get; }
 
   /// <summary>Pagination constructor.</summary>
-  public Pagination(int? limit = null, string? cursor = null) {
+  public Pagination(int? limit = null, string? cursor = null, int? offset = null) {
     this.cursor = cursor;
     this.limit = limit;
+    this.offset = offset;
   }
 }
 
@@ -393,6 +396,11 @@ public class RecordApi {
       var limit = pagination.limit;
       if (limit != null) {
         param.Add("limit", $"{limit}");
+      }
+
+      var offset = pagination.offset;
+      if (offset != null) {
+        param.Add("offset", $"{offset}");
       }
     }
 

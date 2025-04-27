@@ -342,18 +342,29 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
 
     {
       var response = await api.List<JsonObject>(
-        pagination: new Pagination(limit: 1),
+        pagination: new Pagination(limit: 2),
         expand: ["author", "post"],
         order: ["-id"]
       );
 
-      Assert.Single(response.records);
-      var comment = response.records[0];
+      Assert.Equal(2, response.records.Count);
+      var first = response.records[0];
 
-      Assert.Equal(2, comment["id"]!.GetValue<int>());
-      Assert.Equal("second comment", comment["body"]!.GetValue<string>());
-      Assert.Equal("SecondUser", comment["author"]!["data"]!["name"]!.GetValue<string>());
-      Assert.Equal("first post", comment["post"]!["data"]!["title"]!.GetValue<string>());
+      Assert.Equal(2, first["id"]!.GetValue<int>());
+      Assert.Equal("second comment", first["body"]!.GetValue<string>());
+      Assert.Equal("SecondUser", first["author"]!["data"]!["name"]!.GetValue<string>());
+      Assert.Equal("first post", first["post"]!["data"]!["title"]!.GetValue<string>());
+
+      var second = response.records[1];
+
+      var offsetResponse = await api.List<JsonObject>(
+        pagination: new Pagination(limit: 1, offset: 1),
+        expand: ["author", "post"],
+        order: ["-id"]
+      );
+
+      Assert.Single(offsetResponse.records);
+      Assert.True(JsonObject.DeepEquals(second, offsetResponse.records[0]));
     }
   }
 
