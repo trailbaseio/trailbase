@@ -161,7 +161,19 @@ impl Connection {
     F: FnOnce(&mut rusqlite::Connection) -> Result<R> + Send + 'static,
     R: Send + 'static,
   {
-    return call_impl(&self.writer, function).await;
+    // return call_impl(&self.writer, function).await;
+    let (sender, receiver) = oneshot::channel::<Result<R>>();
+
+    self
+      .writer
+      .send(Message::Run(Box::new(move |conn| {
+        if !sender.is_closed() {
+          let _ = sender.send(function(conn));
+        }
+      })))
+      .map_err(|_| Error::ConnectionClosed)?;
+
+    receiver.await.map_err(|_| Error::ConnectionClosed)?
   }
 
   #[inline]
@@ -174,10 +186,21 @@ impl Connection {
   #[inline]
   async fn call_reader<F, R>(&self, function: F) -> Result<R>
   where
-    F: FnOnce(&mut rusqlite::Connection) -> Result<R> + Send + 'static,
+    F: FnOnce(&rusqlite::Connection) -> Result<R> + Send + 'static,
     R: Send + 'static,
   {
-    return call_impl(&self.reader, function).await;
+    let (sender, receiver) = oneshot::channel::<Result<R>>();
+
+    self
+      .reader
+      .send(Message::Run(Box::new(move |conn| {
+        if !sender.is_closed() {
+          let _ = sender.send(function(conn));
+        }
+      })))
+      .map_err(|_| Error::ConnectionClosed)?;
+
+    receiver.await.map_err(|_| Error::ConnectionClosed)?
   }
 
   /// Query SQL statement.
@@ -187,7 +210,7 @@ impl Connection {
     params: impl Params + Send + 'static,
   ) -> Result<Rows> {
     return self
-      .call_reader(move |conn: &mut rusqlite::Connection| {
+      .call_reader(move |conn: &rusqlite::Connection| {
         let mut stmt = conn.prepare_cached(sql.as_ref())?;
         assert!(stmt.readonly());
 
@@ -262,7 +285,7 @@ impl Connection {
     crate::error::Error: From<E>,
   {
     return self
-      .call_reader(move |conn: &mut rusqlite::Connection| {
+      .call_reader(move |conn: &rusqlite::Connection| {
         let mut stmt = conn.prepare_cached(sql.as_ref())?;
         assert!(stmt.readonly());
 
@@ -304,7 +327,7 @@ impl Connection {
     params: impl Params + Send + 'static,
   ) -> Result<Vec<T>> {
     return self
-      .call_reader(move |conn: &mut rusqlite::Connection| {
+      .call_reader(move |conn: &rusqlite::Connection| {
         let mut stmt = conn.prepare_cached(sql.as_ref())?;
         assert!(stmt.readonly());
 
@@ -465,23 +488,6 @@ fn event_loop(mut conn: rusqlite::Connection, receiver: Receiver<Message>) {
       }
     };
   }
-}
-
-#[inline]
-async fn call_impl<F, R>(s: &Sender<Message>, function: F) -> Result<R>
-where
-  F: FnOnce(&mut rusqlite::Connection) -> Result<R> + Send + 'static,
-  R: Send + 'static,
-{
-  let (sender, receiver) = oneshot::channel::<Result<R>>();
-
-  s.send(Message::Run(Box::new(move |conn| {
-    let value = function(conn);
-    let _ = sender.send(value);
-  })))
-  .map_err(|_| Error::ConnectionClosed)?;
-
-  receiver.await.map_err(|_| Error::ConnectionClosed)?
 }
 
 pub fn extract_row_id(case: &PreUpdateCase) -> Option<i64> {
