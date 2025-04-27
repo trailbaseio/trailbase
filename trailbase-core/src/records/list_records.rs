@@ -39,8 +39,7 @@ struct ListRecordQueryTemplate<'a> {
   column_names: &'a [&'a str],
   read_access_clause: &'a str,
   filter_clause: &'a str,
-  // TODO: Consider expanding the cursor and order clause directly in the template.
-  cursor_clause: &'a str,
+  cursor_clause: Option<&'a str>,
   order_clause: &'a str,
   expanded_tables: &'a [ExpandedTable],
   count: bool,
@@ -166,7 +165,7 @@ pub async fn list_records_handler(
     column_names: &column_names,
     read_access_clause,
     filter_clause: &filter_clause,
-    cursor_clause: cursor_clause.as_deref().unwrap_or("TRUE"),
+    cursor_clause: cursor_clause.as_deref(),
     order_clause: &order_clause.unwrap_or_else(|| fmt_order(&pk_column.name, Order::Descending)),
     expanded_tables: &expanded_tables,
     count: count.unwrap_or(false),
@@ -296,20 +295,35 @@ mod tests {
 
   #[test]
   fn test_list_records_template() {
-    let query = ListRecordQueryTemplate {
-      table_name: "table",
-      column_names: &["a", "index"],
-      read_access_clause: "TRUE",
-      filter_clause: "TRUE",
-      cursor_clause: "TRUE",
-      order_clause: "NULL",
-      expanded_tables: &[],
-      count: false,
-    }
-    .render()
-    .unwrap();
+    sanitize_template(
+      &ListRecordQueryTemplate {
+        table_name: "table",
+        column_names: &["a", "index"],
+        read_access_clause: "TRUE",
+        filter_clause: "TRUE",
+        cursor_clause: Some("TRUE"),
+        order_clause: "NULL",
+        expanded_tables: &[],
+        count: false,
+      }
+      .render()
+      .unwrap(),
+    );
 
-    sanitize_template(&query);
+    sanitize_template(
+      &ListRecordQueryTemplate {
+        table_name: "table",
+        column_names: &["a", "index"],
+        read_access_clause: "_USER_.id IS NOT NULL",
+        filter_clause: "a = 'value'",
+        cursor_clause: None,
+        order_clause: "'index' ASC",
+        expanded_tables: &[],
+        count: true,
+      }
+      .render()
+      .unwrap(),
+    );
   }
 
   #[tokio::test]
@@ -352,7 +366,7 @@ mod tests {
       column_names: &["tid", "drop", "index"],
       read_access_clause: "_USER_.id != X'F000'",
       filter_clause: "TRUE",
-      cursor_clause: "TRUE",
+      cursor_clause: None,
       order_clause: "tid",
       expanded_tables: &expanded_tables,
       count: true,
@@ -475,8 +489,7 @@ mod tests {
           match v {
             serde_json::Value::Object(ref obj) => {
               let keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
-              assert_eq!(3, keys.len(), "Got: {:?}", keys);
-              assert_eq!(keys, vec!["mid", "room", "data"])
+              assert_eq!(keys, vec!["mid", "room", "data", "table"], "Got: {keys:?}",)
             }
             _ => panic!("expected object, got {v:?}"),
           };
@@ -516,8 +529,7 @@ mod tests {
           match v {
             serde_json::Value::Object(ref obj) => {
               let keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
-              assert_eq!(3, keys.len(), "Got: {:?}", keys);
-              assert_eq!(keys, vec!["mid", "room", "data"])
+              assert_eq!(keys, vec!["mid", "room", "data", "table"], "Got: {keys:?}",)
             }
             _ => panic!("expected object, got {v:?}"),
           };
@@ -592,7 +604,20 @@ mod tests {
     }
 
     {
-      // Ordering by id;
+      // Filter by column with name that needs escaping.
+      let arr_asc = list_records(
+        &state,
+        Some(&user_y_token.auth_token),
+        Some(format!("table=0")),
+      )
+      .await
+      .unwrap()
+      .records;
+      assert!(arr_asc.len() > 0);
+    }
+
+    {
+      // Ordering by message id;
       let arr_asc = list_records(
         &state,
         Some(&user_y_token.auth_token),
@@ -602,6 +627,17 @@ mod tests {
       .unwrap()
       .records;
       assert_eq!(arr_asc.len(), 3);
+
+      // Ordering by 'table';
+      let arr_table_asc = list_records(
+        &state,
+        Some(&user_y_token.auth_token),
+        Some(format!("order={}", urlencode("+table"))),
+      )
+      .await
+      .unwrap()
+      .records;
+      assert_eq!(arr_table_asc.len(), 3);
 
       // The following assertion would be flaky in case the UUIDv7 message IDs were minted in the
       // same time slot.

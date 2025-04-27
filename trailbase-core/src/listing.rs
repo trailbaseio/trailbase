@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 use trailbase_schema::sqlite::Column;
 
-use crate::records::params::json_string_to_value;
+use crate::records::params::{json_string_to_value, prefix_colon};
 use crate::util::b64_to_id;
 
 #[derive(Debug, Error)]
@@ -277,8 +277,8 @@ pub fn build_filter_where_clause(
 
         match json_string_to_value(col.data_type, query_param.value) {
           Ok(value) => {
-            where_clauses.push(format!("{column_name} {op} :{column_name}"));
-            params.push((format!(":{column_name}").into(), value));
+            where_clauses.push(format!(r#""{column_name}" {op} :{column_name}"#));
+            params.push((prefix_colon(&column_name).into(), value));
           }
           Err(err) => debug!("Parameter conversion for {column_name} failed: {err}"),
         };

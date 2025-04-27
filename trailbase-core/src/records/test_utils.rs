@@ -22,6 +22,9 @@ mod tests {
             room         BLOB NOT NULL,
             data         TEXT NOT NULL DEFAULT 'empty',
 
+            -- Dummy column with a name requiring escaping.
+            'table'      INTEGER NOT NULL DEFAULT 0,
+
             -- on user delete, toombstone it.
             FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
             -- On chatroom delete, delete message
