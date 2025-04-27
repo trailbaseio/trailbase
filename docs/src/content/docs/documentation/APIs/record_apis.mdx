@@ -285,7 +285,9 @@ Parameters:
 
 * Pagination can be controlled via the following query parameters:
   * `limit=N`, with a built-in hard limit of 1024 to avoid abuse.
-  * `cursor=<primary key>` to offset into results.
+  * `cursor=<primary key>` to offset into results using a cursor. Significantly
+    less expensive than `OFFSET`-based pagination.
+  * `offset=N` to offset into results.
   * `count=true` will yield a `total_count` of records in the result. This can
     be used together with `limit` and `cursor` to build pagination UIs.
 * Ordering can be controlled using the `order=[[+-]?<column_name>]+` parameter, e.g.

@@ -16,6 +16,7 @@ export type User = {
 export type Pagination = {
   cursor?: string;
   limit?: number;
+  offset?: number;
 };
 
 export type ListResponse<T> = {
@@ -167,6 +168,9 @@ export class RecordApi {
 
       const limit = pagination.limit;
       if (limit) params.append("limit", limit.toString());
+
+      const offset = pagination.offset;
+      if (offset) params.append("offset", offset.toString());
     }
     const order = opts?.order;
     if (order) params.append("order", order.join(","));

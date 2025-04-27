@@ -227,6 +227,33 @@ test("expand foreign records", async () => {
     expect(comment.author.data?.name).toBe("SecondUser");
     expect(comment.post.data?.title).toBe("first post");
   }
+
+  {
+    const response = await api.list<Comment>({
+      expand: ["author", "post"],
+      order: ["-id"],
+      pagination: {
+        limit: 2,
+      },
+    });
+
+    expect(response.records.length).toBe(2);
+    const second = response.records[1];
+
+    const offsetResponse = await api.list<Comment>({
+      expand: ["author", "post"],
+      order: ["-id"],
+      pagination: {
+        limit: 1,
+        offset: 1,
+      },
+    });
+
+    expect(offsetResponse.records.length).toBe(1);
+    const offsetFirst = offsetResponse.records[0];
+
+    expect(second).toStrictEqual(offsetFirst);
+  }
 });
 
 test("record error tests", async () => {
