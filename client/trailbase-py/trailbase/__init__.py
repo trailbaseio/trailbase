@@ -421,6 +421,7 @@ class RecordApi:
         cursor: str | None = None,
         expand: list[str] | None = None,
         limit: int | None = None,
+        offset: int | None = None,
         count: bool = False,
     ) -> ListResponse:
         params: dict[str, str] = {}
@@ -430,6 +431,9 @@ class RecordApi:
 
         if limit != None:
             params["limit"] = str(limit)
+
+        if offset != None:
+            params["offset"] = str(offset)
 
         if order != None:
             params["order"] = ",".join(order)

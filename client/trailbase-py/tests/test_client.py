@@ -222,6 +222,30 @@ def test_expand_foreign_records(trailbase: TrailBaseFixture):
         assert type(y) is dict
         assert y.get("name") == "SecondUser"
 
+    if True:
+        comments = api.list(
+            expand=["author", "post"],
+            order=["-id"],
+            limit=2,
+        )
+
+        assert len(comments.records) == 2
+
+        first = comments.records[0]
+        assert first.get("id") == 2
+        second = comments.records[1]
+        assert second.get("id") == 1
+
+        offset_comments = api.list(
+            expand=["author", "post"],
+            order=["-id"],
+            limit=1,
+            offset=1,
+        )
+
+        assert len(offset_comments.records) == 1
+        assert second == offset_comments.records[0]
+
 
 def test_subscriptions(trailbase: TrailBaseFixture):
     assert trailbase.isUp()
