@@ -3,6 +3,7 @@ use axum::body::Body;
 use axum::extract::{RawPathParams, Request};
 use axum::http::{HeaderName, HeaderValue, StatusCode, header::CONTENT_TYPE, request::Parts};
 use axum::response::{IntoResponse, Response};
+use futures_util::FutureExt;
 use log::*;
 use parking_lot::Mutex;
 use rustyscript::{
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::from_value;
 use std::collections::HashSet;
 use std::str::FromStr;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::oneshot;
@@ -75,7 +76,7 @@ enum Message {
 }
 
 struct State {
-  private_sender: async_channel::Sender<Message>,
+  private_sender: kanal::AsyncSender<Message>,
   connection: Mutex<Option<trailbase_sqlite::Connection>>,
 }
 
@@ -86,7 +87,7 @@ struct RuntimeSingleton {
   handle: Option<std::thread::JoinHandle<()>>,
 
   // Shared sender.
-  shared_sender: async_channel::Sender<Message>,
+  shared_sender: kanal::AsyncSender<Message>,
 
   // Isolate state.
   state: Vec<State>,
@@ -200,8 +201,8 @@ impl RuntimeSingleton {
 
   fn event_loop(
     runtime: &mut Runtime,
-    private_recv: async_channel::Receiver<Message>,
-    shared_recv: async_channel::Receiver<Message>,
+    private_recv: kanal::AsyncReceiver<Message>,
+    shared_recv: kanal::AsyncReceiver<Message>,
   ) {
     runtime.tokio_runtime().block_on(async {
       let mut completers: Vec<Completer> = vec![];
@@ -258,6 +259,9 @@ impl RuntimeSingleton {
     });
   }
 
+  /// Bring up `threads` worker/isolate threads with basic setup.
+  ///
+  /// NOTE: functions to install routes and jobs are registered later, we need an AppState first.
   fn new_with_threads(threads: Option<usize>) -> Self {
     let n_threads = match threads {
       Some(n) => n,
@@ -272,11 +276,11 @@ impl RuntimeSingleton {
 
     info!("Starting v8 JavaScript runtime with {n_threads} workers.");
 
-    let (shared_sender, shared_receiver) = async_channel::unbounded::<Message>();
+    let (shared_sender, shared_receiver) = kanal::unbounded_async::<Message>();
 
-    let (state, receivers): (Vec<State>, Vec<async_channel::Receiver<Message>>) = (0..n_threads)
+    let (state, receivers): (Vec<State>, Vec<kanal::AsyncReceiver<Message>>) = (0..n_threads)
       .map(|_index| {
-        let (sender, receiver) = async_channel::unbounded::<Message>();
+        let (sender, receiver) = kanal::unbounded_async::<Message>();
 
         return (
           State {
@@ -369,12 +373,7 @@ impl RuntimeSingleton {
     runtime.register_async_function("query", move |args: Vec<serde_json::Value>| {
       Box::pin(async move {
         let query: String = get_arg(&args, 0)?;
-        let json_params: Vec<serde_json::Value> = get_arg(&args, 1)?;
-
-        let params: Vec<trailbase_sqlite::Value> = json_params
-          .into_iter()
-          .map(json_value_to_param)
-          .collect::<Result<Vec<_>, _>>()?;
+        let params = json_values_to_params(get_arg(&args, 1)?)?;
 
         let Some(conn) = get_runtime(None).state[index].connection.lock().clone() else {
           return Err(rustyscript::Error::Runtime(
@@ -397,12 +396,7 @@ impl RuntimeSingleton {
     runtime.register_async_function("execute", move |args: Vec<serde_json::Value>| {
       Box::pin(async move {
         let query: String = get_arg(&args, 0)?;
-        let json_params: Vec<serde_json::Value> = get_arg(&args, 1)?;
-
-        let params: Vec<trailbase_sqlite::Value> = json_params
-          .into_iter()
-          .map(json_value_to_param)
-          .collect::<Result<Vec<_>, _>>()?;
+        let params = json_values_to_params(get_arg(&args, 1)?)?;
 
         let Some(conn) = get_runtime(None).state[index].connection.lock().clone() else {
           return Err(rustyscript::Error::Runtime(
@@ -437,37 +431,18 @@ pub(crate) struct RuntimeHandle {
 }
 
 impl RuntimeHandle {
-  #[cfg(not(test))]
   pub(crate) fn set_connection(&self, conn: trailbase_sqlite::Connection) {
     for s in &self.runtime.state {
       let mut lock = s.connection.lock();
       if lock.is_some() {
+        #[cfg(not(test))]
         panic!("connection already set");
-      }
-      lock.replace(conn.clone());
-    }
-  }
 
-  #[cfg(test)]
-  pub(crate) fn set_connection(&self, conn: trailbase_sqlite::Connection) {
-    for s in &self.runtime.state {
-      let mut lock = s.connection.lock();
-      if lock.is_some() {
+        #[cfg(test)]
         debug!("connection already set");
       } else {
         lock.replace(conn.clone());
       }
-    }
-  }
-
-  #[cfg(test)]
-  pub(crate) fn override_connection(&self, conn: trailbase_sqlite::Connection) {
-    for s in &self.runtime.state {
-      let mut lock = s.connection.lock();
-      if lock.is_some() {
-        debug!("connection already set");
-      }
-      lock.replace(conn.clone());
     }
   }
 
@@ -489,7 +464,7 @@ impl RuntimeHandle {
 }
 
 async fn call_function<T>(
-  sender: &async_channel::Sender<Message>,
+  sender: &kanal::AsyncSender<Message>,
   module: Option<Module>,
   name: &'static str,
   args: Vec<serde_json::Value>,
@@ -531,6 +506,12 @@ fn json_value_to_param(
       }
     }
   });
+}
+
+fn json_values_to_params(
+  values: Vec<serde_json::Value>,
+) -> Result<Vec<trailbase_sqlite::Value>, rustyscript::Error> {
+  return values.into_iter().map(json_value_to_param).collect();
 }
 
 impl IntoResponse for JsResponseError {
@@ -676,124 +657,130 @@ async fn install_routes_and_jobs(
   let runtime_handle = state.script_runtime();
   let jobs = state.jobs();
 
+  // For all the isolates/worker-threads.
   let receivers: Vec<_> = runtime_handle
     .state()
     .iter()
     .enumerate()
-    .map(move |(index, state)| {
+    .map(async |(index, state)| {
       let module = module.clone();
       let runtime_handle = runtime_handle.clone();
       let jobs = jobs.clone();
 
-      async move {
-        let routers = Arc::new(Mutex::new(Vec::new()));
+      let (router_sender, router_receiver) = kanal::unbounded::<Router<AppState>>();
 
-        let runtime_handle_clone = runtime_handle.clone();
-        let routers_clone = routers.clone();
-        if let Err(err) = state
-          .private_sender
-          .send(Message::Run(Box::new(move |runtime: &mut Runtime| {
-            // First install a native callbacks.
-            //
-            // Register native callback for building axum router.
-            runtime
-              .register_function("install_route", move |args: &[serde_json::Value]| {
-                let method: String = get_arg(args, 0)?;
-                let route: String = get_arg(args, 1)?;
+      let runtime_handle_clone = runtime_handle.clone();
+      if let Err(err) = state
+        .private_sender
+        .send(Message::Run(Box::new(move |runtime: &mut Runtime| {
+          // First install a native callbacks.
+          //
+          // Register native callback for building axum router.
+          runtime
+            .register_function("install_route", move |args: &[serde_json::Value]| {
+              let method: String = get_arg(args, 0)?;
+              let route: String = get_arg(args, 1)?;
 
-                let router = add_route_to_router(runtime_handle_clone.clone(), method, route)
-                  .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
+              let router = add_route_to_router(runtime_handle_clone.clone(), method, route)
+                .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
-                routers_clone.lock().push(router);
+              router_sender.send(router).expect("send");
 
-                return Ok(serde_json::Value::Null);
-              })
-              .expect("Failed to register 'install_route' function");
+              return Ok(serde_json::Value::Null);
+            })
+            .expect("Failed to register 'install_route' function");
 
-            // Register native callback for registering cron jobs.
-            runtime
-              .register_function("install_job", move |args: &[serde_json::Value]| {
-                let id_value = Arc::new(Mutex::new(serde_json::Value::Null));
+          // Register native callback for registering cron jobs.
+          runtime
+            .register_function("install_job", move |args: &[serde_json::Value]| {
+              let name: String = get_arg(args, 0)?;
+              let default_spec: String = get_arg(args, 1)?;
+              let schedule = cron::Schedule::from_str(&default_spec).map_err(|err| {
+                return RSError::Runtime(err.to_string());
+              })?;
 
-                let name: String = get_arg(args, 0)?;
-                let default_spec: String = get_arg(args, 1)?;
-                let schedule = cron::Schedule::from_str(&default_spec).map_err(|err| {
-                  return RSError::Runtime(err.to_string());
-                })?;
+              let Some(first_isolate) = runtime_handle.state().first() else {
+                return Err(RSError::Runtime("Missing isolate".to_string()));
+              };
+              let first_isolate_sender = first_isolate.private_sender.clone();
 
-                let id_value_clone = id_value.clone();
-                let runtime_handle = runtime_handle.clone();
-                let Some(job) = jobs.new_job(
-                  None,
-                  name,
-                  schedule,
-                  crate::scheduler::build_callback(move || {
-                    let runtime_handle = runtime_handle.clone();
-                    let id_value = id_value_clone.lock().clone();
+              let (id_sender, id_receiver) = oneshot::channel::<serde_json::Value>();
+              let id_receiver = id_receiver.shared();
 
-                    return async move {
-                      let Some(first_isolate) = runtime_handle.state().first() else {
-                        return Err("missing isolate".into());
-                      };
+              let Some(job) = jobs.new_job(
+                None,
+                name,
+                schedule,
+                crate::scheduler::build_callback(move || {
+                  let first_isolate_sender = first_isolate_sender.clone();
+                  let id_receiver = id_receiver.clone();
 
-                      if let Some(msg) = call_function::<Option<String>>(
-                        &first_isolate.private_sender,
-                        None,
-                        "__dispatchCron",
-                        vec![id_value],
-                      )
-                      .await?
-                      {
-                        return Err(msg.into());
-                      }
+                  return async move {
+                    if let Some(msg) = call_function::<Option<String>>(
+                      &first_isolate_sender,
+                      None,
+                      "__dispatchCron",
+                      vec![id_receiver.await?],
+                    )
+                    .await?
+                    {
+                      return Err(msg.into());
+                    }
 
-                      Ok::<_, AnyError>(())
-                    };
-                  }),
-                ) else {
-                  return Err(RSError::Runtime("Failed to add job".to_string()));
-                };
+                    Ok::<_, AnyError>(())
+                  };
+                }),
+              ) else {
+                return Err(RSError::Runtime("Failed to add job".to_string()));
+              };
 
-                let id = serde_json::Value::Number(job.id.into());
-                *id_value.lock() = id.clone();
+              let job_id = serde_json::Value::Number(job.id.into());
+              if let Err(err) = id_sender.send(job_id.clone()) {
+                return Err(RSError::Runtime(err.to_string()));
+              }
 
-                job.start();
+              job.start();
 
-                return Ok(id);
-              })
-              .expect("Failed to register 'install_job' function");
-          })))
-          .await
-        {
-          panic!("Failed to comm with v8 rt'{index}': {err}");
+              return Ok(job_id);
+            })
+            .expect("Failed to register 'install_job' function");
+        })))
+        .await
+      {
+        panic!("Failed to comm with v8 rt'{index}': {err}");
+      }
+
+      // Then execute the script/module, i.e. statements in the file scope.
+      if let Err(err) = await_loading_module(state, module).await {
+        error!("Failed to load module: {err}");
+        return None;
+      }
+
+      // Now all module-level calls to `install_route` should have happened. Let's drain the
+      // registered routes. Note, we cannot `collect()` since the sender side never hangs up.
+      let mut installed_routers: Vec<Router<AppState>> = vec![];
+      match router_receiver.drain_into(&mut installed_routers) {
+        Ok(n) => debug!("Got {n} routers from JS"),
+        Err(err) => {
+          error!("Failed to get routers from JS: {err}");
+          return None;
         }
+      };
 
-        // Then execute the script/module, i.e. statements in the file scope.
-        match await_loading_module(state, module).await {
-          Ok(()) => {
-            let mut merged_router = Router::<AppState>::new();
-            for router in routers.lock().split_off(0) {
-              merged_router = merged_router.merge(router);
-            }
-
-            if merged_router.has_routes() {
-              Some(merged_router)
-            } else {
-              None
-            }
-          }
-          Err(err) => {
-            error!("Failed to load module: {err}");
-            None
-          }
+      let mut merged_router = Router::<AppState>::new();
+      for router in installed_routers {
+        if router.has_routes() {
+          merged_router = merged_router.merge(router);
         }
       }
+      return Some(merged_router);
     })
     .collect();
 
+  // Await function registration and module loading for all isolates/worker-threads.
   let mut receivers = futures_util::future::join_all(receivers).await;
 
-  // Note: We only return the first router assuming that js route registration is consistent across
+  // Note: We only return the first router assuming that JS route registration is consistent across
   // all isolates.
   return Ok(receivers.swap_remove(0));
 }
@@ -937,6 +924,16 @@ mod tests {
     assert_eq!("test0", result);
   }
 
+  fn override_connection(handle: &RuntimeHandle, conn: trailbase_sqlite::Connection) {
+    for s in &handle.runtime.state {
+      let mut lock = s.connection.lock();
+      if lock.is_some() {
+        debug!("connection already set");
+      }
+      lock.replace(conn.clone());
+    }
+  }
+
   async fn test_javascript_query() {
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
     conn
@@ -949,7 +946,7 @@ mod tests {
       .unwrap();
 
     let handle = RuntimeHandle::new();
-    handle.override_connection(conn);
+    override_connection(&handle, conn);
 
     tracing_subscriber::Registry::default()
       .with(tracing_subscriber::filter::LevelFilter::WARN)
@@ -997,7 +994,7 @@ mod tests {
       .unwrap();
 
     let handle = RuntimeHandle::new();
-    handle.override_connection(conn.clone());
+    override_connection(&handle, conn.clone());
 
     tracing_subscriber::Registry::default()
       .with(tracing_subscriber::filter::LevelFilter::WARN)

@@ -216,7 +216,7 @@ impl Drop for JobRegistry {
 pub fn build_callback<O, F, Fut>(f: F) -> Box<CallbackFunction>
 where
   F: 'static + Sync + Send + Fn() -> Fut,
-  Fut: Sync + Send + Future<Output = O>,
+  Fut: Send + Future<Output = O>,
   O: CallbackResultTrait,
 {
   let fun = Arc::new(f);
