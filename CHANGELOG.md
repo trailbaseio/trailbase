@@ -1,3 +1,17 @@
+## v0.10.1
+
+* Further refine SQLite execution model.
+  * Previously reader/writer queues were processed independently. That's great
+    for naive benchmarks but not ideal for more real-world, mixed workloads.
+  * Use an in-process RwLock to orchestrate access avoiding file-lock congestion.
+* Improve Record listing:
+  * Support `?offset=N` based pagination. Cursor will always be more efficient when applicable.
+  * Updated all the clients to support offset.
+  * Error on in-applicable cursors.
+  * Error on user-provided `?limit=N`s exceeding the hard limit.
+* Fix corner cases for not properly escaped and not fully-qualified filter column names.
+* Update dependencies.
+
 ## v0.10.0
 
 * Finer-grained access control over exposed APIs on a per-column basis:
