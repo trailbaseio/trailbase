@@ -78,12 +78,12 @@ pub async fn list_users_handler(
   // Where clause contains column filters and cursor depending on what's present in the url query
   // string.
   let filter_where_clause =
-    build_filter_where_clause(&table_metadata.schema.columns, filter_params)?;
+    build_filter_where_clause("_ROW_", &table_metadata.schema.columns, filter_params)?;
 
   let total_row_count: i64 = conn
     .read_query_row_f(
       format!(
-        "SELECT COUNT(*) FROM {USER_TABLE} WHERE {where_clause}",
+        "SELECT COUNT(*) FROM {USER_TABLE} AS _ROW_ WHERE {where_clause}",
         where_clause = filter_where_clause.clause
       ),
       filter_where_clause.params.clone(),

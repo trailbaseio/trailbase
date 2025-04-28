@@ -131,6 +131,7 @@ mod tests {
 
     let table_name = "test_table".to_string();
     let pk_col = "myid".to_string();
+
     let _ = create_table_handler(
       State(state.clone()),
       Json(CreateTableRequest {

@@ -123,12 +123,12 @@ pub async fn list_logs_handler(
   let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME).await?;
   let table_metadata = TableMetadata::new(table.clone(), &[table], crate::constants::USER_TABLE);
   let filter_where_clause =
-    build_filter_where_clause(&table_metadata.schema.columns, filter_params)?;
+    build_filter_where_clause("log", &table_metadata.schema.columns, filter_params)?;
 
   let total_row_count: i64 = conn
     .read_query_row_f(
       format!(
-        "SELECT COUNT(*) FROM {LOGS_TABLE_NAME} WHERE {where_clause}",
+        "SELECT COUNT(*) FROM {LOGS_TABLE_NAME} AS log WHERE {where_clause}",
         where_clause = filter_where_clause.clause
       ),
       filter_where_clause.params.clone(),

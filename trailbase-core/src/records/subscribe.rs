@@ -692,7 +692,8 @@ mod tests {
   use crate::app_state::test_state;
   use crate::auth::api::login::login_with_password;
   use crate::config::proto::RecordApiConfig;
-  use crate::records::{PermissionFlag, add_record_api_config};
+  use crate::records::PermissionFlag;
+  use crate::records::test_utils::add_record_api_config;
   use crate::util::uuid_to_b64;
 
   async fn decode_db_event(event: Event) -> DbEvent {

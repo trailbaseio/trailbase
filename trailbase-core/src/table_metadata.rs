@@ -252,7 +252,7 @@ mod tests {
   use crate::config::proto::{PermissionFlag, RecordApiConfig};
   use crate::records::list_records::list_records_handler;
   use crate::records::read_record::{ReadRecordQuery, read_record_handler};
-  use crate::records::*;
+  use crate::records::test_utils::add_record_api_config;
 
   #[tokio::test]
   async fn test_expanded_foreign_key() {

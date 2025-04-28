@@ -253,6 +253,7 @@ pub struct WhereClause {
 }
 
 pub fn build_filter_where_clause(
+  table_name: &str,
   columns: &[Column],
   filter_params: Option<HashMap<String, Vec<QueryParam>>>,
 ) -> Result<WhereClause, WhereClauseError> {
@@ -283,7 +284,9 @@ pub fn build_filter_where_clause(
 
         match json_string_to_value(col.data_type, query_param.value) {
           Ok(value) => {
-            where_clauses.push(format!(r#""{column_name}" {op} :{column_name}"#));
+            where_clauses.push(format!(
+              r#"{table_name}."{column_name}" {op} :{column_name}"#
+            ));
             params.push((prefix_colon(&column_name).into(), value));
           }
           Err(err) => debug!("Parameter conversion for {column_name} failed: {err}"),

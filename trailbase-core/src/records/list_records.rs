@@ -95,7 +95,7 @@ pub async fn list_records_handler(
   let WhereClause {
     clause: filter_clause,
     mut params,
-  } = build_filter_where_clause(api.columns(), filter_params)
+  } = build_filter_where_clause("_ROW_", api.columns(), filter_params)
     .map_err(|_err| RecordError::BadRequest("Invalid filter params"))?;
 
   // User properties
@@ -306,10 +306,9 @@ mod tests {
   use crate::auth::api::login::login_with_password;
   use crate::auth::user::User;
   use crate::config::proto::PermissionFlag;
-  use crate::records::Acls;
+  use crate::records::RecordError;
   use crate::records::query_builder::expand_tables;
   use crate::records::test_utils::*;
-  use crate::records::{AccessRules, RecordError, add_record_api};
   use crate::table_metadata::TableMetadataCache;
   use crate::util::id_to_b64;
   use crate::util::urlencode;
@@ -426,17 +425,77 @@ mod tests {
     };
   }
 
-  #[allow(unused)]
-  #[derive(Deserialize, Debug, PartialEq)]
-  struct Message {
-    mid: String,
-    _owner: Option<String>,
-    room: String,
-    data: String,
+  #[tokio::test]
+  async fn test_record_api_list() {
+    #[derive(Debug, PartialEq, Deserialize)]
+    struct Entry {
+      id: i64,
+      index: String,
+    }
+
+    let state = test_state(None).await.unwrap();
+
+    state
+      .conn()
+      .execute_batch(
+        r#"
+        CREATE TABLE 'table' (
+          id INTEGER PRIMARY KEY,
+          'index' TEXT NOT NULL DEFAULT ''
+        );
+        INSERT INTO 'table' (id, 'index') VALUES (1, '1'), (2, '2'), (3, '3');
+      "#,
+      )
+      .await
+      .unwrap();
+
+    state.table_metadata().invalidate_all().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some("api".to_string()),
+        table_name: Some("table".to_string()),
+        acl_world: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    let response = list_records_handler(
+      State(state.clone()),
+      Path("api".to_string()),
+      RawQuery(None),
+      None,
+    )
+    .await
+    .unwrap()
+    .0;
+
+    assert_eq!(3, response.records.len());
+
+    let first: Entry = serde_json::from_value(response.records[0].clone()).unwrap();
+
+    let response = list_records_handler(
+      State(state.clone()),
+      Path("api".to_string()),
+      RawQuery(Some(format!("id={}", first.id))),
+      None,
+    )
+    .await
+    .unwrap()
+    .0;
+
+    assert_eq!(1, response.records.len());
+    assert_eq!(
+      first,
+      serde_json::from_value(response.records[0].clone()).unwrap()
+    );
   }
 
   #[tokio::test]
-  async fn test_record_api_list() {
+  async fn test_record_api_list_messages_api() {
     let state = test_state(None).await.unwrap();
     let conn = state.conn();
 
@@ -445,20 +504,18 @@ mod tests {
     let room1 = add_room(conn, "room1").await.unwrap();
     let password = "Secret!1!!";
 
-    add_record_api(
+    add_record_api_config(
       &state,
-      "messages_api",
-      "message",
-      Acls {
-        authenticated: vec![PermissionFlag::Create, PermissionFlag::Read],
-        ..Default::default()
-      },
-      AccessRules {
-        read: Some("(_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND user = _USER_.id))".to_string()),
+      RecordApiConfig {
+        name: Some("messages_api".to_string()),
+        table_name: Some("message".to_string()),
+        acl_authenticated: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
+        read_access_rule: Some("(_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND user = _USER_.id))".to_string()),
         ..Default::default()
       },
     )
-    .await.unwrap();
+    .await
+    .unwrap();
 
     {
       // Unauthenticated users cannot list
@@ -511,29 +568,28 @@ mod tests {
 
       assert_eq!(resp.records.len(), 2);
 
-      let messages: Vec<_> = resp
-        .records
-        .into_iter()
-        .map(|v| {
-          match v {
-            serde_json::Value::Object(ref obj) => {
-              let keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
-              assert_eq!(keys, vec!["mid", "room", "data", "table"], "Got: {keys:?}",)
-            }
-            _ => panic!("expected object, got {v:?}"),
-          };
-
-          let message = to_message(v);
-          assert_eq!(None, message._owner);
-
-          return message.data;
-        })
-        .collect();
+      let messages: Vec<Message> = resp.records.into_iter().map(to_message).collect();
 
       assert_eq!(
-        vec!["user_y to room0".to_string(), "user_x to room0".to_string()],
+        &["user_y to room0", "user_x to room0"],
         messages
+          .iter()
+          .map(|m| m.data.as_str())
+          .collect::<Vec<_>>()
+          .as_slice(),
       );
+
+      let first = &messages[0];
+      let resp_by_id = list_records(
+        &state,
+        Some(&user_x_token.auth_token),
+        Some(format!("mid={}", first.mid)),
+      )
+      .await
+      .unwrap();
+
+      assert_eq!(resp_by_id.records.len(), 1);
+      assert_eq!(*first, to_message(resp_by_id.records[0].clone()));
     }
 
     {
@@ -551,27 +607,15 @@ mod tests {
       assert_eq!(resp.records.len(), 2);
       assert_eq!(resp.total_count, Some(2));
 
-      let messages: Vec<_> = resp
-        .records
-        .into_iter()
-        .map(|v| {
-          match v {
-            serde_json::Value::Object(ref obj) => {
-              let keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
-              assert_eq!(keys, vec!["mid", "room", "data", "table"], "Got: {keys:?}",)
-            }
-            _ => panic!("expected object, got {v:?}"),
-          };
-
-          let message = to_message(v);
-          assert_eq!(None, message._owner);
-          message.data
-        })
-        .collect();
+      let messages: Vec<Message> = resp.records.into_iter().map(to_message).collect();
 
       assert_eq!(
-        vec!["user_y to room0".to_string(), "user_x to room0".to_string()],
+        &["user_y to room0", "user_x to room0"],
         messages
+          .iter()
+          .map(|m| m.data.as_str())
+          .collect::<Vec<_>>()
+          .as_slice(),
       );
 
       // Let's paginate
@@ -802,9 +846,5 @@ mod tests {
 
     let response: ListResponse = json_response.0;
     return Ok(response);
-  }
-
-  fn to_message(v: serde_json::Value) -> Message {
-    return serde_json::from_value::<Message>(v).unwrap();
   }
 }

@@ -62,7 +62,7 @@ pub async fn list_rows_handler(
   // Where clause contains column filters and cursor depending on what's present in the url query
   // string.
   let filter_where_clause = if let Some(columns) = table_or_view_metadata.columns() {
-    build_filter_where_clause(columns, filter_params)?
+    build_filter_where_clause("_ROW_", columns, filter_params)?
   } else {
     debug!("Filter clauses currently not supported for complex views");
 
@@ -74,7 +74,7 @@ pub async fn list_rows_handler(
 
   let total_row_count: i64 = {
     let where_clause = &filter_where_clause.clause;
-    let count_query = format!("SELECT COUNT(*) FROM '{table_name}' WHERE {where_clause}");
+    let count_query = format!("SELECT COUNT(*) FROM '{table_name}' AS _ROW_ WHERE {where_clause}");
     state
       .conn()
       .read_query_row_f(count_query, filter_where_clause.params.clone(), |row| {
