@@ -169,23 +169,19 @@ async fn records_test() {
   {
     // List one specific message.
     let filter = format!("text_not_null={}", messages[0]);
-    let filters = vec![filter.as_str()];
     let response = api
-      .list::<serde_json::Value>(ListArguments {
-        filters: Some(&filters),
-        ..Default::default()
-      })
+      .list::<serde_json::Value>(ListArguments::new().with_filters([filter.as_str()]))
       .await
       .unwrap();
 
     assert_eq!(response.records.len(), 1);
 
     let second_response = api
-      .list::<serde_json::Value>(ListArguments {
-        pagination: Pagination::with_cursor(response.cursor),
-        filters: Some(&filters),
-        ..Default::default()
-      })
+      .list::<serde_json::Value>(
+        ListArguments::new()
+          .with_filters(&[filter.as_str()])
+          .with_pagination(Pagination::new().with_cursor(response.cursor)),
+      )
       .await
       .unwrap();
 
@@ -196,12 +192,12 @@ async fn records_test() {
     // List all the messages
     let filter = format!("text_not_null[like]=% =?&{now}");
     let records_ascending: ListResponse<SimpleStrict> = api
-      .list(ListArguments {
-        order: Some(&["+text_not_null"]),
-        filters: Some(&[&filter]),
-        count: true,
-        ..Default::default()
-      })
+      .list(
+        ListArguments::new()
+          .with_order(["+text_not_null"])
+          .with_filters([filter.as_str()])
+          .with_count(true),
+      )
       .await
       .unwrap();
 
@@ -214,11 +210,11 @@ async fn records_test() {
     assert_eq!(Some(2), records_ascending.total_count);
 
     let records_descending: ListResponse<SimpleStrict> = api
-      .list(ListArguments {
-        order: Some(&["-text_not_null"]),
-        filters: Some(&[&filter]),
-        ..Default::default()
-      })
+      .list(
+        ListArguments::new()
+          .with_order(["-text_not_null"])
+          .with_filters([filter.as_str()]),
+      )
       .await
       .unwrap();
 
@@ -277,10 +273,7 @@ async fn expand_foreign_records_test() {
 
   {
     let comment: Comment = api
-      .read(ReadArguments {
-        id: 1,
-        expand: Some(&["post"]),
-      })
+      .read(ReadArguments::new(1).with_expand(["post"]))
       .await
       .unwrap();
     assert_eq!(1, comment.id);
@@ -291,12 +284,12 @@ async fn expand_foreign_records_test() {
 
   {
     let comments: ListResponse<Comment> = api
-      .list(ListArguments {
-        pagination: Pagination::with_limit(2),
-        order: Some(&["-id"]),
-        expand: Some(&["author", "post"]),
-        ..Default::default()
-      })
+      .list(
+        ListArguments::new()
+          .with_pagination(Pagination::new().with_limit(2))
+          .with_order(["-id"])
+          .with_expand(["author", "post"]),
+      )
       .await
       .unwrap();
 
@@ -311,16 +304,12 @@ async fn expand_foreign_records_test() {
     let second = &comments.records[0];
 
     let offset_comments: ListResponse<Comment> = api
-      .list(ListArguments {
-        pagination: Pagination {
-          limit: Some(1),
-          offset: Some(1),
-          ..Default::default()
-        },
-        order: Some(&["-id"]),
-        expand: Some(&["author", "post"]),
-        ..Default::default()
-      })
+      .list(
+        ListArguments::new()
+          .with_pagination(Pagination::new().with_limit(1).with_offset(1))
+          .with_order(["-id"])
+          .with_expand(["author", "post"]),
+      )
       .await
       .unwrap();
 

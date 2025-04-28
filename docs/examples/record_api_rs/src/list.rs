@@ -4,15 +4,12 @@ pub async fn list(client: &Client) -> anyhow::Result<ListResponse<serde_json::Va
   Ok(
     client
       .records("movies")
-      .list(ListArguments {
-        pagination: Pagination {
-          limit: Some(3),
-          ..Default::default()
-        },
-        order: Some(&["rank"]),
-        filters: Some(&["watch_time[lt]=120", "description[like]=%love%"]),
-        ..Default::default()
-      })
+      .list(
+        ListArguments::new()
+          .with_pagination(Pagination::new().with_limit(3))
+          .with_order(["rank"])
+          .with_filters(["watch_time[lt]=120", "description[like]=%love%"]),
+      )
       .await?,
   )
 }

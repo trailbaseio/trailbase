@@ -71,28 +71,31 @@ pub struct Tokens {
   pub csrf_token: Option<String>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Pagination {
-  pub cursor: Option<String>,
-  pub limit: Option<usize>,
-  pub offset: Option<usize>,
+  cursor: Option<String>,
+  limit: Option<usize>,
+  offset: Option<usize>,
 }
 
 impl Pagination {
-  pub fn with(limit: impl Into<Option<usize>>, cursor: impl Into<Option<String>>) -> Pagination {
-    return Pagination {
-      limit: limit.into(),
-      cursor: cursor.into(),
-      offset: None,
-    };
+  pub fn new() -> Self {
+    return Self::default();
   }
 
-  pub fn with_limit(limit: impl Into<Option<usize>>) -> Pagination {
-    return Pagination::with(limit, None);
+  pub fn with_limit(mut self, limit: impl Into<Option<usize>>) -> Pagination {
+    self.limit = limit.into();
+    return self;
   }
 
-  pub fn with_cursor(cursor: impl Into<Option<String>>) -> Pagination {
-    return Pagination::with(None, cursor);
+  pub fn with_cursor(mut self, cursor: impl Into<Option<String>>) -> Pagination {
+    self.cursor = cursor.into();
+    return self;
+  }
+
+  pub fn with_offset(mut self, offset: impl Into<Option<usize>>) -> Pagination {
+    self.offset = offset.into();
+    return self;
   }
 }
 
@@ -141,7 +144,7 @@ impl RecordId<'_> for i64 {
 
 pub trait ReadArgumentsTrait<'a> {
   fn serialized_id(self) -> Cow<'a, str>;
-  fn expand(&self) -> Option<&'a [&'a str]>;
+  fn expand(&self) -> Option<&Vec<&'a str>>;
 }
 
 impl<'a, T: RecordId<'a>> ReadArgumentsTrait<'a> for T {
@@ -149,15 +152,26 @@ impl<'a, T: RecordId<'a>> ReadArgumentsTrait<'a> for T {
     return self.serialized_id();
   }
 
-  fn expand(&self) -> Option<&'a [&'a str]> {
+  fn expand(&self) -> Option<&Vec<&'a str>> {
     return None;
   }
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ReadArguments<'a, T: RecordId<'a>> {
-  pub id: T,
-  pub expand: Option<&'a [&'a str]>,
+  id: T,
+  expand: Option<Vec<&'a str>>,
+}
+
+impl<'a, T: RecordId<'a>> ReadArguments<'a, T> {
+  pub fn new(id: T) -> Self {
+    return Self { id, expand: None };
+  }
+
+  pub fn with_expand(mut self, expand: impl AsRef<[&'a str]>) -> Self {
+    self.expand = Some(expand.as_ref().to_vec());
+    return self;
+  }
 }
 
 impl<'a, T: RecordId<'a>> ReadArgumentsTrait<'a> for ReadArguments<'a, T> {
@@ -165,8 +179,8 @@ impl<'a, T: RecordId<'a>> ReadArgumentsTrait<'a> for ReadArguments<'a, T> {
     return self.id.serialized_id();
   }
 
-  fn expand(&self) -> Option<&'a [&'a str]> {
-    return self.expand;
+  fn expand(&self) -> Option<&Vec<&'a str>> {
+    return self.expand.as_ref();
   }
 }
 
@@ -236,13 +250,44 @@ pub struct RecordApi {
   name: String,
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ListArguments<'a> {
-  pub pagination: Pagination,
-  pub order: Option<&'a [&'a str]>,
-  pub filters: Option<&'a [&'a str]>,
-  pub expand: Option<&'a [&'a str]>,
-  pub count: bool,
+  pagination: Pagination,
+  order: Option<Vec<&'a str>>,
+  filters: Option<Vec<&'a str>>,
+  expand: Option<Vec<&'a str>>,
+  count: bool,
+}
+
+impl<'a> ListArguments<'a> {
+  pub fn new() -> Self {
+    return ListArguments::default();
+  }
+
+  pub fn with_pagination(mut self, pagination: Pagination) -> Self {
+    self.pagination = pagination;
+    return self;
+  }
+
+  pub fn with_order(mut self, order: impl AsRef<[&'a str]>) -> Self {
+    self.order = Some(order.as_ref().to_vec());
+    return self;
+  }
+
+  pub fn with_filters(mut self, filters: impl AsRef<[&'a str]>) -> Self {
+    self.filters = Some(filters.as_ref().to_vec());
+    return self;
+  }
+
+  pub fn with_expand(mut self, expand: impl AsRef<[&'a str]>) -> Self {
+    self.expand = Some(expand.as_ref().to_vec());
+    return self;
+  }
+
+  pub fn with_count(mut self, count: bool) -> Self {
+    self.count = count;
+    return self;
+  }
 }
 
 impl RecordApi {
@@ -266,13 +311,13 @@ impl RecordApi {
 
     if let Some(order) = args.order {
       if !order.is_empty() {
-        params.push((Cow::Borrowed("order"), Cow::Owned(to_list(order))));
+        params.push((Cow::Borrowed("order"), Cow::Owned(to_list(&order))));
       }
     }
 
     if let Some(expand) = args.expand {
       if !expand.is_empty() {
-        params.push((Cow::Borrowed("expand"), Cow::Owned(to_list(expand))));
+        params.push((Cow::Borrowed("expand"), Cow::Owned(to_list(&expand))));
       }
     }
 
