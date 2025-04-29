@@ -17,11 +17,11 @@ use std::sync::{
 };
 use std::task::{Context, Poll};
 use trailbase_sqlite::connection::{extract_record_values, extract_row_id};
+use trailbase_sqlite::rows::value_to_json;
 
 use crate::AppState;
 use crate::auth::user::User;
 use crate::records::RecordApi;
-use crate::records::sql_to_json::valueref_to_json;
 use crate::records::{Permission, RecordError};
 use crate::table_metadata::{TableMetadata, TableMetadataCache};
 use crate::value_notifier::Computed;
@@ -257,7 +257,7 @@ impl SubscriptionManager {
     conn: &rusqlite::Connection,
     subs: &[Subscription],
     record_subscriptions: bool,
-    record: &[(&str, rusqlite::types::ValueRef<'_>)],
+    record: &[(&str, &rusqlite::types::Value)],
     event: &Event,
   ) -> Vec<usize> {
     let mut dead_subscriptions: Vec<usize> = vec![];
@@ -330,10 +330,10 @@ impl SubscriptionManager {
     };
 
     // Join values with column names.
-    let record: Vec<(&str, rusqlite::types::ValueRef<'_>)> = record_values
+    let record: Vec<(&str, &rusqlite::types::Value)> = record_values
       .iter()
       .enumerate()
-      .map(|(idx, v)| (table_metadata.schema.columns[idx].name.as_str(), v.into()))
+      .map(|(idx, v)| (table_metadata.schema.columns[idx].name.as_str(), v))
       .collect();
 
     // Build a JSON-encoded SQLite event (insert, update, delete).
@@ -342,7 +342,7 @@ impl SubscriptionManager {
         record
           .iter()
           .filter_map(|(name, value)| {
-            if let Ok(v) = valueref_to_json(*value) {
+            if let Ok(v) = value_to_json(value) {
               return Some(((*name).to_string(), v));
             };
             return None;

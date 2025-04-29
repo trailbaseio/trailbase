@@ -34,7 +34,7 @@ pub enum AdminError {
   #[error("DB Migration error: {0}")]
   Migration(#[from] trailbase_refinery_core::Error),
   #[error("SQL -> Json error: {0}")]
-  Json(#[from] crate::records::sql_to_json::JsonError),
+  Json(#[from] trailbase_sqlite::rows::JsonError),
   #[error("Schema error: {0}")]
   SchemaError(#[from] trailbase_schema::Error),
   #[error("Json -> SQL Params error: {0}")]

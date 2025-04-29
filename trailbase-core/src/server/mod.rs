@@ -166,7 +166,7 @@ impl Server {
 
     #[cfg(feature = "v8")]
     let js_routes: Option<Router<AppState>> =
-      crate::js::load_routes_and_jobs_from_js_modules(&state)
+      crate::js::runtime::load_routes_and_jobs_from_js_modules(&state)
         .await
         .map_err(|err| InitError::ScriptError(err.to_string()))?;
 

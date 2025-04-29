@@ -459,7 +459,10 @@ fn build_js_runtime(conn: trailbase_sqlite::Connection, threads: Option<usize>) 
     RuntimeHandle::new()
   };
 
-  runtime.set_connection(conn);
+  #[cfg(test)]
+  runtime.set_connection(conn, true);
+  #[cfg(not(test))]
+  runtime.set_connection(conn, false);
 
   return runtime;
 }

@@ -6,9 +6,11 @@ members = [
   "examples/custom-binary",
   "trailbase-apalis",
   "trailbase-assets",
+  "trailbase-build",
   "trailbase-cli",
   "trailbase-core",
   "trailbase-extension",
+  "trailbase-js",
   "trailbase-schema",
   "trailbase-sqlite",
   "vendor/sqlean",
@@ -16,9 +18,11 @@ members = [
 default-members = [
   "client/trailbase-rs",
   "trailbase-assets",
+  "trailbase-build",
   "trailbase-cli",
   "trailbase-core",
   "trailbase-extension",
+  "trailbase-js",
   "trailbase-schema",
   "trailbase-sqlite",
 ]
@@ -43,7 +47,7 @@ opt-level = 3
 #   still using it in github releases.
 lto = "thin" # ("off", "thin", "fat")
 codegen-units = 16
-strip = "debuginfo"
+strip = "debuginfo" # ("symbols", "debuginfo", "none")
 
 # Workaround for https://github.com/gwenn/lemon-rs/issues/78. sqlite3-parser
 # requires 1+MB stack frames to parse trivial SQL statements, which is larger
@@ -59,13 +63,18 @@ axum = { version = "^0.8.1", features = ["multipart"] }
 env_logger = { version = "^0.11.8", default-features = false, features = ["auto-color", "humantime"] }
 libsqlite3-sys = { version = "0.32.0", features = ["bundled"] }
 rusqlite = { version = "0.34.0", default-features = false, features = ["bundled", "column_decltype", "load_extension", "modern_sqlite", "functions", "limits", "backup", "hooks", "preupdate_hook"] }
+rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
 tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "signal", "time", "sync"] }
-trailbase-refinery-core = { path = "vendor/refinery/refinery_core", version = "0.8.16", default-features = false, features = ["rusqlite-bundled"] }
-trailbase-refinery-macros = { path = "vendor/refinery/refinery_macros", version = "0.8.15" }
+tracing = { version = "0.1.40", default-features = false }
+tracing-subscriber = { version = "0.3.18", default-features = false, features = ["smallvec", "std", "fmt", "json"] }
 trailbase-apalis = { path = "trailbase-apalis", version = "0.1.0" }
+trailbase-build = { path = "trailbase-build", version = "0.1.0" }
 trailbase-assets = { path = "trailbase-assets", version = "0.1.0" }
 trailbase-sqlean = { path = "vendor/sqlean", version = "0.0.2" }
 trailbase-extension = { path = "trailbase-extension", version = "0.2.0" }
+trailbase-js = { path = "trailbase-js", version = "0.1.0" }
+trailbase-refinery-core = { path = "vendor/refinery/refinery_core", version = "0.8.16", default-features = false, features = ["rusqlite-bundled"] }
+trailbase-refinery-macros = { path = "vendor/refinery/refinery_macros", version = "0.8.15" }
 trailbase-schema = { path = "trailbase-schema", version = "0.1.0" }
 trailbase-sqlite = { path = "trailbase-sqlite", version = "0.2.0" }
 trailbase = { path = "trailbase-core", version = "0.1.0" }

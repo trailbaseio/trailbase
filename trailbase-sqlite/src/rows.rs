@@ -1,8 +1,10 @@
+use base64::prelude::*;
 use rusqlite::{Statement, types};
 use std::fmt::Debug;
 use std::ops::Index;
 use std::str::FromStr;
 use std::sync::Arc;
+use thiserror::Error;
 
 #[derive(Debug, Copy, Clone)]
 pub enum ValueType {
@@ -197,4 +199,43 @@ impl Index<usize> for Row {
   fn index(&self, idx: usize) -> &Self::Output {
     return &self.0[idx];
   }
+}
+
+#[derive(Debug, Error)]
+pub enum JsonError {
+  #[error("Float not finite")]
+  Finite,
+  #[error("Value not found")]
+  ValueNotFound,
+}
+
+pub fn value_to_json(value: &types::Value) -> Result<serde_json::Value, JsonError> {
+  return Ok(match value {
+    types::Value::Null => serde_json::Value::Null,
+    types::Value::Real(real) => {
+      let Some(number) = serde_json::Number::from_f64(*real) else {
+        return Err(JsonError::Finite);
+      };
+      serde_json::Value::Number(number)
+    }
+    types::Value::Integer(integer) => serde_json::Value::Number(serde_json::Number::from(*integer)),
+    types::Value::Blob(blob) => serde_json::Value::String(BASE64_URL_SAFE.encode(blob)),
+    types::Value::Text(text) => serde_json::Value::String(text.clone()),
+  });
+}
+
+pub fn row_to_json_array(row: &Row) -> Result<Vec<serde_json::Value>, JsonError> {
+  let cols = row.column_count();
+  let mut json_row = Vec::<serde_json::Value>::with_capacity(cols);
+
+  for i in 0..cols {
+    let value = row.get_value(i).ok_or(JsonError::ValueNotFound)?;
+    json_row.push(value_to_json(value)?);
+  }
+
+  return Ok(json_row);
+}
+
+pub fn rows_to_json_arrays(rows: &Rows) -> Result<Vec<Vec<serde_json::Value>>, JsonError> {
+  return rows.iter().map(row_to_json_array).collect();
 }

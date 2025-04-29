@@ -110,7 +110,7 @@ pub async fn init_app_state(
 
   // Write out the latest .js/.d.ts runtime files.
   #[cfg(feature = "v8")]
-  crate::js::write_js_runtime_files(&data_dir).await;
+  trailbase_js::runtime::write_js_runtime_files(data_dir.root()).await;
 
   let app_state = AppState::new(AppStateArgs {
     data_dir: data_dir.clone(),

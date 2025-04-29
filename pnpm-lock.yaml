@@ -657,7 +657,7 @@ importers:
         specifier: ^3.1.2
         version: 3.1.2(@types/debug@4.1.12)(@types/node@22.15.2)(happy-dom@15.11.7)(jiti@2.4.2)(jsdom@26.1.0)(lightningcss@1.29.2)(yaml@2.7.1)
 
-  trailbase-assets/js/runtime:
+  trailbase-js/assets/runtime:
     devDependencies:
       '@eslint/js':
         specifier: ^9.25.1

@@ -1,8 +1,5 @@
 #[cfg(feature = "v8")]
-mod import_provider;
-
-#[cfg(feature = "v8")]
-mod runtime;
+pub(crate) mod runtime;
 
 #[cfg(not(feature = "v8"))]
 mod fallback {
@@ -10,7 +7,7 @@ mod fallback {
   pub(crate) struct RuntimeHandle {}
 
   impl RuntimeHandle {
-    pub(crate) fn set_connection(&self, _conn: trailbase_sqlite::Connection) {}
+    pub(crate) fn set_connection(&self, _conn: trailbase_sqlite::Connection, r#override: bool) {}
 
     pub(crate) fn new() -> Self {
       return Self {};
@@ -23,7 +20,7 @@ mod fallback {
 }
 
 #[cfg(feature = "v8")]
-pub use runtime::*;
+pub use trailbase_js::runtime::RuntimeHandle;
 
 #[cfg(not(feature = "v8"))]
 pub use fallback::*;

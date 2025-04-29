@@ -2,14 +2,14 @@ use rustyscript::deno_core::{
   ModuleSpecifier, RequestedModuleType, ResolutionKind,
   anyhow::{Error, anyhow},
 };
-use rustyscript::module_loader::ImportProvider;
+use rustyscript::module_loader::ImportProvider as RustyScriptImportProvider;
 
 use crate::util::cow_to_string;
 
 #[derive(Default)]
-pub(crate) struct ImportProviderImpl;
+pub struct ImportProvider;
 
-impl ImportProvider for ImportProviderImpl {
+impl RustyScriptImportProvider for ImportProvider {
   fn resolve(
     &mut self,
     specifier: &ModuleSpecifier,
@@ -41,7 +41,7 @@ impl ImportProvider for ImportProviderImpl {
     match specifier.scheme() {
       "trailbase" => {
         return Some(Ok(cow_to_string(
-          trailbase_assets::JsRuntimeAssets::get("index.js")
+          crate::JsRuntimeAssets::get("index.js")
             .expect("Failed to read rt/index.js")
             .data,
         )));

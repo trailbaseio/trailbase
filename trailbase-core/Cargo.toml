@@ -21,7 +21,7 @@ harness = false
 
 [features]
 default = ["v8"]
-v8 = ["dep:rustyscript"]
+v8 = ["dep:trailbase-js"]
 queue = ["dep:apalis", "dep:trailbase-apalis"]
 
 [dependencies]
@@ -64,7 +64,6 @@ regex = "1.11.0"
 reqwest = { version = "0.12.8", default-features = false, features = ["rustls-tls", "json"] }
 rusqlite = { workspace = true }
 rustc_tools_util = "^0.4.2"
-rustyscript = { version = "^0.11.0", optional = true, features = ["web", "fs"] }
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "^1.0.117"
 serde_path_to_error = "0.1.16"
@@ -79,11 +78,12 @@ tower = "0.5.0"
 tower-cookies = "0.11.0"
 tower-http = { version = "^0.6.0", default-features = false, features = ["cors", "trace", "fs", "limit"] }
 tower-service = { version = "0.3.3", default-features = false }
-tracing = { version = "0.1.40", default-features = false }
-tracing-subscriber = { version = "0.3.18", default-features = false, features = ["smallvec", "std", "fmt", "json"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 trailbase-apalis = { workspace = true, optional = true }
 trailbase-assets = { workspace = true }
 trailbase-extension = { workspace = true }
+trailbase-js = { workspace = true, optional = true }
 trailbase-refinery-core = { workspace = true }
 trailbase-refinery-macros = { workspace = true }
 trailbase-schema = { workspace = true }
@@ -95,9 +95,8 @@ uuid = { workspace = true }
 validator = { version = "0.20.0", default-features = false }
 
 [build-dependencies]
-prost-build = "0.13.1"
-prost-reflect-build = "0.15.0"
 rustc_tools_util = "^0.4.2"
+trailbase-build = { workspace = true }
 
 [dev-dependencies]
 anyhow = "^1.0.86"

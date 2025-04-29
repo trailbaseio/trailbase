@@ -1,11 +1,11 @@
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 use trailbase_schema::sqlite::{Column, sqlite3_parse_into_statements};
+use trailbase_sqlite::rows::rows_to_json_arrays;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::records::sql_to_json::rows_to_json_arrays;
 
 #[derive(Debug, Default, Serialize, TS)]
 #[ts(export)]
@@ -81,9 +81,13 @@ pub async fn query_handler(
 
   let batched_rows = batched_rows_result.map_err(|err| Error::BadRequest(err.into()))?;
   if let Some(rows) = batched_rows {
-    let (rows, columns) = rows_to_json_arrays(rows, 1024)?;
+    let columns = crate::admin::util::rows_to_columns(&rows);
+    let rows = rows_to_json_arrays(&rows)?;
 
-    return Ok(Json(QueryResponse { columns, rows }));
+    return Ok(Json(QueryResponse {
+      columns: Some(columns),
+      rows,
+    }));
   }
   return Ok(Json(QueryResponse::default()));
 }

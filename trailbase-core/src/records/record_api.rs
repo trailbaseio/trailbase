@@ -476,7 +476,7 @@ impl RecordApi {
   pub(crate) fn check_record_level_read_access_for_subscriptions(
     &self,
     conn: &rusqlite::Connection,
-    record: &[(&str, rusqlite::types::ValueRef<'_>)],
+    record: &[(&str, &rusqlite::types::Value)],
     user: Option<&User>,
   ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
@@ -499,7 +499,7 @@ impl RecordApi {
       params.extend(record.iter().map(|(name, value)| {
         (
           Cow::Owned(prefix_colon(name)),
-          ToSqlOutput::Borrowed(*value),
+          ToSqlOutput::Borrowed((*value).into()),
         )
       }));
 

@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::sync::Arc;
 use trailbase_schema::sqlite::Column;
+use trailbase_sqlite::rows::rows_to_json_arrays;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -12,7 +13,6 @@ use crate::listing::{
   Cursor, Order, QueryParseResult, WhereClause, build_filter_where_clause, limit_or_default,
   parse_and_sanitize_query,
 };
-use crate::records::sql_to_json::rows_to_json_arrays;
 use crate::table_metadata::{TableMetadata, TableOrViewMetadata};
 
 #[derive(Debug, Serialize, TS)]
@@ -120,7 +120,7 @@ pub async fn list_rows_handler(
     columns: match table_metadata {
       Some(ref metadata) if metadata.schema.virtual_table => {
         // Virtual TABLE case.
-        columns.unwrap_or_else(Vec::new)
+        columns
       }
       Some(ref metadata) => {
         // Non-virtual TABLE case.
@@ -132,7 +132,7 @@ pub async fn list_rows_handler(
           columns.to_vec()
         } else {
           debug!("Falling back to inferred cols for view: '{table_name}'");
-          columns.unwrap_or_else(Vec::new)
+          columns
         }
       }
     },
@@ -153,7 +153,7 @@ async fn fetch_rows(
   filter_where_clause: WhereClause,
   order: Option<Vec<(String, Order)>>,
   pagination: Pagination<'_>,
-) -> Result<(Vec<Vec<serde_json::Value>>, Option<Vec<Column>>), Error> {
+) -> Result<(Vec<Vec<serde_json::Value>>, Vec<Column>), Error> {
   let WhereClause {
     mut clause,
     mut params,
@@ -219,7 +219,10 @@ async fn fetch_rows(
       return err;
     })?;
 
-  return Ok(rows_to_json_arrays(result_rows, 1024)?);
+  return Ok((
+    rows_to_json_arrays(&result_rows)?,
+    crate::admin::util::rows_to_columns(&result_rows),
+  ));
 }
 
 #[cfg(test)]
@@ -272,7 +275,7 @@ mod tests {
 
     state.table_metadata().invalidate_all().await.unwrap();
 
-    let (data, maybe_cols) = fetch_rows(
+    let (data, cols) = fetch_rows(
       conn,
       "test_table",
       WhereClause {
@@ -290,7 +293,6 @@ mod tests {
     .await
     .unwrap();
 
-    let cols = maybe_cols.unwrap();
     assert_eq!(cols.len(), 4);
 
     let row = data.get(0).unwrap();

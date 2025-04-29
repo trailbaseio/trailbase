@@ -11,6 +11,7 @@ mod query;
 pub(crate) mod rows;
 mod table;
 pub(crate) mod user;
+mod util;
 
 pub use error::AdminError;
 

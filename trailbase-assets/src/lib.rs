@@ -16,7 +16,3 @@ pub struct AdminAssets;
 #[derive(RustEmbed, Clone)]
 #[folder = "js/auth/dist/"]
 pub struct AuthAssets;
-
-#[derive(RustEmbed, Clone)]
-#[folder = "js/runtime/dist/"]
-pub struct JsRuntimeAssets;

@@ -8,7 +8,7 @@ packages:
   - 'trailbase-assets/js/admin'
   - 'trailbase-assets/js/auth'
   - 'trailbase-assets/js/client'
-  - 'trailbase-assets/js/runtime'
+  - 'trailbase-js/assets/runtime'
 options:
   link-workspace-packages: true
   prefer-workspace-packages: true

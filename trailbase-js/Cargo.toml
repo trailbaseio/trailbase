@@ -1,0 +1,31 @@
+[package]
+name = "trailbase-js"
+version = "0.1.0"
+edition = "2024"
+license = "OSL-3.0"
+description = "JS runtime for the TrailBase framework"
+homepage = "https://trailbase.io"
+readme = "../README.md"
+exclude = [
+  "**/node_modules/",
+  "**/dist/",
+]
+
+[dependencies]
+axum = { workspace = true }
+bytes = { version = "1.8.0", features = ["serde"] }
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+kanal = "0.1.1"
+log = { version = "^0.4.21", default-features = false }
+parking_lot = { version = "0.12.3", default-features = false }
+rust-embed = { workspace = true }
+rustyscript = { version = "^0.11.0", features = ["web", "fs"] }
+serde = { version = "^1.0.203", features = ["derive"] }
+serde_json = "^1.0.117"
+thiserror = "2.0.1"
+tokio = { workspace = true }
+tracing-subscriber = { workspace = true }
+trailbase-sqlite = { workspace = true }
+
+[build-dependencies]
+trailbase-build = { workspace = true }

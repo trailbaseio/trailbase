@@ -16,9 +16,8 @@ exclude = [
 askama = { workspace = true }
 axum = { workspace = true }
 log = "0.4.27"
-rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
+rust-embed = { workspace = true }
 tower-service = { version = "0.3.3", default-features = false }
 
 [build-dependencies]
-env_logger = { workspace = true }
-log = "0.4.27"
+trailbase-build = { workspace = true }

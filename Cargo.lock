@@ -6732,9 +6732,7 @@ dependencies = [
  "parking_lot",
  "pin-project-lite",
  "prost",
- "prost-build",
  "prost-reflect",
- "prost-reflect-build",
  "quoted_printable",
  "rand 0.9.1",
  "rcgen",
@@ -6742,7 +6740,6 @@ dependencies = [
  "reqwest",
  "rusqlite",
  "rustc_tools_util",
- "rustyscript",
  "schemars",
  "serde",
  "serde_json",
@@ -6763,7 +6760,9 @@ dependencies = [
  "tracing-subscriber",
  "trailbase-apalis",
  "trailbase-assets",
+ "trailbase-build",
  "trailbase-extension",
+ "trailbase-js",
  "trailbase-refinery-core",
  "trailbase-refinery-macros",
  "trailbase-schema",
@@ -6806,10 +6805,20 @@ version = "0.1.0"
 dependencies = [
  "askama",
  "axum 0.8.3",
- "env_logger",
  "log",
  "rust-embed",
  "tower-service",
+ "trailbase-build",
+]
+
+[[package]]
+name = "trailbase-build"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "log",
+ "prost-build",
+ "prost-reflect-build",
 ]
 
 [[package]]
@@ -6870,6 +6879,27 @@ dependencies = [
  "trailbase-sqlean",
  "uuid",
  "validator",
+]
+
+[[package]]
+name = "trailbase-js"
+version = "0.1.0"
+dependencies = [
+ "axum 0.8.3",
+ "bytes",
+ "futures-util",
+ "kanal",
+ "log",
+ "parking_lot",
+ "rust-embed",
+ "rustyscript",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing-subscriber",
+ "trailbase-build",
+ "trailbase-sqlite",
 ]
 
 [[package]]
@@ -6941,6 +6971,7 @@ dependencies = [
 name = "trailbase-sqlite"
 version = "0.2.0"
 dependencies = [
+ "base64 0.22.1",
  "criterion",
  "crossbeam-channel",
  "env_logger",

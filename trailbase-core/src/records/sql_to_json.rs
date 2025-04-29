@@ -1,9 +1,9 @@
-use base64::prelude::*;
 use log::*;
 use std::collections::HashMap;
 use thiserror::Error;
+use trailbase_schema::sqlite::Column;
 use trailbase_schema::sqlite::ColumnOption;
-use trailbase_schema::sqlite::{Column, ColumnDataType};
+use trailbase_sqlite::rows::value_to_json;
 
 use crate::table_metadata::JsonColumnMetadata;
 
@@ -11,10 +11,6 @@ use crate::table_metadata::JsonColumnMetadata;
 pub enum JsonError {
   #[error("SerdeJson error: {0}")]
   SerdeJson(#[from] serde_json::Error),
-  #[error("Malformed bytes, len {0}")]
-  MalformedBytes(usize),
-  #[error("Row not found")]
-  RowNotFound,
   #[error("Float not finite")]
   Finite,
   #[error("Value not found")]
@@ -23,23 +19,13 @@ pub enum JsonError {
   MissingColumnName,
 }
 
-pub(crate) fn valueref_to_json(
-  value: rusqlite::types::ValueRef<'_>,
-) -> Result<serde_json::Value, JsonError> {
-  use rusqlite::types::ValueRef;
-
-  return Ok(match value {
-    ValueRef::Null => serde_json::Value::Null,
-    ValueRef::Real(real) => {
-      let Some(number) = serde_json::Number::from_f64(real) else {
-        return Err(JsonError::Finite);
-      };
-      serde_json::Value::Number(number)
-    }
-    ValueRef::Integer(integer) => serde_json::Value::Number(serde_json::Number::from(integer)),
-    ValueRef::Blob(blob) => serde_json::Value::String(BASE64_URL_SAFE.encode(blob)),
-    ValueRef::Text(text) => serde_json::Value::String(String::from_utf8_lossy(text).to_string()),
-  });
+impl From<trailbase_sqlite::rows::JsonError> for JsonError {
+  fn from(value: trailbase_sqlite::rows::JsonError) -> Self {
+    return match value {
+      trailbase_sqlite::rows::JsonError::ValueNotFound => Self::ValueNotFound,
+      trailbase_sqlite::rows::JsonError::Finite => Self::Finite,
+    };
+  }
 }
 
 /// Serialize SQL row to json.
@@ -91,10 +77,10 @@ pub fn row_to_json_expand(
 
       if let Some(foreign_value) = expand.and_then(|e| e.get(column_name)) {
         if is_foreign_key(&column.options) {
-          let id = match valueref_to_json(value.into()) {
+          let id = match value_to_json(value) {
             Ok(value) => value,
             Err(err) => {
-              return Some(Err(err));
+              return Some(Err(err.into()));
             }
           };
 
@@ -126,9 +112,9 @@ pub fn row_to_json_expand(
         }
       }
 
-      return match valueref_to_json(value.into()) {
+      return match value_to_json(value) {
         Ok(value) => Some(Ok((column_name.to_string(), value))),
-        Err(err) => Some(Err(err)),
+        Err(err) => Some(Err(err.into())),
       };
     })
     .collect::<Result<serde_json::Map<_, _>, JsonError>>()?;
@@ -161,70 +147,6 @@ pub fn rows_to_json_expand(
     .iter()
     .map(|row| row_to_json_expand(columns, json_metadata, row, column_filter, expand))
     .collect::<Result<Vec<_>, JsonError>>();
-}
-
-pub fn row_to_json_array(row: &trailbase_sqlite::Row) -> Result<Vec<serde_json::Value>, JsonError> {
-  let cols = row.column_count();
-  let mut json_row = Vec::<serde_json::Value>::with_capacity(cols);
-
-  for i in 0..cols {
-    let value = row.get_value(i).ok_or(JsonError::ValueNotFound)?;
-    json_row.push(valueref_to_json(value.into())?);
-  }
-
-  return Ok(json_row);
-}
-
-/// Best-effort conversion from row values to column definition.
-///
-/// WARN: This is lossy and whenever possible we should rely on parsed "CREATE TABLE" statement for
-/// the respective column.
-fn rows_to_columns(rows: &trailbase_sqlite::Rows) -> Result<Vec<Column>, rusqlite::Error> {
-  use trailbase_sqlite::ValueType as T;
-
-  let mut columns: Vec<Column> = vec![];
-  for i in 0..rows.column_count() {
-    columns.push(Column {
-      name: rows.column_name(i).unwrap_or("<missing>").to_string(),
-      data_type: match rows.column_type(i).unwrap_or(T::Null) {
-        T::Real => ColumnDataType::Real,
-        T::Text => ColumnDataType::Text,
-        T::Integer => ColumnDataType::Integer,
-        T::Null => ColumnDataType::Null,
-        T::Blob => ColumnDataType::Blob,
-      },
-      // We cannot derive the options from a row of data.
-      options: vec![],
-    });
-  }
-
-  return Ok(columns);
-}
-
-type Row = Vec<serde_json::Value>;
-
-pub fn rows_to_json_arrays(
-  rows: trailbase_sqlite::Rows,
-  limit: usize,
-) -> Result<(Vec<Row>, Option<Vec<Column>>), JsonError> {
-  let columns = match rows_to_columns(&rows) {
-    Ok(columns) => Some(columns),
-    Err(err) => {
-      debug!("Failed to get column def: {err}");
-      None
-    }
-  };
-
-  let mut json_rows: Vec<Vec<serde_json::Value>> = vec![];
-  for (idx, row) in rows.iter().enumerate() {
-    if idx >= limit {
-      break;
-    }
-
-    json_rows.push(row_to_json_array(row)?);
-  }
-
-  return Ok((json_rows, columns));
 }
 
 #[cfg(test)]

@@ -1,0 +1,15 @@
+[package]
+name = "trailbase-build"
+version = "0.1.0"
+edition = "2024"
+license = "OSL-3.0"
+description = "Shared build.rs utilities for the TrailBase framework"
+homepage = "https://trailbase.io"
+repository = "https://github.com/trailbaseio/trailbase"
+readme = "../README.md"
+
+[dependencies]
+env_logger = { workspace = true }
+log = "0.4.27"
+prost-build = "0.13.1"
+prost-reflect-build = "0.15.0"
