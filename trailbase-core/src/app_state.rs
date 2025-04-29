@@ -9,7 +9,7 @@ use crate::config::proto::{Config, RecordApiConfig, S3StorageConfig, hash_config
 use crate::config::{validate_config, write_config_and_vault_textproto};
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
-use crate::js::RuntimeHandle;
+use crate::js::{RuntimeHandle, register_database_functions};
 use crate::queue::Queue;
 use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
@@ -452,17 +452,23 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   });
 }
 
+#[cfg(test)]
+static START: std::sync::Once = std::sync::Once::new();
+
 fn build_js_runtime(conn: trailbase_sqlite::Connection, threads: Option<usize>) -> RuntimeHandle {
   let runtime = if let Some(threads) = threads {
-    RuntimeHandle::new_with_threads(threads)
+    RuntimeHandle::singleton_or_init_with_threads(threads)
   } else {
-    RuntimeHandle::new()
+    RuntimeHandle::singleton()
   };
 
   #[cfg(test)]
-  runtime.set_connection(conn, true);
+  START.call_once(|| {
+    register_database_functions(&runtime, conn);
+  });
+
   #[cfg(not(test))]
-  runtime.set_connection(conn, false);
+  register_database_functions(&runtime, conn);
 
   return runtime;
 }
