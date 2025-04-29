@@ -1,9 +1,10 @@
 use axum::body::Body;
 use axum::http::{StatusCode, header::CONTENT_TYPE};
 use axum::response::{IntoResponse, Response};
+use futures_util::future::LocalBoxFuture;
 use log::*;
 use parking_lot::Mutex;
-use rustyscript::{deno_core::PollEventLoopOptions, init_platform, js_value::Promise, json_args};
+use rustyscript::{deno_core::PollEventLoopOptions, init_platform, js_value::Promise};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
@@ -17,7 +18,7 @@ use trailbase_sqlite::rows::{JsonError, row_to_json_array};
 use crate::JsRuntimeAssets;
 use crate::util::cow_to_string;
 
-pub use rustyscript::{Error, Module, Runtime};
+pub use rustyscript::{Error, Module, ModuleHandle, Runtime};
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -56,16 +57,12 @@ pub struct DispatchArgs {
   pub reply: oneshot::Sender<Result<JsHttpResponse, JsHttpResponseError>>,
 }
 
+#[allow(clippy::type_complexity)]
 pub enum Message {
-  Run(Box<dyn (FnOnce(&mut Runtime)) + Send + Sync>),
-  HttpDispatch(DispatchArgs),
-  CallFunction(
+  Run(
     Option<Module>,
-    &'static str,
-    Vec<serde_json::Value>,
-    oneshot::Sender<Result<serde_json::Value, AnyError>>,
+    Box<dyn (FnOnce(Option<&ModuleHandle>, &mut Runtime, &mut Vec<Box<dyn Completer>>)) + Send>,
   ),
-  LoadModule(Module, oneshot::Sender<Result<(), AnyError>>),
 }
 
 pub struct State {
@@ -79,7 +76,15 @@ impl State {
 
     self
       .private_sender
-      .send(Message::LoadModule(module, sender))
+      .send(Message::Run(
+        Some(module),
+        Box::new(|module_handle, _runtime, _completers| {
+          let _ = match module_handle {
+            Some(_) => sender.send(Ok(())),
+            None => sender.send(Err("Failed to load module".into())),
+          };
+        }),
+      ))
       .await?;
 
     let _ = receiver.await.map_err(|err| {
@@ -95,7 +100,7 @@ impl State {
   }
 }
 
-pub struct RuntimeSingleton {
+struct RuntimeSingleton {
   n_threads: usize,
 
   // Thread handle
@@ -119,27 +124,32 @@ impl Drop for RuntimeSingleton {
   }
 }
 
-struct Completer {
-  name: String,
-  promise: Promise<JsHttpResponse>,
-  reply: oneshot::Sender<Result<JsHttpResponse, JsHttpResponseError>>,
+pub trait Completer {
+  fn is_ready(&self, runtime: &mut Runtime) -> bool;
+  fn resolve<'a>(self: Box<Self>, runtime: &'a mut Runtime) -> LocalBoxFuture<'a, ()>;
 }
 
-impl Completer {
+pub struct CompleterImpl<T: serde::de::DeserializeOwned + Send + 'static> {
+  /// Identifier for book-keeping.
+  #[allow(unused)]
+  pub name: String,
+  /// Promise eventually resolved by the JS engine.
+  pub promise: Promise<T>,
+  /// Back channel to eventually resolve with the value from the promise above.
+  pub resolver: Box<dyn FnOnce(Result<T, Error>) + Send>,
+}
+
+impl<T: serde::de::DeserializeOwned + Send + 'static> Completer for CompleterImpl<T> {
   fn is_ready(&self, runtime: &mut Runtime) -> bool {
     return !self.promise.is_pending(runtime);
   }
 
-  async fn resolve(self, runtime: &mut Runtime) {
-    let value = self
-      .promise
-      .into_future(runtime)
-      .await
-      .map_err(|err| JsHttpResponseError::Internal(err.into()));
-
-    if self.reply.send(value).is_err() {
-      error!("Completer send failed for : {}", self.name);
-    }
+  fn resolve<'a>(self: Box<Self>, runtime: &'a mut Runtime) -> LocalBoxFuture<'a, ()> {
+    let resolver = self.resolver;
+    let promise = self.promise;
+    Box::pin(async {
+      resolver(promise.into_future(runtime).await);
+    })
   }
 }
 
@@ -201,7 +211,7 @@ impl RuntimeSingleton {
                 tokio::runtime::Builder::new_current_thread()
                   .enable_time()
                   .enable_io()
-                  .thread_name("v8-runtime")
+                  .thread_name(format!("v8-runtime-{index}"))
                   .build()
                   .expect("startup"),
               );
@@ -307,69 +317,96 @@ impl RuntimeSingleton {
   }
 }
 
+pub fn build_call_sync_js_function_message<T>(
+  module: Option<Module>,
+  function_name: &'static str,
+  args: impl serde::ser::Serialize + Send + 'static,
+  resolver: impl FnOnce(Result<T, Error>) + Send + 'static,
+) -> Message
+where
+  T: serde::de::DeserializeOwned + Send,
+{
+  return Message::Run(
+    module,
+    Box::new(
+      move |module_handle, runtime: &mut Runtime, _completers: &mut Vec<Box<dyn Completer>>| {
+        resolver(runtime.call_function_immediate::<T>(module_handle, function_name, &args));
+      },
+    ),
+  );
+}
+
+pub fn build_call_async_js_function_message<T>(
+  id: String,
+  module: Option<Module>,
+  function_name: &'static str,
+  args: impl serde::ser::Serialize + Send + 'static,
+  resolver: impl FnOnce(Result<T, Error>) + Send + 'static,
+) -> Message
+where
+  T: serde::de::DeserializeOwned + Send + 'static,
+{
+  return Message::Run(
+    module,
+    Box::new(
+      move |module_handle, runtime: &mut Runtime, completers: &mut Vec<Box<dyn Completer>>| {
+        let promise_or =
+          runtime.call_function_immediate::<Promise<T>>(module_handle, function_name, &args);
+
+        match promise_or {
+          Ok(promise) => {
+            completers.push(Box::new(CompleterImpl::<T> {
+              name: id,
+              promise,
+              resolver: Box::new(resolver),
+            }));
+          }
+          Err(err) => resolver(Err(err)),
+        };
+      },
+    ),
+  );
+}
+
+pub fn build_http_dispatch_message(args: DispatchArgs) -> Message {
+  return build_call_async_js_function_message(
+    args.uri.clone(),
+    None,
+    "__dispatch",
+    serde_json::json!([
+      args.method,
+      args.route_path,
+      args.uri,
+      args.path_params,
+      args.headers,
+      args.user,
+      args.body
+    ]),
+    move |value_or: Result<JsHttpResponse, Error>| {
+      if args
+        .reply
+        .send(value_or.map_err(|err| JsHttpResponseError::Internal(err.into())))
+        .is_err()
+      {
+        debug!("Failed to send reply. Channel closed");
+      }
+    },
+  );
+}
+
+#[inline]
 async fn handle_message(
   runtime: &mut Runtime,
   msg: Message,
-  completers: &mut Vec<Completer>,
+  completers: &mut Vec<Box<dyn Completer>>,
 ) -> Result<(), AnyError> {
   match msg {
-    Message::Run(f) => {
-      f(runtime);
-    }
-    Message::HttpDispatch(args) => {
-      let channel = args.reply;
-      let uri = args.uri.clone();
-      let promise = match runtime.call_function_immediate::<Promise<JsHttpResponse>>(
-        None,
-        "__dispatch",
-        json_args!(
-          args.method,
-          args.route_path,
-          args.uri,
-          args.path_params,
-          args.headers,
-          args.user,
-          args.body
-        ),
-      ) {
-        Ok(promise) => promise,
-        Err(err) => {
-          if channel
-            .send(Err(JsHttpResponseError::Internal(err.into())))
-            .is_err()
-          {
-            error!("dispatch sending error failed");
-          }
-          return Ok(());
-        }
-      };
-
-      completers.push(Completer {
-        name: uri,
-        promise,
-        reply: channel,
-      });
-    }
-    Message::CallFunction(module, name, args, sender) => {
-      let module_handle = if let Some(module) = module {
-        runtime.load_module_async(&module).await.ok()
+    Message::Run(module, f) => {
+      if let Some(module) = module {
+        let module_handle = runtime.load_module_async(&module).await?;
+        f(Some(&module_handle), runtime, completers);
       } else {
-        None
-      };
-
-      let result: Result<serde_json::Value, AnyError> = runtime
-        .call_function_async::<serde_json::Value>(module_handle.as_ref(), name, &args)
-        .await
-        .map_err(|err| err.into());
-
-      if sender.send(result).is_err() {
-        error!("Sending of js function call reply failed");
-      }
-    }
-    Message::LoadModule(module, sender) => {
-      runtime.load_module_async(&module).await?;
-      if sender.send(Ok(())).is_err() {
-        error!("Load module send failed");
+        f(None, runtime, completers);
       }
     }
   }
@@ -390,7 +427,7 @@ fn event_loop(
   };
 
   runtime.tokio_runtime().block_on(async {
-    let mut completers: Vec<Completer> = vec![];
+    let mut completers: Vec<Box<dyn Completer>> = vec![];
 
     loop {
       let completed_indexes = completers
@@ -448,7 +485,7 @@ fn get_runtime(n_threads: Option<usize>) -> &'static RuntimeSingleton {
 
 #[derive(Clone)]
 pub struct RuntimeHandle {
-  pub runtime: &'static RuntimeSingleton,
+  runtime: &'static RuntimeSingleton,
 }
 
 impl RuntimeHandle {
@@ -596,23 +633,6 @@ mod tests {
   use super::*;
   use rustyscript::Module;
 
-  async fn call_function<T>(
-    sender: &kanal::AsyncSender<Message>,
-    module: Option<Module>,
-    name: &'static str,
-    args: Vec<serde_json::Value>,
-  ) -> Result<T, AnyError>
-  where
-    T: serde::de::DeserializeOwned,
-  {
-    let (resp_sender, resp_receiver) = oneshot::channel::<Result<serde_json::Value, AnyError>>();
-    sender
-      .send(Message::CallFunction(module, name, args, resp_sender))
-      .await?;
-
-    return Ok(serde_json::from_value::<T>(resp_receiver.await??)?);
-  }
-
   #[tokio::test]
   async fn test_serial_tests() {
     // NOTE: needs to run serially since registration of SQLite connection with singleton v8
@@ -630,9 +650,12 @@ mod tests {
     handle
       .runtime
       .shared_sender
-      .send(Message::Run(Box::new(|_rt| {
-        sender.send(5).unwrap();
-      })))
+      .send(Message::Run(
+        None,
+        Box::new(|_m, _rt, _c| {
+          sender.send(5).unwrap();
+        }),
+      ))
       .await
       .unwrap();
 
@@ -654,15 +677,22 @@ mod tests {
       "#,
     );
 
-    let result = call_function::<String>(
-      &handle.runtime.shared_sender,
-      Some(module),
-      "test_fun",
-      vec![],
-    )
-    .await
-    .unwrap();
-    assert_eq!("test0", result);
+    let (sender, receiver) = oneshot::channel::<Result<String, Error>>();
+    handle
+      .runtime
+      .shared_sender
+      .send(build_call_sync_js_function_message::<String>(
+        Some(module),
+        "test_fun",
+        Vec::<serde_json::Value>::new(),
+        move |value_or| {
+          sender.send(value_or).unwrap();
+        },
+      ))
+      .await
+      .unwrap();
+
+    assert_eq!("test0", receiver.await.unwrap().unwrap());
   }
 
   fn override_connection(handle: &RuntimeHandle, conn: trailbase_sqlite::Connection) {
@@ -703,14 +733,23 @@ mod tests {
       "#,
     );
 
-    let result = call_function::<Vec<Vec<serde_json::Value>>>(
-      &handle.runtime.shared_sender,
-      Some(module),
-      "test_query",
-      vec![serde_json::json!("SELECT * FROM test")],
-    )
-    .await
-    .unwrap();
+    let (sender, receiver) = oneshot::channel();
+    handle
+      .send_to_any_isolate(build_call_async_js_function_message::<
+        Vec<Vec<serde_json::Value>>,
+      >(
+        "<SOME ID>".to_string(),
+        Some(module),
+        "test_query",
+        vec![serde_json::json!("SELECT * FROM test")],
+        move |value_or| {
+          sender.send(value_or).unwrap();
+        },
+      ))
+      .await
+      .unwrap();
+
+    let result = receiver.await.unwrap().unwrap();
 
     assert_eq!(
       vec![
@@ -730,7 +769,12 @@ mod tests {
   async fn test_javascript_execute() {
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
     conn
-      .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
+      .execute_batch(
+        r#"
+          CREATE TABLE test (v0 TEXT, v1 INTEGER);
+          INSERT INTO test (v0, v1) VALUES ('foo', 5), ('bar', 3);
+        "#,
+      )
       .await
       .unwrap();
 
@@ -751,14 +795,22 @@ mod tests {
       "#,
     );
 
-    let _result = call_function::<i64>(
-      &handle.runtime.shared_sender,
-      Some(module),
-      "test_execute",
-      vec![serde_json::json!("DELETE FROM test")],
-    )
-    .await
-    .unwrap();
+    let (sender, receiver) = oneshot::channel();
+    handle
+      .send_to_any_isolate(build_call_async_js_function_message::<i64>(
+        "<SOME ID>".to_string(),
+        Some(module),
+        "test_execute",
+        vec![serde_json::json!("DELETE FROM test")],
+        move |value_or| {
+          sender.send(value_or).unwrap();
+        },
+      ))
+      .await
+      .unwrap();
+
+    let result = receiver.await.unwrap().unwrap();
+    assert_eq!(2, result);
 
     let count: i64 = conn
       .read_query_row_f("SELECT COUNT(*) FROM test", (), |row| row.get(0))

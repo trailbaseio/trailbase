@@ -10,7 +10,8 @@ use tokio::sync::oneshot;
 
 use trailbase_js::runtime::{
   DispatchArgs, Error as RSError, JsHttpResponse, JsHttpResponseError, JsUser, Message, Module,
-  Runtime, RuntimeHandle, get_arg,
+  Runtime, RuntimeHandle, build_call_async_js_function_message, build_http_dispatch_message,
+  get_arg,
 };
 
 use crate::AppState;
@@ -65,7 +66,7 @@ fn add_route_to_router(
 
     debug!("dispatch {method} {uri}");
     runtime_handle
-      .send_to_any_isolate(Message::HttpDispatch(DispatchArgs {
+      .send_to_any_isolate(build_http_dispatch_message(DispatchArgs {
         method,
         route_path,
         uri: uri.to_string(),
@@ -139,85 +140,91 @@ async fn install_routes_and_jobs(
       let (router_sender, router_receiver) = kanal::unbounded::<Router<AppState>>();
 
       if let Err(err) = state
-        .send_privately(Message::Run(Box::new(move |runtime: &mut Runtime| {
-          // First install a native callbacks.
-          //
-          // Register native callback for building axum router.
-          let runtime_handle_clone = runtime_handle.clone();
-          runtime
-            .register_function("install_route", move |args: &[serde_json::Value]| {
-              let method: String = get_arg(args, 0)?;
-              let route: String = get_arg(args, 1)?;
+        .send_privately(Message::Run(
+          None,
+          Box::new(move |_m, runtime: &mut Runtime, _c| {
+            // First install a native callbacks.
+            //
+            // Register native callback for building axum router.
+            let runtime_handle_clone = runtime_handle.clone();
+            runtime
+              .register_function("install_route", move |args: &[serde_json::Value]| {
+                let method: String = get_arg(args, 0)?;
+                let route: String = get_arg(args, 1)?;
 
-              let router = add_route_to_router(runtime_handle_clone.clone(), method, route)
-                .map_err(|err| RSError::Runtime(err.to_string()))?;
+                let router = add_route_to_router(runtime_handle_clone.clone(), method, route)
+                  .map_err(|err| RSError::Runtime(err.to_string()))?;
 
-              router_sender.send(router).expect("send");
+                router_sender.send(router).expect("send");
 
-              return Ok(serde_json::Value::Null);
-            })
-            .expect("Failed to register 'install_route' function");
+                return Ok(serde_json::Value::Null);
+              })
+              .expect("Failed to register 'install_route' function");
 
-          // Register native callback for registering cron jobs.
-          runtime
-            .register_function("install_job", move |args: &[serde_json::Value]| {
-              let name: String = get_arg(args, 0)?;
-              let default_spec: String = get_arg(args, 1)?;
-              let schedule = cron::Schedule::from_str(&default_spec).map_err(|err| {
-                return RSError::Runtime(err.to_string());
-              })?;
+            // Register native callback for registering cron jobs.
+            runtime
+              .register_function(
+                "install_job",
+                move |args: &[serde_json::Value]| -> Result<serde_json::Value, _> {
+                  let name: String = get_arg(args, 0)?;
+                  let default_spec: String = get_arg(args, 1)?;
+                  let schedule = cron::Schedule::from_str(&default_spec).map_err(|err| {
+                    return RSError::Runtime(err.to_string());
+                  })?;
 
-              let runtime_handle = runtime_handle.clone();
-              let (id_sender, id_receiver) = oneshot::channel::<serde_json::Value>();
-              let id_receiver = id_receiver.shared();
-
-              let Some(job) = jobs.new_job(
-                None,
-                name,
-                schedule,
-                crate::scheduler::build_callback(move || {
                   let runtime_handle = runtime_handle.clone();
-                  let id_receiver = id_receiver.clone();
+                  let (id_sender, id_receiver) = oneshot::channel::<i64>();
+                  let id_receiver = id_receiver.shared();
 
-                  return async move {
-                    let Some(first_isolate) = runtime_handle.state().first() else {
-                      return Err("Missing isolate".into());
-                    };
+                  let Some(job) = jobs.new_job(
+                    None,
+                    name,
+                    schedule,
+                    crate::scheduler::build_callback(move || {
+                      let runtime_handle = runtime_handle.clone();
+                      let id_receiver = id_receiver.clone();
 
-                    let (resp_sender, resp_receiver) = oneshot::channel();
-                    first_isolate
-                      .send_privately(Message::CallFunction(
-                        None,
-                        "__dispatchCron",
-                        vec![id_receiver.await?],
-                        resp_sender,
-                      ))
-                      .await?;
+                      return async move {
+                        let Some(first_isolate) = runtime_handle.state().first() else {
+                          return Err("Missing isolate".into());
+                        };
 
-                    if let Some(msg) =
-                      serde_json::from_value::<Option<String>>(resp_receiver.await??)?
-                    {
-                      return Err(msg.into());
-                    }
+                        let id = id_receiver.await?;
+                        first_isolate
+                          .send_privately(build_call_async_js_function_message(
+                            "cron".to_string(),
+                            None,
+                            "__dispatchCron",
+                            [id],
+                            move |value_or: Result<Option<String>, RSError>| {
+                              match value_or {
+                                Err(err) => debug!("cron failed: {err}"),
+                                Ok(Some(err)) => debug!("cron failed: {err}"),
+                                _ => {}
+                              };
+                            },
+                          ))
+                          .await?;
 
-                    Ok::<_, AnyError>(())
+                        Ok::<_, AnyError>(())
+                      };
+                    }),
+                  ) else {
+                    return Err(RSError::Runtime("Failed to add job".to_string()));
                   };
-                }),
-              ) else {
-                return Err(RSError::Runtime("Failed to add job".to_string()));
-              };
 
-              let job_id = serde_json::Value::Number(job.id.into());
-              if let Err(err) = id_sender.send(job_id.clone()) {
-                return Err(RSError::Runtime(err.to_string()));
-              }
+                  if let Err(err) = id_sender.send(job.id as i64) {
+                    return Err(RSError::Runtime(err.to_string()));
+                  }
 
-              job.start();
+                  job.start();
 
-              return Ok(job_id);
-            })
-            .expect("Failed to register 'install_job' function");
-        })))
+                  return Ok(job.id.into());
+                },
+              )
+              .expect("Failed to register 'install_job' function");
+          }),
+        ))
         .await
       {
         panic!("Failed to comm with v8 rt'{index}': {err}");
