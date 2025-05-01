@@ -6885,7 +6885,6 @@ dependencies = [
 name = "trailbase-js"
 version = "0.1.0"
 dependencies = [
- "axum 0.8.3",
  "bytes",
  "futures-util",
  "kanal",
@@ -6895,7 +6894,6 @@ dependencies = [
  "rustyscript",
  "serde",
  "serde_json",
- "thiserror 2.0.12",
  "tokio",
  "tracing-subscriber",
  "trailbase-build",

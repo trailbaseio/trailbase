@@ -2,22 +2,56 @@ use axum::Router;
 use axum::body::Body;
 use axum::extract::{RawPathParams, Request};
 use axum::http::{HeaderName, HeaderValue, request::Parts};
-use axum::response::Response;
+use axum::http::{StatusCode, header::CONTENT_TYPE};
+use axum::response::{IntoResponse, Response};
 use futures_util::FutureExt;
 use log::*;
 use std::str::FromStr;
+use thiserror::Error;
 use tokio::sync::oneshot;
 
 use trailbase_js::runtime::{
-  DispatchArgs, Error as RSError, JsHttpResponse, JsHttpResponseError, JsUser, Message, Module,
-  Runtime, RuntimeHandle, build_call_async_js_function_message, build_http_dispatch_message,
-  get_arg,
+  DispatchArgs, Error as RSError, JsHttpResponse, JsUser, Message, Module, Runtime, RuntimeHandle,
+  build_call_async_js_function_message, build_http_dispatch_message, get_arg,
 };
 
 use crate::AppState;
 use crate::auth::user::User;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
+
+#[derive(Debug, Error)]
+pub enum JsHttpResponseError {
+  #[error("Precondition: {0}")]
+  Precondition(String),
+  #[error("Internal: {0}")]
+  Internal(Box<dyn std::error::Error + Send + Sync>),
+  #[error("Runtime: {0}")]
+  Runtime(#[from] RSError),
+}
+
+impl IntoResponse for JsHttpResponseError {
+  fn into_response(self) -> Response {
+    let (status, body): (StatusCode, Option<String>) = match self {
+      Self::Precondition(err) => (StatusCode::PRECONDITION_FAILED, Some(err.to_string())),
+      Self::Internal(err) => (StatusCode::INTERNAL_SERVER_ERROR, Some(err.to_string())),
+      Self::Runtime(err) => (StatusCode::INTERNAL_SERVER_ERROR, Some(err.to_string())),
+    };
+
+    if let Some(body) = body {
+      return Response::builder()
+        .status(status)
+        .header(CONTENT_TYPE, "text/plain")
+        .body(Body::new(body))
+        .unwrap_or_default();
+    }
+
+    return Response::builder()
+      .status(status)
+      .body(Body::empty())
+      .unwrap_or_default();
+  }
+}
 
 /// Get's called from JS during `addRoute` and installs an axum HTTP handler.
 ///
@@ -62,7 +96,7 @@ fn add_route_to_router(
       csrf: u.csrf_token,
     });
 
-    let (sender, receiver) = oneshot::channel::<Result<JsHttpResponse, JsHttpResponseError>>();
+    let (sender, receiver) = oneshot::channel::<Result<JsHttpResponse, RSError>>();
 
     debug!("dispatch {method} {uri}");
     runtime_handle
@@ -142,7 +176,7 @@ async fn install_routes_and_jobs(
       if let Err(err) = state
         .send_privately(Message::Run(
           None,
-          Box::new(move |_m, runtime: &mut Runtime, _c| {
+          Box::new(move |_m, runtime: &mut Runtime| {
             // First install a native callbacks.
             //
             // Register native callback for building axum router.
@@ -189,22 +223,23 @@ async fn install_routes_and_jobs(
                           return Err("Missing isolate".into());
                         };
 
+                        let (sender, receiver) =
+                          oneshot::channel::<Result<Option<String>, RSError>>();
                         let id = id_receiver.await?;
                         first_isolate
-                          .send_privately(build_call_async_js_function_message(
-                            "cron".to_string(),
+                          .send_privately(build_call_async_js_function_message::<Option<String>>(
                             None,
                             "__dispatchCron",
                             [id],
-                            move |value_or: Result<Option<String>, RSError>| {
-                              match value_or {
-                                Err(err) => debug!("cron failed: {err}"),
-                                Ok(Some(err)) => debug!("cron failed: {err}"),
-                                _ => {}
-                              };
-                            },
+                            sender,
                           ))
                           .await?;
+
+                        match receiver.await? {
+                          Err(err) => debug!("cron failed: {err}"),
+                          Ok(Some(err)) => debug!("cron failed: {err}"),
+                          _ => {}
+                        };
 
                         Ok::<_, AnyError>(())
                       };
@@ -223,6 +258,8 @@ async fn install_routes_and_jobs(
                 },
               )
               .expect("Failed to register 'install_job' function");
+
+            return None;
           }),
         ))
         .await

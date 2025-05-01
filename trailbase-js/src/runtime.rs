@@ -1,6 +1,3 @@
-use axum::body::Body;
-use axum::http::{StatusCode, header::CONTENT_TYPE};
-use axum::response::{IntoResponse, Response};
 use futures_util::future::LocalBoxFuture;
 use log::*;
 use rustyscript::{deno_core::PollEventLoopOptions, init_platform, js_value::Promise};
@@ -8,9 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::OnceLock;
-use std::time::Duration;
-use thiserror::Error;
 use tokio::sync::oneshot;
+use tokio::time::Duration;
 use tracing_subscriber::prelude::*;
 use trailbase_sqlite::rows::{JsonError, row_to_json_array};
 
@@ -26,14 +22,6 @@ pub struct JsHttpResponse {
   pub headers: Option<Vec<(String, String)>>,
   pub status: Option<u16>,
   pub body: Option<bytes::Bytes>,
-}
-
-#[derive(Debug, Error)]
-pub enum JsHttpResponseError {
-  #[error("Precondition: {0}")]
-  Precondition(String),
-  #[error("Internal: {0}")]
-  Internal(Box<dyn std::error::Error + Send + Sync>),
 }
 
 #[derive(Serialize)]
@@ -53,15 +41,14 @@ pub struct DispatchArgs {
   pub user: Option<JsUser>,
   pub body: bytes::Bytes,
 
-  pub reply: oneshot::Sender<Result<JsHttpResponse, JsHttpResponseError>>,
+  pub reply: oneshot::Sender<Result<JsHttpResponse, Error>>,
 }
 
-#[allow(clippy::type_complexity)]
+pub type CallbackType =
+  dyn FnOnce(Option<&ModuleHandle>, &mut Runtime) -> Option<Box<dyn Completer>> + Send;
+
 pub enum Message {
-  Run(
-    Option<Module>,
-    Box<dyn (FnOnce(Option<&ModuleHandle>, &mut Runtime, &mut Vec<Box<dyn Completer>>)) + Send>,
-  ),
+  Run(Option<Module>, Box<CallbackType>),
 }
 
 pub struct State {
@@ -76,11 +63,12 @@ impl State {
       .private_sender
       .send(Message::Run(
         Some(module),
-        Box::new(|module_handle, _runtime, _completers| {
+        Box::new(|module_handle, _runtime| {
           let _ = match module_handle {
             Some(_) => sender.send(Ok(())),
             None => sender.send(Err("Failed to load module".into())),
           };
+          return None;
         }),
       ))
       .await?;
@@ -98,7 +86,7 @@ impl State {
   }
 }
 
-struct RuntimeSingleton {
+struct RuntimeState {
   n_threads: usize,
 
   // Thread handle
@@ -111,7 +99,7 @@ struct RuntimeSingleton {
   state: Vec<State>,
 }
 
-impl Drop for RuntimeSingleton {
+impl Drop for RuntimeState {
   fn drop(&mut self) {
     if let Some(handle) = self.handle.take() {
       self.state.clear();
@@ -128,30 +116,34 @@ pub trait Completer {
 }
 
 pub struct CompleterImpl<T: serde::de::DeserializeOwned + Send + 'static> {
-  /// Identifier for book-keeping.
-  #[allow(unused)]
-  pub name: String,
   /// Promise eventually resolved by the JS engine.
   pub promise: Promise<T>,
   /// Back channel to eventually resolve with the value from the promise above.
-  pub resolver: Box<dyn FnOnce(Result<T, Error>) + Send>,
+  pub sender: oneshot::Sender<Result<T, Error>>,
 }
 
 impl<T: serde::de::DeserializeOwned + Send + 'static> Completer for CompleterImpl<T> {
   fn is_ready(&self, runtime: &mut Runtime) -> bool {
+    if self.sender.is_closed() {
+      return true;
+    }
     return !self.promise.is_pending(runtime);
   }
 
   fn resolve(self: Box<Self>, runtime: &mut Runtime) -> LocalBoxFuture<'_, ()> {
-    let resolver = self.resolver;
+    let sender = self.sender;
+    if sender.is_closed() {
+      return Box::pin(async {});
+    }
+
     let promise = self.promise;
     Box::pin(async {
-      resolver(promise.into_future(runtime).await);
+      let _ = sender.send(promise.into_future(runtime).await);
     })
   }
 }
 
-impl RuntimeSingleton {
+impl RuntimeState {
   /// Bring up `threads` worker/isolate threads with basic setup.
   ///
   /// NOTE: functions to install routes and jobs are registered later, we need an AppState first.
@@ -230,7 +222,7 @@ impl RuntimeSingleton {
       None
     };
 
-    return RuntimeSingleton {
+    return RuntimeState {
       n_threads,
       shared_sender,
       handle,
@@ -317,9 +309,10 @@ pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlit
       .as_sync()
       .send(Message::Run(
         None,
-        Box::new(move |_, runtime: &mut Runtime, _| {
+        Box::new(move |_, runtime: &mut Runtime| {
           register(runtime, conn).expect("startup");
           sender.send(()).expect("startup");
+          return None;
         }),
       ))
       .expect("startup");
@@ -334,54 +327,67 @@ pub fn build_call_sync_js_function_message<T>(
   module: Option<Module>,
   function_name: &'static str,
   args: impl serde::ser::Serialize + Send + 'static,
-  resolver: impl FnOnce(Result<T, Error>) + Send + 'static,
-) -> Message
-where
-  T: serde::de::DeserializeOwned + Send,
-{
-  return Message::Run(
-    module,
-    Box::new(move |module_handle, runtime: &mut Runtime, _| {
-      resolver(runtime.call_function_immediate::<T>(module_handle, function_name, &args));
-    }),
-  );
-}
-
-pub fn build_call_async_js_function_message<T>(
-  id: String,
-  module: Option<Module>,
-  function_name: &'static str,
-  args: impl serde::ser::Serialize + Send + 'static,
-  resolver: impl FnOnce(Result<T, Error>) + Send + 'static,
+  response: oneshot::Sender<Result<T, Error>>,
 ) -> Message
 where
   T: serde::de::DeserializeOwned + Send + 'static,
 {
   return Message::Run(
     module,
-    Box::new(
-      move |module_handle, runtime: &mut Runtime, completers: &mut Vec<Box<dyn Completer>>| {
-        let promise_or =
-          runtime.call_function_immediate::<Promise<T>>(module_handle, function_name, &args);
+    Box::new(move |module_handle, runtime: &mut Runtime| {
+      let _ =
+        response.send(runtime.call_function_immediate::<T>(module_handle, function_name, &args));
+      return None;
+    }),
+  );
+}
 
-        match promise_or {
-          Ok(promise) => {
-            completers.push(Box::new(CompleterImpl::<T> {
-              name: id,
-              promise,
-              resolver: Box::new(resolver),
-            }));
-          }
-          Err(err) => resolver(Err(err)),
-        };
-      },
-    ),
+pub fn build_call_async_js_function_message<T>(
+  module: Option<Module>,
+  function_name: &'static str,
+  args: impl serde::ser::Serialize + Send + 'static,
+  response: oneshot::Sender<Result<T, Error>>,
+) -> Message
+where
+  T: serde::de::DeserializeOwned + Send + 'static,
+{
+  return Message::Run(
+    module,
+    Box::new(move |module_handle, runtime: &mut Runtime| {
+      // NOTE: We cannot use `call_function_async` here because it would require `handle_message`
+      // to be async and await it, which would prevent new messages from being received until the
+      // async function completes. This would lead to a deadlock in case of recursive calls to
+      // the same isolate.
+      // NOTE: We also cannot push the awaiting to a `LocalSet` local tokio runtime, since it
+      // uses `rt.block_on` internally, which makes tokio panic.
+      //
+      // We haven't found a better way than keeping track of pending futures and resolving them
+      // ourselves.
+      //
+      // Similarly, we await module loading on the event loop hoping that the module load doesn't
+      // trigger recursive requests, which would block up the event loop.
+      // To get rid off all async calls that require the event-loop to progress, we could build
+      // up a module registry before starting the event loop and then refer to modules only by
+      // handle afterwards :shrug:.
+      let promise_or =
+        runtime.call_function_immediate::<Promise<T>>(module_handle, function_name, &args);
+
+      return match promise_or {
+        Ok(promise) => Some(Box::new(CompleterImpl::<T> {
+          promise,
+          sender: response,
+        })),
+        Err(err) => {
+          let _ = response.send(Err(err));
+          None
+        }
+      };
+    }),
   );
 }
 
 pub fn build_http_dispatch_message(args: DispatchArgs) -> Message {
   return build_call_async_js_function_message(
-    args.uri.clone(),
     None,
     "__dispatch",
     serde_json::json!([
@@ -393,36 +399,8 @@ pub fn build_http_dispatch_message(args: DispatchArgs) -> Message {
       args.user,
       args.body
     ]),
-    move |value_or: Result<JsHttpResponse, Error>| {
-      if args
-        .reply
-        .send(value_or.map_err(|err| JsHttpResponseError::Internal(err.into())))
-        .is_err()
-      {
-        debug!("Failed to send reply. Channel closed");
-      }
-    },
+    args.reply,
   );
-}
-
-#[inline]
-async fn handle_message(
-  runtime: &mut Runtime,
-  msg: Message,
-  completers: &mut Vec<Box<dyn Completer>>,
-) -> Result<(), AnyError> {
-  match msg {
-    Message::Run(module, f) => {
-      if let Some(module) = module {
-        let module_handle = runtime.load_module_async(&module).await?;
-        f(Some(&module_handle), runtime, completers);
-      } else {
-        f(None, runtime, completers);
-      }
-    }
-  }
-
-  return Ok(());
 }
 
 /// The main event-loop running for every isolate/worker.
@@ -431,6 +409,7 @@ fn event_loop(
   private_recv: kanal::AsyncReceiver<Message>,
   shared_recv: kanal::AsyncReceiver<Message>,
 ) {
+  const MODULE_LOAD_TIMEOUT: Duration = Duration::from_millis(1000);
   const DURATION: Option<Duration> = Some(Duration::from_millis(25));
   const OPTS: PollEventLoopOptions = PollEventLoopOptions {
     wait_for_inspector: false,
@@ -441,6 +420,7 @@ fn event_loop(
     let mut completers: Vec<Box<dyn Completer>> = vec![];
 
     loop {
+      // In the future, once stabilized, we should use `Vec::drain_filter`.
       let completed_indexes = completers
         .iter()
         .enumerate()
@@ -457,6 +437,13 @@ fn event_loop(
         completers.swap_remove(index).resolve(runtime).await;
       }
 
+      let listen_for_messages = async || {
+        return tokio::select! {
+          msg = private_recv.recv() => msg,
+          msg = shared_recv.recv() => msg,
+        }.expect("channel closed");
+      };
+
       // Either pump or wait for a new private or shared message.
       tokio::select! {
         // Keep pumping while there are still futures (HTTP requests) that need completing.
@@ -465,20 +452,27 @@ fn event_loop(
             error!("JS event loop: {err}");
           }
         },
-        msg = private_recv.recv() => {
-          let Ok(msg) = msg else {
-            panic!("private channel closed");
+        msg = listen_for_messages() => {
+          let completer = match msg {
+            Message::Run(module, f) => {
+              if let Some(module) = module {
+                // Prevent module loads from blocking up the event-loop for ever. This could happen if a
+                // top-level call triggers a recursive call to the isolate, while event loop is blocked up
+                // awaiting this very `load_module_async` call.
+                let Ok(Ok(module_handle)) =
+                tokio::time::timeout(MODULE_LOAD_TIMEOUT, runtime.load_module_async(&module)).await else {
+                  continue;
+                };
+
+                f(Some(&module_handle), runtime)
+              } else {
+                f(None, runtime)
+              }
+            }
           };
-          if let Err(err) = handle_message(runtime, msg, &mut completers).await {
-            error!("Handle private message: {err}");
-          }
-        },
-        msg = shared_recv.recv() => {
-          let Ok(msg) = msg else {
-            panic!("private channel closed");
-          };
-          if let Err(err) = handle_message(runtime, msg, &mut completers).await {
-            error!("Handle shared message: {err}");
+
+          if let Some(completer) = completer {
+            completers.push(completer);
           }
         },
       }
@@ -489,14 +483,14 @@ fn event_loop(
 // NOTE: Repeated runtime initialization, e.g. in a multi-threaded context, leads to segfaults.
 // rustyscript::init_platform is supposed to help with this but we haven't found a way to
 // make it work. Thus, we're making the V8 VM a singleton (like Dart's).
-fn get_runtime(n_threads: Option<usize>) -> &'static RuntimeSingleton {
-  static RUNTIME: OnceLock<RuntimeSingleton> = OnceLock::new();
-  return RUNTIME.get_or_init(move || RuntimeSingleton::new_with_threads(n_threads));
+fn get_runtime(n_threads: Option<usize>) -> &'static RuntimeState {
+  static SINGLETON: OnceLock<RuntimeState> = OnceLock::new();
+  return SINGLETON.get_or_init(move || RuntimeState::new_with_threads(n_threads));
 }
 
 #[derive(Clone)]
 pub struct RuntimeHandle {
-  runtime: &'static RuntimeSingleton,
+  runtime: &'static RuntimeState,
 }
 
 impl RuntimeHandle {
@@ -560,28 +554,6 @@ fn json_values_to_params(
   return values.into_iter().map(json_value_to_param).collect();
 }
 
-impl IntoResponse for JsHttpResponseError {
-  fn into_response(self) -> Response {
-    let (status, body): (StatusCode, Option<String>) = match self {
-      Self::Precondition(err) => (StatusCode::PRECONDITION_FAILED, Some(err.to_string())),
-      Self::Internal(err) => (StatusCode::INTERNAL_SERVER_ERROR, Some(err.to_string())),
-    };
-
-    if let Some(body) = body {
-      return Response::builder()
-        .status(status)
-        .header(CONTENT_TYPE, "text/plain")
-        .body(Body::new(body))
-        .unwrap_or_default();
-    }
-
-    return Response::builder()
-      .status(status)
-      .body(Body::empty())
-      .unwrap_or_default();
-  }
-}
-
 pub fn get_arg<T>(args: &[serde_json::Value], i: usize) -> Result<T, rustyscript::Error>
 where
   T: serde::de::DeserializeOwned,
@@ -631,25 +603,29 @@ mod tests {
 
   #[tokio::test]
   async fn test_serial_tests() {
+    // Run on a single thread to make sure that any potential blocking is maximally bad.
+    let handle = RuntimeHandle::singleton_or_init_with_threads(1);
+
     // NOTE: needs to run serially since registration of SQLite connection with singleton v8
     // runtime is racy.
-    test_runtime_apply().await;
-    test_runtime_javascript().await;
-    test_javascript_query().await;
-    test_javascript_execute().await;
+    test_runtime_apply(&handle).await;
+    test_runtime_javascript(&handle).await;
+    test_runtime_javascript_blocking(&handle).await;
+    test_javascript_query(&handle).await;
+    test_javascript_execute(&handle).await;
   }
 
-  async fn test_runtime_apply() {
+  async fn test_runtime_apply(handle: &RuntimeHandle) {
     let (sender, receiver) = tokio::sync::oneshot::channel::<i64>();
 
-    let handle = RuntimeHandle::singleton();
     handle
       .runtime
       .shared_sender
       .send(Message::Run(
         None,
-        Box::new(|_m, _rt, _c| {
+        Box::new(|_m, _rt| {
           sender.send(5).unwrap();
+          return None;
         }),
       ))
       .await
@@ -658,9 +634,7 @@ mod tests {
     assert_eq!(5, receiver.await.unwrap());
   }
 
-  async fn test_runtime_javascript() {
-    let handle = RuntimeHandle::singleton();
-
+  async fn test_runtime_javascript(handle: &RuntimeHandle) {
     tracing_subscriber::Registry::default()
       .with(tracing_subscriber::filter::LevelFilter::WARN)
       .set_default();
@@ -681,9 +655,7 @@ mod tests {
         Some(module),
         "test_fun",
         Vec::<serde_json::Value>::new(),
-        move |value_or| {
-          sender.send(value_or).unwrap();
-        },
+        sender,
       ))
       .await
       .unwrap();
@@ -691,7 +663,97 @@ mod tests {
     assert_eq!("test0", receiver.await.unwrap().unwrap());
   }
 
-  async fn test_javascript_query() {
+  async fn test_runtime_javascript_blocking(handle: &RuntimeHandle) {
+    tracing_subscriber::Registry::default()
+      .with(tracing_subscriber::filter::LevelFilter::WARN)
+      .set_default();
+
+    let (ext_sender, ext_receiver) = kanal::bounded_async::<i64>(10);
+    {
+      // Register custom functions.
+      let states = &handle.runtime.state;
+      let (sender, receiver) = kanal::bounded(states.len());
+
+      for state in states {
+        let sender = sender.clone();
+        let ext_receiver = ext_receiver.clone();
+
+        state
+          .private_sender
+          .as_sync()
+          .send(Message::Run(
+            None,
+            Box::new(move |_, runtime| {
+              runtime
+                .register_async_function("blocked", move |_args: Vec<serde_json::Value>| {
+                  let ext_receiver = ext_receiver.clone();
+                  return Box::pin(async move {
+                    let _ = ext_receiver.recv().await.unwrap();
+                    return Ok(serde_json::Value::Null);
+                  });
+                })
+                .expect("register");
+
+              sender.send(()).unwrap();
+
+              return None;
+            }),
+          ))
+          .expect("startup");
+      }
+
+      for _ in 0..states.len() {
+        receiver.recv().expect("startup");
+      }
+    }
+
+    let module = Module::new(
+      "module.js",
+      r#"
+        export function test_fun() {
+          return "test0";
+        }
+
+        export async function blocked_fun() {
+          await rustyscript.async_functions.blocked();
+          return "blocked";
+        }
+      "#,
+    );
+
+    let (blocked_sender, blocked_receiver) = oneshot::channel::<Result<String, Error>>();
+    handle
+      .runtime
+      .shared_sender
+      .send(build_call_async_js_function_message::<String>(
+        Some(module.clone()),
+        "blocked_fun",
+        Vec::<serde_json::Value>::new(),
+        blocked_sender,
+      ))
+      .await
+      .unwrap();
+
+    let (sender, receiver) = oneshot::channel::<Result<String, Error>>();
+    handle
+      .runtime
+      .shared_sender
+      .send(build_call_sync_js_function_message::<String>(
+        Some(module.clone()),
+        "test_fun",
+        Vec::<serde_json::Value>::new(),
+        sender,
+      ))
+      .await
+      .unwrap();
+
+    assert_eq!("test0", receiver.await.unwrap().unwrap());
+
+    ext_sender.send(1).await.unwrap();
+    assert_eq!("blocked", blocked_receiver.await.unwrap().unwrap());
+  }
+
+  async fn test_javascript_query(handle: &RuntimeHandle) {
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
     conn
       .execute("CREATE TABLE test (v0 TEXT, v1 INTEGER);", ())
@@ -702,7 +764,6 @@ mod tests {
       .await
       .unwrap();
 
-    let handle = RuntimeHandle::singleton();
     register_database_functions(&handle, conn);
 
     tracing_subscriber::Registry::default()
@@ -725,13 +786,10 @@ mod tests {
       .send_to_any_isolate(build_call_async_js_function_message::<
         Vec<Vec<serde_json::Value>>,
       >(
-        "<SOME ID>".to_string(),
         Some(module),
         "test_query",
         vec![serde_json::json!("SELECT * FROM test")],
-        move |value_or| {
-          sender.send(value_or).unwrap();
-        },
+        sender,
       ))
       .await
       .unwrap();
@@ -753,7 +811,7 @@ mod tests {
     );
   }
 
-  async fn test_javascript_execute() {
+  async fn test_javascript_execute(handle: &RuntimeHandle) {
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
     conn
       .execute_batch(
@@ -765,7 +823,6 @@ mod tests {
       .await
       .unwrap();
 
-    let handle = RuntimeHandle::singleton();
     register_database_functions(&handle, conn.clone());
 
     tracing_subscriber::Registry::default()
@@ -785,13 +842,10 @@ mod tests {
     let (sender, receiver) = oneshot::channel();
     handle
       .send_to_any_isolate(build_call_async_js_function_message::<i64>(
-        "<SOME ID>".to_string(),
         Some(module),
         "test_execute",
         vec![serde_json::json!("DELETE FROM test")],
-        move |value_or| {
-          sender.send(value_or).unwrap();
-        },
+        sender,
       ))
       .await
       .unwrap();
