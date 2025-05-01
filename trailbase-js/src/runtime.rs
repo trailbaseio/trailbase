@@ -1,7 +1,7 @@
 use futures_util::future::LocalBoxFuture;
 use log::*;
 use rustyscript::{deno_core::PollEventLoopOptions, init_platform, js_value::Promise};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -17,31 +17,12 @@ pub use rustyscript::{Error, Module, ModuleHandle, Runtime};
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
-#[derive(Deserialize, Default, Debug)]
-pub struct JsHttpResponse {
-  pub headers: Option<Vec<(String, String)>>,
-  pub status: Option<u16>,
-  pub body: Option<bytes::Bytes>,
-}
-
 #[derive(Serialize)]
 pub struct JsUser {
   // Base64 encoded user id.
   pub id: String,
   pub email: String,
   pub csrf: String,
-}
-
-pub struct DispatchArgs {
-  pub method: String,
-  pub route_path: String,
-  pub uri: String,
-  pub path_params: Vec<(String, String)>,
-  pub headers: Vec<(String, String)>,
-  pub user: Option<JsUser>,
-  pub body: bytes::Bytes,
-
-  pub reply: oneshot::Sender<Result<JsHttpResponse, Error>>,
 }
 
 pub type CallbackType =
@@ -253,76 +234,6 @@ impl RuntimeState {
   }
 }
 
-pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlite::Connection) {
-  fn register(runtime: &mut Runtime, conn: trailbase_sqlite::Connection) -> Result<(), Error> {
-    let conn_clone = conn.clone();
-    runtime.register_async_function("query", move |args: Vec<serde_json::Value>| {
-      let conn = conn_clone.clone();
-      Box::pin(async move {
-        let query: String = get_arg(&args, 0)?;
-        let params = json_values_to_params(get_arg(&args, 1)?)?;
-
-        let rows = conn
-          .write_query_rows(query, params)
-          .await
-          .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
-
-        let values = rows
-          .iter()
-          .map(|row| -> Result<serde_json::Value, JsonError> {
-            return Ok(serde_json::Value::Array(row_to_json_array(row)?));
-          })
-          .collect::<Result<Vec<_>, _>>()
-          .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
-
-        return Ok(serde_json::Value::Array(values));
-      })
-    })?;
-
-    runtime.register_async_function("execute", move |args: Vec<serde_json::Value>| {
-      let conn = conn.clone();
-      Box::pin(async move {
-        let query: String = get_arg(&args, 0)?;
-        let params = json_values_to_params(get_arg(&args, 1)?)?;
-
-        let rows_affected = conn
-          .execute(query, params)
-          .await
-          .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
-
-        return Ok(serde_json::Value::Number(rows_affected.into()));
-      })
-    })?;
-
-    return Ok(());
-  }
-
-  let states = &handle.runtime.state;
-  let (sender, receiver) = kanal::bounded(states.len());
-
-  for state in states {
-    let conn = conn.clone();
-    let sender = sender.clone();
-
-    state
-      .private_sender
-      .as_sync()
-      .send(Message::Run(
-        None,
-        Box::new(move |_, runtime: &mut Runtime| {
-          register(runtime, conn).expect("startup");
-          sender.send(()).expect("startup");
-          return None;
-        }),
-      ))
-      .expect("startup");
-  }
-
-  for _ in 0..states.len() {
-    receiver.recv().expect("startup");
-  }
-}
-
 pub fn build_call_sync_js_function_message<T>(
   module: Option<Module>,
   function_name: &'static str,
@@ -383,23 +294,6 @@ where
         }
       };
     }),
-  );
-}
-
-pub fn build_http_dispatch_message(args: DispatchArgs) -> Message {
-  return build_call_async_js_function_message(
-    None,
-    "__dispatch",
-    serde_json::json!([
-      args.method,
-      args.route_path,
-      args.uri,
-      args.path_params,
-      args.headers,
-      args.user,
-      args.body
-    ]),
-    args.reply,
   );
 }
 
@@ -517,6 +411,77 @@ impl RuntimeHandle {
 
   pub async fn send_to_any_isolate(&self, msg: Message) -> Result<(), kanal::SendError> {
     return self.runtime.shared_sender.send(msg).await;
+  }
+}
+
+pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlite::Connection) {
+  fn register(runtime: &mut Runtime, conn: trailbase_sqlite::Connection) -> Result<(), Error> {
+    let conn_clone = conn.clone();
+    runtime.register_async_function("query", move |args: Vec<serde_json::Value>| {
+      let conn = conn_clone.clone();
+      Box::pin(async move {
+        let query: String = get_arg(&args, 0)?;
+        let params = json_values_to_params(get_arg(&args, 1)?)?;
+
+        let rows = conn
+          .write_query_rows(query, params)
+          .await
+          .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
+
+        let values = rows
+          .iter()
+          .map(|row| -> Result<serde_json::Value, JsonError> {
+            return Ok(serde_json::Value::Array(row_to_json_array(row)?));
+          })
+          .collect::<Result<Vec<_>, _>>()
+          .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
+
+        return Ok(serde_json::Value::Array(values));
+      })
+    })?;
+
+    let conn_clone = conn.clone();
+    runtime.register_async_function("execute", move |args: Vec<serde_json::Value>| {
+      let conn = conn_clone.clone();
+      Box::pin(async move {
+        let query: String = get_arg(&args, 0)?;
+        let params = json_values_to_params(get_arg(&args, 1)?)?;
+
+        let rows_affected = conn
+          .execute(query, params)
+          .await
+          .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
+
+        return Ok(serde_json::Value::Number(rows_affected.into()));
+      })
+    })?;
+
+    return Ok(());
+  }
+
+  let states = &handle.runtime.state;
+  let (sender, receiver) = kanal::bounded(states.len());
+
+  for state in states {
+    let conn = conn.clone();
+    let sender = sender.clone();
+
+    state
+      .private_sender
+      .as_sync()
+      .send(Message::Run(
+        None,
+        Box::new(move |_, runtime: &mut Runtime| {
+          register(runtime, conn).expect("startup");
+          sender.send(()).expect("startup");
+          return None;
+        }),
+      ))
+      .expect("startup");
+  }
+
+  for _ in 0..states.len() {
+    receiver.recv().expect("startup");
   }
 }
 

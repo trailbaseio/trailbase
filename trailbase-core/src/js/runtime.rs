@@ -6,19 +6,39 @@ use axum::http::{StatusCode, header::CONTENT_TYPE};
 use axum::response::{IntoResponse, Response};
 use futures_util::FutureExt;
 use log::*;
+use serde::Deserialize;
 use std::str::FromStr;
 use thiserror::Error;
 use tokio::sync::oneshot;
 
 use trailbase_js::runtime::{
-  DispatchArgs, Error as RSError, JsHttpResponse, JsUser, Message, Module, Runtime, RuntimeHandle,
-  build_call_async_js_function_message, build_http_dispatch_message, get_arg,
+  Error as RSError, JsUser, Message, Module, Runtime, RuntimeHandle,
+  build_call_async_js_function_message, get_arg,
 };
 
 use crate::AppState;
 use crate::auth::user::User;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
+
+pub struct DispatchArgs {
+  pub method: String,
+  pub route_path: String,
+  pub uri: String,
+  pub path_params: Vec<(String, String)>,
+  pub headers: Vec<(String, String)>,
+  pub user: Option<JsUser>,
+  pub body: bytes::Bytes,
+
+  pub reply: oneshot::Sender<Result<JsHttpResponse, RSError>>,
+}
+
+#[derive(Deserialize, Default, Debug)]
+pub struct JsHttpResponse {
+  pub headers: Option<Vec<(String, String)>>,
+  pub status: Option<u16>,
+  pub body: Option<bytes::Bytes>,
+}
 
 #[derive(Debug, Error)]
 pub enum JsHttpResponseError {
@@ -336,4 +356,21 @@ pub(crate) async fn load_routes_and_jobs_from_js_modules(
   }
 
   return Ok(None);
+}
+
+pub fn build_http_dispatch_message(args: DispatchArgs) -> Message {
+  return build_call_async_js_function_message(
+    None,
+    "__dispatch",
+    serde_json::json!([
+      args.method,
+      args.route_path,
+      args.uri,
+      args.path_params,
+      args.headers,
+      args.user,
+      args.body
+    ]),
+    args.reply,
+  );
 }
