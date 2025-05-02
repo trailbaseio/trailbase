@@ -18,8 +18,14 @@ pub enum TransactionError {
   File(String),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+enum QueryType {
+  Query,
+  Execute,
+}
+
 pub struct TransactionLog {
-  log: Vec<String>,
+  log: Vec<(QueryType, String)>,
 }
 
 impl TransactionLog {
@@ -42,7 +48,7 @@ impl TransactionLog {
       let sql_string: String = self
         .log
         .iter()
-        .filter_map(|stmt| match stmt.as_str() {
+        .filter_map(|(_, stmt)| match stmt.as_str() {
           "" => None,
           x if x.ends_with(";") => Some(stmt.clone()),
           x => Some(format!("{x};")),
@@ -83,13 +89,40 @@ impl TransactionLog {
 
     return Ok(report);
   }
+
+  #[allow(unused)]
+  pub(crate) async fn commit(
+    self,
+    conn: &trailbase_sqlite::Connection,
+  ) -> Result<(), trailbase_sqlite::Error> {
+    conn
+      .call(|conn: &mut rusqlite::Connection| {
+        let tx = conn.transaction()?;
+        for (query_type, stmt) in self.log {
+          match query_type {
+            QueryType::Query => {
+              tx.query_row(&stmt, (), |_row| Ok(()))?;
+            }
+            QueryType::Execute => {
+              tx.execute(&stmt, ())?;
+            }
+          }
+        }
+        tx.commit()?;
+
+        return Ok(());
+      })
+      .await?;
+
+    return Ok(());
+  }
 }
 
 /// A recorder for table migrations, i.e.: create, alter, drop, as opposed to data migrations.
 pub struct TransactionRecorder<'a> {
   tx: rusqlite::Transaction<'a>,
 
-  log: Vec<String>,
+  log: Vec<(QueryType, String)>,
 }
 
 impl<'a> TransactionRecorder<'a> {
@@ -105,10 +138,18 @@ impl<'a> TransactionRecorder<'a> {
   // Note that we cannot take any sql params for recording purposes.
   #[allow(unused)]
   pub fn query(&mut self, sql: &str, params: impl rusqlite::Params) -> Result<(), rusqlite::Error> {
-    let mut stmt = self.tx.prepare(sql)?;
-    let mut rows = stmt.query(params)?;
+    let mut stmt = self.tx.prepare_cached(sql)?;
+    params.__bind_in(&mut stmt)?;
+    let Some(expanded_sql) = stmt.expanded_sql() else {
+      return Err(rusqlite::Error::ToSqlConversionFailure(
+        "failed to get expanded query".into(),
+      ));
+    };
+
+    let mut rows = stmt.raw_query();
     rows.next()?;
-    self.log.push(sql.to_string());
+
+    self.log.push((QueryType::Query, expanded_sql));
 
     return Ok(());
   }
@@ -118,8 +159,18 @@ impl<'a> TransactionRecorder<'a> {
     sql: &str,
     params: impl rusqlite::Params,
   ) -> Result<usize, rusqlite::Error> {
-    let rows_affected = self.tx.execute(sql, params)?;
-    self.log.push(sql.to_string());
+    // let rows_affected = self.tx.execute(sql, params)?;
+    let mut stmt = self.tx.prepare_cached(sql)?;
+    params.__bind_in(&mut stmt)?;
+    let Some(expanded_sql) = stmt.expanded_sql() else {
+      return Err(rusqlite::Error::ToSqlConversionFailure(
+        "failed to get expanded query".into(),
+      ));
+    };
+
+    let rows_affected = stmt.raw_execute()?;
+
+    self.log.push((QueryType::Execute, expanded_sql));
     return Ok(rows_affected);
   }
 
@@ -136,8 +187,11 @@ impl<'a> TransactionRecorder<'a> {
   }
 }
 
-#[cfg(not(test))]
 async fn write_migration_file(path: PathBuf, sql: &str) -> std::io::Result<()> {
+  if cfg!(test) {
+    return Ok(());
+  }
+
   use tokio::io::AsyncWriteExt;
 
   let mut migration_file = tokio::fs::File::create_new(path).await?;
@@ -146,6 +200,67 @@ async fn write_migration_file(path: PathBuf, sql: &str) -> std::io::Result<()> {
 }
 
 #[cfg(test)]
-async fn write_migration_file(_path: PathBuf, _sql: &str) -> std::io::Result<()> {
-  return Ok(());
+mod tests {
+  use super::*;
+
+  #[tokio::test]
+  async fn test_transaction_log() {
+    let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+    conn
+      .execute_batch(
+        r#"
+          CREATE TABLE 'table' (
+            id    INTEGER PRIMARY KEY NOT NULL,
+            name  TEXT NOT NULL,
+            age   INTEGER
+          ) STRICT;
+
+          INSERT INTO 'table' (id, name, age) VALUES (0, 'Alice', 21), (1, 'Bob', 18);
+        "#,
+      )
+      .unwrap();
+
+    // Just double checking that rusqlite's query and execute ignore everything but the first
+    // statement.
+    let name: String = conn
+      .query_row(
+        r#"
+          SELECT name FROM 'table' WHERE id = 0;
+          SELECT name FROM 'table' WHERE id = 1;
+          DROP TABLE 'table';
+        "#,
+        (),
+        |row| row.get(0),
+      )
+      .unwrap();
+    assert_eq!(name, "Alice");
+
+    let mut recorder = TransactionRecorder::new(&mut conn).unwrap();
+
+    recorder
+      .execute("DELETE FROM 'table' WHERE age < ?1", rusqlite::params!(20))
+      .unwrap();
+    let log = recorder.rollback().unwrap().unwrap();
+
+    assert_eq!(log.log.len(), 1);
+    assert_eq!(log.log[0].0, QueryType::Execute);
+    assert_eq!(log.log[0].1, "DELETE FROM 'table' WHERE age < 20");
+
+    let conn = trailbase_sqlite::Connection::from_connection_test_only(conn);
+    let count: i64 = conn
+      .query_row_f("SELECT COUNT(*) FROM 'table'", (), |row| row.get(0))
+      .await
+      .unwrap()
+      .unwrap();
+    assert_eq!(count, 2);
+
+    log.commit(&conn).await.unwrap();
+
+    let count: i64 = conn
+      .query_row_f("SELECT COUNT(*) FROM 'table'", (), |row| row.get(0))
+      .await
+      .unwrap()
+      .unwrap();
+    assert_eq!(count, 1);
+  }
 }

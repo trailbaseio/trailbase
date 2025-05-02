@@ -158,6 +158,24 @@ impl Connection {
     });
   }
 
+  pub fn from_connection_test_only(conn: rusqlite::Connection) -> Self {
+    use parking_lot::lock_api::RwLock;
+
+    let (shared_write_sender, shared_write_receiver) = kanal::unbounded::<Message>();
+    std::thread::spawn(move || {
+      event_loop(
+        0,
+        Arc::new(LockedConnections(RwLock::new(vec![conn]))),
+        shared_write_receiver,
+      )
+    });
+
+    return Self {
+      reader: shared_write_sender.clone(),
+      writer: shared_write_sender,
+    };
+  }
+
   /// Open a new connection to an in-memory SQLite database.
   ///
   /// # Failure
