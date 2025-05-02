@@ -34,35 +34,34 @@ pub async fn alter_index_handler(
   let source_schema = request.source_schema;
   let source_index_name = source_schema.name.clone();
   let target_schema = request.target_schema;
+  let filename = format!("alter_index_{source_index_name}");
 
   debug!("Alter index:\nsource: {source_schema:?}\ntarget: {target_schema:?}",);
 
-  let migration_path = state.data_dir().migrations_path();
   let conn = state.conn();
-  let writer = conn
+  let log = conn
     .call(move |conn| {
-      let mut tx = TransactionRecorder::new(
-        conn,
-        migration_path,
-        format!("alter_index_{source_index_name}"),
-      )?;
+      let mut tx = TransactionRecorder::new(conn)?;
 
       // Drop old index
-      tx.execute(&format!("DROP INDEX {source_index_name}"))?;
+      tx.execute(&format!("DROP INDEX {source_index_name}"), ())?;
 
       // Create new index
       let create_index_query = target_schema.create_index_statement();
-      tx.execute(&create_index_query)?;
+      tx.execute(&create_index_query, ())?;
 
       return tx
-        .rollback_and_create_migration()
+        .rollback()
         .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
     })
     .await?;
 
   // Write to migration file.
-  if let Some(writer) = writer {
-    let report = writer.write(conn).await?;
+  if let Some(log) = log {
+    let migration_path = state.data_dir().migrations_path();
+    let report = log
+      .apply_as_migration(conn, migration_path, &filename)
+      .await?;
     debug!("Migration report: {report:?}");
   }
 

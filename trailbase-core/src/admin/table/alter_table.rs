@@ -11,9 +11,9 @@ use serde::Deserialize;
 use trailbase_schema::sqlite::Table;
 use ts_rs::TS;
 
+use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::transaction::TransactionRecorder;
-use crate::{admin::AdminError as Error, transaction::MigrationWriter};
+use crate::transaction::{TransactionLog, TransactionRecorder};
 
 #[derive(Clone, Debug, Deserialize, TS)]
 #[ts(export)]
@@ -35,6 +35,7 @@ pub async fn alter_table_handler(
 
   let source_schema = request.source_schema;
   let source_table_name = source_schema.name.clone();
+  let filename = format!("alter_table_{source_table_name}");
 
   let Some(_metadata) = state.table_metadata().get(&source_table_name) else {
     return Err(Error::Precondition(format!(
@@ -75,27 +76,23 @@ pub async fn alter_table_handler(
   let mut target_schema_copy = target_schema.clone();
   target_schema_copy.name = temp_table_name.to_string();
 
-  let migration_path = state.data_dir().migrations_path();
   let conn = state.conn();
-  let writer = conn
+  let log = conn
     .call(
-      move |conn| -> Result<Option<MigrationWriter>, trailbase_sqlite::Error> {
-        let mut tx = TransactionRecorder::new(
-          conn,
-          migration_path,
-          format!("alter_table_{source_table_name}"),
-        )
-        .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+      move |conn| -> Result<Option<TransactionLog>, trailbase_sqlite::Error> {
+        let mut tx = TransactionRecorder::new(conn)
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
-        tx.execute("PRAGMA foreign_keys = OFF")?;
+        tx.execute("PRAGMA foreign_keys = OFF", ())?;
 
         // Create new table
         let sql = target_schema_copy.create_table_statement();
-        tx.execute(&sql)?;
+        tx.execute(&sql, ())?;
 
         // Copy
-        tx.execute(&format!(
-          r#"
+        tx.execute(
+          &format!(
+            r#"
             INSERT INTO
               {temp_table_name} ({column_list})
             SELECT
@@ -103,29 +100,35 @@ pub async fn alter_table_handler(
             FROM
               {source_table_name}
           "#,
-          column_list = copy_columns.join(", "),
-        ))?;
+            column_list = copy_columns.join(", "),
+          ),
+          (),
+        )?;
 
-        tx.execute(&format!("DROP TABLE {source_table_name}"))?;
+        tx.execute(&format!("DROP TABLE {source_table_name}"), ())?;
 
         if *target_table_name != temp_table_name {
-          tx.execute(&format!(
-            "ALTER TABLE '{temp_table_name}' RENAME TO '{target_table_name}'"
-          ))?;
+          tx.execute(
+            &format!("ALTER TABLE '{temp_table_name}' RENAME TO '{target_table_name}'"),
+            (),
+          )?;
         }
 
-        tx.execute("PRAGMA foreign_keys = ON")?;
+        tx.execute("PRAGMA foreign_keys = ON", ())?;
 
         return tx
-          .rollback_and_create_migration()
+          .rollback()
           .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
       },
     )
     .await?;
 
   // Write to migration file.
-  if let Some(writer) = writer {
-    let report = writer.write(conn).await?;
+  if let Some(log) = log {
+    let migration_path = state.data_dir().migrations_path();
+    let report = log
+      .apply_as_migration(state.conn(), migration_path, &filename)
+      .await?;
     debug!("Migration report: {report:?}");
   }
 

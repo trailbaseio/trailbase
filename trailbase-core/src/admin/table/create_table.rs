@@ -31,30 +31,32 @@ pub async fn create_table_handler(
   }
   let dry_run = request.dry_run.unwrap_or(false);
   let table_name = request.schema.name.clone();
+  let filename = format!("create_table_{table_name}");
 
   // This contains the create table statement and may also contain indexes and triggers.
   let create_table_query = request.schema.create_table_statement();
 
   if !dry_run {
     let create_table_query = create_table_query.clone();
-    let migration_path = state.data_dir().migrations_path();
     let conn = state.conn();
-    let writer = conn
+    let log = conn
       .call(move |conn| {
-        let mut tx =
-          TransactionRecorder::new(conn, migration_path, format!("create_table_{table_name}"))?;
+        let mut tx = TransactionRecorder::new(conn)?;
 
-        tx.execute(&create_table_query)?;
+        tx.execute(&create_table_query, ())?;
 
         return tx
-          .rollback_and_create_migration()
+          .rollback()
           .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
       })
       .await?;
 
     // Write to migration file.
-    if let Some(writer) = writer {
-      let _report = writer.write(conn).await?;
+    if let Some(log) = log {
+      let migration_path = state.data_dir().migrations_path();
+      let _report = log
+        .apply_as_migration(conn, migration_path, &filename)
+        .await?;
     }
 
     state.table_metadata().invalidate_all().await?;

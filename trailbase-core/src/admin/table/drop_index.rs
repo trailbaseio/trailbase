@@ -26,27 +26,29 @@ pub async fn drop_index_handler(
   if state.demo_mode() && index_name.starts_with("_") {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
+  let filename = format!("drop_index_{index_name}");
 
-  let migration_path = state.data_dir().migrations_path();
   let conn = state.conn();
-  let writer = conn
+  let log = conn
     .call(move |conn| {
-      let mut tx =
-        TransactionRecorder::new(conn, migration_path, format!("drop_index_{index_name}"))?;
+      let mut tx = TransactionRecorder::new(conn)?;
 
       let query = format!("DROP INDEX IF EXISTS {}", index_name);
       debug!("dropping index: {query}");
-      tx.execute(&query)?;
+      tx.execute(&query, ())?;
 
       return tx
-        .rollback_and_create_migration()
+        .rollback()
         .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
     })
     .await?;
 
   // Write to migration file.
-  if let Some(writer) = writer {
-    let _report = writer.write(conn).await?;
+  if let Some(log) = log {
+    let migration_path = state.data_dir().migrations_path();
+    let _report = log
+      .apply_as_migration(conn, migration_path, &filename)
+      .await?;
   }
 
   return Ok((StatusCode::OK, "").into_response());

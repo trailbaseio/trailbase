@@ -26,29 +26,31 @@ pub async fn create_index_handler(
 ) -> Result<Json<CreateIndexResponse>, Error> {
   let dry_run = request.dry_run.unwrap_or(false);
   let index_name = request.schema.name.clone();
+  let filename = format!("create_index_{index_name}");
 
   let create_index_query = request.schema.create_index_statement();
 
   if !dry_run {
     let create_index_query = create_index_query.clone();
-    let migration_path = state.data_dir().migrations_path();
     let conn = state.conn();
-    let writer = conn
+    let log = conn
       .call(move |conn| {
-        let mut tx =
-          TransactionRecorder::new(conn, migration_path, format!("create_index_{index_name}"))?;
+        let mut tx = TransactionRecorder::new(conn)?;
 
-        tx.execute(&create_index_query)?;
+        tx.execute(&create_index_query, ())?;
 
         return tx
-          .rollback_and_create_migration()
+          .rollback()
           .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
       })
       .await?;
 
     // Write to migration file.
-    if let Some(writer) = writer {
-      writer.write(conn).await?;
+    if let Some(log) = log {
+      let migration_path = state.data_dir().migrations_path();
+      log
+        .apply_as_migration(conn, migration_path, &filename)
+        .await?;
     }
   }
 
