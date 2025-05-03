@@ -13,26 +13,26 @@
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
-    "@astrojs/starlight": "^0.34.1",
+    "@astrojs/starlight": "^0.34.2",
     "@astrojs/starlight-tailwind": "^4.0.1",
     "@iconify-json/tabler": "^1.2.17",
-    "@tailwindcss/vite": "^4.1.4",
-    "astro": "^5.7.5",
+    "@tailwindcss/vite": "^4.1.5",
+    "astro": "^5.7.10",
     "astro-icon": "^1.1.5",
     "chart.js": "^4.4.9",
     "chartjs-chart-error-bars": "^4.4.4",
     "chartjs-plugin-deferred": "^2.0.0",
     "clsx": "^2.1.1",
     "sharp": "^0.34.1",
-    "solid-js": "^1.9.5",
+    "solid-js": "^1.9.6",
     "starlight-links-validator": "^0.16.0",
     "tailwind-merge": "^3.2.0",
-    "tailwindcss": "^4.1.4",
+    "tailwindcss": "^4.1.5",
     "typescript": "^5.8.3"
   },
   "devDependencies": {
     "@astrojs/sitemap": "^3.3.1",
-    "@astrojs/solid-js": "^5.0.9",
+    "@astrojs/solid-js": "^5.0.10",
     "@eslint/js": "^9.25.1",
     "astro-robots-txt": "^1.0.0",
     "eslint": "^9.25.1",
@@ -43,6 +43,6 @@
     "prettier": "^3.5.3",
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-tailwindcss": "^0.6.11",
-    "typescript-eslint": "^8.31.0"
+    "typescript-eslint": "^8.31.1"
   }
 }

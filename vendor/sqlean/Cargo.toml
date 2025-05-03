@@ -13,7 +13,7 @@ appveyor = { repository = "trailbaseio/trailbase" }
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-libsqlite3-sys = { version = "0.32.0", features = ["bundled"] }
+libsqlite3-sys = { workspace = true }
 
 [build-dependencies]
 bindgen = "0.71.0"

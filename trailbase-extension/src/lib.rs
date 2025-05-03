@@ -41,6 +41,7 @@ pub fn apply_default_pragmas(conn: &rusqlite::Connection) -> Result<(), rusqlite
 
   // NOTE: we're querying here since some pragmas return data.
   for pragma in CONFIG {
+    // TODO: Use conn.pragma_update instead.
     let mut stmt = conn.prepare(pragma)?;
     let mut rows = stmt.query([])?;
     let _maybe_row = rows.next()?;

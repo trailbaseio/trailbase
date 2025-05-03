@@ -140,7 +140,7 @@ pub async fn init_app_state(
       .unwrap_or(0);
 
     if num_admins == 0 {
-      let email = "admin@localhost".to_string();
+      let email = "admin@localhost";
       let password = generate_random_string(20);
 
       app_state
@@ -148,14 +148,13 @@ pub async fn init_app_state(
         .execute(
           format!(
             r#"
-        INSERT INTO {USER_TABLE}
-          (email, password_hash, verified, admin)
-        VALUES
-          ('{email}', (hash_password('{password}')), TRUE, TRUE);
-        INSERT INTO
-        "#
+              INSERT INTO {USER_TABLE}
+                (email, password_hash, verified, admin)
+              VALUES
+                (?1, (hash_password(?2)), TRUE, TRUE)
+            "#
           ),
-          (),
+          trailbase_sqlite::params!(email.to_string(), password.clone()),
         )
         .await?;
 

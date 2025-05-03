@@ -222,18 +222,16 @@ mod tests {
 
     // Just double checking that rusqlite's query and execute ignore everything but the first
     // statement.
-    let name: String = conn
-      .query_row(
-        r#"
+    let result = conn.query_row(
+      r#"
           SELECT name FROM 'table' WHERE id = 0;
           SELECT name FROM 'table' WHERE id = 1;
           DROP TABLE 'table';
         "#,
-        (),
-        |row| row.get(0),
-      )
-      .unwrap();
-    assert_eq!(name, "Alice");
+      (),
+      |row| row.get::<_, String>(0),
+    );
+    assert!(matches!(result, Err(rusqlite::Error::MultipleStatement)));
 
     let mut recorder = TransactionRecorder::new(&mut conn).unwrap();
 

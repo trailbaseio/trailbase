@@ -4,3 +4,6 @@
 [submodule "vendor/sqlean/bundled/sqlean"]
 	path = vendor/sqlean/bundled/sqlean
 	url = https://github.com/trailbaseio/sqlean
+[submodule "vendor/serde_rusqlite"]
+	path = vendor/serde_rusqlite
+	url = https://github.com/trailbaseio/serde_rusqlite.git
