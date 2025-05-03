@@ -4,6 +4,7 @@ use parking_lot::RwLock;
 use rusqlite::fallible_iterator::FallibleIterator;
 use rusqlite::hooks::{Action, PreUpdateCase};
 use rusqlite::types::Value;
+use std::ops::{Deref, DerefMut};
 use std::{
   fmt::{self, Debug},
   sync::Arc,
@@ -70,6 +71,7 @@ impl Default for Options {
 pub struct Connection {
   reader: Sender<Message>,
   writer: Sender<Message>,
+  conns: Arc<LockedConnections>,
 }
 
 impl Connection {
@@ -155,6 +157,7 @@ impl Connection {
     return Ok(Self {
       reader: shared_read_sender,
       writer: shared_write_sender,
+      conns,
     });
   }
 
@@ -162,17 +165,14 @@ impl Connection {
     use parking_lot::lock_api::RwLock;
 
     let (shared_write_sender, shared_write_receiver) = kanal::unbounded::<Message>();
-    std::thread::spawn(move || {
-      event_loop(
-        0,
-        Arc::new(LockedConnections(RwLock::new(vec![conn]))),
-        shared_write_receiver,
-      )
-    });
+    let conns = Arc::new(LockedConnections(RwLock::new(vec![conn])));
+    let conns_clone = conns.clone();
+    std::thread::spawn(move || event_loop(0, conns_clone, shared_write_receiver));
 
     return Self {
       reader: shared_write_sender.clone(),
       writer: shared_write_sender,
+      conns,
     };
   }
 
@@ -183,6 +183,13 @@ impl Connection {
   /// Will return `Err` if the underlying SQLite open call fails.
   pub fn open_in_memory() -> Result<Self> {
     return Self::new(|| Ok(rusqlite::Connection::open_in_memory()?), None);
+  }
+
+  #[inline]
+  pub fn write_lock(&self) -> LockGuard<'_> {
+    return LockGuard {
+      guard: self.conns.0.write(),
+    };
   }
 
   /// Call a function in background thread and get the result
@@ -583,6 +590,25 @@ pub fn extract_record_values(case: &PreUpdateCase) -> Option<Vec<Value>> {
       return None;
     }
   });
+}
+
+pub struct LockGuard<'a> {
+  guard: parking_lot::RwLockWriteGuard<'a, Vec<rusqlite::Connection>>,
+}
+
+impl Deref for LockGuard<'_> {
+  type Target = rusqlite::Connection;
+  #[inline]
+  fn deref(&self) -> &rusqlite::Connection {
+    return &self.guard.deref()[0];
+  }
+}
+
+impl DerefMut for LockGuard<'_> {
+  #[inline]
+  fn deref_mut(&mut self) -> &mut rusqlite::Connection {
+    return &mut self.guard.deref_mut()[0];
+  }
 }
 
 #[cfg(test)]

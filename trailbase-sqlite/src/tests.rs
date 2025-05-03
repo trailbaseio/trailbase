@@ -201,7 +201,7 @@ async fn test_ergonomic_errors() {
 }
 
 #[tokio::test]
-async fn test_call_libsql_query() {
+async fn test_execute_and_query() {
   let conn = Connection::open_in_memory().unwrap();
 
   let result = conn
@@ -283,6 +283,29 @@ async fn test_call_libsql_query() {
     .unwrap();
   assert_eq!(rows.len(), 1);
   assert_eq!(rows.0.get(0).unwrap().get::<i64>(0), Ok(17));
+}
+
+#[test]
+fn test_locking() {
+  let conn = Connection::open_in_memory().unwrap();
+  let mut lock = conn.write_lock();
+
+  let tx = lock.transaction().unwrap();
+  tx.execute_batch(
+    r#"
+        CREATE TABLE 'table' (id INTEGER PRIMARY KEY, name TEXT);
+        INSERT INTO 'table' (id, name) VALUES (1, 'Alice'), (2, 'Bob');
+      "#,
+  )
+  .unwrap();
+  tx.commit().unwrap();
+
+  let name: String = lock
+    .query_row("SELECT name FROM 'table' WHERE id = ?1", [2], |row| {
+      row.get(0)
+    })
+    .unwrap();
+  assert_eq!(name, "Bob");
 }
 
 #[tokio::test]
