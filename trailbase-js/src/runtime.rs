@@ -297,6 +297,20 @@ where
   );
 }
 
+fn drain_filter<T>(v: &mut Vec<T>, mut f: impl FnMut(&T) -> bool) -> Vec<T> {
+  let indexes: Vec<usize> = v
+    .iter()
+    .enumerate()
+    .filter_map(|(idx, value)| if f(value) { Some(idx) } else { None })
+    .collect();
+
+  return indexes
+    .into_iter()
+    .rev()
+    .map(|index| v.swap_remove(index))
+    .collect();
+}
+
 /// The main event-loop running for every isolate/worker.
 fn event_loop(
   runtime: &mut Runtime,
@@ -315,20 +329,8 @@ fn event_loop(
 
     loop {
       // In the future, once stabilized, we should use `Vec::drain_filter`.
-      let completed_indexes = completers
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, completer)| {
-          if completer.is_ready(runtime) {
-            Some(idx)
-          } else {
-            None
-          }
-        })
-        .collect::<Vec<_>>();
-
-      for index in completed_indexes.into_iter().rev() {
-        completers.swap_remove(index).resolve(runtime).await;
+      for completer in drain_filter(&mut completers, |completer| completer.is_ready(runtime)) {
+        completer.resolve(runtime).await;
       }
 
       let listen_for_messages = async || {
