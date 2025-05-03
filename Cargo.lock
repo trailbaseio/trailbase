@@ -5399,6 +5399,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "self_cell"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f7d95a54511e0c7be3f51e8867aa8cf35148d7b9445d44de2f943e2b206e749"
+
+[[package]]
 name = "semver"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6876,8 +6882,10 @@ dependencies = [
  "kanal",
  "log",
  "parking_lot",
+ "rusqlite",
  "rust-embed",
  "rustyscript",
+ "self_cell",
  "serde",
  "serde_json",
  "tokio",

@@ -7,8 +7,10 @@ import {
   htmlHandler,
   jsonHandler,
   stringHandler,
+  transaction,
   HttpError,
   StatusCodes,
+  Transaction,
 } from "../trailbase.js";
 import type {
   JsonRequestType,
@@ -24,7 +26,7 @@ addRoute(
 
     const table = uri.query.get("table");
     if (table) {
-      const rows = await query(`SELECT COUNT(*) FROM ${table}`, []);
+      const rows = await query(`SELECT COUNT(*) FROM "${table}"`, []);
       return `entries: ${rows[0][0]}`;
     }
 
@@ -38,8 +40,26 @@ addRoute(
   stringHandler(async (req: StringRequestType) => {
     const table = req.params["table"];
     if (table) {
-      const rows = await query(`SELECT COUNT(*) FROM ${table}`, []);
+      const rows = await query(`SELECT COUNT(*) FROM "${table}"`, []);
       return `entries: ${rows[0][0]}`;
+    }
+
+    return `test: ${req.uri}`;
+  }),
+);
+
+addRoute(
+  "GET",
+  "/tx/{table}",
+  stringHandler(async (req: StringRequestType) => {
+    const table = req.params["table"];
+    if (table) {
+      const count = transaction((tx: Transaction) => {
+        const rows = tx.query(`SELECT COUNT(*) FROM "${table}"`, []);
+        return rows[0][0] as number;
+      });
+
+      return `entries: ${count}`;
     }
 
     return `test: ${req.uri}`;

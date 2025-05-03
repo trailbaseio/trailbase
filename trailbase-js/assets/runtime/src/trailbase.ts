@@ -703,18 +703,57 @@ export function addPeriodicCallback(
 
 /// Queries the SQLite database.
 export async function query(
-  queryStr: string,
+  sql: string,
   params: unknown[],
 ): Promise<unknown[][]> {
-  return await rustyscript.async_functions.query(queryStr, params);
+  return await rustyscript.async_functions.query(sql, params);
 }
 
 /// Executes given query against SQLite database.
-export async function execute(
-  queryStr: string,
-  params: unknown[],
-): Promise<number> {
-  return await rustyscript.async_functions.execute(queryStr, params);
+export async function execute(sql: string, params: unknown[]): Promise<number> {
+  return await rustyscript.async_functions.execute(sql, params);
+}
+
+export class Transaction {
+  finalized: boolean;
+
+  constructor() {
+    this.finalized = false;
+  }
+
+  public query(queryStr: string, params: unknown[]): unknown[][] {
+    return rustyscript.functions.transaction_query(queryStr, params);
+  }
+
+  public execute(queryStr: string, params: unknown[]): number {
+    return rustyscript.functions.transaction_execute(queryStr, params);
+  }
+
+  public commit(): void {
+    this.finalized = true;
+    rustyscript.functions.transaction_commit();
+  }
+
+  public rollback(): void {
+    this.finalized = true;
+    rustyscript.functions.transaction_rollback();
+  }
+}
+
+export function transaction<T>(f: (tx: Transaction) => T): T {
+  rustyscript.functions.transaction_begin();
+
+  const tx = new Transaction();
+  try {
+    const r = f(tx);
+    if (!tx.finalized) {
+      rustyscript.functions.transaction_rollback();
+    }
+    return r;
+  } catch (e) {
+    rustyscript.functions.transaction_rollback();
+    throw e;
+  }
 }
 
 export type ParsedPath = {

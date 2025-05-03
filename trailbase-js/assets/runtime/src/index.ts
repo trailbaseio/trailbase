@@ -28,6 +28,8 @@ export {
   parsePath,
   query,
   stringHandler,
+  transaction,
+  Transaction,
 } from "./trailbase";
 
 export type {
