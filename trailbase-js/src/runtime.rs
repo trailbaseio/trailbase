@@ -629,10 +629,10 @@ fn json_value_to_param(
   use rustyscript::Error;
   return Ok(match value {
     serde_json::Value::Object(ref _map) => {
-      return Err(Error::Runtime("Object unsupported".to_string()));
+      return Err(Error::Runtime("Object not supported".to_string()));
     }
     serde_json::Value::Array(ref _arr) => {
-      return Err(Error::Runtime("Array unsupported".to_string()));
+      return Err(Error::Runtime("Array not supported".to_string()));
     }
     serde_json::Value::Null => trailbase_sqlite::Value::Null,
     serde_json::Value::Bool(b) => trailbase_sqlite::Value::Integer(b as i64),
@@ -645,7 +645,7 @@ fn json_value_to_param(
       } else if let Some(n) = number.as_f64() {
         trailbase_sqlite::Value::Real(n)
       } else {
-        return Err(Error::Runtime(format!("invalid number: {number:?}")));
+        return Err(Error::Runtime(format!("Invalid number: {number:?}")));
       }
     }
   });
@@ -665,6 +665,7 @@ where
   let arg = args
     .get(i)
     .ok_or_else(|| Error::Runtime(format!("Range err {i} > {}", args.len())))?;
+
   return serde_json::from_value::<T>(arg.clone()).map_err(|err| Error::Runtime(err.to_string()));
 }
 
@@ -984,8 +985,8 @@ mod tests {
         r#"
         import { transaction, Transaction } from "trailbase:main";
 
-        export function test_transaction_rollback() : number {
-          return transaction((tx: Transaction) => {
+        export async function test_transaction_rollback() : Promise<number> {
+          return await transaction((tx: Transaction) => {
             const n = tx.execute("DELETE FROM 'table' WHERE TRUE", []);
             tx.rollback();
             return n;
@@ -996,7 +997,7 @@ mod tests {
 
       let (sender, receiver) = oneshot::channel();
       handle
-        .send_to_any_isolate(build_call_sync_js_function_message::<i64>(
+        .send_to_any_isolate(build_call_async_js_function_message::<i64>(
           Some(module),
           "test_transaction_rollback",
           Vec::<serde_json::Value>::new(),
@@ -1023,8 +1024,8 @@ mod tests {
         r#"
         import { transaction, Transaction } from "trailbase:main";
 
-        export function test_transaction_commit() : [number, number] {
-          return transaction((tx: Transaction) => {
+        export async function test_transaction_commit() : Promise<[number, number]> {
+          return await transaction((tx: Transaction) => {
             const count = tx.query("SELECT COUNT(*) FROM 'table'", [])[0][0];
             const inserted = tx.execute("INSERT INTO 'table' (v0, v1) VALUES (?1, ?2)", ["baz", "7"]);
             tx.commit();
@@ -1034,10 +1035,9 @@ mod tests {
       "#,
       );
 
-      // Check that the rolled back transaction would delete 2 rows but deletes none.
       let (sender, receiver) = oneshot::channel();
       handle
-        .send_to_any_isolate(build_call_sync_js_function_message::<Vec<i64>>(
+        .send_to_any_isolate(build_call_async_js_function_message::<Vec<i64>>(
           Some(module),
           "test_transaction_commit",
           Vec::<serde_json::Value>::new(),
@@ -1067,6 +1067,60 @@ mod tests {
         .unwrap()
         .unwrap();
       assert_eq!("baz", v0);
+    }
+
+    {
+      // Check that the throwing an exception or not explicitly calling commit()/rollback() doesn't
+      // block the writer indefinitely.
+      let module = Module::new(
+        "module.ts",
+        r#"
+        import { transaction, Transaction } from "trailbase:main";
+
+        export async function test_transaction_exception() {
+          return await transaction((tx: Transaction) => {
+            throw "SOMETHING";
+          });
+        }
+
+        export async function test_transaction_no_commit() : Promise<number> {
+          return await transaction((tx: Transaction) => {
+            return tx.query("SELECT COUNT(*) FROM 'table'", [])[0][0];
+          });
+        }
+      "#,
+      );
+
+      let (sender, receiver) = oneshot::channel();
+      handle
+        .send_to_any_isolate(build_call_async_js_function_message::<serde_json::Value>(
+          Some(module.clone()),
+          "test_transaction_exception",
+          Vec::<serde_json::Value>::new(),
+          sender,
+        ))
+        .await
+        .unwrap();
+
+      let resp = receiver.await.unwrap();
+      assert!(resp.is_err(), "{resp:?}");
+
+      let (sender, receiver) = oneshot::channel();
+      handle
+        .send_to_any_isolate(build_call_async_js_function_message::<i64>(
+          Some(module.clone()),
+          "test_transaction_no_commit",
+          Vec::<serde_json::Value>::new(),
+          sender,
+        ))
+        .await
+        .unwrap();
+
+      assert_eq!(3, receiver.await.unwrap().unwrap());
+
+      // Finally acquire a lock. This would block for ever if it was still held by the transactions
+      // above.
+      let _ = conn.write_lock();
     }
   }
 }

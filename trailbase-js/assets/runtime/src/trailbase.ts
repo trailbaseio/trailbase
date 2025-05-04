@@ -709,7 +709,7 @@ export async function query(
   return await rustyscript.async_functions.query(sql, params);
 }
 
-/// Executes given query against SQLite database.
+/// Executes given query against the SQLite database.
 export async function execute(sql: string, params: unknown[]): Promise<number> {
   return await rustyscript.async_functions.execute(sql, params);
 }
@@ -740,7 +740,15 @@ export class Transaction {
   }
 }
 
-export function transaction<T>(f: (tx: Transaction) => T): T {
+/// Commit a SQLite transaction.
+///
+/// NOTE: The API is async while the implementation is not. This is for
+/// future-proofing. This means that calling transaction() will block the
+/// event-loop until a write-lock on the underlying database connection can be
+/// acquired. In most scenarios this should be fine but may become a bottleneck
+/// when there's a lot of write congestion. In the future, we should update the
+/// implementation to be async.
+export async function transaction<T>(f: (tx: Transaction) => T): Promise<T> {
   rustyscript.functions.transaction_begin();
 
   const tx = new Transaction();

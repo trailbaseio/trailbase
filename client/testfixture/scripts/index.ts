@@ -54,7 +54,7 @@ addRoute(
   stringHandler(async (req: StringRequestType) => {
     const table = req.params["table"];
     if (table) {
-      const count = transaction((tx: Transaction) => {
+      const count = await transaction((tx: Transaction) => {
         const rows = tx.query(`SELECT COUNT(*) FROM "${table}"`, []);
         return rows[0][0] as number;
       });
