@@ -29,17 +29,17 @@ pub(crate) async fn insert_row(
   table_name: String,
   json_row: JsonRow,
 ) -> Result<i64, Error> {
-  let Some(table_metadata) = state.table_metadata().get(&table_name) else {
+  let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {
     return Err(Error::Precondition(format!("Table {table_name} not found")));
   };
 
   let rowid_value = InsertQueryBuilder::run(
     state,
-    table_metadata.name(),
+    schema_metadata.name(),
     None,
     "_rowid_",
-    table_metadata.json_metadata.has_file_columns(),
-    Params::from(&*table_metadata, json_row, None)?,
+    schema_metadata.json_metadata.has_file_columns(),
+    Params::from(&*schema_metadata, json_row, None)?,
   )
   .await?;
 

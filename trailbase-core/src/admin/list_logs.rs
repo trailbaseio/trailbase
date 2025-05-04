@@ -18,7 +18,7 @@ use crate::listing::{
   Cursor, Order, QueryParseResult, WhereClause, build_filter_where_clause, limit_or_default,
   parse_and_sanitize_query,
 };
-use crate::table_metadata::{TableMetadata, lookup_and_parse_table_schema};
+use crate::schema_metadata::{TableMetadata, lookup_and_parse_table_schema};
 
 #[derive(Debug, Serialize, TS)]
 pub struct LogJson {
@@ -118,12 +118,12 @@ pub async fn list_logs_handler(
   } = parse_and_sanitize_query(raw_url_query.as_deref())
     .map_err(|err| Error::Precondition(format!("Invalid query '{err}': {raw_url_query:?}")))?;
 
-  // NOTE: We cannot use state.table_metadata() here, since we're working on the logs database.
+  // NOTE: We cannot use state.schema_metadata() here, since we're working on the logs database.
   // We could cache, however this is just the admin logs handler.
   let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME).await?;
-  let table_metadata = TableMetadata::new(table.clone(), &[table], crate::constants::USER_TABLE);
+  let schema_metadata = TableMetadata::new(table.clone(), &[table], crate::constants::USER_TABLE);
   let filter_where_clause =
-    build_filter_where_clause("log", &table_metadata.schema.columns, filter_params)?;
+    build_filter_where_clause("log", &schema_metadata.schema.columns, filter_params)?;
 
   let total_row_count: i64 = conn
     .read_query_row_f(

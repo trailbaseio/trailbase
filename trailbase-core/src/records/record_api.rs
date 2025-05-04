@@ -39,18 +39,18 @@ struct RecordApiSchema {
 }
 
 impl RecordApiSchema {
-  fn from_table(table_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
-    assert_eq!(config.table_name.as_deref(), Some(table_metadata.name()));
+  fn from_table(schema_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
+    assert_eq!(config.table_name.as_deref(), Some(schema_metadata.name()));
 
-    let Some((pk_index, pk_column)) = table_metadata.record_pk_column() else {
+    let Some((pk_index, pk_column)) = schema_metadata.record_pk_column() else {
       return Err("RecordApi requires integer/UUIDv7 primary key column".into());
     };
     let record_pk_column = (pk_index, pk_column.clone());
 
     let (columns, json_column_metadata) = filter_columns(
       config,
-      &table_metadata.schema.columns,
-      &table_metadata.json_metadata.columns,
+      &schema_metadata.schema.columns,
+      &schema_metadata.json_metadata.columns,
     );
 
     let has_file_columns = !find_file_column_indexes(&json_column_metadata).is_empty();
@@ -74,7 +74,7 @@ impl RecordApiSchema {
       .collect();
 
     return Ok(Self {
-      table_name: table_metadata.name().to_string(),
+      table_name: schema_metadata.name().to_string(),
       is_table: true,
       record_pk_column,
       columns,
@@ -176,12 +176,12 @@ impl RecordApiState {
 impl RecordApi {
   pub fn from_table(
     conn: trailbase_sqlite::Connection,
-    table_metadata: &TableMetadata,
+    schema_metadata: &TableMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
-    assert_eq!(config.table_name.as_deref(), Some(table_metadata.name()));
+    assert_eq!(config.table_name.as_deref(), Some(schema_metadata.name()));
 
-    let schema = RecordApiSchema::from_table(table_metadata, &config)?;
+    let schema = RecordApiSchema::from_table(schema_metadata, &config)?;
 
     return Self::from_impl(conn, schema, config);
   }

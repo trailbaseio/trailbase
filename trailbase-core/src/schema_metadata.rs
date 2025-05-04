@@ -12,26 +12,26 @@ pub use trailbase_schema::metadata::{
 
 use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
 
-struct TableMetadataCacheState {
+struct SchemaMetadataCacheState {
   tables: HashMap<String, Arc<TableMetadata>>,
   views: HashMap<String, Arc<ViewMetadata>>,
 }
 
 #[derive(Clone)]
-pub struct TableMetadataCache {
+pub struct SchemaMetadataCache {
   conn: trailbase_sqlite::Connection,
-  state: Arc<parking_lot::RwLock<TableMetadataCacheState>>,
+  state: Arc<parking_lot::RwLock<SchemaMetadataCacheState>>,
 }
 
-impl TableMetadataCache {
-  pub async fn new(conn: trailbase_sqlite::Connection) -> Result<Self, TableLookupError> {
+impl SchemaMetadataCache {
+  pub async fn new(conn: trailbase_sqlite::Connection) -> Result<Self, SchemaLookupError> {
     let tables = lookup_and_parse_all_table_schemas(&conn).await?;
     let table_map = Self::build_tables(&conn, &tables).await?;
     let views = Self::build_views(&conn, &tables).await?;
 
-    return Ok(TableMetadataCache {
+    return Ok(SchemaMetadataCache {
       conn,
-      state: Arc::new(parking_lot::RwLock::new(TableMetadataCacheState {
+      state: Arc::new(parking_lot::RwLock::new(SchemaMetadataCacheState {
         tables: table_map,
         views,
       })),
@@ -41,8 +41,8 @@ impl TableMetadataCache {
   async fn build_tables(
     conn: &trailbase_sqlite::Connection,
     tables: &[Table],
-  ) -> Result<HashMap<String, Arc<TableMetadata>>, TableLookupError> {
-    let table_metadata_map: HashMap<String, Arc<TableMetadata>> = tables
+  ) -> Result<HashMap<String, Arc<TableMetadata>>, SchemaLookupError> {
+    let schema_metadata_map: HashMap<String, Arc<TableMetadata>> = tables
       .iter()
       .cloned()
       .map(|t: Table| {
@@ -55,7 +55,7 @@ impl TableMetadataCache {
 
     // Install file column triggers. This ain't pretty, this might be better on construction and
     // schema changes.
-    for metadata in table_metadata_map.values() {
+    for metadata in schema_metadata_map.values() {
       for idx in metadata.json_metadata.file_column_indexes() {
         let table_name = &metadata.schema.name;
         let col = &metadata.schema.columns[*idx];
@@ -83,13 +83,13 @@ impl TableMetadataCache {
       }
     }
 
-    return Ok(table_metadata_map);
+    return Ok(schema_metadata_map);
   }
 
   async fn build_views(
     conn: &trailbase_sqlite::Connection,
     tables: &[Table],
-  ) -> Result<HashMap<String, Arc<ViewMetadata>>, TableLookupError> {
+  ) -> Result<HashMap<String, Arc<ViewMetadata>>, SchemaLookupError> {
     let views = lookup_and_parse_all_view_schemas(conn, tables).await?;
     let build = |view: View| {
       // NOTE: we check during record API config validation that no temporary views are referenced.
@@ -103,8 +103,7 @@ impl TableMetadataCache {
     return Ok(views.into_iter().filter_map(build).collect());
   }
 
-  // TODO: rename to get_table or split cache.
-  pub fn get(&self, table_name: &str) -> Option<Arc<TableMetadata>> {
+  pub fn get_table(&self, table_name: &str) -> Option<Arc<TableMetadata>> {
     self.state.read().tables.get(table_name).cloned()
   }
 
@@ -122,15 +121,15 @@ impl TableMetadataCache {
       .collect();
   }
 
-  pub async fn invalidate_all(&self) -> Result<(), TableLookupError> {
-    debug!("Rebuilding TableMetadataCache");
+  pub async fn invalidate_all(&self) -> Result<(), SchemaLookupError> {
+    debug!("Rebuilding SchemaMetadataCache");
     let conn = &self.conn;
 
     let tables = lookup_and_parse_all_table_schemas(conn).await?;
     let table_map = Self::build_tables(conn, &tables).await?;
     let views = Self::build_views(conn, &tables).await?;
 
-    *self.state.write() = TableMetadataCacheState {
+    *self.state.write() = SchemaMetadataCacheState {
       tables: table_map,
       views,
     };
@@ -139,10 +138,10 @@ impl TableMetadataCache {
   }
 }
 
-impl std::fmt::Debug for TableMetadataCache {
+impl std::fmt::Debug for SchemaMetadataCache {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let state = self.state.read();
-    f.debug_struct("TableMetadataCache")
+    f.debug_struct("SchemaMetadataCache")
       .field("tables", &state.tables.keys())
       .field("views", &state.views.keys())
       .finish()
@@ -150,7 +149,7 @@ impl std::fmt::Debug for TableMetadataCache {
 }
 
 #[derive(Debug, Error)]
-pub enum TableLookupError {
+pub enum SchemaLookupError {
   #[error("SQL2 error: {0}")]
   Sql(#[from] trailbase_sqlite::Error),
   #[error("SQL3 error: {0}")]
@@ -166,7 +165,7 @@ pub enum TableLookupError {
 pub async fn lookup_and_parse_table_schema(
   conn: &trailbase_sqlite::Connection,
   table_name: &str,
-) -> Result<Table, TableLookupError> {
+) -> Result<Table, SchemaLookupError> {
   // Then get the actual table.
   let sql: String = conn
     .read_query_row_f(
@@ -178,7 +177,7 @@ pub async fn lookup_and_parse_table_schema(
     .ok_or_else(|| trailbase_sqlite::Error::Rusqlite(rusqlite::Error::QueryReturnedNoRows))?;
 
   let Some(stmt) = sqlite3_parse_into_statement(&sql)? else {
-    return Err(TableLookupError::Missing);
+    return Err(SchemaLookupError::Missing);
   };
 
   return Ok(stmt.try_into()?);
@@ -186,7 +185,7 @@ pub async fn lookup_and_parse_table_schema(
 
 pub async fn lookup_and_parse_all_table_schemas(
   conn: &trailbase_sqlite::Connection,
-) -> Result<Vec<Table>, TableLookupError> {
+) -> Result<Vec<Table>, SchemaLookupError> {
   // Then get the actual table.
   let rows = conn
     .read_query_rows(
@@ -199,7 +198,7 @@ pub async fn lookup_and_parse_all_table_schemas(
   for row in rows.iter() {
     let sql: String = row.get(0)?;
     let Some(stmt) = sqlite3_parse_into_statement(&sql)? else {
-      return Err(TableLookupError::Missing);
+      return Err(SchemaLookupError::Missing);
     };
     tables.push(stmt.try_into()?);
   }
@@ -207,15 +206,15 @@ pub async fn lookup_and_parse_all_table_schemas(
   return Ok(tables);
 }
 
-fn sqlite3_parse_view(sql: &str, tables: &[Table]) -> Result<View, TableLookupError> {
+fn sqlite3_parse_view(sql: &str, tables: &[Table]) -> Result<View, SchemaLookupError> {
   let mut parser = sqlite3_parser::lexer::sql::Parser::new(sql.as_bytes());
   match parser.next()? {
-    None => Err(TableLookupError::Missing),
+    None => Err(SchemaLookupError::Missing),
     Some(cmd) => {
       use sqlite3_parser::ast::Cmd;
       match cmd {
         Cmd::Stmt(stmt) => Ok(View::from(stmt, tables)?),
-        Cmd::Explain(_) | Cmd::ExplainQueryPlan(_) => Err(TableLookupError::Missing),
+        Cmd::Explain(_) | Cmd::ExplainQueryPlan(_) => Err(SchemaLookupError::Missing),
       }
     }
   }
@@ -224,7 +223,7 @@ fn sqlite3_parse_view(sql: &str, tables: &[Table]) -> Result<View, TableLookupEr
 pub async fn lookup_and_parse_all_view_schemas(
   conn: &trailbase_sqlite::Connection,
   tables: &[Table],
-) -> Result<Vec<View>, TableLookupError> {
+) -> Result<Vec<View>, SchemaLookupError> {
   // Then get the actual table.
   let rows = conn
     .read_query_rows(
@@ -281,7 +280,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.table_metadata().invalidate_all().await.unwrap();
+    state.schema_metadata().invalidate_all().await.unwrap();
 
     add_record_api_config(
       &state,
@@ -296,14 +295,14 @@ mod tests {
     .await
     .unwrap();
 
-    let test_table_metadata = state.table_metadata().get(table_name).unwrap();
+    let test_schema_metadata = state.schema_metadata().get_table(table_name).unwrap();
 
     let (validator, schema) = build_json_schema_expanded(
       table_name,
-      &test_table_metadata.schema.columns,
+      &test_schema_metadata.schema.columns,
       JsonSchemaMode::Select,
       Some(Expand {
-        tables: &state.table_metadata().tables(),
+        tables: &state.schema_metadata().tables(),
         foreign_key_columns: vec!["foreign_table"],
       }),
     )
@@ -499,7 +498,7 @@ mod tests {
     .await
     .unwrap();
 
-    state.table_metadata().invalidate_all().await.unwrap();
+    state.schema_metadata().invalidate_all().await.unwrap();
 
     add_record_api_config(
       &state,

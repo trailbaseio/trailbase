@@ -14,7 +14,7 @@ use crate::queue::Queue;
 use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
-use crate::table_metadata::TableMetadataCache;
+use crate::schema_metadata::SchemaMetadataCache;
 use crate::value_notifier::{Computed, ValueNotifier};
 
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
@@ -38,7 +38,7 @@ struct InternalState {
 
   jwt: JwtHelper,
 
-  table_metadata: TableMetadataCache,
+  schema_metadata: SchemaMetadataCache,
   subscription_manager: SubscriptionManager,
   object_store: Arc<dyn ObjectStore + Send + Sync>,
 
@@ -55,7 +55,7 @@ pub(crate) struct AppStateArgs {
   pub address: String,
   pub dev: bool,
   pub demo: bool,
-  pub table_metadata: TableMetadataCache,
+  pub schema_metadata: SchemaMetadataCache,
   pub config: Config,
   pub conn: trailbase_sqlite::Connection,
   pub logs_conn: trailbase_sqlite::Connection,
@@ -75,7 +75,7 @@ impl AppState {
     let config = ValueNotifier::new(args.config);
 
     let record_apis = {
-      let table_metadata_clone = args.table_metadata.clone();
+      let schema_metadata_clone = args.schema_metadata.clone();
       let conn_clone = args.conn.clone();
 
       Computed::new(&config, move |c| {
@@ -83,7 +83,7 @@ impl AppState {
           .record_apis
           .iter()
           .filter_map(|config| {
-            match build_record_api(conn_clone.clone(), &table_metadata_clone, config.clone()) {
+            match build_record_api(conn_clone.clone(), &schema_metadata_clone, config.clone()) {
               Ok(api) => Some((api.api_name().to_string(), api)),
               Err(err) => {
                 error!("{err}");
@@ -146,8 +146,12 @@ impl AppState {
         logs_conn: args.logs_conn,
         queue: args.queue,
         jwt: args.jwt,
-        table_metadata: args.table_metadata.clone(),
-        subscription_manager: SubscriptionManager::new(args.conn, args.table_metadata, record_apis),
+        schema_metadata: args.schema_metadata.clone(),
+        subscription_manager: SubscriptionManager::new(
+          args.conn,
+          args.schema_metadata,
+          record_apis,
+        ),
         object_store,
         runtime,
         #[cfg(test)]
@@ -194,16 +198,16 @@ impl AppState {
     return rustc_tools_util::get_version_info!();
   }
 
-  pub(crate) fn table_metadata(&self) -> &TableMetadataCache {
-    return &self.state.table_metadata;
+  pub(crate) fn schema_metadata(&self) -> &SchemaMetadataCache {
+    return &self.state.schema_metadata;
   }
 
   pub(crate) fn subscription_manager(&self) -> &SubscriptionManager {
     return &self.state.subscription_manager;
   }
 
-  pub async fn refresh_table_cache(&self) -> Result<(), crate::table_metadata::TableLookupError> {
-    self.table_metadata().invalidate_all().await
+  pub async fn refresh_table_cache(&self) -> Result<(), crate::schema_metadata::SchemaLookupError> {
+    self.schema_metadata().invalidate_all().await
   }
 
   pub(crate) fn objectstore(&self) -> &(dyn ObjectStore + Send + Sync) {
@@ -269,7 +273,7 @@ impl AppState {
     config: Config,
     hash: Option<String>,
   ) -> Result<(), crate::config::ConfigError> {
-    validate_config(self.table_metadata(), &config)?;
+    validate_config(self.schema_metadata(), &config)?;
 
     match hash {
       Some(hash) => {
@@ -297,7 +301,7 @@ impl AppState {
     // Write new config to the file system.
     return write_config_and_vault_textproto(
       self.data_dir(),
-      self.table_metadata(),
+      self.schema_metadata(),
       &self.get_config(),
     )
     .await;
@@ -334,7 +338,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   assert!(new);
   let logs_conn = crate::connection::init_logs_db(None)?;
 
-  let table_metadata = TableMetadataCache::new(conn.clone()).await?;
+  let schema_metadata = SchemaMetadataCache::new(conn.clone()).await?;
 
   let build_default_config = || {
     // Construct a fabricated config for tests and make sure it's valid.
@@ -375,11 +379,11 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     .as_ref()
     .and_then(|o| o.config.clone())
     .unwrap_or_else(build_default_config);
-  validate_config(&table_metadata, &config).unwrap();
+  validate_config(&schema_metadata, &config).unwrap();
   let config = ValueNotifier::new(config);
 
   let main_conn_clone = conn.clone();
-  let table_metadata_clone = table_metadata.clone();
+  let schema_metadata_clone = schema_metadata.clone();
 
   let data_dir = DataDir(temp_dir.path().to_path_buf());
 
@@ -409,7 +413,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       .filter_map(|config| {
         let api = build_record_api(
           main_conn_clone.clone(),
-          &table_metadata_clone,
+          &schema_metadata_clone,
           config.clone(),
         )
         .unwrap();
@@ -443,8 +447,8 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       logs_conn,
       queue: Queue::new(None).await.unwrap(),
       jwt: jwt::test_jwt_helper(),
-      table_metadata: table_metadata.clone(),
-      subscription_manager: SubscriptionManager::new(conn.clone(), table_metadata, record_apis),
+      schema_metadata: schema_metadata.clone(),
+      subscription_manager: SubscriptionManager::new(conn.clone(), schema_metadata, record_apis),
       object_store,
       runtime: build_js_runtime(conn, None),
       cleanup: vec![Box::new(temp_dir)],
@@ -475,7 +479,7 @@ fn build_js_runtime(conn: trailbase_sqlite::Connection, threads: Option<usize>) 
 
 fn build_record_api(
   conn: trailbase_sqlite::Connection,
-  table_metadata_cache: &TableMetadataCache,
+  schema_metadata_cache: &SchemaMetadataCache,
   config: RecordApiConfig,
 ) -> Result<RecordApi, String> {
   let Some(ref table_name) = config.table_name else {
@@ -484,9 +488,9 @@ fn build_record_api(
     ));
   };
 
-  if let Some(table_metadata) = table_metadata_cache.get(table_name) {
-    return RecordApi::from_table(conn, &table_metadata, config);
-  } else if let Some(view) = table_metadata_cache.get_view(table_name) {
+  if let Some(schema_metadata) = schema_metadata_cache.get_table(table_name) {
+    return RecordApi::from_table(conn, &schema_metadata, config);
+  } else if let Some(view) = schema_metadata_cache.get_view(table_name) {
     return RecordApi::from_view(conn, &view, config);
   }
 

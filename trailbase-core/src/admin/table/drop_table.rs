@@ -29,9 +29,9 @@ pub async fn drop_table_handler(
   }
 
   let entity_type: &str;
-  if state.table_metadata().get(&table_name).is_some() {
+  if state.schema_metadata().get_table(&table_name).is_some() {
     entity_type = "TABLE";
-  } else if state.table_metadata().get_view(&table_name).is_some() {
+  } else if state.schema_metadata().get_view(&table_name).is_some() {
     entity_type = "VIEW";
   } else {
     return Err(Error::Precondition(format!(
@@ -78,7 +78,7 @@ pub async fn drop_table_handler(
       .await?;
   }
 
-  state.table_metadata().invalidate_all().await?;
+  state.schema_metadata().invalidate_all().await?;
 
   return Ok((StatusCode::OK, "").into_response());
 }

@@ -32,16 +32,16 @@ pub async fn update_row_handler(
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
-  let Some(table_metadata) = state.table_metadata().get(&table_name) else {
+  let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {
     return Err(Error::Precondition(format!("Table {table_name} not found")));
   };
 
   let pk_col = &request.primary_key_column;
-  let Some((index, column)) = table_metadata.column_by_name(pk_col) else {
+  let Some((index, column)) = schema_metadata.column_by_name(pk_col) else {
     return Err(Error::Precondition(format!("Missing column: {pk_col}")));
   };
 
-  if let Some(pk_index) = table_metadata.record_pk_column {
+  if let Some(pk_index) = schema_metadata.record_pk_column {
     if index != pk_index {
       return Err(Error::Precondition(format!("Pk column mismatch: {pk_col}")));
     }
@@ -63,10 +63,10 @@ pub async fn update_row_handler(
 
   UpdateQueryBuilder::run(
     &state,
-    table_metadata.name(),
+    schema_metadata.name(),
     &column.name,
-    table_metadata.json_metadata.has_file_columns(),
-    Params::from(&*table_metadata, row, None)?,
+    schema_metadata.json_metadata.has_file_columns(),
+    Params::from(&*schema_metadata, row, None)?,
   )
   .await?;
 

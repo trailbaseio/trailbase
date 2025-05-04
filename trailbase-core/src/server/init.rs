@@ -7,8 +7,8 @@ use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;
 use crate::rand::generate_random_string;
+use crate::schema_metadata::SchemaMetadataCache;
 use crate::server::DataDir;
-use crate::table_metadata::TableMetadataCache;
 
 #[derive(Debug, Error)]
 pub enum InitError {
@@ -27,7 +27,7 @@ pub enum InitError {
   #[error("Custom initializer error: {0}")]
   CustomInit(String),
   #[error("Table error: {0}")]
-  TableError(#[from] crate::table_metadata::TableLookupError),
+  TableError(#[from] crate::schema_metadata::SchemaLookupError),
   #[error("Schema error: {0}")]
   SchemaError(#[from] trailbase_schema::Error),
   #[error("Script error: {0}")]
@@ -64,10 +64,10 @@ pub async fn init_app_state(
   // whether the V1 migration had to be applied. Should be fairly robust.
   let (conn, new_db) = crate::connection::init_main_db(Some(&data_dir), None)?;
 
-  let table_metadata = TableMetadataCache::new(conn.clone()).await?;
+  let schema_metadata = SchemaMetadataCache::new(conn.clone()).await?;
 
   // Read config or write default one.
-  let config = load_or_init_config_textproto(&data_dir, &table_metadata).await?;
+  let config = load_or_init_config_textproto(&data_dir, &schema_metadata).await?;
 
   debug!("Initializing JSON schemas from config");
   trailbase_schema::registry::set_user_schemas(
@@ -118,7 +118,7 @@ pub async fn init_app_state(
     address: args.address,
     dev: args.dev,
     demo: args.demo,
-    table_metadata,
+    schema_metadata,
     config,
     conn,
     logs_conn,

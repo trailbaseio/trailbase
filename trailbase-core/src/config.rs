@@ -15,7 +15,7 @@ use crate::DESCRIPTOR_POOL;
 use crate::auth::oauth::providers::oauth_provider_registry;
 use crate::data_dir::DataDir;
 use crate::records::validate_record_api_config;
-use crate::table_metadata::TableMetadataCache;
+use crate::schema_metadata::SchemaMetadataCache;
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -425,7 +425,7 @@ async fn load_vault_textproto_or_default(data_dir: &DataDir) -> Result<proto::Va
 
 pub async fn load_or_init_config_textproto(
   data_dir: &DataDir,
-  table_metadata: &TableMetadataCache,
+  schema_metadata: &SchemaMetadataCache,
 ) -> Result<proto::Config, ConfigError> {
   let vault = load_vault_textproto_or_default(data_dir).await?;
 
@@ -436,7 +436,7 @@ pub async fn load_or_init_config_textproto(
         std::io::ErrorKind::NotFound => {
           warn!("Falling back to default config: {err}");
           let config = proto::Config::new_with_custom_defaults();
-          write_config_and_vault_textproto(data_dir, table_metadata, &config).await?;
+          write_config_and_vault_textproto(data_dir, schema_metadata, &config).await?;
           config
         }
         _ => {
@@ -446,7 +446,7 @@ pub async fn load_or_init_config_textproto(
     };
 
   let merged_config = merge_vault_and_env(config, vault)?;
-  validate_config(table_metadata, &merged_config)?;
+  validate_config(schema_metadata, &merged_config)?;
 
   return Ok(merged_config);
 }
@@ -464,10 +464,10 @@ fn split_config(config: &proto::Config) -> Result<(proto::Config, proto::Vault),
 
 pub async fn write_config_and_vault_textproto(
   data_dir: &DataDir,
-  table_metadata: &TableMetadataCache,
+  schema_metadata: &SchemaMetadataCache,
   config: &proto::Config,
 ) -> Result<(), ConfigError> {
-  validate_config(table_metadata, config)?;
+  validate_config(schema_metadata, config)?;
 
   let (stripped_config, vault) = split_config(config)?;
 
@@ -504,7 +504,7 @@ fn validate_application_name(name: &str) -> Result<(), ConfigError> {
 }
 
 pub(crate) fn validate_config(
-  tables: &TableMetadataCache,
+  tables: &SchemaMetadataCache,
   config: &proto::Config,
 ) -> Result<(), ConfigError> {
   fn ierr(msg: impl Into<String>) -> Result<(), ConfigError> {
@@ -725,10 +725,12 @@ mod test {
 
   async fn test_default_config_is_valid() {
     let state = test_state(None).await.unwrap();
-    let table_metadata = TableMetadataCache::new(state.conn().clone()).await.unwrap();
+    let schema_metadata = SchemaMetadataCache::new(state.conn().clone())
+      .await
+      .unwrap();
 
     let config = Config::new_with_custom_defaults();
-    validate_config(&table_metadata, &config).unwrap();
+    validate_config(&schema_metadata, &config).unwrap();
   }
 
   fn test_config_merging() {

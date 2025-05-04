@@ -30,7 +30,7 @@ pub enum AdminError {
   #[error("Schema error: {0}")]
   Schema(#[from] trailbase_schema::sqlite::SchemaError),
   #[error("Table lookup error: {0}")]
-  TableLookup(#[from] crate::table_metadata::TableLookupError),
+  TableLookup(#[from] crate::schema_metadata::SchemaLookupError),
   #[error("DB Migration error: {0}")]
   Migration(#[from] trailbase_refinery_core::Error),
   #[error("SQL -> Json error: {0}")]
@@ -48,7 +48,7 @@ pub enum AdminError {
   #[error("Transaction error: {0}")]
   Transaction(#[from] crate::transaction::TransactionError),
   #[error("JSON schema error: {0}")]
-  JSONSchema(#[from] crate::table_metadata::JsonSchemaError),
+  JSONSchema(#[from] crate::schema_metadata::JsonSchemaError),
   #[error("Email error: {0}")]
   Email(#[from] crate::email::EmailError),
   #[error("Query error: {0}")]

@@ -177,7 +177,7 @@ pub async fn list_records_handler(
         }
       }
 
-      expand_tables(state.table_metadata(), table_name, expand)?
+      expand_tables(state.schema_metadata(), table_name, expand)?
     }
     None => vec![],
   };
@@ -309,7 +309,7 @@ mod tests {
   use crate::records::RecordError;
   use crate::records::query_builder::expand_tables;
   use crate::records::test_utils::*;
-  use crate::table_metadata::TableMetadataCache;
+  use crate::schema_metadata::SchemaMetadataCache;
   use crate::util::id_to_b64;
   use crate::util::urlencode;
 
@@ -380,7 +380,7 @@ mod tests {
       .await
       .unwrap();
 
-    let cache = TableMetadataCache::new(conn.clone()).await.unwrap();
+    let cache = SchemaMetadataCache::new(conn.clone()).await.unwrap();
     let expanded_tables = expand_tables(&cache, "table", &["index"]).unwrap();
 
     assert_eq!(expanded_tables.len(), 1);
@@ -449,7 +449,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.table_metadata().invalidate_all().await.unwrap();
+    state.schema_metadata().invalidate_all().await.unwrap();
 
     add_record_api_config(
       &state,

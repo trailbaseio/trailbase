@@ -105,7 +105,7 @@ mod tests {
       )
       .await?;
 
-    state.table_metadata().invalidate_all().await.unwrap();
+    state.schema_metadata().invalidate_all().await.unwrap();
 
     return Ok(());
   }
@@ -146,7 +146,7 @@ mod tests {
       )
       .await?;
 
-    state.table_metadata().invalidate_all().await.unwrap();
+    state.schema_metadata().invalidate_all().await.unwrap();
 
     return Ok(());
   }

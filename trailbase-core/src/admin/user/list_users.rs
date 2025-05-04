@@ -72,13 +72,13 @@ pub async fn list_users_handler(
   } = parse_and_sanitize_query(raw_url_query.as_deref())
     .map_err(|err| Error::Precondition(format!("Invalid query '{err}': {raw_url_query:?}")))?;
 
-  let Some(table_metadata) = state.table_metadata().get(USER_TABLE) else {
+  let Some(schema_metadata) = state.schema_metadata().get_table(USER_TABLE) else {
     return Err(Error::Precondition(format!("Table {USER_TABLE} not found")));
   };
   // Where clause contains column filters and cursor depending on what's present in the url query
   // string.
   let filter_where_clause =
-    build_filter_where_clause("_ROW_", &table_metadata.schema.columns, filter_params)?;
+    build_filter_where_clause("_ROW_", &schema_metadata.schema.columns, filter_params)?;
 
   let total_row_count: i64 = conn
     .read_query_row_f(

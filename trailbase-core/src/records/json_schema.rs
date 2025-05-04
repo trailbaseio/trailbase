@@ -46,7 +46,7 @@ pub fn build_api_json_schema(
   let mode = mode.unwrap_or(JsonSchemaMode::Insert);
 
   if let (Some(config_expand), JsonSchemaMode::Select) = (api.expand(), mode) {
-    let all_tables = state.table_metadata().tables();
+    let all_tables = state.schema_metadata().tables();
     let foreign_key_columns = config_expand.keys().map(|k| k.as_str()).collect::<Vec<_>>();
     let expand = Expand {
       tables: &all_tables,

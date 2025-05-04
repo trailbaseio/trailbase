@@ -443,7 +443,7 @@ mod test {
       .await
       .unwrap();
 
-    state.table_metadata().invalidate_all().await.unwrap();
+    state.schema_metadata().invalidate_all().await.unwrap();
 
     add_record_api(
       &state,
@@ -744,7 +744,7 @@ mod test {
       .await
       .unwrap();
 
-    state.table_metadata().invalidate_all().await.unwrap();
+    state.schema_metadata().invalidate_all().await.unwrap();
 
     let room0 = add_room(conn, "room0").await.unwrap();
     let room1 = add_room(conn, "room1").await.unwrap();
@@ -815,7 +815,7 @@ mod test {
       .await
       .unwrap();
 
-    state.table_metadata().invalidate_all().await.unwrap();
+    state.schema_metadata().invalidate_all().await.unwrap();
 
     add_record_api_config(
       &state,
@@ -912,7 +912,7 @@ mod test {
       .await
       .unwrap();
 
-    state.table_metadata().invalidate_all().await.unwrap();
+    state.schema_metadata().invalidate_all().await.unwrap();
 
     add_record_api(
       &state,

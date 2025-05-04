@@ -44,11 +44,11 @@ pub(crate) async fn delete_row(
   pk_col: &str,
   value: serde_json::Value,
 ) -> Result<(), Error> {
-  let Some(table_metadata) = state.table_metadata().get(table_name) else {
+  let Some(schema_metadata) = state.schema_metadata().get_table(table_name) else {
     return Err(Error::Precondition(format!("Table {table_name} not found")));
   };
 
-  let Some((_index, column)) = table_metadata.column_by_name(pk_col) else {
+  let Some((_index, column)) = schema_metadata.column_by_name(pk_col) else {
     return Err(Error::Precondition(format!("Missing column: {pk_col}")));
   };
 
@@ -58,10 +58,10 @@ pub(crate) async fn delete_row(
 
   DeleteQueryBuilder::run(
     state,
-    table_metadata.name(),
+    schema_metadata.name(),
     pk_col,
     simple_json_value_to_param(column.data_type, value)?,
-    table_metadata.json_metadata.has_file_columns(),
+    schema_metadata.json_metadata.has_file_columns(),
   )
   .await?;
 

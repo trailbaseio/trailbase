@@ -13,7 +13,7 @@ use crate::listing::{
   Cursor, Order, QueryParseResult, WhereClause, build_filter_where_clause, limit_or_default,
   parse_and_sanitize_query,
 };
-use crate::table_metadata::{TableMetadata, TableOrViewMetadata};
+use crate::schema_metadata::{TableMetadata, TableOrViewMetadata};
 
 #[derive(Debug, Serialize, TS)]
 #[ts(export)]
@@ -44,13 +44,13 @@ pub async fn list_rows_handler(
   } = parse_and_sanitize_query(raw_url_query.as_deref())
     .map_err(|err| Error::Precondition(format!("Invalid query '{err}': {raw_url_query:?}")))?;
 
-  let (table_metadata, table_or_view_metadata): (
+  let (schema_metadata, table_or_view_metadata): (
     Option<Arc<TableMetadata>>,
     Arc<dyn TableOrViewMetadata + Sync + Send>,
   ) = {
-    if let Some(table_metadata) = state.table_metadata().get(&table_name) {
-      (Some(table_metadata.clone()), table_metadata)
-    } else if let Some(view_metadata) = state.table_metadata().get_view(&table_name) {
+    if let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) {
+      (Some(schema_metadata.clone()), schema_metadata)
+    } else if let Some(view_metadata) = state.schema_metadata().get_view(&table_name) {
       (None, view_metadata)
     } else {
       return Err(Error::Precondition(format!(
@@ -117,7 +117,7 @@ pub async fn list_rows_handler(
     cursor: next_cursor,
     // NOTE: in the view case we don't have a good way of extracting the columns from the "CREATE
     // VIEW" query so we fall back to columns constructed from the returned data.
-    columns: match table_metadata {
+    columns: match schema_metadata {
       Some(ref metadata) if metadata.schema.virtual_table => {
         // Virtual TABLE case.
         columns
@@ -273,7 +273,7 @@ mod tests {
       .unwrap();
     assert_eq!(cnt, 1);
 
-    state.table_metadata().invalidate_all().await.unwrap();
+    state.schema_metadata().invalidate_all().await.unwrap();
 
     let (data, cols) = fetch_rows(
       conn,

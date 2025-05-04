@@ -20,8 +20,8 @@ mod listing;
 mod migrations;
 mod queue;
 mod scheduler;
+mod schema_metadata;
 mod server;
-mod table_metadata;
 mod transaction;
 mod value_notifier;
 
@@ -66,8 +66,8 @@ pub mod api {
   pub use crate::email::{Email, EmailError};
   pub use crate::migrations::new_unique_migration_filename;
   pub use crate::records::json_schema::build_api_json_schema;
+  pub use crate::schema_metadata::SchemaMetadataCache;
   pub use crate::server::{InitArgs, init_app_state, serve};
-  pub use crate::table_metadata::TableMetadataCache;
 
   pub use trailbase_schema::json_schema::JsonSchemaMode;
 }

@@ -352,7 +352,7 @@ impl SqliteLogLayer {
         } else {
           rusqlite::types::Value::Null
         },
-        // TODO: we're yet not writing extra JSON data to the data field.
+        // TODO: we're not (yet) writing extra JSON data to the data field.
       ))?;
     }
 

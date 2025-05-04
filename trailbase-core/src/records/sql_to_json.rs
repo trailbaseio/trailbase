@@ -5,7 +5,7 @@ use trailbase_schema::sqlite::Column;
 use trailbase_schema::sqlite::ColumnOption;
 use trailbase_sqlite::rows::value_to_json;
 
-use crate::table_metadata::JsonColumnMetadata;
+use crate::schema_metadata::JsonColumnMetadata;
 
 #[derive(Debug, Error)]
 pub enum JsonError {
@@ -157,7 +157,7 @@ mod tests {
   use super::*;
   use crate::app_state::*;
   use crate::constants::USER_TABLE;
-  use crate::table_metadata::{TableMetadata, lookup_and_parse_table_schema};
+  use crate::schema_metadata::{TableMetadata, lookup_and_parse_table_schema};
 
   #[tokio::test]
   async fn test_read_rows() {

@@ -3,7 +3,7 @@ use trailbase_schema::sqlite::ColumnOption;
 
 use crate::config::{ConfigError, proto};
 use crate::records::record_api::validate_rule;
-use crate::table_metadata::{TableMetadataCache, TableOrViewMetadata};
+use crate::schema_metadata::{SchemaMetadataCache, TableOrViewMetadata};
 
 fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
   if name.is_empty() {
@@ -22,7 +22,7 @@ fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
 }
 
 pub(crate) fn validate_record_api_config(
-  tables: &TableMetadataCache,
+  schemas: &SchemaMetadataCache,
   api_config: &proto::RecordApiConfig,
 ) -> Result<String, ConfigError> {
   let ierr = |msg: &str| Err(ConfigError::Invalid(msg.to_string()));
@@ -37,13 +37,13 @@ pub(crate) fn validate_record_api_config(
   };
 
   let metadata: std::sync::Arc<dyn TableOrViewMetadata> =
-    if let Some(metadata) = tables.get(table_name) {
+    if let Some(metadata) = schemas.get_table(table_name) {
       if metadata.schema.temporary {
         return ierr("Record APIs must not reference TEMPORARY tables");
       }
 
       metadata
-    } else if let Some(metadata) = tables.get_view(table_name) {
+    } else if let Some(metadata) = schemas.get_view(table_name) {
       if metadata.schema.temporary {
         return ierr("Record APIs must not reference TEMPORARY views");
       }
@@ -118,7 +118,7 @@ pub(crate) fn validate_record_api_config(
       ));
     }
 
-    let Some(foreign_table) = tables.get(foreign_table_name) else {
+    let Some(foreign_table) = schemas.get_table(foreign_table_name) else {
       return ierr(&format!(
         "{api_name} reference missing table: {foreign_table_name}"
       ));

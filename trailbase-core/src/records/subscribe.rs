@@ -23,7 +23,7 @@ use crate::AppState;
 use crate::auth::user::User;
 use crate::records::RecordApi;
 use crate::records::{Permission, RecordError};
-use crate::table_metadata::{TableMetadata, TableMetadataCache};
+use crate::schema_metadata::{SchemaMetadataCache, TableMetadata};
 use crate::value_notifier::Computed;
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
@@ -135,7 +135,7 @@ struct ManagerState {
   conn: trailbase_sqlite::Connection,
   /// Table metadata for mapping column indexes to column names needed for building JSON encoded
   /// records.
-  table_metadata: TableMetadataCache,
+  schema_metadata: SchemaMetadataCache,
   /// Record API configurations.
   record_apis: Computed<Vec<(String, RecordApi)>, crate::config::proto::Config>,
 
@@ -207,7 +207,7 @@ pub struct SubscriptionManager {
 
 struct ContinuationState {
   state: Arc<ManagerState>,
-  table_metadata: Option<Arc<TableMetadata>>,
+  schema_metadata: Option<Arc<TableMetadata>>,
   action: RecordAction,
   table_name: String,
   rowid: i64,
@@ -217,13 +217,13 @@ struct ContinuationState {
 impl SubscriptionManager {
   pub fn new(
     conn: trailbase_sqlite::Connection,
-    table_metadata: TableMetadataCache,
+    schema_metadata: SchemaMetadataCache,
     record_apis: Computed<Vec<(String, RecordApi)>, crate::config::proto::Config>,
   ) -> Self {
     return Self {
       state: Arc::new(ManagerState {
         conn,
-        table_metadata,
+        schema_metadata,
         record_apis,
 
         record_subscriptions: RwLock::new(HashMap::new()),
@@ -302,7 +302,7 @@ impl SubscriptionManager {
   fn hook_continuation(conn: &rusqlite::Connection, state: ContinuationState) {
     let ContinuationState {
       state,
-      table_metadata,
+      schema_metadata,
       table_name,
       action,
       rowid,
@@ -311,9 +311,9 @@ impl SubscriptionManager {
     let s = &state;
     let table_name = table_name.as_str();
 
-    // If table_metadata is missing, the config/schema must have changed, thus removing the
+    // If schema_metadata is missing, the config/schema must have changed, thus removing the
     // subscriptions.
-    let Some(table_metadata) = table_metadata else {
+    let Some(schema_metadata) = schema_metadata else {
       warn!("Table not found: {table_name}. Removing subscriptions");
 
       let mut record_subs = s.record_subscriptions.write();
@@ -333,7 +333,7 @@ impl SubscriptionManager {
     let record: Vec<(&str, &rusqlite::types::Value)> = record_values
       .iter()
       .enumerate()
-      .map(|(idx, v)| (table_metadata.schema.columns[idx].name.as_str(), v))
+      .map(|(idx, v)| (schema_metadata.schema.columns[idx].name.as_str(), v))
       .collect();
 
     // Build a JSON-encoded SQLite event (insert, update, delete).
@@ -488,7 +488,7 @@ impl SubscriptionManager {
 
           let state = ContinuationState {
             state: s.clone(),
-            table_metadata: s.table_metadata.get(table_name),
+            schema_metadata: s.schema_metadata.get_table(table_name),
             action,
             table_name: table_name.to_string(),
             rowid,
@@ -725,7 +725,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.table_metadata().invalidate_all().await.unwrap();
+    state.schema_metadata().invalidate_all().await.unwrap();
 
     // Register message table as record api with moderator read access.
     add_record_api_config(
@@ -969,7 +969,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.table_metadata().invalidate_all().await.unwrap();
+    state.schema_metadata().invalidate_all().await.unwrap();
 
     // Register message table as record api with moderator read access.
     add_record_api_config(

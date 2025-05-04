@@ -30,12 +30,12 @@ pub async fn read_files_handler(
   Path(table_name): Path<String>,
   Query(request): Query<ReadFilesRequest>,
 ) -> Result<Response, Error> {
-  let Some(table_metadata) = state.table_metadata().get(&table_name) else {
+  let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {
     return Err(Error::Precondition(format!("Table {table_name} not found")));
   };
   let pk_col = &request.pk_column;
 
-  let Some((_index, col)) = table_metadata.column_by_name(pk_col) else {
+  let Some((_index, col)) = schema_metadata.column_by_name(pk_col) else {
     return Err(Error::Precondition(format!("Missing column: {pk_col}")));
   };
 
@@ -43,14 +43,14 @@ pub async fn read_files_handler(
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
   }
 
-  let Some((index, file_col_metadata)) = table_metadata.column_by_name(&request.file_column_name)
+  let Some((index, file_col_metadata)) = schema_metadata.column_by_name(&request.file_column_name)
   else {
     return Err(Error::Precondition(format!(
       "Missing column: {}",
       request.file_column_name
     )));
   };
-  let Some(file_col_json_metadata) = table_metadata.json_metadata.columns[index].as_ref() else {
+  let Some(file_col_json_metadata) = schema_metadata.json_metadata.columns[index].as_ref() else {
     return Err(Error::Precondition(format!(
       "Not a JSON column: {}",
       request.file_column_name

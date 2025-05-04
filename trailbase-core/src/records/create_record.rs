@@ -223,7 +223,7 @@ mod test {
       .await
       .unwrap();
 
-    state.table_metadata().invalidate_all().await.unwrap();
+    state.schema_metadata().invalidate_all().await.unwrap();
 
     add_record_api_config(
       &state,

@@ -11,7 +11,7 @@ use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_pending_files};
 use crate::records::params::{FileMetadataContents, Params};
-use crate::table_metadata::{JsonColumnMetadata, TableMetadata, TableMetadataCache};
+use crate::schema_metadata::{JsonColumnMetadata, SchemaMetadataCache, TableMetadata};
 
 #[derive(Debug, thiserror::Error)]
 pub enum QueryError {
@@ -43,11 +43,11 @@ pub(crate) struct ExpandedTable {
 }
 
 pub(crate) fn expand_tables<T: AsRef<str>>(
-  table_metadata: &TableMetadataCache,
+  schema_metadata: &SchemaMetadataCache,
   table_name: &str,
   expand: &[T],
 ) -> Result<Vec<ExpandedTable>, RecordError> {
-  let Some(root_table) = table_metadata.get(table_name) else {
+  let Some(root_table) = schema_metadata.get_table(table_name) else {
     return Err(RecordError::ApiRequiresTable);
   };
 
@@ -75,7 +75,7 @@ pub(crate) fn expand_tables<T: AsRef<str>>(
       return Err(RecordError::ApiRequiresTable);
     };
 
-    let Some(foreign_table) = table_metadata.get(foreign_table_name) else {
+    let Some(foreign_table) = schema_metadata.get_table(foreign_table_name) else {
       return Err(RecordError::ApiRequiresTable);
     };
 
@@ -150,13 +150,13 @@ impl SelectQueryBuilder {
     pk_value: Value,
     expand: &[&str],
   ) -> Result<Vec<(Arc<TableMetadata>, trailbase_sqlite::Row)>, RecordError> {
-    let table_metadata = state.table_metadata();
+    let schema_metadata = state.schema_metadata();
 
-    let Some(main_table) = table_metadata.get(table_name) else {
+    let Some(main_table) = schema_metadata.get_table(table_name) else {
       return Err(RecordError::ApiRequiresTable);
     };
 
-    let expanded_tables = expand_tables(table_metadata, table_name, expand)?;
+    let expanded_tables = expand_tables(schema_metadata, table_name, expand)?;
     let sql = ReadRecordExpandedQueryTemplate {
       table_name,
       column_names,

@@ -76,7 +76,7 @@ pub async fn query_handler(
 
   // In the fallback case we always need to invalidate the cache.
   if must_invalidate_table_cache {
-    state.table_metadata().invalidate_all().await?;
+    state.schema_metadata().invalidate_all().await?;
   }
 
   let batched_rows = batched_rows_result.map_err(|err| Error::BadRequest(err.into()))?;

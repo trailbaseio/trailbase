@@ -7,7 +7,7 @@ use trailbase_schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{NamedParams, Value};
 
 use crate::records::RecordApi;
-use crate::table_metadata::{self, JsonColumnMetadata, TableMetadata};
+use crate::schema_metadata::{self, JsonColumnMetadata, TableMetadata};
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ParamsError {
@@ -32,7 +32,7 @@ pub enum ParamsError {
   #[error("Parse float error: {0}")]
   ParseFloat(#[from] std::num::ParseFloatError),
   #[error("Json validation error: {0}")]
-  JsonValidation(#[from] table_metadata::JsonSchemaError),
+  JsonValidation(#[from] schema_metadata::JsonSchemaError),
   #[error("Json serialization error: {0}")]
   JsonSerialization(Arc<serde_json::Error>),
   #[error("Json schema error: {0}")]
@@ -522,7 +522,7 @@ mod tests {
   use super::*;
   use crate::constants::USER_TABLE;
   use crate::records::test_utils::json_row_from_value;
-  use crate::table_metadata::TableMetadata;
+  use crate::schema_metadata::TableMetadata;
   use crate::util::id_to_b64;
 
   #[tokio::test]
