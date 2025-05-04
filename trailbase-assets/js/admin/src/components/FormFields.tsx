@@ -494,10 +494,24 @@ export function unsetOrNotEmptyValidator() {
       if (value === undefined) return undefined;
 
       if (!value) {
-        if (import.meta.env.DEV) {
-          return `Must not be empty. Undefined: ${value === undefined}`;
-        }
         return "Must not be empty";
+      }
+    },
+  };
+}
+
+export function unsetOrValidUrl() {
+  return {
+    onChange: ({ value }: { value: string | undefined }) => {
+      if (value === undefined) return undefined;
+
+      try {
+        new URL(value);
+      } catch (e) {
+        if (e instanceof TypeError) {
+          return `${e.message}: '${value}'`;
+        }
+        return `${e}: '${value}'`;
       }
     },
   };

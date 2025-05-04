@@ -511,10 +511,17 @@ pub(crate) fn validate_config(
     return Err(ConfigError::Invalid(msg.into()));
   }
 
-  let Some(app_name) = &config.server.application_name else {
+  // Check server settings.
+  let Some(ref app_name) = config.server.application_name else {
     return ierr("Missing application name");
   };
   validate_application_name(app_name)?;
+
+  if let Some(ref site_url) = config.server.site_url {
+    if let Err(err) = url::Url::parse(site_url) {
+      return ierr(format!("Failed to parse site_url '{site_url}': {err}"));
+    }
+  }
 
   // Check RecordApis.
   //

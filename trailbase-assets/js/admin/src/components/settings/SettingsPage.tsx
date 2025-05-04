@@ -20,8 +20,10 @@ import { showToast } from "@/components/ui/toast";
 import { Config, ServerConfig } from "@proto/config";
 import {
   notEmptyValidator,
+  unsetOrValidUrl,
   buildOptionalNumberFormField,
   buildTextFormField,
+  buildOptionalTextFormField,
   gapStyle,
 } from "@/components/FormFields";
 import { Header } from "@/components/Header";
@@ -96,8 +98,8 @@ function ServerSettings(props: CommonProps) {
             </div>
 
             <div>
-              <form.Field name="siteUrl" validators={notEmptyValidator()}>
-                {buildTextFormField({
+              <form.Field name="siteUrl" validators={unsetOrValidUrl()}>
+                {buildOptionalTextFormField({
                   label: () => <div class={labelWidth}>Site URL</div>,
                   info: (
                     <p>
