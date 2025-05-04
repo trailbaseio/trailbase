@@ -1,3 +1,33 @@
+## v0.11.0
+
+* Support SQLite transactions from JS/TS, e.g.:
+  ```ts
+    import { transaction, Transaction } from "../trailbase.js";
+
+    await transaction((tx: Transaction) => {
+      tx.execute("INSERT INTO 'table0' (v) VALUES (5)", []);
+      tx.execute("INSERT INTO 'table1' (v) VALUES (23)", []);
+      tx.commit();
+    });
+  ```
+  WARN: This will block the event-loop until a lock on the underlying database
+  connection can be acquired. This may become a bottleneck if there's a lot of
+  write congestion. The API is already async to transparently update the
+  implementation in the future.
+* Update rusqlite to v0.35. On of the major changes is that rusqlite will no
+  longer quietly ignore statements beyond the first. This makes a lot of sense
+  but is a breaking change, if you were previously relying on this this odd
+  behavior.
+* Overhaul JS runtime integration: separate crate, unified execution model, use
+  kanal and more tests.
+* Added `trailbase_sqlite::Connection::write_lock()` API to get a lock on the
+  underlying connection to support JS transactions in a way that is compatible
+  with realtime subscriptions w/o blocking the SQLite writer thread for
+  extended periods of time while deferring control to JS.
+* Fix benign double slash in some urls.
+* Minor: improve internal migration writer.
+* Update other dependencies.
+
 ## v0.10.1
 
 * Further refine SQLite execution model.
