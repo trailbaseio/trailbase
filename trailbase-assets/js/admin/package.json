@@ -22,7 +22,7 @@
     "@kobalte/core": "^0.13.9",
     "@kobalte/utils": "^0.9.1",
     "@nanostores/persistent": "^1.0.0",
-    "@nanostores/solid": "^0.5.0",
+    "@nanostores/solid": "^1.0.0",
     "@solid-primitives/memo": "^1.4.2",
     "@solidjs/router": "^0.15.3",
     "@tanstack/solid-form": "^1.9.0",
@@ -47,7 +47,7 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.25.1",
+    "@eslint/js": "^9.26.0",
     "@iconify-json/tabler": "^1.2.17",
     "@solidjs/testing-library": "^0.8.10",
     "@tailwindcss/typography": "^0.5.16",
@@ -57,7 +57,7 @@
     "@types/leaflet": "^1.9.17",
     "@types/wicg-file-system-access": "^2023.10.6",
     "autoprefixer": "^10.4.21",
-    "eslint": "^9.25.1",
+    "eslint": "^9.26.0",
     "eslint-plugin-solid": "^0.14.5",
     "eslint-plugin-tailwindcss": "^3.18.0",
     "globals": "^16.0.0",
