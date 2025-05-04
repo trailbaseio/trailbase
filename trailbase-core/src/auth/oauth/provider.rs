@@ -65,12 +65,13 @@ pub trait OAuthProvider {
   fn settings(&self) -> Result<OAuthClientSettings, AuthError>;
 
   fn oauth_client(&self, state: &AppState) -> Result<OAuthClient, AuthError> {
-    let redirect_url: Url = Url::parse(&format!(
-      "{site}/{AUTH_API_PATH}/oauth/{name}/callback",
-      site = state.site_url(),
-      name = self.name()
-    ))
-    .map_err(|err| AuthError::FailedDependency(err.into()))?;
+    let redirect_url: Url = state
+      .site_url()
+      .join(&format!(
+        "/{AUTH_API_PATH}/oauth/{name}/callback",
+        name = self.name()
+      ))
+      .map_err(|err| AuthError::FailedDependency(err.into()))?;
 
     let settings = self.settings()?;
     if settings.client_id.is_empty() {

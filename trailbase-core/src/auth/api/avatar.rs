@@ -14,7 +14,7 @@ use crate::auth::util::user_by_id;
 use crate::constants::{AVATAR_TABLE, RECORD_API_PATH};
 use crate::util::{assert_uuidv7_version, id_to_b64};
 
-async fn get_avatar_url(state: &AppState, user: &DbUser) -> Option<String> {
+async fn get_avatar_url(state: &AppState, user: &DbUser) -> Option<url::Url> {
   lazy_static! {
     static ref QUERY: String =
       format!(r#"SELECT EXISTS(SELECT user FROM "{AVATAR_TABLE}" WHERE user = $1)"#);
@@ -32,12 +32,14 @@ async fn get_avatar_url(state: &AppState, user: &DbUser) -> Option<String> {
     .unwrap_or(false);
 
   if has_avatar {
-    let site = state.site_url();
     let record_user_id = id_to_b64(&user.id);
     let col_name = "file";
-    return Some(format!(
-      "{site}/{RECORD_API_PATH}/{AVATAR_TABLE}/{record_user_id}/file/{col_name}"
-    ));
+    return state
+      .site_url()
+      .join(&format!(
+        "/{RECORD_API_PATH}/{AVATAR_TABLE}/{record_user_id}/file/{col_name}"
+      ))
+      .ok();
   }
 
   return None;
@@ -68,7 +70,7 @@ pub async fn get_avatar_url_handler(
   // TODO: Allow a configurable fallback url.
   let avatar_url = get_avatar_url(&state, &db_user)
     .await
-    .or(db_user.provider_avatar_url);
+    .map_or_else(|| db_user.provider_avatar_url, |url| Some(url.to_string()));
 
   // TODO: Maybe return a JSON response with url if content-type is JSON.
   return match avatar_url {
@@ -288,11 +290,11 @@ mod tests {
       .to_str()
       .unwrap();
 
+    let mut _url = url::Url::parse(location).unwrap();
     assert_eq!(
       location,
       format!(
-        "{site}/{RECORD_API_PATH}/{AVATAR_COLLECTION_NAME}/{record_id_b64}/file/{COL_NAME}",
-        site = state.site_url(),
+        "https://test.org/{RECORD_API_PATH}/{AVATAR_COLLECTION_NAME}/{record_id_b64}/file/{COL_NAME}",
         record_id_b64 = uuid_to_b64(&record_id),
       )
     );

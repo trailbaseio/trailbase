@@ -74,7 +74,7 @@ pub(super) fn router() -> Router<crate::AppState> {
   //    * refresh-token (no CSRF, safe side-effect)
   //    * logout (no CSRF, safe side-effect)
   //    * change-password (no CSRF: requires old pass),
-  //    * change-email (TODO: CSRF: requires old email so only targeted),
+  //    * change-email (CSRF: requires old email so only targeted),
   //    * delete-user (technically CSRF: however, currently DELETE method)
   //
   //  Avatar life-cycle: read+update are handled as record APIs.

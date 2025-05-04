@@ -22,7 +22,7 @@ use crate::value_notifier::{Computed, ValueNotifier};
 struct InternalState {
   data_dir: DataDir,
   public_dir: Option<PathBuf>,
-  address: String,
+  site_url: Computed<url::Url, Config>,
   dev: bool,
   demo: bool,
 
@@ -74,6 +74,8 @@ impl AppState {
   pub(crate) fn new(args: AppStateArgs) -> Self {
     let config = ValueNotifier::new(args.config);
 
+    let site_url = Computed::new(&config, move |c| build_site_url(c, &args.address));
+
     let record_apis = {
       let schema_metadata_clone = args.schema_metadata.clone();
       let conn_clone = args.conn.clone();
@@ -109,7 +111,7 @@ impl AppState {
       state: Arc::new(InternalState {
         data_dir: args.data_dir,
         public_dir: args.public_dir,
-        address: args.address,
+        site_url,
         dev: args.dev,
         demo: args.demo,
         oauth: Computed::new(&config, |c| {
@@ -233,11 +235,8 @@ impl AppState {
       .collect();
   }
 
-  // TODO: Turn this into a parsed url::Url.
-  pub fn site_url(&self) -> String {
-    self
-      .access_config(|c| c.server.site_url.clone())
-      .unwrap_or_else(|| format!("http://{}", self.state.address))
+  pub fn site_url(&self) -> Arc<url::Url> {
+    return self.state.site_url.load().clone();
   }
 
   pub(crate) fn mailer(&self) -> Arc<Mailer> {
@@ -344,6 +343,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     // Construct a fabricated config for tests and make sure it's valid.
     let mut config = Config::new_with_custom_defaults();
 
+    config.server.site_url = Some("https://test.org".to_string());
     config.email.smtp_host = Some("smtp.test.org".to_string());
     config.email.smtp_port = Some(587);
     config.email.smtp_username = Some("user".to_string());
@@ -429,11 +429,12 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     });
   }
 
+  let address = "localhost:1234";
   return Ok(AppState {
     state: Arc::new(InternalState {
       data_dir,
       public_dir: None,
-      address: "localhost:1234".to_string(),
+      site_url: Computed::new(&config, move |c| build_site_url(c, address)),
       dev: true,
       demo: false,
       oauth: Computed::new(&config, |c| {
@@ -536,4 +537,21 @@ pub(crate) fn build_objectstore(
   return Ok(Box::new(
     object_store::local::LocalFileSystem::new_with_prefix(data_dir.uploads_path())?,
   ));
+}
+
+fn build_site_url(c: &Config, address: &str) -> url::Url {
+  let fallback = url::Url::parse(&format!("http://{address}")).expect("startup");
+
+  if let Some(ref site_url) = c.server.site_url {
+    match url::Url::parse(site_url) {
+      Ok(url) => {
+        return url;
+      }
+      Err(err) => {
+        error!("Failed to parse site_url '{site_url}' from config: {err}");
+      }
+    };
+  }
+
+  return fallback;
 }

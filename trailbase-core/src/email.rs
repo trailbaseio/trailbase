@@ -223,13 +223,19 @@ impl Email {
 fn get_sender(state: &AppState) -> Result<Mailbox, EmailError> {
   let (sender_address, sender_name) =
     state.access_config(|c| (c.email.sender_address.clone(), c.email.sender_name.clone()));
-  // TODO: Have a better default sender, e.g. derive from SITE_URL.
-  let address = sender_address.unwrap_or_else(|| "admin@localhost".to_string());
+  let address = sender_address.unwrap_or_else(|| fallback_sender(&state.site_url()));
 
   if let Some(ref name) = sender_name {
     return Ok(format!("{} <{}>", name, address).parse::<Mailbox>()?);
   }
   return Ok(address.parse::<Mailbox>()?);
+}
+
+fn fallback_sender(site_url: &url::Url) -> String {
+  if let Some(host) = site_url.host() {
+    return format!("noreply@{}", host);
+  }
+  return "noreply@localhost".to_string();
 }
 
 #[derive(Clone)]
@@ -434,5 +440,12 @@ pub mod testing {
       assert_eq!(email.subject, "Reset your Password for TrailBase");
       assert!(email.body.contains(code));
     }
+  }
+
+  #[test]
+  fn test_fallback_sender() {
+    let url = url::Url::parse("https://test.org").unwrap();
+    let sender = fallback_sender(&url);
+    assert_eq!("noreply@test.org", sender);
   }
 }

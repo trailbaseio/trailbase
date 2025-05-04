@@ -61,8 +61,6 @@ pub async fn list_users_handler(
 ) -> Result<Json<ListUsersResponse>, Error> {
   let conn = state.user_conn();
 
-  // TODO: we should probably return an error if the query parsing fails rather than quietly
-  // falling back to defaults.
   let QueryParseResult {
     params: filter_params,
     cursor,

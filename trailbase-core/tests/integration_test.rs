@@ -42,7 +42,7 @@ async fn test_record_apis() {
     tls,
   } = Server::init(ServerOptions {
     data_dir: DataDir(data_dir.path().to_path_buf()),
-    address: "".to_string(),
+    address: "localhost:4041".to_string(),
     admin_address: None,
     public_dir: None,
     dev: false,
