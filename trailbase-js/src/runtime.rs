@@ -10,6 +10,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::OnceLock;
 use tokio::sync::oneshot;
+use tokio::task::LocalSet;
 use tokio::time::Duration;
 use trailbase_sqlite::Params;
 use trailbase_sqlite::connection::LockGuard;
@@ -188,14 +189,14 @@ impl RuntimeState {
                   .expect("startup"),
               );
 
-              let mut js_runtime = match Self::init_runtime(index, tokio_runtime.clone()) {
+              let js_runtime = match Self::init_runtime(index, tokio_runtime.clone()) {
                 Ok(js_runtime) => js_runtime,
                 Err(err) => {
                   panic!("Failed to init v8 runtime on thread {index}: {err}");
                 }
               };
 
-              event_loop(&mut js_runtime, receiver, shared_receiver);
+              event_loop(tokio_runtime, js_runtime, receiver, shared_receiver);
             });
           })
           .collect();
@@ -320,7 +321,8 @@ fn drain_filter<T>(v: &mut Vec<T>, mut f: impl FnMut(&T) -> bool) -> Vec<T> {
 
 /// The main event-loop running for every isolate/worker.
 fn event_loop(
-  runtime: &mut Runtime,
+  tokio_runtime: Rc<tokio::runtime::Runtime>,
+  mut js_runtime: Runtime,
   private_recv: kanal::AsyncReceiver<Message>,
   shared_recv: kanal::AsyncReceiver<Message>,
 ) {
@@ -331,13 +333,15 @@ fn event_loop(
     pump_v8_message_loop: true,
   };
 
-  runtime.tokio_runtime().block_on(async {
+  let local = LocalSet::new();
+
+  local.spawn_local(async move {
     let mut completers: Vec<Box<dyn Completer>> = vec![];
 
     loop {
       // In the future, once stabilized, we should use `Vec::drain_filter`.
-      for completer in drain_filter(&mut completers, |completer| completer.is_ready(runtime)) {
-        completer.resolve(runtime).await;
+      for completer in drain_filter(&mut completers, |completer| completer.is_ready(&mut js_runtime)) {
+        completer.resolve(&mut js_runtime).await;
       }
 
       let listen_for_messages = async || {
@@ -350,7 +354,7 @@ fn event_loop(
       // Either pump or wait for a new private or shared message.
       tokio::select! {
         // Keep pumping while there are still futures (HTTP requests) that need completing.
-        result = runtime.await_event_loop(OPTS, DURATION), if !completers.is_empty() => {
+        result = js_runtime.await_event_loop(OPTS, DURATION), if !completers.is_empty() => {
           if let Err(err) = result{
             error!("JS event loop: {err}");
           }
@@ -362,14 +366,21 @@ fn event_loop(
                 // Prevent module loads from blocking up the event-loop for ever. This could happen if a
                 // top-level call triggers a recursive call to the isolate, while event loop is blocked up
                 // awaiting this very `load_module_async` call.
-                let Ok(Ok(module_handle)) =
-                tokio::time::timeout(MODULE_LOAD_TIMEOUT, runtime.load_module_async(&module)).await else {
-                  continue;
+                let module_handle = match tokio::time::timeout(MODULE_LOAD_TIMEOUT, js_runtime.load_module_async(&module)).await {
+                  Ok(Ok(module_handle)) => module_handle,
+                  Ok(Err(err)) => {
+                    error!("Loading JS module failed: {err}");
+                    continue;
+                  },
+                  Err(_) => {
+                    error!("Loading JS module timed out");
+                    continue;
+                  },
                 };
 
-                f(Some(&module_handle), runtime)
+                f(Some(&module_handle), &mut js_runtime)
               } else {
-                f(None, runtime)
+                f(None, &mut js_runtime)
               }
             }
           };
@@ -381,6 +392,8 @@ fn event_loop(
       }
     }
   });
+
+  tokio_runtime.block_on(local);
 }
 
 // NOTE: Repeated runtime initialization, e.g. in a multi-threaded context, leads to segfaults.
@@ -491,22 +504,40 @@ pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlit
 
     let current_transaction: Rc<Mutex<Option<OwnedTransaction>>> = Rc::new(Mutex::new(None));
     let current_transaction_clone = current_transaction.clone();
-    runtime.register_function("transaction_begin", move |args: &[serde_json::Value]| {
+    runtime.register_async_function("transaction_begin", move |args: Vec<serde_json::Value>| {
       assert_eq!(args.len(), 0);
       assert!(current_transaction_clone.lock().is_none());
 
-      let lock = OwnedLock::new(conn.clone(), |owner| owner.write_lock());
-      let tx = OwnedTransaction::try_new(MutBorrow::new(OwnedLockWrapper(lock)), |lock| {
-        lock
-          .borrow_mut()
-          .0
-          .with_dependent_mut(|_owner, depdendent| depdendent.transaction())
-      })
-      .map_err(error_mapper)?;
+      let conn = conn.clone();
+      let get_lock = async move || {
+        loop {
+          if let Ok(lock) = OwnedLock::try_new(conn.clone(), |owner| {
+            owner
+              .try_write_lock_for(Duration::from_micros(50))
+              .ok_or("timeout")
+          }) {
+            return lock;
+          }
 
-      *current_transaction_clone.lock() = Some(tx);
+          tokio::time::sleep(Duration::from_micros(150)).await;
+        }
+      };
 
-      return Ok(serde_json::Value::Null);
+      let current_transaction = current_transaction_clone.clone();
+      return Box::pin(async move {
+        let lock = get_lock().await;
+        let tx = OwnedTransaction::try_new(MutBorrow::new(OwnedLockWrapper(lock)), |lock| {
+          lock
+            .borrow_mut()
+            .0
+            .with_dependent_mut(|_owner, depdendent| depdendent.transaction())
+        })
+        .map_err(error_mapper)?;
+
+        *current_transaction.lock() = Some(tx);
+
+        return Ok(serde_json::Value::Null);
+      });
     })?;
 
     let current_transaction_clone = current_transaction.clone();
@@ -1084,12 +1115,34 @@ mod tests {
         }
 
         export async function test_transaction_no_commit() : Promise<number> {
-          return await transaction((tx: Transaction) => {
-            return tx.query("SELECT COUNT(*) FROM 'table'", [])[0][0];
+          return await transaction((tx: Transaction) : number => {
+            const count = tx.query("SELECT COUNT(*) FROM 'table'", [])[0][0];
+
+            // Uncommitted edit:
+            tx.execute("INSERT INTO 'table' (v0, v1) VALUES (?1, ?2)", ["baz", "7"]);
+
+            return count;
           });
+        }
+
+        export function get_constant() : number {
+          return 5;
         }
       "#,
       );
+
+      let (sender_id, receiver_id) = oneshot::channel();
+      handle
+        .send_to_any_isolate(build_call_sync_js_function_message::<i64>(
+          Some(module.clone()),
+          "get_constant",
+          Vec::<serde_json::Value>::new(),
+          sender_id,
+        ))
+        .await
+        .unwrap();
+
+      assert!(receiver_id.await.unwrap().unwrap() == 5);
 
       let (sender, receiver) = oneshot::channel();
       handle
@@ -1118,9 +1171,39 @@ mod tests {
 
       assert_eq!(3, receiver.await.unwrap().unwrap());
 
-      // Finally acquire a lock. This would block for ever if it was still held by the transactions
-      // above.
-      let _ = conn.write_lock();
+      // Acquire a lock. This would block for ever if it was still held by the transactions above.
+      let guard = conn.write_lock();
+
+      // Holding the above lock will block further transaction. Make sure the isolate can still
+      // make progress.
+      let (sender, receiver) = oneshot::channel();
+      handle
+        .send_to_any_isolate(build_call_async_js_function_message::<i64>(
+          Some(module.clone()),
+          "test_transaction_no_commit",
+          Vec::<serde_json::Value>::new(),
+          sender,
+        ))
+        .await
+        .unwrap();
+
+      let (sender_id, receiver_id) = oneshot::channel();
+      handle
+        .send_to_any_isolate(build_call_sync_js_function_message::<i64>(
+          Some(module.clone()),
+          "get_constant",
+          Vec::<serde_json::Value>::new(),
+          sender_id,
+        ))
+        .await
+        .unwrap();
+
+      assert_eq!(5, receiver_id.await.unwrap().unwrap());
+
+      // Drop the lock.
+      let _ = drop(guard);
+
+      assert_eq!(3, receiver.await.unwrap().unwrap());
     }
   }
 }

@@ -192,6 +192,15 @@ impl Connection {
     };
   }
 
+  #[inline]
+  pub fn try_write_lock_for(&self, duration: tokio::time::Duration) -> Option<LockGuard<'_>> {
+    return self
+      .conns
+      .0
+      .try_write_for(duration)
+      .map(|guard| LockGuard { guard });
+  }
+
   /// Call a function in background thread and get the result
   /// asynchronously.
   ///

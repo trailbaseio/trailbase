@@ -749,7 +749,7 @@ export class Transaction {
 /// when there's a lot of write congestion. In the future, we should update the
 /// implementation to be async.
 export async function transaction<T>(f: (tx: Transaction) => T): Promise<T> {
-  rustyscript.functions.transaction_begin();
+  await rustyscript.async_functions.transaction_begin();
 
   const tx = new Transaction();
   try {
