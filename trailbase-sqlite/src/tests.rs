@@ -148,18 +148,22 @@ async fn close_failure_test() {
     .await
     .unwrap();
 
-  assert!(match conn.close().await.unwrap_err() {
-    crate::Error::Close(e) => {
-      e == rusqlite::Error::SqliteFailure(
-        ffi::Error {
-          code: ErrorCode::DatabaseBusy,
-          extended_code: 5,
-        },
-        Some("unable to close due to unfinalized statements or unfinished backups".to_string()),
-      )
-    }
-    _ => false,
-  });
+  let err = conn.close().await.unwrap_err();
+  assert!(
+    match &err {
+      crate::Error::Close(e) => {
+        *e == rusqlite::Error::SqliteFailure(
+          ffi::Error {
+            code: ErrorCode::DatabaseBusy,
+            extended_code: 5,
+          },
+          Some("unable to close due to unfinalized statements or unfinished backups".to_string()),
+        )
+      }
+      _ => false,
+    },
+    "Error: {err:?}"
+  );
 }
 
 #[tokio::test]

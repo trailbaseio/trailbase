@@ -48,7 +48,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 enum Message {
   RunMut(Box<dyn FnOnce(&mut rusqlite::Connection) + Send + 'static>),
   RunConst(Box<dyn FnOnce(&rusqlite::Connection) + Send + 'static>),
-  Close(oneshot::Sender<std::result::Result<(), rusqlite::Error>>),
+  Terminate,
 }
 
 #[derive(Clone)]
@@ -461,48 +461,22 @@ impl Connection {
   ///
   /// Will return `Err` if the underlying SQLite close call fails.
   pub async fn close(self) -> Result<()> {
-    // Returns true if connection was successfully closed.
-    let closer = async |s: &Sender<Message>| -> std::result::Result<bool, rusqlite::Error> {
-      let (sender, receiver) = oneshot::channel::<std::result::Result<(), rusqlite::Error>>();
-      if s.send(Message::Close(sender)).is_err() {
-        // If the channel is closed on the other side, it means the connection closed successfully
-        // This is a safeguard against calling close on a `Copy` of the connection
-        return Ok(false);
-      }
-
-      let Ok(result) = receiver.await else {
-        // If we get a RecvError at this point, it also means the channel closed in the meantime
-        // we can assume the connection is closed
-        return Ok(false);
-      };
-
-      // Return the error from `conn.close()` if any.
-      result?;
-
-      return Ok(true);
-    };
+    let _ = self.writer.send(Message::Terminate);
+    while self.reader.send(Message::Terminate).is_ok() {
+      // Continue to close readers while the channel is alive.
+    }
 
     let mut errors = vec![];
-    if let Err(err) = closer(&self.writer).await {
-      errors.push(Error::Close(err));
-    };
-
-    loop {
-      match closer(&self.reader).await {
-        Ok(closed) => {
-          if !closed {
-            break;
-          }
-        }
-        Err(err) => {
-          errors.push(Error::Close(err));
-        }
-      }
+    let conns: Vec<_> = std::mem::take(&mut self.conns.0.write());
+    for conn in conns {
+      if let Err((_, err)) = conn.close() {
+        errors.push(err);
+      };
     }
 
     if !errors.is_empty() {
-      warn!("Closing connection: {errors:?}");
-      return Err(errors.swap_remove(0));
+      debug!("Closing connection: {errors:?}");
+      return Err(Error::Close(errors.swap_remove(0)));
     }
 
     return Ok(());
@@ -516,8 +490,6 @@ impl Debug for Connection {
 }
 
 fn event_loop(id: usize, conns: Arc<LockedConnections>, receiver: Receiver<Message>) {
-  const BUG_TEXT: &str = "bug in trailbase-sqlite, please report";
-
   while let Ok(message) = receiver.recv() {
     match message {
       Message::RunConst(f) => {
@@ -528,20 +500,7 @@ fn event_loop(id: usize, conns: Arc<LockedConnections>, receiver: Receiver<Messa
         let mut lock = conns.0.write();
         f(&mut lock[0])
       }
-      Message::Close(ch) => {
-        let mut lock = conns.0.write();
-        let conns: &mut Vec<rusqlite::Connection> = &mut lock;
-        if conns.is_empty() {
-          break;
-        }
-
-        let conn = conns.swap_remove(0);
-
-        match conn.close() {
-          Ok(v) => ch.send(Ok(v)).expect(BUG_TEXT),
-          Err((_conn, e)) => ch.send(Err(e)).expect(BUG_TEXT),
-        };
-
+      Message::Terminate => {
         return;
       }
     };
