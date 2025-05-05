@@ -101,6 +101,10 @@ pub fn build_js(path: impl AsRef<Path>) -> Result<()> {
   let out_dir = std::env::var("OUT_DIR").unwrap();
   let _install_output = if out_dir.contains("target/package") {
     pnpm_run(&["--dir", &path, "install", "--ignore-workspace"])?
+  } else if cfg!(windows) {
+    // We're having parallel installs into ./node_modules/.pnpm for trailbase-assets,
+    // trailbase-runtime, ... To avoid "ERR_PNPM_EBUSY" on windows avoid shared workspace installs.
+    pnpm_run(&["--dir", &path, "install", "--ignore-workspace"])?
   } else {
     pnpm_run(&["--dir", &path, "install"])?
   };
