@@ -8,16 +8,16 @@ use serde::Serialize;
 use std::borrow::Cow;
 use trailbase_sqlite::Value;
 
+use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::listing::{
   Order, QueryParseResult, WhereClause, build_filter_where_clause, limit_or_default,
   parse_and_sanitize_query,
 };
-use crate::records::query_builder::ExpandedTable;
+use crate::records::query_builder::{ExpandedTable, expand_tables};
 use crate::records::sql_to_json::{row_to_json, row_to_json_expand, rows_to_json_expand};
 use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;
-use crate::{app_state::AppState, records::query_builder::expand_tables};
 
 /// JSON response containing the listed records.
 #[derive(Debug, Serialize)]
@@ -177,7 +177,15 @@ pub async fn list_records_handler(
         }
       }
 
-      expand_tables(state.schema_metadata(), table_name, expand)?
+      expand_tables(
+        state.schema_metadata(),
+        |column_name| {
+          api
+            .column_index_by_name(column_name)
+            .map(|idx| &api.columns()[idx])
+        },
+        expand,
+      )?
     }
     None => vec![],
   };
@@ -380,8 +388,14 @@ mod tests {
       .await
       .unwrap();
 
-    let cache = SchemaMetadataCache::new(conn.clone()).await.unwrap();
-    let expanded_tables = expand_tables(&cache, "table", &["index"]).unwrap();
+    let schema_metadata = SchemaMetadataCache::new(conn.clone()).await.unwrap();
+    let table_metadata = schema_metadata.get_table("table").unwrap();
+    let expanded_tables = expand_tables(
+      &schema_metadata,
+      |column_name| table_metadata.column_by_name(column_name).map(|(_, c)| c),
+      &["index"],
+    )
+    .unwrap();
 
     assert_eq!(expanded_tables.len(), 1);
     assert_eq!(expanded_tables[0].local_column_name, "index");

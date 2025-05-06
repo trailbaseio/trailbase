@@ -42,15 +42,11 @@ pub(crate) struct ExpandedTable {
   pub foreign_column_name: String,
 }
 
-pub(crate) fn expand_tables<T: AsRef<str>>(
+pub(crate) fn expand_tables<'a, 'b, T: AsRef<str>>(
   schema_metadata: &SchemaMetadataCache,
-  table_name: &str,
-  expand: &[T],
+  root_column_by_name: impl Fn(&'a str) -> Option<&'b Column>,
+  expand: &'a [T],
 ) -> Result<Vec<ExpandedTable>, RecordError> {
-  let Some(root_table) = schema_metadata.get_table(table_name) else {
-    return Err(RecordError::ApiRequiresTable);
-  };
-
   let mut expanded_tables = Vec::<ExpandedTable>::with_capacity(expand.len());
 
   for col_name in expand {
@@ -58,8 +54,8 @@ pub(crate) fn expand_tables<T: AsRef<str>>(
     if col_name.is_empty() {
       continue;
     }
-    let Some((_index, column)) = root_table.column_by_name(col_name) else {
-      return Err(RecordError::ApiRequiresTable);
+    let Some(column) = root_column_by_name(col_name) else {
+      return Err(RecordError::Internal("Missing column".into()));
     };
 
     // FIXME: This only expand FKs expressed as column constraints missing table constraints.
@@ -72,7 +68,7 @@ pub(crate) fn expand_tables<T: AsRef<str>>(
       .iter()
       .find_or_first(|o| matches!(o, ColumnOption::ForeignKey { .. }))
     else {
-      return Err(RecordError::ApiRequiresTable);
+      return Err(RecordError::Internal("not a foreign key".into()));
     };
 
     let Some(foreign_table) = schema_metadata.get_table(foreign_table_name) else {
@@ -80,7 +76,7 @@ pub(crate) fn expand_tables<T: AsRef<str>>(
     };
 
     let Some(foreign_pk_column_idx) = foreign_table.record_pk_column else {
-      return Err(RecordError::ApiRequiresTable);
+      return Err(RecordError::Internal("invalid PK".into()));
     };
 
     let foreign_pk_column = &foreign_table.schema.columns[foreign_pk_column_idx].name;
@@ -123,9 +119,14 @@ struct ReadRecordQueryTemplate<'a> {
 
 pub(crate) struct SelectQueryBuilder;
 
+pub(crate) struct ExpandedSelectQueryResult {
+  pub(crate) root: trailbase_sqlite::Row,
+  pub(crate) foreign_rows: Vec<(Arc<TableMetadata>, trailbase_sqlite::Row)>,
+}
+
 impl SelectQueryBuilder {
   pub(crate) async fn run(
-    state: &AppState,
+    conn: &trailbase_sqlite::Connection,
     table_name: &str,
     column_names: &[&str],
     pk_column: &str,
@@ -139,48 +140,44 @@ impl SelectQueryBuilder {
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
 
-    return Ok(state.conn().read_query_row(sql, [pk_value]).await?);
+    return Ok(conn.read_query_row(sql, [pk_value]).await?);
   }
 
   pub(crate) async fn run_expanded(
-    state: &AppState,
+    conn: &trailbase_sqlite::Connection,
     table_name: &str,
     column_names: &[&str],
     pk_column: &str,
     pk_value: Value,
-    expand: &[&str],
-  ) -> Result<Vec<(Arc<TableMetadata>, trailbase_sqlite::Row)>, RecordError> {
-    let schema_metadata = state.schema_metadata();
-
-    let Some(main_table) = schema_metadata.get_table(table_name) else {
-      return Err(RecordError::ApiRequiresTable);
-    };
-
-    let expanded_tables = expand_tables(schema_metadata, table_name, expand)?;
+    expanded_tables: &[ExpandedTable],
+  ) -> Result<Option<ExpandedSelectQueryResult>, RecordError> {
     let sql = ReadRecordExpandedQueryTemplate {
       table_name,
       column_names,
       pk_column_name: pk_column,
-      expanded_tables: &expanded_tables,
+      expanded_tables,
     }
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
 
-    let Some(mut row) = state.conn().read_query_row(sql, [pk_value]).await? else {
-      return Ok(vec![]);
+    let Some(mut row) = conn.read_query_row(sql, [pk_value]).await? else {
+      return Ok(None);
     };
 
-    let mut result = Vec::with_capacity(expanded_tables.len() + 1);
-    let mut curr = row.split_off(column_names.len());
-    result.push((main_table, row));
+    let mut foreign_rows: Vec<(Arc<TableMetadata>, trailbase_sqlite::Row)> =
+      Vec::with_capacity(expanded_tables.len());
 
-    for expanded in expanded_tables {
-      let next = curr.split_off(expanded.num_columns);
-      result.push((expanded.metadata, curr));
+    let mut curr = row.split_off(column_names.len());
+    for expanded_table in expanded_tables {
+      let next = curr.split_off(expanded_table.num_columns);
+      foreign_rows.push((expanded_table.metadata.clone(), curr));
       curr = next;
     }
 
-    return Ok(result);
+    return Ok(Some(ExpandedSelectQueryResult {
+      root: row,
+      foreign_rows,
+    }));
   }
 }
 

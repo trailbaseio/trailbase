@@ -34,7 +34,7 @@ struct RecordApiSchema {
   user_id_columns: Vec<usize>,
 
   // Helpers
-  name_to_index: HashMap<String, usize>,
+  column_name_to_index: HashMap<String, usize>,
   named_params_template: NamedParams,
 }
 
@@ -56,7 +56,7 @@ impl RecordApiSchema {
     let has_file_columns = !find_file_column_indexes(&json_column_metadata).is_empty();
     let user_id_columns = find_user_id_foreign_key_columns(&columns, USER_TABLE);
 
-    let name_to_index = HashMap::<String, usize>::from_iter(
+    let column_name_to_index = HashMap::<String, usize>::from_iter(
       columns
         .iter()
         .enumerate()
@@ -81,7 +81,7 @@ impl RecordApiSchema {
       json_column_metadata,
       has_file_columns,
       user_id_columns,
-      name_to_index,
+      column_name_to_index,
       named_params_template,
     });
   }
@@ -108,7 +108,7 @@ impl RecordApiSchema {
     let has_file_columns = !find_file_column_indexes(&json_column_metadata).is_empty();
     let user_id_columns = find_user_id_foreign_key_columns(&columns, USER_TABLE);
 
-    let name_to_index = HashMap::<String, usize>::from_iter(
+    let column_name_to_index = HashMap::<String, usize>::from_iter(
       columns
         .iter()
         .enumerate()
@@ -123,7 +123,7 @@ impl RecordApiSchema {
       json_column_metadata,
       has_file_columns,
       user_id_columns,
-      name_to_index,
+      column_name_to_index,
       named_params_template: NamedParams::new(),
     });
   }
@@ -365,7 +365,7 @@ impl RecordApi {
 
   #[inline]
   pub fn column_index_by_name(&self, key: &str) -> Option<usize> {
-    return self.state.schema.name_to_index.get(key).copied();
+    return self.state.schema.column_name_to_index.get(key).copied();
   }
 
   pub fn id_to_sql(&self, id: &str) -> Result<Value, RecordError> {

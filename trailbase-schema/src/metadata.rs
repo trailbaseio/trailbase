@@ -21,7 +21,7 @@ pub enum JsonSchemaError {
   JsonSerialization(Arc<serde_json::Error>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum JsonColumnMetadata {
   SchemaName(String),
   Pattern(serde_json::Value),
@@ -52,7 +52,7 @@ impl JsonColumnMetadata {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct JsonMetadata {
   pub columns: Vec<Option<JsonColumnMetadata>>,
 
@@ -449,6 +449,14 @@ mod tests {
     let create_table_statement = sqlite3_parse_into_statement(&table_sql).unwrap().unwrap();
 
     let table: Table = create_table_statement.try_into().unwrap();
+
+    {
+      let metadata = TableMetadata::new(table.clone(), &[table.clone()], "_user");
+
+      assert_eq!(table_name, metadata.name());
+      assert_eq!("col1", metadata.columns().unwrap()[2].name);
+      assert_eq!(1, *metadata.name_to_index.get("col0").unwrap());
+    }
 
     {
       let view_name = "view_name";

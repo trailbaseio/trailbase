@@ -9,14 +9,17 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::records::files::read_file_into_response;
 use crate::records::query_builder::{
-  GetFileQueryBuilder, GetFilesQueryBuilder, SelectQueryBuilder,
+  ExpandedSelectQueryResult, GetFileQueryBuilder, GetFilesQueryBuilder, SelectQueryBuilder,
+  expand_tables,
 };
 use crate::records::sql_to_json::{row_to_json, row_to_json_expand};
 use crate::records::{Permission, RecordError};
 
 #[derive(Debug, Default, Deserialize)]
 pub struct ReadRecordQuery {
-  /// To allow expanding foreign keys.
+  /// Comma separated list of foreign key column names that should be expanded.
+  ///
+  /// Requires the API's configuration to explicitly allow expanding said columns.
   pub expand: Option<String>,
 }
 
@@ -61,25 +64,34 @@ pub async fn read_record_handler(
         }
       }
 
+      let expanded_tables = expand_tables(
+        state.schema_metadata(),
+        |column_name| {
+          api
+            .column_index_by_name(column_name)
+            .map(|idx| &api.columns()[idx])
+        },
+        &query_expand,
+      )?;
+
+      let Some(ExpandedSelectQueryResult { root, foreign_rows }) =
+        SelectQueryBuilder::run_expanded(
+          state.conn(),
+          api.table_name(),
+          &column_names,
+          &pk_column.name,
+          record_id,
+          &expanded_tables,
+        )
+        .await?
+      else {
+        return Err(RecordError::RecordNotFound);
+      };
+
       // Alloc a map from column name to value that's pre-filled with with Value::Null for all
       // expandable columns.
       let mut expand = expand.clone();
 
-      let mut rows = SelectQueryBuilder::run_expanded(
-        &state,
-        api.table_name(),
-        &column_names,
-        &pk_column.name,
-        record_id,
-        &query_expand,
-      )
-      .await?;
-
-      if rows.is_empty() {
-        return Err(RecordError::RecordNotFound);
-      }
-
-      let foreign_rows = rows.split_off(1);
       for (col_name, (metadata, row)) in std::iter::zip(query_expand, foreign_rows) {
         let foreign_value = row_to_json(
           &metadata.schema.columns,
@@ -96,7 +108,7 @@ pub async fn read_record_handler(
       row_to_json_expand(
         api.columns(),
         api.json_column_metadata(),
-        &rows[0].1,
+        &root,
         prefix_filter,
         Some(&expand),
       )
@@ -104,7 +116,7 @@ pub async fn read_record_handler(
     }
     Some(_) | None => {
       let Some(row) = SelectQueryBuilder::run(
-        &state,
+        state.conn(),
         api.table_name(),
         &column_names,
         &pk_column.name,
@@ -257,6 +269,7 @@ fn prefix_filter(col_name: &str) -> bool {
 mod test {
   use axum::Json;
   use axum::extract::{Path, Query, State};
+  use serde_json::json;
   use trailbase_schema::{FileUpload, FileUploadInput};
 
   use super::*;
@@ -273,7 +286,6 @@ mod test {
   use crate::records::delete_record::delete_record_handler;
   use crate::records::params::JsonRow;
   use crate::records::test_utils::*;
-  use crate::records::*;
   use crate::test::unpack_json_response;
   use crate::util::id_to_b64;
 
@@ -323,20 +335,16 @@ mod test {
     let password = "Secret!1!!";
 
     // Register message table as record api with moderator read access.
-    add_record_api(
-    &state,
-    "messages_api",
-    "message",
-      Acls {
-        authenticated: vec![PermissionFlag::Create, PermissionFlag::Read],
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some("messages_api".to_string()),
+        table_name: Some("message".to_string()),
+        acl_authenticated: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
+        read_access_rule: Some("(_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND user = _USER_.id))".to_string()),
         ..Default::default()
       },
-    AccessRules {
-      read: Some("(_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND user = _USER_.id))".to_string()),
-        ..Default::default()
-    },
-  )
-  .await.unwrap();
+    ).await.unwrap();
 
     let user_x_email = "user_x@test.com";
     let user_x = create_user_for_test(&state, user_x_email, password)
@@ -445,19 +453,19 @@ mod test {
 
     state.schema_metadata().invalidate_all().await.unwrap();
 
-    add_record_api(
+    add_record_api_config(
       &state,
-      api_name,
-      "table",
-      Acls {
-        world: vec![
-          PermissionFlag::Create,
-          PermissionFlag::Read,
-          PermissionFlag::Delete,
-        ],
+      RecordApiConfig {
+        name: Some(api_name.to_string()),
+        table_name: Some("table".to_string()),
+        acl_world: [
+          PermissionFlag::Create as i32,
+          PermissionFlag::Read as i32,
+          PermissionFlag::Delete as i32,
+        ]
+        .into(),
         ..Default::default()
       },
-      AccessRules::default(),
     )
     .await
     .unwrap();
@@ -511,7 +519,7 @@ mod test {
         Query(CreateRecordQuery::default()),
         None,
         Either::Json(
-          json_row_from_value(serde_json::json!({
+          json_row_from_value(json!({
             "index": column_value.to_string(),
           }))
           .unwrap()
@@ -560,7 +568,7 @@ mod test {
         Query(CreateRecordQuery::default()),
         None,
         Either::Json(
-          json_row_from_value(serde_json::json!({
+          json_row_from_value(json!({
             file_column: FileUploadInput {
               name: Some("foo".to_string()),
               filename: Some("bar".to_string()),
@@ -657,7 +665,7 @@ mod test {
         Query(CreateRecordQuery::default()),
         None,
         Either::Json(
-          json_row_from_value(serde_json::json!({
+          json_row_from_value(json!({
             files_column: vec![
             FileUploadInput {
               name: Some("foo0".to_string()),
@@ -750,17 +758,14 @@ mod test {
     let room1 = add_room(conn, "room1").await.unwrap();
     let password = "Secret!1!!";
 
-    add_record_api(
+    add_record_api_config(
       &state,
-      "messages_api",
-      view_name,
-      Acls {
-        authenticated: vec![PermissionFlag::Create, PermissionFlag::Read],
+      RecordApiConfig {
+        name: Some("messages_api".to_string()),
+        table_name: Some(view_name.to_string()),
+        acl_authenticated: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
+        read_access_rule: Some("(_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND user = _USER_.id))".to_string()),
         ..Default::default()
-      },
-      AccessRules {
-        read: Some("(_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND user = _USER_.id))".to_string()),
-          ..Default::default()
       },
     )
     .await.unwrap();
@@ -830,7 +835,7 @@ mod test {
     .await
     .unwrap();
 
-    let value = serde_json::json!({
+    let value = json!({
       "pid": 1,
       "drop": "foo".to_string(),
     });
@@ -869,7 +874,7 @@ mod test {
       Query(CreateRecordQuery::default()),
       None,
       Either::Json(
-        json_row_from_value(serde_json::json!({
+        json_row_from_value(json!({
           "pid": 2,
           "drop": "foo".to_string(),
           "index": "INACCESSIBLE".to_string(),
@@ -914,22 +919,19 @@ mod test {
 
     state.schema_metadata().invalidate_all().await.unwrap();
 
-    add_record_api(
+    add_record_api_config(
       &state,
-      API_NAME,
-      TABLE_NAME,
-      Acls {
-        world: vec![
-          PermissionFlag::Create,
-          PermissionFlag::Update,
-          PermissionFlag::Read,
-          PermissionFlag::Delete,
-        ],
-        ..Default::default()
-      },
-      AccessRules {
-        // update: Some("('col0' in _REQ_FIELDS_)".to_string()),
-        create: Some("('col0' NOT IN _REQ_FIELDS_)".to_string()),
+      RecordApiConfig {
+        name: Some(API_NAME.to_string()),
+        table_name: Some(TABLE_NAME.to_string()),
+        acl_world: [
+          PermissionFlag::Create as i32,
+          PermissionFlag::Update as i32,
+          PermissionFlag::Read as i32,
+          PermissionFlag::Delete as i32,
+        ]
+        .into(),
+        create_access_rule: Some("('col0' NOT IN _REQ_FIELDS_)".to_string()),
         ..Default::default()
       },
     )
@@ -942,7 +944,7 @@ mod test {
       Query(CreateRecordQuery::default()),
       None,
       Either::Json(
-        json_row_from_value(serde_json::json!({
+        json_row_from_value(json!({
           "col1": "value".to_string(),
           "NON_EXISTANT": "value".to_string(),
         }))
@@ -960,7 +962,7 @@ mod test {
         Query(CreateRecordQuery::default()),
         None,
         Either::Json(
-          json_row_from_value(serde_json::json!({
+          json_row_from_value(json!({
             "col0": "value".to_string(),
           }))
           .unwrap()
@@ -970,5 +972,98 @@ mod test {
       .await
       .is_err()
     );
+  }
+
+  #[tokio::test]
+  async fn test_expand_fields() {
+    let state = test_state(None).await.unwrap();
+
+    state
+      .conn()
+      .execute_batch(
+        r#"
+          CREATE TABLE parent (
+            id           INTEGER PRIMARY KEY NOT NULL,
+            value        TEXT NOT NULL
+          ) STRICT;
+          INSERT INTO parent (id, value) VALUES (1, 'first'), (2, 'second');
+
+          CREATE TABLE child (
+            id           INTEGER PRIMARY KEY NOT NULL,
+            parent       INTEGER REFERENCES parent NOT NULL
+          ) STRICT;
+          INSERT INTO child (id, parent) VALUES (1, 1), (2, 2);
+
+          CREATE VIEW child_view AS SELECT * FROM child;
+       "#,
+      )
+      .await
+      .unwrap();
+
+    state.schema_metadata().invalidate_all().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some("child_api".to_string()),
+        table_name: Some("child".to_string()),
+        acl_world: [PermissionFlag::Read as i32].into(),
+        expand: vec!["parent".to_string()],
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    let expected = json!({
+      "id": 1,
+      "parent": {
+        "id": 1,
+        "data": {
+          "id": 1,
+          "value":"first",
+        },
+      },
+    });
+
+    let Json(value) = read_record_handler(
+      State(state.clone()),
+      Path(("child_api".to_string(), "1".to_string())),
+      Query(ReadRecordQuery {
+        expand: Some("parent".to_string()),
+      }),
+      None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(value, expected);
+
+    // Test views.
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some("child_view_api".to_string()),
+        table_name: Some("child_view".to_string()),
+        acl_world: [PermissionFlag::Read as i32].into(),
+        expand: vec!["parent".to_string()],
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    let Json(value) = read_record_handler(
+      State(state.clone()),
+      Path(("child_view_api".to_string(), "1".to_string())),
+      Query(ReadRecordQuery {
+        expand: Some("parent".to_string()),
+      }),
+      None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(value, expected);
   }
 }
