@@ -11,6 +11,7 @@ import { createForm } from "@tanstack/solid-form";
 
 import {
   buildOptionalNumberFormField,
+  buildOptionalBoolFormField,
   buildSecretFormField,
   buildOptionalTextFormField,
   type FormStateT,
@@ -320,7 +321,7 @@ function AuthSettingsForm(props: {
       <div class="flex flex-col gap-4">
         <Card>
           <CardHeader>
-            <h2>Token Settings</h2>
+            <h2>Auth Settings</h2>
           </CardHeader>
 
           <CardContent>
@@ -346,6 +347,21 @@ function AuthSettingsForm(props: {
                     <p>
                       RefreshToken TTL. Older tokens are invalid. A refresh
                       token can only be renewed by users logging in anew.
+                    </p>
+                  ),
+                })}
+              </form.Field>
+
+              <form.Field name="disablePasswordAuth">
+                {buildOptionalBoolFormField({
+                  label: () => (
+                    <div class={labelWidth}>Disable Password Auth</div>
+                  ),
+                  info: (
+                    <p>
+                      When disabled new users can only sign up via OAuth.
+                      Existing users will can continue to sign in using
+                      password-based auth.
                     </p>
                   ),
                 })}

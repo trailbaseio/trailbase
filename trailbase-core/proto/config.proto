@@ -55,9 +55,15 @@ message OAuthProviderConfig {
 }
 
 message AuthConfig {
+  /// Time-to-live in seconds for auth tokens. Default: 1h.
   optional int64 auth_token_ttl_sec = 1;
+  /// Time-to-live in seconds for refresh tokens. Default: 30 days.
   optional int64 refresh_token_ttl_sec = 2;
 
+  /// Disables password-based sign-up.
+  optional bool disable_password_auth = 3;
+
+  /// Map of configured OAuth providers.
   map<string, OAuthProviderConfig> oauth_providers = 11;
 }
 

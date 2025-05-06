@@ -403,6 +403,30 @@ export function buildBoolFormField(props: { label: () => JSX.Element }) {
   );
 }
 
+export function buildOptionalBoolFormField(opts: {
+  label: () => JSX.Element;
+  info?: JSX.Element;
+}) {
+  return (field: () => FieldApiT<boolean | undefined>) => (
+    <div
+      class={`grid items-center ${gapStyle}`}
+      style={{ "grid-template-columns": "auto 1fr" }}
+    >
+      <Label class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+        {opts.label()}
+      </Label>
+
+      <Checkbox
+        checked={field().state.value}
+        onBlur={field().handleBlur}
+        onChange={field().handleChange}
+      />
+
+      <div class="col-start-2 text-sm">{opts?.info}</div>
+    </div>
+  );
+}
+
 interface SelectFieldOpts {
   label: () => JSX.Element;
   disabled?: boolean;

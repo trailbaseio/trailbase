@@ -53,6 +53,11 @@ pub async fn register_user_handler(
   State(state): State<AppState>,
   Form(request): Form<RegisterUserRequest>,
 ) -> Result<Response, AuthError> {
+  let disabled = state.access_config(|c| c.auth.disable_password_auth.unwrap_or(false));
+  if disabled {
+    return Err(AuthError::Forbidden);
+  }
+
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
   if let Err(_err) = validate_passwords(

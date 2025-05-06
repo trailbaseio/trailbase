@@ -331,6 +331,7 @@ export function RecordApiSettingsForm(props: {
           tableName: tableName,
           aclWorld: [],
           aclAuthenticated: [],
+          excludedColumns: [],
           expand: [],
         } as RecordApiConfig),
       onSubmit: async ({ value }: { value: RecordApiConfig }) => {

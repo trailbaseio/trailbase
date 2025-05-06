@@ -5,6 +5,7 @@ use askama::Template;
 pub struct LoginTemplate<'a> {
   pub state: String,
   pub alert: &'a str,
+  pub enable_registration: bool,
 }
 
 #[derive(Template)]

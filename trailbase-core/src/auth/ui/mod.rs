@@ -1,6 +1,6 @@
 use askama::Template;
 use axum::Router;
-use axum::extract::Query;
+use axum::extract::{Query, State};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::routing::get;
 use reqwest::StatusCode;
@@ -11,6 +11,7 @@ use trailbase_assets::auth::{
   ResetPasswordRequestTemplate, ResetPasswordUpdateTemplate,
 };
 
+use crate::AppState;
 use crate::auth::User;
 
 #[derive(Debug, Default, Deserialize)]
@@ -21,7 +22,11 @@ pub struct LoginQuery {
   alert: Option<String>,
 }
 
-async fn ui_login_handler(Query(query): Query<LoginQuery>, user: Option<User>) -> Response {
+async fn ui_login_handler(
+  State(state): State<AppState>,
+  Query(query): Query<LoginQuery>,
+  user: Option<User>,
+) -> Response {
   if user.is_some() {
     // Already logged in.
     return Redirect::to("/_/auth/profile").into_response();
@@ -41,6 +46,7 @@ async fn ui_login_handler(Query(query): Query<LoginQuery>, user: Option<User>) -
   let html = LoginTemplate {
     state: form_state,
     alert: query.alert.as_deref().unwrap_or_default(),
+    enable_registration: !state.access_config(|c| c.auth.disable_password_auth.unwrap_or(false)),
   }
   .render();
 
@@ -195,7 +201,7 @@ async fn ui_logout_handler(Query(query): Query<LogoutQuery>) -> Redirect {
 }
 
 /// HTML endpoints of core auth functionality.
-pub(crate) fn auth_ui_router() -> Router<crate::AppState> {
+pub(crate) fn auth_ui_router() -> Router<AppState> {
   // Static assets for auth UI .
   let serve_auth_assets = AssetService::<trailbase_assets::AuthAssets>::with_parameters(
     // We want as little magic as possible. The only /_/auth/subpath that isn't SSR, is profile, so

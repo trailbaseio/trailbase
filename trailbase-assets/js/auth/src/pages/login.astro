@@ -58,9 +58,11 @@ const BASE_URL = import.meta.env.BASE_URL;
       </div>
 
       <div class="my-2 flex justify-between">
-        <a tabindex="4" type="button" href={`${BASE_URL}/register`} class:list={buttonVariants({ variant: "default" })}>
-          Register
-        </a>
+        {"{% if enable_registration -%}"}
+          <a tabindex="4" type="button" href={`${BASE_URL}/register`} class:list={buttonVariants({ variant: "default" })}>
+            Register
+          </a>
+        {"{%- endif %}"}
 
         <Button tabindex="3" variant="default" type="submit">
           Sign In
