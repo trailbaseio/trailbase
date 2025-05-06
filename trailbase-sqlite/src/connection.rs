@@ -424,8 +424,9 @@ impl Connection {
           let mut rows = stmt.raw_query();
           let row = rows.next()?;
 
-          match p.peek() {
-            Err(_) | Ok(None) => {
+          match p.peek()? {
+            Some(_) => {}
+            None => {
               if let Some(row) = row {
                 let cols: Arc<Vec<Column>> = Arc::new(columns(row.as_ref()));
 
@@ -435,11 +436,12 @@ impl Connection {
                 }
                 return Ok(Some(Rows(result, cols)));
               }
+
               return Ok(None);
             }
-            _ => {}
           }
         }
+
         return Ok(None);
       })
       .await;

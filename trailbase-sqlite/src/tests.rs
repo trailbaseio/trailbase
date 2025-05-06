@@ -76,9 +76,9 @@ async fn close_success_test() {
   conn
     .execute_batch(
       r#"
-      INSERT INTO 'test' (id) VALUES (1);
-      INSERT INTO 'test' (id) VALUES (2);
-    "#,
+        INSERT INTO 'test' (id) VALUES (1);
+        INSERT INTO 'test' (id) VALUES (2);
+      "#,
     )
     .await
     .unwrap();
@@ -277,16 +277,69 @@ async fn test_execute_and_query() {
   let rows = conn
     .execute_batch(
       r#"
-            CREATE TABLE foo (id INTEGER) STRICT;
-            INSERT INTO foo (id) VALUES (17);
-            SELECT * FROM foo;
-        "#,
+        CREATE TABLE foo (id INTEGER) STRICT;
+        INSERT INTO foo (id) VALUES (17);
+        SELECT * FROM foo;
+      "#,
     )
     .await
     .unwrap()
     .unwrap();
   assert_eq!(rows.len(), 1);
   assert_eq!(rows.0.get(0).unwrap().get::<i64>(0), Ok(17));
+}
+
+#[tokio::test]
+async fn test_execute_batch() {
+  let conn = Connection::open_in_memory().unwrap();
+  let _ = conn
+    .execute_batch(
+      r#"
+        CREATE TABLE parent (
+          id           INTEGER PRIMARY KEY NOT NULL,
+          value        TEXT NOT NULL
+        ) STRICT;
+
+        INSERT INTO parent (id, value) VALUES (1, 'first'), (2, 'second');
+
+        CREATE TABLE child (
+          id           INTEGER PRIMARY KEY NOT NULL,
+          parent       INTEGER REFERENCES parent NOT NULL
+        ) STRICT;
+
+        INSERT INTO child (id, parent) VALUES (1, 1), (2, 2);
+      "#,
+    )
+    .await
+    .unwrap();
+
+  let count = async |table: &str| -> i64 {
+    return conn
+      .query_row_f(format!("SELECT COUNT(*) FROM {table}"), (), |row| {
+        row.get(0)
+      })
+      .await
+      .unwrap()
+      .unwrap();
+  };
+
+  assert_eq!(2, count("parent").await);
+  assert_eq!(2, count("child").await);
+}
+
+#[tokio::test]
+async fn test_execute_batch_error() {
+  let conn = Connection::open_in_memory().unwrap();
+  let result = conn
+    .execute_batch(
+      r#"
+        CREATE TABLE parent (id INTEGER PRIMARY KEY NOT NULL) STRICT;
+        NOT VALID SQL;
+      "#,
+    )
+    .await;
+
+  assert!(result.is_err(), "{result:?}");
 }
 
 #[test]
@@ -297,9 +350,9 @@ fn test_locking() {
   let tx = lock.transaction().unwrap();
   tx.execute_batch(
     r#"
-        CREATE TABLE 'table' (id INTEGER PRIMARY KEY, name TEXT);
-        INSERT INTO 'table' (id, name) VALUES (1, 'Alice'), (2, 'Bob');
-      "#,
+      CREATE TABLE 'table' (id INTEGER PRIMARY KEY, name TEXT);
+      INSERT INTO 'table' (id, name) VALUES (1, 'Alice'), (2, 'Bob');
+    "#,
   )
   .unwrap();
   tx.commit().unwrap();
