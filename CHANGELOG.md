@@ -1,3 +1,9 @@
+## v0.11.1
+
+* While JS transactions are waiting for a DB lock, periodically yield back to
+  the event loop to allow it to make progress.
+* Allow using foreign key expansion on record APIs backed by `VIEW`s.
+
 ## v0.11.0
 
 * Support SQLite transactions from JS/TS, e.g.:
