@@ -49,6 +49,7 @@ export function LoginPage() {
               type="email"
               value={username()}
               placeholder="E-mail"
+              autocomplete="username"
               onKeyUp={(e: KeyboardEvent) => {
                 const target = e.currentTarget as HTMLInputElement;
                 setUsername(target.value);
@@ -63,6 +64,7 @@ export function LoginPage() {
               type="password"
               value={password()}
               placeholder="password"
+              autocomplete="current-password"
               onKeyUp={(e: KeyboardEvent) => {
                 const target = e.currentTarget as HTMLInputElement;
                 setPassword(target.value);
