@@ -4,8 +4,8 @@ import { TbUser } from "solid-icons/tb";
 import { type User } from "trailbase";
 
 import { urlSafeBase64ToUuid } from "@/lib/utils";
-import { client, $user } from "@/lib/fetch";
-import { Button } from "@/components/ui/button";
+import { $user } from "@/lib/fetch";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -83,14 +83,13 @@ export function AuthButton() {
         </Show>
 
         <DialogFooter>
-          <Button
-            type="Logout"
-            onClick={() => {
-              client.logout();
-            }}
+          <a
+            type="button"
+            href="/_/auth/logout?redirect_to=/_/admin/"
+            class={buttonVariants({ variant: "default" })}
           >
             Logout
-          </Button>
+          </a>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,11 +1,12 @@
 mod init;
 mod serve;
 
+use askama::Template;
 use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::handler::HandlerWithoutStateExt;
 use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
-use axum::response::{IntoResponse, Response};
+use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{RequestExt, Router};
 use log::*;
@@ -22,6 +23,7 @@ use tower_cookies::CookieManagerLayer;
 use tower_http::{cors, limit::RequestBodyLimitLayer, services::ServeDir, trace::TraceLayer};
 use tracing_subscriber::{filter, prelude::*};
 use trailbase_assets::AssetService;
+use trailbase_assets::auth::{LoginTemplate, redirect_to};
 
 use crate::admin;
 use crate::app_state::AppState;
@@ -263,13 +265,20 @@ impl Server {
           assert_admin_api_access,
         )),
       )
-      .nest_service(
-        "/_/admin",
-        AssetService::<trailbase_assets::AdminAssets>::with_parameters(
-          // SPA-style fallback.
-          Some(Box::new(|_| Some("index.html".to_string()))),
-          Some("index.html".to_string()),
-        ),
+      .nest(
+        "/_/admin/",
+        Router::new()
+          .fallback_service(
+            AssetService::<trailbase_assets::AdminAssets>::with_parameters(
+              // SPA-style fallback.
+              Some(Box::new(|_| Some("index.html".to_string()))),
+              Some("index.html".to_string()),
+            ),
+          )
+          .layer(middleware::from_fn_with_state(
+            state.clone(),
+            assert_admin_ui_access,
+          )),
       );
   }
 
@@ -395,6 +404,41 @@ async fn assert_admin_api_access(
   let expected_csrf = &user.csrf_token;
   if expected_csrf != received_csrf_token {
     return Err(AuthError::BadRequest("invalid CSRF token"));
+  }
+
+  return Ok(next.run(req).await);
+}
+
+async fn assert_admin_ui_access(
+  State(state): State<AppState>,
+  mut req: Request,
+  next: Next,
+) -> Result<Response, AuthError> {
+  let Some(user) = req
+    .extract_parts_with_state::<Option<User>, _>(&state)
+    .await?
+  else {
+    let html = LoginTemplate {
+      state: redirect_to(Some("/_/admin/")),
+      alert: "",
+      enable_registration: false,
+    }
+    .render();
+
+    return match html {
+      Ok(html) => Ok(Html(html).into_response()),
+      Err(err) => Ok(
+        (
+          StatusCode::INTERNAL_SERVER_ERROR,
+          format!("failed to render template: {err}"),
+        )
+          .into_response(),
+      ),
+    };
+  };
+
+  if !is_admin(&state, &user).await {
+    return Err(AuthError::Forbidden);
   }
 
   return Ok(next.run(req).await);
