@@ -38,7 +38,7 @@ async fn ui_login_handler(
     {response_type}
     {pkce_code_challenge}
     "#,
-    redirect_to = hidden_input("redirect_to", query.redirect_to.as_ref()),
+    redirect_to = redirect_to(query.redirect_to.as_ref()),
     response_type = hidden_input("response_type", query.response_type.as_ref()),
     pkce_code_challenge = hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref()),
   );
