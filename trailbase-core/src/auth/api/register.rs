@@ -10,7 +10,7 @@ use validator::ValidateEmail;
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
-use crate::auth::password::{hash_password, validate_passwords};
+use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::user::DbUser;
 use crate::auth::util::user_exists;
 use crate::constants::{PASSWORD_OPTIONS, USER_TABLE, VERIFICATION_CODE_LENGTH};
@@ -30,7 +30,7 @@ pub fn validate_and_normalize_email_address(address: &str) -> Result<String, Aut
 
   // TODO: detect and reject one-time burner email addresses.
 
-  return Ok(address.to_ascii_lowercase());
+  return Ok(address.trim().to_ascii_lowercase());
 }
 
 #[derive(Debug, Default, Deserialize, ToSchema)]
@@ -60,7 +60,7 @@ pub async fn register_user_handler(
 
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
-  if let Err(_err) = validate_passwords(
+  if let Err(_err) = validate_password_policy(
     &request.password,
     &request.password_repeat,
     &PASSWORD_OPTIONS,

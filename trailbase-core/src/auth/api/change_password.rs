@@ -1,4 +1,3 @@
-use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
   extract::{Query, State},
   response::Redirect,
@@ -9,7 +8,7 @@ use trailbase_sqlite::named_params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::auth::password::{hash_password, validate_passwords};
+use crate::auth::password::{hash_password, validate_password_policy, verify_password};
 use crate::auth::util::validate_redirects;
 use crate::auth::{AuthError, User};
 use crate::constants::{PASSWORD_OPTIONS, USER_TABLE};
@@ -53,7 +52,7 @@ pub async fn change_password_handler(
     Either::Form(req) => req,
   };
 
-  validate_passwords(
+  validate_password_policy(
     &request.new_password,
     &request.new_password_repeat,
     &PASSWORD_OPTIONS,
@@ -62,11 +61,7 @@ pub async fn change_password_handler(
   let db_user = user_by_id(&state, &user.uuid).await?;
 
   // Validate old password.
-  let parsed_hash = PasswordHash::new(&db_user.password_hash)
-    .map_err(|err| AuthError::Internal(err.to_string().into()))?;
-  Argon2::default()
-    .verify_password(request.old_password.as_bytes(), &parsed_hash)
-    .map_err(|_err| AuthError::Unauthorized)?;
+  verify_password(&db_user, &request.old_password)?;
 
   // NOTE: we're using the old_password_hash to prevent races between concurrent change requests
   // for the same user.

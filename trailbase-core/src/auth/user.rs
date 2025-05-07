@@ -47,6 +47,38 @@ impl DbUser {
     assert_eq!(uuid.get_version_num(), 7);
     return uuid;
   }
+
+  #[cfg(test)]
+  pub fn new_for_test(email: &str, password: &str) -> Self {
+    let now = std::time::SystemTime::now();
+    let timestamp = now.duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+
+    return Self {
+      id: uuid::Uuid::new_v7(uuid::timestamp::Timestamp::from_unix(
+        uuid::NoContext,
+        timestamp,
+        0,
+      ))
+      .into_bytes(),
+      email: email.to_string(),
+      password_hash: crate::auth::password::hash_password(password).unwrap(),
+      verified: true,
+      admin: false,
+      created: timestamp as i64,
+      updated: timestamp as i64,
+      email_verification_code: None,
+      email_verification_code_sent_at: None,
+      pending_email: None,
+      password_reset_code: None,
+      password_reset_code_sent_at: None,
+      authorization_code: None,
+      authorization_code_sent_at: None,
+      pkce_code_challenge: None,
+      provider_id: 0,
+      provider_user_id: None,
+      provider_avatar_url: None,
+    };
+  }
 }
 
 /// Representing an authenticated and *valid* user, as opposed to DbUser, which is merely an entry

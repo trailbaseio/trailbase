@@ -18,7 +18,7 @@ use crate::rand::generate_random_string;
 
 use crate::auth::AuthError;
 use crate::auth::api::register::validate_and_normalize_email_address;
-use crate::auth::password::{hash_password, validate_passwords};
+use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::util::user_by_email;
 
 const TTL_SEC: i64 = 3600;
@@ -131,7 +131,7 @@ pub async fn reset_password_update_handler(
     Either::Form(req) => req,
   };
 
-  validate_passwords(
+  validate_password_policy(
     &request.password,
     &request.password_repeat,
     &PASSWORD_OPTIONS,

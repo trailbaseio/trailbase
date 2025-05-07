@@ -8,8 +8,7 @@ use uuid::Uuid;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::auth::api::register::validate_and_normalize_email_address;
-use crate::auth::password::hash_password;
-use crate::auth::password::validate_passwords;
+use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::user::DbUser;
 use crate::auth::util::user_exists;
 use crate::constants::{PASSWORD_OPTIONS, USER_TABLE, VERIFICATION_CODE_LENGTH};
@@ -37,7 +36,7 @@ pub async fn create_user_handler(
 ) -> Result<Json<CreateUserResponse>, Error> {
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
-  validate_passwords(&request.password, &request.password, &PASSWORD_OPTIONS)?;
+  validate_password_policy(&request.password, &request.password, &PASSWORD_OPTIONS)?;
 
   let exists = user_exists(&state, &normalized_email).await?;
   if exists {
