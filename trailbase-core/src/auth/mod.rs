@@ -11,10 +11,10 @@ pub(crate) mod api;
 pub(crate) mod oauth;
 pub(crate) mod password;
 pub(crate) mod tokens;
+pub(crate) mod ui;
 pub(crate) mod util;
 
 mod error;
-mod ui;
 
 pub use api::reset_password::force_password_reset;
 pub use error::AuthError;
