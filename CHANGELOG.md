@@ -1,3 +1,11 @@
+## v0.11.2
+
+* Rate-limit failed login attempts to protect against brute force.
+* Add option to disallow password-based sign-up.
+* Fix 404 content-type.
+* Fix escaping of hidden form state in auth UI after moving to askama templates.
+* Update dependencies.
+
 ## v0.11.1
 
 * While JS transactions are waiting for a DB lock, periodically yield back to
