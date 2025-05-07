@@ -16,7 +16,7 @@ use crate::auth::api::register::validate_and_normalize_email_address;
 use crate::auth::password::verify_password;
 use crate::auth::tokens::{Tokens, mint_new_tokens};
 use crate::auth::user::DbUser;
-use crate::auth::util::{new_cookie, user_by_email, validate_redirects};
+use crate::auth::util::{new_cookie, remove_cookie, user_by_email, validate_redirects};
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, USER_TABLE, VERIFICATION_CODE_LENGTH,
 };
@@ -87,14 +87,19 @@ pub(crate) async fn login_handler(
   let response = match response_or {
     Ok(response) => response,
     Err(err) => {
-      let err_str = err.to_string();
       let err_response: Response = err.into_response();
-      if err_response.status().is_client_error() {
-        let err_msg = crate::util::urlencode(&format!(
-          "Login Failed [{}]: {err_str}",
-          err_response.status()
-        ));
-        return Ok(Redirect::to(&format!("/_/auth/login?alert={err_msg}")).into_response());
+      let status = err_response.status();
+      if status.is_client_error() {
+        // We also want to unset existing cookies.
+        remove_cookie(&cookies, COOKIE_AUTH_TOKEN);
+        remove_cookie(&cookies, COOKIE_REFRESH_TOKEN);
+
+        let url = format!(
+          "/_/auth/login?alert={msg}",
+          msg = crate::util::urlencode(&format!("Login Failed: {status}"))
+        );
+
+        return Ok(Redirect::to(&url).into_response());
       }
       return Ok(err_response);
     }

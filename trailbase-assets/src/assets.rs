@@ -1,6 +1,6 @@
 use axum::body::{Body, Bytes};
 use axum::http::{self, Request, StatusCode};
-use axum::response::{IntoResponse, Response};
+use axum::response::Response;
 use rust_embed::RustEmbed;
 use std::borrow::Cow;
 use std::convert::Infallible;
@@ -64,7 +64,11 @@ pub struct ServeFuture<E: RustEmbed> {
 
 impl<E: RustEmbed> ServeFuture<E> {
   fn not_found() -> Response<Body> {
-    return (StatusCode::NOT_FOUND, NOT_FOUND).into_response();
+    return Response::builder()
+      .status(StatusCode::NOT_FOUND)
+      .header(http::header::CONTENT_TYPE, "text/html")
+      .body(Body::from(NOT_FOUND))
+      .unwrap_or_default();
   }
 }
 
