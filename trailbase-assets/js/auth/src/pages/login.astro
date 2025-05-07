@@ -23,9 +23,7 @@ const BASE_URL = import.meta.env.BASE_URL;
       method="post"
       enctype="application/x-www-form-urlencoded"
     >
-      <div class="hidden">
-        {"{{ state }}"}
-      </div>
+      <div class="hidden" set:html={`{{ state | escape("none") }}`}></div>
 
       <div
         class="grid grid-cols-2 items-center gap-4"

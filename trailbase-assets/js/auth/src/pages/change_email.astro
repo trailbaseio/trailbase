@@ -20,9 +20,7 @@ const profilePageUrl = `${base}/profile`;
     method="post"
     enctype="application/x-www-form-urlencoded"
   >
-    <div class="hidden">
-      {"{{ state }}"}
-    </div>
+    <div class="hidden" set:html={`{{ state | escape("none") }}`} />
 
     <div
       class="my-4 grid grid-cols-2 items-center gap-4"
