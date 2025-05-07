@@ -11,7 +11,7 @@ pub fn hash_password(password: &str) -> Result<String, argon2::password_hash::Er
   return Ok(hash.to_string());
 }
 
-pub(super) fn hash_password_sqlite(context: &Context) -> rusqlite::Result<String> {
+pub(super) fn hash_password_sqlite(context: &Context) -> Result<String, Error> {
   #[cfg(debug_assertions)]
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));

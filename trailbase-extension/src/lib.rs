@@ -90,7 +90,9 @@ pub fn connect_sqlite(
   return Ok(conn);
 }
 
-pub fn sqlite3_extension_init(db: rusqlite::Connection) -> rusqlite::Result<rusqlite::Connection> {
+pub fn sqlite3_extension_init(
+  db: rusqlite::Connection,
+) -> Result<rusqlite::Connection, rusqlite::Error> {
   // WARN: Be careful with declaring INNOCUOUS. This allows these "app-defined functions" to run
   // even when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
   // GENERATED cols, ... as opposed to just top-level SELECTs.
@@ -222,20 +224,19 @@ extern "C" fn init_sqlean_and_vector_search(
 
 #[cfg(test)]
 mod test {
-  use super::*;
-
   use ::uuid::Uuid;
+  use rusqlite::Error;
+
+  use super::*;
 
   #[test]
   fn test_connect_and_extensions() {
     let conn = connect_sqlite(None, None).unwrap();
 
     let row = conn
-      .query_row(
-        "SELECT (uuid_v7())",
-        (),
-        |row| -> rusqlite::Result<[u8; 16]> { row.get(0) },
-      )
+      .query_row("SELECT (uuid_v7())", (), |row| -> Result<[u8; 16], Error> {
+        row.get(0)
+      })
       .unwrap();
 
     let uuid = Uuid::from_bytes(row);

@@ -2,34 +2,28 @@ use rusqlite::Error;
 use rusqlite::functions::Context;
 use validator::ValidateEmail;
 
-pub(super) fn is_email(context: &Context) -> rusqlite::Result<bool> {
+pub(super) fn is_email(context: &Context) -> Result<bool, Error> {
   #[cfg(debug_assertions)]
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
 
-  return match context.get_raw(0).as_str_or_null()? {
-    None => Ok(true),
-    Some(str) => Ok(str.validate_email()),
-  };
+  if let Some(str) = context.get_raw(0).as_str_or_null()? {
+    return Ok(str.validate_email());
+  }
+  return Ok(true);
 }
 
-pub(super) fn is_json(context: &Context) -> rusqlite::Result<bool> {
+pub(super) fn is_json(context: &Context) -> Result<bool, Error> {
   #[cfg(debug_assertions)]
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
 
-  return match context.get_raw(0).as_str_or_null()? {
-    None => Ok(true),
-    Some(str) => {
-      if serde_json::from_str::<serde_json::Value>(str).is_ok() {
-        Ok(true)
-      } else {
-        Ok(false)
-      }
-    }
-  };
+  if let Some(str) = context.get_raw(0).as_str_or_null()? {
+    return Ok(serde_json::from_str::<serde_json::Value>(str).is_ok());
+  }
+  return Ok(true);
 }
 
 #[cfg(test)]

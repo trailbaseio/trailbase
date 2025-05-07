@@ -4,7 +4,6 @@ use parking_lot::Mutex;
 use rusqlite::Error;
 use rusqlite::functions::Context;
 use std::collections::HashMap;
-use std::ffi;
 use std::sync::{Arc, LazyLock};
 
 pub type ValidationError = jsonschema::ValidationError<'static>;
@@ -35,13 +34,6 @@ impl SchemaEntry {
 
 static SCHEMA_REGISTRY: LazyLock<Mutex<HashMap<String, SchemaEntry>>> =
   LazyLock::new(|| Mutex::new(HashMap::<String, SchemaEntry>::new()));
-
-#[allow(unused)]
-fn cstr_to_string(ptr: *const ffi::c_char) -> String {
-  assert!(!ptr.is_null());
-  let cstr = unsafe { ffi::CStr::from_ptr(ptr) };
-  String::from_utf8_lossy(cstr.to_bytes()).to_string()
-}
 
 pub fn set_schemas(schema_entries: Option<Vec<(String, SchemaEntry)>>) {
   let mut lock = SCHEMA_REGISTRY.lock();
@@ -81,15 +73,7 @@ pub fn get_schemas() -> Vec<(String, serde_json::Value)> {
     .collect()
 }
 
-// fn get_text_or_null<'a>(context: &Context<'a>, idx: usize) -> Option<&'a str> {
-//   return context.get_raw(idx).as_str_or_null();
-// }
-//
-// fn get_text<'a>(context: &Context<'a>, idx: usize) -> rusqlite::Result<&'a str> {
-//   return context.get_raw(idx).as_str();
-// }
-
-pub(crate) fn jsonschema_by_name(context: &Context) -> rusqlite::Result<bool> {
+pub(crate) fn jsonschema_by_name(context: &Context) -> Result<bool, Error> {
   let schema_name = context.get_raw(0).as_str()?;
 
   // Get and parse the JSON contents. If it's invalid JSON to start with, there's not much
@@ -121,7 +105,7 @@ pub(crate) fn jsonschema_by_name(context: &Context) -> rusqlite::Result<bool> {
   return Ok(true);
 }
 
-pub(crate) fn jsonschema_by_name_with_extra_args(context: &Context) -> rusqlite::Result<bool> {
+pub(crate) fn jsonschema_by_name_with_extra_args(context: &Context) -> Result<bool, Error> {
   let schema_name = context.get_raw(0).as_str()?;
   let extra_args = context.get_raw(2).as_str()?;
 
@@ -155,7 +139,7 @@ pub(crate) fn jsonschema_by_name_with_extra_args(context: &Context) -> rusqlite:
 
 static SCHEMA_CACHE: LazyLock<Cache<String, Arc<Validator>>> = LazyLock::new(|| Cache::new(256));
 
-pub(crate) fn jsonschema_matches(context: &Context) -> rusqlite::Result<bool> {
+pub(crate) fn jsonschema_matches(context: &Context) -> Result<bool, Error> {
   // First, get and parse the JSON contents. If it's invalid JSON to start with, there's not much
   // we can validate.
   let Some(contents) = context.get_raw(1).as_str_or_null()? else {

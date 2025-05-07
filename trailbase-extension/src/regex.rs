@@ -11,7 +11,7 @@ static CACHE: LazyLock<Cache<String, Regex>> = LazyLock::new(|| Cache::new(256))
 ///
 /// NOTE: Sqlite supports `col REGEXP pattern` in expression, which requires a custom
 /// `regexp(pattern, col)` scalar function to be registered.
-pub(super) fn regexp(context: &Context) -> rusqlite::Result<bool> {
+pub(super) fn regexp(context: &Context) -> Result<bool, Error> {
   #[cfg(debug_assertions)]
   if context.len() != 2 {
     return Err(Error::InvalidParameterCount(context.len(), 2));
@@ -24,7 +24,7 @@ pub(super) fn regexp(context: &Context) -> rusqlite::Result<bool> {
 }
 
 #[inline]
-fn regexp_impl(re: &str, contents: Option<&str>) -> rusqlite::Result<bool> {
+fn regexp_impl(re: &str, contents: Option<&str>) -> Result<bool, Error> {
   let Some(contents) = contents else {
     return Ok(true);
   };

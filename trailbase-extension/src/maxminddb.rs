@@ -1,8 +1,7 @@
 use arc_swap::ArcSwap;
-use maxminddb::{MaxMindDbError, Reader};
+use maxminddb::{MaxMindDbError, Reader, geoip2::Country};
 use rusqlite::Error;
 use rusqlite::functions::Context;
-use rusqlite::types::ValueRef;
 use std::net::IpAddr;
 use std::path::Path;
 use std::sync::LazyLock;
@@ -22,37 +21,29 @@ pub fn has_geoip_db() -> bool {
   return READER.load().is_some();
 }
 
-pub(crate) fn geoip_country(context: &Context) -> rusqlite::Result<Option<String>> {
+pub(crate) fn geoip_country(context: &Context) -> Result<Option<String>, Error> {
   #[cfg(debug_assertions)]
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
 
-  return match context.get_raw(0) {
-    ValueRef::Null => Ok(None),
-    ValueRef::Text(ascii) => {
-      if ascii.is_empty() {
-        return Ok(None);
-      }
-
-      let text = String::from_utf8_lossy(ascii);
-      let client_ip: IpAddr = text.parse().map_err(|err| {
-        Error::UserFunctionError(format!("Parsing ip '{text:?}' failed: {err}").into())
-      })?;
-
-      if let Some(ref reader) = **READER.load() {
-        use maxminddb::geoip2::Country;
-        if let Ok(country) = reader.lookup::<Country>(client_ip) {
-          return Ok(country.and_then(|c| Some(c.country?.iso_code?.to_string())));
-        }
-      }
-
-      Ok(None)
-    }
-    arg => Err(Error::UserFunctionError(
-      format!("Expected text, got {}", arg.data_type()).into(),
-    )),
+  let Some(text) = context.get_raw(0).as_str_or_null()? else {
+    return Ok(None);
   };
+
+  if !text.is_empty() {
+    let client_ip: IpAddr = text.parse().map_err(|err| {
+      Error::UserFunctionError(format!("Parsing ip '{text:?}' failed: {err}").into())
+    })?;
+
+    if let Some(ref reader) = **READER.load() {
+      if let Ok(country) = reader.lookup::<Country>(client_ip) {
+        return Ok(country.and_then(|c| Some(c.country?.iso_code?.to_string())));
+      }
+    }
+  }
+
+  Ok(None)
 }
 
 #[cfg(test)]
