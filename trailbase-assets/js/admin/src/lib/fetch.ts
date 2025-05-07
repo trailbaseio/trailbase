@@ -27,7 +27,11 @@ function initClient(): Client {
   });
 
   // This will also trigger a logout in case of 401.
-  client.refreshAuthToken();
+  if (client.tokens() !== undefined) {
+    client.refreshAuthToken();
+  } else {
+    client.checkCookies();
+  }
 
   return client;
 }

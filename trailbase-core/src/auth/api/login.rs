@@ -161,6 +161,8 @@ pub(crate) async fn login_handler(
     };
   }
 
+  // WARN: adding a CSRF token to cookies would entirely defeat their purpose, i.e. a second secret
+  // that isn't automatically attached to cross-site requests.
   let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   cookies.add(new_cookie(
     COOKIE_AUTH_TOKEN,
