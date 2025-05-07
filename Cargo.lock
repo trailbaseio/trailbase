@@ -3543,12 +3543,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lru"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f8cc7106155f10bdf99a6f379688f543ad6596a415375b36a59a054ceda1198"
-
-[[package]]
 name = "lru-cache"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6949,8 +6943,8 @@ dependencies = [
  "base64 0.22.1",
  "jsonschema",
  "log",
- "lru",
  "maxminddb",
+ "mini-moka",
  "parking_lot",
  "rand 0.9.1",
  "rand_core 0.6.4",

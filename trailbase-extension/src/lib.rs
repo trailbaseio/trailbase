@@ -8,6 +8,7 @@ pub mod jsonschema;
 pub mod maxminddb;
 pub mod password;
 
+mod regex;
 mod uuid;
 mod validators;
 
@@ -166,7 +167,7 @@ pub fn sqlite3_extension_init(db: rusqlite::Connection) -> rusqlite::Result<rusq
     FunctionFlags::SQLITE_UTF8
       | FunctionFlags::SQLITE_DETERMINISTIC
       | FunctionFlags::SQLITE_INNOCUOUS,
-    validators::regexp,
+    regex::regexp,
   )?;
   db.create_scalar_function(
     "is_email",

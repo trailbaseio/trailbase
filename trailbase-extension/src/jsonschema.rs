@@ -1,13 +1,11 @@
 use jsonschema::Validator;
-use lru::LruCache;
+use mini_moka::sync::Cache;
 use parking_lot::Mutex;
 use rusqlite::Error;
 use rusqlite::functions::Context;
 use std::collections::HashMap;
 use std::ffi;
-use std::num::NonZeroUsize;
-use std::sync::Arc;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 pub type ValidationError = jsonschema::ValidationError<'static>;
 
@@ -155,11 +153,9 @@ pub(crate) fn jsonschema_by_name_with_extra_args(context: &Context) -> rusqlite:
   return Ok(true);
 }
 
-pub(crate) fn jsonschema_matches(context: &Context) -> rusqlite::Result<bool> {
-  type CacheType = LazyLock<Mutex<LruCache<String, Arc<Validator>>>>;
-  static SCHEMA_CACHE: CacheType =
-    LazyLock::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(128).expect("infallible"))));
+static SCHEMA_CACHE: LazyLock<Cache<String, Arc<Validator>>> = LazyLock::new(|| Cache::new(256));
 
+pub(crate) fn jsonschema_matches(context: &Context) -> rusqlite::Result<bool> {
   // First, get and parse the JSON contents. If it's invalid JSON to start with, there's not much
   // we can validate.
   let Some(contents) = context.get_raw(1).as_str_or_null()? else {
@@ -169,23 +165,20 @@ pub(crate) fn jsonschema_matches(context: &Context) -> rusqlite::Result<bool> {
     Error::UserFunctionError(format!("Invalid JSON: '{contents}' => {err}").into())
   })?;
 
-  let pattern = context.get_raw(0).as_str()?;
+  let pattern = context.get_raw(0).as_str()?.to_string();
 
   // Then get/build the schema validator for the given pattern.
-  let validator: Option<Arc<Validator>> = SCHEMA_CACHE.lock().get(pattern).cloned();
-  let valid = match validator {
+  let valid = match SCHEMA_CACHE.get(&pattern) {
     Some(validator) => validator.is_valid(&json),
     None => {
-      let schema = serde_json::from_str(pattern)
+      let schema = serde_json::from_str(&pattern)
         .map_err(|err| Error::UserFunctionError(format!("Invalid JSON Schema: {err}").into()))?;
       let validator = Validator::new(&schema).map_err(|err| {
         Error::UserFunctionError(format!("Failed to compile Schema: {err}").into())
       })?;
 
       let valid = validator.is_valid(&json);
-      SCHEMA_CACHE
-        .lock()
-        .put(pattern.to_string(), Arc::new(validator));
+      SCHEMA_CACHE.insert(pattern, Arc::new(validator));
       valid
     }
   };
