@@ -249,7 +249,7 @@ pub async fn login_with_password(
   let db_user: DbUser = user_by_email(state, normalized_email).await?;
 
   // Validate password.
-  verify_password(&db_user, password)?;
+  verify_password(&db_user, password, state.demo_mode())?;
 
   let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   let user_id = db_user.uuid();

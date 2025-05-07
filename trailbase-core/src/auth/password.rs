@@ -76,12 +76,12 @@ pub fn hash_password(password: &str) -> Result<String, AuthError> {
 
 /// Checks the given password against a known user. Will further ensure that the email was verified
 /// and rate limit attempts to protect against brute-force attacks.
-pub fn verify_password(db_user: &DbUser, password: &str) -> Result<(), AuthError> {
+pub fn verify_password(db_user: &DbUser, password: &str, is_demo: bool) -> Result<(), AuthError> {
   if !db_user.verified {
     return Err(AuthError::Unauthorized);
   }
   let attempts = ATTEMPTS.get(&db_user.email);
-  if attempts.as_ref().map(|a| a.tries).unwrap_or(0) >= 3 {
+  if !is_demo && attempts.as_ref().map(|a| a.tries).unwrap_or(0) >= 3 {
     return Err(AuthError::Unauthorized);
   }
 
@@ -116,12 +116,13 @@ mod tests {
     let password = "0123456789.";
     let db_user = DbUser::new_for_test("foo@test.org", password);
 
-    assert!(verify_password(&db_user, password).is_ok());
+    assert!(verify_password(&db_user, password, false).is_ok());
 
     // Lockout after 3 failed attempts.
-    assert!(verify_password(&db_user, "").is_err());
-    assert!(verify_password(&db_user, "mismatch").is_err());
-    assert!(verify_password(&db_user, "something else").is_err());
-    assert!(verify_password(&db_user, password).is_err());
+    assert!(verify_password(&db_user, "", false).is_err());
+    assert!(verify_password(&db_user, "mismatch", false).is_err());
+    assert!(verify_password(&db_user, "something else", false).is_err());
+    assert!(verify_password(&db_user, password, false).is_err());
+    assert!(verify_password(&db_user, password, true).is_ok());
   }
 }

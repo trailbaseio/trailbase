@@ -61,7 +61,7 @@ pub async fn change_password_handler(
   let db_user = user_by_id(&state, &user.uuid).await?;
 
   // Validate old password.
-  verify_password(&db_user, &request.old_password)?;
+  verify_password(&db_user, &request.old_password, state.demo_mode())?;
 
   // NOTE: we're using the old_password_hash to prevent races between concurrent change requests
   // for the same user.
