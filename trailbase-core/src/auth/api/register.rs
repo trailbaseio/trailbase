@@ -6,32 +6,15 @@ use lazy_static::lazy_static;
 use serde::Deserialize;
 use trailbase_sqlite::named_params;
 use utoipa::ToSchema;
-use validator::ValidateEmail;
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::user::DbUser;
-use crate::auth::util::user_exists;
+use crate::auth::util::{user_exists, validate_and_normalize_email_address};
 use crate::constants::{PASSWORD_OPTIONS, USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;
 use crate::rand::generate_random_string;
-
-/// Validates the given email addresses and returns a best-effort normalized address.
-///
-/// NOTE: That there's no robust way to detect equivalent addresses, default mappings are highly
-/// domain specific, e.g. most mail providers will treat emails as case insensitive and others have
-/// custom rules such as gmail stripping all "." and everything after and including "+". Trying to
-/// be overly smart is probably a recipe for disaster.
-pub fn validate_and_normalize_email_address(address: &str) -> Result<String, AuthError> {
-  if !address.validate_email() {
-    return Err(AuthError::BadRequest("Invalid email"));
-  }
-
-  // TODO: detect and reject one-time burner email addresses.
-
-  return Ok(address.trim().to_ascii_lowercase());
-}
 
 #[derive(Debug, Default, Deserialize, ToSchema)]
 pub struct RegisterUserRequest {

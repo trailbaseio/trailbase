@@ -7,6 +7,7 @@ use tower_cookies::{
   cookie::{self, SameSite},
 };
 use trailbase_sqlite::params;
+use validator::ValidateEmail;
 
 use crate::AppState;
 use crate::auth::AuthError;
@@ -14,6 +15,30 @@ use crate::auth::user::{DbUser, User};
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, SESSION_TABLE, USER_TABLE,
 };
+
+/// Strips plus-addressing, e.g. foo+spam@test.org becomes foo@test.org.
+#[allow(unused)]
+fn strip_plus_email_addressing(email_address: &str) -> String {
+  lazy_static! {
+    static ref PLUS_PATTERN: regex::Regex = regex::Regex::new("[+].*?@").expect("covered by tests");
+  };
+  return PLUS_PATTERN.replace(email_address, "@").to_string();
+}
+
+/// Validates the given email addresses and returns a best-effort normalized address.
+///
+/// NOTE: That there's no robust way to detect equivalent addresses, default mappings are highly
+/// domain specific, e.g. most mail providers will treat emails as case insensitive and others have
+/// custom rules such as gmail stripping all "." and everything after and including "+". Trying to
+/// be overly smart is probably a recipe for disaster.
+pub fn validate_and_normalize_email_address(email_address: &str) -> Result<String, AuthError> {
+  let email_address = email_address.trim().to_ascii_lowercase();
+  if !email_address.validate_email() {
+    return Err(AuthError::BadRequest("Invalid email"));
+  }
+
+  return Ok(email_address.to_string());
+}
 
 pub(crate) fn validate_redirects(
   state: &AppState,
@@ -218,4 +243,22 @@ pub(crate) fn derive_pkce_code_challenge(pkce_code_verifier: &str) -> String {
   sha.update(pkce_code_verifier);
   // NOTE: This is NO_PAD as per the spec.
   return BASE64_URL_SAFE_NO_PAD.encode(sha.finalize());
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_validate_email() {
+    let normalized = validate_and_normalize_email_address(" fOO@test.org   ").unwrap();
+    assert_eq!("foo@test.org", normalized);
+
+    assert!(validate_and_normalize_email_address("foo!test.org").is_err());
+
+    assert_eq!(
+      strip_plus_email_addressing("foo+spam@test.org"),
+      "foo@test.org"
+    );
+  }
 }

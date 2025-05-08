@@ -7,10 +7,9 @@ use uuid::Uuid;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::auth::api::register::validate_and_normalize_email_address;
 use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::user::DbUser;
-use crate::auth::util::user_exists;
+use crate::auth::util::{user_exists, validate_and_normalize_email_address};
 use crate::constants::{PASSWORD_OPTIONS, USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;
 use crate::rand::generate_random_string;
