@@ -418,6 +418,7 @@ async fn assert_admin_ui_access(
     .extract_parts_with_state::<Option<User>, _>(&state)
     .await?
   else {
+    // TODO: Maybe we could make it so only admins can log in.
     let html = LoginTemplate {
       state: redirect_to(Some("/_/admin/")),
       alert: "",
