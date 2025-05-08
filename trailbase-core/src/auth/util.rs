@@ -17,6 +17,8 @@ use crate::constants::{
 };
 
 /// Strips plus-addressing, e.g. foo+spam@test.org becomes foo@test.org.
+///
+/// NOTE: We're not currently using this, see argument on `validate_and_normalize_email_address`.
 #[allow(unused)]
 fn strip_plus_email_addressing(email_address: &str) -> String {
   lazy_static! {
@@ -25,12 +27,21 @@ fn strip_plus_email_addressing(email_address: &str) -> String {
   return PLUS_PATTERN.replace(email_address, "@").to_string();
 }
 
-/// Validates the given email addresses and returns a best-effort normalized address.
+/// Validates the given email addresses and returns a best-effort normalized address, .i.e. trim
+/// whitespaces and lower-case conversion.
 ///
-/// NOTE: That there's no robust way to detect equivalent addresses, default mappings are highly
-/// domain specific, e.g. most mail providers will treat emails as case insensitive and others have
-/// custom rules such as gmail stripping all "." and everything after and including "+". Trying to
-/// be overly smart is probably a recipe for disaster.
+/// We're deliberately do not try to collapse equivalent email addresses, e.g., plus addressing
+/// like "foo+spam@test.org". There's no robust way to do so, since different providers have
+/// different rules, e.g. GMail strips all periods.
+///
+/// Even if we could, it would be rude to reply on an address different than what the user
+/// provided, e.g. "foo+filter@test.org". Even if we did some equivalency checks, the original
+/// address should remain untouched as the primary means of contact.
+///
+/// Moreover, email addresses are never robust abuse detection. If you know about "plus addressing"
+/// you can also registers a domain and get infinite unique addresses or use burner email services.
+/// Instead, for critical use-cases one should rely on stronger IDs such as phone numbers or better
+/// photo ids.
 pub fn validate_and_normalize_email_address(email_address: &str) -> Result<String, AuthError> {
   let email_address = email_address.trim().to_ascii_lowercase();
   if !email_address.validate_email() {

@@ -8,7 +8,7 @@ use serde::Deserialize;
 use trailbase_assets::AssetService;
 use trailbase_assets::auth::{
   ChangeEmailTemplate, ChangePasswordTemplate, LoginTemplate, RegisterTemplate,
-  ResetPasswordRequestTemplate, ResetPasswordUpdateTemplate,
+  ResetPasswordRequestTemplate, ResetPasswordUpdateTemplate, hidden_input, redirect_to,
 };
 
 use crate::AppState;
@@ -232,18 +232,4 @@ pub(crate) fn auth_ui_router() -> Router<AppState> {
     .route("/_/auth/change_password", get(ui_change_password_handler))
     .route("/_/auth/change_email", get(ui_change_email_handler))
     .nest_service("/_/auth/", serve_auth_assets);
-}
-
-fn hidden_input(name: &str, value: Option<&String>) -> String {
-  if let Some(value) = value {
-    return format!(r#"<input name="{name}" type="hidden" value="{value}" />"#);
-  }
-  return "".to_string();
-}
-
-fn redirect_to(redirect_to: Option<&String>) -> String {
-  if let Some(r) = redirect_to {
-    return format!(r#"<input name="redirect_to" type="hidden" value="{r}" />"#);
-  }
-  return "".to_string();
 }
