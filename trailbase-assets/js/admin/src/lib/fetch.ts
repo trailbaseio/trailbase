@@ -10,8 +10,9 @@ const $tokens = persistentAtom<Tokens | null>("auth_tokens", null, {
 });
 export const $user = computed($tokens, (_tokens) => client.user());
 
+export const HOST = import.meta.env.DEV ? new URL("http://localhost:4000") : "";
+
 function initClient(): Client {
-  const HOST = import.meta.env.DEV ? "http://localhost:4000" : "";
   const client = Client.init(HOST, {
     tokens: $tokens.get() ?? undefined,
     onAuthChange: (c: Client, _user: User | undefined) => {
@@ -23,7 +24,19 @@ function initClient(): Client {
   if (client.tokens() !== undefined) {
     client.refreshAuthToken();
   } else {
-    client.checkCookies();
+    (async () => {
+      const tokens = await client.checkCookies();
+      if (tokens) {
+        console.info("Successfully got tokens from cookies");
+      } else {
+        // Getting tokens from cookies failed.
+        //
+        // This may only happen if the SPA was cached or with a DEV server.
+        // Otherwise the server won't provide the assets, if the user isn't
+        // logged in.
+        console.warn("Failed to get tokens from cookies");
+      }
+    })();
   }
 
   return client;
