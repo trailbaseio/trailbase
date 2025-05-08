@@ -279,35 +279,33 @@ export class RecordApi {
     return body.pipeThrough(transformStream);
   }
 
-  public imageUri(id: string | number, colName: string): string {
-    return `${this.client.site}/${RecordApi._recordApi}/${this.name}/${id}/file/${colName}`;
+  public imageUri(id: string | number, colName: string): URL {
+    return new URL(
+      `/${RecordApi._recordApi}/${this.name}/${id}/file/${colName}`,
+      this.client.site,
+    );
   }
 
-  public imagesUri(
-    id: string | number,
-    colName: string,
-    index: number,
-  ): string {
-    return `${this.client.site}/${RecordApi._recordApi}/${this.name}/${id}/files/${colName}/${index}`;
+  public imagesUri(id: string | number, colName: string, index: number): URL {
+    return new URL(
+      `/${RecordApi._recordApi}/${this.name}/${id}/files/${colName}/${index}`,
+      this.client.site,
+    );
   }
 }
 
 class ThinClient {
-  constructor(public readonly site: string) {}
+  constructor(public readonly base: URL) {}
 
   async fetch(
     path: string,
     headers: HeadersInit,
     init?: RequestInit,
   ): Promise<Response> {
-    if (path.startsWith("/")) {
-      throw Error("Path starts with '/'. Relative path expected.");
-    }
-
     // NOTE: We need to merge the headers in such a complicated fashion
     // to avoid user-provided `init` with headers unintentionally suppressing
     // the credentials.
-    const response = await fetch(`${this.site}/${path}`, {
+    const response = await fetch(new URL(path, this.base), {
       credentials: isDev ? "include" : "same-origin",
       ...init,
       headers: init
@@ -338,8 +336,8 @@ export class Client {
     | ((client: Client, user?: User) => void);
   private _tokenState: TokenState;
 
-  constructor(site: string, opts?: ClientOptions) {
-    this._client = new ThinClient(site);
+  constructor(site: URL | string, opts?: ClientOptions) {
+    this._client = new ThinClient(new URL(site));
     this._authChange = opts?.onAuthChange;
 
     // Note: this is a double assignment to _tokenState to ensure the linter
@@ -347,12 +345,12 @@ export class Client {
     this._tokenState = this.setTokenState(buildTokenState(opts?.tokens), true);
   }
 
-  public static init(site: string, opts?: ClientOptions): Client {
+  public static init(site: URL | string, opts?: ClientOptions): Client {
     return new Client(site, opts);
   }
 
   public static async tryFromCookies(
-    site: string,
+    site: URL | string,
     opts?: ClientOptions,
   ): Promise<Client> {
     const client = new Client(site, opts);
@@ -361,19 +359,7 @@ export class Client {
     // with `($token) => Client` factories.
     if (!client.tokens()) {
       try {
-        const response = await client.fetch(`${Client._authApi}/status`);
-        const status: LoginStatusResponse = await response.json();
-
-        const authToken = status?.auth_token;
-        if (authToken) {
-          client.setTokenState(
-            buildTokenState({
-              auth_token: authToken,
-              refresh_token: status.refresh_token,
-              csrf_token: status.csrf_token,
-            }),
-          );
-        }
+        await client.checkCookies();
       } catch (err) {
         console.debug("No valid cookies found: ", err);
       }
@@ -382,8 +368,8 @@ export class Client {
     return client;
   }
 
-  public get site() {
-    return this._client.site;
+  public get site(): URL {
+    return this._client.base;
   }
 
   /// Low-level access to tokens (auth, refresh, csrf) useful for persisting them.
@@ -422,8 +408,11 @@ export class Client {
     );
   }
 
-  public loginUri(redirect?: string): string {
-    return `${this._client.site}/${Client._authUi}/login?${redirect ? `redirect_to=${redirect}` : ""}`;
+  public loginUri(redirect?: string): URL {
+    return new URL(
+      `/${Client._authUi}/login?${redirect ? `redirect_to=${redirect}` : ""}`,
+      this.site,
+    );
   }
 
   public async logout(): Promise<boolean> {
@@ -446,8 +435,11 @@ export class Client {
     return true;
   }
 
-  public logoutUri(redirect?: string): string {
-    return `${this._client.site}/${Client._authApi}/logout?${redirect ? `redirect_to=${redirect}` : ""}`;
+  public logoutUri(redirect?: string): URL {
+    return new URL(
+      `/${Client._authApi}/logout?${redirect ? `redirect_to=${redirect}` : ""}`,
+      this.site,
+    );
   }
 
   public async deleteUser(): Promise<void> {
@@ -462,6 +454,24 @@ export class Client {
         new_email: email,
       } as ChangeEmailRequest),
     });
+  }
+
+  public async checkCookies(): Promise<Tokens | undefined> {
+    const response = await this.fetch(`${Client._authApi}/status`);
+    const status: LoginStatusResponse = await response.json();
+
+    const authToken = status?.auth_token;
+    if (authToken) {
+      const newState = buildTokenState({
+        auth_token: authToken,
+        refresh_token: status.refresh_token,
+        csrf_token: status.csrf_token,
+      });
+
+      this.setTokenState(newState);
+
+      return newState.state?.tokens;
+    }
   }
 
   public async refreshAuthToken(): Promise<void> {
