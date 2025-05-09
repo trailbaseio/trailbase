@@ -11,7 +11,6 @@ pub(crate) mod test;
 use lazy_static::lazy_static;
 use log::*;
 use std::collections::hash_map::HashMap;
-use std::sync::Arc;
 use thiserror::Error;
 
 use crate::auth::oauth::OAuthProvider;
@@ -50,16 +49,13 @@ lazy_static! {
   ];
 }
 
-#[derive(Default)]
-pub struct ConfiguredOAuthProviders {
-  providers: HashMap<String, Arc<OAuthProviderType>>,
-}
-
-impl ConfiguredOAuthProviders {
-  pub fn from_config(config: AuthConfig) -> Result<Self, OAuthProviderError> {
-    let mut providers = HashMap::<String, Arc<OAuthProviderType>>::new();
-
-    for (key, config) in config.oauth_providers {
+pub(crate) fn build_oauth_providers_from_config(
+  config: AuthConfig,
+) -> Result<HashMap<String, OAuthProviderType>, OAuthProviderError> {
+  return config
+    .oauth_providers
+    .iter()
+    .map(|(key, config)| {
       let entry = oauth_provider_registry
         .iter()
         .find(|registered| config.provider_id == Some(registered.id as i32));
@@ -70,25 +66,8 @@ impl ConfiguredOAuthProviders {
         )));
       };
 
-      let provider = Arc::new((entry.factory)(&key, &config)?);
-      providers.insert(provider.name().to_string(), provider);
-    }
-
-    return Ok(ConfiguredOAuthProviders { providers });
-  }
-
-  pub fn lookup(&self, name: &str) -> Option<&Arc<OAuthProviderType>> {
-    if let Some(entry) = self.providers.get(name) {
-      return Some(entry);
-    }
-    return None;
-  }
-
-  pub fn list(&self) -> Vec<(&str, &str)> {
-    return self
-      .providers
-      .values()
-      .map(|p| (p.name(), p.display_name()))
-      .collect();
-  }
+      let provider = (entry.factory)(key, config)?;
+      return Ok((provider.name().to_string(), provider));
+    })
+    .collect();
 }

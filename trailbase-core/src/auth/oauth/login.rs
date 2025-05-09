@@ -27,7 +27,8 @@ pub(crate) async fn login_with_external_auth_provider(
   Query(query): Query<LoginQuery>,
   cookies: Cookies,
 ) -> Result<Redirect, AuthError> {
-  let Some(provider) = state.get_oauth_provider(&provider) else {
+  let auth_options = state.auth_options();
+  let Some(provider) = auth_options.lookup_oauth_provider(&provider) else {
     return Err(AuthError::OAuthProviderNotFound);
   };
   let redirect = validate_redirects(&state, &query.redirect_to, &None)?;

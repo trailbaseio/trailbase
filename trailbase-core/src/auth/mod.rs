@@ -9,6 +9,7 @@ pub mod user;
 
 pub(crate) mod api;
 pub(crate) mod oauth;
+pub(crate) mod options;
 pub(crate) mod password;
 pub(crate) mod tokens;
 pub(crate) mod util;

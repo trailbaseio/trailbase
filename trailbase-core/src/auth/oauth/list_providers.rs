@@ -16,7 +16,9 @@ pub struct ConfiguredOAuthProvidersResponse {
 pub(crate) async fn list_configured_providers_handler(
   State(app_state): State<AppState>,
 ) -> Result<Json<ConfiguredOAuthProvidersResponse>, AuthError> {
-  let providers = app_state.get_oauth_providers();
+  let auth_options = app_state.auth_options();
 
-  return Ok(Json(ConfiguredOAuthProvidersResponse { providers }));
+  return Ok(Json(ConfiguredOAuthProvidersResponse {
+    providers: auth_options.list_oauth_providers(),
+  }));
 }

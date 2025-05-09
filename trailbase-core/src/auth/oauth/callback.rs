@@ -38,7 +38,8 @@ pub(crate) async fn callback_from_external_auth_provider(
   Query(query): Query<AuthRequest>,
   cookies: Cookies,
 ) -> Result<Redirect, AuthError> {
-  let Some(provider) = state.get_oauth_provider(&provider) else {
+  let auth_options = state.auth_options();
+  let Some(provider) = auth_options.lookup_oauth_provider(&provider) else {
     return Err(AuthError::OAuthProviderNotFound);
   };
 

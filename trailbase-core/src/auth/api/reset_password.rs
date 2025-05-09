@@ -11,7 +11,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::constants::{PASSWORD_OPTIONS, USER_TABLE};
+use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
 use crate::rand::generate_random_string;
@@ -130,10 +130,11 @@ pub async fn reset_password_update_handler(
     Either::Form(req) => req,
   };
 
+  let auth_options = state.auth_options();
   validate_password_policy(
     &request.password,
     &request.password_repeat,
-    &PASSWORD_OPTIONS,
+    auth_options.password_options(),
   )?;
 
   let hashed_password = hash_password(&request.password)?;

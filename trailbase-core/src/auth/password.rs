@@ -13,12 +13,12 @@ pub struct PasswordOptions {
   pub max_length: usize,
 }
 
-impl PasswordOptions {
-  pub const fn default() -> Self {
-    PasswordOptions {
+impl Default for PasswordOptions {
+  fn default() -> Self {
+    return PasswordOptions {
       min_length: 8,
       max_length: 128,
-    }
+    };
   }
 }
 

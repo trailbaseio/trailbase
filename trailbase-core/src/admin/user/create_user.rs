@@ -10,7 +10,7 @@ use crate::app_state::AppState;
 use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::user::DbUser;
 use crate::auth::util::{user_exists, validate_and_normalize_email_address};
-use crate::constants::{PASSWORD_OPTIONS, USER_TABLE, VERIFICATION_CODE_LENGTH};
+use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;
 use crate::rand::generate_random_string;
 
@@ -35,7 +35,12 @@ pub async fn create_user_handler(
 ) -> Result<Json<CreateUserResponse>, Error> {
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
-  validate_password_policy(&request.password, &request.password, &PASSWORD_OPTIONS)?;
+  let auth_options = state.auth_options();
+  validate_password_policy(
+    &request.password,
+    &request.password,
+    auth_options.password_options(),
+  )?;
 
   let exists = user_exists(&state, &normalized_email).await?;
   if exists {

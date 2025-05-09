@@ -117,7 +117,8 @@ async fn test_oauth() {
   .await
   .unwrap();
 
-  let providers = state.get_oauth_providers();
+  let auth_options = state.auth_options();
+  let providers = auth_options.list_oauth_providers();
   assert_eq!(providers.len(), 1);
   assert_eq!(providers[0].0, TestOAuthProvider::NAME);
 

@@ -12,7 +12,7 @@ use crate::auth::AuthError;
 use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::user::DbUser;
 use crate::auth::util::{user_exists, validate_and_normalize_email_address};
-use crate::constants::{PASSWORD_OPTIONS, USER_TABLE, VERIFICATION_CODE_LENGTH};
+use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;
 use crate::rand::generate_random_string;
 
@@ -43,10 +43,11 @@ pub async fn register_user_handler(
 
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
+  let auth_options = state.auth_options();
   if let Err(_err) = validate_password_policy(
     &request.password,
     &request.password_repeat,
-    &PASSWORD_OPTIONS,
+    auth_options.password_options(),
   ) {
     let msg = crate::util::urlencode("Invalid password");
     return Ok(Redirect::to(&format!("/_/auth/register?alert={msg}")).into_response());

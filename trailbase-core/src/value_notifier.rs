@@ -1,6 +1,8 @@
-use arc_swap::{ArcSwap, AsRaw, Guard};
+use arc_swap::{ArcSwap, AsRaw};
 use parking_lot::Mutex;
 use std::sync::Arc;
+
+pub use arc_swap::Guard;
 
 type Listener<T> = Box<dyn Fn(&T) + Sync + Send>;
 
@@ -21,6 +23,7 @@ impl<T> ValueNotifier<T> {
     return self.value.load();
   }
 
+  #[allow(unused)]
   pub fn load_full(&self) -> Arc<T> {
     return self.value.load_full();
   }
@@ -48,7 +51,7 @@ impl<T> ValueNotifier<T> {
 
   pub fn listen<F>(&self, callback: F)
   where
-    F: 'static + Sync + Send + Fn(&T),
+    F: Fn(&T) + Sync + Send + 'static,
   {
     self.listeners.lock().push(Box::new(callback));
   }
@@ -65,7 +68,7 @@ impl<T> ValueNotifier<T> {
 
 struct ComputedState<T, V> {
   value: ArcSwap<T>,
-  f: Box<dyn Sync + Send + Fn(&V) -> T>,
+  f: Box<dyn Fn(&V) -> T + Sync + Send>,
 }
 
 #[derive(Clone)]
@@ -73,8 +76,8 @@ pub struct Computed<T, V> {
   state: Arc<ComputedState<T, V>>,
 }
 
-impl<T: 'static + Sync + Send, V: 'static> Computed<T, V> {
-  pub fn new(notifier: &ValueNotifier<V>, f: impl 'static + Sync + Send + Fn(&V) -> T) -> Self {
+impl<T: Sync + Send + 'static, V: 'static> Computed<T, V> {
+  pub fn new(notifier: &ValueNotifier<V>, f: impl Fn(&V) -> T + Sync + Send + 'static) -> Self {
     let state = Arc::new(ComputedState {
       value: ArcSwap::<T>::from_pointee(f(&notifier.load())),
       f: Box::new(f),
@@ -88,8 +91,14 @@ impl<T: 'static + Sync + Send, V: 'static> Computed<T, V> {
     return Computed { state };
   }
 
+  #[inline]
   pub fn load(&self) -> Guard<Arc<T>> {
     return self.state.value.load();
+  }
+
+  #[inline]
+  pub fn load_full(&self) -> Arc<T> {
+    return self.state.value.load_full();
   }
 }
 

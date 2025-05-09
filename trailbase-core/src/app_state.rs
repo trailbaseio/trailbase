@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::auth::jwt::JwtHelper;
-use crate::auth::oauth::providers::{ConfiguredOAuthProviders, OAuthProviderType};
+use crate::auth::options::AuthOptions;
 use crate::config::proto::{Config, RecordApiConfig, S3StorageConfig, hash_config};
 use crate::config::{validate_config, write_config_and_vault_textproto};
 use crate::data_dir::DataDir;
@@ -15,7 +15,7 @@ use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
 use crate::schema_metadata::SchemaMetadataCache;
-use crate::value_notifier::{Computed, ValueNotifier};
+use crate::value_notifier::{Computed, Guard, ValueNotifier};
 
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.
@@ -26,7 +26,7 @@ struct InternalState {
   dev: bool,
   demo: bool,
 
-  oauth: Computed<ConfiguredOAuthProviders, Config>,
+  auth: Computed<AuthOptions, Config>,
   jobs: Computed<JobRegistry, Config>,
   mailer: Computed<Mailer, Config>,
   record_apis: Computed<Vec<(String, RecordApi)>, Config>,
@@ -114,16 +114,7 @@ impl AppState {
         site_url,
         dev: args.dev,
         demo: args.demo,
-        oauth: Computed::new(&config, |c| {
-          debug!("building oauth from config");
-          match ConfiguredOAuthProviders::from_config(c.auth.clone()) {
-            Ok(providers) => providers,
-            Err(err) => {
-              error!("Failed to derive configure oauth providers from config: {err}");
-              ConfiguredOAuthProviders::default()
-            }
-          }
-        }),
+        auth: Computed::new(&config, |c| AuthOptions::from_config(c.auth.clone())),
         jobs: Computed::new(&config, move |c| {
           debug!("building jobs from config");
 
@@ -216,31 +207,20 @@ impl AppState {
     return &*self.state.object_store;
   }
 
-  pub(crate) fn jobs(&self) -> Arc<JobRegistry> {
-    return self.state.jobs.load().clone();
+  pub(crate) fn jobs(&self) -> Guard<Arc<JobRegistry>> {
+    return self.state.jobs.load();
   }
 
-  pub(crate) fn get_oauth_provider(&self, name: &str) -> Option<Arc<OAuthProviderType>> {
-    return self.state.oauth.load().lookup(name).cloned();
-  }
-
-  pub(crate) fn get_oauth_providers(&self) -> Vec<(String, String)> {
-    return self
-      .state
-      .oauth
-      .load()
-      .list()
-      .into_iter()
-      .map(|(name, display_name)| (name.to_string(), display_name.to_string()))
-      .collect();
+  pub(crate) fn auth_options(&self) -> Guard<Arc<AuthOptions>> {
+    return self.state.auth.load();
   }
 
   pub fn site_url(&self) -> Arc<url::Url> {
-    return self.state.site_url.load().clone();
+    return self.state.site_url.load_full();
   }
 
-  pub(crate) fn mailer(&self) -> Arc<Mailer> {
-    return self.state.mailer.load().clone();
+  pub(crate) fn mailer(&self) -> Guard<Arc<Mailer>> {
+    return self.state.mailer.load();
   }
 
   pub(crate) fn jwt(&self) -> &JwtHelper {
@@ -257,7 +237,7 @@ impl AppState {
   }
 
   pub fn get_config(&self) -> Config {
-    return (*self.state.config.load_full()).clone();
+    return (**self.state.config.load()).clone();
   }
 
   pub fn access_config<F, T>(&self, f: F) -> T
@@ -437,9 +417,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       site_url: Computed::new(&config, move |c| build_site_url(c, address)),
       dev: true,
       demo: false,
-      oauth: Computed::new(&config, |c| {
-        ConfiguredOAuthProviders::from_config(c.auth.clone()).unwrap()
-      }),
+      auth: Computed::new(&config, |c| AuthOptions::from_config(c.auth.clone())),
       jobs: Computed::new(&config, |_c| JobRegistry::new()),
       mailer: build_mailer(&config, options.and_then(|o| o.mailer)),
       record_apis: record_apis.clone(),

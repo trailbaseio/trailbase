@@ -11,7 +11,7 @@ use utoipa::{IntoParams, ToSchema};
 use crate::auth::password::{hash_password, validate_password_policy, verify_password};
 use crate::auth::util::validate_redirects;
 use crate::auth::{AuthError, User};
-use crate::constants::{PASSWORD_OPTIONS, USER_TABLE};
+use crate::constants::USER_TABLE;
 use crate::extract::Either;
 use crate::{app_state::AppState, auth::util::user_by_id};
 
@@ -52,10 +52,11 @@ pub async fn change_password_handler(
     Either::Form(req) => req,
   };
 
+  let auth_options = state.auth_options();
   validate_password_policy(
     &request.new_password,
     &request.new_password_repeat,
-    &PASSWORD_OPTIONS,
+    auth_options.password_options(),
   )?;
 
   let db_user = user_by_id(&state, &user.uuid).await?;
