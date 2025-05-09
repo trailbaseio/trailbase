@@ -137,7 +137,7 @@ struct ManagerState {
   /// records.
   schema_metadata: SchemaMetadataCache,
   /// Record API configurations.
-  record_apis: Computed<Vec<(String, RecordApi)>, crate::config::proto::Config>,
+  record_apis: Computed<Vec<(String, RecordApi)>>,
 
   /// Map from table name to row id to list of subscriptions.
   record_subscriptions: RwLock<HashMap<String, HashMap<i64, Vec<Subscription>>>>,
@@ -218,7 +218,7 @@ impl SubscriptionManager {
   pub fn new(
     conn: trailbase_sqlite::Connection,
     schema_metadata: SchemaMetadataCache,
-    record_apis: Computed<Vec<(String, RecordApi)>, crate::config::proto::Config>,
+    record_apis: Computed<Vec<(String, RecordApi)>>,
   ) -> Self {
     return Self {
       state: Arc::new(ManagerState {

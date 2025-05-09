@@ -22,14 +22,14 @@ use crate::value_notifier::{Computed, Guard, ValueNotifier};
 struct InternalState {
   data_dir: DataDir,
   public_dir: Option<PathBuf>,
-  site_url: Computed<url::Url, Config>,
+  site_url: Computed<url::Url>,
   dev: bool,
   demo: bool,
 
-  auth: Computed<AuthOptions, Config>,
-  jobs: Computed<JobRegistry, Config>,
-  mailer: Computed<Mailer, Config>,
-  record_apis: Computed<Vec<(String, RecordApi)>, Config>,
+  auth: Computed<AuthOptions>,
+  jobs: Computed<JobRegistry>,
+  mailer: Computed<Mailer>,
+  record_apis: Computed<Vec<(String, RecordApi)>>,
   config: ValueNotifier<Config>,
 
   conn: trailbase_sqlite::Connection,
@@ -403,7 +403,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       .collect::<Vec<_>>();
   });
 
-  fn build_mailer(c: &ValueNotifier<Config>, mailer: Option<Mailer>) -> Computed<Mailer, Config> {
+  fn build_mailer(c: &ValueNotifier<Config>, mailer: Option<Mailer>) -> Computed<Mailer> {
     return Computed::new(c, move |c| {
       return mailer.clone().unwrap_or_else(|| Mailer::new_from_config(c));
     });

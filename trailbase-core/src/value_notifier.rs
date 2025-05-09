@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 pub use arc_swap::Guard;
 
-type Listener<T> = Box<dyn Fn(&T) + Sync + Send>;
+type Listener<T> = Box<dyn Fn(&T) -> bool + Sync + Send>;
 
 pub struct ValueNotifier<T> {
   value: ArcSwap<T>,
@@ -43,62 +43,56 @@ impl<T> ValueNotifier<T> {
       return false;
     }
 
-    for callback in self.listeners.lock().iter() {
-      callback(&*new);
-    }
+    self.notify(&*new);
     return true;
-  }
-
-  pub fn listen<F>(&self, callback: F)
-  where
-    F: Fn(&T) + Sync + Send + 'static,
-  {
-    self.listeners.lock().push(Box::new(callback));
   }
 
   pub fn store(&self, v: T) {
     let ptr = Arc::new(v);
     self.value.store(ptr.clone());
+    self.notify(&*ptr);
+  }
 
-    for callback in self.listeners.lock().iter() {
-      callback(&*ptr);
-    }
+  fn notify(&self, value: &T) {
+    let mut lock = self.listeners.lock();
+    lock.retain(|callback| callback(value));
+  }
+
+  fn listen(&self, callback: Listener<T>) {
+    self.listeners.lock().push(callback);
   }
 }
 
-struct ComputedState<T, V> {
-  value: ArcSwap<T>,
-  f: Box<dyn Fn(&V) -> T + Sync + Send>,
-}
-
 #[derive(Clone)]
-pub struct Computed<T, V> {
-  state: Arc<ComputedState<T, V>>,
+pub struct Computed<T> {
+  value: Arc<ArcSwap<T>>,
 }
 
-impl<T: Sync + Send + 'static, V: 'static> Computed<T, V> {
-  pub fn new(notifier: &ValueNotifier<V>, f: impl Fn(&V) -> T + Sync + Send + 'static) -> Self {
-    let state = Arc::new(ComputedState {
-      value: ArcSwap::<T>::from_pointee(f(&notifier.load())),
-      f: Box::new(f),
-    });
+impl<T: Sync + Send + 'static> Computed<T> {
+  pub fn new<V>(notifier: &ValueNotifier<V>, f: impl Fn(&V) -> T + Sync + Send + 'static) -> Self {
+    let value = Arc::new(ArcSwap::<T>::from_pointee(f(&notifier.load())));
 
-    let state_ptr = state.clone();
-    notifier.listen(move |v| {
-      state_ptr.value.store(Arc::new((*state_ptr.f)(v)));
-    });
+    let weak = Arc::downgrade(&value);
+    notifier.listen(Box::new(move |v| {
+      if let Some(arc_swap) = weak.upgrade() {
+        arc_swap.store(Arc::new(f(v)));
+        return true;
+      }
 
-    return Computed { state };
+      return false;
+    }));
+
+    return Self { value };
   }
 
   #[inline]
   pub fn load(&self) -> Guard<Arc<T>> {
-    return self.state.value.load();
+    return self.value.load();
   }
 
   #[inline]
   pub fn load_full(&self) -> Arc<T> {
-    return self.state.value.load_full();
+    return self.value.load_full();
   }
 }
 
@@ -118,10 +112,15 @@ mod test {
   fn test_computed() {
     let v = ValueNotifier::new(42);
 
-    let c = Computed::new(&v, |v| v * 2);
-    assert_eq!(**c.load(), 2 * 42);
+    {
+      let c = Computed::new(&v, |v| v * 2);
+      assert_eq!(**c.load(), 2 * 42);
 
-    v.store(23);
-    assert_eq!(**c.load(), 2 * 23);
+      v.store(23);
+      assert_eq!(**c.load(), 2 * 23);
+    }
+
+    v.store(5);
+    assert_eq!(0, v.listeners.lock().len());
   }
 }
