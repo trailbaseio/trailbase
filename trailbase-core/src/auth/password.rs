@@ -8,6 +8,10 @@ use crate::auth::user::DbUser;
 pub struct PasswordOptions {
   pub min_length: usize,
   pub max_length: usize,
+
+  pub must_contain_lower_and_upper_case: bool,
+  pub must_contain_digits: bool,
+  pub must_contain_special_characters: bool,
 }
 
 impl Default for PasswordOptions {
@@ -15,6 +19,9 @@ impl Default for PasswordOptions {
     return PasswordOptions {
       min_length: 8,
       max_length: 128,
+      must_contain_lower_and_upper_case: false,
+      must_contain_digits: false,
+      must_contain_special_characters: false,
     };
   }
 }
@@ -34,6 +41,20 @@ pub fn validate_password_policy(
 
   if password.len() > opts.max_length {
     return Err(AuthError::BadRequest("Password too long"));
+  }
+
+  if opts.must_contain_digits && !password.chars().any(|x| x.is_numeric()) {
+    return Err(AuthError::BadRequest("Must contain numeric"));
+  }
+
+  if opts.must_contain_lower_and_upper_case
+    && !(password.chars().any(|x| x.is_lowercase()) && password.chars().any(|x| x.is_uppercase()))
+  {
+    return Err(AuthError::BadRequest("Must contain lower and upper case"));
+  }
+
+  if opts.must_contain_special_characters && password.chars().all(|x| x.is_alphanumeric()) {
+    return Err(AuthError::BadRequest("Must contain special characters"));
   }
 
   return Ok(());
@@ -119,5 +140,68 @@ mod tests {
     assert!(check_user_password(&db_user, "something else", false).is_err());
     assert!(check_user_password(&db_user, password, false).is_err());
     assert!(check_user_password(&db_user, password, true).is_ok());
+  }
+
+  #[test]
+  fn test_password_policy() {
+    let default_options = PasswordOptions::default();
+    let password = "abc123ABC";
+    assert!(validate_password_policy(password, password, &default_options).is_ok());
+    assert!(validate_password_policy(password, "Abc123ABC", &default_options).is_err());
+
+    let test =
+      |password: &str, opts: &PasswordOptions| validate_password_policy(password, password, opts);
+
+    {
+      // length
+      let options = PasswordOptions {
+        min_length: 2,
+        max_length: 4,
+        ..Default::default()
+      };
+
+      assert!(test("22", &options).is_ok());
+      assert!(test("2222", &options).is_ok());
+      assert!(test("2", &options).is_err());
+      assert!(test("22222", &options).is_err());
+    }
+
+    {
+      // lower-upper
+      let options = PasswordOptions {
+        min_length: 2,
+        must_contain_lower_and_upper_case: true,
+        ..Default::default()
+      };
+
+      assert!(test("22", &options).is_err());
+      assert!(test("2a", &options).is_err());
+      assert!(test("Aa", &options).is_ok());
+    }
+
+    {
+      // Must contain digits
+      let options = PasswordOptions {
+        min_length: 2,
+        must_contain_digits: true,
+        ..Default::default()
+      };
+
+      assert!(test("aa", &options).is_err());
+      assert!(test("2a", &options).is_ok());
+    }
+
+    {
+      // Must contain digits
+      let options = PasswordOptions {
+        min_length: 2,
+        must_contain_special_characters: true,
+        ..Default::default()
+      };
+
+      assert!(test("aa", &options).is_err());
+      assert!(test("a2", &options).is_err());
+      assert!(test("2.", &options).is_ok());
+    }
   }
 }
