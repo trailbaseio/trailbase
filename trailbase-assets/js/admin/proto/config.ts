@@ -318,8 +318,24 @@ export interface AuthConfig {
   refreshTokenTtlSec?:
     | number
     | undefined;
-  /** / Disables password-based sign-up. */
+  /** / Disables password-based sign-up. Does not affect already registered users. */
   disablePasswordAuth?:
+    | boolean
+    | undefined;
+  /** / Minimal password length. Defaults to 8. */
+  passwordMinimalLength?:
+    | number
+    | undefined;
+  /** / Password must contain lower and upper-case letters. */
+  passwordMustContainUpperAndLowerCase?:
+    | boolean
+    | undefined;
+  /** / Password must contain digits in addition to alphabetic characters.. */
+  passwordMustContainDigits?:
+    | boolean
+    | undefined;
+  /** / Password must contain special, non-alphanumeric, characters. */
+  passwordMustContainSpecialCharacters?:
     | boolean
     | undefined;
   /** / Map of configured OAuth providers. */
@@ -940,6 +956,24 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     if (message.disablePasswordAuth !== undefined && message.disablePasswordAuth !== false) {
       writer.uint32(24).bool(message.disablePasswordAuth);
     }
+    if (message.passwordMinimalLength !== undefined && message.passwordMinimalLength !== 0) {
+      writer.uint32(32).uint32(message.passwordMinimalLength);
+    }
+    if (
+      message.passwordMustContainUpperAndLowerCase !== undefined &&
+      message.passwordMustContainUpperAndLowerCase !== false
+    ) {
+      writer.uint32(40).bool(message.passwordMustContainUpperAndLowerCase);
+    }
+    if (message.passwordMustContainDigits !== undefined && message.passwordMustContainDigits !== false) {
+      writer.uint32(48).bool(message.passwordMustContainDigits);
+    }
+    if (
+      message.passwordMustContainSpecialCharacters !== undefined &&
+      message.passwordMustContainSpecialCharacters !== false
+    ) {
+      writer.uint32(56).bool(message.passwordMustContainSpecialCharacters);
+    }
     Object.entries(message.oauthProviders).forEach(([key, value]) => {
       AuthConfig_OauthProvidersEntry.encode({ key: key as any, value }, writer.uint32(90).fork()).join();
     });
@@ -977,6 +1011,38 @@ export const AuthConfig: MessageFns<AuthConfig> = {
           message.disablePasswordAuth = reader.bool();
           continue;
         }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.passwordMinimalLength = reader.uint32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.passwordMustContainUpperAndLowerCase = reader.bool();
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.passwordMustContainDigits = reader.bool();
+          continue;
+        }
+        case 7: {
+          if (tag !== 56) {
+            break;
+          }
+
+          message.passwordMustContainSpecialCharacters = reader.bool();
+          continue;
+        }
         case 11: {
           if (tag !== 90) {
             break;
@@ -1004,6 +1070,18 @@ export const AuthConfig: MessageFns<AuthConfig> = {
       disablePasswordAuth: isSet(object.disablePasswordAuth)
         ? globalThis.Boolean(object.disablePasswordAuth)
         : undefined,
+      passwordMinimalLength: isSet(object.passwordMinimalLength)
+        ? globalThis.Number(object.passwordMinimalLength)
+        : undefined,
+      passwordMustContainUpperAndLowerCase: isSet(object.passwordMustContainUpperAndLowerCase)
+        ? globalThis.Boolean(object.passwordMustContainUpperAndLowerCase)
+        : undefined,
+      passwordMustContainDigits: isSet(object.passwordMustContainDigits)
+        ? globalThis.Boolean(object.passwordMustContainDigits)
+        : undefined,
+      passwordMustContainSpecialCharacters: isSet(object.passwordMustContainSpecialCharacters)
+        ? globalThis.Boolean(object.passwordMustContainSpecialCharacters)
+        : undefined,
       oauthProviders: isObject(object.oauthProviders)
         ? Object.entries(object.oauthProviders).reduce<{ [key: string]: OAuthProviderConfig }>((acc, [key, value]) => {
           acc[key] = OAuthProviderConfig.fromJSON(value);
@@ -1023,6 +1101,24 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     }
     if (message.disablePasswordAuth !== undefined && message.disablePasswordAuth !== false) {
       obj.disablePasswordAuth = message.disablePasswordAuth;
+    }
+    if (message.passwordMinimalLength !== undefined && message.passwordMinimalLength !== 0) {
+      obj.passwordMinimalLength = Math.round(message.passwordMinimalLength);
+    }
+    if (
+      message.passwordMustContainUpperAndLowerCase !== undefined &&
+      message.passwordMustContainUpperAndLowerCase !== false
+    ) {
+      obj.passwordMustContainUpperAndLowerCase = message.passwordMustContainUpperAndLowerCase;
+    }
+    if (message.passwordMustContainDigits !== undefined && message.passwordMustContainDigits !== false) {
+      obj.passwordMustContainDigits = message.passwordMustContainDigits;
+    }
+    if (
+      message.passwordMustContainSpecialCharacters !== undefined &&
+      message.passwordMustContainSpecialCharacters !== false
+    ) {
+      obj.passwordMustContainSpecialCharacters = message.passwordMustContainSpecialCharacters;
     }
     if (message.oauthProviders) {
       const entries = Object.entries(message.oauthProviders);
@@ -1044,6 +1140,10 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     message.authTokenTtlSec = object.authTokenTtlSec ?? 0;
     message.refreshTokenTtlSec = object.refreshTokenTtlSec ?? 0;
     message.disablePasswordAuth = object.disablePasswordAuth ?? false;
+    message.passwordMinimalLength = object.passwordMinimalLength ?? 0;
+    message.passwordMustContainUpperAndLowerCase = object.passwordMustContainUpperAndLowerCase ?? false;
+    message.passwordMustContainDigits = object.passwordMustContainDigits ?? false;
+    message.passwordMustContainSpecialCharacters = object.passwordMustContainSpecialCharacters ?? false;
     message.oauthProviders = Object.entries(object.oauthProviders ?? {}).reduce<{ [key: string]: OAuthProviderConfig }>(
       (acc, [key, value]) => {
         if (value !== undefined) {

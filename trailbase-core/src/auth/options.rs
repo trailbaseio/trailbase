@@ -14,7 +14,17 @@ pub struct AuthOptions {
 impl AuthOptions {
   pub fn from_config(config: AuthConfig) -> Self {
     return Self {
-      password_options: PasswordOptions::default(),
+      password_options: PasswordOptions {
+        min_length: config.password_minimal_length.unwrap_or(8) as usize,
+        max_length: 128,
+        must_contain_upper_and_lower_case: config
+          .password_must_contain_upper_and_lower_case
+          .unwrap_or(false),
+        must_contain_digits: config.password_must_contain_digits.unwrap_or(false),
+        must_contain_special_characters: config
+          .password_must_contain_special_characters
+          .unwrap_or(false),
+      },
       oauth_providers: build_oauth_providers_from_config(config).unwrap_or_else(|err| {
         error!("Failed to derive configured OAuth providers from config: {err}");
         return Default::default();

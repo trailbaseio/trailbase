@@ -323,7 +323,7 @@ function AuthSettingsForm(props: {
       <div class="flex flex-col gap-4">
         <Card>
           <CardHeader>
-            <h2>Auth Settings</h2>
+            <h2>Token Settings</h2>
           </CardHeader>
 
           <CardContent>
@@ -353,11 +353,21 @@ function AuthSettingsForm(props: {
                   ),
                 })}
               </form.Field>
+            </div>
+          </CardContent>
+        </Card>
 
+        <Card>
+          <CardHeader>
+            <h2>Password Settings</h2>
+          </CardHeader>
+
+          <CardContent>
+            <div class="flex flex-col gap-4">
               <form.Field name="disablePasswordAuth">
                 {buildOptionalBoolFormField({
                   label: () => (
-                    <div class={labelWidth}>Disable Password Auth</div>
+                    <div class={labelWidth}>Disable Password Registration</div>
                   ),
                   info: (
                     <p>
@@ -368,7 +378,101 @@ function AuthSettingsForm(props: {
                   ),
                 })}
               </form.Field>
+
+              <form.Field name="passwordMinimalLength">
+                {buildOptionalNumberFormField({
+                  label: () => <div class={labelWidth}>Min Length</div>,
+                  info: (
+                    <p>
+                      Minimal length for new passwords [Default 8]. Does not
+                      affect existing registrations unless users choose to
+                      change their password.
+                    </p>
+                  ),
+                })}
+              </form.Field>
+
+              <form.Field name="passwordMustContainUpperAndLowerCase">
+                {buildOptionalBoolFormField({
+                  label: () => (
+                    <div class={labelWidth}>
+                      Must Contain Upper {"&"} Lower Case
+                    </div>
+                  ),
+                  info: (
+                    <p>
+                      Passwords must contain both, upper and lower case
+                      characters. Does not affect existing registrations unless
+                      users choose to change their password.
+                    </p>
+                  ),
+                })}
+              </form.Field>
+
+              <form.Field name="passwordMustContainDigits">
+                {buildOptionalBoolFormField({
+                  label: () => (
+                    <div class={labelWidth}>Must Contain Digits</div>
+                  ),
+                  info: (
+                    <p>
+                      Passwords must additionally contain digits. Does not
+                      affect existing registrations unless users choose to
+                      change their password.
+                    </p>
+                  ),
+                })}
+              </form.Field>
+
+              <form.Field name="passwordMustContainSpecialCharacters">
+                {buildOptionalBoolFormField({
+                  label: () => (
+                    <div class={labelWidth}>Must Contain Special</div>
+                  ),
+                  info: (
+                    <p>
+                      Passwords must additionally contain special, i.e.,
+                      non-alphanumeric characters.. Does not affect existing
+                      registrations unless users choose to change their
+                      password.
+                    </p>
+                  ),
+                })}
+              </form.Field>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <h2>OAuth Providers</h2>
+          </CardHeader>
+
+          <CardContent>
+            <form.Field name="namedOauthProviders">
+              {(_field) => {
+                return (
+                  <Accordion multiple={false} collapsible class="w-full">
+                    <For each={values().namedOauthProviders}>
+                      {(provider, index) => {
+                        // Skip OIDC provider for now until we expand the form to render the extra fields.
+                        if (provider.provider.id === OAuthProviderId.OIDC0) {
+                          return null;
+                        }
+
+                        return (
+                          <ProviderSettingsSubForm
+                            form={form}
+                            index={index()}
+                            provider={provider.provider}
+                          />
+                        );
+                      }}
+                    </For>
+                  </Accordion>
+                );
+              }}
+            </form.Field>
           </CardContent>
         </Card>
 
@@ -417,39 +521,6 @@ function AuthSettingsForm(props: {
                 Download Public Key
               </Button>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <h2>OAuth Providers</h2>
-          </CardHeader>
-
-          <CardContent>
-            <form.Field name="namedOauthProviders">
-              {(_field) => {
-                return (
-                  <Accordion multiple={false} collapsible class="w-full">
-                    <For each={values().namedOauthProviders}>
-                      {(provider, index) => {
-                        // Skip OIDC provider for now until we expand the form to render the extra fields.
-                        if (provider.provider.id === OAuthProviderId.OIDC0) {
-                          return null;
-                        }
-
-                        return (
-                          <ProviderSettingsSubForm
-                            form={form}
-                            index={index()}
-                            provider={provider.provider}
-                          />
-                        );
-                      }}
-                    </For>
-                  </Accordion>
-                );
-              }}
-            </form.Field>
           </CardContent>
         </Card>
 

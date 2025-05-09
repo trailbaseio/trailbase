@@ -9,7 +9,7 @@ pub struct PasswordOptions {
   pub min_length: usize,
   pub max_length: usize,
 
-  pub must_contain_lower_and_upper_case: bool,
+  pub must_contain_upper_and_lower_case: bool,
   pub must_contain_digits: bool,
   pub must_contain_special_characters: bool,
 }
@@ -19,7 +19,7 @@ impl Default for PasswordOptions {
     return PasswordOptions {
       min_length: 8,
       max_length: 128,
-      must_contain_lower_and_upper_case: false,
+      must_contain_upper_and_lower_case: false,
       must_contain_digits: false,
       must_contain_special_characters: false,
     };
@@ -43,11 +43,16 @@ pub fn validate_password_policy(
     return Err(AuthError::BadRequest("Password too long"));
   }
 
-  if opts.must_contain_digits && !password.chars().any(|x| x.is_numeric()) {
-    return Err(AuthError::BadRequest("Must contain numeric"));
+  if opts.must_contain_digits {
+    if !password.chars().any(|x| x.is_numeric()) {
+      return Err(AuthError::BadRequest("Must contain digits"));
+    }
+    if password.chars().all(|x| x.is_numeric()) {
+      return Err(AuthError::BadRequest("Must contain non-digits"));
+    }
   }
 
-  if opts.must_contain_lower_and_upper_case
+  if opts.must_contain_upper_and_lower_case
     && !(password.chars().any(|x| x.is_lowercase()) && password.chars().any(|x| x.is_uppercase()))
   {
     return Err(AuthError::BadRequest("Must contain lower and upper case"));
@@ -170,7 +175,7 @@ mod tests {
       // lower-upper
       let options = PasswordOptions {
         min_length: 2,
-        must_contain_lower_and_upper_case: true,
+        must_contain_upper_and_lower_case: true,
         ..Default::default()
       };
 
@@ -189,6 +194,7 @@ mod tests {
 
       assert!(test("aa", &options).is_err());
       assert!(test("2a", &options).is_ok());
+      assert!(test("22", &options).is_err());
     }
 
     {
