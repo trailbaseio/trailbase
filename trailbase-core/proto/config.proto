@@ -60,8 +60,20 @@ message AuthConfig {
   /// Time-to-live in seconds for refresh tokens. Default: 30 days.
   optional int64 refresh_token_ttl_sec = 2;
 
-  /// Disables password-based sign-up.
+  /// Disables password-based sign-up. Does not affect already registered users.
   optional bool disable_password_auth = 3;
+
+  /// Minimal password length. Defaults to 8.
+  optional uint32 password_minimal_length = 4;
+
+  /// Password must contain lower and upper-case letters.
+  optional bool password_must_contain_upper_and_lower_case = 5;
+
+  /// Password must contain digits in addition to alphabetic characters..
+  optional bool password_must_contain_digits = 6;
+
+  /// Password must contain special, non-alphanumeric, characters.
+  optional bool password_must_contain_special_characters = 7;
 
   /// Map of configured OAuth providers.
   map<string, OAuthProviderConfig> oauth_providers = 11;

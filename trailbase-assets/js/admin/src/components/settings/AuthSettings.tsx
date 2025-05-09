@@ -366,6 +366,69 @@ function AuthSettingsForm(props: {
                   ),
                 })}
               </form.Field>
+
+              <form.Field name="passwordMinimalLength">
+                {buildOptionalNumberFormField({
+                  label: () => (
+                    <div class={labelWidth}>Password Min Length</div>
+                  ),
+                  info: (
+                    <p>
+                      Minimal length for new passwords [Default 8]. Does not
+                      affect existing registrations unless users choose to
+                      change their password.
+                    </p>
+                  ),
+                })}
+              </form.Field>
+
+              <form.Field name="passwordMustContainUpperAndLowerCase">
+                {buildOptionalBoolFormField({
+                  label: () => (
+                    <div class={labelWidth}>
+                      Password Upper {"&"} Lower case
+                    </div>
+                  ),
+                  info: (
+                    <p>
+                      Passwords must contain both, upper and lower case
+                      characters. Does not affect existing registrations unless
+                      users choose to change their password.
+                    </p>
+                  ),
+                })}
+              </form.Field>
+
+              <form.Field name="passwordMustContainDigits">
+                {buildOptionalBoolFormField({
+                  label: () => (
+                    <div class={labelWidth}>Password Contains Digits</div>
+                  ),
+                  info: (
+                    <p>
+                      Passwords must additionally contain digits. Does not
+                      affect existing registrations unless users choose to
+                      change their password.
+                    </p>
+                  ),
+                })}
+              </form.Field>
+
+              <form.Field name="passwordMustContainSpecialCharacters">
+                {buildOptionalBoolFormField({
+                  label: () => (
+                    <div class={labelWidth}>Password Contains Special</div>
+                  ),
+                  info: (
+                    <p>
+                      Passwords must additionally contain special, i.e.,
+                      non-alphanumeric characters.. Does not affect existing
+                      registrations unless users choose to change their
+                      password.
+                    </p>
+                  ),
+                })}
+              </form.Field>
             </div>
           </CardContent>
         </Card>
