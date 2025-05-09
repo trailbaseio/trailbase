@@ -8,7 +8,7 @@ use trailbase_sqlite::named_params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::auth::password::{hash_password, validate_password_policy, verify_password};
+use crate::auth::password::{check_user_password, hash_password, validate_password_policy};
 use crate::auth::util::validate_redirects;
 use crate::auth::{AuthError, User};
 use crate::constants::USER_TABLE;
@@ -62,7 +62,7 @@ pub async fn change_password_handler(
   let db_user = user_by_id(&state, &user.uuid).await?;
 
   // Validate old password.
-  verify_password(&db_user, &request.old_password, state.demo_mode())?;
+  check_user_password(&db_user, &request.old_password, state.demo_mode())?;
 
   // NOTE: we're using the old_password_hash to prevent races between concurrent change requests
   // for the same user.

@@ -126,6 +126,7 @@ pub fn sqlite3_extension_init(
     uuid::uuid_parse,
   )?;
 
+  // Used to create initial user credentials in migrations.
   db.create_scalar_function(
     "hash_password",
     1,

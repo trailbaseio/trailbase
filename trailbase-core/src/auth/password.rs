@@ -1,7 +1,4 @@
-use argon2::{
-  Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
-  password_hash::{SaltString, rand_core::OsRng},
-};
+use argon2::{Argon2, PasswordHash};
 use lazy_static::lazy_static;
 use mini_moka::sync::Cache;
 
@@ -62,21 +59,19 @@ lazy_static! {
 }
 
 pub fn hash_password(password: &str) -> Result<String, AuthError> {
-  let salt = SaltString::generate(&mut OsRng);
-  return Ok(
-    ARGON2
-      .hash_password(password.as_bytes(), &salt)
-      .map_err(|err| {
-        // NOTE: Wrapping needed since Argon's error doesn't implement the error trait.
-        AuthError::Internal(err.to_string().into())
-      })?
-      .to_string(),
-  );
+  return trailbase_extension::password::hash_password(password).map_err(|err| {
+    // NOTE: Wrapping needed since Argon's error doesn't implement the error trait.
+    AuthError::Internal(err.to_string().into())
+  });
 }
 
 /// Checks the given password against a known user. Will further ensure that the email was verified
 /// and rate limit attempts to protect against brute-force attacks.
-pub fn verify_password(db_user: &DbUser, password: &str, is_demo: bool) -> Result<(), AuthError> {
+pub fn check_user_password(
+  db_user: &DbUser,
+  password: &str,
+  is_demo: bool,
+) -> Result<(), AuthError> {
   if !db_user.verified {
     return Err(AuthError::Unauthorized);
   }
@@ -88,9 +83,8 @@ pub fn verify_password(db_user: &DbUser, password: &str, is_demo: bool) -> Resul
   let parsed_hash = PasswordHash::new(&db_user.password_hash)
     .map_err(|err| AuthError::Internal(err.to_string().into()))?;
 
-  ARGON2
-    .verify_password(password.as_bytes(), &parsed_hash)
-    .map_err(|err| {
+  trailbase_extension::password::verify_password(password.as_bytes(), &parsed_hash).map_err(
+    |err| {
       ATTEMPTS.insert(
         db_user.email.to_string(),
         attempts
@@ -102,7 +96,8 @@ pub fn verify_password(db_user: &DbUser, password: &str, is_demo: bool) -> Resul
         argon2::password_hash::Error::Password => AuthError::Unauthorized,
         err => AuthError::Internal(err.to_string().into()),
       };
-    })?;
+    },
+  )?;
 
   return Ok(());
 }
@@ -116,13 +111,13 @@ mod tests {
     let password = "0123456789.";
     let db_user = DbUser::new_for_test("foo@test.org", password);
 
-    assert!(verify_password(&db_user, password, false).is_ok());
+    assert!(check_user_password(&db_user, password, false).is_ok());
 
     // Lockout after 3 failed attempts.
-    assert!(verify_password(&db_user, "", false).is_err());
-    assert!(verify_password(&db_user, "mismatch", false).is_err());
-    assert!(verify_password(&db_user, "something else", false).is_err());
-    assert!(verify_password(&db_user, password, false).is_err());
-    assert!(verify_password(&db_user, password, true).is_ok());
+    assert!(check_user_password(&db_user, "", false).is_err());
+    assert!(check_user_password(&db_user, "mismatch", false).is_err());
+    assert!(check_user_password(&db_user, "something else", false).is_err());
+    assert!(check_user_password(&db_user, password, false).is_err());
+    assert!(check_user_password(&db_user, password, true).is_ok());
   }
 }

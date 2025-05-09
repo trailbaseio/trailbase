@@ -36,6 +36,8 @@ pub enum InitError {
   ObjectStore(#[from] object_store::Error),
   #[error("Queue error: {0}")]
   Queue(#[from] crate::queue::QueueError),
+  #[error("Auth error: {0}")]
+  Auth(#[from] crate::auth::AuthError),
 }
 
 #[derive(Default)]
@@ -142,6 +144,7 @@ pub async fn init_app_state(
     if num_admins == 0 {
       let email = "admin@localhost";
       let password = generate_random_string(20);
+      let hashed_password = crate::auth::password::hash_password(&password)?;
 
       app_state
         .user_conn()
@@ -151,10 +154,10 @@ pub async fn init_app_state(
               INSERT INTO {USER_TABLE}
                 (email, password_hash, verified, admin)
               VALUES
-                (?1, (hash_password(?2)), TRUE, TRUE)
+                (?1, ?2, TRUE, TRUE)
             "#
           ),
-          trailbase_sqlite::params!(email.to_string(), password.clone()),
+          trailbase_sqlite::params!(email.to_string(), hashed_password),
         )
         .await?;
 

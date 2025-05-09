@@ -12,7 +12,7 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
-use crate::auth::password::verify_password;
+use crate::auth::password::check_user_password;
 use crate::auth::tokens::{Tokens, mint_new_tokens};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
@@ -251,7 +251,7 @@ pub async fn login_with_password(
   let db_user: DbUser = user_by_email(state, normalized_email).await?;
 
   // Validate password.
-  verify_password(&db_user, password, state.demo_mode())?;
+  check_user_password(&db_user, password, state.demo_mode())?;
 
   let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   let user_id = db_user.uuid();
