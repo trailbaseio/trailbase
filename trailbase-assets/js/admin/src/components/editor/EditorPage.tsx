@@ -55,60 +55,29 @@ import { showToast } from "@/components/ui/toast";
 import { DataTable } from "@/components/Table";
 
 import { getAllTableSchemas } from "@/lib/table";
-import type { QueryRequest } from "@bindings/QueryRequest";
 import type { QueryResponse } from "@bindings/QueryResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
-import { adminFetch } from "@/lib/fetch";
+import { executeSql, type ExecutionResult } from "@/lib/fetch";
 import { isNotNull } from "@/lib/schema";
 
-type ExecutionError = {
-  code: number;
-  message: string;
-};
-
-type ExecutionResult = {
-  query: string;
-  timestamp: number;
-
-  data?: QueryResponse;
-  error?: ExecutionError;
-};
-
-async function executeSql(
+async function editorExecuteSql(
   sql: string | undefined,
 ): Promise<ExecutionResult | undefined> {
   if (sql === undefined) {
     return undefined;
   }
 
-  const response = await adminFetch("/query", {
-    method: "POST",
-    body: JSON.stringify({
-      query: sql,
-    } as QueryRequest),
-    throwOnError: false,
-  });
-
-  if (response.ok) {
-    return {
-      query: sql,
-      timestamp: Date.now(),
-      data: await response.json(),
-    } as ExecutionResult;
+  const response = await executeSql(sql);
+  const error = response.error;
+  if (error) {
+    showToast({
+      title: "Execution Error",
+      description: error.message,
+      variant: "error",
+    });
   }
 
-  const error = {
-    code: response.status,
-    message: await response.text(),
-  } as ExecutionError;
-
-  showToast({
-    title: "Execution Error",
-    description: error.message,
-    variant: "error",
-  });
-
-  return { query: sql, timestamp: Date.now(), error } as ExecutionResult;
+  return response;
 }
 
 type RowData = Array<object>;
@@ -323,7 +292,7 @@ function EditorPanel(props: {
     queryString,
     // eslint-disable-next-line solid/reactivity
     async (query: string): Promise<ExecutionResult | undefined> => {
-      const result = await executeSql(query);
+      const result = await editorExecuteSql(query);
 
       // Update the scripts state.
       updateExistingScript(props.selected, {

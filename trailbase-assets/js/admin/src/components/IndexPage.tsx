@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { createResource, For } from "solid-js";
 import type { IconTypes } from "solid-icons";
 import {
   TbDatabase,
@@ -8,7 +8,10 @@ import {
   TbSettings,
 } from "solid-icons/tb";
 
+import { executeSql } from "@/lib/fetch";
+
 import { Header } from "@/components/Header";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
 
 function ColorPalette() {
   return (
@@ -76,12 +79,79 @@ const elements = [
   { icon: TbSettings, content: "Server settings" },
 ] as Element[];
 
+type Data = {
+  dbSize: number;
+  numTables: number;
+  numViews: number;
+  numUsers: number;
+};
+
+function FactCard(props: { title: string; content: string }) {
+  return (
+    <Card class="grow">
+      <div class="px-6">
+        <CardTitle>{props.title}</CardTitle>
+      </div>
+
+      <CardContent class="text-xl font-bold text-primary">
+        {props.content}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function IndexPage() {
+  const [fetchResult, { refetch: _ }] = createResource(
+    `
+    SELECT
+      page_count * page_size, num_tables, num_views, num_users
+    FROM
+      pragma_page_count AS page_count,
+      pragma_page_size AS page_size,
+      (SELECT COUNT(*) AS num_tables FROM sqlite_master WHERE type = 'table'),
+      (SELECT COUNT(*) AS num_views FROM sqlite_master WHERE type = 'view'),
+      (SELECT COUNT(*) AS num_users FROM _user);
+  `,
+    async (sql) => {
+      const response = await executeSql(sql);
+      const error = response.error;
+      if (error) {
+        throw Error(JSON.stringify(error));
+      }
+
+      const data = response.data;
+      if (!data || data.rows.length < 1) {
+        throw Error(`Missing data: ${data}`);
+      }
+      const row = data.rows[0];
+      return {
+        dbSize: row[0] as number,
+        numTables: row[1] as number,
+        numViews: row[2] as number,
+        numUsers: row[3] as number,
+      } as Data;
+    },
+  );
+
   return (
     <div class="h-dvh overflow-y-auto">
       <Header title="TrailBase" />
 
       <div class="prose m-4 grow">
+        {fetchResult.state === "ready" && (
+          <div class="flex grow gap-4">
+            <FactCard title="Users" content={`${fetchResult().numUsers}`} />
+            <FactCard
+              title="Tables & Views"
+              content={`${fetchResult().numTables + fetchResult().numViews}`}
+            />
+            <FactCard
+              title="Size"
+              content={`${(fetchResult().dbSize / 1024 / 1024).toPrecision(2)} MB`}
+            />
+          </div>
+        )}
+
         <p>
           Welcome to TrailBase 🚀: your open-source, sub-millisecond,
           single-executable FireBase alternative with type-safe APIs,
