@@ -11,7 +11,11 @@ const $tokens = persistentAtom<Tokens | null>("auth_tokens", null, {
 export const $user = computed($tokens, (_tokens) => client.user());
 
 function initClient(): Client {
-  const HOST = import.meta.env.DEV ? "http://localhost:4000" : "";
+  // For our dev server setup we assume that a TrailBase instance is running at ":4000", otherwise
+  // we query APIs relative to the origin's root path.
+  const HOST = import.meta.env.DEV
+    ? new URL("http://localhost:4000")
+    : undefined;
   const client = Client.init(HOST, {
     tokens: $tokens.get() ?? undefined,
     onAuthChange: (c: Client, _user: User | undefined) => {
@@ -39,7 +43,7 @@ export async function adminFetch(
   }
 
   try {
-    return await client.fetch(`api/_admin${input}`, init);
+    return await client.fetch(`/api/_admin${input}`, init);
   } catch (err) {
     showToast({
       title: "Fetch Error",

@@ -39,7 +39,6 @@ function UserBadge(props: { user: User | undefined }) {
 }
 
 export function AuthButton() {
-  const client = useStore($client);
   const user = useStore($user);
 
   return (
@@ -47,9 +46,9 @@ export function AuthButton() {
       <Match when={!user()}>
         <a
           href={
-            client()?.loginUri(
-              import.meta.env.DEV ? window.location.origin : undefined,
-            ) ?? `/_/auth/login`
+            import.meta.env.DEV
+              ? "http://localhost:4000/_auth/login?redirect_to=/"
+              : "/_/auth/login?redirect_to=/"
           }
         >
           Log in
@@ -59,9 +58,13 @@ export function AuthButton() {
       <Match when={user()}>
         <button
           onClick={() => {
+            // Remove local tokens before redirecting.
             removeTokens();
-            const logout = client()?.logoutUri("/") ?? "/_/auth/logout";
-            window.location.assign(logout);
+
+            const path = import.meta.env.DEV
+              ? "http://localhost:4000/_/auth/logout"
+              : "/_/auth/logout";
+            window.location.assign(path);
           }}
         >
           <UserBadge user={user()} />

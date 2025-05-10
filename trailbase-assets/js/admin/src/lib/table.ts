@@ -28,7 +28,7 @@ export async function createIndex(
 export async function createTable(
   request: CreateTableRequest,
 ): Promise<CreateTableResponse> {
-  const response = await adminFetch("/table", {
+  const response = await adminFetch("/tableffo", {
     method: "POST",
     body: JSON.stringify(request),
   });

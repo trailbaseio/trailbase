@@ -143,14 +143,13 @@ export interface FileUpload {
 ///
 /// TODO: add file upload/download.
 export class RecordApi {
-  private static readonly _recordApi = "api/records/v1";
-  private readonly _createApi: string;
+  private readonly _path: string;
 
   constructor(
     private readonly client: Client,
     private readonly name: string,
   ) {
-    this._createApi = `${RecordApi._recordApi}/${this.name}`;
+    this._path = `${recordApiBasePath}/${this.name}`;
   }
 
   public async list<T = Record<string, unknown>>(opts?: {
@@ -193,9 +192,7 @@ export class RecordApi {
       }
     }
 
-    const response = await this.client.fetch(
-      `${RecordApi._recordApi}/${this.name}?${params}`,
-    );
+    const response = await this.client.fetch(`${this._path}?${params}`);
     return (await response.json()) as ListResponse<T>;
   }
 
@@ -208,8 +205,8 @@ export class RecordApi {
     const expand = opt?.expand;
     const response = await this.client.fetch(
       expand
-        ? `${RecordApi._recordApi}/${this.name}/${id}?expand=${expand.join(",")}`
-        : `${RecordApi._recordApi}/${this.name}/${id}`,
+        ? `${this._path}/${id}?expand=${expand.join(",")}`
+        : `${this._path}/${id}`,
     );
     return (await response.json()) as T;
   }
@@ -217,7 +214,7 @@ export class RecordApi {
   public async create<T = Record<string, unknown>>(
     record: T,
   ): Promise<string | number> {
-    const response = await this.client.fetch(this._createApi, {
+    const response = await this.client.fetch(this._path, {
       method: "POST",
       body: JSON.stringify(record),
     });
@@ -228,7 +225,7 @@ export class RecordApi {
   public async createBulk<T = Record<string, unknown>>(
     records: T[],
   ): Promise<(string | number)[]> {
-    const response = await this.client.fetch(this._createApi, {
+    const response = await this.client.fetch(this._path, {
       method: "POST",
       body: JSON.stringify(records),
     });
@@ -240,22 +237,20 @@ export class RecordApi {
     id: string | number,
     record: Partial<T>,
   ): Promise<void> {
-    await this.client.fetch(`${RecordApi._recordApi}/${this.name}/${id}`, {
+    await this.client.fetch(`${this._path}/${id}`, {
       method: "PATCH",
       body: JSON.stringify(record),
     });
   }
 
   public async delete(id: string | number): Promise<void> {
-    await this.client.fetch(`${RecordApi._recordApi}/${this.name}/${id}`, {
+    await this.client.fetch(`${this._path}/${id}`, {
       method: "DELETE",
     });
   }
 
   public async subscribe(id: string | number): Promise<ReadableStream<Event>> {
-    const response = await this.client.fetch(
-      `${RecordApi._recordApi}/${this.name}/subscribe/${id}`,
-    );
+    const response = await this.client.fetch(`${this._path}/subscribe/${id}`);
     const body = response.body;
     if (!body) {
       throw Error("Subscription reader is null.");
@@ -278,24 +273,10 @@ export class RecordApi {
 
     return body.pipeThrough(transformStream);
   }
-
-  public imageUri(id: string | number, colName: string): URL {
-    return new URL(
-      `/${RecordApi._recordApi}/${this.name}/${id}/file/${colName}`,
-      this.client.site,
-    );
-  }
-
-  public imagesUri(id: string | number, colName: string, index: number): URL {
-    return new URL(
-      `/${RecordApi._recordApi}/${this.name}/${id}/files/${colName}/${index}`,
-      this.client.site,
-    );
-  }
 }
 
 class ThinClient {
-  constructor(public readonly base: URL) {}
+  constructor(public readonly base: URL | undefined) {}
 
   async fetch(
     path: string,
@@ -305,7 +286,7 @@ class ThinClient {
     // NOTE: We need to merge the headers in such a complicated fashion
     // to avoid user-provided `init` with headers unintentionally suppressing
     // the credentials.
-    const response = await fetch(new URL(path, this.base), {
+    const response = await fetch(this.base ? new URL(path, this.base) : path, {
       credentials: isDev ? "include" : "same-origin",
       ...init,
       headers: init
@@ -327,17 +308,14 @@ type ClientOptions = {
 
 /// Client for interacting with TrailBase auth and record APIs.
 export class Client {
-  private static readonly _authApi = "api/auth/v1";
-  private static readonly _authUi = "_/auth";
-
   private readonly _client: ThinClient;
   private readonly _authChange:
     | undefined
     | ((client: Client, user?: User) => void);
   private _tokenState: TokenState;
 
-  constructor(site: URL | string, opts?: ClientOptions) {
-    this._client = new ThinClient(new URL(site));
+  constructor(baseUrl: URL | string | undefined, opts?: ClientOptions) {
+    this._client = new ThinClient(baseUrl ? new URL(baseUrl) : undefined);
     this._authChange = opts?.onAuthChange;
 
     // Note: this is a double assignment to _tokenState to ensure the linter
@@ -345,12 +323,12 @@ export class Client {
     this._tokenState = this.setTokenState(buildTokenState(opts?.tokens), true);
   }
 
-  public static init(site: URL | string, opts?: ClientOptions): Client {
+  public static init(site?: URL | string, opts?: ClientOptions): Client {
     return new Client(site, opts);
   }
 
   public static async tryFromCookies(
-    site: URL | string,
+    site?: URL | string,
     opts?: ClientOptions,
   ): Promise<Client> {
     const client = new Client(site, opts);
@@ -368,7 +346,7 @@ export class Client {
     return client;
   }
 
-  public get site(): URL {
+  public get base(): URL | undefined {
     return this._client.base;
   }
 
@@ -387,7 +365,7 @@ export class Client {
   public async avatarUrl(): Promise<string | undefined> {
     const user = this.user();
     if (user) {
-      const response = await this.fetch(`${Client._authApi}/avatar/${user.id}`);
+      const response = await this.fetch(`${authApiBasePath}/avatar/${user.id}`);
       const json = (await response.json()) as { avatar_url: string };
       return json.avatar_url;
     }
@@ -395,7 +373,7 @@ export class Client {
   }
 
   public async login(email: string, password: string): Promise<void> {
-    const response = await this.fetch(`${Client._authApi}/login`, {
+    const response = await this.fetch(`${authApiBasePath}/login`, {
       method: "POST",
       body: JSON.stringify({
         email: email,
@@ -408,25 +386,18 @@ export class Client {
     );
   }
 
-  public loginUri(redirect?: string): URL {
-    return new URL(
-      `/${Client._authUi}/login?${redirect ? `redirect_to=${redirect}` : ""}`,
-      this.site,
-    );
-  }
-
   public async logout(): Promise<boolean> {
     try {
       const refresh_token = this._tokenState.state?.tokens.refresh_token;
       if (refresh_token) {
-        await this.fetch(`${Client._authApi}/logout`, {
+        await this.fetch(`${authApiBasePath}/logout`, {
           method: "POST",
           body: JSON.stringify({
             refresh_token,
           } as LogoutRequest),
         });
       } else {
-        await this.fetch(`${Client._authApi}/logout`);
+        await this.fetch(`${authApiBasePath}/logout`);
       }
     } catch (err) {
       console.debug(err);
@@ -435,20 +406,13 @@ export class Client {
     return true;
   }
 
-  public logoutUri(redirect?: string): URL {
-    return new URL(
-      `/${Client._authApi}/logout?${redirect ? `redirect_to=${redirect}` : ""}`,
-      this.site,
-    );
-  }
-
   public async deleteUser(): Promise<void> {
-    await this.fetch(`${Client._authApi}/delete`);
+    await this.fetch(`${authApiBasePath}/delete`);
     this.setTokenState(buildTokenState(undefined));
   }
 
   public async changeEmail(email: string): Promise<void> {
-    await this.fetch(`${Client._authApi}/change_email`, {
+    await this.fetch(`${authApiBasePath}/change_email`, {
       method: "POST",
       body: JSON.stringify({
         new_email: email,
@@ -457,7 +421,7 @@ export class Client {
   }
 
   public async checkCookies(): Promise<Tokens | undefined> {
-    const response = await this.fetch(`${Client._authApi}/status`);
+    const response = await this.fetch(`${authApiBasePath}/status`);
     const status: LoginStatusResponse = await response.json();
 
     const authToken = status?.auth_token;
@@ -484,7 +448,7 @@ export class Client {
 
   private async refreshTokensImpl(refreshToken: string): Promise<TokenState> {
     const response = await this._client.fetch(
-      `${Client._authApi}/refresh`,
+      `${authApiBasePath}/refresh`,
       this._tokenState.headers,
       {
         method: "POST",
@@ -526,7 +490,7 @@ export class Client {
   }
 
   /// Fetches data from TrailBase endpoints, e.g.:
-  ///    const response = await client.fetch("api/auth/v1/status");
+  ///    const response = await client.fetch("/api/auth/v1/status");
   ///
   /// Unlike native fetch, will throw in case !response.ok.
   public async fetch(path: string, init?: FetchOptions): Promise<Response> {
@@ -551,6 +515,26 @@ export class Client {
       throw err;
     }
   }
+}
+
+const recordApiBasePath = "/api/records/v1";
+const authApiBasePath = "/api/auth/v1";
+
+export function filePath(
+  apiName: string,
+  recordId: string | number,
+  columnName: string,
+): string {
+  return `${recordApiBasePath}/${apiName}/${recordId}/file/${columnName}`;
+}
+
+export function filesPath(
+  apiName: string,
+  recordId: string | number,
+  columnName: string,
+  index: number,
+): string {
+  return `${recordApiBasePath}/${apiName}/${recordId}/files/${columnName}/${index}`;
 }
 
 function _isDev(): boolean {

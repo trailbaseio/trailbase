@@ -1,10 +1,15 @@
+import { filePath } from "trailbase";
+
 import { $client } from "@/lib/client";
 import type { Article } from "@schema/article";
 
 export function imageUrl(article: Article): string {
   const client = $client.get();
   if (client && article.image) {
-    return client.records("articles_view").imageUri(`${article.id}`, "image");
+    const path = filePath("articles_view", article.id, "image");
+    return import.meta.env.DEV
+      ? new URL(path, "http://localhost:4000").toString()
+      : path;
   }
   return "/default.svg";
 }

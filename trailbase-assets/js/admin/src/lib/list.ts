@@ -22,7 +22,6 @@ export function buildListSearchParams({
     ?.split(/AND/)
     .map((frag: string) => frag.trim())
     .join("&");
-  console.log("PARAMS", filterParams);
   const params = new URLSearchParams(filterParams);
 
   params.set("limit", pageSize.toString());

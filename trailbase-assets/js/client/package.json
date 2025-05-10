@@ -1,18 +1,18 @@
 {
   "name": "trailbase",
   "description": "Official TrailBase Client",
-  "version": "0.3.3",
+  "version": "0.4.1",
   "license": "OSL-3.0",
   "type": "module",
   "main": "./src/index.ts",
   "publishConfig": {
     "access": "public",
-    "main": "./dist/js/client/src/index.js",
-    "types": "/dist/js/client/src/index.d.ts",
+    "main": "./dist/trailbase-assets/js/client/src/index.js",
+    "types": "/dist/trailbase-assets/js/client/src/index.d.ts",
     "exports": {
       ".": {
-        "default": "./dist/js/client/src/index.js",
-        "types": "./dist/js/client/src/index.d.ts"
+        "default": "./dist/trailbase-assets/js/client/src/index.js",
+        "types": "./dist/trailbase-assets/js/client/src/index.d.ts"
       }
     }
   },
@@ -31,6 +31,7 @@
     "build": "tsc",
     "test": "vitest run && vite-node tests/integration_test_runner.ts",
     "format": "prettier -w src tests",
+    "run-publish": "rm -rf ./dist && pnpm build && pnpm publish . --no-git-checks",
     "check": "tsc --noEmit --skipLibCheck && eslint"
   },
   "devDependencies": {

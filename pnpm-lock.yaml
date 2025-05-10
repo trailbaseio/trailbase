@@ -155,8 +155,8 @@ importers:
         specifier: ^1.9.6
         version: 1.9.6
       trailbase:
-        specifier: ^0.3.3
-        version: 0.3.3
+        specifier: ^0.4.1
+        version: 0.4.1
     devDependencies:
       '@astrojs/solid-js':
         specifier: ^5.0.10
@@ -5592,8 +5592,8 @@ packages:
     resolution: {integrity: sha512-hdF5ZgjTqgAntKkklYw0R03MG2x/bSzTtkxmIRw/sTNV8YXsCJ1tfLAX23lhxhHJlEf3CRCOCGGWw3vI3GaSPw==}
     engines: {node: '>=18'}
 
-  trailbase@0.3.3:
-    resolution: {integrity: sha512-s0GgYMlMbWJKwg3jcu7d9T5AN3rzBlrIeUpOiQhi8ogNX1BoHzRYb0vq3Yy52nEyybCmY+ExnJQvawzm/Yvc0A==}
+  trailbase@0.4.1:
+    resolution: {integrity: sha512-hl4/0DeMwyBmhNJL7NeBFAJhxOHtFHP4oEXVMMY52VSM6YVTn5r3bi5vIG4RTVF14nP2cIheINKwZ19YqiCc5g==}
 
   trim-lines@3.0.1:
     resolution: {integrity: sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg==}
@@ -12537,7 +12537,7 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  trailbase@0.3.3:
+  trailbase@0.4.1:
     dependencies:
       jwt-decode: 4.0.0
       uuid: 11.1.0

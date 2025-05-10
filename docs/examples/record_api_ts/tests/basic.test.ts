@@ -9,7 +9,7 @@ import { list } from "../src/list.ts";
 import { subscribe, subscribeAll } from "../src/subscribe.ts";
 
 async function connect(): Promise<Client> {
-  const client = new Client("http://localhost:4000");
+  const client = Client.init("http://localhost:4000");
   await client.login("admin@localhost", "secret");
   return client;
 }
