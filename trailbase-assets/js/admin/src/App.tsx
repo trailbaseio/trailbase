@@ -31,6 +31,7 @@ function Layout(props: RouteSectionProps) {
 
 const LazyEditorPage = lazy(() => import("@/components/editor/EditorPage"));
 const LazyLogsPage = lazy(() => import("@/components/logs/LogsPage"));
+const LazyErdPage = lazy(() => import("@/components/erd/ErdPage"));
 
 const App: Component = () => {
   const user = useStore($user);
@@ -44,6 +45,7 @@ const App: Component = () => {
             <Route path="/table/:table?" component={TablePage} />
             <Route path="/auth" component={AccountsPage} />
             <Route path="/editor" component={LazyEditorPage} />
+            <Route path="/erd" component={LazyErdPage} />
             <Route path="/logs" component={LazyLogsPage} />
             <Route path="/settings/:group?" component={SettingsPage} />
 

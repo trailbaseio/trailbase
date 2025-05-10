@@ -3,6 +3,7 @@ import type { IconTypes } from "solid-icons";
 import {
   TbDatabase,
   TbEdit,
+  TbChartDots3,
   TbUsers,
   TbTimeline,
   TbSettings,
@@ -73,6 +74,11 @@ const elements = [
     icon: TbEdit,
     content: "Untethered script access letting you execute arbitrary SQL.",
     href: "editor",
+  },
+  {
+    icon: TbChartDots3,
+    content: "Visualize Database Schema as Entity-Relationship-Diagram",
+    href: "erd",
   },
   {
     icon: TbUsers,

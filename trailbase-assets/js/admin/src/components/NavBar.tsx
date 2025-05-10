@@ -4,6 +4,7 @@ import {
   TbDatabase,
   TbEdit,
   TbUsers,
+  TbChartDots3,
   TbTimeline,
   TbSettings,
 } from "solid-icons/tb";
@@ -22,6 +23,7 @@ const BASE = "/_/admin";
 const options = [
   [`${BASE}/table/`, TbDatabase, "Table & View Browser"],
   [`${BASE}/editor`, TbEdit, "SQL Editor"],
+  [`${BASE}/erd`, TbChartDots3, "Entity Relationship Diagram"],
   [`${BASE}/auth`, TbUsers, "User Accounts"],
   [`${BASE}/logs`, TbTimeline, "Logs & Metrics"],
   [`${BASE}/settings/`, TbSettings, "Settings"],
