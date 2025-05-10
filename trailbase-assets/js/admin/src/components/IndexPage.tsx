@@ -98,8 +98,8 @@ type Data = {
   numUsers: number;
 };
 
-function FactCard(props: { title: string; content: string }) {
-  return (
+function FactCard(props: { title: string; content: string; href?: string }) {
+  const FCard = () => (
     <Card class="grow">
       <div class="px-6">
         <CardTitle>{props.title}</CardTitle>
@@ -109,6 +109,18 @@ function FactCard(props: { title: string; content: string }) {
         {props.content}
       </CardContent>
     </Card>
+  );
+
+  return (
+    <>
+      {props.href ? (
+        <a class="grow no-underline" href={props.href}>
+          <FCard />
+        </a>
+      ) : (
+        <FCard />
+      )}
+    </>
   );
 }
 
@@ -152,10 +164,15 @@ export function IndexPage() {
       <div class="prose m-4 flex grow flex-col gap-4">
         {fetchResult.state === "ready" && (
           <div class="flex grow gap-4">
-            <FactCard title="Users" content={`${fetchResult().numUsers}`} />
+            <FactCard
+              title="Users"
+              content={`${fetchResult().numUsers}`}
+              href="auth"
+            />
             <FactCard
               title="Tables & Views"
               content={`${fetchResult().numTables + fetchResult().numViews}`}
+              href="table"
             />
             <FactCard
               title="Size"
