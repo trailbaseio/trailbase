@@ -60,23 +60,35 @@ function ColorPalette() {
 type Element = {
   icon: IconTypes;
   content: string;
+  href: string;
 };
 
 const elements = [
   {
     icon: TbDatabase,
     content: "Browse, create or alter your Tables, Indexes, and Views.",
+    href: "table",
   },
   {
     icon: TbEdit,
     content: "Untethered script access letting you execute arbitrary SQL.",
+    href: "editor",
   },
   {
     icon: TbUsers,
     content: "Browse and manage your application's user registry.",
+    href: "auth",
   },
-  { icon: TbTimeline, content: "Access logs for your application" },
-  { icon: TbSettings, content: "Server settings" },
+  {
+    icon: TbTimeline,
+    content: "Access logs for your application",
+    href: "logs",
+  },
+  {
+    icon: TbSettings,
+    content: "Server settings",
+    href: "settings",
+  },
 ] as Element[];
 
 type Data = {
@@ -137,7 +149,7 @@ export function IndexPage() {
     <div class="h-dvh overflow-y-auto">
       <Header title="TrailBase" />
 
-      <div class="prose m-4 grow">
+      <div class="prose m-4 flex grow flex-col gap-4">
         {fetchResult.state === "ready" && (
           <div class="flex grow gap-4">
             <FactCard title="Users" content={`${fetchResult().numUsers}`} />
@@ -152,41 +164,56 @@ export function IndexPage() {
           </div>
         )}
 
-        <p>
-          Welcome to TrailBase 🚀: your open-source, sub-millisecond,
-          single-executable FireBase alternative with type-safe APIs,
-          notifications, builtin JS/TS runtime, auth &amp; admin UI built on
-          SQLite, Rust &amp; V8.
-        </p>
+        <Card>
+          <div class="px-6">
+            <CardTitle>Welcome to TrailBase 🚀</CardTitle>
+          </div>
 
-        <p>
-          TrailBase is still young and evolving rapidly. You'd really help us
-          out by leaving some feedback on{" "}
-          <a href="https://github.com/trailbaseio/trailbase">GitHub</a> or even
-          a ⭐, if you like it.
-        </p>
+          <CardContent>
+            <p>
+              Your open-source, sub-millisecond, single-executable FireBase
+              alternative with type-safe APIs, notifications, builtin JS/TS
+              runtime, auth &amp; admin UI built on SQLite, Rust &amp; V8.
+            </p>
 
-        <p>
-          Documentation is available at{" "}
-          <a href="https://trailbase.io/getting-started/starting-up">
-            trailbase.io
-          </a>
-          .
-        </p>
+            <p>
+              TrailBase is still young and evolving rapidly. You'd really help
+              us out by leaving some feedback on{" "}
+              <a href="https://github.com/trailbaseio/trailbase">GitHub</a> or
+              even a ⭐, if you like it.
+            </p>
 
-        <p>
-          Quick overview:
-          <For each={elements}>
-            {(item) => {
-              const Icon = item.icon;
-              return (
-                <div class="ml-4 flex items-center gap-4">
-                  <Icon size={20} /> {item.content}
-                </div>
-              );
-            }}
-          </For>
-        </p>
+            <p>
+              Documentation is available at{" "}
+              <a href="https://trailbase.io/getting-started/starting-up">
+                trailbase.io
+              </a>
+              .
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <div class="px-6">
+            <CardTitle>Quick Reference</CardTitle>
+          </div>
+
+          <CardContent>
+            <For each={elements}>
+              {(item) => {
+                const Icon = item.icon;
+                return (
+                  <a
+                    class="ml-4 flex items-center gap-4 font-normal no-underline"
+                    href={item.href}
+                  >
+                    <Icon size={20} /> {item.content}
+                  </a>
+                );
+              }}
+            </For>
+          </CardContent>
+        </Card>
 
         {import.meta.env.DEV && <ColorPalette />}
       </div>
