@@ -24,6 +24,7 @@ use crate::constants::{
 };
 use crate::extract::Either;
 use crate::rand::generate_random_string;
+use crate::util::urlencode;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub(crate) struct LoginQuery {
@@ -97,8 +98,12 @@ pub(crate) async fn login_handler(
         remove_cookie(&cookies, COOKIE_REFRESH_TOKEN);
 
         let url = format!(
-          "/_/auth/login?alert={msg}",
-          msg = crate::util::urlencode(&format!("Login Failed: {status}"))
+          "/_/auth/login?alert={msg}&{redirect_to}",
+          msg = urlencode(&format!("Login Failed: {status}")),
+          redirect_to = redirect.map_or_else(
+            || "".to_string(),
+            |r| format!("redirect_to={}", urlencode(&r))
+          ),
         );
 
         return Ok(Redirect::to(&url).into_response());
