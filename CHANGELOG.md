@@ -1,3 +1,13 @@
+## v0.11.3
+
+* Add simple schema visualizer to admin UI. This is a starting point.
+* Configurable password policies: length, characters, ...
+* Turn admin UI's landing page into more of a dashboard, i.e. provide some
+  quick numbers on DB size, num users, ...
+* Some small fixes and internal cleanups, e.g. preserve `redirect_to`, simplify
+  state management, ...
+* Update dependencies.
+
 ## v0.11.2
 
 * Rate-limit failed login attempts to protect against brute force.
