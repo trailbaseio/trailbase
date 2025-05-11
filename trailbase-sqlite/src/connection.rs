@@ -420,7 +420,7 @@ impl Connection {
         let batch = rusqlite::Batch::new(conn, sql.as_ref());
 
         let mut p = batch.peekable();
-        while let Ok(Some(mut stmt)) = p.next() {
+        while let Some(mut stmt) = p.next()? {
           let mut rows = stmt.raw_query();
           let row = rows.next()?;
 

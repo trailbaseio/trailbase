@@ -42,7 +42,7 @@ pub async fn query_handler(
     sqlite3_parse_into_statements(&request.query).map_err(|err| Error::BadRequest(err.into()))?;
 
   let mut must_invalidate_table_cache = false;
-  let mut mutation = false;
+  let mut mutation = true;
 
   for stmt in statements {
     use sqlite3_parser::ast::Stmt;
@@ -55,14 +55,11 @@ pub async fn query_handler(
       | Stmt::CreateVirtualTable { .. }
       | Stmt::CreateView { .. } => {
         must_invalidate_table_cache = true;
-        mutation = true;
       }
       Stmt::Select { .. } => {
-        // Do nothing.
+        mutation = false;
       }
-      _ => {
-        mutation = true;
-      }
+      _ => {}
     }
   }
 

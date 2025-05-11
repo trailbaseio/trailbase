@@ -330,6 +330,13 @@ async fn test_execute_batch() {
 #[tokio::test]
 async fn test_execute_batch_error() {
   let conn = Connection::open_in_memory().unwrap();
+
+  let result = conn.execute_batch("SELECT a").await;
+  assert!(result.is_err(), "{result:?}");
+
+  let result = conn.execute_batch("SELECT a;").await;
+  assert!(result.is_err(), "{result:?}");
+
   let result = conn
     .execute_batch(
       r#"
