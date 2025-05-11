@@ -1,103 +1,161 @@
-import { Switch, Match } from "solid-js";
+import { Switch, Match, createMemo } from "solid-js";
 import { createTableSchemaQuery } from "@/lib/table";
 
-import { Mermaid } from "@/components/Mermaid";
 import { Header } from "@/components/Header";
+import {
+  ErdGraph,
+  NodeMetadata,
+  EdgeMetadata,
+  PortMetadata,
+  ER_NODE_NAME,
+  NODE_WIDTH,
+  LINE_HEIGHT,
+  EDGE_COLOR,
+} from "@/components/ErdGraph";
 
-import { getForeignKey, getUnique, isNotNull, hiddenTable } from "@/lib/schema";
+import {
+  getForeignKey,
+  getUnique,
+  isNotNull,
+  hiddenTable,
+  tableType,
+  ForeignKey,
+} from "@/lib/schema";
 
 import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 
-function buildErdForTableOrView(
-  tableOrView: Table | View,
-  entities: string[],
-  relations: string[],
-) {
-  const rel = "references";
+function findTargetPortName(
+  allTablesAndViews: (Table | View)[],
+  foreignKey: ForeignKey,
+): string {
+  switch (foreignKey.referred_columns.length) {
+    case 0:
+      break;
+    case 1:
+      return `${foreignKey.foreign_table}-${foreignKey.referred_columns[0]}`;
+    default:
+      return foreignKey.foreign_table;
+  }
 
-  entities.push(`${tableOrView.name} {`);
-  for (const column of tableOrView.columns ?? []) {
-    const unique = getUnique(column.options);
-    const foreignKey = getForeignKey(column.options);
-    if (foreignKey !== undefined) {
-      const notNull = isNotNull(column.options);
-      if (notNull) {
-        relations.push(
-          `   ${tableOrView.name} 1 to 1 ${foreignKey.foreign_table} : ${rel}`,
-        );
-      } else {
-        relations.push(
-          `   ${tableOrView.name} one or zero to 1 ${foreignKey.foreign_table} : ${rel}`,
-        );
-      }
+  for (const tableOrView of allTablesAndViews) {
+    if (tableOrView.name !== foreignKey.foreign_table) {
+      continue;
     }
 
-    const isPrimary = unique?.is_primary ?? false;
-    if (isPrimary) {
-      if (foreignKey !== undefined) {
-        entities.push(
-          `   ${column.data_type} ${column.name} PK, FK "${foreignKey.foreign_table}"`,
-        );
-      } else {
-        entities.push(`   ${column.data_type} ${column.name} PK`);
+    for (const column of tableOrView.columns ?? []) {
+      const unique = getUnique(column.options);
+      if (unique?.is_primary ?? false) {
+        return `${foreignKey.foreign_table}-${column.name}`;
       }
-    } else if (foreignKey !== undefined) {
-      entities.push(
-        `   ${column.data_type} ${column.name} FK "${foreignKey.foreign_table}"`,
-      );
-    } else {
-      entities.push(`   ${column.data_type} ${column.name}`);
     }
   }
-  entities.push(`}`);
+
+  return foreignKey.foreign_table;
 }
 
-function buildErd(schema: ListSchemasResponse): string {
-  const entities: string[] = [];
-  const relations: string[] = [];
-  for (const table of schema.tables) {
-    if (hiddenTable(table)) {
-      continue;
+function buildErNode(
+  allTablesAndViews: (Table | View)[],
+  tableOrView: Table | View,
+): [NodeMetadata, EdgeMetadata[]] {
+  const BASE_EDGE = {
+    shape: "edge",
+    attr: { line: { stroke: EDGE_COLOR, strokeWidth: 2 } },
+    zIndex: 0,
+  };
+
+  const edges: EdgeMetadata[] = [];
+  const ports: PortMetadata[] = [];
+
+  for (const column of tableOrView.columns ?? []) {
+    const notNull = isNotNull(column.options);
+    ports.push({
+      id: `${tableOrView.name}-${column.name}`,
+      group: "list",
+      attrs: {
+        portNameLabel: {
+          text: column.name,
+        },
+        portTypeLabel: {
+          text: notNull ? `${column.data_type}` : `${column.data_type}?`,
+          // Offset to make more space for name.
+          refX: 180,
+        },
+      },
+    });
+
+    const foreignKey = getForeignKey(column.options);
+    if (foreignKey !== undefined) {
+      edges.push({
+        source: {
+          cell: tableOrView.name,
+          port: `${tableOrView.name}-${column.name}`,
+        },
+        // FIXME: lookup pk if referred columns are not provided. Otherwise can
+        // we just point at the node rather than a specific port?
+        target: {
+          cell: foreignKey.foreign_table,
+          port: findTargetPortName(allTablesAndViews, foreignKey),
+        },
+        ...BASE_EDGE,
+      });
     }
-    buildErdForTableOrView(table, entities, relations);
   }
 
-  for (const view of schema.views) {
-    if (hiddenTable(view)) {
-      continue;
+  const node: NodeMetadata = {
+    id: tableOrView.name,
+    shape: ER_NODE_NAME,
+    label: `${tableOrView.name} [${tableType(tableOrView)}]`,
+    width: NODE_WIDTH,
+    height: LINE_HEIGHT,
+    ports,
+    attr: { line: { stroke: EDGE_COLOR, strokeWidth: 2 } },
+  };
+
+  return [node, edges];
+}
+
+function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
+  const nodesAndEdges = createMemo(() => {
+    const nodes: NodeMetadata[] = [];
+    const edges: EdgeMetadata[] = [];
+
+    const allTablesAndViews = [...props.schema.tables, ...props.schema.views];
+    for (const tableOrView of allTablesAndViews) {
+      if (tableOrView.name !== "_user" && hiddenTable(tableOrView)) {
+        continue;
+      }
+
+      const [n, e] = buildErNode(allTablesAndViews, tableOrView);
+      nodes.push(n);
+      edges.push(...e);
     }
-    buildErdForTableOrView(view, entities, relations);
-  }
 
-  return `
-    erDiagram
+    return { nodes, edges };
+  });
 
-    ${entities.join("\n")}
-
-    ${relations.join("\n")}
-  `;
+  return (
+    <ErdGraph nodes={nodesAndEdges().nodes} edges={nodesAndEdges().edges} />
+  );
 }
 
 export function ErdPage() {
   const schemaFetch = createTableSchemaQuery();
 
   return (
-    <div class="h-dvh overflow-y-auto">
+    <div class="h-dvh">
       <Header title="Schema" />
 
-      <div class="flex flex-col gap-4 p-4">
-        <Switch>
-          <Match when={schemaFetch.isError}>
-            <span>Schema fetch error: {JSON.stringify(schemaFetch.error)}</span>
-          </Match>
+      <Switch>
+        <Match when={schemaFetch.isError}>
+          <span>Schema fetch error: {JSON.stringify(schemaFetch.error)}</span>
+        </Match>
 
-          <Match when={schemaFetch.data}>
-            <Mermaid value={buildErd(schemaFetch.data!)} />
-          </Match>
-        </Switch>
-      </div>
+        <Match when={schemaFetch.data}>
+          <SchemaErdGraph schema={schemaFetch.data!} />
+        </Match>
+      </Switch>
     </div>
   );
 }
