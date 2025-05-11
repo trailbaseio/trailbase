@@ -1,4 +1,5 @@
 import { createForm } from "@tanstack/solid-form";
+import { useQueryClient } from "@tanstack/solid-query";
 
 import {
   Accordion,
@@ -81,6 +82,7 @@ export function EmailSettings(props: {
   markDirty: () => void;
   postSubmit: () => void;
 }) {
+  const queryClient = useQueryClient();
   const config = createConfigQuery();
 
   const Form = (p: { config: EmailConfig }) => {
@@ -95,7 +97,7 @@ export function EmailSettings(props: {
 
         const newConfig = Config.fromPartial(c);
         newConfig.email = value;
-        await setConfig(newConfig);
+        await setConfig(queryClient, newConfig);
 
         props.postSubmit();
       },

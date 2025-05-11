@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createMemo, createResource } from "solid-js";
+import { For, Match, Show, Switch, createMemo } from "solid-js";
 import { useNavigate, useParams, type Navigator } from "@solidjs/router";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
@@ -20,7 +20,7 @@ import { SplitView } from "@/components/SplitView";
 import { SafeSheet } from "@/components/SafeSheet";
 import { Separator } from "@/components/ui/separator";
 
-import { getAllTableSchemas } from "@/lib/table";
+import { createTableSchemaQuery } from "@/lib/table";
 import { hiddenTable, tableType } from "@/lib/schema";
 
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
@@ -210,21 +210,21 @@ function TableSplitView(props: {
 }
 
 export function TablePage() {
-  const [schemaFetch, { refetch }] = createResource(getAllTableSchemas);
+  const schemaFetch = createTableSchemaQuery();
   const schemaRefetch = async () => {
-    const schemas = await refetch();
+    const schemas = await schemaFetch.refetch();
     console.debug("All table schemas re-fetched:", schemas);
   };
 
   return (
     <Switch>
-      <Match when={schemaFetch.error}>
-        <span>Schema fetch error: {JSON.stringify(schemaFetch.latest)}</span>
+      <Match when={schemaFetch.isError}>
+        <span>Schema fetch error: {JSON.stringify(schemaFetch.error)}</span>
       </Match>
 
-      <Match when={schemaFetch()}>
+      <Match when={schemaFetch.data}>
         <TableSplitView
-          schemas={schemaFetch()!}
+          schemas={schemaFetch.data!}
           schemaRefetch={schemaRefetch}
         />
       </Match>

@@ -10,6 +10,7 @@ import type { Component, Signal } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
 import { createForm } from "@tanstack/solid-form";
 import { TbRefresh } from "solid-icons/tb";
+import { useQueryClient } from "@tanstack/solid-query";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -40,6 +41,7 @@ import { createConfigQuery, setConfig, invalidateConfig } from "@/lib/config";
 import { adminFetch } from "@/lib/fetch";
 
 function ServerSettings(props: CommonProps) {
+  const queryClient = useQueryClient();
   const config = createConfigQuery();
 
   const Form = (p: { config: ServerConfig }) => {
@@ -54,7 +56,7 @@ function ServerSettings(props: CommonProps) {
 
         const newConfig = Config.fromPartial(c);
         newConfig.server = value;
-        await setConfig(newConfig);
+        await setConfig(queryClient, newConfig);
 
         props.postSubmit?.();
       },
@@ -234,6 +236,7 @@ function ServerSettings(props: CommonProps) {
 }
 
 function ImportSettings(props: CommonProps) {
+  const queryClient = useQueryClient();
   const config = createConfigQuery();
 
   const Form = (p: { config: ServerConfig }) => {
@@ -248,7 +251,7 @@ function ImportSettings(props: CommonProps) {
 
         const newConfig = Config.fromPartial(c);
         newConfig.server = value;
-        await setConfig(newConfig);
+        await setConfig(queryClient, newConfig);
 
         props.postSubmit();
       },
@@ -453,6 +456,7 @@ const sites = [
 ] as const;
 
 export function SettingsPage() {
+  const queryClient = useQueryClient();
   const params = useParams<{ group: string }>();
   const [dirty, setDirty] = createSignal(false);
 
@@ -491,7 +495,7 @@ export function SettingsPage() {
           title="Settings"
           titleSelect={activeSite().label}
           left={
-            <IconButton onClick={invalidateConfig}>
+            <IconButton onClick={() => invalidateConfig(queryClient)}>
               <TbRefresh size={18} />
             </IconButton>
           }

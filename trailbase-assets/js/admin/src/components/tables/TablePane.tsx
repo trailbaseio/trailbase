@@ -16,6 +16,7 @@ import type {
   CellContext,
 } from "@tanstack/solid-table";
 import { createColumnHelper } from "@tanstack/solid-table";
+import { useQueryClient } from "@tanstack/solid-query";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { asyncBase64Encode } from "trailbase";
 
@@ -242,6 +243,7 @@ function TableHeaderRightHandButtons(props: {
     tableOrViewSatisfiesRecordApiRequirements(props.table, props.allTables),
   );
 
+  const queryClient = useQueryClient();
   const config = createConfigQuery();
   const hasRecordApi = () => hasRecordApis(config?.data?.config, table().name);
 
@@ -256,7 +258,7 @@ function TableHeaderRightHandButtons(props: {
                 name: table().name,
               });
 
-              invalidateConfig();
+              invalidateConfig(queryClient);
               await props.schemaRefetch();
             })().catch(console.error)
           }

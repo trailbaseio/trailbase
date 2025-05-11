@@ -4,11 +4,11 @@ import {
   Show,
   Switch,
   createEffect,
-  createResource,
   createSignal,
   onCleanup,
   type Accessor,
 } from "solid-js";
+import { useQuery } from "@tanstack/solid-query";
 import { createWritableMemo } from "@solid-primitives/memo";
 import type { ColumnDef } from "@tanstack/solid-table";
 import { persistentAtom } from "@nanostores/persistent";
@@ -54,31 +54,11 @@ import {
 import { showToast } from "@/components/ui/toast";
 import { DataTable } from "@/components/Table";
 
-import { getAllTableSchemas } from "@/lib/table";
+import { createTableSchemaQuery } from "@/lib/table";
 import type { QueryResponse } from "@bindings/QueryResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import { executeSql, type ExecutionResult } from "@/lib/fetch";
 import { isNotNull } from "@/lib/schema";
-
-async function editorExecuteSql(
-  sql: string | undefined,
-): Promise<ExecutionResult | undefined> {
-  if (sql === undefined) {
-    return undefined;
-  }
-
-  const response = await executeSql(sql);
-  const error = response.error;
-  if (error) {
-    showToast({
-      title: "Execution Error",
-      description: error.message,
-      variant: "error",
-    });
-  }
-
-  return response;
-}
 
 type RowData = Array<object>;
 
@@ -280,36 +260,54 @@ function EditorPanel(props: {
   setDirty: (dirty: boolean) => void;
   deleteScript: () => void;
 }) {
-  const [queryString, setQueryString] = createSignal<string | undefined>();
-  createEffect(() => {
-    // Subscribe to selected script changes and reset the query results.
-    const index = props.selected;
-    console.debug(`Switched to script ${index}, clearing results`);
-    mutate(undefined);
-  });
+  // Will only be set when the user explicitly triggers "execute";
+  const [queryString, setQueryString] = createWritableMemo<string | null>(
+    () => {
+      // Reset whenever we switch tabs.
+      const _unused = props.selected;
 
-  const [executionResult, { mutate, refetch }] = createResource(
-    queryString,
-    // eslint-disable-next-line solid/reactivity
-    async (query: string): Promise<ExecutionResult | undefined> => {
-      const result = await editorExecuteSql(query);
-
-      // Update the scripts state.
-      updateExistingScript(props.selected, {
-        ...props.script,
-        result,
-      });
-
-      return result;
+      return null;
     },
   );
+
+  const executionResult = useQuery(() => {
+    const selected = props.selected;
+    const query = queryString();
+    const queryKey = query ?? props.script.contents;
+    return {
+      queryKey: ["query", queryKey, selected],
+      queryFn: async () => {
+        if (query === null) {
+          return null;
+        }
+
+        const response = await executeSql(query);
+        const error = response.error;
+        if (error) {
+          showToast({
+            title: "Execution Error",
+            description: error.message,
+            variant: "error",
+          });
+        }
+
+        // Update the scripts state.
+        updateExistingScript(props.selected, {
+          ...props.script,
+          result: response,
+        });
+
+        return response;
+      },
+    };
+  });
 
   const execute = () => {
     const text = editor?.state.doc.toString();
     if (text) {
       // We need to distinguish to work-around createResources caching.
       if (queryString() === text) {
-        refetch();
+        executionResult.refetch();
       } else {
         setQueryString(text);
       }
@@ -432,7 +430,10 @@ function EditorPanel(props: {
 
         <ResizablePanel class="hide-scrollbars overflow-y-scroll">
           <div class="grow p-4">
-            <ResultView script={props.script} response={executionResult()} />
+            <ResultView
+              script={props.script}
+              response={executionResult.data ?? undefined}
+            />
           </div>
         </ResizablePanel>
       </Resizable>
@@ -445,7 +446,7 @@ export function EditorPage() {
   const [selected, setSelected] = createSignal<number>(0);
   const [dirty, setDirty] = createSignal<boolean>(false);
 
-  const [schemaFetch, { refetch: _ }] = createResource(getAllTableSchemas);
+  const schemaFetch = createTableSchemaQuery();
 
   type DirtyDialogState = {
     nextSelected: number;
@@ -515,15 +516,15 @@ export function EditorPage() {
         second={() => {
           return (
             <Switch fallback={"Loading..."}>
-              <Match when={schemaFetch.error}>
+              <Match when={schemaFetch.isError}>
                 <span>
-                  Schema fetch error: {JSON.stringify(schemaFetch.latest)}
+                  Schema fetch error: {JSON.stringify(schemaFetch.error)}
                 </span>
               </Match>
 
-              <Match when={schemaFetch()}>
+              <Match when={schemaFetch.data}>
                 <EditorPanel
-                  schemas={schemaFetch()!}
+                  schemas={schemaFetch.data!}
                   selected={selected()}
                   script={script()}
                   dirty={dirty()}

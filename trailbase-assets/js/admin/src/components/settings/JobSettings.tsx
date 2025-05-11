@@ -1,5 +1,6 @@
 import { createResource, Switch, Match, Index } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
+import { useQueryClient } from "@tanstack/solid-query";
 import { TbPlayerPlay, TbInfoCircle } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
@@ -128,6 +129,7 @@ function JobSettingsImpl(props: {
   jobs: Job[];
   refetchJobs: () => void;
 }) {
+  const queryClient = useQueryClient();
   const form = createForm(() => ({
     defaultValues: buildFormProxy(props.config.jobs, props.jobs),
     onSubmit: async ({ value }: { value: FormProxy }) => {
@@ -137,7 +139,7 @@ function JobSettingsImpl(props: {
         jobs,
       } satisfies Config;
 
-      await setConfig(newConfig);
+      await setConfig(queryClient, newConfig);
       props.refetchJobs();
       props.postSubmit();
     },

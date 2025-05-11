@@ -1,6 +1,7 @@
 import { For, JSXElement, createSignal } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { TbInfoCircle } from "solid-icons/tb";
+import { useQueryClient } from "@tanstack/solid-query";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle, CardHeader } from "@/components/ui/card";
@@ -312,6 +313,7 @@ export function RecordApiSettingsForm(props: {
   markDirty: () => void;
   schema: Table | View;
 }) {
+  const queryClient = useQueryClient();
   const config = createConfigQuery();
 
   const type = () => tableType(props.schema);
@@ -345,7 +347,7 @@ export function RecordApiSettingsForm(props: {
 
         const newConfig = updateRecordApiConfig(c, value);
         try {
-          await setConfig(newConfig);
+          await setConfig(queryClient, newConfig);
           props.close();
         } catch (err) {
           showToast({
@@ -683,7 +685,7 @@ export function RecordApiSettingsForm(props: {
               }
 
               const newConfig = removeRecordApiConfig(c, tableName);
-              setConfig(newConfig)
+              setConfig(queryClient, newConfig)
                 // eslint-disable-next-line solid/reactivity
                 .then(() => props.close())
                 .catch(console.error);

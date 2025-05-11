@@ -1,6 +1,7 @@
 import { lazy, type Component } from "solid-js";
 import { Router, Route, type RouteSectionProps } from "@solidjs/router";
 import { useStore } from "@nanostores/solid";
+import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 
 import { TablePage } from "@/components/tables/TablesPage";
 import { AccountsPage } from "@/components/accounts/AccountsPage";
@@ -11,6 +12,8 @@ import { NavBar } from "@/components/NavBar";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { $user } from "@/lib/fetch";
+
+const queryClient = new QueryClient();
 
 function Layout(props: RouteSectionProps) {
   return (
@@ -33,7 +36,7 @@ const App: Component = () => {
   const user = useStore($user);
 
   return (
-    <>
+    <QueryClientProvider client={queryClient}>
       {user() ? (
         <ErrorBoundary>
           <Router base={"/_/admin"} root={Layout}>
@@ -53,7 +56,7 @@ const App: Component = () => {
           <LoginPage />
         </ErrorBoundary>
       )}
-    </>
+    </QueryClientProvider>
   );
 };
 

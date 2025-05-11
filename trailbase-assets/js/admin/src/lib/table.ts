@@ -1,4 +1,5 @@
 import { adminFetch } from "@/lib/fetch";
+import { useQuery } from "@tanstack/solid-query";
 
 import type { AlterIndexRequest } from "@bindings/AlterIndexRequest";
 import type { AlterTableRequest } from "@bindings/AlterTableRequest";
@@ -10,9 +11,20 @@ import type { DropIndexRequest } from "@bindings/DropIndexRequest";
 import type { DropTableRequest } from "@bindings/DropTableRequest";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 
-export async function getAllTableSchemas(): Promise<ListSchemasResponse> {
-  const response = await adminFetch("/tables");
-  return (await response.json()) as ListSchemasResponse;
+const tableSchemaKey = ["table_schema"];
+
+export function createTableSchemaQuery() {
+  async function getAllTableSchemas(): Promise<ListSchemasResponse> {
+    const response = await adminFetch("/tables");
+    return (await response.json()) as ListSchemasResponse;
+  }
+
+  return useQuery(() => ({
+    queryKey: tableSchemaKey,
+    queryFn: getAllTableSchemas,
+    refetchInterval: 120 * 1000,
+    refetchOnMount: false,
+  }));
 }
 
 export async function createIndex(

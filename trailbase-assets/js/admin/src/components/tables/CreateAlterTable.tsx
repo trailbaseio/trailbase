@@ -1,6 +1,7 @@
 import { createMemo, createSignal, Index, Switch, Match } from "solid-js";
 import type { Accessor } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
+import { useQueryClient } from "@tanstack/solid-query";
 
 import { showToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ export function CreateAlterTableForm(props: {
   setSelected: (tableName: string) => void;
   schema?: Table;
 }) {
+  const queryClient = useQueryClient();
   const [sql, setSql] = createSignal<string | undefined>();
 
   const original = createMemo(() =>
@@ -75,7 +77,7 @@ export function CreateAlterTableForm(props: {
       }
 
       if (!dryRun) {
-        invalidateConfig();
+        invalidateConfig(queryClient);
         props.schemaRefetch().then(() => {
           props.setSelected(value.name);
         });

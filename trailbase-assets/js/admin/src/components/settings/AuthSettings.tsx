@@ -53,6 +53,7 @@ import facebook from "@shared/assets/oauth2/facebook.svg";
 import gitlab from "@shared/assets/oauth2/gitlab.svg";
 import google from "@shared/assets/oauth2/google.svg";
 import microsoft from "@shared/assets/oauth2/microsoft.svg";
+import { useQueryClient } from "@tanstack/solid-query";
 
 const assets = new Map<OAuthProviderId, string>([
   [OAuthProviderId.OIDC0, openIdConnect],
@@ -291,6 +292,7 @@ function AuthSettingsForm(props: {
     ),
   );
 
+  const queryClient = useQueryClient();
   const form = createForm(() => ({
     defaultValues: values() as AuthConfigProxy,
     onSubmit: async ({ value }) => {
@@ -298,7 +300,7 @@ function AuthSettingsForm(props: {
       newConfig.auth = proxyToConfig(value);
 
       console.debug("Submitting provider config:", value);
-      await setConfig(newConfig);
+      await setConfig(queryClient, newConfig);
 
       props.postSubmit();
     },
