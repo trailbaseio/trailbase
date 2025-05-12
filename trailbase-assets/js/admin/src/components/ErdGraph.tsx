@@ -164,7 +164,8 @@ export function ErdGraph(props: {
     //
     // v0.3.25 results in "layout is not a function": https://github.com/antvis/X6/issues/4441
     // v1.2 has completely in-compatible APIs. They'll probably need to overhaul x6 first.
-    const size = Math.ceil(Math.sqrt(props.nodes.length));
+    const aspect = window.innerWidth / window.innerHeight;
+    const size = Math.ceil(Math.sqrt(props.nodes.length) * aspect);
     const maxHeight = props.nodes.reduce((acc, node) => {
       const ports = node.ports;
       let numPorts = 0;

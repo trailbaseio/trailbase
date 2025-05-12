@@ -65,13 +65,15 @@ function buildErNode(
     zIndex: 0,
   };
 
-  const edges: EdgeMetadata[] = [];
-  const ports: PortMetadata[] = [];
+  const columns = tableOrView.columns ?? [];
 
-  for (const column of tableOrView.columns ?? []) {
+  const view = tableType(tableOrView) === "view";
+  const ports: PortMetadata[] = columns.map((column) => {
     const notNull = isNotNull(column.options);
-    ports.push({
-      id: `${tableOrView.name}-${column.name}`,
+    return {
+      // View's can have possibly duplicated column names, so we avoid
+      // collisions.
+      id: view ? undefined : `${tableOrView.name}-${column.name}`,
       group: "list",
       attrs: {
         portNameLabel: {
@@ -83,25 +85,29 @@ function buildErNode(
           refX: 180,
         },
       },
-    });
+    };
+  });
 
-    const foreignKey = getForeignKey(column.options);
-    if (foreignKey !== undefined) {
-      edges.push({
-        source: {
-          cell: tableOrView.name,
-          port: `${tableOrView.name}-${column.name}`,
-        },
-        // FIXME: lookup pk if referred columns are not provided. Otherwise can
-        // we just point at the node rather than a specific port?
-        target: {
-          cell: foreignKey.foreign_table,
-          port: findTargetPortName(allTablesAndViews, foreignKey),
-        },
-        ...BASE_EDGE,
-      });
-    }
-  }
+  const edges: EdgeMetadata[] = columns
+    .map((column) => {
+      const foreignKey = getForeignKey(column.options);
+      if (foreignKey !== undefined) {
+        return {
+          source: {
+            cell: tableOrView.name,
+            port: `${tableOrView.name}-${column.name}`,
+          },
+          // FIXME: lookup pk if referred columns are not provided. Otherwise can
+          // we just point at the node rather than a specific port?
+          target: {
+            cell: foreignKey.foreign_table,
+            port: findTargetPortName(allTablesAndViews, foreignKey),
+          },
+          ...BASE_EDGE,
+        };
+      }
+    })
+    .filter((e) => e !== undefined);
 
   const node: NodeMetadata = {
     id: tableOrView.name,
