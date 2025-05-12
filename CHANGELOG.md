@@ -1,3 +1,8 @@
+## v0.11.4
+
+* Replaced Mermaid-based schema renderer with x6.
+* Fix admin UI create-table regression.
+
 ## v0.11.3
 
 * Add simple schema visualizer to admin UI. This is a starting point.
