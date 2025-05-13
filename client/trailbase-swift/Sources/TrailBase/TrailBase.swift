@@ -8,16 +8,22 @@ public struct User: Hashable, Equatable {
 }
 
 // NOTE: Making this explicitly public breaks compiler.
-struct Tokens: Codable, Hashable {
+public struct Tokens: Codable, Hashable, Equatable, Sendable {
   let auth_token: String
   let refresh_token: String?
   let csrf_token: String?
 }
 
 public struct Pagination {
-  var cursor: String? = nil
-  var limit: UInt? = nil
-  var offset: UInt? = nil
+  public var cursor: String? = nil
+  public var limit: UInt? = nil
+  public var offset: UInt? = nil
+
+  public init(cursor: String? = nil, limit: UInt? = nil, offset: UInt? = nil) {
+    self.cursor = cursor
+    self.limit = limit
+    self.offset = offset
+  }
 }
 
 private struct JwtTokenClaims: Decodable, Hashable {
@@ -70,7 +76,7 @@ public struct ListResponse<T: Decodable>: Decodable {
   let records: [T]
 }
 
-class RecordApi {
+public class RecordApi {
   let client: Client
   let name: String
 
@@ -231,12 +237,12 @@ private class ThinClient {
   }
 }
 
-class Client {
+public class Client {
   private let base: URL
   private let client: ThinClient
   private let tokenState: Mutex<TokenState>
 
-  public init(site: URL, tokens: Tokens?) throws {
+  public init(site: URL, tokens: Tokens? = nil) throws {
     self.base = site
     self.client = ThinClient(base: site)
     self.tokenState = Mutex(try TokenState(tokens: tokens))
@@ -264,8 +270,8 @@ class Client {
     })
   }
 
-  public func records(apiName: String) -> RecordApi {
-    return RecordApi(client: self, name: apiName)
+  public func records(_ name: String) -> RecordApi {
+    return RecordApi(client: self, name: name)
   }
 
   public func refresh() async throws {

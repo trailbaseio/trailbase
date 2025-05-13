@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import trailbase
+@testable import TrailBase
 
 struct SimpleStrict: Codable, Equatable {
   var id: String? = nil
@@ -33,7 +33,7 @@ func connect() async throws -> Client {
 
   @Test func recordTest() async throws {
     let client = try await connect()
-    let api = client.records(apiName: "simple_strict_table")
+    let api = client.records("simple_strict_table")
 
     let now = NSDate().timeIntervalSince1970
 

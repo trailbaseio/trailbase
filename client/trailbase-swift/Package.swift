@@ -4,7 +4,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "trailbase",
+    name: "TrailBase",
     platforms: [
         .iOS(.v13),
         .macCatalyst(.v13),
@@ -14,15 +14,15 @@ let package = Package(
     ],
     products: [
         .library(
-            name: "trailbase",
-            targets: ["trailbase"]),
+            name: "TrailBase",
+            targets: ["TrailBase"]),
     ],
     targets: [
         .target(
-            name: "trailbase"),
+            name: "TrailBase"),
         .testTarget(
-            name: "trailbaseTests",
-            dependencies: ["trailbase"]
+            name: "TrailBaseTests",
+            dependencies: ["TrailBase"]
         ),
     ]
 )
