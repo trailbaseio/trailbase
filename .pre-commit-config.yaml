@@ -52,7 +52,7 @@ repos:
       exclude: '^(vendor|bindings)/'
       pass_filenames: false
 
-    ### Auth, Admin, Docs UI ###
+    ### JS/TypeScript: Cient, Admin UI, Auth UI, Docs, examples ... ###
     - id: prettier
       name: Prettier
       entry: pnpm -r format --check
@@ -85,7 +85,7 @@ repos:
       files: .*\.(js|mjs|cjs|ts|jsx|tsx|astro)$
       pass_filenames: false
 
-    ### Dart client and example
+    ### Dart: client and example
     - id: dart_format
       name: Dart format
       entry: dart format -o none --set-exit-if-changed client/trailbase-dart examples/blog/flutter
@@ -150,4 +150,13 @@ repos:
       language: system
       types: [file]
       files: .*\.(py)$
+      pass_filenames: false
+
+    ### Swift client
+    - id: swift_format
+      name: Swift format
+      entry: swift format -r client/trailbase-swift/**/*.swift
+      language: system
+      types: [file]
+      files: .*\.(swift)$
       pass_filenames: false

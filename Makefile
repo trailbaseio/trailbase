@@ -11,7 +11,8 @@ format:
 		txtpbfmt `find . -regex ".*.textproto" | grep -v config.textproto`; \
 		dotnet format client/trailbase-dotnet/src; \
 	       	dotnet format client/trailbase-dotnet/test; \
-		poetry -C client/trailbase-py run black --config pyproject.toml .
+		poetry -C client/trailbase-py run black --config pyproject.toml .; \
+		swift format -r -i client/trailbase-swift/**/*.swift;
 
 check:
 	pnpm -r check; \
