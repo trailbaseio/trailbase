@@ -13,3 +13,6 @@ node_modules/
 
 # Dev artifacts
 public/
+trailbase-assets/js/admin/pnpm-lock.yaml
+trailbase-assets/js/auth/pnpm-lock.yaml
+trailbase-js/assets/runtime/pnpm-lock.yaml

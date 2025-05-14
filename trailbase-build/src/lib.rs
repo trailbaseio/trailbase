@@ -56,7 +56,12 @@ fn write_output(mut sink: impl Write, source: &[u8], header: &str) -> Result<()>
 }
 
 pub fn pnpm_run(args: &[&str]) -> Result<std::process::Output> {
-  let cmd = "pnpm";
+  let cmd = if cfg!(windows) {
+    "pnpm.cmd"
+  } else {
+    "pnpm"
+  };
+
   let output = std::process::Command::new(cmd)
     .args(args)
     .output()
