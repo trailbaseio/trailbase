@@ -7,6 +7,7 @@ import {
   createSignal,
   onCleanup,
   type Accessor,
+  type Signal,
 } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { createWritableMemo } from "@solid-primitives/memo";
@@ -36,7 +37,6 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 import { Button } from "@/components/ui/button";
-import { ConfirmCloseDialog } from "@/components/SafeSheet";
 import {
   Dialog,
   DialogContent,
@@ -82,6 +82,45 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   }
 
   return schema;
+}
+
+function ConfirmSwitchDialog(props: {
+  back: () => void;
+  confirm: () => void;
+  saveScript: () => void;
+  message?: string;
+}) {
+  return (
+    <DialogContent>
+      <DialogTitle>Confirmation</DialogTitle>
+
+      <p>{props.message ?? "Are you sure?"}</p>
+
+      <DialogFooter>
+        <div class="flex w-full justify-between">
+          <Button variant="outline" onClick={props.back}>
+            Back
+          </Button>
+
+          <div class="flex gap-4">
+            <Button variant="destructive" onClick={props.confirm}>
+              Discard
+            </Button>
+
+            <Button
+              variant="default"
+              onClick={() => {
+                props.saveScript();
+                props.confirm();
+              }}
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+      </DialogFooter>
+    </DialogContent>
+  );
 }
 
 function ResultView(props: {
@@ -134,6 +173,7 @@ function ResultView(props: {
 function SideBar(props: {
   selected: number;
   setSelected: (idx: number) => void;
+  dirty: boolean;
   horizontal: boolean;
 }) {
   const scripts = useStore($scripts);
@@ -155,7 +195,9 @@ function SideBar(props: {
               variant={props.selected === i() ? "default" : "outline"}
               onClick={() => props.setSelected(i())}
             >
-              {scriptName()}
+              {props.selected === i() && props.dirty
+                ? `${scriptName()}*`
+                : scriptName()}
             </Button>
           );
         }}
@@ -252,30 +294,40 @@ function RenameDialog(props: { selected: number; script: Script }) {
   );
 }
 
+type DirtyDialogState = {
+  nextSelected: number;
+};
+
 function EditorPanel(props: {
   schemas: ListSchemasResponse;
-  selected: number;
   script: Script;
-  dirty: boolean;
-  setDirty: (dirty: boolean) => void;
+  selected: Signal<number>;
+  dirty: Signal<boolean>;
+  dirtyDialog: Signal<DirtyDialogState | undefined>;
   deleteScript: () => void;
 }) {
+  // eslint-disable-next-line solid/reactivity
+  const [dirty, setDirty] = props.dirty;
+  // eslint-disable-next-line solid/reactivity
+  const [dialog, setDialog] = props.dirtyDialog;
+  // eslint-disable-next-line solid/reactivity
+  const [selected, setSelected] = props.selected;
+
   // Will only be set when the user explicitly triggers "execute";
   const [queryString, setQueryString] = createWritableMemo<string | null>(
     () => {
       // Reset whenever we switch tabs.
-      const _unused = props.selected;
+      const _unused = selected();
 
       return null;
     },
   );
 
   const executionResult = useQuery(() => {
-    const selected = props.selected;
     const query = queryString();
     const queryKey = query ?? props.script.contents;
     return {
-      queryKey: ["query", queryKey, selected],
+      queryKey: ["query", queryKey, selected()],
       queryFn: async () => {
         if (query === null) {
           return null;
@@ -292,7 +344,7 @@ function EditorPanel(props: {
         }
 
         // Update the scripts state.
-        updateExistingScript(props.selected, {
+        updateExistingScript(selected(), {
           ...props.script,
           result: response,
         });
@@ -312,6 +364,16 @@ function EditorPanel(props: {
         setQueryString(text);
       }
     }
+  };
+
+  const saveScript = () => {
+    if (editor) {
+      updateExistingScript(selected(), {
+        ...props.script,
+        contents: editor.state.doc.toString(),
+      });
+    }
+    setDirty(false);
   };
 
   let ref: HTMLDivElement | undefined;
@@ -343,10 +405,9 @@ function EditorPanel(props: {
           schema: buildSchema(props.schemas),
         } as SQLConfig),
         autocompletion(),
-        // eslint-disable-next-line solid/reactivity
         EditorView.updateListener.of((v) => {
           if (!v.changes.empty) {
-            props.setDirty(true);
+            setDirty(true);
           }
         }),
         // NOTE: minimal setup provides a bunch of default extensions such as
@@ -371,21 +432,9 @@ function EditorPanel(props: {
 
   const LeftButtons = () => (
     <>
-      <RenameDialog selected={props.selected} script={props.script} />
+      <RenameDialog selected={selected()} script={props.script} />
 
-      <IconButton
-        tooltip="Save script"
-        onClick={() => {
-          const e = editor;
-          if (e) {
-            updateExistingScript(props.selected, {
-              ...props.script,
-              contents: e.state.doc.toString(),
-            });
-          }
-          props.setDirty(false);
-        }}
-      >
+      <IconButton tooltip="Save script" onClick={saveScript}>
         <TbDeviceFloppy size={20} />
       </IconButton>
 
@@ -396,12 +445,35 @@ function EditorPanel(props: {
   );
 
   return (
-    <>
+    <Dialog
+      id="switch-script-dialog"
+      open={dialog() !== undefined}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setDialog();
+        }
+      }}
+      modal={true}
+    >
+      <ConfirmSwitchDialog
+        back={() => setDialog()}
+        confirm={() => {
+          const state = dialog();
+          if (state) {
+            setSelected(state.nextSelected);
+            setDialog();
+            setDirty(false);
+          }
+        }}
+        saveScript={saveScript}
+        message="Proceeding will discard any pending changes in the current buffer. Proceed with caution."
+      />
+
       <Resizable orientation="vertical" class="overflow-hidden">
         <ResizablePanel class="flex flex-col">
           <Header
             title="Editor"
-            titleSelect={props.script.name}
+            titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
             left={<LeftButtons />}
             right={<HelpDialog />}
           />
@@ -437,7 +509,7 @@ function EditorPanel(props: {
           </div>
         </ResizablePanel>
       </Resizable>
-    </>
+    </Dialog>
   );
 }
 
@@ -448,10 +520,14 @@ export function EditorPage() {
 
   const schemaFetch = createTableSchemaQuery();
 
-  type DirtyDialogState = {
-    nextSelected: number;
-  };
   const [dialog, setDialog] = createSignal<DirtyDialogState | undefined>();
+  const switchToScript = (idx: number) => {
+    if (dirty()) {
+      setDialog({ nextSelected: idx });
+    } else {
+      setSelected(idx);
+    }
+  };
 
   const script = (idx?: number): Script => {
     const s = scripts();
@@ -471,72 +547,41 @@ export function EditorPage() {
     setSelected(Math.max(0, idx - 1));
   };
 
-  const switchToScript = (idx: number) => {
-    if (dirty()) {
-      setDialog({ nextSelected: idx });
-    } else {
-      setSelected(idx);
-    }
-  };
-
   return (
-    <Dialog
-      id="switch-script-dialog"
-      open={dialog() !== undefined}
-      onOpenChange={(isOpen) => {
-        if (!isOpen) {
-          setDialog();
-        }
+    <SplitView
+      first={(props: { horizontal: boolean }) => {
+        return (
+          <SideBar
+            selected={selected()}
+            setSelected={switchToScript}
+            dirty={dirty()}
+            horizontal={props.horizontal}
+          />
+        );
       }}
-      modal={true}
-    >
-      <ConfirmCloseDialog
-        back={() => setDialog()}
-        confirm={() => {
-          const state = dialog();
-          if (state) {
-            setSelected(state.nextSelected);
-            setDialog();
-            setDirty(false);
-          }
-        }}
-        message="Proceeding will discard any pending changes in the current buffer. Proceed with caution."
-      />
+      second={() => {
+        return (
+          <Switch fallback={"Loading..."}>
+            <Match when={schemaFetch.isError}>
+              <span>
+                Schema fetch error: {JSON.stringify(schemaFetch.error)}
+              </span>
+            </Match>
 
-      <SplitView
-        first={(props: { horizontal: boolean }) => {
-          return (
-            <SideBar
-              selected={selected()}
-              setSelected={switchToScript}
-              horizontal={props.horizontal}
-            />
-          );
-        }}
-        second={() => {
-          return (
-            <Switch fallback={"Loading..."}>
-              <Match when={schemaFetch.isError}>
-                <span>
-                  Schema fetch error: {JSON.stringify(schemaFetch.error)}
-                </span>
-              </Match>
-
-              <Match when={schemaFetch.data}>
-                <EditorPanel
-                  schemas={schemaFetch.data!}
-                  selected={selected()}
-                  script={script()}
-                  dirty={dirty()}
-                  setDirty={setDirty}
-                  deleteScript={deleteCurrentScript}
-                />
-              </Match>
-            </Switch>
-          );
-        }}
-      />
-    </Dialog>
+            <Match when={schemaFetch.data}>
+              <EditorPanel
+                schemas={schemaFetch.data!}
+                selected={[selected, setSelected]}
+                script={script()}
+                dirty={[dirty, setDirty]}
+                dirtyDialog={[dialog, setDialog]}
+                deleteScript={deleteCurrentScript}
+              />
+            </Match>
+          </Switch>
+        );
+      }}
+    />
   );
 }
 
