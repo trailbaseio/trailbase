@@ -1,7 +1,17 @@
 import Foundation
+import FoundationNetworking
+import Subprocess
+import SystemPackage
 import Testing
 
 @testable import TrailBase
+
+let PORT: UInt16 = 4058
+
+func panic(_ msg: String) -> Never {
+  print("ABORT: \(msg)", FileHandle.standardError)
+  abort()
+}
 
 struct SimpleStrict: Codable, Equatable {
   var id: String? = nil
@@ -12,23 +22,105 @@ struct SimpleStrict: Codable, Equatable {
 }
 
 func connect() async throws -> Client {
-  let client = try Client(site: URL(string: "http://localhost:4000")!, tokens: nil)
+  let client = try Client(site: URL(string: "http://localhost:\(PORT)")!, tokens: nil)
   let _ = try await client.login(email: "admin@localhost", password: "secret")
   return client
 }
 
-// TODO: Bootstrap a shared test-local TrailBase instance to make the test hermetic.
-@Suite struct Tests {
-  @Test func testAuth() async throws {
+public enum StartupError: Error {
+  case buildFailed(stdout: String?, stderr: String?)
+  case startupTimeout
+}
+
+func startTrailBase() async throws -> ProcessIdentifier {
+  let cwd = FilePath("../..")
+  let depotPath = "client/testfixture"
+
+  let build = try await Subprocess.run(
+    .name("cargo"), arguments: ["build"], workingDirectory: cwd, output: .string, error: .string)
+
+  if !build.terminationStatus.isSuccess {
+    throw StartupError.buildFailed(stdout: build.standardOutput, stderr: build.standardError)
+  }
+
+  let arguments: Arguments = [
+    "run",
+    "--",
+    "--data-dir=\(depotPath)",
+    "run",
+    "--address=127.0.0.1:\(PORT)",
+    "--js-runtime-threads=2",
+  ]
+
+  let process = try Subprocess.runDetached(
+    .name("cargo"),
+    arguments: arguments,
+    workingDirectory: cwd,
+    output: .standardOutput,
+    error: .standardError,
+  )
+
+  // Make sure it's up and running.
+  let request = URLRequest(url: URL(string: "http://127.0.0.1:\(PORT)/api/healthcheck")!)
+  for _ in 0...100 {
+    do {
+      let (data, _) = try await URLSession.shared.data(for: request)
+      let body = String(data: data, encoding: .utf8)!
+      if body.uppercased() == "OK" {
+        return process
+      }
+    } catch {
+    }
+
+    usleep(500 * 1000)
+  }
+
+  kill(process.value, SIGKILL)
+
+  throw StartupError.startupTimeout
+}
+
+final class SetupTrailBaseTrait: SuiteTrait, TestScoping {
+  // Only apply to Suite and not recursively to tests (also is default).
+  public var isRecursive: Bool { false }
+
+  func provideScope(
+    for test: Test,
+    testCase: Test.Case?,
+    performing: () async throws -> Void
+  ) async throws {
+    // Setup
+    print("Starting TrailBase \(test.name)")
+    let process = try await startTrailBase()
+
+    // Run the actual test suite, i.e. all tests:
+    do {
+      try await performing()
+    } catch {
+    }
+
+    // Tear-down
+    print("Killing TrailBase \(test.name)")
+    kill(process.value, SIGKILL)
+  }
+}
+
+extension Trait where Self == SetupTrailBaseTrait {
+  static var setupTrailBase: Self { Self() }
+}
+
+@Suite(.setupTrailBase) struct ClientTestSuite {
+  @Test("Test Authentication") func testAuth() async throws {
+
     let client = try await connect()
-    assert(client.tokens?.refresh_token != nil)
-    assert(client.user!.email == "admin@localhost")
+    #expect(client.tokens?.refresh_token != nil)
+    #expect(client.user!.email == "admin@localhost")
 
     try await client.refresh()
 
     try await client.logout()
-    assert(client.tokens == nil)
-    assert(client.user == nil)
+    #expect(client.tokens == nil)
+    #expect(client.user == nil)
   }
 
   @Test func recordTest() async throws {
