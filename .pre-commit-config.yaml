@@ -158,7 +158,7 @@ repos:
       # NOTE: `swift-format` always exits with code 0, meaning we depend on
       # "--in-place" and the pre-commit framework's "Post Run" hook to fail
       # if files were altered.
-      entry: swift-format format -r --in-place client/trailbase-swift/**/*.swift
+      entry: swift format -r --in-place client/trailbase-swift/**/*.swift
       language: system
       types: [file]
       files: .*\.(swift)$
