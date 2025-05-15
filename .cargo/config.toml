@@ -1,0 +1,16 @@
+# Use mold linker. Found not to make a big difference for build times.
+# Link time is minuscule compared to code-generation.
+#
+# [target.x86_64-unknown-linux-gnu]
+# linker = "clang"
+# rustflags = ["-C", "link-arg=-fuse-ld=/usr/bin/mold"]
+
+# Build static binary by default. We specify this explicitly as part of the
+# Docker (see Dockerfile) and Github (see workflows) release flows.
+# Static binaries are really only a Linux thing with other OSs lacking a stable
+# syscall API.
+#
+# rustflags = ["-C", "target-feature=+crt-static"]
+
+[env]
+TS_RS_EXPORT_DIR = { value = "./trailbase-assets/js/bindings", relative = true }
