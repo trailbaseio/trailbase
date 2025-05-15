@@ -5,23 +5,26 @@ use std::{io::Result, path::PathBuf};
 fn main() -> Result<()> {
   trailbase_build::init_env_logger();
 
-  // WARN: watching non-existent paths will also trigger rebuilds.
-  trailbase_build::rerun_if_changed("js/client/src/");
+  let base = PathBuf::from("js");
+
+  // NOTE: Client isn't separately build and packed, it's merely a dependency of admin & auth that
+  // we watch for changes.
+  trailbase_build::rerun_if_changed(base.join("client").join("src"));
 
   {
-    let path = PathBuf::from("js/admin");
-    trailbase_build::rerun_if_changed(path.join("src/components/"));
-    trailbase_build::rerun_if_changed(path.join("src/lib/"));
+    let path = base.join("admin");
+    trailbase_build::rerun_if_changed(path.join("src").join("components"));
+    trailbase_build::rerun_if_changed(path.join("src").join("lib"));
 
     trailbase_build::build_js(path)?;
   }
 
   {
-    let path = PathBuf::from("js/auth");
-    trailbase_build::rerun_if_changed(path.join("src/components/"));
-    trailbase_build::rerun_if_changed(path.join("src/lib/"));
-    trailbase_build::rerun_if_changed(path.join("src/pages/"));
-    trailbase_build::rerun_if_changed(path.join("src/layouts/"));
+    let path = base.join("auth");
+    trailbase_build::rerun_if_changed(path.join("src").join("components"));
+    trailbase_build::rerun_if_changed(path.join("src").join("lib"));
+    trailbase_build::rerun_if_changed(path.join("src").join("pages"));
+    trailbase_build::rerun_if_changed(path.join("src").join("layouts"));
 
     trailbase_build::build_js(path)?;
   }
