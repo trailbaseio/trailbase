@@ -1707,9 +1707,9 @@ dependencies = [
 
 [[package]]
 name = "deno_media_type"
-version = "0.2.6"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "480223262efd08f96b3be5f0457c82bac7296e70dc4e7ef7350751f66293812c"
+checksum = "3d9080fcfcea53bcd6eea1916217bd5611c896f3a0db4c001a859722a1258a47"
 dependencies = [
  "data-url",
  "serde",
@@ -3351,9 +3351,9 @@ dependencies = [
 
 [[package]]
 name = "lettre"
-version = "0.11.15"
+version = "0.11.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "759bc2b8eabb6a30b235d6f716f7f36479f4b38cbe65b8747aefee51f89e8437"
+checksum = "87ffd14fa289730e3ad68edefdc31f603d56fe716ec38f2076bb7410e09147c2"
 dependencies = [
  "async-std",
  "async-trait",
@@ -3375,7 +3375,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "url",
- "webpki-roots 0.26.11",
+ "webpki-roots 1.0.0",
 ]
 
 [[package]]
@@ -3687,9 +3687,9 @@ dependencies = [
 
 [[package]]
 name = "multimap"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "defc4c55412d89136f966bbb339008b474350e5e6e78d2714439c386b3137a03"
+checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 
 [[package]]
 name = "native-tls"
@@ -3917,9 +3917,9 @@ dependencies = [
 
 [[package]]
 name = "object_store"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9ce831b09395f933addbc56d894d889e4b226eba304d4e7adbab591e26daf1e"
+checksum = "d94ac16b433c0ccf75326388c893d2835ab7457ea35ab8ba5d745c053ef5fa16"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -3936,7 +3936,7 @@ dependencies = [
  "parking_lot",
  "percent-encoding",
  "quick-xml",
- "rand 0.8.5",
+ "rand 0.9.1",
  "reqwest",
  "ring",
  "serde",
@@ -3947,6 +3947,8 @@ dependencies = [
  "tracing",
  "url",
  "walkdir",
+ "wasm-bindgen-futures",
+ "web-time",
 ]
 
 [[package]]
@@ -4987,9 +4989,9 @@ dependencies = [
 
 [[package]]
 name = "resolv-conf"
-version = "0.7.3"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc7c8f7f733062b66dc1c63f9db168ac0b97a9210e247fa90fdc9ad08f51b302"
+checksum = "95325155c684b1c89f7765e30bc1c42e4a6da51ca513615660cb8a62ef9a88e3"
 
 [[package]]
 name = "rfc6979"
@@ -6334,9 +6336,9 @@ checksum = "83176759e9416cf81ee66cb6508dbfe9c96f20b8b56265a39917551c23c70964"
 
 [[package]]
 name = "tempfile"
-version = "3.19.1"
+version = "3.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7437ac7763b9b123ccf33c338a5cc1bac6f69b45a136c19bdd8a65e3916435bf"
+checksum = "e8a64e3985349f2441a1a9ef0b853f869006c3855f2cda6862a94d26ebb9d6a1"
 dependencies = [
  "fastrand",
  "getrandom 0.3.3",
