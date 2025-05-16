@@ -1,6 +1,6 @@
 use serde::de::{Deserializer, Error};
 
-use crate::value::{Value, unexpected};
+use crate::value::Value;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CompareOp {
@@ -55,11 +55,14 @@ impl<'de> serde::de::Deserialize<'de> for CompareOp {
     let value = Value::deserialize(deserializer)?;
 
     let Value::String(ref string) = value else {
-      return Err(Error::invalid_type(unexpected(&value), &"String"));
+      return Err(Error::invalid_type(
+        crate::util::unexpected(&value),
+        &"String",
+      ));
     };
 
     return CompareOp::from(string)
-      .ok_or_else(|| Error::invalid_type(unexpected(&value), &"(eq|ne)"));
+      .ok_or_else(|| Error::invalid_type(crate::util::unexpected(&value), &"(eq|ne)"));
   }
 }
 
@@ -90,6 +93,9 @@ where
   D: Deserializer<'de>,
 {
   use serde_value::Value;
+  if !crate::util::sanitize_column_name(&key) {
+    return Err(Error::custom(format!("invalid column name: {key}")));
+  }
 
   return match value {
     Value::String(_) => Ok(ColumnOpValue {
@@ -109,7 +115,7 @@ where
       })
     }
     v => Err(Error::invalid_type(
-      unexpected(&v),
+      crate::util::unexpected(&v),
       &"Map<String, String | Map<Rel, String>>",
     )),
   };
@@ -128,7 +134,7 @@ impl<'de> serde::de::Deserialize<'de> for ColumnOpValueMap {
 
     let Value::Map(m) = value else {
       return Err(Error::invalid_type(
-        unexpected(&value),
+        crate::util::unexpected(&value),
         &"Map<String, String | Map<Rel, String>>",
       ));
     };
@@ -138,7 +144,7 @@ impl<'de> serde::de::Deserialize<'de> for ColumnOpValueMap {
       .map(|(k, v)| {
         return match (k, v) {
           (Value::String(key), v) => serde_value_to_single_column_rel_value::<D>(key, v),
-          (k, _) => Err(Error::invalid_type(unexpected(&k), &"String")),
+          (k, _) => Err(Error::invalid_type(crate::util::unexpected(&k), &"String")),
         };
       })
       .collect::<Result<Vec<_>, _>>()?;

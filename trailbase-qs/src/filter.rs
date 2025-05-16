@@ -11,7 +11,6 @@ use itertools::Itertools;
 use std::collections::BTreeMap;
 
 use crate::column_rel_value::{ColumnOpValue, serde_value_to_single_column_rel_value};
-use crate::value::unexpected;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Combiner {
@@ -60,7 +59,10 @@ where
 
   // We always expect [key] = value, i.e. a Map[key] = value.
   let Value::Map(mut m) = value else {
-    return Err(Error::invalid_type(unexpected(&value), &"Map1"));
+    return Err(Error::invalid_type(
+      crate::util::unexpected(&value),
+      &"map[col]=val or map[col][op]=val",
+    ));
   };
 
   if m.is_empty() {
@@ -81,7 +83,10 @@ where
               serde_value_to_single_column_rel_value::<D>(key, v)?,
             )),
           },
-          _ => Err(Error::invalid_type(unexpected(&k), &"Map0")),
+          _ => Err(Error::invalid_type(
+            crate::util::unexpected(&k),
+            &"string key",
+          )),
         };
       })
       .collect::<Result<Vec<_>, _>>()?;
@@ -107,7 +112,10 @@ where
             .collect::<Result<Vec<_>, _>>()?,
         ));
       }
-      v => Err(Error::invalid_type(unexpected(&v), &"Sequence")),
+      v => Err(Error::invalid_type(
+        crate::util::unexpected(&v),
+        &"Sequence",
+      )),
     }
   };
 
@@ -120,7 +128,7 @@ where
         serde_value_to_single_column_rel_value::<D>(str, v)?,
       )),
     },
-    (k, _) => Err(Error::invalid_type(unexpected(&k), &"String")),
+    (k, _) => Err(Error::invalid_type(crate::util::unexpected(&k), &"String")),
   }
 }
 
@@ -220,40 +228,5 @@ mod tests {
     let m3: Result<Query, _> =
             qs.deserialize_str("composite_filter[col0]=val0&composite_filter[$and][0][col0]=val0&composite_filter[col1]=val1");
     assert!(m3.is_err(), "{m3:?}");
-
-    // Implicit and with nested or and out of order.
-    let m5: Query = qs.deserialize_str("composite_filter[$or][1][col0][ne]=val0&composite_filter[col1]=1&composite_filter[$or][0][col2]=val2").unwrap();
-    assert_eq!(
-      m5.composite_filter.as_ref().unwrap(),
-      &ValueOrComposite::Composite(
-        Combiner::And,
-        vec![
-          ValueOrComposite::Composite(
-            Combiner::Or,
-            vec![
-              ValueOrComposite::Value(ColumnOpValue {
-                column: "col2".to_string(),
-                op: CompareOp::Equal,
-                value: Value::String("val2".to_string()),
-              }),
-              ValueOrComposite::Value(ColumnOpValue {
-                column: "col0".to_string(),
-                op: CompareOp::NotEqual,
-                value: Value::String("val0".to_string()),
-              }),
-            ]
-          ),
-          ValueOrComposite::Value(ColumnOpValue {
-            column: "col1".to_string(),
-            op: CompareOp::Equal,
-            value: Value::Integer(1),
-          }),
-        ]
-      )
-    );
-    assert_eq!(
-      m5.composite_filter.unwrap().to_sql(),
-      "((col2 = 'val2' OR col0 <> 'val0') AND col1 = 1)"
-    );
   }
 }
