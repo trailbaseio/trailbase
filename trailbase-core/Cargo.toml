@@ -34,7 +34,7 @@ async-trait = "0.1.80"
 axum = { workspace = true }
 axum-client-ip = "0.7.0"
 axum-extra = { version = "^0.10.0", default-features = false, features = ["protobuf"] }
-base64 = { version = "0.22.1", default-features = false }
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
 cron = "0.15.0"

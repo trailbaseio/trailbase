@@ -1,11 +1,54 @@
+use base64::prelude::*;
 use serde::Deserialize;
 
 use crate::filter::ValueOrComposite;
 
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+/// TrailBase supports cursors in a few formats:
+///  * Integers
+///  * Text-encoded UUIDs ([u8; 16])
+///  * Url-safe base64 encoded blobs including UUIDs.
+///
+/// In practice, we should just support integers and generically blobs. In the future way may want
+/// to use encrypted cursors, which would also just be arbitrary url-safe base64 encoded bytes.
+#[derive(Clone, Debug, PartialEq)]
 pub enum Cursor {
   Blob(Vec<u8>),
   Integer(i64),
+}
+
+impl<'de> serde::de::Deserialize<'de> for Cursor {
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::de::Deserializer<'de>,
+  {
+    use serde::de::Error;
+    use serde_value::Value;
+
+    let value = Value::deserialize(deserializer)?;
+    let Value::String(str) = value else {
+      return Err(Error::invalid_type(
+        crate::util::unexpected(&value),
+        &"comma separated column names",
+      ));
+    };
+
+    if let Ok(uuid) = uuid::Uuid::parse_str(&str) {
+      return Ok(Cursor::Blob(uuid.into()));
+    }
+
+    if let Ok(base64) = BASE64_URL_SAFE.decode(&str) {
+      return Ok(Cursor::Blob(base64));
+    }
+
+    if let Ok(integer) = str.parse::<i64>() {
+      return Ok(Cursor::Integer(integer));
+    }
+
+    return Err(Error::invalid_type(
+      crate::util::unexpected(&Value::String(str)),
+      &"integer or url-safe base64 encoded bytes",
+    ));
+  }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -26,8 +69,8 @@ impl<'de> serde::de::Deserialize<'de> for Order {
   {
     use serde::de::Error;
     use serde_value::Value;
-    let value = Value::deserialize(deserializer)?;
 
+    let value = Value::deserialize(deserializer)?;
     let Value::String(str) = value else {
       return Err(Error::invalid_type(
         crate::util::unexpected(&value),
@@ -78,8 +121,8 @@ impl<'de> serde::de::Deserialize<'de> for Expand {
   {
     use serde::de::Error;
     use serde_value::Value;
-    let value = Value::deserialize(deserializer)?;
 
+    let value = Value::deserialize(deserializer)?;
     let Value::String(str) = value else {
       return Err(Error::invalid_type(
         crate::util::unexpected(&value),
@@ -118,7 +161,7 @@ pub struct Query {
   /// Max number of elements returned per page.
   pub limit: Option<usize>,
   /// Cursor to page.
-  pub cursor: Option<String>,
+  pub cursor: Option<Cursor>,
   /// Offset to page. Cursor is more efficient when available
   pub offset: Option<usize>,
 
@@ -267,6 +310,44 @@ mod tests {
     assert_eq!(
       q1.filter.unwrap().to_sql(),
       "((col2 = 'val2' OR col0 <> 'val0') AND col1 = 1)"
+    );
+  }
+
+  #[test]
+  fn test_query_cursor_parsing() {
+    let qs = Config::new(5, true);
+
+    assert_eq!(
+      qs.deserialize_str::<Query>("cursor=").unwrap(),
+      Query::default()
+    );
+
+    assert_eq!(
+      qs.deserialize_str::<Query>("cursor=-5").unwrap(),
+      Query {
+        cursor: Some(Cursor::Integer(-5)),
+        ..Default::default()
+      }
+    );
+
+    let uuid = uuid::Uuid::now_v7();
+    assert_eq!(
+      qs.deserialize_str::<Query>(&format!("cursor={}", uuid.to_string()))
+        .unwrap(),
+      Query {
+        cursor: Some(Cursor::Blob(uuid.as_bytes().into())),
+        ..Default::default()
+      }
+    );
+
+    let blob = BASE64_URL_SAFE.encode(uuid.as_bytes());
+    assert_eq!(
+      qs.deserialize_str::<Query>(&format!("cursor={blob}"))
+        .unwrap(),
+      Query {
+        cursor: Some(Cursor::Blob(uuid.as_bytes().into())),
+        ..Default::default()
+      }
     );
   }
 }

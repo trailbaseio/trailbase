@@ -137,10 +137,10 @@ impl<'de> serde::de::Deserialize<'de> for ValueOrComposite {
   where
     D: serde::de::Deserializer<'de>,
   {
-    use serde_value::Value;
-    let value = Value::deserialize(deserializer)?;
-
-    return serde_value_to_value_or_composite::<D>(value, 0);
+    return serde_value_to_value_or_composite::<D>(
+      serde_value::Value::deserialize(deserializer)?,
+      0,
+    );
   }
 }
 

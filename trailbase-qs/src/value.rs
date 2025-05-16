@@ -81,10 +81,7 @@ impl<'de> Deserialize<'de> for Value {
   where
     D: Deserializer<'de>,
   {
-    use serde_value::Value;
-    let value = Value::deserialize(deserializer)?;
-
-    return serde_value_to_value::<'de, D>(value);
+    return serde_value_to_value::<'de, D>(serde_value::Value::deserialize(deserializer)?);
   }
 }
 

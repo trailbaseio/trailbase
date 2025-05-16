@@ -52,8 +52,8 @@ impl<'de> serde::de::Deserialize<'de> for CompareOp {
     D: Deserializer<'de>,
   {
     use serde_value::Value;
-    let value = Value::deserialize(deserializer)?;
 
+    let value = Value::deserialize(deserializer)?;
     let Value::String(ref string) = value else {
       return Err(Error::invalid_type(
         crate::util::unexpected(&value),
@@ -130,8 +130,8 @@ impl<'de> serde::de::Deserialize<'de> for ColumnOpValueMap {
     D: Deserializer<'de>,
   {
     use serde_value::Value;
-    let value = Value::deserialize(deserializer)?;
 
+    let value = Value::deserialize(deserializer)?;
     let Value::Map(m) = value else {
       return Err(Error::invalid_type(
         crate::util::unexpected(&value),
