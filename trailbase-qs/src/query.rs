@@ -331,6 +331,19 @@ mod tests {
       q1.filter.unwrap().to_sql(),
       "((col2 = 'val2' OR col0 <> 'val0') AND col1 = 1)"
     );
+
+    // Test both encodings: '+' and %20 for ' '.
+    let q2: Query = qs
+      .deserialize_str("filter[col]=with+white%20spaces")
+      .unwrap();
+    assert_eq!(
+      q2.filter.unwrap(),
+      ValueOrComposite::Value(ColumnOpValue {
+        column: "col".to_string(),
+        op: CompareOp::Equal,
+        value: Value::String("with white spaces".to_string()),
+      }),
+    );
   }
 
   #[test]
