@@ -5,6 +5,7 @@ use axum::{
 use lazy_static::lazy_static;
 use serde::Serialize;
 use std::borrow::Cow;
+use trailbase_qs::{Cursor, Order, OrderPrecedent, Query};
 use ts_rs::TS;
 use uuid::Uuid;
 
@@ -12,10 +13,7 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::auth::user::DbUser;
 use crate::constants::{USER_TABLE, USER_TABLE_ID_COLUMN};
-use crate::listing::{
-  Cursor, Order, QueryParseResult, WhereClause, build_filter_where_clause, limit_or_default,
-  parse_and_sanitize_query,
-};
+use crate::listing::{WhereClause, build_filter_where_clause, cursor_to_value, limit_or_default};
 use crate::util::id_to_b64;
 
 #[derive(Debug, Serialize, TS)]
@@ -61,14 +59,18 @@ pub async fn list_users_handler(
 ) -> Result<Json<ListUsersResponse>, Error> {
   let conn = state.user_conn();
 
-  let QueryParseResult {
-    params: filter_params,
-    cursor,
+  let Query {
     limit,
+    cursor,
     order,
+    filter: filter_params,
     ..
-  } = parse_and_sanitize_query(raw_url_query.as_deref())
-    .map_err(|err| Error::Precondition(format!("Invalid query '{err}': {raw_url_query:?}")))?;
+  } = raw_url_query
+    .as_ref()
+    .map_or_else(|| Ok(Query::default()), |query| Query::parse(query))
+    .map_err(|err| {
+      return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
+    })?;
 
   let Some(schema_metadata) = state.schema_metadata().get_table(USER_TABLE) else {
     return Err(Error::Precondition(format!("Table {USER_TABLE} not found")));
@@ -91,14 +93,15 @@ pub async fn list_users_handler(
     .unwrap_or(-1);
 
   lazy_static! {
-    static ref DEFAULT_ORDERING: Vec<(String, Order)> =
-      vec![(USER_TABLE_ID_COLUMN.to_string(), Order::Descending)];
+    static ref DEFAULT_ORDERING: Order = Order {
+      columns: vec![(USER_TABLE_ID_COLUMN.to_string(), OrderPrecedent::Descending)],
+    };
   }
   let users = fetch_users(
     conn,
     filter_where_clause.clone(),
     cursor,
-    order.unwrap_or_else(|| DEFAULT_ORDERING.clone()),
+    order.as_ref().unwrap_or_else(|| &DEFAULT_ORDERING),
     limit_or_default(limit).map_err(|err| Error::BadRequest(err.into()))?,
   )
   .await?;
@@ -117,7 +120,7 @@ async fn fetch_users(
   conn: &trailbase_sqlite::Connection,
   filter_where_clause: WhereClause,
   cursor: Option<Cursor>,
-  order: Vec<(String, Order)>,
+  order: &Order,
   limit: usize,
 ) -> Result<Vec<DbUser>, Error> {
   let mut params = filter_where_clause.params;
@@ -129,18 +132,19 @@ async fn fetch_users(
   ));
 
   if let Some(cursor) = cursor {
-    params.push((Cow::Borrowed(":cursor"), cursor.into()));
+    params.push((Cow::Borrowed(":cursor"), cursor_to_value(cursor)));
     where_clause = format!("{where_clause} AND _ROW_.id < :cursor",);
   }
 
   let order_clause = order
+    .columns
     .iter()
     .map(|(col, ord)| {
       format!(
         r#"_ROW_."{col}" {}"#,
         match ord {
-          Order::Descending => "DESC",
-          Order::Ascending => "ASC",
+          OrderPrecedent::Descending => "DESC",
+          OrderPrecedent::Ascending => "ASC",
         }
       )
     })
