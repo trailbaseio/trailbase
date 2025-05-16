@@ -85,6 +85,7 @@ trailbase-apalis = { workspace = true, optional = true }
 trailbase-assets = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-js = { workspace = true, optional = true }
+trailbase-qs = { workspace = true }
 trailbase-refinery-core = { workspace = true }
 trailbase-refinery-macros = { workspace = true }
 trailbase-schema = { workspace = true }

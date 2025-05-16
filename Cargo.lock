@@ -6836,6 +6836,7 @@ dependencies = [
  "trailbase-build",
  "trailbase-extension",
  "trailbase-js",
+ "trailbase-qs",
  "trailbase-refinery-core",
  "trailbase-refinery-macros",
  "trailbase-schema",
