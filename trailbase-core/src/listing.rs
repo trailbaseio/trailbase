@@ -1,8 +1,10 @@
+use base64::prelude::*;
 use lazy_static::lazy_static;
 use log::*;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use thiserror::Error;
+use trailbase_qs::{Value as QsValue, ValueOrComposite};
 use trailbase_schema::sqlite::Column;
 
 use crate::records::params::{json_string_to_value, prefix_colon};
@@ -257,41 +259,45 @@ pub fn build_filter_where_clause(
   columns: &[Column],
   filter_params: Option<HashMap<String, Vec<QueryParam>>>,
 ) -> Result<WhereClause, WhereClauseError> {
-  let mut where_clauses = Vec::<String>::with_capacity(16);
+  let Some(filter_params) = filter_params else {
+    return Ok(WhereClause {
+      clause: "TRUE".to_string(),
+      params: vec![],
+    });
+  };
+
   let mut params = Vec::<(Cow<'static, str>, trailbase_sqlite::Value)>::with_capacity(16);
+  let mut where_clauses = Vec::<String>::with_capacity(16);
+  for (column_name, query_params) in filter_params {
+    if column_name.starts_with("_") {
+      return Err(WhereClauseError::UnrecognizedParam(format!(
+        "Invalid parameter: {column_name}"
+      )));
+    }
 
-  if let Some(filter_params) = filter_params {
-    for (column_name, query_params) in filter_params {
-      if column_name.starts_with("_") {
-        return Err(WhereClauseError::UnrecognizedParam(format!(
-          "Invalid parameter: {column_name}"
-        )));
-      }
+    // IMPORTANT: We only include parameters with known columns to avoid building an invalid
+    // query early and forbid injections.
+    let Some(col) = columns.iter().find(|c| c.name == column_name) else {
+      return Err(WhereClauseError::UnrecognizedParam(format!(
+        "Unrecognized parameter: {column_name}"
+      )));
+    };
 
-      // IMPORTANT: We only include parameters with known columns to avoid building an invalid
-      // query early and forbid injections.
-      let Some(col) = columns.iter().find(|c| c.name == column_name) else {
-        return Err(WhereClauseError::UnrecognizedParam(format!(
-          "Unrecognized parameter: {column_name}"
-        )));
+    for query_param in query_params {
+      let Some(op) = query_param.qualifier.map(|q| q.to_sql()) else {
+        info!("No op for: {column_name}={query_param:?}");
+        continue;
       };
 
-      for query_param in query_params {
-        let Some(op) = query_param.qualifier.map(|q| q.to_sql()) else {
-          info!("No op for: {column_name}={query_param:?}");
-          continue;
-        };
-
-        match json_string_to_value(col.data_type, query_param.value) {
-          Ok(value) => {
-            where_clauses.push(format!(
-              r#"{table_name}."{column_name}" {op} :{column_name}"#
-            ));
-            params.push((prefix_colon(&column_name).into(), value));
-          }
-          Err(err) => debug!("Parameter conversion for {column_name} failed: {err}"),
-        };
-      }
+      match json_string_to_value(col.data_type, query_param.value) {
+        Ok(value) => {
+          where_clauses.push(format!(
+            r#"{table_name}."{column_name}" {op} :{column_name}"#
+          ));
+          params.push((prefix_colon(&column_name).into(), value));
+        }
+        Err(err) => debug!("Parameter conversion for {column_name} failed: {err}"),
+      };
     }
   }
 
@@ -301,6 +307,73 @@ pub fn build_filter_where_clause(
   };
 
   return Ok(WhereClause { clause, params });
+}
+
+pub(crate) fn build_filter_where_clause2(
+  table_name: &str,
+  columns: &[Column],
+  filter_params: Option<ValueOrComposite>,
+) -> Result<WhereClause, WhereClauseError> {
+  let Some(filter_params) = filter_params else {
+    return Ok(WhereClause {
+      clause: "TRUE".to_string(),
+      params: vec![],
+    });
+  };
+
+  let validator = |column_name: &str| -> Result<(), WhereClauseError> {
+    if column_name.starts_with("_") {
+      return Err(WhereClauseError::UnrecognizedParam(format!(
+        "Invalid parameter: {column_name}"
+      )));
+    }
+
+    // IMPORTANT: We only include parameters with known columns to avoid building an invalid
+    // query early and forbid injections.
+    if !columns.iter().any(|c| c.name == column_name) {
+      return Err(WhereClauseError::UnrecognizedParam(format!(
+        "Unrecognized parameter: {column_name}"
+      )));
+    };
+
+    return Ok(());
+  };
+
+  let (sql, params) = filter_params.into_sql(Some(table_name), &validator)?;
+  if params.is_empty() {
+    return Ok(WhereClause {
+      clause: "TRUE".to_string(),
+      params: vec![],
+    });
+  }
+
+  use trailbase_sqlite::Value;
+  type Param = (Cow<'static, str>, Value);
+  let sql_params: Vec<Param> = params
+    .into_iter()
+    .map(|(name, value)| {
+      return (
+        Cow::Owned(name),
+        match value {
+          QsValue::String(s) => {
+            if let Ok(b) = BASE64_URL_SAFE.decode(&s) {
+              Value::Blob(b)
+            } else {
+              Value::Text(s)
+            }
+          }
+          QsValue::Integer(i) => Value::Integer(i),
+          QsValue::Double(d) => Value::Real(d),
+          QsValue::Bool(b) => Value::Integer(if b { 1 } else { 0 }),
+        },
+      );
+    })
+    .collect();
+
+  return Ok(WhereClause {
+    clause: sql,
+    params: sql_params,
+  });
 }
 
 fn split_key_into_col_and_op(key: &str) -> Option<(&str, Option<&str>)> {

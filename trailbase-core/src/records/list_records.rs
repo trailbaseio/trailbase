@@ -6,14 +6,12 @@ use axum::{
 use itertools::Itertools;
 use serde::Serialize;
 use std::borrow::Cow;
+use trailbase_qs::{Cursor, OrderPrecedent, Query};
 use trailbase_sqlite::Value;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::listing::{
-  Order, QueryParseResult, WhereClause, build_filter_where_clause, limit_or_default,
-  parse_and_sanitize_query,
-};
+use crate::listing::{WhereClause, build_filter_where_clause2, limit_or_default};
 use crate::records::query_builder::{ExpandedTable, expand_tables};
 use crate::records::sql_to_json::{row_to_json, row_to_json_expand, rows_to_json_expand};
 use crate::records::{Permission, RecordError};
@@ -71,20 +69,26 @@ pub async fn list_records_handler(
   let table_name = api.table_name();
   let (pk_index, pk_column) = api.record_pk_column();
 
-  let QueryParseResult {
+  let Query {
     limit,
     cursor,
     count,
     expand: query_expand,
     order,
-    params: filter_params,
+    filter: filter_params,
     offset,
-  } = parse_and_sanitize_query(raw_url_query.as_deref()).map_err(|_err| {
-    return RecordError::BadRequest("Invalid query");
-  })?;
+  } = raw_url_query
+    .as_ref()
+    .map_or_else(|| Ok(Query::default()), |query| Query::parse(query))
+    .map_err(|err| {
+      #[cfg(debug_assertions)]
+      log::error!("Invalid query: {err}");
+
+      return RecordError::BadRequest("Invalid query");
+    })?;
 
   // NOTE: We're using the read access rule to filter the rows as opposed to yes/no early access
-  // blocking as for read-record.
+  // blocking as fInvalid or read-record.
   //
   // TODO: Should this be a separate access rule? Maybe one wants users to access a specific
   // record but not list all the records.
@@ -95,7 +99,7 @@ pub async fn list_records_handler(
   let WhereClause {
     clause: filter_clause,
     mut params,
-  } = build_filter_where_clause("_ROW_", api.columns(), filter_params)
+  } = build_filter_where_clause2("_ROW_", api.columns(), filter_params)
     .map_err(|_err| RecordError::BadRequest("Invalid filter params"))?;
 
   // User properties
@@ -122,9 +126,9 @@ pub async fn list_records_handler(
   }
 
   let cursor_clause = if let Some(cursor) = cursor {
-    let mut pk_order = Order::Descending;
+    let mut pk_order = OrderPrecedent::Descending;
     if let Some(ref order) = order {
-      if let Some((col, ord)) = order.first() {
+      if let Some((col, ord)) = order.columns.first() {
         if *col != pk_column.name {
           return Err(RecordError::BadRequest(
             "Cannot cursor on queries where the primary order criterion is not the primary key",
@@ -135,29 +139,30 @@ pub async fn list_records_handler(
       }
     }
 
-    params.push((Cow::Borrowed(":cursor"), cursor.into()));
+    params.push((Cow::Borrowed(":cursor"), cursor_to_value(cursor)));
     match pk_order {
-      Order::Descending => Some(format!(r#"_ROW_."{}" < :cursor"#, pk_column.name)),
-      Order::Ascending => Some(format!(r#"_ROW_."{}" > :cursor"#, pk_column.name)),
+      OrderPrecedent::Descending => Some(format!(r#"_ROW_."{}" < :cursor"#, pk_column.name)),
+      OrderPrecedent::Ascending => Some(format!(r#"_ROW_."{}" > :cursor"#, pk_column.name)),
     }
   } else {
     None
   };
 
-  fn fmt_order(col: &str, order: Order) -> String {
+  fn fmt_order(col: &str, order: OrderPrecedent) -> String {
     return format!(
       r#"_ROW_."{col}" {}"#,
       match order {
-        Order::Descending => "DESC",
-        Order::Ascending => "ASC",
+        OrderPrecedent::Descending => "DESC",
+        OrderPrecedent::Ascending => "ASC",
       }
     );
   }
 
   let order_clause = order.map_or_else(
-    || fmt_order(&pk_column.name, Order::Descending),
+    || fmt_order(&pk_column.name, OrderPrecedent::Descending),
     |order| {
       order
+        .columns
         .into_iter()
         .map(|(col, ord)| fmt_order(&col, ord))
         .join(",")
@@ -171,7 +176,7 @@ pub async fn list_records_handler(
       };
 
       // NOTE: This will drop any unknown expand column, thus avoiding SQL injections.
-      for col_name in expand {
+      for col_name in &expand.columns {
         if !config_expand.contains_key(col_name) {
           return Err(RecordError::BadRequest("Invalid expansion"));
         }
@@ -184,7 +189,7 @@ pub async fn list_records_handler(
             .column_index_by_name(column_name)
             .map(|idx| &api.columns()[idx])
         },
-        expand,
+        &expand.columns,
       )?
     }
     None => vec![],
@@ -299,6 +304,13 @@ pub async fn list_records_handler(
 #[inline]
 fn column_filter(col_name: &str) -> bool {
   return !col_name.starts_with("_");
+}
+
+fn cursor_to_value(cursor: Cursor) -> Value {
+  return match cursor {
+    Cursor::Integer(i) => Value::Integer(i),
+    Cursor::Blob(b) => Value::Blob(b),
+  };
 }
 
 #[cfg(test)]
@@ -494,7 +506,7 @@ mod tests {
     let response = list_records_handler(
       State(state.clone()),
       Path("api".to_string()),
-      RawQuery(Some(format!("id={}", first.id))),
+      RawQuery(Some(format!("filter[id]={}", first.id))),
       None,
     )
     .await
@@ -597,12 +609,12 @@ mod tests {
       let resp_by_id = list_records(
         &state,
         Some(&user_x_token.auth_token),
-        Some(format!("mid={}", first.mid)),
+        Some(format!("filter[mid]={}", first.mid)),
       )
       .await
       .unwrap();
 
-      assert_eq!(resp_by_id.records.len(), 1);
+      assert_eq!(resp_by_id.records.len(), 1, "mid: {}", first.mid);
       assert_eq!(*first, to_message(resp_by_id.records[0].clone()));
     }
 
@@ -679,7 +691,7 @@ mod tests {
         .records;
       assert_eq!(arr.len(), 3);
 
-      let arr = list_records(
+      let limited_arr = list_records(
         &state,
         Some(&user_y_token.auth_token),
         Some("limit=1".to_string()),
@@ -687,7 +699,27 @@ mod tests {
       .await
       .unwrap()
       .records;
-      assert_eq!(arr.len(), 1);
+      assert_eq!(limited_arr.len(), 1);
+
+      // Composite filter
+      let messages: Vec<Message> = arr.into_iter().map(to_message).collect();
+      let first = &messages[0].mid;
+      let third = &messages[2].mid;
+      let filtered_arr = list_records(
+        &state,
+        Some(&user_y_token.auth_token),
+        Some(format!(
+          "filter[$or][0][mid]={first}&filter[$or][1][mid][$eq]={third}"
+        )),
+      )
+      .await
+      .unwrap()
+      .records;
+
+      assert_eq!(filtered_arr.len(), 2);
+      let filtd_messages: Vec<Message> = filtered_arr.into_iter().map(to_message).collect();
+      assert_eq!(first, &filtd_messages[0].mid);
+      assert_eq!(third, &filtd_messages[1].mid);
     }
 
     {
@@ -825,18 +857,18 @@ mod tests {
       let arr0 = list_records(
         &state,
         Some(&user_y_token.auth_token),
-        Some(format!("room={}", id_to_b64(&room0))),
+        Some(format!("filter[room]={}", id_to_b64(&room0))),
       )
       .await
       .unwrap()
       .records;
 
-      assert_eq!(arr0.len(), 2);
+      assert_eq!(arr0.len(), 2, "{arr0:?}");
 
       let arr1 = list_records(
         &state,
         Some(&user_y_token.auth_token),
-        Some(format!("room={}", id_to_b64(&room1))),
+        Some(format!("filter[room][$eq]={}", id_to_b64(&room1))),
       )
       .await
       .unwrap()

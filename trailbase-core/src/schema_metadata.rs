@@ -454,7 +454,7 @@ mod tests {
       let Json(list_response) = list_records_handler(
         State(state.clone()),
         Path("test_table_api".to_string()),
-        RawQuery(Some("count=1&expand=fk".to_string())),
+        RawQuery(Some("count=TRUE&expand=fk".to_string())),
         None,
       )
       .await
