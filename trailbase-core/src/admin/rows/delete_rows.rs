@@ -233,7 +233,7 @@ mod tests {
     let listing = list_rows_handler(
       State(state.clone()),
       Path(table_name.clone()),
-      RawQuery(Some(format!("{pk_col}={}", uuid_to_b64(&id0)))),
+      RawQuery(Some(format!("filter[{pk_col}]={}", uuid_to_b64(&id0)))),
     )
     .await
     .unwrap();

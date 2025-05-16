@@ -11,7 +11,7 @@ use trailbase_sqlite::Value;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::listing::{WhereClause, build_filter_where_clause2, limit_or_default};
+use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::records::query_builder::{ExpandedTable, expand_tables};
 use crate::records::sql_to_json::{row_to_json, row_to_json_expand, rows_to_json_expand};
 use crate::records::{Permission, RecordError};
@@ -80,10 +80,7 @@ pub async fn list_records_handler(
   } = raw_url_query
     .as_ref()
     .map_or_else(|| Ok(Query::default()), |query| Query::parse(query))
-    .map_err(|err| {
-      #[cfg(debug_assertions)]
-      log::error!("Invalid query: {err}");
-
+    .map_err(|_err| {
       return RecordError::BadRequest("Invalid query");
     })?;
 
@@ -99,7 +96,7 @@ pub async fn list_records_handler(
   let WhereClause {
     clause: filter_clause,
     mut params,
-  } = build_filter_where_clause2("_ROW_", api.columns(), filter_params)
+  } = build_filter_where_clause("_ROW_", api.columns(), filter_params)
     .map_err(|_err| RecordError::BadRequest("Invalid filter params"))?;
 
   // User properties

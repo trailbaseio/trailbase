@@ -3,16 +3,14 @@ use log::*;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::sync::Arc;
+use trailbase_qs::{Cursor, Order, OrderPrecedent, Query};
 use trailbase_schema::sqlite::Column;
 use trailbase_sqlite::rows::rows_to_json_arrays;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::listing::{
-  Cursor, Order, QueryParseResult, WhereClause, build_filter_where_clause, limit_or_default,
-  parse_and_sanitize_query,
-};
+use crate::listing::{WhereClause, build_filter_where_clause, cursor_to_value, limit_or_default};
 use crate::schema_metadata::{TableMetadata, TableOrViewMetadata};
 
 #[derive(Debug, Serialize, TS)]
@@ -34,15 +32,19 @@ pub async fn list_rows_handler(
   Path(table_name): Path<String>,
   RawQuery(raw_url_query): RawQuery,
 ) -> Result<Json<ListRowsResponse>, Error> {
-  let QueryParseResult {
-    params: filter_params,
-    cursor,
+  let Query {
     limit,
+    cursor,
     order,
+    filter: filter_params,
     offset,
     ..
-  } = parse_and_sanitize_query(raw_url_query.as_deref())
-    .map_err(|err| Error::Precondition(format!("Invalid query '{err}': {raw_url_query:?}")))?;
+  } = raw_url_query
+    .as_ref()
+    .map_or_else(|| Ok(Query::default()), |query| Query::parse(query))
+    .map_err(|err| {
+      return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
+    })?;
 
   let (schema_metadata, table_or_view_metadata): (
     Option<Arc<TableMetadata>>,
@@ -89,7 +91,7 @@ pub async fn list_rows_handler(
     state.conn(),
     &table_name,
     filter_where_clause,
-    order,
+    &order,
     Pagination {
       cursor_column: cursor_column.map(|(_idx, c)| c),
       cursor,
@@ -151,7 +153,7 @@ async fn fetch_rows(
   conn: &trailbase_sqlite::Connection,
   table_or_view_name: &str,
   filter_where_clause: WhereClause,
-  order: Option<Vec<(String, Order)>>,
+  order: &Option<Order>,
   pagination: Pagination<'_>,
 ) -> Result<(Vec<Vec<serde_json::Value>>, Vec<Column>), Error> {
   let WhereClause {
@@ -171,19 +173,20 @@ async fn fetch_rows(
   ]);
 
   if let (Some(cursor), Some(pk_column)) = (pagination.cursor, pagination.cursor_column) {
-    params.push((Cow::Borrowed(":cursor"), cursor.into()));
+    params.push((Cow::Borrowed(":cursor"), cursor_to_value(cursor)));
     clause = format!(r#"{clause} AND _ROW_."{}" < :cursor"#, pk_column.name);
   }
 
   let order_clause = match order {
     Some(order) => order
+      .columns
       .iter()
       .map(|(col, ord)| {
         format!(
           r#"_ROW_."{col}" {}"#,
           match ord {
-            Order::Descending => "DESC",
-            Order::Ascending => "ASC",
+            OrderPrecedent::Descending => "DESC",
+            OrderPrecedent::Ascending => "ASC",
           }
         )
       })
@@ -282,7 +285,7 @@ mod tests {
         clause: "TRUE".to_string(),
         params: vec![],
       },
-      None,
+      &None,
       Pagination {
         cursor_column: None,
         cursor: None,

@@ -8,16 +8,14 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use trailbase_qs::{Cursor, Order, OrderPrecedent, Query};
 use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::constants::{LOGS_RETENTION_DEFAULT, LOGS_TABLE_ID_COLUMN};
-use crate::listing::{
-  Cursor, Order, QueryParseResult, WhereClause, build_filter_where_clause, limit_or_default,
-  parse_and_sanitize_query,
-};
+use crate::listing::{WhereClause, build_filter_where_clause, cursor_to_value, limit_or_default};
 use crate::schema_metadata::{TableMetadata, lookup_and_parse_table_schema};
 
 #[derive(Debug, Serialize, TS)]
@@ -109,14 +107,18 @@ pub async fn list_logs_handler(
 
   // TODO: we should probably return an error if the query parsing fails rather than quietly
   // falling back to defaults.
-  let QueryParseResult {
-    params: filter_params,
-    cursor,
+  let Query {
     limit,
+    cursor,
     order,
+    filter: filter_params,
     ..
-  } = parse_and_sanitize_query(raw_url_query.as_deref())
-    .map_err(|err| Error::Precondition(format!("Invalid query '{err}': {raw_url_query:?}")))?;
+  } = raw_url_query
+    .as_ref()
+    .map_or_else(|| Ok(Query::default()), |query| Query::parse(query))
+    .map_err(|err| {
+      return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
+    })?;
 
   // NOTE: We cannot use state.schema_metadata() here, since we're working on the logs database.
   // We could cache, however this is just the admin logs handler.
@@ -138,8 +140,9 @@ pub async fn list_logs_handler(
     .unwrap_or(-1);
 
   lazy_static! {
-    static ref DEFAULT_ORDERING: Vec<(String, Order)> =
-      vec![(LOGS_TABLE_ID_COLUMN.to_string(), Order::Descending)];
+    static ref DEFAULT_ORDERING: Order = Order {
+      columns: vec![(LOGS_TABLE_ID_COLUMN.to_string(), OrderPrecedent::Descending)],
+    };
   }
 
   let first_page = cursor.is_none();
@@ -147,7 +150,7 @@ pub async fn list_logs_handler(
     conn,
     filter_where_clause.clone(),
     cursor,
-    order.unwrap_or_else(|| DEFAULT_ORDERING.clone()),
+    order.as_ref().unwrap_or_else(|| &DEFAULT_ORDERING),
     limit_or_default(limit).map_err(|err| Error::BadRequest(err.into()))?,
   )
   .await?;
@@ -202,7 +205,7 @@ async fn fetch_logs(
   conn: &trailbase_sqlite::Connection,
   filter_where_clause: WhereClause,
   cursor: Option<Cursor>,
-  order: Vec<(String, Order)>,
+  order: &Order,
   limit: usize,
 ) -> Result<Vec<LogEntry>, Error> {
   let mut params = filter_where_clause.params;
@@ -213,18 +216,19 @@ async fn fetch_logs(
   ));
 
   if let Some(cursor) = cursor {
-    params.push((Cow::Borrowed(":cursor"), cursor.into()));
+    params.push((Cow::Borrowed(":cursor"), cursor_to_value(cursor)));
     where_clause = format!("{where_clause} AND log.id < :cursor",);
   }
 
   let order_clause = order
+    .columns
     .iter()
     .map(|(col, ord)| {
       format!(
         "log.{col} {}",
         match ord {
-          Order::Descending => "DESC",
-          Order::Ascending => "ASC",
+          OrderPrecedent::Descending => "DESC",
+          OrderPrecedent::Ascending => "ASC",
         }
       )
     })
