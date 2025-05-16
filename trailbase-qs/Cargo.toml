@@ -1,0 +1,16 @@
+[package]
+name = "trailbase-qs"
+version = "0.1.0"
+edition = "2024"
+license = "OSL-3.0"
+description = "Query string parser for TrailBase"
+homepage = "https://trailbase.io"
+repository = "https://github.com/trailbaseio/trailbase"
+readme = "../README.md"
+
+[dependencies]
+base64 = "0.22.1"
+itertools = "0.14.0"
+serde = "1.0.219"
+serde-value = "0.7.0"
+serde_qs = "0.15.0"

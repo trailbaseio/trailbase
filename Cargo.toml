@@ -11,6 +11,7 @@ members = [
   "trailbase-core",
   "trailbase-extension",
   "trailbase-js",
+  "trailbase-qs",
   "trailbase-schema",
   "trailbase-sqlite",
   "vendor/serde_rusqlite",
@@ -24,6 +25,7 @@ default-members = [
   "trailbase-core",
   "trailbase-extension",
   "trailbase-js",
+  "trailbase-qs",
   "trailbase-schema",
   "trailbase-sqlite",
 ]
@@ -75,6 +77,7 @@ trailbase-assets = { path = "trailbase-assets", version = "0.1.0" }
 trailbase-sqlean = { path = "vendor/sqlean", version = "0.0.2" }
 trailbase-extension = { path = "trailbase-extension", version = "0.2.0" }
 trailbase-js = { path = "trailbase-js", version = "0.1.0" }
+trailbase-qs = { path = "trailbase-qs", version = "0.1.0" }
 trailbase-refinery-core = { path = "vendor/refinery/refinery_core", version = "0.8.16", default-features = false, features = ["rusqlite-bundled"] }
 trailbase-refinery-macros = { path = "vendor/refinery/refinery_macros", version = "0.8.15" }
 trailbase-schema = { path = "trailbase-schema", version = "0.1.0" }

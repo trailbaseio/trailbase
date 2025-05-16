@@ -6,7 +6,7 @@ use rusqlite::Error;
 use rusqlite::functions::Context;
 use std::sync::LazyLock;
 
-static ARGON2: LazyLock<Argon2<'static>> = LazyLock::new(|| Argon2::default());
+static ARGON2: LazyLock<Argon2<'static>> = LazyLock::new(Argon2::default);
 
 pub fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
   let salt = SaltString::generate(&mut OsRng);
