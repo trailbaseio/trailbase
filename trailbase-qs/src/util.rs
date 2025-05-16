@@ -1,4 +1,4 @@
-use serde::de::Unexpected;
+use serde::de::{Deserialize, Unexpected};
 
 #[inline]
 pub(crate) fn sanitize_column_name(name: &str) -> bool {
@@ -7,6 +7,41 @@ pub(crate) fn sanitize_column_name(name: &str) -> bool {
   return name
     .chars()
     .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_');
+}
+
+#[inline]
+pub(crate) fn parse_bool(s: &str) -> Option<bool> {
+  return match s {
+    "TRUE" | "true" => Some(true),
+    "FALSE" | "false" => Some(false),
+    _ => None,
+  };
+}
+
+pub(crate) fn deserialize_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+  D: serde::de::Deserializer<'de>,
+{
+  use serde::de::Error;
+  use serde_value::Value;
+
+  let value = Value::deserialize(deserializer)?;
+  match value {
+    Value::String(ref str) => {
+      if let Some(b) = parse_bool(str) {
+        return Ok(Some(b));
+      }
+    }
+    Value::Bool(b) => {
+      return Ok(Some(b));
+    }
+    _ => {}
+  };
+
+  return Err(Error::invalid_type(
+    crate::util::unexpected(&value),
+    &"'true' | 'TRUE' | 'false' | 'FALSE'",
+  ));
 }
 
 pub(crate) fn unexpected(value: &serde_value::Value) -> Unexpected {

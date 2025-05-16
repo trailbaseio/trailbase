@@ -2,6 +2,7 @@ use base64::prelude::*;
 use serde::Deserialize;
 
 use crate::filter::ValueOrComposite;
+use crate::util::deserialize_bool;
 
 /// TrailBase supports cursors in a few formats:
 ///  * Integers
@@ -166,6 +167,7 @@ pub struct Query {
   pub offset: Option<usize>,
 
   /// Return total number of rows in the table.
+  #[serde(default, deserialize_with = "deserialize_bool")]
   pub count: Option<bool>,
 
   /// Which foreign key columns to expand (only when allowed by configuration).
@@ -194,6 +196,24 @@ mod tests {
     let qs = Config::new(5, true);
 
     assert_eq!(qs.deserialize_str::<Query>("").unwrap(), Query::default());
+    assert_eq!(
+      qs.deserialize_str::<Query>("limit=5&offset=5&count=true")
+        .unwrap(),
+      Query {
+        limit: Some(5),
+        offset: Some(5),
+        count: Some(true),
+        ..Default::default()
+      }
+    );
+    assert_eq!(
+      qs.deserialize_str::<Query>("count=FALSE").unwrap(),
+      Query {
+        count: Some(false),
+        ..Default::default()
+      }
+    );
+    assert!(qs.deserialize_str::<Query>("offset=-1").is_err());
   }
 
   #[test]
