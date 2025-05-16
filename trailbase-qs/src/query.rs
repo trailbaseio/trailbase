@@ -60,7 +60,7 @@ pub enum OrderPrecedent {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Order {
-  columns: Vec<(String, OrderPrecedent)>,
+  pub columns: Vec<(String, OrderPrecedent)>,
 }
 
 impl<'de> serde::de::Deserialize<'de> for Order {
@@ -112,7 +112,7 @@ impl<'de> serde::de::Deserialize<'de> for Order {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Expand {
-  columns: Vec<String>,
+  pub columns: Vec<String>,
 }
 
 impl<'de> serde::de::Deserialize<'de> for Expand {
@@ -181,6 +181,13 @@ pub struct Query {
   pub filter: Option<ValueOrComposite>,
 }
 
+impl Query {
+  pub fn parse(query: &str) -> Result<Query, serde_qs::Error> {
+    let qs = serde_qs::Config::new(5, true);
+    return qs.deserialize_str::<Query>(query);
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -193,12 +200,9 @@ mod tests {
 
   #[test]
   fn test_query_basic_parsing() {
-    let qs = Config::new(5, true);
-
-    assert_eq!(qs.deserialize_str::<Query>("").unwrap(), Query::default());
+    assert_eq!(Query::parse("").unwrap(), Query::default());
     assert_eq!(
-      qs.deserialize_str::<Query>("limit=5&offset=5&count=true")
-        .unwrap(),
+      Query::parse("limit=5&offset=5&count=true").unwrap(),
       Query {
         limit: Some(5),
         offset: Some(5),
@@ -207,13 +211,13 @@ mod tests {
       }
     );
     assert_eq!(
-      qs.deserialize_str::<Query>("count=FALSE").unwrap(),
+      Query::parse("count=FALSE").unwrap(),
       Query {
         count: Some(false),
         ..Default::default()
       }
     );
-    assert!(qs.deserialize_str::<Query>("offset=-1").is_err());
+    assert!(Query::parse("offset=-1").is_err());
   }
 
   #[test]
@@ -221,7 +225,7 @@ mod tests {
     let qs = Config::new(5, true);
 
     assert_eq!(
-      qs.deserialize_str::<Query>("order=").unwrap(),
+      Query::parse("order=").unwrap(),
       Query {
         order: None,
         ..Default::default()
@@ -327,9 +331,24 @@ mod tests {
         ]
       )
     );
+
+    let filter = |_: &str| -> Result<(), String> {
+      return Ok(());
+    };
+    let (sql, params) = q1.filter.clone().unwrap().into_sql(None, &filter).unwrap();
+    assert_eq!(sql, r#"(("col2" = :p1 OR "col0" <> :p2) AND "col1" = :p3)"#);
     assert_eq!(
-      q1.filter.unwrap().to_sql(),
-      "((col2 = 'val2' OR col0 <> 'val0') AND col1 = 1)"
+      params,
+      vec![
+        (":p1".to_string(), Value::String("val2".to_string())),
+        (":p2".to_string(), Value::String("val0".to_string())),
+        (":p3".to_string(), Value::Integer(1)),
+      ]
+    );
+    let (sql, _) = q1.filter.unwrap().into_sql(Some("p"), &filter).unwrap();
+    assert_eq!(
+      sql,
+      r#"((p."col2" = :p1 OR p."col0" <> :p2) AND p."col1" = :p3)"#
     );
 
     // Test both encodings: '+' and %20 for ' '.

@@ -74,17 +74,6 @@ pub struct ColumnOpValue {
   pub value: Value,
 }
 
-impl ColumnOpValue {
-  pub fn to_sql(&self) -> String {
-    return format!(
-      "{c} {o} {v}",
-      c = self.column,
-      o = self.op.to_sql(),
-      v = self.value.to_sql()
-    );
-  }
-}
-
 pub fn serde_value_to_single_column_rel_value<'de, D>(
   key: String,
   value: serde_value::Value,

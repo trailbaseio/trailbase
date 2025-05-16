@@ -14,9 +14,18 @@ pub enum Value {
 
 impl Value {
   fn unparse(value: String) -> Self {
-    return if let Some(b) = crate::util::parse_bool(&value) {
-      Value::Bool(b)
-    } else if let Ok(i) = i64::from_str(&value) {
+    // NOTE: We don't parse '1' and '0'. since we would prefer to parse those as integers.
+    match value.as_str() {
+      "TRUE" | "true" => {
+        return Value::Bool(true);
+      }
+      "FALSE" | "false" => {
+        return Value::Bool(false);
+      }
+      _ => {}
+    };
+
+    return if let Ok(i) = i64::from_str(&value) {
       Value::Integer(i)
     } else if let Ok(d) = f64::from_str(&value) {
       Value::Double(d)

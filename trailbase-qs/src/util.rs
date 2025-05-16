@@ -9,15 +9,6 @@ pub(crate) fn sanitize_column_name(name: &str) -> bool {
     .all(|c| c.is_alphanumeric() || c == '.' || c == '-' || c == '_');
 }
 
-#[inline]
-pub(crate) fn parse_bool(s: &str) -> Option<bool> {
-  return match s {
-    "TRUE" | "true" => Some(true),
-    "FALSE" | "false" => Some(false),
-    _ => None,
-  };
-}
-
 pub(crate) fn deserialize_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
 where
   D: serde::de::Deserializer<'de>,
@@ -28,9 +19,16 @@ where
   let value = Value::deserialize(deserializer)?;
   match value {
     Value::String(ref str) => {
-      if let Some(b) = parse_bool(str) {
-        return Ok(Some(b));
-      }
+      // NOTE: Unlike for Value, we also parse '1' and '0'.
+      match str.as_str() {
+        "TRUE" | "true" | "1" => {
+          return Ok(Some(true));
+        }
+        "FALSE" | "false" | "0" => {
+          return Ok(Some(false));
+        }
+        _ => {}
+      };
     }
     Value::Bool(b) => {
       return Ok(Some(b));

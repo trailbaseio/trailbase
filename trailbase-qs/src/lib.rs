@@ -7,3 +7,7 @@ mod filter;
 mod query;
 mod util;
 mod value;
+
+pub use filter::{Combiner, ValueOrComposite};
+pub use query::{Cursor, Expand, Order, OrderPrecedent, Query};
+pub use value::Value;

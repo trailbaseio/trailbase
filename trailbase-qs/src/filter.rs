@@ -7,10 +7,10 @@
 /// filters[column][eq]=value
 /// filters[and][0][column0][eq]=value0&filters[and][1][column1][eq]=value1
 /// filters[and][0][or][0][column0]=value0&[and][0][or][1][column1]=value1
-use itertools::Itertools;
 use std::collections::BTreeMap;
 
 use crate::column_rel_value::{ColumnOpValue, serde_value_to_single_column_rel_value};
+use crate::value::Value;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Combiner {
@@ -25,20 +25,58 @@ pub enum ValueOrComposite {
 }
 
 impl ValueOrComposite {
-  #[allow(unused)]
-  pub fn to_sql(&self) -> String {
-    let mut fragments: Vec<String> = vec![];
+  pub fn into_sql<E>(
+    self,
+    prefix: Option<&str>,
+    validator: &dyn Fn(&str) -> Result<(), E>,
+  ) -> Result<(String, Vec<(String, Value)>), E> {
+    let mut index: usize = 0;
+    return self.into_sql_impl(prefix, validator, &mut index);
+  }
+
+  fn into_sql_impl<E>(
+    self,
+    prefix: Option<&str>,
+    validator: &dyn Fn(&str) -> Result<(), E>,
+    index: &mut usize,
+  ) -> Result<(String, Vec<(String, Value)>), E> {
     match self {
-      Self::Value(v) => fragments.push(v.to_sql()),
+      Self::Value(v) => {
+        *index += 1;
+        validator(&v.column)?;
+
+        return Ok((
+          match prefix {
+            Some(p) => format!(
+              r#"{p}."{c}" {o} :p{index}"#,
+              c = v.column,
+              o = v.op.to_sql()
+            ),
+            None => format!(r#""{c}" {o} :p{index}"#, c = v.column, o = v.op.to_sql()),
+          },
+          vec![(format!(":p{index}"), v.value)],
+        ));
+      }
       Self::Composite(combiner, vec) => {
-        let f = vec.iter().map(|v| v.to_sql()).join(match combiner {
-          Combiner::And => " AND ",
-          Combiner::Or => " OR ",
-        });
-        fragments.push(format!("({f})"));
+        let mut fragments = Vec::<String>::with_capacity(vec.len());
+        let mut params = Vec::<(String, Value)>::with_capacity(vec.len());
+
+        for value_or_composite in vec {
+          let (f, p) = value_or_composite.into_sql_impl::<E>(prefix, validator, index)?;
+          fragments.push(f);
+          params.extend(p);
+        }
+
+        let fragment = format!(
+          "({})",
+          fragments.join(match combiner {
+            Combiner::And => " AND ",
+            Combiner::Or => " OR ",
+          }),
+        );
+        return Ok((fragment, params));
       }
     };
-    return fragments.join(" ");
   }
 }
 
