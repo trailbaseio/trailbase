@@ -91,7 +91,12 @@ test("Record integration tests", async () => {
 
   {
     const response = await api.list<SimpleStrict>({
-      filters: [`text_not_null=${messages[0]}`],
+      filters: [
+        {
+          column: "text_not_null",
+          value: messages[0],
+        },
+      ],
     });
     expect(response.total_count).toBeUndefined();
     expect(response.cursor).not.undefined.and.not.toBe("");
@@ -102,7 +107,13 @@ test("Record integration tests", async () => {
 
   {
     const response = await api.list<SimpleStrict>({
-      filters: [`text_not_null[like]=% =?&${now}`],
+      filters: [
+        {
+          column: "text_not_null",
+          op: "$like",
+          value: `% =?&${now}`,
+        },
+      ],
       order: ["+text_not_null"],
       count: true,
     });
@@ -114,7 +125,13 @@ test("Record integration tests", async () => {
 
   {
     const response = await api.list<SimpleStrict>({
-      filters: [`text_not_null[like]=%${now}`],
+      filters: [
+        {
+          column: "text_not_null",
+          op: "$like",
+          value: `%${now}`,
+        },
+      ],
       order: ["-text_not_null"],
     });
     expect(

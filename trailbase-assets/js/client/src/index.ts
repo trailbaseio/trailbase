@@ -139,6 +139,32 @@ export interface FileUpload {
   objectstore_path: string;
 }
 
+type CompareOp =
+  | "$eq"
+  | "$ne"
+  | "$lt"
+  | "$lte"
+  | "$gt"
+  | "$gte"
+  | "$like"
+  | "$re";
+
+type Filter = {
+  column: string;
+  op?: CompareOp;
+  value: string;
+};
+
+type And = {
+  and: FilterOrComposite[];
+};
+
+type Or = {
+  or: FilterOrComposite[];
+};
+
+type FilterOrComposite = Filter | And | Or;
+
 /// Provides CRUD access to records through TrailBase's record API.
 ///
 /// TODO: add file upload/download.
@@ -155,7 +181,7 @@ export class RecordApi {
   public async list<T = Record<string, unknown>>(opts?: {
     pagination?: Pagination;
     order?: string[];
-    filters?: string[];
+    filters?: FilterOrComposite[];
     count?: boolean;
     expand?: string[];
   }): Promise<ListResponse<T>> {
@@ -179,16 +205,30 @@ export class RecordApi {
     const expand = opts?.expand;
     if (expand) params.append("expand", expand.join(","));
 
+    function traverseFilters(path: string, filter: FilterOrComposite) {
+      if ("and" in filter) {
+        for (const [i, f] of (filter as And).and.entries()) {
+          traverseFilters(`${path}[$and][${i}]`, f);
+        }
+      } else if ("or" in filter) {
+        for (const [i, f] of (filter as Or).or.entries()) {
+          traverseFilters(`${path}[$or][${i}]`, f);
+        }
+      } else {
+        const f = filter as Filter;
+        const op = f.op;
+        if (op) {
+          params.append(`${path}[${f.column}][${op}]`, f.value);
+        } else {
+          params.append(`${path}[${f.column}]`, f.value);
+        }
+      }
+    }
+
     const filters = opts?.filters;
     if (filters) {
       for (const filter of filters) {
-        const pos = filter.indexOf("=");
-        if (pos <= 0) {
-          throw Error(`Filter '${filter}' does not match: 'name[op]=value'`);
-        }
-        const nameOp = filter.slice(0, pos);
-        const value = filter.slice(pos + 1);
-        params.append(nameOp, value);
+        traverseFilters("filter", filter);
       }
     }
 
