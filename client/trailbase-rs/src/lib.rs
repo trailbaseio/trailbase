@@ -254,9 +254,56 @@ pub struct RecordApi {
 pub struct ListArguments<'a> {
   pagination: Pagination,
   order: Option<Vec<&'a str>>,
-  filters: Option<Vec<&'a str>>,
+  filters: Option<ValueOrFilterGroup>,
   expand: Option<Vec<&'a str>>,
   count: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CompareOp {
+  Equal,
+  NotEqual,
+  GreaterThanEqual,
+  GreaterThan,
+  LessThanEqual,
+  LessThan,
+  Like,
+  Regexp,
+}
+
+impl CompareOp {
+  fn to_str(&self) -> &'static str {
+    return match self {
+      Self::Equal => "$eq",
+      Self::NotEqual => "$ne",
+      Self::GreaterThanEqual => "$gte",
+      Self::GreaterThan => "$gt",
+      Self::LessThanEqual => "$lte",
+      Self::LessThan => "$lt",
+      Self::Like => "$like",
+      Self::Regexp => "$re",
+    };
+  }
+}
+
+#[derive(Clone, Default, Debug, PartialEq)]
+pub struct Filter {
+  pub column: String,
+  pub op: Option<CompareOp>,
+  pub value: String,
+}
+
+impl From<Filter> for ValueOrFilterGroup {
+  fn from(value: Filter) -> Self {
+    return ValueOrFilterGroup::Filter(value);
+  }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ValueOrFilterGroup {
+  Filter(Filter),
+  And(Vec<ValueOrFilterGroup>),
+  Or(Vec<ValueOrFilterGroup>),
 }
 
 impl<'a> ListArguments<'a> {
@@ -274,8 +321,8 @@ impl<'a> ListArguments<'a> {
     return self;
   }
 
-  pub fn with_filters(mut self, filters: impl AsRef<[&'a str]>) -> Self {
-    self.filters = Some(filters.as_ref().to_vec());
+  pub fn with_filters(mut self, filters: impl Into<ValueOrFilterGroup>) -> Self {
+    self.filters = Some(filters.into());
     return self;
   }
 
@@ -295,7 +342,8 @@ impl RecordApi {
     &self,
     args: ListArguments<'_>,
   ) -> Result<ListResponse<T>, Error> {
-    let mut params: Vec<(Cow<'static, str>, Cow<'static, str>)> = vec![];
+    type Param = (Cow<'static, str>, Cow<'static, str>);
+    let mut params: Vec<Param> = vec![];
     if let Some(cursor) = args.pagination.cursor {
       params.push((Cow::Borrowed("cursor"), Cow::Owned(cursor)));
     }
@@ -325,17 +373,40 @@ impl RecordApi {
       params.push((Cow::Borrowed("count"), Cow::Borrowed("true")));
     }
 
-    if let Some(filters) = args.filters {
-      for filter in filters {
-        let Some((name_op, value)) = filter.split_once("=") else {
-          panic!("Filter '{filter}' does not match: 'name[op]=value'");
-        };
-
-        params.push((
-          Cow::Owned(name_op.to_string()),
-          Cow::Owned(value.to_string()),
-        ));
+    fn traverse_filters(params: &mut Vec<Param>, path: String, filter: ValueOrFilterGroup) {
+      match filter {
+        ValueOrFilterGroup::Filter(filter) => {
+          if let Some(op) = filter.op {
+            params.push((
+              Cow::Owned(format!(
+                "{path}[{col}][{op}]",
+                col = filter.column,
+                op = op.to_str()
+              )),
+              Cow::Owned(filter.value),
+            ));
+          } else {
+            params.push((
+              Cow::Owned(format!("{path}[{col}]", col = filter.column)),
+              Cow::Owned(filter.value),
+            ));
+          }
+        }
+        ValueOrFilterGroup::And(vec) => {
+          for (i, f) in vec.into_iter().enumerate() {
+            traverse_filters(params, format!("{path}[$and][{i}]"), f);
+          }
+        }
+        ValueOrFilterGroup::Or(vec) => {
+          for (i, f) in vec.into_iter().enumerate() {
+            traverse_filters(params, format!("{path}[$or][{i}]"), f);
+          }
+        }
       }
+    }
+
+    if let Some(filters) = args.filters {
+      traverse_filters(&mut params, "filter".to_string(), filters);
     }
 
     let response = self

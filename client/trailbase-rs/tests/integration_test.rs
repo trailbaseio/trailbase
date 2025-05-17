@@ -1,7 +1,9 @@
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use trailbase_client::{Client, DbEvent, ListArguments, ListResponse, Pagination, ReadArguments};
+use trailbase_client::{
+  Client, CompareOp, DbEvent, Filter, ListArguments, ListResponse, Pagination, ReadArguments,
+};
 
 struct Server {
   child: std::process::Child,
@@ -168,18 +170,22 @@ async fn records_test() {
 
   {
     // List one specific message.
-    let filter = format!("text_not_null={}", messages[0]);
+    let filter = Filter {
+      column: "text_not_null".to_string(),
+      value: messages[0].clone(),
+      ..Default::default()
+    };
     let response = api
-      .list::<serde_json::Value>(ListArguments::new().with_filters([filter.as_str()]))
+      .list::<serde_json::Value>(ListArguments::new().with_filters(filter.clone()))
       .await
       .unwrap();
 
-    assert_eq!(response.records.len(), 1);
+    assert_eq!(response.records.len(), 1, "{:?}", response.records);
 
     let second_response = api
       .list::<serde_json::Value>(
         ListArguments::new()
-          .with_filters(&[filter.as_str()])
+          .with_filters(filter)
           .with_pagination(Pagination::new().with_cursor(response.cursor)),
       )
       .await
@@ -190,12 +196,16 @@ async fn records_test() {
 
   {
     // List all the messages
-    let filter = format!("text_not_null[like]=% =?&{now}");
+    let filter = Filter {
+      column: "text_not_null".to_string(),
+      op: Some(CompareOp::Like),
+      value: format!("% =?&{now}"),
+    };
     let records_ascending: ListResponse<SimpleStrict> = api
       .list(
         ListArguments::new()
           .with_order(["+text_not_null"])
-          .with_filters([filter.as_str()])
+          .with_filters(filter.clone())
           .with_count(true),
       )
       .await
@@ -213,7 +223,7 @@ async fn records_test() {
       .list(
         ListArguments::new()
           .with_order(["-text_not_null"])
-          .with_filters([filter.as_str()]),
+          .with_filters(filter),
       )
       .await
       .unwrap();
