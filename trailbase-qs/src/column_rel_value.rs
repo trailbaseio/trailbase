@@ -4,7 +4,6 @@ use crate::value::Value;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CompareOp {
-  Not,
   Equal,
   NotEqual,
   GreaterThanEqual,
@@ -18,15 +17,14 @@ pub enum CompareOp {
 impl CompareOp {
   pub fn from(qualifier: &str) -> Option<Self> {
     return match qualifier {
-      "gte" => Some(Self::GreaterThanEqual),
-      "gt" => Some(Self::GreaterThan),
-      "lte" => Some(Self::LessThanEqual),
-      "lt" => Some(Self::LessThan),
-      "eq" => Some(Self::Equal),
-      "not" => Some(Self::Not),
-      "ne" => Some(Self::NotEqual),
-      "like" => Some(Self::Like),
-      "re" => Some(Self::Regexp),
+      "$eq" => Some(Self::Equal),
+      "$ne" => Some(Self::NotEqual),
+      "$gte" => Some(Self::GreaterThanEqual),
+      "$gt" => Some(Self::GreaterThan),
+      "$lte" => Some(Self::LessThanEqual),
+      "$lt" => Some(Self::LessThan),
+      "$like" => Some(Self::Like),
+      "$re" => Some(Self::Regexp),
       _ => None,
     };
   }
@@ -37,7 +35,6 @@ impl CompareOp {
       Self::GreaterThan => ">",
       Self::LessThanEqual => "<=",
       Self::LessThan => "<",
-      Self::Not => "<>",
       Self::NotEqual => "<>",
       Self::Like => "LIKE",
       Self::Regexp => "REGEXP",
@@ -53,16 +50,18 @@ impl<'de> serde::de::Deserialize<'de> for CompareOp {
   {
     use serde_value::Value;
 
+    static EXPECTED: &str = "one of [$eq, $ne, $lt, ...]";
+
     let value = Value::deserialize(deserializer)?;
     let Value::String(ref string) = value else {
       return Err(Error::invalid_type(
         crate::util::unexpected(&value),
-        &"String",
+        &EXPECTED,
       ));
     };
 
     return CompareOp::from(string)
-      .ok_or_else(|| Error::invalid_type(crate::util::unexpected(&value), &"(eq|ne)"));
+      .ok_or_else(|| Error::invalid_type(crate::util::unexpected(&value), &EXPECTED));
   }
 }
 
@@ -105,109 +104,7 @@ where
     }
     v => Err(Error::invalid_type(
       crate::util::unexpected(&v),
-      &"Map<String, String | Map<Rel, String>>",
+      &"[column_name]=value or [column_name][$op]=value",
     )),
   };
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct ColumnOpValueMap(pub(crate) Vec<ColumnOpValue>);
-
-impl<'de> serde::de::Deserialize<'de> for ColumnOpValueMap {
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    use serde_value::Value;
-
-    let value = Value::deserialize(deserializer)?;
-    let Value::Map(m) = value else {
-      return Err(Error::invalid_type(
-        crate::util::unexpected(&value),
-        &"Map<String, String | Map<Rel, String>>",
-      ));
-    };
-
-    let vec = m
-      .into_iter()
-      .map(|(k, v)| {
-        return match (k, v) {
-          (Value::String(key), v) => serde_value_to_single_column_rel_value::<D>(key, v),
-          (k, _) => Err(Error::invalid_type(crate::util::unexpected(&k), &"String")),
-        };
-      })
-      .collect::<Result<Vec<_>, _>>()?;
-
-    return Ok(ColumnOpValueMap(vec));
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  use serde::Deserialize;
-  use serde_qs::Config;
-
-  #[derive(Clone, Debug, Deserialize)]
-  struct Query {
-    filter: Option<ColumnOpValueMap>,
-  }
-
-  #[test]
-  fn test_column_rel_value() {
-    let qs = Config::new(5, true);
-
-    let m_empty: Query = qs.deserialize_str("").unwrap();
-    assert_eq!(m_empty.filter, None);
-
-    let m0: Query = qs.deserialize_str("filter[column]=1").unwrap();
-    assert_eq!(
-      m0.filter.unwrap().0,
-      vec![ColumnOpValue {
-        column: "column".to_string(),
-        op: CompareOp::Equal,
-        value: Value::Integer(1),
-      }]
-    );
-
-    let m0: Query = qs.deserialize_str("filter[column]=true").unwrap();
-    assert_eq!(
-      m0.filter.unwrap().0,
-      vec![ColumnOpValue {
-        column: "column".to_string(),
-        op: CompareOp::Equal,
-        value: Value::Bool(true),
-      }]
-    );
-
-    let m1: Query = qs.deserialize_str("filter[column][eq]=1").unwrap();
-    assert_eq!(
-      m1.filter.unwrap().0,
-      vec![ColumnOpValue {
-        column: "column".to_string(),
-        op: CompareOp::Equal,
-        value: Value::Integer(1),
-      }]
-    );
-
-    let m2: Query = qs
-      .deserialize_str("filter[col1][ne]=1&filter[col2]=2")
-      .unwrap();
-    assert_eq!(
-      m2.filter.unwrap().0,
-      vec![
-        ColumnOpValue {
-          column: "col1".to_string(),
-          op: CompareOp::NotEqual,
-          value: Value::Integer(1),
-        },
-        ColumnOpValue {
-          column: "col2".to_string(),
-          op: CompareOp::Equal,
-          value: Value::Integer(2),
-        },
-      ]
-    );
-  }
 }

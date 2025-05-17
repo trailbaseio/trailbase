@@ -76,7 +76,7 @@ where
     serde_value::Value::Bool(b) => Ok(Value::Bool(b)),
     _ => Err(Error::invalid_type(
       crate::util::unexpected(&value),
-      &"Value",
+      &"trailbase_qs::Value, i.e. string, integer, double or bool",
     )),
   };
 }
@@ -109,7 +109,7 @@ mod tests {
   fn test_value() {
     let qs = Config::new(5, true);
 
-    let v0: Query = qs.deserialize_str("filter[col0][eq]=val0").unwrap();
+    let v0: Query = qs.deserialize_str("filter[col0][$eq]=val0").unwrap();
     assert_eq!(
       v0.filter.unwrap(),
       ValueOrComposite::Value(ColumnOpValue {
@@ -118,7 +118,7 @@ mod tests {
         value: Value::String("val0".to_string()),
       })
     );
-    let v1: Query = qs.deserialize_str("filter[col0][ne]=TRUE").unwrap();
+    let v1: Query = qs.deserialize_str("filter[col0][$ne]=TRUE").unwrap();
     assert_eq!(
       v1.filter.unwrap(),
       ValueOrComposite::Value(ColumnOpValue {
@@ -128,7 +128,7 @@ mod tests {
       })
     );
 
-    let v2: Query = qs.deserialize_str("filter[col0][ne]=0").unwrap();
+    let v2: Query = qs.deserialize_str("filter[col0][$ne]=0").unwrap();
     assert_eq!(
       v2.filter.unwrap(),
       ValueOrComposite::Value(ColumnOpValue {
@@ -138,7 +138,7 @@ mod tests {
       })
     );
 
-    let v3: Query = qs.deserialize_str("filter[col0][ne]=0.0").unwrap();
+    let v3: Query = qs.deserialize_str("filter[col0][$ne]=0.0").unwrap();
     assert_eq!(
       v3.filter.unwrap(),
       ValueOrComposite::Value(ColumnOpValue {

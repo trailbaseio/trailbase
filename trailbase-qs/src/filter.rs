@@ -99,7 +99,7 @@ where
   let Value::Map(mut m) = value else {
     return Err(Error::invalid_type(
       crate::util::unexpected(&value),
-      &"map[col]=val or map[col][op]=val",
+      &"[($and|$or)][index][<nested>] or [column_name][$op]=value",
     ));
   };
 
@@ -194,7 +194,7 @@ mod tests {
 
   #[derive(Clone, Debug, Default, Deserialize)]
   struct Query {
-    composite_filter: Option<ValueOrComposite>,
+    filter: Option<ValueOrComposite>,
   }
 
   #[test]
@@ -202,16 +202,16 @@ mod tests {
     let qs = Config::new(5, true);
 
     let m_empty: Query = qs.deserialize_str("").unwrap();
-    assert_eq!(m_empty.composite_filter, None);
+    assert_eq!(m_empty.filter, None);
 
-    let m0: Result<Query, _> = qs.deserialize_str("composite_filter[$and][0][col0]=val0");
+    let m0: Result<Query, _> = qs.deserialize_str("filter[$and][0][col0]=val0");
     assert!(m0.is_err(), "{m0:?}");
 
     let m1: Query = qs
-      .deserialize_str("composite_filter[$and][0][col0]=val0&composite_filter[$and][1][col1]=val1")
+      .deserialize_str("filter[$and][0][col0]=val0&filter[$and][1][col1]=val1")
       .unwrap();
     assert_eq!(
-      m1.composite_filter.unwrap(),
+      m1.filter.unwrap(),
       ValueOrComposite::Composite(
         Combiner::And,
         vec![
@@ -230,17 +230,15 @@ mod tests {
     );
 
     assert!(
-      qs.deserialize_str::<Query>(
-        "composite_filter[$and][0][col0]=val0&composite_filter[$or][1][col1]=val1",
-      )
-      .is_err()
+      qs.deserialize_str::<Query>("filter[$and][0][col0]=val0&filter[$or][1][col1]=val1",)
+        .is_err()
     );
 
     let m2: Query = qs
-      .deserialize_str("composite_filter[col0]=val0&composite_filter[col1]=val1")
+      .deserialize_str("filter[col0]=val0&filter[col1]=val1")
       .unwrap();
     assert_eq!(
-      m2.composite_filter.unwrap(),
+      m2.filter.unwrap(),
       ValueOrComposite::Composite(
         Combiner::And,
         vec![
@@ -259,12 +257,12 @@ mod tests {
     );
 
     // Too few elements
-    let m4: Result<Query, _> = qs.deserialize_str("composite_filter[$and][0][col0]=val0");
+    let m4: Result<Query, _> = qs.deserialize_str("filter[$and][0][col0]=val0");
     assert!(m4.is_err(), "{m4:?}");
 
     // Too few elements
     let m3: Result<Query, _> =
-            qs.deserialize_str("composite_filter[col0]=val0&composite_filter[$and][0][col0]=val0&composite_filter[col1]=val1");
+      qs.deserialize_str("filter[col0]=val0&filter[$and][0][col0]=val0&filter[col1]=val1");
     assert!(m3.is_err(), "{m3:?}");
   }
 }

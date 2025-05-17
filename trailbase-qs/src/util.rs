@@ -38,7 +38,7 @@ where
 
   return Err(Error::invalid_type(
     crate::util::unexpected(&value),
-    &"'true' | 'TRUE' | 'false' | 'FALSE'",
+    &"one of [true, TRUE, 1, false, FALSE, 0]",
   ));
 }
 

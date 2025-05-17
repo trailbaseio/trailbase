@@ -27,11 +27,13 @@ impl<'de> serde::de::Deserialize<'de> for Cursor {
     use serde::de::Error;
     use serde_value::Value;
 
+    static EXPECTED: &str = "integer or url-safe base64 encoded byte cursor";
+
     let value = Value::deserialize(deserializer)?;
     let Value::String(str) = value else {
       return Err(Error::invalid_type(
         crate::util::unexpected(&value),
-        &"comma separated column names",
+        &EXPECTED,
       ));
     };
 
@@ -49,7 +51,7 @@ impl<'de> serde::de::Deserialize<'de> for Cursor {
 
     return Err(Error::invalid_type(
       crate::util::unexpected(&Value::String(str)),
-      &"integer or url-safe base64 encoded bytes",
+      &EXPECTED,
     ));
   }
 }
@@ -77,7 +79,7 @@ impl<'de> serde::de::Deserialize<'de> for Order {
     let Value::String(str) = value else {
       return Err(Error::invalid_type(
         crate::util::unexpected(&value),
-        &"comma separated column names",
+        &"comma separated column names to order by",
       ));
     };
 
@@ -129,7 +131,7 @@ impl<'de> serde::de::Deserialize<'de> for Expand {
     let Value::String(str) = value else {
       return Err(Error::invalid_type(
         crate::util::unexpected(&value),
-        &"comma separated column names",
+        &"comma separated foreign-key column names to expand",
       ));
     };
 
@@ -179,7 +181,7 @@ pub struct Query {
   pub order: Option<Order>,
 
   /// Map from filter params to filter value. It's a vector in cases like:
-  ///   `col0[gte]=2&col0[lte]=10`.
+  ///   `col0[$gte]=2&col0[$lte]=10`.
   pub filter: Option<ValueOrComposite>,
 }
 
@@ -295,7 +297,7 @@ mod tests {
     );
 
     let q0: Query = qs
-      .deserialize_str("filter[col0][gt]=0&filter[col1]=val1")
+      .deserialize_str("filter[col0][$gt]=0&filter[col1]=val1")
       .unwrap();
     assert_eq!(
       q0.filter.unwrap(),
@@ -318,7 +320,7 @@ mod tests {
 
     // Implicit and with nested or and out of order.
     let q1: Query = qs
-      .deserialize_str("filter[$or][1][col0][ne]=val0&filter[col1]=1&filter[$or][0][col2]=val2")
+      .deserialize_str("filter[$or][1][col0][$ne]=val0&filter[col1]=1&filter[$or][0][col2]=val2")
       .unwrap();
     assert_eq!(
       q1.filter.as_ref().unwrap(),
