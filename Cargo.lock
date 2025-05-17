@@ -6999,7 +6999,6 @@ name = "trailbase-qs"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "itertools 0.14.0",
  "serde",
  "serde-value",
  "serde_qs",

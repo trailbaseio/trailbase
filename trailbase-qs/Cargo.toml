@@ -10,7 +10,6 @@ readme = "../README.md"
 
 [dependencies]
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
-itertools = "0.14.0"
 serde = "1.0.219"
 serde-value = "0.7.0"
 serde_qs = "0.15.0"

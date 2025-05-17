@@ -4,6 +4,8 @@ use serde::Deserialize;
 use crate::filter::ValueOrComposite;
 use crate::util::deserialize_bool;
 
+pub type Error = serde_qs::Error;
+
 /// TrailBase supports cursors in a few formats:
 ///  * Integers
 ///  * Text-encoded UUIDs ([u8; 16])
@@ -182,8 +184,9 @@ pub struct Query {
 }
 
 impl Query {
-  pub fn parse(query: &str) -> Result<Query, serde_qs::Error> {
-    let qs = serde_qs::Config::new(5, true);
+  pub fn parse(query: &str) -> Result<Query, Error> {
+    // NOTE: We rely on non-strict mode to parse `filter[col0]=a&b%filter[col1]=c`.
+    let qs = serde_qs::Config::new(5, false);
     return qs.deserialize_str::<Query>(query);
   }
 }
@@ -201,6 +204,20 @@ mod tests {
   #[test]
   fn test_query_basic_parsing() {
     assert_eq!(Query::parse("").unwrap(), Query::default());
+    assert_eq!(Query::parse("unknown=foo").unwrap(), Query::default());
+
+    assert_eq!(
+      Query::parse("filter%5Btext_not_null%5D=rust+client+test+0%3A+%3D%3F%261747466199")
+        .unwrap()
+        .filter
+        .unwrap(),
+      ValueOrComposite::Value(ColumnOpValue {
+        column: "text_not_null".to_string(),
+        op: CompareOp::Equal,
+        value: Value::String("rust client test 0: =?&1747466199".to_string()),
+      })
+    );
+
     assert_eq!(
       Query::parse("limit=5&offset=5&count=true").unwrap(),
       Query {
