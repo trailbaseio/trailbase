@@ -64,36 +64,37 @@ type Element = {
   href: string;
 };
 
+const BASE = import.meta.env.BASE_URL;
 const elements = [
   {
     icon: TbDatabase,
     content: "Browse, create or alter your Tables, Indexes, and Views.",
-    href: "table",
+    href: `${BASE}/table`,
   },
   {
     icon: TbEdit,
     content: "Untethered script access letting you execute arbitrary SQL.",
-    href: "editor",
+    href: `${BASE}/editor`,
   },
   {
     icon: TbChartDots3,
     content: "Visualize Database Schema as Entity-Relationship-Diagram",
-    href: "erd",
+    href: `${BASE}/erd`,
   },
   {
     icon: TbUsers,
     content: "Browse and manage your application's user registry.",
-    href: "auth",
+    href: `${BASE}/auth`,
   },
   {
     icon: TbTimeline,
     content: "Access logs for your application",
-    href: "logs",
+    href: `${BASE}/logs`,
   },
   {
     icon: TbSettings,
     content: "Server settings",
-    href: "settings",
+    href: `${BASE}/settings`,
   },
 ] as Element[];
 
@@ -173,12 +174,12 @@ export function IndexPage() {
             <FactCard
               title="Users"
               content={`${fetchResult().numUsers}`}
-              href="auth"
+              href={`${BASE}/auth`}
             />
             <FactCard
               title="Tables & Views"
               content={`${fetchResult().numTables + fetchResult().numViews}`}
-              href="table"
+              href={`${BASE}/table`}
             />
             <FactCard
               title="Size"

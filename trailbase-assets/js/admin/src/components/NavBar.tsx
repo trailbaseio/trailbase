@@ -19,7 +19,7 @@ import {
 
 import logo from "@/assets/logo_104.webp";
 
-const BASE = "/_/admin";
+const BASE = import.meta.env.BASE_URL;
 const options = [
   [`${BASE}/table/`, TbDatabase, "Table & View Browser"],
   [`${BASE}/editor`, TbEdit, "SQL Editor"],
@@ -58,6 +58,7 @@ export function NavBar(props: { location: Location }) {
                     </div>
                   </a>
                 </TooltipTrigger>
+
                 <TooltipContent>{tooltip}</TooltipContent>
               </Tooltip>
             );
