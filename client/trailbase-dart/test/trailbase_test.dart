@@ -272,7 +272,7 @@ Future<void> main() async {
 
       {
         final response = await api.list(
-          filters: ['text_not_null=${messages[0]}'],
+          filters: [Filter(column: 'text_not_null', value: messages[0])],
         );
         expect(response.records.length, 1);
         expect(response.records[0]['text_not_null'], messages[0]);
@@ -281,7 +281,12 @@ Future<void> main() async {
       {
         final recordsAsc = (await api.list(
           order: ['+text_not_null'],
-          filters: ['text_not_null[like]=% =?&${now}'],
+          filters: [
+            Filter(
+                column: 'text_not_null',
+                op: CompareOp.like,
+                value: '% =?&${now}')
+          ],
         ))
             .records;
         expect(recordsAsc.map((el) => el['text_not_null']),
@@ -289,7 +294,10 @@ Future<void> main() async {
 
         final recordsDesc = (await api.list(
           order: ['-text_not_null'],
-          filters: ['text_not_null[like]=%${now}'],
+          filters: [
+            Filter(
+                column: 'text_not_null', op: CompareOp.like, value: '%${now}')
+          ],
         ))
             .records;
         expect(recordsDesc.map((el) => el['text_not_null']).toList().reversed,
@@ -300,7 +308,10 @@ Future<void> main() async {
         final response = (await api.list(
           pagination: Pagination(limit: 1),
           order: ['-text_not_null'],
-          filters: ['text_not_null[like]=%${now}'],
+          filters: [
+            Filter(
+                column: 'text_not_null', op: CompareOp.like, value: '%${now}')
+          ],
           count: true,
         ));
 
