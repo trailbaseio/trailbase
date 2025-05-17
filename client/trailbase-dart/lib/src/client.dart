@@ -282,6 +282,58 @@ class ErrorEvent extends Event {
   String toString() => 'ErrorEvent(${_error})';
 }
 
+enum CompareOp {
+  equal,
+  notEqual,
+  lessThan,
+  lessThanEqual,
+  greaterThan,
+  greaterThanEqual,
+  like,
+  regexp,
+}
+
+String _opToSring(CompareOp op) {
+  return switch (op) {
+    CompareOp.equal => '\$eq',
+    CompareOp.notEqual => '\$ne',
+    CompareOp.lessThan => '\$lt',
+    CompareOp.lessThanEqual => '\$lte',
+    CompareOp.greaterThan => '\$gt',
+    CompareOp.greaterThanEqual => '\$gte',
+    CompareOp.like => '\$like',
+    CompareOp.regexp => '\$re',
+  };
+}
+
+sealed class FilterBase {
+  const FilterBase();
+}
+
+class Filter extends FilterBase {
+  final String column;
+  final CompareOp? op;
+  final String value;
+
+  const Filter({
+    required this.column,
+    required this.value,
+    this.op,
+  });
+}
+
+class And extends FilterBase {
+  final List<FilterBase> filters;
+
+  const And(this.filters);
+}
+
+class Or extends FilterBase {
+  final List<FilterBase> filters;
+
+  const Or(this.filters);
+}
+
 class RecordApi {
   static const String _recordApi = 'api/records/v1';
 
@@ -293,7 +345,7 @@ class RecordApi {
   Future<ListResponse> list({
     Pagination? pagination,
     List<String>? order,
-    List<String>? filters,
+    List<FilterBase>? filters,
     bool? count,
     List<String>? expand,
   }) async {
@@ -313,15 +365,30 @@ class RecordApi {
     if (count ?? false) params['count'] = 'true';
     if (expand != null) params['expand'] = expand.join(',');
 
-    if (filters != null) {
-      for (final filter in filters) {
-        final (nameOp, value) = splitOnce(filter, '=');
-        if (value == null) {
-          throw Exception(
-              'Filter "${filter}" does not match: "name[op]=value"');
-        }
-        params[nameOp] = value;
-      }
+    void traverseFilters(String path, FilterBase filter) {
+      final _ = switch (filter) {
+        Filter(column: final c, op: final op, value: final v) => () {
+            if (op != null) {
+              params['${path}[${c}][${_opToSring(op)}]'] = v;
+            } else {
+              params['${path}[${c}]'] = v;
+            }
+          }(),
+        And(filters: final filters) => () {
+            filters.asMap().forEach((index, filter) {
+              traverseFilters('${path}[\$and][${index}]', filter);
+            });
+          }(),
+        Or(filters: final filters) => () {
+            filters.asMap().forEach((index, filter) {
+              traverseFilters('${path}[\$or][${index}]', filter);
+            });
+          }(),
+      };
+    }
+
+    for (final filter in filters ?? []) {
+      traverseFilters('filter', filter);
     }
 
     final response = await _client.fetch(
