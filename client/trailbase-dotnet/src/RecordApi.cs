@@ -206,6 +206,63 @@ public class ErrorEvent : Event {
 internal partial class SerializeResponseRecordIdContext : JsonSerializerContext {
 }
 
+/// <summary>Comparison operation for column filters, e.g. col != 'val'.</summary>
+public enum CompareOp {
+  /// <summary>Equal operator: '='.</summary>
+  Equal,
+  /// <summary>Not equal operator: '&lt;&gt;'.</summary>
+  NotEqual,
+  /// <summary>Less than operator: '&lt;'.</summary>
+  LessThan,
+  /// <summary>Less than equal operator: '&lt;='.</summary>
+  LessThanEqual,
+  /// <summary>Greater than operator: '&gt;'.</summary>
+  GreaterThan,
+  /// <summary>Greater than equal operator: '&gt;='.</summary>
+  GreaterThanEqual,
+  /// <summary>Like string operator: 'LIKE'.</summary>
+  Like,
+  /// <summary>Regular expression operator: 'REGEXP'.</summary>
+  Regexp,
+}
+
+/// <summary>Abstract base class for filters.</summary>
+public abstract class FilterBase { }
+
+/// <summary>Column filters.</summary>
+sealed public class Filter : FilterBase {
+  internal String column;
+  internal CompareOp? op;
+  internal String value;
+
+  /// <summary>Constructs column filter by column name, value and comparison operation</summary>
+  public Filter(String column, String value, CompareOp? op = null) {
+    this.column = column;
+    this.op = op;
+    this.value = value;
+  }
+}
+
+/// <summary>Logical "and" for column filters.</summary>
+sealed public class And : FilterBase {
+  internal List<FilterBase> filters;
+
+  /// <summary>Constructs logical "and".</summary>
+  public And(List<FilterBase> filters) {
+    this.filters = filters;
+  }
+}
+
+/// <summary>Logical "or" for column filters.</summary>
+sealed public class Or : FilterBase {
+  internal List<FilterBase> filters;
+
+  /// <summary>Constructs logical "or".</summary>
+  public Or(List<FilterBase> filters) {
+    this.filters = filters;
+  }
+}
+
 /// <summary>Main API to interact with Records.</summary>
 public class RecordApi {
   static readonly string _recordApi = "api/records/v1";
@@ -330,7 +387,7 @@ public class RecordApi {
   public async Task<ListResponse<T>> List<T>(
     Pagination? pagination = null,
     List<string>? order = null,
-    List<string>? filters = null,
+    List<FilterBase>? filters = null,
     List<string>? expand = null,
     bool count = false
   ) {
@@ -351,7 +408,7 @@ public class RecordApi {
     JsonTypeInfo<ListResponse<T>> jsonTypeInfo,
     Pagination? pagination = null,
     List<string>? order = null,
-    List<string>? filters = null,
+    List<FilterBase>? filters = null,
     List<string>? expand = null,
     bool count = false
   ) {
@@ -370,7 +427,7 @@ public class RecordApi {
   public async Task<ListResponse<JsonObject>> List(
     Pagination? pagination = null,
     List<string>? order = null,
-    List<string>? filters = null,
+    List<FilterBase>? filters = null,
     List<string>? expand = null,
     bool count = false
   ) {
@@ -382,7 +439,7 @@ public class RecordApi {
   private async Task<HttpContent> ListImpl(
     Pagination? pagination,
     List<string>? order,
-    List<string>? filters,
+    List<FilterBase>? filters,
     List<string>? expand,
     bool count
   ) {
@@ -416,16 +473,50 @@ public class RecordApi {
       param.Add("expand", String.Join(",", expand.ToArray()));
     }
 
-    if (filters != null) {
-      foreach (var filter in filters) {
-        var split = filter.Split('=', 2);
-        if (split.Length < 2) {
-          throw new Exception($"Filter '{filter}' does not match: 'name[op]=value'");
-        }
-        var nameOp = split[0];
-        var value = split[1];
-        param.Add(nameOp, value);
+    String op(CompareOp op) {
+      return op switch {
+        CompareOp.Equal => "$eq",
+        CompareOp.NotEqual => "$eq",
+        CompareOp.LessThan => "$lt",
+        CompareOp.LessThanEqual => "$lte",
+        CompareOp.GreaterThan => "$gt",
+        CompareOp.GreaterThanEqual => "$gte",
+        CompareOp.Like => "$like",
+        CompareOp.Regexp => "$re",
+        _ => "??",
+      };
+    }
+
+    void traverseFilters(String path, FilterBase filter) {
+      switch (filter) {
+        case Filter f:
+          if (f.op != null) {
+            var o = op((CompareOp)f.op);
+            param.Add($"{path}[{f.column}][{o}]", f.value);
+          }
+          else {
+            param.Add($"{path}[{f.column}]", f.value);
+          }
+          break;
+        case And f:
+          var i = 0;
+          foreach (var fil in f.filters) {
+            traverseFilters($"{path}[$and][{i++}]", fil);
+          }
+          break;
+        case Or f:
+          var j = 0;
+          foreach (var fil in f.filters) {
+            traverseFilters($"{path}[$or][{j++}]", fil);
+          }
+          break;
+        default:
+          break;
       }
+    }
+
+    foreach (var filter in filters ?? []) {
+      traverseFilters("filter", filter);
     }
 
     var response = await client.Fetch(

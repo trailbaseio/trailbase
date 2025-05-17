@@ -221,11 +221,11 @@ internal class ThinClient {
     }
 
     var query = (Dictionary<string, string> p) => {
-      var queryString = System.Web.HttpUtility.ParseQueryString(string.Empty);
-      foreach (var e in p) {
-        queryString.Add(e.Key, e.Value);
-      }
-      return queryString.ToString();
+      // NOTE: System.Web.HttpUtility encode '[' and ']' as "%5b" and "%5d", while we
+      // need the capital letter version. Use System.Net.WebUtility.UrlEncode instead.
+      var encode = System.Net.WebUtility.UrlEncode;
+      return string.Join("&",
+              p.Select(kvp => $"{encode(kvp.Key)}={encode(kvp.Value)}"));
     };
 
     var httpRequestMessage = new HttpRequestMessage {

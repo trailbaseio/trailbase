@@ -163,11 +163,13 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       ListResponse<SimpleStrict> response = await api.List<SimpleStrict>(
         null,
         null,
-        [$"text_not_null={messages[0]}"],
+        [new Filter(column: "text_not_null", value: $"{messages[0]}")],
         null,
         false
       )!;
+      Console.WriteLine("FFFFIIII");
       Assert.Single(response.records);
+      Console.WriteLine("FFFFIIII AFTER");
       Assert.Null(response.total_count);
       Assert.Equal(messages[0], response.records[0].text_not_null);
     }
@@ -175,7 +177,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     {
       var responseAsc = await api.List<SimpleStrict>(
         order: ["+text_not_null"],
-        filters: [$"text_not_null[like]=% =?&{suffix}"],
+        filters: [new Filter(column: "text_not_null", value: $"% =?&{suffix}", op: CompareOp.Like)],
         count: true
       )!;
       Assert.Equal(2, responseAsc.total_count);
@@ -184,7 +186,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
 
       var responseDesc = await api.List<SimpleStrict>(
         order: ["-text_not_null"],
-        filters: [$"text_not_null[like]=%{suffix}"]
+        filters: [new Filter("text_not_null", $"%{suffix}", op: CompareOp.Like)]
       )!;
       var recordsDesc = responseDesc.records;
       Assert.Equal(messages.Count, recordsDesc.Count);
@@ -217,7 +219,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       var id = ids[0];
       await api.Delete(id);
 
-      var response = await api.List<SimpleStrict>(filters: [$"text_not_null[like]=%{suffix}"])!;
+      var response = await api.List<SimpleStrict>(filters: [new Filter("text_not_null", $"%{suffix}", op: CompareOp.Like)])!;
 
       Assert.Single(response.records);
     }
@@ -249,7 +251,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     {
       ListResponse<SimpleStrict> response = await api.List(
         SerializeSimpleStrictContext.Default.ListResponseSimpleStrict,
-        filters: [$"text_not_null={messages[0]}"]
+        filters: [new Filter("text_not_null", $"{messages[0]}")]
       )!;
       Assert.Single(response.records);
       Assert.Equal(messages[0], response.records[0].text_not_null);
@@ -259,7 +261,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       var responseAsc = await api.List(
         SerializeSimpleStrictContext.Default.ListResponseSimpleStrict,
         order: ["+text_not_null"],
-        filters: [$"text_not_null[like]=% =?&{suffix}"]
+        filters: [new Filter("text_not_null", $"% =?&{suffix}", op: CompareOp.Like)]
       )!;
       var recordsAsc = responseAsc.records;
       Assert.Equal(messages.Count, recordsAsc.Count);
@@ -268,7 +270,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       var responseDesc = await api.List(
         SerializeSimpleStrictContext.Default.ListResponseSimpleStrict,
         order: ["-text_not_null"],
-        filters: [$"text_not_null[like]=%{suffix}"]
+        filters: [new Filter("text_not_null", $"%{suffix}", op: CompareOp.Like)]
       )!;
       var recordsDesc = responseDesc.records;
       Assert.Equal(messages.Count, recordsDesc.Count);
@@ -307,7 +309,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
 
       var response = await api.List(
         SerializeSimpleStrictContext.Default.ListResponseSimpleStrict,
-        filters: [$"text_not_null[like]=%{suffix}"]
+        filters: [new Filter("text_not_null", $"%{suffix}", op: CompareOp.Like)]
       )!;
 
       Assert.Single(response.records);
