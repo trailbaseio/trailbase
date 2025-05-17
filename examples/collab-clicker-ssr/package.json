@@ -13,22 +13,22 @@
     "check": "tsc --noEmit --skipLibCheck && eslint"
   },
   "dependencies": {
-    "solid-js": "^1.9.6",
+    "solid-js": "^1.9.7",
     "trailbase": "workspace:*"
   },
   "devDependencies": {
-    "@eslint/js": "^9.26.0",
-    "@types/express": "^5.0.1",
-    "@types/node": "^22.15.17",
+    "@eslint/js": "^9.27.0",
+    "@types/express": "^5.0.2",
+    "@types/node": "^22.15.18",
     "compression": "^1.8.0",
     "cross-env": "^7.0.3",
-    "eslint": "^9.26.0",
+    "eslint": "^9.27.0",
     "express": "^5.1.0",
     "globals": "^16.1.0",
     "prettier": "^3.5.3",
     "sirv": "^3.0.1",
     "tailwindcss": "^3.4.17",
-    "typescript-eslint": "^8.32.0",
+    "typescript-eslint": "^8.32.1",
     "vite": "^6.3.5",
     "vite-plugin-eslint": "^1.8.1",
     "vite-plugin-solid": "^2.11.6"
