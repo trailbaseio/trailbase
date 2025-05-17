@@ -1,4 +1,4 @@
-from trailbase import Client, RecordId, JSON, JSON_OBJECT
+from trailbase import Client, CompareOp, Filter, RecordId, JSON, JSON_OBJECT
 
 import httpx
 import logging
@@ -124,7 +124,7 @@ def test_records(trailbase: TrailBaseFixture):
 
     if True:
         response = api.list(
-            filters=[f"text_not_null={messages[0]}"],
+            filters=[Filter("text_not_null", messages[0])],
         )
         records = response.records
         assert len(records) == 1
@@ -133,7 +133,7 @@ def test_records(trailbase: TrailBaseFixture):
     if True:
         recordsAsc = api.list(
             order=["+text_not_null"],
-            filters=[f"text_not_null[like]=% =?&{now}"],
+            filters=[Filter(column="text_not_null", value=f"% =?&{now}", op=CompareOp.LIKE)],
             count=True,
         )
 
@@ -142,7 +142,7 @@ def test_records(trailbase: TrailBaseFixture):
 
         recordsDesc = api.list(
             order=["-text_not_null"],
-            filters=[f"text_not_null[like]=%{now}"],
+            filters=[Filter(column="text_not_null", value=f"%{now}", op=CompareOp.LIKE)],
         )
 
         assert [el["text_not_null"] for el in recordsDesc.records] == list(reversed(messages))

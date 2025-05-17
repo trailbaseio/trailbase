@@ -8,9 +8,10 @@ import logging
 import typing
 import json
 
+from enum import Enum
 from contextlib import contextmanager
 from time import time
-from typing import TypeAlias, cast
+from typing import TypeAlias, cast, final
 
 JSON: TypeAlias = dict[str, "JSON"] | list["JSON"] | str | int | float | bool | None
 JSON_OBJECT: TypeAlias = dict[str, JSON]
@@ -404,6 +405,67 @@ class Client:
         )
 
 
+class CompareOp(Enum):
+    EQUAL = 1
+    NOT_EQUAL = 2
+    LESS_THAN = 3
+    LESS_THAN_EQUAL = 4
+    GREATER_THAN = 5
+    GREATER_THAN_EQUAL = 6
+    LIKE = 7
+    REGEXP = 8
+
+    def __repr__(self) -> str:
+        match self:
+            case CompareOp.EQUAL:
+                return "$eq"
+            case CompareOp.NOT_EQUAL:
+                return "$ne"
+            case CompareOp.LESS_THAN:
+                return "$lt"
+            case CompareOp.LESS_THAN_EQUAL:
+                return "$lte"
+            case CompareOp.GREATER_THAN:
+                return "$gt"
+            case CompareOp.GREATER_THAN_EQUAL:
+                return "$gte"
+            case CompareOp.LIKE:
+                return "$like"
+            case CompareOp.REGEXP:
+                return "$re"
+
+
+@final
+class Filter:
+    column: str
+    op: CompareOp | None
+    value: str
+
+    def __init__(self, column: str, value: str, op: CompareOp | None = None):
+        self.column = column
+        self.op = op
+        self.value = value
+
+
+@final
+class And:
+    filters: list["FilterOrComposite"]
+
+    def __init__(self, filters: list["FilterOrComposite"]):
+        self.filters = filters
+
+
+@final
+class Or:
+    filters: list["FilterOrComposite"]
+
+    def __init__(self, filters: list["FilterOrComposite"]):
+        self.filters = filters
+
+
+FilterOrComposite: TypeAlias = Filter | And | Or
+
+
 class RecordApi:
     _recordApi: str = "api/records/v1"
 
@@ -417,7 +479,7 @@ class RecordApi:
     def list(
         self,
         order: list[str] | None = None,
-        filters: list[str] | None = None,
+        filters: list[FilterOrComposite] | None = None,
         cursor: str | None = None,
         expand: list[str] | None = None,
         limit: int | None = None,
@@ -444,13 +506,23 @@ class RecordApi:
         if count:
             params["count"] = "true"
 
+        def traverseFilters(path: str, filter: FilterOrComposite):
+            match filter:
+                case Filter() as f:
+                    if f.op != None:
+                        params[f"{path}[{f.column}][{repr(f.op)}]"] = f.value
+                    else:
+                        params[f"{path}[{f.column}]"] = f.value
+                case And() as f:
+                    for i, filter in enumerate(f.filters):
+                        traverseFilters(f"{path}[$and][{i}", filter)
+                case Or() as f:
+                    for i, filter in enumerate(f.filters):
+                        traverseFilters(f"{path}[$or][{i}", filter)
+
         if filters != None:
             for filter in filters:
-                (nameOp, value) = filter.split("=", 1)
-                if value == "":
-                    raise Exception(f"Filter '{filter}' does not match: 'name[op]=value'")
-
-                params[nameOp] = value
+                traverseFilters("filter", filter)
 
         response = self._client.fetch(f"{self._recordApi}/{self._name}", queryParams=params)
         return ListResponse.from_json(response.json())
