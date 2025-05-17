@@ -37,7 +37,8 @@ func startTrailBase() async throws -> ProcessIdentifier {
   let depotPath = "client/testfixture"
 
   let build = try await Subprocess.run(
-    .name("cargo"), arguments: ["build"], workingDirectory: cwd, output: .string, error: .string)
+    .name("cargo"), arguments: ["build"], workingDirectory: cwd, output: .string, error: .string
+  )
 
   if !build.terminationStatus.isSuccess {
     throw StartupError.buildFailed(stdout: build.standardOutput, stderr: build.standardError)
@@ -145,7 +146,7 @@ extension Trait where Self == SetupTrailBaseTrait {
 
     // List a specific message
     if true {
-      let filter = "text_not_null=\(messages[0])"
+      let filter = Filter.Filter(column: "text_not_null", value: messages[0])
       let response: ListResponse<SimpleStrict> = try await api.list(filters: [filter])
 
       assert(response.records.count == 1)
@@ -158,7 +159,8 @@ extension Trait where Self == SetupTrailBaseTrait {
 
     // List all the messages
     if true {
-      let filter = "text_not_null[like]=% =?&\(now)"
+      let filter = Filter.Filter(
+        column: "text_not_null", op: CompareOp.Like, value: "% =?&\(now)")
       let ascending: ListResponse<SimpleStrict> = try await api.list(
         order: ["+text_not_null"], filters: [filter], count: true)
 

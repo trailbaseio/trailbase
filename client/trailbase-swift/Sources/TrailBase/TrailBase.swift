@@ -76,6 +76,38 @@ public struct ListResponse<T: Decodable>: Decodable {
   let records: [T]
 }
 
+public enum CompareOp {
+  case Equal
+  case NotEqual
+  case LessThan
+  case LessThanEqual
+  case GreaterThan
+  case GreaterThanEqual
+  case Like
+  case Regexp
+}
+
+extension CompareOp {
+  func op() -> String {
+    return switch self {
+    case .Equal: "$eq"
+    case .NotEqual: "$ne"
+    case .LessThan: "$lt"
+    case .LessThanEqual: "$lte"
+    case .GreaterThan: "$gt"
+    case .GreaterThanEqual: "$gte"
+    case .Like: "$like"
+    case .Regexp: "$re"
+    }
+  }
+}
+
+public enum Filter {
+  case Filter(column: String, op: CompareOp? = nil, value: String)
+  case And(filters: [Filter])
+  case Or(filters: [Filter])
+}
+
 public class RecordApi {
   let client: Client
   let name: String
@@ -88,7 +120,7 @@ public class RecordApi {
   public func list<T: Decodable>(
     pagination: Pagination? = nil,
     order: [String]? = nil,
-    filters: [String]? = nil,
+    filters: [Filter]? = nil,
     expand: [String]? = nil,
     count: Bool = false,
   ) async throws -> ListResponse<T> {
@@ -119,14 +151,33 @@ public class RecordApi {
       queryParams.append(URLQueryItem(name: "count", value: "true"))
     }
 
+    func traverseFilters(path: String, filter: Filter) {
+      switch filter {
+      case .Filter(let column, let op, let value):
+        if op != nil {
+          queryParams.append(
+            URLQueryItem(name: "\(path)[\(column)][\(op!.op())]", value: value))
+        } else {
+          queryParams.append(
+            URLQueryItem(name: "\(path)[\(column)]", value: value))
+        }
+        break
+      case .And(let filters):
+        for (i, filter) in filters.enumerated() {
+          traverseFilters(path: "\(path)[$and][\(i)]", filter: filter)
+        }
+        break
+      case .Or(let filters):
+        for (i, filter) in filters.enumerated() {
+          traverseFilters(path: "\(path)[$or][\(i)]", filter: filter)
+        }
+        break
+      }
+    }
+
     if let f = filters {
       for filter in f {
-        let nameOpValue = filter.split(separator: "=", maxSplits: 1)
-        if nameOpValue.count != 2 {
-          throw ClientError.invalidFilter(filter)
-        }
-        queryParams.append(
-          URLQueryItem(name: String(nameOpValue[0]), value: String(nameOpValue[1])))
+        traverseFilters(path: "filter", filter: filter)
       }
     }
 
