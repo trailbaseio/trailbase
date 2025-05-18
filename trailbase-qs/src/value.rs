@@ -107,7 +107,7 @@ mod tests {
 
   #[test]
   fn test_value() {
-    let qs = Config::new(5, true);
+    let qs = Config::new(5, false);
 
     let v0: Query = qs.deserialize_str("filter[col0][$eq]=val0").unwrap();
     assert_eq!(

@@ -42,19 +42,17 @@ impl ValueOrComposite {
   ) -> Result<(String, Vec<(String, Value)>), E> {
     match self {
       Self::Value(v) => {
-        *index += 1;
         validator(&v.column)?;
+
+        let param = param_name(*index);
+        *index += 1;
 
         return Ok((
           match prefix {
-            Some(p) => format!(
-              r#"{p}."{c}" {o} :p{index}"#,
-              c = v.column,
-              o = v.op.to_sql()
-            ),
-            None => format!(r#""{c}" {o} :p{index}"#, c = v.column, o = v.op.to_sql()),
+            Some(p) => format!(r#"{p}."{c}" {o} {param}"#, c = v.column, o = v.op.to_sql()),
+            None => format!(r#""{c}" {o} {param}"#, c = v.column, o = v.op.to_sql()),
           },
-          vec![(format!(":p{index}"), v.value)],
+          vec![(param, v.value)],
         ));
       }
       Self::Composite(combiner, vec) => {
@@ -182,6 +180,14 @@ impl<'de> serde::de::Deserialize<'de> for ValueOrComposite {
   }
 }
 
+#[inline]
+fn param_name(index: usize) -> String {
+  let mut s = String::with_capacity(10);
+  s.push_str(":__p");
+  s.push_str(&index.to_string());
+  return s;
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -199,7 +205,7 @@ mod tests {
 
   #[test]
   fn test_filter_parsing() {
-    let qs = Config::new(5, true);
+    let qs = Config::new(5, false);
 
     let m_empty: Query = qs.deserialize_str("").unwrap();
     assert_eq!(m_empty.filter, None);

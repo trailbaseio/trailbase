@@ -208,6 +208,8 @@ mod tests {
     assert_eq!(Query::parse("").unwrap(), Query::default());
     assert_eq!(Query::parse("unknown=foo").unwrap(), Query::default());
 
+    // NOTE: The filter value contains a '&', which will not parse in serde_qs strict-mode. Test
+    // explicitly that we properly allow '&'s.
     assert_eq!(
       Query::parse("filter%5Btext_not_null%5D=rust+client+test+0%3A+%3D%3F%261747466199")
         .unwrap()
@@ -241,7 +243,7 @@ mod tests {
 
   #[test]
   fn test_query_order_parsing() {
-    let qs = Config::new(5, true);
+    let qs = Config::new(5, false);
 
     assert_eq!(
       Query::parse("order=").unwrap(),
@@ -272,7 +274,7 @@ mod tests {
 
   #[test]
   fn test_query_expand_parsing() {
-    let qs = Config::new(5, true);
+    let qs = Config::new(5, false);
 
     assert_eq!(
       qs.deserialize_str::<Query>("expand=").unwrap(),
@@ -289,7 +291,7 @@ mod tests {
 
   #[test]
   fn test_query_filter_parsing() {
-    let qs = Config::new(5, true);
+    let qs = Config::new(5, false);
 
     assert_eq!(
       qs.deserialize_str::<Query>("filter=").unwrap(),
@@ -355,19 +357,22 @@ mod tests {
       return Ok(());
     };
     let (sql, params) = q1.filter.clone().unwrap().into_sql(None, &filter).unwrap();
-    assert_eq!(sql, r#"(("col2" = :p1 OR "col0" <> :p2) AND "col1" = :p3)"#);
+    assert_eq!(
+      sql,
+      r#"(("col2" = :__p0 OR "col0" <> :__p1) AND "col1" = :__p2)"#
+    );
     assert_eq!(
       params,
       vec![
-        (":p1".to_string(), Value::String("val2".to_string())),
-        (":p2".to_string(), Value::String("val0".to_string())),
-        (":p3".to_string(), Value::Integer(1)),
+        (":__p0".to_string(), Value::String("val2".to_string())),
+        (":__p1".to_string(), Value::String("val0".to_string())),
+        (":__p2".to_string(), Value::Integer(1)),
       ]
     );
     let (sql, _) = q1.filter.unwrap().into_sql(Some("p"), &filter).unwrap();
     assert_eq!(
       sql,
-      r#"((p."col2" = :p1 OR p."col0" <> :p2) AND p."col1" = :p3)"#
+      r#"((p."col2" = :__p0 OR p."col0" <> :__p1) AND p."col1" = :__p2)"#
     );
 
     // Test both encodings: '+' and %20 for ' '.
@@ -386,7 +391,7 @@ mod tests {
 
   #[test]
   fn test_query_cursor_parsing() {
-    let qs = Config::new(5, true);
+    let qs = Config::new(5, false);
 
     assert_eq!(
       qs.deserialize_str::<Query>("cursor=").unwrap(),
