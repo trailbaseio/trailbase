@@ -136,7 +136,7 @@ After setting up your API, TrailBase will expose the following main endpoints[^3
 * **R**ead: <code>GET {apiPath({name: recordApiNamePlaceholder, suffix: recordApiIdPlaceholder})}</code>
 * **U**pdate: <code>PATCH {apiPath({name: recordApiNamePlaceholder, suffix: recordApiIdPlaceholder})}</code>
 * **D**elete: <code>DELETE {apiPath({name: recordApiNamePlaceholder, suffix: recordApiIdPlaceholder})}</code>
-* List: <code>GET {apiPath({name: `${recordApiNamePlaceholder}?<params>`})}</code>
+* List: <code>GET {apiPath({name: `${recordApiNamePlaceholder}?<search_params>`})}</code>
 * Change Subscriptions: <br/><code>GET {apiPath({name: recordApiNamePlaceholder, suffix: `subscribe/[*|${recordApiIdPlaceholder}]`})}</code>
 * Schema: <code>GET {apiPath({name: recordApiNamePlaceholder, suffix: "schema"})}</code>
 
@@ -315,17 +315,17 @@ Parameters:
   ascending order first (same as "+") and subsequently in descending order by
   their `rank` column due to the minus prefix.
 * Filtering can be controlled by passing one or more
-  `<column_name>[op]=<value>` parameters.
-  For example, `revenue[gt]=0` would list records with a positive `revenue` only.
+  `filter[<column_name>][op]=<value>` parameters.
+  For example, `filter[revenue][$gt]=0` would list records with a positive `revenue` only.
   Supported operators are:
-  * equal, is the empty operator, e.g. `?success=TRUE`.
-  * **not**|**ne**: not equal
-  * **gte**: greater-than-equal
-  * **gt**: greater-than
-  * **lte**: less-than-equal
-  * **lt**: less-than
-  * **like**: SQL `LIKE` operator
-  * **re**: SQL `REGEXP` operator
+  * equal, is the default operator or **$eq**, e.g. `?success=TRUE` or `?success[$eq]=TRUE`.
+  * **$ne**|**ne**: not equal
+  * **$gte**: greater-than-equal
+  * **$gt**: greater-than
+  * **$lte**: less-than-equal
+  * **$lt**: less-than
+  * **$like**: SQL `LIKE` operator
+  * **$re**: SQL `REGEXP` operator
 * Parent records, i.e. records pointed to by foreign key columns, can be
   expanded using the `?expand=<col0>,<col`>` parameter, if the respective columns
   were allow-listed in the API configuration.

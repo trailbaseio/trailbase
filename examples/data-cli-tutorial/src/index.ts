@@ -9,7 +9,13 @@ const m = await movies.list({
     limit: 3,
   },
   order: ["rank"],
-  filters: ["watch_time[lt]=120"],
+  filters: [
+    {
+      column: "watch_time",
+      op: "lessThan",
+      value: "120",
+    },
+  ],
 });
 
 console.log(m.records);

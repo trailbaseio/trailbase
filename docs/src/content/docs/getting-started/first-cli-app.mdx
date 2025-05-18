@@ -133,7 +133,7 @@ Let's try it out by querying the top-3 ranked movies with less than 120min
 watch time:
 
 ```bash
-curl -g 'localhost:4000/api/records/v1/movies?limit=3&order=rank&watch_time[lt]=120'
+curl -g 'localhost:4000/api/records/v1/movies?limit=3&order=rank&filter[watch_time][$lt]=120'
 ```
 
 You can also use your browser. Either way, you should see some JSON output with
