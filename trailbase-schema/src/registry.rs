@@ -92,7 +92,7 @@ pub fn set_user_schema(name: &str, pattern: Option<serde_json::Value>) -> Result
   }
 
   if let Some(p) = pattern {
-    let entry = SchemaEntry::from(p, None).map_err(|err| Error::JsonSchema(Arc::new(err)))?;
+    let entry = SchemaEntry::from(p, None).map_err(|err| Error::JsonSchema(err.into()))?;
     trailbase_extension::jsonschema::set_schema(name, Some(entry));
   } else {
     trailbase_extension::jsonschema::set_schema(name, None);
@@ -114,7 +114,7 @@ pub fn set_user_schemas(schemas: Vec<(String, serde_json::Value)>) -> Result<(),
   for (name, schema) in schemas {
     entries.push((
       name,
-      SchemaEntry::from(schema, None).map_err(|err| Error::JsonSchema(Arc::new(err)))?,
+      SchemaEntry::from(schema, None).map_err(|err| Error::JsonSchema(err.into()))?,
     ));
   }
 

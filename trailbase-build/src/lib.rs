@@ -87,7 +87,7 @@ pub fn pnpm_run(args: &[&str]) -> Result<std::process::Output> {
     match env::var("SKIP_ERROR") {
       Ok(v) if is_true(&v) => warn!("{}", msg),
       _ => {
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, msg));
+        return Err(std::io::Error::other(msg));
       }
     }
   }

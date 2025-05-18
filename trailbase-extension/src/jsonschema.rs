@@ -6,7 +6,8 @@ use rusqlite::functions::Context;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 
-pub type ValidationError = jsonschema::ValidationError<'static>;
+// NOTE:: Validation error is very large, we thus Box it.
+pub type ValidationError = Box<jsonschema::ValidationError<'static>>;
 
 type CustomValidatorFn = Arc<dyn Fn(&serde_json::Value, Option<&str>) -> bool + Send + Sync>;
 

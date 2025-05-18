@@ -12,7 +12,7 @@ use thiserror::Error;
 use tokio::sync::oneshot;
 
 use trailbase_js::runtime::{
-  Error as RSError, JsUser, Message, Module, Runtime, RuntimeHandle,
+  JsUser, LargeRSError, Message, Module, Runtime, RuntimeHandle,
   build_call_async_js_function_message, get_arg,
 };
 
@@ -30,7 +30,7 @@ pub struct DispatchArgs {
   pub user: Option<JsUser>,
   pub body: bytes::Bytes,
 
-  pub reply: oneshot::Sender<Result<JsHttpResponse, RSError>>,
+  pub reply: oneshot::Sender<Result<JsHttpResponse, Box<LargeRSError>>>,
 }
 
 #[derive(Deserialize, Default, Debug)]
@@ -47,7 +47,7 @@ pub enum JsHttpResponseError {
   #[error("Internal: {0}")]
   Internal(Box<dyn std::error::Error + Send + Sync>),
   #[error("Runtime: {0}")]
-  Runtime(#[from] RSError),
+  Runtime(#[from] Box<LargeRSError>),
 }
 
 impl IntoResponse for JsHttpResponseError {
@@ -116,7 +116,7 @@ fn add_route_to_router(
       csrf: u.csrf_token,
     });
 
-    let (sender, receiver) = oneshot::channel::<Result<JsHttpResponse, RSError>>();
+    let (sender, receiver) = oneshot::channel::<Result<JsHttpResponse, Box<LargeRSError>>>();
 
     debug!("dispatch {method} {uri}");
     runtime_handle
@@ -207,7 +207,7 @@ async fn install_routes_and_jobs(
                 let route: String = get_arg(args, 1)?;
 
                 let router = add_route_to_router(runtime_handle_clone.clone(), method, route)
-                  .map_err(|err| RSError::Runtime(err.to_string()))?;
+                  .map_err(|err| LargeRSError::Runtime(err.to_string()))?;
 
                 router_sender.send(router).expect("send");
 
@@ -223,7 +223,7 @@ async fn install_routes_and_jobs(
                   let name: String = get_arg(args, 0)?;
                   let default_spec: String = get_arg(args, 1)?;
                   let schedule = cron::Schedule::from_str(&default_spec).map_err(|err| {
-                    return RSError::Runtime(err.to_string());
+                    return LargeRSError::Runtime(err.to_string());
                   })?;
 
                   let runtime_handle = runtime_handle.clone();
@@ -244,7 +244,7 @@ async fn install_routes_and_jobs(
                         };
 
                         let (sender, receiver) =
-                          oneshot::channel::<Result<Option<String>, RSError>>();
+                          oneshot::channel::<Result<Option<String>, Box<LargeRSError>>>();
                         let id = id_receiver.await?;
                         first_isolate
                           .send_privately(build_call_async_js_function_message::<Option<String>>(
@@ -265,11 +265,11 @@ async fn install_routes_and_jobs(
                       };
                     }),
                   ) else {
-                    return Err(RSError::Runtime("Failed to add job".to_string()));
+                    return Err(LargeRSError::Runtime("Failed to add job".to_string()));
                   };
 
                   if let Err(err) = id_sender.send(job.id as i64) {
-                    return Err(RSError::Runtime(err.to_string()));
+                    return Err(LargeRSError::Runtime(err.to_string()));
                   }
 
                   job.start();

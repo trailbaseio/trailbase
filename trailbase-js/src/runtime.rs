@@ -19,7 +19,10 @@ use trailbase_sqlite::rows::{JsonError, row_to_json_array};
 use crate::JsRuntimeAssets;
 use crate::util::cow_to_string;
 
-pub use rustyscript::{Error, Module, ModuleHandle, Runtime};
+pub use rustyscript::{Error as LargeRSError, Module, ModuleHandle, Runtime};
+
+/// Boxed rustyscript error, since error is ~200B.
+pub type Error = Box<rustyscript::Error>;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -125,7 +128,7 @@ impl<T: serde::de::DeserializeOwned + Send + 'static> Completer for CompleterImp
 
     let promise = self.promise;
     Box::pin(async {
-      let _ = sender.send(promise.into_future(runtime).await);
+      let _ = sender.send(promise.into_future(runtime).await.map_err(Box::new));
     })
   }
 }
@@ -254,8 +257,11 @@ where
   return Message::Run(
     module,
     Box::new(move |module_handle, runtime: &mut Runtime| {
-      let _ =
-        response.send(runtime.call_function_immediate::<T>(module_handle, function_name, &args));
+      let _ = response.send(
+        runtime
+          .call_function_immediate::<T>(module_handle, function_name, &args)
+          .map_err(Box::new),
+      );
       return None;
     }),
   );
@@ -297,7 +303,7 @@ where
           sender: response,
         })),
         Err(err) => {
-          let _ = response.send(Err(err));
+          let _ = response.send(Err(Box::new(err)));
           None
         }
       };
@@ -457,8 +463,8 @@ self_cell!(
 );
 
 pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlite::Connection) {
-  fn error_mapper(err: impl std::error::Error) -> Error {
-    return Error::Runtime(err.to_string());
+  fn error_mapper(err: impl std::error::Error) -> rustyscript::Error {
+    return rustyscript::Error::Runtime(err.to_string());
   }
 
   fn register(runtime: &mut Runtime, conn: trailbase_sqlite::Connection) -> Result<(), Error> {
@@ -654,6 +660,8 @@ pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlit
   }
 }
 
+// NOTE: We cannot Box the large error, since we're using this in a rustyscript callback.
+#[allow(clippy::result_large_err)]
 fn json_value_to_param(
   value: serde_json::Value,
 ) -> Result<trailbase_sqlite::Value, rustyscript::Error> {
@@ -682,22 +690,26 @@ fn json_value_to_param(
   });
 }
 
+// NOTE: We cannot Box the large error, since we're using this in a rustyscript callback.
+#[allow(clippy::result_large_err)]
 fn json_values_to_params(
   values: Vec<serde_json::Value>,
 ) -> Result<Vec<trailbase_sqlite::Value>, rustyscript::Error> {
   return values.into_iter().map(json_value_to_param).collect();
 }
 
+// NOTE: We cannot Box the large error, since we're using this in a rustyscript callback.
+#[allow(clippy::result_large_err)]
 pub fn get_arg<T>(args: &[serde_json::Value], i: usize) -> Result<T, rustyscript::Error>
 where
   T: serde::de::DeserializeOwned,
 {
-  use rustyscript::Error;
   let arg = args
     .get(i)
-    .ok_or_else(|| Error::Runtime(format!("Range err {i} > {}", args.len())))?;
+    .ok_or_else(|| rustyscript::Error::Runtime(format!("Range err {i} > {}", args.len())))?;
 
-  return serde_json::from_value::<T>(arg.clone()).map_err(|err| Error::Runtime(err.to_string()));
+  return serde_json::from_value::<T>(arg.clone())
+    .map_err(|err| rustyscript::Error::Runtime(err.to_string()));
 }
 
 pub async fn write_js_runtime_files(data_dir: impl AsRef<Path>) {
