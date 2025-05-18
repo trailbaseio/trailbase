@@ -140,14 +140,35 @@ export interface FileUpload {
 }
 
 type CompareOp =
-  | "$eq"
-  | "$ne"
-  | "$lt"
-  | "$lte"
-  | "$gt"
-  | "$gte"
-  | "$like"
-  | "$re";
+  | "equal"
+  | "notEqual"
+  | "lessThan"
+  | "lessThanEqual"
+  | "greaterThan"
+  | "greaterThanEqual"
+  | "like"
+  | "regexp";
+
+function formatCompareOp(op: CompareOp): string {
+  switch (op) {
+    case "equal":
+      return "$eq";
+    case "notEqual":
+      return "$ne";
+    case "lessThan":
+      return "$lt";
+    case "lessThanEqual":
+      return "$lte";
+    case "greaterThan":
+      return "$gt";
+    case "greaterThanEqual":
+      return "$gte";
+    case "like":
+      return "$like";
+    case "regexp":
+      return "$re";
+  }
+}
 
 type Filter = {
   column: string;
@@ -218,7 +239,10 @@ export class RecordApi {
         const f = filter as Filter;
         const op = f.op;
         if (op) {
-          params.append(`${path}[${f.column}][${op}]`, f.value);
+          params.append(
+            `${path}[${f.column}][${formatCompareOp(op)}]`,
+            f.value,
+          );
         } else {
           params.append(`${path}[${f.column}]`, f.value);
         }

@@ -110,7 +110,7 @@ test("Record integration tests", async () => {
       filters: [
         {
           column: "text_not_null",
-          op: "$like",
+          op: "like",
           value: `% =?&${now}`,
         },
       ],
@@ -128,7 +128,7 @@ test("Record integration tests", async () => {
       filters: [
         {
           column: "text_not_null",
-          op: "$like",
+          op: "like",
           value: `%${now}`,
         },
       ],
