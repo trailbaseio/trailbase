@@ -281,7 +281,27 @@ export function AccountsPage() {
         }
       />
 
-      <div class="m-4">
+      <div class="flex flex-col items-end gap-4 p-4">
+        <FilterBar
+          initial={filter()}
+          onSubmit={(value: string) => {
+            if (value === filter()) {
+              refetch();
+            } else {
+              setFilter(value);
+            }
+          }}
+          example={
+            <>
+              e.g.{" "}
+              <span class="bg-gray-200 font-mono">
+                {" "}
+                email ~ "admin@%" && verified = TRUE
+              </span>
+            </>
+          }
+        />
+
         <Suspense fallback={<div>Loading...</div>}>
           <Switch>
             <Match when={users.error}>
@@ -289,79 +309,65 @@ export function AccountsPage() {
             </Match>
 
             <Match when={users()}>
-              <div class="flex flex-col items-end gap-4">
-                <FilterBar
-                  initial={filter()}
-                  onSubmit={(value: string) => {
-                    if (value === filter()) {
-                      refetch();
-                    } else {
-                      setFilter(value);
-                    }
-                  }}
-                  example='e.g. "email[like]=%@foo.com"'
-                />
-
-                <div class="w-full space-y-2.5">
-                  <DataTable
-                    columns={columns}
-                    data={() => users()?.users}
-                    rowCount={Number(users()?.total_row_count)}
-                    initialPagination={pagination()}
-                    onPaginationChange={setPagination}
-                  />
-                </div>
-
-                <SafeSheet
-                  children={(sheet) => {
-                    return (
-                      <>
-                        <SheetContent class={sheetMaxWidth}>
-                          <AddUser userRefetch={refetch} {...sheet} />
-                        </SheetContent>
-
-                        <SheetTrigger
-                          as={(props: DialogTriggerProps) => (
-                            <Button
-                              variant="outline"
-                              class="flex gap-2"
-                              onClick={() => {}}
-                              {...props}
-                            >
-                              Add User
-                            </Button>
-                          )}
-                        />
-                      </>
-                    );
-                  }}
-                />
-
-                {/* WARN: This might open multiple sheets or at least scrims for each row */}
-                <SafeSheet
-                  open={[
-                    () => editUser() !== undefined,
-                    (isOpen: boolean | ((value: boolean) => boolean)) => {
-                      if (!isOpen) {
-                        setEditUser(undefined);
-                      }
-                    },
-                  ]}
-                  children={(sheet) => {
-                    return (
-                      <SheetContent class={sheetMaxWidth}>
-                        <Show when={editUser()}>
-                          <EditSheetContent
-                            user={editUser()!}
-                            refetch={refetch}
-                            {...sheet}
-                          />
-                        </Show>
-                      </SheetContent>
-                    );
-                  }}
+              <div class="w-full space-y-2.5">
+                <DataTable
+                  columns={columns}
+                  data={() => users()?.users}
+                  rowCount={Number(users()?.total_row_count)}
+                  initialPagination={pagination()}
+                  onPaginationChange={setPagination}
                 />
               </div>
+
+              <SafeSheet
+                children={(sheet) => {
+                  return (
+                    <>
+                      <SheetContent class={sheetMaxWidth}>
+                        <AddUser userRefetch={refetch} {...sheet} />
+                      </SheetContent>
+
+                      <SheetTrigger
+                        as={(props: DialogTriggerProps) => (
+                          <Button
+                            variant="outline"
+                            class="flex gap-2"
+                            onClick={() => {}}
+                            {...props}
+                          >
+                            Add User
+                          </Button>
+                        )}
+                      />
+                    </>
+                  );
+                }}
+              />
+
+              {/* WARN: This might open multiple sheets or at least scrims for each row */}
+              <SafeSheet
+                open={[
+                  () => editUser() !== undefined,
+                  (isOpen: boolean | ((value: boolean) => boolean)) => {
+                    if (!isOpen) {
+                      setEditUser(undefined);
+                    }
+                  },
+                ]}
+                children={(sheet) => {
+                  return (
+                    <SheetContent class={sheetMaxWidth}>
+                      <Show when={editUser()}>
+                        <EditSheetContent
+                          user={editUser()!}
+                          refetch={refetch}
+                          {...sheet}
+                        />
+                      </Show>
+                    </SheetContent>
+                  );
+                }}
+              />
             </Match>
           </Switch>
         </Suspense>

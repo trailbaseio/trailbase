@@ -568,7 +568,14 @@ function RowDataTable(props: {
                     props.state.setStore("filter", (_prev) => value);
                   }
                 }}
-                example='e.g. "latency[lt]=2 AND status=200"'
+                example={
+                  <>
+                    e.g.{" "}
+                    <span class="bg-gray-200 font-mono">
+                      (col0 {">"} 5 && col0 {"<"} 20) || col1 = "val"
+                    </span>
+                  </>
+                }
               />
 
               <div class="space-y-2.5 overflow-auto">

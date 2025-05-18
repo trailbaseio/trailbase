@@ -94,7 +94,7 @@ impl<'de> serde::de::Deserialize<'de> for Order {
 
         if !crate::util::sanitize_column_name(&col_order.0) {
           return Err(Error::custom(format!(
-            "invalid column name: {}",
+            "invalid column name for order: {}",
             col_order.0
           )));
         }
@@ -139,9 +139,9 @@ impl<'de> serde::de::Deserialize<'de> for Expand {
       .split(",")
       .map(|column_name| {
         if !crate::util::sanitize_column_name(column_name) {
-          return Err(Error::custom(
-            format!("invalid column name: {column_name}",),
-          ));
+          return Err(Error::custom(format!(
+            "invalid column name for expand: {column_name}",
+          )));
         }
 
         return Ok(column_name.to_string());
@@ -188,7 +188,7 @@ pub struct Query {
 impl Query {
   pub fn parse(query: &str) -> Result<Query, Error> {
     // NOTE: We rely on non-strict mode to parse `filter[col0]=a&b%filter[col1]=c`.
-    let qs = serde_qs::Config::new(5, false);
+    let qs = serde_qs::Config::new(9, false);
     return qs.deserialize_str::<Query>(query);
   }
 }
@@ -220,6 +220,42 @@ mod tests {
         op: CompareOp::Equal,
         value: Value::String("rust client test 0: =?&1747466199".to_string()),
       })
+    );
+
+    let expected = ValueOrComposite::Composite(
+      Combiner::And,
+      vec![
+        ValueOrComposite::Composite(
+          Combiner::Or,
+          vec![
+            ValueOrComposite::Value(ColumnOpValue {
+              column: "latency".to_string(),
+              op: CompareOp::GreaterThan,
+              value: Value::Integer(2),
+            }),
+            ValueOrComposite::Value(ColumnOpValue {
+              column: "status".to_string(),
+              op: CompareOp::GreaterThanEqual,
+              value: Value::Integer(400),
+            }),
+          ],
+        ),
+        ValueOrComposite::Value(ColumnOpValue {
+          column: "latency".to_string(),
+          op: CompareOp::GreaterThan,
+          value: Value::Integer(2),
+        }),
+      ],
+    );
+
+    // Make sure depth in the parse config is set large enough to also parse more deeply composed
+    // expressions.
+    assert_eq!(
+      Query::parse("filter[$and][0][$or][0][latency][$gt]=2&filter[$and][0][$or][1][status][$gte]=400&filter[$and][1][latency][$gt]=2")
+        .unwrap()
+        .filter
+        .unwrap(),
+        expected
     );
 
     assert_eq!(

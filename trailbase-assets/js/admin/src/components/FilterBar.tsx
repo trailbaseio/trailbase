@@ -1,11 +1,12 @@
+import { JSX } from "solid-js";
+
 import { Button } from "@/components/ui/button";
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
 
 export function FilterBar(props: {
-  example?: string;
-  placeholder?: string;
   initial?: string;
   onSubmit: (filter: string) => void;
+  example?: JSX.Element;
 }) {
   let ref: HTMLInputElement | undefined;
   const onSubmit = () => {
@@ -28,7 +29,7 @@ export function FilterBar(props: {
             ref={ref}
             value={props.initial}
             type="text"
-            placeholder={props.placeholder ?? "filter"}
+            placeholder="filter"
           />
         </TextField>
 

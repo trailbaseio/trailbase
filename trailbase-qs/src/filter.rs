@@ -155,7 +155,6 @@ where
     }
   };
 
-  // We iterate only to take ownership.
   match m.pop_first().expect("len == 1") {
     (Value::String(str), v) => match str.as_str() {
       "$and" => combine(Combiner::And, v),

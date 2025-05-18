@@ -82,7 +82,11 @@ where
 {
   use serde_value::Value;
   if !crate::util::sanitize_column_name(&key) {
-    return Err(Error::custom(format!("invalid column name: {key}")));
+    // NOTE: This may trigger if serde_qs parse depth is not enough. In this case, square brakets
+    // will end up in the column name.
+    return Err(Error::custom(format!(
+      "invalid column name for filter: {key}. Nesting too deep?"
+    )));
   }
 
   return match value {

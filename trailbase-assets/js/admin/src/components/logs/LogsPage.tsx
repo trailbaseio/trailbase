@@ -54,7 +54,8 @@ const columns: ColumnDef<LogJson>[] = [
   columnHelper.display({
     header: "Created",
     cell: (ctx) => {
-      const timestamp = new Date(ctx.row.original.created * 1000);
+      const secondsSinceEpoch = ctx.row.original.created;
+      const timestamp = new Date(secondsSinceEpoch * 1000);
       return (
         <Tooltip>
           <TooltipTrigger as="div">
@@ -64,10 +65,13 @@ const columns: ColumnDef<LogJson>[] = [
           </TooltipTrigger>
 
           <TooltipContent>
-            {timestamp.toLocaleString(undefined, {
-              timeZoneName: "short",
-              hour12: false,
-            })}
+            <p>
+              {timestamp.toLocaleString(undefined, {
+                timeZoneName: "short",
+                hour12: false,
+              })}
+            </p>
+            <p>{secondsSinceEpoch.toFixed(0)}s since epoch</p>
           </TooltipContent>
         </Tooltip>
       );
@@ -204,6 +208,7 @@ export function LogsPage() {
             )}
 
             <FilterBar
+              initial={filter()}
               onSubmit={(value: string) => {
                 if (value === filter()) {
                   refetch();
@@ -211,7 +216,14 @@ export function LogsPage() {
                   setFilter(value);
                 }
               }}
-              example='e.g. "latency[lt]=2 AND status=200"'
+              example={
+                <>
+                  e.g.{" "}
+                  <span class="bg-gray-200 font-mono">
+                    (latency {">"} 2 || status {">="} 400) && method = "GET"
+                  </span>
+                </>
+              }
             />
 
             <DataTable
