@@ -44,7 +44,7 @@ jobs:
           pnpm i
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.86.0
           target: x86_64-unknown-linux-gnu
           default: true
       - name: Rust Build
@@ -62,7 +62,7 @@ jobs:
 
   release-aarch64-apple-darwin:
     needs: changelog
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v3
         with:
@@ -79,7 +79,7 @@ jobs:
           pnpm i
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.86.0
           target: aarch64-apple-darwin
           default: true
       - name: Rust Build
@@ -96,7 +96,7 @@ jobs:
 
   release-x86_64-apple-darwin:
     needs: changelog
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v3
         with:
@@ -113,7 +113,7 @@ jobs:
           pnpm i
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.86.0
           target: x86_64-apple-darwin
           default: true
       - name: Rust Build
@@ -141,7 +141,7 @@ jobs:
           apps: nodejs pnpm protobuf zip
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.86.0
           target: x86_64-pc-windows-msvc
           default: true
       - name: Rust Build

@@ -1,3 +1,9 @@
+## v0.11.5
+
+* Improved admin SQL editor: save dialog and pending change indication.
+* Fix short-cut links on dashboard landing page.
+* Update dependencies.
+
 ## v0.11.4
 
 * Replaced Mermaid-based schema renderer with x6.
