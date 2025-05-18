@@ -4,5 +4,16 @@ Future<ListResponse> list(Client client) async =>
     await client.records('movies').list(
       pagination: Pagination(limit: 3),
       order: ['rank'],
-      filters: ['watch_time[lt]=120', 'description[like]=%love%'],
+      filters: [
+        Filter(
+          column: 'watch_time',
+          op: CompareOp.lessThan,
+          value: '120',
+        ),
+        Filter(
+          column: 'description',
+          op: CompareOp.like,
+          value: '%love%',
+        ),
+      ],
     );

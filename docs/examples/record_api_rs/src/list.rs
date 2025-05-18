@@ -1,4 +1,4 @@
-use trailbase_client::{Client, ListArguments, ListResponse, Pagination};
+use trailbase_client::{Client, CompareOp, Filter, ListArguments, ListResponse, Pagination};
 
 pub async fn list(client: &Client) -> anyhow::Result<ListResponse<serde_json::Value>> {
   Ok(
@@ -8,7 +8,10 @@ pub async fn list(client: &Client) -> anyhow::Result<ListResponse<serde_json::Va
         ListArguments::new()
           .with_pagination(Pagination::new().with_limit(3))
           .with_order(["rank"])
-          .with_filters(["watch_time[lt]=120", "description[like]=%love%"]),
+          .with_filters([
+            Filter::new("watch_time", CompareOp::LessThan, "120"),
+            Filter::new("description", CompareOp::Like, "%love%"),
+          ]),
       )
       .await?,
   )

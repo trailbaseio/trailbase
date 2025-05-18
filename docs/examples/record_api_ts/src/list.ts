@@ -6,5 +6,16 @@ export const list = async (client: Client): Promise<ListResponse<object>> =>
       limit: 3,
     },
     order: ["rank"],
-    filters: ["watch_time[lt]=120", "description[like]=%love%"],
+    filters: [
+      {
+        column: "watch_time",
+        op: "$lt",
+        value: "120",
+      },
+      {
+        column: "description",
+        op: "$like",
+        value: "%love%",
+      },
+    ],
   });

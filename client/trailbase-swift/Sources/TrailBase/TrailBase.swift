@@ -67,13 +67,13 @@ public enum RecordId: CustomStringConvertible {
 }
 
 private struct RecordIdResponse: Codable {
-  let ids: [String]
+  public let ids: [String]
 }
 
 public struct ListResponse<T: Decodable>: Decodable {
-  let cursor: String?
-  let total_count: Int64?
-  let records: [T]
+  public let cursor: String?
+  public let total_count: Int64?
+  public let records: [T]
 }
 
 public enum CompareOp {

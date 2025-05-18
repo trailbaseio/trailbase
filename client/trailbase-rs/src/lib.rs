@@ -293,6 +293,16 @@ pub struct Filter {
   pub value: String,
 }
 
+impl Filter {
+  pub fn new(column: impl Into<String>, op: CompareOp, value: impl Into<String>) -> Self {
+    return Self {
+      column: column.into(),
+      op: Some(op),
+      value: value.into(),
+    };
+  }
+}
+
 impl From<Filter> for ValueOrFilterGroup {
   fn from(value: Filter) -> Self {
     return ValueOrFilterGroup::Filter(value);
@@ -304,6 +314,21 @@ pub enum ValueOrFilterGroup {
   Filter(Filter),
   And(Vec<ValueOrFilterGroup>),
   Or(Vec<ValueOrFilterGroup>),
+}
+
+impl<F> From<F> for ValueOrFilterGroup
+where
+  F: Into<Vec<Filter>>,
+{
+  fn from(filters: F) -> Self {
+    return ValueOrFilterGroup::And(
+      filters
+        .into()
+        .into_iter()
+        .map(ValueOrFilterGroup::Filter)
+        .collect(),
+    );
+  }
 }
 
 impl<'a> ListArguments<'a> {
