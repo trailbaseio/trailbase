@@ -14,7 +14,7 @@ By simply starting TrailBase, the migrations in `traildepot/migrations` will be
 applied, including `U1728810800__create_table_movies.sql`:
 
 ```sql
-CREATE TABLE movies IF NOT EXISTS (
+CREATE TABLE IF NOT EXISTS movies (
   rank         INTEGER PRIMARY KEY,
   name         TEXT NOT NULL,
   year         ANY NOT NULL,

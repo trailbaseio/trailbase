@@ -76,7 +76,7 @@ $ docker compose down
 ## Detailed Instructions
 
 If you don't want to use the `docker compose` setup above, build from scratch, or
-run the the Flutter app, only a few simple steps are needed.
+run the Flutter app, only a few simple steps are needed.
 If you have `cargo`, `pnpm`, and `flutter` installed, you can simply run:
 
 ```bash
@@ -109,7 +109,7 @@ $ make --always-make types
 ├── flutter             #
 │   ├── lib             # Flutter app lives here
 │   └── ...             # Most other files a default cross-platform setup
-├── Makefile            # Builds JSON schemas and coge-generates type definitions
+├── Makefile            # Builds JSON schemas and code-generates type definitions
 ├── schema              # Checked-in JSON schemas
 ├── traildepot          # Where TrailBase keeps its runtime data
 │   ├── backups         # Periodic DB backups
