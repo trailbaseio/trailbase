@@ -27,7 +27,7 @@
     "@panzoom/panzoom": "^4.6.0",
     "@solid-primitives/memo": "^1.4.2",
     "@solidjs/router": "^0.15.3",
-    "@tanstack/solid-form": "^1.11.1",
+    "@tanstack/solid-form": "^1.11.2",
     "@tanstack/solid-query": "^5.76.0",
     "@tanstack/solid-table": "^8.21.3",
     "@tanstack/table-core": "^8.21.3",
@@ -56,7 +56,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/user-event": "^14.6.1",
     "@types/geojson": "^7946.0.16",
-    "@types/leaflet": "^1.9.17",
+    "@types/leaflet": "^1.9.18",
     "@types/wicg-file-system-access": "^2023.10.6",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.27.0",
@@ -74,6 +74,6 @@
     "vite": "^6.3.5",
     "vite-plugin-solid": "^2.11.6",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.1.3"
+    "vitest": "^3.1.4"
   }
 }
