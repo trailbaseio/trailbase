@@ -1,8 +1,11 @@
 [tool.poetry]
 name = "trailbase"
 version = "0.3.0"
-description = ""
+description = "TrailBase client for Python"
 authors = ["TrailBase <contact@trailbase.io>"]
+repository = "https://github.com/trailbaseio/trailbase"
+homepage = "https://trailbase.io"
+license = "OSL-3.0"
 readme = "README.md"
 requires-poetry = ">=2.0"
 

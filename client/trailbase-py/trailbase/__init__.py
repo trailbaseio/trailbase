@@ -262,7 +262,7 @@ class Client:
     def __init__(
         self,
         site: str,
-        tokens: Tokens | None,
+        tokens: Tokens | None = None,
         http_client: httpx.Client | None = None,
     ) -> None:
         self._client = ThinClient(site, http_client)

@@ -1,0 +1,34 @@
+[project]
+name = "record-api-py"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "TrailBase", email = "contact@trailbase.io"}
+]
+license = "OSL-3.0"
+requires-python = "^3.12"
+requires-poetry = "^2.0"
+
+[tool.poetry.dependencies]
+trailbase = { path = "../../../client/trailbase-py" }
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.10.0"
+pyright = "^1.1.389"
+pytest = "^8.3.5"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 108
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "strict"
+useLibraryCodeForTypes = true
+verboseOutput = true
+reportMissingTypeStubs = "warning"
+extraPaths = ["../../../client/trailbase-py/"]
