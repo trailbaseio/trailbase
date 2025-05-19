@@ -16,6 +16,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { createVersionInfoQuery, version } from "@/lib/info";
 
 import logo from "@/assets/logo_104.webp";
 
@@ -36,6 +37,8 @@ export const navBarIconActiveStyle =
   "rounded-full transition-all p-[10px] bg-accent-600 text-white hover:bg-opacity-70 active:scale-90";
 
 export function NavBar(props: { location: Location }) {
+  const versionInfo = createVersionInfoQuery();
+
   return (
     <div class="flex grow flex-col items-center justify-between gap-4 bg-gray-100 py-2">
       <nav class="flex flex-col items-center gap-4">
@@ -66,7 +69,11 @@ export function NavBar(props: { location: Location }) {
         </For>
       </nav>
 
-      <AuthButton />
+      <div class="flex flex-col items-center">
+        <AuthButton />
+
+        <div class="text-[9px]">{version(versionInfo.data)}</div>
+      </div>
     </div>
   );
 }

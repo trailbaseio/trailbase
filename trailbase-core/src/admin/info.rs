@@ -12,6 +12,7 @@ pub struct InfoResponse {
   compiler: Option<String>,
   commit_hash: Option<String>,
   commit_date: Option<String>,
+  version_tag: Option<String>,
   threads: usize,
 }
 
@@ -29,6 +30,7 @@ pub async fn info_handler(State(state): State<AppState>) -> Result<Json<InfoResp
     compiler: version_info.host_compiler,
     commit_hash: version_info.commit_hash,
     commit_date: version_info.commit_date,
+    version_tag: version_info.version_tag,
     threads: std::thread::available_parallelism().map_or(0, |v| v.into()),
   }));
 }

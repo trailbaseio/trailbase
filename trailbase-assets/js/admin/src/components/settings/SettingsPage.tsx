@@ -30,7 +30,7 @@ import { SplitView } from "@/components/SplitView";
 import { IconButton } from "@/components/IconButton";
 
 import { createConfigQuery, setConfig, invalidateConfig } from "@/lib/config";
-import { createVersionInfoQuery } from "@/lib/info";
+import { createVersionInfoQuery, version } from "@/lib/info";
 
 function ServerSettings(props: CommonProps) {
   const queryClient = useQueryClient();
@@ -194,6 +194,9 @@ function ServerSettings(props: CommonProps) {
 
                   <TextFieldLabel class={width}>Commit Date:</TextFieldLabel>
                   <span>{versionInfo.data?.commit_date}</span>
+
+                  <TextFieldLabel class={width}>Version:</TextFieldLabel>
+                  <span>{version(versionInfo.data)}</span>
                 </div>
               </TextField>
             </Match>

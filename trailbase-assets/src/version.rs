@@ -14,7 +14,8 @@ macro_rules! get_version_info {
 
     let host_compiler = std::option_env!("RUSTC_RELEASE_CHANNEL").map(str::to_string);
     let commit_hash = std::option_env!("GIT_HASH").map(str::to_string);
-    let commit_date = std::option_env!("COMMIT_DATE").map(str::to_string);
+    let commit_date = std::option_env!("GIT_COMMIT_DATE").map(str::to_string);
+    let version_tag = std::option_env!("GIT_VERSION_TAG").map(str::to_string);
 
     $crate::version::VersionInfo {
       major,
@@ -23,13 +24,14 @@ macro_rules! get_version_info {
       host_compiler,
       commit_hash,
       commit_date,
+      version_tag,
       crate_name,
     }
   }};
 }
 
 /// This macro can be used in `build.rs` to automatically set the needed environment values, namely
-/// `GIT_HASH`, `COMMIT_DATE`  and `RUSTC_RELEASE_CHANNEL`
+/// `GIT_HASH`, `GIT_COMMIT_DATE`  and `RUSTC_RELEASE_CHANNEL`
 #[macro_export]
 macro_rules! setup_version_info {
   () => {{
@@ -39,8 +41,12 @@ macro_rules! setup_version_info {
       $crate::version::get_commit_hash().unwrap_or_default()
     );
     println!(
-      "cargo:rustc-env=COMMIT_DATE={}",
+      "cargo:rustc-env=GIT_COMMIT_DATE={}",
       $crate::version::get_commit_date().unwrap_or_default()
+    );
+    println!(
+      "cargo:rustc-env=GIT_VERSION_TAG={}",
+      $crate::version::get_version_tag().unwrap_or_default()
     );
     let compiler_version = $crate::version::get_compiler_version();
     println!(
@@ -58,6 +64,7 @@ pub struct VersionInfo {
   pub host_compiler: Option<String>,
   pub commit_hash: Option<String>,
   pub commit_date: Option<String>,
+  pub version_tag: Option<String>,
   pub crate_name: String,
 }
 
@@ -160,6 +167,11 @@ pub fn get_commit_hash() -> Option<String> {
 #[must_use]
 pub fn get_commit_date() -> Option<String> {
   return get_output("git", &["log", "-1", "--date=short", "--pretty=format:%cd"]);
+}
+
+#[must_use]
+pub fn get_version_tag() -> Option<String> {
+  return get_output("git", &["describe", "--tags", "--match=v*"]);
 }
 
 #[must_use]
