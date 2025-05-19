@@ -1,3 +1,18 @@
+## v0.12.0
+
+* Overhaul list API filters to allow for nested, complex expressions. The query
+  parameters change making is a **breaking** change. Users will need to update
+  their client libraries.
+  * All clients have been updated to both: support the new syntax and help in
+    the construction of nested filters.
+  * For raw HTTP users, the filter format went from `col[ne]=val` to
+    `filter[col][$ne]=val` following QS conventions.
+  * For example, exluding a range of values `[v_min, v_max]`:
+    `?filter[$or][0][col][$gt]=v_max&filter[$or][1][col][$lt]=v_min`.
+* A new client implementation for the Swift language.
+* Show release version in the admin dashboard and link to release page.
+* Update dependencies.
+
 ## v0.11.5
 
 * Improved admin SQL editor: save dialog and pending change indication.
