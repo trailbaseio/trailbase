@@ -16,7 +16,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { createVersionInfoQuery, version } from "@/lib/info";
+import { Version } from "@/components/Version";
+
+import { createVersionInfoQuery } from "@/lib/info";
 
 import logo from "@/assets/logo_104.webp";
 
@@ -72,7 +74,9 @@ export function NavBar(props: { location: Location }) {
       <div class="flex flex-col items-center">
         <AuthButton />
 
-        <div class="text-[9px]">{version(versionInfo.data)}</div>
+        <div class="text-[9px]">
+          <Version info={versionInfo.data} />
+        </div>
       </div>
     </div>
   );

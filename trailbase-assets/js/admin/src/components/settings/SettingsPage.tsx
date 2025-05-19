@@ -28,9 +28,10 @@ import { EmailSettings } from "@/components/settings/EmailSettings";
 import { JobSettings } from "@/components/settings/JobSettings";
 import { SplitView } from "@/components/SplitView";
 import { IconButton } from "@/components/IconButton";
+import { Version } from "@/components/Version";
 
 import { createConfigQuery, setConfig, invalidateConfig } from "@/lib/config";
-import { createVersionInfoQuery, version } from "@/lib/info";
+import { createVersionInfoQuery } from "@/lib/info";
 
 function ServerSettings(props: CommonProps) {
   const queryClient = useQueryClient();
@@ -190,13 +191,21 @@ function ServerSettings(props: CommonProps) {
                   <span>{versionInfo.data?.compiler}</span>
 
                   <TextFieldLabel class={width}>Commit Hash:</TextFieldLabel>
-                  <span>{versionInfo.data?.commit_hash}</span>
+                  <span>
+                    <a
+                      href={`https://github.com/trailbaseio/trailbase/commit/${versionInfo.data?.commit_hash}`}
+                    >
+                      {versionInfo.data?.commit_hash}
+                    </a>
+                  </span>
 
                   <TextFieldLabel class={width}>Commit Date:</TextFieldLabel>
                   <span>{versionInfo.data?.commit_date}</span>
 
                   <TextFieldLabel class={width}>Version:</TextFieldLabel>
-                  <span>{version(versionInfo.data)}</span>
+                  <span>
+                    <Version info={versionInfo.data} />
+                  </span>
                 </div>
               </TextField>
             </Match>
