@@ -64,7 +64,6 @@ rand = "^0.9.0"
 regex = "1.11.0"
 reqwest = { version = "0.12.8", default-features = false, features = ["rustls-tls", "json"] }
 rusqlite = { workspace = true }
-rustc_tools_util = "^0.4.2"
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "^1.0.117"
 serde_path_to_error = "0.1.16"
@@ -97,8 +96,8 @@ uuid = { workspace = true }
 validator = { version = "0.20.0", default-features = false }
 
 [build-dependencies]
-rustc_tools_util = "^0.4.2"
 trailbase-build = { workspace = true }
+trailbase-assets = { workspace = true }
 
 [dev-dependencies]
 anyhow = "^1.0.86"

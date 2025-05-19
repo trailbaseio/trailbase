@@ -107,7 +107,7 @@ impl Server {
     opts: ServerOptions,
     on_first_init: impl AsyncFnOnce(AppState) -> Result<(), Box<dyn std::error::Error + Sync + Send>>,
   ) -> Result<Self, InitError> {
-    let version_info = rustc_tools_util::get_version_info!();
+    let version_info = trailbase_assets::get_version_info!();
     info!(
       "Initializing server version: {hash} {date}",
       hash = version_info.commit_hash.unwrap_or_default(),

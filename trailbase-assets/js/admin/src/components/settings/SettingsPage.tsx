@@ -1,11 +1,4 @@
-import {
-  createResource,
-  createSignal,
-  For,
-  Show,
-  Switch,
-  Match,
-} from "solid-js";
+import { createSignal, For, Show, Switch, Match } from "solid-js";
 import type { Component, Signal } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
 import { createForm } from "@tanstack/solid-form";
@@ -36,13 +29,13 @@ import { JobSettings } from "@/components/settings/JobSettings";
 import { SplitView } from "@/components/SplitView";
 import { IconButton } from "@/components/IconButton";
 
-import type { InfoResponse } from "@bindings/InfoResponse";
 import { createConfigQuery, setConfig, invalidateConfig } from "@/lib/config";
-import { adminFetch } from "@/lib/fetch";
+import { createVersionInfoQuery } from "@/lib/info";
 
 function ServerSettings(props: CommonProps) {
   const queryClient = useQueryClient();
   const config = createConfigQuery();
+  const versionInfo = createVersionInfoQuery();
 
   const Form = (p: { config: ServerConfig }) => {
     const form = createForm(() => ({
@@ -169,11 +162,6 @@ function ServerSettings(props: CommonProps) {
     return ServerConfig.fromJSON({});
   };
 
-  const [info] = createResource(async (): Promise<InfoResponse> => {
-    const response = await adminFetch("/info");
-    return await response.json();
-  });
-
   const width = "w-40";
 
   return (
@@ -185,25 +173,27 @@ function ServerSettings(props: CommonProps) {
 
         <CardContent class="flex flex-col gap-4">
           <Switch>
-            <Match when={info.error}>{info.error}</Match>
-            <Match when={info.loading}>Loading...</Match>
-            <Match when={info()}>
+            <Match when={versionInfo.error}>
+              {versionInfo.error?.toString()}
+            </Match>
+            <Match when={versionInfo.isLoading}>Loading...</Match>
+            <Match when={versionInfo.data}>
               <TextField class="w-full">
                 <div
                   class={`grid items-center ${gapStyle}`}
                   style={{ "grid-template-columns": "auto 1fr" }}
                 >
                   <TextFieldLabel class={width}>CPU Threads:</TextFieldLabel>
-                  <span>{info()?.threads}</span>
+                  <span>{versionInfo.data?.threads}</span>
 
                   <TextFieldLabel class={width}>Compiler:</TextFieldLabel>
-                  <span>{info()?.compiler}</span>
+                  <span>{versionInfo.data?.compiler}</span>
 
                   <TextFieldLabel class={width}>Commit Hash:</TextFieldLabel>
-                  <span>{info()?.commit_hash}</span>
+                  <span>{versionInfo.data?.commit_hash}</span>
 
                   <TextFieldLabel class={width}>Commit Date:</TextFieldLabel>
-                  <span>{info()?.commit_date}</span>
+                  <span>{versionInfo.data?.commit_date}</span>
                 </div>
               </TextField>
             </Match>

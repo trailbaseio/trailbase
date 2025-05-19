@@ -187,8 +187,8 @@ impl AppState {
     return &self.state.queue;
   }
 
-  pub fn version(&self) -> rustc_tools_util::VersionInfo {
-    return rustc_tools_util::get_version_info!();
+  pub fn version(&self) -> trailbase_assets::version::VersionInfo {
+    return trailbase_assets::get_version_info!();
   }
 
   pub(crate) fn schema_metadata(&self) -> &SchemaMetadataCache {
