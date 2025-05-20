@@ -338,8 +338,9 @@ Parameters:
   `filter[<column_name>][op]=<value>` parameters.
   For example, `filter[revenue][$gt]=0` would list records with a positive `revenue` only.
   Supported operators are:
-  * equal, is the default operator or **$eq**, e.g. `?success=TRUE` or `?success[$eq]=TRUE`.
-  * **$ne**|**ne**: not equal
+  * **$eq**: equal, which is also the default if no explicit operator is
+    specified, i.e. `?success[$eq]=TRUE` and `?success=TRUE` are identical.
+  * **$ne**: not equal
   * **$gte**: greater-than-equal
   * **$gt**: greater-than
   * **$lte**: less-than-equal
