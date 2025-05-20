@@ -14,6 +14,7 @@ pub struct InfoResponse {
   commit_date: Option<String>,
   version_tag: Option<String>,
   threads: usize,
+  command_line_arguments: Option<Vec<String>>,
 }
 
 pub async fn info_handler(State(state): State<AppState>) -> Result<Json<InfoResponse>, Error> {
@@ -32,5 +33,6 @@ pub async fn info_handler(State(state): State<AppState>) -> Result<Json<InfoResp
     commit_date: version_info.commit_date,
     version_tag: version_info.version_tag,
     threads: std::thread::available_parallelism().map_or(0, |v| v.into()),
+    command_line_arguments: Some(std::env::args().collect()),
   }));
 }

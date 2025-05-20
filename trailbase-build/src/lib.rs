@@ -1,7 +1,6 @@
 #![allow(clippy::needless_return)]
 
 use log::*;
-use std::env;
 use std::fs::{self};
 use std::io::{Result, Write};
 use std::path::{Path, PathBuf};

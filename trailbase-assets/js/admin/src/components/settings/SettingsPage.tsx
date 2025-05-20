@@ -206,6 +206,11 @@ function ServerSettings(props: CommonProps) {
                   <span>
                     <Version info={versionInfo.data} />
                   </span>
+
+                  <TextFieldLabel class={width}>Arguments:</TextFieldLabel>
+                  <span class="font-mono">
+                    {versionInfo.data?.command_line_arguments?.join(" ")}
+                  </span>
                 </div>
               </TextField>
             </Match>
