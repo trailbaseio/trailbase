@@ -27,6 +27,11 @@ RUN cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
 
+# First install all JS deps. This is to avoid collisions due to parallel
+# installs later-on while building `trailbase-assets` (auth, admin, client) and
+# `trailbase-js` (runtime).
+RUN pnpm -r install --frozen-lockfile
+
 ARG TARGETPLATFORM
 
 RUN case ${TARGETPLATFORM} in \

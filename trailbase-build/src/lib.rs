@@ -74,22 +74,10 @@ pub fn pnpm_run(args: &[&str]) -> Result<std::process::Output> {
   write_output(std::io::stderr(), &output.stderr, &header)?;
 
   if !output.status.success() {
-    let msg = format!(
+    return Err(std::io::Error::other(format!(
       "Failed to run '{args:?}'\n\t{}",
       String::from_utf8_lossy(&output.stderr)
-    );
-
-    fn is_true(v: &str) -> bool {
-      return matches!(v.to_lowercase().as_str(), "true" | "1" | "");
-    }
-
-    // NOTE: We don't want to break backend-builds on frontend errors, at least for dev builds.
-    match env::var("SKIP_ERROR") {
-      Ok(v) if is_true(&v) => warn!("{}", msg),
-      _ => {
-        return Err(std::io::Error::other(msg));
-      }
-    }
+    )));
   }
 
   Ok(output)
@@ -97,19 +85,37 @@ pub fn pnpm_run(args: &[&str]) -> Result<std::process::Output> {
 
 pub fn build_js(path: impl AsRef<Path>) -> Result<()> {
   let path = path.as_ref().to_string_lossy().to_string();
-  // We deliberately choose not to use "--frozen-lockfile" here, since this is not a CI use-case.
+  // Note that `--frozen-lockfile` and `-ignore-workspace` are practically exclusive
+  // Because ignoring the workspace one, will require to create a new lockfile.
   let out_dir = std::env::var("OUT_DIR").unwrap();
-  let _install_output = if out_dir.contains("target/package") {
-    pnpm_run(&["--dir", &path, "install", "--ignore-workspace"])?
-  } else if cfg!(windows) {
-    // We're having parallel installs into ./node_modules/.pnpm for trailbase-assets,
-    // trailbase-runtime, ... To avoid "ERR_PNPM_EBUSY" on windows avoid shared workspace installs.
-    pnpm_run(&["--dir", &path, "install", "--ignore-workspace"])?
+  let build_result = if out_dir.contains("target/package") {
+    // When we build cargo packages, we cannot rely on the workspace and prior installs.
+    pnpm_run(&["--dir", &path, "install", "--ignore-workspace"])
   } else {
-    pnpm_run(&["--dir", &path, "install"])?
+    // `trailbase-asstes` and `trailbase-js` both build JS packages. We've seen issues with
+    // parallel installs in the past. We thus require all JS depdencies to be installed once
+    // upfront centrally into the workspace, i.e. `<trailbase>/node_modules`.
+    let args = ["--dir", &path, "install", "--frozen-lockfile", "--offline"];
+    let build_result = pnpm_run(&args);
+    if build_result.is_err() {
+      error!(
+        "`pnpm {}` failed. Make sure to install all JS deps first using `pnpm install`",
+        args.join(" ")
+      )
+    }
+    build_result
   };
 
-  let _build_output = pnpm_run(&["--dir", &path, "build"])?;
+  let _ = build_result?;
+
+  let build_output = pnpm_run(&["--dir", &path, "build"]);
+  if build_output.is_err() && cfg!(windows) {
+    error!(
+      "pnpm build failed on Windows. Make sure to enable symlinks: `git config core.symlinks true && git reset --hard`."
+    );
+  }
+
+  let _ = build_output?;
 
   return Ok(());
 }

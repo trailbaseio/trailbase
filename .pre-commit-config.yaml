@@ -38,7 +38,7 @@ repos:
       name: Cargo Clippy
       # Be verbose to at least still see warnings scroll by.
       verbose: true
-      entry: cargo clippy --workspace --no-deps
+      entry: sh -c 'pnpm i && cargo clippy --workspace --no-deps'
       language: system
       types: [rust]
       exclude: '^vendor/'
@@ -46,7 +46,7 @@ repos:
 
     - id: cargotest
       name: Cargo Test
-      entry: cargo test --workspace -- --show-output
+      entry: sh -c 'pnpm i && cargo test --workspace -- --show-output'
       language: system
       types: [rust]
       exclude: '^(vendor|bindings)/'

@@ -272,7 +272,7 @@ pub enum CompareOp {
 }
 
 impl CompareOp {
-  fn to_str(&self) -> &'static str {
+  fn format(&self) -> &'static str {
     return match self {
       Self::Equal => "$eq",
       Self::NotEqual => "$ne",
@@ -406,7 +406,7 @@ impl RecordApi {
               Cow::Owned(format!(
                 "{path}[{col}][{op}]",
                 col = filter.column,
-                op = op.to_str()
+                op = op.format()
               )),
               Cow::Owned(filter.value),
             ));

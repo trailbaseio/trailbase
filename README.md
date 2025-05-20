@@ -122,12 +122,23 @@ If you have all the necessary dependencies (Rust, protobuf, node.js, pnpm)
 installed, you can build TrailBase by running:
 
 ```bash
+# Windows only: make sure to enable symlinks (w/o `mklink` permissions for your
+# user, git will fall back to copies).
+$ git config core.symlinks true && git reset --hard
+
+# Download necessary git sub-modules.
 $ git submodule update --init --recursive
-$ cargo build --release
+
+# Install Javascript dependencies first. Required for the next step.
+$ pnpm install
+
+# Build the main executable. Adding `--release` will build a faster release
+# binary but slow down the build significantly.
+$ cargo build --bin trail
 ```
 
-To build a static binary you have to explicitly specify the target platform,
-e.g. for Linux using glibc:
+To build a static binary you'll need to explicitly specify the target platform,
+e.g. Linux using the GNU glibc:
 
 ```bash
 $ RUSTFLAGS="-C target-feature=+crt-static" cargo build --target x86_64-unknown-linux-gnu --release
@@ -137,7 +148,10 @@ Alternatively, if you want to build a Docker image or don't have to deal with
 build dependencies, you can simply run:
 
 ```bash
+# Download necessary git sub-modules.
 $ git submodule update --init --recursive
+
+# Build the container as defined in `Dockerfile`.
 $ docker build . -t trailbase
 ```
 
