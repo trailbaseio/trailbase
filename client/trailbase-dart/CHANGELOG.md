@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0
+
+- More powerful, nested list filters intrdocued with TrailBase v0.12.0.
+
 ## 0.3.0
 
 - Add `count` parameter to RecordApi.list to retrieve `total_count` at extra cost.
