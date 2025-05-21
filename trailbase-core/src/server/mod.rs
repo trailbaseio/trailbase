@@ -2,7 +2,7 @@ mod init;
 mod serve;
 
 use askama::Template;
-use axum::extract::{DefaultBodyLimit, Request, State};
+use axum::extract::{DefaultBodyLimit, Query, Request, State};
 use axum::handler::HandlerWithoutStateExt;
 use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
@@ -10,6 +10,7 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{RequestExt, Router};
 use log::*;
+use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::signal;
@@ -409,8 +410,14 @@ async fn assert_admin_api_access(
   return Ok(next.run(req).await);
 }
 
+#[derive(Debug, Default, Deserialize)]
+pub struct AdminLoginQuery {
+  alert: Option<String>,
+}
+
 async fn assert_admin_ui_access(
   State(state): State<AppState>,
+  Query(query): Query<AdminLoginQuery>,
   mut req: Request,
   next: Next,
 ) -> Result<Response, AuthError> {
@@ -421,7 +428,13 @@ async fn assert_admin_ui_access(
     // TODO: Maybe we could make it so only admins can log in.
     let html = LoginTemplate {
       state: redirect_to(Some("/_/admin/")),
-      alert: "",
+      alert: query.alert.as_deref().unwrap_or_else(|| {
+        if state.demo_mode() {
+          "email: \"admin@localhost\" - password: \"secret\""
+        } else {
+          ""
+        }
+      }),
       enable_registration: false,
     }
     .render();
