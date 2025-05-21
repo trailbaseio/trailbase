@@ -9,13 +9,16 @@ const { message } = Astro.props;
 <div
   id="alert-box"
   class:list={[
+    "flex",
+    "justify-center",
     "rounded-xl",
+    "font-bold",
     "outline",
     "outline-1",
     "bg-error",
     "text-error-foreground",
-    "p-4",
-    "m-4",
+    "p-2",
+    "m-2",
   ]}
   set:html={message}
 >
