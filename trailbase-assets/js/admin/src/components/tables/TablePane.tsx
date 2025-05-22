@@ -245,7 +245,8 @@ function TableHeaderRightHandButtons(props: {
 
   const queryClient = useQueryClient();
   const config = createConfigQuery();
-  const hasRecordApi = () => hasRecordApis(config?.data?.config, table().name);
+  const hasRecordApi = () =>
+    hasRecordApis(config?.data?.config, table().name.name);
 
   return (
     <div class="flex items-center justify-end gap-2">
@@ -255,7 +256,7 @@ function TableHeaderRightHandButtons(props: {
           action={() =>
             (async () => {
               await dropTable({
-                name: table().name,
+                name: table().name.name,
               });
 
               invalidateConfig(queryClient);
@@ -362,8 +363,9 @@ function TableHeaderLeftButtons(props: {
 }) {
   const type = () => tableType(props.table);
   const config = createConfigQuery();
+  const tableName = () => props.table.name.name;
   const apis = createMemo(() =>
-    getRecordApis(config?.data?.config, props.table.name),
+    getRecordApis(config?.data?.config, tableName()),
   );
 
   return (
@@ -373,7 +375,7 @@ function TableHeaderLeftButtons(props: {
       </IconButton>
 
       {apis().length > 0 && (
-        <SchemaDialog tableName={props.table.name} apis={apis()} />
+        <SchemaDialog tableName={tableName()} apis={apis()} />
       )}
 
       {import.meta.env.DEV && type() === "table" && (
@@ -409,7 +411,7 @@ function TableHeader(props: {
   return (
     <Header
       title={headerTitle()}
-      titleSelect={props.table.name}
+      titleSelect={props.table.name.name}
       left={
         <TableHeaderLeftButtons
           table={props.table}
@@ -460,7 +462,7 @@ async function buildTableState(
 
   const pkColumnIndex = findPrimaryKeyColumnIndex(response.columns);
   const columnDefs = buildColumnDefs(
-    store.selected.name,
+    store.selected.name.name,
     tableType(store.selected),
     pkColumnIndex,
     response.columns,
@@ -656,7 +658,7 @@ function RowDataTable(props: {
                 return;
               }
 
-              deleteRows(table().name, {
+              deleteRows(table().name.name, {
                 primary_key_column: columns()[pkColumnIndex()].name,
                 values: ids,
               })
@@ -686,9 +688,11 @@ export function TablePane(props: {
 
   const table = () => props.selectedTable;
   const indexes = () =>
-    props.schemas.indexes.filter((idx) => idx.table_name === table().name);
+    props.schemas.indexes.filter((idx) => idx.table_name === table().name.name);
   const triggers = () =>
-    props.schemas.triggers.filter((trig) => trig.table_name === table().name);
+    props.schemas.triggers.filter(
+      (trig) => trig.table_name === table().name.name,
+    );
 
   // Derived table() props.
   const type = () => tableType(table());
@@ -850,9 +854,9 @@ export function TablePane(props: {
                               ) => {
                                 const rows = new Set(selectedIndexes());
                                 if (value) {
-                                  rows.add(index.name);
+                                  rows.add(index.name.name);
                                 } else {
-                                  rows.delete(index.name);
+                                  rows.delete(index.name.name);
                                 }
                                 setSelectedIndexes(rows);
                               }

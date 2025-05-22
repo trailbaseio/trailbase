@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use trailbase_schema::QualifiedName;
 use trailbase_schema::sqlite::ColumnOption;
 
 use crate::config::{ConfigError, proto};
@@ -36,14 +37,15 @@ pub(crate) fn validate_record_api_config(
     return ierr("RecordApi config misses table name.");
   };
 
-  let metadata: std::sync::Arc<dyn TableOrViewMetadata> =
-    if let Some(metadata) = schemas.get_table(table_name) {
+  let metadata: std::sync::Arc<dyn TableOrViewMetadata> = {
+    let table_name = QualifiedName::parse(table_name);
+    if let Some(metadata) = schemas.get_table(&table_name) {
       if metadata.schema.temporary {
         return ierr("Record APIs must not reference TEMPORARY tables");
       }
 
       metadata
-    } else if let Some(metadata) = schemas.get_view(table_name) {
+    } else if let Some(metadata) = schemas.get_view(&table_name) {
       if metadata.schema.temporary {
         return ierr("Record APIs must not reference TEMPORARY views");
       }
@@ -51,7 +53,8 @@ pub(crate) fn validate_record_api_config(
       metadata
     } else {
       return ierr(&format!("Missing table or view for API: {api_name}"));
-    };
+    }
+  };
 
   let Some((pk_index, _)) = metadata.record_pk_column() else {
     return ierr(&format!(
@@ -118,7 +121,7 @@ pub(crate) fn validate_record_api_config(
       ));
     }
 
-    let Some(foreign_table) = schemas.get_table(foreign_table_name) else {
+    let Some(foreign_table) = schemas.get_table(&QualifiedName::parse(foreign_table_name)) else {
       return ierr(&format!(
         "{api_name} reference missing table: {foreign_table_name}"
       ));

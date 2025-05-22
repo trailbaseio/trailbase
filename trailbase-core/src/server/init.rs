@@ -62,6 +62,8 @@ pub async fn init_app_state(
   // TODO: At this early stage we're using an in-memory db. Go persistent before rolling out.
   let queue = crate::queue::Queue::new(None).await?;
 
+  // WIP: Allow multiple databases.
+  //
   // Open or init the main db connection. Note that we derive whether a new DB was initialized
   // based on whether the V1 migration had to be applied. Should be fairly robust.
   let paths = std::fs::read_dir(data_dir.data_path())?;

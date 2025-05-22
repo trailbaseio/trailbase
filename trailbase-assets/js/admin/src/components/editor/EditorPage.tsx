@@ -68,15 +68,17 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   } = {};
 
   for (const table of schemas.tables) {
-    schema[table.name] = {
-      self: { label: table.name, type: "keyword" },
+    const tableName = table.name.name;
+    schema[tableName] = {
+      self: { label: tableName, type: "keyword" },
       children: table.columns.map((c) => c.name),
     } satisfies SQLNamespace;
   }
 
   for (const view of schemas.views) {
-    schema[view.name] = {
-      self: { label: view.name, type: "keyword" },
+    const viewName = view.name.name;
+    schema[viewName] = {
+      self: { label: viewName, type: "keyword" },
       children: view.columns?.map((c) => c.name) ?? [],
     } satisfies SQLNamespace;
   }

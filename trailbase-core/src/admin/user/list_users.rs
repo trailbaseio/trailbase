@@ -6,6 +6,7 @@ use lazy_static::lazy_static;
 use serde::Serialize;
 use std::borrow::Cow;
 use trailbase_qs::{Cursor, Order, OrderPrecedent, Query};
+use trailbase_schema::QualifiedName;
 use ts_rs::TS;
 use uuid::Uuid;
 
@@ -72,7 +73,10 @@ pub async fn list_users_handler(
       return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
     })?;
 
-  let Some(schema_metadata) = state.schema_metadata().get_table(USER_TABLE) else {
+  let Some(schema_metadata) = state
+    .schema_metadata()
+    .get_table(&QualifiedName::parse(USER_TABLE))
+  else {
     return Err(Error::Precondition(format!("Table {USER_TABLE} not found")));
   };
   // Where clause contains column filters and cursor depending on what's present in the url query

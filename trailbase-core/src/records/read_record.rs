@@ -66,6 +66,7 @@ pub async fn read_record_handler(
 
       let expanded_tables = expand_tables(
         state.schema_metadata(),
+        &api.table_name().database_schema,
         |column_name| {
           api
             .column_index_by_name(column_name)
@@ -570,7 +571,7 @@ mod test {
         Either::Json(
           json_row_from_value(json!({
             file_column: FileUploadInput {
-              name: Some("foo".to_string()),
+              name: Some("name".to_string()),
               filename: Some("bar".to_string()),
               content_type: Some("baz".to_string()),
               data: bytes.clone(),
@@ -628,14 +629,13 @@ mod test {
       .await
       .unwrap();
 
-    let mut dir_cnt = 0;
     let mut read_dir = tokio::fs::read_dir(state.data_dir().uploads_path())
       .await
       .unwrap();
-    while let Some(_entry) = read_dir.next_entry().await.unwrap() {
-      dir_cnt += 1;
+    while let Some(entry) = read_dir.next_entry().await.unwrap() {
+      // Fail if there's any entry and the file has not been deleted.
+      panic!("File should be deleted: {entry:?}");
     }
-    assert_eq!(dir_cnt, 0);
 
     assert!(
       get_uploaded_file_from_record_handler(

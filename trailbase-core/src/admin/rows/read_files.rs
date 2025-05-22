@@ -3,6 +3,7 @@ use axum::{
   response::Response,
 };
 use serde::Deserialize;
+use trailbase_schema::QualifiedName;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -30,8 +31,11 @@ pub async fn read_files_handler(
   Path(table_name): Path<String>,
   Query(request): Query<ReadFilesRequest>,
 ) -> Result<Response, Error> {
+  let table_name = QualifiedName::parse(&table_name);
   let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {
-    return Err(Error::Precondition(format!("Table {table_name} not found")));
+    return Err(Error::Precondition(format!(
+      "Table {table_name:?} not found"
+    )));
   };
   let pk_col = &request.pk_column;
 

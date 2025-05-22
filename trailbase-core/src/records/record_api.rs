@@ -8,7 +8,9 @@ use trailbase_schema::metadata::{
   JsonColumnMetadata, TableMetadata, TableOrViewMetadata, ViewMetadata, find_file_column_indexes,
   find_user_id_foreign_key_columns,
 };
-use trailbase_schema::sqlite::{Column, ColumnDataType, sqlite3_parse_into_statement};
+use trailbase_schema::sqlite::{
+  Column, ColumnDataType, QualifiedName, sqlite3_parse_into_statement,
+};
 use trailbase_sqlite::{NamedParamRef, NamedParams, Params as _, Value};
 
 use crate::auth::user::User;
@@ -25,7 +27,8 @@ pub struct RecordApi {
 
 struct RecordApiSchema {
   /// Schema metadata
-  table_name: String,
+  table_name: QualifiedName,
+
   is_table: bool,
   record_pk_column: (usize, Column),
   columns: Vec<Column>,
@@ -40,7 +43,10 @@ struct RecordApiSchema {
 
 impl RecordApiSchema {
   fn from_table(schema_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
-    assert_eq!(config.table_name.as_deref(), Some(schema_metadata.name()));
+    assert_eq!(
+      config.table_name.as_ref(),
+      Some(&schema_metadata.name().name)
+    );
 
     let Some((pk_index, pk_column)) = schema_metadata.record_pk_column() else {
       return Err("RecordApi requires integer/UUIDv7 primary key column".into());
@@ -74,7 +80,7 @@ impl RecordApiSchema {
       .collect();
 
     return Ok(Self {
-      table_name: schema_metadata.name().to_string(),
+      table_name: schema_metadata.schema.name.clone(),
       is_table: true,
       record_pk_column,
       columns,
@@ -87,7 +93,7 @@ impl RecordApiSchema {
   }
 
   pub fn from_view(view_metadata: &ViewMetadata, config: &RecordApiConfig) -> Result<Self, String> {
-    assert_eq!(config.table_name.as_deref(), Some(view_metadata.name()));
+    assert_eq!(config.table_name.as_ref(), Some(&view_metadata.name().name));
 
     let Some((pk_index, pk_column)) = view_metadata.record_pk_column() else {
       return Err(format!(
@@ -116,7 +122,7 @@ impl RecordApiSchema {
     );
 
     return Ok(Self {
-      table_name: view_metadata.name().to_string(),
+      table_name: view_metadata.schema.name.clone(),
       is_table: false,
       record_pk_column,
       columns,
@@ -179,7 +185,10 @@ impl RecordApi {
     schema_metadata: &TableMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
-    assert_eq!(config.table_name.as_deref(), Some(schema_metadata.name()));
+    assert_eq!(
+      config.table_name.as_ref(),
+      Some(&schema_metadata.name().name)
+    );
 
     let schema = RecordApiSchema::from_table(schema_metadata, &config)?;
 
@@ -191,7 +200,7 @@ impl RecordApi {
     view_metadata: &ViewMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
-    assert_eq!(config.table_name.as_deref(), Some(view_metadata.name()));
+    assert_eq!(config.table_name.as_ref(), Some(&view_metadata.name().name));
 
     let schema = RecordApiSchema::from_view(view_metadata, &config)?;
 
@@ -324,7 +333,7 @@ impl RecordApi {
   }
 
   #[inline]
-  pub fn table_name(&self) -> &str {
+  pub fn table_name(&self) -> &QualifiedName {
     return &self.state.schema.table_name;
   }
 
@@ -693,7 +702,7 @@ struct SubscriptionRecordReadTemplate<'a> {
 ///
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
 fn build_read_delete_schema_query(
-  table_name: &str,
+  table_name: &QualifiedName,
   pk_column_name: &str,
   access_rule: &str,
 ) -> Arc<str> {
@@ -703,8 +712,9 @@ fn build_read_delete_schema_query(
         CAST(({access_rule}) AS INTEGER)
       FROM
         (SELECT :__user_id AS id) AS _USER_,
-        (SELECT * FROM "{table_name}" WHERE "{pk_column_name}" = :__record_id) AS _ROW_
-    "#
+        (SELECT * FROM {table_name} WHERE "{pk_column_name}" = :__record_id) AS _ROW_
+    "#,
+    table_name = table_name.escaped_string(),
   )
   .into();
 }
@@ -748,7 +758,7 @@ fn build_create_access_query(
 )]
 struct UpdateRecordAccessQueryTemplate<'a> {
   update_access_rule: &'a str,
-  table_name: &'a str,
+  table_name: &'a QualifiedName,
   pk_column_name: &'a str,
   column_names: Vec<&'a str>,
 }
@@ -757,7 +767,7 @@ struct UpdateRecordAccessQueryTemplate<'a> {
 ///
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
 fn build_update_access_query(
-  table_name: &str,
+  table_name: &QualifiedName,
   columns: &[Column],
   pk_column_name: &str,
   update_access_rule: &str,
@@ -866,7 +876,7 @@ mod tests {
     {
       let query = UpdateRecordAccessQueryTemplate {
         update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = 'secret'"#,
-        table_name: "table",
+        table_name: &QualifiedName::parse("table"),
         pk_column_name: "index",
         column_names: vec![],
       }
@@ -879,7 +889,7 @@ mod tests {
     {
       let query = UpdateRecordAccessQueryTemplate {
         update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = _REQ_."index""#,
-        table_name: "table",
+        table_name: &QualifiedName::parse("table"),
         pk_column_name: "index",
         column_names: vec!["index"],
       }

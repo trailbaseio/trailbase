@@ -2,6 +2,7 @@
 import type { Check } from "./Check";
 import type { Column } from "./Column";
 import type { ForeignKey } from "./ForeignKey";
+import type { QualifiedName } from "./QualifiedName";
 import type { UniqueConstraint } from "./UniqueConstraint";
 
-export type Table = { name: string, strict: boolean, database: string | null, columns: Array<Column>, foreign_keys: Array<ForeignKey>, unique: Array<UniqueConstraint>, checks: Array<Check>, virtual_table: boolean, temporary: boolean, };
+export type Table = { name: QualifiedName, strict: boolean, columns: Array<Column>, foreign_keys: Array<ForeignKey>, unique: Array<UniqueConstraint>, checks: Array<Check>, virtual_table: boolean, temporary: boolean, };

@@ -79,9 +79,10 @@ function columnTypeField(
         const v = value();
 
         for (const table of allTables) {
-          if (table.name === foreignKey) {
+          const tableName = table.name.name;
+          if (tableName === foreignKey) {
             const type = table.columns[0].data_type;
-            console.debug(foreignKey, table.name, type, v);
+            console.debug(foreignKey, tableName, type, v);
             if (v === type) {
               break;
             }
@@ -292,7 +293,7 @@ function ColumnOptionFkSelect(props: {
 }) {
   const fkTableOptions = createMemo((): string[] => [
     "None",
-    ...props.allTables.map((schema) => schema.name),
+    ...props.allTables.map((schema) => schema.name.name),
   ]);
   const fkValue = (): string =>
     getForeignKey(props.value)?.foreign_table ?? "None";
@@ -316,7 +317,7 @@ function ColumnOptionFkSelect(props: {
             props.onChange(setForeignKey(props.value, undefined));
           } else {
             const schema = props.allTables.find(
-              (schema) => schema.name == table,
+              (schema) => schema.name.name == table,
             )!;
             const column =
               schema.columns.find(

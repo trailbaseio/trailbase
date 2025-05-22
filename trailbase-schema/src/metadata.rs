@@ -2,11 +2,13 @@ use jsonschema::Validator;
 use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;
+use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use thiserror::Error;
 
-use crate::sqlite::{Column, ColumnDataType, ColumnOption, Table, View};
+use crate::sqlite::{Column, ColumnDataType, ColumnOption, QualifiedName, Table, View};
 
 // TODO: Can we merge this with crate::sqlite::SchemaError?
 #[derive(Debug, Clone, Error)]
@@ -136,7 +138,7 @@ impl TableMetadata {
   }
 
   #[inline]
-  pub fn name(&self) -> &str {
+  pub fn name(&self) -> &QualifiedName {
     return &self.schema.name;
   }
 
@@ -149,6 +151,40 @@ impl TableMetadata {
   pub fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
     let index = self.column_index_by_name(key)?;
     return Some((index, &self.schema.columns[index]));
+  }
+}
+
+// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
+// use in HashSet.
+impl PartialEq for TableMetadata {
+  fn eq(&self, other: &Self) -> bool {
+    return self.schema.name == other.schema.name;
+  }
+}
+
+impl Eq for TableMetadata {}
+
+// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
+// use in HashSet.
+impl Hash for TableMetadata {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.schema.name.hash(state);
+  }
+}
+
+// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
+// use in HashSet.
+impl Borrow<QualifiedName> for TableMetadata {
+  fn borrow(&self) -> &QualifiedName {
+    return &self.schema.name;
+  }
+}
+
+// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
+// use in HashSet.
+impl Borrow<QualifiedName> for Arc<TableMetadata> {
+  fn borrow(&self) -> &QualifiedName {
+    return &self.schema.name;
   }
 }
 
@@ -194,7 +230,7 @@ impl ViewMetadata {
   }
 
   #[inline]
-  pub fn name(&self) -> &str {
+  pub fn name(&self) -> &QualifiedName {
     &self.schema.name
   }
 
@@ -211,13 +247,52 @@ impl ViewMetadata {
   }
 }
 
+// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
+// use in HashSet.
+impl PartialEq for ViewMetadata {
+  fn eq(&self, other: &Self) -> bool {
+    return self.schema.name == other.schema.name;
+  }
+}
+
+impl Eq for ViewMetadata {}
+
+// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
+// use in HashSet.
+impl Hash for ViewMetadata {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.schema.name.hash(state);
+  }
+}
+
+// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
+// use in HashSet.
+impl Borrow<QualifiedName> for ViewMetadata {
+  fn borrow(&self) -> &QualifiedName {
+    return &self.schema.name;
+  }
+}
+
+// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
+// use in HashSet.
+impl Borrow<QualifiedName> for Arc<ViewMetadata> {
+  fn borrow(&self) -> &QualifiedName {
+    return &self.schema.name;
+  }
+}
+
 pub trait TableOrViewMetadata {
+  fn qualified_name(&self) -> &QualifiedName;
   fn record_pk_column(&self) -> Option<(usize, &Column)>;
   fn json_metadata(&self) -> Option<&JsonMetadata>;
   fn columns(&self) -> Option<&[Column]>;
 }
 
 impl TableOrViewMetadata for TableMetadata {
+  fn qualified_name(&self) -> &QualifiedName {
+    return self.name();
+  }
+
   fn columns(&self) -> Option<&[Column]> {
     return Some(&self.schema.columns);
   }
@@ -233,6 +308,10 @@ impl TableOrViewMetadata for TableMetadata {
 }
 
 impl TableOrViewMetadata for ViewMetadata {
+  fn qualified_name(&self) -> &QualifiedName {
+    return self.name();
+  }
+
   fn columns(&self) -> Option<&[Column]> {
     return self.schema.columns.as_deref();
   }
@@ -384,7 +463,9 @@ fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<u
         referred_columns,
         ..
       } => {
-        let Some(referred_table) = tables.iter().find(|t| t.name == *foreign_table) else {
+        // NOTE: Foreign keys cannot cross database boundaries, we can therefore compare by
+        // unqualified name.
+        let Some(referred_table) = tables.iter().find(|t| t.name.name == *foreign_table) else {
           error!("Failed to get foreign key schema for {foreign_table}");
           continue;
         };
@@ -430,12 +511,17 @@ fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<u
 
 #[cfg(test)]
 mod tests {
+  use std::collections::HashSet;
+
   use super::*;
   use crate::sqlite::{Table, sqlite3_parse_into_statement};
 
   #[test]
   fn test_parse_create_view() {
-    let table_name = "table_name";
+    let table_name = QualifiedName {
+      name: "table_name".to_string(),
+      database_schema: Some("main".to_string()),
+    };
     let table_sql = format!(
       r#"
       CREATE TABLE {table_name} (
@@ -443,7 +529,8 @@ mod tests {
           col0                         TEXT NOT NULL DEFAULT '',
           col1                         BLOB NOT NULL,
           hidden                       INTEGER DEFAULT 42
-      ) STRICT;"#
+      ) STRICT;"#,
+      table_name = table_name.escaped_string(),
     );
 
     let create_table_statement = sqlite3_parse_into_statement(&table_sql).unwrap().unwrap();
@@ -453,15 +540,22 @@ mod tests {
     {
       let metadata = TableMetadata::new(table.clone(), &[table.clone()], "_user");
 
-      assert_eq!(table_name, metadata.name());
+      assert_eq!(table_name, *metadata.name());
       assert_eq!("col1", metadata.columns().unwrap()[2].name);
       assert_eq!(1, *metadata.name_to_index.get("col0").unwrap());
     }
 
+    let view_name = QualifiedName {
+      name: "view_name".to_string(),
+      database_schema: Some("main".to_string()),
+    };
+
     {
-      let view_name = "view_name";
-      let query = format!("SELECT col0, col1 FROM {table_name}");
-      let view_sql = format!("CREATE VIEW {view_name} AS {query}");
+      let query = format!("SELECT col0, col1 FROM {}", table_name.escaped_string());
+      let view_sql = format!(
+        "CREATE VIEW {view_name} AS {query}",
+        view_name = view_name.escaped_string()
+      );
       let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
 
       let table_view = View::from(create_view_statement, &[table.clone()]).unwrap();
@@ -486,9 +580,11 @@ mod tests {
     }
 
     {
-      let view_name = "view_name";
-      let query = format!("SELECT id, col0, col1 FROM {table_name}");
-      let view_sql = format!("CREATE VIEW {view_name} AS {query}");
+      let query = format!("SELECT id, col0, col1 FROM {}", table_name.escaped_string());
+      let view_sql = format!(
+        "CREATE VIEW {view_name} AS {query}",
+        view_name = view_name.escaped_string()
+      );
       let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
 
       let table_view = View::from(create_view_statement, &[table.clone()]).unwrap();
@@ -504,5 +600,52 @@ mod tests {
       assert_eq!(columns.len(), 3);
       assert_eq!(columns[uuidv7_col.0].name, "id");
     }
+  }
+
+  #[test]
+  fn test_metadata_hash_set_by_name() {
+    let table_name = QualifiedName {
+      name: "table_name".to_string(),
+      database_schema: Some("main".to_string()),
+    };
+    let table_sql = format!(
+      "CREATE TABLE {table_name} (id INTEGER PRIMARY KEY) STRICT",
+      table_name = table_name.escaped_string()
+    );
+    let create_table_statement = sqlite3_parse_into_statement(&table_sql).unwrap().unwrap();
+    let table: Table = create_table_statement.try_into().unwrap();
+    let table_metadata = TableMetadata::new(table.clone(), &[table.clone()], "_user");
+
+    let mut table_set = HashSet::<TableMetadata>::new();
+
+    assert!(table_set.insert(table_metadata.clone()));
+    assert!(table_set.get(&table_name).is_some());
+    assert_eq!(
+      table_set.get(&QualifiedName::parse("table_name")),
+      Some(&table_metadata)
+    );
+
+    // Test Arc<views>:
+    let view_name = QualifiedName {
+      name: "view_name".to_string(),
+      database_schema: Some("main".to_string()),
+    };
+    let view_sql = format!(
+      "CREATE VIEW {view_name} AS SELECT id FROM {table_name}",
+      view_name = view_name.escaped_string(),
+      table_name = table_name.escaped_string()
+    );
+    let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
+    let table_view = View::from(create_view_statement, &[table.clone()]).unwrap();
+    let view_metadata = Arc::new(ViewMetadata::new(table_view, &[table.clone()]));
+
+    let mut view_set = HashSet::<Arc<ViewMetadata>>::new();
+
+    assert!(view_set.insert(view_metadata.clone()));
+    assert_eq!(view_set.get(&view_name), Some(&view_metadata));
+    assert_eq!(
+      view_set.get(&QualifiedName::parse("view_name")),
+      Some(&view_metadata)
+    );
   }
 }

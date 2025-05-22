@@ -27,14 +27,18 @@ pub async fn alter_index_handler(
   State(state): State<AppState>,
   Json(request): Json<AlterIndexRequest>,
 ) -> Result<Response, Error> {
-  if state.demo_mode() && request.source_schema.name.starts_with("_") {
+  if state.demo_mode() && request.source_schema.name.name.starts_with("_") {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
   let source_schema = request.source_schema;
   let source_index_name = source_schema.name.clone();
   let target_schema = request.target_schema;
-  let filename = format!("alter_index_{source_index_name}");
+  let filename = if let Some(ref db) = source_index_name.database_schema {
+    format!("alter_index_{db}_{}", source_index_name.name)
+  } else {
+    format!("alter_index_{}", source_index_name.name)
+  };
 
   debug!("Alter index:\nsource: {source_schema:?}\ntarget: {target_schema:?}",);
 
@@ -44,7 +48,13 @@ pub async fn alter_index_handler(
       let mut tx = TransactionRecorder::new(conn)?;
 
       // Drop old index
-      tx.execute(&format!("DROP INDEX {source_index_name}"), ())?;
+      tx.execute(
+        &format!(
+          "DROP INDEX {source_index_name}",
+          source_index_name = source_index_name.escaped_string()
+        ),
+        (),
+      )?;
 
       // Create new index
       let create_index_query = target_schema.create_index_statement();

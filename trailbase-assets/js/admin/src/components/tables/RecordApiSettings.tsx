@@ -321,10 +321,10 @@ export function RecordApiSettingsForm(props: {
 
   // FIXME: We don't currently handle the "multiple APIs for a single table" case.
   const currentApi = () =>
-    findRecordApi(config.data!.config, props.schema.name);
+    findRecordApi(config.data!.config, props.schema.name.name);
 
   const form = createForm(() => {
-    const tableName = props.schema.name;
+    const tableName = props.schema.name.name;
     return {
       defaultValues:
         currentApi() ??
@@ -684,7 +684,7 @@ export function RecordApiSettingsForm(props: {
                 return;
               }
 
-              const newConfig = removeRecordApiConfig(c, tableName);
+              const newConfig = removeRecordApiConfig(c, tableName.name);
               setConfig(queryClient, newConfig)
                 // eslint-disable-next-line solid/reactivity
                 .then(() => props.close())

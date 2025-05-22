@@ -2,6 +2,7 @@ use log::*;
 use object_store::ObjectStore;
 use std::path::PathBuf;
 use std::sync::Arc;
+use trailbase_schema::QualifiedName;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
@@ -466,10 +467,11 @@ fn build_record_api(
       "RecordApi misses table_name configuration: {config:?}"
     ));
   };
+  let table_name = QualifiedName::parse(table_name);
 
-  if let Some(schema_metadata) = schema_metadata_cache.get_table(table_name) {
+  if let Some(schema_metadata) = schema_metadata_cache.get_table(&table_name) {
     return RecordApi::from_table(conn, &schema_metadata, config);
-  } else if let Some(view) = schema_metadata_cache.get_view(table_name) {
+  } else if let Some(view) = schema_metadata_cache.get_view(&table_name) {
     return RecordApi::from_view(conn, &view, config);
   }
 

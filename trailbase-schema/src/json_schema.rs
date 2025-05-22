@@ -108,7 +108,13 @@ pub fn build_json_schema_expanded(
               continue;
             }
 
-            let Some(table) = expand.tables.iter().find(|t| t.name() == foreign_table) else {
+            // NOTE: Foreign keys cannot cross database boundaries, we can therefore compare by
+            // unqualified name.
+            let Some(table) = expand
+              .tables
+              .iter()
+              .find(|t| t.name().name == *foreign_table)
+            else {
               warn!("Failed to find table: {foreign_table}");
               continue;
             };
@@ -126,7 +132,7 @@ pub fn build_json_schema_expanded(
                 continue;
               }
             }) else {
-              warn!("Failed to find pk column for {}", table.name());
+              warn!("Failed to find pk column for {:?}", table.name());
               continue;
             };
 
@@ -385,7 +391,7 @@ mod tests {
     let table_metadata = TableMetadata::new(table.clone(), &[table], "_user");
 
     let (schema, _) = build_json_schema(
-      table_metadata.name(),
+      &table_metadata.name().name,
       &table_metadata.schema.columns,
       JsonSchemaMode::Insert,
     )

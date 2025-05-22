@@ -21,11 +21,18 @@ import { SafeSheet } from "@/components/SafeSheet";
 import { Separator } from "@/components/ui/separator";
 
 import { createTableSchemaQuery } from "@/lib/table";
-import { hiddenTable, tableType } from "@/lib/schema";
+import {
+  hiddenTable,
+  tableType,
+  compareQualifiedNames,
+  prettyFormatQualifiedName,
+  equalQualifiedNames,
+} from "@/lib/schema";
 
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
+import { QualifiedName } from "@bindings/QualifiedName";
 
 function pickInitiallySelectedTable(
   tables: (Table | View)[],
@@ -37,12 +44,13 @@ function pickInitiallySelectedTable(
 
   if (tableName) {
     for (const table of tables) {
-      if (tableName === table.name) {
+      if (tableName === prettyFormatQualifiedName(table.name)) {
         return table;
       }
     }
   }
 
+  console.debug("Table not found. Falling back to first");
   return tables[0];
 }
 
@@ -51,7 +59,7 @@ function tableCompare(a: Table | View, b: Table | View): number {
   const bHidden = hiddenTable(b);
 
   if (aHidden == bHidden) {
-    return a.name.localeCompare(b.name);
+    return compareQualifiedNames(a.name, b.name);
   }
   // Sort hidden tables to the back.
   return aHidden ? 1 : -1;
@@ -102,9 +110,9 @@ function TablePickerPane(props: {
                 <CreateAlterTableForm
                   schemaRefetch={props.schemaRefetch}
                   allTables={props.allTables}
-                  setSelected={(tableName: string) => {
-                    const table = props.tablesAndViews.find(
-                      (t) => t.name === tableName,
+                  setSelected={(tableName: QualifiedName) => {
+                    const table = props.tablesAndViews.find((t) =>
+                      equalQualifiedNames(t.name, tableName),
                     );
                     if (table) {
                       navigateToTable(navigate, table);
@@ -135,12 +143,15 @@ function TablePickerPane(props: {
         {(item: Table | View) => {
           const hidden = hiddenTable(item);
           const type = tableType(item);
-          const selected = () => item.name === selectedTable()?.name;
+          const selected = () => {
+            const s = selectedTable();
+            if (s !== undefined) {
+              return equalQualifiedNames(item.name, s.name);
+            }
+            return false;
+          };
 
-          const name =
-            item.database !== null
-              ? `${item.database}.${item.name}`
-              : item.name;
+          const name = prettyFormatQualifiedName(item.name);
 
           return (
             <Button
@@ -167,7 +178,14 @@ function TablePickerPane(props: {
 }
 
 function navigateToTable(navigate: Navigator, table: Table | View | undefined) {
-  navigate("/table/" + (table?.name ?? ""));
+  if (table === undefined) {
+    navigate("/table/");
+    return;
+  }
+
+  const path = "/table/" + prettyFormatQualifiedName(table.name);
+  console.debug(`navigating to: ${path}`);
+  navigate(path);
 }
 
 function TableSplitView(props: {

@@ -77,7 +77,7 @@ pub async fn list_tables_handler(
           response.tables.push({
             let mut table: Table = create_table_statement.try_into()?;
             if schema.db_schema != "main" {
-              table.database = Some(schema.db_schema.clone());
+              table.name.database_schema = Some(schema.db_schema.clone());
             }
             table
           });
@@ -113,7 +113,7 @@ pub async fn list_tables_handler(
             .tables
             .iter()
             .filter_map(|table| {
-              if table.database.as_deref().unwrap_or("main") == schema.db_schema {
+              if table.name.database_schema.as_deref().unwrap_or("main") == schema.db_schema {
                 return Some(table.clone());
               }
               return None;

@@ -16,6 +16,7 @@ use std::sync::{
   atomic::{AtomicI64, Ordering},
 };
 use std::task::{Context, Poll};
+use trailbase_schema::QualifiedName;
 use trailbase_sqlite::connection::{extract_record_values, extract_row_id};
 use trailbase_sqlite::rows::value_to_json;
 
@@ -35,7 +36,7 @@ type SseEvent = Result<axum::response::sse::Event, axum::Error>;
 /// If row_id is Some, this is considered to reference a subscription to a specific record.
 #[derive(Default, Debug)]
 struct SubscriptionId {
-  table_name: String,
+  table_name: QualifiedName,
   row_id: Option<i64>,
   sub_id: i64,
 }
@@ -140,10 +141,10 @@ struct ManagerState {
   record_apis: Computed<Vec<(String, RecordApi)>>,
 
   /// Map from table name to row id to list of subscriptions.
-  record_subscriptions: RwLock<HashMap<String, HashMap<i64, Vec<Subscription>>>>,
+  record_subscriptions: RwLock<HashMap<QualifiedName, HashMap<i64, Vec<Subscription>>>>,
 
   /// Map from table name to table subscriptions.
-  table_subscriptions: RwLock<HashMap<String, Vec<Subscription>>>,
+  table_subscriptions: RwLock<HashMap<QualifiedName, Vec<Subscription>>>,
 }
 
 impl ManagerState {
@@ -209,7 +210,7 @@ struct ContinuationState {
   state: Arc<ManagerState>,
   schema_metadata: Option<Arc<TableMetadata>>,
   action: RecordAction,
-  table_name: String,
+  table_name: QualifiedName,
   rowid: i64,
   record_values: Vec<rusqlite::types::Value>,
 }
@@ -309,18 +310,16 @@ impl SubscriptionManager {
       record_values,
     } = state;
     let s = &state;
-    let table_name = table_name.as_str();
-
     // If schema_metadata is missing, the config/schema must have changed, thus removing the
     // subscriptions.
     let Some(schema_metadata) = schema_metadata else {
-      warn!("Table not found: {table_name}. Removing subscriptions");
+      warn!("Table not found: {table_name:?}. Removing subscriptions");
 
       let mut record_subs = s.record_subscriptions.write();
-      record_subs.remove(table_name);
+      record_subs.remove(&table_name);
 
       let mut table_subs = s.table_subscriptions.write();
-      table_subs.remove(table_name);
+      table_subs.remove(&table_name);
 
       if record_subs.is_empty() && table_subs.is_empty() {
         conn.preupdate_hook(NO_HOOK);
@@ -365,7 +364,7 @@ impl SubscriptionManager {
 
     'record_subs: {
       let mut read_lock = s.record_subscriptions.upgradable_read();
-      let Some(subs) = read_lock.get(table_name).and_then(|m| m.get(&rowid)) else {
+      let Some(subs) = read_lock.get(&table_name).and_then(|m| m.get(&rowid)) else {
         break 'record_subs;
       };
 
@@ -375,8 +374,8 @@ impl SubscriptionManager {
         break 'record_subs;
       }
 
-      read_lock.with_upgraded(move |subscriptions| {
-        let Some(table_subscriptions) = subscriptions.get_mut(table_name) else {
+      read_lock.with_upgraded(|subscriptions| {
+        let Some(table_subscriptions) = subscriptions.get_mut(&table_name) else {
           return;
         };
 
@@ -385,7 +384,7 @@ impl SubscriptionManager {
           table_subscriptions.remove(&rowid);
 
           if table_subscriptions.is_empty() {
-            subscriptions.remove(table_name);
+            subscriptions.remove(&table_name);
             if subscriptions.is_empty() && s.table_subscriptions.read().is_empty() {
               conn.preupdate_hook(NO_HOOK);
             }
@@ -403,7 +402,7 @@ impl SubscriptionManager {
             table_subscriptions.remove(&rowid);
 
             if table_subscriptions.is_empty() {
-              subscriptions.remove(table_name);
+              subscriptions.remove(&table_name);
               if subscriptions.is_empty() && s.table_subscriptions.read().is_empty() {
                 conn.preupdate_hook(NO_HOOK);
               }
@@ -415,7 +414,7 @@ impl SubscriptionManager {
 
     'table_subs: {
       let mut read_lock = s.table_subscriptions.upgradable_read();
-      let Some(subs) = read_lock.get(table_name) else {
+      let Some(subs) = read_lock.get(&table_name) else {
         break 'table_subs;
       };
 
@@ -426,7 +425,7 @@ impl SubscriptionManager {
       }
 
       read_lock.with_upgraded(move |subscriptions| {
-        let Some(table_subscriptions) = subscriptions.get_mut(table_name) else {
+        let Some(table_subscriptions) = subscriptions.get_mut(&table_name) else {
           return;
         };
 
@@ -435,7 +434,7 @@ impl SubscriptionManager {
         }
 
         if table_subscriptions.is_empty() {
-          subscriptions.remove(table_name);
+          subscriptions.remove(&table_name);
 
           if subscriptions.is_empty() && s.record_subscriptions.read().is_empty() {
             conn.preupdate_hook(NO_HOOK);
@@ -454,8 +453,6 @@ impl SubscriptionManager {
       .conn
       .add_preupdate_hook(Some(
         move |action: Action, db: &str, table_name: &str, case: &PreUpdateCase| {
-          assert_eq!(db, "main");
-
           let action: RecordAction = match action {
             Action::SQLITE_UPDATE | Action::SQLITE_INSERT | Action::SQLITE_DELETE => action.into(),
             a => {
@@ -469,14 +466,23 @@ impl SubscriptionManager {
             return;
           };
 
+          let qualified_table_name = QualifiedName {
+            name: table_name.to_string(),
+            database_schema: Some(db.to_string()),
+          };
+
           // If there are no subscriptions, do nothing.
           let record_subs_candidate = s
             .record_subscriptions
             .read()
-            .get(table_name)
+            .get(&qualified_table_name)
             .and_then(|m| m.get(&rowid))
             .is_some();
-          let table_subs_candidate = s.table_subscriptions.read().get(table_name).is_some();
+          let table_subs_candidate = s
+            .table_subscriptions
+            .read()
+            .get(&qualified_table_name)
+            .is_some();
           if !record_subs_candidate && !table_subs_candidate {
             return;
           }
@@ -488,9 +494,9 @@ impl SubscriptionManager {
 
           let state = ContinuationState {
             state: s.clone(),
-            schema_metadata: s.schema_metadata.get_table(table_name),
+            schema_metadata: s.schema_metadata.get_table(&qualified_table_name),
             action,
-            table_name: table_name.to_string(),
+            table_name: qualified_table_name,
             rowid,
             record_values,
           };
@@ -513,14 +519,17 @@ impl SubscriptionManager {
     record: trailbase_sqlite::Value,
     user: Option<User>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
-    let table_name = api.table_name().to_string();
+    let table_name = api.table_name();
     let pk_column = &api.record_pk_column().1.name;
 
     let Some(row_id): Option<i64> = self
       .state
       .conn
       .read_query_row_f(
-        format!(r#"SELECT _rowid_ FROM "{table_name}" WHERE "{pk_column}" = $1"#),
+        format!(
+          r#"SELECT _rowid_ FROM {table} WHERE "{pk_column}" = $1"#,
+          table = table_name.escaped_string()
+        ),
         [record],
         |row| row.get(0),
       )
@@ -560,7 +569,7 @@ impl SubscriptionManager {
         receiver: receiver.downgrade(),
         state: app_state,
         id: SubscriptionId {
-          table_name,
+          table_name: table_name.clone(),
           row_id: Some(row_id),
           sub_id: subscription_id,
         },
@@ -576,7 +585,7 @@ impl SubscriptionManager {
     user: Option<User>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
     let state = &self.state;
-    let table_name = api.table_name().to_string();
+    let table_name = api.table_name();
 
     let (sender, receiver) = async_channel::bounded::<Event>(16);
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
@@ -607,7 +616,7 @@ impl SubscriptionManager {
         receiver: receiver.downgrade(),
         state: app_state,
         id: SubscriptionId {
-          table_name,
+          table_name: table_name.clone(),
           row_id: None,
           sub_id: subscription_id,
         },

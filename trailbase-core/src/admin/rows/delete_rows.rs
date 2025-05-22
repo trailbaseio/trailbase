@@ -5,6 +5,7 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use trailbase_schema::QualifiedName;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -30,7 +31,7 @@ pub async fn delete_row_handler(
 ) -> Result<Response, Error> {
   delete_row(
     &state,
-    &table_name,
+    &QualifiedName::parse(&table_name),
     &request.primary_key_column,
     request.value,
   )
@@ -40,12 +41,14 @@ pub async fn delete_row_handler(
 
 pub(crate) async fn delete_row(
   state: &AppState,
-  table_name: &str,
+  table_name: &QualifiedName,
   pk_col: &str,
   value: serde_json::Value,
 ) -> Result<(), Error> {
   let Some(schema_metadata) = state.schema_metadata().get_table(table_name) else {
-    return Err(Error::Precondition(format!("Table {table_name} not found")));
+    return Err(Error::Precondition(format!(
+      "Table {table_name:?} not found"
+    )));
   };
 
   let Some((_index, column)) = schema_metadata.column_by_name(pk_col) else {
@@ -58,7 +61,7 @@ pub(crate) async fn delete_row(
 
   DeleteQueryBuilder::run(
     state,
-    schema_metadata.name(),
+    &schema_metadata.schema.name,
     pk_col,
     simple_json_value_to_param(column.data_type, value)?,
     schema_metadata.json_metadata.has_file_columns(),
@@ -89,6 +92,7 @@ pub async fn delete_rows_handler(
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
+  let table_name = QualifiedName::parse(&table_name);
   let DeleteRowsRequest {
     primary_key_column,
     values,
@@ -136,9 +140,8 @@ mod tests {
       State(state.clone()),
       Json(CreateTableRequest {
         schema: Table {
-          name: table_name.clone(),
+          name: QualifiedName::parse(&table_name),
           strict: false,
-          database: None,
           columns: vec![
             Column {
               name: pk_col.clone(),
@@ -173,7 +176,7 @@ mod tests {
     let insert = async |value: &str| {
       let row_id = insert_row(
         &state,
-        table_name.clone(),
+        QualifiedName::parse(&table_name),
         json_row_from_value(serde_json::json!({
           "col0": value,
         }))

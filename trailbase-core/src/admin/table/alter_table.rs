@@ -8,7 +8,7 @@ use axum::{
 };
 use log::*;
 use serde::Deserialize;
-use trailbase_schema::sqlite::Table;
+use trailbase_schema::sqlite::{QualifiedName, Table};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -29,20 +29,24 @@ pub async fn alter_table_handler(
   State(state): State<AppState>,
   Json(request): Json<AlterTableRequest>,
 ) -> Result<Response, Error> {
-  if state.demo_mode() && request.source_schema.name.starts_with("_") {
+  if state.demo_mode() && request.source_schema.name.name.starts_with("_") {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
-  if request.source_schema.database != request.target_schema.database {
+  if request.source_schema.name.database_schema != request.target_schema.name.database_schema {
     return Err(Error::Precondition("Cannot move between databases".into()));
   }
 
   let source_schema = request.source_schema;
   let source_table_name = source_schema.name.clone();
-  let filename = format!("alter_table_{source_table_name}");
+  let filename = if let Some(ref db) = source_table_name.database_schema {
+    format!("alter_table_{db}_{}", source_table_name.name)
+  } else {
+    format!("alter_table_{}", source_table_name.name)
+  };
 
   let Some(_metadata) = state.schema_metadata().get_table(&source_table_name) else {
     return Err(Error::Precondition(format!(
-      "Cannot alter '{source_table_name}'. Only tables are supported.",
+      "Cannot alter '{source_table_name:?}'. Only tables are supported.",
     )));
   };
 
@@ -51,11 +55,14 @@ pub async fn alter_table_handler(
 
   debug!("Alter table:\nsource: {source_schema:?}\ntarget: {target_schema:?}",);
 
-  let temp_table_name: String = {
+  let temp_table_name: QualifiedName = {
     if target_table_name != source_table_name {
       target_table_name.clone()
     } else {
-      format!("__alter_table_{target_table_name}")
+      QualifiedName {
+        name: format!("__alter_table_{}", target_table_name.name),
+        database_schema: target_table_name.database_schema.clone(),
+      }
     }
   };
 
@@ -77,7 +84,7 @@ pub async fn alter_table_handler(
     .collect();
 
   let mut target_schema_copy = target_schema.clone();
-  target_schema_copy.name = temp_table_name.to_string();
+  target_schema_copy.name = temp_table_name.clone();
 
   let conn = state.conn();
   let log = conn
@@ -104,15 +111,27 @@ pub async fn alter_table_handler(
               {source_table_name}
           "#,
             column_list = copy_columns.join(", "),
+            temp_table_name = temp_table_name.escaped_string(),
+            source_table_name = source_table_name.escaped_string(),
           ),
           (),
         )?;
 
-        tx.execute(&format!("DROP TABLE {source_table_name}"), ())?;
+        tx.execute(
+          &format!(
+            "DROP TABLE {source_table_name}",
+            source_table_name = source_table_name.escaped_string()
+          ),
+          (),
+        )?;
 
-        if *target_table_name != temp_table_name {
+        if target_table_name != temp_table_name {
           tx.execute(
-            &format!("ALTER TABLE '{temp_table_name}' RENAME TO '{target_table_name}'"),
+            &format!(
+              "ALTER TABLE {temp_table_name} RENAME TO {target_table_name}",
+              temp_table_name = temp_table_name.escaped_string(),
+              target_table_name = target_table_name.escaped_string()
+            ),
             (),
           )?;
         }
@@ -156,9 +175,8 @@ mod tests {
 
     let create_table_request = CreateTableRequest {
       schema: Table {
-        name: "foo".to_string(),
+        name: QualifiedName::parse("foo"),
         strict: true,
-        database: None,
         columns: vec![Column {
           name: pk_col.clone(),
           data_type: ColumnDataType::Blob,
@@ -234,7 +252,7 @@ mod tests {
       // Rename table and remove "new" column.
       let mut target_schema = create_table_request.schema.clone();
 
-      target_schema.name = "bar".to_string();
+      target_schema.name = QualifiedName::parse("bar");
 
       debug!("{}", target_schema.create_table_statement());
 

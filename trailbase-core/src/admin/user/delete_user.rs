@@ -5,6 +5,7 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use serde::Deserialize;
+use trailbase_schema::QualifiedName;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -29,7 +30,10 @@ pub async fn delete_user_handler(
 
   delete_row(
     &state,
-    "_user",
+    &QualifiedName {
+      name: "_user".to_string(),
+      database_schema: None,
+    },
     "id",
     serde_json::Value::String(uuid_to_b64(&request.id)),
   )

@@ -5,7 +5,7 @@ use log::*;
 use object_store::ObjectStore;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use trailbase_schema::{FileUpload, FileUploads};
+use trailbase_schema::{FileUpload, FileUploads, QualifiedName};
 use trailbase_sqlite::params;
 
 use crate::app_state::AppState;
@@ -69,14 +69,14 @@ pub(crate) struct FileDeletionsDb {
 
 pub(crate) async fn delete_pending_files(
   state: &AppState,
-  table_name: &str,
+  table_name: &QualifiedName,
   rowid: i64,
 ) -> Result<(), FileError> {
   let rows: Vec<FileDeletionsDb> = state
     .conn()
     .read_query_values(
       "SELECT * FROM _file_deletions WHERE table_name = ?1 AND record_rowid = ?2",
-      params!(table_name.to_string(), rowid),
+      params!(table_name.name.clone(), rowid),
     )
     .await?;
 

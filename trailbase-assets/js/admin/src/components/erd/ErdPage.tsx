@@ -40,7 +40,7 @@ function findTargetPortName(
   }
 
   for (const tableOrView of allTablesAndViews) {
-    if (tableOrView.name !== foreignKey.foreign_table) {
+    if (tableOrView.name.name !== foreignKey.foreign_table) {
       continue;
     }
 
@@ -94,7 +94,7 @@ function buildErNode(
       if (foreignKey !== undefined) {
         return {
           source: {
-            cell: tableOrView.name,
+            cell: tableOrView.name.name,
             port: `${tableOrView.name}-${column.name}`,
           },
           // FIXME: lookup pk if referred columns are not provided. Otherwise can
@@ -110,7 +110,7 @@ function buildErNode(
     .filter((e) => e !== undefined);
 
   const node: NodeMetadata = {
-    id: tableOrView.name,
+    id: tableOrView.name.name,
     shape: ER_NODE_NAME,
     label: `${tableOrView.name} [${tableType(tableOrView)}]`,
     width: NODE_WIDTH,
@@ -129,7 +129,7 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
 
     const allTablesAndViews = [...props.schema.tables, ...props.schema.views];
     for (const tableOrView of allTablesAndViews) {
-      if (tableOrView.name !== "_user" && hiddenTable(tableOrView)) {
+      if (tableOrView.name.name !== "_user" && hiddenTable(tableOrView)) {
         continue;
       }
 

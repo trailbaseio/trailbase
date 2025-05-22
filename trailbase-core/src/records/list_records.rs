@@ -7,6 +7,7 @@ use itertools::Itertools;
 use serde::Serialize;
 use std::borrow::Cow;
 use trailbase_qs::{Cursor, OrderPrecedent, Query};
+use trailbase_schema::QualifiedName;
 use trailbase_sqlite::Value;
 
 use crate::app_state::AppState;
@@ -33,7 +34,7 @@ pub struct ListResponse {
 #[derive(Template)]
 #[template(escape = "none", path = "list_record_query.sql")]
 struct ListRecordQueryTemplate<'a> {
-  table_name: &'a str,
+  table_name: &'a QualifiedName,
   column_names: &'a [&'a str],
   read_access_clause: &'a str,
   filter_clause: &'a str,
@@ -181,6 +182,7 @@ pub async fn list_records_handler(
 
       expand_tables(
         state.schema_metadata(),
+        &api.table_name().database_schema,
         |column_name| {
           api
             .column_index_by_name(column_name)
@@ -314,7 +316,7 @@ fn cursor_to_value(cursor: Cursor) -> Value {
 mod tests {
   use serde::Deserialize;
   use std::borrow::Cow;
-  use trailbase_schema::sqlite::sqlite3_parse_into_statement;
+  use trailbase_schema::sqlite::{QualifiedName, sqlite3_parse_into_statement};
   use trailbase_sqlite::Value;
 
   use super::*;
@@ -339,7 +341,7 @@ mod tests {
   fn test_list_records_template() {
     sanitize_template(
       &ListRecordQueryTemplate {
-        table_name: "table",
+        table_name: &QualifiedName::parse("table"),
         column_names: &["a", "index"],
         read_access_clause: "TRUE",
         filter_clause: "TRUE",
@@ -355,7 +357,10 @@ mod tests {
 
     sanitize_template(
       &ListRecordQueryTemplate {
-        table_name: "table",
+        table_name: &QualifiedName {
+          name: "table".to_string(),
+          database_schema: Some("db".to_string()),
+        },
         column_names: &["a", "index"],
         read_access_clause: "_USER_.id IS NOT NULL",
         filter_clause: "a = 'value'",
@@ -398,9 +403,12 @@ mod tests {
       .unwrap();
 
     let schema_metadata = SchemaMetadataCache::new(conn.clone()).await.unwrap();
-    let table_metadata = schema_metadata.get_table("table").unwrap();
+    let table_metadata = schema_metadata
+      .get_table(&QualifiedName::parse("table"))
+      .unwrap();
     let expanded_tables = expand_tables(
       &schema_metadata,
+      &None,
       |column_name| table_metadata.column_by_name(column_name).map(|(_, c)| c),
       &["index"],
     )
@@ -412,7 +420,10 @@ mod tests {
     assert_eq!(expanded_tables[0].foreign_column_name, "index");
 
     let query = ListRecordQueryTemplate {
-      table_name: "table",
+      table_name: &QualifiedName {
+        name: "table".to_string(),
+        database_schema: Some("main".to_string()),
+      },
       column_names: &["tid", "drop", "index"],
       read_access_clause: "_USER_.id != X'F000'",
       filter_clause: "TRUE",

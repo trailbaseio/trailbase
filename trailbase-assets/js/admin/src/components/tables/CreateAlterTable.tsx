@@ -31,6 +31,7 @@ import { invalidateConfig } from "@/lib/config";
 
 import type { Column } from "@bindings/Column";
 import type { Table } from "@bindings/Table";
+import { QualifiedName } from "@bindings/QualifiedName";
 
 function newDefaultColumn(index: number): Column {
   return {
@@ -45,7 +46,7 @@ export function CreateAlterTableForm(props: {
   markDirty: () => void;
   schemaRefetch: () => Promise<void>;
   allTables: Table[];
-  setSelected: (tableName: string) => void;
+  setSelected: (tableName: QualifiedName) => void;
   schema?: Table;
 }) {
   const queryClient = useQueryClient();
@@ -96,9 +97,11 @@ export function CreateAlterTableForm(props: {
     defaultValues:
       props.schema ??
       ({
-        name: randomName(),
+        name: {
+          name: randomName(),
+          database_schema: null,
+        },
         strict: true,
-        database: null,
         indexes: [],
         columns: [
           {
@@ -138,7 +141,7 @@ export function CreateAlterTableForm(props: {
       >
         <div class="mt-4 flex flex-col items-start gap-4 pr-4">
           <form.Field
-            name="name"
+            name="name.name"
             validators={{
               onChange: ({ value }: { value: string | undefined }) => {
                 return value ? undefined : "Table name missing";
