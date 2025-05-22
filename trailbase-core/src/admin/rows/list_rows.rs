@@ -60,6 +60,7 @@ pub async fn list_rows_handler(
       )));
     }
   };
+  let fq_escaped_name = table_or_view_metadata.fq_escaped_name();
 
   // Where clause contains column filters and cursor depending on what's present in the url query
   // string.
@@ -76,7 +77,8 @@ pub async fn list_rows_handler(
 
   let total_row_count: i64 = {
     let where_clause = &filter_where_clause.clause;
-    let count_query = format!("SELECT COUNT(*) FROM '{table_name}' AS _ROW_ WHERE {where_clause}");
+    let count_query =
+      format!("SELECT COUNT(*) FROM {fq_escaped_name} AS _ROW_ WHERE {where_clause}");
     state
       .conn()
       .read_query_row_f(count_query, filter_where_clause.params.clone(), |row| {
@@ -89,7 +91,7 @@ pub async fn list_rows_handler(
   let cursor_column = table_or_view_metadata.record_pk_column();
   let (rows, columns) = fetch_rows(
     state.conn(),
-    &table_name,
+    &fq_escaped_name,
     filter_where_clause,
     &order,
     Pagination {
@@ -151,7 +153,7 @@ struct Pagination<'a> {
 
 async fn fetch_rows(
   conn: &trailbase_sqlite::Connection,
-  table_or_view_name: &str,
+  fq_escaped_name: &str,
   filter_where_clause: WhereClause,
   order: &Option<Order>,
   pagination: Pagination<'_>,
@@ -202,7 +204,7 @@ async fn fetch_rows(
     r#"
       SELECT _ROW_.*
       FROM
-        (SELECT * FROM '{table_or_view_name}') as _ROW_
+        (SELECT * FROM {fq_escaped_name}) as _ROW_
       WHERE
         {clause}
       ORDER BY
@@ -280,7 +282,7 @@ mod tests {
 
     let (data, cols) = fetch_rows(
       conn,
-      "test_table",
+      "'main'.'test_table'",
       WhereClause {
         clause: "TRUE".to_string(),
         params: vec![],

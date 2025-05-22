@@ -47,7 +47,10 @@ impl SchemaMetadataCache {
       .cloned()
       .map(|t: Table| {
         (
-          t.name.clone(),
+          match t.database {
+            Some(ref db) if db != "main" => format!("{db}.{name}", name = t.name),
+            _ => t.name.clone(),
+          },
           Arc::new(TableMetadata::new(t, tables, USER_TABLE)),
         )
       })
@@ -98,14 +101,20 @@ impl SchemaMetadataCache {
       //   debug!("Temporary view: {}", view.name);
       // }
 
-      return Some((view.name.clone(), Arc::new(ViewMetadata::new(view, tables))));
+      return Some((
+        match view.database {
+          Some(ref db) if db != "main" => format!("{db}.{name}", name = view.name),
+          _ => view.name.clone(),
+        },
+        Arc::new(ViewMetadata::new(view, tables)),
+      ));
     };
 
     return Ok(views.into_iter().filter_map(build).collect());
   }
 
   pub fn get_table(&self, table_name: &str) -> Option<Arc<TableMetadata>> {
-    self.state.read().tables.get(table_name).cloned()
+    return self.state.read().tables.get(table_name).cloned();
   }
 
   pub fn get_view(&self, view_name: &str) -> Option<Arc<ViewMetadata>> {

@@ -212,12 +212,20 @@ impl ViewMetadata {
 }
 
 pub trait TableOrViewMetadata {
+  fn fq_escaped_name(&self) -> String;
   fn record_pk_column(&self) -> Option<(usize, &Column)>;
   fn json_metadata(&self) -> Option<&JsonMetadata>;
   fn columns(&self) -> Option<&[Column]>;
 }
 
 impl TableOrViewMetadata for TableMetadata {
+  fn fq_escaped_name(&self) -> String {
+    match self.schema.database {
+      Some(ref db) if db != "main" => format!("'{db}'.'{}'", self.schema.name),
+      _ => format!("'{}'", self.schema.name),
+    }
+  }
+
   fn columns(&self) -> Option<&[Column]> {
     return Some(&self.schema.columns);
   }
@@ -233,6 +241,13 @@ impl TableOrViewMetadata for TableMetadata {
 }
 
 impl TableOrViewMetadata for ViewMetadata {
+  fn fq_escaped_name(&self) -> String {
+    match self.schema.database {
+      Some(ref db) if db != "main" => format!("'{db}'.'{}'", self.schema.name),
+      _ => format!("'{}'", self.schema.name),
+    }
+  }
+
   fn columns(&self) -> Option<&[Column]> {
     return self.schema.columns.as_deref();
   }

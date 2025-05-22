@@ -69,6 +69,7 @@ export async function deleteRows(
 
 export type FetchArgs = {
   tableName: string;
+  database: string | null;
   filter: string | null;
   pageSize: number;
   pageIndex: number;
@@ -88,9 +89,12 @@ export async function fetchRows(
   });
 
   try {
-    const response = await adminFetch(
-      `/table/${source.tableName}/rows?${params}`,
-    );
+    const path =
+      source.database !== null
+        ? `/table/${source.database}.${source.tableName}/rows?${params}`
+        : `/table/${source.tableName}/rows?${params}`;
+
+    const response = await adminFetch(path);
     return (await response.json()) as ListRowsResponse;
   } catch (err) {
     if (value) {
