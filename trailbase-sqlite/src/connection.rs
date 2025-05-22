@@ -466,7 +466,7 @@ impl Connection {
       .await;
   }
 
-  pub async fn attach(&self, path: &str, name: &str) -> Result<()> {
+  pub fn attach(&self, path: &str, name: &str) -> Result<()> {
     let lock = self.conns.0.write();
     for conn in &*lock {
       conn.execute(&format!("ATTACH DATABASE '{path}' AS {name} "), ())?;

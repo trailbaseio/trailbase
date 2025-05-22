@@ -154,7 +154,7 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Admin { cmd }) => {
       init_logger(false);
 
-      let (conn, _) = api::init_main_db(Some(&data_dir), None)?;
+      let (conn, _) = api::init_main_db(Some(&data_dir), None, None)?;
 
       match cmd {
         Some(AdminSubCommands::List) => {
@@ -205,7 +205,7 @@ async fn async_main() -> Result<(), BoxError> {
       init_logger(false);
 
       let data_dir = DataDir(args.data_dir);
-      let (conn, _) = api::init_main_db(Some(&data_dir), None)?;
+      let (conn, _) = api::init_main_db(Some(&data_dir), None, None)?;
 
       match cmd {
         Some(UserSubCommands::ResetPassword { email, password }) => {

@@ -313,7 +313,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let temp_dir = temp_dir::TempDir::new()?;
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
 
-  let (conn, new) = crate::connection::init_main_db(None, None)?;
+  let (conn, new) = crate::connection::init_main_db(None, None, None)?;
   assert!(new);
   let logs_conn = crate::connection::init_logs_db(None)?;
 

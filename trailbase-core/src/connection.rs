@@ -1,3 +1,4 @@
+use log::*;
 use parking_lot::Mutex;
 use std::path::PathBuf;
 use thiserror::Error;
@@ -13,6 +14,8 @@ pub enum ConnectionError {
   SqliteExtension(#[from] trailbase_extension::Error),
   #[error("Rusqlite error: {0}")]
   Rusqlite(#[from] rusqlite::Error),
+  #[error("TB SQLite error: {0}")]
+  TbSqlite(#[from] trailbase_sqlite::Error),
   #[error("Migration error: {0}")]
   Migration(#[from] trailbase_refinery_core::Error),
 }
@@ -24,6 +27,7 @@ pub enum ConnectionError {
 pub fn init_main_db(
   data_dir: Option<&DataDir>,
   extensions: Option<Vec<PathBuf>>,
+  attach: Option<Vec<(String, PathBuf)>>,
 ) -> Result<(Connection, bool), ConnectionError> {
   let new_db = Mutex::new(false);
 
@@ -49,6 +53,14 @@ pub fn init_main_db(
       ..Default::default()
     }),
   )?;
+
+  if let Some(attach) = attach {
+    for (schema_name, path) in attach {
+      debug!("Attaching '{schema_name}': {path:?}");
+      // FIXME: migrations for non-main databases.
+      conn.attach(&path.to_string_lossy(), &schema_name)?;
+    }
+  }
 
   return Ok((conn, *new_db.lock()));
 }

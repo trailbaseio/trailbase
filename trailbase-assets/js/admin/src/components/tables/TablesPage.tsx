@@ -137,6 +137,11 @@ function TablePickerPane(props: {
           const type = tableType(item);
           const selected = () => item.name === selectedTable()?.name;
 
+          const name =
+            item.database !== null
+              ? `${item.database}.${item.name}`
+              : item.name;
+
           return (
             <Button
               variant={selected() ? "default" : "outline"}
@@ -148,7 +153,7 @@ function TablePickerPane(props: {
                   !selected() && hidden ? "truncate text-gray-500" : "truncate"
                 }
               >
-                {item.name}
+                {name}
               </span>
               {hidden && <TbLock />}
               {type === "view" && <TbEye />}

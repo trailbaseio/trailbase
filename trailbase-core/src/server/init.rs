@@ -62,9 +62,29 @@ pub async fn init_app_state(
   // TODO: At this early stage we're using an in-memory db. Go persistent before rolling out.
   let queue = crate::queue::Queue::new(None).await?;
 
-  // Open or init the main db. Note that we derive whether a new DB was initialized based on
-  // whether the V1 migration had to be applied. Should be fairly robust.
-  let (conn, new_db) = crate::connection::init_main_db(Some(&data_dir), None)?;
+  // Open or init the main db connection. Note that we derive whether a new DB was initialized
+  // based on whether the V1 migration had to be applied. Should be fairly robust.
+  let paths = std::fs::read_dir(data_dir.data_path())?;
+  let extra_databases: Vec<(String, PathBuf)> = paths
+    .filter_map(|entry: Result<std::fs::DirEntry, _>| {
+      if let Ok(entry) = entry {
+        let path = entry.path();
+        if let (Some(stem), Some(ext)) = (path.file_stem(), path.extension()) {
+          if ext != "db" {
+            return None;
+          }
+
+          if stem != "main" && stem != "logs" {
+            return Some((stem.to_string_lossy().to_string(), path.to_path_buf()));
+          }
+        }
+      }
+      return None;
+    })
+    .collect();
+
+  let (conn, new_db) =
+    crate::connection::init_main_db(Some(&data_dir), None, Some(extra_databases))?;
 
   let schema_metadata = SchemaMetadataCache::new(conn.clone()).await?;
 

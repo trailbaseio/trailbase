@@ -516,7 +516,7 @@ enum MyError {
 async fn test_attach() {
   let conn = Connection::open_in_memory().unwrap();
 
-  conn.attach(":memory:", "NAME").await.unwrap();
+  conn.attach(":memory:", "NAME").unwrap();
 
   let databases = conn.list_databases().await.unwrap();
   assert_eq!(databases.len(), 2);

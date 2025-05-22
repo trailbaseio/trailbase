@@ -35,21 +35,32 @@ pub async fn list_tables_handler(
     pub name: String,
     pub tbl_name: String,
     pub sql: Option<String>,
+    pub db_schema: String,
   }
 
-  // NOTE: the "ORDER BY" is a bit sneaky, it ensures that we parse all "table"s before we parse
-  // "view"s.
-  let rows = state
-    .conn()
-    .read_query_values::<SqliteSchema>(
-      format!("SELECT type, name, tbl_name, sql FROM {SQLITE_SCHEMA_TABLE} ORDER BY type"),
-      (),
-    )
-    .await?;
+  let databases = state.conn().list_databases().await?;
 
-  let mut schemas = ListSchemasResponse::default();
+  let mut schemas: Vec<SqliteSchema> = vec![];
+  for db in databases {
+    // NOTE: the "ORDER BY" is a bit sneaky, it ensures that we parse all "table"s before we parse
+    // "view"s.
+    let rows = state
+      .conn()
+      .read_query_values::<SqliteSchema>(
+        format!(
+          "SELECT type, name, tbl_name, sql, ?1 AS db_schema FROM {}.{SQLITE_SCHEMA_TABLE} ORDER BY type",
+          db.name
+        ),
+        trailbase_sqlite::params!(db.name),
+      )
+      .await?;
 
-  for schema in rows {
+    schemas.extend(rows);
+  }
+
+  let mut response = ListSchemasResponse::default();
+
+  for schema in schemas {
     let name = &schema.name;
 
     match schema.r#type.as_str() {
@@ -63,7 +74,13 @@ pub async fn list_tables_handler(
         if let Some(create_table_statement) =
           sqlite3_parse_into_statement(&sql).map_err(|err| Error::Internal(err.into()))?
         {
-          schemas.tables.push(create_table_statement.try_into()?);
+          response.tables.push({
+            let mut table: Table = create_table_statement.try_into()?;
+            if schema.db_schema != "main" {
+              table.database = Some(schema.db_schema.clone());
+            }
+            table
+          });
         }
       }
       "index" => {
@@ -79,7 +96,7 @@ pub async fn list_tables_handler(
         if let Some(create_index_statement) =
           sqlite3_parse_into_statement(&sql).map_err(|err| Error::Internal(err.into()))?
         {
-          schemas.indexes.push(create_index_statement.try_into()?);
+          response.indexes.push(create_index_statement.try_into()?);
         }
       }
       "view" => {
@@ -92,9 +109,19 @@ pub async fn list_tables_handler(
         if let Some(create_view_statement) =
           sqlite3_parse_into_statement(&sql).map_err(|err| Error::Internal(err.into()))?
         {
-          schemas
+          let tables: Vec<_> = response
+            .tables
+            .iter()
+            .filter_map(|table| {
+              if table.database.as_deref().unwrap_or("main") == schema.db_schema {
+                return Some(table.clone());
+              }
+              return None;
+            })
+            .collect();
+          response
             .views
-            .push(View::from(create_view_statement, &schemas.tables)?);
+            .push(View::from(create_view_statement, &tables)?);
         }
       }
       "trigger" => {
@@ -104,7 +131,7 @@ pub async fn list_tables_handler(
         };
 
         // TODO: Turn this into structured data now that we use sqlite3_parser.
-        schemas.triggers.push(TableTrigger {
+        response.triggers.push(TableTrigger {
           name: schema.name,
           table_name: schema.tbl_name,
           sql,
@@ -114,5 +141,5 @@ pub async fn list_tables_handler(
     }
   }
 
-  return Ok(Json(schemas));
+  return Ok(Json(response));
 }
