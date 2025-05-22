@@ -36,6 +36,12 @@ macro_rules! named_params {
     };
 }
 
+#[derive(Clone, Debug, PartialEq, serde::Deserialize)]
+pub struct Database {
+  pub seq: u8,
+  pub name: String,
+}
+
 struct LockedConnections(RwLock<Vec<rusqlite::Connection>>);
 
 // NOTE: We must never access the same connection concurrently even as &Connection, due to
@@ -456,6 +462,29 @@ impl Connection {
       .call(move |conn| {
         conn.preupdate_hook(hook);
         return Ok(());
+      })
+      .await;
+  }
+
+  pub async fn attach(&self, path: &str, name: &str) -> Result<()> {
+    let lock = self.conns.0.write();
+    for conn in &*lock {
+      conn.execute(&format!("ATTACH DATABASE '{path}' AS {name} "), ())?;
+    }
+    return Ok(());
+  }
+
+  pub async fn list_databases(&self) -> Result<Vec<Database>> {
+    return self
+      .call(|conn| {
+        let mut stmt = conn.prepare("SELECT seq, name FROM pragma_database_list")?;
+        let mut rows = stmt.raw_query();
+
+        let mut databases: Vec<Database> = vec![];
+        while let Some(row) = rows.next()? {
+          databases.push(serde_rusqlite::from_row(row)?)
+        }
+        return Ok(databases);
       })
       .await;
   }

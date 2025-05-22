@@ -58,21 +58,22 @@ impl SchemaMetadataCache {
     for metadata in schema_metadata_map.values() {
       for idx in metadata.json_metadata.file_column_indexes() {
         let table_name = &metadata.schema.name;
+        let db = metadata.schema.database.as_deref().unwrap_or("main");
         let col = &metadata.schema.columns[*idx];
         let column_name = &col.name;
 
         conn.execute_batch(indoc::formatdoc!(
           r#"
-          DROP TRIGGER IF EXISTS __{table_name}__{column_name}__update_trigger;
-          CREATE TRIGGER IF NOT EXISTS __{table_name}__{column_name}__update_trigger AFTER UPDATE ON "{table_name}"
+          DROP TRIGGER IF EXISTS {db}.__{table_name}__{column_name}__update_trigger;
+          CREATE TRIGGER IF NOT EXISTS {db}.__{table_name}__{column_name}__update_trigger AFTER UPDATE ON "{table_name}"
             WHEN OLD."{column_name}" IS NOT NULL AND OLD."{column_name}" != NEW."{column_name}"
             BEGIN
               INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
                 ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
             END;
 
-          DROP TRIGGER IF EXISTS __{table_name}__{column_name}__delete_trigger;
-          CREATE TRIGGER IF NOT EXISTS __{table_name}__{column_name}__delete_trigger AFTER DELETE ON "{table_name}"
+          DROP TRIGGER IF EXISTS {db}.__{table_name}__{column_name}__delete_trigger;
+          CREATE TRIGGER IF NOT EXISTS {db}.__{table_name}__{column_name}__delete_trigger AFTER DELETE ON "{table_name}"
             --FOR EACH ROW
             WHEN OLD."{column_name}" IS NOT NULL
             BEGIN
@@ -150,9 +151,9 @@ impl std::fmt::Debug for SchemaMetadataCache {
 
 #[derive(Debug, Error)]
 pub enum SchemaLookupError {
-  #[error("SQL2 error: {0}")]
+  #[error("TB SQLite error: {0}")]
   Sql(#[from] trailbase_sqlite::Error),
-  #[error("SQL3 error: {0}")]
+  #[error("Rusqlite error: {0}")]
   FromSql(#[from] rusqlite::types::FromSqlError),
   #[error("Schema error: {0}")]
   Schema(#[from] SchemaError),
@@ -165,11 +166,15 @@ pub enum SchemaLookupError {
 pub async fn lookup_and_parse_table_schema(
   conn: &trailbase_sqlite::Connection,
   table_name: &str,
+  database: Option<&str>,
 ) -> Result<Table, SchemaLookupError> {
   // Then get the actual table.
   let sql: String = conn
     .read_query_row_f(
-      format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1"),
+      format!(
+        "SELECT sql FROM {db}.{SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1",
+        db = database.unwrap_or("main")
+      ),
       params!(table_name.to_string()),
       |row| row.get(0),
     )
@@ -180,27 +185,42 @@ pub async fn lookup_and_parse_table_schema(
     return Err(SchemaLookupError::Missing);
   };
 
-  return Ok(stmt.try_into()?);
+  let mut table: Table = stmt.try_into()?;
+  if let Some(database) = database {
+    table.database = Some(database.to_string());
+  }
+  return Ok(table);
 }
 
 pub async fn lookup_and_parse_all_table_schemas(
   conn: &trailbase_sqlite::Connection,
 ) -> Result<Vec<Table>, SchemaLookupError> {
-  // Then get the actual table.
-  let rows = conn
-    .read_query_rows(
-      format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'table'"),
-      (),
-    )
-    .await?;
+  let databases = conn.list_databases().await?;
 
   let mut tables: Vec<Table> = vec![];
-  for row in rows.iter() {
-    let sql: String = row.get(0)?;
-    let Some(stmt) = sqlite3_parse_into_statement(&sql)? else {
-      return Err(SchemaLookupError::Missing);
-    };
-    tables.push(stmt.try_into()?);
+  for db in databases {
+    // Then get the actual tables.
+    let rows = conn
+      .read_query_rows(
+        format!(
+          "SELECT sql FROM {db}.{SQLITE_SCHEMA_TABLE} WHERE type = 'table'",
+          db = db.name
+        ),
+        (),
+      )
+      .await?;
+
+    for row in rows.iter() {
+      let sql: String = row.get(0)?;
+      let Some(stmt) = sqlite3_parse_into_statement(&sql)? else {
+        return Err(SchemaLookupError::Missing);
+      };
+      tables.push({
+        let mut table: Table = stmt.try_into()?;
+        table.database = Some(db.name.clone());
+        table
+      });
+    }
   }
 
   return Ok(tables);
@@ -224,18 +244,26 @@ pub async fn lookup_and_parse_all_view_schemas(
   conn: &trailbase_sqlite::Connection,
   tables: &[Table],
 ) -> Result<Vec<View>, SchemaLookupError> {
-  // Then get the actual table.
-  let rows = conn
-    .read_query_rows(
-      format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'view'"),
-      (),
-    )
-    .await?;
+  let databases = conn.list_databases().await?;
 
   let mut views: Vec<View> = vec![];
-  for row in rows.iter() {
-    let sql: String = row.get(0)?;
-    views.push(sqlite3_parse_view(&sql, tables)?);
+  for db in databases {
+    // Then get the actual views.
+    let rows = conn
+      .read_query_rows(
+        format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'view'"),
+        (),
+      )
+      .await?;
+
+    for row in rows.iter() {
+      let sql: String = row.get(0)?;
+      views.push({
+        let mut view: View = sqlite3_parse_view(&sql, tables)?;
+        view.database = Some(db.name.clone());
+        view
+      });
+    }
   }
 
   return Ok(views);

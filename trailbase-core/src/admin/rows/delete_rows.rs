@@ -138,6 +138,7 @@ mod tests {
         schema: Table {
           name: table_name.clone(),
           strict: false,
+          database: None,
           columns: vec![
             Column {
               name: pk_col.clone(),

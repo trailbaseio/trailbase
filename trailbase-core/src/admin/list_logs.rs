@@ -122,7 +122,7 @@ pub async fn list_logs_handler(
 
   // NOTE: We cannot use state.schema_metadata() here, since we're working on the logs database.
   // We could cache, however this is just the admin logs handler.
-  let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME).await?;
+  let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME, None).await?;
   let schema_metadata = TableMetadata::new(table.clone(), &[table], crate::constants::USER_TABLE);
   let filter_where_clause =
     build_filter_where_clause("log", &schema_metadata.schema.columns, filter_params)?;

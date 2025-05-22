@@ -194,7 +194,7 @@ mod tests {
       .await
       .unwrap();
 
-    let table = lookup_and_parse_table_schema(conn, "test_table")
+    let table = lookup_and_parse_table_schema(conn, "test_table", Some("main"))
       .await
       .unwrap();
     let metadata = TableMetadata::new(table.clone(), &[table], USER_TABLE);

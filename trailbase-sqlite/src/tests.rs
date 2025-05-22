@@ -3,7 +3,7 @@ use rusqlite::hooks::PreUpdateCase;
 use serde::Deserialize;
 use std::borrow::Cow;
 
-use crate::connection::{Connection, Error, Options, extract_row_id};
+use crate::connection::{Connection, Database, Error, Options, extract_row_id};
 use crate::{Value, ValueType, named_params, params};
 use rusqlite::ErrorCode;
 
@@ -510,4 +510,21 @@ async fn test_hooks() {
 enum MyError {
   #[error("MySpecificError")]
   MySpecificError,
+}
+
+#[tokio::test]
+async fn test_attach() {
+  let conn = Connection::open_in_memory().unwrap();
+
+  conn.attach(":memory:", "NAME").await.unwrap();
+
+  let databases = conn.list_databases().await.unwrap();
+  assert_eq!(databases.len(), 2);
+  assert_eq!(
+    databases[1],
+    Database {
+      seq: 2,
+      name: "NAME".to_string(),
+    }
+  );
 }

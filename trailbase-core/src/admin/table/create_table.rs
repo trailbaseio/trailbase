@@ -30,8 +30,10 @@ pub async fn create_table_handler(
     ));
   }
   let dry_run = request.dry_run.unwrap_or(false);
-  let table_name = request.schema.name.clone();
-  let filename = format!("create_table_{table_name}");
+  let filename = format!(
+    "create_table_{fq_table_name}",
+    fq_table_name = request.schema.fqn().replace(".", "_")
+  );
 
   // This contains the create table statement and may also contain indexes and triggers.
   let create_table_query = request.schema.create_table_statement();

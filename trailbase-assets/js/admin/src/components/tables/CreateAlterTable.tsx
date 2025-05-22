@@ -98,6 +98,7 @@ export function CreateAlterTableForm(props: {
       ({
         name: randomName(),
         strict: true,
+        database: null,
         indexes: [],
         columns: [
           {

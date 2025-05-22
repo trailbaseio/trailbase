@@ -509,6 +509,7 @@ impl Column {
 pub struct Table {
   pub name: String,
   pub strict: bool,
+  pub database: Option<String>,
 
   // Column definition and column-level constraints.
   pub columns: Vec<Column>,
@@ -525,6 +526,16 @@ pub struct Table {
 }
 
 impl Table {
+  /// Returns `{schema_name}.{table_name}` or just `{table_name}` depending on wheter self.database
+  /// is present.
+  pub fn fqn(&self) -> String {
+    if let Some(ref db) = self.database {
+      return format!("{db}.{}", self.name);
+    } else {
+      return self.name.clone();
+    }
+  }
+
   pub fn create_table_statement(&self) -> String {
     if self.virtual_table {
       // https://www.sqlite.org/lang_createvtab.html
@@ -545,9 +556,9 @@ impl Table {
     column_defs_and_table_constraints.extend(self.checks.iter().map(|fk| fk.to_fragment()));
 
     return format!(
-      "CREATE{temporary} TABLE '{name}' ({col_defs_and_constraints}){strict}",
+      "CREATE{temporary} TABLE '{fq_name}' ({col_defs_and_constraints}){strict}",
       temporary = if self.temporary { " TEMPORARY" } else { "" },
-      name = self.name,
+      fq_name = self.fqn(),
       col_defs_and_constraints = column_defs_and_table_constraints.join(", "),
       strict = if self.strict { " STRICT" } else { "" },
     );
@@ -604,6 +615,7 @@ impl TableIndex {
 #[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
 pub struct View {
   pub name: String,
+  pub database: Option<String>,
 
   /// Columns may be inferred from a view's query.
   ///
@@ -716,6 +728,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
         Ok(Table {
           name: unquote_qualified(tbl_name),
           strict: options.contains(TableOptions::STRICT),
+          database: None,
           columns,
           foreign_keys,
           unique,
@@ -731,6 +744,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
       } => Ok(Table {
         name: unquote_qualified(tbl_name),
         strict: false,
+        database: None,
         columns: vec![],
         foreign_keys: vec![],
         unique: vec![],
@@ -883,6 +897,7 @@ impl View {
 
         Ok(View {
           name: unquote_qualified(view_name),
+          database: None,
           columns,
           query: SelectFormatter(*select).to_string(),
           temporary,
@@ -1458,6 +1473,7 @@ mod tests {
       Table {
         name: "profiles".to_string(),
         strict: true,
+        database: None,
         columns: vec![
           Column {
             name: "user".to_string(),
@@ -1490,6 +1506,7 @@ mod tests {
       Table {
         name: "articles".to_string(),
         strict: true,
+        database: None,
         columns: vec![
           Column {
             name: "id".to_string(),

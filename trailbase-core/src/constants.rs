@@ -1,6 +1,6 @@
 use chrono::Duration;
 
-pub const SQLITE_SCHEMA_TABLE: &str = "main.sqlite_schema";
+pub const SQLITE_SCHEMA_TABLE: &str = "sqlite_schema";
 pub const USER_TABLE: &str = "_user";
 pub(crate) const USER_TABLE_ID_COLUMN: &str = "id";
 
