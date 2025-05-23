@@ -64,7 +64,7 @@ pub async fn update_row_handler(
   UpdateQueryBuilder::run(
     &state,
     &schema_metadata.schema.name,
-    schema_metadata.schema.database.as_deref(),
+    schema_metadata.schema.database_schema.as_deref(),
     &column.name,
     schema_metadata.json_metadata.has_file_columns(),
     Params::from(&*schema_metadata, row, None)?,

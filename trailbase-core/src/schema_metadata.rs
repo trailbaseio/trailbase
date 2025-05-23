@@ -47,7 +47,7 @@ impl SchemaMetadataCache {
       .cloned()
       .map(|t: Table| {
         (
-          match t.database {
+          match t.database_schema {
             Some(ref db) if db != "main" => format!("{db}.{name}", name = t.name),
             _ => t.name.clone(),
           },
@@ -61,7 +61,7 @@ impl SchemaMetadataCache {
     for metadata in schema_metadata_map.values() {
       for idx in metadata.json_metadata.file_column_indexes() {
         let table_name = &metadata.schema.name;
-        let db = metadata.schema.database.as_deref().unwrap_or("main");
+        let db = metadata.schema.database_schema.as_deref().unwrap_or("main");
         let col = &metadata.schema.columns[*idx];
         let column_name = &col.name;
 
@@ -102,7 +102,7 @@ impl SchemaMetadataCache {
       // }
 
       return Some((
-        match view.database {
+        match view.database_schema {
           Some(ref db) if db != "main" => format!("{db}.{name}", name = view.name),
           _ => view.name.clone(),
         },
@@ -196,7 +196,7 @@ pub async fn lookup_and_parse_table_schema(
 
   let mut table: Table = stmt.try_into()?;
   if let Some(database) = database {
-    table.database = Some(database.to_string());
+    table.database_schema = Some(database.to_string());
   }
   return Ok(table);
 }
@@ -226,7 +226,7 @@ pub async fn lookup_and_parse_all_table_schemas(
       };
       tables.push({
         let mut table: Table = stmt.try_into()?;
-        table.database = Some(db.name.clone());
+        table.database_schema = Some(db.name.clone());
         table
       });
     }
@@ -269,7 +269,7 @@ pub async fn lookup_and_parse_all_view_schemas(
       let sql: String = row.get(0)?;
       views.push({
         let mut view: View = sqlite3_parse_view(&sql, tables)?;
-        view.database = Some(db.name.clone());
+        view.database_schema = Some(db.name.clone());
         view
       });
     }

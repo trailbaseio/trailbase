@@ -508,8 +508,8 @@ impl Column {
 #[ts(export)]
 pub struct Table {
   pub name: String,
+  pub database_schema: Option<String>,
   pub strict: bool,
-  pub database: Option<String>,
 
   // Column definition and column-level constraints.
   pub columns: Vec<Column>,
@@ -529,10 +529,10 @@ impl Table {
   /// Returns `{schema_name}.{table_name}` or just `{table_name}` depending on wheter self.database
   /// is present.
   pub fn fqn(&self) -> String {
-    if let Some(ref db) = self.database {
-      return format!("{db}.{}", self.name);
+    if let Some(ref db) = self.database_schema {
+      return format!(r#""{db}"."{name}""#, name = self.name);
     } else {
-      return self.name.clone();
+      return format!(r#""{name}""#, name = self.name);
     }
   }
 
@@ -556,7 +556,7 @@ impl Table {
     column_defs_and_table_constraints.extend(self.checks.iter().map(|fk| fk.to_fragment()));
 
     return format!(
-      "CREATE{temporary} TABLE '{fq_name}' ({col_defs_and_constraints}){strict}",
+      "CREATE{temporary} TABLE {fq_name} ({col_defs_and_constraints}){strict}",
       temporary = if self.temporary { " TEMPORARY" } else { "" },
       fq_name = self.fqn(),
       col_defs_and_constraints = column_defs_and_table_constraints.join(", "),
@@ -569,6 +569,7 @@ impl Table {
 pub struct TableIndex {
   pub name: String,
   pub table_name: String,
+  pub database_schema: Option<String>,
   pub columns: Vec<ColumnOrder>,
   pub unique: bool,
   pub predicate: Option<String>,
@@ -579,6 +580,16 @@ pub struct TableIndex {
 }
 
 impl TableIndex {
+  /// Returns `{schema_name}.{table_name}` or just `{table_name}` depending on wheter self.database
+  /// is present.
+  pub fn fqn(&self) -> String {
+    if let Some(ref db) = self.database_schema {
+      return format!(r#""{db}"."{name}""#, name = self.name);
+    } else {
+      return format!(r#""{name}""#, name = self.name);
+    }
+  }
+
   pub fn create_index_statement(&self) -> String {
     let indexed_columns = self
       .columns
@@ -595,14 +606,14 @@ impl TableIndex {
       .join(", ");
 
     return format!(
-      "CREATE{unique} INDEX {if_not_exists} '{name}' ON '{table_name}' ({indexed_columns}) {predicate}",
+      "CREATE{unique} INDEX {if_not_exists} {fqn_name} ON '{table_name}' ({indexed_columns}) {predicate}",
       unique = if self.unique { " UNIQUE" } else { "" },
       if_not_exists = if self.if_not_exists {
         "IF NOT EXISTS"
       } else {
         ""
       },
-      name = self.name,
+      fqn_name = self.fqn(),
       table_name = self.table_name,
       predicate = self
         .predicate
@@ -615,7 +626,7 @@ impl TableIndex {
 #[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
 pub struct View {
   pub name: String,
-  pub database: Option<String>,
+  pub database_schema: Option<String>,
 
   /// Columns may be inferred from a view's query.
   ///
@@ -726,9 +737,9 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
           .collect();
 
         Ok(Table {
+          database_schema: unquote_db_name(&tbl_name),
           name: unquote_qualified(tbl_name),
           strict: options.contains(TableOptions::STRICT),
-          database: None,
           columns,
           foreign_keys,
           unique,
@@ -742,9 +753,9 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
         args: _args,
         ..
       } => Ok(Table {
+        database_schema: unquote_db_name(&tbl_name),
         name: unquote_qualified(tbl_name),
         strict: false,
-        database: None,
         columns: vec![],
         foreign_keys: vec![],
         unique: vec![],
@@ -836,6 +847,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for TableIndex {
         columns,
         where_clause,
       } => Ok(TableIndex {
+        database_schema: unquote_db_name(&idx_name),
         name: unquote_name(idx_name.name),
         table_name: unquote_name(tbl_name),
         columns: columns
@@ -873,6 +885,16 @@ impl std::fmt::Display for SelectFormatter {
 }
 
 impl View {
+  /// Returns `{schema_name}.{table_name}` or just `{table_name}` depending on wheter self.database
+  /// is present.
+  pub fn fqn(&self) -> String {
+    if let Some(ref db) = self.database_schema {
+      return format!(r#""{db}"."{name}""#, name = self.name);
+    } else {
+      return format!(r#""{name}""#, name = self.name);
+    }
+  }
+
   pub fn from(value: sqlite3_parser::ast::Stmt, tables: &[Table]) -> Result<Self, SchemaError> {
     return match value {
       sqlite3_parser::ast::Stmt::CreateView {
@@ -896,8 +918,8 @@ impl View {
         };
 
         Ok(View {
+          database_schema: unquote_db_name(&view_name),
           name: unquote_qualified(view_name),
-          database: None,
           columns,
           query: SelectFormatter(*select).to_string(),
           temporary,
@@ -1265,8 +1287,11 @@ fn unquote_name(name: Name) -> String {
 }
 
 fn unquote_qualified(name: QualifiedName) -> String {
-  // FIXME: unquoting of qualified name.
   return unquote_name(name.name);
+}
+
+fn unquote_db_name(name: &QualifiedName) -> Option<String> {
+  return name.db_name.clone().map(unquote_name);
 }
 
 fn unquote_id(id: sqlite3_parser::ast::Id) -> String {
@@ -1339,7 +1364,7 @@ mod tests {
     let sql = table.create_table_statement();
 
     assert_eq!(
-      "CREATE TABLE 'table' ('index' TEXT, 'delete' TEXT, 'create' TEXT) STRICT",
+      "CREATE TABLE \"table\" ('index' TEXT, 'delete' TEXT, 'create' TEXT) STRICT",
       sql
     );
     sqlite3_parse_into_statement(&sql).unwrap().unwrap();
@@ -1449,7 +1474,8 @@ mod tests {
 
   #[test]
   fn test_parse_create_index() {
-    let sql = "CREATE UNIQUE INDEX index_name ON 'table_name' (a ASC, b DESC) WHERE x > 0";
+    let sql =
+      r#"CREATE UNIQUE INDEX "main"."index_name" ON 'table_name' (a ASC, b DESC) WHERE x > 0"#;
     let stmt = sqlite3_parse_into_statement(sql).unwrap().unwrap();
     let index: TableIndex = stmt.try_into().unwrap();
 
@@ -1473,7 +1499,7 @@ mod tests {
       Table {
         name: "profiles".to_string(),
         strict: true,
-        database: None,
+        database_schema: None,
         columns: vec![
           Column {
             name: "user".to_string(),
@@ -1506,7 +1532,7 @@ mod tests {
       Table {
         name: "articles".to_string(),
         strict: true,
-        database: None,
+        database_schema: None,
         columns: vec![
           Column {
             name: "id".to_string(),

@@ -744,7 +744,7 @@ export function TablePane(props: {
     // fine grained, so accessing a nested object like store.pagination isn't
     // enough.
     tableName: store.selected.name,
-    database: store.selected.database,
+    database: store.selected.database_schema,
     filter: store.filter,
     pageSize: store.pagination.pageSize,
     pageIndex: store.pagination.pageIndex,

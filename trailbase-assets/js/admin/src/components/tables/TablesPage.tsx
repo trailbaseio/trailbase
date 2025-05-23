@@ -138,8 +138,8 @@ function TablePickerPane(props: {
           const selected = () => item.name === selectedTable()?.name;
 
           const name =
-            item.database !== null
-              ? `${item.database}.${item.name}`
+            item.database_schema !== null
+              ? `${item.database_schema}.${item.name}`
               : item.name;
 
           return (

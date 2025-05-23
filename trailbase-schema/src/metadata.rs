@@ -220,8 +220,8 @@ pub trait TableOrViewMetadata {
 
 impl TableOrViewMetadata for TableMetadata {
   fn fq_escaped_name(&self) -> String {
-    match self.schema.database {
-      Some(ref db) if db != "main" => format!("'{db}'.'{}'", self.schema.name),
+    match self.schema.database_schema {
+      Some(ref db) => format!("'{db}'.'{}'", self.schema.name),
       _ => format!("'{}'", self.schema.name),
     }
   }
@@ -242,8 +242,8 @@ impl TableOrViewMetadata for TableMetadata {
 
 impl TableOrViewMetadata for ViewMetadata {
   fn fq_escaped_name(&self) -> String {
-    match self.schema.database {
-      Some(ref db) if db != "main" => format!("'{db}'.'{}'", self.schema.name),
+    match self.schema.database_schema {
+      Some(ref db) => format!("'{db}'.'{}'", self.schema.name),
       _ => format!("'{}'", self.schema.name),
     }
   }

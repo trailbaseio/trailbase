@@ -76,7 +76,7 @@ impl RecordApiSchema {
 
     return Ok(Self {
       table_name: schema_metadata.schema.name.clone(),
-      database_schema: schema_metadata.schema.database.clone(),
+      database_schema: schema_metadata.schema.database_schema.clone(),
       is_table: true,
       record_pk_column,
       columns,
@@ -119,7 +119,7 @@ impl RecordApiSchema {
 
     return Ok(Self {
       table_name: view_metadata.schema.name.clone(),
-      database_schema: view_metadata.schema.database.clone(),
+      database_schema: view_metadata.schema.database_schema.clone(),
       is_table: false,
       record_pk_column,
       columns,

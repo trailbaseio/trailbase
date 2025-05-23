@@ -59,7 +59,7 @@ pub(crate) async fn delete_row(
   DeleteQueryBuilder::run(
     state,
     &schema_metadata.schema.name,
-    schema_metadata.schema.database.as_deref(),
+    schema_metadata.schema.database_schema.as_deref(),
     pk_col,
     simple_json_value_to_param(column.data_type, value)?,
     schema_metadata.json_metadata.has_file_columns(),
@@ -139,7 +139,7 @@ mod tests {
         schema: Table {
           name: table_name.clone(),
           strict: false,
-          database: None,
+          database_schema: None,
           columns: vec![
             Column {
               name: pk_col.clone(),

@@ -32,7 +32,7 @@ pub async fn alter_table_handler(
   if state.demo_mode() && request.source_schema.name.starts_with("_") {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
-  if request.source_schema.database != request.target_schema.database {
+  if request.source_schema.database_schema != request.target_schema.database_schema {
     return Err(Error::Precondition("Cannot move between databases".into()));
   }
 
@@ -158,7 +158,7 @@ mod tests {
       schema: Table {
         name: "foo".to_string(),
         strict: true,
-        database: None,
+        database_schema: None,
         columns: vec![Column {
           name: pk_col.clone(),
           data_type: ColumnDataType::Blob,
