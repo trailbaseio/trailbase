@@ -36,7 +36,6 @@ pub(crate) async fn insert_row(
   let rowid_value = InsertQueryBuilder::run(
     state,
     &schema_metadata.schema.name,
-    schema_metadata.schema.database_schema.as_deref(),
     None,
     "_rowid_",
     schema_metadata.json_metadata.has_file_columns(),

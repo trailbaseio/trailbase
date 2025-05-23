@@ -23,6 +23,7 @@ import {
 } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
 import { randomName } from "@/lib/name";
+import { prettyFormatQualifiedName } from "@/lib/schema";
 
 import type { ColumnOrder } from "@bindings/ColumnOrder";
 import type { Table } from "@bindings/Table";
@@ -87,8 +88,11 @@ export function CreateAlterIndexForm(props: {
     defaultValues:
       props.schema ??
       ({
-        name: `_${props.table.name}__${randomName()}_index`,
-        table_name: props.table.name,
+        name: {
+          name: `_${props.table.name.name}__${randomName()}_index`,
+          database_schema: props.table.name.database_schema,
+        },
+        table_name: props.table.name.name,
         columns: [newDefaultColumn(0)] as ColumnOrder[],
         unique: false,
         predicate: null,
@@ -106,8 +110,8 @@ export function CreateAlterIndexForm(props: {
     <SheetContainer>
       <SheetHeader>
         <SheetTitle>
-          {original() ? "Alter Index" : "Add New Index"} for "{props.table.name}
-          " Table
+          {original() ? "Alter Index" : "Add New Index"} for "
+          {prettyFormatQualifiedName(props.table.name)}" Table
         </SheetTitle>
       </SheetHeader>
 
@@ -120,7 +124,7 @@ export function CreateAlterIndexForm(props: {
       >
         <div class="flex flex-col items-start gap-4 pr-4">
           <form.Field
-            name="name"
+            name="name.name"
             validators={{
               onChange: ({ value }: { value: string | undefined }) => {
                 return value ? undefined : "Table name missing";

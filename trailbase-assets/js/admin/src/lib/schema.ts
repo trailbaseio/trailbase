@@ -3,6 +3,7 @@ import type { ColumnDataType } from "@bindings/ColumnDataType";
 import type { ColumnOption } from "@bindings/ColumnOption";
 import type { ConflictResolution } from "@bindings/ConflictResolution";
 import type { ReferentialAction } from "@bindings/ReferentialAction";
+import type { QualifiedName } from "@bindings/QualifiedName";
 import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
 
@@ -209,7 +210,7 @@ function columnsSatisfyRecordApiRequirements(
         }
 
         const foreign_table = all.find(
-          (t) => t.name === foreign_key.foreign_table,
+          (t) => t.name.name === foreign_key.foreign_table,
         );
         if (!foreign_table) {
           continue;
@@ -266,8 +267,8 @@ export function hiddenTable(table: Table | View): boolean {
   return hiddenName(table.name);
 }
 
-export function hiddenName(name: string): boolean {
-  return name.startsWith("_") || name.startsWith("sqlite_");
+function hiddenName(name: QualifiedName): boolean {
+  return name.name.startsWith("_") || name.name.startsWith("sqlite_");
 }
 
 export function isInt(type: ColumnDataType): boolean {
@@ -354,4 +355,34 @@ export function unescapeLiteralBlob(value: string): string | undefined {
     default:
       return value;
   }
+}
+
+export function prettyFormatQualifiedName(name: QualifiedName): string {
+  if (name.database_schema) {
+    return `${name.database_schema}.${name.name}`;
+  }
+  return name.name;
+}
+
+export function equalQualifiedNames(
+  a: QualifiedName,
+  b: QualifiedName,
+): boolean {
+  if (a.name === b.name) {
+    return (a.database_schema ?? "main") === (b.database_schema ?? "main");
+  }
+  return false;
+}
+
+export function compareQualifiedNames(
+  a: QualifiedName,
+  b: QualifiedName,
+): number {
+  const cmp = a.name.localeCompare(b.name);
+  if (cmp === 0) {
+    return (a.database_schema ?? "main").localeCompare(
+      b.database_schema ?? "main",
+    );
+  }
+  return cmp;
 }

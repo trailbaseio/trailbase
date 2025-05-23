@@ -27,7 +27,7 @@ pub async fn alter_index_handler(
   State(state): State<AppState>,
   Json(request): Json<AlterIndexRequest>,
 ) -> Result<Response, Error> {
-  if state.demo_mode() && request.source_schema.name.starts_with("_") {
+  if state.demo_mode() && request.source_schema.name.name.starts_with("_") {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 

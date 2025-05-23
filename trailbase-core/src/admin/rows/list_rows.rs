@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::sync::Arc;
 use trailbase_qs::{Cursor, Order, OrderPrecedent, Query};
+use trailbase_schema::QualifiedName;
 use trailbase_schema::sqlite::Column;
 use trailbase_sqlite::rows::rows_to_json_arrays;
 use ts_rs::TS;
@@ -60,7 +61,7 @@ pub async fn list_rows_handler(
       )));
     }
   };
-  let fq_escaped_name = table_or_view_metadata.fq_escaped_name();
+  let qualified_name = table_or_view_metadata.qualified_name();
 
   // Where clause contains column filters and cursor depending on what's present in the url query
   // string.
@@ -78,7 +79,7 @@ pub async fn list_rows_handler(
   let total_row_count: i64 = {
     let where_clause = &filter_where_clause.clause;
     let count_query =
-      format!("SELECT COUNT(*) FROM {fq_escaped_name} AS _ROW_ WHERE {where_clause}");
+      format!("SELECT COUNT(*) FROM {qualified_name} AS _ROW_ WHERE {where_clause}");
     state
       .conn()
       .read_query_row_f(count_query, filter_where_clause.params.clone(), |row| {
@@ -91,7 +92,7 @@ pub async fn list_rows_handler(
   let cursor_column = table_or_view_metadata.record_pk_column();
   let (rows, columns) = fetch_rows(
     state.conn(),
-    &fq_escaped_name,
+    qualified_name,
     filter_where_clause,
     &order,
     Pagination {
@@ -153,7 +154,7 @@ struct Pagination<'a> {
 
 async fn fetch_rows(
   conn: &trailbase_sqlite::Connection,
-  fq_escaped_name: &str,
+  qualified_name: &QualifiedName,
   filter_where_clause: WhereClause,
   order: &Option<Order>,
   pagination: Pagination<'_>,
@@ -204,7 +205,7 @@ async fn fetch_rows(
     r#"
       SELECT _ROW_.*
       FROM
-        (SELECT * FROM {fq_escaped_name}) as _ROW_
+        (SELECT * FROM {qualified_name}) as _ROW_
       WHERE
         {clause}
       ORDER BY
@@ -282,7 +283,10 @@ mod tests {
 
     let (data, cols) = fetch_rows(
       conn,
-      "'main'.'test_table'",
+      &QualifiedName {
+        name: "test_table".to_string(),
+        database_schema: Some("main".to_string()),
+      },
       WhereClause {
         clause: "TRUE".to_string(),
         params: vec![],

@@ -3,7 +3,7 @@ use itertools::Itertools;
 use log::*;
 use std::sync::Arc;
 use trailbase_schema::sqlite::{Column, ColumnOption};
-use trailbase_schema::{FileUpload, FileUploads};
+use trailbase_schema::{FileUpload, FileUploads, QualifiedName};
 use trailbase_sqlite::{NamedParams, Params as _, Value};
 
 use crate::AppState;
@@ -103,8 +103,7 @@ pub(crate) fn expand_tables<'a, 'b, T: AsRef<str>>(
 #[derive(Template)]
 #[template(escape = "none", path = "read_record_query_expanded.sql")]
 struct ReadRecordExpandedQueryTemplate<'a> {
-  table_name: &'a str,
-  database_schema: Option<&'a str>,
+  table_name: &'a QualifiedName,
   column_names: &'a [&'a str],
   pk_column_name: &'a str,
   expanded_tables: &'a [ExpandedTable],
@@ -113,8 +112,7 @@ struct ReadRecordExpandedQueryTemplate<'a> {
 #[derive(Template)]
 #[template(escape = "none", path = "read_record_query.sql")]
 struct ReadRecordQueryTemplate<'a> {
-  table_name: &'a str,
-  database_schema: Option<&'a str>,
+  table_name: &'a QualifiedName,
   column_names: &'a [&'a str],
   pk_column_name: &'a str,
 }
@@ -129,15 +127,13 @@ pub(crate) struct ExpandedSelectQueryResult {
 impl SelectQueryBuilder {
   pub(crate) async fn run(
     conn: &trailbase_sqlite::Connection,
-    table_name: &str,
-    database_schema: Option<&str>,
+    table_name: &QualifiedName,
     column_names: &[&str],
     pk_column: &str,
     pk_value: Value,
   ) -> Result<Option<trailbase_sqlite::Row>, RecordError> {
     let sql = ReadRecordQueryTemplate {
       table_name,
-      database_schema,
       column_names,
       pk_column_name: pk_column,
     }
@@ -149,8 +145,7 @@ impl SelectQueryBuilder {
 
   pub(crate) async fn run_expanded(
     conn: &trailbase_sqlite::Connection,
-    table_name: &str,
-    database_schema: Option<&str>,
+    table_name: &QualifiedName,
     column_names: &[&str],
     pk_column: &str,
     pk_value: Value,
@@ -158,7 +153,6 @@ impl SelectQueryBuilder {
   ) -> Result<Option<ExpandedSelectQueryResult>, RecordError> {
     let sql = ReadRecordExpandedQueryTemplate {
       table_name,
-      database_schema,
       column_names,
       pk_column_name: pk_column,
       expanded_tables,
@@ -192,7 +186,7 @@ pub(crate) struct GetFileQueryBuilder;
 impl GetFileQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
-    table_name: &str,
+    table_name: &QualifiedName,
     file_column: &Column,
     json_metadata: &JsonColumnMetadata,
     pk_column: &str,
@@ -205,7 +199,7 @@ impl GetFileQueryBuilder {
         let Some(row) = state
           .conn()
           .read_query_row(
-            format!(r#"SELECT "{column_name}" FROM "{table_name}" WHERE "{pk_column}" = $1"#),
+            format!(r#"SELECT "{column_name}" FROM {table_name} WHERE "{pk_column}" = $1"#),
             [pk_value],
           )
           .await?
@@ -227,7 +221,7 @@ pub(crate) struct GetFilesQueryBuilder;
 impl GetFilesQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
-    table_name: &str,
+    table_name: &QualifiedName,
     file_column: &Column,
     json_metadata: &JsonColumnMetadata,
     pk_column: &str,
@@ -240,7 +234,7 @@ impl GetFilesQueryBuilder {
         let Some(row) = state
           .conn()
           .read_query_row(
-            format!(r#"SELECT "{column_name}" FROM "{table_name}" WHERE "{pk_column}" = $1"#),
+            format!(r#"SELECT "{column_name}" FROM {table_name} WHERE "{pk_column}" = $1"#),
             [pk_value],
           )
           .await?
@@ -260,8 +254,7 @@ impl GetFilesQueryBuilder {
 #[derive(Template)]
 #[template(escape = "none", path = "create_record_query.sql")]
 struct CreateRecordQueryTemplate<'a> {
-  table_name: &'a str,
-  database_schema: Option<&'a str>,
+  table_name: &'a QualifiedName,
   conflict_clause: &'a str,
   column_names: &'a [String],
   returning: &'a [&'a str],
@@ -272,8 +265,7 @@ pub(crate) struct InsertQueryBuilder;
 impl InsertQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
-    table_name: &str,
-    database_schema: Option<&str>,
+    table_name: &QualifiedName,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: &str,
     has_file_columns: bool,
@@ -281,7 +273,6 @@ impl InsertQueryBuilder {
   ) -> Result<rusqlite::types::Value, QueryError> {
     let (query, named_params, files) = Self::build_insert_query(
       table_name,
-      database_schema,
       params,
       conflict_resolution,
       Some(return_column_name),
@@ -315,8 +306,7 @@ impl InsertQueryBuilder {
 
   pub(crate) async fn run_bulk(
     state: &AppState,
-    table_name: &str,
-    database_schema: Option<&str>,
+    table_name: &QualifiedName,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: &str,
     has_file_columns: bool,
@@ -328,7 +318,6 @@ impl InsertQueryBuilder {
     for params in params_list {
       let (query, named_params, mut files) = Self::build_insert_query(
         table_name,
-        database_schema,
         params,
         conflict_resolution,
         Some(return_column_name),
@@ -385,8 +374,7 @@ impl InsertQueryBuilder {
   }
 
   fn build_insert_query(
-    table_name: &str,
-    database_schema: Option<&str>,
+    table_name: &QualifiedName,
     params: Params,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: Option<&str>,
@@ -408,7 +396,6 @@ impl InsertQueryBuilder {
 
     let query = CreateRecordQueryTemplate {
       table_name,
-      database_schema,
       conflict_clause,
       column_names: &params.column_names,
       returning,
@@ -423,8 +410,7 @@ impl InsertQueryBuilder {
 #[derive(Template)]
 #[template(escape = "none", path = "update_record_query.sql")]
 struct UpdateRecordQueryTemplate<'a> {
-  table_name: &'a str,
-  database_schema: Option<&'a str>,
+  table_name: &'a QualifiedName,
   column_names: &'a [String],
   pk_column_name: &'a str,
   returning: Option<&'a str>,
@@ -435,8 +421,7 @@ pub(crate) struct UpdateQueryBuilder;
 impl UpdateQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
-    table_name: &str,
-    database_schema: Option<&str>,
+    table_name: &QualifiedName,
     pk_column: &str,
     has_file_columns: bool,
     mut params: Params,
@@ -458,7 +443,6 @@ impl UpdateQueryBuilder {
 
     let query = UpdateRecordQueryTemplate {
       table_name,
-      database_schema,
       column_names: &params.column_names,
       pk_column_name: pk_column,
       returning: Some("_rowid_"),
@@ -489,8 +473,7 @@ pub(crate) struct DeleteQueryBuilder;
 impl DeleteQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
-    table_name: &str,
-    database: Option<&str>,
+    table_name: &QualifiedName,
     pk_column: &str,
     pk_value: Value,
     has_file_columns: bool,
@@ -498,12 +481,7 @@ impl DeleteQueryBuilder {
     let rowid: i64 = state
       .conn()
       .query_row_f(
-        match database {
-          Some(db) if db != "main" => format!(
-            r#"DELETE FROM "{db}"."{table_name}" WHERE "{pk_column}" = $1 RETURNING _rowid_"#
-          ),
-          _ => format!(r#"DELETE FROM "{table_name}" WHERE "{pk_column}" = $1 RETURNING _rowid_"#),
-        },
+        format!(r#"DELETE FROM {table_name} WHERE "{pk_column}" = $1 RETURNING _rowid_"#),
         [pk_value],
         |row| row.get(0),
       )
@@ -521,7 +499,7 @@ impl DeleteQueryBuilder {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use trailbase_schema::sqlite::sqlite3_parse_into_statement;
+  use trailbase_schema::sqlite::{QualifiedName, sqlite3_parse_into_statement};
 
   fn sanitize_template(template: &str) {
     assert!(sqlite3_parse_into_statement(template).is_ok(), "{template}");
@@ -533,8 +511,7 @@ mod tests {
   fn test_create_record_template() {
     {
       let query = CreateRecordQueryTemplate {
-        table_name: "table",
-        database_schema: None,
+        table_name: &"table".into(),
         conflict_clause: "OR ABORT",
         column_names: &["index".to_string(), "trigger".to_string()],
         returning: &["index"],
@@ -547,8 +524,10 @@ mod tests {
 
     {
       let query = CreateRecordQueryTemplate {
-        table_name: "table",
-        database_schema: Some("db"),
+        table_name: &QualifiedName {
+          name: "table".to_string(),
+          database_schema: Some("db".to_string()),
+        },
         conflict_clause: "",
         column_names: &[],
         returning: &["*"],
@@ -561,8 +540,7 @@ mod tests {
 
     {
       let query = CreateRecordQueryTemplate {
-        table_name: "table",
-        database_schema: None,
+        table_name: &"table".into(),
         conflict_clause: "",
         column_names: &["index".to_string()],
         returning: &[],

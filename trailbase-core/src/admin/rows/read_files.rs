@@ -62,7 +62,7 @@ pub async fn read_files_handler(
   return if let Some(file_index) = request.file_index {
     let mut file_uploads = GetFilesQueryBuilder::run(
       &state,
-      &table_name,
+      &table_name.into(),
       file_col_metadata,
       file_col_json_metadata,
       &request.pk_column,
@@ -78,7 +78,7 @@ pub async fn read_files_handler(
   } else {
     let file_upload = GetFileQueryBuilder::run(
       &state,
-      &table_name,
+      &table_name.into(),
       file_col_metadata,
       file_col_json_metadata,
       &request.pk_column,

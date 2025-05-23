@@ -13,6 +13,7 @@ pub use trailbase_schema::metadata::{
 use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
 
 struct SchemaMetadataCacheState {
+  // TODO: These should be HashSets.
   tables: HashMap<String, Arc<TableMetadata>>,
   views: HashMap<String, Arc<ViewMetadata>>,
 }
@@ -47,9 +48,9 @@ impl SchemaMetadataCache {
       .cloned()
       .map(|t: Table| {
         (
-          match t.database_schema {
-            Some(ref db) if db != "main" => format!("{db}.{name}", name = t.name),
-            _ => t.name.clone(),
+          match t.name.database_schema {
+            Some(ref db) if db != "main" => format!("{db}.{name}", name = t.name.name),
+            _ => t.name.name.clone(),
           },
           Arc::new(TableMetadata::new(t, tables, USER_TABLE)),
         )
@@ -61,27 +62,32 @@ impl SchemaMetadataCache {
     for metadata in schema_metadata_map.values() {
       for idx in metadata.json_metadata.file_column_indexes() {
         let table_name = &metadata.schema.name;
-        let db = metadata.schema.database_schema.as_deref().unwrap_or("main");
+        let unqualified_name = &metadata.schema.name.name;
+        let db = metadata
+          .schema
+          .name
+          .database_schema
+          .as_deref()
+          .unwrap_or("main");
         let col = &metadata.schema.columns[*idx];
         let column_name = &col.name;
 
         conn.execute_batch(indoc::formatdoc!(
           r#"
-          DROP TRIGGER IF EXISTS {db}.__{table_name}__{column_name}__update_trigger;
-          CREATE TRIGGER IF NOT EXISTS {db}.__{table_name}__{column_name}__update_trigger AFTER UPDATE ON "{table_name}"
+          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger";
+          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger" AFTER UPDATE ON {table_name}
             WHEN OLD."{column_name}" IS NOT NULL AND OLD."{column_name}" != NEW."{column_name}"
             BEGIN
               INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
-                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+                ('{unqualified_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
             END;
 
-          DROP TRIGGER IF EXISTS {db}.__{table_name}__{column_name}__delete_trigger;
-          CREATE TRIGGER IF NOT EXISTS {db}.__{table_name}__{column_name}__delete_trigger AFTER DELETE ON "{table_name}"
-            --FOR EACH ROW
+          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger";
+          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger" AFTER DELETE ON {table_name}
             WHEN OLD."{column_name}" IS NOT NULL
             BEGIN
               INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
-                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+                ('{unqualified_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
             END;
           "#)).await?;
       }
@@ -102,9 +108,9 @@ impl SchemaMetadataCache {
       // }
 
       return Some((
-        match view.database_schema {
-          Some(ref db) if db != "main" => format!("{db}.{name}", name = view.name),
-          _ => view.name.clone(),
+        match view.name.database_schema {
+          Some(ref db) if db != "main" => format!("{db}.{name}", name = view.name.name),
+          _ => view.name.name.clone(),
         },
         Arc::new(ViewMetadata::new(view, tables)),
       ));
@@ -196,7 +202,7 @@ pub async fn lookup_and_parse_table_schema(
 
   let mut table: Table = stmt.try_into()?;
   if let Some(database) = database {
-    table.database_schema = Some(database.to_string());
+    table.name.database_schema = Some(database.to_string());
   }
   return Ok(table);
 }
@@ -226,7 +232,7 @@ pub async fn lookup_and_parse_all_table_schemas(
       };
       tables.push({
         let mut table: Table = stmt.try_into()?;
-        table.database_schema = Some(db.name.clone());
+        table.name.database_schema = Some(db.name.clone());
         table
       });
     }
@@ -269,7 +275,7 @@ pub async fn lookup_and_parse_all_view_schemas(
       let sql: String = row.get(0)?;
       views.push({
         let mut view: View = sqlite3_parse_view(&sql, tables)?;
-        view.database_schema = Some(db.name.clone());
+        view.name.database_schema = Some(db.name.clone());
         view
       });
     }

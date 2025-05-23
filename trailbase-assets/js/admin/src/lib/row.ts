@@ -1,6 +1,9 @@
 import { adminFetch } from "@/lib/fetch";
 import { buildListSearchParams } from "@/lib/list";
-import { findPrimaryKeyColumnIndex } from "@/lib/schema";
+import {
+  findPrimaryKeyColumnIndex,
+  prettyFormatQualifiedName,
+} from "@/lib/schema";
 import { preProcessRow, type FormRow } from "@/lib/convert";
 
 import type { Table } from "@bindings/Table";
@@ -8,6 +11,7 @@ import type { InsertRowRequest } from "@bindings/InsertRowRequest";
 import type { UpdateRowRequest } from "@bindings/UpdateRowRequest";
 import type { DeleteRowsRequest } from "@bindings/DeleteRowsRequest";
 import type { ListRowsResponse } from "@bindings/ListRowsResponse";
+import type { QualifiedName } from "@bindings/QualifiedName";
 
 export async function insertRow(table: Table, row: FormRow) {
   const processedRow = preProcessRow(table, row, false);
@@ -68,8 +72,7 @@ export async function deleteRows(
 }
 
 export type FetchArgs = {
-  tableName: string;
-  database: string | null;
+  tableName: QualifiedName;
   filter: string | null;
   pageSize: number;
   pageIndex: number;
@@ -89,10 +92,7 @@ export async function fetchRows(
   });
 
   try {
-    const path =
-      source.database !== null
-        ? `/table/${source.database}.${source.tableName}/rows?${params}`
-        : `/table/${source.tableName}/rows?${params}`;
+    const path = `/table/${prettyFormatQualifiedName(source.tableName)}/rows?${params}`;
 
     const response = await adminFetch(path);
     return (await response.json()) as ListRowsResponse;

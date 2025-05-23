@@ -11,3 +11,4 @@ pub mod sqlite;
 
 pub use error::Error;
 pub use file::{FileUpload, FileUploadInput, FileUploads};
+pub use sqlite::QualifiedName;

@@ -4,10 +4,11 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use sqlite3_parser::ast::{
   ColumnDefinition, CreateTableBody, DeferSubclause, Expr, ForeignKeyClause, FromClause,
-  IndexedColumn, Literal, Name, QualifiedName, SelectTable, Stmt, TableConstraint, TableOptions,
-  fmt::ToTokens,
+  IndexedColumn, Literal, Name, QualifiedName as AstQualifiedName, SelectTable, Stmt,
+  TableConstraint, TableOptions, fmt::ToTokens,
 };
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use thiserror::Error;
 use ts_rs::TS;
 
@@ -504,11 +505,74 @@ impl Column {
   }
 }
 
+#[derive(Clone, Default, Debug, Serialize, Deserialize, TS)]
+pub struct QualifiedName {
+  pub name: String,
+  pub database_schema: Option<String>,
+}
+
+impl PartialEq for QualifiedName {
+  fn eq(&self, other: &Self) -> bool {
+    return self.name == other.name
+      && self.database_schema.as_deref().unwrap_or("main")
+        == other.database_schema.as_deref().unwrap_or("main");
+  }
+}
+
+impl Eq for QualifiedName {}
+
+impl Hash for QualifiedName {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.name.hash(state);
+    self
+      .database_schema
+      .as_deref()
+      .unwrap_or("main")
+      .hash(state);
+  }
+}
+
+impl std::fmt::Display for QualifiedName {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    return if let Some(ref db) = self.database_schema {
+      write!(f, r#""{db}"."{}""#, self.name)
+    } else {
+      write!(f, r#""{}""#, self.name)
+    };
+  }
+}
+
+impl From<AstQualifiedName> for QualifiedName {
+  fn from(qn: AstQualifiedName) -> Self {
+    return Self {
+      database_schema: unquote_db_name(&qn),
+      name: unquote_qualified(qn),
+    };
+  }
+}
+
+impl From<String> for QualifiedName {
+  fn from(name: String) -> Self {
+    return Self {
+      name,
+      database_schema: None,
+    };
+  }
+}
+
+impl From<&str> for QualifiedName {
+  fn from(name: &str) -> Self {
+    return Self {
+      name: name.to_string(),
+      database_schema: None,
+    };
+  }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
 #[ts(export)]
 pub struct Table {
-  pub name: String,
-  pub database_schema: Option<String>,
+  pub name: QualifiedName,
   pub strict: bool,
 
   // Column definition and column-level constraints.
@@ -526,16 +590,6 @@ pub struct Table {
 }
 
 impl Table {
-  /// Returns `{schema_name}.{table_name}` or just `{table_name}` depending on wheter self.database
-  /// is present.
-  pub fn fqn(&self) -> String {
-    if let Some(ref db) = self.database_schema {
-      return format!(r#""{db}"."{name}""#, name = self.name);
-    } else {
-      return format!(r#""{name}""#, name = self.name);
-    }
-  }
-
   pub fn create_table_statement(&self) -> String {
     if self.virtual_table {
       // https://www.sqlite.org/lang_createvtab.html
@@ -558,7 +612,7 @@ impl Table {
     return format!(
       "CREATE{temporary} TABLE {fq_name} ({col_defs_and_constraints}){strict}",
       temporary = if self.temporary { " TEMPORARY" } else { "" },
-      fq_name = self.fqn(),
+      fq_name = self.name,
       col_defs_and_constraints = column_defs_and_table_constraints.join(", "),
       strict = if self.strict { " STRICT" } else { "" },
     );
@@ -567,9 +621,9 @@ impl Table {
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, TS, PartialEq)]
 pub struct TableIndex {
-  pub name: String,
+  pub name: QualifiedName,
+
   pub table_name: String,
-  pub database_schema: Option<String>,
   pub columns: Vec<ColumnOrder>,
   pub unique: bool,
   pub predicate: Option<String>,
@@ -580,16 +634,6 @@ pub struct TableIndex {
 }
 
 impl TableIndex {
-  /// Returns `{schema_name}.{table_name}` or just `{table_name}` depending on wheter self.database
-  /// is present.
-  pub fn fqn(&self) -> String {
-    if let Some(ref db) = self.database_schema {
-      return format!(r#""{db}"."{name}""#, name = self.name);
-    } else {
-      return format!(r#""{name}""#, name = self.name);
-    }
-  }
-
   pub fn create_index_statement(&self) -> String {
     let indexed_columns = self
       .columns
@@ -613,7 +657,7 @@ impl TableIndex {
       } else {
         ""
       },
-      fqn_name = self.fqn(),
+      fqn_name = self.name,
       table_name = self.table_name,
       predicate = self
         .predicate
@@ -625,8 +669,7 @@ impl TableIndex {
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
 pub struct View {
-  pub name: String,
-  pub database_schema: Option<String>,
+  pub name: QualifiedName,
 
   /// Columns may be inferred from a view's query.
   ///
@@ -737,8 +780,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
           .collect();
 
         Ok(Table {
-          database_schema: unquote_db_name(&tbl_name),
-          name: unquote_qualified(tbl_name),
+          name: tbl_name.into(),
           strict: options.contains(TableOptions::STRICT),
           columns,
           foreign_keys,
@@ -753,8 +795,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
         args: _args,
         ..
       } => Ok(Table {
-        database_schema: unquote_db_name(&tbl_name),
-        name: unquote_qualified(tbl_name),
+        name: tbl_name.into(),
         strict: false,
         columns: vec![],
         foreign_keys: vec![],
@@ -847,8 +888,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for TableIndex {
         columns,
         where_clause,
       } => Ok(TableIndex {
-        database_schema: unquote_db_name(&idx_name),
-        name: unquote_name(idx_name.name),
+        name: idx_name.into(),
         table_name: unquote_name(tbl_name),
         columns: columns
           .into_iter()
@@ -885,16 +925,6 @@ impl std::fmt::Display for SelectFormatter {
 }
 
 impl View {
-  /// Returns `{schema_name}.{table_name}` or just `{table_name}` depending on wheter self.database
-  /// is present.
-  pub fn fqn(&self) -> String {
-    if let Some(ref db) = self.database_schema {
-      return format!(r#""{db}"."{name}""#, name = self.name);
-    } else {
-      return format!(r#""{name}""#, name = self.name);
-    }
-  }
-
   pub fn from(value: sqlite3_parser::ast::Stmt, tables: &[Table]) -> Result<Self, SchemaError> {
     return match value {
       sqlite3_parser::ast::Stmt::CreateView {
@@ -918,8 +948,7 @@ impl View {
         };
 
         Ok(View {
-          database_schema: unquote_db_name(&view_name),
-          name: unquote_qualified(view_name),
+          name: view_name.into(),
           columns,
           query: SelectFormatter(*select).to_string(),
           temporary,
@@ -933,7 +962,10 @@ impl View {
   }
 }
 
-fn to_entry(qn: QualifiedName, alias: Option<sqlite3_parser::ast::As>) -> (String, String) {
+fn to_entry(
+  qn: AstQualifiedName,
+  alias: Option<sqlite3_parser::ast::As>,
+) -> (String, QualifiedName) {
   return (
     alias
       .and_then(|alias| {
@@ -943,14 +975,14 @@ fn to_entry(qn: QualifiedName, alias: Option<sqlite3_parser::ast::As>) -> (Strin
         None
       })
       .unwrap_or_else(|| qn.to_string()),
-    qn.to_string(),
+    qn.into(),
   );
 }
 
 #[derive(Clone, Debug)]
 #[allow(unused)]
 struct ReferredColumn {
-  table_name: String,
+  table_name: QualifiedName,
   column_name: String,
 }
 
@@ -1000,7 +1032,7 @@ fn try_extract_column_mapping(
   };
 
   // Use IndexMap to preserve insertion order.
-  let mut table_names = indexmap::IndexMap::<String, String>::from([to_entry(fqn, alias)]);
+  let mut table_names = indexmap::IndexMap::<String, QualifiedName>::from([to_entry(fqn, alias)]);
 
   if let Some(joins) = joins {
     for join in joins {
@@ -1014,7 +1046,8 @@ fn try_extract_column_mapping(
   }
 
   // Now we should have a map of all involved tables and their aliases (if any).
-  let all_tables: HashMap<String, &Table> = tables.iter().map(|t| (t.name.clone(), t)).collect();
+  let all_tables: HashMap<QualifiedName, &Table> =
+    tables.iter().map(|t| (t.name.clone(), t)).collect();
   let mut all_columns = HashMap::<String, (&Table, &Column)>::new();
 
   // Make sure we know all tables and all tables are strict.
@@ -1286,11 +1319,11 @@ fn unquote_name(name: Name) -> String {
   return unquote_string(name.0);
 }
 
-fn unquote_qualified(name: QualifiedName) -> String {
+fn unquote_qualified(name: AstQualifiedName) -> String {
   return unquote_name(name.name);
 }
 
-fn unquote_db_name(name: &QualifiedName) -> Option<String> {
+fn unquote_db_name(name: &AstQualifiedName) -> Option<String> {
   return name.db_name.clone().map(unquote_name);
 }
 
@@ -1347,9 +1380,13 @@ mod tests {
 
   #[test]
   fn test_create_table_statement_quoting() {
+    let table_name = QualifiedName {
+      name: "table".to_string(),
+      database_schema: None,
+    };
     let statement = format!(
       r#"
-      CREATE TABLE "table" (
+      CREATE TABLE {table_name} (
           'index'       TEXT,
           `delete`      TEXT,
           [create]      TEXT
@@ -1360,7 +1397,7 @@ mod tests {
     let parsed = sqlite3_parse_into_statement(&statement).unwrap().unwrap();
 
     let table: Table = parsed.try_into().unwrap();
-    assert_eq!(table.name, "table");
+    assert_eq!(table.name, table_name);
     let sql = table.create_table_statement();
 
     assert_eq!(
@@ -1488,7 +1525,7 @@ mod tests {
 
   #[test]
   fn test_view_column_extraction() {
-    let sql = "SELECT user, *, a.*, p.user AS foo FROM articles AS a LEFT JOIN profiles AS p ON p.user = a.author";
+    let sql = "SELECT user, *, a.*, p.user AS foo FROM foo.articles AS a LEFT JOIN bar.profiles AS p ON p.user = a.author";
     let sqlite3_parser::ast::Stmt::Select(select) =
       sqlite3_parse_into_statement(sql).unwrap().unwrap()
     else {
@@ -1497,9 +1534,11 @@ mod tests {
 
     let tables = vec![
       Table {
-        name: "profiles".to_string(),
+        name: QualifiedName {
+          name: "profiles".to_string(),
+          database_schema: Some("bar".to_string()),
+        },
         strict: true,
-        database_schema: None,
         columns: vec![
           Column {
             name: "user".to_string(),
@@ -1530,9 +1569,11 @@ mod tests {
         temporary: false,
       },
       Table {
-        name: "articles".to_string(),
+        name: QualifiedName {
+          name: "articles".to_string(),
+          database_schema: Some("foo".to_string()),
+        },
         strict: true,
-        database_schema: None,
         columns: vec![
           Column {
             name: "id".to_string(),
