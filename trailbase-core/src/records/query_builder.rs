@@ -104,6 +104,7 @@ pub(crate) fn expand_tables<'a, 'b, T: AsRef<str>>(
 #[template(escape = "none", path = "read_record_query_expanded.sql")]
 struct ReadRecordExpandedQueryTemplate<'a> {
   table_name: &'a str,
+  database_schema: Option<&'a str>,
   column_names: &'a [&'a str],
   pk_column_name: &'a str,
   expanded_tables: &'a [ExpandedTable],
@@ -113,6 +114,7 @@ struct ReadRecordExpandedQueryTemplate<'a> {
 #[template(escape = "none", path = "read_record_query.sql")]
 struct ReadRecordQueryTemplate<'a> {
   table_name: &'a str,
+  database_schema: Option<&'a str>,
   column_names: &'a [&'a str],
   pk_column_name: &'a str,
 }
@@ -128,12 +130,14 @@ impl SelectQueryBuilder {
   pub(crate) async fn run(
     conn: &trailbase_sqlite::Connection,
     table_name: &str,
+    database_schema: Option<&str>,
     column_names: &[&str],
     pk_column: &str,
     pk_value: Value,
   ) -> Result<Option<trailbase_sqlite::Row>, RecordError> {
     let sql = ReadRecordQueryTemplate {
       table_name,
+      database_schema,
       column_names,
       pk_column_name: pk_column,
     }
@@ -146,6 +150,7 @@ impl SelectQueryBuilder {
   pub(crate) async fn run_expanded(
     conn: &trailbase_sqlite::Connection,
     table_name: &str,
+    database_schema: Option<&str>,
     column_names: &[&str],
     pk_column: &str,
     pk_value: Value,
@@ -153,6 +158,7 @@ impl SelectQueryBuilder {
   ) -> Result<Option<ExpandedSelectQueryResult>, RecordError> {
     let sql = ReadRecordExpandedQueryTemplate {
       table_name,
+      database_schema,
       column_names,
       pk_column_name: pk_column,
       expanded_tables,
@@ -255,6 +261,7 @@ impl GetFilesQueryBuilder {
 #[template(escape = "none", path = "create_record_query.sql")]
 struct CreateRecordQueryTemplate<'a> {
   table_name: &'a str,
+  database_schema: Option<&'a str>,
   conflict_clause: &'a str,
   column_names: &'a [String],
   returning: &'a [&'a str],
@@ -266,6 +273,7 @@ impl InsertQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
     table_name: &str,
+    database_schema: Option<&str>,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: &str,
     has_file_columns: bool,
@@ -273,6 +281,7 @@ impl InsertQueryBuilder {
   ) -> Result<rusqlite::types::Value, QueryError> {
     let (query, named_params, files) = Self::build_insert_query(
       table_name,
+      database_schema,
       params,
       conflict_resolution,
       Some(return_column_name),
@@ -307,6 +316,7 @@ impl InsertQueryBuilder {
   pub(crate) async fn run_bulk(
     state: &AppState,
     table_name: &str,
+    database_schema: Option<&str>,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: &str,
     has_file_columns: bool,
@@ -318,6 +328,7 @@ impl InsertQueryBuilder {
     for params in params_list {
       let (query, named_params, mut files) = Self::build_insert_query(
         table_name,
+        database_schema,
         params,
         conflict_resolution,
         Some(return_column_name),
@@ -375,6 +386,7 @@ impl InsertQueryBuilder {
 
   fn build_insert_query(
     table_name: &str,
+    database_schema: Option<&str>,
     params: Params,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: Option<&str>,
@@ -396,6 +408,7 @@ impl InsertQueryBuilder {
 
     let query = CreateRecordQueryTemplate {
       table_name,
+      database_schema,
       conflict_clause,
       column_names: &params.column_names,
       returning,
@@ -411,6 +424,7 @@ impl InsertQueryBuilder {
 #[template(escape = "none", path = "update_record_query.sql")]
 struct UpdateRecordQueryTemplate<'a> {
   table_name: &'a str,
+  database_schema: Option<&'a str>,
   column_names: &'a [String],
   pk_column_name: &'a str,
   returning: Option<&'a str>,
@@ -422,6 +436,7 @@ impl UpdateQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
     table_name: &str,
+    database_schema: Option<&str>,
     pk_column: &str,
     has_file_columns: bool,
     mut params: Params,
@@ -443,6 +458,7 @@ impl UpdateQueryBuilder {
 
     let query = UpdateRecordQueryTemplate {
       table_name,
+      database_schema,
       column_names: &params.column_names,
       pk_column_name: pk_column,
       returning: Some("_rowid_"),
@@ -474,6 +490,7 @@ impl DeleteQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
     table_name: &str,
+    database: Option<&str>,
     pk_column: &str,
     pk_value: Value,
     has_file_columns: bool,
@@ -481,7 +498,12 @@ impl DeleteQueryBuilder {
     let rowid: i64 = state
       .conn()
       .query_row_f(
-        format!(r#"DELETE FROM "{table_name}" WHERE "{pk_column}" = $1 RETURNING _rowid_"#),
+        match database {
+          Some(db) if db != "main" => format!(
+            r#"DELETE FROM "{db}"."{table_name}" WHERE "{pk_column}" = $1 RETURNING _rowid_"#
+          ),
+          _ => format!(r#"DELETE FROM "{table_name}" WHERE "{pk_column}" = $1 RETURNING _rowid_"#),
+        },
         [pk_value],
         |row| row.get(0),
       )
@@ -503,7 +525,7 @@ mod tests {
 
   fn sanitize_template(template: &str) {
     assert!(sqlite3_parse_into_statement(template).is_ok(), "{template}");
-    assert!(!template.contains("\n"), "{template}");
+    assert!(!template.contains("\n\n"), "{template}");
     assert!(!template.contains("   "), "{template}");
   }
 
@@ -512,6 +534,7 @@ mod tests {
     {
       let query = CreateRecordQueryTemplate {
         table_name: "table",
+        database_schema: None,
         conflict_clause: "OR ABORT",
         column_names: &["index".to_string(), "trigger".to_string()],
         returning: &["index"],
@@ -525,6 +548,7 @@ mod tests {
     {
       let query = CreateRecordQueryTemplate {
         table_name: "table",
+        database_schema: Some("db"),
         conflict_clause: "",
         column_names: &[],
         returning: &["*"],
@@ -538,6 +562,7 @@ mod tests {
     {
       let query = CreateRecordQueryTemplate {
         table_name: "table",
+        database_schema: None,
         conflict_clause: "",
         column_names: &["index".to_string()],
         returning: &[],

@@ -34,6 +34,7 @@ pub struct ListResponse {
 #[template(escape = "none", path = "list_record_query.sql")]
 struct ListRecordQueryTemplate<'a> {
   table_name: &'a str,
+  database_schema: Option<&'a str>,
   column_names: &'a [&'a str],
   read_access_clause: &'a str,
   filter_clause: &'a str,
@@ -197,6 +198,7 @@ pub async fn list_records_handler(
   let column_names: Vec<_> = api.columns().iter().map(|c| c.name.as_str()).collect();
   let query = ListRecordQueryTemplate {
     table_name,
+    database_schema: api.database_schema(),
     column_names: &column_names,
     read_access_clause,
     filter_clause: &filter_clause,
@@ -340,6 +342,7 @@ mod tests {
     sanitize_template(
       &ListRecordQueryTemplate {
         table_name: "table",
+        database_schema: None,
         column_names: &["a", "index"],
         read_access_clause: "TRUE",
         filter_clause: "TRUE",
@@ -356,6 +359,7 @@ mod tests {
     sanitize_template(
       &ListRecordQueryTemplate {
         table_name: "table",
+        database_schema: Some("db"),
         column_names: &["a", "index"],
         read_access_clause: "_USER_.id IS NOT NULL",
         filter_clause: "a = 'value'",
@@ -413,6 +417,7 @@ mod tests {
 
     let query = ListRecordQueryTemplate {
       table_name: "table",
+      database_schema: Some("main"),
       column_names: &["tid", "drop", "index"],
       read_access_clause: "_USER_.id != X'F000'",
       filter_clause: "TRUE",

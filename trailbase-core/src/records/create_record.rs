@@ -155,6 +155,7 @@ pub async fn create_record_handler(
       let record_id = InsertQueryBuilder::run(
         &state,
         api.table_name(),
+        api.database_schema(),
         api.insert_conflict_resolution_strategy(),
         &pk_column.name,
         api.has_file_columns(),
@@ -169,6 +170,7 @@ pub async fn create_record_handler(
       let record_ids = InsertQueryBuilder::run_bulk(
         &state,
         api.table_name(),
+        api.database_schema(),
         api.insert_conflict_resolution_strategy(),
         &pk_column.name,
         api.has_file_columns(),

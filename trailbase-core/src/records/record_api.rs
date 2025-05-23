@@ -26,6 +26,7 @@ pub struct RecordApi {
 struct RecordApiSchema {
   /// Schema metadata
   table_name: String,
+  database_schema: Option<String>,
   is_table: bool,
   record_pk_column: (usize, Column),
   columns: Vec<Column>,
@@ -74,7 +75,8 @@ impl RecordApiSchema {
       .collect();
 
     return Ok(Self {
-      table_name: schema_metadata.name().to_string(),
+      table_name: schema_metadata.schema.name.clone(),
+      database_schema: schema_metadata.schema.database.clone(),
       is_table: true,
       record_pk_column,
       columns,
@@ -116,7 +118,8 @@ impl RecordApiSchema {
     );
 
     return Ok(Self {
-      table_name: view_metadata.name().to_string(),
+      table_name: view_metadata.schema.name.clone(),
+      database_schema: view_metadata.schema.database.clone(),
       is_table: false,
       record_pk_column,
       columns,
@@ -326,6 +329,11 @@ impl RecordApi {
   #[inline]
   pub fn table_name(&self) -> &str {
     return &self.state.schema.table_name;
+  }
+
+  #[inline]
+  pub fn database_schema(&self) -> Option<&str> {
+    return self.state.schema.database_schema.as_deref();
   }
 
   #[inline]

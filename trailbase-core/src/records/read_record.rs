@@ -78,6 +78,7 @@ pub async fn read_record_handler(
         SelectQueryBuilder::run_expanded(
           state.conn(),
           api.table_name(),
+          api.database_schema(),
           &column_names,
           &pk_column.name,
           record_id,
@@ -118,6 +119,7 @@ pub async fn read_record_handler(
       let Some(row) = SelectQueryBuilder::run(
         state.conn(),
         api.table_name(),
+        api.database_schema(),
         &column_names,
         &pk_column.name,
         record_id,

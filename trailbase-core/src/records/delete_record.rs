@@ -40,6 +40,7 @@ pub async fn delete_record_handler(
   DeleteQueryBuilder::run(
     &state,
     api.table_name(),
+    api.database_schema(),
     &pk_column.name,
     record_id,
     api.has_file_columns(),

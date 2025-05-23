@@ -1,4 +1,4 @@
-UPDATE "{{ table_name }}" SET
+UPDATE {% if let Some(db) = database_schema %}"{{ db }}".{% endif %}"{{ table_name }}" SET
 {%- for name in column_names -%}
   {%- if !loop.first %},{% endif %}"{{ name }}" = :{{ name }}
 {%- endfor %}

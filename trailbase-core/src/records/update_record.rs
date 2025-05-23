@@ -61,6 +61,7 @@ pub async fn update_record_handler(
   UpdateQueryBuilder::run(
     &state,
     api.table_name(),
+    api.database_schema(),
     &pk_column.name,
     api.has_file_columns(),
     lazy_params
