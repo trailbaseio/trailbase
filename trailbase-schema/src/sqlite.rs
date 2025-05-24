@@ -553,6 +553,12 @@ impl From<AstQualifiedName> for QualifiedName {
 
 impl From<String> for QualifiedName {
   fn from(name: String) -> Self {
+    if let Some((db, name)) = name.split_once('.') {
+      return Self {
+        name: name.to_string(),
+        database_schema: Some(db.to_string()),
+      };
+    }
     return Self {
       name,
       database_schema: None,
@@ -562,6 +568,12 @@ impl From<String> for QualifiedName {
 
 impl From<&str> for QualifiedName {
   fn from(name: &str) -> Self {
+    if let Some((db, name)) = name.split_once('.') {
+      return Self {
+        name: name.to_string(),
+        database_schema: Some(db.to_string()),
+      };
+    }
     return Self {
       name: name.to_string(),
       database_schema: None,

@@ -180,6 +180,14 @@ impl Borrow<QualifiedName> for TableMetadata {
   }
 }
 
+// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
+// use in HashSet.
+impl Borrow<QualifiedName> for Arc<TableMetadata> {
+  fn borrow(&self) -> &QualifiedName {
+    return &self.schema.name;
+  }
+}
+
 /// A data class describing a sqlite View and future, additional meta data useful for TrailBase.
 #[derive(Debug, Clone)]
 pub struct ViewMetadata {
@@ -260,6 +268,14 @@ impl Hash for ViewMetadata {
 // Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
 // use in HashSet.
 impl Borrow<QualifiedName> for ViewMetadata {
+  fn borrow(&self) -> &QualifiedName {
+    return &self.schema.name;
+  }
+}
+
+// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
+// use in HashSet.
+impl Borrow<QualifiedName> for Arc<ViewMetadata> {
   fn borrow(&self) -> &QualifiedName {
     return &self.schema.name;
   }
@@ -599,7 +615,7 @@ mod tests {
       Some(&table_metadata)
     );
 
-    // Test views:
+    // Test Arc<views>:
     let view_name = QualifiedName {
       name: "view_name".to_string(),
       database_schema: Some("main".to_string()),
@@ -607,9 +623,9 @@ mod tests {
     let view_sql = format!("CREATE VIEW {view_name} AS SELECT id FROM {table_name}");
     let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
     let table_view = View::from(create_view_statement, &[table.clone()]).unwrap();
-    let view_metadata = ViewMetadata::new(table_view, &[table.clone()]);
+    let view_metadata = Arc::new(ViewMetadata::new(table_view, &[table.clone()]));
 
-    let mut view_set = HashSet::<ViewMetadata>::new();
+    let mut view_set = HashSet::<Arc<ViewMetadata>>::new();
 
     assert!(view_set.insert(view_metadata.clone()));
     assert_eq!(view_set.get(&view_name), Some(&view_metadata));

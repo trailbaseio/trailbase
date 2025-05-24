@@ -44,6 +44,7 @@ pub(crate) struct ExpandedTable {
 
 pub(crate) fn expand_tables<'a, 'b, T: AsRef<str>>(
   schema_metadata: &SchemaMetadataCache,
+  database_schema: &Option<String>,
   root_column_by_name: impl Fn(&'a str) -> Option<&'b Column>,
   expand: &'a [T],
 ) -> Result<Vec<ExpandedTable>, RecordError> {
@@ -71,7 +72,10 @@ pub(crate) fn expand_tables<'a, 'b, T: AsRef<str>>(
       return Err(RecordError::Internal("not a foreign key".into()));
     };
 
-    let Some(foreign_table) = schema_metadata.get_table(foreign_table_name) else {
+    let Some(foreign_table) = schema_metadata.get_table(&QualifiedName {
+      name: foreign_table_name.clone(),
+      database_schema: database_schema.clone(),
+    }) else {
       return Err(RecordError::ApiRequiresTable);
     };
 

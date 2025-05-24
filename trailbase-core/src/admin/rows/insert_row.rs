@@ -1,6 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
+use trailbase_schema::QualifiedName;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -20,13 +21,13 @@ pub async fn insert_row_handler(
   Path(table_name): Path<String>,
   Json(request): Json<InsertRowRequest>,
 ) -> Result<(), Error> {
-  let _row_id = insert_row(&state, table_name, request.row).await?;
+  let _row_id = insert_row(&state, table_name.into(), request.row).await?;
   return Ok(());
 }
 
 pub(crate) async fn insert_row(
   state: &AppState,
-  table_name: String,
+  table_name: QualifiedName,
   json_row: JsonRow,
 ) -> Result<i64, Error> {
   let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {

@@ -5,6 +5,7 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use trailbase_schema::QualifiedName;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -30,7 +31,7 @@ pub async fn delete_row_handler(
 ) -> Result<Response, Error> {
   delete_row(
     &state,
-    &table_name,
+    &table_name.into(),
     &request.primary_key_column,
     request.value,
   )
@@ -40,11 +41,11 @@ pub async fn delete_row_handler(
 
 pub(crate) async fn delete_row(
   state: &AppState,
-  table_name: &str,
+  table_name: &QualifiedName,
   pk_col: &str,
   value: serde_json::Value,
 ) -> Result<(), Error> {
-  let Some(schema_metadata) = state.schema_metadata().get_table(table_name) else {
+  let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {
     return Err(Error::Precondition(format!("Table {table_name} not found")));
   };
 
@@ -89,6 +90,7 @@ pub async fn delete_rows_handler(
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
+  let table_name: QualifiedName = table_name.into();
   let DeleteRowsRequest {
     primary_key_column,
     values,
@@ -172,7 +174,7 @@ mod tests {
     let insert = async |value: &str| {
       let row_id = insert_row(
         &state,
-        table_name.clone(),
+        table_name.clone().into(),
         json_row_from_value(serde_json::json!({
           "col0": value,
         }))

@@ -40,7 +40,7 @@ pub async fn alter_table_handler(
   let source_table_name = source_schema.name.clone();
   let filename = format!("alter_table_{source_table_name}");
 
-  let Some(_metadata) = state.schema_metadata().get_table(&source_table_name.name) else {
+  let Some(_metadata) = state.schema_metadata().get_table(&source_table_name) else {
     return Err(Error::Precondition(format!(
       "Cannot alter '{source_table_name}'. Only tables are supported.",
     )));

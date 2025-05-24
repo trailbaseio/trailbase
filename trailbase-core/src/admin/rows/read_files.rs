@@ -3,6 +3,7 @@ use axum::{
   response::Response,
 };
 use serde::Deserialize;
+use trailbase_schema::QualifiedName;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -30,6 +31,7 @@ pub async fn read_files_handler(
   Path(table_name): Path<String>,
   Query(request): Query<ReadFilesRequest>,
 ) -> Result<Response, Error> {
+  let table_name: QualifiedName = table_name.into();
   let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {
     return Err(Error::Precondition(format!("Table {table_name} not found")));
   };
@@ -62,7 +64,7 @@ pub async fn read_files_handler(
   return if let Some(file_index) = request.file_index {
     let mut file_uploads = GetFilesQueryBuilder::run(
       &state,
-      &table_name.into(),
+      &table_name,
       file_col_metadata,
       file_col_json_metadata,
       &request.pk_column,
@@ -78,7 +80,7 @@ pub async fn read_files_handler(
   } else {
     let file_upload = GetFileQueryBuilder::run(
       &state,
-      &table_name.into(),
+      &table_name,
       file_col_metadata,
       file_col_json_metadata,
       &request.pk_column,

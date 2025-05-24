@@ -72,7 +72,7 @@ pub async fn list_users_handler(
       return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
     })?;
 
-  let Some(schema_metadata) = state.schema_metadata().get_table(USER_TABLE) else {
+  let Some(schema_metadata) = state.schema_metadata().get_table(&USER_TABLE.into()) else {
     return Err(Error::Precondition(format!("Table {USER_TABLE} not found")));
   };
   // Where clause contains column filters and cursor depending on what's present in the url query

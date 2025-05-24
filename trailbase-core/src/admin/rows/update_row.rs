@@ -1,6 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
+use trailbase_schema::QualifiedName;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -32,6 +33,7 @@ pub async fn update_row_handler(
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
+  let table_name: QualifiedName = table_name.into();
   let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {
     return Err(Error::Precondition(format!("Table {table_name} not found")));
   };

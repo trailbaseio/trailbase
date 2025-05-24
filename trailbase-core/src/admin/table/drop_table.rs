@@ -6,6 +6,7 @@ use axum::{
 };
 use log::*;
 use serde::Deserialize;
+use trailbase_schema::QualifiedName;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -23,10 +24,12 @@ pub async fn drop_table_handler(
   State(state): State<AppState>,
   Json(request): Json<DropTableRequest>,
 ) -> Result<Response, Error> {
-  let table_name = request.name.to_string();
-  if state.demo_mode() && table_name.starts_with("_") {
+  let unqualified_table_name = request.name.to_string();
+  if state.demo_mode() && unqualified_table_name.starts_with("_") {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
+
+  let table_name: QualifiedName = request.name.into();
 
   let entity_type: &str;
   if state.schema_metadata().get_table(&table_name).is_some() {
@@ -38,7 +41,10 @@ pub async fn drop_table_handler(
       "Table or view '{table_name}' not found"
     )));
   }
-  let filename = format!("drop_{}_{table_name}", entity_type.to_lowercase());
+  let filename = format!(
+    "drop_{}_{unqualified_table_name}",
+    entity_type.to_lowercase()
+  );
 
   let log = state
     .conn()
@@ -59,10 +65,9 @@ pub async fn drop_table_handler(
   let mut config = state.get_config();
   let old_config_hash = hash_config(&config);
 
-  let table_name = &request.name;
-  config.record_apis.retain(move |c| {
-    if let Some(ref table) = c.table_name {
-      return table != table_name;
+  config.record_apis.retain(|c| {
+    if let Some(ref name) = c.table_name {
+      return *name != unqualified_table_name;
     }
     return true;
   });

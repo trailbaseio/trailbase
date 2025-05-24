@@ -1,9 +1,11 @@
 use fallible_iterator::FallibleIterator;
 use log::*;
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 use thiserror::Error;
-use trailbase_schema::sqlite::{SchemaError, Table, View, sqlite3_parse_into_statement};
+use trailbase_schema::sqlite::{
+  QualifiedName, SchemaError, Table, View, sqlite3_parse_into_statement,
+};
 use trailbase_sqlite::params;
 
 pub use trailbase_schema::metadata::{
@@ -13,9 +15,8 @@ pub use trailbase_schema::metadata::{
 use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
 
 struct SchemaMetadataCacheState {
-  // TODO: These should be HashSets.
-  tables: HashMap<String, Arc<TableMetadata>>,
-  views: HashMap<String, Arc<ViewMetadata>>,
+  tables: HashSet<Arc<TableMetadata>>,
+  views: HashSet<Arc<ViewMetadata>>,
 }
 
 #[derive(Clone)]
@@ -42,24 +43,18 @@ impl SchemaMetadataCache {
   async fn build_tables(
     conn: &trailbase_sqlite::Connection,
     tables: &[Table],
-  ) -> Result<HashMap<String, Arc<TableMetadata>>, SchemaLookupError> {
-    let schema_metadata_map: HashMap<String, Arc<TableMetadata>> = tables
+  ) -> Result<HashSet<Arc<TableMetadata>>, SchemaLookupError> {
+    let schema_metadata_map: HashSet<Arc<TableMetadata>> = tables
       .iter()
       .cloned()
       .map(|t: Table| {
-        (
-          match t.name.database_schema {
-            Some(ref db) if db != "main" => format!("{db}.{name}", name = t.name.name),
-            _ => t.name.name.clone(),
-          },
-          Arc::new(TableMetadata::new(t, tables, USER_TABLE)),
-        )
+        return Arc::new(TableMetadata::new(t, tables, USER_TABLE));
       })
       .collect();
 
     // Install file column triggers. This ain't pretty, this might be better on construction and
     // schema changes.
-    for metadata in schema_metadata_map.values() {
+    for metadata in &schema_metadata_map {
       for idx in metadata.json_metadata.file_column_indexes() {
         let table_name = &metadata.schema.name;
         let unqualified_name = &metadata.schema.name.name;
@@ -99,7 +94,7 @@ impl SchemaMetadataCache {
   async fn build_views(
     conn: &trailbase_sqlite::Connection,
     tables: &[Table],
-  ) -> Result<HashMap<String, Arc<ViewMetadata>>, SchemaLookupError> {
+  ) -> Result<HashSet<Arc<ViewMetadata>>, SchemaLookupError> {
     let views = lookup_and_parse_all_view_schemas(conn, tables).await?;
     let build = |view: View| {
       // NOTE: we check during record API config validation that no temporary views are referenced.
@@ -107,24 +102,18 @@ impl SchemaMetadataCache {
       //   debug!("Temporary view: {}", view.name);
       // }
 
-      return Some((
-        match view.name.database_schema {
-          Some(ref db) if db != "main" => format!("{db}.{name}", name = view.name.name),
-          _ => view.name.name.clone(),
-        },
-        Arc::new(ViewMetadata::new(view, tables)),
-      ));
+      return Some(Arc::new(ViewMetadata::new(view, tables)));
     };
 
     return Ok(views.into_iter().filter_map(build).collect());
   }
 
-  pub fn get_table(&self, table_name: &str) -> Option<Arc<TableMetadata>> {
-    return self.state.read().tables.get(table_name).cloned();
+  pub fn get_table(&self, name: &QualifiedName) -> Option<Arc<TableMetadata>> {
+    return self.state.read().tables.get(name).cloned();
   }
 
-  pub fn get_view(&self, view_name: &str) -> Option<Arc<ViewMetadata>> {
-    self.state.read().views.get(view_name).cloned()
+  pub fn get_view(&self, name: &QualifiedName) -> Option<Arc<ViewMetadata>> {
+    self.state.read().views.get(name).cloned()
   }
 
   pub(crate) fn tables(&self) -> Vec<TableMetadata> {
@@ -132,7 +121,7 @@ impl SchemaMetadataCache {
       .state
       .read()
       .tables
-      .values()
+      .iter()
       .map(|t| (**t).clone())
       .collect();
   }
@@ -158,8 +147,8 @@ impl std::fmt::Debug for SchemaMetadataCache {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let state = self.state.read();
     f.debug_struct("SchemaMetadataCache")
-      .field("tables", &state.tables.keys())
-      .field("views", &state.views.keys())
+      .field("tables", &state.tables.iter().map(|t| &t.schema.name))
+      .field("views", &state.views.iter().map(|v| &v.schema.name))
       .finish()
   }
 }
@@ -288,6 +277,7 @@ pub async fn lookup_and_parse_all_view_schemas(
 mod tests {
   use axum::extract::{Json, Path, Query, RawQuery, State};
   use serde_json::json;
+  use trailbase_schema::QualifiedName;
   use trailbase_schema::json_schema::{Expand, JsonSchemaMode, build_json_schema_expanded};
 
   use crate::app_state::*;
@@ -309,7 +299,11 @@ mod tests {
       .await
       .unwrap();
 
-    let table_name = "test_table";
+    let table_name = QualifiedName {
+      name: "test_table".to_string(),
+      database_schema: None,
+    };
+
     conn
       .execute(
         format!(
@@ -329,7 +323,7 @@ mod tests {
       &state,
       RecordApiConfig {
         name: Some("test_table_api".to_string()),
-        table_name: Some(table_name.to_string()),
+        table_name: Some(table_name.name.clone()),
         acl_world: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
         expand: vec!["fk".to_string()],
         ..Default::default()
@@ -338,10 +332,10 @@ mod tests {
     .await
     .unwrap();
 
-    let test_schema_metadata = state.schema_metadata().get_table(table_name).unwrap();
+    let test_schema_metadata = state.schema_metadata().get_table(&table_name).unwrap();
 
     let (validator, schema) = build_json_schema_expanded(
-      table_name,
+      &table_name.name,
       &test_schema_metadata.schema.columns,
       JsonSchemaMode::Select,
       Some(Expand {
@@ -354,7 +348,7 @@ mod tests {
     assert_eq!(
       schema,
       json!({
-        "title": table_name,
+        "title": table_name.name,
         "type": "object",
         "properties": {
           "id": { "type": "integer" },

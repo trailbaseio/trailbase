@@ -182,6 +182,7 @@ pub async fn list_records_handler(
 
       expand_tables(
         state.schema_metadata(),
+        &api.table_name().database_schema,
         |column_name| {
           api
             .column_index_by_name(column_name)
@@ -402,9 +403,10 @@ mod tests {
       .unwrap();
 
     let schema_metadata = SchemaMetadataCache::new(conn.clone()).await.unwrap();
-    let table_metadata = schema_metadata.get_table("table").unwrap();
+    let table_metadata = schema_metadata.get_table(&"table".into()).unwrap();
     let expanded_tables = expand_tables(
       &schema_metadata,
+      &None,
       |column_name| table_metadata.column_by_name(column_name).map(|(_, c)| c),
       &["index"],
     )

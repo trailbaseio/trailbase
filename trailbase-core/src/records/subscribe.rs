@@ -494,7 +494,7 @@ impl SubscriptionManager {
 
           let state = ContinuationState {
             state: s.clone(),
-            schema_metadata: s.schema_metadata.get_table(table_name),
+            schema_metadata: s.schema_metadata.get_table(&qualified_table_name),
             action,
             table_name: qualified_table_name,
             rowid,
