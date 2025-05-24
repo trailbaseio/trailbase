@@ -713,7 +713,8 @@ fn build_read_delete_schema_query(
       FROM
         (SELECT :__user_id AS id) AS _USER_,
         (SELECT * FROM {table_name} WHERE "{pk_column_name}" = :__record_id) AS _ROW_
-    "#
+    "#,
+    table_name = table_name.escaped_string(),
   )
   .into();
 }
@@ -875,7 +876,7 @@ mod tests {
     {
       let query = UpdateRecordAccessQueryTemplate {
         update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = 'secret'"#,
-        table_name: &"table".into(),
+        table_name: &QualifiedName::parse("table"),
         pk_column_name: "index",
         column_names: vec![],
       }
@@ -888,7 +889,7 @@ mod tests {
     {
       let query = UpdateRecordAccessQueryTemplate {
         update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = _REQ_."index""#,
-        table_name: &"table".into(),
+        table_name: &QualifiedName::parse("table"),
         pk_column_name: "index",
         column_names: vec!["index"],
       }

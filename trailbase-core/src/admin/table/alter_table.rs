@@ -38,11 +38,15 @@ pub async fn alter_table_handler(
 
   let source_schema = request.source_schema;
   let source_table_name = source_schema.name.clone();
-  let filename = format!("alter_table_{source_table_name}");
+  let filename = if let Some(ref db) = source_table_name.database_schema {
+    format!("alter_table_{db}_{}", source_table_name.name)
+  } else {
+    format!("alter_table_{}", source_table_name.name)
+  };
 
   let Some(_metadata) = state.schema_metadata().get_table(&source_table_name) else {
     return Err(Error::Precondition(format!(
-      "Cannot alter '{source_table_name}'. Only tables are supported.",
+      "Cannot alter '{source_table_name:?}'. Only tables are supported.",
     )));
   };
 
@@ -107,15 +111,27 @@ pub async fn alter_table_handler(
               {source_table_name}
           "#,
             column_list = copy_columns.join(", "),
+            temp_table_name = temp_table_name.escaped_string(),
+            source_table_name = source_table_name.escaped_string(),
           ),
           (),
         )?;
 
-        tx.execute(&format!("DROP TABLE {source_table_name}"), ())?;
+        tx.execute(
+          &format!(
+            "DROP TABLE {source_table_name}",
+            source_table_name = source_table_name.escaped_string()
+          ),
+          (),
+        )?;
 
         if target_table_name != temp_table_name {
           tx.execute(
-            &format!("ALTER TABLE {temp_table_name} RENAME TO {target_table_name}"),
+            &format!(
+              "ALTER TABLE {temp_table_name} RENAME TO {target_table_name}",
+              temp_table_name = temp_table_name.escaped_string(),
+              target_table_name = target_table_name.escaped_string()
+            ),
             (),
           )?;
         }
@@ -159,7 +175,7 @@ mod tests {
 
     let create_table_request = CreateTableRequest {
       schema: Table {
-        name: "foo".into(),
+        name: QualifiedName::parse("foo"),
         strict: true,
         columns: vec![Column {
           name: pk_col.clone(),
@@ -236,7 +252,7 @@ mod tests {
       // Rename table and remove "new" column.
       let mut target_schema = create_table_request.schema.clone();
 
-      target_schema.name = "bar".into();
+      target_schema.name = QualifiedName::parse("bar");
 
       debug!("{}", target_schema.create_table_statement());
 

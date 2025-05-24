@@ -132,7 +132,7 @@ pub fn build_json_schema_expanded(
                 continue;
               }
             }) else {
-              warn!("Failed to find pk column for {}", table.name());
+              warn!("Failed to find pk column for {:?}", table.name());
               continue;
             };
 

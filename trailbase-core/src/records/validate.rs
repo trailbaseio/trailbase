@@ -38,7 +38,7 @@ pub(crate) fn validate_record_api_config(
   };
 
   let metadata: std::sync::Arc<dyn TableOrViewMetadata> = {
-    let table_name: QualifiedName = table_name.as_str().into();
+    let table_name = QualifiedName::parse(table_name);
     if let Some(metadata) = schemas.get_table(&table_name) {
       if metadata.schema.temporary {
         return ierr("Record APIs must not reference TEMPORARY tables");
@@ -121,7 +121,7 @@ pub(crate) fn validate_record_api_config(
       ));
     }
 
-    let Some(foreign_table) = schemas.get_table(&foreign_table_name.as_str().into()) else {
+    let Some(foreign_table) = schemas.get_table(&QualifiedName::parse(foreign_table_name)) else {
       return ierr(&format!(
         "{api_name} reference missing table: {foreign_table_name}"
       ));

@@ -511,6 +511,29 @@ pub struct QualifiedName {
   pub database_schema: Option<String>,
 }
 
+impl QualifiedName {
+  pub fn parse(name: &str) -> Self {
+    if let Some((db, name)) = name.split_once('.') {
+      return Self {
+        name: name.to_string(),
+        database_schema: Some(db.to_string()),
+      };
+    }
+    return Self {
+      name: name.to_string(),
+      database_schema: None,
+    };
+  }
+
+  pub fn escaped_string(&self) -> String {
+    return if let Some(ref db) = self.database_schema {
+      format!(r#""{db}"."{}""#, self.name)
+    } else {
+      format!(r#""{}""#, self.name)
+    };
+  }
+}
+
 impl PartialEq for QualifiedName {
   fn eq(&self, other: &Self) -> bool {
     return self.name == other.name
@@ -532,51 +555,11 @@ impl Hash for QualifiedName {
   }
 }
 
-impl std::fmt::Display for QualifiedName {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    return if let Some(ref db) = self.database_schema {
-      write!(f, r#""{db}"."{}""#, self.name)
-    } else {
-      write!(f, r#""{}""#, self.name)
-    };
-  }
-}
-
 impl From<AstQualifiedName> for QualifiedName {
   fn from(qn: AstQualifiedName) -> Self {
     return Self {
       database_schema: unquote_db_name(&qn),
       name: unquote_qualified(qn),
-    };
-  }
-}
-
-impl From<String> for QualifiedName {
-  fn from(name: String) -> Self {
-    if let Some((db, name)) = name.split_once('.') {
-      return Self {
-        name: name.to_string(),
-        database_schema: Some(db.to_string()),
-      };
-    }
-    return Self {
-      name,
-      database_schema: None,
-    };
-  }
-}
-
-impl From<&str> for QualifiedName {
-  fn from(name: &str) -> Self {
-    if let Some((db, name)) = name.split_once('.') {
-      return Self {
-        name: name.to_string(),
-        database_schema: Some(db.to_string()),
-      };
-    }
-    return Self {
-      name: name.to_string(),
-      database_schema: None,
     };
   }
 }
@@ -624,7 +607,7 @@ impl Table {
     return format!(
       "CREATE{temporary} TABLE {fq_name} ({col_defs_and_constraints}){strict}",
       temporary = if self.temporary { " TEMPORARY" } else { "" },
-      fq_name = self.name,
+      fq_name = self.name.escaped_string(),
       col_defs_and_constraints = column_defs_and_table_constraints.join(", "),
       strict = if self.strict { " STRICT" } else { "" },
     );
@@ -669,7 +652,7 @@ impl TableIndex {
       } else {
         ""
       },
-      fqn_name = self.name,
+      fqn_name = self.name.escaped_string(),
       table_name = self.table_name,
       predicate = self
         .predicate
@@ -1067,7 +1050,7 @@ fn try_extract_column_mapping(
     match all_tables.get(table_name) {
       Some(table) => {
         if !table.strict {
-          info!("Skipping view: referenced table: {table_name} not strict");
+          info!("Skipping view: referenced table: {table_name:?} not strict");
           return Ok(None);
         }
 
@@ -1077,7 +1060,7 @@ fn try_extract_column_mapping(
       }
       None => {
         return Err(SchemaError::Precondition(
-          format!("View's SELECT references missing table: {table_name}").into(),
+          format!("View's SELECT references missing table: {table_name:?}").into(),
         ));
       }
     };
@@ -1403,7 +1386,8 @@ mod tests {
           `delete`      TEXT,
           [create]      TEXT
       ) STRICT;
-      "#
+      "#,
+      table_name = table_name.escaped_string(),
     );
 
     let parsed = sqlite3_parse_into_statement(&statement).unwrap().unwrap();

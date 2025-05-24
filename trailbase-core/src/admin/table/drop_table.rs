@@ -29,7 +29,7 @@ pub async fn drop_table_handler(
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
-  let table_name: QualifiedName = request.name.into();
+  let table_name = QualifiedName::parse(&request.name);
 
   let entity_type: &str;
   if state.schema_metadata().get_table(&table_name).is_some() {
@@ -38,7 +38,7 @@ pub async fn drop_table_handler(
     entity_type = "VIEW";
   } else {
     return Err(Error::Precondition(format!(
-      "Table or view '{table_name}' not found"
+      "Table or view '{table_name:?}' not found"
     )));
   }
   let filename = format!(
@@ -51,7 +51,10 @@ pub async fn drop_table_handler(
     .call(move |conn| {
       let mut tx = TransactionRecorder::new(conn)?;
 
-      let query = format!("DROP {entity_type} IF EXISTS {table_name}");
+      let query = format!(
+        "DROP {entity_type} IF EXISTS {table_name}",
+        table_name = table_name.escaped_string()
+      );
       debug!("dropping table: {query}");
       tx.execute(&query, ())?;
 

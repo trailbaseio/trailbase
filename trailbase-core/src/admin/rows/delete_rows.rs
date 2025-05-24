@@ -31,7 +31,7 @@ pub async fn delete_row_handler(
 ) -> Result<Response, Error> {
   delete_row(
     &state,
-    &table_name.into(),
+    &QualifiedName::parse(&table_name),
     &request.primary_key_column,
     request.value,
   )
@@ -45,8 +45,10 @@ pub(crate) async fn delete_row(
   pk_col: &str,
   value: serde_json::Value,
 ) -> Result<(), Error> {
-  let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {
-    return Err(Error::Precondition(format!("Table {table_name} not found")));
+  let Some(schema_metadata) = state.schema_metadata().get_table(table_name) else {
+    return Err(Error::Precondition(format!(
+      "Table {table_name:?} not found"
+    )));
   };
 
   let Some((_index, column)) = schema_metadata.column_by_name(pk_col) else {
@@ -90,7 +92,7 @@ pub async fn delete_rows_handler(
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
-  let table_name: QualifiedName = table_name.into();
+  let table_name = QualifiedName::parse(&table_name);
   let DeleteRowsRequest {
     primary_key_column,
     values,
@@ -138,7 +140,7 @@ mod tests {
       State(state.clone()),
       Json(CreateTableRequest {
         schema: Table {
-          name: table_name.clone().into(),
+          name: QualifiedName::parse(&table_name),
           strict: false,
           columns: vec![
             Column {
@@ -174,7 +176,7 @@ mod tests {
     let insert = async |value: &str| {
       let row_id = insert_row(
         &state,
-        table_name.clone().into(),
+        QualifiedName::parse(&table_name),
         json_row_from_value(serde_json::json!({
           "col0": value,
         }))

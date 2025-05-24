@@ -84,7 +84,9 @@ impl SchemaMetadataCache {
               INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
                 ('{unqualified_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
             END;
-          "#)).await?;
+          "#,
+          table_name = table_name.escaped_string(),
+        )).await?;
       }
     }
 
@@ -310,7 +312,8 @@ mod tests {
           r#"CREATE TABLE {table_name} (
             id INTEGER PRIMARY KEY,
             fk INTEGER REFERENCES foreign_table(id)
-          ) STRICT"#
+          ) STRICT"#,
+          table_name = table_name.escaped_string(),
         ),
         (),
       )
@@ -382,7 +385,10 @@ mod tests {
 
     conn
       .execute(
-        format!("INSERT INTO {table_name} (id, fk) VALUES (1, 1);"),
+        format!(
+          "INSERT INTO {table_name} (id, fk) VALUES (1, 1);",
+          table_name = table_name.escaped_string(),
+        ),
         (),
       )
       .await

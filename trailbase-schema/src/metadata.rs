@@ -529,7 +529,8 @@ mod tests {
           col0                         TEXT NOT NULL DEFAULT '',
           col1                         BLOB NOT NULL,
           hidden                       INTEGER DEFAULT 42
-      ) STRICT;"#
+      ) STRICT;"#,
+      table_name = table_name.escaped_string(),
     );
 
     let create_table_statement = sqlite3_parse_into_statement(&table_sql).unwrap().unwrap();
@@ -550,8 +551,11 @@ mod tests {
     };
 
     {
-      let query = format!("SELECT col0, col1 FROM {table_name}");
-      let view_sql = format!("CREATE VIEW {view_name} AS {query}");
+      let query = format!("SELECT col0, col1 FROM {}", table_name.escaped_string());
+      let view_sql = format!(
+        "CREATE VIEW {view_name} AS {query}",
+        view_name = view_name.escaped_string()
+      );
       let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
 
       let table_view = View::from(create_view_statement, &[table.clone()]).unwrap();
@@ -576,8 +580,11 @@ mod tests {
     }
 
     {
-      let query = format!("SELECT id, col0, col1 FROM {table_name}");
-      let view_sql = format!("CREATE VIEW {view_name} AS {query}");
+      let query = format!("SELECT id, col0, col1 FROM {}", table_name.escaped_string());
+      let view_sql = format!(
+        "CREATE VIEW {view_name} AS {query}",
+        view_name = view_name.escaped_string()
+      );
       let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
 
       let table_view = View::from(create_view_statement, &[table.clone()]).unwrap();
@@ -601,7 +608,10 @@ mod tests {
       name: "table_name".to_string(),
       database_schema: Some("main".to_string()),
     };
-    let table_sql = format!("CREATE TABLE {table_name} (id INTEGER PRIMARY KEY) STRICT");
+    let table_sql = format!(
+      "CREATE TABLE {table_name} (id INTEGER PRIMARY KEY) STRICT",
+      table_name = table_name.escaped_string()
+    );
     let create_table_statement = sqlite3_parse_into_statement(&table_sql).unwrap().unwrap();
     let table: Table = create_table_statement.try_into().unwrap();
     let table_metadata = TableMetadata::new(table.clone(), &[table.clone()], "_user");
@@ -611,7 +621,7 @@ mod tests {
     assert!(table_set.insert(table_metadata.clone()));
     assert!(table_set.get(&table_name).is_some());
     assert_eq!(
-      table_set.get::<QualifiedName>(&"table_name".into()),
+      table_set.get(&QualifiedName::parse("table_name")),
       Some(&table_metadata)
     );
 
@@ -620,7 +630,11 @@ mod tests {
       name: "view_name".to_string(),
       database_schema: Some("main".to_string()),
     };
-    let view_sql = format!("CREATE VIEW {view_name} AS SELECT id FROM {table_name}");
+    let view_sql = format!(
+      "CREATE VIEW {view_name} AS SELECT id FROM {table_name}",
+      view_name = view_name.escaped_string(),
+      table_name = table_name.escaped_string()
+    );
     let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
     let table_view = View::from(create_view_statement, &[table.clone()]).unwrap();
     let view_metadata = Arc::new(ViewMetadata::new(table_view, &[table.clone()]));
@@ -630,7 +644,7 @@ mod tests {
     assert!(view_set.insert(view_metadata.clone()));
     assert_eq!(view_set.get(&view_name), Some(&view_metadata));
     assert_eq!(
-      view_set.get::<QualifiedName>(&"view_name".into()),
+      view_set.get(&QualifiedName::parse("view_name")),
       Some(&view_metadata)
     );
   }

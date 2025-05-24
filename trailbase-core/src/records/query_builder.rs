@@ -203,7 +203,10 @@ impl GetFileQueryBuilder {
         let Some(row) = state
           .conn()
           .read_query_row(
-            format!(r#"SELECT "{column_name}" FROM {table_name} WHERE "{pk_column}" = $1"#),
+            format!(
+              r#"SELECT "{column_name}" FROM {table} WHERE "{pk_column}" = $1"#,
+              table = table_name.escaped_string()
+            ),
             [pk_value],
           )
           .await?
@@ -238,7 +241,10 @@ impl GetFilesQueryBuilder {
         let Some(row) = state
           .conn()
           .read_query_row(
-            format!(r#"SELECT "{column_name}" FROM {table_name} WHERE "{pk_column}" = $1"#),
+            format!(
+              r#"SELECT "{column_name}" FROM {table} WHERE "{pk_column}" = $1"#,
+              table = table_name.escaped_string()
+            ),
             [pk_value],
           )
           .await?
@@ -485,7 +491,10 @@ impl DeleteQueryBuilder {
     let rowid: i64 = state
       .conn()
       .query_row_f(
-        format!(r#"DELETE FROM {table_name} WHERE "{pk_column}" = $1 RETURNING _rowid_"#),
+        format!(
+          r#"DELETE FROM {table} WHERE "{pk_column}" = $1 RETURNING _rowid_"#,
+          table = table_name.escaped_string()
+        ),
         [pk_value],
         |row| row.get(0),
       )
@@ -515,7 +524,7 @@ mod tests {
   fn test_create_record_template() {
     {
       let query = CreateRecordQueryTemplate {
-        table_name: &"table".into(),
+        table_name: &QualifiedName::parse("table"),
         conflict_clause: "OR ABORT",
         column_names: &["index".to_string(), "trigger".to_string()],
         returning: &["index"],
@@ -544,7 +553,7 @@ mod tests {
 
     {
       let query = CreateRecordQueryTemplate {
-        table_name: &"table".into(),
+        table_name: &QualifiedName::parse("table"),
         conflict_clause: "",
         column_names: &["index".to_string()],
         returning: &[],

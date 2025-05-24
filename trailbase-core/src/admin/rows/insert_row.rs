@@ -21,7 +21,7 @@ pub async fn insert_row_handler(
   Path(table_name): Path<String>,
   Json(request): Json<InsertRowRequest>,
 ) -> Result<(), Error> {
-  let _row_id = insert_row(&state, table_name.into(), request.row).await?;
+  let _row_id = insert_row(&state, QualifiedName::parse(&table_name), request.row).await?;
   return Ok(());
 }
 
@@ -31,7 +31,9 @@ pub(crate) async fn insert_row(
   json_row: JsonRow,
 ) -> Result<i64, Error> {
   let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {
-    return Err(Error::Precondition(format!("Table {table_name} not found")));
+    return Err(Error::Precondition(format!(
+      "Table {table_name:?} not found"
+    )));
   };
 
   let rowid_value = InsertQueryBuilder::run(

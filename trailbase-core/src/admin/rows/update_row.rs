@@ -33,9 +33,11 @@ pub async fn update_row_handler(
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
-  let table_name: QualifiedName = table_name.into();
+  let table_name = QualifiedName::parse(&table_name);
   let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {
-    return Err(Error::Precondition(format!("Table {table_name} not found")));
+    return Err(Error::Precondition(format!(
+      "Table {table_name:?} not found"
+    )));
   };
 
   let pk_col = &request.primary_key_column;

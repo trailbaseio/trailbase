@@ -341,7 +341,7 @@ mod tests {
   fn test_list_records_template() {
     sanitize_template(
       &ListRecordQueryTemplate {
-        table_name: &"table".into(),
+        table_name: &QualifiedName::parse("table"),
         column_names: &["a", "index"],
         read_access_clause: "TRUE",
         filter_clause: "TRUE",
@@ -403,7 +403,9 @@ mod tests {
       .unwrap();
 
     let schema_metadata = SchemaMetadataCache::new(conn.clone()).await.unwrap();
-    let table_metadata = schema_metadata.get_table(&"table".into()).unwrap();
+    let table_metadata = schema_metadata
+      .get_table(&QualifiedName::parse("table"))
+      .unwrap();
     let expanded_tables = expand_tables(
       &schema_metadata,
       &None,

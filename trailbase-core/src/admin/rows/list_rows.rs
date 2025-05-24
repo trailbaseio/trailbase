@@ -47,7 +47,7 @@ pub async fn list_rows_handler(
       return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
     })?;
 
-  let table_name: QualifiedName = table_name.into();
+  let table_name = QualifiedName::parse(&table_name);
   let (schema_metadata, table_or_view_metadata): (
     Option<Arc<TableMetadata>>,
     Arc<dyn TableOrViewMetadata + Sync + Send>,
@@ -58,7 +58,7 @@ pub async fn list_rows_handler(
       (None, view_metadata)
     } else {
       return Err(Error::Precondition(format!(
-        "Table or view '{table_name}' not found"
+        "Table or view '{table_name:?}' not found"
       )));
     }
   };
@@ -79,8 +79,10 @@ pub async fn list_rows_handler(
 
   let total_row_count: i64 = {
     let where_clause = &filter_where_clause.clause;
-    let count_query =
-      format!("SELECT COUNT(*) FROM {qualified_name} AS _ROW_ WHERE {where_clause}");
+    let count_query = format!(
+      "SELECT COUNT(*) FROM {table} AS _ROW_ WHERE {where_clause}",
+      table = qualified_name.escaped_string()
+    );
     state
       .conn()
       .read_query_row_f(count_query, filter_where_clause.params.clone(), |row| {
@@ -137,7 +139,7 @@ pub async fn list_rows_handler(
         if let Some(columns) = table_or_view_metadata.columns() {
           columns.to_vec()
         } else {
-          debug!("Falling back to inferred cols for view: '{table_name}'");
+          debug!("Falling back to inferred cols for view: {table_name:?}");
           columns
         }
       }
@@ -206,7 +208,7 @@ async fn fetch_rows(
     r#"
       SELECT _ROW_.*
       FROM
-        (SELECT * FROM {qualified_name}) as _ROW_
+        (SELECT * FROM {table}) as _ROW_
       WHERE
         {clause}
       ORDER BY
@@ -214,6 +216,7 @@ async fn fetch_rows(
       LIMIT :limit
       OFFSET :offset
     "#,
+    table = qualified_name.escaped_string()
   );
 
   let result_rows = conn
