@@ -5,7 +5,7 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
-use trailbase_schema::QualifiedName;
+use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -31,7 +31,7 @@ pub async fn delete_row_handler(
 ) -> Result<Response, Error> {
   delete_row(
     &state,
-    &QualifiedName::parse(&table_name),
+    &QualifiedName::parse(&table_name)?,
     &request.primary_key_column,
     request.value,
   )
@@ -61,7 +61,7 @@ pub(crate) async fn delete_row(
 
   DeleteQueryBuilder::run(
     state,
-    &schema_metadata.schema.name,
+    &QualifiedNameEscaped::from(&schema_metadata.schema.name),
     pk_col,
     simple_json_value_to_param(column.data_type, value)?,
     schema_metadata.json_metadata.has_file_columns(),
@@ -92,7 +92,7 @@ pub async fn delete_rows_handler(
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
-  let table_name = QualifiedName::parse(&table_name);
+  let table_name = QualifiedName::parse(&table_name)?;
   let DeleteRowsRequest {
     primary_key_column,
     values,
@@ -140,7 +140,7 @@ mod tests {
       State(state.clone()),
       Json(CreateTableRequest {
         schema: Table {
-          name: QualifiedName::parse(&table_name),
+          name: QualifiedName::parse(&table_name).unwrap(),
           strict: false,
           columns: vec![
             Column {
@@ -176,7 +176,7 @@ mod tests {
     let insert = async |value: &str| {
       let row_id = insert_row(
         &state,
-        QualifiedName::parse(&table_name),
+        QualifiedName::parse(&table_name).unwrap(),
         json_row_from_value(serde_json::json!({
           "col0": value,
         }))

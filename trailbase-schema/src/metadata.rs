@@ -621,7 +621,7 @@ mod tests {
     assert!(table_set.insert(table_metadata.clone()));
     assert!(table_set.get(&table_name).is_some());
     assert_eq!(
-      table_set.get(&QualifiedName::parse("table_name")),
+      table_set.get(&QualifiedName::parse("table_name").unwrap()),
       Some(&table_metadata)
     );
 
@@ -644,7 +644,7 @@ mod tests {
     assert!(view_set.insert(view_metadata.clone()));
     assert_eq!(view_set.get(&view_name), Some(&view_metadata));
     assert_eq!(
-      view_set.get(&QualifiedName::parse("view_name")),
+      view_set.get(&QualifiedName::parse("view_name").unwrap()),
       Some(&view_metadata)
     );
   }

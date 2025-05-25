@@ -35,6 +35,8 @@ pub enum ConfigError {
   IO(#[from] std::io::Error),
   #[error("Id error: {0}")]
   Id(#[from] uuid::Error),
+  #[error("Schema error: {0}")]
+  Schema(#[from] trailbase_schema::sqlite::SchemaError),
 }
 
 #[cfg(not(test))]

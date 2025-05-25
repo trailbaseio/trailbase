@@ -29,7 +29,7 @@ pub async fn drop_table_handler(
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
-  let table_name = QualifiedName::parse(&request.name);
+  let table_name = QualifiedName::parse(&request.name)?;
 
   let entity_type: &str;
   if state.schema_metadata().get_table(&table_name).is_some() {
@@ -41,10 +41,7 @@ pub async fn drop_table_handler(
       "Table or view '{table_name:?}' not found"
     )));
   }
-  let filename = format!(
-    "drop_{}_{unqualified_table_name}",
-    entity_type.to_lowercase()
-  );
+  let filename = table_name.migration_filename(&format!("drop_{}", entity_type.to_lowercase()));
 
   let log = state
     .conn()

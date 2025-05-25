@@ -64,6 +64,15 @@ impl SchemaMetadataCache {
           .database_schema
           .as_deref()
           .unwrap_or("main");
+
+        if db != "main" {
+          // FIXME: TRIGGERS are always database-local. Thus every database with tables
+          // with file columns would need its own _file_deletions table.
+          return Err(SchemaLookupError::Other(
+            "File columns not suppored on attached databases".into(),
+          ));
+        }
+
         let col = &metadata.schema.columns[*idx];
         let column_name = &col.name;
 
@@ -74,7 +83,7 @@ impl SchemaMetadataCache {
             WHEN OLD."{column_name}" IS NOT NULL AND OLD."{column_name}" != NEW."{column_name}"
             BEGIN
               INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
-                ('{unqualified_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
             END;
 
           DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger";
@@ -82,7 +91,7 @@ impl SchemaMetadataCache {
             WHEN OLD."{column_name}" IS NOT NULL
             BEGIN
               INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
-                ('{unqualified_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
             END;
           "#,
           table_name = table_name.escaped_string(),
@@ -167,6 +176,8 @@ pub enum SchemaLookupError {
   Missing,
   #[error("Sql parse error: {0}")]
   SqlParse(#[from] sqlite3_parser::lexer::sql::Error),
+  #[error("Other error: {0}")]
+  Other(Box<dyn std::error::Error + Send + Sync>),
 }
 
 pub async fn lookup_and_parse_table_schema(

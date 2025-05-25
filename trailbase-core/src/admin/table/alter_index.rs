@@ -34,11 +34,7 @@ pub async fn alter_index_handler(
   let source_schema = request.source_schema;
   let source_index_name = source_schema.name.clone();
   let target_schema = request.target_schema;
-  let filename = if let Some(ref db) = source_index_name.database_schema {
-    format!("alter_index_{db}_{}", source_index_name.name)
-  } else {
-    format!("alter_index_{}", source_index_name.name)
-  };
+  let filename = source_index_name.migration_filename("alter_index");
 
   debug!("Alter index:\nsource: {source_schema:?}\ntarget: {target_schema:?}",);
 

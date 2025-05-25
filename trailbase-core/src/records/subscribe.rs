@@ -526,10 +526,7 @@ impl SubscriptionManager {
       .state
       .conn
       .read_query_row_f(
-        format!(
-          r#"SELECT _rowid_ FROM {table} WHERE "{pk_column}" = $1"#,
-          table = table_name.escaped_string()
-        ),
+        format!(r#"SELECT _rowid_ FROM {table_name} WHERE "{pk_column}" = $1"#),
         [record],
         |row| row.get(0),
       )
@@ -544,7 +541,8 @@ impl SubscriptionManager {
     let empty = {
       let mut lock = self.state.record_subscriptions.write();
       let empty = lock.is_empty();
-      let m: &mut HashMap<i64, Vec<Subscription>> = lock.entry(table_name.clone()).or_default();
+      let m: &mut HashMap<i64, Vec<Subscription>> =
+        lock.entry(api.qualified_name().clone()).or_default();
 
       m.entry(row_id).or_default().push(Subscription {
         subscription_id,
@@ -569,7 +567,7 @@ impl SubscriptionManager {
         receiver: receiver.downgrade(),
         state: app_state,
         id: SubscriptionId {
-          table_name: table_name.clone(),
+          table_name: api.qualified_name().clone(),
           row_id: Some(row_id),
           sub_id: subscription_id,
         },
@@ -585,14 +583,13 @@ impl SubscriptionManager {
     user: Option<User>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
     let state = &self.state;
-    let table_name = api.table_name();
 
     let (sender, receiver) = async_channel::bounded::<Event>(16);
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let empty = {
       let mut lock = state.table_subscriptions.write();
       let empty = lock.is_empty() && state.record_subscriptions.read().is_empty();
-      let m: &mut Vec<Subscription> = lock.entry(table_name.clone()).or_default();
+      let m: &mut Vec<Subscription> = lock.entry(api.qualified_name().clone()).or_default();
 
       m.push(Subscription {
         subscription_id,
@@ -616,7 +613,7 @@ impl SubscriptionManager {
         receiver: receiver.downgrade(),
         state: app_state,
         id: SubscriptionId {
-          table_name: table_name.clone(),
+          table_name: api.qualified_name().clone(),
           row_id: None,
           sub_id: subscription_id,
         },

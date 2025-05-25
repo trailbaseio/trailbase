@@ -75,7 +75,7 @@ pub async fn list_users_handler(
 
   let Some(schema_metadata) = state
     .schema_metadata()
-    .get_table(&QualifiedName::parse(USER_TABLE))
+    .get_table(&QualifiedName::parse(USER_TABLE)?)
   else {
     return Err(Error::Precondition(format!("Table {USER_TABLE} not found")));
   };

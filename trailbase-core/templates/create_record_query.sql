@@ -1,4 +1,4 @@
-INSERT {{ conflict_clause }} INTO {{ table_name.escaped_string() }}
+INSERT {{ conflict_clause }} INTO {{ table_name }}
 {%- if column_names.is_empty() %} DEFAULT VALUES
 {%- else %} (
   {%- for name in column_names -%}

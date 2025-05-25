@@ -1,7 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
-use trailbase_schema::QualifiedName;
+use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -21,7 +21,7 @@ pub async fn insert_row_handler(
   Path(table_name): Path<String>,
   Json(request): Json<InsertRowRequest>,
 ) -> Result<(), Error> {
-  let _row_id = insert_row(&state, QualifiedName::parse(&table_name), request.row).await?;
+  let _row_id = insert_row(&state, QualifiedName::parse(&table_name)?, request.row).await?;
   return Ok(());
 }
 
@@ -38,7 +38,7 @@ pub(crate) async fn insert_row(
 
   let rowid_value = InsertQueryBuilder::run(
     state,
-    &schema_metadata.schema.name,
+    &QualifiedNameEscaped::new(&schema_metadata.schema.name),
     None,
     "_rowid_",
     schema_metadata.json_metadata.has_file_columns(),

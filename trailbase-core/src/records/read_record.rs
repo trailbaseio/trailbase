@@ -66,7 +66,7 @@ pub async fn read_record_handler(
 
       let expanded_tables = expand_tables(
         state.schema_metadata(),
-        &api.table_name().database_schema,
+        &api.qualified_name().database_schema,
         |column_name| {
           api
             .column_index_by_name(column_name)

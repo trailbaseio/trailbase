@@ -1,4 +1,4 @@
-UPDATE {{ table_name.escaped_string() }} SET
+UPDATE {{ table_name }} SET
 {%- for name in column_names -%}
   {%- if !loop.first %},{% endif %}"{{ name }}" = :{{ name }}
 {%- endfor %}

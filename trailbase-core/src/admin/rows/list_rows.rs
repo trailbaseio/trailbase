@@ -47,7 +47,7 @@ pub async fn list_rows_handler(
       return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
     })?;
 
-  let table_name = QualifiedName::parse(&table_name);
+  let table_name = QualifiedName::parse(&table_name)?;
   let (schema_metadata, table_or_view_metadata): (
     Option<Arc<TableMetadata>>,
     Arc<dyn TableOrViewMetadata + Sync + Send>,

@@ -512,17 +512,21 @@ pub struct QualifiedName {
 }
 
 impl QualifiedName {
-  pub fn parse(name: &str) -> Self {
-    if let Some((db, name)) = name.split_once('.') {
-      return Self {
-        name: name.to_string(),
-        database_schema: Some(db.to_string()),
-      };
+  pub fn parse(name: &str) -> Result<Self, SchemaError> {
+    if name.contains(';') {
+      return Err(SchemaError::Precondition("Invalid name".into()));
     }
-    return Self {
-      name: name.to_string(),
+
+    if let Some((db, name)) = name.split_once('.') {
+      return Ok(Self {
+        name: unquote_string(name.to_string()),
+        database_schema: Some(unquote_string(db.to_string())),
+      });
+    }
+    return Ok(Self {
+      name: unquote_string(name.to_string()),
       database_schema: None,
-    };
+    });
   }
 
   pub fn escaped_string(&self) -> String {
@@ -530,6 +534,14 @@ impl QualifiedName {
       format!(r#""{db}"."{}""#, self.name)
     } else {
       format!(r#""{}""#, self.name)
+    };
+  }
+
+  pub fn migration_filename(&self, prefix: &str) -> String {
+    return if let Some(ref db) = self.database_schema {
+      format!("{prefix}_{db}_{}", self.name)
+    } else {
+      format!("{prefix}_{}", self.name)
     };
   }
 }

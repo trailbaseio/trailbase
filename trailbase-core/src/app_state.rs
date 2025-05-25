@@ -467,7 +467,7 @@ fn build_record_api(
       "RecordApi misses table_name configuration: {config:?}"
     ));
   };
-  let table_name = QualifiedName::parse(table_name);
+  let table_name = QualifiedName::parse(table_name).map_err(|err| err.to_string())?;
 
   if let Some(schema_metadata) = schema_metadata_cache.get_table(&table_name) {
     return RecordApi::from_table(conn, &schema_metadata, config);

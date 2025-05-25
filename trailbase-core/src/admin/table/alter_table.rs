@@ -38,11 +38,7 @@ pub async fn alter_table_handler(
 
   let source_schema = request.source_schema;
   let source_table_name = source_schema.name.clone();
-  let filename = if let Some(ref db) = source_table_name.database_schema {
-    format!("alter_table_{db}_{}", source_table_name.name)
-  } else {
-    format!("alter_table_{}", source_table_name.name)
-  };
+  let filename = source_table_name.migration_filename("alter_table");
 
   let Some(_metadata) = state.schema_metadata().get_table(&source_table_name) else {
     return Err(Error::Precondition(format!(
@@ -175,7 +171,7 @@ mod tests {
 
     let create_table_request = CreateTableRequest {
       schema: Table {
-        name: QualifiedName::parse("foo"),
+        name: QualifiedName::parse("foo").unwrap(),
         strict: true,
         columns: vec![Column {
           name: pk_col.clone(),
@@ -252,7 +248,7 @@ mod tests {
       // Rename table and remove "new" column.
       let mut target_schema = create_table_request.schema.clone();
 
-      target_schema.name = QualifiedName::parse("bar");
+      target_schema.name = QualifiedName::parse("bar").unwrap();
 
       debug!("{}", target_schema.create_table_statement());
 

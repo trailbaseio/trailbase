@@ -26,11 +26,7 @@ pub async fn create_index_handler(
 ) -> Result<Json<CreateIndexResponse>, Error> {
   let dry_run = request.dry_run.unwrap_or(false);
   let index_name = request.schema.name.clone();
-  let filename = if let Some(ref db) = index_name.database_schema {
-    format!("create_index_{db}_{}", index_name.escaped_string())
-  } else {
-    format!("create_index_{}", index_name.escaped_string())
-  };
+  let filename = index_name.migration_filename("create_index");
 
   let create_index_query = request.schema.create_index_statement();
 

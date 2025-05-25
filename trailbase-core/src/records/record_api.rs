@@ -8,9 +8,8 @@ use trailbase_schema::metadata::{
   JsonColumnMetadata, TableMetadata, TableOrViewMetadata, ViewMetadata, find_file_column_indexes,
   find_user_id_foreign_key_columns,
 };
-use trailbase_schema::sqlite::{
-  Column, ColumnDataType, QualifiedName, sqlite3_parse_into_statement,
-};
+use trailbase_schema::sqlite::{Column, ColumnDataType, sqlite3_parse_into_statement};
+use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::{NamedParamRef, NamedParams, Params as _, Value};
 
 use crate::auth::user::User;
@@ -27,7 +26,8 @@ pub struct RecordApi {
 
 struct RecordApiSchema {
   /// Schema metadata
-  table_name: QualifiedName,
+  qualified_name: QualifiedName,
+  table_name: QualifiedNameEscaped,
 
   is_table: bool,
   record_pk_column: (usize, Column),
@@ -80,7 +80,8 @@ impl RecordApiSchema {
       .collect();
 
     return Ok(Self {
-      table_name: schema_metadata.schema.name.clone(),
+      qualified_name: schema_metadata.schema.name.clone(),
+      table_name: QualifiedNameEscaped::new(&schema_metadata.schema.name),
       is_table: true,
       record_pk_column,
       columns,
@@ -122,7 +123,8 @@ impl RecordApiSchema {
     );
 
     return Ok(Self {
-      table_name: view_metadata.schema.name.clone(),
+      qualified_name: view_metadata.schema.name.clone(),
+      table_name: QualifiedNameEscaped::new(&view_metadata.schema.name),
       is_table: false,
       record_pk_column,
       columns,
@@ -333,7 +335,12 @@ impl RecordApi {
   }
 
   #[inline]
-  pub fn table_name(&self) -> &QualifiedName {
+  pub fn qualified_name(&self) -> &QualifiedName {
+    return &self.state.schema.qualified_name;
+  }
+
+  #[inline]
+  pub fn table_name(&self) -> &QualifiedNameEscaped {
     return &self.state.schema.table_name;
   }
 
@@ -702,7 +709,7 @@ struct SubscriptionRecordReadTemplate<'a> {
 ///
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
 fn build_read_delete_schema_query(
-  table_name: &QualifiedName,
+  table_name: &QualifiedNameEscaped,
   pk_column_name: &str,
   access_rule: &str,
 ) -> Arc<str> {
@@ -714,7 +721,6 @@ fn build_read_delete_schema_query(
         (SELECT :__user_id AS id) AS _USER_,
         (SELECT * FROM {table_name} WHERE "{pk_column_name}" = :__record_id) AS _ROW_
     "#,
-    table_name = table_name.escaped_string(),
   )
   .into();
 }
@@ -758,7 +764,7 @@ fn build_create_access_query(
 )]
 struct UpdateRecordAccessQueryTemplate<'a> {
   update_access_rule: &'a str,
-  table_name: &'a QualifiedName,
+  table_name: &'a QualifiedNameEscaped,
   pk_column_name: &'a str,
   column_names: Vec<&'a str>,
 }
@@ -767,7 +773,7 @@ struct UpdateRecordAccessQueryTemplate<'a> {
 ///
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
 fn build_update_access_query(
-  table_name: &QualifiedName,
+  table_name: &QualifiedNameEscaped,
   columns: &[Column],
   pk_column_name: &str,
   update_access_rule: &str,
@@ -835,7 +841,7 @@ fn filter_columns(
 
 #[cfg(test)]
 mod tests {
-  use trailbase_schema::sqlite::sqlite3_parse_into_statement;
+  use trailbase_schema::sqlite::{QualifiedName, sqlite3_parse_into_statement};
 
   use super::*;
   use crate::{config::proto::PermissionFlag, records::Permission};
@@ -876,7 +882,7 @@ mod tests {
     {
       let query = UpdateRecordAccessQueryTemplate {
         update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = 'secret'"#,
-        table_name: &QualifiedName::parse("table"),
+        table_name: &QualifiedName::parse("table").unwrap().into(),
         pk_column_name: "index",
         column_names: vec![],
       }
@@ -889,7 +895,7 @@ mod tests {
     {
       let query = UpdateRecordAccessQueryTemplate {
         update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = _REQ_."index""#,
-        table_name: &QualifiedName::parse("table"),
+        table_name: &QualifiedName::parse("table").unwrap().into(),
         pk_column_name: "index",
         column_names: vec!["index"],
       }
