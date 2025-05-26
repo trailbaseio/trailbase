@@ -5,3 +5,5 @@ uploads/
 
 trailbase.d.ts
 trailbase.js
+
+*.mmdb
