@@ -4,8 +4,8 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use sqlite3_parser::ast::{
   ColumnDefinition, CreateTableBody, DeferSubclause, Expr, ForeignKeyClause, FromClause,
-  IndexedColumn, Literal, Name, QualifiedName as AstQualifiedName, SelectTable, Stmt,
-  TableConstraint, TableOptions, fmt::ToTokens,
+  IndexedColumn, Literal, Name, QualifiedName as AstQualifiedName, SelectTable, Stmt, TabFlags,
+  TableConstraint, fmt::ToTokens,
 };
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -519,12 +519,12 @@ impl QualifiedName {
 
     if let Some((db, name)) = name.split_once('.') {
       return Ok(Self {
-        name: unquote_string(name.to_string()),
-        database_schema: Some(unquote_string(db.to_string())),
+        name: unquote_string(name),
+        database_schema: Some(unquote_string(db)),
       });
     }
     return Ok(Self {
-      name: unquote_string(name.to_string()),
+      name: unquote_string(name),
       database_schema: None,
     });
   }
@@ -707,7 +707,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
         let CreateTableBody::ColumnsAndConstraints {
           columns,
           constraints,
-          options,
+          flags,
         } = body
         else {
           return Err(SchemaError::Precondition(
@@ -762,6 +762,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
               col_name,
               col_type,
               constraints,
+              flags: _,
             } = def;
             assert_eq!(name, col_name);
 
@@ -788,7 +789,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
 
         Ok(Table {
           name: tbl_name.into(),
-          strict: options.contains(TableOptions::STRICT),
+          strict: flags.contains(TabFlags::Strict),
           columns,
           foreign_keys,
           unique,
@@ -866,7 +867,7 @@ impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
       Constraint::Generated { expr, typ } => ColumnOption::Generated {
         // NOTE: This is not using unquote on purpose to avoid turning "AS ('')" into "AS ()".
         expr: expr.to_string(),
-        mode: typ.and_then(|t| match t.0.as_str() {
+        mode: typ.and_then(|t| match &*t.0 {
           "VIRTUAL" => Some(GeneratedExpressionMode::Virtual),
           "STORED" => Some(GeneratedExpressionMode::Stored),
           x => {
@@ -1012,11 +1013,12 @@ fn try_extract_column_mapping(
   }
 
   let sqlite3_parser::ast::OneSelect::Select {
-    distinctness,
     columns,
+    distinctness,
     from,
-    where_clause: _,
     group_by,
+    having: _,
+    where_clause: _,
     window_clause,
   } = body.select
   else {
@@ -1307,10 +1309,10 @@ pub(crate) fn quote(column_names: &[String]) -> String {
 }
 
 #[inline]
-fn unquote_string(s: String) -> String {
+fn unquote_string(s: &str) -> String {
   let n = s.as_bytes();
   if n.is_empty() {
-    return s;
+    return String::new();
   }
 
   return match n[0] {
@@ -1318,12 +1320,12 @@ fn unquote_string(s: String) -> String {
       assert!(n.len() >= 2, "string: {s}");
       s[1..n.len() - 1].to_string()
     }
-    _ => s,
+    _ => s.to_string(),
   };
 }
 
 fn unquote_name(name: Name) -> String {
-  return unquote_string(name.0);
+  return unquote_string(&name.0);
 }
 
 fn unquote_qualified(name: AstQualifiedName) -> String {
@@ -1335,14 +1337,14 @@ fn unquote_db_name(name: &AstQualifiedName) -> Option<String> {
 }
 
 fn unquote_id(id: sqlite3_parser::ast::Id) -> String {
-  return unquote_string(id.0);
+  return unquote_string(&id.0);
 }
 
 fn unquote_expr(expr: Expr) -> String {
   return match expr {
     Expr::Name(n) => unquote_name(n),
     Expr::Id(id) => unquote_id(id),
-    Expr::Literal(Literal::String(s)) => unquote_string(s),
+    Expr::Literal(Literal::String(s)) => unquote_string(&s),
     x => x.to_string(),
   };
 }
@@ -1380,9 +1382,9 @@ mod tests {
 
   #[test]
   fn test_unquote() {
-    assert_eq!(unquote_name(Name("".to_string())), "");
-    assert_eq!(unquote_name(Name("['``']".to_string())), "'``'");
-    assert_eq!(unquote_name(Name("\"[]\"".to_string())), "[]");
+    assert_eq!(unquote_name(Name("".into())), "");
+    assert_eq!(unquote_name(Name("['``']".into())), "'``'");
+    assert_eq!(unquote_name(Name("\"[]\"".into())), "[]");
   }
 
   #[test]

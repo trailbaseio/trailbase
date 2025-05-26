@@ -70,7 +70,7 @@ serde_path_to_error = "0.1.16"
 serde_urlencoded = "0.7.1"
 sha2 = "0.10.8"
 sqlformat = "0.3.1"
-sqlite3-parser = "0.14.0"
+sqlite3-parser = "0.15.0"
 thiserror = "2.0.1"
 tokio = { workspace = true }
 tokio-rustls = { version = "0.26.1", default-features = false }

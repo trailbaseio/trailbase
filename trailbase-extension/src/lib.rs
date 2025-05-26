@@ -78,7 +78,7 @@ pub fn connect_sqlite(
   // Load user-provided extensions.
   if let Some(extensions) = extensions {
     for path in extensions {
-      unsafe { conn.load_extension(path, None)? }
+      unsafe { conn.load_extension::<_, &str>(path, None)? }
     }
   }
 

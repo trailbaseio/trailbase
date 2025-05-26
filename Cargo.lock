@@ -389,9 +389,9 @@ dependencies = [
 
 [[package]]
 name = "async-io"
-version = "2.4.0"
+version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43a2b323ccce0a1d90b449fd71f2a06ca7faa7c54c2751f06c9bd851fc061059"
+checksum = "1237c0ae75a0f3765f58910ff9cdd0a12eeb39ab2f4c7de23262f337f0aacbb3"
 dependencies = [
  "async-lock",
  "cfg-if",
@@ -400,7 +400,7 @@ dependencies = [
  "futures-lite",
  "parking",
  "polling",
- "rustix 0.38.44",
+ "rustix 1.0.7",
  "slab",
  "tracing",
  "windows-sys 0.59.0",
@@ -2315,6 +2315,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ced92e76e966ca2fd84c8f7aa01a4aea65b0eb6648d72f7c8f3e2764a67fece"
 dependencies = [
  "crc32fast",
+ "libz-rs-sys",
  "miniz_oxide 0.8.8",
 ]
 
@@ -2712,9 +2713,9 @@ checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
 
 [[package]]
 name = "hermit-abi"
-version = "0.4.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbf6a919d6cf397374f7dfeeea91d974c7c0a7221d0d0f4f20d859d329e53fcc"
+checksum = "f154ce46856750ed433c8649605bf7ed2de3bc35fd9d2a9f30cddd873c80cb08"
 
 [[package]]
 name = "hex"
@@ -3401,14 +3402,23 @@ dependencies = [
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.33.0"
+version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "947e6816f7825b2b45027c2c32e7085da9934defa535de4a6a46b10a4d5257fa"
+checksum = "91632f3b4fb6bd1d72aa3d78f41ffecfcf2b1a6648d8c241dbe7dbfaf4875e15"
 dependencies = [
  "bindgen 0.71.1",
  "cc",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "libz-rs-sys"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6489ca9bd760fe9642d7644e827b0c9add07df89857b0416ee15c1cc1a3b8c5a"
+dependencies = [
+ "zlib-rs",
 ]
 
 [[package]]
@@ -4392,15 +4402,15 @@ dependencies = [
 
 [[package]]
 name = "polling"
-version = "3.7.4"
+version = "3.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a604568c3202727d1507653cb121dbd627a58684eb09a820fd746bee38b4442f"
+checksum = "b53a684391ad002dd6a596ceb6c74fd004fdce75f4be2e3f615068abbea5fd50"
 dependencies = [
  "cfg-if",
  "concurrent-queue",
- "hermit-abi 0.4.0",
+ "hermit-abi 0.5.1",
  "pin-project-lite",
- "rustix 0.38.44",
+ "rustix 1.0.7",
  "tracing",
  "windows-sys 0.59.0",
 ]
@@ -5032,9 +5042,9 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.35.0"
+version = "0.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a22715a5d6deef63c637207afbe68d0c72c3f8d0022d7cf9714c442d6157606b"
+checksum = "3de23c3319433716cf134eed225fe9986bc24f63bed9be9f20c329029e672dc7"
 dependencies = [
  "bitflags",
  "fallible-iterator",
@@ -5801,9 +5811,9 @@ dependencies = [
 
 [[package]]
 name = "sqlite3-parser"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3a9d9c3080a2da890fff8c0a8b764da31460877be04f7ef9a4894a09bfdffb8"
+checksum = "44b0cfa2d88bd3288931e1af41f1e8427199458c894bed44e579e0ffd6ceb74b"
 dependencies = [
  "bitflags",
  "cc",
@@ -7314,9 +7324,9 @@ dependencies = [
 
 [[package]]
 name = "utoipa-swagger-ui"
-version = "9.0.0"
+version = "9.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "161166ec520c50144922a625d8bc4925cc801b2dda958ab69878527c0e5c5d61"
+checksum = "d047458f1b5b65237c2f6dc6db136945667f40a7668627b3490b9513a3d43a55"
 dependencies = [
  "axum 0.8.4",
  "base64 0.22.1",
@@ -8145,20 +8155,23 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "2.4.2"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fabe6324e908f85a1c52063ce7aa26b68dcb7eb6dbc83a2d148403c9bc3eba50"
+checksum = "12598812502ed0105f607f941c386f43d441e00148fce9dec3ca5ffb0bde9308"
 dependencies = [
  "arbitrary",
  "crc32fast",
- "crossbeam-utils",
- "displaydoc",
  "flate2",
  "indexmap 2.9.0",
  "memchr",
- "thiserror 2.0.12",
  "zopfli",
 ]
+
+[[package]]
+name = "zlib-rs"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "868b928d7949e09af2f6086dfc1e01936064cc7a819253bce650d4e2a2d63ba8"
 
 [[package]]
 name = "zopfli"

@@ -272,11 +272,7 @@ fn build_job(
           return async move {
             conn
               .call(|conn| {
-                return Ok(conn.backup(
-                  rusqlite::DatabaseName::Main,
-                  backup_file,
-                  /* progress= */ None,
-                )?);
+                return Ok(conn.backup("main", backup_file, /* progress= */ None)?);
               })
               .await
               .map_err(|err| {

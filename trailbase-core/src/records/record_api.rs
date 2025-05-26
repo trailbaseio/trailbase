@@ -678,7 +678,7 @@ fn validate_expr_recursively(expr: &sqlite3_parser::ast::Expr) -> Result<(), Str
         ast::QualifiedName {
           name: ast::Name(name),
           ..
-        } if name == "_REQ_FIELDS_" => {
+        } if **name == *"_REQ_FIELDS_" => {
           if !matches!(**lhs, ast::Expr::Literal(ast::Literal::String(_))) {
             return Err(format!("Expected literal string: {lhs:?}"));
           }
