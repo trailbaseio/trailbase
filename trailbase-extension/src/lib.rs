@@ -4,8 +4,8 @@
 use rusqlite::functions::FunctionFlags;
 use std::path::PathBuf;
 
+pub mod geoip;
 pub mod jsonschema;
-pub mod maxminddb;
 pub mod password;
 
 mod regex;
@@ -193,8 +193,26 @@ pub fn sqlite3_extension_init(
   db.create_scalar_function(
     "geoip_country",
     1,
-    FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_INNOCUOUS,
-    maxminddb::geoip_country,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    geoip::geoip_country,
+  )?;
+  db.create_scalar_function(
+    "geoip_city_name",
+    1,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    geoip::geoip_city_name,
+  )?;
+  db.create_scalar_function(
+    "geoip_city_json",
+    1,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    geoip::geoip_city_json,
   )?;
 
   return Ok(db);

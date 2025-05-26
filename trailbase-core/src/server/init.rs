@@ -126,7 +126,7 @@ pub async fn init_app_state(
 
   // Init geoip if present.
   let geoip_db_path = data_dir.root().join("GeoLite2-Country.mmdb");
-  if let Err(err) = trailbase_extension::maxminddb::load_geoip_db(geoip_db_path.clone()) {
+  if let Err(err) = trailbase_extension::geoip::load_geoip_db(geoip_db_path.clone()) {
     debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
   }
 

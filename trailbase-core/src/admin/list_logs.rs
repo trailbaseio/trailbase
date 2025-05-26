@@ -31,6 +31,7 @@ pub struct LogJson {
   pub client_ip: String,
   /// Optional two-letter country code.
   pub client_cc: Option<String>,
+
   pub referer: String,
   pub user_agent: String,
   pub user_id: Option<String>,
@@ -344,20 +345,22 @@ async fn fetch_aggregate_stats(
     ));
   }
 
-  if trailbase_extension::maxminddb::has_geoip_db() {
-    let cc_query = format!(
-      r#"
-    SELECT
-      country_code,
-      SUM(cnt) as count
-    FROM
-      (SELECT client_ip, COUNT(*) AS cnt, geoip_country(client_ip) as country_code FROM {LOGS_TABLE_NAME} GROUP BY client_ip)
-    GROUP BY
-      country_code
-  "#
-    );
+  if trailbase_extension::geoip::has_geoip_db() {
+    lazy_static! {
+      static ref CC_QUERY: String = format!(
+        r#"
+          SELECT
+            country_code,
+            SUM(cnt) as count
+          FROM
+            (SELECT client_ip, COUNT(*) AS cnt, geoip_country(client_ip) as country_code FROM {LOGS_TABLE_NAME} GROUP BY client_ip)
+          GROUP BY
+            country_code
+        "#
+      );
+    }
 
-    let rows = conn.read_query_rows(cc_query, ()).await?;
+    let rows = conn.read_query_rows(CC_QUERY.as_str(), ()).await?;
 
     let mut country_codes = HashMap::<String, usize>::new();
     for row in rows.iter() {

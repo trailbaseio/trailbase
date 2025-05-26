@@ -6945,6 +6945,7 @@ dependencies = [
  "rand_core 0.6.4",
  "regex",
  "rusqlite",
+ "serde",
  "serde_json",
  "sqlite-vec",
  "thiserror 2.0.12",
