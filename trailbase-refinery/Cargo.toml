@@ -16,7 +16,7 @@ log = "0.4"
 regex = "1"
 rusqlite = { workspace = true }
 siphasher = "1.0"
-thiserror = "1"
+thiserror = "2"
 time = { version = "0.3.5", features = ["parsing", "formatting"] }
 tokio = { workspace = true }
 url = "2.0"
