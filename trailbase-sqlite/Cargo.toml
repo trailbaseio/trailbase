@@ -23,7 +23,7 @@ parking_lot = { version = "0.12.3", default-features = false }
 rusqlite = { workspace = true }
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "1.0.122"
-serde_rusqlite = { workspace = true }
+serde_rusqlite = "0.39"
 thiserror = "2.0.1"
 tokio = { workspace = true }
 

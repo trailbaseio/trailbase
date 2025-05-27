@@ -5558,12 +5558,12 @@ dependencies = [
 
 [[package]]
 name = "serde_rusqlite"
-version = "0.38.0"
+version = "0.39.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4edfce51dc48d6b4164d661bece122f1c5e6bf8bc56c305843911e76215f57c4"
 dependencies = [
  "rusqlite",
  "serde",
- "serde_bytes",
- "serde_derive",
 ]
 
 [[package]]
