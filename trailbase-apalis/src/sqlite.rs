@@ -63,8 +63,32 @@ impl<T, C> Clone for SqliteStorage<T, C> {
   }
 }
 
-mod main {
-  trailbase_refinery_macros::embed_migrations!("migrations");
+mod migrations {
+  use trailbase_refinery::{Migration, Runner};
+
+  #[derive(Clone, rust_embed::RustEmbed)]
+  #[folder = "migrations"]
+  struct Migrations;
+
+  fn load_migrations<T: rust_embed::RustEmbed>() -> Vec<Migration> {
+    let mut migrations = vec![];
+    for filename in T::iter() {
+      if let Some(file) = T::get(&filename) {
+        migrations.push(
+          Migration::unapplied(&filename, &String::from_utf8_lossy(&file.data)).expect("startup"),
+        )
+      }
+    }
+    return migrations;
+  }
+
+  pub(crate) fn migration_runner() -> Runner {
+    const MIGRATION_TABLE_NAME: &str = "_schema_history";
+    let migrations = load_migrations::<Migrations>();
+    let mut runner = trailbase_refinery::Runner::new(&migrations).set_abort_divergent(false);
+    runner.set_migration_table_name(MIGRATION_TABLE_NAME);
+    return runner;
+  }
 }
 
 impl SqliteStorage<()> {
@@ -81,7 +105,7 @@ impl SqliteStorage<()> {
       )
       .await?;
 
-    let runner = main::migrations::runner();
+    let runner = migrations::migration_runner();
 
     let _report = conn
       .call(move |conn| {

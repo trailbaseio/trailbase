@@ -28,7 +28,7 @@ async fn hello_world_handler(State(state): State<CustomState>, user: Option<User
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
   env_logger::init_from_env(
     env_logger::Env::new()
-      .default_filter_or("info,refinery_core=warn,tracing::span=warn,swc_ecma_codegen=off"),
+      .default_filter_or("info,trailbase_refinery=warn,tracing::span=warn,swc_ecma_codegen=off"),
   );
 
   let Server {

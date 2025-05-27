@@ -13,7 +13,7 @@ pub enum TransactionError {
   #[error("IO error: {0}")]
   IO(#[from] std::io::Error),
   #[error("Migration error: {0}")]
-  Migration(#[from] trailbase_refinery_core::Error),
+  Migration(#[from] trailbase_refinery::Error),
   #[error("File error: {0}")]
   File(String),
 }
@@ -35,7 +35,7 @@ impl TransactionLog {
     conn: &trailbase_sqlite::Connection,
     migration_path: impl AsRef<Path>,
     filename_suffix: &str,
-  ) -> Result<trailbase_refinery_core::Report, TransactionError> {
+  ) -> Result<trailbase_refinery::Report, TransactionError> {
     let filename = migrations::new_unique_migration_filename(filename_suffix);
     let stem = Path::new(&filename)
       .file_stem()
@@ -68,7 +68,7 @@ impl TransactionLog {
       )
     };
 
-    let migrations = vec![trailbase_refinery_core::Migration::unapplied(&stem, &sql)?];
+    let migrations = vec![trailbase_refinery::Migration::unapplied(&stem, &sql)?];
     let runner = migrations::new_migration_runner(&migrations).set_abort_missing(false);
 
     let report = conn

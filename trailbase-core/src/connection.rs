@@ -17,7 +17,7 @@ pub enum ConnectionError {
   #[error("TB SQLite error: {0}")]
   TbSqlite(#[from] trailbase_sqlite::Error),
   #[error("Migration error: {0}")]
-  Migration(#[from] trailbase_refinery_core::Error),
+  Migration(#[from] trailbase_refinery::Error),
 }
 
 /// Initializes a new SQLite Connection with all the default extensions, migrations and settings

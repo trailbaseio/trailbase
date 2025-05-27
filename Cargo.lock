@@ -6821,6 +6821,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rusqlite",
+ "rust-embed",
  "schemars",
  "serde",
  "serde_json",
@@ -6845,8 +6846,7 @@ dependencies = [
  "trailbase-extension",
  "trailbase-js",
  "trailbase-qs",
- "trailbase-refinery-core",
- "trailbase-refinery-macros",
+ "trailbase-refinery",
  "trailbase-schema",
  "trailbase-sqlite",
  "ts-rs",
@@ -6871,13 +6871,12 @@ dependencies = [
  "log",
  "once_cell",
  "rusqlite",
+ "rust-embed",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
  "tokio",
- "trailbase-apalis",
- "trailbase-refinery-core",
- "trailbase-refinery-macros",
+ "trailbase-refinery",
  "trailbase-sqlite",
 ]
 
@@ -6997,31 +6996,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "trailbase-refinery-core"
-version = "0.8.16"
+name = "trailbase-refinery"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "cfg-if",
+ "futures",
  "log",
  "regex",
  "rusqlite",
  "siphasher 1.0.1",
+ "tempfile",
  "thiserror 1.0.69",
  "time",
+ "tokio",
  "url",
  "walkdir",
-]
-
-[[package]]
-name = "trailbase-refinery-macros"
-version = "0.8.15"
-dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "regex",
- "syn 2.0.101",
- "trailbase-refinery-core",
 ]
 
 [[package]]

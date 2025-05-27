@@ -28,7 +28,7 @@ use crate::extract::Either;
 #[tokio::test]
 async fn test_auth_registration_reset_and_change_email() {
   let _ = env_logger::try_init_from_env(
-    env_logger::Env::new().default_filter_or("info,refinery_core=warn"),
+    env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn"),
   );
 
   let mailer = TestAsyncSmtpTransport::new();

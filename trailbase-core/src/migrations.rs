@@ -2,14 +2,7 @@ use lazy_static::lazy_static;
 use log::*;
 use parking_lot::Mutex;
 use std::path::PathBuf;
-use trailbase_refinery_core::Migration;
-
-mod main {
-  trailbase_refinery_macros::embed_migrations!("migrations/main");
-}
-mod logs {
-  trailbase_refinery_macros::embed_migrations!("migrations/logs");
-}
+use trailbase_refinery::Migration;
 
 const MIGRATION_TABLE_NAME: &str = "_schema_history";
 
@@ -35,29 +28,41 @@ pub fn new_unique_migration_filename(suffix: &str) -> String {
   return format!("U{timestamp}__{suffix}.sql");
 }
 
-pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refinery_core::Runner {
+pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refinery::Runner {
   // NOTE: divergent migrations are migrations with the same version but a different name. That
   // said, `set_abort_divergent` is not a viable way for us to handle collisions (e.g. in tests),
   // since setting it to false, will prevent the migration from failing but divergent migrations
   // are quietly dropped on the floor and not applied. That's not ok.
-  let mut runner = trailbase_refinery_core::Runner::new(migrations).set_abort_divergent(false);
+  let mut runner = trailbase_refinery::Runner::new(migrations).set_abort_divergent(false);
   runner.set_migration_table_name(MIGRATION_TABLE_NAME);
   return runner;
+}
+
+fn load_migrations<T: rust_embed::RustEmbed>() -> Vec<Migration> {
+  let mut migrations = vec![];
+  for filename in T::iter() {
+    if let Some(file) = T::get(&filename) {
+      migrations.push(
+        Migration::unapplied(&filename, &String::from_utf8_lossy(&file.data)).expect("startup"),
+      )
+    }
+  }
+  return migrations;
 }
 
 pub(crate) fn apply_main_migrations(
   conn: &mut rusqlite::Connection,
   user_migrations_path: Option<PathBuf>,
-) -> Result<bool, trailbase_refinery_core::Error> {
+) -> Result<bool, trailbase_refinery::Error> {
   let all_migrations = {
     let mut migrations: Vec<Migration> = vec![];
 
-    let system_migrations_runner = main::migrations::runner();
-    migrations.extend(system_migrations_runner.get_migrations().iter().cloned());
+    let system_migrations_runner: Vec<Migration> = load_migrations::<MainMigrations>();
+    migrations.extend(system_migrations_runner);
 
     if let Some(path) = user_migrations_path {
       // NOTE: refinery has a bug where it will name-check the directory and write a warning... :/.
-      let user_migrations = trailbase_refinery_core::load_sql_migrations(path)?;
+      let user_migrations = trailbase_refinery::load_sql_migrations(path)?;
       migrations.extend(user_migrations);
     }
 
@@ -92,8 +97,10 @@ pub(crate) fn apply_main_migrations(
 
 pub(crate) fn apply_logs_migrations(
   logs_conn: &mut rusqlite::Connection,
-) -> Result<(), trailbase_refinery_core::Error> {
-  let mut runner = logs::migrations::runner();
+) -> Result<(), trailbase_refinery::Error> {
+  let migrations = load_migrations::<LogsMigrations>();
+
+  let mut runner = new_migration_runner(&migrations);
   runner.set_migration_table_name(MIGRATION_TABLE_NAME);
 
   let report = runner.run(logs_conn).map_err(|err| {
@@ -109,3 +116,11 @@ pub(crate) fn apply_logs_migrations(
 
   return Ok(());
 }
+
+#[derive(Clone, rust_embed::RustEmbed)]
+#[folder = "migrations/main"]
+struct MainMigrations;
+
+#[derive(Clone, rust_embed::RustEmbed)]
+#[folder = "migrations/logs"]
+struct LogsMigrations;
