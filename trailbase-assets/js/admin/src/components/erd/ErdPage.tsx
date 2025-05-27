@@ -1,5 +1,6 @@
 import { Switch, Match, createMemo } from "solid-js";
 import { createTableSchemaQuery } from "@/lib/table";
+import { prettyFormatQualifiedName } from "@/lib/schema";
 
 import { Header } from "@/components/Header";
 import {
@@ -25,10 +26,26 @@ import {
 import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
+import { QualifiedName } from "@bindings/QualifiedName";
+
+function namesMatch(a: QualifiedName, b: QualifiedName): boolean {
+  if (a.name === b.name) {
+    return (a.database_schema ?? "main") === (b.database_schema ?? "main");
+  }
+  return false;
+}
+
+function isUserTable(name: QualifiedName): boolean {
+  return namesMatch(name, {
+    name: "_user",
+    database_schema: "main",
+  });
+}
 
 function findTargetPortName(
   allTablesAndViews: (Table | View)[],
   foreignKey: ForeignKey,
+  databaseSchema: string | null,
 ): string {
   switch (foreignKey.referred_columns.length) {
     case 0:
@@ -40,7 +57,12 @@ function findTargetPortName(
   }
 
   for (const tableOrView of allTablesAndViews) {
-    if (tableOrView.name.name !== foreignKey.foreign_table) {
+    if (
+      !namesMatch(tableOrView.name, {
+        name: foreignKey.foreign_table,
+        database_schema: databaseSchema,
+      })
+    ) {
       continue;
     }
 
@@ -65,6 +87,7 @@ function buildErNode(
     zIndex: 0,
   };
 
+  const name = prettyFormatQualifiedName(tableOrView.name);
   const columns = tableOrView.columns ?? [];
 
   const view = tableType(tableOrView) === "view";
@@ -73,7 +96,7 @@ function buildErNode(
     return {
       // View's can have possibly duplicated column names, so we avoid
       // collisions.
-      id: view ? undefined : `${tableOrView.name}-${column.name}`,
+      id: view ? undefined : `${name}-${column.name}`,
       group: "list",
       attrs: {
         portNameLabel: {
@@ -94,14 +117,21 @@ function buildErNode(
       if (foreignKey !== undefined) {
         return {
           source: {
-            cell: tableOrView.name.name,
-            port: `${tableOrView.name}-${column.name}`,
+            cell: name,
+            port: `${name}-${column.name}`,
           },
           // FIXME: lookup pk if referred columns are not provided. Otherwise can
           // we just point at the node rather than a specific port?
           target: {
-            cell: foreignKey.foreign_table,
-            port: findTargetPortName(allTablesAndViews, foreignKey),
+            cell: prettyFormatQualifiedName({
+              name: foreignKey.foreign_table,
+              database_schema: tableOrView.name.database_schema,
+            }),
+            port: findTargetPortName(
+              allTablesAndViews,
+              foreignKey,
+              tableOrView.name.database_schema,
+            ),
           },
           ...BASE_EDGE,
         };
@@ -110,9 +140,9 @@ function buildErNode(
     .filter((e) => e !== undefined);
 
   const node: NodeMetadata = {
-    id: tableOrView.name.name,
+    id: name,
     shape: ER_NODE_NAME,
-    label: `${tableOrView.name} [${tableType(tableOrView)}]`,
+    label: `${name} [${tableType(tableOrView)}]`,
     width: NODE_WIDTH,
     height: LINE_HEIGHT,
     ports,
@@ -129,7 +159,7 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
 
     const allTablesAndViews = [...props.schema.tables, ...props.schema.views];
     for (const tableOrView of allTablesAndViews) {
-      if (tableOrView.name.name !== "_user" && hiddenTable(tableOrView)) {
+      if (hiddenTable(tableOrView) && !isUserTable(tableOrView.name)) {
         continue;
       }
 
