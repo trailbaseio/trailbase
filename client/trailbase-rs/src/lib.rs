@@ -7,17 +7,20 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
+use bytes::Bytes;
 use eventsource_stream::Eventsource;
 pub use futures::Stream;
 use futures::StreamExt;
-use http_body_util::BodyExt;
+use http_body_util::{BodyExt as _, StreamBody, combinators::BoxBody};
 use parking_lot::RwLock;
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::{Method, StatusCode};
 use std::borrow::Cow;
 use std::sync::Arc;
 use thiserror::Error;
-use tower::ServiceBuilder;
+use tower::{BoxError, Service, ServiceBuilder, util::BoxCloneSyncService};
+use tower_http::ServiceBuilderExt as _;
+use tower_http_client::adapters::reqwest::into_reqwest_body;
 use tower_http_client::client::body_reader::BodyReaderError;
 use tower_http_client::{ResponseExt as _, ServiceExt as _};
 use tower_reqwest::HttpClientLayer;
@@ -182,8 +185,53 @@ impl<'a, T: RecordId<'a>> ReadArgumentsTrait<'a> for ReadArguments<'a, T> {
   }
 }
 
+/// A body that can be cloned in order to be sent multiple times.
+type CloneableBody = http_body_util::Full<Bytes>;
+
+/// A type-erased HTTP client that is completely implementation-agnostic.
+// type HttpClient = BoxCloneSyncService<
+//   http::Request<CloneableBody>,
+//   http::Response<BoxBody<Bytes, BoxError>>,
+//   BoxError,
+// >;
+
+/// Convert a `reqwest::Client` into an implementation-agnostic opaque client.
+fn into_opaque_http_client(
+  client: reqwest::Client,
+) -> impl Service<
+  http::Request<CloneableBody>,
+  Response = http::Response<BoxBody<Bytes, BoxError>>,
+  Error = BoxError,
+  Future = impl Send,
+> + Send
++ Clone {
+  ServiceBuilder::new()
+    .map_err(BoxError::from)
+    .map_response_body(|body: reqwest::Body| body.map_err(BoxError::from).boxed())
+    .map_request_body(into_reqwest_body)
+    .layer(HttpClientLayer)
+    .service(client)
+}
+
+type ResponseBody = http_body_util::StreamBody<Bytes>;
+
+pub fn into_foo(
+  client: reqwest::Client,
+) -> impl Service<
+  http::Request<http_body_util::Full<bytes::Bytes>>,
+  Response = http::Response<reqwest::Body>,
+  Error = tower_reqwest::Error,
+  Future = impl Send,
+> + Send
++ Clone {
+  ServiceBuilder::new()
+    .map_request_body(into_reqwest_body)
+    .layer(HttpClientLayer)
+    .service(client)
+}
+
 type HttpClient = tower::util::BoxCloneSyncService<
-  http::Request<reqwest::Body>,
+  http::Request<http_body_util::Full<bytes::Bytes>>,
   http::Response<reqwest::Body>,
   tower_reqwest::Error,
 >;
@@ -223,9 +271,7 @@ impl ThinClient {
 
     if let Some(ref body) = body {
       let json: Vec<u8> = serde_json::to_vec(body).map_err(Error::RecordSerialization)?;
-      let body: reqwest::Body = json.into();
-
-      let request = builder.body::<reqwest::Body>(body)?;
+      let request = builder.body::<bytes::Bytes>(json)?;
       return Ok(request.send().await.map_err(|err| Error::Reqwest(err))?);
     } else {
       return Ok(builder.send().await.map_err(|err| Error::Reqwest(err))?);
@@ -713,11 +759,7 @@ impl Client {
     return Self::new_with_client(
       site,
       tokens,
-      tower::util::BoxCloneSyncService::new(
-        ServiceBuilder::new()
-          .layer(HttpClientLayer)
-          .service(reqwest::Client::new()),
-      ),
+      tower::util::BoxCloneSyncService::new(into_foo(reqwest::Client::new())),
     );
   }
 
@@ -962,6 +1004,7 @@ mod tests {
     // let client = Client::new_with_client("http://127.0.0.1:4000", None).unwrap();
     let c = tower::util::BoxCloneSyncService::new(
       ServiceBuilder::new()
+        .map_request_body(into_reqwest_body)
         .layer(HttpClientLayer)
         .service(Mock::new()),
     );
