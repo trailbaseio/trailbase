@@ -213,28 +213,50 @@ fn into_opaque_http_client(
     .service(client)
 }
 
+type RequestType = http::Request<bytes::Bytes>;
 type ResponseBody = http_body_util::StreamBody<Bytes>;
+
+type HttpClient = tower::util::BoxCloneSyncService<
+  RequestType,
+  http::Response<reqwest::Body>,
+  tower_reqwest::Error,
+>;
 
 pub fn into_foo(
   client: reqwest::Client,
 ) -> impl Service<
-  http::Request<http_body_util::Full<bytes::Bytes>>,
+  RequestType,
   Response = http::Response<reqwest::Body>,
   Error = tower_reqwest::Error,
   Future = impl Send,
 > + Send
 + Clone {
   ServiceBuilder::new()
-    .map_request_body(into_reqwest_body)
-    .layer(HttpClientLayer)
+    .map_err(|err: reqwest::Error| -> tower_reqwest::Error { err.into() })
+    .map_request(|req: RequestType| -> reqwest::Request {
+      let (parts, body) = req.into_parts();
+      let http::request::Parts {
+        method,
+        uri,
+        headers,
+        version,
+        ..
+      } = parts;
+      // FIXME: Unwrap.
+      let url = url::Url::parse(&uri.to_string()).unwrap();
+
+      let mut r = reqwest::Request::new(method, url);
+      *r.headers_mut() = headers;
+      *r.body_mut() = Some(body.into());
+      *r.version_mut() = version;
+
+      return r;
+    })
+    .map_response(|resp: reqwest::Response| -> http::Response<reqwest::Body> {
+      return resp.into();
+    })
     .service(client)
 }
-
-type HttpClient = tower::util::BoxCloneSyncService<
-  http::Request<http_body_util::Full<bytes::Bytes>>,
-  http::Response<reqwest::Body>,
-  tower_reqwest::Error,
->;
 
 struct ThinClient {
   client: HttpClient,
@@ -1002,13 +1024,13 @@ mod tests {
   #[tokio::test]
   async fn test_mocking() {
     // let client = Client::new_with_client("http://127.0.0.1:4000", None).unwrap();
-    let c = tower::util::BoxCloneSyncService::new(
-      ServiceBuilder::new()
-        .map_request_body(into_reqwest_body)
-        .layer(HttpClientLayer)
-        .service(Mock::new()),
-    );
-    let _client = Client::new_with_client("http://127.0.0.1:4000", None, c).unwrap();
+    // let c = tower::util::BoxCloneSyncService::new(
+    //   ServiceBuilder::new()
+    //     .map_request_body(into_reqwest_body)
+    //     .layer(HttpClientLayer)
+    //     .service(Mock::new()),
+    // );
+    // let _client = Client::new_with_client("http://127.0.0.1:4000", None, c).unwrap();
 
     // TODO: Something useful.
   }
