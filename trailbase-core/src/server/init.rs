@@ -42,22 +42,22 @@ pub enum InitError {
 
 #[derive(Default)]
 pub struct InitArgs {
+  pub data_dir: DataDir,
+  pub public_dir: Option<PathBuf>,
+  pub geoip_db_path: Option<PathBuf>,
+
   pub address: String,
   pub dev: bool,
   pub demo: bool,
   pub js_runtime_threads: Option<usize>,
 }
 
-pub async fn init_app_state(
-  data_dir: DataDir,
-  public_dir: Option<PathBuf>,
-  args: InitArgs,
-) -> Result<(bool, AppState), InitError> {
+pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitError> {
   // First create directory structure.
-  data_dir.ensure_directory_structure().await?;
+  args.data_dir.ensure_directory_structure().await?;
 
   // Then open or init new databases.
-  let logs_conn = crate::connection::init_logs_db(Some(&data_dir))?;
+  let logs_conn = crate::connection::init_logs_db(Some(&args.data_dir))?;
 
   // TODO: At this early stage we're using an in-memory db. Go persistent before rolling out.
   let queue = crate::queue::Queue::new(None).await?;
@@ -66,7 +66,7 @@ pub async fn init_app_state(
   //
   // Open or init the main db connection. Note that we derive whether a new DB was initialized
   // based on whether the V1 migration had to be applied. Should be fairly robust.
-  let paths = std::fs::read_dir(data_dir.data_path())?;
+  let paths = std::fs::read_dir(args.data_dir.data_path())?;
   let extra_databases: Vec<(String, PathBuf)> = paths
     .filter_map(|entry: Result<std::fs::DirEntry, _>| {
       if let Ok(entry) = entry {
@@ -86,12 +86,12 @@ pub async fn init_app_state(
     .collect();
 
   let (conn, new_db) =
-    crate::connection::init_main_db(Some(&data_dir), None, Some(extra_databases))?;
+    crate::connection::init_main_db(Some(&args.data_dir), None, Some(extra_databases))?;
 
   let schema_metadata = SchemaMetadataCache::new(conn.clone()).await?;
 
   // Read config or write default one.
-  let config = load_or_init_config_textproto(&data_dir, &schema_metadata).await?;
+  let config = load_or_init_config_textproto(&args.data_dir, &schema_metadata).await?;
 
   debug!("Initializing JSON schemas from config");
   trailbase_schema::registry::set_user_schemas(
@@ -122,23 +122,25 @@ pub async fn init_app_state(
       .collect(),
   )?;
 
-  let jwt = JwtHelper::init_from_path(&data_dir).await?;
+  let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
 
   // Init geoip if present.
-  let geoip_db_path = data_dir.root().join("GeoLite2-Country.mmdb");
+  let geoip_db_path = args
+    .geoip_db_path
+    .unwrap_or_else(|| args.data_dir.root().join("GeoLite2-Country.mmdb"));
   if let Err(err) = trailbase_extension::geoip::load_geoip_db(geoip_db_path.clone()) {
     debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
   }
 
-  let object_store = build_objectstore(&data_dir, config.server.s3_storage_config.as_ref())?;
+  let object_store = build_objectstore(&args.data_dir, config.server.s3_storage_config.as_ref())?;
 
   // Write out the latest .js/.d.ts runtime files.
   #[cfg(feature = "v8")]
-  trailbase_js::runtime::write_js_runtime_files(data_dir.root()).await;
+  trailbase_js::runtime::write_js_runtime_files(args.data_dir.root()).await;
 
   let app_state = AppState::new(AppStateArgs {
-    data_dir: data_dir.clone(),
-    public_dir,
+    data_dir: args.data_dir.clone(),
+    public_dir: args.public_dir,
     address: args.address,
     dev: args.dev,
     demo: args.demo,

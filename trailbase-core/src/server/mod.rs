@@ -51,6 +51,9 @@ pub struct ServerOptions {
   /// Optional path to static assets that will be served at the HTTP root.
   pub public_dir: Option<PathBuf>,
 
+  /// Optional path to MaxmindDB geoip database. Can be used to map logged IPs to a geo location.
+  pub geoip_db_path: Option<PathBuf>,
+
   /// We trace the request->response flow to generate a server log. Setting this to true will also
   /// log an event to stdout.
   pub log_responses: bool,
@@ -114,16 +117,15 @@ impl Server {
       date = version_info.commit_date.unwrap_or_default(),
     );
 
-    let (new_data_dir, state) = init::init_app_state(
-      opts.data_dir.clone(),
-      opts.public_dir.clone(),
-      InitArgs {
-        address: opts.address.clone(),
-        dev: opts.dev,
-        demo: opts.demo,
-        js_runtime_threads: opts.js_runtime_threads,
-      },
-    )
+    let (new_data_dir, state) = init::init_app_state(InitArgs {
+      data_dir: opts.data_dir.clone(),
+      public_dir: opts.public_dir.clone(),
+      geoip_db_path: opts.geoip_db_path.clone(),
+      address: opts.address.clone(),
+      dev: opts.dev,
+      demo: opts.demo,
+      js_runtime_threads: opts.js_runtime_threads,
+    })
     .await?;
 
     // Initialize tracing subscribers/layers.

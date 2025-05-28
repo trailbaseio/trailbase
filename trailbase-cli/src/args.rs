@@ -84,6 +84,10 @@ pub struct ServerArgs {
   #[arg(long, env)]
   pub public_dir: Option<String>,
 
+  /// Optional path to MaxmindDB geoip database. Can be used to map logged IPs to a geo location.
+  #[arg(long, env)]
+  pub geoip_db_path: Option<String>,
+
   /// Use permissive CORS and cookies to allow for cross-origin requests when developing the UI
   /// using externally hosted UI, e.g. using a dev server.
   #[arg(long)]

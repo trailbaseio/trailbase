@@ -75,6 +75,7 @@ async fn async_main() -> Result<(), BoxError> {
         address: cmd.address,
         admin_address: cmd.admin_address,
         public_dir: cmd.public_dir.map(|p| p.into()),
+        geoip_db_path: cmd.geoip_db_path.map(|p| p.into()),
         log_responses: cmd.dev || cmd.stderr_logging,
         dev: cmd.dev,
         demo: cmd.demo,
@@ -124,8 +125,11 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Schema(cmd)) => {
       init_logger(false);
 
-      let (_new_db, state) =
-        init_app_state(DataDir(args.data_dir), None, InitArgs::default()).await?;
+      let (_new_db, state) = init_app_state(InitArgs {
+        data_dir: DataDir(args.data_dir),
+        ..Default::default()
+      })
+      .await?;
 
       let api_name = &cmd.api;
       let Some(api) = state.lookup_record_api(api_name) else {
@@ -243,8 +247,11 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Email(cmd)) => {
       init_logger(false);
 
-      let (_new_db, state) =
-        init_app_state(DataDir(args.data_dir), None, InitArgs::default()).await?;
+      let (_new_db, state) = init_app_state(InitArgs {
+        data_dir: DataDir(args.data_dir),
+        ..Default::default()
+      })
+      .await?;
 
       let email = Email::new(&state, &cmd.to, cmd.subject, cmd.body)?;
       email.send().await?;
