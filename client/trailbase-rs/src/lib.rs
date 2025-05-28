@@ -7,27 +7,22 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
-use bytes::Bytes;
+use bytes::Buf;
 use eventsource_stream::Eventsource;
 pub use futures::Stream;
 use futures::StreamExt;
-use http_body_util::{BodyExt as _, StreamBody, combinators::BoxBody};
 use parking_lot::RwLock;
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::{Method, StatusCode};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::sync::Arc;
 use thiserror::Error;
-use tower::{BoxError, Service, ServiceBuilder, util::BoxCloneSyncService};
-use tower_http::ServiceBuilderExt as _;
-use tower_http_client::adapters::reqwest::into_reqwest_body;
-use tower_http_client::client::body_reader::BodyReaderError;
-use tower_http_client::{ResponseExt as _, ServiceExt as _};
-use tower_reqwest::HttpClientLayer;
+use tower::ServiceExt;
 use tracing::*;
 
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+mod http;
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -48,11 +43,8 @@ pub enum Error {
   InvalidUrl(url::ParseError),
 
   // NOTE: This error is leaky but comprehensively unpacking reqwest is unsustainable.
-  #[error("TowerReqwest: {0}")]
-  Reqwest(tower_reqwest::Error),
-
-  #[error("Http: {0}")]
-  Http(#[from] http::Error),
+  #[error("Reqwest: {0}")]
+  Reqwest(reqwest::Error),
 }
 
 /// Represents the currently logged-in user.
@@ -185,81 +177,8 @@ impl<'a, T: RecordId<'a>> ReadArgumentsTrait<'a> for ReadArguments<'a, T> {
   }
 }
 
-/// A body that can be cloned in order to be sent multiple times.
-type CloneableBody = http_body_util::Full<Bytes>;
-
-/// A type-erased HTTP client that is completely implementation-agnostic.
-// type HttpClient = BoxCloneSyncService<
-//   http::Request<CloneableBody>,
-//   http::Response<BoxBody<Bytes, BoxError>>,
-//   BoxError,
-// >;
-
-/// Convert a `reqwest::Client` into an implementation-agnostic opaque client.
-fn into_opaque_http_client(
-  client: reqwest::Client,
-) -> impl Service<
-  http::Request<CloneableBody>,
-  Response = http::Response<BoxBody<Bytes, BoxError>>,
-  Error = BoxError,
-  Future = impl Send,
-> + Send
-+ Clone {
-  ServiceBuilder::new()
-    .map_err(BoxError::from)
-    .map_response_body(|body: reqwest::Body| body.map_err(BoxError::from).boxed())
-    .map_request_body(into_reqwest_body)
-    .layer(HttpClientLayer)
-    .service(client)
-}
-
-type RequestType = http::Request<bytes::Bytes>;
-type ResponseBody = http_body_util::StreamBody<Bytes>;
-
-type HttpClient = tower::util::BoxCloneSyncService<
-  RequestType,
-  http::Response<reqwest::Body>,
-  tower_reqwest::Error,
->;
-
-pub fn into_foo(
-  client: reqwest::Client,
-) -> impl Service<
-  RequestType,
-  Response = http::Response<reqwest::Body>,
-  Error = tower_reqwest::Error,
-  Future = impl Send,
-> + Send
-+ Clone {
-  ServiceBuilder::new()
-    .map_err(|err: reqwest::Error| -> tower_reqwest::Error { err.into() })
-    .map_request(|req: RequestType| -> reqwest::Request {
-      let (parts, body) = req.into_parts();
-      let http::request::Parts {
-        method,
-        uri,
-        headers,
-        version,
-        ..
-      } = parts;
-      // FIXME: Unwrap.
-      let url = url::Url::parse(&uri.to_string()).unwrap();
-
-      let mut r = reqwest::Request::new(method, url);
-      *r.headers_mut() = headers;
-      *r.body_mut() = Some(body.into());
-      *r.version_mut() = version;
-
-      return r;
-    })
-    .map_response(|resp: reqwest::Response| -> http::Response<reqwest::Body> {
-      return resp.into();
-    })
-    .service(client)
-}
-
 struct ThinClient {
-  client: HttpClient,
+  client: http::HttpClient,
   url: url::Url,
 }
 
@@ -271,7 +190,7 @@ impl ThinClient {
     method: Method,
     body: Option<&T>,
     query_params: Option<&[(Cow<'static, str>, Cow<'static, str>)]>,
-  ) -> Result<http::Response<reqwest::Body>, Error> {
+  ) -> Result<http::HttpResponseType, Error> {
     assert!(path.starts_with("/"));
 
     let mut url = self.url.clone();
@@ -284,20 +203,20 @@ impl ThinClient {
       }
     }
 
-    let mut client = self.client.clone();
-    let mut builder = client.request(method, url);
-
-    for (k, v) in headers.iter() {
-      builder = builder.header(k, v);
-    }
+    let mut req = http::HttpRequestType::new(method, url);
+    *req.headers_mut() = headers;
 
     if let Some(ref body) = body {
       let json: Vec<u8> = serde_json::to_vec(body).map_err(Error::RecordSerialization)?;
-      let request = builder.body::<bytes::Bytes>(json)?;
-      return Ok(request.send().await.map_err(|err| Error::Reqwest(err))?);
-    } else {
-      return Ok(builder.send().await.map_err(|err| Error::Reqwest(err))?);
+      let _ = req.body_mut().insert(json.into());
     }
+
+    return self
+      .client
+      .clone()
+      .oneshot(req)
+      .await
+      .map_err(|err| Error::Reqwest(err));
   }
 }
 
@@ -638,7 +557,7 @@ impl RecordApi {
 
     return Ok(
       response
-        .into_data_stream()
+        .bytes_stream()
         .eventsource()
         .filter_map(|event_or| async {
           if let Ok(event) = event_or {
@@ -688,7 +607,7 @@ impl ClientState {
     method: Method,
     body: Option<&T>,
     query_params: Option<&[(Cow<'static, str>, Cow<'static, str>)]>,
-  ) -> Result<http::Response<reqwest::Body>, Error> {
+  ) -> Result<http::HttpResponseType, Error> {
     let (mut headers, refresh_token) = self.extract_headers_and_refresh_token_if_exp();
     if let Some(refresh_token) = refresh_token {
       let new_tokens = ClientState::refresh_tokens(&self.client, headers, refresh_token).await?;
@@ -781,14 +700,14 @@ impl Client {
     return Self::new_with_client(
       site,
       tokens,
-      tower::util::BoxCloneSyncService::new(into_foo(reqwest::Client::new())),
+      tower::util::BoxCloneSyncService::new(http::into_http_client(reqwest::Client::new())),
     );
   }
 
   pub fn new_with_client(
     site: &str,
     tokens: Option<Tokens>,
-    client: HttpClient,
+    client: http::HttpClient,
   ) -> Result<Client, Error> {
     return Ok(Client {
       state: Arc::new(ClientState {
@@ -956,13 +875,10 @@ fn now() -> u64 {
 }
 
 #[inline]
-async fn json<T: DeserializeOwned>(resp: http::Response<reqwest::Body>) -> Result<T, Error> {
-  return resp.body_reader().json().await.map_err(|err| {
-    return match err {
-      BodyReaderError::Decode(err) => Error::RecordSerialization(err),
-      BodyReaderError::Read(err) => Error::Reqwest(err.into()),
-    };
-  });
+async fn json<T: DeserializeOwned>(resp: http::HttpResponseType) -> Result<T, Error> {
+  let bytes = resp.bytes().await.map_err(|err| Error::Reqwest(err))?;
+  return serde_json::from_reader::<_, T>(bytes.reader())
+    .map_err(|err| Error::RecordSerialization(err));
 }
 
 const AUTH_API: &str = "api/auth/v1";
@@ -971,8 +887,6 @@ const RECORD_API: &str = "api/records/v1";
 #[cfg(test)]
 mod tests {
   use super::*;
-
-  use tower_service::Service;
 
   #[tokio::test]
   async fn is_send_test() {
@@ -992,34 +906,34 @@ mod tests {
     }
   }
 
-  #[derive(Clone)]
-  struct Mock {}
-
-  impl Mock {
-    fn new() -> Self {
-      return Self {};
-    }
-  }
-
-  impl Service<reqwest::Request> for Mock {
-    type Response = http::Response<reqwest::Body>;
-    type Error = tower_reqwest::Error;
-    type Future = std::future::Ready<Result<Self::Response, Self::Error>>;
-
-    fn poll_ready(
-      &mut self,
-      _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-      std::task::Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, _req: reqwest::Request) -> Self::Future {
-      let response = http::Response::builder()
-        .body(reqwest::Body::default())
-        .unwrap();
-      return std::future::ready(Ok(response));
-    }
-  }
+  // #[derive(Clone)]
+  // struct Mock {}
+  //
+  // impl Mock {
+  //   fn new() -> Self {
+  //     return Self {};
+  //   }
+  // }
+  //
+  // impl Service<reqwest::Request> for Mock {
+  //   type Response = http::Response<reqwest::Body>;
+  //   type Error = tower_reqwest::Error;
+  //   type Future = std::future::Ready<Result<Self::Response, Self::Error>>;
+  //
+  //   fn poll_ready(
+  //     &mut self,
+  //     _cx: &mut std::task::Context<'_>,
+  //   ) -> std::task::Poll<Result<(), Self::Error>> {
+  //     std::task::Poll::Ready(Ok(()))
+  //   }
+  //
+  //   fn call(&mut self, _req: reqwest::Request) -> Self::Future {
+  //     let response = http::Response::builder()
+  //       .body(reqwest::Body::default())
+  //       .unwrap();
+  //     return std::future::ready(Ok(response));
+  //   }
+  // }
 
   #[tokio::test]
   async fn test_mocking() {
