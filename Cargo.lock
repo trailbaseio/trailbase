@@ -6798,6 +6798,7 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
+ "tower 0.5.2",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -7080,6 +7081,7 @@ dependencies = [
 name = "trailbase-client"
 version = "0.5.0"
 dependencies = [
+ "bytes",
  "eventsource-stream",
  "futures",
  "http",
@@ -7092,6 +7094,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tower 0.5.2",
+ "tower-http",
  "tower-http-client",
  "tower-reqwest",
  "tower-service",
