@@ -2713,30 +2713,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "headers"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "322106e6bd0cba2d5ead589ddb8150a13d7c4217cf80d7c4f682ca994ccc6aa9"
-dependencies = [
- "base64 0.21.7",
- "bytes",
- "headers-core",
- "http",
- "httpdate",
- "mime",
- "sha1",
-]
-
-[[package]]
-name = "headers-core"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54b4a22553d4242c49fddb9ba998a99962b5cc6f22cb5a3482bec22522403ce4"
-dependencies = [
- "http",
-]
-
-[[package]]
 name = "heck"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2867,22 +2843,6 @@ checksum = "1efedce1fb8e6913f23e0c92de8e62cd5b772a67e7b3946df930a62566c93184"
 dependencies = [
  "bytes",
  "http",
-]
-
-[[package]]
-name = "http-body-reader"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f48bccebca88888bfe36a4c2ae28e4122f6cfb676678659e74edfd968bda581"
-dependencies = [
- "bytes",
- "http",
- "http-body",
- "http-body-util",
- "include-utils",
- "serde",
- "serde_json",
- "serde_urlencoded",
 ]
 
 [[package]]
@@ -3146,28 +3106,6 @@ name = "if_chain"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb56e1aa765b4b4f3aadfab769793b7087bb03a4ea4920644a6d238e2df5b9ed"
-
-[[package]]
-name = "include-utils"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "431d3c09de1082802cc229e78a515e4f46be80c7ac31eda029afa32e1518cebf"
-dependencies = [
- "include-utils-macro",
-]
-
-[[package]]
-name = "include-utils-macro"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a2c76d2506581ed9ead2afacb6b8164e4cac323427fd67102b59225d35b49cb"
-dependencies = [
- "itertools 0.13.0",
- "manyhow",
- "proc-macro2",
- "quote",
- "syn 2.0.101",
-]
 
 [[package]]
 name = "indexmap"
@@ -3587,29 +3525,6 @@ name = "lru-slab"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
-
-[[package]]
-name = "manyhow"
-version = "0.11.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b33efb3ca6d3b07393750d4030418d594ab1139cee518f0dc88db70fec873587"
-dependencies = [
- "manyhow-macros",
- "proc-macro2",
- "quote",
- "syn 2.0.101",
-]
-
-[[package]]
-name = "manyhow-macros"
-version = "0.11.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46fce34d199b78b6e6073abf984c9cf5fd3e9330145a93ee0738a7443e371495"
-dependencies = [
- "proc-macro-utils",
- "proc-macro2",
- "quote",
-]
 
 [[package]]
 name = "matchit"
@@ -4614,17 +4529,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.103",
-]
-
-[[package]]
-name = "proc-macro-utils"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eeaf08a13de400bc215877b5bdc088f241b12eb42f0a548d3390dc1c56bb7071"
-dependencies = [
- "proc-macro2",
- "quote",
- "smallvec",
 ]
 
 [[package]]
@@ -6798,35 +6702,9 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
- "tower 0.5.2",
  "tower-layer",
  "tower-service",
  "tracing",
-]
-
-[[package]]
-name = "tower-http-client"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fba5daf83a10a4a17befac82b5bfd6d0adf6c8f0020ee365a83584412a4fede8"
-dependencies = [
- "bytes",
- "futures-util",
- "headers",
- "http",
- "http-body",
- "http-body-reader",
- "http-body-util",
- "include-utils",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "thiserror 2.0.12",
- "tower 0.5.2",
- "tower-layer",
- "tower-reqwest",
- "tower-service",
- "url",
 ]
 
 [[package]]
@@ -6834,25 +6712,6 @@ name = "tower-layer"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "121c2a6cda46980bb0fcd1647ffaf6cd3fc79a013de288782836f6df9c48780e"
-
-[[package]]
-name = "tower-reqwest"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fe0f3dfbf59f29b821a47b5d0a09bcada3644f2035847011e44f6187de480dd"
-dependencies = [
- "bytes",
- "futures-util",
- "http",
- "http-body",
- "http-body-util",
- "include-utils",
- "pin-project",
- "reqwest",
- "thiserror 2.0.12",
- "tower-layer",
- "tower-service",
-]
 
 [[package]]
 name = "tower-service"
@@ -7084,8 +6943,6 @@ dependencies = [
  "bytes",
  "eventsource-stream",
  "futures",
- "http",
- "http-body-util",
  "jsonwebtoken",
  "parking_lot",
  "reqwest",
@@ -7094,10 +6951,6 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "tower 0.5.2",
- "tower-http",
- "tower-http-client",
- "tower-reqwest",
- "tower-service",
  "tracing",
  "url",
 ]
