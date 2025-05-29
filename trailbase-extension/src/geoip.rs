@@ -14,9 +14,9 @@ static READER: LazyLock<ArcSwap<Option<MaxMindReader>>> =
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct City {
-  country_code: Option<String>,
-  name: Option<String>,
-  subdivisions: Option<Vec<String>>,
+  pub country_code: Option<String>,
+  pub name: Option<String>,
+  pub subdivisions: Option<Vec<String>>,
 }
 
 impl City {
@@ -34,12 +34,34 @@ impl City {
 
 pub fn load_geoip_db(path: impl AsRef<Path>) -> Result<(), MaxMindDbError> {
   let reader = Reader::open_readfile(path)?;
+  log::debug!("Loaded geoip DB: {:?}", reader.metadata);
   READER.swap(Some(reader).into());
   return Ok(());
 }
 
 pub fn has_geoip_db() -> bool {
   return READER.load().is_some();
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum DatabaseType {
+  Unknown,
+  GeoLite2Country,
+  GeoLite2City,
+  GeoLite2ASN,
+}
+
+pub fn database_type() -> Option<DatabaseType> {
+  if let Some(ref reader) = **READER.load() {
+    return Some(match reader.metadata.database_type.as_str() {
+      "GeoLite2-Country" => DatabaseType::GeoLite2Country,
+      "GeoLite2-City" => DatabaseType::GeoLite2City,
+      // Autonomous system number.
+      "GeoLite2-ASN" => DatabaseType::GeoLite2ASN,
+      _ => DatabaseType::Unknown,
+    });
+  }
+  return None;
 }
 
 pub(crate) fn geoip_country(context: &Context) -> Result<Option<String>, Error> {

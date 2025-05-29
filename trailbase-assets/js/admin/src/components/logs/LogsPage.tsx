@@ -81,13 +81,20 @@ const columns: ColumnDef<LogJson>[] = [
   { accessorKey: "method" },
   { accessorKey: "url" },
   {
-    accessorKey: "latency_ms",
     header: "Latency (ms)",
+    accessorKey: "latency_ms",
   },
   { accessorKey: "client_ip" },
   {
-    accessorKey: "client_cc",
-    header: "Country Code",
+    header: "GeoIP",
+    cell: (ctx) => {
+      const row = ctx.row.original;
+      const city = row.client_geoip_city;
+      if (city) {
+        return `${city.name} (${city.country_code})`;
+      }
+      return row.client_geoip_cc;
+    },
   },
   { accessorKey: "referer" },
   {

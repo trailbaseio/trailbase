@@ -8,6 +8,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use trailbase_extension::geoip::{City, DatabaseType};
 use trailbase_qs::{Cursor, Order, OrderPrecedent, Query};
 use ts_rs::TS;
 use uuid::Uuid;
@@ -17,6 +18,21 @@ use crate::app_state::AppState;
 use crate::constants::{LOGS_RETENTION_DEFAULT, LOGS_TABLE_ID_COLUMN};
 use crate::listing::{WhereClause, build_filter_where_clause, cursor_to_value, limit_or_default};
 use crate::schema_metadata::{TableMetadata, lookup_and_parse_table_schema};
+
+#[derive(Debug, Deserialize, Serialize, TS)]
+pub struct GeoipCity {
+  country_code: Option<String>,
+  name: Option<String>,
+}
+
+impl From<City> for GeoipCity {
+  fn from(city: City) -> Self {
+    return Self {
+      country_code: city.country_code,
+      name: city.name,
+    };
+  }
+}
 
 #[derive(Debug, Serialize, TS)]
 pub struct LogJson {
@@ -30,7 +46,8 @@ pub struct LogJson {
   pub latency_ms: f64,
   pub client_ip: String,
   /// Optional two-letter country code.
-  pub client_cc: Option<String>,
+  pub client_geoip_cc: Option<String>,
+  pub client_geoip_city: Option<GeoipCity>,
 
   pub referer: String,
   pub user_agent: String,
@@ -50,7 +67,9 @@ struct LogEntry {
   latency: f64,
   client_ip: String,
   /// Optional two-letter country code.
-  client_cc: Option<String>,
+  client_geoip_cc: Option<String>,
+  /// Optional city JSON.
+  client_geoip_city: Option<String>,
 
   referer: String,
   user_agent: String,
@@ -82,7 +101,16 @@ impl From<LogEntry> for LogJson {
       url: value.url,
       latency_ms: value.latency,
       client_ip: value.client_ip,
-      client_cc: value.client_cc,
+      client_geoip_cc: value.client_geoip_cc,
+      client_geoip_city: value.client_geoip_city.and_then(|city| {
+        return serde_json::from_str::<City>(&city)
+          .map_err(|err| {
+            log::warn!("Failed to parse geoip city json: {err}");
+            return err;
+          })
+          .map(|city| city.into())
+          .ok();
+      }),
       referer: value.referer,
       user_agent: value.user_agent,
       user_id: value.user_id.map(|blob| Uuid::from_bytes(blob).to_string()),
@@ -147,8 +175,10 @@ pub async fn list_logs_handler(
   }
 
   let first_page = cursor.is_none();
+  let geoip_db_type = trailbase_extension::geoip::database_type();
   let mut logs = fetch_logs(
     conn,
+    geoip_db_type.clone(),
     filter_where_clause.clone(),
     cursor,
     order.as_ref().unwrap_or_else(|| &DEFAULT_ORDERING),
@@ -162,9 +192,10 @@ pub async fn list_logs_handler(
     }
   }
 
-  let stats = {
+  let stats = if first_page {
     let now = Utc::now();
     let args = FetchAggregateArgs {
+      geoip_db_type,
       filter_where_clause: Some(filter_where_clause),
       from: now
         - Duration::seconds(state.access_config(|c| {
@@ -176,17 +207,14 @@ pub async fn list_logs_handler(
       interval: Duration::seconds(600),
     };
 
-    match first_page {
-      true => {
-        let stats = fetch_aggregate_stats(conn, &args).await;
-
-        if let Err(ref err) = stats {
-          warn!("Failed to fetch stats for {args:?}: {err}");
-        }
-        stats.ok()
-      }
-      false => None,
+    let stats = fetch_aggregate_stats(conn, &args).await;
+    if let Err(ref err) = stats {
+      warn!("Failed to fetch stats for {args:?}: {err}");
     }
+
+    stats.ok()
+  } else {
+    None
   };
 
   let response = ListLogsResponse {
@@ -204,6 +232,7 @@ pub async fn list_logs_handler(
 
 async fn fetch_logs(
   conn: &trailbase_sqlite::Connection,
+  geoip_db_type: Option<DatabaseType>,
   filter_where_clause: WhereClause,
   cursor: Option<Cursor>,
   order: &Order,
@@ -238,7 +267,7 @@ async fn fetch_logs(
 
   let sql_query = format!(
     r#"
-      SELECT log.*, geoip_country(log.client_ip) AS client_cc
+      SELECT log.*, {geoip}
       FROM
         (SELECT * FROM {LOGS_TABLE_NAME}) AS log
       WHERE
@@ -247,6 +276,11 @@ async fn fetch_logs(
         {order_clause}
       LIMIT :limit
     "#,
+    geoip = match geoip_db_type {
+      Some(DatabaseType::GeoLite2Country) => "geoip_country(log.client_ip) AS client_geoip_cc",
+      Some(DatabaseType::GeoLite2City) => "geoip_city_json(log.client_ip) AS client_geoip_city",
+      _ => "''",
+    },
   );
 
   return Ok(
@@ -266,6 +300,7 @@ pub struct Stats {
 
 #[derive(Debug)]
 struct FetchAggregateArgs {
+  geoip_db_type: Option<DatabaseType>,
   filter_where_clause: Option<WhereClause>,
   from: DateTime<Utc>,
   to: DateTime<Utc>,
@@ -345,7 +380,9 @@ async fn fetch_aggregate_stats(
     ));
   }
 
-  if trailbase_extension::geoip::has_geoip_db() {
+  if args.geoip_db_type == Some(DatabaseType::GeoLite2Country)
+    || args.geoip_db_type == Some(DatabaseType::GeoLite2City)
+  {
     lazy_static! {
       static ref CC_QUERY: String = format!(
         r#"
@@ -439,6 +476,7 @@ mod tests {
     }
 
     let args = FetchAggregateArgs {
+      geoip_db_type: Some(DatabaseType::Unknown),
       filter_where_clause: None,
       from: from.into(),
       to: to.into(),
