@@ -1,0 +1,5 @@
+# Deployment-specific directories:
+backups/
+data/
+secrets/
+uploads/

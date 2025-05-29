@@ -345,6 +345,73 @@ importers:
         specifier: ^8.35.0
         version: 8.35.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3)
 
+  examples/local-first:
+    dependencies:
+      '@tanstack/db':
+        specifier: ^0.0.12
+        version: 0.0.12(typescript@5.8.3)
+      '@tanstack/db-collections':
+        specifier: ^0.0.15
+        version: 0.0.15(@electric-sql/client@1.0.4)(typescript@5.8.3)
+      '@tanstack/query-core':
+        specifier: ^5.81.2
+        version: 5.81.2
+      '@tanstack/react-db':
+        specifier: ^0.0.12
+        version: 0.0.12(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(typescript@5.8.3)
+      '@tanstack/store':
+        specifier: ^0.7.1
+        version: 0.7.1
+      react:
+        specifier: ^19.1.0
+        version: 19.1.0
+      react-dom:
+        specifier: ^19.1.0
+        version: 19.1.0(react@19.1.0)
+      trailbase:
+        specifier: workspace:*
+        version: link:../../trailbase-assets/js/client
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.29.0
+        version: 9.29.0
+      '@types/react':
+        specifier: ^19.1.8
+        version: 19.1.8
+      '@types/react-dom':
+        specifier: ^19.1.6
+        version: 19.1.6(@types/react@19.1.8)
+      '@vitejs/plugin-react':
+        specifier: ^4.5.2
+        version: 4.6.0(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
+      eslint:
+        specifier: ^9.29.0
+        version: 9.29.0(jiti@2.4.2)
+      eslint-plugin-react-hooks:
+        specifier: ^5.2.0
+        version: 5.2.0(eslint@9.29.0(jiti@2.4.2))
+      eslint-plugin-react-refresh:
+        specifier: ^0.4.20
+        version: 0.4.20(eslint@9.29.0(jiti@2.4.2))
+      globals:
+        specifier: ^16.2.0
+        version: 16.2.0
+      prettier:
+        specifier: ^3.5.3
+        version: 3.6.0
+      prettier-plugin-tailwindcss:
+        specifier: ^0.6.12
+        version: 0.6.13(prettier-plugin-astro@0.14.1)(prettier@3.6.0)
+      typescript:
+        specifier: ~5.8.3
+        version: 5.8.3
+      typescript-eslint:
+        specifier: ^8.34.1
+        version: 8.35.0(eslint@9.29.0(jiti@2.4.2))(typescript@5.8.3)
+      vite:
+        specifier: ^6.3.5
+        version: 6.3.5(@types/node@24.0.3)(jiti@2.4.2)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
+
   trailbase-assets/js/admin:
     dependencies:
       '@antv/x6':
@@ -981,6 +1048,12 @@ packages:
   '@ctrl/tinycolor@4.1.0':
     resolution: {integrity: sha512-WyOx8cJQ+FQus4Mm4uPIZA64gbk3Wxh0so5Lcii0aJifqwoVOlfFtorjLE0Hen4OYyHZMXDWqMmaQemBhgxFRQ==}
     engines: {node: '>=14'}
+
+  '@electric-sql/client@1.0.4':
+    resolution: {integrity: sha512-kyywKJNYvbzuAXfykPm537axuFjvpCxGWCKfOLeziNNMEM5LY81UfpEV450gKqPN2Fws51VL0tLgRTTYEPOzrg==}
+
+  '@electric-sql/d2mini@0.1.3':
+    resolution: {integrity: sha512-oXgGcKISNn79Y/WmL9oEAwt4C70m5C6lsvm7iECw46DNkAnF+wZSbmkShBbJrPDu1aTP/7oqaSBIO0TWRbcN7A==}
 
   '@emmetio/abbreviation@2.3.3':
     resolution: {integrity: sha512-mgv58UrU3rh4YgbE/TzgLQwJ3pFsHHhCLqY20aJq+9comytTXUDNGG/SMtSeMJdkpxgXSXunBGLD8Boka3JyVA==}
@@ -2136,6 +2209,9 @@ packages:
       '@solidjs/router':
         optional: true
 
+  '@standard-schema/spec@1.0.0':
+    resolution: {integrity: sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA==}
+
   '@swc/helpers@0.5.17':
     resolution: {integrity: sha512-5IKx/Y13RsYd+sauPb2x+U/xZikHjolzfuDgTAl/Tdf3Q8rslRvC19NKDLgAJQ6wsqADk10ntlv08nPFw/gO/A==}
 
@@ -2234,11 +2310,33 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6
 
+  '@tanstack/db-collections@0.0.15':
+    resolution: {integrity: sha512-6O65P77dTNadwHsDqjkhNGtFxenBi+vYKBQVFF5gU0BAhUFWKRjGzyRrNgthKm1yQApQ+zWO5Wunu4rXnYXl5A==}
+    peerDependencies:
+      '@electric-sql/client': '>=1.0.0'
+      typescript: '>=4.7'
+
+  '@tanstack/db@0.0.12':
+    resolution: {integrity: sha512-teOlxarfbIKrpl7vI4WxuVaS3iIIQa6gUX1d5YhJc4H6vymfOgFQOBWdBdBFOIYo1SugUjXjYbM80dyD+O0Obg==}
+    peerDependencies:
+      typescript: '>=4.7'
+
   '@tanstack/form-core@1.12.3':
     resolution: {integrity: sha512-H59XYP8Jxg8vT4IYIZa1BHkYiyiZqFcLSD2HpxefHP/vlG06/spCySVe/vGAP7IJgHHSAlEqBhQoy1Mg2ruTRA==}
 
   '@tanstack/query-core@5.81.2':
     resolution: {integrity: sha512-QLYkPdrudoMATDFa3MiLEwRhNnAlzHWDf0LKaXUqJd0/+QxN8uTPi7bahRlxoAyH0UbLMBdeDbYzWALj7THOtw==}
+
+  '@tanstack/react-db@0.0.12':
+    resolution: {integrity: sha512-ohjLR2hl6JlxFBeBRWHBA3B/BaZ8K/thpRJS1wj92tgDzrEjhxSKFEhqpejXz8TetzPMt9o82O8UzbSKGF031g==}
+    peerDependencies:
+      react: '>=16.8.0'
+
+  '@tanstack/react-store@0.7.1':
+    resolution: {integrity: sha512-qUTEKdId6QPWGiWyKAPf/gkN29scEsz6EUSJ0C3HgLMgaqTAyBsQ2sMCfGVcqb+kkhEXAdjleCgH6LAPD6f2sA==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   '@tanstack/solid-form@1.12.3':
     resolution: {integrity: sha512-Q224nRL6goGWC0ryuAN4F0SNXBASpvAfYvB0Jy5GdPL5TUvvF2Pqtmba+Ojsu7LrG2l9AlMBzT2lbmtGBZKkHw==}
@@ -3663,6 +3761,10 @@ packages:
   fraction.js@4.3.7:
     resolution: {integrity: sha512-ZsDfxO51wGAXREY55a7la9LScWpwv9RxIrYABrlvOFBlH/ShPnrtsXeuUIfXKKOVicNxQ+o8JTbJvjS4M89yew==}
 
+  fractional-indexing@3.2.0:
+    resolution: {integrity: sha512-PcOxmqwYCW7O2ovKRU8OoQQj2yqTfEB/yeTYk4gPid6dN5ODRfU1hXd9tTVZzax/0NkO7AxpHykvZnT1aYp/BQ==}
+    engines: {node: ^14.13.1 || >=16.0.0}
+
   fresh@2.0.0:
     resolution: {integrity: sha512-Rx/WycZ60HOaqLKAi6cHRKKI7zxWbJ31MhntmtwMoaTeF7XFH9hhBp8vITaMidfljRQ6eYWCKkaTK+ykVJHP2A==}
     engines: {node: '>= 0.8'}
@@ -4595,6 +4697,9 @@ packages:
 
   muggle-string@0.4.1:
     resolution: {integrity: sha512-VNTrAak/KhO2i8dqqnqnAHOa3cYBwXEZe9h+D5h/1ZqFSTEFHdM65lR7RoIqq3tBBYavsOXV84NoHXZ0AkPyqQ==}
+
+  murmurhash-js@1.0.0:
+    resolution: {integrity: sha512-TvmkNhkv8yct0SVBSy+o8wYzXjE4Zz3PCesbfs8HiCXXdcTuocApFv11UWlNFWKYsP2okqrhb7JNlSm9InBhIw==}
 
   mz@2.7.0:
     resolution: {integrity: sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==}
@@ -5906,6 +6011,11 @@ packages:
     resolution: {integrity: sha512-4oszoaEKE/mQOtAmdMWqIRHmkxWkUZMnXFnjQ5i01CuRSK3uluxcH1MRVVVWmhlnzT1SCDfKxxficm2G37qzCA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
+  use-sync-external-store@1.5.0:
+    resolution: {integrity: sha512-Rb46I4cGGVBmjamjphe8L/UnvJD+uPPtTkNvX5mZgqdbavhI4EbgIWJiIHXJ8bc/i9EQGPRh4DwEURJ552Do0A==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
@@ -6872,6 +6982,15 @@ snapshots:
   '@csstools/css-tokenizer@3.0.4': {}
 
   '@ctrl/tinycolor@4.1.0': {}
+
+  '@electric-sql/client@1.0.4':
+    optionalDependencies:
+      '@rollup/rollup-darwin-arm64': 4.44.0
+
+  '@electric-sql/d2mini@0.1.3':
+    dependencies:
+      fractional-indexing: 3.2.0
+      murmurhash-js: 1.0.0
 
   '@emmetio/abbreviation@2.3.3':
     dependencies:
@@ -7948,6 +8067,8 @@ snapshots:
     optionalDependencies:
       '@solidjs/router': 0.15.3(solid-js@1.9.7)
 
+  '@standard-schema/spec@1.0.0': {}
+
   '@swc/helpers@0.5.17':
     dependencies:
       tslib: 2.8.1
@@ -8039,11 +8160,44 @@ snapshots:
       tailwindcss: 4.1.10
       vite: 6.3.5(@types/node@24.0.3)(jiti@2.4.2)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
 
+  '@tanstack/db-collections@0.0.15(@electric-sql/client@1.0.4)(typescript@5.8.3)':
+    dependencies:
+      '@electric-sql/client': 1.0.4
+      '@standard-schema/spec': 1.0.0
+      '@tanstack/db': 0.0.12(typescript@5.8.3)
+      '@tanstack/query-core': 5.81.2
+      '@tanstack/store': 0.7.1
+      typescript: 5.8.3
+
+  '@tanstack/db@0.0.12(typescript@5.8.3)':
+    dependencies:
+      '@electric-sql/d2mini': 0.1.3
+      '@standard-schema/spec': 1.0.0
+      '@tanstack/store': 0.7.1
+      typescript: 5.8.3
+
   '@tanstack/form-core@1.12.3':
     dependencies:
       '@tanstack/store': 0.7.1
 
   '@tanstack/query-core@5.81.2': {}
+
+  '@tanstack/react-db@0.0.12(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(typescript@5.8.3)':
+    dependencies:
+      '@tanstack/db': 0.0.12(typescript@5.8.3)
+      '@tanstack/react-store': 0.7.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      react: 19.1.0
+      use-sync-external-store: 1.5.0(react@19.1.0)
+    transitivePeerDependencies:
+      - react-dom
+      - typescript
+
+  '@tanstack/react-store@0.7.1(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+    dependencies:
+      '@tanstack/store': 0.7.1
+      react: 19.1.0
+      react-dom: 19.1.0(react@19.1.0)
+      use-sync-external-store: 1.5.0(react@19.1.0)
 
   '@tanstack/solid-form@1.12.3(solid-js@1.9.7)':
     dependencies:
@@ -10067,6 +10221,8 @@ snapshots:
 
   fraction.js@4.3.7: {}
 
+  fractional-indexing@3.2.0: {}
+
   fresh@2.0.0: {}
 
   fs-extra@11.3.0:
@@ -11321,6 +11477,8 @@ snapshots:
   ms@2.1.3: {}
 
   muggle-string@0.4.1: {}
+
+  murmurhash-js@1.0.0: {}
 
   mz@2.7.0:
     dependencies:
@@ -12856,6 +13014,10 @@ snapshots:
   urijs@1.19.11: {}
 
   url-template@3.1.1: {}
+
+  use-sync-external-store@1.5.0(react@19.1.0):
+    dependencies:
+      react: 19.1.0
 
   util-deprecate@1.0.2: {}
 
