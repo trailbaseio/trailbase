@@ -30,7 +30,11 @@ import { SplitView } from "@/components/SplitView";
 import { IconButton } from "@/components/IconButton";
 import { Version } from "@/components/Version";
 
-import { createConfigQuery, setConfig, invalidateConfig } from "@/lib/config";
+import {
+  createConfigQuery,
+  setConfig,
+  invalidateAllAdminQueries,
+} from "@/lib/config";
 import { createVersionInfoQuery } from "@/lib/info";
 
 function ServerSettings(props: CommonProps) {
@@ -502,7 +506,7 @@ export function SettingsPage() {
           title="Settings"
           titleSelect={activeSite().label}
           left={
-            <IconButton onClick={() => invalidateConfig(queryClient)}>
+            <IconButton onClick={() => invalidateAllAdminQueries(queryClient)}>
               <TbRefresh size={18} />
             </IconButton>
           }

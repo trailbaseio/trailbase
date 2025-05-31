@@ -1,12 +1,12 @@
 import {
   createSignal,
   createMemo,
-  createResource,
   For,
   Suspense,
   Switch,
   Match,
 } from "solid-js";
+import { useQuery } from "@tanstack/solid-query";
 import { createForm } from "@tanstack/solid-form";
 
 import {
@@ -553,7 +553,10 @@ export function AuthSettings(props: {
   markDirty: () => void;
   postSubmit: () => void;
 }) {
-  const [providers] = createResource(adminListOAuthProviders);
+  const providers = useQuery(() => ({
+    queryKey: ["admin", "oauthproviders"],
+    queryFn: adminListOAuthProviders,
+  }));
   const config = createConfigQuery();
 
   const protoConfig = () => {
@@ -577,11 +580,11 @@ export function AuthSettings(props: {
           <span>Error: {config.error?.toString()}</span>
         </Match>
 
-        <Match when={config.isSuccess && providers()}>
+        <Match when={config.isSuccess}>
           <AuthSettingsForm
             markDirty={props.markDirty}
             postSubmit={props.postSubmit}
-            providers={providers()!}
+            providers={providers.data!}
             config={protoConfig()}
           />
         </Match>

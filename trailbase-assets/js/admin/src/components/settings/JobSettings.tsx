@@ -1,6 +1,6 @@
-import { createResource, Switch, Match, Index } from "solid-js";
+import { Switch, Match, Index } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
-import { useQueryClient } from "@tanstack/solid-query";
+import { useQueryClient, useQuery } from "@tanstack/solid-query";
 import { TbPlayerPlay, TbInfoCircle } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
@@ -378,24 +378,34 @@ function JobSettingsImpl(props: {
   );
 }
 
+const listJobsKey = ["admin", "jobs"];
+
 export function JobSettings(props: {
   markDirty: () => void;
   postSubmit: () => void;
 }) {
+  const queryClient = useQueryClient();
   const config = createConfigQuery();
-  const [jobList, { refetch }] = createResource(listJobs);
+  const jobList = useQuery(() => ({
+    queryKey: listJobsKey,
+    queryFn: listJobs,
+  }));
 
   return (
     <Switch fallback="Loading...">
-      <Match when={jobList.error}>{jobList.error}</Match>
+      <Match when={jobList.isError}>{jobList.error?.toString()}</Match>
       <Match when={config.error}>{JSON.stringify(config.error)}</Match>
 
-      <Match when={jobList() && config.data?.config}>
+      <Match when={jobList.isSuccess && config.data?.config}>
         <JobSettingsImpl
           {...props}
           config={config.data!.config!}
-          jobs={jobList()?.jobs ?? []}
-          refetchJobs={refetch}
+          jobs={jobList.data?.jobs ?? []}
+          refetchJobs={() => {
+            queryClient.invalidateQueries({
+              queryKey: listJobsKey,
+            });
+          }}
         />
       </Match>
     </Switch>

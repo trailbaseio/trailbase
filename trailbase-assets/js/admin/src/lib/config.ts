@@ -26,6 +26,12 @@ export async function setConfig(
   invalidateConfig(queryClient);
 }
 
+export function invalidateAllAdminQueries(queryClient: QueryClient) {
+  queryClient.invalidateQueries({
+    queryKey: ["admin"],
+  });
+}
+
 export function invalidateConfig(queryClient: QueryClient) {
   queryClient.invalidateQueries({
     queryKey: key,
@@ -61,4 +67,4 @@ async function updateConfig(request: UpdateConfigRequest): Promise<void> {
   });
 }
 
-const key = ["proto_config"];
+const key = ["admin", "proto_config"];

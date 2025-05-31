@@ -1,5 +1,6 @@
-import { createResource, Suspense, Switch, Match, Index } from "solid-js";
+import { Suspense, Switch, Match, Index } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
+import { useQuery } from "@tanstack/solid-query";
 import {
   Accordion,
   AccordionContent,
@@ -100,15 +101,18 @@ export function SchemaSettings(props: {
   markDirty: () => void;
   postSubmit: () => void;
 }) {
-  const [schemas] = createResource(listSchemas);
+  const schemas = useQuery(() => ({
+    queryKey: ["admin", "jsonSchemas"],
+    queryFn: listSchemas,
+  }));
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <Switch>
-        <Match when={schemas.error}>
+        <Match when={schemas.isError}>
           <span>Error: {`${schemas.error}`}</span>
         </Match>
 
-        <Match when={schemas()}>
+        <Match when={schemas.isSuccess}>
           <Card>
             <CardHeader>
               <h2>Schemas</h2>
@@ -134,7 +138,7 @@ export function SchemaSettings(props: {
               <SchemaSettingsForm
                 markDirty={props.markDirty}
                 postSubmit={props.postSubmit}
-                schemas={schemas()!.schemas}
+                schemas={schemas.data?.schemas ?? []}
               />
             </CardContent>
           </Card>
