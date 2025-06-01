@@ -9,5 +9,5 @@ mod util;
 mod value;
 
 pub use filter::{Combiner, ValueOrComposite};
-pub use query::{Cursor, Expand, Order, OrderPrecedent, Query};
+pub use query::{Cursor, CursorType, Expand, Order, OrderPrecedent, Query};
 pub use value::Value;

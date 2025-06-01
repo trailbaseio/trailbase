@@ -3,9 +3,9 @@ use log::*;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::sync::Arc;
-use trailbase_qs::{Cursor, Order, OrderPrecedent, Query};
+use trailbase_qs::{Cursor, CursorType, Order, OrderPrecedent, Query};
 use trailbase_schema::QualifiedName;
-use trailbase_schema::sqlite::Column;
+use trailbase_schema::sqlite::{Column, ColumnDataType};
 use trailbase_sqlite::rows::rows_to_json_arrays;
 use ts_rs::TS;
 
@@ -93,6 +93,10 @@ pub async fn list_rows_handler(
   };
 
   let cursor_column = table_or_view_metadata.record_pk_column();
+  let cursor = match (cursor, cursor_column) {
+    (Some(cursor), Some((_idx, c))) => Some(parse_cursor(&cursor, &c)?),
+    _ => None,
+  };
   let (rows, columns) = fetch_rows(
     state.conn(),
     qualified_name,
@@ -233,6 +237,18 @@ async fn fetch_rows(
     rows_to_json_arrays(&result_rows)?,
     crate::admin::util::rows_to_columns(&result_rows),
   ));
+}
+
+fn parse_cursor(cursor: &str, pk_col: &Column) -> Result<Cursor, Error> {
+  return match pk_col.data_type {
+    ColumnDataType::Blob => {
+      Cursor::parse(cursor, CursorType::Blob).map_err(|err| Error::BadRequest(err.into()))
+    }
+    ColumnDataType::Integer => {
+      Cursor::parse(cursor, CursorType::Integer).map_err(|err| Error::BadRequest(err.into()))
+    }
+    _ => Err(Error::BadRequest("Invalid cursor column type".into())),
+  };
 }
 
 #[cfg(test)]

@@ -6,6 +6,12 @@ use crate::util::deserialize_bool;
 
 pub type Error = serde_qs::Error;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum CursorType {
+  Blob,
+  Integer,
+}
+
 /// TrailBase supports cursors in a few formats:
 ///  * Integers
 ///  * Text-encoded UUIDs ([u8; 16])
@@ -19,42 +25,25 @@ pub enum Cursor {
   Integer(i64),
 }
 
-impl<'de> serde::de::Deserialize<'de> for Cursor {
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-  where
-    D: serde::de::Deserializer<'de>,
-  {
-    use serde::de::Error;
-    use serde_value::Value;
+impl Cursor {
+  pub fn parse(s: &str, cursor_type: CursorType) -> Result<Self, Error> {
+    return match cursor_type {
+      CursorType::Integer => {
+        let i = s.parse::<i64>().map_err(|err| Error::ParseInt(err))?;
+        Ok(Self::Integer(i))
+      }
+      CursorType::Blob => {
+        if let Ok(uuid) = uuid::Uuid::parse_str(&s) {
+          return Ok(Cursor::Blob(uuid.into()));
+        }
 
-    static EXPECTED: &str = "integer or url-safe base64 encoded byte cursor";
+        if let Ok(base64) = BASE64_URL_SAFE.decode(&s) {
+          return Ok(Cursor::Blob(base64));
+        }
 
-    let value = Value::deserialize(deserializer)?;
-    let Value::String(str) = value else {
-      return Err(Error::invalid_type(
-        crate::util::unexpected(&value),
-        &EXPECTED,
-      ));
+        Err(Error::Custom(format!("Failed to parse: {s}")))
+      }
     };
-
-    // FIXME: This is brittle. The consumer should explicitly define what kind of cursor we expect
-    // based on table schema.
-    if let Ok(integer) = str.parse::<i64>() {
-      return Ok(Cursor::Integer(integer));
-    }
-
-    if let Ok(uuid) = uuid::Uuid::parse_str(&str) {
-      return Ok(Cursor::Blob(uuid.into()));
-    }
-
-    if let Ok(base64) = BASE64_URL_SAFE.decode(&str) {
-      return Ok(Cursor::Blob(base64));
-    }
-
-    return Err(Error::invalid_type(
-      crate::util::unexpected(&Value::String(str)),
-      &EXPECTED,
-    ));
   }
 }
 
@@ -168,7 +157,7 @@ pub struct Query {
   /// Max number of elements returned per page.
   pub limit: Option<usize>,
   /// Cursor to page.
-  pub cursor: Option<Cursor>,
+  pub cursor: Option<String>,
   /// Offset to page. Cursor is more efficient when available
   pub offset: Option<usize>,
 
@@ -191,7 +180,7 @@ impl Query {
   pub fn parse(query: &str) -> Result<Query, Error> {
     // NOTE: We rely on non-strict mode to parse `filter[col0]=a&b%filter[col1]=c`.
     let qs = serde_qs::Config::new(9, false);
-    return qs.deserialize_str::<Query>(query);
+    return qs.deserialize_bytes::<Query>(query.as_bytes());
   }
 }
 
@@ -439,19 +428,25 @@ mod tests {
     assert_eq!(
       qs.deserialize_str::<Query>("cursor=-5").unwrap(),
       Query {
-        cursor: Some(Cursor::Integer(-5)),
+        cursor: Some("-5".to_string()),
         ..Default::default()
       }
     );
 
     let uuid = uuid::Uuid::now_v7();
+    let r = qs
+      .deserialize_str::<Query>(&format!("cursor={}", uuid.to_string()))
+      .unwrap();
     assert_eq!(
-      qs.deserialize_str::<Query>(&format!("cursor={}", uuid.to_string()))
-        .unwrap(),
+      r,
       Query {
-        cursor: Some(Cursor::Blob(uuid.as_bytes().into())),
+        cursor: Some(uuid.to_string()),
         ..Default::default()
       }
+    );
+    assert_eq!(
+      Cursor::parse(&r.cursor.unwrap(), CursorType::Blob).unwrap(),
+      Cursor::Blob(uuid.into())
     );
 
     let blob = BASE64_URL_SAFE.encode(uuid.as_bytes());
@@ -459,7 +454,7 @@ mod tests {
       qs.deserialize_str::<Query>(&format!("cursor={blob}"))
         .unwrap(),
       Query {
-        cursor: Some(Cursor::Blob(uuid.as_bytes().into())),
+        cursor: Some(blob),
         ..Default::default()
       }
     );

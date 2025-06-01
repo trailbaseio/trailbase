@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use trailbase_extension::geoip::{City, DatabaseType};
-use trailbase_qs::{Cursor, Order, OrderPrecedent, Query};
+use trailbase_qs::{Order, OrderPrecedent, Query};
 use ts_rs::TS;
 use uuid::Uuid;
 
@@ -174,16 +174,15 @@ pub async fn list_logs_handler(
     };
   }
 
-  let cursor = cursor.and_then(|c| match c {
-    Cursor::Integer(i) => Some(i),
-    Cursor::Blob(b) => {
-      log::warn!(
-        "expected integer cursor, got: {} from {raw_url_query:?}",
-        String::from_utf8_lossy(&b)
-      );
-      None
-    }
-  });
+  let cursor = if let Some(cursor) = cursor {
+    Some(
+      cursor
+        .parse::<i64>()
+        .map_err(|err| Error::BadRequest(err.into()))?,
+    )
+  } else {
+    None
+  };
 
   let geoip_db_type = trailbase_extension::geoip::database_type();
   let mut logs = fetch_logs(

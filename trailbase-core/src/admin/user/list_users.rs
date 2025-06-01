@@ -104,7 +104,14 @@ pub async fn list_users_handler(
   let users = fetch_users(
     conn,
     filter_where_clause.clone(),
-    cursor,
+    if let Some(cursor) = cursor {
+      Some(
+        Cursor::parse(&cursor, trailbase_qs::CursorType::Blob)
+          .map_err(|err| Error::BadRequest(err.into()))?,
+      )
+    } else {
+      None
+    },
     order.as_ref().unwrap_or_else(|| &DEFAULT_ORDERING),
     limit_or_default(limit).map_err(|err| Error::BadRequest(err.into()))?,
   )

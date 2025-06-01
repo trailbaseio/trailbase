@@ -6,8 +6,9 @@ use axum::{
 use itertools::Itertools;
 use serde::Serialize;
 use std::borrow::Cow;
-use trailbase_qs::{Cursor, OrderPrecedent, Query};
-use trailbase_schema::QualifiedNameEscaped;
+use trailbase_qs::{Cursor, CursorType, OrderPrecedent, Query};
+use trailbase_schema::sqlite::Column;
+use trailbase_schema::{QualifiedNameEscaped, sqlite::ColumnDataType};
 use trailbase_sqlite::Value;
 
 use crate::app_state::AppState;
@@ -124,6 +125,8 @@ pub async fn list_records_handler(
   }
 
   let cursor_clause = if let Some(cursor) = cursor {
+    let cursor = parse_cursor(&cursor, pk_column)?;
+
     let mut pk_order = OrderPrecedent::Descending;
     if let Some(ref order) = order {
       if let Some((col, ord)) = order.columns.first() {
@@ -137,7 +140,10 @@ pub async fn list_records_handler(
       }
     }
 
-    params.push((Cow::Borrowed(":cursor"), cursor_to_value(cursor)));
+    params.push((
+      Cow::Borrowed(":cursor"),
+      crate::listing::cursor_to_value(cursor),
+    ));
     match pk_order {
       OrderPrecedent::Descending => Some(format!(r#"_ROW_."{}" < :cursor"#, pk_column.name)),
       OrderPrecedent::Ascending => Some(format!(r#"_ROW_."{}" > :cursor"#, pk_column.name)),
@@ -305,10 +311,13 @@ fn column_filter(col_name: &str) -> bool {
   return !col_name.starts_with("_");
 }
 
-fn cursor_to_value(cursor: Cursor) -> Value {
-  return match cursor {
-    Cursor::Integer(i) => Value::Integer(i),
-    Cursor::Blob(b) => Value::Blob(b),
+fn parse_cursor(cursor: &str, pk_col: &Column) -> Result<Cursor, RecordError> {
+  return match pk_col.data_type {
+    ColumnDataType::Blob => Cursor::parse(cursor, CursorType::Blob)
+      .map_err(|_| RecordError::BadRequest("Invalid blob cursor")),
+    ColumnDataType::Integer => Cursor::parse(cursor, CursorType::Integer)
+      .map_err(|_| RecordError::BadRequest("Invalid integer cursor")),
+    _ => Err(RecordError::BadRequest("Invalid cursor column type")),
   };
 }
 
