@@ -1,79 +1,17 @@
 import { parse, ExprGroup, Expr, JoinOp, SignOp } from "@/lib/fexpr";
 import { showToast } from "@/components/ui/toast";
 
-export type ListArgs = {
-  filter: string | undefined | null;
-
-  pageSize: number;
-  pageIndex: number;
-
-  cursor: string | undefined | null;
-  prevCursors: string[];
-};
-
-export function buildListSearchParams({
-  filter,
-  pageSize,
-  pageIndex,
-  cursor,
-  prevCursors,
-}: ListArgs): URLSearchParams {
-  const params = new URLSearchParams();
-
-  if (filter) {
-    try {
-      const filterParams = parseFilter(filter);
-      console.debug(`Filter search params: ${filterParams}`);
-
-      for (const [filter, value] of filterParams) {
-        params.set(filter, value);
-      }
-    } catch (err) {
-      showToast({
-        title: "Parse Error",
-        description: `${err}`,
-        variant: "error",
-      });
-    }
-  }
-
-  params.set("limit", pageSize.toString());
-
-  // Build the next cursor from previous response and update local
-  // cursor stack. If we're paging forward we add new cursors, otherwise we're
-  // re-using previously seen cursors for consistency. We reset if we go back
-  // to the start.
-  if (pageIndex <= 0) {
-    prevCursors.length = 0;
-  } else {
-    const index = pageIndex - 1;
-    if (index < prevCursors.length) {
-      // Already known page
-      params.set("cursor", prevCursors[index]);
-    } else {
-      // New page case: use cursor from previous response or fall back to more
-      // expensive and inconsistent offset-based pagination.
-      if (cursor) {
-        prevCursors.push(cursor);
-        params.set("cursor", cursor);
-      } else {
-        params.set("offset", `${pageIndex * pageSize}`);
-      }
-    }
-  }
-
-  return params;
-}
-
 export type ListArgs2 = {
   filter: string | undefined | null;
   pageSize: number;
+  pageIndex?: number;
   cursor: string | undefined | null;
 };
 
 export function buildListSearchParams2({
   filter,
   pageSize,
+  pageIndex,
   cursor,
 }: ListArgs2): URLSearchParams {
   const params = new URLSearchParams();
@@ -99,6 +37,10 @@ export function buildListSearchParams2({
 
   if (cursor) {
     params.set("cursor", cursor);
+  } else {
+    if (pageIndex) {
+      params.set("offset", `${pageIndex * pageSize}`);
+    }
   }
 
   return params;
