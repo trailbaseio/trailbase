@@ -1,16 +1,10 @@
-import {
-  createMemo,
-  createSignal,
-  createResource,
-  Switch,
-  Match,
-  Show,
-} from "solid-js";
+import { createMemo, createSignal, Switch, Match, Show } from "solid-js";
+import { useQuery } from "@tanstack/solid-query";
 import { createWritableMemo } from "@solid-primitives/memo";
-import { adminFetch } from "@/lib/fetch";
 import { TbDownload, TbColumns, TbColumnsOff } from "solid-icons/tb";
+
+import { adminFetch } from "@/lib/fetch";
 import { showSaveFileDialog } from "@/lib/utils";
-import { iconButtonStyle } from "@/components/IconButton";
 
 import { RecordApiConfig } from "@proto/config";
 import type { Table } from "@bindings/Table";
@@ -25,6 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { iconButtonStyle } from "@/components/IconButton";
 import {
   Select,
   SelectContent,
@@ -70,20 +65,18 @@ export function SchemaDialog(props: {
 }) {
   const [mode, setMode] = createSignal<Mode>("Select");
   const apiNames = createMemo(() => props.apis.map((api) => api.name));
-  const [api, setApi] = createWritableMemo(() => apiNames()[0] ?? "");
+  const [apiName, setApiName] = createWritableMemo(() => apiNames()[0] ?? "");
 
-  const args = () => ({
-    mode: mode(),
-    apiName: api(),
-  });
-
-  const [schema] = createResource(args, async ({ mode, apiName }) => {
-    console.debug(`Fetching ${apiName}: ${mode}`);
-    const response = await adminFetch(
-      `/schema/${apiName}/schema.json?mode=${mode}`,
-    );
-    return await response.json();
-  });
+  const schema = useQuery(() => ({
+    queryKey: ["schema", mode(), apiName()],
+    queryFn: async () => {
+      console.debug(`Fetching ${apiName()}: ${mode()}`);
+      const response = await adminFetch(
+        `/schema/${apiName()}/schema.json?mode=${mode()}`,
+      );
+      return await response.json();
+    },
+  }));
 
   return (
     <Dialog id="schema">
@@ -100,35 +93,38 @@ export function SchemaDialog(props: {
       <DialogContent class="min-w-[80dvw]">
         <DialogHeader>
           <div class="mr-4 flex items-center justify-between">
-            <DialogTitle>JSON Schema</DialogTitle>
+            <DialogTitle>JSON Schema "{apiName()}"</DialogTitle>
 
             <div class="flex items-center gap-2">
-              <Show when={schema.state === "ready"}>
+              <Show when={schema.isSuccess}>
                 <SchemaDownloadButton
-                  apiName={api()}
-                  schema={schema()}
+                  apiName={apiName()}
+                  schema={schema.data}
                   mode={mode()}
                 />
               </Show>
 
-              <Select
-                value={api()}
-                onChange={setApi}
-                options={[...apiNames()]}
-                placeholder="API"
-                itemComponent={(props) => (
-                  <SelectItem item={props.item}>
-                    {props.item.rawValue}
-                  </SelectItem>
-                )}
-              >
-                <SelectTrigger aria-label="Apis" class="w-[180px]">
-                  <SelectValue>
-                    {(state) => `API: ${state.selectedOption()}`}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent />
-              </Select>
+              {/* NOTE: This is for tables with multiple APIs */}
+              {apiNames().length > 1 && (
+                <Select
+                  value={apiName()}
+                  onChange={setApiName}
+                  options={[...apiNames()]}
+                  placeholder="API"
+                  itemComponent={(props) => (
+                    <SelectItem item={props.item}>
+                      {props.item.rawValue}
+                    </SelectItem>
+                  )}
+                >
+                  <SelectTrigger aria-label="Apis" class="w-[180px]">
+                    <SelectValue>
+                      {(state) => `API: ${state.selectedOption()}`}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent />
+                </Select>
+              )}
 
               <Select
                 value={mode()}
@@ -154,12 +150,12 @@ export function SchemaDialog(props: {
 
         <div class="h-[80dvh] overflow-auto">
           <Switch>
-            <Match when={schema.error}>Error: {schema.error}</Match>
+            <Match when={schema.error}>{`Error: ${schema.error}`}</Match>
 
-            <Match when={schema.loading}>Loading...</Match>
+            <Match when={schema.isLoading}>Loading...</Match>
 
-            <Match when={schema()}>
-              <pre>{JSON.stringify(schema(), null, "  ")}</pre>
+            <Match when={schema.data}>
+              <pre>{JSON.stringify(schema.data!, null, "  ")}</pre>
             </Match>
           </Switch>
         </div>
