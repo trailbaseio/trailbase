@@ -1,14 +1,12 @@
 import {
   For,
   Show,
-  createEffect,
   createMemo,
   createSignal,
   splitProps,
   type Accessor,
 } from "solid-js";
 import { createWritableMemo } from "@solid-primitives/memo";
-import { useSearchParams } from "@solidjs/router";
 import {
   flexRender,
   createSolidTable,
@@ -40,11 +38,6 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { createWindowWidth } from "@/components/SplitView";
 
-type SearchParams = {
-  pageIndex: string;
-  pageSize: string;
-};
-
 export function safeParseInt(v: string | undefined): number | undefined {
   if (v !== undefined) {
     try {
@@ -74,7 +67,7 @@ type Props<TData, TValue> = {
   data: Accessor<TData[] | undefined>;
 
   rowCount?: number;
-  initialPagination?: PaginationState;
+  pagination?: PaginationState;
   onPaginationChange?: OnChangeFn<PaginationState>;
 
   onRowSelection?: (idx: number, row: TData, value: boolean) => void;
@@ -85,36 +78,19 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
   const [local] = splitProps(props, ["columns", "data"]);
   const [rowSelection, setRowSelection] = createSignal({});
 
-  const [searchParams, setSearchParams] = useSearchParams<SearchParams>();
   const paginationEnabled = () => props.onPaginationChange !== undefined;
-
-  function initPaginationState(): PaginationState {
-    return {
-      pageIndex:
-        safeParseInt(searchParams.pageIndex) ??
-        props.initialPagination?.pageIndex ??
-        0,
-      pageSize:
-        safeParseInt(searchParams.pageSize) ??
-        props.initialPagination?.pageSize ??
-        20,
-    };
-  }
-
   const [paginationState, setPaginationState] =
     createWritableMemo<PaginationState>(() => {
       // Whenever column definitions change, reset pagination state.
       //
-      // FIXME: column definition is an insufficient proxy, we should also reset
-      // when switching between tables/views with matching schemas. Maybe we
-      // should just inject a Signal<PaginationState>
+      // FIXME: We should probably just not use a memo and and receive columns/data by value to rebuild instead.
       const _c = props.columns();
 
-      return initPaginationState();
+      return {
+        pageIndex: props.pagination?.pageIndex ?? 0,
+        pageSize: props.pagination?.pageSize ?? 20,
+      };
     });
-  createEffect(() => {
-    setSearchParams({ ...paginationState() });
-  });
 
   const columns = createMemo(() => {
     const onRowSelection = props.onRowSelection;
@@ -409,6 +385,9 @@ function PaginationControl<TData>(props: {
               />
             </svg>
           </Button>
+
+          {/*
+            // Doesn't work for cursors.
           <Button
             aria-label="Go to last page"
             variant="outline"
@@ -433,6 +412,7 @@ function PaginationControl<TData>(props: {
               />
             </svg>
           </Button>
+          */}
         </div>
 
         <div class="flex items-center justify-center whitespace-nowrap text-sm font-medium">

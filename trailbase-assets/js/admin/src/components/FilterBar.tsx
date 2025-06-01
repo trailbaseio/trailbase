@@ -9,7 +9,9 @@ export function FilterBar(props: {
   example?: JSX.Element;
 }) {
   let ref: HTMLInputElement | undefined;
-  const onSubmit = () => {
+  const onSubmit = (ev: SubmitEvent) => {
+    ev.preventDefault();
+
     const value = ref?.value;
     console.debug("set filter: ", value);
     if (value !== undefined) {

@@ -157,9 +157,14 @@ function ResultView(props: {
               {new Date(response()?.timestamp ?? 0).toLocaleTimeString()}
             </div>
 
+            {/* TODO: Enable pagination */}
             <DataTable
               columns={() => columnDefs(response()!.data!)}
               data={() => response()!.data!.rows as RowData[]}
+              pagination={{
+                pageIndex: 0,
+                pageSize: 50,
+              }}
             />
           </div>
         </Match>
@@ -359,7 +364,7 @@ function EditorPanel(props: {
   const execute = () => {
     const text = editor?.state.doc.toString();
     if (text) {
-      // We need to distinguish to work-around createResources caching.
+      // We need to distinguish new query vs same query to make sure we're not caching.
       if (queryString() === text) {
         executionResult.refetch();
       } else {

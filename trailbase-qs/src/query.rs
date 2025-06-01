@@ -37,16 +37,18 @@ impl<'de> serde::de::Deserialize<'de> for Cursor {
       ));
     };
 
+    // FIXME: This is brittle. The consumer should explicitly define what kind of cursor we expect
+    // based on table schema.
+    if let Ok(integer) = str.parse::<i64>() {
+      return Ok(Cursor::Integer(integer));
+    }
+
     if let Ok(uuid) = uuid::Uuid::parse_str(&str) {
       return Ok(Cursor::Blob(uuid.into()));
     }
 
     if let Ok(base64) = BASE64_URL_SAFE.decode(&str) {
       return Ok(Cursor::Blob(base64));
-    }
-
-    if let Ok(integer) = str.parse::<i64>() {
-      return Ok(Cursor::Integer(integer));
     }
 
     return Err(Error::invalid_type(

@@ -3,7 +3,6 @@ import {
   Match,
   Switch,
   createEffect,
-  createResource,
   createSignal,
   onCleanup,
   onMount,
@@ -11,6 +10,7 @@ import {
 import { useSearchParams } from "@solidjs/router";
 import { createColumnHelper } from "@tanstack/solid-table";
 import type { ColumnDef, PaginationState } from "@tanstack/solid-table";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/solid-query";
 import { Chart } from "chart.js/auto";
 import type {
   ChartData,
@@ -37,10 +37,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { DataTable, defaultPaginationState } from "@/components/Table";
+import { DataTable, safeParseInt } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 
 import { getLogs, type GetLogsProps } from "@/lib/logs";
+import type { ListLogsResponse } from "@bindings/ListLogsResponse";
 
 import countriesGeoJSON from "@/assets/countries-110m.json";
 
@@ -118,28 +119,74 @@ const columns: ColumnDef<LogJson>[] = [
 
 // Value is the previous value in case this isn't the first fetch.
 export function LogsPage() {
+  // NOTE: pageIndex is not controlled via the search params since we cannot
+  // just jump to page N, we need to cursor from the beginning.
+  const [pageIndex, setPageIndex] = createSignal(0);
   const [searchParams, setSearchParams] = useSearchParams<{
-    filter: string;
+    filter?: string;
+    pageSize?: string;
   }>();
-  const [filter, setFilter] = createSignal<string | undefined>(
-    searchParams.filter,
-  );
-  createEffect(() => {
-    setSearchParams({ filter: filter() });
-  });
 
-  const [pagination, setPagination] = createSignal<PaginationState>(
-    defaultPaginationState(),
-  );
-  const cursors: string[] = [];
-  const getLogsProps = (): GetLogsProps => {
+  const pagination = (): PaginationState => {
     return {
-      ...pagination(),
-      filter: filter(),
-      cursors,
+      pageSize: safeParseInt(searchParams.pageSize) ?? 20,
+      pageIndex: pageIndex(),
     };
   };
-  const [logsFetch, { refetch }] = createResource(getLogsProps, getLogs);
+
+  const setFilter = (filter: string | undefined) =>
+    setSearchParams({
+      ...searchParams,
+      filter,
+    });
+
+  // NOTE: admin logs endpoint doesn't support offset, we have to cursor through.
+  // FIXME: Are the cursors actually still needed with getNextPageParam?.
+  const cursors: string[] = [];
+
+  const logsFetch = useInfiniteQuery(() => ({
+    queryKey: ["logs", searchParams, pageIndex()],
+    initialPageParam: null,
+    getNextPageParam: (lastPage: ListLogsResponse, _pages): string | null => {
+      return lastPage.cursor;
+    },
+    queryFn: async ({ pageParam }: { pageParam: string | null }) => {
+      const pageIndex = pagination().pageIndex;
+      const fetchArgs: GetLogsProps = {
+        ...pagination(),
+        filter: searchParams.filter,
+        cursors: cursors,
+      };
+
+      // FIXME: pageParam should be the previous cursor, but it's always null?
+      const cursor: string | null = pageParam;
+      // console.debug("logs cursor", cursor, cursors);
+
+      const r = await getLogs(fetchArgs, cursor);
+      if (r.cursor !== null) {
+        if (pageIndex > cursors.length - 1) {
+          cursors.push(r.cursor);
+        } else {
+          cursors[pageIndex] = r.cursor;
+        }
+      }
+
+      return r;
+    },
+  }));
+  const client = useQueryClient();
+  const refetch = () => {
+    client.invalidateQueries({
+      queryKey: ["logs"],
+    });
+  };
+
+  const lastPage = (pages: ListLogsResponse[] | undefined) => {
+    if (pages) {
+      return pages[pages.length - 1];
+    }
+  };
+
   const [showMap, setShowMap] = createSignal(true);
   const [showGeoipDialog, setShowGeoipDialog] = createSignal(false);
 
@@ -176,9 +223,9 @@ export function LogsPage() {
               </DialogContent>
 
               <IconButton
-                disabled={logsFetch.state !== "ready"}
+                disabled={logsFetch.isSuccess}
                 onClick={() => {
-                  if (logsFetch()?.stats?.country_codes) {
+                  if (lastPage(logsFetch.data?.pages)?.stats?.country_codes) {
                     setShowMap((v) => !v);
                   } else {
                     setShowGeoipDialog((v) => !v);
@@ -197,27 +244,34 @@ export function LogsPage() {
         <Switch fallback={<p>Loading...</p>}>
           <Match when={logsFetch.error}>Error {`${logsFetch.error}`}</Match>
 
-          <Match when={logsFetch.state === "ready"}>
-            {pagination().pageIndex === 0 && logsFetch()!.stats && (
-              <div class="mb-4 flex h-[300px] w-full gap-4">
-                <div class={showMap() ? "w-1/2 grow" : "w-full"}>
-                  <LogsChart stats={logsFetch()!.stats!} />
-                </div>
-
-                {showMap() && logsFetch()!.stats?.country_codes && (
-                  <div class="flex w-1/2 max-w-[500px] items-center">
-                    <WorldMap
-                      country_codes={logsFetch()!.stats!.country_codes!}
+          <Match when={logsFetch.isSuccess}>
+            {pagination().pageIndex === 0 &&
+              lastPage(logsFetch.data?.pages)?.stats && (
+                <div class="mb-4 flex h-[300px] w-full gap-4">
+                  <div class={showMap() ? "w-1/2 grow" : "w-full"}>
+                    <LogsChart
+                      stats={lastPage(logsFetch.data?.pages)!.stats!}
                     />
                   </div>
-                )}
-              </div>
-            )}
+
+                  {showMap() &&
+                    lastPage(logsFetch.data?.pages)?.stats?.country_codes && (
+                      <div class="flex w-1/2 max-w-[500px] items-center">
+                        <WorldMap
+                          country_codes={
+                            lastPage(logsFetch.data?.pages)!.stats!
+                              .country_codes!
+                          }
+                        />
+                      </div>
+                    )}
+                </div>
+              )}
 
             <FilterBar
-              initial={filter()}
+              initial={searchParams.filter}
               onSubmit={(value: string) => {
-                if (value === filter()) {
+                if (value === searchParams.filter) {
                   refetch();
                 } else {
                   setFilter(value);
@@ -235,10 +289,39 @@ export function LogsPage() {
 
             <DataTable
               columns={() => columns}
-              data={() => logsFetch()?.entries}
-              rowCount={Number(logsFetch()?.total_row_count ?? -1)}
-              onPaginationChange={setPagination}
-              initialPagination={pagination()}
+              data={() => lastPage(logsFetch.data?.pages)?.entries}
+              rowCount={Number(
+                lastPage(logsFetch.data?.pages)?.total_row_count ?? -1,
+              )}
+              pagination={pagination()}
+              onPaginationChange={(
+                p:
+                  | PaginationState
+                  | ((old: PaginationState) => PaginationState),
+              ) => {
+                function setPagination({
+                  pageSize,
+                  pageIndex,
+                }: PaginationState) {
+                  // Pagination requires cursors. So whenever we reset the pageSize we need to start from the beginning.
+                  const newIndex =
+                    pageSize !== safeParseInt(searchParams.pageSize)
+                      ? 0
+                      : pageIndex;
+                  setPageIndex(newIndex);
+
+                  setSearchParams({
+                    ...searchParams,
+                    pageSize,
+                  });
+                }
+
+                if (typeof p === "function") {
+                  setPagination(p(pagination()));
+                } else {
+                  setPagination(p);
+                }
+              }}
             />
           </Match>
         </Switch>

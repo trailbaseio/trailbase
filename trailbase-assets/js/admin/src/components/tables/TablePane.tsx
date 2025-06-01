@@ -585,7 +585,7 @@ function RowDataTable(props: {
                   columns={() => props.state.columnDefs}
                   data={() => props.state.response.rows}
                   rowCount={totalRowCount()}
-                  initialPagination={props.state.store.pagination}
+                  pagination={props.state.store.pagination}
                   onPaginationChange={(
                     p:
                       | PaginationState
@@ -703,6 +703,7 @@ export function TablePane(props: {
     pageSize?: string;
   }>();
 
+  // TODO: We're syncing filter state between the store and the search params. Let's remove it from the store.
   function newStore({ filter }: { filter: string | null }): TableStore {
     return {
       selected: props.selectedTable,

@@ -1,17 +1,12 @@
-import {
-  createResource,
-  createSignal,
-  Match,
-  Show,
-  Switch,
-  Suspense,
-} from "solid-js";
+import { createSignal, Match, Show, Switch, Suspense } from "solid-js";
 import type { Setter } from "solid-js";
-import { createForm } from "@tanstack/solid-form";
+import { useSearchParams } from "@solidjs/router";
 import { TbRefresh, TbCrown, TbEdit, TbTrash } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
-import { createColumnHelper, PaginationState } from "@tanstack/solid-table";
-import type { ColumnDef } from "@tanstack/solid-table";
+import { createForm } from "@tanstack/solid-form";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/solid-query";
+import { createColumnHelper } from "@tanstack/solid-table";
+import type { ColumnDef, PaginationState } from "@tanstack/solid-table";
 
 import {
   Dialog,
@@ -32,7 +27,7 @@ import {
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Header } from "@/components/Header";
-import { DataTable } from "@/components/Table";
+import { DataTable, safeParseInt } from "@/components/Table";
 import { IconButton } from "@/components/IconButton";
 import { Label } from "@/components/ui/label";
 import { AddUser } from "@/components/accounts/AddUser";
@@ -50,6 +45,7 @@ import { SafeSheet, SheetContainer } from "@/components/SafeSheet";
 
 import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
 import type { UserJson } from "@bindings/UserJson";
+import { ListUsersResponse } from "@bindings/ListUsersResponse";
 
 const columnHelper = createColumnHelper<UserJson>();
 
@@ -251,24 +247,75 @@ function EditSheetContent(props: {
 }
 
 export function AccountsPage() {
-  const [filter, setFilter] = createSignal<string | undefined>();
-  const [pagination, setPagination] = createSignal<PaginationState>({
-    pageSize: 20,
-    pageIndex: 0,
-  });
+  // NOTE: pageIndex is not controlled via the search params since we cannot
+  // just jump to page N, we need to cursor from the beginning.
+  const [pageIndex, setPageIndex] = createSignal(0);
+  const [searchParams, setSearchParams] = useSearchParams<{
+    filter?: string;
+    pageSize?: string;
+  }>();
+
+  const pagination = (): PaginationState => {
+    return {
+      pageSize: safeParseInt(searchParams.pageSize) ?? 20,
+      pageIndex: pageIndex(),
+    };
+  };
+
+  const setFilter = (filter: string | undefined) =>
+    setSearchParams({
+      ...searchParams,
+      filter,
+    });
+
+  // NOTE: admin user endpoint doesn't support offset, we have to cursor through.
+  // FIXME: Are the cursors actually still needed with getNextPageParam?.
   const cursors: string[] = [];
 
-  const buildFetchArgs = (): FetchUsersArgs => ({
-    pageSize: pagination().pageSize,
-    pageIndex: pagination().pageIndex,
-    cursors: cursors,
-    filter: filter(),
-  });
+  const users = useInfiniteQuery(() => ({
+    queryKey: ["users", searchParams, pageIndex()],
+    initialPageParam: null,
+    getNextPageParam: (lastPage: ListUsersResponse, _pages) => lastPage.cursor,
+    queryFn: async ({ pageParam }: { pageParam: string | null }) => {
+      const pageIndex = pagination().pageIndex;
+      const fetchArgs: FetchUsersArgs = {
+        ...pagination(),
+        cursors: cursors,
+        filter: searchParams.filter,
+      };
 
-  const [users, { refetch }] = createResource(buildFetchArgs, fetchUsers);
+      // FIXME: pageParam should be the previous cursor, but it's always null?
+      const cursor: string | null = pageParam;
+      // console.debug("account cursor", cursor, cursors);
+
+      const r = await fetchUsers(fetchArgs, cursor);
+      if (r.cursor !== null) {
+        if (pageIndex > cursors.length - 1) {
+          cursors.push(r.cursor);
+        } else {
+          cursors[pageIndex] = r.cursor;
+        }
+      }
+
+      return r;
+    },
+  }));
+  const client = useQueryClient();
+  const refetch = () => {
+    client.invalidateQueries({
+      queryKey: ["users"],
+    });
+  };
+
   const [editUser, setEditUser] = createSignal<UserJson | undefined>();
 
   const columns = () => buildColumns(setEditUser, refetch);
+
+  const lastPage = (pages: ListUsersResponse[] | undefined) => {
+    if (pages) {
+      return pages[pages.length - 1];
+    }
+  };
 
   return (
     <div class="h-dvh overflow-y-auto">
@@ -283,9 +330,9 @@ export function AccountsPage() {
 
       <div class="flex flex-col items-end gap-4 p-4">
         <FilterBar
-          initial={filter()}
+          initial={searchParams.filter}
           onSubmit={(value: string) => {
-            if (value === filter()) {
+            if (value === searchParams.filter) {
               refetch();
             } else {
               setFilter(value);
@@ -304,18 +351,47 @@ export function AccountsPage() {
 
         <Suspense fallback={<div>Loading...</div>}>
           <Switch>
-            <Match when={users.error}>
-              <span>Error: {users.error}</span>
+            <Match when={users.isError}>
+              <span>Error: {users.error?.toString()}</span>
             </Match>
 
-            <Match when={users()}>
+            <Match when={users.data?.pages}>
               <div class="w-full space-y-2.5">
                 <DataTable
                   columns={columns}
-                  data={() => users()?.users}
-                  rowCount={Number(users()?.total_row_count)}
-                  initialPagination={pagination()}
-                  onPaginationChange={setPagination}
+                  data={() => lastPage(users.data?.pages)?.users ?? []}
+                  rowCount={Number(
+                    lastPage(users.data?.pages)?.total_row_count ?? -1,
+                  )}
+                  pagination={pagination()}
+                  onPaginationChange={(
+                    p:
+                      | PaginationState
+                      | ((old: PaginationState) => PaginationState),
+                  ) => {
+                    function setPagination({
+                      pageSize,
+                      pageIndex,
+                    }: PaginationState) {
+                      // Pagination requires cursors. So whenever we reset the pageSize we need to start from the beginning.
+                      const newIndex =
+                        pageSize !== safeParseInt(searchParams.pageSize)
+                          ? 0
+                          : pageIndex;
+                      setPageIndex(newIndex);
+
+                      setSearchParams({
+                        ...searchParams,
+                        pageSize,
+                      });
+                    }
+
+                    if (typeof p === "function") {
+                      setPagination(p(pagination()));
+                    } else {
+                      setPagination(p);
+                    }
+                  }}
                 />
               </div>
 

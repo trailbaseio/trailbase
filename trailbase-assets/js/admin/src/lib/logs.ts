@@ -14,23 +14,16 @@ export type GetLogsProps = {
 
 export async function getLogs(
   source: GetLogsProps,
-  { value }: { value: ListLogsResponse | undefined },
+  cursor: string | null,
 ): Promise<ListLogsResponse> {
   const params = buildListSearchParams({
     filter: source.filter,
     pageSize: source.pageSize,
     pageIndex: source.pageIndex,
-    cursor: value?.cursor,
+    cursor,
     prevCursors: source.cursors,
   });
 
-  try {
-    const response = await adminFetch(`/logs?${params}`);
-    return await response.json();
-  } catch (err) {
-    if (value) {
-      return value;
-    }
-    throw err;
-  }
+  const response = await adminFetch(`/logs?${params}`);
+  return await response.json();
 }

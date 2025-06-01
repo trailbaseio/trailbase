@@ -23,7 +23,7 @@ export function buildListSearchParams({
   if (filter) {
     try {
       const filterParams = parseFilter(filter);
-      console.debug(`Filter search prams: ${filterParams}`);
+      console.debug(`Filter search params: ${filterParams}`);
 
       for (const [filter, value] of filterParams) {
         params.set(filter, value);
@@ -43,7 +43,7 @@ export function buildListSearchParams({
   // cursor stack. If we're paging forward we add new cursors, otherwise we're
   // re-using previously seen cursors for consistency. We reset if we go back
   // to the start.
-  if (pageIndex === 0) {
+  if (pageIndex <= 0) {
     prevCursors.length = 0;
   } else {
     const index = pageIndex - 1;

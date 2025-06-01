@@ -16,7 +16,7 @@ use uuid::Uuid;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::constants::{LOGS_RETENTION_DEFAULT, LOGS_TABLE_ID_COLUMN};
-use crate::listing::{WhereClause, build_filter_where_clause, cursor_to_value, limit_or_default};
+use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::schema_metadata::{TableMetadata, lookup_and_parse_table_schema};
 
 #[derive(Debug, Deserialize, Serialize, TS)]
@@ -174,7 +174,17 @@ pub async fn list_logs_handler(
     };
   }
 
-  let first_page = cursor.is_none();
+  let cursor = cursor.and_then(|c| match c {
+    Cursor::Integer(i) => Some(i),
+    Cursor::Blob(b) => {
+      log::warn!(
+        "expected integer cursor, got: {} from {raw_url_query:?}",
+        String::from_utf8_lossy(&b)
+      );
+      None
+    }
+  });
+
   let geoip_db_type = trailbase_extension::geoip::database_type();
   let mut logs = fetch_logs(
     conn,
@@ -192,6 +202,7 @@ pub async fn list_logs_handler(
     }
   }
 
+  let first_page = cursor.is_none();
   let stats = if first_page {
     let now = Utc::now();
     let args = FetchAggregateArgs {
@@ -219,7 +230,13 @@ pub async fn list_logs_handler(
 
   let response = ListLogsResponse {
     total_row_count,
-    cursor: logs.last().map(|log| log.id.to_string()),
+    cursor: logs.last().map(|log| {
+      if let Some(old_cursor) = cursor {
+        assert!(old_cursor > log.id);
+      }
+
+      return log.id.to_string();
+    }),
     entries: logs
       .into_iter()
       .map(|log| log.into())
@@ -234,7 +251,7 @@ async fn fetch_logs(
   conn: &trailbase_sqlite::Connection,
   geoip_db_type: Option<DatabaseType>,
   filter_where_clause: WhereClause,
-  cursor: Option<Cursor>,
+  cursor: Option<i64>,
   order: &Order,
   limit: usize,
 ) -> Result<Vec<LogEntry>, Error> {
@@ -246,7 +263,10 @@ async fn fetch_logs(
   ));
 
   if let Some(cursor) = cursor {
-    params.push((Cow::Borrowed(":cursor"), cursor_to_value(cursor)));
+    params.push((
+      Cow::Borrowed(":cursor"),
+      trailbase_sqlite::Value::Integer(cursor),
+    ));
     where_clause = format!("{where_clause} AND log.id < :cursor",);
   }
 

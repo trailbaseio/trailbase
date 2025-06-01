@@ -36,23 +36,16 @@ export type FetchUsersArgs = {
 
 export async function fetchUsers(
   source: FetchUsersArgs,
-  { value }: { value: ListUsersResponse | undefined },
+  cursor: string | null,
 ): Promise<ListUsersResponse> {
   const params = buildListSearchParams({
     filter: source.filter,
     pageSize: source.pageSize,
     pageIndex: source.pageIndex,
-    cursor: value?.cursor,
+    cursor,
     prevCursors: source.cursors,
   });
 
-  try {
-    const response = await adminFetch(`/user?${params}`);
-    return await response.json();
-  } catch (err) {
-    if (value) {
-      return value;
-    }
-    throw err;
-  }
+  const response = await adminFetch(`/user?${params}`);
+  return await response.json();
 }

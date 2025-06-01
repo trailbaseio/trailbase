@@ -1,4 +1,5 @@
-import { createResource, For } from "solid-js";
+import { For } from "solid-js";
+import { useQuery } from "@tanstack/solid-query";
 import type { IconTypes } from "solid-icons";
 import {
   TbDatabase,
@@ -131,9 +132,8 @@ function FactCard(props: { title: string; content: string; href?: string }) {
   );
 }
 
-export function IndexPage() {
-  const [fetchResult, { refetch: _ }] = createResource(
-    `
+async function fetchDashboardData(): Promise<Data> {
+  const sql = `
     SELECT
       page_count * page_size, num_tables, num_views, num_users
     FROM
@@ -141,49 +141,53 @@ export function IndexPage() {
       pragma_page_size AS page_size,
       (SELECT COUNT(*) AS num_tables FROM sqlite_master WHERE type = 'table'),
       (SELECT COUNT(*) AS num_views FROM sqlite_master WHERE type = 'view'),
-      (SELECT COUNT(*) AS num_users FROM _user);
-  `,
-    async (sql) => {
-      const response = await executeSql(sql);
-      const error = response.error;
-      if (error) {
-        throw Error(JSON.stringify(error));
-      }
+      (SELECT COUNT(*) AS num_users FROM _user);`;
 
-      const data = response.data;
-      if (!data || data.rows.length < 1) {
-        throw Error(`Missing data: ${data}`);
-      }
-      const row = data.rows[0];
-      return {
-        dbSize: row[0] as number,
-        numTables: row[1] as number,
-        numViews: row[2] as number,
-        numUsers: row[3] as number,
-      } as Data;
-    },
-  );
+  const response = await executeSql(sql);
+  const error = response.error;
+  if (error) {
+    throw Error(JSON.stringify(error));
+  }
+
+  const data = response.data;
+  if (!data || data.rows.length < 1) {
+    throw Error(`Missing data: ${data}`);
+  }
+  const row = data.rows[0];
+  return {
+    dbSize: row[0] as number,
+    numTables: row[1] as number,
+    numViews: row[2] as number,
+    numUsers: row[3] as number,
+  } as Data;
+}
+
+export function IndexPage() {
+  const dashboardFetch = useQuery(() => ({
+    queryKey: ["dashboard"],
+    queryFn: fetchDashboardData,
+  }));
 
   return (
     <div class="h-dvh overflow-y-auto">
       <Header title="TrailBase" />
 
       <div class="prose m-4 flex grow flex-col gap-4">
-        {fetchResult.state === "ready" && (
+        {dashboardFetch.data && (
           <div class="flex grow gap-4">
             <FactCard
               title="Users"
-              content={`${fetchResult().numUsers}`}
+              content={`${dashboardFetch.data!.numUsers}`}
               href={`${BASE}/auth`}
             />
             <FactCard
               title="Tables & Views"
-              content={`${fetchResult().numTables + fetchResult().numViews}`}
+              content={`${dashboardFetch.data!.numTables + dashboardFetch.data!.numViews}`}
               href={`${BASE}/table`}
             />
             <FactCard
               title="Size"
-              content={`${(fetchResult().dbSize / 1024 / 1024).toPrecision(2)} MB`}
+              content={`${(dashboardFetch.data!.dbSize / 1024 / 1024).toPrecision(2)} MB`}
             />
           </div>
         )}
