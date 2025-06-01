@@ -31,12 +31,7 @@ import { DataTable, safeParseInt } from "@/components/Table";
 import { IconButton } from "@/components/IconButton";
 import { Label } from "@/components/ui/label";
 import { AddUser } from "@/components/accounts/AddUser";
-import {
-  deleteUser,
-  updateUser,
-  fetchUsers,
-  type FetchUsersArgs,
-} from "@/lib/user";
+import { deleteUser, updateUser, fetchUsers } from "@/lib/user";
 import {
   buildTextFormField,
   buildSecretFormField,
@@ -268,36 +263,21 @@ export function AccountsPage() {
       filter,
     });
 
-  // NOTE: admin user endpoint doesn't support offset, we have to cursor through.
-  // FIXME: Are the cursors actually still needed with getNextPageParam?.
-  const cursors: string[] = [];
-
+  // NOTE: admin user endpoint doesn't support offset, we have to cursor through
+  // and cannot just jump to page N.
   const users = useInfiniteQuery(() => ({
-    queryKey: ["users", searchParams, pageIndex()],
+    queryKey: ["users", searchParams],
     initialPageParam: null,
     getNextPageParam: (lastPage: ListUsersResponse, _pages) => lastPage.cursor,
     queryFn: async ({ pageParam }: { pageParam: string | null }) => {
-      const pageIndex = pagination().pageIndex;
-      const fetchArgs: FetchUsersArgs = {
-        ...pagination(),
-        cursors: cursors,
-        filter: searchParams.filter,
-      };
-
-      // FIXME: pageParam should be the previous cursor, but it's always null?
       const cursor: string | null = pageParam;
-      // console.debug("account cursor", cursor, cursors);
+      console.debug("account cursor", cursor);
 
-      const r = await fetchUsers(fetchArgs, cursor);
-      if (r.cursor !== null) {
-        if (pageIndex > cursors.length - 1) {
-          cursors.push(r.cursor);
-        } else {
-          cursors[pageIndex] = r.cursor;
-        }
-      }
-
-      return r;
+      return await fetchUsers(
+        searchParams.filter,
+        pagination().pageSize,
+        cursor,
+      );
     },
   }));
   const client = useQueryClient();
@@ -310,12 +290,8 @@ export function AccountsPage() {
   const [editUser, setEditUser] = createSignal<UserJson | undefined>();
 
   const columns = () => buildColumns(setEditUser, refetch);
-
-  const lastPage = (pages: ListUsersResponse[] | undefined) => {
-    if (pages) {
-      return pages[pages.length - 1];
-    }
-  };
+  const currentPage = (): ListUsersResponse | undefined =>
+    (users.data?.pages ?? [])[pagination().pageIndex];
 
   return (
     <div class="h-dvh overflow-y-auto">
@@ -355,14 +331,16 @@ export function AccountsPage() {
               <span>Error: {users.error?.toString()}</span>
             </Match>
 
-            <Match when={users.data?.pages}>
+            <Match when={users.isLoading}>
+              <span>Loading</span>
+            </Match>
+
+            <Match when={currentPage()}>
               <div class="w-full space-y-2.5">
                 <DataTable
                   columns={columns}
-                  data={() => lastPage(users.data?.pages)?.users ?? []}
-                  rowCount={Number(
-                    lastPage(users.data?.pages)?.total_row_count ?? -1,
-                  )}
+                  data={() => currentPage()?.users}
+                  rowCount={Number(users.data?.pages[0]?.total_row_count ?? -1)}
                   pagination={pagination()}
                   onPaginationChange={(
                     p:
@@ -373,12 +351,8 @@ export function AccountsPage() {
                       pageSize,
                       pageIndex,
                     }: PaginationState) {
-                      // Pagination requires cursors. So whenever we reset the pageSize we need to start from the beginning.
-                      const newIndex =
-                        pageSize !== safeParseInt(searchParams.pageSize)
-                          ? 0
-                          : pageIndex;
-                      setPageIndex(newIndex);
+                      setPageIndex(pageIndex);
+                      users.fetchNextPage();
 
                       setSearchParams({
                         ...searchParams,

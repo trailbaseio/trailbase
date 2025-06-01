@@ -205,13 +205,21 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
 
           <TableBody>
             <Show
-              when={table().getRowModel().rows?.length}
+              when={table().getRowModel().rows?.length > 0}
               fallback={
-                <TableRow>
-                  <TableCell colSpan={local.columns.length}>
-                    <span>No results.</span>
-                  </TableCell>
-                </TableRow>
+                paginationState().pageIndex > 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={local.columns.length}>
+                      <span>Loading...</span>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={local.columns.length}>
+                      <span>No results.</span>
+                    </TableCell>
+                  </TableRow>
+                )
               }
             >
               <For each={table().getRowModel().rows}>

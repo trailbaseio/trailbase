@@ -65,6 +65,45 @@ export function buildListSearchParams({
   return params;
 }
 
+export type ListArgs2 = {
+  filter: string | undefined | null;
+  pageSize: number;
+  cursor: string | undefined | null;
+};
+
+export function buildListSearchParams2({
+  filter,
+  pageSize,
+  cursor,
+}: ListArgs2): URLSearchParams {
+  const params = new URLSearchParams();
+
+  if (filter) {
+    try {
+      const filterParams = parseFilter(filter);
+      console.debug(`Filter search params: ${filterParams}`);
+
+      for (const [filter, value] of filterParams) {
+        params.set(filter, value);
+      }
+    } catch (err) {
+      showToast({
+        title: "Parse Error",
+        description: `${err}`,
+        variant: "error",
+      });
+    }
+  }
+
+  params.set("limit", pageSize.toString());
+
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+
+  return params;
+}
+
 export function parseFilter(expr: string): [string, string][] {
   if (expr === "") {
     return [];
