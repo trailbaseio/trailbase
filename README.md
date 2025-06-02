@@ -170,16 +170,28 @@ established by much larger, successful projects such as Grafana or Element.
 
 ## License
 
-TrailBase is free software under the terms of the [OSL-3.0](LICENSE).
+TrailBase is free software under the terms of the [Open Software License 3.0
+(OSL-3.0)](https://opensource.org/licenses/OSL-3.0).
 
-We chose this license over more popular, similar copyleft licenses such as
-AGPLv3 due to its narrower definition of derivative work that only covers
-modifications to TrailBase itself. This is similar to GPL's classpath or LGPL's
-linkage exception allowing the use of TrailBase as a framework and JS runtime
-without inflicting licensing requirements on your original work.
-That said, we ain't lawyers. The author of the license provides a more thorough
-[explanation](https://rosenlaw.com/OSL3.0-explained.htm). If you have any
-concerns or advice for us, please reach out.
+We chose the OSL-3.0 over other, better known copyleft licenses due to its
+narrower definition of "derivative work" that **only** covers modifications to
+TrailBase itself.
+This means that your application's original code is **not** subject to the
+OSL-3.0's copyleft provisions. This is true whether you connect over the
+network (e.g. web, mobile, other services, etc.), you're serving static assets,
+using the runtime to write custom server-side logic or using TrailBase as a
+framework.
+
+This limited scope is similar to the GPL's classpath or the LGPL's [linking
+exception](https://en.wikipedia.org/wiki/GPL_linking_exception).
+The goal is to allow building on top and around of TrailBase without any
+provisions rubbing off onto your original work, while making sure that fixes
+and improvements find their way back to the community.
+These are our intentions - we felt the need to spell them out explicitly
+because licensing is tricky and we ain't lawyers.
+Graciously, the license's author provides some more
+[explanations](https://rosenlaw.com/OSL3.0-explained.htm).
+If you have any concerns, please reach out.
 
 If you require an
 [exception](https://www.gnu.org/philosophy/selling-exceptions.html), reach out
