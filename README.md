@@ -170,16 +170,22 @@ established by much larger, successful projects such as Grafana or Element.
 
 ## License
 
-TrailBase is free software under the terms of the [OSL-3.0](LICENSE).
+TrailBase is licensed under the [Open Software License 3.0 (OSL-3.0)](https://opensource.org/licenses/OSL-3.0).
+For the full license text as included in this project and our detailed interpretation, please see our [Official License Page](https://github.com/trailbaseio/trailbase/blob/main/docs/src/content/docs/license.md).
 
-We chose this license over more popular, similar copyleft licenses such as
-AGPLv3 due to its narrower definition of derivative work that only covers
-modifications to TrailBase itself. This is similar to GPL's classpath or LGPL's
-linkage exception allowing the use of TrailBase as a framework and JS runtime
-without inflicting licensing requirements on your original work.
-That said, we ain't lawyers. The author of the license provides a more thorough
-[explanation](https://rosenlaw.com/OSL3.0-explained.htm). If you have any
-concerns or advice for us, please reach out.
+**Our Intent & Your Application:**
+
+We chose OSL-3.0 because its definition of "derivative work" is intended to be narrow, covering modifications _to the TrailBase core software itself_.
+
+This means:
+
+- If you **modify or extend the TrailBase core library source code**, those changes fall under OSL-3.0 and must also be shared under OSL-3.0.
+- If you **use TrailBase with your application** – for example, by using our client-side libraries (for web, mobile, etc.), writing server-side hooks and functions executed by TrailBase, or utilizing TrailBase for static web hosting – **your application and its original code are NOT considered derivative works of TrailBase.** Therefore, you are **not** required to license your project under OSL-3.0 or disclose its source code due to merely using TrailBase. The OSL-3.0's copyleft provision does not apply to your original work in these scenarios.
+
+This approach is similar in spirit to the "library" or "linkage" exceptions found in licenses like LGPL, or the "classpath exception" for GPL. The goal is to allow you to build on top of TrailBase without the copyleft provisions of OSL-3.0 applying to your original work.
+
+**Disclaimer:**
+We are not lawyers, and this is not legal advice. The above reflects our understanding and intent. For a detailed legal explanation of OSL-3.0, please refer to resources like the one provided by [Rosen Law](https://rosenlaw.com/OSL3.0-explained.htm) or consult your own legal counsel.
 
 If you require an
 [exception](https://www.gnu.org/philosophy/selling-exceptions.html), reach out
