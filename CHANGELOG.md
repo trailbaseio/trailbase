@@ -1,3 +1,14 @@
+## v0.12.1
+
+* Use fully-qualified databases everywhere. Preparation for multi-DB.
+* Support for for Maxmind's city-geoip DB and command line to specificy custom
+  DB locations.
+* Explicitly parse cursor based on schema.
+* Show command line in admin dashboard
+* Improve admin dash's state management .
+* Internal: Reduce dependene on vendored crates.
+* Update dependencies including latest version of SQLite.
+
 ## v0.12.0
 
 * Overhaul list API filters to allow for nested, complex expressions. The query
