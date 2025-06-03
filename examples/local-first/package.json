@@ -4,8 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
     "build": "tsc -b && vite build",
+    "check": "tsc --noEmit --skipLibCheck && eslint",
+    "dev": "vite",
+    "format": "prettier -w src",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -14,6 +16,7 @@
     "@tanstack/db-collections": "^0.0.6",
     "@tanstack/query-core": "=5.77.2",
     "@tanstack/react-db": "^0.0.4",
+    "@tanstack/store": "^0.7.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "trailbase": "workspace:*"
@@ -27,6 +30,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^16.0.0",
+    "prettier": "^3.5.3",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.30.1",
     "vite": "^6.3.5"
