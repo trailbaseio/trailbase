@@ -1,22 +1,13 @@
-import {
-  type ResourceFetcherInfo,
-  For,
-  Match,
-  Switch,
-  createMemo,
-  createEffect,
-  createResource,
-  createSignal,
-} from "solid-js";
-import { createStore, type Store, type SetStoreFunction } from "solid-js/store";
+import { For, Match, Switch, createMemo, createSignal } from "solid-js";
+import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { useSearchParams } from "@solidjs/router";
 import type {
   ColumnDef,
   PaginationState,
   CellContext,
 } from "@tanstack/solid-table";
+import { createWritableMemo } from "@solid-primitives/memo";
 import { createColumnHelper } from "@tanstack/solid-table";
-import { useQueryClient } from "@tanstack/solid-query";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { asyncBase64Encode } from "trailbase";
 
@@ -32,11 +23,7 @@ import {
 } from "@/components/tables/SchemaDownload";
 import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
 import { CreateAlterIndexForm } from "@/components/tables/CreateAlterIndex";
-import {
-  DataTable,
-  defaultPaginationState,
-  safeParseInt,
-} from "@/components/Table";
+import { DataTable, safeParseInt } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 import { DestructiveActionButton } from "@/components/DestructiveActionButton";
 import { IconButton } from "@/components/IconButton";
@@ -58,7 +45,7 @@ import { type FormRow, RowData } from "@/lib/convert";
 import { adminFetch } from "@/lib/fetch";
 import { urlSafeBase64ToUuid } from "@/lib/utils";
 import { dropTable, dropIndex } from "@/lib/table";
-import { deleteRows, fetchRows, type FetchArgs } from "@/lib/row";
+import { deleteRows, fetchRows } from "@/lib/row";
 import {
   findPrimaryKeyColumnIndex,
   getForeignKey,
@@ -71,6 +58,7 @@ import {
   tableType,
   tableSatisfiesRecordApiRequirements,
   viewSatisfiesRecordApiRequirements,
+  prettyFormatQualifiedName,
   type TableType,
 } from "@/lib/schema";
 
@@ -81,6 +69,8 @@ import type { Table } from "@bindings/Table";
 import type { TableIndex } from "@bindings/TableIndex";
 import type { TableTrigger } from "@bindings/TableTrigger";
 import type { View } from "@bindings/View";
+
+export type SimpleSignal<T> = [get: () => T, set: (state: T) => void];
 
 type FileUpload = {
   id: string;
@@ -183,19 +173,22 @@ function renderCell(
 }
 
 function Image(props: { url: string; mime: string }) {
-  const [imageData] = createResource(async () => {
-    const response = await adminFetch(props.url);
-    return await asyncBase64Encode(await response.blob());
-  });
+  const imageData = useQuery(() => ({
+    queryKey: ["tableImage", props.url],
+    queryFn: async () => {
+      const response = await adminFetch(props.url);
+      return await asyncBase64Encode(await response.blob());
+    },
+  }));
 
   return (
     <Switch>
-      <Match when={imageData.error}>{imageData.error}</Match>
+      <Match when={imageData.isError}>{`${imageData.error}`}</Match>
 
-      <Match when={imageData.loading}>Loading</Match>
+      <Match when={imageData.isLoading}>Loading</Match>
 
-      <Match when={imageData()}>
-        <img class="size-[50px]" src={imageData()} />
+      <Match when={imageData.data}>
+        <img class="size-[50px]" src={imageData.data} />
       </Match>
     </Switch>
   );
@@ -359,7 +352,7 @@ function TableHeaderLeftButtons(props: {
   indexes: TableIndex[];
   triggers: TableTrigger[];
   allTables: Table[];
-  rowsRefetch: () => Promise<void>;
+  rowsRefetch: () => void;
 }) {
   const type = () => tableType(props.table);
   const config = createConfigQuery();
@@ -395,7 +388,7 @@ function TableHeader(props: {
   triggers: TableTrigger[];
   allTables: Table[];
   schemaRefetch: () => Promise<void>;
-  rowsRefetch: () => Promise<void>;
+  rowsRefetch: () => void;
 }) {
   const headerTitle = () => {
     switch (tableType(props.table)) {
@@ -432,48 +425,44 @@ function TableHeader(props: {
   );
 }
 
-type TableStore = {
-  selected: Table | View;
-  schemas: ListSchemasResponse;
-
-  // Filter & pagination
-  filter: string | null;
-  pagination: PaginationState;
-};
-
 type TableState = {
-  store: Store<TableStore>;
-  setStore: SetStoreFunction<TableStore>;
-
-  response: ListRowsResponse;
+  selected: Table | View;
 
   // Derived
   pkColumnIndex: number;
   columnDefs: ColumnDef<RowData>[];
+
+  response: ListRowsResponse;
 };
 
 async function buildTableState(
-  source: FetchArgs,
-  store: Store<TableStore>,
-  setStore: SetStoreFunction<TableStore>,
-  info: ResourceFetcherInfo<TableState>,
+  selected: Table | View,
+  filter: string | null,
+  pageSize: number,
+  pageIndex: number,
+  cursor: string | null,
 ): Promise<TableState> {
-  const response = await fetchRows(source, { value: info.value?.response });
+  const response = await fetchRows(
+    selected.name,
+    filter,
+    pageSize,
+    pageIndex,
+    cursor,
+  );
 
   const pkColumnIndex = findPrimaryKeyColumnIndex(response.columns);
   const columnDefs = buildColumnDefs(
-    store.selected.name.name,
-    tableType(store.selected),
+    selected.name.name,
+    tableType(selected),
     pkColumnIndex,
     response.columns,
   );
 
   return {
-    store,
-    setStore,
-    response,
+    selected,
     pkColumnIndex,
     columnDefs,
+    response,
   };
 }
 
@@ -525,15 +514,17 @@ function buildColumnDefs(
 
 function RowDataTable(props: {
   state: TableState;
-  rowsRefetch: () => Promise<void>;
+  pagination: SimpleSignal<PaginationState>;
+  filter: SimpleSignal<string | undefined>;
+  rowsRefetch: () => void;
 }) {
   const [editRow, setEditRow] = createSignal<FormRow | undefined>();
   const [selectedRows, setSelectedRows] = createSignal(new Set<string>());
 
-  const table = () => props.state.store.selected;
+  const table = () => props.state.selected;
   const mutable = () => tableType(table()) === "table" && !hiddenTable(table());
 
-  const rowsRefetch = () => props.rowsRefetch().catch(console.error);
+  const rowsRefetch = () => props.rowsRefetch();
   const columns = (): Column[] => props.state.response.columns;
   const totalRowCount = () => Number(props.state.response.total_row_count);
   const pkColumnIndex = () => props.state.pkColumnIndex;
@@ -562,12 +553,12 @@ function RowDataTable(props: {
               </SheetContent>
 
               <FilterBar
-                initial={props.state.store.filter ?? undefined}
+                initial={props.filter[0]()}
                 onSubmit={(value: string) => {
-                  if (value === props.state.store.filter) {
+                  if (value === props.filter[0]()) {
                     rowsRefetch();
                   } else {
-                    props.state.setStore("filter", (_prev) => value);
+                    props.filter[1](value);
                   }
                 }}
                 example={
@@ -580,18 +571,23 @@ function RowDataTable(props: {
                 }
               />
 
-              <div class="space-y-2.5 overflow-auto">
+              <div class="space-y-2 overflow-auto">
                 <DataTable
                   columns={() => props.state.columnDefs}
                   data={() => props.state.response.rows}
                   rowCount={totalRowCount()}
-                  pagination={props.state.store.pagination}
+                  pagination={props.pagination[0]()}
                   onPaginationChange={(
                     p:
                       | PaginationState
                       | ((old: PaginationState) => PaginationState),
                   ) => {
-                    props.state.setStore("pagination", p);
+                    if (typeof p === "function") {
+                      const state = p(props.pagination[0]());
+                      props.pagination[1](state);
+                    } else {
+                      props.pagination[1](p);
+                    }
                   }}
                   onRowClick={
                     mutable()
@@ -703,73 +699,101 @@ export function TablePane(props: {
     pageSize?: string;
   }>();
 
-  // TODO: We're syncing filter state between the store and the search params. Let's remove it from the store.
-  function newStore({ filter }: { filter: string | null }): TableStore {
-    return {
-      selected: props.selectedTable,
-      schemas: props.schemas,
-      filter,
-      pagination: defaultPaginationState({
-        // NOTE: We index has to start at 0 since we're building the list of
-        // stable cursors as we incrementally page.
-        index: 0,
-        size: safeParseInt(searchParams.pageSize) ?? 20,
-      }),
-    };
-  }
+  // Reset when table or search params change
+  const reset = () => {
+    return [props.selectedTable, searchParams.pageSize, searchParams.filter];
+  };
+  const [pageIndex, setPageIndex] = createWritableMemo<number>(() => {
+    reset();
+    return 0;
+  });
+  const [cursors, setCursors] = createWritableMemo<string[]>(() => {
+    reset();
+    return [];
+  });
 
-  // Cursors are deliberately kept out of the store to avoid tracking.
-  let cursors: string[] = [];
-  const [store, setStore] = createStore<TableStore>(
-    newStore({ filter: searchParams.filter ?? null }),
-  );
-  createEffect(() => {
-    // When switching tables/views, recreate the state. This includes the main
-    // store but also the current search params and the untracked cursors.
-    if (store.selected.name !== props.selectedTable.name) {
-      cursors = [];
-
-      // The new table probably has different schema, thus filters must not
-      // carry over.
-      const newFilter = { filter: null };
-      setSearchParams(newFilter);
-
-      setStore(newStore(newFilter));
-      return;
-    }
-
-    // When the filter changes, we also update the search params to be in sync.
+  const filter = () => searchParams.filter;
+  const setFilter = (filter: string | undefined) => {
     setSearchParams({
-      filter: store.filter,
+      ...searchParams,
+      filter,
     });
-  });
+  };
+  const pagination = (): PaginationState => {
+    return {
+      pageSize: safeParseInt(searchParams.pageSize) ?? 20,
+      pageIndex: pageIndex(),
+    };
+  };
 
-  const buildFetchArgs = (): FetchArgs => ({
-    // We need to access store properties here to react to them changing. It's
-    // fine grained, so accessing a nested object like store.pagination isn't
-    // enough.
-    tableName: store.selected.name,
-    filter: store.filter,
-    pageSize: store.pagination.pageSize,
-    pageIndex: store.pagination.pageIndex,
-    cursors: cursors,
-  });
-  const [state, { refetch: rowsRefetch }] = createResource(
-    buildFetchArgs,
-    async (source: FetchArgs, info: ResourceFetcherInfo<TableState>) => {
+  const state = useQuery(() => ({
+    queryKey: [
+      "tableData",
+      searchParams.filter,
+      pagination().pageIndex,
+      pagination().pageSize,
+      prettyFormatQualifiedName(props.selectedTable.name),
+    ],
+    queryFn: async ({ queryKey }) => {
+      const p = pagination();
+      const c = cursors();
+      console.debug(
+        `Fetching data for key: ${queryKey}, index: ${p.pageIndex}, cursors: ${c}`,
+      );
+
       try {
-        return await buildTableState(source, store, setStore, info);
+        const response = await buildTableState(
+          props.selectedTable,
+          searchParams.filter ?? null,
+          p.pageSize,
+          p.pageIndex,
+          c[p.pageIndex - 1],
+        );
+
+        const cursor = response.response.cursor;
+        if (cursor && p.pageIndex >= c.length) {
+          setCursors([...c, cursor]);
+        }
+
+        return response;
       } catch (err) {
+        // Reset.
+        setPageIndex(0);
         setSearchParams({
           filter: undefined,
-          pageIndex: undefined,
           pageSize: undefined,
         });
 
         throw err;
       }
     },
-  );
+  }));
+
+  const client = useQueryClient();
+  const rowsRefetch = () =>
+    client.invalidateQueries({
+      queryKey: ["tableData"],
+    });
+
+  const setPagination = (s: PaginationState) => {
+    const current = pagination();
+    if (current.pageSize !== s.pageSize) {
+      setSearchParams({
+        ...searchParams,
+        pageSize: s.pageSize,
+      });
+      return;
+    }
+
+    if (current.pageIndex != s.pageIndex) {
+      setPageIndex(s.pageIndex);
+    }
+  };
+
+  const Fallback = () => {
+    // TODO: Return a shimmery table to reduce visual jank.
+    return <>Loading...</>;
+  };
 
   return (
     <>
@@ -779,16 +803,12 @@ export function TablePane(props: {
         triggers={triggers()}
         allTables={props.schemas.tables}
         schemaRefetch={props.schemaRefetch}
-        rowsRefetch={() =>
-          (async () => {
-            await rowsRefetch();
-          })()
-        }
+        rowsRefetch={rowsRefetch}
       />
 
       <div class="flex flex-col gap-8 p-4">
-        <Switch fallback={<>Loading...</>}>
-          <Match when={state.error}>
+        <Switch fallback={Fallback()}>
+          <Match when={state.isError}>
             <div class="my-2 flex flex-col gap-4">
               Failed to fetch rows: {`${state.error}`}
               <div>
@@ -797,14 +817,12 @@ export function TablePane(props: {
             </div>
           </Match>
 
-          <Match when={state()}>
+          <Match when={state.data}>
             <RowDataTable
-              state={state()!}
-              rowsRefetch={() =>
-                (async () => {
-                  await rowsRefetch();
-                })()
-              }
+              state={state.data!}
+              pagination={[pagination, setPagination]}
+              filter={[filter, setFilter]}
+              rowsRefetch={rowsRefetch}
             />
           </Match>
         </Switch>

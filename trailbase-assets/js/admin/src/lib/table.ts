@@ -11,8 +11,6 @@ import type { DropIndexRequest } from "@bindings/DropIndexRequest";
 import type { DropTableRequest } from "@bindings/DropTableRequest";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 
-const tableSchemaKey = ["table_schema"];
-
 export function createTableSchemaQuery() {
   async function getAllTableSchemas(): Promise<ListSchemasResponse> {
     const response = await adminFetch("/tables");
@@ -20,10 +18,10 @@ export function createTableSchemaQuery() {
   }
 
   return useQuery(() => ({
-    queryKey: tableSchemaKey,
+    queryKey: ["table_schema"],
     queryFn: getAllTableSchemas,
-    refetchInterval: 120 * 1000,
-    refetchOnMount: false,
+    // refetchInterval: 120 * 1000,
+    refetchOnMount: true,
   }));
 }
 

@@ -1,5 +1,5 @@
 import { adminFetch } from "@/lib/fetch";
-import { buildListSearchParams } from "@/lib/list";
+import { buildListSearchParams2 } from "@/lib/list";
 import {
   findPrimaryKeyColumnIndex,
   prettyFormatQualifiedName,
@@ -71,35 +71,22 @@ export async function deleteRows(
   return await response.text();
 }
 
-export type FetchArgs = {
-  tableName: QualifiedName;
-  filter: string | null;
-  pageSize: number;
-  pageIndex: number;
-  cursors: string[];
-};
-
 export async function fetchRows(
-  source: FetchArgs,
-  { value }: { value: ListRowsResponse | undefined },
+  tableName: QualifiedName,
+  filter: string | null,
+  pageSize: number,
+  pageIndex: number,
+  cursor: string | null,
 ): Promise<ListRowsResponse> {
-  const params = buildListSearchParams({
-    filter: source.filter,
-    pageSize: source.pageSize,
-    pageIndex: source.pageIndex,
-    cursor: value?.cursor,
-    prevCursors: source.cursors,
+  const params = buildListSearchParams2({
+    filter,
+    pageSize,
+    pageIndex,
+    cursor,
   });
 
-  try {
-    const path = `/table/${prettyFormatQualifiedName(source.tableName)}/rows?${params}`;
+  const path = `/table/${prettyFormatQualifiedName(tableName)}/rows?${params}`;
 
-    const response = await adminFetch(path);
-    return (await response.json()) as ListRowsResponse;
-  } catch (err) {
-    if (value) {
-      return value;
-    }
-    throw err;
-  }
+  const response = await adminFetch(path);
+  return (await response.json()) as ListRowsResponse;
 }

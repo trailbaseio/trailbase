@@ -52,16 +52,6 @@ export function safeParseInt(v: string | undefined): number | undefined {
   return undefined;
 }
 
-export function defaultPaginationState(opts?: {
-  index?: number;
-  size?: number;
-}): PaginationState {
-  return {
-    pageIndex: opts?.index ?? 0,
-    pageSize: opts?.size ?? 20,
-  };
-}
-
 type Props<TData, TValue> = {
   columns: Accessor<ColumnDef<TData, TValue>[]>;
   data: Accessor<TData[] | undefined>;
@@ -205,13 +195,21 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
 
           <TableBody>
             <Show
-              when={table().getRowModel().rows?.length}
+              when={table().getRowModel().rows?.length > 0}
               fallback={
-                <TableRow>
-                  <TableCell colSpan={local.columns.length}>
-                    <span>No results.</span>
-                  </TableCell>
-                </TableRow>
+                paginationState().pageIndex > 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={local.columns.length}>
+                      <span>Loading...</span>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={local.columns.length}>
+                      <span>No results.</span>
+                    </TableCell>
+                  </TableRow>
+                )
               }
             >
               <For each={table().getRowModel().rows}>
@@ -272,7 +270,7 @@ function PaginationControl<TData>(props: {
   const table = () => props.table;
 
   const PerPage = () => (
-    <div class="flex items-center space-x-2">
+    <div class="flex items-center space-x-2 py-1">
       <Select
         value={table().getState().pagination.pageSize}
         onChange={(value) => {

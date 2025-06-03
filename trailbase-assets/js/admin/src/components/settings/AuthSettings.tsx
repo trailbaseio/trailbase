@@ -285,12 +285,12 @@ function AuthSettingsForm(props: {
   markDirty: () => void;
   postSubmit: () => void;
 }) {
-  const values = createMemo(() =>
-    configToProxy(
+  const values = createMemo(() => {
+    return configToProxy(
       props.providers.providers,
       props.config.auth ?? AuthConfig.create(),
-    ),
-  );
+    );
+  });
 
   const queryClient = useQueryClient();
   const form = createForm(() => ({
@@ -580,7 +580,7 @@ export function AuthSettings(props: {
           <span>Error: {config.error?.toString()}</span>
         </Match>
 
-        <Match when={config.isSuccess}>
+        <Match when={config.data && providers.data}>
           <AuthSettingsForm
             markDirty={props.markDirty}
             postSubmit={props.postSubmit}

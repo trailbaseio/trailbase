@@ -1,23 +1,19 @@
 import { parse, ExprGroup, Expr, JoinOp, SignOp } from "@/lib/fexpr";
 import { showToast } from "@/components/ui/toast";
 
-export type ListArgs = {
+export type ListArgs2 = {
   filter: string | undefined | null;
-
   pageSize: number;
-  pageIndex: number;
-
+  pageIndex?: number;
   cursor: string | undefined | null;
-  prevCursors: string[];
 };
 
-export function buildListSearchParams({
+export function buildListSearchParams2({
   filter,
   pageSize,
   pageIndex,
   cursor,
-  prevCursors,
-}: ListArgs): URLSearchParams {
+}: ListArgs2): URLSearchParams {
   const params = new URLSearchParams();
 
   if (filter) {
@@ -39,26 +35,11 @@ export function buildListSearchParams({
 
   params.set("limit", pageSize.toString());
 
-  // Build the next cursor from previous response and update local
-  // cursor stack. If we're paging forward we add new cursors, otherwise we're
-  // re-using previously seen cursors for consistency. We reset if we go back
-  // to the start.
-  if (pageIndex <= 0) {
-    prevCursors.length = 0;
+  if (cursor) {
+    params.set("cursor", cursor);
   } else {
-    const index = pageIndex - 1;
-    if (index < prevCursors.length) {
-      // Already known page
-      params.set("cursor", prevCursors[index]);
-    } else {
-      // New page case: use cursor from previous response or fall back to more
-      // expensive and inconsistent offset-based pagination.
-      if (cursor) {
-        prevCursors.push(cursor);
-        params.set("cursor", cursor);
-      } else {
-        params.set("offset", `${pageIndex * pageSize}`);
-      }
+    if (pageIndex) {
+      params.set("offset", `${pageIndex * pageSize}`);
     }
   }
 
