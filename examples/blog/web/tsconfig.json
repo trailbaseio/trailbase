@@ -7,7 +7,8 @@
     "baseUrl": "./",
     "paths": {
       "@/*": ["./src/*"],
-      "@bindings/*": ["../../trailbase-core/bindings/*"],
+      // Only needed when "trailbase" package is pulled from workspace:
+      // "@bindings/*": ["../../../trailbase-assets/js/bindings/*"],
       "@schema/*": ["./types/*"]
     }
   },
