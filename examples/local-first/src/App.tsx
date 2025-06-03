@@ -1,10 +1,17 @@
-import { QueryClient } from '@tanstack/query-core';
-import { useLiveQuery, useOptimisticMutation, type PendingMutation } from "@tanstack/react-db"
-import { createQueryCollection, type QueryCollection } from "@tanstack/db-collections";
+import { QueryClient } from "@tanstack/query-core";
+import {
+  useLiveQuery,
+  useOptimisticMutation,
+  type PendingMutation,
+} from "@tanstack/react-db";
+import {
+  createQueryCollection,
+  type QueryCollection,
+} from "@tanstack/db-collections";
 
 import { Client } from "trailbase";
 import "./App.css";
-import type { FormEvent } from 'react';
+import type { FormEvent } from "react";
 
 const client = Client.init("http://localhost:4000");
 
@@ -22,7 +29,7 @@ const dataCollection = createQueryCollection<Data>({
   queryFn: async () => (await client.records("data").list<Data>()).records,
   getId: (item) => item.id?.toString() ?? "??",
   queryClient: queryClient,
-})
+});
 
 function App() {
   const { data } = useLiveQuery((q) =>
@@ -30,21 +37,21 @@ function App() {
       .from({ dataCollection })
       .keyBy(`@id`)
       .orderBy(`@updated`)
-      .select(`@id`, `@updated`, `@data`)
-  )
+      .select(`@id`, `@updated`, `@data`),
+  );
 
   // Define mutations
   const addData = useOptimisticMutation({
     mutationFn: async ({ transaction }) => {
-      const mutation = transaction.mutations[0] as PendingMutation<Data>
+      const mutation = transaction.mutations[0] as PendingMutation<Data>;
 
-      const { modified } = mutation
+      const { modified } = mutation;
       const response = await client.records("data").create(modified as Data);
 
       // TODO: We should await the update.
       (mutation.collection as QueryCollection<Data>).refetch();
     },
-  })
+  });
 
   function handleSubmit(e: FormEvent) {
     // Don't reload the page.
@@ -59,7 +66,7 @@ function App() {
         id: null,
         updated: null,
         data: formJson.text as string,
-      })
+      });
     });
 
     console.log(formJson);
@@ -92,7 +99,7 @@ function App() {
       </div>
 
       <p className="read-the-docs">
-        <form method="post" onSubmit={handleSubmit} >
+        <form method="post" onSubmit={handleSubmit}>
           <input name="text" type="text" />
 
           <button type="submit">submit</button>
