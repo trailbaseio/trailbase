@@ -356,6 +356,9 @@ importers:
       '@tanstack/react-db':
         specifier: ^0.0.4
         version: 0.0.4(@electric-sql/client@1.0.4)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(typescript@5.8.3)
+      '@tanstack/store':
+        specifier: ^0.7.1
+        version: 0.7.1
       react:
         specifier: ^19.1.0
         version: 19.1.0
@@ -390,6 +393,9 @@ importers:
       globals:
         specifier: ^16.0.0
         version: 16.2.0
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
       typescript:
         specifier: ~5.8.3
         version: 5.8.3
