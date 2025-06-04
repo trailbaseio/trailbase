@@ -91,10 +91,17 @@ pub fn build_js(path: impl AsRef<Path>) -> Result<()> {
     // When we build cargo packages, we cannot rely on the workspace and prior installs.
     pnpm_run(&["--dir", &path, "install", "--ignore-workspace"])
   } else {
-    // `trailbase-asstes` and `trailbase-js` both build JS packages. We've seen issues with
-    // parallel installs in the past. We thus require all JS depdencies to be installed once
-    // upfront centrally into the workspace, i.e. `<trailbase>/node_modules`.
-    let args = ["--dir", &path, "install", "--frozen-lockfile", "--offline"];
+    // `trailbase-assets` and `trailbase-js` both build JS packages. We've seen issues with
+    // parallel installs in the past. Our current approach is to recommend installing workspace
+    // JS deps upfront in combination with `--prefer-offline`. We used to use plain `--offline`,
+    // however this adds an extra mandatory step when vendoring trailbase for framework use-cases.
+    let args = [
+      "--dir",
+      &path,
+      "install",
+      "--prefer-frozen-lockfile",
+      "--prefer-offline",
+    ];
     let build_result = pnpm_run(&args);
     if build_result.is_err() {
       error!(

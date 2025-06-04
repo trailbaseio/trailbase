@@ -9,8 +9,11 @@ packages:
   - 'trailbase-assets/js/auth'
   - 'trailbase-assets/js/client'
   - 'trailbase-js/assets/runtime'
-options:
-  link-workspace-packages: true
-  prefer-workspace-packages: true
-  strict-peer-dependencies: true
-  # shared-workspace-lockfile: false
+
+sharedWorkspaceLockfile: true
+linkWorkspacePackages: true
+preferWorkspacePackages: true
+preferOffline: true
+preferFrozenLockfile: true
+# strictPeerDependencies: false
+disallowWorkspaceCycles: true
