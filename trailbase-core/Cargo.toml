@@ -90,7 +90,7 @@ trailbase-refinery = { workspace = true }
 trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true }
 ts-rs = { version = "10", features = ["uuid-impl", "serde-json-impl"] }
-url = "^2.4.1"
+url = { version = "^2.4.1", default-features = false }
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 uuid = { workspace = true }
 validator = { version = "0.20.0", default-features = false }

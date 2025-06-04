@@ -119,7 +119,7 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
-        SITE_URL => site_url,
+        SITE_URL => *site_url,
         CODE => email_verification_code,
         EMAIL => email,
       })?;
@@ -165,7 +165,7 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
-        SITE_URL => site_url,
+        SITE_URL => *site_url,
         CODE => email_verification_code,
         EMAIL => email,
       })?;
@@ -211,7 +211,7 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
-        SITE_URL => site_url,
+        SITE_URL => *site_url,
         CODE => password_reset_code,
         EMAIL => email,
       })?;

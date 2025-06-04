@@ -94,7 +94,7 @@ pub async fn list_rows_handler(
 
   let cursor_column = table_or_view_metadata.record_pk_column();
   let cursor = match (cursor, cursor_column) {
-    (Some(cursor), Some((_idx, c))) => Some(parse_cursor(&cursor, &c)?),
+    (Some(cursor), Some((_idx, c))) => Some(parse_cursor(&cursor, c)?),
     _ => None,
   };
   let (rows, columns) = fetch_rows(

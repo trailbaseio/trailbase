@@ -29,15 +29,15 @@ impl Cursor {
   pub fn parse(s: &str, cursor_type: CursorType) -> Result<Self, Error> {
     return match cursor_type {
       CursorType::Integer => {
-        let i = s.parse::<i64>().map_err(|err| Error::ParseInt(err))?;
+        let i = s.parse::<i64>().map_err(Error::ParseInt)?;
         Ok(Self::Integer(i))
       }
       CursorType::Blob => {
-        if let Ok(uuid) = uuid::Uuid::parse_str(&s) {
+        if let Ok(uuid) = uuid::Uuid::parse_str(s) {
           return Ok(Cursor::Blob(uuid.into()));
         }
 
-        if let Ok(base64) = BASE64_URL_SAFE.decode(&s) {
+        if let Ok(base64) = BASE64_URL_SAFE.decode(s) {
           return Ok(Cursor::Blob(base64));
         }
 
