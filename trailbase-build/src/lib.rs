@@ -100,17 +100,17 @@ pub fn build_js(path: impl AsRef<Path>) -> Result<()> {
     // parallel installs in the past. Our current approach is to recommend installing workspace
     // JS deps upfront in combination with `--prefer-offline`. We used to use plain `--offline`,
     // however this adds an extra mandatory step when vendoring trailbase for framework use-cases.
-    let args = [
-      "--dir",
-      &path,
-      "install",
-      "--prefer-frozen-lockfile",
-      if offline {
-        "--offline"
-      } else {
-        "--prefer-offline"
-      },
-    ];
+    let args = if offline {
+      [
+        "--dir",
+        &path,
+        "install",
+        "--prefer-frozen-lockfile",
+        "--prefer-offline",
+      ]
+    } else {
+      ["--dir", &path, "install", "--frozen-lockfile", "--offline"]
+    };
     let build_result = pnpm_run(&args);
     if build_result.is_err() {
       error!(
