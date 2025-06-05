@@ -1,3 +1,9 @@
+## v0.12.3
+
+* Fix row insertion/update in admin dashboard.
+* Fall back to downloading JS deps during build when missing. This helps with vendoring TrailBase for framework use-cases.
+* Update dependencies.
+
 ## v0.12.2
 
 * Fix unchecked null assertion in admin auth dashboard.
