@@ -84,11 +84,16 @@ pub fn pnpm_run(args: &[&str]) -> Result<std::process::Output> {
 
 pub fn build_js(path: impl AsRef<Path>) -> Result<()> {
   let path = path.as_ref().to_string_lossy().to_string();
+  let offline: bool = matches!(
+    std::env::var("PNPM_OFFLINE").as_deref(),
+    Ok("TRUE") | Ok("true") | Ok("1")
+  );
+
   // Note that `--frozen-lockfile` and `-ignore-workspace` are practically exclusive
   // Because ignoring the workspace one, will require to create a new lockfile.
   let out_dir = std::env::var("OUT_DIR").unwrap();
   let build_result = if out_dir.contains("target/package") {
-    // When we build cargo packages, we cannot rely on the workspace and prior installs.
+    // When we build cargo packages, we cannot rely on the workspace itself and prior installs.
     pnpm_run(&["--dir", &path, "install", "--ignore-workspace"])
   } else {
     // `trailbase-assets` and `trailbase-js` both build JS packages. We've seen issues with
@@ -100,7 +105,11 @@ pub fn build_js(path: impl AsRef<Path>) -> Result<()> {
       &path,
       "install",
       "--prefer-frozen-lockfile",
-      "--prefer-offline",
+      if offline {
+        "--offline"
+      } else {
+        "--prefer-offline"
+      },
     ];
     let build_result = pnpm_run(&args);
     if build_result.is_err() {

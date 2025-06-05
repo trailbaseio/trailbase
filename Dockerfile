@@ -38,7 +38,7 @@ RUN case ${TARGETPLATFORM} in \
          "linux/arm64")  RUST_TARGET="aarch64-unknown-linux-gnu"  ;; \
          *)              RUST_TARGET="x86_64-unknown-linux-gnu"   ;; \
     esac && \
-    RUSTFLAGS="-C target-feature=+crt-static" cargo build --target ${RUST_TARGET} --release --bin trail && \
+    RUSTFLAGS="-C target-feature=+crt-static" PNPM_OFFLINE="TRUE" cargo build --target ${RUST_TARGET} --release --bin trail && \
     mv target/${RUST_TARGET}/release/trail /app/trail.exe
 
 FROM alpine:3.20 AS runtime
