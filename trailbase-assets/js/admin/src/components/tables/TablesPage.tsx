@@ -36,17 +36,15 @@ import { QualifiedName } from "@bindings/QualifiedName";
 
 function pickInitiallySelectedTable(
   tables: (Table | View)[],
-  tableName: string | undefined,
+  qualifiedTableName: string,
 ): Table | View | undefined {
   if (tables.length === 0) {
     return undefined;
   }
 
-  if (tableName) {
-    for (const table of tables) {
-      if (tableName === prettyFormatQualifiedName(table.name)) {
-        return table;
-      }
+  for (const table of tables) {
+    if (qualifiedTableName === prettyFormatQualifiedName(table.name)) {
+      return table;
     }
   }
 

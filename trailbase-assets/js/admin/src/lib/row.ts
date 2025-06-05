@@ -20,7 +20,8 @@ export async function insertRow(table: Table, row: FormRow) {
     row: processedRow,
   };
 
-  const response = await adminFetch(`/table/${table.name}`, {
+  const tableName: string = prettyFormatQualifiedName(table.name);
+  const response = await adminFetch(`/table/${tableName}`, {
     method: "POST",
     body: JSON.stringify(request),
   });
@@ -29,7 +30,7 @@ export async function insertRow(table: Table, row: FormRow) {
 }
 
 export async function updateRow(table: Table, row: FormRow) {
-  const tableName = table.name;
+  const tableName: string = prettyFormatQualifiedName(table.name);
   const primaryKeyColumIndex = findPrimaryKeyColumnIndex(table.columns);
   if (primaryKeyColumIndex < 0) {
     throw Error("No primary key column found.");

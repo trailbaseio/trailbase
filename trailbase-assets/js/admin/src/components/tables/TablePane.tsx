@@ -69,6 +69,7 @@ import type { Table } from "@bindings/Table";
 import type { TableIndex } from "@bindings/TableIndex";
 import type { TableTrigger } from "@bindings/TableTrigger";
 import type { View } from "@bindings/View";
+import { QualifiedName } from "@bindings/QualifiedName";
 
 export type SimpleSignal<T> = [get: () => T, set: (state: T) => void];
 
@@ -91,7 +92,7 @@ function rowDataToRow(columns: Column[], row: RowData): FormRow {
 
 function renderCell(
   context: CellContext<RowData, unknown>,
-  tableName: string,
+  tableName: QualifiedName,
   columns: Column[],
   pkIndex: number,
   cell: {
@@ -195,13 +196,14 @@ function Image(props: { url: string; mime: string }) {
 }
 
 function imageUrl(opts: {
-  tableName: string;
+  tableName: QualifiedName;
   pkCol: string;
   pkVal: string;
   fileColName: string;
   index?: number;
 }): string {
-  const uri = `/table/${opts.tableName}/files?pk_column=${opts.pkCol}&pk_value=${opts.pkVal}&file_column_name=${opts.fileColName}`;
+  const tableName: string = prettyFormatQualifiedName(opts.tableName);
+  const uri = `/table/${tableName}/files?pk_column=${opts.pkCol}&pk_value=${opts.pkVal}&file_column_name=${opts.fileColName}`;
   const index = opts.index;
   if (index) {
     return `${uri}&file_index=${index}`;
@@ -452,7 +454,7 @@ async function buildTableState(
 
   const pkColumnIndex = findPrimaryKeyColumnIndex(response.columns);
   const columnDefs = buildColumnDefs(
-    selected.name.name,
+    selected.name,
     tableType(selected),
     pkColumnIndex,
     response.columns,
@@ -467,7 +469,7 @@ async function buildTableState(
 }
 
 function buildColumnDefs(
-  tableName: string,
+  tableName: QualifiedName,
   tableType: TableType,
   pkColumn: number,
   columns: Column[],
