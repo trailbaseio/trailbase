@@ -34,7 +34,7 @@ struct RecordApiSchema {
   columns: Vec<Column>,
   json_column_metadata: Vec<Option<JsonColumnMetadata>>,
   has_file_columns: bool,
-  user_id_columns: Vec<usize>,
+  user_id_columns: Vec<(usize, Column)>,
 
   // Helpers
   column_name_to_index: HashMap<String, usize>,
@@ -350,7 +350,7 @@ impl RecordApi {
   }
 
   #[inline]
-  pub fn user_id_columns(&self) -> &[usize] {
+  pub fn user_id_columns(&self) -> &[(usize, Column)] {
     return &self.state.schema.user_id_columns;
   }
 

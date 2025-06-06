@@ -135,9 +135,8 @@ mod tests {
     filename: &str,
     body_slice: &[u8],
   ) -> Request {
-    let user_id = uuid_to_b64(&user);
-
-    let form = MultipartForm::new().add_text("user", user_id).add_part(
+    // let form = MultipartForm::new().add_text("user", uuid_to_b64(&user)).add_part(
+    let form = MultipartForm::new().add_part(
       COL_NAME,
       Part::bytes(body_slice.to_vec()).file_name(filename),
     );
@@ -155,7 +154,7 @@ mod tests {
     state: &AppState,
     user: Option<User>,
     body: &[u8],
-  ) -> Result<uuid::Uuid, anyhow::Error> {
+  ) -> Result<i64, anyhow::Error> {
     let user_id = user.as_ref().unwrap().uuid;
     println!("BAZ 0");
     let response: CreateRecordResponse = unpack_json_response(
@@ -176,29 +175,30 @@ mod tests {
     .await
     .unwrap();
 
-    println!("BAZ: {:?}", response.ids);
-    let avatar_id: i64 = response.ids[0].parse().unwrap();
-    let user_uuid = state
-      .conn()
-      .query_row_f(
-        format!("SELECT user FROM {AVATAR_TABLE} WHERE id = ?1"),
-        trailbase_sqlite::params!(avatar_id),
-        |row| -> Result<_, rusqlite::Error> {
-          return Ok(b64_to_uuid(&row.get::<_, String>(0)?).unwrap());
-        },
-      )
-      .await
-      .unwrap();
-
-    return Ok(user_uuid.unwrap());
+    return Ok(response.ids[0].parse().unwrap());
+    // println!("BAZ: {:?}", response.ids);
+    // let avatar_id: i64 = response.ids[0].parse().unwrap();
+    // let user_uuid = state
+    //   .conn()
+    //   .query_row_f(
+    //     format!("SELECT user FROM {AVATAR_TABLE} WHERE id = ?1"),
+    //     trailbase_sqlite::params!(avatar_id),
+    //     |row| -> Result<_, rusqlite::Error> {
+    //       return Ok(Uuid::from_bytes(row.get::<_, [u8; 16]>(0)?));
+    //     },
+    //   )
+    //   .await
+    //   .unwrap();
+    //
+    // return Ok(user_uuid.unwrap());
   }
 
-  async fn download_avatar(state: &AppState, record_id: &[u8; 16]) -> Response {
+  async fn download_avatar(state: &AppState, record_id: i64) -> Response {
     return get_uploaded_file_from_record_handler(
       State(state.clone()),
       Path((
         AVATAR_COLLECTION_NAME.to_string(),
-        id_to_b64(record_id),
+        record_id.to_string(),
         COL_NAME.to_string(),
       )),
       None,
@@ -253,7 +253,7 @@ mod tests {
     .await
     .unwrap();
 
-    let response = download_avatar(&state, &record_id.into_bytes()).await;
+    let response = download_avatar(&state, record_id).await;
     assert_eq!(
       axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
@@ -269,7 +269,7 @@ mod tests {
     )
     .await
     .unwrap();
-    let response = download_avatar(&state, &record_id.into_bytes()).await;
+    let response = download_avatar(&state, record_id).await;
     assert_eq!(
       axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
@@ -308,8 +308,7 @@ mod tests {
     assert_eq!(
       location,
       format!(
-        "https://test.org/{RECORD_API_PATH}/{AVATAR_COLLECTION_NAME}/{record_id_b64}/file/{COL_NAME}",
-        record_id_b64 = uuid_to_b64(&record_id),
+        "https://test.org/{RECORD_API_PATH}/{AVATAR_COLLECTION_NAME}/{record_id}/file/{COL_NAME}",
       )
     );
   }

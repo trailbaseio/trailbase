@@ -102,7 +102,7 @@ pub struct TableMetadata {
   /// If and which column on this table qualifies as a record PK column, i.e. integer or UUIDv7.
   pub record_pk_column: Option<usize>,
   /// If and which columns on this table reference _user(id).
-  pub user_id_columns: Vec<usize>,
+  pub user_id_columns: Vec<(usize, Column)>,
   /// Metadata for CHECK(json_schema()) columns.
   pub json_metadata: JsonMetadata,
 
@@ -405,8 +405,11 @@ pub fn find_file_column_indexes(json_column_metadata: &[Option<JsonColumnMetadat
   return indexes;
 }
 
-pub fn find_user_id_foreign_key_columns(columns: &[Column], user_table_name: &str) -> Vec<usize> {
-  let mut indexes: Vec<usize> = vec![];
+pub fn find_user_id_foreign_key_columns(
+  columns: &[Column],
+  user_table_name: &str,
+) -> Vec<(usize, Column)> {
+  let mut indexes: Vec<(usize, Column)> = vec![];
   for (index, col) in columns.iter().enumerate() {
     for opt in &col.options {
       if let ColumnOption::ForeignKey {
@@ -415,11 +418,17 @@ pub fn find_user_id_foreign_key_columns(columns: &[Column], user_table_name: &st
         ..
       } = opt
       {
-        if foreign_table == user_table_name
-          && referred_columns.len() == 1
-          && referred_columns[0] == "id"
-        {
-          indexes.push(index);
+        if foreign_table == user_table_name && referred_columns.len() == 1 {
+          let column_name = &referred_columns[0];
+          match column_name.as_str() {
+            "id" => {
+              indexes.push((index, col.clone()));
+            }
+            "pk" => {
+              indexes.push((index, col.clone()));
+            }
+            _ => {}
+          }
         }
       }
     }

@@ -3,6 +3,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
 use trailbase_schema::FileUploadInput;
+use trailbase_schema::sqlite::ColumnDataType;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
@@ -105,7 +106,7 @@ pub async fn create_record_handler(
     return Err(RecordError::ApiRequiresTable);
   }
 
-  println!("FOO 0.5: {either_request:?}");
+  println!("FOO 0.5: {either_request:?} {:?}", api.user_id_columns());
 
   let records_and_files: Vec<RecordAndFiles> = match either_request {
     Either::Json(value) => extract_records(value)?,
@@ -118,8 +119,14 @@ pub async fn create_record_handler(
   for (mut record, files) in records_and_files {
     if api.insert_autofill_missing_user_id_columns() {
       if let Some(ref user) = user {
-        for column_index in api.user_id_columns() {
+        for (column_index, column) in api.user_id_columns() {
+          if column.data_type != ColumnDataType::Blob {
+            return Err(RecordError::Internal(
+              "Inter user column not (yet) supported".into(),
+            ));
+          }
           let col_name = &api.columns()[*column_index].name;
+
           println!("COL: {}  {}", col_name, user.uuid);
           if !record.contains_key(col_name) {
             record.insert(

@@ -80,6 +80,9 @@ INSERT INTO _new_user(
     provider_avatar_url
   FROM _user;
 
+-- Create unique id index early to allow avatars to reference it.
+CREATE UNIQUE INDEX __user__id_index ON _new_user (id);
+
 
 -- Session table
 CREATE TABLE IF NOT EXISTS _new_session (
@@ -118,7 +121,7 @@ CREATE INDEX __session__user_index ON _session (user);
 -- Avatars
 CREATE TABLE IF NOT EXISTS _new_user_avatar (
   id                           INTEGER PRIMARY KEY,
-  user                         INTEGER NOT NULL REFERENCES _new_user(pk) ON DELETE CASCADE,
+  user                         BLOB NOT NULL REFERENCES _new_user(id),
   file                         TEXT CHECK(jsonschema('std.FileUpload', file, 'image/png, image/jpeg')) NOT NULL,
   updated                      INTEGER DEFAULT (UNIXEPOCH()) NOT NULL
 ) STRICT;
@@ -152,7 +155,7 @@ DROP TABLE _user;
 
 ALTER TABLE _new_user RENAME TO _user;
 
-CREATE UNIQUE INDEX __user__id_index ON _user (id);
+-- CREATE UNIQUE INDEX __user__id_index ON _user (id);
 CREATE UNIQUE INDEX __user__email_index ON _user (email);
 CREATE UNIQUE INDEX __user__email_verification_code_index ON _user (email_verification_code);
 CREATE UNIQUE INDEX __user__password_reset_code_index ON _user (password_reset_code);
