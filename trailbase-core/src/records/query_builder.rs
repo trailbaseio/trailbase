@@ -2,6 +2,7 @@ use askama::Template;
 use itertools::Itertools;
 use log::*;
 use std::sync::Arc;
+use thiserror::Error;
 use trailbase_schema::sqlite::{Column, ColumnOption};
 use trailbase_schema::{FileUpload, FileUploads, QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::{NamedParams, Params as _, Value};
@@ -13,7 +14,7 @@ use crate::records::files::{FileManager, delete_pending_files};
 use crate::records::params::{FileMetadataContents, Params};
 use crate::schema_metadata::{JsonColumnMetadata, SchemaMetadataCache, TableMetadata};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum QueryError {
   #[error("Precondition error: {0}")]
   Precondition(&'static str),

@@ -4,10 +4,14 @@ use lazy_static::lazy_static;
 use trailbase_schema::QualifiedName;
 
 use crate::app_state::AppState;
-use crate::auth::AuthError;
+use crate::auth::{AuthError, User};
+use crate::config::proto::ConflictResolutionStrategy;
 use crate::constants::AVATAR_TABLE;
+use crate::extract::Either;
+use crate::records::create_record::{RecordAndFiles, extract_record, extract_records};
+use crate::records::params::LazyParams;
 use crate::records::query_builder::QueryError;
-use crate::util::assert_uuidv7_version;
+use crate::util::{assert_uuidv7_version, uuid_to_b64};
 
 #[utoipa::path(
   get,
@@ -22,13 +26,6 @@ pub async fn get_avatar_handler(
     return Err(AuthError::BadRequest("Invalid user id"));
   };
   assert_uuidv7_version(&user_id);
-
-  lazy_static! {
-    static ref table_name: QualifiedName = QualifiedName {
-      name: AVATAR_TABLE.to_string(),
-      database_schema: None,
-    };
-  }
 
   let Some(table) = state.schema_metadata().get_table(&table_name) else {
     return Err(AuthError::Internal("missing table".into()));
@@ -59,6 +56,97 @@ pub async fn get_avatar_handler(
   return crate::records::files::read_file_into_response(&state, file_upload)
     .await
     .map_err(|err| AuthError::Internal(err.into()));
+}
+
+#[utoipa::path(
+  post,
+  path = "/avatar/",
+  responses((status = 200, description = "Deletion success"))
+)]
+pub async fn create_avatar_handler(
+  State(state): State<AppState>,
+  user: User,
+  either_request: Either<serde_json::Value>,
+) -> Result<(), AuthError> {
+  let Some(table) = state.schema_metadata().get_table(&table_name) else {
+    return Err(AuthError::Internal("missing table".into()));
+  };
+
+  let mut records_and_files: Vec<RecordAndFiles> = match either_request {
+    Either::Json(value) => {
+      extract_records(value).map_err(|_err| AuthError::BadRequest("extract json"))?
+    }
+    Either::Multipart(value, files) => vec![(
+      extract_record(value).map_err(|_err| AuthError::BadRequest("extract multipart"))?,
+      Some(files),
+    )],
+    Either::Form(value) => vec![(
+      extract_record(value).map_err(|_err| AuthError::BadRequest("extract form"))?,
+      None,
+    )],
+  };
+
+  // TODO: Better input validation, i.e. ensure only one "file" provided.
+  if records_and_files.len() != 1 {
+    return Err(AuthError::BadRequest("expected one file"));
+  }
+
+  let (mut record, files) = records_and_files.swap_remove(0);
+  if record
+    .insert(
+      "user".to_string(),
+      serde_json::Value::String(uuid_to_b64(&user.uuid)),
+    )
+    .is_some()
+  {
+    return Err(AuthError::BadRequest("pre-existing user"));
+  }
+
+  let lazy_params = LazyParams::new(&*table, record, files);
+  let params = lazy_params
+    .consume()
+    .map_err(|_| AuthError::BadRequest("parameter conversion"))?;
+
+  let _user_id_value = crate::records::query_builder::InsertQueryBuilder::run(
+    &state,
+    &trailbase_schema::QualifiedNameEscaped::new(&table_name),
+    Some(ConflictResolutionStrategy::Replace),
+    "user",
+    true,
+    params,
+  )
+  .await
+  .map_err(|err| AuthError::Internal(err.into()))?;
+
+  return Ok(());
+}
+
+#[utoipa::path(
+  delete,
+  path = "/avatar/",
+  responses((status = 200, description = "Deletion success"))
+)]
+pub async fn delete_avatar_handler(
+  State(state): State<AppState>,
+  user: User,
+) -> Result<(), AuthError> {
+  lazy_static! {
+    static ref SQL: String = format!("DELETE FROM {AVATAR_TABLE} WHERE user = ?1");
+  }
+
+  state
+    .conn()
+    .execute(&*SQL, [rusqlite::types::Value::Blob(user.uuid.into())])
+    .await?;
+
+  return Ok(());
+}
+
+lazy_static! {
+  static ref table_name: QualifiedName = QualifiedName {
+    name: AVATAR_TABLE.to_string(),
+    database_schema: None,
+  };
 }
 
 #[cfg(test)]

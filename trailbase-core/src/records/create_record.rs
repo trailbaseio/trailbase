@@ -29,7 +29,7 @@ pub struct CreateRecordResponse {
 }
 
 #[inline]
-fn extract_record(value: serde_json::Value) -> Result<JsonRow, RecordError> {
+pub(crate) fn extract_record(value: serde_json::Value) -> Result<JsonRow, RecordError> {
   return Ok(match value {
     serde_json::Value::Object(record) => record,
     _ => {
@@ -38,10 +38,12 @@ fn extract_record(value: serde_json::Value) -> Result<JsonRow, RecordError> {
   });
 }
 
-type RecordAndFiles = (JsonRow, Option<Vec<FileUploadInput>>);
+pub(crate) type RecordAndFiles = (JsonRow, Option<Vec<FileUploadInput>>);
 
 #[inline]
-fn extract_records(value: serde_json::Value) -> Result<Vec<RecordAndFiles>, RecordError> {
+pub(crate) fn extract_records(
+  value: serde_json::Value,
+) -> Result<Vec<RecordAndFiles>, RecordError> {
   return match value {
     serde_json::Value::Object(record) => Ok(vec![(record, None)]),
     serde_json::Value::Array(records) => {
