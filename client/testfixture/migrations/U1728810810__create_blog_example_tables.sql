@@ -3,7 +3,7 @@
 
 CREATE TABLE profile (
   id            BLOB NOT NULL PRIMARY KEY CHECK (is_uuid_v7(id)) DEFAULT (uuid_v7()),
-  user          BLOB NOT NULL REFERENCES _user ON DELETE CASCADE UNIQUE,
+  user          BLOB NOT NULL REFERENCES _user(id) ON DELETE CASCADE UNIQUE,
 
   name          TEXT NOT NULL
 ) STRICT;
@@ -13,7 +13,7 @@ INSERT INTO profile (user, name) SELECT id, 'SecondUser' FROM _user WHERE email 
 
 CREATE TABLE post (
   id            BLOB NOT NULL PRIMARY KEY CHECK (is_uuid_v7(id)) DEFAULT (uuid_v7()),
-  author        BLOB NOT NULL REFERENCES _user,
+  author        BLOB NOT NULL REFERENCES _user(id),
 
   title         TEXT NOT NULL,
   body          TEXT NOT NULL

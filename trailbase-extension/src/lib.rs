@@ -104,11 +104,19 @@ pub fn sqlite3_extension_init(
     uuid::is_uuid,
   )?;
   db.create_scalar_function(
+    "is_uuid_v4",
+    1,
+    FunctionFlags::SQLITE_DETERMINISTIC | FunctionFlags::SQLITE_INNOCUOUS,
+    uuid::is_uuid_v4,
+  )?;
+  db.create_scalar_function("uuid_v4", 0, FunctionFlags::SQLITE_INNOCUOUS, uuid::uuid_v4)?;
+  db.create_scalar_function(
     "is_uuid_v7",
     1,
     FunctionFlags::SQLITE_DETERMINISTIC | FunctionFlags::SQLITE_INNOCUOUS,
     uuid::is_uuid_v7,
   )?;
+  db.create_scalar_function("uuid_v7", 0, FunctionFlags::SQLITE_INNOCUOUS, uuid::uuid_v7)?;
   db.create_scalar_function(
     "uuid_text",
     1,
@@ -116,7 +124,6 @@ pub fn sqlite3_extension_init(
     uuid::uuid_text,
   )?;
 
-  db.create_scalar_function("uuid_v7", 0, FunctionFlags::SQLITE_INNOCUOUS, uuid::uuid_v7)?;
   db.create_scalar_function(
     "uuid_parse",
     1,

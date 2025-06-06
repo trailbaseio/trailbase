@@ -275,6 +275,7 @@ impl InsertQueryBuilder {
     has_file_columns: bool,
     params: Params,
   ) -> Result<rusqlite::types::Value, QueryError> {
+    println!("BAZ 0");
     let (query, named_params, files) = Self::build_insert_query(
       table_name,
       params,
@@ -290,6 +291,7 @@ impl InsertQueryBuilder {
       FileManager::write(state, files).await?
     };
 
+    println!("BAZ 1 {query}");
     let (rowid, return_value): (i64, rusqlite::types::Value) = state
       .conn()
       .query_row_f(query, named_params, |row| -> Result<_, rusqlite::Error> {
@@ -300,6 +302,7 @@ impl InsertQueryBuilder {
 
     // Successful write, do not cleanup written files.
     file_manager.release();
+    println!("BAZ 2");
 
     if Some(ConflictResolutionStrategy::Replace) == conflict_resolution && has_file_columns {
       delete_pending_files(state, table_name, rowid).await?;

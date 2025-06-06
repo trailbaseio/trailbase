@@ -135,6 +135,7 @@ impl Params {
     json: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Result<Self, ParamsError> {
+    println!("Y 0");
     let len = json.len();
     let mut params = Params {
       named_params: NamedParams::with_capacity(len),
@@ -142,6 +143,7 @@ impl Params {
       column_names: Vec::with_capacity(len),
       column_indexes: Vec::with_capacity(len),
     };
+    println!("Y 1");
 
     for (key, value) in json {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
@@ -150,22 +152,28 @@ impl Params {
         continue;
       };
 
+      println!("Y 2");
       let (param, mut json_files) = extract_params_and_files_from_json(col, json_meta, value)?;
+      println!("Y 2.5");
       if let Some(json_files) = json_files.as_mut() {
         // Note: files provided as a multipart form upload are handled below. They need more
         // special handling to establish the field.name to column mapping.
         params.files.append(json_files);
       }
+      println!("Y 3");
 
       params.named_params.push((prefix_colon(&key).into(), param));
       params.column_names.push(key);
       params.column_indexes.push(index);
     }
 
+    println!("Y 4");
+
     // Note: files provided as part of a JSON request are handled above.
     if let Some(multipart_files) = multipart_files {
       params.append_multipart_files(accessor, multipart_files)?;
     }
+    println!("Y 5");
 
     return Ok(params);
   }
@@ -273,6 +281,7 @@ impl<'a, S: SchemaAccessor> LazyParams<'a, S> {
   }
 
   pub fn params(&mut self) -> Result<&'_ Params, ParamsError> {
+    println!("SSS 0");
     let result = self.result.get_or_insert_with(|| {
       Params::from(
         self.accessor,
@@ -281,6 +290,7 @@ impl<'a, S: SchemaAccessor> LazyParams<'a, S> {
       )
     });
 
+    println!("SSS 1 {}", result.is_err());
     return result.as_ref().map_err(|err| err.clone());
   }
 
@@ -298,6 +308,7 @@ fn extract_params_and_files_from_json(
   value: serde_json::Value,
 ) -> Result<(Value, Option<FileMetadataContents>), ParamsError> {
   let col_name = &col.name;
+  println!("Z 0: {:?} {col:?}", value);
   match value {
     serde_json::Value::Object(ref _map) => {
       // Only text columns are allowed to store nested JSON as text.
@@ -452,6 +463,7 @@ pub(crate) fn json_string_to_value(
   data_type: ColumnDataType,
   value: String,
 ) -> Result<Value, ParamsError> {
+  println!("QUE 0 {value} {data_type:?}");
   return Ok(match data_type {
     ColumnDataType::Null => Value::Null,
     // Strict/storage types

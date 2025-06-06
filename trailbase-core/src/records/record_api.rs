@@ -437,12 +437,15 @@ impl RecordApi {
   ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
+    println!("RRRR0");
 
     let Some(access_query) = self.state.cached_access_query(p) else {
       return Ok(());
     };
 
+    println!("RRRR1");
     let params = self.build_named_params(p, record_id, request_params, user)?;
+    println!("RRRR2");
 
     // NOTE: Avoid slushing between sqlite threads with regard to an allowed follow-on action.
     let allowed_result = match p {
@@ -579,6 +582,7 @@ impl RecordApi {
   ) -> Result<NamedParams, RecordError> {
     // We need to inject context like: record id, user, request, and row into the access
     // check. Below we're building the query and binding the context as params accordingly.
+    println!("XXX 0");
     let mut params = match p {
       Permission::Create | Permission::Update => {
         // Create and update cannot write to views.
@@ -586,15 +590,19 @@ impl RecordApi {
           return Err(RecordError::ApiRequiresTable);
         };
 
+        println!("XXX 0.1");
         let request_params = request_params
           .ok_or_else(|| RecordError::Internal("missing req params".into()))?
           .params()
           .map_err(|err| RecordError::Internal(err.into()))?;
+        println!("XXX 0.2");
 
         // NOTE: We cannot have access queries access missing _REQ_.props. So we need to inject an
         // explicit NULL value for all missing fields on the request. Can we make this cheaper,
         // either by pre-processing the access query or improving construction?
         let mut named_params = self.state.schema.named_params_template.clone();
+
+        println!("XXX 0.3");
 
         // 'outer: for (placeholder, value) in &request_params.named_params {
         //   for (p, ref mut v) in named_params.iter_mut() {
@@ -605,6 +613,7 @@ impl RecordApi {
         //   }
         // }
 
+        println!("XXX 0.4");
         assert_eq!(
           request_params.column_names.len(),
           request_params.column_indexes.len()
@@ -614,20 +623,25 @@ impl RecordApi {
           named_params[*column_index].1 = request_params.named_params[index].1.clone();
         }
 
+        println!("XXX 0.5");
         named_params.push((
           Cow::Borrowed(":__fields"),
           Value::Text(serde_json::to_string(&request_params.column_names).expect("json array")),
         ));
+        println!("XXX 0.6");
 
         named_params
       }
       Permission::Read | Permission::Delete | Permission::Schema => NamedParams::with_capacity(2),
     };
 
+    println!("XXX 1");
+
     params.push((
       Cow::Borrowed(":__user_id"),
       user.map_or(Value::Null, |u| Value::Blob(u.uuid.into())),
     ));
+    println!("XXX 2");
     params.push((
       Cow::Borrowed(":__record_id"),
       record_id.map_or(Value::Null, |id| id.clone()),

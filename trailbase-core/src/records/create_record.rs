@@ -100,9 +100,12 @@ pub async fn create_record_handler(
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
+  println!("FOO 0: {api_name}");
   if !api.is_table() {
     return Err(RecordError::ApiRequiresTable);
   }
+
+  println!("FOO 0.5: {either_request:?}");
 
   let records_and_files: Vec<RecordAndFiles> = match either_request {
     Either::Json(value) => extract_records(value)?,
@@ -110,12 +113,14 @@ pub async fn create_record_handler(
     Either::Form(value) => vec![(extract_record(value)?, None)],
   };
 
+  println!("FOO 1: {}", api.insert_autofill_missing_user_id_columns());
   let mut params_list: Vec<Params> = Vec::with_capacity(records_and_files.len());
   for (mut record, files) in records_and_files {
     if api.insert_autofill_missing_user_id_columns() {
       if let Some(ref user) = user {
         for column_index in api.user_id_columns() {
           let col_name = &api.columns()[*column_index].name;
+          println!("COL: {}  {}", col_name, user.uuid);
           if !record.contains_key(col_name) {
             record.insert(
               col_name.to_owned(),
@@ -126,7 +131,11 @@ pub async fn create_record_handler(
       }
     }
 
+    println!("FOO 1.5");
+
     let mut lazy_params = LazyParams::new(&api, record, files);
+
+    println!("FOO 1.6");
 
     // NOTE: We're currently serializing the async checks, we could parallelize them however it's
     // unclear if this would be much faster.
@@ -139,6 +148,7 @@ pub async fn create_record_handler(
       )
       .await?;
 
+    println!("FOO 2");
     params_list.push(
       lazy_params
         .consume()
@@ -146,6 +156,7 @@ pub async fn create_record_handler(
     );
   }
 
+  println!("FOO 3");
   let (_index, pk_column) = api.record_pk_column();
   let record_ids: Vec<String> = match params_list.len() {
     0 => {
@@ -183,6 +194,7 @@ pub async fn create_record_handler(
         .collect::<Result<Vec<_>, _>>()?
     }
   };
+  println!("FOO 4");
 
   if let Some(redirect_to) = create_record_query.redirect_to {
     return Ok(Redirect::to(&redirect_to).into_response());
@@ -214,7 +226,9 @@ mod test {
       .execute(
         r#"
       CREATE TABLE simple (
-        owner   BLOB PRIMARY KEY CHECK(is_uuid_v7(owner)) REFERENCES _user,
+        id      INTEGER PRIMARY KEY,
+        -- UNIQUE to test conflict resolution strategy
+        owner   BLOB CHECK(is_uuid(owner)) REFERENCES _user(id) UNIQUE,
         value   INTEGER
       ) STRICT;
       "#,

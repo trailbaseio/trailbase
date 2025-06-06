@@ -87,11 +87,13 @@ pub(crate) async fn callback_from_external_auth_provider(
     return Err(AuthError::BadRequest("remote oauth user not verified"));
   }
 
+  println!("HERE 0");
   let conn = state.user_conn();
   let existing_user =
     user_by_provider_id(conn, oauth_user.provider_id, &oauth_user.provider_user_id)
       .await
       .ok();
+  println!("HERE 1");
 
   let db_user = match existing_user {
     Some(existing_user) => existing_user,
@@ -110,6 +112,7 @@ pub(crate) async fn callback_from_external_auth_provider(
       db_user
     }
   };
+  println!("HERE 2");
 
   // Mint user token.
   let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
@@ -124,11 +127,13 @@ pub(crate) async fn callback_from_external_auth_provider(
   } = mint_new_tokens(
     &state,
     db_user.verified,
+    db_user.pk,
     db_user.uuid(),
     db_user.email,
     expires_in,
   )
   .await?;
+  println!("HERE 3");
 
   let auth_token = state
     .jwt()
@@ -147,6 +152,7 @@ pub(crate) async fn callback_from_external_auth_provider(
     refresh_token_ttl,
     state.dev_mode(),
   ));
+  println!("HERE 4");
 
   remove_cookie(&cookies, COOKIE_OAUTH_STATE);
 
@@ -155,6 +161,8 @@ pub(crate) async fn callback_from_external_auth_provider(
       if redirect.is_none() {
         return Err(AuthError::BadRequest("missing 'redirect_to'"));
       };
+
+      println!("HERE 5");
 
       // For the auth_code flow we generate a random code.
       let authorization_code = generate_random_string(VERIFICATION_CODE_LENGTH);
@@ -185,6 +193,7 @@ pub(crate) async fn callback_from_external_auth_provider(
           },
         )
         .await?;
+      println!("HERE 6");
 
       match rows_affected {
         0 => return Err(AuthError::BadRequest("invalid user")),

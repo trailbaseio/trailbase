@@ -12,7 +12,7 @@ use crate::auth::AuthError;
 use crate::auth::user::DbUser;
 use crate::auth::util::user_by_id;
 use crate::constants::{AVATAR_TABLE, RECORD_API_PATH};
-use crate::util::{assert_uuidv7_version, id_to_b64};
+use crate::util::id_to_b64;
 
 async fn get_avatar_url(state: &AppState, user: &DbUser) -> Option<url::Url> {
   lazy_static! {
@@ -59,7 +59,6 @@ pub async fn get_avatar_url_handler(
   let Ok(user_id) = crate::util::b64_to_uuid(&b64_user_id) else {
     return Err(AuthError::BadRequest("Invalid user id"));
   };
-  assert_uuidv7_version(&user_id);
 
   let json = headers
     .get(header::CONTENT_TYPE)
@@ -158,6 +157,7 @@ mod tests {
     body: &[u8],
   ) -> Result<uuid::Uuid, anyhow::Error> {
     let user_id = user.as_ref().unwrap().uuid;
+    println!("BAZ 0");
     let response: CreateRecordResponse = unpack_json_response(
       create_record_handler(
         State(state.clone()),
@@ -176,7 +176,21 @@ mod tests {
     .await
     .unwrap();
 
-    return Ok(b64_to_uuid(&response.ids[0])?);
+    println!("BAZ: {:?}", response.ids);
+    let avatar_id: i64 = response.ids[0].parse().unwrap();
+    let user_uuid = state
+      .conn()
+      .query_row_f(
+        format!("SELECT user FROM {AVATAR_TABLE} WHERE id = ?1"),
+        trailbase_sqlite::params!(avatar_id),
+        |row| -> Result<_, rusqlite::Error> {
+          return Ok(b64_to_uuid(&row.get::<_, String>(0)?).unwrap());
+        },
+      )
+      .await
+      .unwrap();
+
+    return Ok(user_uuid.unwrap());
   }
 
   async fn download_avatar(state: &AppState, record_id: &[u8; 16]) -> Response {

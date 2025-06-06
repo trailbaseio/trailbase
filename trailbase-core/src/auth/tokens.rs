@@ -161,7 +161,8 @@ pub struct FreshTokens {
 pub(crate) async fn mint_new_tokens(
   state: &AppState,
   verified: bool,
-  user_id: uuid::Uuid,
+  user_id: i64,
+  user_uuid: uuid::Uuid,
   user_email: String,
   expires_in: Duration,
 ) -> Result<FreshTokens, AuthError> {
@@ -172,7 +173,7 @@ pub(crate) async fn mint_new_tokens(
     ));
   }
 
-  let claims = TokenClaims::new(verified, user_id, user_email, expires_in);
+  let claims = TokenClaims::new(verified, user_uuid, user_email, expires_in);
 
   // Unlike JWT auth tokens, refresh tokens are opaque.
   let refresh_token = generate_random_string(REFRESH_TOKEN_LENGTH);
@@ -183,10 +184,7 @@ pub(crate) async fn mint_new_tokens(
 
   state
     .user_conn()
-    .execute(
-      &*QUERY,
-      params!(user_id.into_bytes().to_vec(), refresh_token.clone(),),
-    )
+    .execute(&*QUERY, params!(user_id, refresh_token.clone(),))
     .await?;
 
   return Ok(FreshTokens {

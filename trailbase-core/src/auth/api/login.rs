@@ -259,19 +259,20 @@ pub async fn login_with_password(
   check_user_password(&db_user, password, state.demo_mode())?;
 
   let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
-  let user_id = db_user.uuid();
+  let user_uuid = db_user.uuid();
 
   let tokens = mint_new_tokens(
     state,
     db_user.verified,
-    user_id,
+    db_user.pk,
+    user_uuid.clone(),
     db_user.email,
     auth_token_ttl,
   )
   .await?;
 
   return Ok(NewTokens {
-    id: user_id,
+    id: user_uuid,
     auth_token: state
       .jwt()
       .encode(&tokens.auth_token_claims)

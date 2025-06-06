@@ -9,6 +9,22 @@ pub(super) fn is_uuid(context: &Context) -> Result<bool, Error> {
   return Ok(unpack_uuid_or_null(context).is_ok());
 }
 
+/// Checks that argument is a valid UUIDv4 blob or null.
+///
+/// Null is explicitly allowed to enable use as CHECK constraint in nullable columns.
+pub(super) fn is_uuid_v4(context: &Context) -> Result<bool, Error> {
+  let Some(uuid) = unpack_uuid_or_null(context)? else {
+    return Ok(true);
+  };
+
+  return Ok(uuid.get_version_num() == 7);
+}
+
+/// Creates a new UUIDv4 blob.
+pub(super) fn uuid_v4(_context: &Context) -> Result<[u8; 16], Error> {
+  return Ok(Uuid::new_v4().into_bytes());
+}
+
 /// Checks that argument is a valid UUIDv7 blob or null.
 ///
 /// Null is explicitly allowed to enable use as CHECK constraint in nullable columns.
@@ -21,8 +37,8 @@ pub(super) fn is_uuid_v7(context: &Context) -> Result<bool, Error> {
 }
 
 /// Creates a new UUIDv7 blob.
-pub(super) fn uuid_v7(_context: &Context) -> Result<Vec<u8>, Error> {
-  return Ok(Uuid::now_v7().as_bytes().to_vec());
+pub(super) fn uuid_v7(_context: &Context) -> Result<[u8; 16], Error> {
+  return Ok(Uuid::now_v7().into_bytes());
 }
 
 /// Format UUID blob as string-encoded UUID.
@@ -38,7 +54,7 @@ pub(super) fn uuid_text(context: &Context) -> Result<String, Error> {
 }
 
 /// Parse UUID from string-encoded UUID.
-pub(super) fn uuid_parse(context: &Context) -> Result<Vec<u8>, Error> {
+pub(super) fn uuid_parse(context: &Context) -> Result<[u8; 16], Error> {
   #[cfg(debug_assertions)]
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
@@ -46,7 +62,7 @@ pub(super) fn uuid_parse(context: &Context) -> Result<Vec<u8>, Error> {
 
   let str = context.get_raw(0).as_str()?;
   let uuid = Uuid::try_parse(str).map_err(|err| Error::UserFunctionError(err.into()))?;
-  return Ok(uuid.into_bytes().into());
+  return Ok(uuid.into_bytes());
 }
 
 #[inline]

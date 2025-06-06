@@ -12,6 +12,7 @@ use crate::{app_state::AppState, util::b64_to_uuid};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct DbUser {
+  pub pk: i64,
   pub id: [u8; 16],
   pub email: String,
   pub password_hash: String,
@@ -44,7 +45,6 @@ pub(crate) struct DbUser {
 impl DbUser {
   pub(crate) fn uuid(&self) -> Uuid {
     let uuid = Uuid::from_bytes(self.id);
-    assert_eq!(uuid.get_version_num(), 7);
     return uuid;
   }
 
@@ -54,6 +54,7 @@ impl DbUser {
     let timestamp = now.duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
 
     return Self {
+      pk: 0,
       id: uuid::Uuid::new_v7(uuid::timestamp::Timestamp::from_unix(
         uuid::NoContext,
         timestamp,
@@ -108,7 +109,6 @@ impl User {
   pub(crate) fn from_token_claims(claims: TokenClaims) -> Result<Self, AuthError> {
     let uuid = b64_to_uuid(&claims.sub)
       .map_err(|_err| AuthError::UnauthorizedExt("invalid user id".into()))?;
-    assert_eq!(uuid.get_version_num(), 7);
 
     return Ok(Self {
       id: claims.sub,
