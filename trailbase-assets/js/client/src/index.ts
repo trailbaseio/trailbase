@@ -429,9 +429,7 @@ export class Client {
   public async avatarUrl(): Promise<string | undefined> {
     const user = this.user();
     if (user) {
-      const response = await this.fetch(`${authApiBasePath}/avatar/${user.id}`);
-      const json = (await response.json()) as { avatar_url: string };
-      return json.avatar_url;
+      return `${authApiBasePath}/avatar/${user.id}`;
     }
     return undefined;
   }

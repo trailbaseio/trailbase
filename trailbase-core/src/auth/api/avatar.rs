@@ -1,59 +1,21 @@
-use axum::extract::{Json, Path, State};
-use axum::http::{HeaderMap, StatusCode, header};
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::extract::{Path, State};
+use axum::response::Response;
 use lazy_static::lazy_static;
-use serde::{Deserialize, Serialize};
-use trailbase_schema::FileUpload;
-use trailbase_sqlite::params;
-use uuid::Uuid;
+use trailbase_schema::QualifiedName;
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
-use crate::auth::user::DbUser;
-use crate::auth::util::user_by_id;
-use crate::constants::{AVATAR_TABLE, RECORD_API_PATH};
-use crate::util::{assert_uuidv7_version, id_to_b64};
+use crate::constants::AVATAR_TABLE;
+use crate::records::query_builder::QueryError;
+use crate::util::assert_uuidv7_version;
 
-async fn get_avatar_url(state: &AppState, user: &DbUser) -> Option<url::Url> {
-  lazy_static! {
-    static ref QUERY: String =
-      format!(r#"SELECT EXISTS(SELECT user FROM "{AVATAR_TABLE}" WHERE user = $1)"#);
-  };
-
-  let has_avatar = state
-    .user_conn()
-    .read_query_row_f(&*QUERY, params!(user.id), |row| row.get::<_, bool>(0))
-    .await
-    .map_err(|err| {
-      log::debug!("avatar query broken?");
-      return err;
-    })
-    .unwrap_or_default()
-    .unwrap_or(false);
-
-  if has_avatar {
-    let record_user_id = id_to_b64(&user.id);
-    let col_name = "file";
-    return state
-      .site_url()
-      .join(&format!(
-        "/{RECORD_API_PATH}/{AVATAR_TABLE}/{record_user_id}/file/{col_name}"
-      ))
-      .ok();
-  }
-
-  return None;
-}
-
-/// Get a user's avatar url if available.
 #[utoipa::path(
   get,
   path = "/avatar/:b64_user_id",
-  responses((status = 200, description = "Optional Avatar url"))
+  responses((status = 200, description = "Optional Avatar file"))
 )]
-pub async fn get_avatar_url_handler(
+pub async fn get_avatar_handler(
   State(state): State<AppState>,
-  headers: HeaderMap,
   Path(b64_user_id): Path<String>,
 ) -> Result<Response, AuthError> {
   let Ok(user_id) = crate::util::b64_to_uuid(&b64_user_id) else {
@@ -61,47 +23,42 @@ pub async fn get_avatar_url_handler(
   };
   assert_uuidv7_version(&user_id);
 
-  let json = headers
-    .get(header::CONTENT_TYPE)
-    .is_some_and(|t| t == "application/json");
+  lazy_static! {
+    static ref table_name: QualifiedName = QualifiedName {
+      name: AVATAR_TABLE.to_string(),
+      database_schema: None,
+    };
+  }
 
-  let db_user = user_by_id(&state, &user_id).await?;
-
-  // TODO: Allow a configurable fallback url.
-  let avatar_url = get_avatar_url(&state, &db_user)
-    .await
-    .map_or_else(|| db_user.provider_avatar_url, |url| Some(url.to_string()));
-
-  // TODO: Maybe return a JSON response with url if content-type is JSON.
-  return match avatar_url {
-    Some(url) => {
-      if json {
-        Ok(
-          Json(serde_json::json!({
-            "avatar_url": url,
-          }))
-          .into_response(),
-        )
-      } else {
-        Ok(Redirect::to(&url).into_response())
-      }
-    }
-    None => Ok(StatusCode::NOT_FOUND.into_response()),
+  let Some(table) = state.schema_metadata().get_table(&table_name) else {
+    return Err(AuthError::Internal("missing table".into()));
   };
-}
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub(crate) struct DbAvatar {
-  pub user: [u8; 16],
-  pub file: String,
-  pub updated: i64,
-}
+  let Some((index, file_column)) = table.column_by_name("file") else {
+    return Err(AuthError::Internal("missing column".into()));
+  };
 
-#[allow(unused)]
-#[derive(Debug, Clone)]
-pub struct Avatar {
-  pub user: Uuid,
-  pub file: FileUpload,
+  let Some(ref column_json_metadata) = table.json_metadata.columns[index] else {
+    return Err(AuthError::Internal("missing metadata".into()));
+  };
+
+  let file_upload = crate::records::query_builder::GetFileQueryBuilder::run(
+    &state,
+    &trailbase_schema::QualifiedNameEscaped::new(&table_name),
+    file_column,
+    column_json_metadata,
+    "user",
+    rusqlite::types::Value::Blob(user_id.into()),
+  )
+  .await
+  .map_err(|err| match err {
+    QueryError::NotFound => AuthError::NotFound,
+    _ => AuthError::Internal(err.into()),
+  })?;
+
+  return crate::records::files::read_file_into_response(&state, file_upload)
+    .await
+    .map_err(|err| AuthError::Internal(err.into()));
 }
 
 #[cfg(test)]
@@ -116,13 +73,11 @@ mod tests {
   use crate::app_state::*;
   use crate::auth::api::login::login_with_password;
   use crate::auth::user::{DbUser, User};
-  use crate::constants::RECORD_API_PATH;
   use crate::constants::{AVATAR_TABLE, USER_TABLE};
   use crate::extract::Either;
   use crate::records::create_record::{
     CreateRecordQuery, CreateRecordResponse, create_record_handler,
   };
-  use crate::records::read_record::get_uploaded_file_from_record_handler;
   use crate::test::unpack_json_response;
   use crate::util::{b64_to_uuid, id_to_b64, uuid_to_b64};
 
@@ -180,17 +135,9 @@ mod tests {
   }
 
   async fn download_avatar(state: &AppState, record_id: &[u8; 16]) -> Response {
-    return get_uploaded_file_from_record_handler(
-      State(state.clone()),
-      Path((
-        AVATAR_COLLECTION_NAME.to_string(),
-        id_to_b64(record_id),
-        COL_NAME.to_string(),
-      )),
-      None,
-    )
-    .await
-    .unwrap();
+    return get_avatar_handler(State(state.clone()), Path(id_to_b64(record_id)))
+      .await
+      .unwrap();
   }
 
   #[tokio::test]
@@ -216,17 +163,14 @@ mod tests {
       .unwrap()
       .unwrap();
 
-    let missing_profile_response = get_avatar_url_handler(
-      State(state.clone()),
-      HeaderMap::new(),
-      Path(id_to_b64(&db_user.id)),
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-      missing_profile_response.status(),
-      http::StatusCode::NOT_FOUND
-    );
+    let missing_profile_response =
+      get_avatar_handler(State(state.clone()), Path(id_to_b64(&db_user.id)))
+        .await
+        .err();
+    assert!(matches!(
+      missing_profile_response,
+      Some(AuthError::NotFound)
+    ));
 
     const PNG0: &[u8] = b"\x89PNG\x0d\x0a\x1a\x0b";
     const PNG1: &[u8] = b"\x89PNG\x0d\x0a\x1a\x0c";
@@ -274,29 +218,14 @@ mod tests {
       .is_err()
     );
 
-    let avatar_response = get_avatar_url_handler(
-      State(state.clone()),
-      HeaderMap::new(),
-      Path(id_to_b64(&db_user.id)),
-    )
-    .await
-    .unwrap();
-
-    assert_eq!(avatar_response.status(), http::StatusCode::SEE_OTHER);
-    let location = avatar_response
-      .headers()
-      .get("location")
-      .unwrap()
-      .to_str()
+    let response = get_avatar_handler(State(state.clone()), Path(id_to_b64(&db_user.id)))
+      .await
       .unwrap();
-
-    let mut _url = url::Url::parse(location).unwrap();
     assert_eq!(
-      location,
-      format!(
-        "https://test.org/{RECORD_API_PATH}/{AVATAR_COLLECTION_NAME}/{record_id_b64}/file/{COL_NAME}",
-        record_id_b64 = uuid_to_b64(&record_id),
-      )
+      axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap(),
+      PNG1
     );
   }
 }

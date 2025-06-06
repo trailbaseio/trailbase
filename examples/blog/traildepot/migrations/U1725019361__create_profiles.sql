@@ -27,7 +27,7 @@ CREATE VIEW profiles_view AS
     p.*,
     -- TrailBase requires top-level cast to determine result type and generate JSON schemas.
     CAST(CASE
-      WHEN avatar.file IS NOT NULL THEN CONCAT('/api/records/v1/_user_avatar/', uuid_text(p.user), '/file/file')
+      WHEN avatar.file IS NOT NULL THEN CONCAT('/api/auth/avatar/', uuid_text(p.user))
       ELSE NULL
     END AS TEXT) AS avatar_url,
     -- TrailBase requires top-level cast to determine result type and generate JSON schemas.

@@ -34,7 +34,7 @@ use crate::constants::AUTH_API_PATH;
     api::logout::logout_handler,
     api::refresh::refresh_handler,
     api::register::register_user_handler,
-    api::avatar::get_avatar_url_handler,
+    api::avatar::get_avatar_handler,
     api::delete::delete_handler,
     api::verify_email::verify_email_handler,
     api::verify_email::request_email_verification_handler,
@@ -153,7 +153,7 @@ pub(super) fn router() -> Router<crate::AppState> {
     // Get a user's avatar.
     .route(
       &format!("/{AUTH_API_PATH}/avatar/{{b64_user_id}}"),
-      get(api::avatar::get_avatar_url_handler),
+      get(api::avatar::get_avatar_handler),
     )
     // User delete.
     .route(

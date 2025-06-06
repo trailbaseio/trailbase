@@ -30,9 +30,9 @@ record_apis: [{
   name: "_user_avatar"
   table_name: "_user_avatar"
   conflict_resolution: REPLACE
+  excluded_columns: ["updated"]
   autofill_missing_user_id_columns: true
-  acl_world: [READ]
-  acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+  acl_authenticated: [CREATE, UPDATE, DELETE]
   create_access_rule: "_REQ_.user IS NULL OR _REQ_.user = _USER_.id"
   update_access_rule: "_ROW_.user = _USER_.id"
   delete_access_rule: "_ROW_.user = _USER_.id"
