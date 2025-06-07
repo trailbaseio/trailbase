@@ -429,10 +429,10 @@ export class Client {
   /// Construct accessor for Record API with given name.
   public records = (name: string): RecordApi => new RecordApi(this, name);
 
-  public async avatarUrl(): Promise<string | undefined> {
-    const user = this.user();
-    if (user) {
-      return `${authApiBasePath}/avatar/${user.id}`;
+  public avatarUrl(userId?: string): string | undefined {
+    const id = userId ?? this.user()?.id;
+    if (id) {
+      return `${authApiBasePath}/avatar/${id}`;
     }
     return undefined;
   }
