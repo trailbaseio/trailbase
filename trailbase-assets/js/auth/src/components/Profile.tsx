@@ -64,20 +64,7 @@ function DeleteAccountButton(props: { client: Client }) {
 }
 
 function Avatar(props: { client: Client; user: User }) {
-  const AvatarImage = () => {
-    return (
-      <object
-        type="image/jpeg"
-        data={avatarUrl(props.user)}
-        width={60}
-        height={60}
-        aria-label="Avatar image"
-      >
-        {/* Fallback */}
-        <TbUser size={60} />
-      </object>
-    );
-  };
+  const [failed, setFailed] = createSignal(false);
 
   let fileRef: HTMLInputElement | undefined;
   let formRef: HTMLFormElement | undefined;
@@ -85,9 +72,7 @@ function Avatar(props: { client: Client; user: User }) {
   return (
     <form
       ref={formRef}
-      id="avatar-form"
       method="dialog"
-      action={AVATAR_API}
       enctype="multipart/form-data"
       class="my-4 flex items-center justify-between"
       onSubmit={async (ev: SubmitEvent) => {
@@ -119,9 +104,42 @@ function Avatar(props: { client: Client; user: User }) {
         }}
       />
 
-      <button class="bg-gray-200 p-2" onClick={() => fileRef!.click()}>
-        <AvatarImage />
-      </button>
+      <div class="relative">
+        <button class="rounded bg-white p-2" onClick={() => fileRef!.click()}>
+          <object
+            class="rounded"
+            type="image/jpeg"
+            data={avatarUrl(props.user)}
+            width={60}
+            height={60}
+            aria-label="Avatar image"
+            onError={() => {
+              setFailed(true);
+            }}
+          >
+            {/* Fallback */}
+            <TbUser size={60} color="#0073aa" />
+          </object>
+        </button>
+
+        {!failed() && (
+          <div class="absolute right-0 top-0">
+            <button
+              class={cn(DESTRUCTIVE_ICON_STYLE, "rounded-full bg-white/75")}
+              onClick={async () => {
+                const response = await props.client.fetch(AVATAR_API, {
+                  method: "DELETE",
+                });
+                if (response.ok) {
+                  window.location.reload();
+                }
+              }}
+            >
+              <TbTrash />
+            </button>
+          </div>
+        )}
+      </div>
     </form>
   );
 }
