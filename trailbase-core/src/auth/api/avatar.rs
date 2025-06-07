@@ -1,15 +1,14 @@
 use axum::extract::{Path, State};
 use axum::response::Response;
 use lazy_static::lazy_static;
-use trailbase_schema::QualifiedName;
+use trailbase_schema::{FileUploadInput, QualifiedName};
 
 use crate::app_state::AppState;
 use crate::auth::{AuthError, User};
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::constants::AVATAR_TABLE;
 use crate::extract::Either;
-use crate::records::create_record::{RecordAndFiles, extract_record, extract_records};
-use crate::records::params::LazyParams;
+use crate::records::params::{JsonRow, LazyParams};
 use crate::records::query_builder::QueryError;
 use crate::util::{assert_uuidv7_version, uuid_to_b64};
 
@@ -72,38 +71,23 @@ pub async fn create_avatar_handler(
     return Err(AuthError::Internal("missing table".into()));
   };
 
-  let mut records_and_files: Vec<RecordAndFiles> = match either_request {
-    Either::Json(value) => {
-      extract_records(value).map_err(|_err| AuthError::BadRequest("extract json"))?
+  let files: Vec<FileUploadInput> = match either_request {
+    Either::Multipart(_value, files) => files,
+    _ => {
+      return Err(AuthError::BadRequest("expected multipart"));
     }
-    Either::Multipart(value, files) => vec![(
-      extract_record(value).map_err(|_err| AuthError::BadRequest("extract multipart"))?,
-      Some(files),
-    )],
-    Either::Form(value) => vec![(
-      extract_record(value).map_err(|_err| AuthError::BadRequest("extract form"))?,
-      None,
-    )],
   };
 
-  // TODO: Better input validation, i.e. ensure only one "file" provided. Consider only supporting
-  // multipart form.
-  if records_and_files.len() != 1 {
-    return Err(AuthError::BadRequest("expected one file"));
+  if files.len() != 1 || files[0].name.as_deref() != Some("file") {
+    return Err(AuthError::BadRequest("Expected single 'file'"));
   }
 
-  let (mut record, files) = records_and_files.swap_remove(0);
-  if record
-    .insert(
-      "user".to_string(),
-      serde_json::Value::String(uuid_to_b64(&user.uuid)),
-    )
-    .is_some()
-  {
-    return Err(AuthError::BadRequest("pre-existing user"));
-  }
+  let record = JsonRow::from_iter([(
+    "user".to_string(),
+    serde_json::Value::String(uuid_to_b64(&user.uuid)),
+  )]);
 
-  let lazy_params = LazyParams::new(&*table, record, files);
+  let lazy_params = LazyParams::new(&*table, record, Some(files));
   let params = lazy_params
     .consume()
     .map_err(|_| AuthError::BadRequest("parameter conversion"))?;
@@ -164,7 +148,7 @@ mod tests {
   use crate::auth::user::{DbUser, User};
   use crate::constants::USER_TABLE;
   use crate::extract::Either;
-  use crate::util::{id_to_b64, uuid_to_b64};
+  use crate::util::id_to_b64;
 
   type Request = http::Request<axum::body::Body>;
 
