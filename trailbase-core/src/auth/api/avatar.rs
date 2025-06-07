@@ -86,7 +86,8 @@ pub async fn create_avatar_handler(
     )],
   };
 
-  // TODO: Better input validation, i.e. ensure only one "file" provided.
+  // TODO: Better input validation, i.e. ensure only one "file" provided. Consider only supporting
+  // multipart form.
   if records_and_files.len() != 1 {
     return Err(AuthError::BadRequest("expected one file"));
   }
@@ -151,7 +152,7 @@ lazy_static! {
 
 #[cfg(test)]
 mod tests {
-  use axum::extract::{FromRequest, Path, Query, State};
+  use axum::extract::{FromRequest, Path, State};
   use axum::http;
   use axum::response::Response;
   use axum_test::multipart::{MultipartForm, Part};
@@ -161,27 +162,16 @@ mod tests {
   use crate::app_state::*;
   use crate::auth::api::login::login_with_password;
   use crate::auth::user::{DbUser, User};
-  use crate::constants::{AVATAR_TABLE, USER_TABLE};
+  use crate::constants::USER_TABLE;
   use crate::extract::Either;
-  use crate::records::create_record::{
-    CreateRecordQuery, CreateRecordResponse, create_record_handler,
-  };
-  use crate::test::unpack_json_response;
-  use crate::util::{b64_to_uuid, id_to_b64, uuid_to_b64};
+  use crate::util::{id_to_b64, uuid_to_b64};
 
   type Request = http::Request<axum::body::Body>;
 
   const COL_NAME: &str = "file";
-  const AVATAR_COLLECTION_NAME: &str = AVATAR_TABLE;
 
-  async fn build_upload_avatar_form_req(
-    user: &uuid::Uuid,
-    filename: &str,
-    body_slice: &[u8],
-  ) -> Request {
-    let user_id = uuid_to_b64(&user);
-
-    let form = MultipartForm::new().add_text("user", user_id).add_part(
+  async fn build_upload_avatar_form_req(filename: &str, body_slice: &[u8]) -> Request {
+    let form = MultipartForm::new().add_part(
       COL_NAME,
       Part::bytes(body_slice.to_vec()).file_name(filename),
     );
@@ -197,29 +187,21 @@ mod tests {
 
   async fn upload_avatar(
     state: &AppState,
-    user: Option<User>,
+    user: User,
     body: &[u8],
   ) -> Result<uuid::Uuid, anyhow::Error> {
-    let user_id = user.as_ref().unwrap().uuid;
-    let response: CreateRecordResponse = unpack_json_response(
-      create_record_handler(
-        State(state.clone()),
-        Path(AVATAR_COLLECTION_NAME.to_string()),
-        Query(CreateRecordQuery::default()),
-        user,
-        Either::from_request(
-          build_upload_avatar_form_req(&user_id, "foo.html", body).await,
-          &(),
-        )
+    let user_id = user.uuid;
+
+    create_avatar_handler(
+      State(state.clone()),
+      user,
+      Either::from_request(build_upload_avatar_form_req("foo.html", body).await, &())
         .await
         .unwrap(),
-      )
-      .await?,
     )
-    .await
-    .unwrap();
+    .await?;
 
-    return Ok(b64_to_uuid(&response.ids[0])?);
+    return Ok(user_id);
   }
 
   async fn download_avatar(state: &AppState, record_id: &[u8; 16]) -> Response {
@@ -263,15 +245,10 @@ mod tests {
     const PNG0: &[u8] = b"\x89PNG\x0d\x0a\x1a\x0b";
     const PNG1: &[u8] = b"\x89PNG\x0d\x0a\x1a\x0c";
 
-    let record_id = upload_avatar(
-      &state,
-      User::from_auth_token(&state, &user_x_token.auth_token),
-      PNG0,
-    )
-    .await
-    .unwrap();
+    let user = User::from_auth_token(&state, &user_x_token.auth_token).unwrap();
+    let user_id = upload_avatar(&state, user.clone(), PNG0).await.unwrap();
 
-    let response = download_avatar(&state, &record_id.into_bytes()).await;
+    let response = download_avatar(&state, &user_id.into_bytes()).await;
     assert_eq!(
       axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
@@ -280,14 +257,8 @@ mod tests {
     );
 
     // Test replacement
-    let record_id = upload_avatar(
-      &state,
-      User::from_auth_token(&state, &user_x_token.auth_token),
-      PNG1,
-    )
-    .await
-    .unwrap();
-    let response = download_avatar(&state, &record_id.into_bytes()).await;
+    let user_id = upload_avatar(&state, user.clone(), PNG1).await.unwrap();
+    let response = download_avatar(&state, &user_id.into_bytes()).await;
     assert_eq!(
       axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
@@ -299,7 +270,7 @@ mod tests {
     assert!(
       upload_avatar(
         &state,
-        User::from_auth_token(&state, &user_x_token.auth_token),
+        User::from_auth_token(&state, &user_x_token.auth_token).unwrap(),
         b"<html><body>Body 0</body></html>",
       )
       .await

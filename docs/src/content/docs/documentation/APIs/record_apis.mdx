@@ -25,21 +25,17 @@ multiple times as different API endpoints.
 Editing the configuration file directly, you can set up as many as you like
 allowing for some extra flexibility around permissions and visibility.
 
-An example API setup for managing user avatars:
+An example API setup for managing user profiles:
 
 ```json
 record_apis: [
   {
-    name: "_user_avatar"
-    table_name: "_user_avatar"
+    name: "profiles"
+    table_name: "profiles"
     conflict_resolution: REPLACE
-    autofill_missing_user_id_columns: true
-    acl_world: [READ]
-    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
-    create_access_rule: "_REQ_.user IS NULL OR _REQ_.user = _USER_.id"
-    update_access_rule: "_ROW_.user = _USER_.id"
-    delete_access_rule: "_ROW_.user = _USER_.id"
-  }
+    acl_authenticated: [READ, CREATE]
+    create_access_rule: "_REQ_.user = _USER_.id"
+  },
 ]
 ```
 

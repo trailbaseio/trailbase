@@ -76,7 +76,7 @@ pub mod proto {
   use crate::DESCRIPTOR_POOL;
   use crate::config::ConfigError;
   use crate::constants::{
-    AVATAR_TABLE, DEFAULT_AUTH_TOKEN_TTL, DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT,
+    DEFAULT_AUTH_TOKEN_TTL, DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT,
   };
   use crate::email;
 
@@ -114,7 +114,7 @@ pub mod proto {
       // NOTE: It's arguable if copying custom defaults into the config is the cleanest approach,
       // however it lets us tie into the set update-config Admin UI flow to let users change the
       // templates.
-      let mut config = Config {
+      let config = Config {
         server: ServerConfig {
           application_name: Some("TrailBase".to_string()),
           site_url: None,
@@ -134,27 +134,6 @@ pub mod proto {
         },
         ..Default::default()
       };
-
-      config.record_apis = vec![RecordApiConfig {
-        name: Some(AVATAR_TABLE.to_string()),
-        table_name: Some(AVATAR_TABLE.to_string()),
-        conflict_resolution: Some(ConflictResolutionStrategy::Replace.into()),
-        autofill_missing_user_id_columns: Some(true),
-        enable_subscriptions: None,
-        acl_world: vec![],
-        acl_authenticated: vec![
-          PermissionFlag::Create as i32,
-          PermissionFlag::Update as i32,
-          PermissionFlag::Delete as i32,
-        ],
-        excluded_columns: vec!["updated".to_string()],
-        read_access_rule: None,
-        create_access_rule: Some("_REQ_.user IS NULL OR _REQ_.user = _USER_.id".to_string()),
-        update_access_rule: Some("_ROW_.user = _USER_.id".to_string()),
-        delete_access_rule: Some("_ROW_.user = _USER_.id".to_string()),
-        schema_access_rule: None,
-        expand: vec![],
-      }];
 
       return config;
     }
