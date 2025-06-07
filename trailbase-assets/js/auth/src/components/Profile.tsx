@@ -1,8 +1,12 @@
-import { createResource, createSignal, Switch, Match } from "solid-js";
+import { createSignal, Switch, Match } from "solid-js";
 import { TbUser, TbLogout, TbTrash } from "solid-icons/tb";
+import { useStore } from "@nanostores/solid";
 import { Client, type User } from "trailbase";
 
-import { HOST, RECORD_API } from "@/lib/constants";
+import { HOST, AVATAR_API } from "@/lib/constants";
+import { $client } from "@/lib/client";
+import { cn } from "@/lib/utils";
+
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -15,13 +19,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+function avatarUrl(user: User): string {
+  return `${AVATAR_API}/${user.id}`;
+}
+
 function DeleteAccountButton(props: { client: Client }) {
   const [open, setOpen] = createSignal<boolean>(false);
 
   return (
     <Dialog open={open()} onOpenChange={setOpen}>
       <DialogTrigger>
-        <div class={DESTRUCTIVE_ICON_STYLE.join(" ")}>
+        <div class={cn(DESTRUCTIVE_ICON_STYLE)}>
           <TbTrash />
         </div>
       </DialogTrigger>
@@ -55,81 +63,70 @@ function DeleteAccountButton(props: { client: Client }) {
   );
 }
 
-function Avatar(props: { avatarUrl?: () => string | undefined }) {
-  const url = () => props.avatarUrl?.();
-
+function Avatar(props: { client: Client; user: User }) {
   const AvatarImage = () => {
     return (
-      <Switch fallback={<TbUser size={60} />}>
-        <Match when={url()}>
-          <img class="size-[60px]" alt="user avatar" src={url()} />
-        </Match>
-      </Switch>
+      <object
+        type="image/jpeg"
+        data={avatarUrl(props.user)}
+        width={60}
+        height={60}
+        aria-label="Avatar image"
+      >
+        {/* Fallback */}
+        <TbUser size={60} />
+      </object>
     );
   };
 
-  const profilePageUrl = `${window.location.origin}/_/auth/profile`;
-  const actionUrl = `${RECORD_API}/_user_avatar?redirect_to=${profilePageUrl}`;
-
-  const openFileDialog = () => {
-    try {
-      const element = document.getElementById("file-input") as HTMLInputElement;
-      element.click();
-    } catch (err) {
-      console.debug(err);
-    }
-  };
+  let fileRef: HTMLInputElement | undefined;
+  let formRef: HTMLFormElement | undefined;
 
   return (
     <form
+      ref={formRef}
       id="avatar-form"
-      method="post"
-      action={actionUrl}
+      method="dialog"
+      action={AVATAR_API}
       enctype="multipart/form-data"
-      target="_self"
       class="my-4 flex items-center justify-between"
+      onSubmit={async (ev: SubmitEvent) => {
+        ev.preventDefault();
+
+        const form = ev.currentTarget;
+        if (form) {
+          const formData = new FormData(form as HTMLFormElement);
+          const response = await props.client.fetch(AVATAR_API, {
+            method: "POST",
+            body: formData,
+          });
+
+          if (response.ok) {
+            window.location.reload();
+          }
+        }
+      }}
     >
-      {/* NOTE: user().id is a UUID rather than a b64 string.
-        <input type="hidden" name="user" value={`${user().id}`} />
-      */}
       <input
         hidden
-        id="file-input"
+        ref={fileRef}
         type="file"
         name="file"
         required
         accept="image/png, image/jpeg"
-        onChange={(e: Event) => {
-          const v = (e.currentTarget as HTMLInputElement).value;
-          if (v) {
-            const el = document.getElementById(
-              "avatar-form",
-            ) as HTMLFormElement;
-            if (el) {
-              el.submit();
-            }
-          }
+        onChange={(_e: Event) => {
+          formRef!.requestSubmit();
         }}
       />
 
-      <button class="bg-gray-200 p-2" onClick={openFileDialog}>
+      <button class="bg-gray-200 p-2" onClick={() => fileRef!.click()}>
         <AvatarImage />
       </button>
-
-      {/*
-        <Button onClick={openFileDialog}>Set Avatar</Button>
-      */}
     </form>
   );
 }
 
-function ProfileTable(props: {
-  user: User;
-  client: Client;
-  avatarUrl?: () => string | undefined;
-}) {
-  const user = () => props.user;
-
+function ProfileTable(props: { client: Client; user: User }) {
   return (
     <Card class="w-[80dvw] max-w-[460px] p-8">
       <div class="flex items-center justify-between">
@@ -138,19 +135,19 @@ function ProfileTable(props: {
         <div class="flex items-center gap-2">
           <DeleteAccountButton client={props.client} />
 
-          <a class={ICON_STYLE.join(" ")} href={`${HOST}/_/auth/logout`}>
+          <a class={cn(ICON_STYLE)} href={`${HOST}/_/auth/logout`}>
             <TbLogout />
           </a>
         </div>
       </div>
 
       <div class="flex w-full items-center gap-4">
-        <Avatar avatarUrl={props.avatarUrl} />
+        <Avatar client={props.client} user={props.user} />
 
         <div class="flex flex-col gap-2">
-          <strong>{user().email}</strong>
+          <strong>{props.user.email}</strong>
 
-          <div>Id: {user().id}</div>
+          <div>Id: {props.user.id}</div>
         </div>
       </div>
 
@@ -187,41 +184,27 @@ function ProfileTable(props: {
 }
 
 export function Profile() {
-  // FIXME: This is ugly, that state management should be simpler. One option
-  // might be to return synchronously from tryFromCookies and call onAuthChange
-  // async later.
-  const [user, setUser] = createSignal<User | undefined>();
-  const [client] = createResource(async () => {
-    return Client.tryFromCookies(HOST, {
-      onAuthChange: (_client, user) => setUser(user),
-    });
-  });
-
-  const [avatarUrl] = createResource(
-    client,
-    async (c: Client) => await c.avatarUrl(),
-  );
+  const client = useStore($client);
 
   return (
     <ErrorBoundary>
-      <Switch fallback={<div>Loading...</div>}>
-        <Match when={client.error}>
-          <span>{`${client.error}`}</span>
+      <Switch fallback={<div>Something went wrong</div>}>
+        <Match when={client() === undefined}>
+          <div>Loading...</div>
+        </Match>
 
-          <a href="/_/auth/login/">
-            <Button>To Login</Button>
+        <Match when={client()?.user() === undefined}>
+          <a
+            class={buttonVariants({ variant: "default" })}
+            href="/_/auth/login"
+          >
+            Login
           </a>
         </Match>
 
-        <Match when={client() && user()}>
-          <ProfileTable
-            user={user()!}
-            client={client()!}
-            avatarUrl={avatarUrl}
-          />
+        <Match when={client()?.user()}>
+          <ProfileTable client={client()!} user={client()!.user()!} />
         </Match>
-
-        <Match when={client() && !user()}>Not logged in.</Match>
       </Switch>
     </ErrorBoundary>
   );

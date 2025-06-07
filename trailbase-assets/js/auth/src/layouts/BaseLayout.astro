@@ -14,7 +14,7 @@ const DEV = import.meta.env.DEV;
 const CspFragments = new Map<string, string>([
   // default-src is fallback for all other policies that are not explicitly defined below.
   ["default-src", "'none'"],
-  ["object-src", "'none'"],
+  ["object-src", ["'self'", ...(DEV ? ["localhost:*"] : [])].join(" ")],
   ["style-src", ["'self'", "'unsafe-inline'"].join(" ")],
   ["media-src", "'none'"],
   ["frame-src", "'self'"],

@@ -46,7 +46,12 @@ export async function adminFetch(
   }
 
   try {
-    return await client.fetch(`/api/_admin${input}`, init);
+    return await client.fetch(`/api/_admin${input}`, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+      ...init,
+    });
   } catch (err) {
     showToast({
       title: "Fetch Error",
