@@ -281,6 +281,7 @@ export class RecordApi {
     const response = await this.client.fetch(this._path, {
       method: "POST",
       body: JSON.stringify(record),
+      headers: jsonContentTypeHeader,
     });
 
     return (await response.json()).ids[0];
@@ -292,6 +293,7 @@ export class RecordApi {
     const response = await this.client.fetch(this._path, {
       method: "POST",
       body: JSON.stringify(records),
+      headers: jsonContentTypeHeader,
     });
 
     return (await response.json()).ids;
@@ -304,6 +306,7 @@ export class RecordApi {
     await this.client.fetch(`${this._path}/${id}`, {
       method: "PATCH",
       body: JSON.stringify(record),
+      headers: jsonContentTypeHeader,
     });
   }
 
@@ -441,6 +444,7 @@ export class Client {
         email: email,
         password: password,
       } as LoginRequest),
+      headers: jsonContentTypeHeader,
     });
 
     this.setTokenState(
@@ -457,6 +461,7 @@ export class Client {
           body: JSON.stringify({
             refresh_token,
           } as LogoutRequest),
+          headers: jsonContentTypeHeader,
         });
       } else {
         await this.fetch(`${authApiBasePath}/logout`);
@@ -479,6 +484,7 @@ export class Client {
       body: JSON.stringify({
         new_email: email,
       } as ChangeEmailRequest),
+      headers: jsonContentTypeHeader,
     });
   }
 
@@ -517,6 +523,7 @@ export class Client {
         body: JSON.stringify({
           refresh_token: refreshToken,
         } as RefreshRequest),
+        headers: jsonContentTypeHeader,
       },
     );
 
@@ -615,8 +622,6 @@ function headers(tokens?: Tokens): HeadersInit {
   if (tokens) {
     const { auth_token, refresh_token, csrf_token } = tokens;
     return {
-      "Content-Type": "application/json",
-
       ...(auth_token && {
         Authorization: `Bearer ${auth_token}`,
       }),
@@ -629,10 +634,12 @@ function headers(tokens?: Tokens): HeadersInit {
     };
   }
 
-  return {
-    "Content-Type": "application/json",
-  };
+  return {};
 }
+
+const jsonContentTypeHeader = {
+  "Content-Type": "application/json",
+};
 
 export function textEncode(s: string): Uint8Array {
   return new TextEncoder().encode(s);

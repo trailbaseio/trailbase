@@ -52,14 +52,14 @@ test("auth integration tests", async () => {
   expect(newTokens).not.undefined.and.not.equals(oldTokens!.auth_token);
 
   const headers0 = client.headers();
-  expect(headers0["Content-Type"]).toContain("json");
+  expect(headers0["Content-Type"]).toBeUndefined();
   expect(headers0["Authorization"].startsWith("Bearer ")).toBe(true);
 
   expect(await client.logout()).toBe(true);
   expect(client.user()).toBe(undefined);
 
   const headers1 = client.headers();
-  expect(headers1["Content-Type"]).toContain("json");
+
   expect(headers1["Authorization"]).toBeUndefined();
 });
 

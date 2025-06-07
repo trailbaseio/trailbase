@@ -156,7 +156,7 @@ importers:
         version: 1.9.7
       trailbase:
         specifier: ^0.5.1
-        version: 0.5.1
+        version: link:../../../trailbase-assets/js/client
     devDependencies:
       '@astrojs/solid-js':
         specifier: ^5.1.0
@@ -540,6 +540,9 @@ importers:
       '@kobalte/core':
         specifier: ^0.13.10
         version: 0.13.10(solid-js@1.9.7)
+      '@nanostores/solid':
+        specifier: ^1.0.0
+        version: 1.0.0(nanostores@1.0.1)(solid-js@1.9.7)
       astro:
         specifier: ^5.8.1
         version: 5.8.1(@types/node@22.15.29)(jiti@2.4.2)(lightningcss@1.30.1)(rollup@4.41.1)(terser@5.39.0)(typescript@5.8.3)(yaml@2.8.0)
@@ -552,6 +555,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      nanostores:
+        specifier: ^1.0.1
+        version: 1.0.1
       solid-icons:
         specifier: ^1.1.0
         version: 1.1.0(solid-js@1.9.7)
@@ -5570,9 +5576,6 @@ packages:
   tr46@5.1.1:
     resolution: {integrity: sha512-hdF5ZgjTqgAntKkklYw0R03MG2x/bSzTtkxmIRw/sTNV8YXsCJ1tfLAX23lhxhHJlEf3CRCOCGGWw3vI3GaSPw==}
     engines: {node: '>=18'}
-
-  trailbase@0.5.1:
-    resolution: {integrity: sha512-38R0KUDyO4Imo0Wn94rcMuCqrDJOvrGi15Pk+4eJ3VDHvZDdfWx5gUoT0vYz9cLhof/TmbhIaHsUEfiHqzrqkA==}
 
   trim-lines@3.0.1:
     resolution: {integrity: sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg==}
@@ -12462,11 +12465,6 @@ snapshots:
   tr46@5.1.1:
     dependencies:
       punycode: 2.3.1
-
-  trailbase@0.5.1:
-    dependencies:
-      jwt-decode: 4.0.0
-      uuid: 11.1.0
 
   trim-lines@3.0.1: {}
 
