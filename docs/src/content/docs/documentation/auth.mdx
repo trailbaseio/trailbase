@@ -13,12 +13,15 @@ These primitives let you establish the identity of your users in order to
 authorize or deny access to your data, let users change their email address,
 reset their password, etc.
 
-<Aside type="danger" title="HTTPs">
+<Aside type="danger" title="Encryption: TLS/HTTPS">
   The safety of any authentication flow in hinges on TLS/HTTPS.
   Always use TLS in [production](/documentation/production).
   It allows your users to trust that the server they're talking to is actually
   yours *and* ensures credentials are end-to-end encrypted on the wire as
   opposed to plain text.
+  You can achieve this either by using TrailBase's built-in TLS termination or
+  using a reverse proxy in front. The latter may allow you to automatically
+  update certificates.
 </Aside>
 
 ## Implementation
@@ -75,7 +78,7 @@ support the above flows. By default it's accessible via the route:
 The built-in auth UIs can be disabled with `--disable-auth-ui` in case you
 prefer rolling your own or have no need web-based authentication.
 
-## Usernames and other metadata
+## Usernames and Other Metadata
 
 Strictly speaking, authentication is merely responsible for uniquely
 identifying who's on the other side.
@@ -109,6 +112,19 @@ primary key column. You can then freely expose profiles as dedicated record API
 endpoints or join them with other data `_user.id`.
 The blog example in `<repo>/examples/blog` demonstrates this, joining blog
 posts with user profiles on the author id to get an author's name.
+
+## Lifetime Considerations when Persisting Tokens
+
+If you decide to persist tokens, it's your responsibility to clean them up
+appropriately when a user logs out, otherwise users may still appear to be
+logged in.
+Specifically, when browsing to `/_/auth/logout` or directly invoking the
+log-out API (`/api/auth/v1/logout`), the session will be instantly invalidated.
+In browser environments, cookies carrying tokens will also be removed.
+Session invalidation results in the refresh token no longer being valid.
+However, the auth token will remain valid until it expires. In other words, to
+ensure that users don't appear as logged in anymore, any auth token you may
+have persisted should be dropped.
 
 <div class="h-[50px]" />
 
