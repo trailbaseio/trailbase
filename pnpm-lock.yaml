@@ -155,7 +155,7 @@ importers:
         specifier: ^1.9.7
         version: 1.9.7
       trailbase:
-        specifier: ^0.5.1
+        specifier: workspace:*
         version: link:../../../trailbase-assets/js/client
     devDependencies:
       '@astrojs/solid-js':

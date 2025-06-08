@@ -84,7 +84,7 @@ pub fn pnpm_run(args: &[&str]) -> Result<std::process::Output> {
 
 pub fn build_js(path: impl AsRef<Path>) -> Result<()> {
   let path = path.as_ref().to_string_lossy().to_string();
-  let offline: bool = matches!(
+  let strict_offline: bool = matches!(
     std::env::var("PNPM_OFFLINE").as_deref(),
     Ok("TRUE") | Ok("true") | Ok("1")
   );
@@ -100,7 +100,9 @@ pub fn build_js(path: impl AsRef<Path>) -> Result<()> {
     // parallel installs in the past. Our current approach is to recommend installing workspace
     // JS deps upfront in combination with `--prefer-offline`. We used to use plain `--offline`,
     // however this adds an extra mandatory step when vendoring trailbase for framework use-cases.
-    let args = if offline {
+    let args = if strict_offline {
+      ["--dir", &path, "install", "--frozen-lockfile", "--offline"]
+    } else {
       [
         "--dir",
         &path,
@@ -108,8 +110,6 @@ pub fn build_js(path: impl AsRef<Path>) -> Result<()> {
         "--prefer-frozen-lockfile",
         "--prefer-offline",
       ]
-    } else {
-      ["--dir", &path, "install", "--frozen-lockfile", "--offline"]
     };
     let build_result = pnpm_run(&args);
     if build_result.is_err() {

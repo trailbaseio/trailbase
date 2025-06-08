@@ -1,3 +1,21 @@
+## v0.13.0
+
+* Improve authentication and avatar handling (breaking).
+  * Remove avatar handling dependence on *special* `_user_avatar` record API by introducing dedicaed APIs.
+    This is a breaking change to the semantics of `/api/auth/v1/avatar*`, which
+    affects users of said APIs or `client.avatarUrl()`. Make sure to update to
+    the latest JS/TS client (v0.6).
+  * We also recommend removing the `_user_avatar` API definition from your `<traildepot>/config.textproto`.
+    It's inconsequential to have but no longer needed.
+  * Further, `/api/auth/v1/status` will now also refresh tokens thus not only
+    validating the auth token but also the session. The JS/TS client uses this to
+    asynchronously validate provided tokens.
+  * Allow deletion of avatars on `/_/auth/profile`. Also adopt nanostores to
+    manage client/user state on the profiles page.
+  * Add avatars back to admin UI.
+  * Document auth token lifecycle expectations when persisting tokens.
+* Update dependencies.
+
 ## v0.12.3
 
 * Fix row insertion/update in admin dashboard.
