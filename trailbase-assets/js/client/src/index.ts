@@ -385,9 +385,29 @@ export class Client {
     this._client = new ThinClient(baseUrl ? new URL(baseUrl) : undefined);
     this._authChange = opts?.onAuthChange;
 
+    const tokens = opts?.tokens;
     // Note: this is a double assignment to _tokenState to ensure the linter
     // that it's really initialized in the constructor.
-    this._tokenState = this.setTokenState(buildTokenState(opts?.tokens), true);
+    this._tokenState = this.setTokenState(buildTokenState(tokens), true);
+
+    if (tokens?.refresh_token !== undefined) {
+      // Validate session. This is currently async, which allows to initialize
+      // a Client synchronously from invalid tokens. We may want to consider
+      // offering a safer async initializer to avoid "racy" behavior. Especially,
+      // when the auth token is valid while the session has already been closed.
+      this.checkAuthStatus()
+        .then((tokens) => {
+          if (tokens === undefined) {
+            // In this case, the auth state has changed, so we should invoke the callback.
+            this.setTokenState(buildTokenState(undefined), false);
+          } else {
+            // In this case, the auth state has remained the same, we're merely
+            // updating the reminted auth token.
+            this.setTokenState(buildTokenState(tokens), true);
+          }
+        })
+        .catch(console.error);
+    }
   }
 
   public static init(site?: URL | string, opts?: ClientOptions): Client {
@@ -488,20 +508,31 @@ export class Client {
     });
   }
 
+  /// This will call the status endpoint, which validates any provided tokens
+  /// but also hoists any tokens provided as cookies into a JSON response.
+  private async checkAuthStatus(): Promise<Tokens | undefined> {
+    const response = await this.fetch(`${authApiBasePath}/status`, {
+      throwOnError: false,
+    });
+    if (response.ok) {
+      const status: LoginStatusResponse = await response.json();
+      const auth_token = status.auth_token;
+      if (auth_token) {
+        return {
+          auth_token,
+          refresh_token: status.refresh_token,
+          csrf_token: status.csrf_token,
+        };
+      }
+    }
+    return undefined;
+  }
+
   public async checkCookies(): Promise<Tokens | undefined> {
-    const response = await this.fetch(`${authApiBasePath}/status`);
-    const status: LoginStatusResponse = await response.json();
-
-    const authToken = status?.auth_token;
-    if (authToken) {
-      const newState = buildTokenState({
-        auth_token: authToken,
-        refresh_token: status.refresh_token,
-        csrf_token: status.csrf_token,
-      });
-
+    const tokens = await this.checkAuthStatus();
+    if (tokens) {
+      const newState = buildTokenState(tokens);
       this.setTokenState(newState);
-
       return newState.state?.tokens;
     }
   }
@@ -579,7 +610,7 @@ export class Client {
       return response;
     } catch (err) {
       if (err instanceof TypeError) {
-        throw Error(`Connection refused ${err}. TrailBase down or CORS?`);
+        console.debug(`Connection refused ${err}. TrailBase down or CORS?`);
       }
       throw err;
     }
