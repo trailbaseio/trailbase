@@ -213,14 +213,13 @@ mod test {
 
     state
       .conn()
-      .execute(
+      .execute_batch(
         r#"
           CREATE TABLE simple (
             owner   BLOB PRIMARY KEY CHECK(is_uuid(owner)) REFERENCES _user,
             value   INTEGER
           ) STRICT;
         "#,
-        (),
       )
       .await
       .unwrap();
@@ -291,7 +290,7 @@ mod test {
         User::from_auth_token(&state, &user_x_token.auth_token),
         Either::Json(
           json_row_from_value(json!({
-            "owner": uuid_to_b64(&uuid::Uuid::now_v7()),
+            "owner": uuid_to_b64(&uuid::Uuid::new_v4()),
             "value": 17,
           }))
           .unwrap()

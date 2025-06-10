@@ -10,7 +10,7 @@ use crate::constants::AVATAR_TABLE;
 use crate::extract::Either;
 use crate::records::params::{JsonRow, LazyParams};
 use crate::records::query_builder::QueryError;
-use crate::util::{assert_uuidv7_version, uuid_to_b64};
+use crate::util::uuid_to_b64;
 
 #[utoipa::path(
   get,
@@ -24,8 +24,6 @@ pub async fn get_avatar_handler(
   let Ok(user_id) = crate::util::b64_to_uuid(&b64_user_id) else {
     return Err(AuthError::BadRequest("Invalid user id"));
   };
-  assert_uuidv7_version(&user_id);
-
   let Some(table) = state.schema_metadata().get_table(&table_name) else {
     return Err(AuthError::Internal("missing table".into()));
   };

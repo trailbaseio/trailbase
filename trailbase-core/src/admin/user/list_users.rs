@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::auth::user::DbUser;
-use crate::constants::{USER_TABLE, USER_TABLE_ID_COLUMN};
+use crate::constants::USER_TABLE;
 use crate::listing::{WhereClause, build_filter_where_clause, cursor_to_value, limit_or_default};
 use crate::util::id_to_b64;
 
@@ -98,7 +98,7 @@ pub async fn list_users_handler(
 
   lazy_static! {
     static ref DEFAULT_ORDERING: Order = Order {
-      columns: vec![(USER_TABLE_ID_COLUMN.to_string(), OrderPrecedent::Descending)],
+      columns: vec![("_rowid_".to_string(), OrderPrecedent::Descending)],
     };
   }
   let users = fetch_users(
@@ -165,8 +165,7 @@ async fn fetch_users(
   let sql_query = format!(
     r#"
       SELECT _ROW_.*
-      FROM
-        (SELECT * FROM {USER_TABLE}) as _ROW_
+      FROM {USER_TABLE} as _ROW_
       WHERE
         {where_clause}
       ORDER BY

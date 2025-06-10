@@ -44,7 +44,6 @@ pub(crate) struct DbUser {
 impl DbUser {
   pub(crate) fn uuid(&self) -> Uuid {
     let uuid = Uuid::from_bytes(self.id);
-    assert_eq!(uuid.get_version_num(), 7);
     return uuid;
   }
 
@@ -108,7 +107,6 @@ impl User {
   pub(crate) fn from_token_claims(claims: TokenClaims) -> Result<Self, AuthError> {
     let uuid = b64_to_uuid(&claims.sub)
       .map_err(|_err| AuthError::UnauthorizedExt("invalid user id".into()))?;
-    assert_eq!(uuid.get_version_num(), 7);
 
     return Ok(Self {
       id: claims.sub,
