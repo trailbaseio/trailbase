@@ -16,7 +16,7 @@ maintenance = { status = "actively-developed" }
 libsqlite3-sys = { workspace = true }
 
 [build-dependencies]
-bindgen = "0.71.0"
+bindgen = "0.72.0"
 cc = "1.1.28"
 
 [dev-dependencies]
