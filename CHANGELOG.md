@@ -1,3 +1,8 @@
+## v0.13.1
+
+* Fix index names in admin UI.
+* Update JS & Rust dependencies.
+
 ## v0.13.0
 
 * Improve authentication and avatar handling (breaking).
