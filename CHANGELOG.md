@@ -1,3 +1,7 @@
+## v0.13.2
+
+* Fix Admin-UI login form reactivity issue.
+
 ## v0.13.1
 
 * Fix index names in admin UI.
