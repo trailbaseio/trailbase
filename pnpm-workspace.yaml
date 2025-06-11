@@ -13,7 +13,7 @@ packages:
 sharedWorkspaceLockfile: true
 linkWorkspacePackages: true
 preferWorkspacePackages: true
-preferOffline: true
+preferOffline: false
 preferFrozenLockfile: true
 # strictPeerDependencies: false
 disallowWorkspaceCycles: true

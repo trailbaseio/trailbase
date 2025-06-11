@@ -15,9 +15,9 @@
     "@astrojs/check": "^0.9.4",
     "@astrojs/starlight": "^0.34.3",
     "@astrojs/starlight-tailwind": "^4.0.1",
-    "@iconify-json/tabler": "^1.2.18",
+    "@iconify-json/tabler": "^1.2.19",
     "@tailwindcss/vite": "^4.1.8",
-    "astro": "^5.8.1",
+    "astro": "^5.9.2",
     "astro-icon": "^1.1.5",
     "chart.js": "^4.4.9",
     "chartjs-chart-error-bars": "^4.4.4",
@@ -26,12 +26,12 @@
     "sharp": "^0.34.2",
     "solid-js": "^1.9.7",
     "starlight-links-validator": "^0.16.0",
-    "tailwind-merge": "^3.3.0",
+    "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.1.8",
     "typescript": "^5.8.3"
   },
   "devDependencies": {
-    "@astrojs/sitemap": "^3.4.0",
+    "@astrojs/sitemap": "^3.4.1",
     "@astrojs/solid-js": "^5.1.0",
     "@eslint/js": "^9.28.0",
     "astro-robots-txt": "^1.0.0",
@@ -43,6 +43,6 @@
     "prettier": "^3.5.3",
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-tailwindcss": "^0.6.12",
-    "typescript-eslint": "^8.33.1"
+    "typescript-eslint": "^8.34.0"
   }
 }

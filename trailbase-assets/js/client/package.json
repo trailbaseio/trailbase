@@ -41,13 +41,13 @@
     "globals": "^16.2.0",
     "http-status": "^2.1.0",
     "jsdom": "^26.1.0",
-    "oauth2-mock-server": "^8.0.1",
+    "oauth2-mock-server": "^8.1.0",
     "prettier": "^3.5.3",
     "tinybench": "^4.0.1",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.33.1",
-    "vite-node": "^3.2.1",
-    "vitest": "^3.2.1"
+    "typescript-eslint": "^8.34.0",
+    "vite-node": "^3.2.3",
+    "vitest": "^3.2.3"
   },
   "dependencies": {
     "jwt-decode": "^4.0.0",
