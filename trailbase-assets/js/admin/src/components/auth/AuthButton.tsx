@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, Show, Switch, Match } from "solid-js";
 import { useStore } from "@nanostores/solid";
 import { TbUser } from "solid-icons/tb";
 import { type User } from "trailbase";
@@ -22,22 +22,26 @@ function avatarUrl(user: User): string {
 }
 
 function Avatar(props: { user: User | undefined; size: number }) {
-  if (props.user === undefined) {
-    return <TbUser size={props.size} color="#0073aa" />;
-  }
-
   return (
-    <object
-      class="rounded-full bg-transparent"
-      type="image/png"
-      data={avatarUrl(props.user)}
-      width={props.size}
-      height={props.size}
-      aria-label="Avatar image"
-    >
-      {/* Fallback */}
-      <TbUser size={props.size} color="#0073aa" />
-    </object>
+    <Switch>
+      <Match when={props.user === undefined}>
+        <TbUser size={props.size} color="#0073aa" />
+      </Match>
+
+      <Match when={props.user !== undefined}>
+        <object
+          class="rounded-full bg-transparent"
+          type="image/png"
+          data={avatarUrl(props.user!)}
+          width={props.size}
+          height={props.size}
+          aria-label="Avatar image"
+        >
+          {/* Fallback */}
+          <TbUser size={props.size} color="#0073aa" />
+        </object>
+      </Match>
+    </Switch>
   );
 }
 

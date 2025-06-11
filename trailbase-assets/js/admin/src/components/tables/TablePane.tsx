@@ -686,7 +686,14 @@ export function TablePane(props: {
 
   const table = () => props.selectedTable;
   const indexes = () =>
-    props.schemas.indexes.filter((idx) => idx.table_name === table().name.name);
+    props.schemas.indexes.filter((idx) => {
+      const tbl = table();
+      return (
+        (idx.name.database_schema ?? "main") ==
+          (tbl.name.database_schema ?? "main") &&
+        idx.table_name === tbl.name.name
+      );
+    });
   const triggers = () =>
     props.schemas.triggers.filter(
       (trig) => trig.table_name === table().name.name,
@@ -973,7 +980,7 @@ const sheetMaxWidth = "sm:max-w-[520px]";
 const indexColumns = [
   {
     header: "name",
-    accessorKey: "name",
+    accessorFn: (index: TableIndex) => index.name.name,
   },
   {
     header: "columns",
