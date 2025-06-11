@@ -369,9 +369,9 @@ export function RecordApiSettingsForm(props: {
   return (
     <SheetContainer>
       <form
-        onSubmit={(e) => {
+        method="dialog"
+        onSubmit={(e: SubmitEvent) => {
           e.preventDefault();
-          e.stopPropagation();
           form.handleSubmit();
         }}
       >

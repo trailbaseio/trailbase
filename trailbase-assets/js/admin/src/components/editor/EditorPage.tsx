@@ -252,14 +252,6 @@ function RenameDialog(props: { selected: number; script: Script }) {
   const [open, setOpen] = createSignal(false);
   const [name, setName] = createWritableMemo(() => props.script.name);
 
-  const onSubmit = () => {
-    updateExistingScript(props.selected, {
-      ...props.script,
-      name: name(),
-    });
-    setOpen(false);
-  };
-
   return (
     <Dialog id="rename" open={open()} onOpenChange={setOpen}>
       <DialogTrigger class={iconButtonStyle}>
@@ -279,14 +271,22 @@ function RenameDialog(props: { selected: number; script: Script }) {
         <form
           class="flex flex-col gap-4 px-8 py-12"
           method="dialog"
-          onSubmit={onSubmit}
+          onSubmit={(e: SubmitEvent) => {
+            e.preventDefault();
+
+            updateExistingScript(props.selected, {
+              ...props.script,
+              name: name(),
+            });
+            setOpen(false);
+          }}
         >
           <TextField>
             <TextFieldInput
               required
               value={name()}
               type="text"
-              onKeyUp={(e: Event) => {
+              onChange={(e: Event) => {
                 setName((e.target as HTMLInputElement).value);
               }}
             />

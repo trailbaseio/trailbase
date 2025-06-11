@@ -111,9 +111,9 @@ export function EmailSettings(props: {
 
     return (
       <form
-        onSubmit={(e) => {
+        method="dialog"
+        onSubmit={(e: SubmitEvent) => {
           e.preventDefault();
-          e.stopPropagation();
           form.handleSubmit();
         }}
       >

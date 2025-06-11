@@ -68,9 +68,9 @@ function ServerSettings(props: CommonProps) {
 
     return (
       <form
-        onSubmit={(e) => {
+        method="dialog"
+        onSubmit={(e: SubmitEvent) => {
           e.preventDefault();
-          e.stopPropagation();
           form.handleSubmit();
         }}
       >
@@ -276,9 +276,9 @@ function ImportSettings(props: CommonProps) {
 
     return (
       <form
-        onSubmit={(e) => {
+        method="dialog"
+        onSubmit={(e: SubmitEvent) => {
           e.preventDefault();
-          e.stopPropagation();
           form.handleSubmit();
         }}
       >
@@ -317,27 +317,6 @@ function ImportSettings(props: CommonProps) {
               </pre>
             </CardContent>
           </Card>
-
-          <div class="flex justify-end pt-4">
-            <form.Subscribe
-              selector={(state) => ({
-                canSubmit: state.canSubmit,
-                isSubmitting: state.isSubmitting,
-              })}
-            >
-              {(state) => {
-                return (
-                  <Button
-                    type="submit"
-                    disabled={!state().canSubmit}
-                    variant="default"
-                  >
-                    {state().isSubmitting ? "..." : "Submit"}
-                  </Button>
-                );
-              }}
-            </form.Subscribe>
-          </div>
         </div>
       </form>
     );

@@ -18,27 +18,27 @@ export function LoginPage() {
   const urlParams = new URLSearchParams(window.location.search);
   const message = urlParams.get("loginMessage");
 
-  const onSubmit = async () => {
-    try {
-      await client.login(username(), password());
-    } catch (err) {
-      showToast({
-        title: "Uncaught Error",
-        description: `${err}`,
-        variant: "error",
-      });
-    }
-    // Don't reload.
-    return false;
-  };
-
   return (
     <div class="flex h-dvh flex-col items-center justify-center">
       <Card>
         <form
           class="flex flex-col gap-4 px-8 py-12"
           method="dialog"
-          onSubmit={onSubmit}
+          onSubmit={async (ev: SubmitEvent) => {
+            ev.preventDefault();
+
+            try {
+              await client.login(username(), password());
+            } catch (err) {
+              showToast({
+                title: "Uncaught Error",
+                description: `${err}`,
+                variant: "error",
+              });
+            }
+            // Don't reload.
+            return false;
+          }}
         >
           <h1>Login</h1>
 
@@ -50,7 +50,7 @@ export function LoginPage() {
               value={username()}
               placeholder="E-mail"
               autocomplete="username"
-              onKeyUp={(e: KeyboardEvent) => {
+              onChange={(e: Event) => {
                 const target = e.currentTarget as HTMLInputElement;
                 setUsername(target.value);
               }}
@@ -65,7 +65,7 @@ export function LoginPage() {
               value={password()}
               placeholder="password"
               autocomplete="current-password"
-              onKeyUp={(e: KeyboardEvent) => {
+              onChange={(e: Event) => {
                 const target = e.currentTarget as HTMLInputElement;
                 setPassword(target.value);
               }}

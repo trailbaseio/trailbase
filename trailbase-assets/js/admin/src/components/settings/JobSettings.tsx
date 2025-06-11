@@ -153,9 +153,9 @@ function JobSettingsImpl(props: {
 
   return (
     <form
-      onSubmit={(e) => {
+      method="dialog"
+      onSubmit={(e: SubmitEvent) => {
         e.preventDefault();
-        e.stopPropagation();
         form.handleSubmit();
       }}
     >
@@ -280,7 +280,7 @@ function JobSettingsImpl(props: {
                                         value={field().state.value}
                                         onBlur={field().handleBlur}
                                         autocomplete="off"
-                                        onKeyUp={(e: Event) => {
+                                        onChange={(e: Event) => {
                                           field().handleChange(
                                             (e.target as HTMLInputElement)
                                               .value,

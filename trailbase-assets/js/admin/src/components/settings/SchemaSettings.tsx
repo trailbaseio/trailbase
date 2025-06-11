@@ -39,7 +39,7 @@ function SchemaSettingsForm(props: {
       entries: props.schemas,
     },
     onSubmit: async ({ value }) => {
-      throw `NOT IMPLEMENTED: ${value}`;
+      throw new Error(`NOT IMPLEMENTED: ${value}`);
 
       props.postSubmit();
     },
@@ -53,9 +53,9 @@ function SchemaSettingsForm(props: {
 
   return (
     <form
-      onSubmit={(e) => {
+      method="dialog"
+      onSubmit={(e: SubmitEvent) => {
         e.preventDefault();
-        e.stopPropagation();
         form.handleSubmit();
       }}
     >

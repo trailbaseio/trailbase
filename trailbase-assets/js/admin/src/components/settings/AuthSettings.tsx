@@ -314,9 +314,9 @@ function AuthSettingsForm(props: {
 
   return (
     <form
+      method="dialog"
       onSubmit={(e) => {
         e.preventDefault();
-        e.stopPropagation();
         form.handleSubmit();
       }}
     >

@@ -129,9 +129,9 @@ export function InsertUpdateRowForm(props: {
       </SheetHeader>
 
       <form
-        onSubmit={(e) => {
+        method="dialog"
+        onSubmit={(e: SubmitEvent) => {
           e.preventDefault();
-          e.stopPropagation();
           form.handleSubmit();
         }}
       >
