@@ -1,11 +1,17 @@
+use aes_gcm::aead::{Aead, AeadInPlace, KeyInit, OsRng, Payload, generic_array::GenericArray};
+use aes_gcm::{Aes256Gcm, Key};
 use askama::Template;
 use axum::{
   Json,
   extract::{Path, RawQuery, State},
 };
+use base64::prelude::*;
 use itertools::Itertools;
+use lazy_static::lazy_static;
+use rand::RngCore;
 use serde::Serialize;
 use std::borrow::Cow;
+use std::convert::TryInto;
 use trailbase_qs::{Cursor, CursorType, OrderPrecedent, Query};
 use trailbase_schema::sqlite::Column;
 use trailbase_schema::{QualifiedNameEscaped, sqlite::ColumnDataType};
@@ -124,8 +130,12 @@ pub async fn list_records_handler(
     ));
   }
 
+  lazy_static! {
+    static ref key: Key<Aes256Gcm> = Aes256Gcm::generate_key(OsRng);
+  }
+
   let cursor_clause = if let Some(cursor) = cursor {
-    let cursor = parse_cursor(&cursor, pk_column)?;
+    let cursor = parse_cursor(&key, api_name.as_bytes(), &cursor, pk_column)?;
 
     let mut pk_order = OrderPrecedent::Descending;
     if let Some(ref order) = order {
@@ -229,11 +239,14 @@ pub async fn list_records_handler(
   };
 
   assert!(*pk_index < last_row.len());
-  let cursor = match &last_row[*pk_index] {
-    rusqlite::types::Value::Blob(blob) => {
-      uuid::Uuid::from_slice(blob).as_ref().map(uuid_to_b64).ok()
+  let cursor: Option<String> = match &last_row[*pk_index] {
+    rusqlite::types::Value::Blob(blob) => uuid::Uuid::from_slice(blob)
+      .as_ref()
+      .ok()
+      .and_then(|uuid| encrypt_cursor(&key, api_name.as_bytes(), &uuid_to_b64(uuid)).ok()),
+    rusqlite::types::Value::Integer(i) => {
+      encrypt_cursor(&key, api_name.as_bytes(), &i.to_string()).ok()
     }
-    rusqlite::types::Value::Integer(i) => Some(i.to_string()),
     _ => None,
   };
 
@@ -311,11 +324,84 @@ fn column_filter(col_name: &str) -> bool {
   return !col_name.starts_with("_");
 }
 
-fn parse_cursor(cursor: &str, pk_col: &Column) -> Result<Cursor, RecordError> {
+const NONCE_LEN: usize = 12;
+const TAG_LEN: usize = 16;
+// const KEY_LEN: usize = 32;
+
+/// Encrypts the cookie's value with authenticated encryption providing
+/// confidentiality, integrity, and authenticity.
+fn encrypt_cursor(
+  key: &Key<Aes256Gcm>,
+  associated_data: &[u8],
+  cursor: &str,
+) -> Result<String, &'static str> {
+  // Create a vec to hold the [nonce | cookie value | tag].
+  let cursor_bytes = cursor.as_bytes();
+  let mut data = vec![0; NONCE_LEN + cursor_bytes.len() + TAG_LEN];
+
+  // Split data into three: nonce, input/output, tag. Copy input.
+  let (nonce, in_out) = data.split_at_mut(NONCE_LEN);
+  let (in_out, tag) = in_out.split_at_mut(cursor_bytes.len());
+  in_out.copy_from_slice(cursor_bytes);
+
+  // Fill nonce piece with random data.
+  let mut rng = rand::rng();
+  rng.fill_bytes(nonce);
+  let nonce = GenericArray::clone_from_slice(nonce);
+
+  // Perform the actual sealing operation, using the cookie's name as
+  // associated data to prevent value swapping.
+  let aead = Aes256Gcm::new(key);
+  let aad_tag = aead
+    .encrypt_in_place_detached(&nonce, associated_data, in_out)
+    .map_err(|_| "encryption failure!")?;
+
+  // Copy the tag into the tag piece.
+  tag.copy_from_slice(&aad_tag);
+
+  // Base64 encode [nonce | encrypted value | tag].
+  return Ok(BASE64_URL_SAFE.encode(&data));
+}
+
+fn decrypt_cursor(
+  key: &Key<Aes256Gcm>,
+  associated_data: &[u8],
+  value: &str,
+) -> Result<String, &'static str> {
+  let data = BASE64_URL_SAFE
+    .decode(value)
+    .map_err(|_| "bad base64 value")?;
+  if data.len() <= NONCE_LEN {
+    return Err("length of decoded data is <= NONCE_LEN");
+  }
+
+  let (nonce, cipher) = data.split_at(NONCE_LEN);
+  let payload = Payload {
+    msg: cipher,
+    aad: associated_data,
+  };
+
+  let aead = Aes256Gcm::new(GenericArray::from_slice(key));
+  aead
+    .decrypt(GenericArray::from_slice(nonce), payload)
+    .map_err(|_| "invalid key/nonce/value: bad seal")
+    .and_then(|s| String::from_utf8(s).map_err(|_| "bad unsealed utf8"))
+}
+
+fn parse_cursor(
+  key: &Key<Aes256Gcm>,
+  associated_data: &[u8],
+  encrypted_cursor: &str,
+  pk_col: &Column,
+) -> Result<Cursor, RecordError> {
+  let cursor = decrypt_cursor(key, associated_data, encrypted_cursor).map_err(|_err| {
+    return RecordError::BadRequest("Bad cursor");
+  })?;
+
   return match pk_col.data_type {
-    ColumnDataType::Blob => Cursor::parse(cursor, CursorType::Blob)
+    ColumnDataType::Blob => Cursor::parse(&cursor, CursorType::Blob)
       .map_err(|_| RecordError::BadRequest("Invalid blob cursor")),
-    ColumnDataType::Integer => Cursor::parse(cursor, CursorType::Integer)
+    ColumnDataType::Integer => Cursor::parse(&cursor, CursorType::Integer)
       .map_err(|_| RecordError::BadRequest("Invalid integer cursor")),
     _ => Err(RecordError::BadRequest("Invalid cursor column type")),
   };
@@ -323,6 +409,8 @@ fn parse_cursor(cursor: &str, pk_col: &Column) -> Result<Cursor, RecordError> {
 
 #[cfg(test)]
 mod tests {
+  use aes_gcm::aead::{KeyInit, OsRng};
+  use aes_gcm::{Aes256Gcm, Key};
   use serde::Deserialize;
   use std::borrow::Cow;
   use trailbase_schema::sqlite::{QualifiedName, sqlite3_parse_into_statement};
@@ -383,6 +471,19 @@ mod tests {
       .render()
       .unwrap(),
     );
+  }
+
+  #[test]
+  fn test_cursor_encryption() {
+    let api_name = "test".to_string();
+
+    let key: Key<Aes256Gcm> = Aes256Gcm::generate_key(OsRng).into();
+
+    let value = "secret cursor";
+    let encrypted = encrypt_cursor(&key, api_name.as_bytes(), &value).unwrap();
+    let decrypted = decrypt_cursor(&key, api_name.as_bytes(), &encrypted).unwrap();
+
+    assert_eq!(value, decrypted);
   }
 
   #[tokio::test]
@@ -817,7 +918,16 @@ mod tests {
       assert_eq!(arr_asc, arr_desc.into_iter().rev().collect::<Vec<_>>());
 
       // Ordering and cursor work well together.
-      let cursor_middle = to_message(arr_asc[1].clone()).mid;
+      let cursor_middle = list_records(
+        &state,
+        Some(&user_y_token.auth_token),
+        // We're basically getting a cursor to the third element.
+        Some("order=-mid&limit=2".to_string()),
+      )
+      .await
+      .unwrap()
+      .cursor
+      .unwrap();
 
       let mut cursored_desc = list_records(
         &state,
@@ -856,13 +966,12 @@ mod tests {
       );
 
       // Ordering and cursor return an error when PK is not primary order cirteria.
-      let cursor_first = to_message(arr_asc[0].clone()).mid;
       assert!(
         list_records(
           &state,
           Some(&user_y_token.auth_token),
           Some(format!(
-            "order={}&cursor={cursor_first}",
+            "order={}&cursor={cursor_middle}",
             urlencode("+room,+mid")
           )),
         )

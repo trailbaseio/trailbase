@@ -6789,6 +6789,7 @@ dependencies = [
 name = "trailbase"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "anyhow",
  "apalis",
  "arc-swap",
