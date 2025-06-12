@@ -3,6 +3,12 @@ import { createForm } from "@tanstack/solid-form";
 import { TbInfoCircle } from "solid-icons/tb";
 import { useQueryClient } from "@tanstack/solid-query";
 
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,7 +26,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SheetFooter } from "@/components/ui/sheet";
+import { SheetContainer } from "@/components/SafeSheet";
 import { showToast } from "@/components/ui/toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import {
   Config,
@@ -28,7 +36,6 @@ import {
   PermissionFlag,
   RecordApiConfig,
 } from "@proto/config";
-import { SheetContainer } from "@/components/SafeSheet";
 import {
   buildTextFormField,
   buildOptionalTextFormField,
@@ -36,6 +43,7 @@ import {
 import { createConfigQuery, setConfig } from "@/lib/config";
 import { parseSqlExpression } from "@/lib/parse";
 import { tableType, getForeignKey } from "@/lib/schema";
+import { client } from "@/lib/fetch";
 
 import type { ForeignKey } from "@bindings/ForeignKey";
 import type { Table } from "@bindings/Table";
@@ -43,14 +51,14 @@ import type { View } from "@bindings/View";
 
 const tablePermissions = {
   Create: PermissionFlag.CREATE,
-  Read: PermissionFlag.READ,
+  "Read/List": PermissionFlag.READ,
   Update: PermissionFlag.UPDATE,
   Delete: PermissionFlag.DELETE,
   Schema: PermissionFlag.SCHEMA,
 } as const;
 
 const viewPermissions = {
-  Read: PermissionFlag.READ,
+  "Read/List": PermissionFlag.READ,
   Schema: PermissionFlag.SCHEMA,
 } as const;
 
@@ -82,7 +90,7 @@ function AclForm(props: {
           >
             {(key, index) => (
               <div
-                class="col-span-1 ml-1 [writing-mode:vertical-rl]"
+                class="col-span-1 ml-1 text-sm [writing-mode:vertical-rl]"
                 style={{ "grid-column-start": index() + 2 }}
               >
                 {key}
@@ -308,6 +316,37 @@ function getForeignKeyColumns(schema: Table | View): [string, ForeignKey][] {
     .filter(filter) as [string, ForeignKey][];
 }
 
+function ReadExample(props: { apiName: string; config: Config | undefined }) {
+  const text = () => {
+    const host =
+      props.config?.server?.siteUrl ??
+      (import.meta.env.DEV ? "http://localhost:4000" : window.location.origin);
+
+    return `curl \\
+  --header "Content-Type: application/json" \\
+  --header "Authorization: Bearer ${client.tokens()?.auth_token}" \\
+  --request GET \\
+  "${host}/api/records/v1/${props.apiName}/<RECORD_ID>"`;
+  };
+
+  return <pre class="text-wrap break-all font-mono text-sm">{text()}</pre>;
+}
+
+function ListExample(props: { apiName: string; config: Config | undefined }) {
+  const text = () => {
+    const host =
+      props.config?.server?.siteUrl ??
+      (import.meta.env.DEV ? "http://localhost:4000" : window.location.origin);
+
+    return `curl \\
+  --header "Content-Type: application/json" \\
+  --header "Authorization: Bearer ${client.tokens()?.auth_token}" \\
+  --request GET \\
+  "${host}/api/records/v1/${props.apiName}"`;
+  };
+  return <pre class="text-wrap break-all font-mono text-sm">{text()}</pre>;
+}
+
 export function RecordApiSettingsForm(props: {
   close: () => void;
   markDirty: () => void;
@@ -366,354 +405,457 @@ export function RecordApiSettingsForm(props: {
     }
   });
 
+  const SubmitDisableButtons = () => {
+    return (
+      <SheetFooter>
+        <Button
+          disabled={currentApi() === undefined}
+          variant="destructive"
+          onClick={() => {
+            const tableName = props.schema.name;
+            console.debug("Remove record API config for:", tableName);
+
+            const c = config.data?.config;
+            if (!c) {
+              console.error("missing base configuration");
+              return;
+            }
+
+            const newConfig = removeRecordApiConfig(c, tableName.name);
+            setConfig(queryClient, newConfig)
+              // eslint-disable-next-line solid/reactivity
+              .then(() => props.close())
+              .catch(console.error);
+          }}
+        >
+          Disable
+        </Button>
+
+        <form.Subscribe
+          selector={(state) => ({
+            canSubmit: state.canSubmit,
+            isSubmitting: state.isSubmitting,
+          })}
+        >
+          {(state) => (
+            <Button
+              type="submit"
+              disabled={!state().canSubmit}
+              variant="default"
+            >
+              {currentApi() ? "Update" : "Enable"}
+            </Button>
+          )}
+        </form.Subscribe>
+      </SheetFooter>
+    );
+  };
+
   return (
     <SheetContainer>
       <form
         method="dialog"
+        class="flex flex-col gap-2"
         onSubmit={(e: SubmitEvent) => {
           e.preventDefault();
           form.handleSubmit();
         }}
       >
-        <div class="flex flex-col items-start gap-4 py-4">
-          <Card class="w-full">
-            <CardHeader>
-              <CardTitle>Record API Settings</CardTitle>
-            </CardHeader>
+        <Tabs defaultValue="account" class="w-full">
+          <TabsList class="grid w-full grid-cols-3">
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+            <TabsTrigger value="access">Access</TabsTrigger>
+            <TabsTrigger value="examples">Examples</TabsTrigger>
+          </TabsList>
 
-            <CardContent class="my-4 flex flex-col gap-4">
-              <form.Field
-                name="name"
-                validators={{
-                  onChange: ({ value }: { value: string | undefined }) => {
-                    return value ? undefined : "Api name missing";
-                  },
-                }}
-              >
-                {buildTextFormField({
-                  label: () => (
-                    <div class={labelWidth}>
-                      <Label>API Name</Label>
-                      <StyledHoverCard>
-                        <div class="flex justify-between space-x-4">
-                          <div class="space-y-1 text-sm">
-                            Public name used to access the API via{" "}
-                            <span class="font-mono">/api/records/v1/name</span>.
-                          </div>
-                        </div>
-                      </StyledHoverCard>
-                    </div>
-                  ),
-                })}
-              </form.Field>
+          <TabsContent value="settings" class="flex flex-col gap-2">
+            <Card>
+              {/*
+              <CardHeader>
+                <CardTitle>Record API Settings</CardTitle>
+              </CardHeader>
+              */}
 
-              {type() === "table" && (
-                <>
-                  <form.Field name="conflictResolution">
-                    {(field) => (
-                      <div class="flex items-center justify-between gap-2">
-                        <div>
-                          <Label>Conflict Resolution</Label>
-                          <StyledHoverCard>
-                            <div class="flex justify-between space-x-4">
-                              <div class="space-y-1 text-sm">
-                                SQLite conflict resolution strategy to employ on
-                                record collision.
-                              </div>
+              <CardContent class="my-4 flex flex-col gap-4">
+                <form.Field
+                  name="name"
+                  validators={{
+                    onChange: ({ value }: { value: string | undefined }) => {
+                      return value ? undefined : "Api name missing";
+                    },
+                  }}
+                >
+                  {buildTextFormField({
+                    label: () => (
+                      <div class={labelWidth}>
+                        <Label>API Name</Label>
+                        <StyledHoverCard>
+                          <div class="flex justify-between space-x-4">
+                            <div class="space-y-1 text-sm">
+                              Public name used to access the API via{" "}
+                              <span class="font-mono">
+                                /api/records/v1/name
+                              </span>
+                              .
                             </div>
-                          </StyledHoverCard>
-                        </div>
-
-                        <Select
-                          multiple={false}
-                          placeholder="Select group..."
-                          defaultValue={field().state.value}
-                          options={[
-                            ConflictResolutionStrategy.CONFLICT_RESOLUTION_STRATEGY_UNDEFINED,
-                            ConflictResolutionStrategy.ABORT,
-                            ConflictResolutionStrategy.ROLLBACK,
-                            ConflictResolutionStrategy.FAIL,
-                            ConflictResolutionStrategy.IGNORE,
-                            ConflictResolutionStrategy.REPLACE,
-                          ]}
-                          onChange={(
-                            strategy: ConflictResolutionStrategy | null,
-                          ) => {
-                            if (
-                              strategy === null ||
-                              strategy ==
-                                ConflictResolutionStrategy.CONFLICT_RESOLUTION_STRATEGY_UNDEFINED
-                            ) {
-                              field().handleChange(undefined);
-                            } else {
-                              field().handleChange(strategy);
-                            }
-                          }}
-                          itemComponent={(props) => (
-                            <SelectItem item={props.item}>
-                              {ConflictResolutionSrategyToString(
-                                props.item.rawValue,
-                              )}
-                            </SelectItem>
-                          )}
-                        >
-                          <SelectTrigger class="w-[180px]">
-                            <SelectValue<ConflictResolutionStrategy>>
-                              {(state) =>
-                                ConflictResolutionSrategyToString(
-                                  state.selectedOption(),
-                                )
-                              }
-                            </SelectValue>
-                          </SelectTrigger>
-
-                          <SelectContent />
-                        </Select>
+                          </div>
+                        </StyledHoverCard>
                       </div>
-                    )}
-                  </form.Field>
+                    ),
+                  })}
+                </form.Field>
 
-                  <form.Field
-                    name="autofillMissingUserIdColumns"
-                    children={(field) => {
-                      // TODO: Should be buildBoolFormField?
-                      const v = () => field().state.value;
-                      return (
-                        <div class="mt-2 flex items-center justify-between gap-2">
+                {type() === "table" && (
+                  <>
+                    <form.Field name="conflictResolution">
+                      {(field) => (
+                        <div class="flex items-center justify-between gap-2">
                           <div>
-                            <Label>Infer Missing User</Label>
+                            <Label>Conflict Resolution</Label>
                             <StyledHoverCard>
                               <div class="flex justify-between space-x-4">
-                                <div class="space-y-1">
-                                  <p class="text-sm">
-                                    When enabled, user id values not provided as
-                                    part of a CREATE request will be auto-filled
-                                    using the calling user's authentication
-                                    context.
-                                  </p>
-
-                                  <p class="text-sm">
-                                    For most use-cases this setting should be
-                                    off with user ids being provided explicitly
-                                    by the client. This can be useful for static
-                                    HTML forms.
-                                  </p>
+                                <div class="space-y-1 text-sm">
+                                  SQLite conflict resolution strategy to employ
+                                  on record collision.
                                 </div>
                               </div>
                             </StyledHoverCard>
                           </div>
 
-                          <Checkbox
-                            checked={v()}
-                            onChange={(v: boolean) => field().handleChange(v)}
-                          />
+                          <Select
+                            multiple={false}
+                            placeholder="Select group..."
+                            defaultValue={field().state.value}
+                            options={[
+                              ConflictResolutionStrategy.CONFLICT_RESOLUTION_STRATEGY_UNDEFINED,
+                              ConflictResolutionStrategy.ABORT,
+                              ConflictResolutionStrategy.ROLLBACK,
+                              ConflictResolutionStrategy.FAIL,
+                              ConflictResolutionStrategy.IGNORE,
+                              ConflictResolutionStrategy.REPLACE,
+                            ]}
+                            onChange={(
+                              strategy: ConflictResolutionStrategy | null,
+                            ) => {
+                              if (
+                                strategy === null ||
+                                strategy ==
+                                  ConflictResolutionStrategy.CONFLICT_RESOLUTION_STRATEGY_UNDEFINED
+                              ) {
+                                field().handleChange(undefined);
+                              } else {
+                                field().handleChange(strategy);
+                              }
+                            }}
+                            itemComponent={(props) => (
+                              <SelectItem item={props.item}>
+                                {ConflictResolutionSrategyToString(
+                                  props.item.rawValue,
+                                )}
+                              </SelectItem>
+                            )}
+                          >
+                            <SelectTrigger class="w-[180px]">
+                              <SelectValue<ConflictResolutionStrategy>>
+                                {(state) =>
+                                  ConflictResolutionSrategyToString(
+                                    state.selectedOption(),
+                                  )
+                                }
+                              </SelectValue>
+                            </SelectTrigger>
+
+                            <SelectContent />
+                          </Select>
                         </div>
-                      );
-                    }}
-                  />
-
-                  <form.Field
-                    name="enableSubscriptions"
-                    children={(field) => {
-                      const v = () => field().state.value;
-                      return (
-                        <div class="mt-2 flex items-center justify-between gap-2">
-                          <div>
-                            <Label>Enable Subscriptions</Label>
-                            <StyledHoverCard>
-                              <div class="flex justify-between space-x-4">
-                                <div class="space-y-1">
-                                  <p class="text-sm">
-                                    When enabled, users can subscribe to data
-                                    changes in real time. Record access is
-                                    checked on a per-record level at
-                                    notification time ensuring up-to-date
-                                    enforcement as data evolves.
-                                  </p>
-                                </div>
-                              </div>
-                            </StyledHoverCard>
-                          </div>
-
-                          <Checkbox
-                            checked={v()}
-                            onChange={(v: boolean) => field().handleChange(v)}
-                          />
-                        </div>
-                      );
-                    }}
-                  />
-
-                  <form.Field name="expand">
-                    {(field) => {
-                      const has = (colName: string) =>
-                        new Set([...field().state.value]).has(colName);
-                      const add = (colName: string) =>
-                        field().handleChange(
-                          Array.from(
-                            new Set([colName, ...field().state.value]),
-                          ),
-                        );
-                      const remove = (colName: string) => {
-                        const s = new Set(field().state.value);
-                        s.delete(colName);
-                        field().handleChange(Array.from(s));
-                      };
-
-                      return (
-                        <For each={foreignKeys()}>
-                          {([colName, item]) => {
-                            return (
-                              <div class="mt-2 flex items-center justify-between gap-2">
-                                <div>
-                                  <Label>
-                                    Expand Column ({colName} {"=>"}{" "}
-                                    {item.foreign_table})
-                                  </Label>
-                                  <StyledHoverCard>
-                                    <div class="flex justify-between space-x-4">
-                                      <div class="space-y-1 text-sm">
-                                        Expanding a foreign key column, changes
-                                        the APIs field schema from simply being
-                                        the foreign key, to
-                                        <span class="font-mono">{`{ id: any, data?: object }`}</span>
-                                        . Then the respective foreign record can
-                                        be included during read/list by
-                                        specifying
-                                        <span class="font-mono">
-                                          ?expand={colName}
-                                        </span>
-                                        .
-                                      </div>
-                                    </div>
-                                  </StyledHoverCard>
-                                </div>
-
-                                <Checkbox
-                                  checked={has(colName)}
-                                  onChange={(v: boolean) =>
-                                    v ? add(colName) : remove(colName)
-                                  }
-                                />
-                              </div>
-                            );
-                          }}
-                        </For>
-                      );
-                    }}
-                  </form.Field>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card class="w-full">
-            <CardHeader>
-              <CardTitle>Access</CardTitle>
-            </CardHeader>
-
-            <CardContent class="my-4 flex flex-col gap-4">
-              <form.Field name="aclWorld">
-                {(field) => {
-                  const v = field().state.value;
-                  return (
-                    <div class="mb-4">
-                      <AclForm
-                        entity="World"
-                        showHeader={true}
-                        initial={v}
-                        onChange={field().handleChange}
-                        view={type() === "view"}
-                      />
-                    </div>
-                  );
-                }}
-              </form.Field>
-
-              <form.Field name="aclAuthenticated">
-                {(field) => {
-                  const v = field().state.value;
-                  return (
-                    <div class="mb-4">
-                      <AclForm
-                        entity="Authenticated"
-                        showHeader={false}
-                        initial={v}
-                        onChange={field().handleChange}
-                        view={type() === "view"}
-                      />
-                    </div>
-                  );
-                }}
-              </form.Field>
-
-              <For
-                each={type() === "view" ? viewAccessRules : tableAccessRules}
-              >
-                {(item) => {
-                  return (
-                    <form.Field
-                      name={item.field}
-                      validators={{
-                        onChangeAsync: asyncSqlValidator,
-                        onChangeAsyncDebounceMs: 500,
-                      }}
-                    >
-                      {buildOptionalTextFormField({
-                        label: () => <div class={labelWidth}>{item.label}</div>,
-                      })}
+                      )}
                     </form.Field>
-                  );
-                }}
-              </For>
-            </CardContent>
-          </Card>
-        </div>
 
-        <SheetFooter>
-          <Button
-            disabled={currentApi() === undefined}
-            variant="destructive"
-            onClick={() => {
-              const tableName = props.schema.name;
-              console.debug("Remove record API config for:", tableName);
+                    <form.Field
+                      name="autofillMissingUserIdColumns"
+                      children={(field) => {
+                        // TODO: Should be buildBoolFormField?
+                        const v = () => field().state.value;
+                        return (
+                          <div class="mt-2 flex items-center justify-between gap-2">
+                            <div>
+                              <Label>Infer Missing User</Label>
+                              <StyledHoverCard>
+                                <div class="flex justify-between space-x-4">
+                                  <div class="space-y-1">
+                                    <p class="text-sm">
+                                      When enabled, user id values not provided
+                                      as part of a CREATE request will be
+                                      auto-filled using the calling user's
+                                      authentication context.
+                                    </p>
 
-              const c = config.data?.config;
-              if (!c) {
-                console.error("missing base configuration");
-                return;
-              }
+                                    <p class="text-sm">
+                                      For most use-cases this setting should be
+                                      off with user ids being provided
+                                      explicitly by the client. This can be
+                                      useful for static HTML forms.
+                                    </p>
+                                  </div>
+                                </div>
+                              </StyledHoverCard>
+                            </div>
 
-              const newConfig = removeRecordApiConfig(c, tableName.name);
-              setConfig(queryClient, newConfig)
-                // eslint-disable-next-line solid/reactivity
-                .then(() => props.close())
-                .catch(console.error);
-            }}
-          >
-            Disable
-          </Button>
+                            <Checkbox
+                              checked={v()}
+                              onChange={(v: boolean) => field().handleChange(v)}
+                            />
+                          </div>
+                        );
+                      }}
+                    />
 
-          <form.Subscribe
-            selector={(state) => ({
-              canSubmit: state.canSubmit,
-              isSubmitting: state.isSubmitting,
-            })}
-          >
-            {(state) => (
-              <Button
-                type="submit"
-                disabled={!state().canSubmit}
-                variant="default"
-              >
-                {currentApi() ? "Update" : "Enable"}
-              </Button>
-            )}
-          </form.Subscribe>
-        </SheetFooter>
+                    <form.Field
+                      name="enableSubscriptions"
+                      children={(field) => {
+                        const v = () => field().state.value;
+                        return (
+                          <div class="mt-2 flex items-center justify-between gap-2">
+                            <div>
+                              <Label>Enable Subscriptions</Label>
+                              <StyledHoverCard>
+                                <div class="flex justify-between space-x-4">
+                                  <div class="space-y-1">
+                                    <p class="text-sm">
+                                      When enabled, users can subscribe to data
+                                      changes in real time. Record access is
+                                      checked on a per-record level at
+                                      notification time ensuring up-to-date
+                                      enforcement as data evolves.
+                                    </p>
+                                  </div>
+                                </div>
+                              </StyledHoverCard>
+                            </div>
+
+                            <Checkbox
+                              checked={v()}
+                              onChange={(v: boolean) => field().handleChange(v)}
+                            />
+                          </div>
+                        );
+                      }}
+                    />
+
+                    <form.Field name="expand">
+                      {(field) => {
+                        const has = (colName: string) =>
+                          new Set([...field().state.value]).has(colName);
+                        const add = (colName: string) =>
+                          field().handleChange(
+                            Array.from(
+                              new Set([colName, ...field().state.value]),
+                            ),
+                          );
+                        const remove = (colName: string) => {
+                          const s = new Set(field().state.value);
+                          s.delete(colName);
+                          field().handleChange(Array.from(s));
+                        };
+
+                        return (
+                          <For each={foreignKeys()}>
+                            {([colName, item]) => {
+                              return (
+                                <div class="mt-2 flex items-center justify-between gap-2">
+                                  <div>
+                                    <Label>
+                                      Expand Column ({colName} {"=>"}{" "}
+                                      {item.foreign_table})
+                                    </Label>
+                                    <StyledHoverCard>
+                                      <div class="flex justify-between space-x-4">
+                                        <div class="space-y-1 text-sm">
+                                          Expanding a foreign key column,
+                                          changes the APIs field schema from
+                                          simply being the foreign key, to
+                                          <span class="font-mono">{`{ id: any, data?: object }`}</span>
+                                          . Then the respective foreign record
+                                          can be included during read/list by
+                                          specifying
+                                          <span class="font-mono">
+                                            ?expand={colName}
+                                          </span>
+                                          .
+                                        </div>
+                                      </div>
+                                    </StyledHoverCard>
+                                  </div>
+
+                                  <Checkbox
+                                    checked={has(colName)}
+                                    onChange={(v: boolean) =>
+                                      v ? add(colName) : remove(colName)
+                                    }
+                                  />
+                                </div>
+                              );
+                            }}
+                          </For>
+                        );
+                      }}
+                    </form.Field>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <SubmitDisableButtons />
+          </TabsContent>
+
+          <TabsContent value="access" class="flex flex-col gap-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>ACL</CardTitle>
+              </CardHeader>
+
+              <CardContent class="my-4 flex flex-col gap-4">
+                <p class="text-sm">
+                  Grant access to specific API actions for authorized users or
+                  anyone using the following access-control-list (ACL). By
+                  default, actions are inaccessible.
+                </p>
+
+                <form.Field name="aclWorld">
+                  {(field) => {
+                    const v = field().state.value;
+                    return (
+                      <div class="mb-4">
+                        <AclForm
+                          entity="World"
+                          showHeader={true}
+                          initial={v}
+                          onChange={field().handleChange}
+                          view={type() === "view"}
+                        />
+                      </div>
+                    );
+                  }}
+                </form.Field>
+
+                <form.Field name="aclAuthenticated">
+                  {(field) => {
+                    const v = field().state.value;
+                    return (
+                      <div class="mb-4">
+                        <AclForm
+                          entity="Authenticated"
+                          showHeader={false}
+                          initial={v}
+                          onChange={field().handleChange}
+                          view={type() === "view"}
+                        />
+                      </div>
+                    );
+                  }}
+                </form.Field>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Access Rules</CardTitle>
+              </CardHeader>
+
+              <CardContent class="my-4 flex flex-col gap-4">
+                <p class="text-sm">
+                  In addition to coarse ACLs, access can be constrained using
+                  custom SQL expressions. Check the{" "}
+                  <a
+                    class="underline"
+                    href="https://trailbase.io/documentation/apis/record_apis/#permissions"
+                  >
+                    docs
+                  </a>{" "}
+                  for more information. Example:
+                </p>
+
+                <pre class="pl-2 font-mono text-sm">{exampleRule}</pre>
+
+                <For
+                  each={type() === "view" ? viewAccessRules : tableAccessRules}
+                >
+                  {(item) => {
+                    return (
+                      <form.Field
+                        name={item.field}
+                        validators={{
+                          onChangeAsync: asyncSqlValidator,
+                          onChangeAsyncDebounceMs: 500,
+                        }}
+                      >
+                        {buildOptionalTextFormField({
+                          label: () => (
+                            <div class={labelWidth}>{item.label}</div>
+                          ),
+                        })}
+                      </form.Field>
+                    );
+                  }}
+                </For>
+              </CardContent>
+            </Card>
+
+            <SubmitDisableButtons />
+          </TabsContent>
+
+          <TabsContent value="examples">
+            <Card>
+              {/*
+              <CardHeader>
+                <CardTitle>Examples</CardTitle>
+              </CardHeader>
+              */}
+
+              <CardContent class="my-4 flex flex-col gap-4">
+                <p class="text-sm">
+                  Some examples on how to interact with the APIs using{" "}
+                  <span class="font-mono">curl</span>. Make sure to provide
+                  access first. Note further that access tokens are short-lived
+                  and expire frequently.
+                </p>
+
+                <Accordion multiple={false} collapsible class="w-full">
+                  <AccordionItem value={`read`}>
+                    <AccordionTrigger>Read Record</AccordionTrigger>
+
+                    <AccordionContent>
+                      <ReadExample
+                        apiName={form.state.values.name ?? ""}
+                        config={config.data?.config}
+                      />
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  <AccordionItem value={`list`}>
+                    <AccordionTrigger>List Records</AccordionTrigger>
+
+                    <AccordionContent>
+                      <ListExample
+                        apiName={form.state.values.name ?? ""}
+                        config={config.data?.config}
+                      />
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </form>
     </SheetContainer>
   );
 }
 
 const labelWidth = "w-[112px]";
+const exampleRule = `EXISTS(
+  SELECT 1
+  FROM group AS g
+  WHERE
+    g.member = _USER_.id AND g.name = 'mygroup'
+)`;
