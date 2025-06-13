@@ -427,7 +427,7 @@ fn build_cors(opts: &ServerOptions) -> cors::CorsLayer {
   // Cannot combine `Access-Control-Allow-Credentials: true` with `Access-Control-Allow-Methods: *`
   return cors::CorsLayer::new()
     .allow_methods(cors::Any)
-    // .allow_credentials(wildcard)
+    .allow_headers(cors::Any)
     .allow_origin(origins);
 }
 
