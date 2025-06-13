@@ -1,3 +1,10 @@
+## v0.13.3
+
+* Improve RecordAPI settings sheet with tabs, help text, and curl examples.
+* Fix state update on key-stroke for input fields in admin UI.
+* Minor: inline filter examples.
+* Update Rust dependencies.
+
 ## v0.13.2
 
 * Fix Admin-UI login form reactivity issue.
