@@ -563,14 +563,7 @@ function RowDataTable(props: {
                     props.filter[1](value);
                   }
                 }}
-                example={
-                  <>
-                    e.g.{" "}
-                    <span class="bg-gray-200 font-mono">
-                      (col0 {">"} 5 && col0 {"<"} 20) || col1 = "val"
-                    </span>
-                  </>
-                }
+                placeholder={`Filter Query, e.g. '(col0 > 5 && col0 < 20) || col1 = "val"'`}
               />
 
               <div class="space-y-2 overflow-auto">

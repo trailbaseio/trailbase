@@ -7,6 +7,7 @@ export function FilterBar(props: {
   initial?: string;
   onSubmit: (filter: string) => void;
   example?: JSX.Element;
+  placeholder?: string;
 }) {
   let ref: HTMLInputElement | undefined;
   const onSubmit = (ev: SubmitEvent) => {
@@ -31,7 +32,7 @@ export function FilterBar(props: {
             ref={ref}
             value={props.initial}
             type="text"
-            placeholder="filter"
+            placeholder={props.placeholder ?? "Filter Query"}
           />
         </TextField>
 

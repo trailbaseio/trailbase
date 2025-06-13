@@ -272,14 +272,7 @@ export function LogsPage() {
                   setFilter(value);
                 }
               }}
-              example={
-                <>
-                  e.g.{" "}
-                  <span class="bg-gray-200 font-mono">
-                    (latency {">"} 2 || status {">="} 400) && method = "GET"
-                  </span>
-                </>
-              }
+              placeholder={`Filter Query, e.g. '(latency > 2 || status >= 400) && method = "GET"'`}
             />
 
             <DataTable

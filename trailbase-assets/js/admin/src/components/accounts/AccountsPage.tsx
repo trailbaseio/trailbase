@@ -334,15 +334,7 @@ export function AccountsPage() {
               setFilter(value);
             }
           }}
-          example={
-            <>
-              e.g.{" "}
-              <span class="bg-gray-200 font-mono">
-                {" "}
-                email ~ "admin@%" && verified = TRUE
-              </span>
-            </>
-          }
+          placeholder={`Filter Query, e.g. 'email ~ "admin@%" && verified = TRUE'`}
         />
 
         <Suspense fallback={<div>Loading...</div>}>
