@@ -86,7 +86,7 @@ function buildTextFormFieldT<T extends string | null>(opts: TextFieldOptions) {
             onBlur={field().handleBlur}
             autocomplete={opts.autocomplete}
             autocorrect={opts.type === "password" ? "off" : undefined}
-            onChange={(e: Event) => {
+            onInput={(e: Event) => {
               const value: string = (e.target as HTMLInputElement).value;
               field().handleChange(value as T);
             }}
@@ -147,7 +147,7 @@ function buildOptionalNullableTextFormField<
               onBlur={field().handleBlur}
               autocomplete={opts.autocomplete}
               autocorrect={opts.type === "password" ? "off" : undefined}
-              onChange={(e: Event) => field().handleChange(handler(e))}
+              onInput={(e: Event) => field().handleChange(handler(e))}
               data-testid="input"
             />
 
@@ -215,7 +215,7 @@ export function buildSecretFormField(
             onBlur={field().handleBlur}
             autocomplete={"off"}
             autocorrect="off"
-            onChange={(e: Event) => {
+            onInput={(e: Event) => {
               field().handleChange((e.target as HTMLInputElement).value);
             }}
           />
@@ -259,7 +259,7 @@ export function buildTextAreaFormField(
             disabled={opts?.disabled ?? false}
             value={field().state.value}
             onBlur={field().handleBlur}
-            onChange={(e: Event) => {
+            onInput={(e: Event) => {
               field().handleChange((e.target as HTMLInputElement).value);
             }}
           />
@@ -331,7 +331,7 @@ function buildOptionalNullableNumberFormField<
               value={value()}
               placeholder={placeholder()}
               onBlur={field().handleBlur}
-              onChange={(e) => {
+              onInput={(e: Event) => {
                 // NOTE: OnKeyUp doesn't work here, since numbers can be scrolled etc.
                 field().handleChange(handler(e));
               }}
