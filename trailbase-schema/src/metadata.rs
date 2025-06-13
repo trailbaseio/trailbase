@@ -438,7 +438,7 @@ pub(crate) fn find_pk_column_index(columns: &[Column]) -> Option<usize> {
   });
 }
 
-/// Finds suitable Integer or UUIDv7 primary key columns, if present.
+/// Finds suitable Integer or UUIDv7/UUIDv4 primary key columns, if present.
 ///
 /// Cursors require certain properties like a stable, time-sortable primary key.
 fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<usize> {
@@ -453,7 +453,7 @@ fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<u
 
   for opts in &column.options {
     lazy_static! {
-      static ref UUID_V7_RE: Regex = Regex::new(r"^is_uuid_v7\s*\(").expect("infallible");
+      static ref UUID_CHECK_RE: Regex = Regex::new(r"^is_uuid(|_v7|_v4)\s*\(").expect("infallible");
     }
 
     match &opts {
@@ -483,7 +483,7 @@ fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<u
         let mut is_pk = false;
         for opt in &col.options {
           match opt {
-            ColumnOption::Check(expr) if UUID_V7_RE.is_match(expr) => {
+            ColumnOption::Check(expr) if UUID_CHECK_RE.is_match(expr) => {
               return Some(index);
             }
             ColumnOption::Unique { is_primary, .. } if *is_primary => {
@@ -499,7 +499,7 @@ fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<u
 
         return None;
       }
-      ColumnOption::Check(expr) if UUID_V7_RE.is_match(expr) => {
+      ColumnOption::Check(expr) if UUID_CHECK_RE.is_match(expr) => {
         return Some(index);
       }
       _ => {}

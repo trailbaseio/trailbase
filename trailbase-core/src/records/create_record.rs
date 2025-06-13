@@ -215,11 +215,11 @@ mod test {
       .conn()
       .execute(
         r#"
-      CREATE TABLE simple (
-        owner   BLOB PRIMARY KEY CHECK(is_uuid_v7(owner)) REFERENCES _user,
-        value   INTEGER
-      ) STRICT;
-      "#,
+          CREATE TABLE simple (
+            owner   BLOB PRIMARY KEY CHECK(is_uuid(owner)) REFERENCES _user,
+            value   INTEGER
+          ) STRICT;
+        "#,
         (),
       )
       .await

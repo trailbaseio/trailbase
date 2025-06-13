@@ -58,7 +58,7 @@ pub(crate) fn validate_record_api_config(
 
   let Some((pk_index, _)) = metadata.record_pk_column() else {
     return ierr(&format!(
-      "Table for api '{api_name}' is missing valid integer/uuidv7 primary key column."
+      "Table for api '{api_name}' is missing valid integer/UUID primary key column."
     ));
   };
 
