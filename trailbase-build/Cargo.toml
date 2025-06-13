@@ -11,5 +11,5 @@ readme = "../README.md"
 [dependencies]
 env_logger = { workspace = true }
 log = "0.4.27"
-prost-build = "0.13.1"
+prost-build = "^0.13.4"
 prost-reflect-build = "0.15.0"
