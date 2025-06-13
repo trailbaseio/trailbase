@@ -13,8 +13,8 @@ TrailBase's restful CRUD _Record APIs_ allow you to access your `TABLE`s and
 - Tables and views need to be `STRICT`ly[^1] typed to guarantee type-safety all the
   way from your records, via JSON schema, to your client-side language bindings [^2].
 - They need to have a sequential primary key column to allow for stable sorting
-  and thus efficient cursor-based pagination. Either an explicit `INTEGER` or
-  UUIDv7 `PRIMARY KEY` will do, including `FOREIGN KEY` columns.
+  and thus efficient cursor-based pagination. Either an explicit `INTEGER`,
+  UUIDv4 or UUIDv7 `PRIMARY KEY` will do, including `FOREIGN KEY` columns.
 
 ## Configuration
 

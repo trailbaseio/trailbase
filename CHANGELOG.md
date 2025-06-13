@@ -1,3 +1,17 @@
+## v0.14.0
+
+* Allow truly random UUIDv4 record IDs by relying on AES encrypted `_rowid_`s
+  for cursors. UUIDv7, while great, has the problem of leaking creation-time.
+  * Note: the encryption key for cursors is tied to the instance lifetime, i.e.
+    they cannot be used across instance restarts (at least for now).
+* Move user ids to UUIDv4 by default to avoid leaking user creation-time.
+  * A bundled schema migration will update the PK to allow any UUID type, this is
+    mostly to allow for existing users with UUIDv7 ids to continue to exist.
+  * We expect this change to be transparent for most users but may break you,
+    if you're relying on user ids being of the UUIDv7. Sorry, we felt this was an
+    important change and wanted to rip off the band-aid. If you're having issues
+    and are unsure on how to address them, please reach out and we'll help.
+
 ## v0.13.3
 
 * Improve RecordAPI settings sheet with tabs, help text, and curl examples.

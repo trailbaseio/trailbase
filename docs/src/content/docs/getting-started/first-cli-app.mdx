@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS movies (
 ```
 
 Note that the only schema requirement for exposing an API is: `STRICT` typing
-and an integer (or UUIDv7) primary key column.
+and an integer, UUIDv4 or UUIDv7 primary key column.
 
 The main benefit of relying on TrailBase to apply the above schema as migrations
 over manually applying the schema yourself, is to:
