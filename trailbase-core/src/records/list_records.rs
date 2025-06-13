@@ -13,8 +13,8 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::convert::TryInto;
 use trailbase_qs::{Cursor, CursorType, OrderPrecedent, Query};
-use trailbase_schema::sqlite::Column;
-use trailbase_schema::{QualifiedNameEscaped, sqlite::ColumnDataType};
+use trailbase_schema::QualifiedNameEscaped;
+use trailbase_schema::sqlite::ColumnDataType;
 use trailbase_sqlite::Value;
 
 use crate::app_state::AppState;
@@ -23,7 +23,6 @@ use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::records::query_builder::{ExpandedTable, expand_tables};
 use crate::records::sql_to_json::{row_to_json, row_to_json_expand, rows_to_json_expand};
 use crate::records::{Permission, RecordError};
-use crate::util::uuid_to_b64;
 
 /// JSON response containing the listed records.
 #[derive(Debug, Serialize)]
@@ -75,7 +74,7 @@ pub async fn list_records_handler(
   api.check_table_level_access(Permission::Read, user.as_ref())?;
 
   let table_name = api.table_name();
-  let (pk_index, pk_column) = api.record_pk_column();
+  let (_pk_index, pk_column) = api.record_pk_column();
 
   let Query {
     limit,
@@ -92,11 +91,8 @@ pub async fn list_records_handler(
       return RecordError::BadRequest("Invalid query");
     })?;
 
-  // NOTE: We're using the read access rule to filter the rows as opposed to yes/no early access
-  // blocking as fInvalid or read-record.
-  //
-  // TODO: Should this be a separate access rule? Maybe one wants users to access a specific
-  // record but not list all the records.
+  // NOTE: We're using the read access rule to filter accessible rows as opposed to blocking access
+  // early as we do for READs.
   let read_access_clause: &str = api.read_access_rule().unwrap_or("TRUE");
 
   // Where clause contains column filters and cursor depending on what's present.
@@ -130,33 +126,40 @@ pub async fn list_records_handler(
     ));
   }
 
-  lazy_static! {
-    static ref key: Key<Aes256Gcm> = Aes256Gcm::generate_key(OsRng);
-  }
+  let cursor_clause = if let Some(encrypted_cursor) = cursor {
+    let decrypted_cursor =
+      decrypt_cursor(&KEY, api_name.as_bytes(), &encrypted_cursor).map_err(|_err| {
+        return RecordError::BadRequest("Bad cursor");
+      })?;
 
-  let cursor_clause = if let Some(cursor) = cursor {
-    let cursor = parse_cursor(&key, api_name.as_bytes(), &cursor, pk_column)?;
+    // We always use INTEGER _rowid_.
+    let Cursor::Integer(cursor) = Cursor::parse(&decrypted_cursor, CursorType::Integer)
+      .map_err(|_| RecordError::BadRequest("Invalid integer cursor"))?
+    else {
+      return Err(RecordError::BadRequest("Invalid integer cursor"));
+    };
 
     let mut pk_order = OrderPrecedent::Descending;
     if let Some(ref order) = order {
       if let Some((col, ord)) = order.columns.first() {
-        if *col != pk_column.name {
-          return Err(RecordError::BadRequest(
-            "Cannot cursor on queries where the primary order criterion is not the primary key",
-          ));
-        }
+        if *ord == OrderPrecedent::Ascending {
+          if pk_column.data_type != ColumnDataType::Integer || *col != pk_column.name {
+            // NOTE: This relies on the fact that _rowid_ is an alias for integer primary key
+            // columns.
+            return Err(RecordError::BadRequest(
+              "Cannot cursor on queries where the primary order criterion is not an integer primary key",
+            ));
+          }
 
-        pk_order = ord.clone();
+          pk_order = OrderPrecedent::Ascending;
+        }
       }
     }
 
-    params.push((
-      Cow::Borrowed(":cursor"),
-      crate::listing::cursor_to_value(cursor),
-    ));
+    params.push((Cow::Borrowed(":cursor"), Value::Integer(cursor)));
     match pk_order {
-      OrderPrecedent::Descending => Some(format!(r#"_ROW_."{}" < :cursor"#, pk_column.name)),
-      OrderPrecedent::Ascending => Some(format!(r#"_ROW_."{}" > :cursor"#, pk_column.name)),
+      OrderPrecedent::Descending => Some("_ROW_._rowid_ < :cursor".to_string()),
+      OrderPrecedent::Ascending => Some("_ROW_._rowid_ > :cursor".to_string()),
     }
   } else {
     None
@@ -210,8 +213,8 @@ pub async fn list_records_handler(
     None => vec![],
   };
 
-  // NOTE: the `total_count._value_` underscore is load-bearing to strip it from result based on
-  // "_" prefix.
+  // NOTE: The template relies on load-bearing underscores for "_rowid_" and "_total_count_" to
+  // have them be stripped later on by `rows_to_json`.
   let column_names: Vec<_> = api.columns().iter().map(|c| c.name.as_str()).collect();
   let query = ListRecordQueryTemplate {
     table_name,
@@ -230,7 +233,7 @@ pub async fn list_records_handler(
   // Execute the query.
   let rows = state.conn().read_query_rows(query, params).await?;
   let Some(last_row) = rows.last() else {
-    // Rows are empty:
+    // Query result is empty:
     return Ok(Json(ListResponse {
       cursor: None,
       total_count: Some(0),
@@ -238,22 +241,25 @@ pub async fn list_records_handler(
     }));
   };
 
-  assert!(*pk_index < last_row.len());
-  let cursor: Option<String> = match &last_row[*pk_index] {
-    rusqlite::types::Value::Blob(blob) => uuid::Uuid::from_slice(blob)
-      .as_ref()
-      .ok()
-      .and_then(|uuid| encrypt_cursor(&key, api_name.as_bytes(), &uuid_to_b64(uuid)).ok()),
-    rusqlite::types::Value::Integer(i) => {
-      encrypt_cursor(&key, api_name.as_bytes(), &i.to_string()).ok()
+  let cursor: Option<String> = {
+    let rowid_index = last_row.len() - 1;
+    if let Value::Integer(i) = last_row[rowid_index] {
+      Some(
+        encrypt_cursor(&KEY, api_name.as_bytes(), &i.to_string())
+          .map_err(|err| RecordError::Internal(err.into()))?,
+      )
+    } else {
+      None
     }
-    _ => None,
   };
 
   let total_count = if count == Some(true) {
-    let Some(rusqlite::types::Value::Integer(count)) = rows[0].last() else {
+    // Total count is in the final column.
+    let first_row = &rows[0];
+    let value = &first_row[first_row.len() - 2];
+    let Value::Integer(count) = value else {
       return Err(RecordError::Internal(
-        format!("expected count, got {:?}", rows[0].last()).into(),
+        format!("expected count, got {value:?}").into(),
       ));
     };
     Some(*count as usize)
@@ -388,23 +394,8 @@ fn decrypt_cursor(
     .and_then(|s| String::from_utf8(s).map_err(|_| "bad unsealed utf8"))
 }
 
-fn parse_cursor(
-  key: &Key<Aes256Gcm>,
-  associated_data: &[u8],
-  encrypted_cursor: &str,
-  pk_col: &Column,
-) -> Result<Cursor, RecordError> {
-  let cursor = decrypt_cursor(key, associated_data, encrypted_cursor).map_err(|_err| {
-    return RecordError::BadRequest("Bad cursor");
-  })?;
-
-  return match pk_col.data_type {
-    ColumnDataType::Blob => Cursor::parse(&cursor, CursorType::Blob)
-      .map_err(|_| RecordError::BadRequest("Invalid blob cursor")),
-    ColumnDataType::Integer => Cursor::parse(&cursor, CursorType::Integer)
-      .map_err(|_| RecordError::BadRequest("Invalid integer cursor")),
-    _ => Err(RecordError::BadRequest("Invalid cursor column type")),
-  };
+lazy_static! {
+  static ref KEY: Key<Aes256Gcm> = Aes256Gcm::generate_key(OsRng);
 }
 
 #[cfg(test)]
@@ -947,23 +938,25 @@ mod tests {
         to_message(arr_asc[0].clone())
       );
 
-      let mut cursored_asc = list_records(
-        &state,
-        Some(&user_y_token.auth_token),
-        Some(format!(
-          "order={}&cursor={cursor_middle}",
-          urlencode("+mid")
-        )),
-      )
-      .await
-      .unwrap()
-      .records;
-
-      assert_eq!(cursored_asc.len(), 1);
-      assert_eq!(
-        to_message(cursored_asc.swap_remove(0)),
-        to_message(arr_asc[2].clone())
-      );
+      // NOTE: Ascending ordering by PK column is no longer allowed, since PK might no longer
+      // strictly monotonically increase like the _rowid_ by which we cursor.
+      // let mut cursored_asc = list_records(
+      //   &state,
+      //   Some(&user_y_token.auth_token),
+      //   Some(format!(
+      //     "order={}&cursor={cursor_middle}",
+      //     urlencode("+mid")
+      //   )),
+      // )
+      // .await
+      // .unwrap()
+      // .records;
+      //
+      // assert_eq!(cursored_asc.len(), 1);
+      // assert_eq!(
+      //   to_message(cursored_asc.swap_remove(0)),
+      //   to_message(arr_asc[2].clone())
+      // );
 
       // Ordering and cursor return an error when PK is not primary order cirteria.
       assert!(

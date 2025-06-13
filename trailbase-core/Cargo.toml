@@ -25,7 +25,7 @@ v8 = ["dep:trailbase-js"]
 queue = ["dep:apalis", "dep:trailbase-apalis"]
 
 [dependencies]
-aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "alloc", "rand_core"] }
+aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "rand_core"] }
 apalis = { version = "0.7.0", optional = true, default-features = false }
 arc-swap = "1.7.1"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
