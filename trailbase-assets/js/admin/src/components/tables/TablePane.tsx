@@ -53,7 +53,7 @@ import {
   isFileUploadsColumn,
   isJSONColumn,
   isNotNull,
-  isUUIDv7Column,
+  isUUIDColumn,
   hiddenTable,
   tableType,
   tableSatisfiesRecordApiRequirements,
@@ -97,7 +97,7 @@ function renderCell(
   pkIndex: number,
   cell: {
     col: Column;
-    isUUIDv7: boolean;
+    isUUID: boolean;
     isJSON: boolean;
     isFile: boolean;
     isFiles: boolean;
@@ -109,7 +109,7 @@ function renderCell(
   }
 
   if (typeof value === "string") {
-    if (cell.isUUIDv7) {
+    if (cell.isUUID) {
       return urlSafeBase64ToUuid(value);
     }
 
@@ -300,8 +300,8 @@ function TableHeaderRightHandButtons(props: {
                         ) : (
                           <p>
                             This table does not satisfy the requirements for
-                            exposing a Record API: strictly typed {"&"} UUIDv7
-                            primary key column.
+                            exposing a Record API: strictly typed {"&"} integer
+                            or UUID primary key column.
                           </p>
                         )}
                       </TooltipContent>
@@ -478,13 +478,13 @@ function buildColumnDefs(
     const fk = getForeignKey(col.options);
     const notNull = isNotNull(col.options);
     const isJSON = isJSONColumn(col);
-    const isUUIDv7 = isUUIDv7Column(col);
+    const isUUID = isUUIDColumn(col);
     const isFile = isFileUploadColumn(col);
     const isFiles = isFileUploadsColumn(col);
 
     // TODO: Add support for custom json schemas or generally JSON types.
-    const type = (() => {
-      if (isUUIDv7) return "UUIDv7";
+    const type = ((): string => {
+      if (isUUID) return "UUID";
       if (isJSON) return "JSON";
       if (isFile) return "File";
       if (isFiles) return "File[]";
@@ -500,7 +500,7 @@ function buildColumnDefs(
       cell: (context) =>
         renderCell(context, tableName, columns, pkColumn, {
           col: col,
-          isUUIDv7,
+          isUUID,
           isJSON,
           // FIXME: Whether or not an image can be rendered depends on whether
           // Record API read-access is configured and not the tableType. We

@@ -5,6 +5,7 @@ import {
   unescapeLiteral,
   unescapeLiteralBlob,
   getDefaultValue,
+  getForeignKey,
   isPrimaryKeyColumn,
   isNotNull,
   isNullableColumn,
@@ -91,7 +92,11 @@ export function preProcessInsertValue(
         }
       }
 
-      urlSafeBase64Decode(value);
+      try {
+        urlSafeBase64Decode(value);
+      } catch {
+        throw new Error("Url-safe base64 decoding error");
+      }
 
       return value;
     }
@@ -154,8 +159,6 @@ export function preProcessUpdateValue(
   const isPk = isPrimaryKeyColumn(col);
   const notNull = isNotNull(col.options);
 
-  console.log("hRE VALUE: ", col.name, value);
-
   if (value === undefined) {
     throw Error(`Missing value for: ${col.name}`);
   }
@@ -178,7 +181,11 @@ export function preProcessUpdateValue(
         }
       }
 
-      urlSafeBase64Decode(value);
+      try {
+        urlSafeBase64Decode(value);
+      } catch {
+        throw new Error("Url-safe base64 decoding error");
+      }
 
       return value;
     }
@@ -239,4 +246,52 @@ export function preProcessRow(
 // Just to make it explicit.
 export function copyRow(row: FormRow): FormRow {
   return { ...row };
+}
+
+export function buildDefaultRow(schema: Table): FormRow {
+  const obj: FormRow = {};
+  for (const col of schema.columns) {
+    const type = col.data_type;
+    const isPk = isPrimaryKeyColumn(col);
+    const foreignKey = getForeignKey(col.options);
+    const notNull = isNotNull(col.options);
+    const defaultValue = getDefaultValue(col.options);
+    const nullable = isNullableColumn({
+      type: col.data_type,
+      notNull,
+      isPk,
+    });
+
+    /// If there's no default and the column is nullable we default to null.
+    if (defaultValue !== undefined) {
+      // If there is a default, we leave the form field empty and show the default as a textinput placeholder.
+      obj[col.name] = null;
+      continue;
+    } else if (nullable) {
+      obj[col.name] = null;
+      continue;
+    }
+
+    // No default and non-nullable, i.e required...
+    //
+    // ...we fall back to generic defaults. We may be wrong based on CHECK constraints.
+    if (type === "Blob") {
+      if (foreignKey !== undefined) {
+        obj[col.name] = `<${foreignKey.foreign_table.toUpperCase()}_ID>`;
+      } else {
+        obj[col.name] = "";
+      }
+    } else if (type === "Text") {
+      obj[col.name] = "";
+    } else if (isInt(type)) {
+      obj[col.name] = 0;
+    } else if (isReal(type)) {
+      obj[col.name] = 0.0;
+    } else if (type === "Null") {
+      obj[col.name] = null;
+    } else {
+      console.warn(`No fallback for ${type} column: ${col.name}`);
+    }
+  }
+  return obj;
 }

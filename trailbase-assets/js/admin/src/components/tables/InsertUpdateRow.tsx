@@ -8,72 +8,17 @@ import type { Column } from "@bindings/Column";
 import type { Table } from "@bindings/Table";
 
 import { buildDBCellField } from "@/components/FormFields";
-import {
-  getDefaultValue,
-  isInt,
-  isNotNull,
-  isPrimaryKeyColumn,
-  isReal,
-} from "@/lib/schema";
+import { getDefaultValue, isNotNull, isPrimaryKeyColumn } from "@/lib/schema";
 import { SheetContainer } from "@/components/SafeSheet";
 import { showToast } from "@/components/ui/toast";
 import {
   copyRow,
   preProcessInsertValue,
   preProcessUpdateValue,
+  buildDefaultRow,
   type FormRow,
 } from "@/lib/convert";
 import { updateRow, insertRow } from "@/lib/row";
-import { isNullableColumn } from "@/lib/schema";
-
-function buildDefault(schema: Table): FormRow {
-  const obj: FormRow = {};
-  for (const col of schema.columns) {
-    const type = col.data_type;
-    const isPk = isPrimaryKeyColumn(col);
-    const notNull = isNotNull(col.options);
-    const defaultValue = getDefaultValue(col.options);
-    const nullable = isNullableColumn({
-      type: col.data_type,
-      notNull,
-      isPk,
-    });
-
-    /// If there's no default and the column is nullable we default to null.
-    if (defaultValue === undefined) {
-      if (nullable) {
-        obj[col.name] = null;
-        continue;
-      }
-    } else {
-      // If there is a default, we leave the form field empty and show the default as a textinput placeholder.
-      obj[col.name] = "";
-      continue;
-    }
-
-    // If there's neither a default nor is the column nullable, we fall back to generic defaults.
-    // They may be invalid based on CHECK constraints.
-    if (type === "Blob") {
-      obj[col.name] = "";
-      break;
-    } else if (type === "Text") {
-      obj[col.name] = "";
-      break;
-    } else if (isInt(type)) {
-      obj[col.name] = 0;
-      break;
-    } else if (isReal(type)) {
-      obj[col.name] = 0.0;
-      break;
-    } else if (type === "Null") {
-      obj[col.name] = null;
-      break;
-    } else {
-      console.debug(`No fallback for: ${col.name}`);
-    }
-  }
-  return obj;
-}
 
 type FormRowForm = {
   row: FormRow;
@@ -87,7 +32,7 @@ export function InsertUpdateRowForm(props: {
   row?: FormRow;
 }) {
   const defaultValues = createMemo(() =>
-    props.row ? copyRow(props.row) : buildDefault(props.schema),
+    props.row ? copyRow(props.row) : buildDefaultRow(props.schema),
   );
   const isUpdate = () => props.row !== undefined;
 
@@ -142,6 +87,7 @@ export function InsertUpdateRowForm(props: {
               const notNull = isNotNull(col.options);
               const defaultValue = getDefaultValue(col.options);
 
+              // TODO: For foreign keys we'd ideally render a auto-complete search bar.
               return (
                 <form.Field
                   name={`row[${col.name}]`}

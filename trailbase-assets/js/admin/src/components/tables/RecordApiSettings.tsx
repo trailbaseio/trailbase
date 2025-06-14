@@ -43,6 +43,7 @@ import {
 import { createConfigQuery, setConfig } from "@/lib/config";
 import { parseSqlExpression } from "@/lib/parse";
 import { tableType, getForeignKey } from "@/lib/schema";
+import { buildDefaultRow } from "@/lib/convert";
 import { client } from "@/lib/fetch";
 
 import type { ForeignKey } from "@bindings/ForeignKey";
@@ -316,35 +317,75 @@ function getForeignKeyColumns(schema: Table | View): [string, ForeignKey][] {
     .filter(filter) as [string, ForeignKey][];
 }
 
-function ReadExample(props: { apiName: string; config: Config | undefined }) {
-  const text = () => {
-    const host =
-      props.config?.server?.siteUrl ??
-      (import.meta.env.DEV ? "http://localhost:4000" : window.location.origin);
+function siteUrl(config: Config | undefined): string {
+  return (
+    config?.server?.siteUrl ??
+    (import.meta.env.DEV ? "http://localhost:4000" : window.location.origin)
+  );
+}
 
-    return `curl \\
+function CodeBlock(props: { text: string }) {
+  return <pre class="text-wrap break-all font-mono text-sm">{props.text}</pre>;
+}
+
+function ReadExample(props: { apiName: string; config: Config | undefined }) {
+  const text = () => `curl \\
   --header "Content-Type: application/json" \\
   --header "Authorization: Bearer ${client.tokens()?.auth_token}" \\
   --request GET \\
-  "${host}/api/records/v1/${props.apiName}/<RECORD_ID>"`;
-  };
+  "${siteUrl(props.config)}/api/records/v1/${props.apiName}/<RECORD_ID>"`;
 
-  return <pre class="text-wrap break-all font-mono text-sm">{text()}</pre>;
+  return <CodeBlock text={text()} />;
 }
 
 function ListExample(props: { apiName: string; config: Config | undefined }) {
-  const text = () => {
-    const host =
-      props.config?.server?.siteUrl ??
-      (import.meta.env.DEV ? "http://localhost:4000" : window.location.origin);
-
-    return `curl \\
+  const text = () => `curl \\
   --header "Content-Type: application/json" \\
   --header "Authorization: Bearer ${client.tokens()?.auth_token}" \\
   --request GET \\
-  "${host}/api/records/v1/${props.apiName}"`;
-  };
-  return <pre class="text-wrap break-all font-mono text-sm">{text()}</pre>;
+  "${siteUrl(props.config)}/api/records/v1/${props.apiName}"`;
+
+  return <CodeBlock text={text()} />;
+}
+
+function CreateExample(props: {
+  apiName: string;
+  config: Config | undefined;
+  schema: Table;
+}) {
+  const text = () => `curl \\
+  --header "Content-Type: application/json" \\
+  --header "Authorization: Bearer ${client.tokens()?.auth_token}" \\
+  --request POST \\
+  --data '${JSON.stringify(buildDefaultRow(props.schema))}' \\
+  "${siteUrl(props.config)}/api/records/v1/${props.apiName}"`;
+
+  return <CodeBlock text={text()} />;
+}
+
+function UpdateExample(props: {
+  apiName: string;
+  config: Config | undefined;
+  schema: Table;
+}) {
+  const text = () => `curl \\
+  --header "Content-Type: application/json" \\
+  --header "Authorization: Bearer ${client.tokens()?.auth_token}" \\
+  --request PATCH \\
+  --data '${JSON.stringify(buildDefaultRow(props.schema))}' \\
+  "${siteUrl(props.config)}/api/records/v1/${props.apiName}/<RECORD_ID>"`;
+
+  return <CodeBlock text={text()} />;
+}
+
+function DeleteExample(props: { apiName: string; config: Config | undefined }) {
+  const text = () => `curl \\
+  --header "Content-Type: application/json" \\
+  --header "Authorization: Bearer ${client.tokens()?.auth_token}" \\
+  --request DELETE \\
+  "${siteUrl(props.config)}/api/records/v1/${props.apiName}/<RECORD_ID>"`;
+
+  return <CodeBlock text={text()} />;
 }
 
 export function RecordApiSettingsForm(props: {
@@ -821,7 +862,7 @@ export function RecordApiSettingsForm(props: {
                 </p>
 
                 <Accordion multiple={false} collapsible class="w-full">
-                  <AccordionItem value={`read`}>
+                  <AccordionItem value="read">
                     <AccordionTrigger>Read Record</AccordionTrigger>
 
                     <AccordionContent>
@@ -832,7 +873,7 @@ export function RecordApiSettingsForm(props: {
                     </AccordionContent>
                   </AccordionItem>
 
-                  <AccordionItem value={`list`}>
+                  <AccordionItem value="list">
                     <AccordionTrigger>List Records</AccordionTrigger>
 
                     <AccordionContent>
@@ -842,6 +883,45 @@ export function RecordApiSettingsForm(props: {
                       />
                     </AccordionContent>
                   </AccordionItem>
+
+                  {type() === "table" && (
+                    <>
+                      <AccordionItem value="create">
+                        <AccordionTrigger>Create Record</AccordionTrigger>
+
+                        <AccordionContent>
+                          <CreateExample
+                            apiName={form.state.values.name ?? ""}
+                            config={config.data?.config}
+                            schema={props.schema as Table}
+                          />
+                        </AccordionContent>
+                      </AccordionItem>
+
+                      <AccordionItem value="update">
+                        <AccordionTrigger>Update Record</AccordionTrigger>
+
+                        <AccordionContent>
+                          <UpdateExample
+                            apiName={form.state.values.name ?? ""}
+                            config={config.data?.config}
+                            schema={props.schema as Table}
+                          />
+                        </AccordionContent>
+                      </AccordionItem>
+
+                      <AccordionItem value="delete">
+                        <AccordionTrigger>Delete Record</AccordionTrigger>
+
+                        <AccordionContent>
+                          <DeleteExample
+                            apiName={form.state.values.name ?? ""}
+                            config={config.data?.config}
+                          />
+                        </AccordionContent>
+                      </AccordionItem>
+                    </>
+                  )}
                 </Accordion>
               </CardContent>
             </Card>

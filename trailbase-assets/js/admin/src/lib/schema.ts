@@ -164,6 +164,14 @@ export function isUUIDv7Column(column: Column): boolean {
   return false;
 }
 
+export function isUUIDColumn(column: Column): boolean {
+  if (column.data_type === "Blob") {
+    const check = getCheckValue(column.options);
+    return (check?.search(/^is_uuid(|_v7|_v4)\s*\(/g) ?? -1) === 0;
+  }
+  return false;
+}
+
 export function isFileUploadColumn(column: Column): boolean {
   if (column.data_type === "Text") {
     const check = getCheckValue(column.options);
@@ -198,7 +206,7 @@ function columnsSatisfyRecordApiRequirements(
         return true;
       }
 
-      if (isUUIDv7Column(column)) {
+      if (isUUIDColumn(column)) {
         return true;
       }
 
@@ -219,7 +227,7 @@ function columnsSatisfyRecordApiRequirements(
         const foreign_col = foreign_table.columns.find(
           (c) => c.name === foreign_col_name,
         );
-        if (foreign_col && isUUIDv7Column(foreign_col)) {
+        if (foreign_col && isUUIDColumn(foreign_col)) {
           return true;
         }
       }
