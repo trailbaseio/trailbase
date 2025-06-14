@@ -1,3 +1,12 @@
+## v0.14.1
+
+* Admin UI:
+  * Fix Record API id constraints to allow any UUID after v0.14.0 update.
+  * Add more curl examples for record create/update/delete.
+  * Fix and improve default value construction.
+* More permissive default CORS, allow any headers.
+* Update JS dependencies.
+
 ## v0.14.0
 
 * Allow truly random UUIDv4 record IDs by relying on AES encrypted `_rowid_`s
