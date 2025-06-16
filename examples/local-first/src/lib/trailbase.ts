@@ -1,7 +1,7 @@
 import { Client } from "trailbase";
 
 import { Store } from "@tanstack/store";
-import { Collection } from "@tanstack/db";
+import { CollectionImpl } from "@tanstack/db";
 import type { CollectionConfig, SyncConfig } from "@tanstack/db";
 
 /**
@@ -20,7 +20,7 @@ export interface TrailBaseCollectionConfig<TItem extends object>
  */
 export class TrailbaseCollection<
   TItem extends object,
-> extends Collection<TItem> {
+> extends CollectionImpl<TItem> {
   private seenTxids: Store<Set<number>>;
 
   constructor(config: TrailBaseCollectionConfig<TItem>) {

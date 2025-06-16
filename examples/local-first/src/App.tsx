@@ -2,12 +2,9 @@ import { QueryClient } from "@tanstack/query-core";
 import {
   useLiveQuery,
   useOptimisticMutation,
-  type PendingMutation,
+  createCollection,
 } from "@tanstack/react-db";
-import {
-  createQueryCollection,
-  type QueryCollection,
-} from "@tanstack/db-collections";
+import { queryCollectionOptions } from "@tanstack/db-collections";
 
 import { Client } from "trailbase";
 import "./App.css";
@@ -23,19 +20,20 @@ type Data = {
 
 const queryClient = new QueryClient();
 
-const dataCollection = createQueryCollection<Data>({
-  id: "data",
-  queryKey: ["data"],
-  queryFn: async () => (await client.records("data").list<Data>()).records,
-  getId: (item) => item.id?.toString() ?? "??",
-  queryClient: queryClient,
-});
+const dataCollection = createCollection(
+  queryCollectionOptions<Data>({
+    id: "data",
+    queryKey: ["data"],
+    queryFn: async () => (await client.records("data").list<Data>()).records,
+    getKey: (item) => item.id?.toString() ?? "??",
+    queryClient: queryClient,
+  }),
+);
 
 function App() {
   const { data } = useLiveQuery((q) =>
     q
       .from({ dataCollection })
-      .keyBy(`@id`)
       .orderBy(`@updated`)
       .select(`@id`, `@updated`, `@data`),
   );
@@ -43,13 +41,12 @@ function App() {
   // Define mutations
   const addData = useOptimisticMutation({
     mutationFn: async ({ transaction }) => {
-      const mutation = transaction.mutations[0] as PendingMutation<Data>;
+      const { changes: newData } = transaction.mutations[0];
+      const response = await client.records("data").create(newData as Data);
+      const _ = response;
 
-      const { modified } = mutation;
-      const response = await client.records("data").create(modified as Data);
-
+      await dataCollection.utils.refetch();
       // TODO: We should await the update.
-      (mutation.collection as QueryCollection<Data>).refetch();
     },
   });
 
