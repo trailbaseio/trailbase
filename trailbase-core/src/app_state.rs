@@ -11,7 +11,6 @@ use crate::config::{validate_config, write_config_and_vault_textproto};
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::js::{RuntimeHandle, register_database_functions};
-use crate::queue::Queue;
 use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
@@ -35,7 +34,6 @@ struct InternalState {
 
   conn: trailbase_sqlite::Connection,
   logs_conn: trailbase_sqlite::Connection,
-  queue: Queue,
 
   jwt: JwtHelper,
 
@@ -60,7 +58,6 @@ pub(crate) struct AppStateArgs {
   pub config: Config,
   pub conn: trailbase_sqlite::Connection,
   pub logs_conn: trailbase_sqlite::Connection,
-  pub queue: Queue,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore + Send + Sync>,
   pub js_runtime_threads: Option<usize>,
@@ -138,7 +135,6 @@ impl AppState {
         config,
         conn: args.conn.clone(),
         logs_conn: args.logs_conn,
-        queue: args.queue,
         jwt: args.jwt,
         schema_metadata: args.schema_metadata.clone(),
         subscription_manager: SubscriptionManager::new(
@@ -182,10 +178,6 @@ impl AppState {
 
   pub fn logs_conn(&self) -> &trailbase_sqlite::Connection {
     return &self.state.logs_conn;
-  }
-
-  pub fn queue(&self) -> &Queue {
-    return &self.state.queue;
   }
 
   pub fn version(&self) -> trailbase_assets::version::VersionInfo {
@@ -426,7 +418,6 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       config,
       conn: conn.clone(),
       logs_conn,
-      queue: Queue::new(None).await.unwrap(),
       jwt: jwt::test_jwt_helper(),
       schema_metadata: schema_metadata.clone(),
       subscription_manager: SubscriptionManager::new(conn.clone(), schema_metadata, record_apis),

@@ -206,7 +206,7 @@ mod test {
   fn test_struct_local() {
     let vi = get_version_info!();
     assert_eq!(vi.major, 0);
-    assert_eq!(vi.minor, 1);
+    assert_eq!(vi.minor, 2);
     assert_eq!(vi.patch, 0);
     assert_eq!(vi.crate_name, "trailbase-assets");
     // hard to make positive tests for these since they will always change
@@ -219,7 +219,7 @@ mod test {
   #[test]
   fn test_display_local() {
     let vi = get_version_info!();
-    assert_eq!(vi.to_string(), "trailbase-assets 0.1.0");
+    assert_eq!(vi.to_string(), "trailbase-assets 0.2.0");
   }
 
   #[test]
@@ -228,7 +228,7 @@ mod test {
     let s = format!("{vi:?}");
     assert_eq!(
       s,
-      "VersionInfo { crate_name: \"trailbase-assets\", major: 0, minor: 1, patch: 0 }"
+      "VersionInfo { crate_name: \"trailbase-assets\", major: 0, minor: 2, patch: 0 }"
     );
   }
 }

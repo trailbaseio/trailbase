@@ -6787,11 +6787,10 @@ dependencies = [
 
 [[package]]
 name = "trailbase"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
- "apalis",
  "arc-swap",
  "argon2",
  "askama",
@@ -6854,7 +6853,6 @@ dependencies = [
  "tower-service",
  "tracing",
  "tracing-subscriber",
- "trailbase-apalis",
  "trailbase-assets",
  "trailbase-build",
  "trailbase-extension",
@@ -6896,7 +6894,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-assets"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "askama",
  "axum 0.8.4",
@@ -6908,7 +6906,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-build"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "env_logger",
  "log",
@@ -6954,7 +6952,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-extension"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "arc-swap",
  "argon2",
@@ -6979,7 +6977,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-js"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytes",
  "futures-util",
@@ -7057,7 +7055,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-sqlean"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "bindgen 0.72.0",
  "cc",
@@ -7067,7 +7065,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-sqlite"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "criterion",

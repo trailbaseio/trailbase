@@ -18,7 +18,6 @@ mod extract;
 mod js;
 mod listing;
 mod migrations;
-mod queue;
 mod scheduler;
 mod schema_metadata;
 mod server;

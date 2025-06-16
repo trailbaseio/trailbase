@@ -34,8 +34,6 @@ pub enum InitError {
   ScriptError(String),
   #[error("ObjectStore error: {0}")]
   ObjectStore(#[from] object_store::Error),
-  #[error("Queue error: {0}")]
-  Queue(#[from] crate::queue::QueueError),
   #[error("Auth error: {0}")]
   Auth(#[from] crate::auth::AuthError),
 }
@@ -58,9 +56,6 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
 
   // Then open or init new databases.
   let logs_conn = crate::connection::init_logs_db(Some(&args.data_dir))?;
-
-  // TODO: At this early stage we're using an in-memory db. Go persistent before rolling out.
-  let queue = crate::queue::Queue::new(None).await?;
 
   // WIP: Allow multiple databases.
   //
@@ -148,7 +143,6 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     config,
     conn,
     logs_conn,
-    queue,
     jwt,
     object_store,
     js_runtime_threads: args.js_runtime_threads,

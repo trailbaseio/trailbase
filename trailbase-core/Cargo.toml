@@ -1,6 +1,6 @@
 [package]
 name = "trailbase"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "OSL-3.0"
 description = "Package to use TrailBase as a framework"
@@ -22,11 +22,9 @@ harness = false
 [features]
 default = ["v8"]
 v8 = ["dep:trailbase-js"]
-queue = ["dep:apalis", "dep:trailbase-apalis"]
 
 [dependencies]
 aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "rand_core"] }
-apalis = { version = "0.7.0", optional = true, default-features = false }
 arc-swap = "1.7.1"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
 askama = { workspace = true }
@@ -82,7 +80,6 @@ tower-http = { version = "^0.6.0", default-features = false, features = ["cors",
 tower-service = { version = "0.3.3", default-features = false }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-trailbase-apalis = { workspace = true, optional = true }
 trailbase-assets = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-js = { workspace = true, optional = true }

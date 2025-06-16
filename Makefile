@@ -28,4 +28,17 @@ docker:
 cloc:
 	cloc --not-match-d=".*(/target|/dist|/node_modules|/vendor|.astro|.build|.venv|/traildepot|/flutter|/assets|lock|_benchmark|/bin|/obj).*" .
 
-.PHONY: default format check static docker cloc
+crates:
+	cargo +nightly -Z package-workspace publish --no-verify \
+		-p trailbase-build \
+		-p trailbase-assets \
+		-p trailbase-qs \
+		-p trailbase-sqlean \
+		-p trailbase-refinery \
+		-p trailbase-extension \
+		-p trailbase-schema \
+		-p trailbase-sqlite \
+		-p trailbase-js \
+		-p trailbase
+
+.PHONY: default format check static docker cloc crates
