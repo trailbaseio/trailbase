@@ -7,8 +7,10 @@ import {
 import { queryCollectionOptions } from "@tanstack/db-collections";
 
 import { Client } from "trailbase";
-import "./App.css";
 import type { FormEvent } from "react";
+
+import { trailBaseCollectionOptions } from "./lib/trailbase.ts";
+import "./App.css";
 
 const client = Client.init("http://localhost:4000");
 
@@ -19,15 +21,23 @@ type Data = {
 };
 
 const queryClient = new QueryClient();
+const useTrailBase = true;
 
 const dataCollection = createCollection(
-  queryCollectionOptions<Data>({
-    id: "data",
-    queryKey: ["data"],
-    queryFn: async () => (await client.records("data").list<Data>()).records,
-    getKey: (item) => item.id?.toString() ?? "??",
-    queryClient: queryClient,
-  }),
+  useTrailBase
+    ? trailBaseCollectionOptions<Data>({
+        client,
+        recordApi: "data",
+        getKey: (item) => item.id?.toString() ?? "??",
+      })
+    : queryCollectionOptions<Data>({
+        id: "data",
+        queryKey: ["data"],
+        queryFn: async () =>
+          (await client.records("data").list<Data>()).records,
+        getKey: (item) => item.id?.toString() ?? "??",
+        queryClient: queryClient,
+      }),
 );
 
 function App() {

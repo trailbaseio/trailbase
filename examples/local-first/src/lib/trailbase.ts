@@ -1,8 +1,12 @@
 import { Client } from "trailbase";
 
 import { Store } from "@tanstack/store";
-import { CollectionImpl } from "@tanstack/db";
-import type { CollectionConfig, SyncConfig } from "@tanstack/db";
+import type {
+  CollectionConfig,
+  SyncConfig,
+  MutationFnParams,
+  UtilsRecord,
+} from "@tanstack/db";
 
 /**
  * Configuration interface for TrailbaseCollection
@@ -13,31 +17,40 @@ export interface TrailBaseCollectionConfig<TItem extends object>
    * TrailBase client.
    */
   client: Client;
+
+  /**
+   * Record API name
+   */
+  recordApi: string;
+
+  // getKey: CollectionConfig<TItem>[`getKey`];
 }
 
-/**
- * Specialized Collection class for TrailBase integration
- */
-export class TrailbaseCollection<
-  TItem extends object,
-> extends CollectionImpl<TItem> {
-  private seenTxids: Store<Set<number>>;
+export type AwaitTxIdFn = (txId: string, timeout?: number) => Promise<boolean>;
 
-  constructor(config: TrailBaseCollectionConfig<TItem>) {
-    const seenTxids = new Store<Set<number>>(new Set([Math.random()]));
-    super({ ...config, sync: createTrailBaseSync<TItem>(config, seenTxids) });
+export type RefetchFn = () => Promise<void>;
 
-    this.seenTxids = seenTxids;
-  }
+export interface TrailBaseCollectionUtils extends UtilsRecord {
+  refetch: RefetchFn;
+}
+
+export function trailBaseCollectionOptions<TItem extends object>(
+  config: TrailBaseCollectionConfig<TItem>,
+): CollectionConfig<TItem> & { utils: TrailBaseCollectionUtils } {
+  const seenTxids = new Store<Set<string>>(new Set([Math.random().toString()]));
+  const sync = createTrailBaseSync<TItem>(config, seenTxids);
 
   /**
    * Wait for a specific transaction ID to be synced
-   * @param txId The transaction ID to wait for
+   * @param txId The transaction ID to wait for as a string
    * @param timeout Optional timeout in milliseconds (defaults to 30000ms)
    * @returns Promise that resolves when the txId is synced
    */
-  async awaitTxId(txId: number, timeout = 30000): Promise<boolean> {
-    const hasTxid = this.seenTxids.state.has(txId);
+  const awaitTxId: AwaitTxIdFn = async (
+    txId: string,
+    timeout = 30000,
+  ): Promise<boolean> => {
+    const hasTxid = seenTxids.state.has(txId);
     if (hasTxid) return true;
 
     return new Promise((resolve, reject) => {
@@ -46,21 +59,69 @@ export class TrailbaseCollection<
         reject(new Error(`Timeout waiting for txId: ${txId}`));
       }, timeout);
 
-      const unsubscribe = this.seenTxids.subscribe(() => {
-        if (this.seenTxids.state.has(txId)) {
+      const unsubscribe = seenTxids.subscribe(() => {
+        if (seenTxids.state.has(txId)) {
           clearTimeout(timeoutId);
           unsubscribe();
           resolve(true);
         }
       });
     });
-  }
-}
+  };
 
-export function createTrailBaseCollection<TItem extends object>(
-  config: TrailBaseCollectionConfig<TItem>,
-): TrailbaseCollection<TItem> {
-  return new TrailbaseCollection(config);
+  // Create wrapper handlers for direct persistence operations that handle txid awaiting
+  const onInsert = async (params: MutationFnParams<TItem>) => {
+    const handlerResult = (await config.onInsert!(params)) ?? {};
+    const txid = (handlerResult as { txid?: string }).txid;
+
+    if (!txid) {
+      throw new Error(
+        `Electric collection onInsert handler must return a txid`,
+      );
+    }
+
+    await awaitTxId(txid);
+    return handlerResult;
+  };
+
+  const onUpdate = async (params: MutationFnParams<TItem>) => {
+    const handlerResult = await config.onUpdate!(params);
+    const txid = (handlerResult as { txid?: string }).txid;
+
+    if (!txid) {
+      throw new Error(
+        `Electric collection onUpdate handler must return a txid`,
+      );
+    }
+
+    await awaitTxId(txid);
+    return handlerResult;
+  };
+
+  const onDelete = async (params: MutationFnParams<TItem>) => {
+    const handlerResult = await config.onDelete!(params);
+    const txid = (handlerResult as { txid?: string }).txid;
+
+    if (!txid) {
+      throw new Error(
+        `Electric collection onDelete handler must return a txid`,
+      );
+    }
+
+    await awaitTxId(txid);
+    return handlerResult;
+  };
+
+  return {
+    sync,
+    getKey: config.getKey,
+    onInsert,
+    onUpdate,
+    onDelete,
+    utils: {
+      refetch: async () => {},
+    },
+  };
 }
 
 /**
@@ -68,14 +129,15 @@ export function createTrailBaseCollection<TItem extends object>(
  */
 function createTrailBaseSync<TItem extends object>(
   config: TrailBaseCollectionConfig<TItem>,
-  seenTxIds: Store<Set<number>>,
+  seenTxIds: Store<Set<string>>,
 ): SyncConfig<TItem> {
   const client = config.client;
+
   return {
     sync: (params: Parameters<SyncConfig<TItem>[`sync`]>[0]) => {
       const { begin, write, commit } = params;
 
-      const records = client.records("foo");
+      const records = client.records(config.recordApi);
       (async () => {
         const eventStream = await records.subscribe("*");
 
