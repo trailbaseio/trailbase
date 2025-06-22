@@ -97,12 +97,11 @@ async fn async_main() -> Result<(), BoxError> {
       use utoipa::OpenApi;
       use utoipa_swagger_ui::SwaggerUi;
 
-      let run_server = |port: u16| async move {
+      let run_server = |addr: String| async move {
         let router = axum::Router::new().merge(
           SwaggerUi::new("/docs").url("/api/openapi.json", trailbase::openapi::Doc::openapi()),
         );
 
-        let addr = format!("localhost:{port}");
         let listener = tokio::net::TcpListener::bind(addr.clone()).await.unwrap();
         log::info!("docs @ http://{addr}/docs 🚀");
 
@@ -114,11 +113,11 @@ async fn async_main() -> Result<(), BoxError> {
           let json = trailbase::openapi::Doc::openapi().to_pretty_json()?;
           println!("{json}");
         }
-        Some(OpenApiSubCommands::Run { port }) => {
-          run_server(port).await;
+        Some(OpenApiSubCommands::Run { address }) => {
+          run_server(address).await;
         }
         None => {
-          run_server(4004).await;
+          run_server("localhost:4004".to_string()).await;
         }
       }
     }

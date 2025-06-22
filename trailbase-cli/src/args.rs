@@ -144,8 +144,9 @@ pub struct EmailArgs {
 pub enum OpenApiSubCommands {
   Print,
   Run {
-    #[arg(long, default_value_t = 4004)]
-    port: u16,
+    /// Authority (<host>:<port>) the HTTP server binds to (Default: localhost:4000).
+    #[arg(short, long, env, default_value = "localhost:4004")]
+    address: String,
   },
 }
 
