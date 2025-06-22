@@ -9,7 +9,7 @@ publish = false
 name = "trail"
 
 [features]
-openapi = ["dep:utoipa", "dep:utoipa-swagger-ui"]
+swagger = ["dep:utoipa-swagger-ui"]
 
 [dependencies]
 axum = { version = "^0.8.1", features=["multipart"] }
@@ -22,6 +22,6 @@ mimalloc = { version = "^0.1.41", default-features = false }
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "^1.0.117"
 tokio = { workspace = true }
-utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"], optional = true }
+utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9.0.0", features = ["axum"], optional = true }
 uuid = { workspace = true }

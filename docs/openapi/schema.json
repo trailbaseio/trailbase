@@ -1,0 +1,541 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TrailBase",
+    "description": "TrailBase APIs",
+    "license": {
+      "name": "OSL-3.0",
+      "identifier": "OSL-3.0"
+    },
+    "version": "0.2.0"
+  },
+  "paths": {
+    "/api/auth/v1/avatar/": {
+      "post": {
+        "tags": ["avatar"],
+        "operationId": "create_avatar_handler",
+        "responses": {
+          "200": {
+            "description": "Deletion success"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["avatar"],
+        "operationId": "delete_avatar_handler",
+        "responses": {
+          "200": {
+            "description": "Deletion success"
+          }
+        }
+      }
+    },
+    "/api/auth/v1/avatar/:b64_user_id": {
+      "get": {
+        "tags": ["avatar"],
+        "operationId": "get_avatar_handler",
+        "responses": {
+          "200": {
+            "description": "Optional Avatar file"
+          }
+        }
+      }
+    },
+    "/api/auth/v1/change_email/confirm/:email_verification_code": {
+      "get": {
+        "tags": ["change_email"],
+        "summary": "Confirm a change of email address.",
+        "operationId": "change_email_confirm_handler",
+        "responses": {
+          "200": {
+            "description": "Success."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/change_email/request": {
+      "post": {
+        "tags": ["change_email"],
+        "summary": "Request an email change.",
+        "operationId": "change_email_request_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/change_password": {
+      "post": {
+        "tags": ["change_password"],
+        "summary": "Request a change of password.",
+        "operationId": "change_password_handler",
+        "parameters": [
+          {
+            "name": "redirect_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/delete": {
+      "delete": {
+        "tags": ["delete"],
+        "summary": "Get public profile of the given user.",
+        "operationId": "delete_handler",
+        "responses": {
+          "200": {
+            "description": "User deleted."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/login": {
+      "post": {
+        "tags": ["login"],
+        "summary": "Logs in user by email and password.",
+        "operationId": "login_handler",
+        "parameters": [
+          {
+            "name": "redirect_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Auth & refresh tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/logout": {
+      "get": {
+        "tags": ["logout"],
+        "summary": "Logs out the current user and delete **all** pending sessions for that user.",
+        "description": "Relies on the client to drop any auth tokens. We delete the session to avoid refresh tokens\nbringing a logged out session back to live.",
+        "operationId": "logout_handler",
+        "parameters": [
+          {
+            "name": "redirect_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Auth & refresh tokens."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/refresh": {
+      "post": {
+        "tags": ["refresh"],
+        "summary": "Refreshes auth tokens given a refresh token.",
+        "description": "NOTE: This is a json-only API, since cookies will be auto-refreshed.",
+        "operationId": "refresh_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Refreshed auth tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/register": {
+      "post": {
+        "tags": ["register"],
+        "summary": "Registers a new user with email and password.",
+        "operationId": "register_user_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful registration."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/reset_password/request": {
+      "post": {
+        "tags": ["reset_password"],
+        "summary": "Request a password reset.",
+        "operationId": "reset_password_request_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/reset_password/update/:password_reset_code": {
+      "post": {
+        "tags": ["reset_password"],
+        "summary": "Endpoint for setting a new password after the user has requested a reset and provided a\nreplacement password.",
+        "operationId": "reset_password_update_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/status": {
+      "get": {
+        "tags": ["login"],
+        "summary": "Check login status.",
+        "operationId": "login_status_handler",
+        "responses": {
+          "200": {
+            "description": "Auth & refresh tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/token": {
+      "post": {
+        "tags": ["token"],
+        "summary": "Exchange authorization code for auth tokens.",
+        "description": "This API endpoint is meant for client-side applications (SPA, mobile, desktop, ...) using the\nweb-auth flow.",
+        "operationId": "auth_code_to_token_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthCodeToTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Converts auth & pkce codes to tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/verify_email/confirm/:email_verification_code": {
+      "get": {
+        "tags": ["verify_email"],
+        "summary": "Request a new email to verify email address.",
+        "operationId": "verify_email_handler",
+        "responses": {
+          "200": {
+            "description": "Email verified."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/verify_email/trigger": {
+      "get": {
+        "tags": ["verify_email"],
+        "summary": "Request a new email to verify email address.",
+        "operationId": "request_email_verification_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Email verification sent."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthCodeToTokenRequest": {
+        "type": "object",
+        "properties": {
+          "authorization_code": {
+            "type": ["string", "null"]
+          },
+          "pkce_code_verifier": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "ChangeEmailRequest": {
+        "type": "object",
+        "required": ["csrf_token", "new_email"],
+        "properties": {
+          "csrf_token": {
+            "type": "string"
+          },
+          "new_email": {
+            "type": "string"
+          },
+          "old_email": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "required": ["old_password", "new_password", "new_password_repeat"],
+        "properties": {
+          "new_password": {
+            "type": "string"
+          },
+          "new_password_repeat": {
+            "type": "string"
+          },
+          "old_password": {
+            "type": "string"
+          }
+        }
+      },
+      "EmailVerificationRequest": {
+        "type": "object",
+        "required": ["email"],
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "pkce_code_challenge": {
+            "type": ["string", "null"]
+          },
+          "redirect_to": {
+            "type": ["string", "null"]
+          },
+          "response_type": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": ["auth_token", "refresh_token", "csrf_token"],
+        "properties": {
+          "auth_token": {
+            "type": "string"
+          },
+          "csrf_token": {
+            "type": "string"
+          },
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginStatusResponse": {
+        "type": "object",
+        "properties": {
+          "auth_token": {
+            "type": ["string", "null"]
+          },
+          "csrf_token": {
+            "type": ["string", "null"]
+          },
+          "refresh_token": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "required": ["refresh_token"],
+        "properties": {
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      },
+      "RefreshResponse": {
+        "type": "object",
+        "required": ["auth_token", "csrf_token"],
+        "properties": {
+          "auth_token": {
+            "type": "string"
+          },
+          "csrf_token": {
+            "type": "string"
+          }
+        }
+      },
+      "RegisterUserRequest": {
+        "type": "object",
+        "required": ["email", "password", "password_repeat"],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "password_repeat": {
+            "type": "string"
+          }
+        }
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": ["email"],
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "ResetPasswordUpdateRequest": {
+        "type": "object",
+        "required": ["password", "password_repeat"],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "password_repeat": {
+            "type": "string"
+          }
+        }
+      },
+      "TokenResponse": {
+        "type": "object",
+        "required": ["auth_token", "refresh_token", "csrf_token"],
+        "properties": {
+          "auth_token": {
+            "type": "string"
+          },
+          "csrf_token": {
+            "type": "string"
+          },
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": []
+}

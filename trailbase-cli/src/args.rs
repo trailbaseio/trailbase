@@ -45,7 +45,6 @@ pub enum SubCommands {
   Run(ServerArgs),
   /// Export JSON Schema definitions.
   Schema(JsonSchemaArgs),
-  #[cfg(feature = "openapi")]
   /// Export OpenAPI definitions.
   OpenApi {
     #[command(subcommand)]
@@ -139,10 +138,10 @@ pub struct EmailArgs {
   pub body: String,
 }
 
-#[cfg(feature = "openapi")]
 #[derive(Subcommand, Debug, Clone)]
 pub enum OpenApiSubCommands {
   Print,
+  #[cfg(feature = "swagger")]
   Run {
     /// Authority (<host>:<port>) the HTTP server binds to (Default: localhost:4000).
     #[arg(short, long, env, default_value = "localhost:4004")]

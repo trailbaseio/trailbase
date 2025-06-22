@@ -7,5 +7,4 @@ pub use args::{
   UserSubCommands,
 };
 
-#[cfg(feature = "openapi")]
 pub use args::OpenApiSubCommands;

@@ -47,12 +47,15 @@ pub mod openapi {
 
   #[derive(OpenApi)]
   #[openapi(
-        modifiers(),
+        info(
+            title = "TrailBase",
+            description = "TrailBase APIs",
+        ),
         nest(
             (path = "/api/auth/v1", api = crate::auth::AuthAPI),
-            (path = "/api/records/v1", api = crate::records::RecordOpenApi),
+            // (path = "/api/records/v1", api = crate::records::RecordOpenApi),
         ),
-        tags()
+        tags(),
     )]
   pub struct Doc;
 }

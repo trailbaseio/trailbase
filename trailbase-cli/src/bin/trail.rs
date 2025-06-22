@@ -14,8 +14,11 @@ use trailbase::{
   api::{self, Email, InitArgs, JsonSchemaMode, TokenClaims, init_app_state},
   constants::USER_TABLE,
 };
+use utoipa::OpenApi;
 
-use trailbase_cli::{AdminSubCommands, DefaultCommandLineArgs, SubCommands, UserSubCommands};
+use trailbase_cli::{
+  AdminSubCommands, DefaultCommandLineArgs, OpenApiSubCommands, SubCommands, UserSubCommands,
+};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -89,35 +92,25 @@ async fn async_main() -> Result<(), BoxError> {
 
       app.serve().await?;
     }
-    #[cfg(feature = "openapi")]
     Some(SubCommands::OpenApi { cmd }) => {
       init_logger(false);
 
-      use trailbase_cli::OpenApiSubCommands;
-      use utoipa::OpenApi;
-      use utoipa_swagger_ui::SwaggerUi;
-
-      let run_server = |addr: String| async move {
-        let router = axum::Router::new().merge(
-          SwaggerUi::new("/docs").url("/api/openapi.json", trailbase::openapi::Doc::openapi()),
-        );
-
-        let listener = tokio::net::TcpListener::bind(addr.clone()).await.unwrap();
-        log::info!("docs @ http://{addr}/docs 🚀");
-
-        axum::serve(listener, router).await.unwrap();
-      };
-
       match cmd {
-        Some(OpenApiSubCommands::Print) => {
+        Some(OpenApiSubCommands::Print) | None => {
           let json = trailbase::openapi::Doc::openapi().to_pretty_json()?;
           println!("{json}");
         }
+        #[cfg(feature = "swagger")]
         Some(OpenApiSubCommands::Run { address }) => {
-          run_server(address).await;
-        }
-        None => {
-          run_server("localhost:4004".to_string()).await;
+          let router = axum::Router::new().merge(
+            utoipa_swagger_ui::SwaggerUi::new("/docs")
+              .url("/api/openapi.json", trailbase::openapi::Doc::openapi()),
+          );
+
+          let listener = tokio::net::TcpListener::bind(addr.clone()).await.unwrap();
+          log::info!("docs @ http://{addr}/docs 🚀");
+
+          axum::serve(listener, router).await.unwrap();
         }
       }
     }

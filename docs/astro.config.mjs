@@ -1,5 +1,6 @@
 import { defineConfig } from "astro/config";
 
+import starlightOpenAPI, { openAPISidebarGroups } from "starlight-openapi";
 import icon from "astro-icon";
 import robotsTxt from "astro-robots-txt";
 import sitemap from "@astrojs/sitemap";
@@ -35,6 +36,21 @@ export default defineConfig({
         starlightLinksValidator({
           exclude: ["http://localhost:4000/", "http://localhost:4000/**/*"],
         }),
+        // Generate the OpenAPI documentation pages.
+        starlightOpenAPI([
+          {
+            base: "api",
+            schema: "./openapi/schema.json",
+            sidebar: {
+              label: "OpenAPI",
+              operations: {
+                badges: true,
+                labels: "operationId",
+                sort: "alphabetical",
+              },
+            },
+          },
+        ]),
       ],
       sidebar: [
         {
@@ -85,6 +101,8 @@ export default defineConfig({
             directory: "reference",
           },
         },
+        // Add the generated sidebar group to the sidebar.
+        ...openAPISidebarGroups,
       ],
       components: {
         Footer: "./src/components/Footer.astro",

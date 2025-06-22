@@ -28,6 +28,7 @@ use crate::AppState;
 use crate::config::proto::PermissionFlag;
 use crate::constants::RECORD_API_PATH;
 
+#[allow(unused)]
 #[derive(OpenApi)]
 #[openapi(
   paths(
