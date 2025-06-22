@@ -1,3 +1,12 @@
+## v0.14.2
+
+* OpenAPI:
+  * Include OpenAPI spec output into default builds with only Swagger UI behind
+    a "swagger" feature flag.
+  * Replace `--port` with `--address` for Swagger UI.
+  * Add OpenAPI auth output to docs.
+* Update dependencies.
+
 ## v0.14.1
 
 * Admin UI:
