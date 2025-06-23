@@ -1029,4 +1029,61 @@ mod tests {
     let response: ListResponse = json_response.0;
     return Ok(response);
   }
+
+  #[tokio::test]
+  async fn test_record_api_list_message_view_api() {
+    let state = test_state(None).await.unwrap();
+    let conn = state.conn();
+
+    create_chat_message_app_tables(&state).await.unwrap();
+    let room0 = add_room(conn, "room0").await.unwrap();
+    let password = "Secret!1!!";
+
+    state
+      .conn()
+      .execute_batch("CREATE VIEW message_view AS SELECT * FROM message;")
+      .await
+      .unwrap();
+
+    state.schema_metadata().invalidate_all().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some("messages_view_api".to_string()),
+        table_name: Some("message_view".to_string()),
+        acl_world: [PermissionFlag::Read as i32].into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    let user_x_email = "user_x@test.com";
+    let user_x = create_user_for_test(&state, user_x_email, password)
+      .await
+      .unwrap()
+      .into_bytes();
+
+    let user_x_token = login_with_password(&state, user_x_email, password)
+      .await
+      .unwrap();
+
+    add_user_to_room(conn, user_x, room0).await.unwrap();
+    send_message(conn, user_x, room0, "user_x to room0")
+      .await
+      .unwrap();
+
+    let json_response = list_records_handler(
+      State(state.clone()),
+      Path("messages_view_api".to_string()),
+      RawQuery(None),
+      User::from_auth_token(&state, &user_x_token.auth_token),
+    )
+    .await
+    .unwrap();
+
+    let response: ListResponse = json_response.0;
+    assert_eq!(1, response.records.len());
+  }
 }
