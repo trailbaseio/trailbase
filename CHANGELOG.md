@@ -1,3 +1,10 @@
+## v0.14.3
+
+* Fix issue with listing records from `VIEW`s. We cannot rely on `_rowid_`,
+  thus fall back to `OFFSET`. In the future we may add cursoring back for
+  `VIEW`s that include a cursorable PK column.
+* Minor: add an `limit=5` query parameter to list example queries.
+
 ## v0.14.2
 
 * OpenAPI:
