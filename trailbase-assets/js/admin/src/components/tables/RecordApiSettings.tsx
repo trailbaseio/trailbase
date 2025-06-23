@@ -343,7 +343,7 @@ function ListExample(props: { apiName: string; config: Config | undefined }) {
   --header "Content-Type: application/json" \\
   --header "Authorization: Bearer ${client.tokens()?.auth_token}" \\
   --request GET \\
-  "${siteUrl(props.config)}/api/records/v1/${props.apiName}"`;
+  "${siteUrl(props.config)}/api/records/v1/${props.apiName}?limit=5"`;
 
   return <CodeBlock text={text()} />;
 }
