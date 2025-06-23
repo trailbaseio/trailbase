@@ -18,7 +18,7 @@ lazy_static = "1.5.0"
 log = { version = "^0.4.21", default-features = false }
 parking_lot = { version = "0.12.3", default-features = false }
 regex = "1.11.1"
-schemars = "0.9.0"
+schemars = "1.0.0"
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "1.0.122"
 sqlite3-parser = "0.15.0"

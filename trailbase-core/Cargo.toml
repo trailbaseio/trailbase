@@ -104,7 +104,7 @@ criterion = { version = "0.6", features = ["html_reports", "async_tokio"] }
 env_logger = { workspace = true }
 trailbase-extension = { workspace = true }
 quoted_printable = "0.5.1"
-schemars = "0.9.0"
+schemars = "1.0.0"
 temp-dir = "0.1.13"
 tower = { version = "0.5.0", features = ["util"] }
 rcgen = "0.13.2"

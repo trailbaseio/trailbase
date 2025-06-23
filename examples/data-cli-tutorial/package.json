@@ -14,11 +14,11 @@
     "@eslint/js": "^9.29.0",
     "@types/node": "^24.0.3",
     "eslint": "^9.29.0",
-    "prettier": "^3.5.3",
+    "prettier": "^3.6.0",
     "quicktype": "^23.2.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.34.1"
+    "typescript-eslint": "^8.35.0"
   },
   "dependencies": {
     "csv-parse": "^5.6.0",
