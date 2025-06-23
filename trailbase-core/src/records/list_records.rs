@@ -49,6 +49,7 @@ struct ListRecordQueryTemplate<'a> {
   expanded_tables: &'a [ExpandedTable],
   count: bool,
   offset: bool,
+  is_table: bool,
 }
 
 /// Lists records matching the given filters
@@ -75,6 +76,7 @@ pub async fn list_records_handler(
 
   let table_name = api.table_name();
   let (_pk_index, pk_column) = api.record_pk_column();
+  let is_table = api.is_table();
 
   let Query {
     limit,
@@ -127,6 +129,13 @@ pub async fn list_records_handler(
   }
 
   let cursor_clause = if let Some(encrypted_cursor) = cursor {
+    if !is_table {
+      // TODO: When we moved to _rowid_ for cursoring, we lost the ability to cursor VIEWs. They
+      // currently only support OFFSET. We could restore cursoring for cases where a cursorable
+      // PK column is included. We also need a test-case to cover this.
+      return Err(RecordError::BadRequest("Only tables support cursors"));
+    }
+
     let decrypted_cursor =
       decrypt_cursor(&KEY, api_name.as_bytes(), &encrypted_cursor).map_err(|_err| {
         return RecordError::BadRequest("Bad cursor");
@@ -226,6 +235,7 @@ pub async fn list_records_handler(
     expanded_tables: &expanded_tables,
     count: count.unwrap_or(false),
     offset: offset.is_some(),
+    is_table,
   }
   .render()
   .map_err(|err| RecordError::Internal(err.into()))?;
@@ -241,7 +251,7 @@ pub async fn list_records_handler(
     }));
   };
 
-  let cursor: Option<String> = {
+  let cursor: Option<String> = if is_table {
     let rowid_index = last_row.len() - 1;
     if let Value::Integer(i) = last_row[rowid_index] {
       Some(
@@ -251,6 +261,8 @@ pub async fn list_records_handler(
     } else {
       None
     }
+  } else {
+    None
   };
 
   let total_count = if count == Some(true) {
@@ -438,6 +450,7 @@ mod tests {
         expanded_tables: &[],
         count: false,
         offset: false,
+        is_table: true,
       }
       .render()
       .unwrap(),
@@ -458,6 +471,7 @@ mod tests {
         expanded_tables: &[],
         count: true,
         offset: true,
+        is_table: false,
       }
       .render()
       .unwrap(),
@@ -535,6 +549,7 @@ mod tests {
       expanded_tables: &expanded_tables,
       count: true,
       offset: false,
+      is_table: true,
     }
     .render()
     .unwrap();

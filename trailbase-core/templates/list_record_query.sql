@@ -17,9 +17,9 @@ SELECT
 {%- endfor %}
 {%- for expanded in expanded_tables -%}
   , F{{ loop.index0 }}.*
-{%- endfor -%}
-{% if count -%}, total_count._value_ AS _total_count_{%- endif %}
-  , _ROW_._rowid_ AS _rowid_
+{%- endfor %}
+{%- if count -%}, total_count._value_ AS _total_count_{%- endif %}
+{%- if is_table -%}, _ROW_._rowid_ AS _rowid_{%- endif %}
 FROM
   (SELECT :__user_id AS id) AS _USER_,
 {%- if count %}
