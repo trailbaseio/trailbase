@@ -27,6 +27,7 @@ pub struct LogoutQuery {
 #[utoipa::path(
   get,
   path = "/logout",
+  tag = "auth",
   params(LogoutQuery),
   responses(
     (status = 200, description = "Auth & refresh tokens.")
@@ -67,6 +68,7 @@ pub struct LogoutRequest {
 #[utoipa::path(
   post,
   path = "/logout",
+  tag = "auth",
   request_body = LogoutRequest,
   responses(
     (status = 200, description = "Auth & refresh tokens.")

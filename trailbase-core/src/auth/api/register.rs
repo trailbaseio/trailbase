@@ -27,6 +27,7 @@ pub struct RegisterUserRequest {
 #[utoipa::path(
   post,
   path = "/register",
+  tag = "auth",
   request_body = RegisterUserRequest,
   responses(
     (status = 200, description = "Successful registration.")

@@ -32,6 +32,7 @@ pub struct ChangePasswordRequest {
 #[utoipa::path(
   post,
   path = "/change_password",
+  tag = "auth",
   params(ChangePasswordQuery),
   request_body = ChangePasswordRequest,
   responses(

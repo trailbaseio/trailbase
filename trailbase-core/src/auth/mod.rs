@@ -29,42 +29,34 @@ use api::*;
 
 #[derive(OpenApi)]
 #[openapi(
+  tags(
+      (name = "auth", description = "Auth-related APIs"),
+  ),
   paths(
-    login::login_handler,
-    login::login_status_handler,
-    token::auth_code_to_token_handler,
-    logout::logout_handler,
-    refresh::refresh_handler,
     register::register_user_handler,
+    verify_email::request_email_verification_handler,
+    verify_email::verify_email_handler,
+    change_email::change_email_request_handler,
+    change_email::change_email_confirm_handler,
+    reset_password::reset_password_request_handler,
+    reset_password::reset_password_update_handler,
+    change_password::change_password_handler,
+    refresh::refresh_handler,
+    login::login_handler,
+    token::auth_code_to_token_handler,
+    login::login_status_handler,
+    logout::logout_handler,
+    logout::post_logout_handler,
     avatar::get_avatar_handler,
     avatar::create_avatar_handler,
     avatar::delete_avatar_handler,
     delete::delete_handler,
-    verify_email::verify_email_handler,
-    verify_email::request_email_verification_handler,
-    change_email::change_email_request_handler,
-    change_email::change_email_confirm_handler,
-    change_password::change_password_handler,
-    reset_password::reset_password_request_handler,
-    reset_password::reset_password_update_handler,
   ),
-  components(schemas(
-    login::LoginRequest,
-    login::LoginResponse,
-    login::LoginStatusResponse,
-    token::TokenResponse,
-    token::AuthCodeToTokenRequest,
-    refresh::RefreshRequest,
-    refresh::RefreshResponse,
-    register::RegisterUserRequest,
-    verify_email::EmailVerificationRequest,
-    reset_password::ResetPasswordRequest,
-    reset_password::ResetPasswordUpdateRequest,
-    change_email::ChangeEmailRequest,
-    change_password::ChangePasswordRequest,
-  ))
+  nest(
+     (path = "/oauth", api = oauth::OAuthApi),
+  ),
 )]
-pub(super) struct AuthAPI;
+pub(super) struct AuthApi;
 
 /// Router for auth API endpoints, i.e. api/auth/v?/... .
 pub(super) fn router() -> Router<crate::AppState> {

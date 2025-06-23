@@ -21,6 +21,16 @@ pub(crate) struct LoginQuery {
   pub pkce_code_challenge: Option<String>,
 }
 
+/// Log in via external OAuth provider.
+#[utoipa::path(
+  get,
+  path = "/{provider}/login",
+  tag = "oauth",
+  params(LoginQuery),
+  responses(
+    (status = 200, description = "Redirect.")
+  )
+)]
 pub(crate) async fn login_with_external_auth_provider(
   State(state): State<AppState>,
   Path(provider): Path<String>,

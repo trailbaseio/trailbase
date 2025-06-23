@@ -85,7 +85,8 @@ fn extract_record_id(value: rusqlite::types::Value) -> Result<String, trailbase_
 /// Create new record.
 #[utoipa::path(
   post,
-  path = "/:name",
+  path = "/{name}",
+  tag = "records",
   params(CreateRecordQuery),
   request_body = serde_json::Value,
   responses(

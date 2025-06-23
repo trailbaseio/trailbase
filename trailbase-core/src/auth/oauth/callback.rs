@@ -9,6 +9,7 @@ use oauth2::{AuthorizationCode, StandardTokenResponse, TokenResponse};
 use serde::Deserialize;
 use tower_cookies::Cookies;
 use trailbase_sqlite::{named_params, params};
+use utoipa::IntoParams;
 use uuid::Uuid;
 
 use crate::AppState;
@@ -24,18 +25,27 @@ use crate::constants::{
 };
 use crate::rand::generate_random_string;
 
-#[derive(Debug, Deserialize)]
-pub struct AuthRequest {
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct AuthQuery {
   pub code: String,
   pub state: String,
 }
 
-// This handler receives the ?code=<>&state=<>, uses it to get an external oauth token, gets the
-// user's information, creates a new local user if needed, and finally mints our own tokens.
+/// This handler receives the ?code=<>&state=<>, uses it to get an external oauth token, gets the
+/// user's information, creates a new local user if needed, and finally mints our own tokens.
+#[utoipa::path(
+  get,
+  path = "/{provider}/callback",
+  tag = "oauth",
+  params(AuthQuery),
+  responses(
+    (status = 200, description = "Redirect.")
+  )
+)]
 pub(crate) async fn callback_from_external_auth_provider(
   State(state): State<AppState>,
   Path(provider): Path<String>,
-  Query(query): Query<AuthRequest>,
+  Query(query): Query<AuthQuery>,
   cookies: Cookies,
 ) -> Result<Redirect, AuthError> {
   let auth_options = state.auth_options();

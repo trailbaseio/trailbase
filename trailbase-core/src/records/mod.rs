@@ -30,19 +30,17 @@ use crate::constants::RECORD_API_PATH;
 
 #[allow(unused)]
 #[derive(OpenApi)]
-#[openapi(
-  paths(
-    read_record::read_record_handler,
-    read_record::get_uploaded_file_from_record_handler,
-    read_record::get_uploaded_files_from_record_handler,
-    list_records::list_records_handler,
-    create_record::create_record_handler,
-    update_record::update_record_handler,
-    delete_record::delete_record_handler,
-    json_schema::json_schema_handler,
-  ),
-  components(schemas(create_record::CreateRecordResponse))
-)]
+#[openapi(paths(
+  read_record::read_record_handler,
+  read_record::get_uploaded_file_from_record_handler,
+  read_record::get_uploaded_files_from_record_handler,
+  list_records::list_records_handler,
+  create_record::create_record_handler,
+  update_record::update_record_handler,
+  delete_record::delete_record_handler,
+  json_schema::json_schema_handler,
+  subscribe::add_subscription_sse_handler,
+))]
 pub(super) struct RecordOpenApi;
 
 pub(crate) fn router() -> Router<AppState> {

@@ -52,8 +52,8 @@ pub mod openapi {
             description = "TrailBase APIs",
         ),
         nest(
-            (path = "/api/auth/v1", api = crate::auth::AuthAPI),
-            // (path = "/api/records/v1", api = crate::records::RecordOpenApi),
+            (path = "/api/auth/v1", api = crate::auth::AuthApi),
+            (path = "/api/records/v1", api = crate::records::RecordOpenApi),
         ),
         tags(),
     )]

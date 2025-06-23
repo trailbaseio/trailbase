@@ -26,7 +26,8 @@ pub struct ReadRecordQuery {
 /// Read record.
 #[utoipa::path(
   get,
-  path = "/:name/:record",
+  path = "/{name}/{record}",
+  tag = "records",
   responses(
     (status = 200, description = "Record contents.", body = serde_json::Value)
   )
@@ -149,7 +150,8 @@ type GetUploadedFileFromRecordPath = Path<(
 /// Read file associated with record.
 #[utoipa::path(
   get,
-  path = "/:name/:record/file/:column_name",
+  path = "/{name}/{record}/file/{column_name}",
+  tag = "records",
   responses(
     (status = 200, description = "File contents.")
   )
@@ -208,7 +210,8 @@ type GetUploadedFilesFromRecordPath = Path<(
 /// Read single file from list associated with record.
 #[utoipa::path(
   get,
-  path = "/:name/:record/files/:column_name/:file_index",
+  path = "/{name}/{record}/files/{column_name}/{file_index}",
+  tag = "records",
   responses(
     (status = 200, description = "File contents.")
   )

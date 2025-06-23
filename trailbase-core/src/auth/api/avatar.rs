@@ -15,6 +15,7 @@ use crate::util::uuid_to_b64;
 #[utoipa::path(
   get,
   path = "/avatar/:b64_user_id",
+  tag = "auth",
   responses((status = 200, description = "Optional Avatar file"))
 )]
 pub async fn get_avatar_handler(
@@ -58,6 +59,7 @@ pub async fn get_avatar_handler(
 #[utoipa::path(
   post,
   path = "/avatar/",
+  tag = "auth",
   responses((status = 200, description = "Deletion success"))
 )]
 pub async fn create_avatar_handler(
@@ -107,6 +109,7 @@ pub async fn create_avatar_handler(
 #[utoipa::path(
   delete,
   path = "/avatar/",
+  tag = "auth",
   responses((status = 200, description = "Deletion success"))
 )]
 pub async fn delete_avatar_handler(

@@ -27,6 +27,7 @@ pub struct EmailVerificationRequest {
 #[utoipa::path(
   get,
   path = "/verify_email/trigger",
+  tag = "auth",
   request_body = EmailVerificationRequest,
   responses(
     (status = 200, description = "Email verification sent.")
@@ -99,6 +100,7 @@ pub(crate) struct VerifyEmailQuery {
 #[utoipa::path(
   get,
   path = "/verify_email/confirm/:email_verification_code",
+  tag = "auth",
   responses(
     (status = 200, description = "Email verified.")
   )

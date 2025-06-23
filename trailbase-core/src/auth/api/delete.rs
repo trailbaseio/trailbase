@@ -14,6 +14,7 @@ use crate::constants::USER_TABLE;
 #[utoipa::path(
   delete,
   path = "/delete",
+  tag = "auth",
   responses(
     (status = 200, description = "User deleted.")
   )

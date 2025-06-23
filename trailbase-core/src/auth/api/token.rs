@@ -34,6 +34,7 @@ pub struct TokenResponse {
 #[utoipa::path(
   post,
   path = "/token",
+  tag = "auth",
   request_body = AuthCodeToTokenRequest,
   responses(
     (status = 200, description = "Converts auth & pkce codes to tokens.", body = TokenResponse)

@@ -12,7 +12,8 @@ use crate::records::{Permission, RecordError};
 /// Delete record.
 #[utoipa::path(
   delete,
-  path = "/:name/:record",
+  path = "/{name}/{record}",
+  tag = "records",
   responses(
     (status = 200, description = "Successful deletion.")
   )

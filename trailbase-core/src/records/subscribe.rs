@@ -623,6 +623,15 @@ impl SubscriptionManager {
   }
 }
 
+/// Read record.
+#[utoipa::path(
+  get,
+  path = "/{name}/subscribe/{record}",
+  tag = "records",
+  responses(
+    (status = 200, description = "SSE stream of record changes.")
+  )
+)]
 pub async fn add_subscription_sse_handler(
   State(state): State<AppState>,
   Path((api_name, record)): Path<(String, String)>,

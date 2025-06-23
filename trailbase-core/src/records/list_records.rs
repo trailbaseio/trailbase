@@ -55,7 +55,8 @@ struct ListRecordQueryTemplate<'a> {
 /// Lists records matching the given filters
 #[utoipa::path(
   get,
-  path = "/:name",
+  path = "/{name}",
+  tag = "records",
   responses(
     (status = 200, description = "Matching records.")
   )

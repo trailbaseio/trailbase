@@ -16,7 +16,8 @@ pub struct JsonSchemaQuery {
 /// Retrieve json schema associated with given record api.
 #[utoipa::path(
   get,
-  path = "/:name/schema",
+  path = "/{name}/schema",
+  tag = "records",
   responses(
     (status = 200, description = "JSON schema.")
   )

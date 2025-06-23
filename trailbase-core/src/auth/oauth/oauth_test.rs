@@ -171,7 +171,7 @@ async fn test_oauth() {
   let internal_redirect = callback::callback_from_external_auth_provider(
     State(state.clone()),
     Path(name.clone()),
-    Query(callback::AuthRequest {
+    Query(callback::AuthQuery {
       state: auth_query.state.clone(),
       code: auth_query.code_challenge.clone(),
     }),

@@ -34,6 +34,7 @@ pub struct ChangeEmailRequest {
 #[utoipa::path(
   post,
   path = "/change_email/request",
+  tag = "auth",
   request_body = ChangeEmailRequest,
   responses(
     (status = 200, description = "Success.")
@@ -139,6 +140,7 @@ pub(crate) struct ChangeEmailConfigQuery {
 #[utoipa::path(
   get,
   path = "/change_email/confirm/:email_verification_code",
+  tag = "auth",
   responses(
     (status = 200, description = "Success.")
   )

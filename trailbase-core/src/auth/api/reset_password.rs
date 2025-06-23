@@ -32,6 +32,7 @@ pub struct ResetPasswordRequest {
 #[utoipa::path(
   post,
   path = "/reset_password/request",
+  tag = "auth",
   request_body = ResetPasswordRequest,
   responses(
     (status = 200, description = "Success.")
@@ -114,6 +115,7 @@ pub struct ResetPasswordUpdateRequest {
 #[utoipa::path(
   post,
   path = "/reset_password/update/:password_reset_code",
+  tag = "auth",
   request_body = ResetPasswordUpdateRequest,
   responses(
     (status = 200, description = "Success.")

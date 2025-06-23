@@ -26,6 +26,7 @@ pub struct RefreshResponse {
 #[utoipa::path(
   post,
   path = "/refresh",
+  tag = "auth",
   request_body = RefreshRequest,
   responses(
     (status = 200, description = "Refreshed auth tokens.", body = RefreshResponse)

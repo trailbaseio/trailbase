@@ -50,10 +50,11 @@ pub struct LoginResponse {
   pub csrf_token: String,
 }
 
-/// Logs in user by email and password.
+/// Log in users by email and password.
 #[utoipa::path(
   post,
   path = "/login",
+  tag= "auth",
   params(LoginQuery),
   request_body = LoginRequest,
   responses(
@@ -198,6 +199,7 @@ pub struct LoginStatusResponse {
 #[utoipa::path(
   get,
   path = "/status",
+  tag = "auth",
   responses(
     (status = 200, description = "Auth & refresh tokens.", body = LoginStatusResponse)
   )

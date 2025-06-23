@@ -10,7 +10,8 @@ use crate::records::{Permission, RecordError};
 /// Update existing record.
 #[utoipa::path(
   patch,
-  path = "/:name/:record",
+  path = "/{name}/{record}",
+  tag = "records",
   request_body = serde_json::Value,
   responses(
     (status = 200, description = "Successful update.")
