@@ -13,7 +13,10 @@ import type {
 export interface TrailBaseCollectionConfig<
   TItem extends object,
   TKey extends string | number = string | number,
-> extends Omit<CollectionConfig<TItem, TKey>, `sync`> {
+> extends Omit<
+    CollectionConfig<TItem, TKey>,
+    "sync" | "onInsert" | "onUpdate" | "onDelete"
+  > {
   /**
    * TrailBase client.
    */
@@ -37,14 +40,13 @@ export function trailBaseCollectionOptions<TItem extends object>(
   config: TrailBaseCollectionConfig<TItem>,
 ): CollectionConfig<TItem> & { utils: TrailBaseCollectionUtils } {
   const client = config.client;
+  const records = client.records(config.recordApi);
   const getKey = config.getKey;
 
   let coll: Collection<TItem> | undefined;
 
   const sync = {
     sync: (params: Parameters<SyncConfig<TItem>[`sync`]>[0]) => {
-      const records = client.records(config.recordApi);
-
       const { collection, begin, write, commit } = params;
       coll = collection;
 
@@ -119,12 +121,30 @@ export function trailBaseCollectionOptions<TItem extends object>(
   return {
     sync,
     getKey,
-    onInsert: config.onInsert,
-    onUpdate: config.onUpdate,
-    onDelete: config.onDelete,
+    onInsert: async (params): Promise<(number | string)[]> => {
+      console.debug("onInsert");
+
+      const inserts = params.transaction.mutations.map((tx) => {
+        const { type, changes } = tx;
+        console.assert(type === "insert");
+        return changes as TItem;
+      });
+
+      const ids = await records.createBulk(inserts);
+      return ids;
+    },
+    onUpdate: async (params) => {
+      console.error("Not implemented: onUpdate", params);
+    },
+    onDelete: async (params) => {
+      console.error("Not implemented: onDelete", params);
+    },
     utils: {
+      // NOTE: Refetch shouldn't be necessary, we'll see. It may still be
+      // necessary if subscriptions gets temorarily disconnected and changes
+      // get lost.
       refetch: async () => {
-        console.warn(`refetch noop`, coll);
+        console.warn(`Not implemented: refetch`, coll);
       },
     },
   };

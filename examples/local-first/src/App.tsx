@@ -3,6 +3,7 @@ import {
   useLiveQuery,
   useOptimisticMutation,
   createCollection,
+  type MutationFn,
 } from "@tanstack/react-db";
 import { queryCollectionOptions } from "@tanstack/db-collections";
 
@@ -23,6 +24,27 @@ type Data = {
 
 const queryClient = new QueryClient();
 const useTrailBase = true;
+
+function buildMutationFn<T extends object>(client: Client): MutationFn<T> {
+  return async ({ transaction }) => {
+    for (const tx of transaction.mutations) {
+      const { key, type, changes } = tx;
+
+      if (type === "insert") {
+        // NOTE: We could also do bulk inserts.
+        await client.records("data").create(changes as Data);
+      } else if (type === "update") {
+        await client.records("data").update(key, changes as Data);
+      } else if (type === "delete") {
+        await client.records("data").delete(key);
+      }
+    }
+
+    if (!useTrailBase) {
+      await dataCollection.utils.refetch();
+    }
+  };
+}
 
 const dataCollection = createCollection(
   useTrailBase
@@ -52,13 +74,8 @@ function App() {
   );
 
   // Define mutations
-  const addData = useOptimisticMutation({
-    mutationFn: async ({ transaction }) => {
-      const { changes: newData } = transaction.mutations[0];
-      await client.records("data").create(newData as Data);
-
-      await dataCollection.utils.refetch();
-    },
+  const _addData = useOptimisticMutation({
+    mutationFn: buildMutationFn(client),
   });
 
   function handleSubmit(e: FormEvent) {
@@ -71,15 +88,19 @@ function App() {
     const text = formJson.text as string;
 
     if (text) {
-      addData.mutate(() => {
-        dataCollection.insert({
-          id: null,
-          updated: null,
-          data: formJson.text as string,
-        });
+      dataCollection.insert({
+        id: null,
+        updated: null,
+        data: formJson.text as string,
       });
 
-      console.log(formJson);
+      // addData.mutate(() => {
+      //   dataCollection.insert({
+      //     id: null,
+      //     updated: null,
+      //     data: formJson.text as string,
+      //   });
+      // });
     }
   }
 
