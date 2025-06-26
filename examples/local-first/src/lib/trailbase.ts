@@ -1,11 +1,7 @@
 import { Client } from "trailbase";
 
-import type {
-  Collection,
-  CollectionConfig,
-  SyncConfig,
-  UtilsRecord,
-} from "@tanstack/db";
+import type { CollectionConfig, SyncConfig, UtilsRecord } from "@tanstack/db";
+import { Store } from "@tanstack/store";
 
 /**
  * Configuration interface for TrailbaseCollection
@@ -43,14 +39,63 @@ export function trailBaseCollectionOptions<TItem extends object>(
   const records = client.records(config.recordApi);
   const getKey = config.getKey;
 
-  let coll: Collection<TItem> | undefined;
+  const seenIds = new Store(new Map<string, number>());
 
+  const awaitIds = (
+    ids: string[],
+    timeout: number = 120 * 1000,
+  ): Promise<void> => {
+    const completed = (value: Map<string, number>) =>
+      ids.every((id) => value.has(id));
+    if (completed(seenIds.state)) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        unsubscribe();
+        reject(new Error(`Timeout waiting for ids: ${ids}`));
+      }, timeout);
+
+      const unsubscribe = seenIds.subscribe((value) => {
+        if (completed(value.currentVal)) {
+          clearTimeout(timeoutId);
+          unsubscribe();
+          resolve();
+        }
+      });
+    });
+  };
+
+  const weakSeenIds = new WeakRef(seenIds);
+  const cleanupTimer = setInterval(() => {
+    const seen = weakSeenIds.deref();
+    if (seen) {
+      seen.setState((curr) => {
+        const now = Date.now();
+        let anyExpired = false;
+        const notExpired = curr.entries().filter(([_, v]) => {
+          const expired = now - v > 300 * 1000;
+          anyExpired = anyExpired || expired;
+          return !expired;
+        });
+
+        if (anyExpired) {
+          return new Map(notExpired);
+        }
+        return curr;
+      });
+    } else {
+      clearInterval(cleanupTimer);
+    }
+  }, 120 * 1000);
+
+  type SyncParams = Parameters<SyncConfig<TItem>[`sync`]>[0];
+  let syncParams: SyncParams | undefined;
   const sync = {
-    sync: (params: Parameters<SyncConfig<TItem>[`sync`]>[0]) => {
-      const { collection, begin, write, commit } = params;
-      coll = collection;
-
-      console.debug("sync", params);
+    sync: (params: SyncParams) => {
+      syncParams = params;
+      const { begin, write, commit } = params;
 
       // Initial fetch.
       async function initialFetch() {
@@ -91,22 +136,28 @@ export function trailBaseCollectionOptions<TItem extends object>(
           console.debug(`Event: ${JSON.stringify(event)}`);
 
           begin();
+          let value: TItem | undefined;
           if ("Insert" in event) {
-            const value = event.Insert as TItem;
-            // const _key = getKey(value);
+            value = event.Insert as TItem;
             write({ type: "insert", value });
           } else if ("Delete" in event) {
-            const value = event.Delete as TItem;
-            // const _key = getKey(value);
+            value = event.Delete as TItem;
             write({ type: "delete", value });
           } else if ("Update" in event) {
-            const value = event.Update as TItem;
-            // const _key = getKey(value);
+            value = event.Update as TItem;
             write({ type: "update", value });
           } else {
             console.error(`Error: ${event.Error}`);
           }
           commit();
+
+          if (value) {
+            seenIds.setState((curr) => {
+              const newIds = new Map(curr);
+              newIds.set(String(getKey(value)), Date.now());
+              return newIds;
+            });
+          }
         }
       }
 
@@ -122,29 +173,65 @@ export function trailBaseCollectionOptions<TItem extends object>(
     sync,
     getKey,
     onInsert: async (params): Promise<(number | string)[]> => {
-      console.debug("onInsert");
+      const ids = await records.createBulk(
+        params.transaction.mutations.map((tx) => {
+          const { type, changes } = tx;
+          if (type !== "insert") {
+            throw new Error(`Expected 'insert', got: ${type}`);
+          }
+          return changes as TItem;
+        }),
+      );
 
-      const inserts = params.transaction.mutations.map((tx) => {
-        const { type, changes } = tx;
-        console.assert(type === "insert");
-        return changes as TItem;
-      });
+      // The optimistic mutation overlay is removed on return, so at this point
+      // we have to ensure that the new record was properly added to the local
+      // DB by the subscription.
+      await awaitIds(ids.map((id) => String(id)));
 
-      const ids = await records.createBulk(inserts);
       return ids;
     },
     onUpdate: async (params) => {
-      console.error("Not implemented: onUpdate", params);
+      const ids: string[] = await Promise.all(
+        params.transaction.mutations.map(async (tx) => {
+          const { type, changes, key } = tx;
+          if (type !== "update") {
+            throw new Error(`Expected 'update', got: ${type}`);
+          }
+
+          await records.update(key, changes);
+          return String(key);
+        }),
+      );
+
+      // The optimistic mutation overlay is removed on return, so at this point
+      // we have to ensure that the new record was properly updated in the local
+      // DB by the subscription.
+      await awaitIds(ids);
     },
     onDelete: async (params) => {
-      console.error("Not implemented: onDelete", params);
+      const ids: string[] = await Promise.all(
+        params.transaction.mutations.map(async (tx) => {
+          const { type, key } = tx;
+          if (type !== "delete") {
+            throw new Error(`Expected 'delete', got: ${type}`);
+          }
+
+          await records.delete(key);
+          return String(key);
+        }),
+      );
+
+      // The optimistic mutation overlay is removed on return, so at this point
+      // we have to ensure that the new record was properly updated in the local
+      // DB by the subscription.
+      await awaitIds(ids);
     },
     utils: {
       // NOTE: Refetch shouldn't be necessary, we'll see. It may still be
-      // necessary if subscriptions gets temorarily disconnected and changes
+      // necessary if subscriptions gets temporarily disconnected and changes
       // get lost.
       refetch: async () => {
-        console.warn(`Not implemented: refetch`, coll);
+        console.warn(`Not implemented: refetch`, syncParams?.collection);
       },
     },
   };
