@@ -8,6 +8,7 @@ import type {
 } from "@tanstack/solid-table";
 import { createWritableMemo } from "@solid-primitives/memo";
 import { createColumnHelper } from "@tanstack/solid-table";
+import type { Row } from "@tanstack/solid-table";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { asyncBase64Encode } from "trailbase";
 
@@ -593,15 +594,19 @@ function RowDataTable(props: {
                   }
                   onRowSelection={
                     mutable()
-                      ? (_idx: number, row: RowData, value: boolean) => {
-                          const rows = new Set(selectedRows());
-                          const rowId = row[pkColumnIndex()] as string;
-                          if (value) {
-                            rows.add(rowId);
-                          } else {
-                            rows.delete(rowId);
+                      ? (rows: Row<RowData>[], value: boolean) => {
+                          const newSelection = new Set(selectedRows());
+                          for (const row of rows) {
+                            const rowId = row.original[
+                              pkColumnIndex()
+                            ] as string;
+                            if (value) {
+                              newSelection.add(rowId);
+                            } else {
+                              newSelection.delete(rowId);
+                            }
                           }
-                          setSelectedRows(rows);
+                          setSelectedRows(newSelection);
                         }
                       : undefined
                   }
@@ -644,20 +649,17 @@ function RowDataTable(props: {
             variant="destructive"
             disabled={selectedRows().size === 0}
             onClick={() => {
-              const ids = Array.from(selectedRows());
+              const ids = [...selectedRows()];
               if (ids.length === 0) {
                 return;
               }
 
+              setSelectedRows(new Set<string>());
               deleteRows(table().name.name, {
                 primary_key_column: columns()[pkColumnIndex()].name,
                 values: ids,
               })
-                // eslint-disable-next-line solid/reactivity
-                .then(() => {
-                  setSelectedRows(new Set<string>());
-                  rowsRefetch();
-                })
+                .finally(rowsRefetch)
                 .catch(console.error);
             }}
           >
@@ -868,18 +870,17 @@ export function TablePane(props: {
                         onRowSelection={
                           hidden()
                             ? undefined
-                            : (
-                                _idx: number,
-                                index: TableIndex,
-                                value: boolean,
-                              ) => {
-                                const rows = new Set(selectedIndexes());
-                                if (value) {
-                                  rows.add(index.name.name);
-                                } else {
-                                  rows.delete(index.name.name);
+                            : (rows: Row<TableIndex>[], value: boolean) => {
+                                const newSelection = new Set(selectedIndexes());
+                                for (const row of rows) {
+                                  const name = row.original.name.name;
+                                  if (value) {
+                                    newSelection.add(name);
+                                  } else {
+                                    newSelection.delete(name);
+                                  }
                                 }
-                                setSelectedIndexes(rows);
+                                setSelectedIndexes(newSelection);
                               }
                         }
                       />

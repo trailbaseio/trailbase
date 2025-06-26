@@ -1,6 +1,7 @@
 import {
   For,
   Show,
+  createEffect,
   createMemo,
   createSignal,
   splitProps,
@@ -14,9 +15,11 @@ import {
 } from "@tanstack/solid-table";
 import type {
   ColumnDef,
-  Table as TableType,
-  PaginationState,
   OnChangeFn,
+  PaginationState,
+  Row,
+  RowSelectionState,
+  Table as TableType,
 } from "@tanstack/solid-table";
 
 import { Button } from "@/components/ui/button";
@@ -60,13 +63,18 @@ type Props<TData, TValue> = {
   pagination?: PaginationState;
   onPaginationChange?: OnChangeFn<PaginationState>;
 
-  onRowSelection?: (idx: number, row: TData, value: boolean) => void;
+  onRowSelection?: (rows: Row<TData>[], value: boolean) => void;
   onRowClick?: (idx: number, row: TData) => void;
 };
 
 export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
   const [local] = splitProps(props, ["columns", "data"]);
-  const [rowSelection, setRowSelection] = createSignal({});
+  const [rowSelection, setRowSelection] = createSignal<RowSelectionState>({});
+  createEffect(() => {
+    // NOTE: because we use our own state for row selection, reset it when data changes.
+    local.data();
+    setRowSelection({});
+  });
 
   const paginationEnabled = () => props.onPaginationChange !== undefined;
   const [paginationState, setPaginationState] =
@@ -82,7 +90,7 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
       };
     });
 
-  const columns = createMemo(() => {
+  const columns = () => {
     const onRowSelection = props.onRowSelection;
     if (!onRowSelection) {
       return local.columns();
@@ -93,18 +101,28 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
         id: "select",
         header: (ctx) => (
           <Checkbox
-            indeterminate={ctx.table.getIsSomePageRowsSelected()}
             checked={ctx.table.getIsAllPageRowsSelected()}
-            onChange={(value) => ctx.table.toggleAllPageRowsSelected(!!value)}
+            onChange={(value: boolean) => {
+              console.debug(
+                "Select all",
+                value,
+                ctx.table.getIsSomeRowsSelected(),
+              );
+              ctx.table.toggleAllPageRowsSelected(value);
+
+              const allRows = ctx.table.getRowModel();
+              onRowSelection(allRows.rows, value);
+            }}
             aria-label="Select all"
           />
         ),
         cell: (ctx) => (
           <Checkbox
             checked={ctx.row.getIsSelected()}
-            onChange={(value) => {
-              onRowSelection(ctx.row.index, ctx.row.original, value);
+            onChange={(value: boolean) => {
               ctx.row.toggleSelected(value);
+
+              onRowSelection([ctx.row], value);
             }}
             aria-label="Select row"
             onClick={(event: Event) => {
@@ -118,13 +136,13 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
       } as ColumnDef<TData, TValue>,
       ...local.columns(),
     ];
-  });
+  };
 
-  const table = createMemo(() =>
-    createSolidTable({
-      get data() {
-        return local.data() || [];
-      },
+  const table = createMemo(() => {
+    console.debug("table data rebuild");
+
+    return createSolidTable({
+      data: local.data() || [],
       state: {
         pagination: paginationState(),
         rowSelection: rowSelection(),
@@ -136,7 +154,7 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
       // enableColumnResizing: true,
       // columnResizeMode: 'onChange',
 
-      // pagination {
+      // pagination:
       manualPagination: paginationEnabled(),
       onPaginationChange: (state) => {
         setPaginationState(state);
@@ -146,7 +164,6 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
         }
       },
       rowCount: props.rowCount,
-      // } pagination
 
       // Just means, the input data is already filtered.
       manualFiltering: true,
@@ -157,10 +174,11 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
       // NOTE: In our current setup this causes infinite reload cycles when paginating.
       autoResetPageIndex: false,
 
+      enableRowSelection: true,
       enableMultiRowSelection: props.onRowSelection ? true : false,
       onRowSelectionChange: setRowSelection,
-    }),
-  );
+    });
+  });
 
   return (
     <>
