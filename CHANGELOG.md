@@ -1,3 +1,9 @@
+## v0.14.4
+
+* Improve OpenAPI definitions.
+* Fix multi-row selection in Admin UI's table view.
+* Update dependencies.
+
 ## v0.14.3
 
 * Fix issue with listing records from `VIEW`s. We cannot rely on `_rowid_`,
