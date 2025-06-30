@@ -12,10 +12,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tanstack/db": "^0.0.12",
-    "@tanstack/db-collections": "^0.0.15",
+    "@tanstack/db": "^0.0.13",
+    "@tanstack/db-collections": "^0.0.16",
     "@tanstack/query-core": "^5.81.5",
-    "@tanstack/react-db": "^0.0.12",
+    "@tanstack/react-db": "^0.0.13",
     "@tanstack/store": "^0.7.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

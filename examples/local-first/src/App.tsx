@@ -1,7 +1,6 @@
 import { QueryClient } from "@tanstack/query-core";
 import {
   useLiveQuery,
-  useOptimisticMutation,
   createCollection,
   type MutationFn,
 } from "@tanstack/react-db";
@@ -73,11 +72,6 @@ function App() {
       .select(`@id`, `@updated`, `@data`),
   );
 
-  // Define mutations
-  const _addData = useOptimisticMutation({
-    mutationFn: buildMutationFn(client),
-  });
-
   function handleSubmit(e: FormEvent) {
     e.preventDefault(); // Don't reload the page.
 
@@ -93,14 +87,6 @@ function App() {
         updated: null,
         data: formJson.text as string,
       });
-
-      // addData.mutate(() => {
-      //   dataCollection.insert({
-      //     id: null,
-      //     updated: null,
-      //     data: formJson.text as string,
-      //   });
-      // });
     }
   }
 
