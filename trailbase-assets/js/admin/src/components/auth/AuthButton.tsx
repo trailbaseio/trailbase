@@ -5,7 +5,7 @@ import { type User } from "trailbase";
 
 import { urlSafeBase64ToUuid } from "@/lib/utils";
 import { $user, client } from "@/lib/fetch";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -69,7 +69,7 @@ export function AuthButton() {
 
   // For our dev server setup we assume that a TrailBase instance is running at ":4000", otherwise
   // we query APIs relative to the origin's root path.
-  const redirect = import.meta.env.DEV
+  const logoutRedirect = import.meta.env.DEV
     ? "http://localhost:4000/_/auth/logout?redirect_to=http://localhost:3000/_/admin/"
     : "/_/auth/logout?redirect_to=/_/admin/";
 
@@ -91,9 +91,12 @@ export function AuthButton() {
         <DialogFooter>
           <a
             type="button"
-            href={redirect}
+            href={logoutRedirect}
             class={buttonVariants({ variant: "default" })}
-            onClick={() => client.logout()}
+            onClick={() => {
+              client.logout();
+              window.location.reload();
+            }}
           >
             Logout
           </a>

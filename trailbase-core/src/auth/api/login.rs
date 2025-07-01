@@ -29,6 +29,7 @@ use crate::util::urlencode;
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub(crate) struct LoginQuery {
   pub redirect_to: Option<String>,
+  pub admin: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, TS, ToSchema)]
@@ -98,14 +99,21 @@ pub(crate) async fn login_handler(
         remove_cookie(&cookies, COOKIE_AUTH_TOKEN);
         remove_cookie(&cookies, COOKIE_REFRESH_TOKEN);
 
-        let url = format!(
-          "/_/auth/login?alert={msg}&{redirect_to}",
-          msg = urlencode(&format!("Login Failed: {status}")),
-          redirect_to = redirect.map_or_else(
-            || "".to_string(),
-            |r| format!("redirect_to={}", urlencode(&r))
-          ),
-        );
+        let url = if query.admin.unwrap_or(false) {
+          format!(
+            "/_/admin/?alert={msg}&{redirect_to}",
+            msg = urlencode(&format!("Login Failed: {status}")),
+            redirect_to = redirect.map_or_else(
+              || "".to_string(),
+              |r| format!("redirect_to={}", urlencode(&r))
+            ),
+          )
+        } else {
+          format!(
+            "/_/auth/login?alert={msg}",
+            msg = urlencode(&format!("Login Failed: {status}")),
+          )
+        };
 
         return Ok(Redirect::to(&url).into_response());
       }

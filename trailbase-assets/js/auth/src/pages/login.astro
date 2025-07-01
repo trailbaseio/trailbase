@@ -17,7 +17,7 @@ const BASE_URL = import.meta.env.BASE_URL;
     <form
       id="login-form"
       class="flex flex-col gap-2"
-      action={`${formBaseAction}{% if let Some(r) = redirect_to %}?redirect_to={{ r }}{% endif %}`}
+      action={`${formBaseAction}?admin={{ admin }}{% if let Some(r) = redirect_to %}&redirect_to={{ r }}{% endif %}`}
       data-base_action={formBaseAction}
       data-base_url={BASE_URL}
       method="post"

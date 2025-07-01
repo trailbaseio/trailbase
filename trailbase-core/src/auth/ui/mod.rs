@@ -48,6 +48,7 @@ async fn ui_login_handler(
     alert: query.alert.as_deref().unwrap_or_default(),
     redirect_to: query.redirect_to.as_deref(),
     enable_registration: !state.access_config(|c| c.auth.disable_password_auth.unwrap_or(false)),
+    admin: false,
   }
   .render();
 

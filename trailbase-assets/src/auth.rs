@@ -7,6 +7,7 @@ pub struct LoginTemplate<'a> {
   pub alert: &'a str,
   pub redirect_to: Option<&'a str>,
   pub enable_registration: bool,
+  pub admin: bool,
 }
 
 #[derive(Template)]
@@ -79,6 +80,7 @@ mod tests {
       alert,
       redirect_to: Some(redirect_to),
       enable_registration: true,
+      admin: false,
     }
     .render()
     .unwrap();

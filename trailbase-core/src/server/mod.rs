@@ -435,7 +435,9 @@ async fn assert_admin_ui_access(
           ""
         }
       }),
+      redirect_to: None,
       enable_registration: false,
+      admin: true,
     }
     .render();
 

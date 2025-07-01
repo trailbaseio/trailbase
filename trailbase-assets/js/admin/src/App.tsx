@@ -1,11 +1,10 @@
-import { lazy, type Component } from "solid-js";
+import { createEffect, lazy, type Component } from "solid-js";
 import { Router, Route, type RouteSectionProps } from "@solidjs/router";
 import { useStore } from "@nanostores/solid";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 
 import { TablePage } from "@/components/tables/TablesPage";
 import { AccountsPage } from "@/components/accounts/AccountsPage";
-import { LoginPage } from "@/components/auth/LoginPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { IndexPage } from "@/components/IndexPage";
 import { NavBar } from "@/components/NavBar";
@@ -36,6 +35,14 @@ const LazyErdPage = lazy(() => import("@/components/erd/ErdPage"));
 const App: Component = () => {
   const user = useStore($user);
 
+  createEffect(() => {
+    // We rely on server-side redirect to admin's auth page. It thus doesn't
+    // work with the dev-server.
+    if (!import.meta.env.DEV && user() === undefined) {
+      window.location.reload();
+    }
+  });
+
   return (
     <QueryClientProvider client={queryClient}>
       {user() ? (
@@ -54,9 +61,7 @@ const App: Component = () => {
           </Router>
         </ErrorBoundary>
       ) : (
-        <ErrorBoundary>
-          <LoginPage />
-        </ErrorBoundary>
+        <p>Not logged in</p>
       )}
     </QueryClientProvider>
   );
