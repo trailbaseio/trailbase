@@ -17,7 +17,7 @@ const BASE_URL = import.meta.env.BASE_URL;
     <form
       id="login-form"
       class="flex flex-col gap-2"
-      action={formBaseAction}
+      action={`${formBaseAction}{% if let Some(r) = redirect_to %}?redirect_to={{ r }}{% endif %}`}
       data-base_action={formBaseAction}
       data-base_url={BASE_URL}
       method="post"
@@ -75,7 +75,7 @@ const BASE_URL = import.meta.env.BASE_URL;
 </Form>
 
 {
-  // For DEV we need to fix up redirects to point back to dev server.
+  // For DEV we need to fix up redirects to point back to dev server's auth APIs.
   import.meta.env.DEV && (
     <script is:inline>
       const urlParams = new URLSearchParams(window.location.search);

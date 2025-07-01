@@ -5,6 +5,7 @@ use askama::Template;
 pub struct LoginTemplate<'a> {
   pub state: String,
   pub alert: &'a str,
+  pub redirect_to: Option<&'a str>,
   pub enable_registration: bool,
 }
 
@@ -71,16 +72,19 @@ mod tests {
   fn test_login_template_escaping() {
     let state = hidden_input("TEST", Some("FOO"));
     let alert = "<><>";
+    let redirect_to = "http://localhost:42";
 
     let template = LoginTemplate {
       state: state.clone(),
       alert,
+      redirect_to: Some(redirect_to),
       enable_registration: true,
     }
     .render()
     .unwrap();
 
     assert!(template.contains(&state), "{template}"); // Not escaped.
+    assert!(template.contains(&redirect_to), "{template}"); // Not escaped.
     assert!(!template.contains(alert), "{template}"); // Is escaped.
   }
 
