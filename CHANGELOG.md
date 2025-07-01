@@ -1,3 +1,7 @@
+## v0.14.5
+
+* Fix `&redirect_to=` propagation for password-based login.
+
 ## v0.14.4
 
 * Improve OpenAPI definitions.
