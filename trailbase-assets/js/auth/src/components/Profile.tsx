@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { showToast } from "@/components/ui/toast";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   Dialog,
@@ -47,13 +48,20 @@ function DeleteAccountButton(props: { client: Client }) {
 
           <Button
             variant="destructive"
-            onClick={() =>
-              (async () => {
+            onClick={async () => {
+              try {
                 await props.client.deleteUser();
-                setOpen(false);
                 window.location.replace("/_/auth/login");
-              })().catch(console.error)
-            }
+              } catch (err) {
+                showToast({
+                  title: "User deletion",
+                  description: `${err}`,
+                  variant: "error",
+                });
+              } finally {
+                setOpen(false);
+              }
+            }}
           >
             Delete
           </Button>
