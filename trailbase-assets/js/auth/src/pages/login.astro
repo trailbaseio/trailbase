@@ -50,10 +50,12 @@ const BASE_URL = import.meta.env.BASE_URL;
         />
       </div>
 
+      {"{% if !admin -%}"}
       <div class="flex justify-center gap-1 text-sm">
         <span>Forgot your password?</span>
         <a tabindex="5" href={`${BASE_URL}/reset_password/request`} class="text-primary">Reset</a>
       </div>
+      {"{%- endif %}"}
 
       <div class="my-2 flex justify-between">
         {"{% if enable_registration -%}"}
