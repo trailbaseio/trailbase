@@ -1,5 +1,4 @@
 use axum::extract::State;
-use axum_extra::protobuf::Protobuf;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
@@ -7,6 +6,7 @@ use crate::config::{
   proto::{GetConfigResponse, hash_config},
   redact_secrets,
 };
+use crate::extract::protobuf::Protobuf;
 
 pub async fn get_config_handler(
   State(state): State<AppState>,

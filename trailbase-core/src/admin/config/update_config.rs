@@ -1,12 +1,12 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum_extra::protobuf::Protobuf;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::config::proto::{UpdateConfigRequest, Vault};
 use crate::config::{merge_vault_and_env, redact_secrets};
+use crate::extract::protobuf::Protobuf;
 
 pub async fn update_config_handler(
   State(state): State<AppState>,
