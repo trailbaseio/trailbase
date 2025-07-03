@@ -7,7 +7,7 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 use trailbase_assets::AssetService;
 use trailbase_assets::auth::{
-  ChangeEmailTemplate, ChangePasswordTemplate, LoginTemplate, RegisterTemplate,
+  ChangeEmailTemplate, ChangePasswordTemplate, LoginTemplate, OAuthProvider, RegisterTemplate,
   ResetPasswordRequestTemplate, ResetPasswordUpdateTemplate, hidden_input, redirect_to,
 };
 
@@ -32,6 +32,22 @@ async fn ui_login_handler(
     return Redirect::to("/_/auth/profile").into_response();
   }
 
+  let oauth_providers: Vec<_> = state
+    .auth_options()
+    .list_oauth_providers()
+    .into_iter()
+    .map(|p| OAuthProvider {
+      img_name: match p.name.as_str() {
+        "discord" | "facebook" | "gitlab" | "google" | "microsoft" => {
+          format!("{name}.svg", name = p.name)
+        }
+        _ => "oidc.svg".to_string(),
+      },
+      name: p.name,
+      display_name: p.display_name,
+    })
+    .collect();
+
   let form_state = indoc::formatdoc!(
     r#"
     {redirect_to}
@@ -48,6 +64,7 @@ async fn ui_login_handler(
     alert: query.alert.as_deref().unwrap_or_default(),
     redirect_to: query.redirect_to.as_deref(),
     enable_registration: !state.access_config(|c| c.auth.disable_password_auth.unwrap_or(false)),
+    oauth_providers: &oauth_providers,
   }
   .render();
 

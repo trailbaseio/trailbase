@@ -29,6 +29,10 @@ pub(crate) async fn list_configured_providers_handler(
   let auth_options = app_state.auth_options();
 
   return Ok(Json(ConfiguredOAuthProvidersResponse {
-    providers: auth_options.list_oauth_providers(),
+    providers: auth_options
+      .list_oauth_providers()
+      .into_iter()
+      .map(|p| (p.name, p.display_name))
+      .collect(),
   }));
 }

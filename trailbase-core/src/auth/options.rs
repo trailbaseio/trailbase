@@ -11,6 +11,12 @@ pub struct AuthOptions {
   oauth_providers: HashMap<String, OAuthProviderType>,
 }
 
+#[derive(Default)]
+pub struct OAuthProvider {
+  pub name: String,
+  pub display_name: String,
+}
+
 impl AuthOptions {
   pub fn from_config(config: AuthConfig) -> Self {
     return Self {
@@ -44,11 +50,14 @@ impl AuthOptions {
   }
 
   /// Returns list of tuples with (name, display_name);
-  pub fn list_oauth_providers(&self) -> Vec<(String, String)> {
+  pub fn list_oauth_providers(&self) -> Vec<OAuthProvider> {
     return self
       .oauth_providers
       .values()
-      .map(|p| (p.name().to_string(), p.display_name().to_string()))
+      .map(|p| OAuthProvider {
+        name: p.name().to_string(),
+        display_name: p.display_name().to_string(),
+      })
       .collect();
   }
 }

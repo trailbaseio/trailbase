@@ -120,7 +120,7 @@ async fn test_oauth() {
   let auth_options = state.auth_options();
   let providers = auth_options.list_oauth_providers();
   assert_eq!(providers.len(), 1);
-  assert_eq!(providers[0].0, TestOAuthProvider::NAME);
+  assert_eq!(providers[0].name, TestOAuthProvider::NAME);
 
   let Json(response) = list_providers::list_configured_providers_handler(State(state.clone()))
     .await

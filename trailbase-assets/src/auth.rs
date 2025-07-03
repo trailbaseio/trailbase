@@ -1,5 +1,11 @@
 use askama::Template;
 
+pub struct OAuthProvider {
+  pub name: String,
+  pub display_name: String,
+  pub img_name: String,
+}
+
 #[derive(Template)]
 #[template(path = "login/index.html")]
 pub struct LoginTemplate<'a> {
@@ -7,6 +13,7 @@ pub struct LoginTemplate<'a> {
   pub alert: &'a str,
   pub redirect_to: Option<&'a str>,
   pub enable_registration: bool,
+  pub oauth_providers: &'a [OAuthProvider],
 }
 
 #[derive(Template)]
@@ -79,6 +86,7 @@ mod tests {
       alert,
       redirect_to: Some(redirect_to),
       enable_registration: true,
+      oauth_providers: &[],
     }
     .render()
     .unwrap();
