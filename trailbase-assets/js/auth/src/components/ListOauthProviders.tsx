@@ -66,7 +66,7 @@ export function ConfiguredOAuthProviders() {
               return (
                 <a
                   class={cn("w-full", buttonVariants({ variant: "outline" }))}
-                  href={`${AUTH_API}/oauth/${name}/login`}
+                  href={`${AUTH_API}/oauth/${name}/login${window.location.search}`}
                 >
                   <div class="flex items-center gap-2">
                     {image && (
