@@ -1,3 +1,10 @@
+## v0.14.6
+
+* Render OAuth login options on the server rather than the client. Reduces the
+  need for client JS.
+* Fix `&redirect_to=` propagation for OAuth login.
+* Denormalize `axum_extra::protobuf` and update Rust deps.
+
 ## v0.14.5
 
 * Fix `&redirect_to=` propagation for password-based login.
