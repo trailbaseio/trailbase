@@ -456,7 +456,7 @@ impl Connection {
   /// Convenience API for (un)setting a new pre-update hook.
   pub async fn add_preupdate_hook(
     &self,
-    hook: Option<impl (Fn(Action, &str, &str, &PreUpdateCase)) + Send + Sync + 'static>,
+    hook: Option<impl Fn(Action, &str, &str, &PreUpdateCase) + Send + Sync + 'static>,
   ) -> Result<()> {
     return self
       .call(move |conn| {

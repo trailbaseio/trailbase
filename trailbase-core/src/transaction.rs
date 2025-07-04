@@ -81,7 +81,7 @@ impl TransactionLog {
       })
       .await
       .map_err(|err| {
-        error!("Migration aborted with: {err} for {}", sql);
+        error!("Migration aborted with: {err} for {sql}");
         err
       })?;
 

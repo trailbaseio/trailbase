@@ -15,13 +15,13 @@ fn test_https_serving() {
   // Generate a certificate valid for "trailbase.io" and "localhost".
   let subject_alt_names = vec!["trailbase.io".to_string(), "localhost".to_string()];
 
-  let CertifiedKey { cert, key_pair } = generate_simple_self_signed(subject_alt_names).unwrap();
+  let CertifiedKey { cert, signing_key } = generate_simple_self_signed(subject_alt_names).unwrap();
 
   let _ = runtime.block_on(async move {
     let port = 4025;
     let address = format!("127.0.0.1:{port}");
 
-    let tls_pem = key_pair.serialize_pem();
+    let tls_pem = signing_key.serialize_pem();
     let tls_key = PrivateKeyDer::from_pem_slice(tls_pem.as_bytes()).unwrap();
 
     let app = Server::init(ServerOptions {

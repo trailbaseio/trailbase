@@ -226,14 +226,14 @@ fn get_sender(state: &AppState) -> Result<Mailbox, EmailError> {
   let address = sender_address.unwrap_or_else(|| fallback_sender(&state.site_url()));
 
   if let Some(ref name) = sender_name {
-    return Ok(format!("{} <{}>", name, address).parse::<Mailbox>()?);
+    return Ok(format!("{name} <{address}>").parse::<Mailbox>()?);
   }
   return Ok(address.parse::<Mailbox>()?);
 }
 
 fn fallback_sender(site_url: &url::Url) -> String {
   if let Some(host) = site_url.host() {
-    return format!("noreply@{}", host);
+    return format!("noreply@{host}");
   }
   return "noreply@localhost".to_string();
 }

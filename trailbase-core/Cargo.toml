@@ -107,4 +107,4 @@ quoted_printable = "0.5.1"
 schemars = "1.0.0"
 temp-dir = "0.1.13"
 tower = { version = "0.5.0", features = ["util"] }
-rcgen = "0.13.2"
+rcgen = "0.14.1"

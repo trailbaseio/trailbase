@@ -30,15 +30,12 @@ pub fn migrate<T: Transaction>(
   for mut migration in migrations.into_iter() {
     if let Target::Version(input_target) | Target::FakeVersion(input_target) = target {
       if input_target < migration.version() {
-        log::info!(
-          "stopping at migration: {}, due to user option",
-          input_target
-        );
+        log::info!("stopping at migration: {input_target}, due to user option");
         break;
       }
     }
 
-    log::info!("applying migration: {}", migration);
+    log::info!("applying migration: {migration}");
     migration.set_applied();
     let insert_migration = insert_migration_query(&migration, migration_table_name);
     let migration_sql = migration.sql().expect("sql must be Some!").to_string();

@@ -29,7 +29,7 @@ pub(crate) fn verify_migrations(
       if abort_missing {
         return Err(Error::new(Kind::MissingVersion(app.clone()), None));
       } else {
-        log::warn!(target: "trailbase_refinery::traits::missing", "migration {} is missing from the filesystem", app);
+        log::warn!(target: "trailbase_refinery::traits::missing", "migration {app} is missing from the filesystem");
       }
     }
   }

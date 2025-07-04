@@ -34,15 +34,12 @@ async fn migrate<T: AsyncTransaction>(
   for mut migration in migrations.into_iter() {
     if let Target::Version(input_target) = target {
       if input_target < migration.version() {
-        log::info!(
-          "stopping at migration: {}, due to user option",
-          input_target
-        );
+        log::info!("stopping at migration: {input_target}, due to user option");
         break;
       }
     }
 
-    log::info!("applying migration: {}", migration);
+    log::info!("applying migration: {migration}");
     migration.set_applied();
     let update_query = insert_migration_query(&migration, migration_table_name);
     transaction
@@ -55,7 +52,7 @@ async fn migrate<T: AsyncTransaction>(
       )
       .await
       .migration_err(
-        &format!("error applying migration {}", migration),
+        &format!("error applying migration {migration}"),
         Some(&applied_migrations),
       )?;
     applied_migrations.push(migration);
@@ -105,10 +102,7 @@ async fn migrate_grouped<T: AsyncTransaction>(
   };
 
   if let Target::Version(input_target) = target {
-    log::info!(
-      "stopping at migration: {}, due to user option",
-      input_target
-    );
+    log::info!("stopping at migration: {input_target}, due to user option");
   }
 
   let refs = grouped_migrations.iter().map(AsRef::as_ref);

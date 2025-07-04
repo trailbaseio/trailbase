@@ -89,8 +89,7 @@ pub fn find_migration_files(
                 Some(file_name) if re.is_match(file_name) => true,
                 Some(file_name) => {
                     log::warn!(
-                        "File \"{}\" does not adhere to the migration naming convention. Migrations must be named in the format [U|V]{{1}}__{{2}}.sql or [U|V]{{1}}__{{2}}.rs, where {{1}} represents the migration version and {{2}} the name.",
-                        file_name
+                        "File \"{file_name}\" does not adhere to the migration naming convention. Migrations must be named in the format [U|V]{{1}}__{{2}}.sql or [U|V]{{1}}__{{2}}.rs, where {{1}} represents the migration version and {{2}} the name."
                     );
                     false
                 }

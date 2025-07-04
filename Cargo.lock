@@ -334,9 +334,9 @@ dependencies = [
 
 [[package]]
 name = "async-channel"
-version = "2.3.1"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89b47800b0be77592da0afd425cc03468052844aff33b84e33cc696f64e77b6a"
+checksum = "16c74e56284d2188cabb6ad99603d1ace887a5d7e7b695d01b728155ed9ed427"
 dependencies = [
  "concurrent-queue",
  "event-listener-strategy",
@@ -378,7 +378,7 @@ version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05b1b633a2115cd122d73b955eadd9916c18c8f510ec9cd1686404c60ad1c29c"
 dependencies = [
- "async-channel 2.3.1",
+ "async-channel 2.4.0",
  "async-executor",
  "async-io",
  "async-lock",
@@ -423,7 +423,7 @@ version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cde3f4e40e6021d7acffc90095cbd6dc54cb593903d1de5832f435eb274b85dc"
 dependencies = [
- "async-channel 2.3.1",
+ "async-channel 2.4.0",
  "async-io",
  "async-lock",
  "async-signal",
@@ -924,7 +924,7 @@ version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "703f41c54fc768e63e091340b424302bb1c29ef4aa0c7f10fe849dfb114d29ea"
 dependencies = [
- "async-channel 2.3.1",
+ "async-channel 2.4.0",
  "async-task",
  "futures-io",
  "futures-lite",
@@ -4859,9 +4859,9 @@ dependencies = [
 
 [[package]]
 name = "rcgen"
-version = "0.13.2"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75e669e5202259b5314d1ea5397316ad400819437857b90861765f24c4cf80a2"
+checksum = "218a7fbb357f6da42c9fd3610b1a5128d087d460e5386eaa5040705c464611dc"
 dependencies = [
  "pem",
  "ring",
@@ -5583,9 +5583,9 @@ dependencies = [
 
 [[package]]
 name = "serde_rusqlite"
-version = "0.39.2"
+version = "0.39.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab5457c3fa8a30df47786b725c1c96ecb7944f9c6f834eeec0ba29aa5fdc7e47"
+checksum = "4f7daf08fa3f89e68c02ab5f1a56a74f1c1be50f910bdd214453abd728d06d7f"
 dependencies = [
  "rusqlite",
  "serde",
@@ -6804,7 +6804,7 @@ dependencies = [
  "arc-swap",
  "argon2",
  "askama",
- "async-channel 2.3.1",
+ "async-channel 2.4.0",
  "async-trait",
  "axum 0.8.4",
  "axum-client-ip",

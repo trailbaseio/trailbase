@@ -543,9 +543,9 @@ impl tracing::field::Visit for LogVisitor<'_> {
 
   fn record_debug(&mut self, field: &Field, dbg: &dyn std::fmt::Debug) {
     match field.name() {
-      "method" => self.0.method = format!("{:?}", dbg).as_str().into(),
-      "uri" => self.0.uri = format!("{:?}", dbg),
-      "version" => self.0.version = format!("{:?}", dbg).as_str().into(),
+      "method" => self.0.method = format!("{dbg:?}").as_str().into(),
+      "uri" => self.0.uri = format!("{dbg:?}"),
+      "version" => self.0.version = format!("{dbg:?}").as_str().into(),
       _name => {
         // Skip "messages" and other fields, we only log structured data.
       }

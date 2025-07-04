@@ -25,7 +25,7 @@ impl fmt::Display for Type {
       Type::Versioned => "V",
       Type::Unversioned => "U",
     };
-    write!(f, "{}", version_type)
+    write!(f, "{version_type}")
   }
 }
 
@@ -35,7 +35,7 @@ impl fmt::Debug for Type {
       Type::Versioned => "Versioned",
       Type::Unversioned => "Unversioned",
     };
-    write!(f, "{}", version_type)
+    write!(f, "{version_type}")
   }
 }
 
