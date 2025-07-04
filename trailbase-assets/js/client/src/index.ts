@@ -93,7 +93,7 @@ function shouldRefresh(tokenState: TokenState): string | undefined {
   }
 }
 
-type FetchOptions = RequestInit & {
+export type FetchOptions = RequestInit & {
   throwOnError?: boolean;
 };
 
@@ -139,7 +139,7 @@ export interface FileUpload {
   objectstore_path: string;
 }
 
-type CompareOp =
+export type CompareOp =
   | "equal"
   | "notEqual"
   | "lessThan"
@@ -170,21 +170,21 @@ function formatCompareOp(op: CompareOp): string {
   }
 }
 
-type Filter = {
+export type Filter = {
   column: string;
   op?: CompareOp;
   value: string;
 };
 
-type And = {
+export type And = {
   and: FilterOrComposite[];
 };
 
-type Or = {
+export type Or = {
   or: FilterOrComposite[];
 };
 
-type FilterOrComposite = Filter | And | Or;
+export type FilterOrComposite = Filter | And | Or;
 
 export interface RecordApi<T = Record<string, unknown>> {
   list(opts?: {
