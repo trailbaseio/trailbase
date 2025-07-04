@@ -1,7 +1,7 @@
 import { createSignal, Switch, Match } from "solid-js";
 import { TbUser, TbLogout, TbTrash } from "solid-icons/tb";
 import { useStore } from "@nanostores/solid";
-import { Client, type User } from "trailbase";
+import type { Client, User } from "trailbase";
 
 import { HOST, AVATAR_API } from "@/lib/constants";
 import { $client } from "@/lib/client";
@@ -48,19 +48,21 @@ function DeleteAccountButton(props: { client: Client }) {
 
           <Button
             variant="destructive"
-            onClick={async () => {
-              try {
-                await props.client.deleteUser();
-                window.location.replace("/_/auth/login");
-              } catch (err) {
-                showToast({
-                  title: "User deletion",
-                  description: `${err}`,
-                  variant: "error",
-                });
-              } finally {
-                setOpen(false);
-              }
+            onClick={() => {
+              (async () => {
+                try {
+                  await props.client.deleteUser();
+                  window.location.replace("/_/auth/login");
+                } catch (err) {
+                  showToast({
+                    title: "User deletion",
+                    description: `${err}`,
+                    variant: "error",
+                  });
+                } finally {
+                  setOpen(false);
+                }
+              })();
             }}
           >
             Delete

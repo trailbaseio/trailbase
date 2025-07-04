@@ -1,4 +1,4 @@
-import { Client, type ListResponse } from "trailbase";
+import type { Client, ListResponse } from "trailbase";
 
 export const list = async (client: Client): Promise<ListResponse<object>> =>
   await client.records("movies").list({

@@ -1,5 +1,5 @@
 import { computed, task } from "nanostores";
-import { Client, FetchError } from "trailbase";
+import { type Client, FetchError } from "trailbase";
 
 import type { NewProfile } from "@schema/new_profile";
 import type { Profile } from "@schema/profile";
@@ -9,7 +9,7 @@ export async function createProfile(
   client: Client,
   username: string,
 ): Promise<void> {
-  await client.records("profiles").create<NewProfile>({
+  await client.records<NewProfile>("profiles").create({
     user: client.user()?.id ?? "",
     username,
   });
@@ -26,8 +26,8 @@ export const $profile = computed([$client], (client) =>
     if (client && userId) {
       try {
         const profile = await client
-          .records("profiles_view")
-          .read<Profile>(userId);
+          .records<Profile>("profiles_view")
+          .read(userId);
         return {
           profile,
           missingProfile: false,

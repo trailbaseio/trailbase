@@ -1,6 +1,7 @@
 import { computed } from "nanostores";
 import { persistentAtom } from "@nanostores/persistent";
-import { Client, type Tokens, type User } from "trailbase";
+import type { Client, Tokens, User } from "trailbase";
+import { initClient } from "trailbase";
 
 import { showToast } from "@/components/ui/toast";
 
@@ -13,13 +14,13 @@ const $tokens = persistentAtom<Tokens | null>("auth_tokens", null, {
 });
 export const $user = computed($tokens, (_tokens) => client.user());
 
-function initClient(): Client {
+function buildClient(): Client {
   // For our dev server setup we assume that a TrailBase instance is running at ":4000", otherwise
   // we query APIs relative to the origin's root path.
   const HOST = import.meta.env.DEV
     ? new URL("http://localhost:4000")
     : undefined;
-  const client = Client.init(HOST, {
+  const client = initClient(HOST, {
     tokens: $tokens.get() ?? undefined,
     onAuthChange: (c: Client, _user: User | undefined) => {
       $tokens.set(c.tokens() ?? null);
@@ -31,7 +32,7 @@ function initClient(): Client {
 
   return client;
 }
-export const client = initClient();
+export const client = buildClient();
 
 type FetchOptions = RequestInit & {
   throwOnError?: boolean;

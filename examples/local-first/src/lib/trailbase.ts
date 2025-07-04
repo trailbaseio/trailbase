@@ -1,4 +1,4 @@
-import { Client } from "trailbase";
+import { type RecordApi } from "trailbase";
 
 import type { CollectionConfig, SyncConfig, UtilsRecord } from "@tanstack/db";
 import { Store } from "@tanstack/store";
@@ -14,14 +14,9 @@ export interface TrailBaseCollectionConfig<
     "sync" | "onInsert" | "onUpdate" | "onDelete"
   > {
   /**
-   * TrailBase client.
-   */
-  client: Client;
-
-  /**
    * Record API name
    */
-  recordApi: string;
+  recordApi: RecordApi<TItem>;
 }
 
 export type AwaitTxIdFn = (txId: string, timeout?: number) => Promise<boolean>;
@@ -35,8 +30,6 @@ export interface TrailBaseCollectionUtils extends UtilsRecord {
 export function trailBaseCollectionOptions<TItem extends object>(
   config: TrailBaseCollectionConfig<TItem>,
 ): CollectionConfig<TItem> & { utils: TrailBaseCollectionUtils } {
-  const client = config.client;
-  const records = client.records(config.recordApi);
   const getKey = config.getKey;
 
   const seenIds = new Store(new Map<string, number>());
@@ -99,7 +92,7 @@ export function trailBaseCollectionOptions<TItem extends object>(
 
       // Initial fetch.
       async function initialFetch() {
-        let response = await records.list<TItem>({ count: true });
+        let response = await config.recordApi.list({ count: true });
         let cursor = response.cursor;
         let got = 0;
 
@@ -116,7 +109,7 @@ export function trailBaseCollectionOptions<TItem extends object>(
             write({ type: "insert", value: item as TItem });
           }
 
-          response = await records.list<TItem>({
+          response = await config.recordApi.list({
             pagination: {
               cursor,
               offset: cursor === undefined ? got : undefined,
@@ -130,7 +123,7 @@ export function trailBaseCollectionOptions<TItem extends object>(
 
       // Afterwards subscribe.
       async function subscribe() {
-        const eventStream = await records.subscribe("*");
+        const eventStream = await config.recordApi.subscribe("*");
 
         for await (const event of eventStream) {
           console.debug(`Event: ${JSON.stringify(event)}`);
@@ -173,7 +166,7 @@ export function trailBaseCollectionOptions<TItem extends object>(
     sync,
     getKey,
     onInsert: async (params): Promise<(number | string)[]> => {
-      const ids = await records.createBulk(
+      const ids = await config.recordApi.createBulk(
         params.transaction.mutations.map((tx) => {
           const { type, changes } = tx;
           if (type !== "insert") {
@@ -198,7 +191,7 @@ export function trailBaseCollectionOptions<TItem extends object>(
             throw new Error(`Expected 'update', got: ${type}`);
           }
 
-          await records.update(key, changes);
+          await config.recordApi.update(key, changes);
           return String(key);
         }),
       );
@@ -216,7 +209,7 @@ export function trailBaseCollectionOptions<TItem extends object>(
             throw new Error(`Expected 'delete', got: ${type}`);
           }
 
-          await records.delete(key);
+          await config.recordApi.delete(key);
           return String(key);
         }),
       );

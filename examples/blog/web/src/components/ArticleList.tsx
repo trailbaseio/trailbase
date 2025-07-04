@@ -1,6 +1,6 @@
 import { createResource, createSignal, For, Match, Switch } from "solid-js";
 import { useStore } from "@nanostores/solid";
-import { Client } from "trailbase";
+import type { Client } from "trailbase";
 
 import { $client } from "@/lib/client";
 import { $profile, createProfile } from "@/lib/profile";
@@ -94,7 +94,7 @@ function AssignNewUsername(props: { client: Client }) {
 export function ArticleList() {
   const client = useStore($client);
   const [articles] = createResource(client, async (client) => {
-    const response = await client?.records("articles_view").list<Article>();
+    const response = await client?.records<Article>("articles_view").list();
     return response.records;
   });
   const profile = useStore($profile);

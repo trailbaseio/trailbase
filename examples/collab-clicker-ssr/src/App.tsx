@@ -30,7 +30,7 @@ export function App({ initialCount }: { initialCount?: number }) {
     const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
     const listen = async () => {
-      const client = trailbase.Client.init(window.location.origin);
+      const client = trailbase.initClient(window.location.origin);
       const api = client.records("counter");
 
       const reader = (await api.subscribe(1)).getReader();

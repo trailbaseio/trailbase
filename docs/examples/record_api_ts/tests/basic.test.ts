@@ -1,4 +1,5 @@
-import { Client, type Event } from "trailbase";
+import { initClient } from "trailbase";
+import type { Client, Event } from "trailbase";
 import { expect, test } from "vitest";
 
 import { create } from "../src/create.ts";
@@ -9,7 +10,7 @@ import { list } from "../src/list.ts";
 import { subscribe, subscribeAll } from "../src/subscribe.ts";
 
 async function connect(): Promise<Client> {
-  const client = Client.init("http://localhost:4000");
+  const client = initClient("http://localhost:4000");
   await client.login("admin@localhost", "secret");
   return client;
 }

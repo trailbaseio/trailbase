@@ -1,6 +1,6 @@
-import { Client } from "trailbase";
+import { initClient } from "trailbase";
 
-const client = new Client("http://localhost:4000");
+const client = initClient("http://localhost:4000");
 await client.login("admin@localhost", "secret");
 
 const movies = client.records("movies");

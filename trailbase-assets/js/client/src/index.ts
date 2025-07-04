@@ -186,10 +186,36 @@ type Or = {
 
 type FilterOrComposite = Filter | And | Or;
 
+export interface RecordApi<T = Record<string, unknown>> {
+  list(opts?: {
+    pagination?: Pagination;
+    order?: string[];
+    filters?: FilterOrComposite[];
+    count?: boolean;
+    expand?: string[];
+  }): Promise<ListResponse<T>>;
+
+  read(
+    id: string | number,
+    opt?: {
+      expand?: string[];
+    },
+  ): Promise<T>;
+
+  create(record: T): Promise<string | number>;
+  createBulk(records: T[]): Promise<(string | number)[]>;
+
+  update(id: string | number, record: Partial<T>): Promise<void>;
+
+  delete(id: string | number): Promise<void>;
+
+  subscribe(id: string | number): Promise<ReadableStream<Event>>;
+}
+
 /// Provides CRUD access to records through TrailBase's record API.
-///
-/// TODO: add file upload/download.
-export class RecordApi {
+export class RecordApiImpl<T = Record<string, unknown>>
+  implements RecordApi<T>
+{
   private readonly _path: string;
 
   constructor(
@@ -368,13 +394,44 @@ class ThinClient {
   }
 }
 
-type ClientOptions = {
+export interface ClientOptions {
   tokens?: Tokens;
   onAuthChange?: (client: Client, user?: User) => void;
-};
+}
+
+export interface Client {
+  get base(): URL | undefined;
+
+  /// Low-level access to tokens (auth, refresh, csrf) useful for persisting them.
+  tokens(): Tokens | undefined;
+
+  /// Provides current user.
+  user(): User | undefined;
+
+  /// Provides current user.
+  headers(): HeadersInit;
+
+  /// Construct accessor for Record API with given name.
+  records<T = Record<string, unknown>>(name: string): RecordApi<T>;
+
+  avatarUrl(userId?: string): string | undefined;
+
+  login(email: string, password: string): Promise<void>;
+  logout(): Promise<boolean>;
+
+  deleteUser(): Promise<void>;
+  checkCookies(): Promise<Tokens | undefined>;
+  refreshAuthToken(): Promise<void>;
+
+  /// Fetches data from TrailBase endpoints, e.g.:
+  ///    const response = await client.fetch("/api/auth/v1/status");
+  ///
+  /// Unlike native fetch, will throw in case !response.ok.
+  fetch(path: string, init?: FetchOptions): Promise<Response>;
+}
 
 /// Client for interacting with TrailBase auth and record APIs.
-export class Client {
+class ClientImpl implements Client {
   private readonly _client: ThinClient;
   private readonly _authChange:
     | undefined
@@ -410,29 +467,6 @@ export class Client {
     }
   }
 
-  public static init(site?: URL | string, opts?: ClientOptions): Client {
-    return new Client(site, opts);
-  }
-
-  public static async tryFromCookies(
-    site?: URL | string,
-    opts?: ClientOptions,
-  ): Promise<Client> {
-    const client = new Client(site, opts);
-
-    // Prefer explicit tokens. When given, do not update/refresh infinite recursion
-    // with `($token) => Client` factories.
-    if (!client.tokens()) {
-      try {
-        await client.checkCookies();
-      } catch (err) {
-        console.debug("No valid cookies found: ", err);
-      }
-    }
-
-    return client;
-  }
-
   public get base(): URL | undefined {
     return this._client.base;
   }
@@ -447,7 +481,9 @@ export class Client {
   public headers = (): HeadersInit => this._tokenState.headers;
 
   /// Construct accessor for Record API with given name.
-  public records = (name: string): RecordApi => new RecordApi(this, name);
+  public records<T = Record<string, unknown>>(name: string): RecordApi<T> {
+    return new RecordApiImpl<T>(this, name);
+  }
 
   public avatarUrl(userId?: string): string | undefined {
     const id = userId ?? this.user()?.id;
@@ -615,6 +651,32 @@ export class Client {
       throw err;
     }
   }
+}
+
+/// Initialize a new TrailBase client.
+export function initClient(site?: URL | string, opts?: ClientOptions): Client {
+  return new ClientImpl(site, opts);
+}
+
+/// Asynchronizly initialize a new TrailBase client trying to convert any
+/// potentially existing cookies into an authenticated client.
+export async function initClientFromCookies(
+  site?: URL | string,
+  opts?: ClientOptions,
+): Promise<Client> {
+  const client = new ClientImpl(site, opts);
+
+  // Prefer explicit tokens. When given, do not update/refresh infinite recursion
+  // with `($token) => Client` factories.
+  if (!client.tokens()) {
+    try {
+      await client.checkCookies();
+    } catch (err) {
+      console.debug("No valid cookies found: ", err);
+    }
+  }
+
+  return client;
 }
 
 const recordApiBasePath = "/api/records/v1";

@@ -1,5 +1,6 @@
 import { atom, computed, task } from "nanostores";
-import { Client, type User } from "trailbase";
+import type { Client, User } from "trailbase";
+import { initClientFromCookies } from "trailbase";
 
 import { HOST } from "@/lib/constants.ts";
 
@@ -11,7 +12,7 @@ function onAuthChange(c: Client) {
 
 export const $client = computed([], () =>
   task(async () => {
-    const client = await Client.tryFromCookies(HOST, {
+    const client = await initClientFromCookies(HOST, {
       tokens: undefined,
       onAuthChange,
     });

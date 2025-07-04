@@ -6,14 +6,14 @@ import {
 } from "@tanstack/react-db";
 import { queryCollectionOptions } from "@tanstack/db-collections";
 
-import { Client } from "trailbase";
+import { initClient, type Client } from "trailbase";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { trailBaseCollectionOptions } from "./lib/trailbase.ts";
 import "./App.css";
 
-const client = Client.init("http://localhost:4000");
+const client: Client = initClient("http://localhost:4000");
 
 type Data = {
   id: number | null;
@@ -24,39 +24,19 @@ type Data = {
 const queryClient = new QueryClient();
 const useTrailBase = true;
 
-function buildMutationFn<T extends object>(client: Client): MutationFn<T> {
-  return async ({ transaction }) => {
-    for (const tx of transaction.mutations) {
-      const { key, type, changes } = tx;
-
-      if (type === "insert") {
-        // NOTE: We could also do bulk inserts.
-        await client.records("data").create(changes as Data);
-      } else if (type === "update") {
-        await client.records("data").update(key, changes as Data);
-      } else if (type === "delete") {
-        await client.records("data").delete(key);
-      }
-    }
-
-    if (!useTrailBase) {
-      await dataCollection.utils.refetch();
-    }
-  };
-}
-
 const dataCollection = createCollection(
   useTrailBase
     ? trailBaseCollectionOptions<Data>({
-        client,
-        recordApi: "data",
+        recordApi: client.records<Data>("data"),
         getKey: (item) => item.id ?? -1,
       })
     : queryCollectionOptions<Data>({
         id: "data",
         queryKey: ["data"],
-        queryFn: async () =>
-          (await client.records("data").list<Data>()).records,
+        queryFn: async () => {
+          const data = client.records<Data>("data");
+          return (await data.list()).records;
+        },
         getKey: (item) => item.id ?? -1,
         queryClient: queryClient,
       }),

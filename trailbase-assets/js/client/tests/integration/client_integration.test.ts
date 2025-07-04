@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 import { expect, test } from "vitest";
-import { Client, Event, urlSafeBase64Encode } from "../../src/index";
+import { initClient, urlSafeBase64Encode } from "../../src/index";
+import type { Client, Event } from "../../src/index";
 import { status } from "http-status";
 import { v7 as uuidv7, parse as uuidParse } from "uuid";
 
@@ -32,7 +33,7 @@ type SimpleSubsetView = {
 };
 
 async function connect(): Promise<Client> {
-  const client = Client.init(address);
+  const client = initClient(address);
   await client.login("admin@localhost", "secret");
   return client;
 }
@@ -65,7 +66,7 @@ test("auth integration tests", async () => {
 
 test("Record integration tests", async () => {
   const client = await connect();
-  const api = client.records("simple_strict_table");
+  const api = client.records<NewSimpleStrict>("simple_strict_table");
 
   const now = new Date().getTime();
   // Throw in some url characters for good measure.
@@ -76,13 +77,11 @@ test("Record integration tests", async () => {
 
   const ids: string[] = [];
   for (const msg of messages) {
-    ids.push(
-      (await api.create<NewSimpleStrict>({ text_not_null: msg })) as string,
-    );
+    ids.push((await api.create({ text_not_null: msg })) as string);
   }
 
   {
-    const bulkIds = await api.createBulk<NewSimpleStrict>([
+    const bulkIds = await api.createBulk([
       { text_not_null: "ts bulk create 0" },
       { text_not_null: "ts bulk create 1" },
     ]);
@@ -90,7 +89,7 @@ test("Record integration tests", async () => {
   }
 
   {
-    const response = await api.list<SimpleStrict>({
+    const response = await api.list({
       filters: [
         {
           column: "text_not_null",
@@ -106,7 +105,7 @@ test("Record integration tests", async () => {
   }
 
   {
-    const response = await api.list<SimpleStrict>({
+    const response = await api.list({
       filters: [
         {
           column: "text_not_null",

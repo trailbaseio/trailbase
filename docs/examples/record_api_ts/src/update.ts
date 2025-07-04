@@ -1,4 +1,4 @@
-import { Client } from "trailbase";
+import type { Client } from "trailbase";
 
 export const update = async (
   client: Client,

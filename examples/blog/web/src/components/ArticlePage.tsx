@@ -51,10 +51,7 @@ export function ArticlePage() {
   }
 
   const [article] = createResource(client, async (client) => {
-    console.log("Before");
-    const x = await client?.records("articles_view").read<Article>(articleId);
-    console.log("After", x);
-    return x;
+    return await client?.records<Article>("articles_view").read(articleId);
   });
 
   return (
