@@ -1,9 +1,5 @@
 import { QueryClient } from "@tanstack/query-core";
-import {
-  useLiveQuery,
-  createCollection,
-  type MutationFn,
-} from "@tanstack/react-db";
+import { useLiveQuery, createCollection } from "@tanstack/react-db";
 import { queryCollectionOptions } from "@tanstack/db-collections";
 
 import { initClient, type Client } from "trailbase";
@@ -24,13 +20,15 @@ type Data = {
 const queryClient = new QueryClient();
 const useTrailBase = true;
 
-const dataCollection = createCollection(
-  useTrailBase
-    ? trailBaseCollectionOptions<Data>({
+const dataCollection = useTrailBase
+  ? createCollection(
+      trailBaseCollectionOptions<Data>({
         recordApi: client.records<Data>("data"),
         getKey: (item) => item.id ?? -1,
-      })
-    : queryCollectionOptions<Data>({
+      }),
+    )
+  : createCollection(
+      queryCollectionOptions<Data>({
         id: "data",
         queryKey: ["data"],
         queryFn: async () => {
@@ -40,7 +38,7 @@ const dataCollection = createCollection(
         getKey: (item) => item.id ?? -1,
         queryClient: queryClient,
       }),
-);
+    );
 
 function App() {
   const [input, setInput] = useState("");
@@ -67,6 +65,7 @@ function App() {
         updated: null,
         data: formJson.text as string,
       });
+      setInput("");
     }
   }
 
@@ -101,6 +100,7 @@ function App() {
           <input
             name="text"
             type="text"
+            value={input}
             onInput={(e) => setInput(e.currentTarget.value)}
           />
 

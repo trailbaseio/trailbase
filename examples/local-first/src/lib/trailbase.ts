@@ -1,7 +1,7 @@
-import { type RecordApi } from "trailbase";
+import { Store } from "@tanstack/store";
+import type { Event, RecordApi } from "trailbase";
 
 import type { CollectionConfig, SyncConfig, UtilsRecord } from "@tanstack/db";
-import { Store } from "@tanstack/store";
 
 /**
  * Configuration interface for TrailbaseCollection
@@ -11,7 +11,7 @@ export interface TrailBaseCollectionConfig<
   TKey extends string | number = string | number,
 > extends Omit<
     CollectionConfig<TItem, TKey>,
-    "sync" | "onInsert" | "onUpdate" | "onDelete"
+    `sync` | `onInsert` | `onUpdate` | `onDelete`
   > {
   /**
    * Record API name
@@ -21,10 +21,8 @@ export interface TrailBaseCollectionConfig<
 
 export type AwaitTxIdFn = (txId: string, timeout?: number) => Promise<boolean>;
 
-export type RefetchFn = () => Promise<void>;
-
 export interface TrailBaseCollectionUtils extends UtilsRecord {
-  refetch: RefetchFn;
+  cancel: () => void;
 }
 
 export function trailBaseCollectionOptions<TItem extends object>(
@@ -35,7 +33,7 @@ export function trailBaseCollectionOptions<TItem extends object>(
   const seenIds = new Store(new Map<string, number>());
 
   const awaitIds = (
-    ids: string[],
+    ids: Array<string>,
     timeout: number = 120 * 1000,
   ): Promise<void> => {
     const completed = (value: Map<string, number>) =>
@@ -67,6 +65,7 @@ export function trailBaseCollectionOptions<TItem extends object>(
       seen.setState((curr) => {
         const now = Date.now();
         let anyExpired = false;
+
         const notExpired = curr.entries().filter(([_, v]) => {
           const expired = now - v > 300 * 1000;
           anyExpired = anyExpired || expired;
@@ -84,15 +83,20 @@ export function trailBaseCollectionOptions<TItem extends object>(
   }, 120 * 1000);
 
   type SyncParams = Parameters<SyncConfig<TItem>[`sync`]>[0];
-  let syncParams: SyncParams | undefined;
+
+  let eventReader: ReadableStreamDefaultReader<Event> | undefined;
   const sync = {
     sync: (params: SyncParams) => {
-      syncParams = params;
       const { begin, write, commit } = params;
 
       // Initial fetch.
       async function initialFetch() {
-        let response = await config.recordApi.list({ count: true });
+        const limit = 256;
+        let response = await config.recordApi.list({
+          pagination: {
+            limit,
+          },
+        });
         let cursor = response.cursor;
         let got = 0;
 
@@ -100,17 +104,18 @@ export function trailBaseCollectionOptions<TItem extends object>(
 
         while (true) {
           const length = response.records.length;
-          if (length === 0) {
-            break;
-          }
+          if (length === 0) break;
 
           got = got + length;
           for (const item of response.records) {
-            write({ type: "insert", value: item as TItem });
+            write({ type: `insert`, value: item });
           }
+
+          if (length < limit) break;
 
           response = await config.recordApi.list({
             pagination: {
+              limit,
               cursor,
               offset: cursor === undefined ? got : undefined,
             },
@@ -123,22 +128,29 @@ export function trailBaseCollectionOptions<TItem extends object>(
 
       // Afterwards subscribe.
       async function subscribe() {
-        const eventStream = await config.recordApi.subscribe("*");
+        const eventStream = await config.recordApi.subscribe(`*`);
+        const reader = (eventReader = eventStream.getReader());
 
-        for await (const event of eventStream) {
-          console.debug(`Event: ${JSON.stringify(event)}`);
+        while (true) {
+          const { done, value: event } = await reader.read();
+
+          if (done || !event) {
+            reader.releaseLock();
+            eventReader = undefined;
+            return;
+          }
 
           begin();
           let value: TItem | undefined;
-          if ("Insert" in event) {
+          if (`Insert` in event) {
             value = event.Insert as TItem;
-            write({ type: "insert", value });
-          } else if ("Delete" in event) {
+            write({ type: `insert`, value });
+          } else if (`Delete` in event) {
             value = event.Delete as TItem;
-            write({ type: "delete", value });
-          } else if ("Update" in event) {
+            write({ type: `delete`, value });
+          } else if (`Update` in event) {
             value = event.Update as TItem;
-            write({ type: "update", value });
+            write({ type: `update`, value });
           } else {
             console.error(`Error: ${event.Error}`);
           }
@@ -154,9 +166,7 @@ export function trailBaseCollectionOptions<TItem extends object>(
         }
       }
 
-      initialFetch().then(() => {
-        subscribe();
-      });
+      initialFetch().then(() => subscribe());
     },
     // Expose the getSyncMetadata function
     getSyncMetadata: undefined,
@@ -165,11 +175,11 @@ export function trailBaseCollectionOptions<TItem extends object>(
   return {
     sync,
     getKey,
-    onInsert: async (params): Promise<(number | string)[]> => {
+    onInsert: async (params): Promise<Array<number | string>> => {
       const ids = await config.recordApi.createBulk(
         params.transaction.mutations.map((tx) => {
           const { type, changes } = tx;
-          if (type !== "insert") {
+          if (type !== `insert`) {
             throw new Error(`Expected 'insert', got: ${type}`);
           }
           return changes as TItem;
@@ -184,10 +194,10 @@ export function trailBaseCollectionOptions<TItem extends object>(
       return ids;
     },
     onUpdate: async (params) => {
-      const ids: string[] = await Promise.all(
+      const ids: Array<string> = await Promise.all(
         params.transaction.mutations.map(async (tx) => {
           const { type, changes, key } = tx;
-          if (type !== "update") {
+          if (type !== `update`) {
             throw new Error(`Expected 'update', got: ${type}`);
           }
 
@@ -202,10 +212,10 @@ export function trailBaseCollectionOptions<TItem extends object>(
       await awaitIds(ids);
     },
     onDelete: async (params) => {
-      const ids: string[] = await Promise.all(
+      const ids: Array<string> = await Promise.all(
         params.transaction.mutations.map(async (tx) => {
           const { type, key } = tx;
-          if (type !== "delete") {
+          if (type !== `delete`) {
             throw new Error(`Expected 'delete', got: ${type}`);
           }
 
@@ -220,11 +230,12 @@ export function trailBaseCollectionOptions<TItem extends object>(
       await awaitIds(ids);
     },
     utils: {
-      // NOTE: Refetch shouldn't be necessary, we'll see. It may still be
-      // necessary if subscriptions gets temporarily disconnected and changes
-      // get lost.
-      refetch: async () => {
-        console.warn(`Not implemented: refetch`, syncParams?.collection);
+      cancel: () => {
+        if (eventReader) {
+          eventReader.cancel();
+          eventReader.releaseLock();
+          eventReader = undefined;
+        }
       },
     },
   };
