@@ -3,7 +3,7 @@ import type { Accessor } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,6 @@ import {
   buildSelectField,
 } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
-import { randomName } from "@/lib/name";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 
 import type { ColumnOrder } from "@bindings/ColumnOrder";
@@ -84,21 +83,25 @@ export function CreateAlterIndexForm(props: {
     }
   };
 
-  const form = createForm(() => ({
-    defaultValues:
-      props.schema ??
-      ({
-        name: {
-          name: `_${props.table.name.name}__${randomName()}_index`,
-          database_schema: props.table.name.database_schema,
-        },
-        table_name: props.table.name.name,
-        columns: [newDefaultColumn(0)] as ColumnOrder[],
-        unique: false,
-        predicate: null,
-      } as TableIndex),
-    onSubmit: async ({ value }) => await onSubmit(value, false),
-  }));
+  const form = createForm(() => {
+    const columns: ColumnOrder[] = [newDefaultColumn(0)];
+
+    return {
+      defaultValues:
+        props.schema ??
+        ({
+          name: {
+            name: `_${props.table.name.name}__${columns[0].column_name}_index`,
+            database_schema: props.table.name.database_schema,
+          },
+          table_name: props.table.name.name,
+          columns,
+          unique: false,
+          predicate: null,
+        } as TableIndex),
+      onSubmit: async ({ value }) => await onSubmit(value, false),
+    };
+  });
 
   form.useStore((state) => {
     if (state.isDirty && !state.isSubmitted) {
@@ -110,8 +113,10 @@ export function CreateAlterIndexForm(props: {
     <SheetContainer>
       <SheetHeader>
         <SheetTitle>
-          {original() ? "Alter Index" : "Add New Index"} for "
-          {prettyFormatQualifiedName(props.table.name)}" Table
+          {original() ? "Alter Index" : "Add Index"} for{" "}
+          <span class="font-mono">
+            {prettyFormatQualifiedName(props.table.name)}
+          </span>
         </SheetTitle>
       </SheetHeader>
 
@@ -131,7 +136,7 @@ export function CreateAlterIndexForm(props: {
               },
             }}
           >
-            {buildTextFormField({ label: () => "Index name" })}
+            {buildTextFormField({ label: () => "Index Name" })}
           </form.Field>
 
           {/* columns */}
@@ -142,10 +147,10 @@ export function CreateAlterIndexForm(props: {
                   <Index each={field().state.value}>
                     {(_c: Accessor<ColumnOrder>, i) => (
                       <Card>
-                        <CardHeader>Index Column {i}</CardHeader>
+                        {/* <CardHeader>Index Column {i}</CardHeader> */}
 
                         <CardContent>
-                          <div class="flex w-full flex-col gap-4">
+                          <div class="mt-8 flex w-full flex-col gap-4">
                             <form.Field name={`columns[${i}].column_name`}>
                               {buildSelectField(
                                 [...props.table.columns.map((c) => c.name)],
@@ -165,7 +170,7 @@ export function CreateAlterIndexForm(props: {
 
                             <form.Field name={`columns[${i}].nulls_first`}>
                               {buildBoolFormField({
-                                label: () => <div>Nulls first</div>,
+                                label: () => <div>Nulls First</div>,
                               })}
                             </form.Field>
                           </div>
