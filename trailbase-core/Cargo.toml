@@ -31,10 +31,10 @@ askama = { workspace = true }
 async-channel = "2.3.1"
 async-trait = "0.1.80"
 axum = { workspace = true }
-axum-client-ip = "0.7.0"
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
+client-ip = "0.1.1"
 cron = "0.15.0"
 ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
