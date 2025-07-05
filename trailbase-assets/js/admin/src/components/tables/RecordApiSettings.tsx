@@ -511,13 +511,7 @@ export function RecordApiSettingsForm(props: {
 
           <TabsContent value="settings" class="flex flex-col gap-2">
             <Card>
-              {/*
-              <CardHeader>
-                <CardTitle>Record API Settings</CardTitle>
-              </CardHeader>
-              */}
-
-              <CardContent class="my-4 flex flex-col gap-4">
+              <CardContent class="mt-8 flex flex-col gap-4">
                 <form.Field
                   name="name"
                   validators={{
@@ -755,7 +749,7 @@ export function RecordApiSettingsForm(props: {
                 <CardTitle>ACL</CardTitle>
               </CardHeader>
 
-              <CardContent class="my-4 flex flex-col gap-4">
+              <CardContent class="flex flex-col gap-4">
                 <p class="text-sm">
                   Grant access to specific API actions for authorized users or
                   anyone using the following access-control-list (ACL). By
@@ -803,7 +797,7 @@ export function RecordApiSettingsForm(props: {
                 <CardTitle>Access Rules</CardTitle>
               </CardHeader>
 
-              <CardContent class="my-4 flex flex-col gap-4">
+              <CardContent class="flex flex-col gap-4">
                 <p class="text-sm">
                   In addition to coarse ACLs, access can be constrained using
                   custom SQL expressions. Check the{" "}
@@ -847,13 +841,7 @@ export function RecordApiSettingsForm(props: {
 
           <TabsContent value="examples">
             <Card>
-              {/*
-              <CardHeader>
-                <CardTitle>Examples</CardTitle>
-              </CardHeader>
-              */}
-
-              <CardContent class="my-4 flex flex-col gap-4">
+              <CardContent class="mt-8 flex flex-col gap-4">
                 <p class="text-sm">
                   Some examples on how to interact with the APIs using{" "}
                   <span class="font-mono">curl</span>. Make sure to provide
