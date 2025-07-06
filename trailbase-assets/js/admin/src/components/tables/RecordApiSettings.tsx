@@ -1,4 +1,11 @@
-import { For, JSXElement, createSignal } from "solid-js";
+import {
+  For,
+  JSXElement,
+  Switch,
+  Match,
+  createMemo,
+  createSignal,
+} from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { TbInfoCircle } from "solid-icons/tb";
 import { useQueryClient } from "@tanstack/solid-query";
@@ -9,9 +16,17 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardTitle, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
   HoverCard,
@@ -28,6 +43,11 @@ import {
 import { SheetFooter } from "@/components/ui/sheet";
 import { SheetContainer } from "@/components/SafeSheet";
 import { showToast } from "@/components/ui/toast";
+import {
+  TextField,
+  TextFieldLabel,
+  TextFieldInput,
+} from "@/components/ui/text-field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import {
@@ -202,12 +222,16 @@ function updateRecordApiConfig(
   return newConfig;
 }
 
-function removeRecordApiConfig(config: Config, tableName: string): Config {
+function removeRecordApiConfig(
+  config: Config,
+  tableName: string,
+  apiName: string,
+): Config {
   const newConfig = Config.fromPartial(config);
 
   while (true) {
     const index = newConfig.recordApis.findIndex(
-      (api) => api.tableName === tableName,
+      (api) => api.tableName === tableName && api.name === apiName,
     );
     if (index < 0) {
       break;
@@ -247,10 +271,13 @@ export function getRecordApis(
   );
 }
 
-function newRecordApiDefault(tableName: string): RecordApiConfig {
+function newRecordApiDefault(opts: {
+  tableName: string;
+  apiName: string;
+}): RecordApiConfig {
   return {
-    name: tableName,
-    tableName: tableName,
+    name: opts.apiName,
+    tableName: opts.tableName,
     aclWorld: [],
     aclAuthenticated: [],
     excludedColumns: [],
@@ -382,29 +409,182 @@ function DeleteExample(props: { apiName: string; config: Config | undefined }) {
   return <CodeBlock text={text()} />;
 }
 
+function AddApiDialog(props: {
+  tableName: string;
+  defaultApiName: string;
+  setApi: (api: RecordApiConfig) => void;
+}) {
+  const [open, setOpen] = createSignal(false);
+  const [name, setName] = createSignal<string>(props.defaultApiName);
+
+  const confirm = () => {
+    const n = name();
+    if (n !== "") {
+      props.setApi(
+        newRecordApiDefault({ tableName: props.tableName, apiName: name() }),
+      );
+      setOpen(false);
+    }
+  };
+
+  return (
+    <Dialog
+      id="edit-help"
+      open={open()}
+      onOpenChange={(isOpen: boolean) => setOpen(isOpen)}
+    >
+      <DialogTrigger class={buttonVariants({ variant: "default" })}>
+        Add API
+      </DialogTrigger>
+
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add New API</DialogTitle>
+        </DialogHeader>
+
+        <TextField class="flex items-center gap-2">
+          <TextFieldLabel class="w-[100px]">API Name</TextFieldLabel>
+
+          <TextFieldInput
+            type={"text"}
+            value={name()}
+            placeholder={"API Name"}
+            onKeyUp={(e: KeyboardEvent) => {
+              if (e.key === "Enter") {
+                confirm();
+              }
+            }}
+            onInput={(e: Event) => {
+              setName((e.target as HTMLInputElement).value);
+            }}
+          />
+        </TextField>
+
+        <DialogFooter>
+          <div class="flex w-full justify-between gap-2">
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Abort
+            </Button>
+
+            <Button onClick={confirm}>Add</Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function RecordApiSettingsForm(props: {
   close: () => void;
   markDirty: () => void;
   schema: Table | View;
 }) {
   const config = createConfigQuery();
-  const unqualifiedName = () => props.schema.name.name;
+  const existingApis = createMemo(() =>
+    getRecordApis(config.data!.config, props.schema.name.name),
+  );
 
-  // FIXME: We don't currently handle the "multiple APIs for a single table" case.
-  const currentApi = () => {
-    const apis = getRecordApis(config.data!.config, props.schema.name.name);
-    if (apis.length > 1) {
-      console.warn("Multiple APIs not yet supported in UI, picking first.");
-    }
-    return apis[0];
+  type State = {
+    api: RecordApiConfig;
+    mode: Mode;
   };
 
+  const defaultApi = () => {
+    const first = existingApis()[0];
+    if (first) {
+      return {
+        api: first,
+        mode: Mode.Update,
+      };
+    }
+    return undefined;
+  };
+  const [api, setApi] = createSignal<State | undefined>(defaultApi());
+
   return (
-    <IndividualRecordApiSettingsForm
-      api={currentApi() ?? newRecordApiDefault(unqualifiedName())}
-      mode={currentApi() === undefined ? Mode.Create : Mode.Update}
-      {...props}
-    />
+    <div>
+      <div class="flex gap-2">
+        <AddApiDialog
+          tableName={props.schema.name.name ?? "<missing>"}
+          defaultApiName={(() => {
+            const unqualifiedTableName = props.schema.name.name;
+            for (const api of existingApis()) {
+              if (api.name === unqualifiedTableName) {
+                return "";
+              }
+            }
+            return unqualifiedTableName;
+          })()}
+          setApi={(api) => {
+            setApi({
+              api,
+              mode: Mode.Create,
+            });
+          }}
+        />
+
+        <Select
+          multiple={false}
+          placeholder="Select API..."
+          value={(() => {
+            const name = api()?.api.name;
+            for (const api of existingApis()) {
+              if (api.name === name) {
+                return name;
+              }
+            }
+            return undefined;
+          })()}
+          options={existingApis().map((api) => api.name)}
+          onChange={(apiName: string | null) => {
+            if (apiName === null || api()?.api.name === apiName) {
+              return;
+            }
+
+            for (const api of existingApis()) {
+              if (api.name === apiName) {
+                setApi({
+                  api,
+                  mode: Mode.Update,
+                });
+                break;
+              }
+            }
+          }}
+          itemComponent={(props) => (
+            <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+          )}
+        >
+          <SelectTrigger class="w-[180px]">
+            <SelectValue<string>>
+              {(state) => state.selectedOption()}
+            </SelectValue>
+          </SelectTrigger>
+
+          <SelectContent />
+        </Select>
+      </div>
+
+      <Switch>
+        <Match when={api() !== undefined}>
+          <IndividualRecordApiSettingsForm
+            api={api()!.api}
+            mode={api()!.mode}
+            reset={(api?: RecordApiConfig) => {
+              if (api) {
+                setApi({
+                  api,
+                  mode: Mode.Update,
+                });
+              } else {
+                setApi(defaultApi());
+              }
+            }}
+            {...props}
+          />
+        </Match>
+      </Switch>
+    </div>
   );
 }
 
@@ -414,7 +594,7 @@ enum Mode {
 }
 
 function IndividualRecordApiSettingsForm(props: {
-  close: () => void;
+  reset: (api?: RecordApiConfig) => void;
   markDirty: () => void;
   schema: Table | View;
   api: RecordApiConfig;
@@ -441,7 +621,14 @@ function IndividualRecordApiSettingsForm(props: {
         const newConfig = updateRecordApiConfig(c, value);
         try {
           await setConfig(queryClient, newConfig);
-          props.close();
+
+          showToast({
+            title: "Success",
+            description:
+              props.mode === Mode.Create ? "API Added" : "API Updated",
+            variant: "success",
+          });
+          props.reset(value);
         } catch (err) {
           showToast({
             title: "Uncaught Error",
@@ -461,11 +648,23 @@ function IndividualRecordApiSettingsForm(props: {
 
   const SubmitDisableButtons = () => {
     return (
-      <SheetFooter>
+      <SheetFooter class="pb-1">
         <Button
-          disabled={props.mode === Mode.Create}
           variant="destructive"
           onClick={() => {
+            const apiName = props.api.name;
+            if (props.mode === Mode.Create) {
+              // Abort case
+              showToast({
+                title: "Success",
+                description: `API "${apiName}" discarded`,
+                variant: "success",
+              });
+              props.reset();
+              return;
+            }
+
+            // Delete case
             const tableName = props.schema.name;
             console.debug("Remove record API config for:", tableName);
 
@@ -475,14 +674,28 @@ function IndividualRecordApiSettingsForm(props: {
               return;
             }
 
-            const newConfig = removeRecordApiConfig(c, tableName.name);
-            setConfig(queryClient, newConfig)
-              // eslint-disable-next-line solid/reactivity
-              .then(() => props.close())
-              .catch(console.error);
+            if (apiName !== undefined) {
+              const newConfig = removeRecordApiConfig(
+                c,
+                tableName.name,
+                apiName,
+              );
+
+              setConfig(queryClient, newConfig)
+                // eslint-disable-next-line solid/reactivity
+                .then(() => {
+                  showToast({
+                    title: "Success",
+                    description: `API "${apiName}" deleted`,
+                    variant: "success",
+                  });
+                  props.reset();
+                })
+                .catch(console.error);
+            }
           }}
         >
-          Disable
+          {props.mode === Mode.Create ? "Discard" : "Delete"}
         </Button>
 
         <form.Subscribe
@@ -497,7 +710,7 @@ function IndividualRecordApiSettingsForm(props: {
               disabled={!state().canSubmit}
               variant="default"
             >
-              {props.mode === Mode.Update ? "Update" : "Enable"}
+              {props.mode === Mode.Update ? "Update" : "Create"}
             </Button>
           )}
         </form.Subscribe>
@@ -534,6 +747,7 @@ function IndividualRecordApiSettingsForm(props: {
                   }}
                 >
                   {buildTextFormField({
+                    disabled: true,
                     label: () => (
                       <div class={labelWidth}>
                         <Label>API Name</Label>
