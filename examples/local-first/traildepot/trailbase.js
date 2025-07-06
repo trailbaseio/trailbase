@@ -1,6 +1,3 @@
-var __defProp = Object.defineProperty;
-var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 var fs;
 ((fs2) => {
   fs2.writeFile = Deno.writeFile;
@@ -183,10 +180,10 @@ var StatusCodes = /* @__PURE__ */ ((StatusCodes2) => {
   return StatusCodes2;
 })(StatusCodes || {});
 class HttpError extends Error {
+  statusCode;
+  headers;
   constructor(statusCode, message, headers) {
     super(message);
-    __publicField(this, "statusCode");
-    __publicField(this, "headers");
     this.statusCode = statusCode;
     this.headers = headers;
   }
@@ -388,8 +385,8 @@ async function execute(sql, params) {
   return await rustyscript.async_functions.execute(sql, params);
 }
 class Transaction {
+  finalized;
   constructor() {
-    __publicField(this, "finalized");
     this.finalized = false;
   }
   query(queryStr, params) {
