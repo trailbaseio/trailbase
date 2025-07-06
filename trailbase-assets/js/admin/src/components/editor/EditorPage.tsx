@@ -269,7 +269,7 @@ function RenameDialog(props: { selected: number; script: Script }) {
         </DialogHeader>
 
         <form
-          class="flex flex-col gap-4 px-8 py-12"
+          class="flex flex-col gap-4"
           method="dialog"
           onSubmit={(e: SubmitEvent) => {
             e.preventDefault();

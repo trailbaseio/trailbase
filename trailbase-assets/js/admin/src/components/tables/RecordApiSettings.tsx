@@ -247,6 +247,17 @@ export function getRecordApis(
   );
 }
 
+function newRecordApiDefault(tableName: string): RecordApiConfig {
+  return {
+    name: tableName,
+    tableName: tableName,
+    aclWorld: [],
+    aclAuthenticated: [],
+    excludedColumns: [],
+    expand: [],
+  };
+}
+
 export function hasRecordApis(
   config: Config | undefined,
   tableName: string,
@@ -257,23 +268,6 @@ export function hasRecordApis(
     }
   }
   return false;
-}
-
-function findRecordApi(
-  config: Config | undefined,
-  tableName: string,
-): RecordApiConfig | undefined {
-  const apis = getRecordApis(config, tableName);
-
-  switch (apis.length) {
-    case 0:
-      return undefined;
-    case 1:
-      return apis[0];
-    default:
-      console.warn("Multiple APIs not yet supported in UI, picking first.");
-      return apis[0];
-  }
 }
 
 function StyledHoverCard(props: { children: JSXElement }) {
@@ -393,29 +387,48 @@ export function RecordApiSettingsForm(props: {
   markDirty: () => void;
   schema: Table | View;
 }) {
+  const config = createConfigQuery();
+  const unqualifiedName = () => props.schema.name.name;
+
+  // FIXME: We don't currently handle the "multiple APIs for a single table" case.
+  const currentApi = () => {
+    const apis = getRecordApis(config.data!.config, props.schema.name.name);
+    if (apis.length > 1) {
+      console.warn("Multiple APIs not yet supported in UI, picking first.");
+    }
+    return apis[0];
+  };
+
+  return (
+    <IndividualRecordApiSettingsForm
+      api={currentApi() ?? newRecordApiDefault(unqualifiedName())}
+      mode={currentApi() === undefined ? Mode.Create : Mode.Update}
+      {...props}
+    />
+  );
+}
+
+enum Mode {
+  Create,
+  Update,
+}
+
+function IndividualRecordApiSettingsForm(props: {
+  close: () => void;
+  markDirty: () => void;
+  schema: Table | View;
+  api: RecordApiConfig;
+  mode: Mode;
+}) {
   const queryClient = useQueryClient();
   const config = createConfigQuery();
 
   const type = () => tableType(props.schema);
   const foreignKeys = () => getForeignKeyColumns(props.schema);
 
-  // FIXME: We don't currently handle the "multiple APIs for a single table" case.
-  const currentApi = () =>
-    findRecordApi(config.data!.config, props.schema.name.name);
-
   const form = createForm(() => {
-    const tableName = props.schema.name.name;
     return {
-      defaultValues:
-        currentApi() ??
-        ({
-          name: tableName,
-          tableName: tableName,
-          aclWorld: [],
-          aclAuthenticated: [],
-          excludedColumns: [],
-          expand: [],
-        } as RecordApiConfig),
+      defaultValues: props.api,
       onSubmit: async ({ value }: { value: RecordApiConfig }) => {
         console.debug("Add record api config:", value);
 
@@ -450,7 +463,7 @@ export function RecordApiSettingsForm(props: {
     return (
       <SheetFooter>
         <Button
-          disabled={currentApi() === undefined}
+          disabled={props.mode === Mode.Create}
           variant="destructive"
           onClick={() => {
             const tableName = props.schema.name;
@@ -484,7 +497,7 @@ export function RecordApiSettingsForm(props: {
               disabled={!state().canSubmit}
               variant="default"
             >
-              {currentApi() ? "Update" : "Enable"}
+              {props.mode === Mode.Update ? "Update" : "Enable"}
             </Button>
           )}
         </form.Subscribe>
