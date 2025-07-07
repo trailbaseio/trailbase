@@ -99,11 +99,11 @@ pub(crate) fn build_filter_where_clause(
 
 pub fn limit_or_default(limit: Option<usize>) -> Result<usize, &'static str> {
   const DEFAULT_LIMIT: usize = 50;
-  const MAX_LIMIT: usize = 256;
+  const MAX_LIMIT: usize = 1024;
 
   if let Some(limit) = limit {
     if limit > MAX_LIMIT {
-      return Err("limit exceeds max limit of 256");
+      return Err("limit exceeds max limit of 1024");
     }
     return Ok(limit);
   }

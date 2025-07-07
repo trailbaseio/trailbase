@@ -320,7 +320,7 @@ and query parameters.
 Parameters:
 
 * Pagination can be controlled via the following query parameters:
-  * `limit=N`, with a built-in hard limit of 1024 to avoid abuse.
+  * `limit=N`, with a built-in default of 50 and a hard limit of 1024 to avoid abuse.
   * `cursor=<primary key>` to offset into results using a cursor. Significantly
     less expensive than `OFFSET`-based pagination.
   * `offset=N` to offset into results.
