@@ -106,7 +106,7 @@ pub async fn list_rows_handler(
       cursor_column: cursor_column.map(|(_idx, c)| c),
       cursor,
       offset,
-      limit: limit_or_default(limit).map_err(|err| Error::BadRequest(err.into()))?,
+      limit: limit_or_default(limit, None).map_err(|err| Error::BadRequest(err.into()))?,
     },
   )
   .await?;

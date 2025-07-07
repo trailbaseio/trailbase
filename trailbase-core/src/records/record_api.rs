@@ -154,6 +154,8 @@ struct RecordApiState {
   // Foreign key expansion configuration. Affects schema.
   expand: Option<HashMap<String, serde_json::Value>>,
 
+  listing_hard_limit: Option<usize>,
+
   // Open question: right now the read_access rule is also used for listing. It might be nice to
   // allow different permissions, however there's a risk of listing records w/o read access.
   // Arguably, this could always be modeled as two APIs with different permissions on the same
@@ -307,6 +309,8 @@ impl RecordApi {
           )
         },
 
+        listing_hard_limit: config.listing_hard_limit.map(|l| l as usize),
+
         // Access control lists.
         acl: [
           convert_acl(&config.acl_world),
@@ -410,6 +414,11 @@ impl RecordApi {
   #[inline]
   pub fn read_access_rule(&self) -> Option<&str> {
     return self.state.read_access_rule.as_deref();
+  }
+
+  #[inline]
+  pub fn listing_hard_limit(&self) -> Option<usize> {
+    return self.state.listing_hard_limit;
   }
 
   #[inline]

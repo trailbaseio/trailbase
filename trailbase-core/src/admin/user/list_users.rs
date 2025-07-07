@@ -113,7 +113,7 @@ pub async fn list_users_handler(
       None
     },
     order.as_ref().unwrap_or_else(|| &DEFAULT_ORDERING),
-    limit_or_default(limit).map_err(|err| Error::BadRequest(err.into()))?,
+    limit_or_default(limit, None).map_err(|err| Error::BadRequest(err.into()))?,
   )
   .await?;
 

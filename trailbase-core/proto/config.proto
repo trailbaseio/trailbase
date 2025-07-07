@@ -123,7 +123,8 @@ message SystemJob {
   /// Identifies the system job by its id.
   optional SystemJobId id = 1;
 
-  /// Cron spec: shorthand or 7-components: (sec, min, hour, day of month, / month, day of week, year).
+  /// Cron spec: shorthand or 7-components: (sec, min, hour, day of month, /
+  /// month, day of week, year).
   optional string schedule = 2;
 
   /// Disable the system job.
@@ -218,7 +219,8 @@ message RecordApiConfig {
   /// matches the current authenticated user's id. One can also construct
   /// arbitrary validations including sub-queries, e.g.:
   ///
-  ///   _USER_.id = _REQ_.owner AND EXISTS(SELECT FROM allowed WHERE allowed.user = _USER_.id)
+  ///   _USER_.id = _REQ_.owner AND EXISTS(SELECT FROM allowed WHERE
+  ///   allowed.user = _USER_.id)
   optional string create_access_rule = 11;
   optional string read_access_rule = 12;
   optional string update_access_rule = 13;
@@ -232,6 +234,9 @@ message RecordApiConfig {
   /// Only columns and foreign tables with names not starting with "_", i.e. are
   /// allowed to be expanded.
   repeated string expand = 21;
+
+  /// Hard limit for listing records (default: 1024).
+  optional uint64 listing_hard_limit = 22;
 }
 
 message JsonSchemaConfig {

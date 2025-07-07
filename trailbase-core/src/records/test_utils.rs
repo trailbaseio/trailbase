@@ -35,6 +35,7 @@ mod tests {
       delete_access_rule: access_rules.delete,
       schema_access_rule: access_rules.schema,
       expand: vec![],
+      listing_hard_limit: None,
     });
 
     return state.validate_and_update_config(config, None).await;

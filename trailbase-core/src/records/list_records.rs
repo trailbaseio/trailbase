@@ -110,7 +110,9 @@ pub async fn list_records_handler(
   params.extend_from_slice(&[
     (
       Cow::Borrowed(":__limit"),
-      Value::Integer(limit_or_default(limit).map_err(RecordError::BadRequest)? as i64),
+      Value::Integer(
+        limit_or_default(limit, api.listing_hard_limit()).map_err(RecordError::BadRequest)? as i64,
+      ),
     ),
     (
       Cow::Borrowed(":__user_id"),
