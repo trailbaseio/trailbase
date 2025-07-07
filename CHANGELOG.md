@@ -1,3 +1,10 @@
+## v0.14.7
+
+* Allow setting up multiple record APIs per `TABLE` or `VIEW` from with the admin UI. Previously, this was only available manually.
+* User-configurable per-API limits on listing records, see config.
+* Many small admin UI tweaks.
+* Update Rust & JS dependencies.
+
 ## v0.14.6
 
 * Render OAuth login options on the server rather than the client. Reduces the
