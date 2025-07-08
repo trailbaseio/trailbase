@@ -9,7 +9,7 @@ $ alias trail="docker run \
       --mount type=bind,source=$PWD/traildepot,target=/app/traildepot \
       trailbase/trailbase /app/trail"
 $ mkdir traildepot # pre-create mount point for Docker
-$ trail run
+$ trail run --address 0.0.0.0:4000
 ```
 
 or compile from [source](https://github.com/trailbaseio/trailbase).
