@@ -114,7 +114,7 @@
 * Explicitly parse cursor based on schema.
 * Show command line in admin dashboard
 * Improve admin dash's state management .
-* Internal: Reduce dependene on vendored crates.
+* Internal: Reduce dependence on vendored crates.
 * Update dependencies including latest version of SQLite.
 
 ## v0.12.0

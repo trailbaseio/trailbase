@@ -7,7 +7,7 @@
    viewBox="0 0 133.7685 99.899433"
    version="1.1"
    id="svg5"
-   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   inkscape:version="1.4 (e7c3feb100, 2024-10-09)"
    sodipodi:docname="_relations.svg"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -24,9 +24,9 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="px"
      showgrid="false"
-     inkscape:zoom="0.78095874"
-     inkscape:cx="617.83034"
-     inkscape:cy="257.37595"
+     inkscape:zoom="1.6383794"
+     inkscape:cx="336.9183"
+     inkscape:cy="104.98179"
      inkscape:window-width="1920"
      inkscape:window-height="1131"
      inkscape:window-x="0"
@@ -42,8 +42,8 @@
        refY="0"
        orient="auto-start-reverse"
        inkscape:stockid="TriangleStart"
-       markerWidth="5.3244081"
-       markerHeight="6.155385"
+       markerWidth="5.32440803"
+       markerHeight="6.15538502"
        viewBox="0 0 5.3244081 6.1553851"
        inkscape:isstock="true"
        inkscape:collect="always"
@@ -757,8 +757,8 @@
              y="53.309708">FK</tspan></text>
       </g>
       <path
-         style="fill:none;stroke:#000000;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:40;stroke-dasharray:none;marker-end:url(#marker6535)"
-         d="m 72.865201,61.260787 h -9.254692 v 23.957292 h 68.320101 l 0.078,18.446701 4.46379,3.65987"
+         style="fill:none;stroke:#666666;stroke-width:0.529167;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:40;stroke-dasharray:none;marker-end:url(#marker6535)"
+         d="m 71.890102,61.260787 h -8.279593 v 23.957292 h 68.320101 l 0.078,18.446701 4.46379,3.65987"
          id="path5929"
          sodipodi:nodetypes="cccccc" />
       <text
@@ -778,18 +778,18 @@
            x="76.259377"
            y="56.282932" /></text>
       <path
-         style="fill:none;stroke:#000000;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:40;stroke-dasharray:none;marker-end:url(#marker6535)"
-         d="m 118.97093,61.264835 h -7.81308 v 10.932692 h 42.90504 V 53.287849 h 7.8427"
+         style="fill:none;stroke:#666666;stroke-width:0.529167;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:40;stroke-dasharray:none;marker-end:url(#marker6535)"
+         d="m 118.07234,61.211587 h -6.91449 v 10.98594 h 42.90504 V 53.287849 h 7.8427"
          id="path6483"
          sodipodi:nodetypes="cccccc" />
       <path
-         style="fill:none;stroke:#000000;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:40;stroke-dasharray:none"
-         d="m 118.99767,53.316534 h -8.32273 V 32.750521 H 63.606063 v 20.524647 h 8.521551"
+         style="fill:none;stroke:#666666;stroke-width:0.529167;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:40;stroke-dasharray:none;marker-end:url(#marker6535)"
+         d="m 118.07285,53.316534 h -7.39791 V 32.750521 H 63.606063 v 20.524647 h 6.696204"
          id="path6485"
          sodipodi:nodetypes="cccccc" />
       <path
-         style="fill:none;stroke:#000000;stroke-width:0.529167;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:40;stroke-dasharray:none;marker-end:url(#marker6535)"
-         d="M 72.31685,109.0099 H 63.610509 V 88.77312 h 64.736831 v 25.32127 h 3.56458 l 4.40153,-3.43366"
+         style="fill:none;stroke:#666666;stroke-width:0.529167;stroke-linecap:square;stroke-linejoin:round;stroke-miterlimit:40;stroke-dasharray:none;marker-end:url(#marker6535)"
+         d="M 71.396944,116.99806 H 63.610509 V 88.77312 h 64.736831 v 25.32127 h 3.56458 l 4.40153,-3.43366"
          id="path1264"
          sodipodi:nodetypes="ccccccc" />
     </g>
