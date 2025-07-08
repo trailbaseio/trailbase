@@ -830,6 +830,17 @@ mod tests {
       .records;
       assert_eq!(limited_arr.len(), 1);
 
+      // unary filter
+      let unary_filtered_arr = list_records(
+        &state,
+        Some(&user_y_token.auth_token),
+        Some(format!("filter[mid][$some]")),
+      )
+      .await
+      .unwrap()
+      .records;
+      assert_eq!(unary_filtered_arr.len(), 3);
+
       // Composite filter
       let messages: Vec<Message> = arr.into_iter().map(to_message).collect();
       let first = &messages[0].mid;

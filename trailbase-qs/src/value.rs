@@ -109,18 +109,23 @@ mod tests {
   fn test_value() {
     let qs = Config::new(5, false);
 
-    let v0: Query = qs.deserialize_str("filter[col0][$eq]=val0").unwrap();
     assert_eq!(
-      v0.filter.unwrap(),
+      qs.deserialize_str::<Query>("filter[col0][$eq]=val0")
+        .unwrap()
+        .filter
+        .unwrap(),
       ValueOrComposite::Value(ColumnOpValue {
         column: "col0".to_string(),
         op: CompareOp::Equal,
         value: Value::String("val0".to_string()),
       })
     );
-    let v1: Query = qs.deserialize_str("filter[col0][$ne]=TRUE").unwrap();
+
     assert_eq!(
-      v1.filter.unwrap(),
+      qs.deserialize_str::<Query>("filter[col0][$ne]=TRUE")
+        .unwrap()
+        .filter
+        .unwrap(),
       ValueOrComposite::Value(ColumnOpValue {
         column: "col0".to_string(),
         op: CompareOp::NotEqual,
@@ -128,9 +133,11 @@ mod tests {
       })
     );
 
-    let v2: Query = qs.deserialize_str("filter[col0][$ne]=0").unwrap();
     assert_eq!(
-      v2.filter.unwrap(),
+      qs.deserialize_str::<Query>("filter[col0][$ne]=0")
+        .unwrap()
+        .filter
+        .unwrap(),
       ValueOrComposite::Value(ColumnOpValue {
         column: "col0".to_string(),
         op: CompareOp::NotEqual,
@@ -138,13 +145,27 @@ mod tests {
       })
     );
 
-    let v3: Query = qs.deserialize_str("filter[col0][$ne]=0.0").unwrap();
     assert_eq!(
-      v3.filter.unwrap(),
+      qs.deserialize_str::<Query>("filter[col0][$ne]=0.0")
+        .unwrap()
+        .filter
+        .unwrap(),
       ValueOrComposite::Value(ColumnOpValue {
         column: "col0".to_string(),
         op: CompareOp::NotEqual,
         value: Value::Double(0.0),
+      })
+    );
+
+    assert_eq!(
+      qs.deserialize_str::<Query>("filter[col0][$some]")
+        .unwrap()
+        .filter
+        .unwrap(),
+      ValueOrComposite::Value(ColumnOpValue {
+        column: "col0".to_string(),
+        op: CompareOp::NotNull,
+        value: Value::String("".to_string()),
       })
     );
   }

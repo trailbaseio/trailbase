@@ -10,6 +10,8 @@ pub enum CompareOp {
   GreaterThan,
   LessThanEqual,
   LessThan,
+  Null,
+  NotNull,
   Like,
   Regexp,
 }
@@ -23,10 +25,16 @@ impl CompareOp {
       "$gt" => Some(Self::GreaterThan),
       "$lte" => Some(Self::LessThanEqual),
       "$lt" => Some(Self::LessThan),
+      "$null" => Some(Self::Null),
+      "$some" => Some(Self::NotNull),
       "$like" => Some(Self::Like),
       "$re" => Some(Self::Regexp),
       _ => None,
     };
+  }
+
+  pub fn is_unary(&self) -> bool {
+    return matches!(self, Self::Null | Self::NotNull);
   }
 
   pub fn to_sql(self) -> &'static str {
@@ -36,6 +44,8 @@ impl CompareOp {
       Self::LessThanEqual => "<=",
       Self::LessThan => "<",
       Self::NotEqual => "<>",
+      Self::Null => "IS NULL",
+      Self::NotNull => "IS NOT NULL",
       Self::Like => "LIKE",
       Self::Regexp => "REGEXP",
       Self::Equal => "=",

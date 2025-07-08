@@ -27,16 +27,16 @@ pub enum ValueOrComposite {
 impl ValueOrComposite {
   pub fn into_sql<E>(
     self,
-    prefix: Option<&str>,
+    column_prefix: Option<&str>,
     validator: &dyn Fn(&str) -> Result<(), E>,
   ) -> Result<(String, Vec<(String, Value)>), E> {
     let mut index: usize = 0;
-    return self.into_sql_impl(prefix, validator, &mut index);
+    return self.into_sql_impl(column_prefix, validator, &mut index);
   }
 
   fn into_sql_impl<E>(
     self,
-    prefix: Option<&str>,
+    column_prefix: Option<&str>,
     validator: &dyn Fn(&str) -> Result<(), E>,
     index: &mut usize,
   ) -> Result<(String, Vec<(String, Value)>), E> {
@@ -44,23 +44,33 @@ impl ValueOrComposite {
       Self::Value(v) => {
         validator(&v.column)?;
 
-        let param = param_name(*index);
-        *index += 1;
+        return Ok(if v.op.is_unary() {
+          (
+            match column_prefix {
+              Some(p) => format!(r#"{p}."{c}" {o}"#, c = v.column, o = v.op.to_sql()),
+              None => format!(r#""{c}" {o}"#, c = v.column, o = v.op.to_sql()),
+            },
+            vec![],
+          )
+        } else {
+          let param = param_name(*index);
+          *index += 1;
 
-        return Ok((
-          match prefix {
-            Some(p) => format!(r#"{p}."{c}" {o} {param}"#, c = v.column, o = v.op.to_sql()),
-            None => format!(r#""{c}" {o} {param}"#, c = v.column, o = v.op.to_sql()),
-          },
-          vec![(param, v.value)],
-        ));
+          (
+            match column_prefix {
+              Some(p) => format!(r#"{p}."{c}" {o} {param}"#, c = v.column, o = v.op.to_sql()),
+              None => format!(r#""{c}" {o} {param}"#, c = v.column, o = v.op.to_sql()),
+            },
+            vec![(param, v.value)],
+          )
+        });
       }
       Self::Composite(combiner, vec) => {
         let mut fragments = Vec::<String>::with_capacity(vec.len());
         let mut params = Vec::<(String, Value)>::with_capacity(vec.len());
 
         for value_or_composite in vec {
-          let (f, p) = value_or_composite.into_sql_impl::<E>(prefix, validator, index)?;
+          let (f, p) = value_or_composite.into_sql_impl::<E>(column_prefix, validator, index)?;
           fragments.push(f);
           params.extend(p);
         }
@@ -269,5 +279,47 @@ mod tests {
     let m3: Result<Query, _> =
       qs.deserialize_str("filter[col0]=val0&filter[$and][0][col0]=val0&filter[col1]=val1");
     assert!(m3.is_err(), "{m3:?}");
+  }
+
+  #[test]
+  fn test_filter_to_sql() {
+    let v0 = ValueOrComposite::Value(ColumnOpValue {
+      column: "col0".to_string(),
+      op: CompareOp::Equal,
+      value: Value::String("val0".to_string()),
+    });
+
+    let validator = |_: &str| -> Result<(), String> {
+      return Ok(());
+    };
+    let sql0 = v0
+      .clone()
+      .into_sql(/* column_prefix= */ None, &validator)
+      .unwrap();
+    assert_eq!(sql0.0, r#""col0" = :__p0"#);
+    let sql0 = v0
+      .into_sql(/* column_prefix= */ Some("p"), &validator)
+      .unwrap();
+    assert_eq!(sql0.0, r#"p."col0" = :__p0"#);
+
+    let v1 = ValueOrComposite::Value(ColumnOpValue {
+      column: "col0".to_string(),
+      op: CompareOp::Null,
+      value: Value::String("".to_string()),
+    });
+    assert_eq!(
+      v1.into_sql(None, &validator).unwrap().0,
+      r#""col0" IS NULL"#
+    );
+
+    let v2 = ValueOrComposite::Value(ColumnOpValue {
+      column: "col0".to_string(),
+      op: CompareOp::NotNull,
+      value: Value::String("ignored".to_string()),
+    });
+    assert_eq!(
+      v2.into_sql(Some("p"), &validator).unwrap().0,
+      r#"p."col0" IS NOT NULL"#
+    );
   }
 }
