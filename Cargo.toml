@@ -60,8 +60,8 @@ opt-level = 1
 askama = { version = "0.14.0", default-features = false, features = ["derive", "std", "config"] }
 axum = { version = "^0.8.1", features = ["multipart"] }
 env_logger = { version = "^0.11.8", default-features = false, features = ["auto-color", "humantime"] }
-libsqlite3-sys = { version = "0.34.0", features = ["bundled"] }
-rusqlite = { version = "0.36.0", default-features = false, features = ["bundled", "column_decltype", "load_extension", "modern_sqlite", "functions", "limits", "backup", "hooks", "preupdate_hook"] }
+libsqlite3-sys = { version = "0.35.0", features = ["bundled"] }
+rusqlite = { version = "0.37.0", default-features = false, features = ["bundled", "column_decltype", "load_extension", "modern_sqlite", "functions", "limits", "backup", "hooks", "preupdate_hook"] }
 rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
 tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "signal", "time", "sync"] }
 tracing = { version = "0.1.40", default-features = false }
