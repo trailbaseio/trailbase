@@ -110,7 +110,7 @@ directory:
 
 ```bash
 $ mkdir traildepot
-$ alias trail="docker run -p 4000:4000 --mount type=bind,source=$PWD/traildepot,target=/app/traildepot trailbase/trailbase /app/trail"
+$ alias trail="docker run --network host --mount type=bind,source=$PWD/traildepot,target=/app/traildepot trailbase/trailbase /app/trail"
 $ trail run
 ```
 

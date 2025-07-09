@@ -5,11 +5,11 @@ Alternatively, you can use a Docker image from DockerHub:
 
 ```bash
 $ alias trail="docker run \
-      -p 4000:4000 \
+      --network host \
       --mount type=bind,source=$PWD/traildepot,target=/app/traildepot \
       trailbase/trailbase /app/trail"
 $ mkdir traildepot # pre-create mount point for Docker
-$ trail run --address 0.0.0.0:4000
+$ trail run
 ```
 
 or compile from [source](https://github.com/trailbaseio/trailbase).

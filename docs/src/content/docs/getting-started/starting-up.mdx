@@ -15,7 +15,7 @@ The quickest way to get TrailBase up and running is to use docker:
 
 ```bash
   $ mkdir traildepot
-  $ docker run -p 4000:4000 --mount type=bind,source=$PWD/traildepot,target=/app/traildepot trailbase/trailbase
+  $ docker run --network host --mount type=bind,source=$PWD/traildepot,target=/app/traildepot trailbase/trailbase
 ```
 
 On first start, TrailBase will generate a `traildepot` folder in your working
