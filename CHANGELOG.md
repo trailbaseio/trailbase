@@ -1,3 +1,10 @@
+## v0.14.8
+
+* Add an `$is` operator for filtering records. Allows filltering by `NULL` and `!NULL`.
+* Add optional `--public-url` CLI argument and push responsibility of handling absent `site_url` down the stack to OAuth and Email components for more appropriate fallbacks.
+* Documentation fixes around getting started with docker and relations.
+* Update dependencies.
+
 ## v0.14.7
 
 * Allow setting up multiple record APIs per `TABLE` or `VIEW` from with the admin UI. Previously, this was only available manually.
