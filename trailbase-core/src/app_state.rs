@@ -22,7 +22,7 @@ use crate::value_notifier::{Computed, Guard, ValueNotifier};
 struct InternalState {
   data_dir: DataDir,
   public_dir: Option<PathBuf>,
-  site_url: Computed<url::Url>,
+  site_url: Computed<Option<url::Url>>,
   dev: bool,
   demo: bool,
 
@@ -50,8 +50,8 @@ struct InternalState {
 
 pub(crate) struct AppStateArgs {
   pub data_dir: DataDir,
+  pub public_url: Option<url::Url>,
   pub public_dir: Option<PathBuf>,
-  pub address: String,
   pub dev: bool,
   pub demo: bool,
   pub schema_metadata: SchemaMetadataCache,
@@ -72,7 +72,21 @@ impl AppState {
   pub(crate) fn new(args: AppStateArgs) -> Self {
     let config = ValueNotifier::new(args.config);
 
-    let site_url = Computed::new(&config, move |c| build_site_url(c, &args.address));
+    let public_url = args.public_url.clone();
+    let site_url = Computed::new(&config, move |site_url| -> Option<url::Url> {
+      if let Some(ref public_url) = public_url {
+        log::info!("Public url provided: {public_url:?}");
+        return Some(public_url.clone());
+      }
+
+      return build_site_url(site_url)
+        .map_err(|err| {
+          error!("Failed to parse `site_url`: {err}");
+          return err;
+        })
+        .ok()
+        .flatten();
+    });
 
     let record_apis = {
       let schema_metadata_clone = args.schema_metadata.clone();
@@ -208,7 +222,7 @@ impl AppState {
     return self.state.auth.load();
   }
 
-  pub fn site_url(&self) -> Arc<url::Url> {
+  pub fn site_url(&self) -> Arc<Option<url::Url>> {
     return self.state.site_url.load_full();
   }
 
@@ -403,12 +417,11 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     });
   }
 
-  let address = "localhost:1234";
   return Ok(AppState {
     state: Arc::new(InternalState {
       data_dir,
       public_dir: None,
-      site_url: Computed::new(&config, move |c| build_site_url(c, address)),
+      site_url: Computed::new(&config, |c| build_site_url(c).unwrap()),
       dev: true,
       demo: false,
       auth: Computed::new(&config, |c| AuthOptions::from_config(c.auth.clone())),
@@ -511,19 +524,10 @@ pub(crate) fn build_objectstore(
   ));
 }
 
-fn build_site_url(c: &Config, address: &str) -> url::Url {
-  let fallback = url::Url::parse(&format!("http://{address}")).expect("startup");
-
+fn build_site_url(c: &Config) -> Result<Option<url::Url>, url::ParseError> {
   if let Some(ref site_url) = c.server.site_url {
-    match url::Url::parse(site_url) {
-      Ok(url) => {
-        return url;
-      }
-      Err(err) => {
-        error!("Failed to parse site_url '{site_url}' from config: {err}");
-      }
-    };
+    return Ok(Some(url::Url::parse(site_url)?));
   }
 
-  return fallback;
+  return Ok(None);
 }

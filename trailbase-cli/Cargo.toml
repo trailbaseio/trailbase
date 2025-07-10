@@ -25,3 +25,4 @@ tokio = { workspace = true }
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9.0.0", features = ["axum"], optional = true }
 uuid = { workspace = true }
+url = "2.5.4"

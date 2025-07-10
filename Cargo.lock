@@ -6901,6 +6901,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "trailbase",
+ "url",
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",

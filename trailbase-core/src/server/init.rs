@@ -41,6 +41,7 @@ pub enum InitError {
 #[derive(Default)]
 pub struct InitArgs {
   pub data_dir: DataDir,
+  pub public_url: Option<url::Url>,
   pub public_dir: Option<PathBuf>,
   pub geoip_db_path: Option<PathBuf>,
 
@@ -135,8 +136,8 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
 
   let app_state = AppState::new(AppStateArgs {
     data_dir: args.data_dir.clone(),
+    public_url: args.public_url,
     public_dir: args.public_dir,
-    address: args.address,
     dev: args.dev,
     demo: args.demo,
     schema_metadata,

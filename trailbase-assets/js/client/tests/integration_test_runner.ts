@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
 import { createVitest } from "vitest/node";
-import { cwd, chdir } from "node:process";
+import { cwd } from "node:process";
 import { join } from "node:path";
 import { execa, type Subprocess } from "execa";
 
+import { PORT } from "./constants";
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const port: number = 4005;
 
 async function initTrailBase(): Promise<{ subprocess: Subprocess }> {
   const pwd = cwd();
@@ -27,7 +28,7 @@ async function initTrailBase(): Promise<{ subprocess: Subprocess }> {
     cwd: root,
     stdout: process.stdout,
     stderr: process.stdout,
-  })`cargo run -- --data-dir client/testfixture run -a 127.0.0.1:${port} --js-runtime-threads 1`;
+  })`cargo run -- --data-dir client/testfixture --public-url http://127.0.0.1:${PORT} run -a 127.0.0.1:${PORT} --js-runtime-threads 1`;
 
   for (let i = 0; i < 100; ++i) {
     if ((subprocess.exitCode ?? 0) > 0) {
@@ -35,7 +36,7 @@ async function initTrailBase(): Promise<{ subprocess: Subprocess }> {
     }
 
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/healthcheck`);
+      const response = await fetch(`http://127.0.0.1:${PORT}/api/healthcheck`);
       if (response.ok) {
         return { subprocess };
       }

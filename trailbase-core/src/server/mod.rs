@@ -42,6 +42,9 @@ pub struct ServerOptions {
   /// Optional path to static assets that will be served at the HTTP root.
   pub data_dir: DataDir,
 
+  /// Optional public url
+  pub public_url: Option<url::Url>,
+
   // Authority (<host>:<port>) the HTTP server binds to, e.g. "localhost:4000".
   pub address: String,
 
@@ -119,6 +122,7 @@ impl Server {
 
     let (new_data_dir, state) = init::init_app_state(InitArgs {
       data_dir: opts.data_dir.clone(),
+      public_url: opts.public_url.clone(),
       public_dir: opts.public_dir.clone(),
       geoip_db_path: opts.geoip_db_path.clone(),
       address: opts.address.clone(),

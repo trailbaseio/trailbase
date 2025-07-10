@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
 import { OAuth2Server } from "oauth2-mock-server";
+import { PORT } from "../constants";
 
-const port: number = 4005;
-const address: string = `http://127.0.0.1:${port}`;
+const address: string = `http://127.0.0.1:${PORT}`;
 
 type OpenIdConfig = {
   issuer: string;
@@ -18,6 +18,7 @@ test("OIDC", async () => {
   // Generate a new RSA key and add it to the keystore
   await server.issuer.keys.generate("RS256");
 
+  // NOTE: this port needs to match the client/testfixture/config.textproto.
   const authPort = 9088;
   const authAddress = "127.0.0.1";
   await server.start(authPort, authAddress);

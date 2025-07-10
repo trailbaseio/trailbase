@@ -2,6 +2,7 @@ use lettre::address::AddressError;
 use lettre::message::{Body, Mailbox, Message, header::ContentType};
 use lettre::transport::smtp;
 use lettre::{AsyncSendmailTransport, AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
+use log::*;
 use minijinja::{Environment, context};
 use std::sync::Arc;
 use thiserror::Error;
@@ -87,7 +88,6 @@ impl Email {
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email.parse()?;
 
-    let site_url = state.site_url();
     let (server_config, template) =
       state.access_config(|c| (c.server.clone(), c.email.user_verification_template.clone()));
 
@@ -97,7 +97,7 @@ impl Email {
         body: Some(body),
       }) => (subject, body),
       _ => {
-        log::debug!("Falling back to default email verification email");
+        debug!("Falling back to default email verification email");
         (
           defaults::EMAIL_VALIDATION_SUBJECT.to_string(),
           defaults::EMAIL_VALIDATION_BODY.to_string(),
@@ -105,6 +105,7 @@ impl Email {
       }
     };
 
+    let site_url = get_site_url(state);
     let verification_url = format!("{site_url}/verify_email/confirm/{email_verification_code}");
 
     let env = Environment::empty();
@@ -119,7 +120,7 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
-        SITE_URL => *site_url,
+        SITE_URL => site_url,
         CODE => email_verification_code,
         EMAIL => email,
       })?;
@@ -133,7 +134,6 @@ impl Email {
     email_verification_code: &str,
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email.parse()?;
-    let site_url = state.site_url();
     let (server_config, template) =
       state.access_config(|c| (c.server.clone(), c.email.change_email_template.clone()));
 
@@ -143,7 +143,7 @@ impl Email {
         body: Some(body),
       }) => (subject, body),
       _ => {
-        log::debug!("Falling back to default change email template");
+        debug!("Falling back to default change email template");
         (
           defaults::CHANGE_EMAIL_SUBJECT.to_string(),
           defaults::CHANGE_EMAIL_BODY.to_string(),
@@ -151,6 +151,7 @@ impl Email {
       }
     };
 
+    let site_url = get_site_url(state);
     let verification_url = format!("{site_url}/change_email/confirm/{email_verification_code}");
 
     let env = Environment::empty();
@@ -165,7 +166,7 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
-        SITE_URL => *site_url,
+        SITE_URL => site_url,
         CODE => email_verification_code,
         EMAIL => email,
       })?;
@@ -179,7 +180,6 @@ impl Email {
     password_reset_code: &str,
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email.parse()?;
-    let site_url = state.site_url();
     let (server_config, template) =
       state.access_config(|c| (c.server.clone(), c.email.password_reset_template.clone()));
 
@@ -189,7 +189,7 @@ impl Email {
         body: Some(body),
       }) => (subject, body),
       _ => {
-        log::debug!("Falling back to default reset password email");
+        debug!("Falling back to default reset password email");
         (
           defaults::PASSWORD_RESET_SUBJECT.to_string(),
           defaults::PASSWORD_RESET_BODY.to_string(),
@@ -197,6 +197,7 @@ impl Email {
       }
     };
 
+    let site_url = get_site_url(state);
     let verification_url = format!("{site_url}/reset_password/update/{password_reset_code}");
 
     let env = Environment::empty();
@@ -211,7 +212,7 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
-        SITE_URL => *site_url,
+        SITE_URL => site_url,
         CODE => password_reset_code,
         EMAIL => email,
       })?;
@@ -223,6 +224,7 @@ impl Email {
 fn get_sender(state: &AppState) -> Result<Mailbox, EmailError> {
   let (sender_address, sender_name) =
     state.access_config(|c| (c.email.sender_address.clone(), c.email.sender_name.clone()));
+
   let address = sender_address.unwrap_or_else(|| fallback_sender(&state.site_url()));
 
   if let Some(ref name) = sender_name {
@@ -231,10 +233,15 @@ fn get_sender(state: &AppState) -> Result<Mailbox, EmailError> {
   return Ok(address.parse::<Mailbox>()?);
 }
 
-fn fallback_sender(site_url: &url::Url) -> String {
-  if let Some(host) = site_url.host() {
+fn fallback_sender(site_url: &Option<url::Url>) -> String {
+  if let Some(host) = site_url.as_ref().and_then(|u| u.host()) {
     return format!("noreply@{host}");
   }
+
+  warn!(
+    "No 'site_url' configured, falling back to sender 'noreply@localhost'. This may be ok for development environments but otherwise will result in your emails being filtered."
+  );
+
   return "noreply@localhost".to_string();
 }
 
@@ -286,6 +293,19 @@ impl Mailer {
 
     return Self::new_local();
   }
+}
+
+fn get_site_url(state: &AppState) -> url::Url {
+  return match *state.site_url() {
+    Some(ref site_url) => site_url.clone(),
+    None => {
+      warn!(
+        "No 'site_url' configured, falling back to 'http://localhost'. This may be ok for development but will result in invalid auth links otherwise."
+      );
+
+      url::Url::parse("http://localhost").expect("invariant")
+    }
+  };
 }
 
 pub(crate) mod defaults {
@@ -444,7 +464,7 @@ pub mod testing {
 
   #[test]
   fn test_fallback_sender() {
-    let url = url::Url::parse("https://test.org").unwrap();
+    let url = Some(url::Url::parse("https://test.org").unwrap());
     let sender = fallback_sender(&url);
     assert_eq!("noreply@test.org", sender);
   }

@@ -96,6 +96,7 @@ async fn test_oauth() {
   .unwrap();
 
   let mut config = Config::new_with_custom_defaults();
+  config.server.site_url = Some("https://bar.org".to_string());
   config.auth.oauth_providers.insert(
     name.clone(),
     OAuthProviderConfig {
@@ -160,7 +161,7 @@ async fn test_oauth() {
   assert_eq!(auth_query.state, oauth_state.csrf_secret);
   assert_eq!(
     auth_query.redirect_uri,
-    format!("http://localhost:1234/{AUTH_API_PATH}/oauth/{name}/callback")
+    format!("https://bar.org/{AUTH_API_PATH}/oauth/{name}/callback")
   );
   assert_eq!(
     auth_query.code_challenge,

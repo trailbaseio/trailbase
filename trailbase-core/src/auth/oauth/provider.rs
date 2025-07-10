@@ -65,8 +65,13 @@ pub trait OAuthProvider {
   fn settings(&self) -> Result<OAuthClientSettings, AuthError>;
 
   fn oauth_client(&self, state: &AppState) -> Result<OAuthClient, AuthError> {
-    let redirect_url: Url = state
-      .site_url()
+    let Some(ref site_url) = *state.site_url() else {
+      return Err(AuthError::Internal(
+        "Missing site_url for redirectback ".into(),
+      ));
+    };
+
+    let redirect_url: Url = site_url
       .join(&format!(
         "/{AUTH_API_PATH}/oauth/{name}/callback",
         name = self.name()

@@ -75,6 +75,7 @@ async fn async_main() -> Result<(), BoxError> {
 
       let app = Server::init(ServerOptions {
         data_dir,
+        public_url: args.public_url,
         address: cmd.address,
         admin_address: cmd.admin_address,
         public_dir: cmd.public_dir.map(|p| p.into()),
@@ -119,6 +120,7 @@ async fn async_main() -> Result<(), BoxError> {
 
       let (_new_db, state) = init_app_state(InitArgs {
         data_dir: DataDir(args.data_dir),
+        public_url: args.public_url,
         ..Default::default()
       })
       .await?;
@@ -241,6 +243,7 @@ async fn async_main() -> Result<(), BoxError> {
 
       let (_new_db, state) = init_app_state(InitArgs {
         data_dir: DataDir(args.data_dir),
+        public_url: args.public_url,
         ..Default::default()
       })
       .await?;

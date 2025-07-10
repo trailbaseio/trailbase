@@ -35,6 +35,11 @@ pub struct DefaultCommandLineArgs {
   #[arg(long, env, default_value = DataDir::DEFAULT)]
   pub data_dir: std::path::PathBuf,
 
+  /// Public url used to access TrailBase. This is necessary for sending valid auth emails and
+  /// OAuth2 redirects, i.e. after users authenticating externally.
+  #[arg(long, env)]
+  pub public_url: Option<url::Url>,
+
   #[command(subcommand)]
   pub cmd: Option<SubCommands>,
 }

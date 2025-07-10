@@ -497,11 +497,12 @@ pub(crate) fn validate_config(
   };
   validate_application_name(app_name)?;
 
-  if let Some(ref site_url) = config.server.site_url {
-    if let Err(err) = url::Url::parse(site_url) {
-      return ierr(format!("Failed to parse site_url '{site_url}': {err}"));
-    }
-  }
+  let site_url = match config.server.site_url {
+    Some(ref site_url) => Some(url::Url::parse(site_url).map_err(|err| {
+      ConfigError::Invalid(format!("Failed to parse site_url '{site_url}': {err}",))
+    })?),
+    None => None,
+  };
 
   // Check RecordApis.
   //
@@ -519,6 +520,12 @@ pub(crate) fn validate_config(
   }
 
   // Check OAuth.
+  if !config.auth.oauth_providers.is_empty() && site_url.is_none() {
+    info!(
+      "OAuth requires a public URL for redirects from external auth providers but `config.server.site_url` not set. May have been provided via `--public-url` instead"
+    );
+  }
+
   for (name, provider) in &config.auth.oauth_providers {
     let provider_id: OAuthProviderId = provider
       .provider_id
