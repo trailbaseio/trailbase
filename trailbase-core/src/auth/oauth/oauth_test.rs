@@ -160,7 +160,7 @@ async fn test_oauth() {
   assert_eq!(auth_query.state, oauth_state.csrf_secret);
   assert_eq!(
     auth_query.redirect_uri,
-    format!("http://localhost:1234/{AUTH_API_PATH}/oauth/{name}/callback")
+    format!("http://localhost/{AUTH_API_PATH}/oauth/{name}/callback")
   );
   assert_eq!(
     auth_query.code_challenge,

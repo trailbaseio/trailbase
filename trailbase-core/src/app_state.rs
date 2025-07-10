@@ -403,12 +403,11 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     });
   }
 
-  let address = "localhost:1234";
   return Ok(AppState {
     state: Arc::new(InternalState {
       data_dir,
       public_dir: None,
-      site_url: Computed::new(&config, move |c| build_site_url(c, address)),
+      site_url: Computed::new(&config, move |c| build_site_url(c, "")),
       dev: true,
       demo: false,
       auth: Computed::new(&config, |c| AuthOptions::from_config(c.auth.clone())),
@@ -512,8 +511,6 @@ pub(crate) fn build_objectstore(
 }
 
 fn build_site_url(c: &Config, address: &str) -> url::Url {
-  let fallback = url::Url::parse(&format!("http://{address}")).expect("startup");
-
   if let Some(ref site_url) = c.server.site_url {
     match url::Url::parse(site_url) {
       Ok(url) => {
@@ -525,5 +522,6 @@ fn build_site_url(c: &Config, address: &str) -> url::Url {
     };
   }
 
+  let fallback = url::Url::parse(&format!("http://{address}")).expect("startup");
   return fallback;
 }

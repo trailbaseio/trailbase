@@ -117,7 +117,7 @@ pub mod proto {
       let config = Config {
         server: ServerConfig {
           application_name: Some("TrailBase".to_string()),
-          site_url: None,
+          site_url: Some("http://localhost".to_string()),
           logs_retention_sec: Some(LOGS_RETENTION_DEFAULT.num_seconds()),
           ..Default::default()
         },
