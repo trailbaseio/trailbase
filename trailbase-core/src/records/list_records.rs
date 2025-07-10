@@ -834,7 +834,7 @@ mod tests {
       let unary_filtered_arr = list_records(
         &state,
         Some(&user_y_token.auth_token),
-        Some(format!("filter[mid][$some]")),
+        Some(format!("filter[mid][$is]=!NULL")),
       )
       .await
       .unwrap()

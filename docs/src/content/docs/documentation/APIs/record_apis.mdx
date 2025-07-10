@@ -333,7 +333,7 @@ Parameters:
 * Filtering can be controlled by passing one or more
   `filter[<column_name>][op]=<value>` parameters.
   For example, `filter[revenue][$gt]=0` would list records with a positive `revenue` only.
-  Supported operators are:
+* Supported operators are:
   * **$eq**: equal, which is also the default if no explicit operator is
     specified, i.e. `?success[$eq]=TRUE` and `?success=TRUE` are identical.
   * **$ne**: not equal
@@ -341,10 +341,9 @@ Parameters:
   * **$gt**: greater-than
   * **$lte**: less-than-equal
   * **$lt**: less-than
-  * **$null**: SQL `IS NULL` unary operator
-  * **$some**: SQL `IS NOT NULL` unary operator
-  * **$like**: SQL `LIKE` operator
-  * **$re**: SQL `REGEXP` operator
+  * **$is**: is null or not null, i.e. `?col[$is]=NULL` or `?col[$is]=!NULL`, respectively
+  * **$like**: SQL `LIKE` operator, e.g. `?col[$like]=%something%`
+  * **$re**: SQL `REGEXP` operator, e.g. `?col[$re]=^something$`
 * Parent records, i.e. records pointed to by foreign key columns, can be
   expanded using the `?expand=<col0>,<col`>` parameter, if the respective columns
   were allow-listed in the API configuration.

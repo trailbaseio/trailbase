@@ -44,25 +44,9 @@ impl ValueOrComposite {
       Self::Value(v) => {
         validator(&v.column)?;
 
-        return Ok(if v.op.is_unary() {
-          (
-            match column_prefix {
-              Some(p) => format!(r#"{p}."{c}" {o}"#, c = v.column, o = v.op.to_sql()),
-              None => format!(r#""{c}" {o}"#, c = v.column, o = v.op.to_sql()),
-            },
-            vec![],
-          )
-        } else {
-          let param = param_name(*index);
-          *index += 1;
-
-          (
-            match column_prefix {
-              Some(p) => format!(r#"{p}."{c}" {o} {param}"#, c = v.column, o = v.op.to_sql()),
-              None => format!(r#""{c}" {o} {param}"#, c = v.column, o = v.op.to_sql()),
-            },
-            vec![(param, v.value)],
-          )
+        return Ok(match v.into_sql(column_prefix, index) {
+          (sql, Some(param)) => (sql, vec![param]),
+          (sql, None) => (sql, vec![]),
         });
       }
       Self::Composite(combiner, vec) => {
@@ -189,14 +173,6 @@ impl<'de> serde::de::Deserialize<'de> for ValueOrComposite {
   }
 }
 
-#[inline]
-fn param_name(index: usize) -> String {
-  let mut s = String::with_capacity(10);
-  s.push_str(":__p");
-  s.push_str(&index.to_string());
-  return s;
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -242,6 +218,16 @@ mod tests {
           }),
         ]
       )
+    );
+
+    let m3: Query = qs.deserialize_str("filter[col0][$is]=!NULL").unwrap();
+    assert_eq!(
+      m3.filter.unwrap(),
+      ValueOrComposite::Value(ColumnOpValue {
+        column: "col0".to_string(),
+        op: CompareOp::Is,
+        value: Value::String("NOT NULL".to_string()),
+      })
     );
 
     assert!(
@@ -304,22 +290,10 @@ mod tests {
 
     let v1 = ValueOrComposite::Value(ColumnOpValue {
       column: "col0".to_string(),
-      op: CompareOp::Null,
-      value: Value::String("".to_string()),
+      op: CompareOp::Is,
+      value: Value::String("NULL".to_string()),
     });
-    assert_eq!(
-      v1.into_sql(None, &validator).unwrap().0,
-      r#""col0" IS NULL"#
-    );
-
-    let v2 = ValueOrComposite::Value(ColumnOpValue {
-      column: "col0".to_string(),
-      op: CompareOp::NotNull,
-      value: Value::String("ignored".to_string()),
-    });
-    assert_eq!(
-      v2.into_sql(Some("p"), &validator).unwrap().0,
-      r#"p."col0" IS NOT NULL"#
-    );
+    let sql1 = v1.into_sql(None, &validator).unwrap();
+    assert_eq!(sql1.0, r#""col0" IS NULL"#, "{sql1:?}",);
   }
 }

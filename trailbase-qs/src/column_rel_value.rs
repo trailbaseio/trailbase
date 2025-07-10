@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use serde::de::{Deserializer, Error};
 
 use crate::value::Value;
@@ -10,8 +11,7 @@ pub enum CompareOp {
   GreaterThan,
   LessThanEqual,
   LessThan,
-  Null,
-  NotNull,
+  Is,
   Like,
   Regexp,
 }
@@ -25,53 +25,26 @@ impl CompareOp {
       "$gt" => Some(Self::GreaterThan),
       "$lte" => Some(Self::LessThanEqual),
       "$lt" => Some(Self::LessThan),
-      "$null" => Some(Self::Null),
-      "$some" => Some(Self::NotNull),
+      "$is" => Some(Self::Is),
       "$like" => Some(Self::Like),
       "$re" => Some(Self::Regexp),
       _ => None,
     };
   }
 
-  pub fn is_unary(&self) -> bool {
-    return matches!(self, Self::Null | Self::NotNull);
-  }
-
-  pub fn to_sql(self) -> &'static str {
+  #[inline]
+  pub fn as_sql(&self) -> &'static str {
     return match self {
       Self::GreaterThanEqual => ">=",
       Self::GreaterThan => ">",
       Self::LessThanEqual => "<=",
       Self::LessThan => "<",
       Self::NotEqual => "<>",
-      Self::Null => "IS NULL",
-      Self::NotNull => "IS NOT NULL",
+      Self::Is => "IS",
       Self::Like => "LIKE",
       Self::Regexp => "REGEXP",
       Self::Equal => "=",
     };
-  }
-}
-
-impl<'de> serde::de::Deserialize<'de> for CompareOp {
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    use serde_value::Value;
-
-    static EXPECTED: &str = "one of [$eq, $ne, $lt, ...]";
-
-    let value = Value::deserialize(deserializer)?;
-    let Value::String(ref string) = value else {
-      return Err(Error::invalid_type(
-        crate::util::unexpected(&value),
-        &EXPECTED,
-      ));
-    };
-
-    return CompareOp::from(string)
-      .ok_or_else(|| Error::invalid_type(crate::util::unexpected(&value), &EXPECTED));
   }
 }
 
@@ -83,6 +56,88 @@ pub struct ColumnOpValue {
   pub value: Value,
 }
 
+impl ColumnOpValue {
+  pub fn into_sql(
+    self,
+    column_prefix: Option<&str>,
+    index: &mut usize,
+  ) -> (String, Option<(String, Value)>) {
+    return match self.op {
+      CompareOp::Is => {
+        assert!(matches!(self.value, Value::String(_)), "{:?}", self.value);
+
+        match column_prefix {
+          Some(p) => (
+            format!(r#"{p}."{c}" IS {v}"#, c = self.column, v = self.value),
+            None,
+          ),
+          None => (
+            format!(r#""{c}" IS {v}"#, c = self.column, v = self.value),
+            None,
+          ),
+        }
+      }
+      _ => {
+        let param = param_name(*index);
+        *index += 1;
+
+        match column_prefix {
+          Some(p) => (
+            format!(
+              r#"{p}."{c}" {o} {param}"#,
+              c = self.column,
+              o = self.op.as_sql()
+            ),
+            Some((param, self.value)),
+          ),
+          None => (
+            format!(
+              r#""{c}" {o} {param}"#,
+              c = self.column,
+              o = self.op.as_sql()
+            ),
+            Some((param, self.value)),
+          ),
+        }
+      }
+    };
+  }
+}
+
+fn parse_value<'de, D>(op: CompareOp, value: serde_value::Value) -> Result<Value, D::Error>
+where
+  D: Deserializer<'de>,
+{
+  use crate::util::unexpected;
+
+  return match op {
+    CompareOp::Is => match value {
+      serde_value::Value::String(value) if value == "NULL" => Ok(Value::String("NULL".to_string())),
+      serde_value::Value::String(value) if value == "!NULL" => {
+        Ok(Value::String("NOT NULL".to_string()))
+      }
+      _ => Err(Error::invalid_type(unexpected(&value), &"NULL or !NULL")),
+    },
+    _ => match value {
+      serde_value::Value::String(value) => Ok(Value::unparse(value)),
+      serde_value::Value::Bytes(bytes) => Ok(Value::String(BASE64_URL_SAFE.encode(bytes))),
+      serde_value::Value::I64(i) => Ok(Value::Integer(i)),
+      serde_value::Value::I32(i) => Ok(Value::Integer(i as i64)),
+      serde_value::Value::I16(i) => Ok(Value::Integer(i as i64)),
+      serde_value::Value::I8(i) => Ok(Value::Integer(i as i64)),
+      serde_value::Value::U64(i) => Ok(Value::Integer(i as i64)),
+      serde_value::Value::U32(i) => Ok(Value::Integer(i as i64)),
+      serde_value::Value::U16(i) => Ok(Value::Integer(i as i64)),
+      serde_value::Value::U8(i) => Ok(Value::Integer(i as i64)),
+      serde_value::Value::Bool(b) => Ok(Value::Bool(b)),
+      _ => Err(Error::invalid_type(
+        unexpected(&value),
+        &"trailbase_qs::Value, i.e. string, integer, double or bool",
+      )),
+    },
+  };
+}
+
 pub fn serde_value_to_single_column_rel_value<'de, D>(
   key: String,
   value: serde_value::Value,
@@ -90,7 +145,9 @@ pub fn serde_value_to_single_column_rel_value<'de, D>(
 where
   D: Deserializer<'de>,
 {
+  use crate::util::unexpected;
   use serde_value::Value;
+
   if !crate::util::sanitize_column_name(&key) {
     // NOTE: This may trigger if serde_qs parse depth is not enough. In this case, square brakets
     // will end up in the column name.
@@ -103,22 +160,36 @@ where
     Value::String(_) => Ok(ColumnOpValue {
       column: key,
       op: CompareOp::Equal,
-      value: crate::value::serde_value_to_value::<D>(value)?,
+      value: parse_value::<D>(CompareOp::Equal, value)?,
     }),
     Value::Map(mut m) if m.len() == 1 => {
       let (k, v) = m.pop_first().expect("len() == 1");
 
-      let op = k.deserialize_into::<CompareOp>().map_err(Error::custom)?;
+      let op = if let Value::String(ref op_str) = k {
+        CompareOp::from(op_str).ok_or_else(|| Error::invalid_type(unexpected(&k), &OP_ERR))?
+      } else {
+        return Err(Error::invalid_type(unexpected(&k), &OP_ERR));
+      };
 
       Ok(ColumnOpValue {
         column: key,
+        value: parse_value::<D>(op, v)?,
         op,
-        value: crate::value::serde_value_to_value::<D>(v)?,
       })
     }
     v => Err(Error::invalid_type(
-      crate::util::unexpected(&v),
+      unexpected(&v),
       &"[column_name]=value or [column_name][$op]=value",
     )),
   };
 }
+
+#[inline]
+fn param_name(index: usize) -> String {
+  let mut s = String::with_capacity(10);
+  s.push_str(":__p");
+  s.push_str(&index.to_string());
+  return s;
+}
+
+const OP_ERR: &str = "one of [$eq, $ne, $lt, ...]";
