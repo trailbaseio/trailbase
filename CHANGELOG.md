@@ -1,3 +1,13 @@
+## v0.15.0
+
+* Overhaul `user` and `admin` CLI commands to additionally support: change email, delete user, set verify status, invalidate sessions.
+  * Users can now be referenced both by UUID (string and base64 encoded) and email addresses.
+* With the extended CLI surface, disallow update/delete of admin users from the UI, thus reducing the potential for abuse. Priviledge now lies with sys-admins.
+* Support install using a one-liner: `curl -sSL https://raw.githubusercontent.com/trailbaseio/trailbase/main/install.sh | bash` in addition to docker.
+  * Also overhauled the "getting started" guide making it clearer how easy it is to install vanilla TrailBase and that docker is entirely optional.
+* Fix record filtering when `[$is]=(!NULL|NULL)` is the only filter.
+* Minor: reduce info log spam.
+
 ## v0.14.8
 
 * Add an `$is` operator for filtering records. Allows filltering by `NULL` and `!NULL`.
