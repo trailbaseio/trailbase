@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use log::*;
 use parking_lot::Mutex;
@@ -76,21 +77,16 @@ pub(crate) fn apply_main_migrations(
   let report = match runner.run(conn) {
     Ok(report) => report,
     Err(err) => {
-      error!("Main migrations: {err}");
+      error!("Migration error for 'main' DB: {err}");
       return Err(err);
     }
   };
 
-  for applied_migration in report.applied_migrations() {
-    if cfg!(test) {
-      debug!("applied migration: {applied_migration:?}");
-    } else {
-      info!("applied migration: {applied_migration:?}");
-    }
-  }
+  let applied_migrations = report.applied_migrations();
+  log_migrations("main", applied_migrations);
 
   // If we applied migration v1 we can be sure this is a fresh database.
-  let new_db = report.applied_migrations().iter().any(|m| m.version() == 1);
+  let new_db = applied_migrations.iter().any(|m| m.version() == 1);
 
   return Ok(new_db);
 }
@@ -104,17 +100,44 @@ pub(crate) fn apply_logs_migrations(
   runner.set_migration_table_name(MIGRATION_TABLE_NAME);
 
   let report = runner.run(logs_conn).map_err(|err| {
-    error!("Logs migrations: {err}");
+    error!("Migration error for 'logs' DB: {err}");
     return err;
   })?;
 
-  if cfg!(test) {
-    debug!("Logs migrations: {report:?}");
-  } else {
-    info!("Logs migrations: {report:?}");
-  }
+  log_migrations("logs", report.applied_migrations());
 
   return Ok(());
+}
+
+fn log_migrations(db_name: &str, migrations: &[Migration]) {
+  fn name(migration: &Migration) -> String {
+    return format!(
+      "{prefix}{version}__{name}",
+      prefix = migration.prefix(),
+      version = migration.version(),
+      name = migration.name(),
+    );
+  }
+
+  if !migrations.is_empty() {
+    if !cfg!(test) {
+      info!(
+        "Successfully applied migrations for '{db_name}' DB: {names}",
+        names = migrations
+          .iter()
+          .map(|m| format!("'{}'", name(m)))
+          .join(", ")
+      )
+    }
+
+    for migration in migrations {
+      trace!(
+        "Migration details for '{name}':\n{sql}",
+        name = name(migration),
+        sql = migration.sql().unwrap_or("<EMPTY>"),
+      );
+    }
+  }
 }
 
 #[derive(Clone, rust_embed::RustEmbed)]

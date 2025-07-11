@@ -294,7 +294,7 @@ fn build_job(
         disabled: Some(false),
       },
       callback: build_callback(|| async {
-        info!("alive");
+        debug!("alive");
       }),
     },
     SystemJobId::LogCleaner => {
