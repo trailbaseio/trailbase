@@ -61,12 +61,6 @@ pub(crate) fn build_filter_where_clause(
   };
 
   let (sql, params) = filter_params.into_sql(Some(table_name), &validator)?;
-  if params.is_empty() {
-    return Ok(WhereClause {
-      clause: "TRUE".to_string(),
-      params: vec![],
-    });
-  }
 
   use trailbase_sqlite::Value;
   type Param = (Cow<'static, str>, Value);

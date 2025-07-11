@@ -586,6 +586,7 @@ mod tests {
     struct Entry {
       id: i64,
       index: String,
+      nullable: Option<i64>,
     }
 
     let state = test_state(None).await.unwrap();
@@ -596,9 +597,10 @@ mod tests {
         r#"
         CREATE TABLE 'table' (
           id INTEGER PRIMARY KEY,
-          'index' TEXT NOT NULL DEFAULT ''
+          'index' TEXT NOT NULL DEFAULT '',
+          nullable INTEGER
         );
-        INSERT INTO 'table' (id, 'index') VALUES (1, '1'), (2, '2'), (3, '3');
+        INSERT INTO 'table' (id, 'index', nullable) VALUES (1, '1', 1), (2, '2', NULL), (3, '3', NULL);
       "#,
       )
       .await
@@ -611,7 +613,7 @@ mod tests {
       RecordApiConfig {
         name: Some("api".to_string()),
         table_name: Some("table".to_string()),
-        acl_world: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
+        acl_world: [PermissionFlag::Read as i32].into(),
         ..Default::default()
       },
     )
@@ -647,6 +649,28 @@ mod tests {
       first,
       serde_json::from_value(response.records[0].clone()).unwrap()
     );
+
+    let null_response = list_records_handler(
+      State(state.clone()),
+      Path("api".to_string()),
+      RawQuery(Some("filter[nullable][$is]=NULL".to_string())),
+      None,
+    )
+    .await
+    .unwrap()
+    .0;
+    assert_eq!(2, null_response.records.len());
+
+    let not_null_response = list_records_handler(
+      State(state.clone()),
+      Path("api".to_string()),
+      RawQuery(Some("filter[nullable][$is]=!NULL".to_string())),
+      None,
+    )
+    .await
+    .unwrap()
+    .0;
+    assert_eq!(1, not_null_response.records.len());
   }
 
   #[tokio::test]
@@ -829,17 +853,6 @@ mod tests {
       .unwrap()
       .records;
       assert_eq!(limited_arr.len(), 1);
-
-      // unary filter
-      let unary_filtered_arr = list_records(
-        &state,
-        Some(&user_y_token.auth_token),
-        Some(format!("filter[mid][$is]=!NULL")),
-      )
-      .await
-      .unwrap()
-      .records;
-      assert_eq!(unary_filtered_arr.len(), 3);
 
       // Composite filter
       let messages: Vec<Message> = arr.into_iter().map(to_message).collect();
