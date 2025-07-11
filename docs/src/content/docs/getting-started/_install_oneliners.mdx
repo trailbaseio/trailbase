@@ -1,0 +1,28 @@
+import { Code, Tabs, TabItem } from '@astrojs/starlight/components';
+
+export const installMacLinux = `curl -sSL https://raw.githubusercontent.com/trailbaseio/trailbase/main/install.sh | bash`;
+export const installWindows = `iwr https://raw.githubusercontent.com/trailbaseio/trailbase/main/install.sh | iex`;
+export const installDocker= `
+# Docker is used here merely as an easy, portable way to install TrailBase.
+# To make this persistent, you'll have to add the alias to your shell's rc.
+alias trail='
+  mkdir traildepot && \\
+  docker run \\
+      --network host \\
+      --mount type=bind,source="$PWD"/traildepot,target=/app/traildepot \\
+      trailbase/trailbase /app/trail'
+`;
+
+<Tabs>
+  <TabItem label="MacOS/Linux">
+    <Code lang="sh" code={installMacLinux} frame={false} />
+  </TabItem>
+
+  <TabItem label="Windows">
+    <Code lang="sh" code={installWindows} frame={false} />
+  </TabItem>
+
+  <TabItem label="Docker">
+    <Code lang="sh" code={installDocker} frame={false} />
+  </TabItem>
+</Tabs>

@@ -57,8 +57,8 @@ export default defineConfig({
           label: "Getting Started",
           items: [
             {
-              label: "Starting Up",
-              slug: "getting-started/starting-up",
+              label: "Install & Run",
+              slug: "getting-started/install",
             },
             {
               label: "Tutorials",
@@ -72,7 +72,7 @@ export default defineConfig({
                   slug: "getting-started/first-cli-app",
                 },
                 {
-                  label: "Realtime Sync & SSR",
+                  label: "Realtime-sync & SSR",
                   slug: "getting-started/first-realtime-app",
                 },
               ],

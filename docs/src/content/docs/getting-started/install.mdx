@@ -1,0 +1,79 @@
+---
+title: Install & Run
+description: Quick installation and startup guide
+---
+
+import { Aside, Code } from '@astrojs/starlight/components';
+
+
+Welcome! In this *Getting Started* guide, we'll first see how to install
+TrailBase, followed by tutorials on building our first small applications.
+
+TrailBase is a **single static executable** and therefore very easy to install.
+It's as simple as downloading the latest
+[release](https://github.com/trailbaseio/trailbase/releases) for your
+system and running it. If you prefer building your own binary, check out our
+[GitHub](https://github.com/trailbaseio/trailbase) page.
+
+If you want to get started even quicker, you can simply run one of the
+following commands:
+
+import InstallOneLiners from "./_install_oneliners.mdx";
+
+<InstallOneLiners />
+
+Once installed, you can run
+
+<Code lang="sh" code={"trail help"} frame={false} />
+
+to check that the executable is properly installed and see all available
+command line options.
+
+
+## Starting the Server & Admin Dashboard
+
+After successfully installing TrailBase above, you can run
+
+<Code lang="sh" code={"trail run"} frame={false} />
+
+to bring up the server on `localhost:4000`.
+
+On first start, a `./traildepot` folder will be created. It contains
+configuration, databases, secrets and a few more things.
+Moreover, an admin user will be created with their credentials printed to your
+terminal.
+Watch out for something like:
+
+```
+Created new admin user:
+        email: 'admin@localhost'
+        password: '<random>'
+```
+
+Optionally, you can change the credentials to something more fitting:
+
+<Code lang="sh" code={`
+trail user change-password admin@localhost mypassword
+trail user change-email admin@localhost me@mydomain.org
+`} frame={false} />
+
+
+<Aside type="tip" title="Starting Over">
+Don't worry about breaking anything, you can always delete `traildepot` and start from scratch.
+</Aside>
+
+Armed with your new credentials, open http://localhost:4000/_/admin/ in your
+browser and log in.
+
+We encourage you to take a few minutes, click around, and maybe create a table
+or two.
+Note that when creating, altering, or deleting tables, indexes or views a
+schema migration file will be created in `traildepot/migrations`. This allows
+TrailBase to enforce consistent schemas across multiple database instances for
+dev, test, prod, ... .
+
+If you like what you see and want to get your hands dirty, consider checking
+out some of the tutorials.
+Lastly, if you have any issues or feedback, don't hesitate and reach out either
+on [GitHub](https://github.com/trailbaseio/trailbase) or via
+*contact@trailbase.io*.
