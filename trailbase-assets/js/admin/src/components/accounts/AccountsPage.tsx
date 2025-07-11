@@ -73,24 +73,23 @@ function buildColumns(
     columnHelper.display({
       header: "actions",
       cell: (ctx) => {
-        const userId = ctx.row.original.id;
-        const email = ctx.row.original.email;
-
         return (
-          <div class="flex gap-2">
-            <IconButton
-              tooltip="Edit user"
-              onClick={() => setEditUser(ctx.row.original)}
-            >
-              <TbEdit size={20} />
-            </IconButton>
+          <Show when={!ctx.row.original.admin}>
+            <div class="flex gap-2">
+              <IconButton
+                tooltip="Edit user"
+                onClick={() => setEditUser(ctx.row.original)}
+              >
+                <TbEdit size={20} />
+              </IconButton>
 
-            <DeleteUserButton
-              userId={userId}
-              email={email}
-              userRefetch={userRefetch}
-            />
-          </div>
+              <DeleteUserButton
+                userId={ctx.row.original.id}
+                email={ctx.row.original.email}
+                userRefetch={userRefetch}
+              />
+            </div>
+          </Show>
         );
       },
     }),
