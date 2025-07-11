@@ -60,12 +60,12 @@ pub enum SubCommands {
     /// Optional suffix used for the generated migration file: U<timetamp>__<suffix>.sql.
     suffix: Option<String>,
   },
-  /// Simple admin management (use dashboard for everything else).
+  /// Manage admin users (list, demote, promote).
   Admin {
     #[command(subcommand)]
     cmd: Option<AdminSubCommands>,
   },
-  /// Simple user management (use dashboard for everything else).
+  /// Manage users. Unlike the admin UI this will also let you change admin users.
   User {
     #[command(subcommand)]
     cmd: Option<UserSubCommands>,
@@ -160,26 +160,54 @@ pub enum AdminSubCommands {
   List,
   /// Demotes admin user to normal user.
   Demote {
-    /// E-mail of the admin who's demoted.
-    email: String,
+    /// Admin in question, either email or UUID.
+    user: String,
   },
   /// Promotes user to admin.
   Promote {
-    /// E-mail of the user who's promoted to admin.
-    email: String,
+    /// User in question, either email or UUID.
+    user: String,
   },
 }
 
+// TODO: Add "create user" (low priority since users can be created via the UI).
 #[derive(Subcommand, Debug, Clone)]
 pub enum UserSubCommands {
-  // TODO: create new user. Low prio, use dashboard.
-  /// Resets a users password.
-  ResetPassword {
-    /// E-mail of the user who's password is being reset.
-    email: String,
-    /// Password to set.
+  /// Change a user's password.
+  ChangePassword {
+    /// User in question, either email or UUID.
+    user: String,
+    /// New password to set for user.
     password: String,
   },
-  /// Mint auth tokens for the given user.
-  MintToken { email: String },
+  /// Change a user's email.
+  ChangeEmail {
+    /// User in question, either email or UUID.
+    user: String,
+    /// New email address to set for user.
+    new_email: String,
+  },
+  /// Delete a user.
+  Delete {
+    /// User in question, either email or UUID.
+    user: String,
+  },
+  /// Change a user's verification state.
+  Verify {
+    /// User in question, either email or UUID.
+    user: String,
+    /// User's verification state to set.
+    #[arg(default_value = "true")]
+    verified: bool,
+  },
+  /// Invalidate user session, thus requiring them to re-auth when their auth token expires.
+  InvalidateSession {
+    /// User in question, either email or UUID.
+    user: String,
+  },
+  /// Mint auth token for the given user.
+  MintToken {
+    /// User in question, either email or UUID.
+    user: String,
+  },
 }

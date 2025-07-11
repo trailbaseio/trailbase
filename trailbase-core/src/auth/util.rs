@@ -6,12 +6,12 @@ use tower_cookies::{
   Cookie, Cookies,
   cookie::{self, SameSite},
 };
-use trailbase_sqlite::params;
+use trailbase_sqlite::{Connection, params};
 use validator::ValidateEmail;
 
 use crate::AppState;
 use crate::auth::AuthError;
-use crate::auth::user::{DbUser, User};
+use crate::auth::user::DbUser;
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, SESSION_TABLE, USER_TABLE,
 };
@@ -157,16 +157,16 @@ pub async fn get_user_by_email(
   let db_user = user_conn
     .read_query_value::<DbUser>(&*QUERY, params!(email.to_string()))
     .await
-    .map_err(|_err| AuthError::UnauthorizedExt("user not found by email".into()))?;
+    .map_err(|_err| AuthError::NotFound)?;
 
-  return db_user.ok_or_else(|| AuthError::UnauthorizedExt("invalid user".into()));
+  return db_user.ok_or_else(|| AuthError::NotFound);
 }
 
 pub async fn user_by_id(state: &AppState, id: &uuid::Uuid) -> Result<DbUser, AuthError> {
   return get_user_by_id(state.user_conn(), id).await;
 }
 
-async fn get_user_by_id(
+pub async fn get_user_by_id(
   user_conn: &trailbase_sqlite::Connection,
   id: &uuid::Uuid,
 ) -> Result<DbUser, AuthError> {
@@ -176,9 +176,9 @@ async fn get_user_by_id(
   let db_user = user_conn
     .read_query_value::<DbUser>(&*QUERY, params!(id.into_bytes()))
     .await
-    .map_err(|_err| AuthError::UnauthorizedExt("User not found by id".into()))?;
+    .map_err(|_err| AuthError::NotFound)?;
 
-  return db_user.ok_or_else(|| AuthError::UnauthorizedExt("invalid user".into()));
+  return db_user.ok_or_else(|| AuthError::NotFound);
 }
 
 pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, AuthError> {
@@ -193,14 +193,14 @@ pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, AuthErro
     .ok_or_else(|| AuthError::Internal("query should return".into()));
 }
 
-pub(crate) async fn is_admin(state: &AppState, user: &User) -> bool {
+pub(crate) async fn is_admin(state: &AppState, user_id: &uuid::Uuid) -> bool {
   lazy_static! {
     static ref QUERY: String = format!(r#"SELECT admin FROM "{USER_TABLE}" WHERE id = $1"#);
   };
 
   let Ok(Some(row)) = state
     .user_conn()
-    .read_query_row_f(&*QUERY, params!(user.uuid.as_bytes().to_vec()), |row| {
+    .read_query_row_f(&*QUERY, params!(user_id.as_bytes().to_vec()), |row| {
       row.get(0)
     })
     .await
@@ -212,7 +212,7 @@ pub(crate) async fn is_admin(state: &AppState, user: &User) -> bool {
 }
 
 pub(crate) async fn delete_all_sessions_for_user(
-  state: &AppState,
+  user_conn: &Connection,
   user_id: uuid::Uuid,
 ) -> Result<usize, AuthError> {
   lazy_static! {
@@ -220,8 +220,7 @@ pub(crate) async fn delete_all_sessions_for_user(
   };
 
   return Ok(
-    state
-      .user_conn()
+    user_conn
       .execute(
         &*QUERY,
         [trailbase_sqlite::Value::Blob(user_id.into_bytes().to_vec())],

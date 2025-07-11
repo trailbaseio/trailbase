@@ -5,7 +5,7 @@ use axum::{
 use chrono::Duration;
 use lazy_static::lazy_static;
 use tower_cookies::Cookies;
-use trailbase_sqlite::params;
+use trailbase_sqlite::{Connection, params};
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
@@ -159,20 +159,19 @@ pub struct FreshTokens {
 }
 
 pub(crate) async fn mint_new_tokens(
-  state: &AppState,
-  verified: bool,
-  user_id: uuid::Uuid,
-  user_email: String,
+  user_conn: &Connection,
+  db_user: &DbUser,
   expires_in: Duration,
 ) -> Result<FreshTokens, AuthError> {
-  assert!(verified);
+  let verified = db_user.verified;
   if !verified {
     return Err(AuthError::Internal(
       "Cannot mint tokens for unverified user".into(),
     ));
   }
 
-  let claims = TokenClaims::new(verified, user_id, user_email, expires_in);
+  let user_id = db_user.uuid();
+  let claims = TokenClaims::new(verified, user_id, db_user.email.clone(), expires_in);
 
   // Unlike JWT auth tokens, refresh tokens are opaque.
   let refresh_token = generate_random_string(REFRESH_TOKEN_LENGTH);
@@ -181,8 +180,7 @@ pub(crate) async fn mint_new_tokens(
       format!("INSERT INTO '{SESSION_TABLE}' (user, refresh_token) VALUES ($1, $2)");
   }
 
-  state
-    .user_conn()
+  user_conn
     .execute(
       &*QUERY,
       params!(user_id.into_bytes().to_vec(), refresh_token.clone(),),

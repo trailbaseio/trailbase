@@ -5,13 +5,12 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
-use log::*;
 use serde::Deserialize;
 use std::rc::Rc;
 use tokio::{fs, io::AsyncWriteExt};
 use trailbase::{
   DataDir, Server, ServerOptions,
-  api::{self, Email, InitArgs, JsonSchemaMode, TokenClaims, init_app_state},
+  api::{self, Email, InitArgs, JsonSchemaMode, init_app_state},
   constants::USER_TABLE,
 };
 use utoipa::OpenApi;
@@ -41,7 +40,6 @@ fn init_logger(dev: bool) {
 struct DbUser {
   id: [u8; 16],
   email: String,
-  verified: bool,
   created: i64,
   updated: i64,
 }
@@ -50,19 +48,6 @@ impl DbUser {
   fn uuid(&self) -> uuid::Uuid {
     uuid::Uuid::from_bytes(self.id)
   }
-}
-
-async fn get_user_by_email(conn: &api::Connection, email: &str) -> Result<DbUser, BoxError> {
-  if let Some(user) = conn
-    .read_query_value::<DbUser>(
-      format!("SELECT * FROM {USER_TABLE} WHERE email = $1"),
-      (email.to_string(),),
-    )
-    .await?
-  {
-    return Ok(user);
-  }
-  return Err("not found".into());
 }
 
 async fn async_main() -> Result<(), BoxError> {
@@ -171,25 +156,13 @@ async fn async_main() -> Result<(), BoxError> {
             );
           }
         }
-        Some(AdminSubCommands::Demote { email }) => {
-          conn
-            .execute(
-              format!("UPDATE {USER_TABLE} SET admin = FALSE WHERE email = $1"),
-              (email.clone(),),
-            )
-            .await?;
-
-          println!("'{email}' has been demoted");
+        Some(AdminSubCommands::Demote { user }) => {
+          let id = api::cli::demote_admin_to_user(&conn, to_user_reference(user)).await?;
+          println!("Demoted admin to user for '{id}'");
         }
-        Some(AdminSubCommands::Promote { email }) => {
-          conn
-            .execute(
-              format!("UPDATE {USER_TABLE} SET admin = TRUE WHERE email = $1"),
-              (email.clone(),),
-            )
-            .await?;
-
-          println!("'{email}' is now an admin");
+        Some(AdminSubCommands::Promote { user }) => {
+          let id = api::cli::promote_user_to_admin(&conn, to_user_reference(user)).await?;
+          println!("Promoted user to admin for '{id}'");
         }
         None => {
           DefaultCommandLineArgs::command()
@@ -205,31 +178,30 @@ async fn async_main() -> Result<(), BoxError> {
       let (conn, _) = api::init_main_db(Some(&data_dir), None, None)?;
 
       match cmd {
-        Some(UserSubCommands::ResetPassword { email, password }) => {
-          if get_user_by_email(&conn, &email).await.is_err() {
-            return Err(format!("User with email='{email}' not found.").into());
-          }
-          api::force_password_reset(&conn, email.clone(), password).await?;
-
-          println!("Password updated for '{email}'");
+        Some(UserSubCommands::ChangePassword { user, password }) => {
+          let id = api::cli::change_password(&conn, to_user_reference(user), &password).await?;
+          println!("Updated password for '{id}'");
         }
-        Some(UserSubCommands::MintToken { email }) => {
-          let user = get_user_by_email(&conn, &email).await?;
-          let jwt = api::JwtHelper::init_from_path(&data_dir).await?;
-
-          if !user.verified {
-            warn!("User '{email}' not verified");
-          }
-
-          let claims = TokenClaims::new(
-            user.verified,
-            user.uuid(),
-            user.email,
-            chrono::Duration::hours(12),
-          );
-          let token = jwt.encode(&claims)?;
-
-          println!("Bearer {token}");
+        Some(UserSubCommands::ChangeEmail { user, new_email }) => {
+          let id = api::cli::change_email(&conn, to_user_reference(user), &new_email).await?;
+          println!("Updated email for '{id}'");
+        }
+        Some(UserSubCommands::Delete { user }) => {
+          api::cli::delete_user(&conn, to_user_reference(user.clone())).await?;
+          println!("Deleted user '{user}'");
+        }
+        Some(UserSubCommands::Verify { user, verified }) => {
+          let id = api::cli::set_verified(&conn, to_user_reference(user), verified).await?;
+          println!("Set verified={verified} for '{id}'");
+        }
+        Some(UserSubCommands::InvalidateSession { user }) => {
+          api::cli::invalidate_sessions(&conn, to_user_reference(user.clone())).await?;
+          println!("Sessions invalidated for '{user}'");
+        }
+        Some(UserSubCommands::MintToken { user }) => {
+          let auth_token =
+            api::cli::mint_auth_token(&data_dir, &conn, to_user_reference(user.clone())).await?;
+          println!("Bearer {auth_token}");
         }
         None => {
           DefaultCommandLineArgs::command()
@@ -267,6 +239,13 @@ async fn async_main() -> Result<(), BoxError> {
   }
 
   Ok(())
+}
+
+fn to_user_reference(user: String) -> api::cli::UserReference {
+  if user.contains("@") {
+    return api::cli::UserReference::Email(user);
+  }
+  return api::cli::UserReference::Id(user);
 }
 
 fn main() -> Result<(), BoxError> {

@@ -10,11 +10,16 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
-use crate::admin::user::is_demo_admin;
 use crate::app_state::AppState;
 use crate::auth::password::hash_password;
+use crate::auth::util::is_admin;
 use crate::constants::USER_TABLE;
 
+/// Request changes to user with given `id`.
+///
+/// NOTE: We don't allow admin promotions and especially demotions, since they could easily be
+/// abused. Instead we relegate such critical actions to the CLI, which limits them to sys
+/// admins over mere TrailBase admins.
 #[derive(Debug, Serialize, Deserialize, Default, TS)]
 #[ts(export)]
 pub struct UpdateUserRequest {
@@ -29,8 +34,10 @@ pub async fn update_user_handler(
   State(state): State<AppState>,
   Json(request): Json<UpdateUserRequest>,
 ) -> Result<Response, Error> {
-  if state.demo_mode() && is_demo_admin(&state, &request.id).await {
-    return Err(Error::Precondition("Updating demo admin forbidden".into()));
+  if is_admin(&state, &request.id).await {
+    return Err(Error::Precondition(
+      "Admins can only be updated using the CLI to prevent abuse".into(),
+    ));
   }
 
   let hashed_password = match &request.password {

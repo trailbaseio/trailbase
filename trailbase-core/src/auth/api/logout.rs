@@ -44,7 +44,7 @@ pub async fn logout_handler(
   remove_all_cookies(&cookies);
 
   if let Some(user) = user {
-    delete_all_sessions_for_user(&state, user.uuid).await?;
+    delete_all_sessions_for_user(state.user_conn(), user.uuid).await?;
   }
 
   return Ok(Redirect::to(redirect.as_deref().unwrap_or_else(|| {

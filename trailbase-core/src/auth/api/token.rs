@@ -86,16 +86,8 @@ pub(crate) async fn auth_code_to_token_handler(
   };
 
   let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
-  let user_id = db_user.uuid();
 
-  let tokens = mint_new_tokens(
-    &state,
-    db_user.verified,
-    user_id,
-    db_user.email,
-    auth_token_ttl,
-  )
-  .await?;
+  let tokens = mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;
   let auth_token = state
     .jwt()
     .encode(&tokens.auth_token_claims)

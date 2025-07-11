@@ -285,7 +285,10 @@ pub async fn login_with_password(
   normalized_email: &str,
   password: &str,
 ) -> Result<NewTokens, AuthError> {
-  let db_user: DbUser = user_by_email(state, normalized_email).await?;
+  let db_user: DbUser = user_by_email(state, normalized_email).await.map_err(|_| {
+    // Don't leak if user wasn't found or password was wrong.
+    return AuthError::Unauthorized;
+  })?;
 
   // Validate password.
   check_user_password(&db_user, password, state.demo_mode())?;
@@ -293,14 +296,7 @@ pub async fn login_with_password(
   let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   let user_id = db_user.uuid();
 
-  let tokens = mint_new_tokens(
-    state,
-    db_user.verified,
-    user_id,
-    db_user.email,
-    auth_token_ttl,
-  )
-  .await?;
+  let tokens = mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;
 
   return Ok(NewTokens {
     id: user_id,

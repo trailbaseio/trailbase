@@ -383,7 +383,7 @@ async fn assert_admin_api_access(
 ) -> Result<Response, AuthError> {
   let user = req.extract_parts_with_state::<User, _>(&state).await?;
 
-  if !is_admin(&state, &user).await {
+  if !is_admin(&state, &user.uuid).await {
     return Err(AuthError::Forbidden);
   }
 

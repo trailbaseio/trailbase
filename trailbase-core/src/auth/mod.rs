@@ -4,6 +4,7 @@ use axum::{
 };
 use utoipa::OpenApi;
 
+pub mod cli;
 pub mod jwt;
 pub mod user;
 
@@ -17,7 +18,6 @@ pub(crate) mod util;
 mod error;
 mod ui;
 
-pub use api::reset_password::force_password_reset;
 pub use error::AuthError;
 pub use jwt::{JwtHelper, TokenClaims};
 pub(crate) use ui::auth_ui_router;

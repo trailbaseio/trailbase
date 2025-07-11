@@ -8,8 +8,6 @@ use thiserror::Error;
 pub enum AuthError {
   #[error("Unauthorized")]
   Unauthorized,
-  #[error("Unauthorized")]
-  UnauthorizedExt(Box<dyn std::error::Error + Send + Sync>),
   #[error("Forbidden")]
   Forbidden,
   #[error("Conflict")]
@@ -66,10 +64,6 @@ impl IntoResponse for AuthError {
   fn into_response(self) -> Response {
     let (status, body) = match self {
       Self::Unauthorized => (StatusCode::UNAUTHORIZED, None),
-      Self::UnauthorizedExt(msg) if cfg!(debug_assertions) => {
-        (StatusCode::UNAUTHORIZED, Some(msg.to_string()))
-      }
-      Self::UnauthorizedExt(_msg) => (StatusCode::UNAUTHORIZED, None),
       Self::Forbidden => (StatusCode::FORBIDDEN, None),
       Self::Conflict => (StatusCode::CONFLICT, None),
       Self::NotFound => (StatusCode::NOT_FOUND, None),

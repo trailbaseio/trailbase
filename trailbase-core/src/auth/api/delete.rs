@@ -24,7 +24,7 @@ pub(crate) async fn delete_handler(
   user: User,
   cookies: Cookies,
 ) -> Result<Response, AuthError> {
-  let _ = delete_all_sessions_for_user(&state, user.uuid).await;
+  let _ = delete_all_sessions_for_user(state.user_conn(), user.uuid).await;
 
   lazy_static! {
     static ref QUERY: String = format!(r#"DELETE FROM "{USER_TABLE}" WHERE id = $1"#);

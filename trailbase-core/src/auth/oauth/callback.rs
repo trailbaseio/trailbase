@@ -131,14 +131,7 @@ pub(crate) async fn callback_from_external_auth_provider(
     auth_token_claims,
     refresh_token,
     ..
-  } = mint_new_tokens(
-    &state,
-    db_user.verified,
-    db_user.uuid(),
-    db_user.email,
-    expires_in,
-  )
-  .await?;
+  } = mint_new_tokens(state.user_conn(), &db_user, expires_in).await?;
 
   let auth_token = state
     .jwt()

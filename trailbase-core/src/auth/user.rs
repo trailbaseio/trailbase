@@ -105,8 +105,7 @@ impl User {
   /// Construct new verified [User] from [TokenClaims]. This is used when picking
   /// credentials/tokens from headers/cookies.
   pub(crate) fn from_token_claims(claims: TokenClaims) -> Result<Self, AuthError> {
-    let uuid = b64_to_uuid(&claims.sub)
-      .map_err(|_err| AuthError::UnauthorizedExt("invalid user id".into()))?;
+    let uuid = b64_to_uuid(&claims.sub).map_err(|_err| AuthError::BadRequest("invalid user id"))?;
 
     return Ok(Self {
       id: claims.sub,

@@ -8,7 +8,6 @@ use serde::Deserialize;
 use trailbase_sqlite::params;
 use ts_rs::TS;
 use utoipa::ToSchema;
-use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::constants::USER_TABLE;
@@ -168,22 +167,4 @@ pub async fn reset_password_update_handler(
       panic!("multiple users with same verification code.");
     }
   };
-}
-
-pub async fn force_password_reset(
-  user_conn: &trailbase_sqlite::Connection,
-  email: String,
-  password: String,
-) -> Result<Uuid, AuthError> {
-  let hashed_password = hash_password(&password)?;
-
-  lazy_static! {
-    static ref UPDATE_PASSWORD_QUERY: String =
-      format!("UPDATE '{USER_TABLE}' SET password_hash = $1 WHERE email = $2 RETURNING id");
-  }
-
-  return user_conn
-    .write_query_value(&*UPDATE_PASSWORD_QUERY, params!(hashed_password, email))
-    .await?
-    .ok_or(AuthError::NotFound);
 }

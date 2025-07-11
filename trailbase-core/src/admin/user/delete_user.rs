@@ -10,8 +10,8 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::admin::rows::delete_row;
-use crate::admin::user::is_demo_admin;
 use crate::app_state::AppState;
+use crate::auth::util::is_admin;
 use crate::util::uuid_to_b64;
 
 #[derive(Debug, Deserialize, Default, TS)]
@@ -24,8 +24,10 @@ pub async fn delete_user_handler(
   State(state): State<AppState>,
   Json(request): Json<DeleteUserRequest>,
 ) -> Result<Response, Error> {
-  if state.demo_mode() && is_demo_admin(&state, &request.id).await {
-    return Err(Error::Precondition("Deleting demo admin forbidden".into()));
+  if is_admin(&state, &request.id).await {
+    return Err(Error::Precondition(
+      "Admins can only be deleted using the CLI to prevent abuse".into(),
+    ));
   }
 
   delete_row(
