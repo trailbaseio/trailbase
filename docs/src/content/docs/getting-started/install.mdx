@@ -26,7 +26,7 @@ Once installed, you can run
 
 <Code lang="sh" code={"trail help"} frame={false} />
 
-to check that the executable is properly installed and see all available
+to check that the executable is properly installed and list all available
 command line options.
 
 
@@ -40,7 +40,7 @@ to bring up the server on `localhost:4000`.
 
 On first start, a `./traildepot` folder will be created. It contains
 configuration, databases, secrets and a few more things.
-Moreover, an admin user will be created with their credentials printed to your
+Moreover, an admin user will be created and their credentials printed to the
 terminal.
 Watch out for something like:
 
@@ -56,7 +56,6 @@ Optionally, you can change the credentials to something more fitting:
 trail user change-password admin@localhost mypassword
 trail user change-email admin@localhost me@mydomain.org
 `} frame={false} />
-
 
 <Aside type="tip" title="Starting Over">
 Don't worry about breaking anything, you can always delete `traildepot` and start from scratch.

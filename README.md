@@ -66,16 +66,14 @@ If you like TrailBase or want to follow along, consider leaving a ⭐🙏.
 
 ## Project Structure & Releases
 
-This repository contains all components that make up TrailBase including client
-libraries, tests, documentation and examples.
+This repository contains all components that make up TrailBase including the
+server, client libraries, tests, documentation and examples.
 Only the [benchmarks](https://github.com/trailbaseio/trailbase-benchmark) are
 kept separately due to their external dependencies.
 
 Pre-built static binaries are available as
 [GitHub releases](https://github.com/trailbaseio/trailbase/releases/) for
-Linux, MacOS and Windows.
-On Windows the Docker [image](https://hub.docker.com/r/trailbase/trailbase) can
-be used.
+Linux, MacOS and Windows or [Docker images](https://hub.docker.com/r/trailbase/trailbase).
 
 Client packages for various languages are available via:
 
@@ -83,76 +81,87 @@ Client packages for various languages are available via:
 - [Dart/Flutter](https://pub.dev/packages/trailbase)
 - [Rust](https://crates.io/crates/trailbase-client)
 - [C#/.Net](https://www.nuget.org/packages/TrailBase/)
+- [Swift](https://github.com/trailbaseio/trailbase/tree/main/client/trailbase-swift)
 - [Python](https://pypi.org/project/trailbase/)
 
-## Running
+## Getting Started
 
-You can get TrailBase either as a pre-built static binary (MacOS &
-Linux), run it using [Docker](https://hub.docker.com/r/trailbase/trailbase)
-(Windows, MacOS, Linux, ...), or [build](#building) it from source.
+TrailBase is a **single static executable** and therefore very easy to
+[deploy](https://trailbase.io/getting-started/install/).
+You can simply download the appropriate pre-built
+[GitHub release](https://github.com/trailbaseio/trailbase/releases/) bundle for
+your system (MacOS, Linux or Windows), unpack and run the executable w/o having
+to worry about dependencies or shared-library skew.
 
-The latest pre-built binaries can be downloaded from [GitHub
-releases](https://github.com/trailbaseio/trailbase/releases/) and run via:
+If you want to get started even quicker, install TrailBase with the following
+command:
 
-```bash
-$ ./trail run
+```sh
+curl -sSL https://raw.githubusercontent.com/trailbaseio/trailbase/main/install.sh | bash
 ```
 
-Thanks to `trail` being a single static binary, there's no need to install
-anything including system dependencies.
-This also means that you can confidently update your system and deploy to
-different machines without having to worry about prior set-up or shared
-library compatibility.
+Alternatively, run TrailBase using the Docker image:
 
-Using [Docker](https://hub.docker.com/r/trailbase/trailbase), you can run the
-following, which will also create and mount a local `./traildepot` asset
-directory:
-
-```bash
-$ mkdir traildepot
-$ alias trail="docker run --network host --mount type=bind,source=$PWD/traildepot,target=/app/traildepot trailbase/trailbase /app/trail"
-$ trail run
+```sh
+alias trail='
+  mkdir traildepot && \
+  docker run \
+      --network host \
+      --mount type=bind,source="$PWD"/traildepot,target=/app/traildepot \
+      trailbase/trailbase /app/trail'
 ```
 
-To get a full list of commands, simply run `trail --help` .
+Then execute `trail help` to check that it is properly installed and list all
+available command line options.
+
+To bring up the server on `localhost:4000`, run:
+
+```sh
+trail run
+```
+
+On first start, a `./traildepot` folder will be bootstrapped, an admin user
+created and their credentials printed to the terminal.
+Afterwards open http://localhost:4000/_/admin/ in your browser and use the
+credentials to log into the admin dashboard.
 
 ## Building
 
-If you have all the necessary dependencies (Rust, protobuf, node.js, pnpm)
-installed, you can build TrailBase by running:
+If you have all the necessary build dependencies (Rust, protobuf, node.js,
+pnpm) installed, you can build TrailBase by running:
 
-```bash
+```sh
 # Windows only: make sure to enable symlinks (w/o `mklink` permissions for your
 # user, git will fall back to copies).
-$ git config core.symlinks true && git reset --hard
+git config core.symlinks true && git reset --hard
 
 # Download necessary git sub-modules.
-$ git submodule update --init --recursive
+git submodule update --init --recursive
 
 # Install Javascript dependencies first. Required for the next step.
-$ pnpm install
+pnpm install
 
-# Build the main executable. Adding `--release` will build a faster release
-# binary but slow down the build significantly.
-$ cargo build --bin trail
+# Build the executable. Adding `--release` will yield a more optimized binary
+# but slow builds significantly.
+cargo build --bin trail
 ```
 
 To build a static binary you'll need to explicitly specify the target platform,
-e.g. Linux using the GNU glibc:
+e.g. Linux with GNU glibc:
 
-```bash
-$ RUSTFLAGS="-C target-feature=+crt-static" cargo build --target x86_64-unknown-linux-gnu --release
+```sh
+RUSTFLAGS="-C target-feature=+crt-static" cargo build --target x86_64-unknown-linux-gnu --release
 ```
 
 Alternatively, if you want to build a Docker image or don't have to deal with
 build dependencies, you can simply run:
 
-```bash
+```sh
 # Download necessary git sub-modules.
-$ git submodule update --init --recursive
+git submodule update --init --recursive
 
 # Build the container as defined in `Dockerfile`.
-$ docker build . -t trailbase
+docker build . -t trailbase
 ```
 
 ## Contributing
