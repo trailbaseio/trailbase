@@ -2,6 +2,7 @@ import {
   For,
   Match,
   Switch,
+  Show,
   createEffect,
   createSignal,
   onCleanup,
@@ -24,6 +25,7 @@ import type { FeatureCollection, Feature } from "geojson";
 import "leaflet/dist/leaflet.css";
 import * as L from "leaflet";
 
+import { showToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Header } from "@/components/Header";
 import { IconButton } from "@/components/IconButton";
@@ -58,23 +60,25 @@ const columns: ColumnDef<LogJson>[] = [
       const secondsSinceEpoch = ctx.row.original.created;
       const timestamp = new Date(secondsSinceEpoch * 1000);
       return (
-        <Tooltip>
-          <TooltipTrigger as="div">
-            <div class="w-[128px]">
-              {timestamp.toISOString().replace(/T/, " ")}
-            </div>
-          </TooltipTrigger>
+        <div class="flex items-center">
+          <Tooltip>
+            <TooltipTrigger as="div">
+              <div class="w-[128px]">
+                {timestamp.toISOString().replace(/T/, " ")}
+              </div>
+            </TooltipTrigger>
 
-          <TooltipContent>
-            <p>
-              {timestamp.toLocaleString(undefined, {
-                timeZoneName: "short",
-                hour12: false,
-              })}
-            </p>
-            <p>{secondsSinceEpoch.toFixed(0)}s since epoch</p>
-          </TooltipContent>
-        </Tooltip>
+            <TooltipContent>
+              <p>
+                {timestamp.toLocaleString(undefined, {
+                  timeZoneName: "short",
+                  hour12: false,
+                })}
+              </p>
+              <p>{secondsSinceEpoch.toFixed(0)}s since epoch</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
       );
     },
   }),
@@ -89,12 +93,11 @@ const columns: ColumnDef<LogJson>[] = [
   {
     header: "GeoIP",
     cell: (ctx) => {
-      const row = ctx.row.original;
-      const city = row.client_geoip_city;
+      const city = ctx.row.original.client_geoip_city;
       if (city) {
         return `${city.name} (${city.country_code})`;
       }
-      return row.client_geoip_cc;
+      return ctx.row.original.client_geoip_cc;
     },
   },
   { accessorKey: "referer" },
@@ -102,19 +105,41 @@ const columns: ColumnDef<LogJson>[] = [
     accessorKey: "user_agent",
     cell: (ctx) => {
       return (
-        <Tooltip>
-          <TooltipTrigger>
-            <div class="line-clamp-2 text-ellipsis text-left">
-              {ctx.row.original.user_agent}
-            </div>
-          </TooltipTrigger>
+        <div class="flex items-center">
+          <Tooltip>
+            <TooltipTrigger>
+              <div class="line-clamp-2 text-ellipsis text-left">
+                {ctx.row.original.user_agent}
+              </div>
+            </TooltipTrigger>
 
-          <TooltipContent>{ctx.row.original.user_agent}</TooltipContent>
-        </Tooltip>
+            <TooltipContent>{ctx.row.original.user_agent}</TooltipContent>
+          </Tooltip>
+        </div>
       );
     },
   },
-  { accessorKey: "user_id" },
+  {
+    accessorKey: "user_id",
+    cell: (ctx) => {
+      const userId = () => ctx.row.original.user_id;
+      return (
+        <Show when={userId()}>
+          <div
+            class="hover:text-gray-600"
+            onClick={() => {
+              navigator.clipboard.writeText(userId() ?? "");
+              showToast({
+                title: "Copied to clipboard",
+              });
+            }}
+          >
+            {userId()}
+          </div>
+        </Show>
+      );
+    },
+  },
 ];
 
 // Value is the previous value in case this isn't the first fetch.

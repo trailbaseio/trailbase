@@ -25,6 +25,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { showToast } from "@/components/ui/toast";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Header } from "@/components/Header";
@@ -53,6 +54,22 @@ function buildColumns(
     {
       header: "id",
       accessorKey: "id",
+      cell: (ctx) => {
+        const userId = ctx.row.original.id;
+        return (
+          <div
+            class="hover:text-gray-600"
+            onClick={() => {
+              navigator.clipboard.writeText(userId);
+              showToast({
+                title: "Copied to clipboard",
+              });
+            }}
+          >
+            {userId}
+          </div>
+        );
+      },
     },
     {
       header: "email",
