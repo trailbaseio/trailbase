@@ -66,7 +66,7 @@ export function trailBaseCollectionOptions<TItem extends object>(
         const now = Date.now();
         let anyExpired = false;
 
-        const notExpired = curr.entries().filter(([_, v]) => {
+        const notExpired = Array.from(curr.entries()).filter(([_, v]) => {
           const expired = now - v > 300 * 1000;
           anyExpired = anyExpired || expired;
           return !expired;
@@ -85,6 +85,14 @@ export function trailBaseCollectionOptions<TItem extends object>(
   type SyncParams = Parameters<SyncConfig<TItem>[`sync`]>[0];
 
   let eventReader: ReadableStreamDefaultReader<Event> | undefined;
+  const cancel = () => {
+    if (eventReader) {
+      eventReader.cancel();
+      eventReader.releaseLock();
+      eventReader = undefined;
+    }
+  };
+
   const sync = {
     sync: (params: SyncParams) => {
       const { begin, write, commit } = params;
@@ -127,10 +135,7 @@ export function trailBaseCollectionOptions<TItem extends object>(
       }
 
       // Afterwards subscribe.
-      async function subscribe() {
-        const eventStream = await config.recordApi.subscribe(`*`);
-        const reader = (eventReader = eventStream.getReader());
-
+      async function listen(reader: ReadableStreamDefaultReader<Event>) {
         while (true) {
           const { done, value: event } = await reader.read();
 
@@ -166,13 +171,30 @@ export function trailBaseCollectionOptions<TItem extends object>(
         }
       }
 
-      initialFetch().then(() => subscribe());
+      async function start() {
+        const eventStream = await config.recordApi.subscribe(`*`);
+        const reader = (eventReader = eventStream.getReader());
+
+        // Start listening for subscriptions first. Otherwise, we'd risk a gap
+        // between the initial fetch and starting to listen.
+        listen(reader);
+
+        try {
+          await initialFetch();
+        } catch (e) {
+          cancel();
+          throw e;
+        }
+      }
+
+      start();
     },
     // Expose the getSyncMetadata function
     getSyncMetadata: undefined,
   };
 
   return {
+    ...config,
     sync,
     getKey,
     onInsert: async (params): Promise<Array<number | string>> => {
@@ -182,7 +204,7 @@ export function trailBaseCollectionOptions<TItem extends object>(
           if (type !== `insert`) {
             throw new Error(`Expected 'insert', got: ${type}`);
           }
-          return changes as TItem;
+          return changes;
         }),
       );
 
@@ -230,13 +252,7 @@ export function trailBaseCollectionOptions<TItem extends object>(
       await awaitIds(ids);
     },
     utils: {
-      cancel: () => {
-        if (eventReader) {
-          eventReader.cancel();
-          eventReader.releaseLock();
-          eventReader = undefined;
-        }
-      },
+      cancel,
     },
   };
 }

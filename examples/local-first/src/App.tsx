@@ -44,10 +44,7 @@ function App() {
   const [input, setInput] = useState("");
 
   const { data } = useLiveQuery((q) =>
-    q
-      .from({ dataCollection })
-      .orderBy(`@updated`)
-      .select(`@id`, `@updated`, `@data`),
+    q.from({ record: dataCollection }).orderBy(({ record }) => record.updated),
   );
 
   function handleSubmit(e: FormEvent) {
