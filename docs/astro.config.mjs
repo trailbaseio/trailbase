@@ -85,9 +85,34 @@ export default defineConfig({
         },
         {
           label: "Documentation",
-          autogenerate: {
-            directory: "documentation",
-          },
+          items: [
+            {
+              slug: "documentation/auth",
+            },
+            {
+              label: "APIs",
+              items: [
+                {
+                  slug: "documentation/record_apis",
+                },
+                {
+                  slug: "documentation/js_apis",
+                },
+              ],
+            },
+            {
+              slug: "documentation/extending",
+            },
+            {
+              slug: "documentation/models_and_relations",
+            },
+            {
+              slug: "documentation/production",
+            },
+            {
+              slug: "documentation/type_safety",
+            },
+          ],
         },
         {
           label: "Comparisons",

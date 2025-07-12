@@ -8,23 +8,55 @@ import { Aside } from "@astrojs/starlight/components";
 
 import implementation from "./_auth.svg";
 
-TrailBase provides core authentication flows and a basic UI out of the box[^1].
-These primitives let you establish the identity of your users in order to
-authorize or deny access to your data, let users change their email address,
-reset their password, etc.
+TrailBase provides core authentication flows: APIs and a basic UI out of the
+box[^1].
+These flows allow your users to log in thus establishing their identity to
+authorize or deny access, lets them change their email address, reset their
+password, etc.
 
-<Aside type="danger" title="Encryption: TLS/HTTPS">
-  The safety of any authentication flow in hinges on TLS/HTTPS.
-  Always use TLS in [production](/documentation/production).
-  It allows your users to trust that the server they're talking to is actually
-  yours *and* ensures credentials are end-to-end encrypted on the wire as
-  opposed to plain text.
-  You can achieve this either by using TrailBase's built-in TLS termination or
-  using a reverse proxy in front. The latter may allow you to automatically
-  update certificates.
+<Aside type="caution" title="Encryption: TLS/HTTPS">
+  Always use TLS/HTTPS in [production](/documentation/production).
+  The safety of any authentication flow hinges on it.
+  It provides the trust that the server users are talking to is actually yours
+  *and* ensures credentials are encrypted on the wire.
+  Either use TrailBase's built-in TLS termination or more flexibly a reverse
+  proxy in front.
+  The latter allows certificates to be updated automatically.
 </Aside>
 
-## Implementation
+## Integrating Auth
+
+At an abstract level, whenever a user signs in, either directly into TrailBase
+using `email+password` or via an external OAuth2 provider (Google, Microsoft,
+...), they receive a set of tokens.
+Users or a backend of yours should then attach the *auth* token to their
+TrailBase API requests to identify themselves. TrailBase will then accept or
+reject the request based on the user's authorization.
+
+With this in mind, integrating auth into your application mostly means:
+
+1. Providing UI flows for users to sign in, log out, change passwords, ... .
+   You can either build your own using TrailBase's auth APIs or rely on the
+   built-in UIs mounted at `/_/auth/(login|logout|...)`[^1].
+2. And managing tokens, e.g. making sure they get attached to request or
+   dropped when the user logs out. The TrailBase client libraries can help you
+   with that.
+
+There are a few considerations, which may affect your choices:
+
+* Are you building a mobile/desktop or web app or both? If you're building for
+  mobile or desktop, do the auth UIs need to be native or is ok to open a
+  WebView?
+* If you're planning to build native auth UIs for multiple platforms you may
+  need to implement them multiple times.
+* Are you planning to support sign-in using external OAuth providers? If so,
+  you'll need a WebView anyway for users to sign in with the external provider.
+
+The `examples/blog/(web|flutter)` demonstrates how the built-in UIs, including
+OAuth, can be used by both web and mobile applications.
+
+
+## Design
 
 TrailBase tries to offer a standard, safe and versatile auth implementation out
 of the box. It combines:
@@ -60,7 +92,7 @@ token.
   />
 </div>
 
-## Flows & UI
+### Available Flows
 
 TrailBase currently implements the following auth flows:
 
@@ -78,7 +110,7 @@ support the above flows. By default it's accessible via the route:
 The built-in auth UIs can be disabled with `--disable-auth-ui` in case you
 prefer rolling your own or have no need web-based authentication.
 
-## Usernames and Other Metadata
+## Adding Usernames and Other Metadata
 
 Strictly speaking, authentication is merely responsible for uniquely
 identifying who's on the other side.
@@ -115,9 +147,9 @@ posts with user profiles on the author id to get an author's name.
 
 ## Lifetime Considerations when Persisting Tokens
 
-If you decide to persist tokens, it's your responsibility to clean them up
-appropriately when a user logs out, otherwise users may still appear to be
-logged in.
+If you decide to implement your own authentication flows and persist tokens,
+it's your responsibility to clean them up appropriately when a user logs out,
+otherwise users may still appear to be logged in.
 Specifically, when browsing to `/_/auth/logout` or directly invoking the
 log-out API (`/api/auth/v1/logout`), the session will be instantly invalidated.
 In browser environments, cookies carrying tokens will also be removed.
