@@ -12,6 +12,10 @@ import tailwindcss from "@tailwindcss/vite";
 // https://astro.build/config
 export default defineConfig({
   site: "https://trailbase.io",
+  redirects: {
+    // Stable docs path independent of documentation structure.
+    "/docs": "/getting-started/install",
+  },
   integrations: [
     icon(),
     robotsTxt(),

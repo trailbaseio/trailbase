@@ -213,10 +213,7 @@ export function IndexPage() {
 
             <p>
               Documentation is available at{" "}
-              <a href="https://trailbase.io/getting-started/starting-up">
-                trailbase.io
-              </a>
-              .
+              <a href="https://trailbase.io/docs">trailbase.io</a>.
             </p>
           </CardContent>
         </Card>
