@@ -26,9 +26,9 @@ password, etc.
 
 ## Integrating Auth
 
-At an abstract level, whenever a user signs in, either directly into TrailBase
-using `email+password` or via an external OAuth2 provider (Google, Microsoft,
-...), they receive a set of tokens.
+At an abstract level, whenever a user signs in, either directly with
+`email+password` or via an external OAuth2 provider (Google, Microsoft, ...),
+they receive a set of tokens minted by your TrailBase instance.
 Users or a backend of yours should then attach the *auth* token to their
 TrailBase API requests to identify themselves. TrailBase will then accept or
 reject the request based on the user's authorization.

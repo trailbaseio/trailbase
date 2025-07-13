@@ -105,16 +105,16 @@ export default defineConfig({
               ],
             },
             {
-              slug: "documentation/extending",
+              slug: "documentation/models_and_relations",
             },
             {
-              slug: "documentation/models_and_relations",
+              slug: "documentation/type_safety",
             },
             {
               slug: "documentation/production",
             },
             {
-              slug: "documentation/type_safety",
+              slug: "documentation/extending",
             },
           ],
         },
