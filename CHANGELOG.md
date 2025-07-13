@@ -1,5 +1,13 @@
 ## v0.15.0
 
+* Re-apply migrations on SIGHUP. This allows applying schema changes w/o having to restart TrailBase.
+* Polish: add copy&paste to log/user id and vertically align tooltips.
+* Add a callout to the SQL editor warning users of schema skew when not using migrations.
+* Minor: fix broken documentation link in dashboard.
+* Update dependencies.
+
+## v0.15.0
+
 * Overhaul `user` and `admin` CLI commands to additionally support: change email, delete user, set verify status, invalidate sessions.
   * Users can now be referenced both by UUID (string and base64 encoded) and email addresses.
 * With the extended CLI surface, disallow update/delete of admin users from the UI, thus reducing the potential for abuse. Priviledge now lies with sys-admins.

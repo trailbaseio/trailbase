@@ -494,9 +494,10 @@ function EditorPanel(props: {
                 class="text-sm hover:opacity-[80%]"
                 onClick={() => setShowCallout(false)}
               >
-                Consider using migrations to consistently apply schema changes
-                across environments. One-off alterations can lead to skew.
-                Alterations using the table browser will produce migrations.
+                When changing schemas, consider using migrations to consistently
+                apply changes across environments. One-off alterations can
+                otherwise lead to skew. Alterations using the table browser will
+                produce migrations.
               </Callout>
             )}
 
