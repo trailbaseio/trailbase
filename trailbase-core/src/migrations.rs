@@ -51,6 +51,10 @@ fn load_migrations<T: rust_embed::RustEmbed>() -> Vec<Migration> {
   return migrations;
 }
 
+/// Apply migrations: embedded and from `user_mgiations_path`.
+///
+/// Returns true, if V1 was applied, i.e. DB is initialized for the first time,
+/// otherwise false.
 pub(crate) fn apply_main_migrations(
   conn: &mut rusqlite::Connection,
   user_migrations_path: Option<PathBuf>,
@@ -62,7 +66,6 @@ pub(crate) fn apply_main_migrations(
     migrations.extend(system_migrations_runner);
 
     if let Some(path) = user_migrations_path {
-      // NOTE: refinery has a bug where it will name-check the directory and write a warning... :/.
       let user_migrations = trailbase_refinery::load_sql_migrations(path)?;
       migrations.extend(user_migrations);
     }

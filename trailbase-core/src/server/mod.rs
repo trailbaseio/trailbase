@@ -198,8 +198,10 @@ impl Server {
 
         loop {
           stream.recv().await;
-          log::info!("Received HUP signal. Reloading config.");
 
+          info!("Received SIGHUP: re-loading config & re-applying migrations.");
+
+          // Reload config:
           match crate::config::load_or_init_config_textproto(
             state.data_dir(),
             state.schema_metadata(),
@@ -208,11 +210,40 @@ impl Server {
           {
             Ok(config) => {
               if let Err(err) = state.validate_and_update_config(config, None).await {
-                log::error!("Failed to reload config: {err}");
+                error!("Failed to reload config: {err}");
               }
             }
             Err(err) => {
-              log::error!("Failed to reload config: {err}");
+              error!("Failed to reload config: {err}");
+            }
+          }
+
+          // Re-apply migrations.
+          let user_migrations_path = state.data_dir().migrations_path();
+          match state
+            .conn()
+            .call(move |conn: &mut rusqlite::Connection| {
+              return crate::migrations::apply_main_migrations(conn, Some(user_migrations_path))
+                .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+            })
+            .await
+          {
+            Err(err) => {
+              // NOTE: it's not clear what the best error behavior here is. Should the server continue
+              // to run when migrations fail?
+              error!("Failed to apply migrations: {err}");
+            }
+            Ok(_new_db) => {
+              info!(
+                "Migrations applied: {:?}",
+                state.data_dir().migrations_path()
+              );
+
+              // NOTE: we're always invalidating: simple & safe. We could also avoid invalidation
+              // when no new migrations were applied :shrug:.
+              if let Err(err) = state.schema_metadata().invalidate_all().await {
+                error!("Failed to invalidate schema cache: {err}");
+              }
             }
           }
         }
