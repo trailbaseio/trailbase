@@ -1,4 +1,9 @@
-## v0.15.0
+## v0.15.2
+
+* Admin UI: fix vertical scrolling in SplitView on small screens.
+* Update dependencies.
+
+## v0.15.1
 
 * Re-apply migrations on SIGHUP. This allows applying schema changes w/o having to restart TrailBase.
 * Polish: add copy&paste to log/user id and vertically align tooltips.
