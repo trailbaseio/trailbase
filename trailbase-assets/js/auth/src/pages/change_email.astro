@@ -46,16 +46,16 @@ const profilePageUrl = `${base}/profile`;
         placeholder="Email"
       />
     </div>
+
+    <div class="flex w-full justify-between">
+      <a
+        class:list={buttonVariants({ variant: "outline" })}
+        href={profilePageUrl}
+      >
+        Back
+      </a>
+
+      <Button tabindex="3" type="submit">Send Email Verification</Button>
+    </div>
   </form>
-
-  <div class="flex w-full justify-between">
-    <a
-      class:list={buttonVariants({ variant: "outline" })}
-      href={profilePageUrl}
-    >
-      Back
-    </a>
-
-    <Button tabindex="3" type="submit">Send Email Verification</Button>
-  </div>
 </Form>
