@@ -36,6 +36,7 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
+import { Callout } from "@/components/ui/callout";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -320,6 +321,8 @@ function EditorPanel(props: {
   // eslint-disable-next-line solid/reactivity
   const [selected, setSelected] = props.selected;
 
+  const [showCallout, setShowCallout] = createSignal(true);
+
   // Will only be set when the user explicitly triggers "execute";
   const [queryString, setQueryString] = createWritableMemo<string | null>(
     () => {
@@ -485,23 +488,36 @@ function EditorPanel(props: {
             right={<HelpDialog />}
           />
 
-          {/* Editor */}
-          <div
-            class="mx-4 my-2 max-h-[70dvh] grow overflow-y-scroll rounded outline outline-1"
-            ref={ref}
-          />
+          <div class="mx-4 my-2 flex grow flex-col gap-2">
+            {showCallout() && (
+              <Callout
+                class="text-sm hover:opacity-[80%]"
+                onClick={() => setShowCallout(false)}
+              >
+                Consider using migrations to consistently apply schema changes
+                across environments. One-off alterations can lead to skew.
+                Alterations using the table browser will produce migrations.
+              </Callout>
+            )}
 
-          <div class="flex justify-end px-4 pb-2">
-            <Tooltip>
-              <TooltipTrigger as="div">
-                <Button variant="destructive" onClick={execute}>
-                  Execute (Ctrl+Enter)
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Execute script on the server. No turning back.
-              </TooltipContent>
-            </Tooltip>
+            {/* Editor */}
+            <div
+              class="max-h-[70dvh] grow overflow-y-scroll rounded outline outline-1"
+              ref={ref}
+            />
+
+            <div class="flex justify-end">
+              <Tooltip>
+                <TooltipTrigger as="div">
+                  <Button variant="destructive" onClick={execute}>
+                    Execute (Ctrl+Enter)
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Execute script on the server. No turning back.
+                </TooltipContent>
+              </Tooltip>
+            </div>
           </div>
         </ResizablePanel>
 
