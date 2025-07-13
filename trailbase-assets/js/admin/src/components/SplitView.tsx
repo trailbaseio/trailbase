@@ -44,8 +44,11 @@ export function SplitView(props: {
 }) {
   function VerticalSplit() {
     return (
-      <div class="flex flex-col overflow-hidden">
-        <props.first horizontal={false} />
+      <div class="hide-scrollbars flex h-full flex-col overflow-x-hidden overflow-y-scroll">
+        <div>
+          <props.first horizontal={false} />
+        </div>
+
         <props.second horizontal={false} />
       </div>
     );
