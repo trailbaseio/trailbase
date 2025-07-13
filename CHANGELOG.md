@@ -1,5 +1,6 @@
 ## v0.15.2
 
+* Fix change email email form. Thanks @eugenefil!
 * Admin UI: fix vertical scrolling in SplitView on small screens.
 * Update dependencies.
 
