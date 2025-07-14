@@ -103,8 +103,8 @@ curl -sSL https://raw.githubusercontent.com/trailbaseio/trailbase/main/install.s
 Alternatively, run TrailBase using the Docker image:
 
 ```sh
-mkdir traildepot &&
 alias trail='
+  mkdir -p traildepot && \
   docker run \
       --network host \
       --mount type=bind,source="$PWD"/traildepot,target=/app/traildepot \
