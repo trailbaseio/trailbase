@@ -199,7 +199,38 @@ impl Server {
         loop {
           stream.recv().await;
 
-          info!("Received SIGHUP: re-loading config & re-applying migrations.");
+          info!("Received SIGHUP: re-apply migations then re-load config.");
+
+          // Re-apply migrations. This needs to happen before reloading the config, which is
+          // consistent with the startup order. Otherwise, we may validate a configuration
+          // against a stale database schema.
+          let user_migrations_path = state.data_dir().migrations_path();
+          match state
+            .conn()
+            .call(move |conn: &mut rusqlite::Connection| {
+              return crate::migrations::apply_main_migrations(conn, Some(user_migrations_path))
+                .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+            })
+            .await
+          {
+            Err(err) => {
+              // NOTE: it's not clear what the best error behavior here is. Should the server
+              // continue to run when migrations fail?
+              error!("Failed to apply migrations: {err}");
+            }
+            Ok(_new_db) => {
+              info!(
+                "Migrations applied: {:?}",
+                state.data_dir().migrations_path()
+              );
+
+              // NOTE: we're always invalidating: simple & safe. We could also avoid invalidation
+              // when no new migrations were applied :shrug:.
+              if let Err(err) = state.schema_metadata().invalidate_all().await {
+                error!("Failed to invalidate schema cache: {err}");
+              }
+            }
+          }
 
           // Reload config:
           match crate::config::load_or_init_config_textproto(
@@ -215,35 +246,6 @@ impl Server {
             }
             Err(err) => {
               error!("Failed to reload config: {err}");
-            }
-          }
-
-          // Re-apply migrations.
-          let user_migrations_path = state.data_dir().migrations_path();
-          match state
-            .conn()
-            .call(move |conn: &mut rusqlite::Connection| {
-              return crate::migrations::apply_main_migrations(conn, Some(user_migrations_path))
-                .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
-            })
-            .await
-          {
-            Err(err) => {
-              // NOTE: it's not clear what the best error behavior here is. Should the server continue
-              // to run when migrations fail?
-              error!("Failed to apply migrations: {err}");
-            }
-            Ok(_new_db) => {
-              info!(
-                "Migrations applied: {:?}",
-                state.data_dir().migrations_path()
-              );
-
-              // NOTE: we're always invalidating: simple & safe. We could also avoid invalidation
-              // when no new migrations were applied :shrug:.
-              if let Err(err) = state.schema_metadata().invalidate_all().await {
-                error!("Failed to invalidate schema cache: {err}");
-              }
             }
           }
         }
