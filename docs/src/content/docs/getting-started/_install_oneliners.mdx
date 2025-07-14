@@ -6,7 +6,7 @@ export const installDocker= `
 # Docker is used here merely as an easy, portable way to install TrailBase.
 # To make this persistent, you'll have to add the alias to your shell's rc.
 alias trail='
-  mkdir traildepot && \\
+  mkdir -p traildepot && \\
   docker run \\
       --network host \\
       --mount type=bind,source="$PWD"/traildepot,target=/app/traildepot \\
