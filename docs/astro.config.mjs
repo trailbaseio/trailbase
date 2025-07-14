@@ -108,6 +108,9 @@ export default defineConfig({
               slug: "documentation/models_and_relations",
             },
             {
+              slug: "documentation/migrations",
+            },
+            {
               slug: "documentation/type_safety",
             },
             {

@@ -1,0 +1,94 @@
+---
+title: Migrations
+description: Migrations and Schema changes.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+TrailBase provides a schema migration system to coordinate changes across
+different environments.
+For example, adding a new table or column may need to happen consistently
+across multiple environments like dev, CI, pre-prod and production.
+
+<Aside type="note" title="API Implications">
+Schema changes to `TABLE`s or `VIEW`s exposed as record APIs, will also change
+the API definition, which requires special attention and may require a well
+orchestrated rollout.
+
+For example, adding a new `NOT NULL` column without `DEFAULT`, will require all
+clients to start providing a corresponding value during record creation.
+Similarly, removing a `NOT NULL` column will break clients that critically
+expect a corresponding value when reading records.
+</Aside>
+
+## Creating a Migration
+
+At the surface, migrations are simply files containing SQL statements in
+`trailbase/migrations/` following a naming scheme of
+`U<timestamp>__<name>.sql`.
+The quickest way to create a new empty migration is: `trail migration`, which
+will create an empty file with the current timestamp. Afterwards you can
+rename the file and add your SQL, e.g.:
+`CREATE TABLE new_table (id INTEGER PRIMARY KEY) STRICT`.
+Once satisfied, migrations can be applied either by restarting TrailBase or
+sending a `SIGHUP` signal to a running instance.
+
+Alternatively, altering the schema via the table explorer in the admin UI will
+generate migrations for you and instantly apply them.
+
+<Aside type="note" title="Append Only">
+  Migrations represent a strict progression of the schema evolution. Meaning,
+  once a migration has been applied, the migration file may no longer be
+  removed w/o invalidating the database state. This ensures that all
+  environments will eventually have the same progression.
+  Think of migrations as append-only.
+
+  If you're playing around with migrations in your local dev environment, the
+  quickest way to get rid of a failed experiment is to stop TrailBase and
+  delete `traildepot/data/main.db`.
+  The migration state is tracked in the `main._schema_history` table.
+</Aside>
+
+## Rolling Out Schema Changes to Clients
+
+Schema changes to `TABLES` or `VIEW`s exposed as APIs will also change the API
+definition and thus require special diligence.
+Especially client-server divergence over columns with `NOT NULL` constraints
+can lead to breaking API changes.
+For example, adding a new `NOT NULL` column w/o a `DEFAULT` requires all
+clients going forward to provide said value, otherwise the API call will fail.
+Consequently, some API toolkits like
+[protobuf](https://protobuf.dev/best-practices/dos-donts/#add-required)
+strongly advice against or even disallow *required* fields.
+In other words, adding and removing `NULL`able columns is a lot simpler and
+safer.
+
+It is your responsibility to ensure that all clients are compatible with both
+the old and new version of the API at the time of the rollout.
+For changes with required fields, it will often be easier to add a new version
+of the API - potentially using `VIEW`s or `excluded_columns` - move your clients
+over, and ensure that no more out-of-date clients exist that we're not ok with
+breaking before removing the old API.
+
+
+## Reverting Migrations vs Backups
+
+Some schema migration systems allow reverting or undoing migrations. In
+practice, they are inverse follow-up migration. While this allows reverting
+schemas to a prior state, it doesn't allow restoring the actual database state.
+For example, dropping a table is a destructive operation that results in all of
+the table's records being deleted.
+Reverting the schema will bring back an empty table only.
+
+TrailBase does **not** provide a builtin revert. Schema migrations are append
+only and move strictly forward in time.
+They should always be conducted with great care.
+If a destructive operations has been rolled out all the way to prod, the data
+is gone. You can still undo the schema change by manually applying an inverse
+forward migration, i.e. addin a column or table back, but properly undoing the
+database state will require a restore from backups.
+
+<Aside type="note" title="Backups">
+  By default, TrailBase backs up your database periodically to
+  `traildepot/backups/backup.db`.
+</Aside>
