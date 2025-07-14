@@ -46,7 +46,7 @@ export default defineConfig({
             base: "api",
             schema: "./openapi/schema.json",
             sidebar: {
-              label: "OpenAPI",
+              label: "HTTP API",
               operations: {
                 badges: true,
                 labels: "operationId",
@@ -69,69 +69,74 @@ export default defineConfig({
               items: [
                 {
                   label: "API, Vector Search & UI",
-                  slug: "getting-started/first-ui-app",
+                  slug: "tutorials/first-ui-app",
                 },
                 {
                   label: "Data CLI",
-                  slug: "getting-started/first-cli-app",
+                  slug: "tutorials/first-cli-app",
                 },
                 {
                   label: "Realtime-sync & SSR",
-                  slug: "getting-started/first-realtime-app",
+                  slug: "tutorials/first-realtime-app",
                 },
               ],
-            },
-            {
-              label: "Our Goals",
-              slug: "getting-started/goals",
             },
           ],
         },
         {
-          label: "Documentation",
+          label: "Guides",
           items: [
             {
-              slug: "documentation/auth",
+              label: "Authentication",
+              slug: "getting-started/auth",
             },
             {
-              label: "APIs",
-              items: [
-                {
-                  slug: "documentation/record_apis",
-                },
-                {
-                  slug: "documentation/js_apis",
-                },
-              ],
+              label: "Autgenerated Record APIs",
+              slug: "getting-started/record_apis",
             },
             {
-              slug: "documentation/models_and_relations",
+              label: "Extending with Custom APIs",
+              slug: "getting-started/extending",
             },
             {
-              slug: "documentation/type_safety",
+              slug: "getting-started/models_and_relations",
             },
             {
-              slug: "documentation/production",
+              slug: "getting-started/type_safety",
             },
             {
-              slug: "documentation/extending",
+              label: "Going to production",
+              slug: "getting-started/production",
             },
           ],
-        },
-        {
-          label: "Comparisons",
-          autogenerate: {
-            directory: "comparison",
-          },
-        },
-        {
-          label: "Reference",
-          autogenerate: {
-            directory: "reference",
-          },
         },
         // Add the generated sidebar group to the sidebar.
         ...openAPISidebarGroups,
+        {
+          label: "Why TrailBase?",
+          items: [
+            {
+              label: "Goals",
+              slug: "why-trailbase/goals",
+            },
+            {
+              label: "Comparisons",
+              slug: "why-trailbase/comparisons",
+            },
+            {
+              label: "Benchmarks",
+              slug: "why-trailbase/benchmarks",
+            },
+            {
+              label: "Roadmap",
+              slug: "why-trailbase/roadmap",
+            },
+            {
+              label: "FAQ",
+              slug: "why-trailbase/faq",
+            },
+          ],
+        },
       ],
       components: {
         Footer: "./src/components/Footer.astro",

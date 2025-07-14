@@ -1,10 +1,8 @@
 ---
-title: PocketBase
-description: Comparing TrailBase & PocketBase.
+title: Comparisons
 ---
 
-import { Aside } from "@astrojs/starlight/components";
-import GettingTrailBase from "../getting-started/_getting_trailbase.mdx";
+## TrailBase vs. PocketBase
 
 Firstly, PocketBase is amazing! It paved the way for single-executable
 application bases, is incredibly easy-to-use, and a polished
@@ -17,7 +15,7 @@ storage, JavaScript (JS) runtimes, admin dashboard..., all on top of SQLite.
 For the sake of this comparison, we'll dive a little deeper to have a closer
 look at their differences both technically and philosophically.
 
-## Goals
+### Goals
 
 TrailBase was born out of admiration for PocketBase trying to move the needle
 in a few areas:
@@ -39,11 +37,11 @@ in a few areas:
   Imagine a self-contained data science project that ships an interactive UI
   with vector search and custom JS extensions alongside its data.
 
-## Differences
+### Differences
 
 Beyond goals and intentions, let's look at some of the more practical differences:
 
-### Language & Performance
+#### Language & Performance
 
 PocketBase being written in Go and TrailBase in Rust may be the most instantly
 visible difference.
@@ -53,14 +51,14 @@ either as a framework rather than the standalone binary or modifying the core.
 In practice, both languages are solid, speedy options with rich ecosystems.
 Though Rust's lack of a runtime and lower FFI overhead gives it the edge in
 terms of performance.
-Measuring we found that TrailBase's APIs are roughly [10x faster](/reference/benchmarks/).
+Measuring we found that TrailBase's APIs are roughly [10x faster](/why-trailbase/benchmarks/).
 This may sound like a lot but is the result of SQLite itself being extremely
 fast meaning that even small overheads weigh heavily.
 
 Independently, TrailBase choice of V8 as its JS runtime allows code to run
 roughly 40x faster.
 
-### Framework Use
+#### Framework Use
 
 Both PocketBase and TrailBase allow customization using their built-in JS
 runtimes. However, some users may want even more control and built their own
@@ -75,7 +73,7 @@ TrailBase technically allows it too, but at this point it really feels more
 like an afterthought while we focus on the standalone experience.
 Expect TrailBase to improve significantly in this area.
 
-### Features
+#### Features
 
 When we look more deeply into the seemingly identical features sets, many and
 constantly evolving differences are starting to surface.
@@ -104,7 +102,7 @@ sleeve:
 - Efficient and stable cursor-based pagination as opposed to `OFFSET`.
 - An admin UI that "works" on small mobile screens 😅.
 
-### Contributing & Licensing
+#### Contributing & Licensing
 
 Both PocketBase and TrailBase are truly open-source: they accept contributions
 and are distributed under [OSI-approved](https://opensource.org/licenses) licenses.
@@ -116,7 +114,7 @@ modifications to TrailBase itself. This is similar to GPL's classpath or LGPL's
 linkage exception allowing the use of TrailBase as a framework and JS runtime
 without inflicting licensing requirements on your original work.
 
-## Final Words
+### Final Words
 
 PocketBase is great and both PocketBase and TrailBase are constantly evolving
 making it hard to give clear guidance on which to pick when.
@@ -129,6 +127,40 @@ Otherwise it may be worth giving TrailBase a closer look, especially when
 flexibility and performance matter.
 
 <GettingTrailBase />
+
+---
+
+## TrailBase vs. SupaBase
+
+Both SupaBase and Postgres are amazing. Comparing either to TrailBase and
+SQLite, respectively, is challenging given how different they are
+architecturally.
+
+For one, both Postgres and SupaBase are heck of a lot more modular. "Rule 34" of
+the database world: if you can think of it, there's a Postgres extension for it.
+And SupaBase does an excellent job at making all that flexibility available
+without getting in the way and giving you untethered access while further
+expanding upon it.
+In many ways, TrailBase is trying to eventually do the same for SQLite:
+combining PocketBase's simplicity with SupaBase's layering.
+
+One foundational difference is that Postgres itself is a multi-user,
+client-server architecture already.
+Extending it by building a layered services around it, like SupaBase did,
+feels very natural.
+However, SQLite is neither a multi-user system nor a server. Hence, extending
+it by embedding it into a monolith, like PocketBase did,  feels fairly natural
+as well.
+There are ups and downs to either approach. The layered service approach, for
+example, allows for isolated failure domains and scaling of individual
+components [^5]. The monolith, on the other hand, with its lesser need for modularity
+can have fewer interaction points, fewer moving parts making it fundamentally
+simpler, cheaper, and
+[lower overhead (10+x performance difference)](/reference/benchmarks).
+
+Ultimately, the biggest difference is that SupaBase is a polished product with
+a lot of mileage under its belt. Our simpler architecture will hopefully let us
+get there but for now SupaBase is our north star.
 
 ---
 
@@ -146,9 +178,15 @@ flexibility and performance matter.
     mediated through PocketBase to keep everything in sync.
 
 [^3]:
-    All extensions can be built into a small, standalone shared library and
+   5 All extensions can be built into a small, standalone shared library and
     imported by vanilla SQLite to avoid vendor lock-in.
 
 [^4]:
     Note that SQLite is not strictly typed by default. Instead column types
     merely a type affinity for value conversions.
+
+[^5]:
+    For example, in our performance testing we've found that PostgREST,
+    SupaBase's RESTful API layer in front of Postgres, is relatively resource
+    hungry. This might not be an issue since one can simply scale by pointing
+    many independent instances at the same database instance.

@@ -21,50 +21,74 @@ server-side execution is greatly reduced.
 providing common server-side functionality and strategic extension points**.
 
 
-## Bring your own Backend
-
-The most flexible and likewise de-coupled way of running your own code is to
-deploy a separate service alongside TrailBase. This gives you full control over
-your destiny: runtime, scaling, deployment, etc.
-
-TrailBase is designed with the explicit goal of running along a sea of other
-services.
-Its stateless tokens using asymmetric crypto make it easy for other resource
-servers to hermetically authenticate your users.
-TrailBase's APIs can be accessed transitively, simply by forwarding user
-tokens [^1].
-Alternatively, you can fall back to raw SQLite for reads, writes and even
-schema alterations[^2].
-
 ## Custom APIs in TrailBase
 
 TrailBase provides a couple of ways to embed custom logic and provide custom APIs endpoints:
 
-1. Rust HTTP handlers using Axum,
-2. JS/TS handlers [APIs](/documentation/js_apis/),
-3. Stored database procedures,
-3. SQLite extensions and modules (virtual tables).
+1. Rust HTTP handlers using Axum
+2. JS/TS endpoints
+3. Stored database procedures
+3. SQLite extensions and modules (virtual tables)
 
 <Aside type="note" title="Rust Handlers">
   the Rust APIs are subject to change. However, we will rely on semantic
   versioning to communicate breaking changes explicitly.
 </Aside>
 
-### Using ES6 JavaScript & TypeScript
+### Using ES6 JS/TS Endpoints
 
 You can write custom HTTP endpoints using both full ES6 JavaScript and/or
 TypeScript. TrailBase will transpile your code on the fly and execute it on a
 speedy V8-engine, the same engine found across Chrome, node.js and deno.
-More information can be found in the [API docs](/documentation/js_apis/).
 
-### Using Rust
+At its heart, it's a pool of V8-js-engines alongside a runtime that supports basic
+tasks such as file I/O, web requests, timers, etc.
+However, it is *not* a complete Node.js runtime, at least for now, since it
+would pull in a lot of extra dependencies.
+Note further, that the pool of workers/isolates does not share state, i.e. you
+cannot use global state to reliably share state across requests. You should
+rely on the database for persisting and sharing state.
+
+The following example illustrates a few things:
+
+* How to register a parameterized route with `:table`.
+* How to implement a handler that returns `text/plain` content. There is also
+  `jsonHandler` and `htmlHandler`.
+* How to query the database.
+* How to return an error.
+
+```js
+import {
+  addRoute,
+  query,
+  stringHandler,
+  HttpError,
+  StatusCodes
+} from "../trailbase.js";
+
+addRoute("GET", "/test/{table}", stringHandler(async (req) => {
+  const table = req.params["table"];
+  if (table) {
+    const rows = await query(`SELECT COUNT(*) FROM ${table}`, [])
+    return `entries: ${rows[0][0]}`;
+  }
+
+  throw new HttpError(
+      StatusCodes.BAD_REQUEST, "Missing '?table=' search query parm");
+}));
+```
+
+More examples can be found in the repository in
+`client/testfixture/scripts/index.ts`.
+
+### Using Rust Endpoints
 
 The Rust APIs aren't yet stable and fairly undocumented.
 That said, similar to using PocketBase as a Go framework, you can build your
 own TrailBase binary and register custom Axum handlers written in rust with the
 main application router, see `/examples/custom-binary`.
 
-### Stored Procedures
+### Using Stored Procedures
 
 Unlike Postgres or MySQL, SQLite does not support stored procedures out of the
 box.
@@ -73,7 +97,7 @@ However, TrailBase has integrated sqlean's
 to fill the gap. You can easily adopt SQLean in your own backends avoiding
 lock-in.
 
-### SQLite Extensions and Modules a.k.a. Virtual Tables
+### Using Virtual Tables
 
 Likely the most bespoke approach is to expose your functionality as a custom
 SQLite extension or module similar to how TrailBase extends SQLite itself.
@@ -90,6 +114,22 @@ modules are:
 * you have extremely low-overhead access to your data,
 * extensions and modules can also be used by services accessing the
   underlying SQLite databases.
+
+
+## Bring your own Backend
+
+The most flexible and likewise de-coupled way of running your own code is to
+deploy a separate service alongside TrailBase. This gives you full control over
+your destiny: runtime, scaling, deployment, etc.
+
+TrailBase is designed with the explicit goal of running along a sea of other
+services.
+Its stateless tokens using asymmetric crypto make it easy for other resource
+servers to hermetically authenticate your users.
+TrailBase's APIs can be accessed transitively, simply by forwarding user
+tokens [^1].
+Alternatively, you can fall back to raw SQLite for reads, writes and even
+schema alterations[^2].
 
 ---
 
