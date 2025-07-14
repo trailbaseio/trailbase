@@ -53,8 +53,13 @@ There are a few considerations, which may affect your choices:
   you'll need a WebView anyway for users to sign in with the external provider.
 
 The `examples/blog/(web|flutter)` demonstrates how the built-in UIs, including
-OAuth, can be used by both web and mobile applications.
+OAuth via WebView, can be used by both web and mobile/desktop applications[^2].
 
+When using the built-in UIs, the general approach is to send users to
+`/_/auth/(login|logout|profile)`. Additionally, for OAuth client-side
+applications, like SPAs, mobile or desktop, should use `?pkce_code_challenge=`
+(i.e. Proof-Key-for-Code-Exchange) to protect against auth-code interception
+attacks.
 
 ## Design
 
@@ -76,7 +81,7 @@ This is very easy and efficient, however means that hermetic auth tokens cannot
 be invalidated.
 A hermetic auth token released into the wild is valid until it expires.
 To balance the risks and benefits, TrailBase uses short-lived auth tokens
-expiring frequently[^2].
+expiring frequently[^3].
 To avoid burdening users by constantly re-authenticating, TrailBase issues an
 additional __opaque, stateful refresh token__.
 Refresh tokens are simply a unique identifier the server keeps track of as
@@ -165,4 +170,8 @@ have persisted should be dropped.
     own or have no need for a web-based authentication UI.
 
 [^2]:
+    The approach is similar for any native application. This example uses Flutter
+    and can run both on Mobile (iOS, Android) and Desktop (Windows, MacOS, Linux).
+
+[^3]:
     A one hour TTL by default.

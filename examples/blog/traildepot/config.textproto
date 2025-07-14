@@ -4,7 +4,18 @@ server {
   application_name: "TrailBase"
   site_url: "http://localhost:4000"
 }
-auth {}
+auth {
+  oauth_providers: [
+    {
+      key: "discord"
+      value {
+        client_id: "invalid_discord_id"
+        client_secret: "<REDACTED>"
+        provider_id: DISCORD
+      }
+    }
+  ]
+}
 record_apis: [
   {
     name: "profiles"
