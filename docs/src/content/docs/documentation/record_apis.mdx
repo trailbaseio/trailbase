@@ -10,20 +10,20 @@ import { apiPath, recordApiNamePlaceholder, recordApiIdPlaceholder } from "./_re
 TrailBase's restful CRUD _Record APIs_ allow you to access your `TABLE`s and
 `VIEW`s in an easy and type-safe manner.
 
-- Tables and views need to be `STRICT`ly[^1] typed to guarantee type-safety all the
-  way from your records, via JSON schema, to your client-side language bindings [^2].
-- They need to have a sequential primary key column to allow for stable sorting
-  and thus efficient cursor-based pagination. Either an explicit `INTEGER`,
-  UUIDv4 or UUIDv7 `PRIMARY KEY` will do, including `FOREIGN KEY` columns.
+- `TABLE`s and `VIEW`s need to be `STRICT`ly[^1] typed to guarantee type-safety
+  all the way from your records, via JSON schema, to your client-side language
+  bindings [^2].
+  `CAST(col AS <TYPE>)` expressions can be used to assert types of computed
+  `VIEW` columns.
+- `TABLE`s need to have a sequential primary key column to allow for stable
+  sorting and thus efficient cursor-based pagination. Either an explicit
+  `INTEGER`, UUIDv4 or UUIDv7 `PRIMARY KEY` will do, including `FOREIGN KEY`
+  columns.
 
 ## Configuration
 
-Record APIs can be configured via the admin dashboard or in TrailBase's
-configuration file.
-Not all features are yet exposed via the UI like exporting the same table/view
-multiple times as different API endpoints.
-Editing the configuration file directly, you can set up as many as you like
-allowing for some extra flexibility around permissions and visibility.
+Record APIs can be configured via the admin dashboard or direclty in
+TrailBase's configuration file.
 
 An example API setup for managing user profiles:
 
@@ -43,7 +43,7 @@ A quick explanation:
 
 * The `name` needs to be unique. It's what is used to access the API via
   <code>{apiPath({name:"name", prefix:"http://<host>"})}</code>
-* `table_name` references the table or view that is being exposed.
+* `table_name` references the `TABLE` or `VIEW` that is being exposed.
 * `conflict_resolution` declares what should happen if a newly created record is
   conflicting with an existing one.
 * `autofill_missing_user_id_column` lets you omit fields for columns with a foreign
@@ -55,6 +55,9 @@ A quick explanation:
   only authenticated users can modify them. The following `access_rules` further narrow
   mutations to records where the `user` column (or request field for insertions)
   match. In other words, user X cannot modify user Y's avatar.
+
+Note that and `TABLE`/`VIEW` can be exposed multiple times as different APIs
+with different properties.
 
 
 ### Permissions
@@ -83,8 +86,8 @@ of a group `'mygroup'`:
   will be `NULL`.
 * To check for the presence of a specific field in a `CREATE` or `UPDATE`
   request, you can use `'field' IN _REQ__FIELDS_`. Note that `_REQ_FIELDS_` may
-  only contain fields with a corresponding column in the underlying table or
-  view.
+  only contain fields with a corresponding column in the underlying `TABLE` or
+  `VIEW`.
 * Similarly, `_ROW_` is a sub-query of the target record. It is available in
   the access rules for `READ`, `UPDATE`, and `DELETE` operations.
 * Lastly, `_USER_.id` references the id of the currently authenticated user and
@@ -101,23 +104,47 @@ What makes the most sense in your case, is very application dependent.
 The `<repo>/examples/blog` has an "editor" group to control who can write blog
 posts.
 
-Somewhat on a tangent and pretty meta, group and capability tables can
-themselves be exposed via Record APIs.
+Somewhat on a tangent, group and capability tables can themselves be exposed
+via Record APIs.
 This can be used to programmatically manage permissions, e.g. for building a
 moderation dashboard.
 When exposing authorization primitives, make sure the permissions are
 appropriately tight to avoid permission escalations.
 
+### `VIEW`-based APIs
+
+`VIEW`s can support a variety of use-cases, e.g.: read-only APIs on a subset of
+columns, APIs exposing complex joins across many tables, computed values across
+many columns, etc.
+Note that computed columns require a top-level `CAST` expression for TrailBase
+to determine the resulting type and satisfy the type-safety requirements for
+record APIs, e.g.:
+
+
+export const viewExample = `
+CREATE VIEW profile_view AS
+  SELECT
+    p.*,
+    -- The CAST is needed to determine the type of the result.
+    CAST(IIF(editors.user IS NULL, FALSE, TRUE) AS BOOLEAN) AS editor
+  FROM profiles AS p
+    LEFT JOIN editors ON p.user = editors.user;
+`;
+
+<Code lang="sql" code={viewExample} mark={["CAST(", "AS BOOLEAN)"]} />
+
+
 ### Write-only columns
 
 Columns with names starting with an underscore can be written on insert or
-updated but are hidden on reads. This is meant as a convenient convention to
-allow for internal data fields, e.g hiding the record owner in an otherwise public
-data set or hiding a user's internal credit rating from their profile. A
-similar effect could otherwise be achieved by only allowing create/update
+updated but are hidden during read/list operations.
+This is meant as a convenient convention to allow for internal data fields, e.g
+hiding the record owner in an otherwise public data set or hiding a user's
+internal credit rating from their profile.
+A similar effect could otherwise be achieved by only allowing create/update
 operations on the table and exposing a subset of columns through a readable
-`VIEW`. However, this would lead to different API endpoints for read vs
-create/update.
+`VIEW`.
+However, this would lead to different API endpoints for read vs create/update.
 
 <Aside type="note" title="Unhiding">
   Note that views can also be used to rename columns and thus expose hidden columns
