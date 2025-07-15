@@ -1,9 +1,9 @@
 ## v0.15.3
 
 * Fix parsing of `VIEW` definitions with elided aliases and handle `VIEW` parsing errors more gracefully.
-* Fix `SIGHUP` migration/config order to much startup.
+* Fix `SIGHUP` migration/config order to match startup.
 * Fix references in auth Emails.
-* Documentation improvements: early schema migration doc, mutli-API in UI, use of PKCE, etc.
+* Documentation improvements: early schema migration doc, multi-API in UI, use of PKCE, etc.
 * Update Rust & JS dependencies.
 
 ## v0.15.2

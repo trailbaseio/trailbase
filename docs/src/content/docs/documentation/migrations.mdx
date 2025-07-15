@@ -11,20 +11,20 @@ For example, adding a new table or column may need to happen consistently
 across multiple environments like dev, CI, pre-prod and production.
 
 <Aside type="note" title="API Implications">
-Schema changes to `TABLE`s or `VIEW`s exposed as record APIs, will also change
-the API definition, which requires special attention and may require a well
-orchestrated rollout.
+  Schema changes to `TABLE`s or `VIEW`s exposed as record APIs, will also
+  change the API definition, which requires special attention and may require a
+  well orchestrated rollout.
 
-For example, adding a new `NOT NULL` column without `DEFAULT`, will require all
-clients to start providing a corresponding value during record creation.
-Similarly, removing a `NOT NULL` column will break clients that critically
-expect a corresponding value when reading records.
+  For example, adding a new `NOT NULL` column without `DEFAULT`, will require
+  all clients to start providing a corresponding value during record creation.
+  Similarly, removing a `NOT NULL` column will break clients that critically
+  expect a corresponding value when reading records.
 </Aside>
 
 ## Creating a Migration
 
-At the surface, migrations are simply files containing SQL statements in
-`trailbase/migrations/` following a naming scheme of
+On the surface, migrations are simply files containing SQL statements in
+`traildepot/migrations/` following a naming scheme of
 `U<timestamp>__<name>.sql`.
 The quickest way to create a new empty migration is: `trail migration`, which
 will create an empty file with the current timestamp. Afterwards you can
@@ -51,24 +51,25 @@ generate migrations for you and instantly apply them.
 
 ## Rolling Out Schema Changes to Clients
 
-Schema changes to `TABLES` or `VIEW`s exposed as APIs will also change the API
-definition and thus require special diligence.
+Schema changes to `TABLES` or `VIEW`s exposed as APIs will automatically change
+the API definition and thus require special diligence.
 Especially client-server divergence over columns with `NOT NULL` constraints
 can lead to breaking API changes.
 For example, adding a new `NOT NULL` column w/o a `DEFAULT` requires all
-clients going forward to provide said value, otherwise the API call will fail.
+clients going forward to provide said value, otherwise the server will reject
+the call.
 Consequently, some API toolkits like
 [protobuf](https://protobuf.dev/best-practices/dos-donts/#add-required)
 strongly advice against or even disallow *required* fields.
-In other words, adding and removing `NULL`able columns is a lot simpler and
+In other words, adding and removing nullable columns is a lot simpler and
 safer.
 
 It is your responsibility to ensure that all clients are compatible with both
 the old and new version of the API at the time of the rollout.
 For changes with required fields, it will often be easier to add a new version
-of the API - potentially using `VIEW`s or `excluded_columns` - move your clients
-over, and ensure that no more out-of-date clients exist that we're not ok with
-breaking before removing the old API.
+of the API - potentially using `VIEW`s to emulate the old behavior - move your
+clients over, and ensure that no more out-of-date clients exist that we're not
+ok with breaking before removing the old API.
 
 
 ## Reverting Migrations vs Backups
