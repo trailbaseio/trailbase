@@ -462,36 +462,25 @@ pub mod testing {
       let email = Email::verification_email(&state, "foo@bar.org", code).unwrap();
       assert_eq!(email.subject, "Verify your Email Address for TrailBase");
       assert!(email.body.contains("Welcome foo@bar.org"));
-      assert!(email.body.contains(code));
-      assert!(
-        email
-          .body
-          .contains("https://test.org/api/auth/v1/verify_email/confirm"),
-        "{}",
-        email.body
-      );
+      assert!(email.body.contains(&format!(
+        "https://test.org/api/auth/v1/verify_email/confirm/{code}"
+      )));
     }
 
     {
       let email = Email::change_email_address_email(&state, "foo@bar.org", code).unwrap();
       assert_eq!(email.subject, "Change your Email Address for TrailBase");
-      assert!(email.body.contains(code));
-      assert!(
-        email
-          .body
-          .contains("https://test.org/api/auth/v1/change_email/confirm")
-      );
+      assert!(email.body.contains(&format!(
+        "https://test.org/api/auth/v1/change_email/confirm/{code}"
+      )));
     }
 
     {
       let email = Email::password_reset_email(&state, "foo@bar.org", code).unwrap();
       assert_eq!(email.subject, "Reset your Password for TrailBase");
-      assert!(email.body.contains(code));
-      assert!(
-        email
-          .body
-          .contains("https://test.org/api/auth/v1/reset_password/update")
-      );
+      assert!(email.body.contains(&format!(
+        "https://test.org/api/auth/v1/reset_password/update/{code}"
+      )));
     }
   }
 
