@@ -13,11 +13,11 @@
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
-    "@astrojs/starlight": "^0.34.5",
+    "@astrojs/starlight": "^0.34.6",
     "@astrojs/starlight-tailwind": "^4.0.1",
     "@iconify-json/tabler": "^1.2.19",
     "@tailwindcss/vite": "^4.1.11",
-    "astro": "^5.11.0",
+    "astro": "^5.11.1",
     "astro-icon": "^1.1.5",
     "chart.js": "^4.5.0",
     "chartjs-chart-error-bars": "^4.4.4",
@@ -44,6 +44,6 @@
     "prettier": "^3.6.2",
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-tailwindcss": "^0.6.14",
-    "typescript-eslint": "^8.36.0"
+    "typescript-eslint": "^8.37.0"
   }
 }
