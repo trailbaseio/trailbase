@@ -106,7 +106,12 @@ impl Email {
     };
 
     let site_url = get_site_url(state);
-    let verification_url = format!("{site_url}/verify_email/confirm/{email_verification_code}");
+    let verification_url = site_url
+      .join(&format!(
+        "/api/auth/v1/verify_email/confirm/{email_verification_code}"
+      ))
+      .map_err(|_err| EmailError::Missing("email verification URL"))?
+      .to_string();
 
     let env = Environment::empty();
     let subject = env
@@ -152,7 +157,12 @@ impl Email {
     };
 
     let site_url = get_site_url(state);
-    let verification_url = format!("{site_url}/change_email/confirm/{email_verification_code}");
+    let verification_url = site_url
+      .join(&format!(
+        "/api/auth/v1/change_email/confirm/{email_verification_code}"
+      ))
+      .map_err(|_err| EmailError::Missing("change email confirmation URL"))?
+      .to_string();
 
     let env = Environment::empty();
     let subject = env
@@ -198,7 +208,12 @@ impl Email {
     };
 
     let site_url = get_site_url(state);
-    let verification_url = format!("{site_url}/reset_password/update/{password_reset_code}");
+    let verification_url = site_url
+      .join(&format!(
+        "/api/auth/v1/reset_password/update/{password_reset_code}"
+      ))
+      .map_err(|_err| EmailError::Missing("password reset URL"))?
+      .to_string();
 
     let env = Environment::empty();
     let subject = env
@@ -299,11 +314,12 @@ fn get_site_url(state: &AppState) -> url::Url {
   return match *state.site_url() {
     Some(ref site_url) => site_url.clone(),
     None => {
+      // TODO: We should forward the actual server address.
       warn!(
-        "No 'site_url' configured, falling back to 'http://localhost'. This may be ok for development but will result in invalid auth links otherwise."
+        "No 'site_url' configured, falling back to 'http://localhost:4000'. This may be ok for development but will result in invalid auth links otherwise."
       );
 
-      url::Url::parse("http://localhost").expect("invariant")
+      url::Url::parse("http://localhost:4000").expect("invariant")
     }
   };
 }
@@ -447,18 +463,35 @@ pub mod testing {
       assert_eq!(email.subject, "Verify your Email Address for TrailBase");
       assert!(email.body.contains("Welcome foo@bar.org"));
       assert!(email.body.contains(code));
+      assert!(
+        email
+          .body
+          .contains("https://test.org/api/auth/v1/verify_email/confirm"),
+        "{}",
+        email.body
+      );
     }
 
     {
       let email = Email::change_email_address_email(&state, "foo@bar.org", code).unwrap();
       assert_eq!(email.subject, "Change your Email Address for TrailBase");
       assert!(email.body.contains(code));
+      assert!(
+        email
+          .body
+          .contains("https://test.org/api/auth/v1/change_email/confirm")
+      );
     }
 
     {
       let email = Email::password_reset_email(&state, "foo@bar.org", code).unwrap();
       assert_eq!(email.subject, "Reset your Password for TrailBase");
       assert!(email.body.contains(code));
+      assert!(
+        email
+          .body
+          .contains("https://test.org/api/auth/v1/reset_password/update")
+      );
     }
   }
 
