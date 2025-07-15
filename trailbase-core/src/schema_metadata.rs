@@ -275,11 +275,15 @@ pub async fn lookup_and_parse_all_view_schemas(
 
     for row in rows.iter() {
       let sql: String = row.get(0)?;
-      views.push({
-        let mut view: View = sqlite3_parse_view(&sql, tables)?;
-        view.name.database_schema = Some(db.name.clone());
-        view
-      });
+      match sqlite3_parse_view(&sql, tables) {
+        Ok(mut view) => {
+          view.name.database_schema = Some(db.name.clone());
+          views.push(view);
+        }
+        Err(err) => {
+          error!("Failed to parse VIEW definition '{sql}': {err}");
+        }
+      }
     }
   }
 

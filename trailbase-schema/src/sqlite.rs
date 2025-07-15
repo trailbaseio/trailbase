@@ -974,17 +974,15 @@ fn to_entry(
   qn: AstQualifiedName,
   alias: Option<sqlite3_parser::ast::As>,
 ) -> (String, QualifiedName) {
-  return (
-    alias
-      .and_then(|alias| {
-        if let sqlite3_parser::ast::As::As(name) = alias {
-          return Some(unquote_name(name));
-        }
-        None
-      })
-      .unwrap_or_else(|| qn.to_string()),
-    qn.into(),
-  );
+  let key = match alias {
+    // "FROM table_name AS alias"
+    Some(sqlite3_parser::ast::As::As(name)) => unquote_name(name),
+    // "FROM table_name alias"
+    Some(sqlite3_parser::ast::As::Elided(name)) => unquote_name(name),
+    _ => qn.to_string(),
+  };
+
+  return (key, qn.into());
 }
 
 #[derive(Clone, Debug)]
@@ -1151,11 +1149,11 @@ fn try_extract_column_mapping(
         }
         Expr::Qualified(qualifier, name) => {
           let qualifier = unquote_name(qualifier);
-          let col_name = unquote_name(name);
+          let col_name = unquote_name(name.clone());
 
           let Some(table_name) = table_names.get(&qualifier) else {
             return Err(SchemaError::Precondition(
-              format!("Missing table with qualifier: {qualifier}").into(),
+              format!("Missing table: Qualified({qualifier}, {name})").into(),
             ));
           };
 
@@ -1535,6 +1533,66 @@ mod tests {
 
   #[test]
   fn test_view_column_extraction() {
+    let tables = vec![Table {
+      name: QualifiedName {
+        name: "table_name".to_string(),
+        database_schema: None,
+      },
+      strict: true,
+      columns: vec![Column {
+        name: "column".to_string(),
+        data_type: ColumnDataType::Text,
+        options: vec![],
+      }],
+      foreign_keys: vec![],
+      unique: vec![],
+      checks: vec![],
+      virtual_table: false,
+      temporary: false,
+    }];
+
+    {
+      // No alias
+      let sql = "SELECT column FROM table_name";
+      let sqlite3_parser::ast::Stmt::Select(select) =
+        sqlite3_parse_into_statement(sql).unwrap().unwrap()
+      else {
+        panic!("Not a select");
+      };
+      let _mapping = try_extract_column_mapping(*select, &tables)
+        .unwrap()
+        .unwrap();
+    }
+
+    {
+      // With alias
+      let sql = "SELECT alias.column FROM table_name AS alias";
+      let sqlite3_parser::ast::Stmt::Select(select) =
+        sqlite3_parse_into_statement(sql).unwrap().unwrap()
+      else {
+        panic!("Not a select");
+      };
+      let _mapping = try_extract_column_mapping(*select, &tables)
+        .unwrap()
+        .unwrap();
+    }
+
+    {
+      // With "elided" alias
+      let sql = "SELECT alias.column FROM table_name alias";
+      let sqlite3_parser::ast::Stmt::Select(select) =
+        sqlite3_parse_into_statement(sql).unwrap().unwrap()
+      else {
+        panic!("Not a select");
+      };
+      let _mapping = try_extract_column_mapping(*select, &tables)
+        .unwrap()
+        .unwrap();
+    }
+  }
+
+  #[test]
+  fn test_view_column_extraction_join() {
     let sql = "SELECT user, *, a.*, p.user AS foo FROM foo.articles AS a LEFT JOIN bar.profiles AS p ON p.user = a.author";
     let sqlite3_parser::ast::Stmt::Select(select) =
       sqlite3_parse_into_statement(sql).unwrap().unwrap()

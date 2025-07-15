@@ -6936,8 +6936,6 @@ dependencies = [
  "maxminddb",
  "mini-moka",
  "parking_lot",
- "rand 0.9.1",
- "rand_core 0.9.3",
  "regex",
  "rusqlite",
  "serde",

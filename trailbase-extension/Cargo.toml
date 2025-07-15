@@ -13,15 +13,13 @@ crate-type=["cdylib", "rlib"]
 
 [dependencies]
 arc-swap = "1.7.1"
-argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash", "rand"] }
+argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash", "rand", "std"] }
 base64 = { version = "0.22.1", default-features = false }
 jsonschema = { version = "0.30.0", default-features = false }
 log = "0.4.27"
 maxminddb = "0.26.0"
 mini-moka = "0.10.3"
 parking_lot = { version = "0.12.3", default-features = false }
-rand = "^0.9.0"
-rand_core = "^0.9"
 regex = "1.11.0"
 rusqlite = { workspace = true }
 serde = { version = "^1.0.203", features = ["derive"] }
