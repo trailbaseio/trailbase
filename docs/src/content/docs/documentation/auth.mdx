@@ -36,7 +36,7 @@ reject the request based on the user's authorization.
 With this in mind, integrating auth into your application mostly means:
 
 1. Providing UI flows for users to sign in, log out, change passwords, ... .
-   You can either build your own using TrailBase's auth APIs or rely on the
+   You can either build your own UI using TrailBase's auth APIs or rely on the
    built-in UIs mounted at `/_/auth/(login|logout|...)`[^1].
 2. And managing tokens, e.g. making sure they get attached to request or
    dropped when the user logs out. The TrailBase client libraries can help you
@@ -47,10 +47,11 @@ There are a few considerations, which may affect your choices:
 * Are you building a mobile/desktop or web app or both? If you're building for
   mobile or desktop, do the auth UIs need to be native or is ok to open a
   WebView?
-* If you're planning to build native auth UIs for multiple platforms you may
+* If you're planning to build your own auth UIs for multiple platforms you may
   need to implement them multiple times.
-* Are you planning to support sign-in using external OAuth providers? If so,
-  you'll need a WebView anyway for users to sign in with the external provider.
+* If you're building something other than a web app and are planning to support
+  sign-in using external OAuth providers, you'll need a Browser or WebView
+  anyway for users to sign in on the external provider's site.
 
 The `examples/blog/(web|flutter)` demonstrates how the built-in UIs, including
 OAuth via WebView, can be used by both web and mobile/desktop applications[^2].
@@ -60,6 +61,14 @@ When using the built-in UIs, the general approach is to send users to
 applications, like SPAs, mobile or desktop, should use `?pkce_code_challenge=`
 (i.e. Proof-Key-for-Code-Exchange) to protect against auth-code interception
 attacks.
+
+When building your own UIs, login is handled by:
+
+* for password auth: [`/api/auth/v1/login`](/api/operations/login_handler/),
+  which received the credentials directly in return for tokens.
+* for OAuth: [`api/auth/v1/oauth/<PROVIDER_NAME>/login`](/api/operations/login_with_external_auth_provider/),
+  which constructs a redirect to the external provider including the callback
+  address back to your TrailBase instance.
 
 ## Design
 

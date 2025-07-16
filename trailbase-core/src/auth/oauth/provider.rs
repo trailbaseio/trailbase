@@ -67,7 +67,7 @@ pub trait OAuthProvider {
   fn oauth_client(&self, state: &AppState) -> Result<OAuthClient, AuthError> {
     let Some(ref site_url) = *state.site_url() else {
       return Err(AuthError::Internal(
-        "Missing site_url for redirectback ".into(),
+        "Missing site_url for redirect back from external provider to your TB instance".into(),
       ));
     };
 

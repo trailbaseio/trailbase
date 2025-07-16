@@ -9,6 +9,8 @@ import starlight from "@astrojs/starlight";
 import starlightLinksValidator from "starlight-links-validator";
 import tailwindcss from "@tailwindcss/vite";
 
+const openApiBase = "api";
+
 // https://astro.build/config
 export default defineConfig({
   site: "https://trailbase.io",
@@ -37,13 +39,10 @@ export default defineConfig({
         },
       ],
       plugins: [
-        starlightLinksValidator({
-          exclude: ["http://localhost:4000/", "http://localhost:4000/**/*"],
-        }),
         // Generate the OpenAPI documentation pages.
         starlightOpenAPI([
           {
-            base: "api",
+            base: openApiBase,
             schema: "./openapi/schema.json",
             sidebar: {
               label: "OpenAPI",
@@ -55,6 +54,14 @@ export default defineConfig({
             },
           },
         ]),
+        starlightLinksValidator({
+          exclude: [
+            "http://localhost:4000/",
+            "http://localhost:4000/**/*",
+            // The link validator fails to validate the OpenAPI pages injected above.
+            `/${openApiBase}/**/*`,
+          ],
+        }),
       ],
       sidebar: [
         {
