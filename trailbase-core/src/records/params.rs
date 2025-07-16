@@ -397,15 +397,39 @@ pub fn simple_json_value_to_param(
       try_json_array_to_blob(arr)?
     }
     serde_json::Value::Null => Value::Null,
-    serde_json::Value::Bool(b) => Value::Integer(b as i64),
+    serde_json::Value::Bool(b) => {
+      if col_type != ColumnDataType::Integer {
+        return Err(ParamsError::UnexpectedType("Bool", format!("{col_type:?}")));
+      }
+      Value::Integer(b as i64)
+    }
     serde_json::Value::String(str) => json_string_to_value(col_type, str)?,
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
-        Value::Integer(n)
+        match col_type {
+          ColumnDataType::Integer => Value::Integer(n),
+          // NOTE: "as" is lossy conversion. Does not panic.
+          ColumnDataType::Real => Value::Real(n as f64),
+          _ => {
+            return Err(ParamsError::UnexpectedType("int", format!("{col_type:?}")));
+          }
+        }
       } else if let Some(n) = number.as_u64() {
-        Value::Integer(n as i64)
+        match col_type {
+          // NOTE: "as" is lossy conversion. Does not panic.
+          ColumnDataType::Integer => Value::Integer(n as i64),
+          ColumnDataType::Real => Value::Real(n as f64),
+          _ => {
+            return Err(ParamsError::UnexpectedType("uint", format!("{col_type:?}")));
+          }
+        }
       } else if let Some(n) = number.as_f64() {
-        Value::Real(n)
+        match col_type {
+          ColumnDataType::Real => Value::Real(n),
+          _ => {
+            return Err(ParamsError::UnexpectedType("real", format!("{col_type:?}")));
+          }
+        }
       } else {
         warn!("Not a valid number: {number:?}");
         return Err(ParamsError::NotANumber);

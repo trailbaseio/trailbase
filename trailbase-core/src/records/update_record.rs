@@ -66,7 +66,7 @@ pub async fn update_record_handler(
     api.has_file_columns(),
     lazy_params
       .consume()
-      .map_err(|err| RecordError::Internal(err.into()))?,
+      .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?,
   )
   .await
   .map_err(|err| RecordError::Internal(err.into()))?;
@@ -77,6 +77,7 @@ pub async fn update_record_handler(
 #[cfg(test)]
 mod test {
   use axum::extract::Query;
+  use serde_json::json;
   use trailbase_sqlite::params;
 
   use super::*;
@@ -93,6 +94,106 @@ mod test {
   use crate::records::*;
   use crate::test::unpack_json_response;
   use crate::util::{b64_to_id, id_to_b64};
+
+  #[tokio::test]
+  async fn test_simple_record_api_update() {
+    let state = test_state(None).await.unwrap();
+
+    state
+      .conn()
+      .execute_batch(
+        r#"
+          CREATE TABLE "update" (
+            "id"      INTEGER PRIMARY KEY,
+            "int"     INTEGER NOT NULL DEFAULT (-1),
+            "float"   REAL NOT NULL,
+            "text"    TEXT
+          ) STRICT;
+        "#,
+      )
+      .await
+      .unwrap();
+
+    state.schema_metadata().invalidate_all().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some("update_api".to_string()),
+        table_name: Some("update".to_string()),
+        acl_world: [
+          PermissionFlag::Create as i32,
+          PermissionFlag::Read as i32,
+          PermissionFlag::Update as i32,
+        ]
+        .into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    let _ = create_record_handler(
+      State(state.clone()),
+      Path("update_api".to_string()),
+      Query(CreateRecordQuery::default()),
+      None,
+      Either::Json(
+        json_row_from_value(json!({
+          "id": 1,
+          "float": 5,
+        }))
+        .unwrap()
+        .into(),
+      ),
+    )
+    .await
+    .unwrap();
+
+    let _ = update_record_handler(
+      State(state.clone()),
+      Path(("update_api".to_string(), "1".to_string())),
+      None,
+      Either::Json(
+        json_row_from_value(json!({
+          "int": 4,
+        }))
+        .unwrap()
+        .into(),
+      ),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+      state
+        .conn()
+        .read_query_value::<i64>(r#"SELECT "int" FROM "update" WHERE id = 1"#, ())
+        .await
+        .unwrap(),
+      Some(4)
+    );
+
+    // Test that bad input leads to bad request.
+    let response = update_record_handler(
+      State(state.clone()),
+      Path(("update_api".to_string(), "1".to_string())),
+      None,
+      Either::Json(
+        json_row_from_value(json!({
+          "int": 4.1,
+        }))
+        .unwrap()
+        .into(),
+      ),
+    )
+    .await;
+
+    assert!(matches!(
+      response.err().unwrap(),
+      RecordError::BadRequest(_)
+    ))
+  }
 
   #[tokio::test]
   async fn test_record_api_update() {

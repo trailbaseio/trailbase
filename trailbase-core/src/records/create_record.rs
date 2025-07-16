@@ -145,7 +145,7 @@ pub async fn create_record_handler(
     params_list.push(
       lazy_params
         .consume()
-        .map_err(|_| RecordError::BadRequest("Parameter conversion"))?,
+        .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?,
     );
   }
 
@@ -207,6 +207,7 @@ mod test {
   use crate::util::{id_to_b64, uuid_to_b64};
 
   use serde_json::json;
+  use trailbase_sqlite::params;
 
   #[tokio::test]
   async fn test_simple_record_api_create() {
@@ -271,16 +272,14 @@ mod test {
       .unwrap();
     }
 
-    let value: Option<i64> = state
-      .conn()
-      .read_query_row_f(
-        "SELECT value FROM simple WHERE owner = ?1",
-        trailbase_sqlite::params!(user_x),
-        |row| row.get(0),
-      )
-      .await
-      .unwrap();
-    assert_eq!(value, Some(9));
+    assert_eq!(
+      state
+        .conn()
+        .read_query_value::<i64>("SELECT value FROM simple WHERE owner = ?1", params!(user_x))
+        .await
+        .unwrap(),
+      Some(9)
+    );
 
     {
       // Make sure user.id == owner ACL check works
