@@ -1,3 +1,9 @@
+## v0.15.4
+
+* Stricter JSON conversion and better errors for record APIs.
+* Automatically fix-up record API config on table renames.
+* Update dependencies.
+
 ## v0.15.3
 
 * Fix parsing of `VIEW` definitions with elided aliases and handle `VIEW` parsing errors more gracefully.
