@@ -1,0 +1,57 @@
+---
+title: JS/TS APIs
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+On startup TrailBase will automatically load any JavaScript and TypeScript
+files in `traildepot/scripts`.
+This can be used to implement arbitrary HTTP APIs using custom handlers.
+
+## Example HTTP Endpoint
+
+The following example illustrates a few things:
+
+* How to register a parameterized route with `{table}`.
+* How to implement a handler that returns `text/plain` content. There is also
+  `jsonHandler` and `htmlHandler`.
+* How to query the database.
+* How to return an error.
+
+```js
+import {
+  addRoute,
+  query,
+  stringHandler,
+  HttpError,
+  StatusCodes
+} from "../trailbase.js";
+
+addRoute("GET", "/test/{table}", stringHandler(async (req) => {
+  const table = req.params["table"];
+  if (table) {
+    const rows = await query(`SELECT COUNT(*) FROM ${table}`, [])
+    return `entries: ${rows[0][0]}`;
+  }
+
+  throw new HttpError(
+      StatusCodes.BAD_REQUEST, "Missing '?table=' search query param");
+}));
+```
+
+More examples can be found in the repository in
+`client/testfixture/scripts/index.ts`.
+
+## Runtime Details
+
+At its heart, TrailBase's runtime is a pool of V8 worker threads - called
+*isolates* - alongside a runtime that supports basic tasks such as file I/O, web
+requests, timers, etc.
+While it uses Deno's V8-integration under the hood, it is *not* a full Node.js
+runtime, at least for now.
+
+<Aside type="note" title="State Sharing">
+  Different *isolates* do not share state, i.e. you cannot use global state to
+  reliably share state across requests. Instead, state can be persisted using
+  the database.
+</Aside>

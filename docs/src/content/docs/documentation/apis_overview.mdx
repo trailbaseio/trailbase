@@ -1,0 +1,129 @@
+---
+title: Endpoints
+description: Collocating your custom business logic
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+When building any connected application, eventually you'll want to call an API
+endpoint:
+
+1. to [read/write some data](#data-apis), or
+2. to run some [server-side application logic](#custom-endpoints-inside-trailbase).
+
+Especially for application logic, where and how it should run depends on your
+app, your environment, and external requirements.
+
+For example, for rich client-side applications - such as mobile, desktop, and
+progressive web apps - it is often a good idea to run inside the user's device.
+It is cheap, snappy, privacy-friendly and able to run offline or on a spotty
+connection.
+That said, there are very valid reasons to not run everything in an untrusted,
+resource and battery-limited, hard to update sandbox.
+
+## Data APIs
+
+Data APIs are limited APIs that let you perform a common operations on your
+data: **read/list**, **create**, **update** and **delete**.
+
+In the simplest case, you can use TrailBase's [record
+APIs](/documentation/apis_record/) to define limited-access APIs over your
+`TABLE`s and `VIEW`s.
+If you require more flexibility, the following provides an overview of ways to
+run arbitrary logic.
+
+
+## Custom Endpoints inside TrailBase
+
+There are several ways to integrate custom logic into TrailBase, however you
+can also run logic outside in your [own backend](#bring-your-own-backend).
+
+Within TrailBase you have the following options:
+
+1. [JS & TS handlers](#javascript--typescript-handlers),
+2. [Stored database procedures](#stored-procedures),
+3. [Native Rust handlers](#rust-handlers).
+
+
+### JavaScript & TypeScript Handlers
+
+TrailBase's built-in runtime enables wiring custom HTTP endpoints using full
+ES6 JavaScript and/or TypeScript.
+For more context, check out the dedicated [docs](/documentation/apis_js/).
+
+### Stored Procedures
+
+Unlike Postgres or MySQL, SQLite does not support stored procedures out of the
+box.
+TrailBase makes Sqlean's
+[user-defined functions](https://github.com/nalgeon/sqlean/blob/main/docs/define.md)
+available to fill the gap.
+They can be accessed from record APIs through `VIEW`s or custom handlers.
+
+<Aside type="note" title="Portability">
+  Sqlean can be used with any SQLite client, thus avoiding lock-in.
+</Aside>
+
+{/* Is this too obtuse to actually be useful?
+### SQLite Extensions and Virtual Tables
+
+Likely the most bespoke approach is to expose your functionality as a custom
+SQLite extension or module similar to how TrailBase extends SQLite itself.
+
+This approach can be somewhat limiting in terms of dependencies you have
+access to and things you can do especially for extensions. Modules are quite a bit
+more flexible but also involved.
+Take a look at [SQLite's list](https://www.sqlite.org/vtablist.html) and
+[osquery](https://osquery.readthedocs.io/en/stable/) to get a sense of what's
+possible.
+
+Besides their limitations, major advantages of using extensions or
+modules are:
+* you have extremely low-overhead access to your data,
+* extensions and modules can also be used by services accessing the
+  underlying SQLite databases.
+*/}
+
+### Rust Handlers
+
+The Rust APIs aren't yet stable and fairly undocumented.
+That said, similar to using PocketBase as a Go framework, you can build your
+own TrailBase binary and register custom
+[axum](https://github.com/tokio-rs/axum) HTTP handlers written in rust with the
+main application router, see `/examples/custom-binary`.
+
+<Aside type="note" title="API Stability">
+  the Rust APIs are subject to change. However, we will rely on semantic
+  versioning to communicate breaking changes explicitly.
+</Aside>
+
+
+## Bring your own Backend
+
+The most flexible and de-coupled way of running your own code is to deploy a
+separate service in front of or alongside TrailBase.
+This gives you full control over your destiny: language, runtime, scaling,
+deployment, etc.
+
+TrailBase is designed with the explicit goal of running along a sea of other
+services.
+Its stateless tokens using asymmetric crypto make it easy for other resource
+servers to hermetically authenticate your users.
+TrailBase's APIs can be accessed transitively, simply by forwarding users'
+[auth tokens](/documentation/auth/) [^1].
+
+Alternatively, for more of a side-car setup you can fall back to accessing the
+SQLite database directly, both for data access and schema alterations[^2].
+
+---
+
+[^1]:
+    We would like to add service accounts in the future to authorize privileged
+    services independent from user-provided tokens or using fake user-accounts
+    for services.
+
+[^2]:
+    SQLite is running in WAL mode, which allows for parallel reads and
+    concurrent writes. That said, when possible you should probably use the APIs
+    since falling back to raw database access is a priviledge practically reserved
+    to processes with access to a shared file-system.

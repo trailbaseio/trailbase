@@ -101,13 +101,17 @@ export default defineConfig({
               slug: "documentation/auth",
             },
             {
-              label: "APIs",
+              label: "Endpoints",
               items: [
                 {
-                  slug: "documentation/record_apis",
+                  label: "Overview",
+                  slug: "documentation/apis_overview",
                 },
                 {
-                  slug: "documentation/js_apis",
+                  slug: "documentation/apis_record",
+                },
+                {
+                  slug: "documentation/apis_js",
                 },
               ],
             },
@@ -122,9 +126,6 @@ export default defineConfig({
             },
             {
               slug: "documentation/production",
-            },
-            {
-              slug: "documentation/extending",
             },
           ],
         },
