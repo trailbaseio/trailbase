@@ -13,6 +13,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
+use crate::config::proto::hash_config;
 use crate::transaction::{TransactionLog, TransactionRecorder};
 
 #[derive(Clone, Debug, Deserialize, TS)]
@@ -51,14 +52,14 @@ pub async fn alter_table_handler(
 
   debug!("Alter table:\nsource: {source_schema:?}\ntarget: {target_schema:?}",);
 
-  let temp_table_name: QualifiedName = {
-    if target_table_name != source_table_name {
-      target_table_name.clone()
-    } else {
-      QualifiedName {
-        name: format!("__alter_table_{}", target_table_name.name),
-        database_schema: target_table_name.database_schema.clone(),
-      }
+  let is_table_rename = target_table_name != source_table_name;
+  let temp_table_name: QualifiedName = if is_table_rename {
+    // No ephemeral table needed.
+    target_table_name.clone()
+  } else {
+    QualifiedName {
+      name: format!("__alter_table_{}", target_table_name.name),
+      database_schema: target_table_name.database_schema.clone(),
     }
   };
 
@@ -141,7 +142,7 @@ pub async fn alter_table_handler(
     )
     .await?;
 
-  // Write to migration file.
+  // Write migration file and apply it right away.
   if let Some(log) = log {
     let migration_path = state.data_dir().migrations_path();
     let report = log
@@ -151,6 +152,32 @@ pub async fn alter_table_handler(
   }
 
   state.schema_metadata().invalidate_all().await?;
+
+  // Fix configuration: update all table references by existing APIs.
+  //
+  // TODO: Update and or validate for column changes. Specifically: expand, excluded_columns and
+  // all the rules.
+  if is_table_rename
+    && matches!(
+      source_schema.name.database_schema.as_deref(),
+      Some("main") | None
+    )
+  {
+    let mut config = state.get_config();
+    let old_config_hash = hash_config(&config);
+
+    for api in &mut config.record_apis {
+      if let Some(ref name) = api.table_name {
+        if *name == source_schema.name.name {
+          api.table_name = Some(target_schema.name.name.clone());
+        }
+      }
+    }
+
+    state
+      .validate_and_update_config(config, Some(old_config_hash))
+      .await?;
+  }
 
   return Ok((StatusCode::OK, "altered table").into_response());
 }

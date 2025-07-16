@@ -61,7 +61,17 @@ pub async fn drop_table_handler(
     })
     .await?;
 
-  // Update configuration: remove all APIs reference the no longer existing table.
+  // Write migration file and apply it right away.
+  if let Some(log) = log {
+    let migration_path = state.data_dir().migrations_path();
+    let _report = log
+      .apply_as_migration(state.conn(), migration_path, &filename)
+      .await?;
+  }
+
+  state.schema_metadata().invalidate_all().await?;
+
+  // Fix configuration: remove all APIs reference the no longer existing table.
   let mut config = state.get_config();
   let old_config_hash = hash_config(&config);
 
@@ -74,16 +84,6 @@ pub async fn drop_table_handler(
   state
     .validate_and_update_config(config, Some(old_config_hash))
     .await?;
-
-  // Write migration file and apply it right away.
-  if let Some(log) = log {
-    let migration_path = state.data_dir().migrations_path();
-    let _report = log
-      .apply_as_migration(state.conn(), migration_path, &filename)
-      .await?;
-  }
-
-  state.schema_metadata().invalidate_all().await?;
 
   return Ok((StatusCode::OK, "").into_response());
 }
