@@ -211,7 +211,7 @@ fn check_column_removals_invalidating_config(
       .collect()
   };
 
-  if deleted_columns.is_empty() {
+  if !deleted_columns.is_empty() {
     return Ok(());
   }
 
@@ -238,7 +238,36 @@ fn check_column_removals_invalidating_config(
       }
     }
 
-    // TODO: Check that column is not referenced in rules.
+    // Check that column is not referenced in rules.
+    for rule in [
+      &api.read_access_rule,
+      &api.create_access_rule,
+      &api.update_access_rule,
+      &api.delete_access_rule,
+      &api.schema_access_rule,
+    ]
+    .into_iter()
+    .flatten()
+    {
+      for deleted_column in &deleted_columns {
+        // NOTE: ideally, we'd parse the rule like in crate::records::record_api::validate_rule.
+        // The current approach would fail if the column name is a keyword used as part of the rule
+        // query. In the meantime, let's error on the side of false positive.
+        const KEYWORDS: &[&str] = &[
+          "select", "in", "where", "as", "and", "or", "is", "null", "coalesce",
+        ];
+        if KEYWORDS.contains(&deleted_column.to_lowercase().as_str()) {
+          continue;
+        }
+
+        if rule.contains(deleted_column) {
+          return Err(Error::BadRequest(
+            format!("Cannot remove column {deleted_column} referenced by access rule: {rule}")
+              .into(),
+          ));
+        }
+      }
+    }
   }
 
   return Ok(());
