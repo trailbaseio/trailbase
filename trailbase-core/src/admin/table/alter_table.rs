@@ -23,9 +23,10 @@ pub struct AlterTableRequest {
   pub target_schema: Table,
 }
 
-// NOTE: sqlite has very limited alter table support, thus we're always recreating the table and
-// moving data over, see https://sqlite.org/lang_altertable.html.
-
+/// Admin-only handler for altering `TABLE` schemas.
+///
+/// NOTE: SQLite has very limited alter table support. Thus, we always recreate the table and move
+/// the data over, see https://sqlite.org/lang_altertable.html.
 pub async fn alter_table_handler(
   State(state): State<AppState>,
   Json(request): Json<AlterTableRequest>,
@@ -52,6 +53,10 @@ pub async fn alter_table_handler(
 
   debug!("Alter table:\nsource: {source_schema:?}\ntarget: {target_schema:?}",);
 
+  // Check that removing columns won't break record API configuration. Note that table renames will
+  // be fixed up automatically later.
+  check_column_removals_invalidating_config(&state, &source_schema, &target_schema)?;
+
   let is_table_rename = target_table_name != source_table_name;
   let temp_table_name: QualifiedName = if is_table_rename {
     // No ephemeral table needed.
@@ -63,22 +68,24 @@ pub async fn alter_table_handler(
     }
   };
 
-  let source_columns: HashSet<String> = source_schema
-    .columns
-    .iter()
-    .map(|c| c.name.clone())
-    .collect();
-  let copy_columns: Vec<String> = target_schema
-    .columns
-    .iter()
-    .filter_map(|c| {
-      if source_columns.contains(&c.name) {
-        Some(c.name.clone())
-      } else {
-        None
-      }
-    })
-    .collect();
+  let copy_columns: Vec<String> = {
+    let source_columns: HashSet<String> = source_schema
+      .columns
+      .iter()
+      .map(|c| c.name.clone())
+      .collect();
+
+    target_schema
+      .columns
+      .iter()
+      .filter_map(|c| {
+        if source_columns.contains(&c.name) {
+          return Some(c.name.clone());
+        }
+        return None;
+      })
+      .collect()
+  };
 
   let mut target_schema_copy = target_schema.clone();
   target_schema_copy.name = temp_table_name.clone();
@@ -154,9 +161,6 @@ pub async fn alter_table_handler(
   state.schema_metadata().invalidate_all().await?;
 
   // Fix configuration: update all table references by existing APIs.
-  //
-  // TODO: Update and or validate for column changes. Specifically: expand, excluded_columns and
-  // all the rules.
   if is_table_rename
     && matches!(
       source_schema.name.database_schema.as_deref(),
@@ -180,6 +184,64 @@ pub async fn alter_table_handler(
   }
 
   return Ok((StatusCode::OK, "altered table").into_response());
+}
+
+fn check_column_removals_invalidating_config(
+  state: &AppState,
+  source_schema: &Table,
+  target_schema: &Table,
+) -> Result<(), Error> {
+  // Check that removing columns won't break record API configuration.
+  let deleted_columns: Vec<String> = {
+    let target_columns: HashSet<String> = target_schema
+      .columns
+      .iter()
+      .map(|c| c.name.clone())
+      .collect();
+
+    source_schema
+      .columns
+      .iter()
+      .filter_map(|c| {
+        if target_columns.contains(&c.name) {
+          return None;
+        }
+        return Some(c.name.clone());
+      })
+      .collect()
+  };
+
+  if deleted_columns.is_empty() {
+    return Ok(());
+  }
+
+  let config = state.get_config();
+  for api in &config.record_apis {
+    let api_name = api.table_name.as_deref().unwrap_or_default();
+    if api_name != source_schema.name.name {
+      continue;
+    }
+
+    for expanded_column in &api.expand {
+      if deleted_columns.contains(expanded_column) {
+        return Err(Error::BadRequest(
+          format!("Cannot remove column {expanded_column} referenced by API: {api_name}").into(),
+        ));
+      }
+    }
+
+    for excluded_column in &api.excluded_columns {
+      if deleted_columns.contains(excluded_column) {
+        return Err(Error::BadRequest(
+          format!("Cannot remove column {excluded_column} referenced by API: {api_name}").into(),
+        ));
+      }
+    }
+
+    // TODO: Check that column is not referenced in rules.
+  }
+
+  return Ok(());
 }
 
 #[cfg(test)]
