@@ -27,6 +27,9 @@ export default defineConfig({
     solid(),
     starlight({
       title: "TrailBase",
+      editLink: {
+        baseUrl: "https://github.com/trailbaseio/trailbase/edit/main/docs/",
+      },
       customCss: ["./src/styles/global.css"],
       social: [
         {
@@ -149,6 +152,7 @@ export default defineConfig({
       components: {
         Footer: "./src/components/Footer.astro",
         Hero: "./src/components/Hero.astro",
+        SiteTitle: "./src/components/SiteTitle.astro",
       },
     }),
   ],
