@@ -4,18 +4,6 @@ description: >
   A blazingly fast, open-source, single-executable, featureful Firebase alternative.
 template: splash
 hero:
-  tagline: >
-    An open, blazingly fast, single-executable Firebase alternative with
-    type-safe REST & realtime APIs, built-in JS/ES6/TS runtime, SSR,
-    auth and admin UI built on Rust, SQLite & V8.
-    <br />
-    <br />
-    Simplify with fewer moving parts&colon; an easy to self-host
-    single-executable with everything you need to focus on your mobile, web or
-    desktop application.
-    Sub-millisecond latencies eliminate the need for dedicated caches, no more
-    stale or inconsistent data.
-
   image:
     file: ../../assets/logo_512.webp
   actions:
@@ -40,8 +28,6 @@ import { Image } from "astro:assets";
 import { Aside, Card, CardGrid } from "@astrojs/starlight/components";
 import SplitCard from "@/components/SplitCard.astro";
 import Footer from "@/components/Footer.astro";
-
-import Roadmap from "./_roadmap.md";
 
 import shelve from "@/assets/shelve.webp";
 
@@ -185,15 +171,4 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
 
   </CardGrid>
 
-</div>
-
-<div class="h-8" />
-
-<div class="flex justify-center">
-  <div class="md:w-[80%] flex flex-col items-center gap-4">
-    <Aside type="tip" title="Roadmap">
-      <Roadmap />
-    </Aside>
-
-  </div>
 </div>

@@ -9,6 +9,7 @@ For context, some larger features we have on our Roadmap:
   Also, service-accounts to auth other backends as opposed to end-users.
 - Many SQLite databases: imagine a separate database by tenant or user. Note
   that while joins are available across databases, foreign keys are not.
+- Point-in-time-recovery via checkpointing or SQLite sessions.
 - A message queue system to deal with slow tasks or bursty workloads.
 - We might want to address fan-out and the integration of external resources
   through GraphQL or similar.

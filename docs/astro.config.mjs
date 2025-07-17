@@ -14,6 +14,8 @@ const openApiBase = "api";
 // https://astro.build/config
 export default defineConfig({
   site: "https://trailbase.io",
+  // NOTE: Since we're serving static content, these redirects are actual
+  // pages with a meta refresh tag rather than redirect HTTP responses.
   redirects: {
     // Stable docs path independent of documentation structure.
     "/docs": "/getting-started/install",
@@ -146,6 +148,7 @@ export default defineConfig({
       ],
       components: {
         Footer: "./src/components/Footer.astro",
+        Hero: "./src/components/Hero.astro",
       },
     }),
   ],
