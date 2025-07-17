@@ -1,12 +1,12 @@
 import { QueryClient } from "@tanstack/query-core";
 import { useLiveQuery, createCollection } from "@tanstack/react-db";
-import { queryCollectionOptions } from "@tanstack/db-collections";
+import { queryCollectionOptions } from "@tanstack/query-db-collection";
+import { trailBaseCollectionOptions } from "@tanstack/trailbase-db-collection";
 
 import { initClient, type Client } from "trailbase";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
-import { trailBaseCollectionOptions } from "./lib/trailbase.ts";
 import "./App.css";
 
 const client: Client = initClient("http://localhost:4000");
@@ -25,6 +25,8 @@ const dataCollection = useTrailBase
       trailBaseCollectionOptions<Data>({
         recordApi: client.records<Data>("data"),
         getKey: (item) => item.id ?? -1,
+        parse: {},
+        serialize: {},
       }),
     )
   : createCollection(

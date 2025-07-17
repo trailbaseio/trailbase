@@ -12,11 +12,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tanstack/db": "^0.0.20",
-    "@tanstack/db-collections": "^0.0.24",
+    "@tanstack/db": "^0.0.26",
     "@tanstack/query-core": "^5.83.0",
-    "@tanstack/react-db": "^0.0.20",
-    "@tanstack/store": "^0.7.2",
+    "@tanstack/query-db-collection": "^0.0.8",
+    "@tanstack/react-db": "^0.0.26",
+    "@tanstack/trailbase-db-collection": "^0.0.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "trailbase": "workspace:*"
