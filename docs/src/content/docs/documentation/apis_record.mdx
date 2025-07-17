@@ -7,17 +7,18 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 import { apiPath, recordApiNamePlaceholder, recordApiIdPlaceholder } from "./_record_apis.ts";
 
-TrailBase's restful CRUD _Record APIs_ allow you to access your `TABLE`s and
-`VIEW`s in an easy and type-safe manner.
+TrailBase's _Record APIs_ allow you to easily configure endpoints exposing your
+`TABLE`s and `VIEW`s though **type-safe** restful
+**C**reate**R**ead**U**pdate**D**elete operations, composite list queries and
+even realtime change subscriptions.
+
+For your data to be exposed via _Record APIs_:
 
 - `TABLE`s and `VIEW`s need to be `STRICT`ly[^1] typed to guarantee type-safety
-  all the way from your records, via JSON schema, to your client-side language
-  bindings [^2].
-  `CAST(col AS <TYPE>)` expressions can be used to assert types of computed
-  `VIEW` columns.
-- `TABLE`s need to have a sequential primary key column to allow for stable
-  sorting and thus efficient cursor-based pagination. Either an explicit
-  `INTEGER`, UUIDv4 or UUIDv7 `PRIMARY KEY` will do, including `FOREIGN KEY`
+  all the way from your DB records, over JSON schemas, to your client-side
+  language bindings[^2].
+- To allow for stable sorting and thus efficient cursor-based pagination,
+  `TABLE`s are required to have either `INTEGER`, UUIDv4 or UUIDv7 primary key
   columns.
 
 ## Configuration
@@ -527,7 +528,7 @@ client-side APIs.
 Independent of type-safety and Record APIs,
 [SQLite](https://www.sqlite.org/json1.html) has first-class support for
 querying nested properties of columns containing JSON in textual or binary
-format [^4].
+format[^4].
 For example, given a table:
 
 ```sql
@@ -559,17 +560,14 @@ addition to your toolbox.
 ---
 
 [^1]:
-    By default, SQLite are not strictly typed. Column types merely express
-    type-affinities. Unless tables are explicitly created as `STRICT` columns can
-    store any data type.
+    By default, SQLite is not strictly typed. Column types merely express
+    affinities  unless the table is explicitly created as `STRICT`.
 
 [^2]:
-    Views are more tricky to strictly type, since they're the result of an
-    arbitrary `SELECT` statement. TrailBase parses the `CREATE VIEW` statement
-    and will allow record APIs only on top of a conservative subset, where it
-    can infer the column types. Over time, TrailBase will be able to support
-    larger subsets. Let us know if you have provably strictly typed queries
-    that you think should be supported but aren't.
+    Views are more tricky to type strictly being the result of an arbitrary
+    `SELECT` statement. For columns that are mapped 1:1 from a `STRICT`ly typed
+    `TABLE` the type can be infered. For everything else you can use
+    `CAST(col AS <TYPE>)` expressions to assert the types of computed columns.
 
 [^3]:
     There's also a few other endpoints, e.g. for downloading files, which will

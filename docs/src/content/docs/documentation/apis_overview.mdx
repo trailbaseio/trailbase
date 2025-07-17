@@ -8,7 +8,7 @@ import { Aside } from "@astrojs/starlight/components";
 When building any connected application, eventually you'll want to call an API
 endpoint:
 
-1. to [read/write some data](#data-apis), or
+1. to [read/write some data or subscribe to changes](#record-data-apis),
 2. to run some [server-side application logic](#custom-endpoints-inside-trailbase).
 
 Especially for application logic, where and how it should run depends on your
@@ -21,14 +21,14 @@ connection.
 That said, there are very valid reasons to not run everything in an untrusted,
 resource and battery-limited, hard to update sandbox.
 
-## Data APIs
+## Record "Data" APIs
 
-Data APIs are limited APIs that let you perform a common operations on your
-data: **read/list**, **create**, **update** and **delete**.
+Generally, data APIs tend to be limited-scope APIs to perform common operations
+on your data: **read/list**, **create**, **update** and **delete**.
+TrailBase provides [Record APIs](/documentation/apis_record/), which let you
+no-code configure such APIs over your `TABLE`s and `VIEW`s.
+They even allow you to subscribe to data changes in realtime.
 
-In the simplest case, you can use TrailBase's [record
-APIs](/documentation/apis_record/) to define limited-access APIs over your
-`TABLE`s and `VIEW`s.
 If you require more flexibility, the following provides an overview of ways to
 run arbitrary logic.
 
@@ -58,7 +58,8 @@ box.
 TrailBase makes Sqlean's
 [user-defined functions](https://github.com/nalgeon/sqlean/blob/main/docs/define.md)
 available to fill the gap.
-They can be accessed from record APIs through `VIEW`s or custom handlers.
+They can be accessed from [Record APIs](/documentation/apis_record/) through
+`VIEW`s or custom handlers.
 
 <Aside type="note" title="Portability">
   Sqlean can be used with any SQLite client, thus avoiding lock-in.
