@@ -1,3 +1,11 @@
+## v0.15.5
+
+* Check out the [TanStack/db](https://github.com/TanStack/db) sync engine, which now officially supports TrailBase 🥳.
+* Prevent schema alterations from invalidating Record API configuration, fix up renamed table and error when dropping referenced columns.
+* Add dry-run to all the schema altering admin handlers.
+* Fix: add missing symlink to assets.
+* Update dependencies.
+
 ## v0.15.4
 
 * Stricter JSON conversion and better errors for record APIs.
