@@ -775,10 +775,17 @@ export function TablePane(props: {
   }));
 
   const client = useQueryClient();
-  const rowsRefetch = () =>
+  const rowsRefetch = () => {
+    // Refetches the actual table contents above.
     client.invalidateQueries({
       queryKey: ["tableData"],
     });
+  };
+  const schemaRefetch = async () => {
+    // First re-fetch the schema then the data rows to trigger a re-render.
+    await props.schemaRefetch();
+    rowsRefetch();
+  };
 
   const setPagination = (s: PaginationState) => {
     const current = pagination();
@@ -807,7 +814,7 @@ export function TablePane(props: {
         indexes={indexes()}
         triggers={triggers()}
         allTables={props.schemas.tables}
-        schemaRefetch={props.schemaRefetch}
+        schemaRefetch={schemaRefetch}
         rowsRefetch={rowsRefetch}
       />
 
