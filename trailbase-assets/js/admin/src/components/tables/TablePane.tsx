@@ -253,6 +253,7 @@ function TableHeaderRightHandButtons(props: {
             (async () => {
               await dropTable({
                 name: table().name.name,
+                dry_run: null,
               });
 
               invalidateConfig(queryClient);
@@ -927,7 +928,7 @@ export function TablePane(props: {
 
                     const deleteIndexes = async () => {
                       for (const name of names) {
-                        await dropIndex({ name });
+                        await dropIndex({ name, dry_run: null });
                       }
 
                       setSelectedIndexes(new Set<string>());

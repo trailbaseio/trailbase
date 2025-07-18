@@ -30,40 +30,30 @@ pub async fn create_index_handler(
 
   let create_index_query = request.schema.create_index_statement();
 
+  let tx_log = state
+    .conn()
+    .call(move |conn| {
+      let mut tx = TransactionRecorder::new(conn)?;
+
+      tx.execute(&create_index_query, ())?;
+
+      return tx
+        .rollback()
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+    })
+    .await?;
+
   if !dry_run {
-    let create_index_query = create_index_query.clone();
-    let conn = state.conn();
-    let log = conn
-      .call(move |conn| {
-        let mut tx = TransactionRecorder::new(conn)?;
-
-        tx.execute(&create_index_query, ())?;
-
-        return tx
-          .rollback()
-          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
-      })
-      .await?;
-
-    // Write to migration file.
-    if let Some(log) = log {
+    // Take transaction log, write a migration file and apply.
+    if let Some(ref log) = tx_log {
       let migration_path = state.data_dir().migrations_path();
       log
-        .apply_as_migration(conn, migration_path, &filename)
+        .apply_as_migration(state.conn(), migration_path, &filename)
         .await?;
     }
   }
 
   return Ok(Json(CreateIndexResponse {
-    sql: sqlformat::format(
-      &format!("{create_index_query};"),
-      &sqlformat::QueryParams::None,
-      &sqlformat::FormatOptions {
-        ignore_case_convert: None,
-        indent: sqlformat::Indent::Spaces(2),
-        uppercase: Some(true),
-        lines_between_queries: 1,
-      },
-    ),
+    sql: tx_log.map(|l| l.build_sql()).unwrap_or_default(),
   }));
 }

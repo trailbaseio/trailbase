@@ -59,8 +59,13 @@ export function CreateAlterIndexForm(props: {
         const response = await alterIndex({
           source_schema: o,
           target_schema: value,
+          dry_run: dryRun,
         });
         console.debug("AlterIndexResponse:", response);
+
+        if (dryRun) {
+          setSql(response.sql);
+        }
       } else {
         const response = await createIndex({ schema: value, dry_run: dryRun });
         console.debug(`CreateIndexResponse [dry: ${dryRun}]:`, response);
@@ -71,7 +76,10 @@ export function CreateAlterIndexForm(props: {
       }
 
       if (!dryRun) {
+        // Reload schemas.
         props.schemaRefetch();
+
+        // Close dialog/sheet.
         props.close();
       }
     } catch (err) {

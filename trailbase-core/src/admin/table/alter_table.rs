@@ -1,13 +1,8 @@
 use std::collections::HashSet;
 
-use axum::{
-  Json,
-  extract::State,
-  http::StatusCode,
-  response::{IntoResponse, Response},
-};
+use axum::extract::{Json, State};
 use log::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use trailbase_schema::sqlite::{QualifiedName, Table};
 use ts_rs::TS;
 
@@ -21,6 +16,13 @@ use crate::transaction::{TransactionLog, TransactionRecorder};
 pub struct AlterTableRequest {
   pub source_schema: Table,
   pub target_schema: Table,
+  pub dry_run: Option<bool>,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct AlterTableResponse {
+  pub sql: String,
 }
 
 /// Admin-only handler for altering `TABLE` schemas.
@@ -30,7 +32,7 @@ pub struct AlterTableRequest {
 pub async fn alter_table_handler(
   State(state): State<AppState>,
   Json(request): Json<AlterTableRequest>,
-) -> Result<Response, Error> {
+) -> Result<Json<AlterTableResponse>, Error> {
   if state.demo_mode() && request.source_schema.name.name.starts_with("_") {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
@@ -38,6 +40,7 @@ pub async fn alter_table_handler(
     return Err(Error::Precondition("Cannot move between databases".into()));
   }
 
+  let dry_run = request.dry_run.unwrap_or(false);
   let source_schema = request.source_schema;
   let source_table_name = source_schema.name.clone();
   let filename = source_table_name.migration_filename("alter_table");
@@ -52,6 +55,12 @@ pub async fn alter_table_handler(
   let target_table_name = target_schema.name.clone();
 
   debug!("Alter table:\nsource: {source_schema:?}\ntarget: {target_schema:?}",);
+
+  if source_schema == target_schema {
+    return Ok(Json(AlterTableResponse {
+      sql: "".to_string(),
+    }));
+  }
 
   // Check that removing columns won't break record API configuration. Note that table renames will
   // be fixed up automatically later.
@@ -90,8 +99,8 @@ pub async fn alter_table_handler(
   let mut target_schema_copy = target_schema.clone();
   target_schema_copy.name = temp_table_name.clone();
 
-  let conn = state.conn();
-  let log = conn
+  let tx_log = state
+    .conn()
     .call(
       move |conn| -> Result<Option<TransactionLog>, trailbase_sqlite::Error> {
         let mut tx = TransactionRecorder::new(conn)
@@ -149,41 +158,45 @@ pub async fn alter_table_handler(
     )
     .await?;
 
-  // Write migration file and apply it right away.
-  if let Some(log) = log {
-    let migration_path = state.data_dir().migrations_path();
-    let report = log
-      .apply_as_migration(state.conn(), migration_path, &filename)
-      .await?;
-    debug!("Migration report: {report:?}");
-  }
-
-  state.schema_metadata().invalidate_all().await?;
-
-  // Fix configuration: update all table references by existing APIs.
-  if is_table_rename
-    && matches!(
-      source_schema.name.database_schema.as_deref(),
-      Some("main") | None
-    )
-  {
-    let mut config = state.get_config();
-    let old_config_hash = hash_config(&config);
-
-    for api in &mut config.record_apis {
-      if let Some(ref name) = api.table_name {
-        if *name == source_schema.name.name {
-          api.table_name = Some(target_schema.name.name.clone());
-        }
-      }
+  if !dry_run {
+    // Take transaction log, write a migration file and apply.
+    if let Some(ref log) = tx_log {
+      let migration_path = state.data_dir().migrations_path();
+      let report = log
+        .apply_as_migration(state.conn(), migration_path, &filename)
+        .await?;
+      debug!("Migration report: {report:?}");
     }
 
-    state
-      .validate_and_update_config(config, Some(old_config_hash))
-      .await?;
+    state.schema_metadata().invalidate_all().await?;
+
+    // Fix configuration: update all table references by existing APIs.
+    if is_table_rename
+      && matches!(
+        source_schema.name.database_schema.as_deref(),
+        Some("main") | None
+      )
+    {
+      let mut config = state.get_config();
+      let old_config_hash = hash_config(&config);
+
+      for api in &mut config.record_apis {
+        if let Some(ref name) = api.table_name {
+          if *name == source_schema.name.name {
+            api.table_name = Some(target_schema.name.name.clone());
+          }
+        }
+      }
+
+      state
+        .validate_and_update_config(config, Some(old_config_hash))
+        .await?;
+    }
   }
 
-  return Ok((StatusCode::OK, "altered table").into_response());
+  return Ok(Json(AlterTableResponse {
+    sql: tx_log.map(|l| l.build_sql()).unwrap_or_default(),
+  }));
 }
 
 fn check_column_removals_invalidating_config(
@@ -322,11 +335,14 @@ mod tests {
       let alter_table_request = AlterTableRequest {
         source_schema: create_table_request.schema.clone(),
         target_schema: create_table_request.schema.clone(),
+        dry_run: None,
       };
 
-      alter_table_handler(State(state.clone()), Json(alter_table_request.clone()))
-        .await
-        .unwrap();
+      let Json(response) =
+        alter_table_handler(State(state.clone()), Json(alter_table_request.clone()))
+          .await
+          .unwrap();
+      assert_eq!(response.sql, "");
 
       conn
         .read_query_rows(format!("SELECT {pk_col} FROM foo"), ())
@@ -351,11 +367,14 @@ mod tests {
       let alter_table_request = AlterTableRequest {
         source_schema: create_table_request.schema.clone(),
         target_schema,
+        dry_run: None,
       };
 
-      alter_table_handler(State(state.clone()), Json(alter_table_request.clone()))
-        .await
-        .unwrap();
+      let Json(response) =
+        alter_table_handler(State(state.clone()), Json(alter_table_request.clone()))
+          .await
+          .unwrap();
+      assert!(response.sql.contains("new"));
 
       conn
         .read_query_rows(format!("SELECT {pk_col}, new FROM foo"), ())
@@ -373,11 +392,14 @@ mod tests {
       let alter_table_request = AlterTableRequest {
         source_schema: create_table_request.schema.clone(),
         target_schema,
+        dry_run: None,
       };
 
-      alter_table_handler(State(state.clone()), Json(alter_table_request.clone()))
-        .await
-        .unwrap();
+      let Json(response) =
+        alter_table_handler(State(state.clone()), Json(alter_table_request.clone()))
+          .await
+          .unwrap();
+      assert!(response.sql.contains("bar"));
 
       assert!(conn.read_query_rows("SELECT * FROM foo", ()).await.is_err());
       conn

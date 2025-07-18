@@ -29,6 +29,30 @@ pub struct TransactionLog {
 }
 
 impl TransactionLog {
+  pub(crate) fn build_sql(&self) -> String {
+    let sql_string: String = self
+      .log
+      .iter()
+      .filter_map(|(_, stmt)| match stmt.as_str() {
+        "" => None,
+        x if x.ends_with(";") => Some(stmt.clone()),
+        x => Some(format!("{x};")),
+      })
+      .collect::<Vec<String>>()
+      .join("\n");
+
+    return sqlformat::format(
+      &sql_string,
+      &sqlformat::QueryParams::None,
+      &sqlformat::FormatOptions {
+        ignore_case_convert: None,
+        indent: sqlformat::Indent::Spaces(4),
+        uppercase: Some(true),
+        lines_between_queries: 2,
+      },
+    );
+  }
+
   /// Commit previously recorded transaction log on provided connection.
   pub(crate) async fn apply_as_migration(
     &self,
@@ -44,30 +68,7 @@ impl TransactionLog {
       .to_string();
     let path = migration_path.as_ref().join(filename);
 
-    let sql = {
-      let sql_string: String = self
-        .log
-        .iter()
-        .filter_map(|(_, stmt)| match stmt.as_str() {
-          "" => None,
-          x if x.ends_with(";") => Some(stmt.clone()),
-          x => Some(format!("{x};")),
-        })
-        .collect::<Vec<String>>()
-        .join("\n");
-
-      sqlformat::format(
-        &sql_string,
-        &sqlformat::QueryParams::None,
-        &sqlformat::FormatOptions {
-          ignore_case_convert: None,
-          indent: sqlformat::Indent::Spaces(4),
-          uppercase: Some(true),
-          lines_between_queries: 2,
-        },
-      )
-    };
-
+    let sql = self.build_sql();
     let migrations = vec![trailbase_refinery::Migration::unapplied(&stem, &sql)?];
     let runner = migrations::new_migration_runner(&migrations).set_abort_missing(false);
 

@@ -1,11 +1,6 @@
-use axum::{
-  Json,
-  extract::State,
-  http::StatusCode,
-  response::{IntoResponse, Response},
-};
+use axum::extract::{Json, State};
 use log::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use trailbase_schema::sqlite::TableIndex;
 use ts_rs::TS;
 
@@ -18,6 +13,13 @@ use crate::transaction::TransactionRecorder;
 pub struct AlterIndexRequest {
   pub source_schema: TableIndex,
   pub target_schema: TableIndex,
+  pub dry_run: Option<bool>,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+#[ts(export)]
+pub struct AlterIndexResponse {
+  pub sql: String,
 }
 
 // NOTE: sqlite has very limited alter table support, thus we're always recreating the table and
@@ -26,11 +28,12 @@ pub struct AlterIndexRequest {
 pub async fn alter_index_handler(
   State(state): State<AppState>,
   Json(request): Json<AlterIndexRequest>,
-) -> Result<Response, Error> {
+) -> Result<Json<AlterIndexResponse>, Error> {
   if state.demo_mode() && request.source_schema.name.name.starts_with("_") {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
+  let dry_run = request.dry_run.unwrap_or(false);
   let source_schema = request.source_schema;
   let source_index_name = source_schema.name.clone();
   let target_schema = request.target_schema;
@@ -38,8 +41,14 @@ pub async fn alter_index_handler(
 
   debug!("Alter index:\nsource: {source_schema:?}\ntarget: {target_schema:?}",);
 
-  let conn = state.conn();
-  let log = conn
+  if source_schema == target_schema {
+    return Ok(Json(AlterIndexResponse {
+      sql: "".to_string(),
+    }));
+  }
+
+  let tx_log = state
+    .conn()
     .call(move |conn| {
       let mut tx = TransactionRecorder::new(conn)?;
 
@@ -62,14 +71,18 @@ pub async fn alter_index_handler(
     })
     .await?;
 
-  // Write to migration file.
-  if let Some(log) = log {
-    let migration_path = state.data_dir().migrations_path();
-    let report = log
-      .apply_as_migration(conn, migration_path, &filename)
-      .await?;
-    debug!("Migration report: {report:?}");
+  if !dry_run {
+    // Take transaction log, write a migration file and apply.
+    if let Some(ref log) = tx_log {
+      let migration_path = state.data_dir().migrations_path();
+      let report = log
+        .apply_as_migration(state.conn(), migration_path, &filename)
+        .await?;
+      debug!("Migration report: {report:?}");
+    }
   }
 
-  return Ok((StatusCode::OK, "altered index").into_response());
+  return Ok(Json(AlterIndexResponse {
+    sql: tx_log.map(|l| l.build_sql()).unwrap_or_default(),
+  }));
 }

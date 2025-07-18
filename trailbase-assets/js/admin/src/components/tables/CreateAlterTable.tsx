@@ -66,8 +66,13 @@ export function CreateAlterTableForm(props: {
         const response = await alterTable({
           source_schema: o,
           target_schema: value,
+          dry_run: dryRun,
         });
         console.debug("AlterTableResponse:", response);
+
+        if (dryRun) {
+          setSql(response.sql);
+        }
       } else {
         const response = await createTable({ schema: value, dry_run: dryRun });
         console.debug(`CreateTableResponse [dry: ${dryRun}]:`, response);
@@ -78,10 +83,15 @@ export function CreateAlterTableForm(props: {
       }
 
       if (!dryRun) {
+        // Trigger config reload
         invalidateConfig(queryClient);
+
+        // Reload schemas.
         props.schemaRefetch().then(() => {
           props.setSelected(value.name);
         });
+
+        // Close dialog/sheet.
         props.close();
       }
     } catch (err) {

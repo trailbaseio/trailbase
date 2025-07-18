@@ -35,23 +35,22 @@ pub async fn create_table_handler(
   // This contains the create table statement and may also contain indexes and triggers.
   let create_table_query = request.schema.create_table_statement();
 
+  let conn = state.conn();
+  let tx_log = conn
+    .call(move |conn| {
+      let mut tx = TransactionRecorder::new(conn)?;
+
+      tx.execute(&create_table_query, ())?;
+
+      return tx
+        .rollback()
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+    })
+    .await?;
+
   if !dry_run {
-    let create_table_query = create_table_query.clone();
-    let conn = state.conn();
-    let log = conn
-      .call(move |conn| {
-        let mut tx = TransactionRecorder::new(conn)?;
-
-        tx.execute(&create_table_query, ())?;
-
-        return tx
-          .rollback()
-          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
-      })
-      .await?;
-
-    // Write to migration file.
-    if let Some(log) = log {
+    // Take transaction log, write a migration file and apply.
+    if let Some(ref log) = tx_log {
       let migration_path = state.data_dir().migrations_path();
       let _report = log
         .apply_as_migration(conn, migration_path, &filename)
@@ -62,15 +61,6 @@ pub async fn create_table_handler(
   }
 
   return Ok(Json(CreateTableResponse {
-    sql: sqlformat::format(
-      format!("{create_table_query};").as_str(),
-      &sqlformat::QueryParams::None,
-      &sqlformat::FormatOptions {
-        ignore_case_convert: None,
-        indent: sqlformat::Indent::Spaces(2),
-        uppercase: Some(true),
-        lines_between_queries: 1,
-      },
-    ),
+    sql: tx_log.map(|l| l.build_sql()).unwrap_or_default(),
   }));
 }
