@@ -2,7 +2,7 @@
 // Hero component inspired from starlight's original:
 //   https://github.com/withastro/starlight/blob/8cf8ac79213a69eae8a04c848de9570b9fd1408f/packages/starlight/components/Hero.astro
 import { Image } from "astro:assets";
-import { Code, LinkButton } from "@astrojs/starlight/components";
+import { Code, LinkButton, TabItem, Tabs } from "@astrojs/starlight/components";
 import type { ImageMetadata } from "astro";
 
 export const PAGE_TITLE_ID = "_top";
@@ -72,12 +72,33 @@ if (image) {
 
         <br />
 
-        <Code
-          class=""
-          lang="sh"
-          code={"curl -sSL https://trailbase.io/install.sh | bash"}
-          frame={false}
-        />
+        <div class="text-sm">
+          <Tabs>
+            <TabItem label="Linux/MacOS">
+              <Code
+                lang="sh"
+                code={"curl -sSL https://trailbase.io/install.sh | bash"}
+                frame={false}
+              />
+            </TabItem>
+
+            <TabItem label="Windows">
+              <Code
+                lang="sh"
+                code={"iwr https://trailbase.io/install.sh | iex"}
+                frame={false}
+              />
+            </TabItem>
+
+            <TabItem label="Docker">
+              <Code
+                lang="sh"
+                code={"docker run -p 4000:4000 trailbase/trailbase"}
+                frame={false}
+              />
+            </TabItem>
+          </Tabs>
+        </div>
       </div>
     </div>
 
@@ -164,7 +185,7 @@ if (image) {
     }
 
     .actions {
-      gap: 1rem 2rem;
+      gap: 1rem 1.5rem;
       flex-wrap: wrap;
       justify-content: center;
     }

@@ -3,6 +3,12 @@
 //   https://github.com/withastro/starlight/blob/7a8007a6e2f8ee744cd83e2bfa39910dd3f50e50/packages/starlight/components/SiteTitle.astro
 import config from "virtual:starlight/user-config";
 import type { ImageMetadata } from "astro";
+import { Image } from "astro:assets";
+
+const { data } = Astro.locals.starlightRoute.entry;
+const { actions = [] } = data.hero ?? {};
+
+import nut from "@/assets/nut.svg";
 
 function stripLeadingSlash(href: string) {
   if (href[0] === "/") href = href.slice(1);
@@ -53,9 +59,12 @@ if (config.logo) {
 const href = pathWithBase(Astro.props.locale || "/");
 ---
 
-<div class="flex items-center gap-8">
+<div class="flex items-center gap-4">
   <a {href} class="site-title sl-flex">
+    <Image src={nut} alt="Nut logo" />
+
     {
+      /*
       config.logo && logos.dark && (
         <>
           <img
@@ -65,7 +74,6 @@ const href = pathWithBase(Astro.props.locale || "/");
             width={logos.dark.width}
             height={logos.dark.height}
           />
-          {/* Show light alternate if a user configure both light and dark logos. */}
           {!("src" in config.logo) && (
             <img
               class="light-only"
@@ -76,14 +84,35 @@ const href = pathWithBase(Astro.props.locale || "/");
             />
           )}
         </>
-      )
+      )*/
     }
+
     <span class:list={{ "sr-only": config.logo?.replacesTitle }}>
       {config.title[Astro.props.locale ?? "en"] ?? config.title["en"]}
     </span>
   </a>
 
-  <!-- TODO: Add links -->
+  {
+    actions.length > 0 && (
+      <div class="hidden lg:block">
+        <div class="flex items-center gap-4">
+          {actions.map(
+            ({
+              // attrs: { class: className, ...attrs } = {},
+              // icon,
+              // variant,
+              link: href,
+              text,
+            }) => (
+              <a class="site-title-link" href={href}>
+                {text}
+              </a>
+            ),
+          )}
+        </div>
+      </div>
+    )
+  }
 </div>
 
 <style>
@@ -99,6 +128,16 @@ const href = pathWithBase(Astro.props.locale || "/");
     text-decoration: none;
     white-space: nowrap;
   }
+
+  .site-title-link {
+    color: var(--sl-color-gray-2);
+    text-decoration: none;
+  }
+
+  .site-title-link:hover {
+    color: var(--sl-color-text-accent);
+  }
+
   img {
     height: calc(var(--sl-nav-height) - 2 * var(--sl-nav-pad-y));
     width: auto;
@@ -106,9 +145,11 @@ const href = pathWithBase(Astro.props.locale || "/");
     object-fit: contain;
     object-position: 0 50%;
   }
+
   :global([data-theme="light"]) .dark-only {
     display: none;
   }
+
   :global([data-theme="dark"]) .light-only {
     display: none;
   }

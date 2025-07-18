@@ -1,10 +1,9 @@
 import { Code, Tabs, TabItem } from '@astrojs/starlight/components';
 
-export const installMacLinux = `curl -sSL https://raw.githubusercontent.com/trailbaseio/trailbase/main/install.sh | bash`;
-export const installWindows = `iwr https://raw.githubusercontent.com/trailbaseio/trailbase/main/install.sh | iex`;
+export const installMacLinux = `curl -sSL https://trailbase.io/install.sh | bash`;
+export const installWindows = `iwr https://trailbase.io/install.sh | iex`;
 export const installDocker= `
-# Docker is used here merely as an easy, portable way to install TrailBase.
-# To make this persistent, you'll have to add the alias to your shell's rc.
+# Mimic "install" with Docker. Add the alias to your shell's rc to persist.
 alias trail='
   mkdir -p traildepot && \\
   docker run \\
@@ -14,7 +13,7 @@ alias trail='
 `;
 
 <Tabs>
-  <TabItem label="MacOS/Linux">
+  <TabItem label="Linux/MacOS">
     <Code lang="sh" code={installMacLinux} frame={false} />
   </TabItem>
 
