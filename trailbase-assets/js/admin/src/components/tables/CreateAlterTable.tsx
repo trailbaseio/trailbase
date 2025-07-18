@@ -55,6 +55,7 @@ export function CreateAlterTableForm(props: {
   const original = createMemo(() =>
     props.schema ? JSON.parse(JSON.stringify(props.schema)) : undefined,
   );
+  const isCreateTable = () => original() === undefined;
 
   const onSubmit = async (value: Table, dryRun: boolean) => {
     /* eslint-disable solid/reactivity */
@@ -62,7 +63,7 @@ export function CreateAlterTableForm(props: {
 
     try {
       const o = original();
-      if (o) {
+      if (o !== undefined) {
         const response = await alterTable({
           source_schema: o,
           target_schema: value,
@@ -139,7 +140,9 @@ export function CreateAlterTableForm(props: {
   return (
     <SheetContainer>
       <SheetHeader>
-        <SheetTitle>{original() ? "Alter Table" : "Add New Table"}</SheetTitle>
+        <SheetTitle>
+          {isCreateTable() ? "Add New Table" : "Alter Table"}
+        </SheetTitle>
       </SheetHeader>
 
       <form
@@ -184,7 +187,7 @@ export function CreateAlterTableForm(props: {
                             colIndex={i}
                             column={c()}
                             allTables={props.allTables}
-                            disabled={original() !== undefined}
+                            disabled={!isCreateTable()}
                           />
                         </Match>
 
@@ -227,44 +230,42 @@ export function CreateAlterTableForm(props: {
             {(state) => {
               return (
                 <div class="flex items-center gap-4">
-                  {original() === undefined && (
-                    <Dialog
-                      open={sql() !== undefined}
-                      onOpenChange={(open: boolean) => {
-                        if (!open) {
-                          setSql(undefined);
-                        }
-                      }}
-                    >
-                      <DialogTrigger>
-                        <Button
-                          class="w-[92px]"
-                          disabled={!state().canSubmit}
-                          variant="outline"
-                          onClick={() => {
-                            onSubmit(form.state.values, true).catch(
-                              console.error,
-                            );
-                          }}
-                          {...props}
-                        >
-                          {state().isSubmitting ? "..." : "Dry Run"}
-                        </Button>
-                      </DialogTrigger>
+                  <Dialog
+                    open={sql() !== undefined}
+                    onOpenChange={(open: boolean) => {
+                      if (!open) {
+                        setSql(undefined);
+                      }
+                    }}
+                  >
+                    <DialogTrigger>
+                      <Button
+                        class="w-[92px]"
+                        disabled={!state().canSubmit}
+                        variant="outline"
+                        onClick={() => {
+                          onSubmit(form.state.values, true).catch(
+                            console.error,
+                          );
+                        }}
+                        {...props}
+                      >
+                        {state().isSubmitting ? "..." : "Dry Run"}
+                      </Button>
+                    </DialogTrigger>
 
-                      <DialogContent class="min-w-[80dvw]">
-                        <DialogHeader>
-                          <DialogTitle>SQL</DialogTitle>
-                        </DialogHeader>
+                    <DialogContent class="min-w-[80dvw]">
+                      <DialogHeader>
+                        <DialogTitle>SQL</DialogTitle>
+                      </DialogHeader>
 
-                        <div class="overflow-auto">
-                          <pre>{sql()}</pre>
-                        </div>
+                      <div class="overflow-auto">
+                        <pre>{sql() === "" ? "<EMPTY>" : sql()}</pre>
+                      </div>
 
-                        <DialogFooter />
-                      </DialogContent>
-                    </Dialog>
-                  )}
+                      <DialogFooter />
+                    </DialogContent>
+                  </Dialog>
 
                   <div class="mr-4 flex w-full justify-end">
                     <Button

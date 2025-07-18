@@ -22,7 +22,6 @@ import {
   buildSelectField,
 } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
-import { prettyFormatQualifiedName } from "@/lib/schema";
 
 import type { ColumnOrder } from "@bindings/ColumnOrder";
 import type { Table } from "@bindings/Table";
@@ -40,6 +39,8 @@ export function CreateAlterIndexForm(props: {
   const original = createMemo(() =>
     props.schema ? JSON.parse(JSON.stringify(props.schema)) : undefined,
   );
+  const isCreateIndex = () => original() === undefined;
+
   const newDefaultColumn = (index: number): ColumnOrder => {
     return {
       column_name: props.table.columns[index].name,
@@ -55,7 +56,7 @@ export function CreateAlterIndexForm(props: {
 
     try {
       const o = original();
-      if (o) {
+      if (o !== undefined) {
         const response = await alterIndex({
           source_schema: o,
           target_schema: value,
@@ -120,12 +121,7 @@ export function CreateAlterIndexForm(props: {
   return (
     <SheetContainer>
       <SheetHeader>
-        <SheetTitle>
-          {original() ? "Alter Index" : "Add Index"} for{" "}
-          <span class="font-mono">
-            {prettyFormatQualifiedName(props.table.name)}
-          </span>
-        </SheetTitle>
+        <SheetTitle>{isCreateIndex() ? "Add Index" : "Alter Index"}</SheetTitle>
       </SheetHeader>
 
       <form
@@ -213,45 +209,43 @@ export function CreateAlterIndexForm(props: {
             {(state) => {
               return (
                 <div class="flex items-center gap-4">
-                  {original() === undefined && (
-                    <Dialog
-                      open={sql() !== undefined}
-                      onOpenChange={(open: boolean) => {
-                        if (!open) {
-                          setSql(undefined);
-                        }
-                      }}
-                    >
-                      <DialogTrigger>
-                        <div>
-                          <Button
-                            disabled={!state().canSubmit}
-                            variant="outline"
-                            onClick={() => {
-                              onSubmit(form.state.values, true).catch(
-                                console.error,
-                              );
-                            }}
-                            {...props}
-                          >
-                            {state().isSubmitting ? "..." : "Dry Run"}
-                          </Button>
-                        </div>
-                      </DialogTrigger>
+                  <Dialog
+                    open={sql() !== undefined}
+                    onOpenChange={(open: boolean) => {
+                      if (!open) {
+                        setSql(undefined);
+                      }
+                    }}
+                  >
+                    <DialogTrigger>
+                      <div>
+                        <Button
+                          disabled={!state().canSubmit}
+                          variant="outline"
+                          onClick={() => {
+                            onSubmit(form.state.values, true).catch(
+                              console.error,
+                            );
+                          }}
+                          {...props}
+                        >
+                          {state().isSubmitting ? "..." : "Dry Run"}
+                        </Button>
+                      </div>
+                    </DialogTrigger>
 
-                      <DialogContent class="min-w-[80dvw]">
-                        <DialogHeader>
-                          <DialogTitle>SQL</DialogTitle>
-                        </DialogHeader>
+                    <DialogContent class="min-w-[80dvw]">
+                      <DialogHeader>
+                        <DialogTitle>SQL</DialogTitle>
+                      </DialogHeader>
 
-                        <div class="overflow-auto">
-                          <pre>{sql()}</pre>
-                        </div>
+                      <div class="overflow-auto">
+                        <pre>{sql() === "" ? "<EMPTY>" : sql()}</pre>
+                      </div>
 
-                        <DialogFooter />
-                      </DialogContent>
-                    </Dialog>
-                  )}
+                      <DialogFooter />
+                    </DialogContent>
+                  </Dialog>
 
                   <div>
                     <Button
