@@ -505,6 +505,7 @@ export function ColumnSubForm(props: {
                     {([name, preset]) => (
                       <ButtonBadge
                         class="p-1 active:scale-90"
+                        type="button"
                         onClick={() => {
                           const columns = [...props.form.state.values.columns];
                           const column = columns[props.colIndex];
@@ -634,6 +635,7 @@ export function PrimaryKeyColumnSubForm(props: {
                       {([name, preset]) => (
                         <ButtonBadge
                           class="p-1 active:scale-90"
+                          type="button"
                           onClick={() => {
                             const columns = [
                               ...props.form.state.values.columns,
@@ -722,6 +724,32 @@ type Preset = {
 
 export const primaryKeyPresets: [string, (colName: string) => Preset][] = [
   [
+    "INTEGER",
+    (_colName: string) => {
+      return {
+        data_type: "Integer",
+        options: [
+          { Unique: { is_primary: true, conflict_clause: null } },
+          "NotNull",
+        ],
+      };
+    },
+  ],
+  [
+    "UUIDv4",
+    (colName: string) => {
+      return {
+        data_type: "Blob",
+        options: [
+          { Unique: { is_primary: true, conflict_clause: null } },
+          { Check: `is_uuid(${colName})` },
+          { Default: "(uuid_v4())" },
+          "NotNull",
+        ],
+      };
+    },
+  ],
+  [
     "UUIDv7",
     (colName: string) => {
       return {
@@ -730,18 +758,6 @@ export const primaryKeyPresets: [string, (colName: string) => Preset][] = [
           { Unique: { is_primary: true, conflict_clause: null } },
           { Check: `is_uuid_v7(${colName})` },
           { Default: "(uuid_v7())" },
-          "NotNull",
-        ],
-      };
-    },
-  ],
-  [
-    "INTEGER",
-    (_colName: string) => {
-      return {
-        data_type: "Integer",
-        options: [
-          { Unique: { is_primary: true, conflict_clause: null } },
           "NotNull",
         ],
       };
@@ -756,6 +772,19 @@ const presets: [string, (colName: string) => Preset][] = [
       return {
         data_type: "Text",
         options: [{ Default: "''" }, "NotNull"],
+      };
+    },
+  ],
+  [
+    "UUIDv4",
+    (colName: string) => {
+      return {
+        data_type: "Blob",
+        options: [
+          { Check: `is_uuid(${colName})` },
+          { Default: "(uuid_v4())" },
+          "NotNull",
+        ],
       };
     },
   ],
@@ -779,7 +808,7 @@ const presets: [string, (colName: string) => Preset][] = [
         data_type: "Text",
         options: [
           { Check: `is_json(${colName})` },
-          { Default: "{}" },
+          { Default: "'{}'" },
           "NotNull",
         ],
       };
@@ -807,7 +836,7 @@ const presets: [string, (colName: string) => Preset][] = [
           {
             Check: `jsonschema('std.FileUploads', ${colName})`,
           },
-          { Default: "[]" },
+          { Default: "'[]'" },
           "NotNull",
         ],
       };
