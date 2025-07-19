@@ -1,3 +1,10 @@
+## v0.15.6
+
+* Make "Dry Run" button available for all table and index schema changes.
+* Automatically re-render data table after changing the schema.
+* Fix: column preset buttons and add a UUIDv4 preset.
+* Update JS and Rust dependencies.
+
 ## v0.15.5
 
 * Check out the [TanStack/db](https://github.com/TanStack/db) sync engine, which now officially supports TrailBase 🥳.
