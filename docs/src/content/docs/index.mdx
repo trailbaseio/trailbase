@@ -19,7 +19,7 @@ hero:
       icon: github
       variant: secondary
     - text: Demo
-      link: https://demo.trailbase.io/_/admin?loginMessage=E-mail:%20admin@localhost%20%E2%80%A2%20Password:%20secret
+      link: https://demo.trailbase.io
       icon: rocket
       variant: secondary
 ---
@@ -39,6 +39,8 @@ import swiftLogo from "@/assets/swift_logo.svg";
 import tsLogo from "@/assets/ts_logo.svg";
 
 import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx";
+
+export const demoLink = "https://demo.trailbase.io";
 
 <div class="flex flex-col gap-4">
 
@@ -80,16 +82,14 @@ import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx
 
     <div class="flex justify-center">
       <div class="max-w-[680px] relative" >
-        <a
-          href="https://demo.trailbase.io/_/admin?loginMessage=E-mail:%20admin@localhost%20%E2%80%A2%20Password:%20secret"
-        >
+        <a href={demoLink}>
           <Image class="z-0 rounded-xl" src={shelve} alt="Screenshots of TrailBase's admin dashboard" />
         </a>
 
         <div class="z-1 w-full h-full absolute top-0 flex justify-center items-center pointer-events-none">
           <a
             class="pointer-events-auto no-underline flex flex-col items-center bg-gray-200 dark:bg-accent-900 px-4 py-2 rounded"
-            href="https://demo.trailbase.io/_/admin?loginMessage=E-mail:%20admin@localhost%20%E2%80%A2%20Password:%20secret"
+            href={demoLink}
           >
             <strong>Live Demo</strong>
             <span>login: admin@localhost</span>
