@@ -44,9 +44,15 @@ jobs:
       - name: Poetry install
         run: |
           pipx install poetry && poetry -C client/trailbase-py install
+      # - name: Setup Go
+      #   uses: actions/setup-go@v5
+      #   with:
+      #     go-version: "1.24.x"
       # Swift 6.1 is preinstalled and swift-action sporadically fails on
       # gpg issues: https://github.com/swift-actions/setup-swift/issues/694
       # - uses: swift-actions/setup-swift@v2
       #   with:
       #     swift-version: "6.1"
       - uses: pre-commit/action@v3.0.1
+        with:
+          extra_args: "--all-files --verbose"
