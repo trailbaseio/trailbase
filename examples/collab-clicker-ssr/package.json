@@ -19,8 +19,8 @@
   "devDependencies": {
     "@eslint/js": "^9.31.0",
     "@types/express": "^5.0.3",
-    "@types/node": "^24.0.14",
-    "compression": "^1.8.0",
+    "@types/node": "^24.0.15",
+    "compression": "^1.8.1",
     "cross-env": "^7.0.3",
     "eslint": "^9.31.0",
     "express": "^5.1.0",

@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@antv/x6": "^2.18.1",
-    "@bufbuild/protobuf": "^2.6.0",
+    "@bufbuild/protobuf": "^2.6.1",
     "@codemirror/autocomplete": "^6.18.6",
     "@codemirror/lang-sql": "^6.9.0",
     "@codemirror/state": "^6.5.2",

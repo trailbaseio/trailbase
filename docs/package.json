@@ -13,11 +13,11 @@
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
-    "@astrojs/starlight": "^0.35.0",
+    "@astrojs/starlight": "^0.35.1",
     "@astrojs/starlight-tailwind": "^4.0.1",
     "@iconify-json/tabler": "^1.2.19",
     "@tailwindcss/vite": "^4.1.11",
-    "astro": "^5.11.2",
+    "astro": "^5.12.0",
     "astro-icon": "^1.1.5",
     "chart.js": "^4.5.0",
     "chartjs-chart-error-bars": "^4.4.4",
