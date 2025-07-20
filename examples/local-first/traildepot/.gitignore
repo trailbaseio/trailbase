@@ -3,3 +3,6 @@ backups/
 data/
 secrets/
 uploads/
+
+trailbase.js
+trailbase.d.ts

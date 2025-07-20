@@ -1,33 +1,24 @@
-# Auto-generated config.Config textproto
-email {
-  user_verification_template {
-    subject: "Verify your Email Address for {{ APP_NAME }}"
-    body: "<html>\n  <body>\n    <h1>Welcome {{ EMAIL }}</h1>\n\n    <p>\n      Thanks for joining {{ APP_NAME }}.\n    </p>\n\n    <p>\n      To be able to log in, first validate your email by clicking the link below.\n    </p>\n\n    <a class=\"btn\" href=\"{{ VERIFICATION_URL }}\">\n      {{ VERIFICATION_URL }}\n    </a>\n  </body>\n</html>"
-  }
-  password_reset_template {
-    subject: "Reset your Password for {{ APP_NAME }}"
-    body: "<html>\n  <body>\n    <h1>Password Reset</h1>\n\n    <p>\n      Click the link below to reset your password.\n    </p>\n\n    <a class=\"btn\" href=\"{{ VERIFICATION_URL }}\">\n      {{ VERIFICATION_URL }}\n    </a>\n  </body>\n</html>"
-  }
-  change_email_template {
-    subject: "Change your Email Address for {{ APP_NAME }}"
-    body: "<html>\n  <body>\n    <h1>Change E-Mail Address</h1>\n\n    <p>\n      Click the link below to verify your new E-mail address:\n    </p>\n\n    <a class=\"btn\" href=\"{{ VERIFICATION_URL }}\">\n      {{ VERIFICATION_URL }}\n    </a>\n  </body>\n</html>"
-  }
-}
+email {}
 server {
-  application_name: "TrailBase"
+  application_name: "TanStack-DB TrailBase Example"
   logs_retention_sec: 604800
 }
 auth {
-  auth_token_ttl_sec: 120
+  auth_token_ttl_sec: 3600
   refresh_token_ttl_sec: 2592000
 }
 jobs {}
 record_apis: [
   {
-    name: "data"
-    table_name: "data"
-    conflict_resolution: REPLACE
-    enable_subscriptions: true
+    name: "todos"
+    table_name: "todos"
     acl_world: [CREATE, READ, UPDATE, DELETE]
+    enable_subscriptions: true
+  },
+  {
+    name: "config"
+    table_name: "config"
+    acl_world: [CREATE, READ, UPDATE, DELETE]
+    enable_subscriptions: true
   }
 ]
