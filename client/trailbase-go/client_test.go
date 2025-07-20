@@ -49,5 +49,13 @@ func TestRecordApi(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_ = id
+	var simpleStrict SimpleStrict
+	err = api.Read(id, &simpleStrict)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if simpleStrict.TextNotNull != "test" {
+		t.Fatal("expected 'test', got", simpleStrict.TextNotNull)
+	}
 }

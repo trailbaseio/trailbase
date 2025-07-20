@@ -20,8 +20,8 @@ import (
 
 type Tokens struct {
 	AuthToken    string  `json:"auth_token"`
-	RefreshToken *string `json:"refresh_token"`
-	CsrfToken    *string `json:"csrf_token"`
+	RefreshToken *string `json:"refresh_token,omitempty"`
+	CsrfToken    *string `json:"csrf_token,omitempty"`
 }
 
 type JwtTokenClaims struct {
@@ -343,4 +343,3 @@ func NewClient(site string) (Client, error) {
 var jsonHeader Header = Header{key: "Content-Type", value: "application/json"}
 
 const authApi string = "api/auth/v1"
-const recordApi string = "api/records/v1"
