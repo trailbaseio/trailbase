@@ -31,7 +31,7 @@ type state struct {
 
 type TokenState struct {
 	s       *state
-	headers map[string]string
+	headers http.Header
 }
 
 func NewTokenState(tokens *Tokens) (*TokenState, error) {
@@ -52,13 +52,13 @@ func NewTokenState(tokens *Tokens) (*TokenState, error) {
 				tokens: *tokens,
 				claims: claims,
 			},
-			headers: make(map[string]string),
+			headers: make(http.Header),
 		}, nil
 	}
 
 	return &TokenState{
 		s:       nil,
-		headers: make(map[string]string),
+		headers: make(http.Header),
 	}, nil
 }
 
@@ -68,13 +68,9 @@ type JwtTokenClaims struct {
 	jwt.RegisteredClaims
 }
 
-type Credentials struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
-
 type Client interface {
 	Login(email string, password string) (*Tokens, error)
+	Logout() error
 }
 
 type ClientImpl struct {
@@ -86,7 +82,12 @@ type ClientImpl struct {
 }
 
 func (c *ClientImpl) Login(email string, password string) (*Tokens, error) {
-	creds, err := json.Marshal(Credentials{
+	type Credentials struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	reqBody, err := json.Marshal(Credentials{
 		Email:    email,
 		Password: password,
 	})
@@ -95,25 +96,63 @@ func (c *ClientImpl) Login(email string, password string) (*Tokens, error) {
 	}
 
 	url := c.base.JoinPath(authApi, "login").String()
-	resp, err := c.client.Post(url, "application/json", bytes.NewBuffer(creds))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Println(resp)
-
-	body, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
 	var tokens Tokens
-	err = json.Unmarshal(body, &tokens)
+	err = json.Unmarshal(respBody, &tokens)
 	if err != nil {
 		return nil, err
 	}
 
 	return c.updateTokens(&tokens)
+}
+
+func (c *ClientImpl) Logout() error {
+	url := c.base.JoinPath(authApi, "logout").String()
+	r := c.getHeaderAndRefresh()
+	if r != nil {
+		type LogoutRequest struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+
+		body, err := json.Marshal(LogoutRequest{
+			RefreshToken: r.refreshToken,
+		})
+		if err != nil {
+			return err
+		}
+
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		_, err = c.client.Do(req)
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err := c.client.Get(url)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err := c.updateTokens(nil)
+	return err
 }
 
 func (c *ClientImpl) updateTokens(tokens *Tokens) (*Tokens, error) {
@@ -127,6 +166,27 @@ func (c *ClientImpl) updateTokens(tokens *Tokens) (*Tokens, error) {
 	c.tokenMutex.Unlock()
 
 	return tokens, nil
+}
+
+type HeaderAndRefreshToken struct {
+	header       http.Header
+	refreshToken string
+}
+
+func (c *ClientImpl) getHeaderAndRefresh() *HeaderAndRefreshToken {
+	var r *HeaderAndRefreshToken
+
+	c.tokenMutex.Lock()
+	s := c.tokenState
+	if s != nil && s.s != nil && s.s.tokens.RefreshToken != nil {
+		r = &HeaderAndRefreshToken{
+			header:       c.tokenState.headers,
+			refreshToken: *c.tokenState.s.tokens.RefreshToken,
+		}
+	}
+	c.tokenMutex.Unlock()
+
+	return r
 }
 
 func NewClient(site string) (Client, error) {
@@ -152,7 +212,12 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println(tokens)
+	fmt.Println("Tokens: ", tokens)
+
+	err = client.Logout()
+	if err != nil {
+		panic(err)
+	}
 }
 
 const authApi string = "api/auth/v1"
