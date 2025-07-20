@@ -1,9 +1,7 @@
-package main
+package trailbase
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -15,15 +13,21 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type User struct {
-	Sub   string
-	Email string
-}
+// type User struct {
+// 	Sub   string
+// 	Email string
+// }
 
 type Tokens struct {
 	AuthToken    string  `json:"auth_token"`
 	RefreshToken *string `json:"refresh_token"`
 	CsrfToken    *string `json:"csrf_token"`
+}
+
+type JwtTokenClaims struct {
+	Email     string `json:"email"`
+	CsrfToken string `json:"csrf_token"`
+	jwt.RegisteredClaims
 }
 
 type state struct {
@@ -101,80 +105,11 @@ func buildHeaders(tokens *Tokens) []Header {
 	return headers
 }
 
-type JwtTokenClaims struct {
-	Email     string `json:"email"`
-	CsrfToken string `json:"csrf_token"`
-	jwt.RegisteredClaims
-}
-
-type RecordIdResponse struct {
-	Ids []string `json:"ids"`
-}
-
-type RecordApi struct {
-	client internalClient
-	name   string
-}
-
-func (r *RecordApi) Create(record any) (*string, error) {
-	reqBody, err := json.Marshal(record)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := r.client.do("POST", recordApi+"/"+r.name, reqBody, []QueryParam{})
-	if err != nil {
-		return nil, err
-	}
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var recordIdResponse RecordIdResponse
-	err = json.Unmarshal(respBody, &recordIdResponse)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(recordIdResponse.Ids) != 1 {
-		return nil, errors.New("expected one id")
-	}
-	return &recordIdResponse.Ids[0], nil
-}
-
 type Client interface {
 	Refresh() error
 	Login(email string, password string) (*Tokens, error)
 	Logout() error
 	RecordApi(name string) *RecordApi
-}
-
-type internalClient interface {
-	do(method string, path string, body []byte, queryParams []QueryParam) (*http.Response, error)
-}
-
-type thinClient struct {
-	base   *url.URL
-	client *http.Client
-}
-
-func (c *thinClient) do(method string, path string, headers []Header, body []byte, queryParams []QueryParam) (*http.Response, error) {
-	req, err := http.NewRequest(method, c.base.JoinPath(path).String(), bytes.NewBuffer(body))
-	if err != nil {
-		return nil, err
-	}
-	for _, header := range headers {
-		req.Header.Add(header.key, header.value)
-	}
-	for _, param := range queryParams {
-		req.URL.Query().Add(param.key, param.value)
-	}
-	return c.client.Do(req)
-}
-
-func (c *thinClient) get(url string) (*http.Response, error) {
-	return c.client.Get(url)
 }
 
 type ClientImpl struct {
@@ -338,28 +273,23 @@ func (c *ClientImpl) getHeadersAndRefreshTokenIfExpired() ([]Header, *string) {
 	}
 
 	headers := s.headers
-	var refreshToken string
+	var refreshToken *string
 
 	if s.s != nil && s.s.tokens.RefreshToken != nil {
 		exp := s.s.claims.ExpiresAt
 		if exp != nil && shouldRefresh(exp.Unix()) {
-			refreshToken = *s.s.tokens.RefreshToken
+			refreshToken = s.s.tokens.RefreshToken
 		}
 	}
 	c.tokenMutex.Unlock()
 
-	return headers, &refreshToken
+	return headers, refreshToken
 }
 
 func doRefreshToken(client *thinClient, headers []Header, refreshToken string) (*TokenState, error) {
 	type RefreshRequest struct {
 		RefreshToken string `json:"refresh_token"`
 	}
-	type RefreshResponse struct {
-		AuthToken string  `json:"auth_token"`
-		CsrfToken *string `json:"csrf_token"`
-	}
-
 	reqBody, err := json.Marshal(RefreshRequest{
 		RefreshToken: refreshToken,
 	})
@@ -377,6 +307,10 @@ func doRefreshToken(client *thinClient, headers []Header, refreshToken string) (
 		return nil, err
 	}
 
+	type RefreshResponse struct {
+		AuthToken string  `json:"auth_token"`
+		CsrfToken *string `json:"csrf_token,omitempty"`
+	}
 	var refreshResp RefreshResponse
 	err = json.Unmarshal(respBody, &refreshResp)
 	if err != nil {
@@ -404,39 +338,6 @@ func NewClient(site string) (Client, error) {
 		tokenState: nil,
 		tokenMutex: &sync.Mutex{},
 	}, nil
-}
-
-func main() {
-	client, err := NewClient("http://localhost:4000")
-	if err != nil {
-		panic(err)
-	}
-	tokens, err := client.Login("admin@localhost", "secret")
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("Tokens: ", tokens)
-
-	client.Refresh()
-
-	type SimpleStrict struct {
-		Id *string `json:"id"`
-
-		TextNull    *string `json:"text_null"`
-		TextDefault *string `json:"text_default"`
-		TextNotNull string  `json:"text_not_null"`
-	}
-
-	api := client.RecordApi("simple_strict_table")
-	api.Create(SimpleStrict{
-		TextNotNull: "test",
-	})
-
-	err = client.Logout()
-	if err != nil {
-		panic(err)
-	}
 }
 
 var jsonHeader Header = Header{key: "Content-Type", value: "application/json"}
