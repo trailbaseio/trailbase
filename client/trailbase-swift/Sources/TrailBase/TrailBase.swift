@@ -133,6 +133,9 @@ public class RecordApi {
       if let limit = p.limit {
         queryParams.append(URLQueryItem(name: "limit", value: "\(limit)"))
       }
+      if let offset = p.offset {
+        queryParams.append(URLQueryItem(name: "offset", value: "\(offset)"))
+      }
     }
 
     if let o = order {
@@ -441,8 +444,10 @@ public class Client {
 
     let refreshResponse = try JSONDecoder().decode(RefreshResponse.self, from: data)
     let tokens = Tokens(
-      auth_token: refreshResponse.auth_token, refresh_token: refreshToken,
-      csrf_token: refreshResponse.csrf_token)
+      auth_token: refreshResponse.auth_token,
+      refresh_token: refreshToken,
+      csrf_token: refreshResponse.csrf_token,
+    )
     return try TokenState(tokens: tokens)
   }
 }
