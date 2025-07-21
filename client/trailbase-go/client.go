@@ -13,10 +13,10 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// type User struct {
-// 	Sub   string
-// 	Email string
-// }
+type User struct {
+	Sub   string
+	Email string
+}
 
 type Tokens struct {
 	AuthToken    string  `json:"auth_token"`
@@ -106,9 +106,14 @@ func buildHeaders(tokens *Tokens) []Header {
 }
 
 type Client interface {
-	Refresh() error
+	Site() *url.URL
+	Tokens() *Tokens
+	User() *User
+
+	// Authenticate
 	Login(email string, password string) (*Tokens, error)
 	Logout() error
+	Refresh() error
 
 	// Internal
 	do(method string, path string, body []byte, queryParams []QueryParam) (*http.Response, error)
@@ -122,21 +127,32 @@ type ClientImpl struct {
 	tokenMutex *sync.Mutex
 }
 
-func (c *ClientImpl) Refresh() error {
-	headerAndRefresh := c.getHeadersAndRefreshToken()
-	if headerAndRefresh == nil {
-		return errors.New("Unauthenticated")
-	}
+func (c *ClientImpl) Site() *url.URL {
+	return c.base
+}
 
-	newTokenState, err := doRefreshToken(c.client, headerAndRefresh.headers, headerAndRefresh.refreshToken)
-	if err != nil {
-		return err
-	}
-
+func (c *ClientImpl) Tokens() *Tokens {
 	c.tokenMutex.Lock()
 	defer c.tokenMutex.Unlock()
-	c.tokenState = newTokenState
+	if c.tokenState != nil && c.tokenState.s != nil {
+		return &c.tokenState.s.tokens
+	}
+	return nil
+}
 
+func (c *ClientImpl) User() *User {
+	c.tokenMutex.Lock()
+	defer c.tokenMutex.Unlock()
+	if c.tokenState != nil && c.tokenState.s != nil {
+		claims := c.tokenState.s.claims
+		sub := claims.Subject
+		email := claims.Email
+
+		return &User{
+			Sub:   sub,
+			Email: email,
+		}
+	}
 	return nil
 }
 
@@ -201,6 +217,24 @@ func (c *ClientImpl) Logout() error {
 
 	_, err := c.updateTokens(nil)
 	return err
+}
+
+func (c *ClientImpl) Refresh() error {
+	headerAndRefresh := c.getHeadersAndRefreshToken()
+	if headerAndRefresh == nil {
+		return errors.New("Unauthenticated")
+	}
+
+	newTokenState, err := doRefreshToken(c.client, headerAndRefresh.headers, headerAndRefresh.refreshToken)
+	if err != nil {
+		return err
+	}
+
+	c.tokenMutex.Lock()
+	defer c.tokenMutex.Unlock()
+	c.tokenState = newTokenState
+
+	return nil
 }
 
 func (c *ClientImpl) do(method string, path string, body []byte, queryParams []QueryParam) (*http.Response, error) {
