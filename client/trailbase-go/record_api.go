@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"encoding/json"
-	"net/http"
 )
 
 type RecordId interface {
@@ -29,16 +28,12 @@ type RecordIdResponse struct {
 	Ids []string `json:"ids"`
 }
 
-type internalClient interface {
-	do(method string, path string, body []byte, queryParams []QueryParam) (*http.Response, error)
-}
-
-type RecordApi struct {
-	client internalClient
+type RecordApi[T any] struct {
+	client Client
 	name   string
 }
 
-func (r *RecordApi) Create(record any) (RecordId, error) {
+func (r *RecordApi[T]) Create(record T) (RecordId, error) {
 	reqBody, err := json.Marshal(record)
 	if err != nil {
 		return nil, err
@@ -65,17 +60,29 @@ func (r *RecordApi) Create(record any) (RecordId, error) {
 	return StringRecordId(recordIdResponse.Ids[0]), nil
 }
 
-func (r *RecordApi) Read(id RecordId, v any) error {
+func (r *RecordApi[T]) Read(id RecordId) (*T, error) {
 	resp, err := r.client.do("GET", fmt.Sprintf("%s/%s/%s", recordApi, r.name, id.ToString()), []byte{}, []QueryParam{})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return json.Unmarshal(respBody, v)
+	var value T
+	err = json.Unmarshal(respBody, &value)
+	if err != nil {
+		return nil, err
+	}
+	return &value, nil
+}
+
+func NewRecordApi[T any](c Client, name string) *RecordApi[T] {
+	return &RecordApi[T]{
+		client: c,
+		name:   name,
+	}
 }
 
 const recordApi string = "api/records/v1"

@@ -41,7 +41,7 @@ type SimpleStrict struct {
 func TestRecordApi(t *testing.T) {
 	client := newClient(t)
 
-	api := client.RecordApi("simple_strict_table")
+	api := NewRecordApi[SimpleStrict](client, "simple_strict_table")
 	id, err := api.Create(SimpleStrict{
 		TextNotNull: "test",
 	})
@@ -49,10 +49,12 @@ func TestRecordApi(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var simpleStrict SimpleStrict
-	err = api.Read(id, &simpleStrict)
+	simpleStrict, err := api.Read(id)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if simpleStrict == nil {
+		t.Fatal("null value")
 	}
 
 	if simpleStrict.TextNotNull != "test" {

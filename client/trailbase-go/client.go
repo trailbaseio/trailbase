@@ -109,7 +109,9 @@ type Client interface {
 	Refresh() error
 	Login(email string, password string) (*Tokens, error)
 	Logout() error
-	RecordApi(name string) *RecordApi
+
+	// Internal
+	do(method string, path string, body []byte, queryParams []QueryParam) (*http.Response, error)
 }
 
 type ClientImpl struct {
@@ -199,13 +201,6 @@ func (c *ClientImpl) Logout() error {
 
 	_, err := c.updateTokens(nil)
 	return err
-}
-
-func (c *ClientImpl) RecordApi(name string) *RecordApi {
-	return &RecordApi{
-		client: c,
-		name:   name,
-	}
 }
 
 func (c *ClientImpl) do(method string, path string, body []byte, queryParams []QueryParam) (*http.Response, error) {
