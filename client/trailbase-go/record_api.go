@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"encoding/json"
 )
@@ -104,8 +105,155 @@ func (r *RecordApi[T]) Delete(id RecordId) error {
 	return nil
 }
 
-func (r *RecordApi[T]) List() (*ListResponse[T], error) {
-	resp, err := r.client.do("GET", fmt.Sprintf("%s/%s", recordApi, r.name), []byte{}, []QueryParam{})
+type filter interface {
+	toParams(path string) []QueryParam
+}
+
+type CompareOp int
+
+const (
+	Undefined CompareOp = iota
+	Equal
+	NotEqual
+	LessThan
+	LessThanEqual
+	GreaterThan
+	GreaterThanEqual
+	Like
+	Regex
+)
+
+func (op CompareOp) toString() string {
+	switch op {
+	case Equal:
+		return "$eq"
+	case NotEqual:
+		return "$ne"
+	case LessThan:
+		return "$lt"
+	case LessThanEqual:
+		return "$lte"
+	case GreaterThan:
+		return "$gt"
+	case GreaterThanEqual:
+		return "$gte"
+	case Like:
+		return "$like"
+	case Regex:
+		return "re"
+	default:
+		panic(fmt.Sprint("Unknown operation:", op))
+	}
+}
+
+type Filter struct {
+	column string
+	op     CompareOp
+	value  string
+}
+
+func (f Filter) toParams(path string) []QueryParam {
+	if f.op != Undefined {
+		return []QueryParam{
+			QueryParam{
+				key:   fmt.Sprintf("%s[%s][%s]", path, f.column, f.op.toString()),
+				value: f.value,
+			},
+		}
+	}
+	return []QueryParam{
+		QueryParam{
+			key:   fmt.Sprintf("%s[%s]", path, f.column),
+			value: f.value,
+		},
+	}
+}
+
+type FilterAnd struct {
+	filters []filter
+}
+
+func (f FilterAnd) toParams(path string) []QueryParam {
+	params := []QueryParam{}
+	for i, nested := range f.filters {
+		params = append(params, nested.toParams(fmt.Sprintf("%s[$and][%d]", path, i))...)
+	}
+	return params
+}
+
+type FilterOr struct {
+	filters []filter
+}
+
+func (f FilterOr) toParams(path string) []QueryParam {
+	params := []QueryParam{}
+	for i, nested := range f.filters {
+		params = append(params, nested.toParams(fmt.Sprintf("%s[$or][%d]", path, i))...)
+	}
+	return params
+}
+
+type Pagination struct {
+	Cursor *string
+	Limit  *uint64
+	Offset *uint64
+}
+
+type ListArguments struct {
+	Order   []string
+	Filters []Filter
+	Expand  []string
+	Count   bool
+
+	Pagination
+}
+
+func (r *RecordApi[T]) List(args *ListArguments) (*ListResponse[T], error) {
+	queryParams := []QueryParam{}
+
+	if args != nil {
+		if args.Cursor != nil && *args.Cursor != "" {
+			queryParams = append(queryParams, QueryParam{
+				key:   "cursor",
+				value: *args.Cursor,
+			})
+		}
+		if args.Limit != nil {
+			queryParams = append(queryParams, QueryParam{
+				key:   "limit",
+				value: fmt.Sprint(*args.Limit),
+			})
+		}
+		if args.Offset != nil {
+			queryParams = append(queryParams, QueryParam{
+				key:   "offset",
+				value: fmt.Sprint(*args.Offset),
+			})
+		}
+		if len(args.Order) > 0 {
+			queryParams = append(queryParams, QueryParam{
+				key:   "order",
+				value: strings.Join(args.Order, ","),
+			})
+		}
+		if len(args.Expand) > 0 {
+			queryParams = append(queryParams, QueryParam{
+				key:   "expand",
+				value: strings.Join(args.Expand, ","),
+			})
+		}
+		if args.Count {
+			queryParams = append(queryParams, QueryParam{
+				key:   "count",
+				value: "true",
+			})
+		}
+		for _, filter := range args.Filters {
+			queryParams = append(queryParams, filter.toParams("filter")...)
+		}
+	}
+
+	resp, err := r.client.do("GET", fmt.Sprintf("%s/%s", recordApi, r.name), []byte{}, queryParams)
 	if err != nil {
 		return nil, err
 	}

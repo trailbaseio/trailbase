@@ -1,8 +1,22 @@
 package trailbase
 
 import (
+	"os/exec"
 	"testing"
 )
+
+func startTrailBase() error {
+	cmd := exec.Command("")
+
+	err := cmd.Start()
+	if err != nil {
+		return err
+	}
+
+	cmd.Process.Kill()
+
+	return nil
+}
 
 func newClient(t *testing.T) Client {
 	client, err := NewClient("http://localhost:4000")
@@ -72,7 +86,9 @@ func TestRecordApi(t *testing.T) {
 		t.Fatal("expected 'test_updated', got", simpleStrict0)
 	}
 
-	listResponse, err := api.List()
+	listResponse, err := api.List(&ListArguments{
+		Count: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
