@@ -132,8 +132,8 @@ func (c *ClientImpl) Refresh() error {
 	}
 
 	c.tokenMutex.Lock()
+	defer c.tokenMutex.Unlock()
 	c.tokenState = newTokenState
-	c.tokenMutex.Unlock()
 
 	return nil
 }
@@ -217,8 +217,9 @@ func (c *ClientImpl) do(method string, path string, body []byte, queryParams []Q
 		}
 		headers = newTokenState.headers
 		c.tokenMutex.Lock()
+		defer c.tokenMutex.Unlock()
+
 		c.tokenState = newTokenState
-		c.tokenMutex.Unlock()
 	}
 
 	return c.client.do(method, path, headers, body, queryParams)
@@ -231,8 +232,8 @@ func (c *ClientImpl) updateTokens(tokens *Tokens) (*Tokens, error) {
 	}
 
 	c.tokenMutex.Lock()
+	defer c.tokenMutex.Unlock()
 	c.tokenState = state
-	c.tokenMutex.Unlock()
 
 	return tokens, nil
 }
@@ -246,6 +247,8 @@ func (c *ClientImpl) getHeadersAndRefreshToken() *HeadersAndRefreshToken {
 	var r *HeadersAndRefreshToken
 
 	c.tokenMutex.Lock()
+	defer c.tokenMutex.Unlock()
+
 	s := c.tokenState
 	if s != nil && s.s != nil && s.s.tokens.RefreshToken != nil {
 		r = &HeadersAndRefreshToken{
@@ -253,7 +256,6 @@ func (c *ClientImpl) getHeadersAndRefreshToken() *HeadersAndRefreshToken {
 			refreshToken: *c.tokenState.s.tokens.RefreshToken,
 		}
 	}
-	c.tokenMutex.Unlock()
 
 	return r
 }
@@ -265,10 +267,10 @@ func (c *ClientImpl) getHeadersAndRefreshTokenIfExpired() ([]Header, *string) {
 	}
 
 	c.tokenMutex.Lock()
+	defer c.tokenMutex.Unlock()
 
 	s := c.tokenState
 	if s == nil {
-		c.tokenMutex.Unlock()
 		return []Header{}, nil
 	}
 
@@ -281,7 +283,6 @@ func (c *ClientImpl) getHeadersAndRefreshTokenIfExpired() ([]Header, *string) {
 			refreshToken = s.s.tokens.RefreshToken
 		}
 	}
-	c.tokenMutex.Unlock()
 
 	return headers, refreshToken
 }
