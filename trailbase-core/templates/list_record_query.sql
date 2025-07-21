@@ -34,7 +34,7 @@ WHERE
   AND ({{ filter_clause }})
 {%- if let Some(cursor_clause) = cursor_clause -%}
   AND ({{ cursor_clause }})
-{%- endif -%}
+{%- endif %}
 ORDER BY
   {{ order_clause }}
 LIMIT :__limit

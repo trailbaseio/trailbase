@@ -271,12 +271,20 @@ pub async fn list_records_handler(
   let total_count = if count == Some(true) {
     // Total count is in the final column.
     let first_row = &rows[0];
-    let value = &first_row[first_row.len() - 2];
+    let count_index = if is_table {
+      first_row.len() - 2
+    } else {
+      first_row.len() - 1
+    };
+    assert_eq!(rows.column_names()[count_index], "_total_count_");
+
+    let value = &first_row[count_index];
     let Value::Integer(count) = value else {
       return Err(RecordError::Internal(
         format!("expected count, got {value:?}").into(),
       ));
     };
+
     Some(*count as usize)
   } else {
     None
@@ -1058,17 +1066,30 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn test_record_api_list_message_view_api() {
+  async fn test_record_api_list_view_api() {
     let state = test_state(None).await.unwrap();
-    let conn = state.conn();
-
-    create_chat_message_app_tables(&state).await.unwrap();
-    let room0 = add_room(conn, "room0").await.unwrap();
-    let password = "Secret!1!!";
 
     state
       .conn()
-      .execute_batch("CREATE VIEW message_view AS SELECT * FROM message;")
+      .execute_batch(
+        r#"
+          CREATE TABLE data (
+            id       INTEGER PRIMARY KEY,
+            data     TEXT NOT NULL,
+            flag     INTEGER NOT NULL DEFAULT 0
+          ) STRICT;
+
+          INSERT INTO data (id, data, flag) VALUES (0, 'msg0', 1), (1, 'msg1', 1), (2, 'msg2', 0);
+
+          CREATE VIEW data_view AS SELECT * FROM data;
+
+          CREATE VIEW data_view_filtered AS SELECT
+              d.*,
+              CAST(CONCAT('prefix_', d.data) AS TEXT) AS prefixed
+            FROM data AS d
+            WHERE d.flag > 0;
+        "#,
+      )
       .await
       .unwrap();
 
@@ -1077,8 +1098,8 @@ mod tests {
     add_record_api_config(
       &state,
       RecordApiConfig {
-        name: Some("messages_view_api".to_string()),
-        table_name: Some("message_view".to_string()),
+        name: Some("data_view_api".to_string()),
+        table_name: Some("data_view".to_string()),
         acl_world: [PermissionFlag::Read as i32].into(),
         ..Default::default()
       },
@@ -1086,31 +1107,52 @@ mod tests {
     .await
     .unwrap();
 
-    let user_x_email = "user_x@test.com";
-    let user_x = create_user_for_test(&state, user_x_email, password)
-      .await
-      .unwrap()
-      .into_bytes();
-
-    let user_x_token = login_with_password(&state, user_x_email, password)
-      .await
-      .unwrap();
-
-    add_user_to_room(conn, user_x, room0).await.unwrap();
-    send_message(conn, user_x, room0, "user_x to room0")
-      .await
-      .unwrap();
-
-    let json_response = list_records_handler(
+    let resp = list_records_handler(
       State(state.clone()),
-      Path("messages_view_api".to_string()),
-      RawQuery(None),
-      User::from_auth_token(&state, &user_x_token.auth_token),
+      Path("data_view_api".to_string()),
+      RawQuery(Some("count=TRUE".to_string())),
+      None,
     )
     .await
     .unwrap();
 
-    let response: ListResponse = json_response.0;
-    assert_eq!(1, response.records.len());
+    assert_eq!(3, resp.records.len());
+    assert_eq!(3, resp.total_count.unwrap());
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some("data_view_filtered_api".to_string()),
+        table_name: Some("data_view_filtered".to_string()),
+        acl_world: [PermissionFlag::Read as i32].into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    let resp_filtered0 = list_records_handler(
+      State(state.clone()),
+      Path("data_view_filtered_api".to_string()),
+      RawQuery(Some("count=TRUE&offset=0".to_string())),
+      None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(2, resp_filtered0.records.len());
+    assert_eq!(2, resp_filtered0.total_count.unwrap());
+
+    let resp_filtered1 = list_records_handler(
+      State(state.clone()),
+      Path("data_view_filtered_api".to_string()),
+      RawQuery(Some("count=TRUE&filter[prefixed]=prefix_msg0".to_string())),
+      None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(1, resp_filtered1.records.len());
+    assert_eq!(1, resp_filtered1.total_count.unwrap());
   }
 }
