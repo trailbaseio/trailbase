@@ -4,8 +4,8 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use sqlite3_parser::ast::{
   ColumnDefinition, CreateTableBody, DeferSubclause, Expr, ForeignKeyClause, FromClause,
-  IndexedColumn, Literal, Name, QualifiedName as AstQualifiedName, SelectTable, Stmt, TabFlags,
-  TableConstraint, fmt::ToTokens,
+  IndexedColumn, Literal, Name, QualifiedName as AstQualifiedName, ResultColumn, SelectTable, Stmt,
+  TabFlags, TableConstraint, fmt::ToTokens,
 };
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -1034,8 +1034,21 @@ fn try_extract_column_mapping(
   let Some(select) = select else {
     return Ok(None);
   };
-  let SelectTable::Table(fqn, alias, _indexed) = *select else {
-    return Ok(None);
+  let (fqn, alias) = match *select {
+    SelectTable::Table(fqn, alias, _indexed) => (fqn, alias),
+    SelectTable::Select(select, _as) => {
+      if Some(&ResultColumn::Star) == columns.get(0) {
+        // Recurse
+        return try_extract_column_mapping(*select, tables);
+      }
+      // Support more complex
+      debug!("The following sub-query is not (yet) supported: {select:?}");
+      return Ok(None);
+    }
+    _ => {
+      debug!("The following select is not (yet) supported: {select:?}");
+      return Ok(None);
+    }
   };
 
   // Use IndexMap to preserve insertion order.
@@ -1081,7 +1094,6 @@ fn try_extract_column_mapping(
   let mut mapping: Vec<ColumnMapping> = vec![];
   for col in columns {
     use sqlite3_parser::ast::Expr;
-    use sqlite3_parser::ast::ResultColumn;
 
     match col {
       ResultColumn::Star => {

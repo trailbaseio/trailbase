@@ -518,50 +518,36 @@ mod tests {
 
   #[test]
   fn test_parse_create_view() {
-    let table_name = QualifiedName {
-      name: "table_name".to_string(),
-      database_schema: Some("main".to_string()),
-    };
-    let table_sql = format!(
-      r#"
-      CREATE TABLE {table_name} (
+    let table: Table = {
+      let table_sql = r#"
+      CREATE TABLE table0 (
           id                           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT (uuid_v7()),
           col0                         TEXT NOT NULL DEFAULT '',
           col1                         BLOB NOT NULL,
           hidden                       INTEGER DEFAULT 42
-      ) STRICT;"#,
-      table_name = table_name.escaped_string(),
-    );
+      ) STRICT;
+    "#;
 
-    let create_table_statement = sqlite3_parse_into_statement(&table_sql).unwrap().unwrap();
-
-    let table: Table = create_table_statement.try_into().unwrap();
-
-    {
-      let metadata = TableMetadata::new(table.clone(), &[table.clone()], "_user");
-
-      assert_eq!(table_name, *metadata.name());
-      assert_eq!("col1", metadata.columns().unwrap()[2].name);
-      assert_eq!(1, *metadata.name_to_index.get("col0").unwrap());
-    }
-
-    let view_name = QualifiedName {
-      name: "view_name".to_string(),
-      database_schema: Some("main".to_string()),
+      let create_table_statement = sqlite3_parse_into_statement(table_sql).unwrap().unwrap();
+      create_table_statement.try_into().unwrap()
     };
 
+    let tables = [table.clone()];
+    let metadata = TableMetadata::new(table, &tables, "_user");
+
+    assert_eq!("table0", metadata.name().name);
+    assert_eq!("col1", metadata.columns().unwrap()[2].name);
+    assert_eq!(1, *metadata.name_to_index.get("col0").unwrap());
+
     {
-      let query = format!("SELECT col0, col1 FROM {}", table_name.escaped_string());
-      let view_sql = format!(
-        "CREATE VIEW {view_name} AS {query}",
-        view_name = view_name.escaped_string()
-      );
-      let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
+      let table_view: View = {
+        let view_sql = "CREATE VIEW view0 AS SELECT col0, col1 FROM table0";
+        let create_view_statement = sqlite3_parse_into_statement(view_sql).unwrap().unwrap();
 
-      let table_view = View::from(create_view_statement, &[table.clone()]).unwrap();
-
-      assert_eq!(table_view.name, view_name);
-      assert_eq!(table_view.query, query);
+        View::from(create_view_statement, &tables).unwrap()
+      };
+      assert_eq!(table_view.name.name, "view0");
+      assert_eq!(table_view.query, "SELECT col0, col1 FROM table0");
       assert_eq!(table_view.temporary, false);
 
       let view_columns = table_view.columns.as_ref().unwrap();
@@ -573,32 +559,134 @@ mod tests {
       assert_eq!(view_columns[1].name, "col1");
       assert_eq!(view_columns[1].data_type, ColumnDataType::Blob);
 
-      let view_metadata = ViewMetadata::new(table_view, &[table.clone()]);
+      let view_metadata = ViewMetadata::new(table_view, &tables);
 
       assert!(view_metadata.record_pk_column().is_none());
       assert_eq!(view_metadata.columns().as_ref().unwrap().len(), 2);
     }
 
     {
-      let query = format!("SELECT id, col0, col1 FROM {}", table_name.escaped_string());
-      let view_sql = format!(
-        "CREATE VIEW {view_name} AS {query}",
-        view_name = view_name.escaped_string()
-      );
-      let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
+      let query = "SELECT id, col0, col1 FROM table0";
+      let table_view: View = {
+        let view_sql = format!("CREATE VIEW view0 AS {query}");
+        let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
 
-      let table_view = View::from(create_view_statement, &[table.clone()]).unwrap();
+        View::from(create_view_statement, &tables).unwrap()
+      };
 
-      assert_eq!(table_view.name, view_name);
+      assert_eq!(table_view.name.name, "view0");
       assert_eq!(table_view.query, query);
       assert_eq!(table_view.temporary, false);
 
-      let view_metadata = ViewMetadata::new(table_view, &[table.clone()]);
+      let view_metadata = ViewMetadata::new(table_view, &tables);
 
       let uuidv7_col = view_metadata.record_pk_column().unwrap();
       let columns = view_metadata.columns().unwrap();
       assert_eq!(columns.len(), 3);
       assert_eq!(columns[uuidv7_col.0].name, "id");
+    }
+  }
+
+  #[test]
+  fn test_parse_create_view_with_subquery() {
+    let table_a: Table = {
+      let table_sql =
+        "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT";
+      let stmt = sqlite3_parse_into_statement(table_sql).unwrap().unwrap();
+      stmt.try_into().unwrap()
+    };
+
+    let tables = [table_a];
+
+    {
+      let view: View = {
+        let view_sql = "CREATE VIEW view0 AS SELECT * FROM (SELECT * FROM a);";
+        let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
+        View::from(create_view_statement, &tables).unwrap()
+      };
+      let view_columns = view.columns.as_ref().unwrap();
+
+      assert_eq!(view_columns.len(), 2);
+      assert_eq!(view_columns[0].name, "id");
+      assert_eq!(view_columns[0].data_type, ColumnDataType::Integer);
+
+      assert_eq!(view_columns[1].name, "data");
+      assert_eq!(view_columns[1].data_type, ColumnDataType::Text);
+
+      let metadata = ViewMetadata::new(view, &tables);
+      let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
+      assert_eq!(pk_index, 0);
+      assert_eq!(pk_col.name, "id");
+    }
+
+    {
+      let _view_result: Result<View, _> = {
+        let view_sql = "CREATE VIEW view0 AS SELECT id FROM (SELECT * FROM a);";
+        let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
+
+        View::from(create_view_statement, &tables)
+      };
+      // TODO: Support column filter on sub-queries.
+      // let view = _view_result.unwrap();
+
+      // let view_columns = view.columns.as_ref().unwrap();
+      //
+      // assert_eq!(view_columns.len(), 1);
+      // assert_eq!(view_columns[0].name, "id");
+      // assert_eq!(view_columns[0].data_type, ColumnDataType::Integer);
+      //
+      // let metadata = ViewMetadata::new(view, &tables);
+      // let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
+      // assert_eq!(pk_index, 0);
+      // assert_eq!(pk_col.name, "id");
+    }
+  }
+
+  #[test]
+  fn test_parse_create_view_with_joins() {
+    let table_a: Table = {
+      let table_sql =
+        "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT";
+      let stmt = sqlite3_parse_into_statement(table_sql).unwrap().unwrap();
+      stmt.try_into().unwrap()
+    };
+    let table_b: Table = {
+      let table_sql = r#"
+          CREATE TABLE b (
+            id INTEGER PRIMARY KEY,
+            fk INTEGER NOT NULL REFERENCES a(id)
+          ) STRICT"#;
+      let stmt = sqlite3_parse_into_statement(table_sql).unwrap().unwrap();
+      stmt.try_into().unwrap()
+    };
+
+    let tables = [table_a, table_b];
+
+    {
+      // LEFT JOIN
+      let view: View = {
+        let view_sql = r#"
+            CREATE VIEW view0 AS SELECT a.data, b.fk, a.id FROM a AS a LEFT JOIN b AS b ON a.id = b.fk;
+        "#;
+        let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
+        View::from(create_view_statement, &tables).unwrap()
+      };
+      let view_columns = view.columns.as_ref().unwrap();
+
+      assert_eq!(view_columns.len(), 3);
+      assert_eq!(view_columns[2].name, "id");
+      assert_eq!(view_columns[2].data_type, ColumnDataType::Integer);
+
+      assert_eq!(view_columns[0].name, "data");
+      assert_eq!(view_columns[0].data_type, ColumnDataType::Text);
+
+      assert_eq!(view_columns[1].name, "fk");
+      assert_eq!(view_columns[1].data_type, ColumnDataType::Integer);
+
+      let metadata = ViewMetadata::new(view, &tables);
+      let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
+      assert_eq!(pk_index, 2);
+      assert_eq!(pk_col.name, "id");
     }
   }
 
