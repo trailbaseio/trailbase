@@ -49,15 +49,44 @@ func TestRecordApi(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	simpleStrict, err := api.Read(id)
+	simpleStrict0, err := api.Read(id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if simpleStrict == nil {
-		t.Fatal("null value")
+	if simpleStrict0 == nil || simpleStrict0.TextNotNull != "test" {
+		t.Fatal("expected 'test', got", simpleStrict0)
 	}
 
-	if simpleStrict.TextNotNull != "test" {
-		t.Fatal("expected 'test', got", simpleStrict.TextNotNull)
+	err = api.Update(id, SimpleStrict{
+		TextNotNull: "test_updated",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	simpleStrict1, err := api.Read(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if simpleStrict1 == nil || simpleStrict1.TextNotNull != "test_updated" {
+		t.Fatal("expected 'test_updated', got", simpleStrict0)
+	}
+
+	listResponse, err := api.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listResponse.Records) < 1 {
+		t.Fatal("expected a record, got: ", listResponse.Records)
+	}
+
+	err = api.Delete(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = api.Read(id)
+	if err == nil {
+		t.Fatal("expected error reading delete record")
 	}
 }
