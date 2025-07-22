@@ -514,7 +514,7 @@ mod tests {
   use std::collections::HashSet;
 
   use super::*;
-  use crate::sqlite::{SchemaError, Table, sqlite3_parse_into_statement};
+  use crate::sqlite::{Table, sqlite3_parse_into_statement};
 
   fn parse_create_table(create_table_sql: &str) -> Table {
     let create_table_statement = sqlite3_parse_into_statement(create_table_sql)
@@ -523,11 +523,11 @@ mod tests {
     return create_table_statement.try_into().unwrap();
   }
 
-  fn parse_create_view(create_view_sql: &str, tables: &[Table]) -> Result<View, SchemaError> {
+  fn parse_create_view(create_view_sql: &str, tables: &[Table]) -> View {
     let create_view_statement = sqlite3_parse_into_statement(create_view_sql)
       .unwrap()
       .unwrap();
-    return View::from(create_view_statement, tables);
+    return View::from(create_view_statement, tables).unwrap();
   }
 
   #[test]
@@ -554,8 +554,7 @@ mod tests {
       let table_view = parse_create_view(
         "CREATE VIEW view0 AS SELECT col0, col1 FROM table0",
         &tables,
-      )
-      .unwrap();
+      );
       assert_eq!(table_view.name.name, "view0");
       assert_eq!(table_view.query, "SELECT col0, col1 FROM table0");
       assert_eq!(table_view.temporary, false);
@@ -577,8 +576,7 @@ mod tests {
 
     {
       let query = "SELECT id, col0, col1 FROM table0";
-      let table_view =
-        parse_create_view(&format!("CREATE VIEW view0 AS {query}"), &tables).unwrap();
+      let table_view = parse_create_view(&format!("CREATE VIEW view0 AS {query}"), &tables);
 
       assert_eq!(table_view.name.name, "view0");
       assert_eq!(table_view.query, query);
@@ -605,8 +603,7 @@ mod tests {
       let view = parse_create_view(
         "CREATE VIEW view0 AS SELECT * FROM (SELECT * FROM a);",
         &tables,
-      )
-      .unwrap();
+      );
       let view_columns = view.columns.as_ref().unwrap();
 
       assert_eq!(view_columns.len(), 2);
@@ -626,8 +623,7 @@ mod tests {
       let view = parse_create_view(
         "CREATE VIEW view0 AS SELECT id FROM (SELECT * FROM a);",
         &tables,
-      )
-      .unwrap();
+      );
       let view_columns = view.columns.as_ref().unwrap();
       assert_eq!(view_columns.len(), 1);
       assert_eq!(view_columns[0].name, "id");
@@ -643,8 +639,7 @@ mod tests {
       let view = parse_create_view(
         "CREATE VIEW view0 AS SELECT x.id FROM (SELECT * FROM a) AS x;",
         &tables,
-      )
-      .unwrap();
+      );
       let view_columns = view.columns.as_ref().unwrap();
       assert_eq!(view_columns.len(), 1);
       assert_eq!(view_columns[0].name, "id");
@@ -654,6 +649,15 @@ mod tests {
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
       assert_eq!(pk_index, 0);
       assert_eq!(pk_col.name, "id");
+    }
+
+    {
+      // JOIN on a SELECT is not suitable for APIs. They're cross-producty nature spoils PKs.
+      let view = parse_create_view(
+        "CREATE VIEW view0 AS SELECT x.id, y.id FROM (SELECT * FROM a) AS x, (SELECT * FROM a) AS y;",
+        &tables,
+      );
+      assert_eq!(view.columns, None);
     }
   }
 
@@ -677,7 +681,7 @@ mod tests {
       let view = parse_create_view(
         "CREATE VIEW view0 AS SELECT a.data, b.fk, a.id FROM a AS a LEFT JOIN b AS b ON a.id = b.fk;",
         &tables,
-      ).unwrap();
+      );
       let view_columns = view.columns.as_ref().unwrap();
 
       assert_eq!(view_columns.len(), 3);
@@ -732,8 +736,7 @@ mod tests {
         table_name = table_name.escaped_string()
       ),
       &tables,
-    )
-    .unwrap();
+    );
     let view_metadata = Arc::new(ViewMetadata::new(table_view, &[table.clone()]));
 
     let mut view_set = HashSet::<Arc<ViewMetadata>>::new();

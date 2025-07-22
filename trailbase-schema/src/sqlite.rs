@@ -1189,7 +1189,7 @@ fn extract_referenced_tables_by_alias(
 ) -> Result<Vec<(Option<String>, &Table)>, SchemaError> {
   let body = select.body;
   if body.compounds.is_some() {
-    return Err(precondition("Compound bodies not (yet) supported"));
+    return Err(precondition("Compound queries not supported"));
   }
 
   let sqlite3_parser::ast::OneSelect::Select {
@@ -1639,6 +1639,36 @@ mod tests {
         panic!("Not a select");
       };
       let _mapping = extract_column_mapping(*select, &tables).unwrap();
+    }
+
+    {
+      // JOIN on a SELECT.
+      let sql = "SELECT x.column, y.column FROM table_name AS x, (SELECT * FROM table_name) AS y";
+      let sqlite3_parser::ast::Stmt::Select(select) =
+        sqlite3_parse_into_statement(sql).unwrap().unwrap()
+      else {
+        panic!("Not a select");
+      };
+      let err = extract_column_mapping(*select, &tables)
+        .err()
+        .unwrap()
+        .to_string();
+      assert!(err.contains("JOIN with TABLE expected"), "{err}");
+    }
+
+    {
+      // Compound SELECT.
+      let sql = "SELECT column FROM table_name UNION SELECT column FROM table_name";
+      let sqlite3_parser::ast::Stmt::Select(select) =
+        sqlite3_parse_into_statement(sql).unwrap().unwrap()
+      else {
+        panic!("Not a select");
+      };
+      let err = extract_column_mapping(*select, &tables)
+        .err()
+        .unwrap()
+        .to_string();
+      assert!(err.contains("Compound queries not supported"), "{err}");
     }
   }
 
