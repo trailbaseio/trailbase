@@ -11,6 +11,7 @@ include: package:flutter_lints/flutter.yaml
 
 analyzer:
   exclude:
+    # Quicktype prefers double quotes.
     - lib/types/**
 
 linter:

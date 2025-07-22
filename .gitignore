@@ -2,6 +2,9 @@
 target/
 node_modules/
 
+# Dart workspace artifacts
+.dart_tool
+
 # macOS-specific files
 .DS_Store
 

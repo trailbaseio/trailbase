@@ -6,7 +6,7 @@ static:
 format:
 	pnpm -r format; \
 		cargo +nightly fmt; \
-		dart format client/trailbase-dart/ examples/blog/flutter/; \
+		dart format client/trailbase-dart docs/examples/record_api_dart examples/blog/flutter; \
 		# Don't mess with TrailBase writing config.textproto
 		txtpbfmt `find . -regex ".*.textproto" | grep -v config.textproto`; \
 		dotnet format client/trailbase-dotnet/src; \
@@ -18,7 +18,7 @@ format:
 check:
 	pnpm -r check; \
 		cargo clippy --workspace --no-deps; \
-		dart analyze client/trailbase-dart examples/blog/flutter; \
+		dart analyze; \
 		dotnet format client/trailbase-dotnet/src --verify-no-changes; \
 		dotnet format client/trailbase-dotnet/test --verify-no-changes; \
 		poetry -C client/trailbase-py run pyright

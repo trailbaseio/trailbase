@@ -63,6 +63,8 @@ class FileUpload {
 
   ///The file's original file name.
   String? filename;
+
+  ///The file's unique id from which the objectstore path is derived.
   String id;
 
   ///The file's inferred mime type. Not user provided.

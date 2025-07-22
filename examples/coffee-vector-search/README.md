@@ -25,4 +25,4 @@ $ docker build . -t coffee && docker run -p 4001:4000 coffee
 
 ## Reference
 
-* Coffee data [source](https://github.com/jldbc/coffee-quality-database/blob/master/data/arabica_data_cleaned.csv)
+- Coffee data [source](https://github.com/jldbc/coffee-quality-database/blob/master/data/arabica_data_cleaned.csv)

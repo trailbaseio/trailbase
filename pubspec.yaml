@@ -1,0 +1,8 @@
+name: _
+publish_to: none
+environment:
+  sdk: ^3.6.1
+workspace:
+  - client/trailbase-dart
+  - examples/blog/flutter
+  - docs/examples/record_api_dart

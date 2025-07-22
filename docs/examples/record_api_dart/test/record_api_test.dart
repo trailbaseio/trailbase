@@ -39,44 +39,44 @@ Future<Client> connect() async {
 
 void main() {
   test('Test code examples', () async {
-      final client = await connect();
+    final client = await connect();
 
-      final tableStream = await subscribeAll(client);
+    final tableStream = await subscribeAll(client);
 
-      final id = await create(client);
+    final id = await create(client);
 
-      final recordStream = await subscribe(client, id);
+    final recordStream = await subscribe(client, id);
 
-      {
-        final json = await read(client, id);
-        final record = SimpleStrict.fromJson(json);
-        expect(record.textNotNull, equals('test'));
-      }
+    {
+      final json = await read(client, id);
+      final record = SimpleStrict.fromJson(json);
+      expect(record.textNotNull, equals('test'));
+    }
 
-      {
-        await update(client, id);
-        final json = await read(client, id);
-        final record = SimpleStrict.fromJson(json);
-        expect(record.textNotNull, equals('updated'));
-      }
+    {
+      await update(client, id);
+      final json = await read(client, id);
+      final record = SimpleStrict.fromJson(json);
+      expect(record.textNotNull, equals('updated'));
+    }
 
-      await delete(client, id);
+    await delete(client, id);
 
-      expect(await recordStream.length, equals(2));
+    expect(await recordStream.length, equals(2));
 
-      final tableEventList =
-          await tableStream.timeout(Duration(seconds: 5), onTimeout: (sink) {
-        print('Stream timeout');
-        sink.close();
-      }).toList();
-      expect(tableEventList.length, equals(3));
+    final tableEventList =
+        await tableStream.timeout(Duration(seconds: 5), onTimeout: (sink) {
+      print('Stream timeout');
+      sink.close();
+    }).toList();
+    expect(tableEventList.length, equals(3));
   });
 
   test('Test code listing example', () async {
-      final client = await connect();
-      final results = await list(client);
+    final client = await connect();
+    final results = await list(client);
 
-      expect(results.records.length, 3);
-      expect(results.records[0]['name'], 'Casablanca');
+    expect(results.records.length, 3);
+    expect(results.records[0]['name'], 'Casablanca');
   });
 }

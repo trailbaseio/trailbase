@@ -25,20 +25,18 @@ repos:
     - id: cargofmt
       name: Cargo Format
       entry: cargo fmt -- --check
-      pass_filenames: false
-      # NOTE: language refers to the language in which the hook is implemented
-      # in, rather than the inputs. In this case we rely on cargo being
-      # installed on the system
+      # NOTE: `system` refers to the `entry` above, which is shell.
       language: system
-      # NOTE: types/files/exclude narrow the inputs the hook should run on.
+      # NOTE: types are based on `identify-cli <filename>`, e.g. ["file", "python", "text"].
       types: [rust]
       exclude: '^vendor/'
+      pass_filenames: false
 
     - id: cargoclippy
       name: Cargo Clippy
       # Be verbose to at least still see warnings scroll by.
       verbose: true
-      entry: sh -c 'pnpm i && cargo clippy --workspace --no-deps'
+      entry: sh -c 'pnpm i --frozen-lockfile --prefer-offline && cargo clippy --workspace --no-deps'
       language: system
       types: [rust]
       exclude: '^vendor/'
@@ -46,7 +44,7 @@ repos:
 
     - id: cargotest
       name: Cargo Test
-      entry: sh -c 'pnpm i && cargo test --workspace -- --show-output'
+      entry: sh -c 'pnpm i --frozen-lockfile --prefer-offline && cargo test --workspace -- --show-output'
       language: system
       types: [rust]
       exclude: '^(vendor|bindings)/'
@@ -57,57 +55,54 @@ repos:
       name: Prettier
       entry: pnpm -r format --check
       language: system
-      types: [file]
-      files: .*\.(js|mjs|cjs|ts|jsx|tsx|astro|md|mdx)$
+      types_or: [javascript, jsx, ts, tsx, astro, markdown, mdx]
+      # NOTE: We're relying on pnpm workspaces instead.
       pass_filenames: false
 
-    - id: typescript_check
-      name: Typescript Check
+    - id: pnpm_check
+      name: PNPM Check
       entry: pnpm -r check
       language: system
-      types: [file]
-      files: .*\.(js|mjs|cjs|ts|jsx|tsx|astro|mdx)$
+      types_or: [javascript, jsx, ts, tsx, astro]
+      # NOTE: We're relying on pnpm workspaces instead.
       pass_filenames: false
 
-    - id: javascript_test
-      name: JavaScript Test
+    - id: pnpm_test
+      name: PNPM Test
       entry: pnpm -r test
       language: system
-      types: [file]
-      files: .*\.(js|mjs|cjs|ts|jsx|tsx|astro)$
+      types_or: [javascript, jsx, ts, tsx, astro]
+      # NOTE: We're relying on pnpm workspaces instead.
       pass_filenames: false
 
     - id: build_website
       name: Build Website
-      entry: sh -c 'cd docs && pnpm build'
+      entry: sh -c 'pnpm i --frozen-lockfile --prefer-offline && pnpm -C docs build'
       language: system
-      types: [file]
-      files: .*\.(js|mjs|cjs|ts|jsx|tsx|astro)$
+      types_or: [javascript, jsx, ts, tsx, astro, markdown, mdx]
       pass_filenames: false
 
     ### Dart: client and example
-    - id: dart_format
-      name: Dart format
-      entry: dart format -o none --set-exit-if-changed client/trailbase-dart examples/blog/flutter
-      language: system
-      types: [file]
-      files: .*\.dart$
-      pass_filenames: false
-
     - id: dart_analyze
       name: Dart analyze
-      entry: sh -c 'dart pub -C client/trailbase-dart get && dart pub -C examples/blog/flutter get && dart analyze -- client/trailbase-dart examples/blog/flutter'
+      entry: sh -c 'dart pub get && dart analyze'
       language: system
-      types: [file]
-      files: .*\.dart$
+      types: [dart]
+      # Unlike formatting, analyzing & testing require a project rather than a list of files.
       pass_filenames: false
+
+    - id: dart_format
+      name: Dart format
+      entry: dart format -o none --show all --set-exit-if-changed
+      language: system
+      types: [dart]
 
     - id: dart_test
       name: Dart test
-      entry: sh -c 'cd client/trailbase-dart && dart pub get && dart test'
+      entry: sh -c 'dart pub get && cd client/trailbase-dart && dart test'
       language: system
-      types: [file]
-      files: .*\.dart$
+      types: [dart]
+      # Unlike formatting, analyzing & testing require a project rather than a list of files.
       pass_filenames: false
 
     ### Dotnet client
@@ -115,16 +110,14 @@ repos:
       name: Dotnet format
       entry: sh -c 'dotnet format client/trailbase-dotnet/src --verify-no-changes && dotnet format client/trailbase-dotnet/test --verify-no-changes'
       language: system
-      types: [file]
-      files: .*\.(cs|csproj)$
+      types: [c#, csproj]
       pass_filenames: false
 
     - id: dotnet_test
       name: Dotnet test
       entry: dotnet test client/trailbase-dotnet/test
       language: system
-      types: [file]
-      files: .*\.(cs|csproj)$
+      types: [c#, csproj]
       pass_filenames: false
 
     ### Python client
@@ -132,24 +125,21 @@ repos:
       name: Python format
       entry: poetry -C client/trailbase-py run black --config pyproject.toml --check .
       language: system
-      types: [file]
-      files: .*\.(py)$
+      types: [python]
       pass_filenames: false
 
     - id: python_check
       name: Python check
       entry: poetry -C client/trailbase-py run pyright --outputjson
       language: system
-      types: [file]
-      files: .*\.(py)$
+      types: [python]
       pass_filenames: false
 
     - id: python_test
       name: Python test
       entry: poetry -C client/trailbase-py run pytest
       language: system
-      types: [file]
-      files: .*\.(py)$
+      types: [python]
       pass_filenames: false
 
     ### Swift client
@@ -160,16 +150,14 @@ repos:
       # if files were altered.
       entry: swift format -r --in-place client/trailbase-swift/**/*.swift
       language: system
-      types: [file]
-      files: .*\.(swift)$
+      types: [swift]
       pass_filenames: false
 
     - id: swift_test
       name: Swift test
       entry: swift test --package-path client/trailbase-swift
       language: system
-      types: [file]
-      files: .*\.(swift)$
+      types: [swift]
       pass_filenames: false
 
     ### Go client
@@ -178,7 +166,7 @@ repos:
       # gofmt always returns zero exit code :sigh:
       entry: sh -c 'DIFF=$(gofmt -d -e client/go/trailbase/) && echo "${DIFF}" && test -z "${DIFF}"'
       language: system
-      types: [file]
+      types: [go]
       files: .*\.(go)$
       pass_filenames: false
 

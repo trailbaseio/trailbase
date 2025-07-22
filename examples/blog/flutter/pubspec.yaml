@@ -4,7 +4,8 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 0.0.1+1
 
 environment:
-  sdk: ^3.5.3
+  sdk: ^3.6.1
+resolution: workspace
 
 dependencies:
   cupertino_icons: ^1.0.8
