@@ -7001,7 +7001,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "fallible-iterator",
- "indexmap 2.10.0",
  "indoc",
  "infer",
  "itertools 0.14.0",

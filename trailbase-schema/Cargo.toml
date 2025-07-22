@@ -10,7 +10,6 @@ readme = "../README.md"
 
 [dependencies]
 fallible-iterator = "0.3.0"
-indexmap = "2.6.0"
 infer = "0.19.0"
 itertools = "0.14.0"
 jsonschema = { version = "0.30.0", default-features = false }

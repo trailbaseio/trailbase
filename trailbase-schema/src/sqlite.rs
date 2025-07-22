@@ -1,5 +1,4 @@
 use fallible_iterator::FallibleIterator;
-use indexmap::IndexMap;
 use itertools::Itertools;
 use log::*;
 use serde::{Deserialize, Serialize};
@@ -981,16 +980,13 @@ impl View {
   }
 }
 
-fn to_alias(qn: &AstQualifiedName, alias: Option<sqlite3_parser::ast::As>) -> String {
-  return match alias {
+fn to_alias(alias: Option<sqlite3_parser::ast::As>) -> Option<String> {
+  return alias.map(|a| match a {
     // "FROM table_name AS alias"
-    Some(sqlite3_parser::ast::As::As(name)) => unquote_name(name),
+    sqlite3_parser::ast::As::As(name) => unquote_name(name),
     // "FROM table_name alias"
-    Some(sqlite3_parser::ast::As::Elided(name)) => unquote_name(name),
-    // Fall back to plain table name.
-    // TODO: Test that this works correctly when fully qualified.
-    _ => qn.to_string(),
-  };
+    sqlite3_parser::ast::As::Elided(name) => unquote_name(name),
+  });
 }
 
 #[derive(Clone, Debug)]
@@ -1012,125 +1008,46 @@ fn extract_column_mapping(
   select: sqlite3_parser::ast::Select,
   tables: &[Table],
 ) -> Result<Vec<ColumnMapping>, SchemaError> {
-  fn precondition(m: &str) -> SchemaError {
-    return SchemaError::Precondition(m.into());
-  }
+  let result_columns = extract_result_columns(&select)?;
+  let referenced_table_by_alias = extract_referenced_tables_by_alias(select, tables)?;
 
-  let body = select.body;
-  if body.compounds.is_some() {
-    return Err(precondition("Compound bodies not (yet) supported"));
-  }
-
-  let sqlite3_parser::ast::OneSelect::Select {
-    columns,
-    distinctness,
-    from,
-    group_by,
-    having: _,
-    where_clause: _,
-    window_clause,
-  } = body.select
-  else {
-    return Err(precondition(&format!(
-      "VALUES not supported: {:?}",
-      body.select
-    )));
-  };
-
-  if group_by.is_some() {
-    return Err(precondition("GROUP BY clause not (yet) supported"));
-  }
-
-  if distinctness.is_some() {
-    return Err(precondition("DISTINCT clause not (yet) supported"));
-  }
-
-  if window_clause.is_some() {
-    return Err(precondition("WINDOW clause not (yet) supported"));
-  }
-
-  // First build list of referenced tables and their aliases.
-  let Some(FromClause {
-    select: nested_select,
-    joins,
-    ..
-  }) = from
-  else {
-    return Err(precondition("missing FROM clause"));
-  };
-
-  let find_table = |qualified_name: &QualifiedName| -> Result<&Table, SchemaError> {
-    let Some(table) = tables.iter().find(|t| t.name == *qualified_name) else {
-      return Err(precondition(&format!("Missing table: {qualified_name:?}")));
-    };
-
-    // Make sure all referenced tables are strict.
-    if !table.strict {
-      return Err(precondition(&format!(
-        "Referenced table: {:?} must be STRICT",
-        table.name
-      )));
-    }
-
-    return Ok(table);
-  };
-
-  // Map from "alias" to table. Use IndexMap to preserve insertion order.
-  let referenced_table_by_alias: IndexMap<String, &Table> = match nested_select.map(|s| *s) {
-    Some(SelectTable::Table(fqn, alias, _indexed)) => {
-      let mut referenced_tables =
-        IndexMap::<String, &Table>::from([(to_alias(&fqn, alias), find_table(&fqn.into())?)]);
-
-      for join in joins.unwrap_or_default() {
-        let SelectTable::Table(fqn, alias, _indexed) = join.table else {
-          return Err(precondition("JOIN with TABLE expected"));
-        };
-        referenced_tables.insert(to_alias(&fqn, alias), find_table(&fqn.into())?);
-      }
-
-      referenced_tables
-    }
-    Some(SelectTable::Select(select, _as)) => {
-      // Nested sub-query case.
-      if Some(&ResultColumn::Star) == columns.first() {
-        // Recurse
-        return extract_column_mapping(*select, tables);
-      }
-
-      // Support more complex
-      return Err(precondition(&format!(
-        "The following sub-query is not (yet) supported: {select:?}"
-      )));
-    }
-    Some(x) => {
-      return Err(precondition(&format!(
-        "The following sub-query is not (yet) supported: {x:?}"
-      )));
-    }
-    None => {
-      return Err(precondition("missing SELECT"));
-    }
-  };
-
-  let find_column_by_name = |col_name: &str| -> Option<(&Table, &Column)> {
+  // SQLite checks comprehensively and will return an `ambiguous column name: <col>` error at
+  // query time (as opposed to VIEW-creation-time).
+  let find_column_by_unqualified_name = |col_name: &str| -> Result<(&Table, &Column), SchemaError> {
     // Search tables in index order.
+    let mut found: Option<(&Table, &Column)> = None;
     for (_alias, table) in &referenced_table_by_alias {
       for col in &table.columns {
         if col.name == col_name {
-          return Some((table, col));
+          if found.is_some() {
+            return Err(precondition(&format!("Ambibuous column: {col_name}")));
+          }
+          found = Some((table, col));
         }
       }
     }
-    return None;
+
+    return found.ok_or(precondition(&format!("Column '{col_name}' not found")));
+  };
+
+  let find_table_by_alias = |a: &str| -> Result<&Table, SchemaError> {
+    for (alias, table) in &referenced_table_by_alias {
+      if let Some(alias) = alias
+        && alias == a
+      {
+        return Ok(table);
+      }
+    }
+    return Err(precondition(&format!("No table found for '{a}'")));
   };
 
   let mut mapping: Vec<ColumnMapping> = vec![];
-  for col in columns {
+  for col in result_columns {
     use sqlite3_parser::ast::Expr;
 
     match col {
       ResultColumn::Star => {
-        for table in referenced_table_by_alias.values() {
+        for (_alias, table) in &referenced_table_by_alias {
           for c in &table.columns {
             mapping.push(ColumnMapping {
               column: c.clone(),
@@ -1144,9 +1061,7 @@ fn extract_column_mapping(
       }
       ResultColumn::TableStar(name) => {
         let name = unquote_name(name);
-        let Some(table) = referenced_table_by_alias.get(&name) else {
-          return Err(precondition(&format!("Missing alias: {name}")));
-        };
+        let table = find_table_by_alias(&name)?;
 
         for c in &table.columns {
           mapping.push(ColumnMapping {
@@ -1161,9 +1076,7 @@ fn extract_column_mapping(
       ResultColumn::Expr(expr, alias) => match expr {
         Expr::Id(id) => {
           let col_name = unquote_id(id.clone());
-          let Some((table, column)) = find_column_by_name(&col_name) else {
-            return Err(precondition(&format!("Missing column: {id:?}")));
-          };
+          let (table, column) = find_column_by_unqualified_name(&col_name)?;
 
           let name = alias
             .and_then(|alias| {
@@ -1187,15 +1100,9 @@ fn extract_column_mapping(
           });
         }
         Expr::Qualified(qualifier, name) => {
-          let qualifier = unquote_name(qualifier);
-          let col_name = unquote_name(name.clone());
+          let table = find_table_by_alias(&unquote_name(qualifier))?;
 
-          let Some(table) = referenced_table_by_alias.get(&qualifier) else {
-            return Err(precondition(&format!(
-              "Missing table ({qualifier}, {name})"
-            )));
-          };
-
+          let col_name = unquote_name(name);
           let Some(column) = table.columns.iter().find(|c| c.name == col_name) else {
             return Err(precondition(&format!("Missing col: {col_name}")));
           };
@@ -1260,6 +1167,120 @@ fn extract_column_mapping(
   }
 
   return Ok(mapping);
+}
+
+#[inline]
+fn precondition(m: &str) -> SchemaError {
+  return SchemaError::Precondition(m.into());
+}
+
+fn extract_result_columns(
+  select: &sqlite3_parser::ast::Select,
+) -> Result<Vec<ResultColumn>, SchemaError> {
+  let sqlite3_parser::ast::OneSelect::Select { columns, .. } = &select.body.select else {
+    return Err(precondition("VALUES not supported"));
+  };
+  return Ok(columns.clone());
+}
+
+fn extract_referenced_tables_by_alias(
+  select: sqlite3_parser::ast::Select,
+  tables: &[Table],
+) -> Result<Vec<(Option<String>, &Table)>, SchemaError> {
+  let body = select.body;
+  if body.compounds.is_some() {
+    return Err(precondition("Compound bodies not (yet) supported"));
+  }
+
+  let sqlite3_parser::ast::OneSelect::Select {
+    columns: _,
+    distinctness,
+    from,
+    group_by,
+    having: _,
+    where_clause: _,
+    window_clause,
+  } = body.select
+  else {
+    return Err(precondition(&format!(
+      "VALUES not supported: {:?}",
+      body.select
+    )));
+  };
+
+  if group_by.is_some() {
+    return Err(precondition("GROUP BY clause not (yet) supported"));
+  }
+
+  if distinctness.is_some() {
+    return Err(precondition("DISTINCT clause not (yet) supported"));
+  }
+
+  if window_clause.is_some() {
+    return Err(precondition("WINDOW clause not (yet) supported"));
+  }
+
+  // First build list of referenced tables and their aliases.
+  let Some(FromClause {
+    select: nested_select,
+    joins,
+    ..
+  }) = from
+  else {
+    return Err(precondition("missing FROM clause"));
+  };
+
+  let find_table = |qualified_name: &QualifiedName| -> Result<&Table, SchemaError> {
+    let Some(table) = tables.iter().find(|t| t.name == *qualified_name) else {
+      return Err(precondition(&format!("Missing table: {qualified_name:?}")));
+    };
+
+    // Make sure all referenced tables are strict.
+    if !table.strict {
+      return Err(precondition(&format!(
+        "Referenced table: {:?} must be STRICT",
+        table.name
+      )));
+    }
+
+    return Ok(table);
+  };
+
+  // Map from "alias" to table. Use IndexMap to preserve insertion order.
+  let referenced_table_by_alias: Vec<(Option<String>, &Table)> = match nested_select.map(|s| *s) {
+    Some(SelectTable::Table(fqn, alias, _indexed)) => {
+      let mut referenced_tables = vec![(to_alias(alias), find_table(&fqn.into())?)];
+
+      for join in joins.unwrap_or_default() {
+        // We don't currently allow joining sub-queries, etc.
+        let SelectTable::Table(fqn, alias, _indexed) = join.table else {
+          return Err(precondition("JOIN with TABLE expected"));
+        };
+        referenced_tables.push((to_alias(alias), find_table(&fqn.into())?));
+      }
+
+      referenced_tables
+    }
+    Some(SelectTable::Select(select, alias)) => {
+      let alias = to_alias(alias);
+      return Ok(
+        extract_referenced_tables_by_alias(*select, tables)?
+          .into_iter()
+          .map(|(_, table)| (alias.clone(), table))
+          .collect(),
+      );
+    }
+    Some(x) => {
+      return Err(precondition(&format!(
+        "The following sub-query is not (yet) supported: {x:?}"
+      )));
+    }
+    None => {
+      return Err(precondition("missing SELECT"));
+    }
+  };
+
+  return Ok(referenced_table_by_alias);
 }
 
 fn build_foreign_key(

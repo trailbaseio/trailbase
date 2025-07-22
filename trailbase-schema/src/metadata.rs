@@ -623,23 +623,37 @@ mod tests {
     }
 
     {
-      let _view_result = parse_create_view(
+      let view = parse_create_view(
         "CREATE VIEW view0 AS SELECT id FROM (SELECT * FROM a);",
         &tables,
-      );
-      // TODO: Support column filter on sub-queries.
-      // let view = _view_result.unwrap();
+      )
+      .unwrap();
+      let view_columns = view.columns.as_ref().unwrap();
+      assert_eq!(view_columns.len(), 1);
+      assert_eq!(view_columns[0].name, "id");
+      assert_eq!(view_columns[0].data_type, ColumnDataType::Integer);
 
-      // let view_columns = view.columns.as_ref().unwrap();
-      //
-      // assert_eq!(view_columns.len(), 1);
-      // assert_eq!(view_columns[0].name, "id");
-      // assert_eq!(view_columns[0].data_type, ColumnDataType::Integer);
-      //
-      // let metadata = ViewMetadata::new(view, &tables);
-      // let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
-      // assert_eq!(pk_index, 0);
-      // assert_eq!(pk_col.name, "id");
+      let metadata = ViewMetadata::new(view, &tables);
+      let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
+      assert_eq!(pk_index, 0);
+      assert_eq!(pk_col.name, "id");
+    }
+
+    {
+      let view = parse_create_view(
+        "CREATE VIEW view0 AS SELECT x.id FROM (SELECT * FROM a) AS x;",
+        &tables,
+      )
+      .unwrap();
+      let view_columns = view.columns.as_ref().unwrap();
+      assert_eq!(view_columns.len(), 1);
+      assert_eq!(view_columns[0].name, "id");
+      assert_eq!(view_columns[0].data_type, ColumnDataType::Integer);
+
+      let metadata = ViewMetadata::new(view, &tables);
+      let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
+      assert_eq!(pk_index, 0);
+      assert_eq!(pk_col.name, "id");
     }
   }
 
