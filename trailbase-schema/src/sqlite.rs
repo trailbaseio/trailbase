@@ -4,8 +4,8 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use sqlite3_parser::ast::{
   ColumnDefinition, CreateTableBody, DeferSubclause, Expr, ForeignKeyClause, FromClause,
-  IndexedColumn, Literal, Name, QualifiedName as AstQualifiedName, ResultColumn, SelectTable, Stmt,
-  TabFlags, TableConstraint, fmt::ToTokens,
+  IndexedColumn, JoinOperator, JoinType, Literal, Name, QualifiedName as AstQualifiedName,
+  ResultColumn, SelectTable, Stmt, TabFlags, TableConstraint, fmt::ToTokens,
 };
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
@@ -1252,6 +1252,19 @@ fn extract_referenced_tables_by_alias(
       let mut referenced_tables = vec![(to_alias(alias), find_table(&fqn.into())?)];
 
       for join in joins.unwrap_or_default() {
+        match join.operator {
+          JoinOperator::TypedJoin(Some(t)) if t.contains(JoinType::LEFT) => {}
+          _ => {
+            // Right now, we're picking the VIEW's primary key left to right. Other joins would
+            // require more sophistication. Many joins will spoil PKs, e.g. by computing a
+            // cross-product yielding a non-unique column.
+            return Err(precondition(&format!(
+              "Only LEFT JOINS supported yet, got: {:?}",
+              join.operator
+            )));
+          }
+        }
+
         // We don't currently allow joining sub-queries, etc.
         let SelectTable::Table(fqn, alias, _indexed) = join.table else {
           return Err(precondition("JOIN with TABLE expected"));
@@ -1643,7 +1656,7 @@ mod tests {
 
     {
       // JOIN on a SELECT.
-      let sql = "SELECT x.column, y.column FROM table_name AS x, (SELECT * FROM table_name) AS y";
+      let sql = "SELECT x.column, y.column FROM table_name AS x LEFT JOIN (SELECT * FROM table_name) AS y ON x.column = y.column";
       let sqlite3_parser::ast::Stmt::Select(select) =
         sqlite3_parse_into_statement(sql).unwrap().unwrap()
       else {
