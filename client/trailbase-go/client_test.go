@@ -1,25 +1,72 @@
 package trailbase
 
 import (
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
 	"os/exec"
+	"runtime"
+	"strings"
+	"time"
+
 	"testing"
 )
 
-func startTrailBase() error {
-	cmd := exec.Command("")
+const PORT uint16 = 4059
 
-	err := cmd.Start()
-	if err != nil {
-		return err
-	}
-
-	cmd.Process.Kill()
-
-	return nil
+func buildCommand(name string, arg ...string) *exec.Cmd {
+	c := exec.Command(name, arg...)
+	c.Dir = "../.."
+	c.Stdout = os.Stdout
+	// TODO: Print stdout only if command fails.
+	// c.Stderr = os.Stderr
+	return c
 }
 
-func newClient(t *testing.T) Client {
-	client, err := NewClient("http://localhost:4000")
+func startTrailBase() (*exec.Cmd, error) {
+	// First build separately to avoid health timeouts.
+	err := buildCommand("cargo", "build").Run()
+	if err != nil {
+		return nil, err
+	}
+
+	// Then start
+	args := []string{
+		"run",
+		"--",
+		"--data-dir=client/testfixture",
+		"run",
+		fmt.Sprintf("--address=127.0.0.1:%d", PORT),
+		"--js-runtime-threads=2",
+	}
+	cmd := buildCommand("cargo", args...)
+	cmd.Start()
+
+	for range 100 {
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/api/healthcheck", PORT))
+		if err != nil {
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		if strings.ToUpper(string(body)) == "OK" {
+			return cmd, nil
+		}
+
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	return nil, errors.New("TB server never got healthy")
+}
+
+func connect(t *testing.T) Client {
+	client, err := NewClient(fmt.Sprintf("http://localhost:%d", PORT))
 	if err != nil {
 		panic(err)
 	}
@@ -33,15 +80,38 @@ func newClient(t *testing.T) Client {
 	return client
 }
 
+func TestMain(m *testing.M) {
+	cmd, err := startTrailBase()
+	if err != nil {
+		log.Fatal("Failed to start TB: ", err)
+	}
+	if cmd == nil {
+		log.Fatal("Missing command")
+	}
+
+	code := m.Run()
+
+	err = cmd.Process.Kill()
+	if err != nil {
+		log.Fatal("Failed to kill TB: ", err)
+	}
+
+	os.Exit(code)
+}
+
 func TestAuth(t *testing.T) {
-	client := newClient(t)
+	client := connect(t)
+
+	user := client.User()
+	assertEqual(t, user.Email, "admin@localhost")
+	assert(t, client.Tokens().RefreshToken != nil, "missing token")
 
 	client.Refresh()
 
 	err := client.Logout()
-	if err != nil {
-		t.Fatal(err)
-	}
+	assertFine(t, err)
+	assert(t, client.Tokens() == nil, "should be nil")
+	assert(t, client.User() == nil, "should be nil")
 }
 
 type SimpleStrict struct {
@@ -53,56 +123,124 @@ type SimpleStrict struct {
 }
 
 func TestRecordApi(t *testing.T) {
-	client := newClient(t)
-
+	client := connect(t)
 	api := NewRecordApi[SimpleStrict](client, "simple_strict_table")
-	id, err := api.Create(SimpleStrict{
-		TextNotNull: "test",
+
+	now := time.Now().Unix()
+	messages := []string{
+		fmt.Sprint("go client test 0: =?&", now),
+		fmt.Sprint("go client test 1: =?&", now),
+	}
+
+	ids := []RecordId{}
+	for _, message := range messages {
+		id, err := api.Create(SimpleStrict{
+			TextNotNull: message,
+		})
+		assertFine(t, err)
+		ids = append(ids, id)
+	}
+
+	// Read
+	simpleStrict0, err := api.Read(ids[0])
+	assertFine(t, err)
+	assertEqual(t, messages[0], simpleStrict0.TextNotNull)
+
+	// List specific message
+	{
+		filters := []Filter{
+			FilterColumn{
+				Column: "text_not_null",
+				Value:  messages[0],
+			},
+		}
+		first, err := api.List(&ListArguments{
+			Filters: filters,
+		})
+		assertFine(t, err)
+		assert(t, len(first.Records) == 1, fmt.Sprint("expected 1, got ", first))
+
+		second, err := api.List(&ListArguments{
+			Filters: filters,
+			Pagination: Pagination{
+				Cursor: first.Cursor,
+			},
+		})
+		assertFine(t, err)
+		assert(t, len(second.Records) == 0, fmt.Sprint("expected 0, got ", second))
+	}
+
+	// List all messages
+	{
+		filters := []Filter{
+			FilterColumn{
+				Column: "text_not_null",
+				Op:     Like,
+				Value:  fmt.Sprint("% =?&", now),
+			},
+		}
+
+		ascending, err := api.List(&ListArguments{
+			Order:   []string{"+text_not_null"},
+			Filters: filters,
+			Count:   true,
+		})
+		assertFine(t, err)
+		assertEqual(t, 2, *ascending.TotalCount)
+		for i, msg := range ascending.Records {
+			assertEqual(t, messages[i], msg.TextNotNull)
+		}
+
+		descending, err := api.List(&ListArguments{
+			Order:   []string{"-text_not_null"},
+			Filters: filters,
+			Count:   true,
+		})
+		assertFine(t, err)
+		assertEqual(t, 2, *descending.TotalCount)
+		for i, msg := range descending.Records {
+			assertEqual(t, messages[len(messages)-i-1], msg.TextNotNull)
+		}
+	}
+
+	// Update
+	updatedMessage := fmt.Sprint("go client updated test 0: =?&", now)
+	err = api.Update(ids[0], SimpleStrict{
+		TextNotNull: updatedMessage,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	assertFine(t, err)
+	simpleStrict1, err := api.Read(ids[0])
+	assertFine(t, err)
+	assertEqual(t, updatedMessage, simpleStrict1.TextNotNull)
 
-	simpleStrict0, err := api.Read(id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if simpleStrict0 == nil || simpleStrict0.TextNotNull != "test" {
-		t.Fatal("expected 'test', got", simpleStrict0)
-	}
+	// Delete
+	err = api.Delete(ids[0])
+	assertFine(t, err)
+	r, err := api.Read(ids[0])
+	assert(t, err != nil, "expected error reading delete record")
+	assert(t, r == nil, "expected nil value reading delete record")
+}
 
-	err = api.Update(id, SimpleStrict{
-		TextNotNull: "test_updated",
-	})
-	if err != nil {
-		t.Fatal(err)
+func assertEqual[T comparable](t *testing.T, expected T, got T) {
+	if expected != got {
+		buf := make([]byte, 1<<16)
+		runtime.Stack(buf, true)
+		t.Fatal("Expected", expected, ", got:", got, "\n", string(buf))
 	}
+}
 
-	simpleStrict1, err := api.Read(id)
+func assertFine(t *testing.T, err error) {
 	if err != nil {
-		t.Fatal(err)
+		buf := make([]byte, 1<<16)
+		runtime.Stack(buf, true)
+		t.Fatal(err, "\n", string(buf))
 	}
-	if simpleStrict1 == nil || simpleStrict1.TextNotNull != "test_updated" {
-		t.Fatal("expected 'test_updated', got", simpleStrict0)
-	}
+}
 
-	listResponse, err := api.List(&ListArguments{
-		Count: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(listResponse.Records) < 1 {
-		t.Fatal("expected a record, got: ", listResponse.Records)
-	}
-
-	err = api.Delete(id)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = api.Read(id)
-	if err == nil {
-		t.Fatal("expected error reading delete record")
+func assert(t *testing.T, condition bool, msg string) {
+	if !condition {
+		buf := make([]byte, 1<<16)
+		runtime.Stack(buf, true)
+		t.Fatal(msg, "\n", string(buf))
 	}
 }

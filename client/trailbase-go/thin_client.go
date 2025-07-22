@@ -20,8 +20,12 @@ func (c *thinClient) do(method string, path string, headers []Header, body []byt
 	for _, header := range headers {
 		req.Header.Add(header.key, header.value)
 	}
-	for _, param := range queryParams {
-		req.URL.Query().Add(param.key, param.value)
+	if len(queryParams) > 0 {
+		query := req.URL.Query()
+		for _, param := range queryParams {
+			query.Add(param.key, param.value)
+		}
+		req.URL.RawQuery = query.Encode()
 	}
 	return c.client.Do(req)
 }

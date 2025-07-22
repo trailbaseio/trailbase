@@ -17,9 +17,9 @@ func testEq[T comparable](a, b []T) bool {
 }
 
 func TestFilter(t *testing.T) {
-	got0 := Filter{
-		column: "col",
-		value:  "value",
+	got0 := FilterColumn{
+		Column: "col",
+		Value:  "value",
 	}.toParams("filter")
 	expected0 := []QueryParam{
 		QueryParam{key: "filter[col]", value: "value"},
@@ -29,22 +29,22 @@ func TestFilter(t *testing.T) {
 	}
 
 	got1 := FilterAnd{
-		filters: []filter{
-			Filter{
-				column: "col0",
-				value:  "val0",
+		filters: []Filter{
+			FilterColumn{
+				Column: "col0",
+				Value:  "val0",
 			},
 			FilterOr{
-				filters: []filter{
-					Filter{
-						column: "col1",
-						op:     NotEqual,
-						value:  "val1",
+				filters: []Filter{
+					FilterColumn{
+						Column: "col1",
+						Op:     NotEqual,
+						Value:  "val1",
 					},
-					Filter{
-						column: "col2",
-						op:     LessThan,
-						value:  "val2",
+					FilterColumn{
+						Column: "col2",
+						Op:     LessThan,
+						Value:  "val2",
 					},
 				},
 			},

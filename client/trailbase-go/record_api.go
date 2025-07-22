@@ -105,7 +105,7 @@ func (r *RecordApi[T]) Delete(id RecordId) error {
 	return nil
 }
 
-type filter interface {
+type Filter interface {
 	toParams(path string) []QueryParam
 }
 
@@ -146,31 +146,31 @@ func (op CompareOp) toString() string {
 	}
 }
 
-type Filter struct {
-	column string
-	op     CompareOp
-	value  string
+type FilterColumn struct {
+	Column string
+	Op     CompareOp
+	Value  string
 }
 
-func (f Filter) toParams(path string) []QueryParam {
-	if f.op != Undefined {
+func (f FilterColumn) toParams(path string) []QueryParam {
+	if f.Op != Undefined {
 		return []QueryParam{
 			QueryParam{
-				key:   fmt.Sprintf("%s[%s][%s]", path, f.column, f.op.toString()),
-				value: f.value,
+				key:   fmt.Sprintf("%s[%s][%s]", path, f.Column, f.Op.toString()),
+				value: f.Value,
 			},
 		}
 	}
 	return []QueryParam{
 		QueryParam{
-			key:   fmt.Sprintf("%s[%s]", path, f.column),
-			value: f.value,
+			key:   fmt.Sprintf("%s[%s]", path, f.Column),
+			value: f.Value,
 		},
 	}
 }
 
 type FilterAnd struct {
-	filters []filter
+	filters []Filter
 }
 
 func (f FilterAnd) toParams(path string) []QueryParam {
@@ -182,7 +182,7 @@ func (f FilterAnd) toParams(path string) []QueryParam {
 }
 
 type FilterOr struct {
-	filters []filter
+	filters []Filter
 }
 
 func (f FilterOr) toParams(path string) []QueryParam {
