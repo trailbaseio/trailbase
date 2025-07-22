@@ -8,7 +8,6 @@ use sqlite3_parser::ast::{
   IndexedColumn, Literal, Name, QualifiedName as AstQualifiedName, ResultColumn, SelectTable, Stmt,
   TabFlags, TableConstraint, fmt::ToTokens,
 };
-use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
 use ts_rs::TS;
@@ -982,19 +981,16 @@ impl View {
   }
 }
 
-fn to_entry(
-  qn: AstQualifiedName,
-  alias: Option<sqlite3_parser::ast::As>,
-) -> (String, QualifiedName) {
-  let key = match alias {
+fn to_alias(qn: &AstQualifiedName, alias: Option<sqlite3_parser::ast::As>) -> String {
+  return match alias {
     // "FROM table_name AS alias"
     Some(sqlite3_parser::ast::As::As(name)) => unquote_name(name),
     // "FROM table_name alias"
     Some(sqlite3_parser::ast::As::Elided(name)) => unquote_name(name),
+    // Fall back to plain table name.
+    // TODO: Test that this works correctly when fully qualified.
     _ => qn.to_string(),
   };
-
-  return (key, qn.into());
 }
 
 #[derive(Clone, Debug)]
@@ -1036,7 +1032,7 @@ fn extract_column_mapping(
   } = body.select
   else {
     return Err(precondition(&format!(
-      "Expected Select, got: {:?}",
+      "VALUES not supported: {:?}",
       body.select
     )));
   };
@@ -1063,8 +1059,37 @@ fn extract_column_mapping(
     return Err(precondition("missing FROM clause"));
   };
 
-  let (fqn, alias) = match nested_select.map(|s| *s) {
-    Some(SelectTable::Table(fqn, alias, _indexed)) => (fqn, alias),
+  let find_table = |qualified_name: &QualifiedName| -> Result<&Table, SchemaError> {
+    let Some(table) = tables.iter().find(|t| t.name == *qualified_name) else {
+      return Err(precondition(&format!("Missing table: {qualified_name:?}")));
+    };
+
+    // Make sure all referenced tables are strict.
+    if !table.strict {
+      return Err(precondition(&format!(
+        "Referenced table: {:?} must be STRICT",
+        table.name
+      )));
+    }
+
+    return Ok(table);
+  };
+
+  // Map from "alias" to table. Use IndexMap to preserve insertion order.
+  let referenced_table_by_alias: IndexMap<String, &Table> = match nested_select.map(|s| *s) {
+    Some(SelectTable::Table(fqn, alias, _indexed)) => {
+      let mut referenced_tables =
+        IndexMap::<String, &Table>::from([(to_alias(&fqn, alias), find_table(&fqn.into())?)]);
+
+      for join in joins.unwrap_or_default() {
+        let SelectTable::Table(fqn, alias, _indexed) = join.table else {
+          return Err(precondition("JOIN with TABLE expected"));
+        };
+        referenced_tables.insert(to_alias(&fqn, alias), find_table(&fqn.into())?);
+      }
+
+      referenced_tables
+    }
     Some(SelectTable::Select(select, _as)) => {
       // Nested sub-query case.
       if Some(&ResultColumn::Star) == columns.first() {
@@ -1087,44 +1112,17 @@ fn extract_column_mapping(
     }
   };
 
-  // Use IndexMap to preserve insertion order.
-  let mut table_names = IndexMap::<String, QualifiedName>::from([to_entry(fqn, alias)]);
-
-  if let Some(joins) = joins {
-    for join in joins {
-      let SelectTable::Table(fqn, alias, _indexed) = join.table else {
-        return Err(precondition("JOIN with TABLE expected"));
-      };
-
-      let entry = to_entry(fqn, alias);
-      table_names.insert(entry.0, entry.1);
+  let find_column_by_name = |col_name: &str| -> Option<(&Table, &Column)> {
+    // Search tables in index order.
+    for (_alias, table) in &referenced_table_by_alias {
+      for col in &table.columns {
+        if col.name == col_name {
+          return Some((table, col));
+        }
+      }
     }
-  }
-
-  // Now we should have a map of all involved tables and their aliases (if any).
-  let all_tables: HashMap<QualifiedName, &Table> =
-    tables.iter().map(|t| (t.name.clone(), t)).collect();
-  let mut all_columns = HashMap::<String, (&Table, &Column)>::new();
-
-  // Make sure we know all tables and all tables are strict.
-  for table_name in table_names.values() {
-    match all_tables.get(table_name) {
-      Some(table) => {
-        if !table.strict {
-          return Err(precondition(&format!(
-            "Referenced table: {table_name:?} must be STRICT"
-          )));
-        }
-
-        for col in &table.columns {
-          all_columns.insert(col.name.clone(), (table, col));
-        }
-      }
-      None => {
-        return Err(precondition(&format!("Table missing: {table_name:?}")));
-      }
-    };
-  }
+    return None;
+  };
 
   let mut mapping: Vec<ColumnMapping> = vec![];
   for col in columns {
@@ -1132,8 +1130,7 @@ fn extract_column_mapping(
 
     match col {
       ResultColumn::Star => {
-        for table_name in table_names.values() {
-          let table = all_tables.get(table_name).expect("checked above");
+        for table in referenced_table_by_alias.values() {
           for c in &table.columns {
             mapping.push(ColumnMapping {
               column: c.clone(),
@@ -1147,11 +1144,10 @@ fn extract_column_mapping(
       }
       ResultColumn::TableStar(name) => {
         let name = unquote_name(name);
-        let Some(table_name) = table_names.get(&name) else {
+        let Some(table) = referenced_table_by_alias.get(&name) else {
           return Err(precondition(&format!("Missing alias: {name}")));
         };
 
-        let table = all_tables.get(table_name).expect("checked above");
         for c in &table.columns {
           mapping.push(ColumnMapping {
             column: c.clone(),
@@ -1165,8 +1161,8 @@ fn extract_column_mapping(
       ResultColumn::Expr(expr, alias) => match expr {
         Expr::Id(id) => {
           let col_name = unquote_id(id.clone());
-          let Some((table, column)) = all_columns.get(&col_name) else {
-            return Err(precondition(&format!("Missing columns: {id:?}")));
+          let Some((table, column)) = find_column_by_name(&col_name) else {
+            return Err(precondition(&format!("Missing column: {id:?}")));
           };
 
           let name = alias
@@ -1194,13 +1190,12 @@ fn extract_column_mapping(
           let qualifier = unquote_name(qualifier);
           let col_name = unquote_name(name.clone());
 
-          let Some(table_name) = table_names.get(&qualifier) else {
+          let Some(table) = referenced_table_by_alias.get(&qualifier) else {
             return Err(precondition(&format!(
               "Missing table ({qualifier}, {name})"
             )));
           };
 
-          let table = all_tables.get(table_name).expect("checked above");
           let Some(column) = table.columns.iter().find(|c| c.name == col_name) else {
             return Err(precondition(&format!("Missing col: {col_name}")));
           };
