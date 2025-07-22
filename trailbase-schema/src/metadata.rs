@@ -514,23 +514,34 @@ mod tests {
   use std::collections::HashSet;
 
   use super::*;
-  use crate::sqlite::{Table, sqlite3_parse_into_statement};
+  use crate::sqlite::{SchemaError, Table, sqlite3_parse_into_statement};
+
+  fn parse_create_table(create_table_sql: &str) -> Table {
+    let create_table_statement = sqlite3_parse_into_statement(create_table_sql)
+      .unwrap()
+      .unwrap();
+    return create_table_statement.try_into().unwrap();
+  }
+
+  fn parse_create_view(create_view_sql: &str, tables: &[Table]) -> Result<View, SchemaError> {
+    let create_view_statement = sqlite3_parse_into_statement(create_view_sql)
+      .unwrap()
+      .unwrap();
+    return View::from(create_view_statement, tables);
+  }
 
   #[test]
   fn test_parse_create_view() {
-    let table: Table = {
-      let table_sql = r#"
-      CREATE TABLE table0 (
-          id                           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT (uuid_v7()),
-          col0                         TEXT NOT NULL DEFAULT '',
-          col1                         BLOB NOT NULL,
-          hidden                       INTEGER DEFAULT 42
-      ) STRICT;
-    "#;
-
-      let create_table_statement = sqlite3_parse_into_statement(table_sql).unwrap().unwrap();
-      create_table_statement.try_into().unwrap()
-    };
+    let table = parse_create_table(
+      r#"
+        CREATE TABLE table0 (
+            id               BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT (uuid_v7()),
+            col0             TEXT NOT NULL DEFAULT '',
+            col1             BLOB NOT NULL,
+            hidden           INTEGER DEFAULT 42
+        ) STRICT;
+      "#,
+    );
 
     let tables = [table.clone()];
     let metadata = TableMetadata::new(table, &tables, "_user");
@@ -540,12 +551,11 @@ mod tests {
     assert_eq!(1, *metadata.name_to_index.get("col0").unwrap());
 
     {
-      let table_view: View = {
-        let view_sql = "CREATE VIEW view0 AS SELECT col0, col1 FROM table0";
-        let create_view_statement = sqlite3_parse_into_statement(view_sql).unwrap().unwrap();
-
-        View::from(create_view_statement, &tables).unwrap()
-      };
+      let table_view = parse_create_view(
+        "CREATE VIEW view0 AS SELECT col0, col1 FROM table0",
+        &tables,
+      )
+      .unwrap();
       assert_eq!(table_view.name.name, "view0");
       assert_eq!(table_view.query, "SELECT col0, col1 FROM table0");
       assert_eq!(table_view.temporary, false);
@@ -567,12 +577,8 @@ mod tests {
 
     {
       let query = "SELECT id, col0, col1 FROM table0";
-      let table_view: View = {
-        let view_sql = format!("CREATE VIEW view0 AS {query}");
-        let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
-
-        View::from(create_view_statement, &tables).unwrap()
-      };
+      let table_view =
+        parse_create_view(&format!("CREATE VIEW view0 AS {query}"), &tables).unwrap();
 
       assert_eq!(table_view.name.name, "view0");
       assert_eq!(table_view.query, query);
@@ -589,21 +595,18 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_with_subquery() {
-    let table_a: Table = {
-      let table_sql =
-        "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT";
-      let stmt = sqlite3_parse_into_statement(table_sql).unwrap().unwrap();
-      stmt.try_into().unwrap()
-    };
+    let table_a = parse_create_table(
+      "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
+    );
 
     let tables = [table_a];
 
     {
-      let view: View = {
-        let view_sql = "CREATE VIEW view0 AS SELECT * FROM (SELECT * FROM a);";
-        let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
-        View::from(create_view_statement, &tables).unwrap()
-      };
+      let view = parse_create_view(
+        "CREATE VIEW view0 AS SELECT * FROM (SELECT * FROM a);",
+        &tables,
+      )
+      .unwrap();
       let view_columns = view.columns.as_ref().unwrap();
 
       assert_eq!(view_columns.len(), 2);
@@ -620,12 +623,10 @@ mod tests {
     }
 
     {
-      let _view_result: Result<View, _> = {
-        let view_sql = "CREATE VIEW view0 AS SELECT id FROM (SELECT * FROM a);";
-        let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
-
-        View::from(create_view_statement, &tables)
-      };
+      let _view_result = parse_create_view(
+        "CREATE VIEW view0 AS SELECT id FROM (SELECT * FROM a);",
+        &tables,
+      );
       // TODO: Support column filter on sub-queries.
       // let view = _view_result.unwrap();
 
@@ -644,33 +645,25 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_with_joins() {
-    let table_a: Table = {
-      let table_sql =
-        "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT";
-      let stmt = sqlite3_parse_into_statement(table_sql).unwrap().unwrap();
-      stmt.try_into().unwrap()
-    };
-    let table_b: Table = {
-      let table_sql = r#"
+    let table_a = parse_create_table(
+      "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
+    );
+    let table_b = parse_create_table(
+      r#"
           CREATE TABLE b (
             id INTEGER PRIMARY KEY,
             fk INTEGER NOT NULL REFERENCES a(id)
-          ) STRICT"#;
-      let stmt = sqlite3_parse_into_statement(table_sql).unwrap().unwrap();
-      stmt.try_into().unwrap()
-    };
+          ) STRICT"#,
+    );
 
     let tables = [table_a, table_b];
 
     {
       // LEFT JOIN
-      let view: View = {
-        let view_sql = r#"
-            CREATE VIEW view0 AS SELECT a.data, b.fk, a.id FROM a AS a LEFT JOIN b AS b ON a.id = b.fk;
-        "#;
-        let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
-        View::from(create_view_statement, &tables).unwrap()
-      };
+      let view = parse_create_view(
+        "CREATE VIEW view0 AS SELECT a.data, b.fk, a.id FROM a AS a LEFT JOIN b AS b ON a.id = b.fk;",
+        &tables,
+      ).unwrap();
       let view_columns = view.columns.as_ref().unwrap();
 
       assert_eq!(view_columns.len(), 3);
@@ -696,13 +689,13 @@ mod tests {
       name: "table_name".to_string(),
       database_schema: Some("main".to_string()),
     };
-    let table_sql = format!(
+    let table = parse_create_table(&format!(
       "CREATE TABLE {table_name} (id INTEGER PRIMARY KEY) STRICT",
       table_name = table_name.escaped_string()
-    );
-    let create_table_statement = sqlite3_parse_into_statement(&table_sql).unwrap().unwrap();
-    let table: Table = create_table_statement.try_into().unwrap();
-    let table_metadata = TableMetadata::new(table.clone(), &[table.clone()], "_user");
+    ));
+    let tables = [table.clone()];
+
+    let table_metadata = TableMetadata::new(table.clone(), &tables, "_user");
 
     let mut table_set = HashSet::<TableMetadata>::new();
 
@@ -718,13 +711,15 @@ mod tests {
       name: "view_name".to_string(),
       database_schema: Some("main".to_string()),
     };
-    let view_sql = format!(
-      "CREATE VIEW {view_name} AS SELECT id FROM {table_name}",
-      view_name = view_name.escaped_string(),
-      table_name = table_name.escaped_string()
-    );
-    let create_view_statement = sqlite3_parse_into_statement(&view_sql).unwrap().unwrap();
-    let table_view = View::from(create_view_statement, &[table.clone()]).unwrap();
+    let table_view = parse_create_view(
+      &format!(
+        "CREATE VIEW {view_name} AS SELECT id FROM {table_name}",
+        view_name = view_name.escaped_string(),
+        table_name = table_name.escaped_string()
+      ),
+      &tables,
+    )
+    .unwrap();
     let view_metadata = Arc::new(ViewMetadata::new(table_view, &[table.clone()]));
 
     let mut view_set = HashSet::<Arc<ViewMetadata>>::new();
