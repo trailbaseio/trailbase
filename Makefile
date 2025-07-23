@@ -12,7 +12,8 @@ format:
 		dotnet format client/trailbase-dotnet/src; \
 	       	dotnet format client/trailbase-dotnet/test; \
 		poetry -C client/trailbase-py run black --config pyproject.toml .; \
-		swift format -r -i client/trailbase-swift/**/*.swift;
+		swift format -r -i client/trailbase-swift/**/*.swift; \
+		gofmt -w **/*.go;
 
 check:
 	pnpm -r check; \
@@ -28,7 +29,7 @@ docker:
 cloc:
 	cloc --not-match-d=".*(/target|/dist|/node_modules|/vendor|.astro|.build|.venv|/traildepot|/flutter|/assets|lock|_benchmark|/bin|/obj).*" .
 
-crates:
+publish_crates:
 	cargo +nightly -Z package-workspace publish --no-verify \
 		-p trailbase-build \
 		-p trailbase-assets \
@@ -41,4 +42,4 @@ crates:
 		-p trailbase-js \
 		-p trailbase
 
-.PHONY: default format check static docker cloc crates
+.PHONY: default format check static docker cloc publish_crates
