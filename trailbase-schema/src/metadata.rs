@@ -77,7 +77,12 @@ impl JsonMetadata {
   }
 
   fn from_view(view: &View) -> Option<Self> {
-    return view.columns.as_ref().map(|cols| Self::from_columns(cols));
+    if let Some(ref columns) = view.columns {
+      return Some(Self::from_columns(
+        &columns.iter().map(|m| m.column.clone()).collect::<Vec<_>>(),
+      ));
+    }
+    return None;
   }
 
   fn from_columns(columns: &[Column]) -> Self {
@@ -193,6 +198,7 @@ impl Borrow<QualifiedName> for Arc<TableMetadata> {
 pub struct ViewMetadata {
   pub schema: View,
 
+  columns: Option<Vec<Column>>,
   name_to_index: HashMap<String, usize>,
   record_pk_column: Option<usize>,
   json_metadata: Option<JsonMetadata>,
@@ -209,20 +215,26 @@ impl ViewMetadata {
         columns
           .iter()
           .enumerate()
-          .map(|(index, col)| (col.name.clone(), index)),
+          .map(|(index, col)| (col.column.name.clone(), index)),
       )
     } else {
       HashMap::<String, usize>::new()
     };
 
-    let record_pk_column = view
+    let columns: Option<Vec<Column>> = view
       .columns
+      .as_ref()
+      .map(|c| c.iter().map(|m| m.column.clone()).collect());
+
+    // TODO: Pick GROUP BY as key, if present.
+    let record_pk_column = columns
       .as_ref()
       .and_then(|c| find_record_pk_column_index(c, tables));
     let json_metadata = JsonMetadata::from_view(&view);
 
     return ViewMetadata {
       schema: view,
+      columns,
       name_to_index,
       record_pk_column,
       json_metadata,
@@ -235,6 +247,11 @@ impl ViewMetadata {
   }
 
   #[inline]
+  pub fn columns(&self) -> Option<&[Column]> {
+    return self.columns.as_deref();
+  }
+
+  #[inline]
   pub fn column_index_by_name(&self, key: &str) -> Option<usize> {
     self.name_to_index.get(key).copied()
   }
@@ -243,7 +260,7 @@ impl ViewMetadata {
   pub fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
     let index = self.column_index_by_name(key)?;
     let cols = self.schema.columns.as_ref()?;
-    return Some((index, &cols[index]));
+    return Some((index, &cols[index].column));
   }
 }
 
@@ -313,7 +330,7 @@ impl TableOrViewMetadata for ViewMetadata {
   }
 
   fn columns(&self) -> Option<&[Column]> {
-    return self.schema.columns.as_deref();
+    return self.columns.as_deref();
   }
 
   fn json_metadata(&self) -> Option<&JsonMetadata> {
@@ -321,7 +338,7 @@ impl TableOrViewMetadata for ViewMetadata {
   }
 
   fn record_pk_column(&self) -> Option<(usize, &Column)> {
-    let Some(columns) = &self.schema.columns else {
+    let Some(columns) = &self.columns else {
       return None;
     };
     let index = self.record_pk_column?;
@@ -559,11 +576,11 @@ mod tests {
       let view_columns = table_view.columns.as_ref().unwrap();
 
       assert_eq!(view_columns.len(), 2);
-      assert_eq!(view_columns[0].name, "col0");
-      assert_eq!(view_columns[0].data_type, ColumnDataType::Text);
+      assert_eq!(view_columns[0].column.name, "col0");
+      assert_eq!(view_columns[0].column.data_type, ColumnDataType::Text);
 
-      assert_eq!(view_columns[1].name, "col1");
-      assert_eq!(view_columns[1].data_type, ColumnDataType::Blob);
+      assert_eq!(view_columns[1].column.name, "col1");
+      assert_eq!(view_columns[1].column.data_type, ColumnDataType::Blob);
 
       let view_metadata = ViewMetadata::new(table_view, &tables);
 
@@ -604,11 +621,11 @@ mod tests {
       let view_columns = view.columns.as_ref().unwrap();
 
       assert_eq!(view_columns.len(), 2);
-      assert_eq!(view_columns[0].name, "id");
-      assert_eq!(view_columns[0].data_type, ColumnDataType::Integer);
+      assert_eq!(view_columns[0].column.name, "id");
+      assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
 
-      assert_eq!(view_columns[1].name, "data");
-      assert_eq!(view_columns[1].data_type, ColumnDataType::Text);
+      assert_eq!(view_columns[1].column.name, "data");
+      assert_eq!(view_columns[1].column.data_type, ColumnDataType::Text);
 
       let metadata = ViewMetadata::new(view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
@@ -623,8 +640,8 @@ mod tests {
       );
       let view_columns = view.columns.as_ref().unwrap();
       assert_eq!(view_columns.len(), 1);
-      assert_eq!(view_columns[0].name, "id");
-      assert_eq!(view_columns[0].data_type, ColumnDataType::Integer);
+      assert_eq!(view_columns[0].column.name, "id");
+      assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
 
       let metadata = ViewMetadata::new(view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
@@ -639,8 +656,8 @@ mod tests {
       );
       let view_columns = view.columns.as_ref().unwrap();
       assert_eq!(view_columns.len(), 1);
-      assert_eq!(view_columns[0].name, "id");
-      assert_eq!(view_columns[0].data_type, ColumnDataType::Integer);
+      assert_eq!(view_columns[0].column.name, "id");
+      assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
 
       let metadata = ViewMetadata::new(view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
@@ -682,14 +699,14 @@ mod tests {
       let view_columns = view.columns.as_ref().unwrap();
 
       assert_eq!(view_columns.len(), 3);
-      assert_eq!(view_columns[2].name, "id");
-      assert_eq!(view_columns[2].data_type, ColumnDataType::Integer);
+      assert_eq!(view_columns[2].column.name, "id");
+      assert_eq!(view_columns[2].column.data_type, ColumnDataType::Integer);
 
-      assert_eq!(view_columns[0].name, "data");
-      assert_eq!(view_columns[0].data_type, ColumnDataType::Text);
+      assert_eq!(view_columns[0].column.name, "data");
+      assert_eq!(view_columns[0].column.data_type, ColumnDataType::Text);
 
-      assert_eq!(view_columns[1].name, "fk");
-      assert_eq!(view_columns[1].data_type, ColumnDataType::Integer);
+      assert_eq!(view_columns[1].column.name, "fk");
+      assert_eq!(view_columns[1].column.data_type, ColumnDataType::Integer);
 
       let metadata = ViewMetadata::new(view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();

@@ -104,7 +104,7 @@ impl RecordApiSchema {
     };
     let record_pk_column = (pk_index, pk_column.clone());
 
-    let Some(ref columns) = view_metadata.schema.columns else {
+    let Some(columns) = view_metadata.columns() else {
       return Err("RecordApi requires schema".to_string());
     };
     let Some(json_metadata) = view_metadata.json_metadata() else {
