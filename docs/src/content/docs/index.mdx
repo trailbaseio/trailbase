@@ -35,8 +35,10 @@ import dotnetLogo from "@/assets/dotnet_logo.svg";
 import flutterLogo from "@/assets/flutter_logo.svg";
 import pythonLogo from "@/assets/python_logo.svg";
 import rustLogo from "@/assets/rust_unofficial_logo.svg";
+import goLogo from "@/assets/go_logo.svg";
 import swiftLogo from "@/assets/swift_logo.svg";
 import tsLogo from "@/assets/ts_logo.svg";
+import tanstackLogo from "@/assets/tanstack_logo.svg";
 
 import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx";
 
@@ -100,24 +102,78 @@ export const demoLink = "https://demo.trailbase.io";
     </div>
   </Card>
 
+  <Card title="Integrations" icon="puzzle">
+    Straightforward integration with any stack thanks to thin abstractions,
+    reliance on standards, and JSON Schema for type-safety allowing type-safe
+    bindings for virtually any language.
+
+    Clients as well as code-generation examples for TypeScript,
+    Dart/Flutter, Python, C#/.NET and Rust are provided out of the box.
+
+    <div class="pt-4 m-0 gap-4 grid grid-cols-7 justify-center items-start">
+      <a href="https://www.npmjs.com/package/trailbase">
+        <Image class="p-0 m-0" height={52} src={tsLogo} alt="TypeScript" />
+      </a>
+
+      <a href="https://pub.dev/packages/trailbase">
+        <Image margin={0} class="p-0 m-0" width={42} height={52} src={flutterLogo} alt="Flutter" />
+      </a>
+
+      <a href="https://github.com/trailbaseio/trailbase/tree/main/client/trailbase-swift">
+        <Image margin={0} class="p-0 m-0" width={52} height={52} src={swiftLogo} alt="Swift" />
+      </a>
+
+      <a href="https://pypi.org/project/trailbase/">
+        <Image margin={0} class="p-0 m-0" width={52} height={52} src={pythonLogo} alt="Python" />
+      </a>
+
+      <a href="https://www.nuget.org/packages/TrailBase/">
+        <Image margin={0} class="p-0 m-0" width={52} height={52} src={dotnetLogo} alt="Dotnet" />
+      </a>
+
+      <a href="https://crates.io/crates/trailbase-client">
+        <Image margin={0} class="p-0 m-0" width={52} height={52} src={rustLogo} alt="Rust" />
+      </a>
+
+      <a href="https://github.com/trailbaseio/trailbase/tree/main/client/go/trailbase">
+        <Image margin={0} class="p-0 m-0" width={52} height={52} src={goLogo} alt="Go" />
+      </a>
+    </div>
+  </Card>
+
   <CardGrid>
 
-    <Card title="Simple" icon="heart">
-      TrailBase is a small static binary that is incredibly easy to deploy
-      **consistently** across integration testing, development, pre-prod, and
-      production environments including edge.
+    <Card title="Realtime Sync" icon="cloud-download">
+      Subscribe to push-based realtime data changes letting you act quickly or
+      synchronize your clients.
+
+      [TanStack/db](https://tanstack.com/db/latest) ships with a TrailBase
+      integration out-of-the-box, check out our
+      [example](https://github.com/trailbaseio/trailbase/tree/main/examples/local-first).
+
+      <div class="flex justify-center items-center">
+        <a href="https://github.com/TanStack/db/tree/main/packages/trailbase-db-collection">
+          <Image class="p-0 m-0" height={100} src={tanstackLogo} alt="TanStack/db" />
+        </a>
+      </div>
+    </Card>
+
+    <Card title="Simple & Consistent" icon="heart">
+      TrailBase is a single small static binary that is incredibly
+      easy to deploy **consistently** across integration testing, development,
+      pre-prod, and production environments including edge.
       Architecturally, TrailBase aims to be a simple, thin abstraction around
       standards helping full or piece-meal adoption and avoiding lock-in.
 
-      A simple architecture, both in your dependencies and your own App, will
-      let you move faster, more confidently and pivot when necessary.
+      A simple architecture for your App and also your dependencies lets you
+      move faster, more confidently and pivot when necessary.
     </Card>
 
-    <Card title="Authentication" icon="open-book">
-      TrailBase comes with an authentication system and UI built in supporting
+    <Card title="Built-in Auth" icon="open-book">
+      TrailBase comes with an auth system and UI built in supporting
       both password-based and Social/OAuth (Google, Discord, ...) sign-ups.
 
-      TrailBase authentication system follows standards and best-practices
+      TrailBase's auth system follows standards and best-practices
       combining short-lived, stateless JSON web tokens with long-lived stateful
       refresh tokens letting you easily and efficiently authenticate your users
       from any of your other back-ends relying on safe, asymmetric cryptography.
@@ -132,41 +188,6 @@ export const demoLink = "https://demo.trailbase.io";
       Authorize users based on ACLs and SQL access rules letting you
       easily build higher-level access management or moderation facilities
       like groups or capabilities.
-    </Card>
-
-    <Card title="Integrations" icon="puzzle">
-      Straightforward integration with any stack thanks to thin abstractions,
-      reliance on standards, and JSON Schema for type-safety allowing type-safe
-      bindings for virtually any language.
-
-      Clients as well as code-generation examples for TypeScript,
-      Dart/Flutter, Python, C#/.NET and Rust are provided out of the box.
-
-      <div class="pt-4 m-0 flex justify-center items-start gap-8">
-        <a href="https://www.npmjs.com/package/trailbase">
-          <Image class="p-0 m-0" height={52} src={tsLogo} alt="TypeScript" />
-        </a>
-
-        <a href="https://pub.dev/packages/trailbase">
-          <Image margin={0} class="p-0 m-0" width={42} height={52} src={flutterLogo} alt="Flutter" />
-        </a>
-
-        <a href="https://github.com/trailbaseio/trailbase/tree/main/client/trailbase-swift">
-          <Image margin={0} class="p-0 m-0" width={52} height={52} src={swiftLogo} alt="Swift" />
-        </a>
-
-        <a href="https://pypi.org/project/trailbase/">
-          <Image margin={0} class="p-0 m-0" width={52} height={52} src={pythonLogo} alt="Dotnet" />
-        </a>
-
-        <a href="https://www.nuget.org/packages/TrailBase/">
-          <Image margin={0} class="p-0 m-0" width={52} height={52} src={dotnetLogo} alt="Dotnet" />
-        </a>
-
-        <a href="https://crates.io/crates/trailbase-client">
-          <Image margin={0} class="p-0 m-0" width={52} height={52} src={rustLogo} alt="Dotnet" />
-        </a>
-      </div>
     </Card>
 
   </CardGrid>
