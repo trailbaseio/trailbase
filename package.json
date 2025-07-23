@@ -1,0 +1,21 @@
+{
+  "name": "trailbase/monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "license": "OSL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/trailbaseio/trailbase.git"
+  },
+  "description": "TrailBase's mono repo",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "keywords": [],
+  "type": "module",
+  "packageManager": "pnpm@10.11.0",
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.0"
+  }
+}
