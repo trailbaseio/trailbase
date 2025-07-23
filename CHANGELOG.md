@@ -1,3 +1,10 @@
+## v0.15.7
+
+* Add an official Golang client for TrailBase 🎉.
+* Support simple sub-queries in `VIEW`-based APIs.
+* Fix total `count` for `VIEW`-based APIs.
+* Update Rust & JS dependencies.
+
 ## v0.15.6
 
 * Make "Dry Run" button available for all table and index schema changes.

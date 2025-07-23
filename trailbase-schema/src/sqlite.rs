@@ -964,9 +964,7 @@ fn extract_column_mapping(
 
   let find_table_by_alias = |a: &str| -> Result<&Table, SchemaError> {
     for (alias, table) in &referenced_table_by_alias {
-      if let Some(alias) = alias
-        && alias == a
-      {
+      if alias.as_deref() == Some(a) {
         return Ok(table);
       }
     }
