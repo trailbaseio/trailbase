@@ -176,7 +176,7 @@ repos:
     - id: go_format
       name: Go format
       # gofmt always returns zero exit code :sigh:
-      entry: sh -c 'DIFF=$(gofmt -d -e client/trailbase-go/) && echo "${DIFF}" && test -z "${DIFF}"'
+      entry: sh -c 'DIFF=$(gofmt -d -e client/go/trailbase/) && echo "${DIFF}" && test -z "${DIFF}"'
       language: system
       types: [file]
       files: .*\.(go)$
@@ -184,7 +184,7 @@ repos:
 
     - id: go_test
       name: Go test
-      entry: sh -c 'cd client/trailbase-go && go test -v'
+      entry: sh -c 'cd client/go/trailbase && go test -v'
       language: system
       types: [go]
       pass_filenames: false

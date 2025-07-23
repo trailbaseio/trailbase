@@ -19,7 +19,7 @@ const PORT uint16 = 4059
 
 func buildCommand(name string, arg ...string) *exec.Cmd {
 	c := exec.Command(name, arg...)
-	c.Dir = "../.."
+	c.Dir = "../../../"
 	c.Stdout = os.Stdout
 	// TODO: Print stdout only if command fails.
 	// c.Stderr = os.Stderr
