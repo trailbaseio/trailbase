@@ -264,9 +264,9 @@ pub(crate) fn auth_ui_router() -> Router<AppState> {
     .nest_service(
       "/_/auth/",
       AssetService::<trailbase_assets::AuthAssets>::with_parameters(
-        // We want as little magic as possible. The only /_/auth/subpath that isn't SSR, is profile, so
-        // we when hitting /profile or /profile, we want actually want to serve the static
-        // profile/index.html.
+        // We want as little magic as possible. The only /_/auth/subpath that isn't SSR, is
+        // profile, so we when hitting /profile or /profile, we want actually want to serve
+        // the static profile/index.html.
         Some(Box::new(|path| {
           if path == "profile" {
             Some(format!("{path}/index.html"))

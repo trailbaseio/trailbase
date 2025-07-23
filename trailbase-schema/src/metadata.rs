@@ -2,13 +2,16 @@ use jsonschema::Validator;
 use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;
+use sqlite3_parser::ast::JoinType;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use thiserror::Error;
 
-use crate::sqlite::{Column, ColumnDataType, ColumnOption, QualifiedName, Table, View};
+use crate::sqlite::{
+  Column, ColumnDataType, ColumnMapping, ColumnOption, QualifiedName, Table, View,
+};
 
 // TODO: Can we merge this with crate::sqlite::SchemaError?
 #[derive(Debug, Clone, Error)]
@@ -76,18 +79,12 @@ impl JsonMetadata {
     return Self::from_columns(&table.columns);
   }
 
-  fn from_view(view: &View) -> Option<Self> {
-    return view.columns.as_ref().map(|cols| Self::from_columns(cols));
-  }
-
   fn from_columns(columns: &[Column]) -> Self {
     let columns: Vec<_> = columns.iter().map(build_json_metadata).collect();
 
-    let file_column_indexes = find_file_column_indexes(&columns);
-
     return Self {
+      file_column_indexes: find_file_column_indexes(&columns),
       columns,
-      file_column_indexes,
     };
   }
 }
@@ -124,7 +121,7 @@ impl TableMetadata {
         .map(|(index, col)| (col.name.clone(), index)),
     );
 
-    let record_pk_column = find_record_pk_column_index(&table.columns, tables);
+    let record_pk_column = find_record_pk_column_index_for_table(&table, tables);
     let user_id_columns = find_user_id_foreign_key_columns(&table.columns, user_table_name);
     let json_metadata = JsonMetadata::from_table(&table);
 
@@ -193,6 +190,10 @@ impl Borrow<QualifiedName> for Arc<TableMetadata> {
 pub struct ViewMetadata {
   pub schema: View,
 
+  // QUESTION: Why do we have copy of the columns here? Right now it's duplicate from `.schema`.
+  // This probably only exists because we have a trait impl that returns Option<&[Column]>.
+  columns: Option<Vec<Column>>,
+
   name_to_index: HashMap<String, usize>,
   record_pk_column: Option<usize>,
   json_metadata: Option<JsonMetadata>,
@@ -204,34 +205,47 @@ impl ViewMetadata {
   /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
   /// key relationships.
   pub fn new(view: View, tables: &[Table]) -> Self {
-    let name_to_index = if let Some(ref columns) = view.columns {
-      HashMap::<String, usize>::from_iter(
-        columns
+    return match view.column_mapping {
+      Some(ref column_mapping) => {
+        let columns: Vec<Column> = column_mapping
+          .columns
           .iter()
-          .enumerate()
-          .map(|(index, col)| (col.name.clone(), index)),
-      )
-    } else {
-      HashMap::<String, usize>::new()
-    };
+          .map(|m| m.column.clone())
+          .collect();
 
-    let record_pk_column = view
-      .columns
-      .as_ref()
-      .and_then(|c| find_record_pk_column_index(c, tables));
-    let json_metadata = JsonMetadata::from_view(&view);
+        let name_to_index = HashMap::<String, usize>::from_iter(
+          columns
+            .iter()
+            .enumerate()
+            .map(|(index, col)| (col.name.clone(), index)),
+        );
 
-    return ViewMetadata {
-      schema: view,
-      name_to_index,
-      record_pk_column,
-      json_metadata,
+        ViewMetadata {
+          name_to_index,
+          json_metadata: Some(JsonMetadata::from_columns(&columns)),
+          columns: Some(columns),
+          record_pk_column: find_record_pk_column_index_for_view(column_mapping, tables),
+          schema: view,
+        }
+      }
+      None => ViewMetadata {
+        name_to_index: HashMap::<String, usize>::default(),
+        columns: None,
+        record_pk_column: None,
+        json_metadata: None,
+        schema: view,
+      },
     };
   }
 
   #[inline]
   pub fn name(&self) -> &QualifiedName {
     &self.schema.name
+  }
+
+  #[inline]
+  pub fn columns(&self) -> Option<&[Column]> {
+    return self.columns.as_deref();
   }
 
   #[inline]
@@ -242,8 +256,8 @@ impl ViewMetadata {
   #[inline]
   pub fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
     let index = self.column_index_by_name(key)?;
-    let cols = self.schema.columns.as_ref()?;
-    return Some((index, &cols[index]));
+    let mapping = self.schema.column_mapping.as_ref()?;
+    return Some((index, &mapping.columns[index].column));
   }
 }
 
@@ -313,7 +327,7 @@ impl TableOrViewMetadata for ViewMetadata {
   }
 
   fn columns(&self) -> Option<&[Column]> {
-    return self.schema.columns.as_deref();
+    return self.columns.as_deref();
   }
 
   fn json_metadata(&self) -> Option<&JsonMetadata> {
@@ -321,7 +335,7 @@ impl TableOrViewMetadata for ViewMetadata {
   }
 
   fn record_pk_column(&self) -> Option<(usize, &Column)> {
-    let Some(columns) = &self.schema.columns else {
+    let Some(columns) = &self.columns else {
       return None;
     };
     let index = self.record_pk_column?;
@@ -427,85 +441,122 @@ pub fn find_user_id_foreign_key_columns(columns: &[Column], user_table_name: &st
   return indexes;
 }
 
-pub(crate) fn find_pk_column_index(columns: &[Column]) -> Option<usize> {
-  return columns.iter().position(|col| {
-    for opt in &col.options {
-      if let ColumnOption::Unique { is_primary, .. } = opt {
-        return *is_primary;
-      }
+pub(crate) fn is_pk_column(column: &Column) -> bool {
+  for opt in &column.options {
+    if let ColumnOption::Unique { is_primary, .. } = opt {
+      return *is_primary;
     }
+  }
+  return false;
+}
+
+fn is_suitable_record_pk_column(column: &Column, tables: &[Table]) -> bool {
+  if !is_pk_column(column) {
     return false;
-  });
+  }
+
+  return match column.data_type {
+    ColumnDataType::Integer => {
+      // TODO: We should detect the "integer pk" desc case and at least warn:
+      // https://www.sqlite.org/lang_createtable.html#rowid.
+      true
+    }
+    ColumnDataType::Blob => {
+      lazy_static! {
+        static ref UUID_CHECK_RE: Regex =
+          Regex::new(r"^is_uuid(|_v7|_v4)\s*\(").expect("infallible");
+      }
+
+      for opts in &column.options {
+        match opts {
+          // Check the column itself is a UUID column.
+          ColumnOption::Check(expr) if UUID_CHECK_RE.is_match(expr) => return true,
+          // Or that a referenced column is a UUID column.
+          ColumnOption::ForeignKey {
+            foreign_table,
+            referred_columns,
+            ..
+          } => {
+            let referred_column = {
+              if referred_columns.len() != 1 {
+                return false;
+              }
+              &referred_columns[0]
+            };
+
+            // NOTE: Foreign keys cannot cross database boundaries, we can therefore compare by
+            // unqualified name.
+            let Some(referred_table) = tables.iter().find(|t| t.name.name == *foreign_table) else {
+              warn!("Failed to get foreign key schema for {foreign_table}");
+              return false;
+            };
+
+            let Some(foreign_column) = referred_table
+              .columns
+              .iter()
+              .find(|c| c.name == *referred_column)
+            else {
+              return false;
+            };
+
+            for opt in &foreign_column.options {
+              match opt {
+                ColumnOption::Check(expr) if UUID_CHECK_RE.is_match(expr) => return true,
+                _ => {}
+              }
+            }
+          }
+          _ => {}
+        }
+      }
+
+      false
+    }
+    _ => false,
+  };
 }
 
 /// Finds suitable Integer or UUIDv7/UUIDv4 primary key columns, if present.
 ///
 /// Cursors require certain properties like a stable, time-sortable primary key.
-fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<usize> {
-  let index = find_pk_column_index(columns)?;
-  let column = &columns[index];
-
-  if column.data_type == ColumnDataType::Integer {
-    // TODO: We should detect the "integer pk" desc case and at least warn:
-    // https://www.sqlite.org/lang_createtable.html#rowid.
-    return Some(index);
-  }
-
-  for opts in &column.options {
-    lazy_static! {
-      static ref UUID_CHECK_RE: Regex = Regex::new(r"^is_uuid(|_v7|_v4)\s*\(").expect("infallible");
-    }
-
-    match &opts {
-      // Check if the referenced column is a uuidv7 column.
-      ColumnOption::ForeignKey {
-        foreign_table,
-        referred_columns,
-        ..
-      } => {
-        // NOTE: Foreign keys cannot cross database boundaries, we can therefore compare by
-        // unqualified name.
-        let Some(referred_table) = tables.iter().find(|t| t.name.name == *foreign_table) else {
-          error!("Failed to get foreign key schema for {foreign_table}");
-          continue;
-        };
-
-        if referred_columns.len() != 1 {
-          return None;
-        }
-        let referred_column = &referred_columns[0];
-
-        let col = referred_table
-          .columns
-          .iter()
-          .find(|c| c.name == *referred_column)?;
-
-        let mut is_pk = false;
-        for opt in &col.options {
-          match opt {
-            ColumnOption::Check(expr) if UUID_CHECK_RE.is_match(expr) => {
-              return Some(index);
-            }
-            ColumnOption::Unique { is_primary, .. } if *is_primary => {
-              is_pk = true;
-            }
-            _ => {}
-          }
-        }
-
-        if is_pk && col.data_type == ColumnDataType::Integer {
-          return Some(index);
-        }
-
-        return None;
-      }
-      ColumnOption::Check(expr) if UUID_CHECK_RE.is_match(expr) => {
+fn find_record_pk_column_index_for_table(table: &Table, tables: &[Table]) -> Option<usize> {
+  if table.strict {
+    for (index, column) in table.columns.iter().enumerate() {
+      if is_suitable_record_pk_column(column, tables) {
         return Some(index);
       }
-      _ => {}
+    }
+  }
+  return None;
+}
+
+fn find_record_pk_column_index_for_view(
+  column_mapping: &ColumnMapping,
+  tables: &[Table],
+) -> Option<usize> {
+  if let Some(group_by_index) = column_mapping.group_by {
+    let column = &column_mapping.columns[group_by_index];
+    if is_suitable_record_pk_column(&column.column, tables) {
+      return Some(group_by_index);
+    }
+    return None;
+  }
+
+  // NOTE: We could be smarter here. It's quite tricky to say with a set of arbitrary joins, which
+  // (integer, UUID) columns end up being unique afterwards. Rely on explicit GROUP BY instead.
+  let mask = JoinType::RIGHT | JoinType::CROSS | JoinType::NATURAL;
+  for join_type in &column_mapping.joins {
+    if join_type & mask.bits() != 0 {
+      warn!("Only LEFT and INNER JOINS supported yet, got: {join_type:?}");
+      return None;
     }
   }
 
+  for (index, mapped_column) in column_mapping.columns.iter().enumerate() {
+    if is_suitable_record_pk_column(&mapped_column.column, tables) {
+      return Some(index);
+    }
+  }
   return None;
 }
 
@@ -515,16 +566,55 @@ mod tests {
 
   use super::*;
   use crate::parse::parse_into_statement;
-  use crate::sqlite::Table;
+  use crate::sqlite::{SchemaError, Table};
 
   fn parse_create_table(create_table_sql: &str) -> Table {
     let create_table_statement = parse_into_statement(create_table_sql).unwrap().unwrap();
     return create_table_statement.try_into().unwrap();
   }
 
-  fn parse_create_view(create_view_sql: &str, tables: &[Table]) -> View {
+  fn parse_create_view(create_view_sql: &str, tables: &[Table]) -> Result<View, SchemaError> {
     let create_view_statement = parse_into_statement(create_view_sql).unwrap().unwrap();
-    return View::from(create_view_statement, tables).unwrap();
+    return View::from(create_view_statement, tables);
+  }
+
+  #[test]
+  fn test_find_record_pk_column_index_for_table() {
+    let table = parse_create_table("CREATE TABLE t (id INTEGER PRIMARY KEY) STRICT");
+    let tables = [table.clone()];
+    assert_eq!(
+      Some(0),
+      find_record_pk_column_index_for_table(&table, &tables)
+    );
+
+    let table = parse_create_table(
+      r#"
+        CREATE TABLE t (
+            value     TEXT,
+            id        BLOB PRIMARY KEY NOT NULL CHECK(is_uuid(id))
+        ) STRICT;
+      "#,
+    );
+
+    let tables = [table.clone()];
+    assert_eq!(
+      Some(1),
+      find_record_pk_column_index_for_table(&table, &tables)
+    );
+
+    let non_strict_table = parse_create_table(
+      r#"
+        CREATE TABLE t (
+            value     TEXT,
+            id        BLOB PRIMARY KEY NOT NULL CHECK(is_uuid(id))
+        );
+      "#,
+    );
+    let tables = [non_strict_table.clone()];
+    assert_eq!(
+      None,
+      find_record_pk_column_index_for_table(&non_strict_table, &tables)
+    );
   }
 
   #[test]
@@ -551,19 +641,20 @@ mod tests {
       let table_view = parse_create_view(
         "CREATE VIEW view0 AS SELECT col0, col1 FROM table0",
         &tables,
-      );
+      )
+      .unwrap();
       assert_eq!(table_view.name.name, "view0");
       assert_eq!(table_view.query, "SELECT col0, col1 FROM table0");
       assert_eq!(table_view.temporary, false);
 
-      let view_columns = table_view.columns.as_ref().unwrap();
+      let view_columns = &table_view.column_mapping.as_ref().unwrap().columns;
 
       assert_eq!(view_columns.len(), 2);
-      assert_eq!(view_columns[0].name, "col0");
-      assert_eq!(view_columns[0].data_type, ColumnDataType::Text);
+      assert_eq!(view_columns[0].column.name, "col0");
+      assert_eq!(view_columns[0].column.data_type, ColumnDataType::Text);
 
-      assert_eq!(view_columns[1].name, "col1");
-      assert_eq!(view_columns[1].data_type, ColumnDataType::Blob);
+      assert_eq!(view_columns[1].column.name, "col1");
+      assert_eq!(view_columns[1].column.data_type, ColumnDataType::Blob);
 
       let view_metadata = ViewMetadata::new(table_view, &tables);
 
@@ -573,7 +664,8 @@ mod tests {
 
     {
       let query = "SELECT id, col0, col1 FROM table0";
-      let table_view = parse_create_view(&format!("CREATE VIEW view0 AS {query}"), &tables);
+      let table_view =
+        parse_create_view(&format!("CREATE VIEW view0 AS {query}"), &tables).unwrap();
 
       assert_eq!(table_view.name.name, "view0");
       assert_eq!(table_view.query, query);
@@ -600,15 +692,16 @@ mod tests {
       let view = parse_create_view(
         "CREATE VIEW view0 AS SELECT * FROM (SELECT * FROM a);",
         &tables,
-      );
-      let view_columns = view.columns.as_ref().unwrap();
+      )
+      .unwrap();
+      let view_columns = &view.column_mapping.as_ref().unwrap().columns;
 
       assert_eq!(view_columns.len(), 2);
-      assert_eq!(view_columns[0].name, "id");
-      assert_eq!(view_columns[0].data_type, ColumnDataType::Integer);
+      assert_eq!(view_columns[0].column.name, "id");
+      assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
 
-      assert_eq!(view_columns[1].name, "data");
-      assert_eq!(view_columns[1].data_type, ColumnDataType::Text);
+      assert_eq!(view_columns[1].column.name, "data");
+      assert_eq!(view_columns[1].column.data_type, ColumnDataType::Text);
 
       let metadata = ViewMetadata::new(view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
@@ -620,11 +713,12 @@ mod tests {
       let view = parse_create_view(
         "CREATE VIEW view0 AS SELECT id FROM (SELECT * FROM a);",
         &tables,
-      );
-      let view_columns = view.columns.as_ref().unwrap();
+      )
+      .unwrap();
+      let view_columns = &view.column_mapping.as_ref().unwrap().columns;
       assert_eq!(view_columns.len(), 1);
-      assert_eq!(view_columns[0].name, "id");
-      assert_eq!(view_columns[0].data_type, ColumnDataType::Integer);
+      assert_eq!(view_columns[0].column.name, "id");
+      assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
 
       let metadata = ViewMetadata::new(view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
@@ -636,11 +730,12 @@ mod tests {
       let view = parse_create_view(
         "CREATE VIEW view0 AS SELECT x.id FROM (SELECT * FROM a) AS x;",
         &tables,
-      );
-      let view_columns = view.columns.as_ref().unwrap();
+      )
+      .unwrap();
+      let view_columns = &view.column_mapping.as_ref().unwrap().columns;
       assert_eq!(view_columns.len(), 1);
-      assert_eq!(view_columns[0].name, "id");
-      assert_eq!(view_columns[0].data_type, ColumnDataType::Integer);
+      assert_eq!(view_columns[0].column.name, "id");
+      assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
 
       let metadata = ViewMetadata::new(view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
@@ -653,8 +748,8 @@ mod tests {
       let view = parse_create_view(
         "CREATE VIEW view0 AS SELECT x.id, y.id FROM (SELECT * FROM a) AS x, (SELECT * FROM a) AS y;",
         &tables,
-      );
-      assert_eq!(view.columns, None);
+      ).unwrap();
+      assert!(view.column_mapping.is_none());
     }
   }
 
@@ -678,24 +773,131 @@ mod tests {
       let view = parse_create_view(
         "CREATE VIEW view0 AS SELECT a.data, b.fk, a.id FROM a AS a LEFT JOIN b AS b ON a.id = b.fk;",
         &tables,
-      );
-      let view_columns = view.columns.as_ref().unwrap();
+      ).unwrap();
+      let view_columns = &view.column_mapping.as_ref().unwrap().columns;
 
       assert_eq!(view_columns.len(), 3);
-      assert_eq!(view_columns[2].name, "id");
-      assert_eq!(view_columns[2].data_type, ColumnDataType::Integer);
+      assert_eq!(view_columns[2].column.name, "id");
+      assert_eq!(view_columns[2].column.data_type, ColumnDataType::Integer);
 
-      assert_eq!(view_columns[0].name, "data");
-      assert_eq!(view_columns[0].data_type, ColumnDataType::Text);
+      assert_eq!(view_columns[0].column.name, "data");
+      assert_eq!(view_columns[0].column.data_type, ColumnDataType::Text);
 
-      assert_eq!(view_columns[1].name, "fk");
-      assert_eq!(view_columns[1].data_type, ColumnDataType::Integer);
+      assert_eq!(view_columns[1].column.name, "fk");
+      assert_eq!(view_columns[1].column.data_type, ColumnDataType::Integer);
 
       let metadata = ViewMetadata::new(view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
       assert_eq!(pk_index, 2);
       assert_eq!(pk_col.name, "id");
     }
+
+    {
+      // JOINs
+      for (join_type, expected) in [
+        ("LEFT", Some(1)),
+        ("INNER", Some(1)),
+        ("RIGHT", None),
+        ("CROSS", None),
+      ] {
+        let view = parse_create_view(
+          &format!(
+            "CREATE VIEW view0 AS SELECT a.data, a.id FROM a AS a {join_type} JOIN b AS b ON a.id = b.fk;"
+          ),
+          &tables,
+        )
+        .unwrap();
+
+        let metadata = ViewMetadata::new(view, &tables);
+        assert_eq!(
+          expected,
+          metadata.record_pk_column().map(|c| c.0),
+          "{join_type}"
+        );
+      }
+    }
+  }
+
+  #[test]
+  fn test_parse_create_view_with_group_by() {
+    let table_a = parse_create_table(
+      "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
+    );
+    let table_b = parse_create_table(
+      r#"
+          CREATE TABLE b (
+            id INTEGER PRIMARY KEY,
+            fk INTEGER NOT NULL REFERENCES a(id)
+          ) STRICT"#,
+    );
+
+    let tables = [table_a, table_b];
+
+    {
+      // JOIN on a SELECT is not suitable for APIs. They're cross-producty nature spoils PKs.
+      {
+        for (i, sql) in [
+          "CREATE VIEW v AS SELECT data, a.id AS z FROM a RIGHT JOIN b ON a.id = b.id GROUP BY z;",
+          "CREATE VIEW v AS SELECT data, x.id AS z FROM a AS x RIGHT JOIN b ON x.id = b.id GROUP BY z;",
+          "CREATE VIEW v AS SELECT data, x.id AS z FROM a x RIGHT JOIN b ON x.id = b.id GROUP BY z;",
+        ].iter().enumerate() {
+          let view = parse_create_view(sql, &tables).unwrap();
+          assert!(view.column_mapping.is_some(), "{i}: {sql}");
+
+          let metadata = ViewMetadata::new(view, &tables);
+          assert_eq!(Some(1), metadata.record_pk_column().map(|c| c.0));
+        }
+      }
+
+      {
+        let view = parse_create_view(
+          "CREATE VIEW v AS SELECT a.data, a.id FROM a RIGHT JOIN b ON a.id = b.id GROUP BY a.id;",
+          &tables,
+        )
+        .unwrap();
+
+        let metadata = ViewMetadata::new(view, &tables);
+        assert_eq!(Some(1), metadata.record_pk_column().map(|c| c.0));
+      }
+    }
+  }
+
+  #[test]
+  fn test_parse_create_view_from_issue_99() {
+    let authors_table = parse_create_table(
+      "
+        CREATE TABLE authors (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          age INTEGER DEFAULT NULL
+        ) STRICT;
+      ",
+    );
+    let posts_table = parse_create_table(
+      "
+        CREATE TABLE posts (
+          id INTEGER PRIMARY KEY,
+          author INTEGER DEFAULT NULL REFERENCES persons(id),
+          title TEXT NOT NULL
+        ) STRICT;
+      ",
+    );
+
+    let tables = [authors_table, posts_table];
+
+    let view = parse_create_view(
+      "
+        CREATE VIEW authors_view_posts AS
+          SELECT authors.* FROM authors authors
+              INNER JOIN posts posts ON posts.author = authors.id
+          GROUP BY authors.id;
+      ",
+      &tables,
+    )
+    .unwrap();
+
+    let metadata = ViewMetadata::new(view, &tables);
+    assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.0));
   }
 
   #[test]
@@ -726,15 +928,16 @@ mod tests {
       name: "view_name".to_string(),
       database_schema: Some("main".to_string()),
     };
-    let table_view = parse_create_view(
+    let view = parse_create_view(
       &format!(
         "CREATE VIEW {view_name} AS SELECT id FROM {table_name}",
         view_name = view_name.escaped_string(),
         table_name = table_name.escaped_string()
       ),
       &tables,
-    );
-    let view_metadata = Arc::new(ViewMetadata::new(table_view, &[table.clone()]));
+    )
+    .unwrap();
+    let view_metadata = Arc::new(ViewMetadata::new(view, &[table.clone()]));
 
     let mut view_set = HashSet::<Arc<ViewMetadata>>::new();
 

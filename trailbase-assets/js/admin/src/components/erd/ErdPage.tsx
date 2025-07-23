@@ -20,6 +20,7 @@ import {
   isNotNull,
   hiddenTable,
   tableType,
+  getColumns,
   ForeignKey,
 } from "@/lib/schema";
 
@@ -66,7 +67,7 @@ function findTargetPortName(
       continue;
     }
 
-    for (const column of tableOrView.columns ?? []) {
+    for (const column of getColumns(tableOrView) ?? []) {
       const unique = getUnique(column.options);
       if (unique?.is_primary ?? false) {
         return `${foreignKey.foreign_table}-${column.name}`;
@@ -88,7 +89,7 @@ function buildErNode(
   };
 
   const name = prettyFormatQualifiedName(tableOrView.name);
-  const columns = tableOrView.columns ?? [];
+  const columns = getColumns(tableOrView) ?? [];
 
   const view = tableType(tableOrView) === "view";
   const ports: PortMetadata[] = columns.map((column) => {

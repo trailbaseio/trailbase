@@ -196,16 +196,15 @@ export function isJSONColumn(column: Column): boolean {
   return false;
 }
 
-function columnsSatisfyRecordApiRequirements(
-  columns: Column[],
-  all: Table[],
-): boolean {
-  for (const column of columns) {
-    if (isPrimaryKeyColumn(column)) {
-      if (column.data_type === "Integer") {
-        return true;
-      }
+function isSuitableRecordPkColumn(column: Column, all: Table[]): boolean {
+  if (!isPrimaryKeyColumn(column)) {
+    return false;
+  }
 
+  switch (column.data_type) {
+    case "Integer":
+      return true;
+    case "Blob": {
       if (isUUIDColumn(column)) {
         return true;
       }
@@ -214,14 +213,14 @@ function columnsSatisfyRecordApiRequirements(
       if (foreign_key) {
         const foreign_col_name = foreign_key.referred_columns[0];
         if (!foreign_col_name) {
-          continue;
+          return false;
         }
 
         const foreign_table = all.find(
           (t) => t.name.name === foreign_key.foreign_table,
         );
         if (!foreign_table) {
-          continue;
+          return false;
         }
 
         const foreign_col = foreign_table.columns.find(
@@ -231,6 +230,7 @@ function columnsSatisfyRecordApiRequirements(
           return true;
         }
       }
+      break;
     }
   }
 
@@ -242,7 +242,11 @@ export function tableSatisfiesRecordApiRequirements(
   all: Table[],
 ): boolean {
   if (table.strict) {
-    return columnsSatisfyRecordApiRequirements(table.columns, all);
+    for (const column of table.columns) {
+      if (isSuitableRecordPkColumn(column, all)) {
+        return true;
+      }
+    }
   }
   return false;
 }
@@ -251,14 +255,48 @@ export function viewSatisfiesRecordApiRequirements(
   view: View,
   all: Table[],
 ): boolean {
-  const columns = view.columns;
-  if (columns) {
-    return columnsSatisfyRecordApiRequirements(columns, all);
+  const mapping = view.column_mapping;
+  if (!mapping) {
+    return false;
   }
+
+  const groupBy = mapping.group_by;
+  if (groupBy != null) {
+    if (isSuitableRecordPkColumn(mapping.columns[groupBy].column, all)) {
+      return true;
+    }
+  }
+
+  const RIGHT = 0x10;
+  const CROSS = 0x02;
+  const NATURAL = 0x04;
+  const MASK = RIGHT | CROSS | NATURAL;
+  for (const joinType of mapping.joins) {
+    if (joinType & MASK) {
+      return false;
+    }
+  }
+
+  for (const column of mapping.columns.map((c) => c.column)) {
+    if (isSuitableRecordPkColumn(column, all)) {
+      return true;
+    }
+  }
+
   return false;
 }
 
 export type TableType = "table" | "virtualTable" | "view";
+
+export function getColumns(tableOrView: Table | View): undefined | Column[] {
+  switch (tableType(tableOrView)) {
+    case "table":
+    case "virtualTable":
+      return (tableOrView as Table).columns;
+    case "view":
+      return (tableOrView as View).column_mapping?.columns.map((c) => c.column);
+  }
+}
 
 export function tableType(table: Table | View): TableType {
   if ("virtual_table" in table) {

@@ -608,7 +608,7 @@ mod tests {
           id INTEGER PRIMARY KEY,
           'index' TEXT NOT NULL DEFAULT '',
           nullable INTEGER
-        );
+        ) STRICT;
         INSERT INTO 'table' (id, 'index', nullable) VALUES (1, '1', 1), (2, '2', NULL), (3, '3', NULL);
       "#,
       )
