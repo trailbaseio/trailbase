@@ -3,9 +3,8 @@ use log::*;
 use std::collections::HashSet;
 use std::sync::Arc;
 use thiserror::Error;
-use trailbase_schema::sqlite::{
-  QualifiedName, SchemaError, Table, View, sqlite3_parse_into_statement,
-};
+use trailbase_schema::parse::parse_into_statement;
+use trailbase_schema::sqlite::{QualifiedName, SchemaError, Table, View};
 use trailbase_sqlite::params;
 
 pub use trailbase_schema::metadata::{
@@ -198,7 +197,7 @@ pub async fn lookup_and_parse_table_schema(
     .await?
     .ok_or_else(|| trailbase_sqlite::Error::Rusqlite(rusqlite::Error::QueryReturnedNoRows))?;
 
-  let Some(stmt) = sqlite3_parse_into_statement(&sql)? else {
+  let Some(stmt) = parse_into_statement(&sql)? else {
     return Err(SchemaLookupError::Missing);
   };
 
@@ -229,7 +228,7 @@ pub async fn lookup_and_parse_all_table_schemas(
 
     for row in rows.iter() {
       let sql: String = row.get(0)?;
-      let Some(stmt) = sqlite3_parse_into_statement(&sql)? else {
+      let Some(stmt) = parse_into_statement(&sql)? else {
         return Err(SchemaLookupError::Missing);
       };
       tables.push({

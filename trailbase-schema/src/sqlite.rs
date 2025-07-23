@@ -1,4 +1,17 @@
-use fallible_iterator::FallibleIterator;
+/// This file contains table schema and index representations. Originally, they were mostly
+/// adaptations of sqlparser's CreateX AST representations (we've since moved to
+/// sqlite3_parser). This serves two purposes:
+///
+///  * We'd like some representation that we can construct on the client with type-safety. We
+///    could also consider using proto here, but ts-rs let's us "skip" some fields.
+///  * But also, there's a fundamental difference between an AST that represents a specific SQL
+///    program and a more abstract semantic representation of the schema, e.g. we don't care in
+///    which order indexes were constructed or what quotes were used...
+///
+/// NOTE: We're very much "over-wrapping" here entering the space of the exact-program AST
+/// domain. This is mostly convenient for testing our code by transforming back and forth and
+/// checking the output is stable. We can use "skip" to remove some more "representational"
+/// details from the API.
 use itertools::Itertools;
 use log::*;
 use serde::{Deserialize, Serialize};
@@ -19,80 +32,6 @@ pub enum SchemaError {
   Precondition(Box<dyn std::error::Error + Send + Sync>),
 }
 
-pub fn sqlite3_parse_into_statements(
-  sql: &str,
-) -> Result<Vec<Stmt>, sqlite3_parser::lexer::sql::Error> {
-  use sqlite3_parser::ast::Cmd;
-
-  // According to sqlite3_parser's docs they're working to remove panics in some edge cases.
-  // Meanwhile we'll trap them here. We haven't seen any in practice yet.
-  let outer_result = std::panic::catch_unwind(|| {
-    let mut parser = sqlite3_parser::lexer::sql::Parser::new(sql.as_bytes());
-
-    let mut statements: Vec<Stmt> = vec![];
-    while let Some(cmd) = parser.next()? {
-      match cmd {
-        Cmd::Stmt(stmt) => {
-          statements.push(stmt);
-        }
-        Cmd::Explain(_) | Cmd::ExplainQueryPlan(_) => {}
-      }
-    }
-    return Ok(statements);
-  });
-
-  return match outer_result {
-    Ok(inner_result) => inner_result,
-    Err(_panic_err) => {
-      error!("Parser panicked");
-      return Err(sqlite3_parser::lexer::sql::Error::UnrecognizedToken(None));
-    }
-  };
-}
-
-pub fn sqlite3_parse_into_statement(
-  sql: &str,
-) -> Result<Option<Stmt>, sqlite3_parser::lexer::sql::Error> {
-  use sqlite3_parser::ast::Cmd;
-
-  // According to sqlite3_parser's docs they're working to remove panics in some edge cases.
-  // Meanwhile we'll trap them here. We haven't seen any in practice yet.
-  let outer_result = std::panic::catch_unwind(|| {
-    let mut parser = sqlite3_parser::lexer::sql::Parser::new(sql.as_bytes());
-
-    while let Some(cmd) = parser.next()? {
-      match cmd {
-        Cmd::Stmt(stmt) => {
-          return Ok(Some(stmt));
-        }
-        Cmd::Explain(_) | Cmd::ExplainQueryPlan(_) => {}
-      }
-    }
-    return Ok(None);
-  });
-
-  return match outer_result {
-    Ok(inner_result) => inner_result,
-    Err(_panic_err) => {
-      error!("Parser panicked");
-      return Err(sqlite3_parser::lexer::sql::Error::UnrecognizedToken(None));
-    }
-  };
-}
-
-// This file contains table schema and index representations. Originally, they were mostly
-// adaptations of sqlparser's CreateX AST representations (we've since moved to sqlite3_parser).
-// This serves two purposes:
-//
-//  * We'd like some representation that we can construct on the client with type-safety. We could
-//    also consider using proto here, but ts-rs let's us "skip" some fields.
-//  * But also, there's a fundamental difference between an AST that represents a specific SQL
-//    program and a more abstract semantic representation of the schema, e.g. we don't care in which
-//    order indexes were constructed or what quotes were used...
-//
-// NOTE: We're very much "over-wrapping" here entering the space of the exact-program AST domain.
-// This is mostly convenient for testing our code by transforming back and forth and checking the
-// output is stable. We can use "skip" to remove some more "representational" details from the API.
 #[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
 pub struct ForeignKey {
   pub name: Option<String>,
@@ -348,6 +287,64 @@ impl ColumnOption {
   }
 }
 
+impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
+  fn from(constraint: sqlite3_parser::ast::ColumnConstraint) -> Self {
+    type Constraint = sqlite3_parser::ast::ColumnConstraint;
+
+    return match constraint {
+      Constraint::PrimaryKey {
+        conflict_clause,
+        order: _,
+        auto_increment: _,
+      } => ColumnOption::Unique {
+        is_primary: true,
+        conflict_clause: conflict_clause.map(|c| c.into()),
+      },
+      Constraint::Unique(conflict_clause) => ColumnOption::Unique {
+        is_primary: false,
+        conflict_clause: conflict_clause.map(|c| c.into()),
+      },
+      Constraint::Check(expr) => {
+        // NOTE: This is not using unquote on purpose, since this is not an identifier.
+        ColumnOption::Check(expr.to_string())
+      }
+      Constraint::ForeignKey {
+        clause,
+        deref_clause,
+      } => {
+        let fk = build_foreign_key(None, None, clause, deref_clause);
+
+        ColumnOption::ForeignKey {
+          foreign_table: fk.foreign_table,
+          referred_columns: fk.referred_columns,
+          on_delete: fk.on_delete,
+          on_update: fk.on_update,
+        }
+      }
+      Constraint::NotNull { .. } => ColumnOption::NotNull,
+      Constraint::Default(expr) => {
+        // NOTE: This is not using unquote on purpose to avoid turning "DEFAULT ''" into "DEFAULT".
+        ColumnOption::Default(expr.to_string())
+      }
+      Constraint::Generated { expr, typ } => ColumnOption::Generated {
+        // NOTE: This is not using unquote on purpose to avoid turning "AS ('')" into "AS ()".
+        expr: expr.to_string(),
+        mode: typ.and_then(|t| match &*t.0 {
+          "VIRTUAL" => Some(GeneratedExpressionMode::Virtual),
+          "STORED" => Some(GeneratedExpressionMode::Stored),
+          x => {
+            warn!("Unexpected generated column mode: {x}");
+            None
+          }
+        }),
+      },
+      Constraint::Collate { .. } | Constraint::Defer(_) => {
+        panic!("Not implemented: {constraint:?}");
+      }
+    };
+  }
+}
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, TS, PartialEq)]
 pub enum ColumnDataType {
   Null,
@@ -453,6 +450,12 @@ impl ColumnDataType {
         return None;
       }
     });
+  }
+}
+
+impl From<sqlite3_parser::ast::Type> for ColumnDataType {
+  fn from(data_type: sqlite3_parser::ast::Type) -> Self {
+    return ColumnDataType::from_type_name(&data_type.name).unwrap_or(ColumnDataType::Null);
   }
 }
 
@@ -625,73 +628,6 @@ impl Table {
   }
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, TS, PartialEq)]
-pub struct TableIndex {
-  pub name: QualifiedName,
-
-  pub table_name: String,
-  pub columns: Vec<ColumnOrder>,
-  pub unique: bool,
-  pub predicate: Option<String>,
-
-  #[ts(skip)]
-  #[serde(default)]
-  pub if_not_exists: bool,
-}
-
-impl TableIndex {
-  pub fn create_index_statement(&self) -> String {
-    let indexed_columns = self
-      .columns
-      .iter()
-      .map(|c| {
-        format!(
-          "'{name}' {order}",
-          name = c.column_name,
-          order = c
-            .ascending
-            .map_or("", |asc| if asc { "ASC" } else { "DESC" })
-        )
-      })
-      .join(", ");
-
-    return format!(
-      "CREATE{unique} INDEX {if_not_exists} {fqn_name} ON '{table_name}' ({indexed_columns}) {predicate}",
-      unique = if self.unique { " UNIQUE" } else { "" },
-      if_not_exists = if self.if_not_exists {
-        "IF NOT EXISTS"
-      } else {
-        ""
-      },
-      fqn_name = self.name.escaped_string(),
-      table_name = self.table_name,
-      predicate = self
-        .predicate
-        .as_ref()
-        .map_or_else(|| "".to_string(), |p| format!("WHERE {p}")),
-    );
-  }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
-pub struct View {
-  pub name: QualifiedName,
-
-  /// Columns may be inferred from a view's query.
-  ///
-  /// Views can be defined with arbitrary queries referencing arbitrary sources: tables, views,
-  /// functions, ..., which makes them inherently not type safe and therefore their columns not
-  /// well defined.
-  pub columns: Option<Vec<Column>>,
-
-  pub query: String,
-
-  pub temporary: bool,
-
-  #[ts(skip)]
-  pub if_not_exists: bool,
-}
-
 impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
   type Error = SchemaError;
 
@@ -818,67 +754,51 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
   }
 }
 
-impl From<sqlite3_parser::ast::Type> for ColumnDataType {
-  fn from(data_type: sqlite3_parser::ast::Type) -> Self {
-    return ColumnDataType::from_type_name(&data_type.name).unwrap_or(ColumnDataType::Null);
-  }
+#[derive(Clone, Default, Debug, Serialize, Deserialize, TS, PartialEq)]
+pub struct TableIndex {
+  pub name: QualifiedName,
+
+  pub table_name: String,
+  pub columns: Vec<ColumnOrder>,
+  pub unique: bool,
+  pub predicate: Option<String>,
+
+  #[ts(skip)]
+  #[serde(default)]
+  pub if_not_exists: bool,
 }
 
-impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
-  fn from(constraint: sqlite3_parser::ast::ColumnConstraint) -> Self {
-    type Constraint = sqlite3_parser::ast::ColumnConstraint;
+impl TableIndex {
+  pub fn create_index_statement(&self) -> String {
+    let indexed_columns = self
+      .columns
+      .iter()
+      .map(|c| {
+        format!(
+          "'{name}' {order}",
+          name = c.column_name,
+          order = c
+            .ascending
+            .map_or("", |asc| if asc { "ASC" } else { "DESC" })
+        )
+      })
+      .join(", ");
 
-    return match constraint {
-      Constraint::PrimaryKey {
-        conflict_clause,
-        order: _,
-        auto_increment: _,
-      } => ColumnOption::Unique {
-        is_primary: true,
-        conflict_clause: conflict_clause.map(|c| c.into()),
+    return format!(
+      "CREATE{unique} INDEX {if_not_exists} {fqn_name} ON '{table_name}' ({indexed_columns}) {predicate}",
+      unique = if self.unique { " UNIQUE" } else { "" },
+      if_not_exists = if self.if_not_exists {
+        "IF NOT EXISTS"
+      } else {
+        ""
       },
-      Constraint::Unique(conflict_clause) => ColumnOption::Unique {
-        is_primary: false,
-        conflict_clause: conflict_clause.map(|c| c.into()),
-      },
-      Constraint::Check(expr) => {
-        // NOTE: This is not using unquote on purpose, since this is not an identifier.
-        ColumnOption::Check(expr.to_string())
-      }
-      Constraint::ForeignKey {
-        clause,
-        deref_clause,
-      } => {
-        let fk = build_foreign_key(None, None, clause, deref_clause);
-
-        ColumnOption::ForeignKey {
-          foreign_table: fk.foreign_table,
-          referred_columns: fk.referred_columns,
-          on_delete: fk.on_delete,
-          on_update: fk.on_update,
-        }
-      }
-      Constraint::NotNull { .. } => ColumnOption::NotNull,
-      Constraint::Default(expr) => {
-        // NOTE: This is not using unquote on purpose to avoid turning "DEFAULT ''" into "DEFAULT".
-        ColumnOption::Default(expr.to_string())
-      }
-      Constraint::Generated { expr, typ } => ColumnOption::Generated {
-        // NOTE: This is not using unquote on purpose to avoid turning "AS ('')" into "AS ()".
-        expr: expr.to_string(),
-        mode: typ.and_then(|t| match &*t.0 {
-          "VIRTUAL" => Some(GeneratedExpressionMode::Virtual),
-          "STORED" => Some(GeneratedExpressionMode::Stored),
-          x => {
-            warn!("Unexpected generated column mode: {x}");
-            None
-          }
-        }),
-      },
-      Constraint::Collate { .. } | Constraint::Defer(_) => {
-        panic!("Not implemented: {constraint:?}");
-      }
-    };
+      fqn_name = self.name.escaped_string(),
+      table_name = self.table_name,
+      predicate = self
+        .predicate
+        .as_ref()
+        .map_or_else(|| "".to_string(), |p| format!("WHERE {p}")),
+    );
   }
 }
 
@@ -931,6 +851,27 @@ impl std::fmt::Display for SelectFormatter {
   }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+pub struct View {
+  pub name: QualifiedName,
+
+  /// Columns may be inferred from a view's query.
+  ///
+  /// Views can be defined with arbitrary queries referencing arbitrary sources: tables, views,
+  /// functions, ..., which makes them inherently not type safe and therefore their columns not
+  /// well defined.
+  ///
+  /// NOTE: Should all this inference be in ViewMetadata?
+  pub columns: Option<Vec<Column>>,
+
+  pub query: String,
+
+  pub temporary: bool,
+
+  #[ts(skip)]
+  pub if_not_exists: bool,
+}
+
 impl View {
   pub fn from(stmt: sqlite3_parser::ast::Stmt, tables: &[Table]) -> Result<Self, SchemaError> {
     let sqlite3_parser::ast::Stmt::CreateView {
@@ -978,15 +919,6 @@ impl View {
       if_not_exists,
     });
   }
-}
-
-fn to_alias(alias: Option<sqlite3_parser::ast::As>) -> Option<String> {
-  return alias.map(|a| match a {
-    // "FROM table_name AS alias"
-    sqlite3_parser::ast::As::As(name) => unquote_name(name),
-    // "FROM table_name alias"
-    sqlite3_parser::ast::As::Elided(name) => unquote_name(name),
-  });
 }
 
 #[derive(Clone, Debug)]
@@ -1414,6 +1346,15 @@ fn unquote_expr(expr: Expr) -> String {
   };
 }
 
+fn to_alias(alias: Option<sqlite3_parser::ast::As>) -> Option<String> {
+  return alias.map(|a| match a {
+    // "FROM table_name AS alias"
+    sqlite3_parser::ast::As::As(name) => unquote_name(name),
+    // "FROM table_name alias"
+    sqlite3_parser::ast::As::Elided(name) => unquote_name(name),
+  });
+}
+
 #[cfg(test)]
 pub fn lookup_and_parse_table_schema(
   conn: &rusqlite::Connection,
@@ -1427,7 +1368,7 @@ pub fn lookup_and_parse_table_schema(
     |row| row.get(0),
   )?;
 
-  let Some(stmt) = sqlite3_parse_into_statement(&sql)? else {
+  let Some(stmt) = crate::parse::parse_into_statement(&sql)? else {
     anyhow::bail!("Not a statement");
   };
 
@@ -1437,6 +1378,7 @@ pub fn lookup_and_parse_table_schema(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::parse::parse_into_statement;
 
   #[test]
   fn test_quote() {
@@ -1469,7 +1411,7 @@ mod tests {
       table_name = table_name.escaped_string(),
     );
 
-    let parsed = sqlite3_parse_into_statement(&statement).unwrap().unwrap();
+    let parsed = parse_into_statement(&statement).unwrap().unwrap();
 
     let table: Table = parsed.try_into().unwrap();
     assert_eq!(table.name, table_name);
@@ -1479,7 +1421,7 @@ mod tests {
       "CREATE TABLE \"table\" ('index' TEXT, 'delete' TEXT, 'create' TEXT) STRICT",
       sql
     );
-    sqlite3_parse_into_statement(&sql).unwrap().unwrap();
+    parse_into_statement(&sql).unwrap().unwrap();
   }
 
   struct StmtFormatter(Stmt);
@@ -1523,7 +1465,7 @@ mod tests {
       conn.execute(&statement, ()).unwrap();
     }
 
-    let statement1 = sqlite3_parse_into_statement(&statement).unwrap().unwrap();
+    let statement1 = parse_into_statement(&statement).unwrap().unwrap();
     let table1: Table = statement1.clone().try_into().unwrap();
 
     let sql = table1.create_table_statement();
@@ -1533,7 +1475,7 @@ mod tests {
       conn.execute(&sql, ()).unwrap();
     }
 
-    let statement2 = sqlite3_parse_into_statement(&sql).unwrap().unwrap();
+    let statement2 = parse_into_statement(&sql).unwrap().unwrap();
 
     let table2: Table = statement2.clone().try_into().unwrap();
 
@@ -1558,10 +1500,10 @@ mod tests {
     const SQL: &str =
       "CREATE UNIQUE INDEX IF NOT EXISTS 'index' ON 'table' ('create') WHERE 'create' != '';";
 
-    let statement1 = sqlite3_parse_into_statement(SQL).unwrap().unwrap();
+    let statement1 = parse_into_statement(SQL).unwrap().unwrap();
     let index1: TableIndex = statement1.clone().try_into().unwrap();
 
-    let statement2 = sqlite3_parse_into_statement(&index1.create_index_statement())
+    let statement2 = parse_into_statement(&index1.create_index_statement())
       .unwrap()
       .unwrap();
     let index2: TableIndex = statement2.clone().try_into().unwrap();
@@ -1581,21 +1523,21 @@ mod tests {
       END
     "#;
 
-    sqlite3_parse_into_statement(SQL).unwrap().unwrap();
+    parse_into_statement(SQL).unwrap().unwrap();
   }
 
   #[test]
   fn test_parse_create_index() {
     let sql =
       r#"CREATE UNIQUE INDEX "main"."index_name" ON 'table_name' (a ASC, b DESC) WHERE x > 0"#;
-    let index: TableIndex = sqlite3_parse_into_statement(sql)
+    let index: TableIndex = parse_into_statement(sql)
       .unwrap()
       .unwrap()
       .try_into()
       .unwrap();
 
     let sql1 = index.create_index_statement();
-    let stmt1 = sqlite3_parse_into_statement(&sql1).unwrap().unwrap();
+    let stmt1 = parse_into_statement(&sql1).unwrap().unwrap();
     let index1: TableIndex = stmt1.try_into().unwrap();
 
     assert_eq!(index, index1, "Parsed: {sql1}");
@@ -1624,8 +1566,7 @@ mod tests {
     {
       // No alias
       let sql = "SELECT column FROM table_name";
-      let sqlite3_parser::ast::Stmt::Select(select) =
-        sqlite3_parse_into_statement(sql).unwrap().unwrap()
+      let sqlite3_parser::ast::Stmt::Select(select) = parse_into_statement(sql).unwrap().unwrap()
       else {
         panic!("Not a select");
       };
@@ -1635,8 +1576,7 @@ mod tests {
     {
       // With alias
       let sql = "SELECT alias.column FROM table_name AS alias";
-      let sqlite3_parser::ast::Stmt::Select(select) =
-        sqlite3_parse_into_statement(sql).unwrap().unwrap()
+      let sqlite3_parser::ast::Stmt::Select(select) = parse_into_statement(sql).unwrap().unwrap()
       else {
         panic!("Not a select");
       };
@@ -1646,8 +1586,7 @@ mod tests {
     {
       // With "elided" alias
       let sql = "SELECT alias.column FROM table_name alias";
-      let sqlite3_parser::ast::Stmt::Select(select) =
-        sqlite3_parse_into_statement(sql).unwrap().unwrap()
+      let sqlite3_parser::ast::Stmt::Select(select) = parse_into_statement(sql).unwrap().unwrap()
       else {
         panic!("Not a select");
       };
@@ -1657,8 +1596,7 @@ mod tests {
     {
       // JOIN on a SELECT.
       let sql = "SELECT x.column, y.column FROM table_name AS x LEFT JOIN (SELECT * FROM table_name) AS y ON x.column = y.column";
-      let sqlite3_parser::ast::Stmt::Select(select) =
-        sqlite3_parse_into_statement(sql).unwrap().unwrap()
+      let sqlite3_parser::ast::Stmt::Select(select) = parse_into_statement(sql).unwrap().unwrap()
       else {
         panic!("Not a select");
       };
@@ -1672,8 +1610,7 @@ mod tests {
     {
       // Compound SELECT.
       let sql = "SELECT column FROM table_name UNION SELECT column FROM table_name";
-      let sqlite3_parser::ast::Stmt::Select(select) =
-        sqlite3_parse_into_statement(sql).unwrap().unwrap()
+      let sqlite3_parser::ast::Stmt::Select(select) = parse_into_statement(sql).unwrap().unwrap()
       else {
         panic!("Not a select");
       };
@@ -1686,17 +1623,14 @@ mod tests {
   }
 
   fn parse_create_table(create_table_sql: &str) -> Table {
-    let create_table_statement = sqlite3_parse_into_statement(create_table_sql)
-      .unwrap()
-      .unwrap();
+    let create_table_statement = parse_into_statement(create_table_sql).unwrap().unwrap();
     return create_table_statement.try_into().unwrap();
   }
 
   #[test]
   fn test_view_column_extraction_join() {
     let sql = "SELECT user, *, a.*, p.user AS foo FROM foo.articles AS a LEFT JOIN bar.profiles AS p ON p.user = a.author";
-    let sqlite3_parser::ast::Stmt::Select(select) =
-      sqlite3_parse_into_statement(sql).unwrap().unwrap()
+    let sqlite3_parser::ast::Stmt::Select(select) = parse_into_statement(sql).unwrap().unwrap()
     else {
       panic!("Not a select");
     };

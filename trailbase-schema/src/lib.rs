@@ -6,6 +6,7 @@ pub mod error;
 pub mod file;
 pub mod json_schema;
 pub mod metadata;
+pub mod parse;
 pub mod registry;
 pub mod sqlite;
 

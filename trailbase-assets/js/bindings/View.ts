@@ -9,5 +9,7 @@ export type View = { name: QualifiedName,
  * Views can be defined with arbitrary queries referencing arbitrary sources: tables, views,
  * functions, ..., which makes them inherently not type safe and therefore their columns not
  * well defined.
+ *
+ * NOTE: Should all this inference be in ViewMetadata?
  */
 columns: Array<Column> | null, query: string, temporary: boolean, };

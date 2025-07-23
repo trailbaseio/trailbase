@@ -1,6 +1,7 @@
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
-use trailbase_schema::sqlite::{Column, sqlite3_parse_into_statements};
+use trailbase_schema::parse::parse_into_statements;
+use trailbase_schema::sqlite::Column;
 use trailbase_sqlite::rows::rows_to_json_arrays;
 use ts_rs::TS;
 
@@ -39,7 +40,7 @@ pub async fn query_handler(
 
   // Check the statements are correct before executing anything, just to be sure.
   let statements =
-    sqlite3_parse_into_statements(&request.query).map_err(|err| Error::BadRequest(err.into()))?;
+    parse_into_statements(&request.query).map_err(|err| Error::BadRequest(err.into()))?;
 
   let mut must_invalidate_table_cache = false;
   let mut mutation = true;

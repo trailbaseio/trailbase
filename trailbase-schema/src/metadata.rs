@@ -514,19 +514,16 @@ mod tests {
   use std::collections::HashSet;
 
   use super::*;
-  use crate::sqlite::{Table, sqlite3_parse_into_statement};
+  use crate::parse::parse_into_statement;
+  use crate::sqlite::Table;
 
   fn parse_create_table(create_table_sql: &str) -> Table {
-    let create_table_statement = sqlite3_parse_into_statement(create_table_sql)
-      .unwrap()
-      .unwrap();
+    let create_table_statement = parse_into_statement(create_table_sql).unwrap().unwrap();
     return create_table_statement.try_into().unwrap();
   }
 
   fn parse_create_view(create_view_sql: &str, tables: &[Table]) -> View {
-    let create_view_statement = sqlite3_parse_into_statement(create_view_sql)
-      .unwrap()
-      .unwrap();
+    let create_view_statement = parse_into_statement(create_view_sql).unwrap().unwrap();
     return View::from(create_view_statement, tables).unwrap();
   }
 

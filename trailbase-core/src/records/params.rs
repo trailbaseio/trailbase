@@ -541,7 +541,8 @@ mod tests {
   use base64::prelude::*;
   use schemars::{JsonSchema, schema_for};
   use serde_json::json;
-  use trailbase_schema::sqlite::{Table, sqlite3_parse_into_statement};
+  use trailbase_schema::parse::parse_into_statement;
+  use trailbase_schema::sqlite::Table;
 
   use super::*;
   use crate::constants::USER_TABLE;
@@ -624,7 +625,7 @@ mod tests {
     "#
     );
 
-    let table: Table = sqlite3_parse_into_statement(&sql)
+    let table: Table = parse_into_statement(&sql)
       .unwrap()
       .unwrap()
       .try_into()

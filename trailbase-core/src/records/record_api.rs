@@ -8,7 +8,8 @@ use trailbase_schema::metadata::{
   JsonColumnMetadata, TableMetadata, TableOrViewMetadata, ViewMetadata, find_file_column_indexes,
   find_user_id_foreign_key_columns,
 };
-use trailbase_schema::sqlite::{Column, ColumnDataType, sqlite3_parse_into_statement};
+use trailbase_schema::parse::parse_into_statement;
+use trailbase_schema::sqlite::{Column, ColumnDataType};
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::{NamedParamRef, NamedParams, Params as _, Value};
 
@@ -647,7 +648,7 @@ impl RecordApi {
 }
 
 pub(crate) fn validate_rule(rule: &str) -> Result<(), String> {
-  let stmt = sqlite3_parse_into_statement(&format!("SELECT {rule}"))
+  let stmt = parse_into_statement(&format!("SELECT {rule}"))
     .map_err(|err| format!("'{rule}' not a valid SQL expression: {err}"))?;
 
   let Some(sqlite3_parser::ast::Stmt::Select(select)) = stmt else {
@@ -850,13 +851,14 @@ fn filter_columns(
 
 #[cfg(test)]
 mod tests {
-  use trailbase_schema::sqlite::{QualifiedName, sqlite3_parse_into_statement};
+  use trailbase_schema::parse::parse_into_statement;
+  use trailbase_schema::sqlite::QualifiedName;
 
   use super::*;
   use crate::{config::proto::PermissionFlag, records::Permission};
 
   fn sanitize_template(template: &str) {
-    assert!(sqlite3_parse_into_statement(template).is_ok(), "{template}");
+    assert!(parse_into_statement(template).is_ok(), "{template}");
     assert!(!template.contains("   "), "{template}");
     assert!(!template.contains("\n\n"), "{template}");
   }

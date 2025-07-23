@@ -427,7 +427,8 @@ mod tests {
   use aes_gcm::{Aes256Gcm, Key};
   use serde::Deserialize;
   use std::borrow::Cow;
-  use trailbase_schema::sqlite::{QualifiedName, sqlite3_parse_into_statement};
+  use trailbase_schema::parse::parse_into_statement;
+  use trailbase_schema::sqlite::QualifiedName;
   use trailbase_sqlite::Value;
 
   use super::*;
@@ -444,7 +445,7 @@ mod tests {
   use crate::util::urlencode;
 
   fn sanitize_template(template: &str) {
-    assert!(sqlite3_parse_into_statement(template).is_ok(), "{template}");
+    assert!(parse_into_statement(template).is_ok(), "{template}");
     assert!(!template.contains("\n\n"), "{template}");
   }
 
