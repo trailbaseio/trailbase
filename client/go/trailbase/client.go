@@ -369,7 +369,15 @@ func doRefreshToken(client *thinClient, headers []Header, refreshToken string) (
 }
 
 func NewClient(site string) (Client, error) {
+	return NewClientWithTokens(site, nil)
+}
+
+func NewClientWithTokens(site string, tokens *Tokens) (Client, error) {
 	base, err := url.Parse(site)
+	if err != nil {
+		return nil, err
+	}
+	tokenState, err := NewTokenState(tokens)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +387,7 @@ func NewClient(site string) (Client, error) {
 			base:   base,
 			client: &http.Client{},
 		},
-		tokenState: nil,
+		tokenState: tokenState,
 		tokenMutex: &sync.Mutex{},
 	}, nil
 }

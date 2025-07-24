@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"runtime"
 	"strings"
 	"time"
@@ -15,11 +16,14 @@ import (
 	"testing"
 )
 
-const PORT uint16 = 4059
+const (
+	PORT uint16 = 4059
+	SITE string = "http://127.0.0.1:4059"
+)
 
-func buildCommand(name string, arg ...string) *exec.Cmd {
+func buildCommand(name string, cwd string, arg ...string) *exec.Cmd {
 	c := exec.Command(name, arg...)
-	c.Dir = "../../../"
+	c.Dir = cwd
 	c.Stdout = os.Stdout
 	// TODO: Print stdout only if command fails.
 	// c.Stderr = os.Stderr
@@ -27,8 +31,16 @@ func buildCommand(name string, arg ...string) *exec.Cmd {
 }
 
 func startTrailBase() (*exec.Cmd, error) {
+	cwd := "../../../"
+	traildepot := "client/testfixture"
+
+	_, err := os.Stat(path.Join(cwd, traildepot))
+	if err != nil {
+		return nil, errors.New(fmt.Sprint("missing traildepot: ", err))
+	}
+
 	// First build separately to avoid health timeouts.
-	err := buildCommand("cargo", "build").Run()
+	err = buildCommand("cargo", cwd, "build").Run()
 	if err != nil {
 		return nil, err
 	}
@@ -37,12 +49,12 @@ func startTrailBase() (*exec.Cmd, error) {
 	args := []string{
 		"run",
 		"--",
-		"--data-dir=client/testfixture",
+		fmt.Sprint("--data-dir=", traildepot),
 		"run",
 		fmt.Sprintf("--address=127.0.0.1:%d", PORT),
 		"--js-runtime-threads=2",
 	}
-	cmd := buildCommand("cargo", args...)
+	cmd := buildCommand("cargo", cwd, args...)
 	cmd.Start()
 
 	for i := range 100 {
@@ -50,7 +62,7 @@ func startTrailBase() (*exec.Cmd, error) {
 			log.Printf("Checking healthy: (%d/100)\n", i+1)
 		}
 
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/api/healthcheck", PORT))
+		resp, err := http.Get(fmt.Sprintf("%s/api/healthcheck", SITE))
 		if err == nil {
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
@@ -82,7 +94,7 @@ func stopTrailBase(cmd *exec.Cmd) {
 }
 
 func connect(t *testing.T) Client {
-	client, err := NewClient(fmt.Sprintf("http://localhost:%d", PORT))
+	client, err := NewClient(SITE)
 	if err != nil {
 		panic(err)
 	}
@@ -120,9 +132,13 @@ func TestAuth(t *testing.T) {
 	assertEqual(t, user.Email, "admin@localhost")
 	assert(t, client.Tokens().RefreshToken != nil, "missing token")
 
+	newClient, err := NewClientWithTokens(SITE, client.Tokens())
+	assertFine(t, err)
+	assertEqual(t, newClient.User().Email, "admin@localhost")
+
 	client.Refresh()
 
-	err := client.Logout()
+	err = client.Logout()
 	assertFine(t, err)
 	assert(t, client.Tokens() == nil, "should be nil")
 	assert(t, client.User() == nil, "should be nil")
