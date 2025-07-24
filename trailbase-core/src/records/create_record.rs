@@ -199,7 +199,7 @@ mod test {
   use super::*;
   use crate::admin::user::*;
   use crate::app_state::*;
-  use crate::auth::api::login::login_with_password;
+  use crate::auth::util::login_with_password;
   use crate::config::proto::{ConflictResolutionStrategy, PermissionFlag, RecordApiConfig};
   use crate::records::test_utils::*;
   use crate::records::*;

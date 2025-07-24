@@ -705,7 +705,7 @@ mod tests {
 
   use crate::admin::user::*;
   use crate::app_state::test_state;
-  use crate::auth::api::login::login_with_password;
+  use crate::auth::util::login_with_password;
   use crate::config::proto::RecordApiConfig;
   use crate::records::PermissionFlag;
   use crate::records::test_utils::add_record_api_config;

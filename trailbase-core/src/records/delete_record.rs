@@ -59,8 +59,8 @@ mod test {
   use super::*;
   use crate::admin::user::*;
   use crate::app_state::*;
-  use crate::auth::api::login::login_with_password;
   use crate::auth::user::User;
+  use crate::auth::util::login_with_password;
   use crate::config::proto::PermissionFlag;
   use crate::extract::Either;
   use crate::records::create_record::{

@@ -3,6 +3,7 @@ use axum::{
   response::{IntoResponse, Redirect, Response},
 };
 use base64::prelude::*;
+use chrono::Duration;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use tower_cookies::Cookies;
@@ -105,10 +106,12 @@ async fn login_without_pkce(
   // Check credentials.
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
-  return match login_with_password(state, &normalized_email, &request.password).await {
+  let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
+  return match login_with_password(state, &normalized_email, &request.password, auth_token_ttl)
+    .await
+  {
     Ok(response) if is_json => Ok(Json(response.into_login_response()).into_response()),
     Ok(response) => {
-      let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
       cookies.add(new_cookie(
         COOKIE_AUTH_TOKEN,
         response.auth_token,
@@ -223,11 +226,7 @@ async fn login_with_pkce(
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("invalid user")),
-    1 => {
-      // TODO: could be smarter with merging here.
-      let url = format!("{redirect}?code={authorization_code}");
-      Ok(Redirect::to(&url).into_response())
-    }
+    1 => Ok(Redirect::to(&format!("{redirect}?code={authorization_code}")).into_response()),
     _ => {
       panic!("code challenge update affected multiple users: {rows_affected}");
     }
@@ -292,10 +291,11 @@ pub async fn check_credentials(
 
 /// Given valid credentials, logs in the user by minting new tokens and therefore also creating a
 /// new sessions.
-pub async fn login_with_password(
+pub(crate) async fn login_with_password(
   state: &AppState,
   normalized_email: &str,
   password: &str,
+  auth_token_ttl: Duration,
 ) -> Result<NewTokens, AuthError> {
   let db_user: DbUser = user_by_email(state, normalized_email).await.map_err(|_| {
     // Don't leak if user wasn't found or password was wrong.
@@ -305,7 +305,6 @@ pub async fn login_with_password(
   // Validate password.
   check_user_password(&db_user, password, state.demo_mode())?;
 
-  let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   let user_id = db_user.uuid();
 
   let tokens = mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;

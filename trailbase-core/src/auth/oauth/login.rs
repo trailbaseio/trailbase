@@ -2,6 +2,7 @@ use axum::{
   extract::{Path, Query, State},
   response::Redirect,
 };
+use base64::prelude::*;
 use chrono::Duration;
 use oauth2::{CsrfToken, PkceCodeChallenge, Scope};
 use serde::Deserialize;
@@ -42,13 +43,36 @@ pub(crate) async fn login_with_external_auth_provider(
     return Err(AuthError::OAuthProviderNotFound);
   };
   let redirect = validate_redirects(&state, query.redirect_to.as_deref(), None)?;
-  let code_response = query.response_type.is_some_and(|r| r == "code");
+  let user_pkce_code_challenge = query.pkce_code_challenge;
+  let response_type = if query.response_type.is_some_and(|r| r == "code") {
+    Some(ResponseType::Code)
+  } else {
+    None
+  };
 
-  let client = provider.oauth_client(&state)?;
+  // PKCE code flow requires the client to provide both a valid redirect and `pkce_code_challenge`.
+  if response_type == Some(ResponseType::Code) {
+    if redirect.is_none() {
+      return Err(AuthError::BadRequest("missing 'redirect_to'"));
+    }
 
-  let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
+    if BASE64_URL_SAFE_NO_PAD
+      .decode(user_pkce_code_challenge.as_deref().ok_or_else(|| {
+        return AuthError::BadRequest("missing 'pkce_code_challenge'");
+      })?)
+      .is_err()
+    {
+      return Err(AuthError::BadRequest("invalid 'pkce_code_challenge'"));
+    };
+  }
 
-  let (authorize_url, csrf_state) = client
+  // Also use PKCE between TrailBase and the external auth provider. Is is independent from PKCE
+  // between the client and TrailBase.
+  let (server_pkce_code_challenge, server_pkce_code_verifier) =
+    PkceCodeChallenge::new_random_sha256();
+
+  let (authorize_url, csrf_state) = provider
+    .oauth_client(&state)?
     .authorize_url(CsrfToken::new_random)
     .add_scopes(
       provider
@@ -56,20 +80,16 @@ pub(crate) async fn login_with_external_auth_provider(
         .into_iter()
         .map(|s| Scope::new(s.to_string())),
     )
-    .set_pkce_challenge(pkce_code_challenge)
+    .set_pkce_challenge(server_pkce_code_challenge)
     .url();
 
-  // Set short-lived CSRF and PkceCodeVerifier cookies for the callback.
   let oauth_state = OAuthState {
-    exp: (chrono::Utc::now() + chrono::Duration::seconds(5 * 60)).timestamp(),
+    // Set short-lived CSRF and PkceCodeVerifier cookies for the callback.
+    exp: (chrono::Utc::now() + Duration::seconds(5 * 60)).timestamp(),
     csrf_secret: csrf_state.secret().to_string(),
-    pkce_code_verifier: pkce_code_verifier.secret().to_string(),
-    user_pkce_code_challenge: query.pkce_code_challenge,
-    response_type: if code_response {
-      Some(ResponseType::Code)
-    } else {
-      None
-    },
+    pkce_code_verifier: server_pkce_code_verifier.secret().to_string(),
+    user_pkce_code_challenge,
+    response_type,
     redirect_to: redirect,
   };
 

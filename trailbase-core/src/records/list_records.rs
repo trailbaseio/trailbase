@@ -434,8 +434,8 @@ mod tests {
   use super::*;
   use crate::admin::user::*;
   use crate::app_state::*;
-  use crate::auth::api::login::login_with_password;
   use crate::auth::user::User;
+  use crate::auth::util::login_with_password;
   use crate::config::proto::PermissionFlag;
   use crate::records::RecordError;
   use crate::records::query_builder::expand_tables;

@@ -11,7 +11,6 @@ use crate::auth::api::change_password::{
   ChangePasswordQuery, ChangePasswordRequest, change_password_handler,
 };
 use crate::auth::api::delete::delete_handler;
-use crate::auth::api::login::login_with_password;
 use crate::auth::api::logout::{LogoutQuery, logout_handler};
 use crate::auth::api::refresh::{RefreshRequest, refresh_handler};
 use crate::auth::api::register::{RegisterUserRequest, register_user_handler};
@@ -21,6 +20,7 @@ use crate::auth::api::reset_password::{
 };
 use crate::auth::api::verify_email::{VerifyEmailQuery, verify_email_handler};
 use crate::auth::user::{DbUser, User};
+use crate::auth::util::login_with_password;
 use crate::constants::*;
 use crate::email::{Mailer, testing::TestAsyncSmtpTransport};
 use crate::extract::Either;

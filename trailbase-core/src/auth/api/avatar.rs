@@ -145,8 +145,8 @@ mod tests {
   use super::*;
   use crate::admin::user::create_user_for_test;
   use crate::app_state::*;
-  use crate::auth::api::login::login_with_password;
   use crate::auth::user::{DbUser, User};
+  use crate::auth::util::login_with_password;
   use crate::constants::USER_TABLE;
   use crate::extract::Either;
   use crate::util::id_to_b64;

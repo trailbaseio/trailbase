@@ -279,8 +279,8 @@ mod test {
   use super::*;
   use crate::admin::user::*;
   use crate::app_state::*;
-  use crate::auth::api::login::login_with_password;
   use crate::auth::user::User;
+  use crate::auth::util::login_with_password;
   use crate::config::proto::{PermissionFlag, RecordApiConfig};
   use crate::constants::USER_TABLE;
   use crate::extract::Either;

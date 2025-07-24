@@ -2,10 +2,8 @@ use axum::{
   extract::{Path, Query, State},
   response::Redirect,
 };
-use chrono::Duration;
 use lazy_static::lazy_static;
-use oauth2::PkceCodeVerifier;
-use oauth2::{AuthorizationCode, StandardTokenResponse, TokenResponse};
+use oauth2::{AuthorizationCode, PkceCodeVerifier, StandardTokenResponse, TokenResponse};
 use serde::Deserialize;
 use tower_cookies::Cookies;
 use trailbase_sqlite::{named_params, params};
@@ -15,10 +13,11 @@ use uuid::Uuid;
 use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::oauth::OAuthUser;
+use crate::auth::oauth::providers::OAuthProviderType;
 use crate::auth::oauth::state::{OAuthState, ResponseType};
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
-use crate::auth::util::{new_cookie, remove_cookie, user_by_id, validate_redirects};
+use crate::auth::util::{get_user_by_id, new_cookie, remove_cookie, validate_redirects};
 use crate::config::proto::OAuthProviderId;
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, USER_TABLE, VERIFICATION_CODE_LENGTH,
@@ -53,32 +52,177 @@ pub(crate) async fn callback_from_external_auth_provider(
     return Err(AuthError::OAuthProviderNotFound);
   };
 
-  // Get round-tripped state from the users browser.
-  let Some(oauth_state) = cookies.get(COOKIE_OAUTH_STATE).and_then(|cookie| {
-    // The decoding can fail if the state was tampered with.
-    state.jwt().decode::<OAuthState>(cookie.value()).ok()
-  }) else {
-    return Err(AuthError::BadRequest("missing state"));
+  // Get round-tripped state from cookies, set by prior call to oauth::login.
+  let oauth_state = {
+    let oauth_state_cookie = cookies
+      .get(COOKIE_OAUTH_STATE)
+      .ok_or_else(|| AuthError::BadRequest("missing state"))?
+      .value()
+      .to_owned();
+
+    remove_cookie(&cookies, COOKIE_OAUTH_STATE);
+
+    state
+      .jwt()
+      .decode::<OAuthState>(&oauth_state_cookie)
+      .map_err(|_err| AuthError::BadRequest("invalid state"))
+      .and_then(|state| {
+        if state.csrf_secret != query.state {
+          return Err(AuthError::BadRequest("invalid state"));
+        }
+        return Ok(state);
+      })?
   };
 
   let redirect = validate_redirects(&state, oauth_state.redirect_to.as_deref(), None)?;
 
-  if oauth_state.csrf_secret != query.state {
+  return match oauth_state.response_type {
+    Some(ResponseType::Code) => {
+      callback_from_external_auth_provider_with_pkce(
+        &state,
+        provider,
+        redirect,
+        query.code,
+        oauth_state.pkce_code_verifier,
+        oauth_state.user_pkce_code_challenge,
+      )
+      .await
+    }
+    _ => {
+      callback_from_external_auth_provider_without_pkce(
+        &state,
+        &cookies,
+        provider,
+        redirect,
+        query.code,
+        oauth_state.pkce_code_verifier,
+      )
+      .await
+    }
+  };
+}
+
+async fn callback_from_external_auth_provider_without_pkce(
+  state: &AppState,
+  cookies: &Cookies,
+  provider: &OAuthProviderType,
+  redirect: Option<String>,
+  auth_code: String,
+  server_pkce_code_verifier: String,
+) -> Result<Redirect, AuthError> {
+  let db_user = get_or_create_user(state, provider, auth_code, server_pkce_code_verifier).await?;
+
+  // Mint user token and start a session.
+  let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
+
+  let FreshTokens {
+    auth_token_claims,
+    refresh_token,
+    ..
+  } = mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;
+
+  let auth_token = state
+    .jwt()
+    .encode(&auth_token_claims)
+    .map_err(|err| AuthError::Internal(err.into()))?;
+
+  cookies.add(new_cookie(
+    COOKIE_AUTH_TOKEN,
+    auth_token,
+    auth_token_ttl,
+    state.dev_mode(),
+  ));
+  cookies.add(new_cookie(
+    COOKIE_REFRESH_TOKEN,
+    refresh_token,
+    refresh_token_ttl,
+    state.dev_mode(),
+  ));
+
+  return Ok(Redirect::to(redirect.as_deref().unwrap_or_else(|| {
+    if state.public_dir().is_some() {
+      "/"
+    } else {
+      "/_/auth/profile"
+    }
+  })));
+}
+
+async fn callback_from_external_auth_provider_with_pkce(
+  state: &AppState,
+  provider: &OAuthProviderType,
+  redirect: Option<String>,
+  auth_code: String,
+  server_pkce_code_verifier: String,
+  user_pkce_code_challenge: Option<String>,
+) -> Result<Redirect, AuthError> {
+  let (Some(redirect), Some(user_pkce_code_challenge)) = (redirect, user_pkce_code_challenge)
+  else {
+    // The OAuth login handler should have already ensured that both are present in the PKCE
+    // case. This can only really happen if the state was tempered with.
     return Err(AuthError::BadRequest("invalid state"));
+  };
+
+  let db_user = get_or_create_user(state, provider, auth_code, server_pkce_code_verifier).await?;
+
+  // For the auth_code flow we generate a random code.
+  let authorization_code = generate_random_string(VERIFICATION_CODE_LENGTH);
+
+  lazy_static! {
+    pub static ref QUERY: String = format!(
+      r#"
+        UPDATE
+          '{USER_TABLE}'
+        SET
+          authorization_code = :authorization_code,
+          authorization_code_sent_at = UNIXEPOCH(),
+          pkce_code_challenge = :pkce_code_challenge
+        WHERE
+          id = :user_id
+      "#
+    );
   }
 
+  let rows_affected = state
+    .user_conn()
+    .execute(
+      &*QUERY,
+      named_params! {
+        ":authorization_code": authorization_code.clone(),
+        ":pkce_code_challenge": user_pkce_code_challenge,
+        ":user_id": db_user.id,
+      },
+    )
+    .await?;
+
+  return match rows_affected {
+    0 => Err(AuthError::BadRequest("invalid user")),
+    1 => Ok(Redirect::to(&format!(
+      "{redirect}?code={authorization_code}"
+    ))),
+    _ => {
+      panic!("code challenge update affected multiple users: {rows_affected}");
+    }
+  };
+}
+
+async fn get_or_create_user(
+  state: &AppState,
+  provider: &OAuthProviderType,
+  auth_code: String,
+  server_pkce_code_verifier: String,
+) -> Result<DbUser, AuthError> {
   let http_client = reqwest::ClientBuilder::new()
-    // Following redirects opens the client up to SSRF vulnerabilities.
+    // Following redirects might set us up for server-side request forgery (SSRF).
     .redirect(reqwest::redirect::Policy::none())
     .build()
     .map_err(|err| AuthError::Internal(err.into()))?;
 
-  let client = provider.oauth_client(&state)?;
-
   // Exchange code for token.
-  let token_response: StandardTokenResponse<_, oauth2::basic::BasicTokenType> = client
-    .exchange_code(AuthorizationCode::new(query.code))
-    .set_pkce_verifier(PkceCodeVerifier::new(oauth_state.pkce_code_verifier))
+  let token_response: StandardTokenResponse<_, oauth2::basic::BasicTokenType> = provider
+    .oauth_client(state)?
+    .exchange_code(AuthorizationCode::new(auth_code))
+    .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
     .request_async(&http_client)
     .await
     .map_err(|err| AuthError::FailedDependency(err.into()))?;
@@ -91,127 +235,40 @@ pub(crate) async fn callback_from_external_auth_provider(
 
   let oauth_user = provider
     .get_user(token_response.access_token().secret().clone())
-    .await?;
+    .await
+    .and_then(|user| {
+      if !user.verified {
+        return Err(AuthError::BadRequest("External OAuth user unverified"));
+      }
+      return Ok(user);
+    })?;
 
-  if !oauth_user.verified {
-    return Err(AuthError::BadRequest("remote oauth user not verified"));
-  }
+  let existing_user = user_by_provider_id(
+    state.user_conn(),
+    oauth_user.provider_id,
+    &oauth_user.provider_user_id,
+  )
+  .await
+  .ok();
 
-  let conn = state.user_conn();
-  let existing_user =
-    user_by_provider_id(conn, oauth_user.provider_id, &oauth_user.provider_user_id)
-      .await
-      .ok();
-
-  let db_user = match existing_user {
-    Some(existing_user) => existing_user,
+  return match existing_user {
+    Some(existing_user) => Ok(existing_user),
     None => {
       // NOTE: We could combine the INSERT + SELECT.
-      let id = create_user_for_external_provider(conn, &oauth_user).await?;
-      let db_user = user_by_id(&state, &id).await?;
-      assert!(db_user.verified);
+      let id = create_user_for_external_provider(state.user_conn(), &oauth_user).await?;
+      let db_user = get_user_by_id(state.user_conn(), &id).await?;
 
+      // We should have only ever created the local user, if the external user was verified.
+      assert!(db_user.verified);
       if !db_user.verified {
         return Err(AuthError::Internal(
-          "user created from oauth should be verified".into(),
+          "OAuth users are expected to be verified".into(),
         ));
       }
 
-      db_user
+      Ok(db_user)
     }
   };
-
-  // Mint user token and start a session.
-  //
-  // FIXME: We shouldn't log the user in, i.e. create a session, if the're using the PKCE login
-  // flow.
-  let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
-  let expires_in = token_response.expires_in().map_or(auth_token_ttl, |exp| {
-    Duration::seconds(exp.as_secs() as i64)
-  });
-
-  let FreshTokens {
-    auth_token_claims,
-    refresh_token,
-    ..
-  } = mint_new_tokens(state.user_conn(), &db_user, expires_in).await?;
-
-  let auth_token = state
-    .jwt()
-    .encode(&auth_token_claims)
-    .map_err(|err| AuthError::Internal(err.into()))?;
-
-  cookies.add(new_cookie(
-    COOKIE_AUTH_TOKEN,
-    auth_token,
-    expires_in,
-    state.dev_mode(),
-  ));
-  cookies.add(new_cookie(
-    COOKIE_REFRESH_TOKEN,
-    refresh_token,
-    refresh_token_ttl,
-    state.dev_mode(),
-  ));
-
-  remove_cookie(&cookies, COOKIE_OAUTH_STATE);
-
-  let code_response_requested: bool = oauth_state
-    .response_type
-    .is_some_and(|t| t == ResponseType::Code);
-  if code_response_requested {
-    if redirect.is_none() {
-      return Err(AuthError::BadRequest("missing 'redirect_to'"));
-    };
-
-    // For the auth_code flow we generate a random code.
-    let authorization_code = generate_random_string(VERIFICATION_CODE_LENGTH);
-
-    lazy_static! {
-      pub static ref QUERY: String = format!(
-        r#"
-        UPDATE
-          '{USER_TABLE}'
-        SET
-          authorization_code = :authorization_code,
-          authorization_code_sent_at = UNIXEPOCH(),
-          pkce_code_challenge = :pkce_code_challenge
-        WHERE
-          id = :user_id
-      "#
-      );
-    }
-
-    let rows_affected = state
-      .user_conn()
-      .execute(
-        &*QUERY,
-        named_params! {
-          ":authorization_code": authorization_code.clone(),
-          ":pkce_code_challenge": oauth_state.user_pkce_code_challenge,
-          ":user_id": db_user.id,
-        },
-      )
-      .await?;
-
-    match rows_affected {
-      0 => return Err(AuthError::BadRequest("invalid user")),
-      1 => {
-        // Success
-      }
-      _ => {
-        panic!("code challenge update affected multiple users: {rows_affected}");
-      }
-    };
-  }
-
-  return Ok(Redirect::to(redirect.as_deref().unwrap_or_else(|| {
-    if state.public_dir().is_some() {
-      "/"
-    } else {
-      "/_/auth/profile"
-    }
-  })));
 }
 
 async fn create_user_for_external_provider(

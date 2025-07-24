@@ -62,7 +62,7 @@ pub mod openapi {
 
 pub mod api {
   pub use crate::admin::user::{CreateUserRequest, create_user_handler};
-  pub use crate::auth::api::login::login_with_password;
+  pub use crate::auth::util::login_with_password;
   pub use crate::auth::{JwtHelper, TokenClaims, cli};
   pub use crate::connection::{Connection, init_main_db};
   pub use crate::email::{Email, EmailError};
