@@ -25,6 +25,7 @@ pub use user::User;
 
 use crate::constants::AUTH_API_PATH;
 
+// NOTE: This import is needed to not mangle names in OpenAPI export.
 use api::*;
 
 #[derive(OpenApi)]
@@ -44,7 +45,7 @@ use api::*;
     refresh::refresh_handler,
     login::login_handler,
     token::auth_code_to_token_handler,
-    login::login_status_handler,
+    status::login_status_handler,
     logout::logout_handler,
     logout::post_logout_handler,
     avatar::get_avatar_handler,
@@ -134,7 +135,7 @@ pub(super) fn router() -> Router<crate::AppState> {
     // Login status (also let's one lift tokens from cookies).
     .route(
       &format!("/{AUTH_API_PATH}/status"),
-      get(api::login::login_status_handler),
+      get(api::status::login_status_handler),
     )
     // Logout [get]: deletes all sessions for the current user.
     .route(
@@ -178,7 +179,7 @@ pub(super) fn admin_auth_router() -> Router<crate::AppState> {
     )
     .route(
       &format!("/{AUTH_API_PATH}/status"),
-      get(api::login::login_status_handler),
+      get(api::status::login_status_handler),
     )
     .route(
       &format!("/{AUTH_API_PATH}/logout"),

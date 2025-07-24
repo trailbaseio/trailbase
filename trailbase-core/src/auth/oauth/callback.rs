@@ -121,7 +121,10 @@ pub(crate) async fn callback_from_external_auth_provider(
     }
   };
 
-  // Mint user token.
+  // Mint user token and start a session.
+  //
+  // FIXME: We shouldn't log the user in, i.e. create a session, if the're using the PKCE login
+  // flow.
   let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   let expires_in = token_response.expires_in().map_or(auth_token_ttl, |exp| {
     Duration::seconds(exp.as_secs() as i64)
@@ -153,18 +156,20 @@ pub(crate) async fn callback_from_external_auth_provider(
 
   remove_cookie(&cookies, COOKIE_OAUTH_STATE);
 
-  if let Some(response_type) = oauth_state.response_type {
-    if response_type == ResponseType::Code {
-      if redirect.is_none() {
-        return Err(AuthError::BadRequest("missing 'redirect_to'"));
-      };
+  let code_response_requested: bool = oauth_state
+    .response_type
+    .is_some_and(|t| t == ResponseType::Code);
+  if code_response_requested {
+    if redirect.is_none() {
+      return Err(AuthError::BadRequest("missing 'redirect_to'"));
+    };
 
-      // For the auth_code flow we generate a random code.
-      let authorization_code = generate_random_string(VERIFICATION_CODE_LENGTH);
+    // For the auth_code flow we generate a random code.
+    let authorization_code = generate_random_string(VERIFICATION_CODE_LENGTH);
 
-      lazy_static! {
-        pub static ref QUERY: String = format!(
-          r#"
+    lazy_static! {
+      pub static ref QUERY: String = format!(
+        r#"
         UPDATE
           '{USER_TABLE}'
         SET
@@ -174,29 +179,30 @@ pub(crate) async fn callback_from_external_auth_provider(
         WHERE
           id = :user_id
       "#
-        );
-      }
-
-      let rows_affected = state
-        .user_conn()
-        .execute(
-          &*QUERY,
-          named_params! {
-            ":authorization_code": authorization_code.clone(),
-            ":pkce_code_challenge": oauth_state.user_pkce_code_challenge,
-            ":user_id": db_user.id,
-          },
-        )
-        .await?;
-
-      match rows_affected {
-        0 => return Err(AuthError::BadRequest("invalid user")),
-        1 => {}
-        _ => {
-          panic!("code challenge update affected multiple users: {rows_affected}");
-        }
-      };
+      );
     }
+
+    let rows_affected = state
+      .user_conn()
+      .execute(
+        &*QUERY,
+        named_params! {
+          ":authorization_code": authorization_code.clone(),
+          ":pkce_code_challenge": oauth_state.user_pkce_code_challenge,
+          ":user_id": db_user.id,
+        },
+      )
+      .await?;
+
+    match rows_affected {
+      0 => return Err(AuthError::BadRequest("invalid user")),
+      1 => {
+        // Success
+      }
+      _ => {
+        panic!("code challenge update affected multiple users: {rows_affected}");
+      }
+    };
   }
 
   return Ok(Redirect::to(redirect.as_deref().unwrap_or_else(|| {
