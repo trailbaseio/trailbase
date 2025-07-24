@@ -148,14 +148,15 @@ repos:
       # NOTE: `swift-format` always exits with code 0, meaning we depend on
       # "--in-place" and the pre-commit framework's "Post Run" hook to fail
       # if files were altered.
-      entry: swift format -r --in-place client/trailbase-swift/**/*.swift
+      entry: swift format -r --in-place client/swift/trailbase/**/*.swift
       language: system
       types: [swift]
       pass_filenames: false
 
     - id: swift_test
       name: Swift test
-      entry: swift test --package-path client/trailbase-swift
+      # NOTE: cannot test `docs/examples/record_api_swift`, since not hermetic
+      entry: swift test --package-path client/swift/trailbase
       language: system
       types: [swift]
       pass_filenames: false

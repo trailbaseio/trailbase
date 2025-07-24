@@ -11,13 +11,13 @@ let package = Package(
       targets: ["RecordApiDocs"])
   ],
   dependencies: [
-    .package(path: "../../../client/trailbase-swift")
+    .package(path: "../../../client/swift/trailbase")
   ],
   targets: [
     .target(
       name: "RecordApiDocs",
       dependencies: [
-        .product(name: "TrailBase", package: "trailbase-swift")
+        .product(name: "TrailBase", package: "trailbase")
       ]
     ),
     .testTarget(
