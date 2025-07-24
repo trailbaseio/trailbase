@@ -99,7 +99,7 @@ repos:
 
     - id: dart_test
       name: Dart test
-      entry: sh -c 'dart pub get && cd client/trailbase-dart && dart test'
+      entry: sh -c 'dart pub get && cd client/dart && dart test'
       language: system
       types: [dart]
       # Unlike formatting, analyzing & testing require a project rather than a list of files.

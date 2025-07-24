@@ -9,7 +9,7 @@ resolution: workspace
 
 dependencies:
   trailbase:
-    path: ../../../client/trailbase-dart
+    path: ../../../client/dart
 
 dev_dependencies:
   lints: ^5.1.1

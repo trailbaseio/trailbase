@@ -15,7 +15,7 @@ dependencies:
   logging: ^1.2.0
   shared_preferences: ^2.3.2
   trailbase:
-    path: ../../../client/trailbase-dart
+    path: ../../../client/dart
 
 dev_dependencies:
   flutter_test:

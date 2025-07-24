@@ -6,7 +6,7 @@ static:
 format:
 	pnpm -r format; \
 		cargo +nightly fmt; \
-		dart format client/trailbase-dart docs/examples/record_api_dart examples/blog/flutter; \
+		dart format client/dart docs/examples/record_api_dart examples/blog/flutter; \
 		# Don't mess with TrailBase writing config.textproto
 		txtpbfmt `find . -regex ".*.textproto" | grep -v config.textproto`; \
 		dotnet format client/dotnet/trailbase; \

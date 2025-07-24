@@ -205,7 +205,7 @@ Future<Process> initTrailBase() async {
 }
 
 Future<void> main() async {
-  if (!Directory.current.path.endsWith('trailbase-dart')) {
+  if (!Directory.current.path.endsWith('dart')) {
     throw Exception('Unexpected working directory');
   }
 
