@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-  "client/trailbase-rs",
+  "client/rust",
   "docs/examples/record_api_rs",
   "examples/custom-binary",
   "trailbase-apalis",
@@ -18,7 +18,7 @@ members = [
   "vendor/sqlean",
 ]
 default-members = [
-  "client/trailbase-rs",
+  "client/rust",
   "trailbase-assets",
   "trailbase-build",
   "trailbase-cli",
@@ -67,8 +67,9 @@ tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread", "fs", "s
 tracing = { version = "0.1.40", default-features = false }
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["smallvec", "std", "fmt", "json"] }
 trailbase-apalis = { path = "trailbase-apalis", version = "0.1.0" }
-trailbase-build = { path = "trailbase-build", version = "0.1.1" }
 trailbase-assets = { path = "trailbase-assets", version = "0.2.0" }
+trailbase-build = { path = "trailbase-build", version = "0.1.1" }
+trailbase-client = { path = "client/rust", version = "0.5.0" }
 trailbase-sqlean = { path = "vendor/sqlean", version = "0.0.3" }
 trailbase-extension = { path = "trailbase-extension", version = "0.3.0" }
 trailbase-js = { path = "trailbase-js", version = "0.2.0" }

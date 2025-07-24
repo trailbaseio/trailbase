@@ -19,7 +19,7 @@ const PORT: u16 = 4057;
 
 fn start_server() -> Result<Server, std::io::Error> {
   let cwd = std::env::current_dir()?;
-  assert!(cwd.ends_with("trailbase-rs"));
+  assert!(cwd.ends_with("rust"));
 
   let command_cwd = cwd.parent().unwrap().parent().unwrap();
   let depot_path = "client/testfixture";
