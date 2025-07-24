@@ -21,7 +21,7 @@ class TrailBaseFixture:
 
     def __init__(self) -> None:
         cwd = os.getcwd()
-        traildepot = "../testfixture" if cwd.endswith("trailbase-py") else "client/testfixture"
+        traildepot = "../testfixture" if cwd.endswith("python") else "client/testfixture"
 
         logger.info("Building TrailBase")
         build = subprocess.run(["cargo", "build"])

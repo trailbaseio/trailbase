@@ -123,21 +123,21 @@ repos:
     ### Python client
     - id: python_format
       name: Python format
-      entry: poetry -C client/trailbase-py run black --config pyproject.toml --check .
+      entry: poetry -C client/python run black --config pyproject.toml --check .
       language: system
       types: [python]
       pass_filenames: false
 
     - id: python_check
       name: Python check
-      entry: poetry -C client/trailbase-py run pyright --outputjson
+      entry: poetry -C client/python run pyright --outputjson
       language: system
       types: [python]
       pass_filenames: false
 
     - id: python_test
       name: Python test
-      entry: poetry -C client/trailbase-py run pytest
+      entry: poetry -C client/python run pytest
       language: system
       types: [python]
       pass_filenames: false

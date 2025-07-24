@@ -11,7 +11,7 @@ format:
 		txtpbfmt `find . -regex ".*.textproto" | grep -v config.textproto`; \
 		dotnet format client/dotnet/trailbase; \
 	       	dotnet format client/dotnet/test; \
-		poetry -C client/trailbase-py run black --config pyproject.toml .; \
+		poetry -C client/python run black --config pyproject.toml .; \
 		swift format -r -i client/swift/trailbase/**/*.swift; \
 		gofmt -w **/*.go;
 
@@ -21,7 +21,7 @@ check:
 		dart analyze; \
 		dotnet format client/dotnet/trailbase --verify-no-changes; \
 		dotnet format client/dotnet/test --verify-no-changes; \
-		poetry -C client/trailbase-py run pyright
+		poetry -C client/python run pyright
 
 docker:
 	docker buildx build --platform linux/arm64,linux/amd64 --output=type=registry -t trailbase/trailbase:latest .

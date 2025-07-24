@@ -493,7 +493,7 @@ files = [
 
 [[package]]
 name = "trailbase"
-version = "0.3.0"
+version = "0.4.0"
 description = "TrailBase client for Python"
 optional = false
 python-versions = "^3.12"
@@ -508,7 +508,7 @@ pyjwt = "^2.10.0"
 
 [package.source]
 type = "directory"
-url = "../../../client/trailbase-py"
+url = "../../../client/python"
 
 [[package]]
 name = "typing-extensions"
@@ -526,4 +526,4 @@ markers = {main = "python_version < \"3.13\""}
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "71bb1977fce56458d00419bb62a9112bc8c479d1063c3b835fed7c8092f4737b"
+content-hash = "af05be45b5aa841db3cdc0b17d2ae133b40a7fdd1d22bec70244a3420ff40127"

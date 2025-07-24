@@ -43,7 +43,7 @@ jobs:
           python-version: '3.13'
       - name: Poetry install
         run: |
-          pipx install poetry && poetry -C client/trailbase-py install
+          pipx install poetry && poetry -C client/python install
       # - name: Setup Go
       #   uses: actions/setup-go@v5
       #   with:
