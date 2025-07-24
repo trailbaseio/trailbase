@@ -17,6 +17,7 @@ Future<void> main() async {
         '${record.level.name}: ${record.time}  ${record.loggerName}: ${record.message}');
   });
 
+  WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
 
   final tokensJson = prefs.getString(_tokensKey);
