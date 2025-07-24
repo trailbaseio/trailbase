@@ -51,36 +51,61 @@ pub fn validate_and_normalize_email_address(email_address: &str) -> Result<Strin
   return Ok(email_address.to_string());
 }
 
+pub(crate) fn validate_redirect(
+  site: Option<&url::Url>,
+  custom_uri_schemes: &[String],
+  redirect: &str,
+  dev: bool,
+) -> Result<(), AuthError> {
+  // Always accept redirects relative to current site.
+  if redirect.starts_with("/") {
+    return Ok(());
+  }
+
+  if let Ok(url) = url::Url::parse(redirect) {
+    let scheme = url.scheme();
+    if let Some(site) = site {
+      if url.host() == site.host() && scheme == site.scheme() {
+        return Ok(());
+      }
+    }
+
+    // Allow custom schemes for mobile apps, desktop and SPAs.
+    if scheme != "http" && scheme != "https" {
+      for custom_scheme in custom_uri_schemes {
+        if url.scheme() == custom_scheme {
+          return Ok(());
+        }
+      }
+    }
+
+    if dev
+      && match url.host() {
+        Some(url::Host::Ipv4(ip)) if ip.is_loopback() => true,
+        Some(url::Host::Ipv6(ip)) if ip.is_loopback() => true,
+        Some(url::Host::Domain("localhost")) => true,
+        _ => false,
+      }
+    {
+      return Ok(());
+    }
+  }
+
+  return Err(AuthError::BadRequest("invalid redirect"));
+}
+
+/// Validates up to two redirects, typically from query parameter and/or request body.
 pub(crate) fn validate_redirects(
   state: &AppState,
-  first: &Option<String>,
-  second: &Option<String>,
+  primary: Option<&str>,
+  secondary: Option<&str>,
 ) -> Result<Option<String>, AuthError> {
-  let site = state.access_config(|c| c.server.site_url.clone());
+  let site: &Option<url::Url> = &state.site_url();
+  let custom_uri_schemes = state.access_config(|c| c.auth.custom_uri_schemes.clone());
 
-  let valid = |redirect: &String| -> bool {
-    if redirect.starts_with("/") {
-      return true;
-    }
-    if state.dev_mode() && redirect.starts_with("http://localhost") {
-      return true;
-    }
-
-    // TODO: Add a configurable allow list.
-    if let Some(site) = site {
-      return redirect.starts_with(&site);
-    }
-    return false;
-  };
-
-  #[allow(clippy::manual_flatten)]
-  for r in [first, second] {
-    if let Some(r) = r {
-      if valid(r) {
-        return Ok(Some(r.to_owned()));
-      }
-      return Err(AuthError::BadRequest("Invalid redirect"));
-    }
+  if let Some(r) = [primary, secondary].iter().flatten().next() {
+    validate_redirect(site.as_ref(), &custom_uri_schemes, r, state.dev_mode())?;
+    return Ok(Some((*r).to_string()));
   }
 
   return Ok(None);
@@ -258,6 +283,7 @@ pub(crate) fn derive_pkce_code_challenge(pkce_code_verifier: &str) -> String {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::app_state::test_state;
 
   #[test]
   fn test_validate_email() {
@@ -269,6 +295,73 @@ mod tests {
     assert_eq!(
       strip_plus_email_addressing("foo+spam@test.org"),
       "foo@test.org"
+    );
+  }
+
+  #[test]
+  fn test_validate_redirect() {
+    let empty_site: Option<url::Url> = None;
+    assert!(validate_redirect(empty_site.as_ref(), &[], "", true).is_err());
+    assert!(validate_redirect(empty_site.as_ref(), &[], "/somewhere", false).is_ok());
+    assert!(
+      validate_redirect(
+        empty_site.as_ref(),
+        &["custom".to_string()],
+        "custom://somewhere",
+        false
+      )
+      .is_ok()
+    );
+    assert!(validate_redirect(empty_site.as_ref(), &[], "http://localhost", false).is_err());
+    assert!(validate_redirect(empty_site.as_ref(), &[], "http://127.0.0.1", false).is_err());
+    assert!(validate_redirect(empty_site.as_ref(), &[], "http://localhost", true).is_ok());
+
+    let site = Some(url::Url::parse("https://test.org").unwrap());
+    assert!(validate_redirect(site.as_ref(), &[], "/somewhere", false).is_ok());
+    assert!(validate_redirect(site.as_ref(), &[], "https://test.org/somewhere", false).is_ok());
+    assert!(validate_redirect(site.as_ref(), &[], "https://other.org/somewhere", false).is_err());
+    assert!(validate_redirect(site.as_ref(), &[], "custom://test.org/somewhere", false).is_err());
+    assert!(
+      validate_redirect(
+        site.as_ref(),
+        &["custom".to_string()],
+        "custom://test.org/somewhere",
+        false
+      )
+      .is_ok()
+    );
+  }
+
+  #[tokio::test]
+  async fn test_validate_redirects() {
+    let state = test_state(None).await.unwrap();
+
+    assert!(validate_redirects(&state, None, None).is_ok());
+    assert!(validate_redirects(&state, Some("invalid"), None).is_err());
+
+    let redirect = "https://test.org";
+    assert_eq!(
+      redirect,
+      validate_redirects(&state, None, Some(redirect))
+        .unwrap()
+        .unwrap()
+    );
+    assert!(validate_redirects(&state, Some("http://invalid.org"), Some(redirect)).is_err());
+
+    assert!(validate_redirects(&state, None, Some("https://other.org")).is_err());
+
+    for loopback in ["http://localhost", "http://127.0.0.1"] {
+      assert_eq!(
+        Some(loopback.to_string()),
+        validate_redirects(&state, None, Some(loopback)).expect(loopback)
+      );
+    }
+
+    assert!(validate_redirects(&state, None, Some("invalid://something")).is_err());
+    let custom = "test-scheme://something";
+    assert_eq!(
+      Some(custom.to_string()),
+      validate_redirects(&state, None, Some(custom)).unwrap()
     );
   }
 }

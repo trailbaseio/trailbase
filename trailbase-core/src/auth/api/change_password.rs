@@ -45,7 +45,7 @@ pub async fn change_password_handler(
   user: User,
   either_request: Either<ChangePasswordRequest>,
 ) -> Result<Redirect, AuthError> {
-  let redirect = validate_redirects(&state, &query.redirect_to, &None)?;
+  let redirect = validate_redirects(&state, query.redirect_to.as_deref(), None)?;
 
   let request = match either_request {
     Either::Json(req) => req,

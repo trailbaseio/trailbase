@@ -74,7 +74,11 @@ pub(crate) async fn login_handler(
   };
 
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
-  let redirect = validate_redirects(&state, &query.redirect_to, &request.redirect_to)?;
+  let redirect = validate_redirects(
+    &state,
+    query.redirect_to.as_deref(),
+    request.redirect_to.as_deref(),
+  )?;
   let code_response = request.response_type.as_ref().is_some_and(|t| t == "code");
   let pkce_code_challenge = request.pkce_code_challenge.clone();
 

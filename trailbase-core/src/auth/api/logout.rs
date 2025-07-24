@@ -39,7 +39,7 @@ pub async fn logout_handler(
   user: Option<User>,
   cookies: Cookies,
 ) -> Result<Redirect, AuthError> {
-  let redirect = validate_redirects(&state, &query.redirect_to, &None)?;
+  let redirect = validate_redirects(&state, query.redirect_to.as_deref(), None)?;
 
   remove_all_cookies(&cookies);
 

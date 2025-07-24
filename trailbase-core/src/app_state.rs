@@ -348,6 +348,10 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
         ..Default::default()
       },
     );
+    config
+      .auth
+      .custom_uri_schemes
+      .push("test-scheme".to_string());
 
     // NOTE: The below "append" semantics are different from prod's override behavior, to avoid
     // races between concurrent tests. The registry needs to be global for the sqlite extensions

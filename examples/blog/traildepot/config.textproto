@@ -15,6 +15,7 @@ auth {
       }
     }
   ]
+  custom_uri_schemes: ["trailbase-example-blog"]
 }
 record_apis: [
   {

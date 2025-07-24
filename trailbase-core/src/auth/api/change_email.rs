@@ -151,7 +151,7 @@ pub async fn change_email_confirm_handler(
   Query(query): Query<ChangeEmailConfigQuery>,
   user: User,
 ) -> Result<Redirect, AuthError> {
-  let redirect = validate_redirects(&state, &query.redirect_to, &None)?;
+  let redirect = validate_redirects(&state, query.redirect_to.as_deref(), None)?;
 
   if email_verification_code.len() != VERIFICATION_CODE_LENGTH {
     return Err(AuthError::BadRequest("Invalid code"));

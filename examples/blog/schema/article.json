@@ -1,0 +1,81 @@
+{
+  "title": "articles_view",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "intro": {
+      "type": "string"
+    },
+    "tag": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "image": {
+      "$ref": "#/$defs/image"
+    },
+    "created": {
+      "type": "integer"
+    },
+    "username": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "author",
+    "title",
+    "intro",
+    "tag",
+    "body",
+    "created",
+    "username"
+  ],
+  "$defs": {
+    "image": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "FileUpload",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The file's unique id from which the objectstore path is derived.",
+          "type": "string"
+        },
+        "filename": {
+          "description": "The file's original file name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content_type": {
+          "description": "The file's user-provided content type.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "description": "The file's inferred mime type. Not user provided.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ]
+    }
+  }
+}

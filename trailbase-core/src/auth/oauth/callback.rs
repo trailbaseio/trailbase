@@ -61,7 +61,7 @@ pub(crate) async fn callback_from_external_auth_provider(
     return Err(AuthError::BadRequest("missing state"));
   };
 
-  let redirect = validate_redirects(&state, &oauth_state.redirect_to, &None)?;
+  let redirect = validate_redirects(&state, oauth_state.redirect_to.as_deref(), None)?;
 
   if oauth_state.csrf_secret != query.state {
     return Err(AuthError::BadRequest("invalid state"));

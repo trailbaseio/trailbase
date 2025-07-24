@@ -110,7 +110,7 @@ pub async fn verify_email_handler(
   Path(email_verification_code): Path<String>,
   Query(query): Query<VerifyEmailQuery>,
 ) -> Result<Redirect, AuthError> {
-  let redirect = validate_redirects(&state, &query.redirect_to, &None)?;
+  let redirect = validate_redirects(&state, query.redirect_to.as_deref(), None)?;
 
   lazy_static! {
     static ref UPDATE_CODE_QUERY: String = format!(

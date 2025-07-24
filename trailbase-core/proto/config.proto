@@ -77,6 +77,12 @@ message AuthConfig {
 
   /// Map of configured OAuth providers.
   map<string, OAuthProviderConfig> oauth_providers = 11;
+
+  /// List of custom URI schemes allowed as auth redirects.
+  ///
+  /// This is useful for mobile apps, desktop or SPAs where an app registers a
+  /// custom scheme for calls it wants to handle.
+  repeated string custom_uri_schemes = 21;
 }
 
 message S3StorageConfig {
