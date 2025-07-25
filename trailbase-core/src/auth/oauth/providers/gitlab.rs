@@ -23,11 +23,11 @@ impl GitlabOAuthProvider {
 
   fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
-      return Err(OAuthProviderError::Missing("Discord client id".to_string()));
+      return Err(OAuthProviderError::Missing("GitLab client id".to_string()));
     };
     let Some(client_secret) = config.client_secret.clone() else {
       return Err(OAuthProviderError::Missing(
-        "Discord client secret".to_string(),
+        "GitLab client secret".to_string(),
       ));
     };
 
@@ -76,7 +76,7 @@ impl OAuthProvider for GitlabOAuthProvider {
   }
 
   fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["identify", "email"];
+    return vec!["read_user"];
   }
 
   async fn get_user(&self, access_token: String) -> Result<OAuthUser, AuthError> {
@@ -95,14 +95,15 @@ impl OAuthProvider for GitlabOAuthProvider {
       // username: String,
       email: String,
       avatar_url: Option<String>,
-      active: bool,
+      state: String,
     }
 
     let user = response
       .json::<GitlabUser>()
       .await
       .map_err(|err| AuthError::FailedDependency(err.into()))?;
-    if !user.active {
+    let verified = user.state == "active";
+    if !verified {
       return Err(AuthError::Unauthorized);
     }
 
@@ -110,7 +111,7 @@ impl OAuthProvider for GitlabOAuthProvider {
       provider_user_id: user.id.to_string(),
       provider_id: OAuthProviderId::Gitlab,
       email: user.email,
-      verified: user.active,
+      verified,
       avatar: user.avatar_url,
     });
   }
