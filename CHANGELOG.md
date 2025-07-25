@@ -2,7 +2,7 @@
 
 * Support custom URI schmes for auth redirects like `my-app://callback`.
 * Stop auto-redirect for signed in users if explicit `?redirect_to` is provided.
-* Fix benign ghost session when login in using PKCE.
+* Fix benign ghost session when logging in using PKCE.
 * Fix param propagation for OAuth login flow.
 * Many more tests and better documentation.
 * Minor: clean up the repository of clients.

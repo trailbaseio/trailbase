@@ -234,7 +234,7 @@ async fn test_auth_password_login_flow_with_pkce() {
   .await
   .unwrap();
 
-  let location = url::Url::parse(&get_see_other_location(&login_response).unwrap()).unwrap();
+  let location = url::Url::parse(&get_redirect_location(&login_response).unwrap()).unwrap();
   assert_eq!("test-scheme", location.scheme());
   let auth_code_re = Regex::new(r"^code=(.*)$").unwrap();
   let captures = auth_code_re.captures(&location.query().unwrap()).unwrap();
@@ -698,7 +698,7 @@ async fn session_exists(state: &AppState, user_id: Uuid) -> bool {
     .unwrap();
 }
 
-fn get_see_other_location(response: &Response) -> Option<String> {
+fn get_redirect_location(response: &Response) -> Option<String> {
   return response
     .headers()
     .get("location")
@@ -707,7 +707,7 @@ fn get_see_other_location(response: &Response) -> Option<String> {
 
 fn is_failed_login_redirect_response(response: &Response) -> bool {
   return response.status() == StatusCode::SEE_OTHER
-    && get_see_other_location(response).map_or(false, |location| {
+    && get_redirect_location(response).map_or(false, |location| {
       location.starts_with("/_/auth/login?alert=")
     });
 }
