@@ -59,12 +59,34 @@ async fn ui_login_handler(
     pkce_code_challenge = hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref()),
   );
 
+  let oauth_query_params: Vec<String> = [
+    query
+      .redirect_to
+      .as_ref()
+      .map(|r| format!("redirect_to={r}")),
+    query
+      .response_type
+      .as_ref()
+      .map(|r| format!("response_type={r}")),
+    query
+      .pkce_code_challenge
+      .as_ref()
+      .map(|r| format!("pkce_code_challenge={r}")),
+  ]
+  .into_iter()
+  .flatten()
+  .collect();
+
   let html = LoginTemplate {
     state: form_state,
     alert: query.alert.as_deref().unwrap_or_default(),
-    redirect_to: query.redirect_to.as_deref(),
     enable_registration: !state.access_config(|c| c.auth.disable_password_auth.unwrap_or(false)),
     oauth_providers: &oauth_providers,
+    oauth_query_params: if oauth_query_params.is_empty() {
+      None
+    } else {
+      Some(oauth_query_params.join("&"))
+    },
   }
   .render();
 

@@ -17,7 +17,7 @@ const BASE_URL = import.meta.env.BASE_URL;
     <form
       id="login-form"
       class="flex flex-col gap-2"
-      action={`${formBaseAction}{% if let Some(r) = redirect_to %}?redirect_to={{ r }}{% endif %}`}
+      action={`${formBaseAction}`}
       data-base_action={formBaseAction}
       data-base_url={BASE_URL}
       method="post"
@@ -76,7 +76,7 @@ const BASE_URL = import.meta.env.BASE_URL;
 
       {"{% for provider in oauth_providers %}"}
       <a
-        href={`${AUTH_API}/oauth/{{ provider.name }}/login{% if let Some(r) = redirect_to %}?redirect_to={{ r }}{% endif %}`}
+        href={`${AUTH_API}/oauth/{{ provider.name }}/login{% if let Some(q) = oauth_query_params %}?{{ q }}{% endif %}`}
         class={cn("w-full", buttonVariants({ variant: "outline" }))}
       >
         <div class="flex items-center gap-2">
@@ -100,6 +100,9 @@ const BASE_URL = import.meta.env.BASE_URL;
       const baseAction = form.dataset.base_action;
       const baseUrl = form.dataset.base_url;
 
+      // NOTE: Only setting redirect_to should be fine since other params such
+      // as response_type are sent via the hidden form state. This is different from
+      // OAuth APIs, which expect oauth_query_params.
       const redirect = urlParams.get("redirect_to");
       if (redirect) {
         form.action = `${baseAction}?redirect_to=${redirect}`;

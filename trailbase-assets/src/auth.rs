@@ -11,9 +11,9 @@ pub struct OAuthProvider {
 pub struct LoginTemplate<'a> {
   pub state: String,
   pub alert: &'a str,
-  pub redirect_to: Option<&'a str>,
   pub enable_registration: bool,
   pub oauth_providers: &'a [OAuthProvider],
+  pub oauth_query_params: Option<String>,
 }
 
 #[derive(Template)]
@@ -84,16 +84,36 @@ mod tests {
     let template = LoginTemplate {
       state: state.clone(),
       alert,
-      redirect_to: Some(redirect_to),
       enable_registration: true,
       oauth_providers: &[],
+      oauth_query_params: Some(format!("redirect_to={redirect_to}&foo=bar")),
     }
     .render()
     .unwrap();
 
     assert!(template.contains(&state), "{template}"); // Not escaped.
-    assert!(template.contains(&redirect_to), "{template}"); // Not escaped.
+    assert!(!template.contains(&redirect_to), "{template}"); // Not escaped.
+    // Missing because no oauth provider given.
+    assert!(!template.contains("foo=bar"), "{template}"); // Not escaped.
     assert!(!template.contains(alert), "{template}"); // Is escaped.
+
+    let oauth_template = LoginTemplate {
+      state: state.clone(),
+      alert: "",
+      enable_registration: false,
+      oauth_providers: &[OAuthProvider {
+        name: "name".to_string(),
+        display_name: "Fancy Name".to_string(),
+        img_name: "oidc".to_string(),
+      }],
+      oauth_query_params: Some(format!("redirect_to={redirect_to}&foo=bar")),
+    }
+    .render()
+    .unwrap();
+
+    assert!(oauth_template.contains(&state), "{template}"); // Not escaped.
+    assert!(oauth_template.contains(&redirect_to), "{template}"); // Not escaped.
+    assert!(oauth_template.contains("foo=bar"), "{template}"); // Not escaped.
   }
 
   #[test]
