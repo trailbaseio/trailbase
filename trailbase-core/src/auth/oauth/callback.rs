@@ -53,26 +53,25 @@ pub(crate) async fn callback_from_external_auth_provider(
   };
 
   // Get round-tripped state from cookies, set by prior call to oauth::login.
-  let oauth_state = {
-    let oauth_state_cookie = cookies
-      .get(COOKIE_OAUTH_STATE)
-      .ok_or_else(|| AuthError::BadRequest("missing state"))?
-      .value()
-      .to_owned();
-
-    remove_cookie(&cookies, COOKIE_OAUTH_STATE);
-
-    state
-      .jwt()
-      .decode::<OAuthState>(&oauth_state_cookie)
-      .map_err(|_err| AuthError::BadRequest("invalid state"))
-      .and_then(|state| {
-        if state.csrf_secret != query.state {
-          return Err(AuthError::BadRequest("invalid state"));
-        }
-        return Ok(state);
-      })?
-  };
+  let oauth_state = state
+    .jwt()
+    .decode::<OAuthState>(
+      cookies
+        .get(COOKIE_OAUTH_STATE)
+        .ok_or_else(|| AuthError::BadRequest("missing state"))?
+        .value(),
+    )
+    .map_err(|_err| {
+      remove_cookie(&cookies, COOKIE_OAUTH_STATE);
+      return AuthError::BadRequest("invalid state");
+    })
+    .and_then(|state| {
+      if state.csrf_secret != query.state {
+        remove_cookie(&cookies, COOKIE_OAUTH_STATE);
+        return Err(AuthError::BadRequest("invalid state"));
+      }
+      return Ok(state);
+    })?;
 
   let redirect = validate_redirects(&state, oauth_state.redirect_to.as_deref(), None)?;
 
@@ -80,6 +79,7 @@ pub(crate) async fn callback_from_external_auth_provider(
     Some(ResponseType::Code) => {
       callback_from_external_auth_provider_with_pkce(
         &state,
+        &cookies,
         provider,
         redirect,
         query.code,
@@ -144,6 +144,10 @@ async fn callback_from_external_auth_provider_without_pkce(
     state.dev_mode(),
   ));
 
+  // NOTE: we're removing the OAUTH_STATE cookie deliberately late in case there are any
+  // transient issues, letting users retry.
+  remove_cookie(cookies, COOKIE_OAUTH_STATE);
+
   return Ok(Redirect::to(redirect.as_deref().unwrap_or_else(|| {
     if state.public_dir().is_some() {
       "/"
@@ -160,6 +164,7 @@ async fn callback_from_external_auth_provider_without_pkce(
 /// TODO: Needs test coverage.
 async fn callback_from_external_auth_provider_with_pkce(
   state: &AppState,
+  cookies: &Cookies,
   provider: &OAuthProviderType,
   redirect: Option<String>,
   auth_code: String,
@@ -170,6 +175,7 @@ async fn callback_from_external_auth_provider_with_pkce(
   else {
     // The OAuth login handler should have already ensured that both are present in the PKCE
     // case. This can only really happen if the state was tempered with.
+    remove_cookie(cookies, COOKIE_OAUTH_STATE);
     return Err(AuthError::BadRequest("invalid state"));
   };
 
@@ -204,6 +210,10 @@ async fn callback_from_external_auth_provider_with_pkce(
       },
     )
     .await?;
+
+  // NOTE: we're removing the OAUTH_STATE cookie deliberately late in case there are any
+  // transient issues, letting users retry.
+  remove_cookie(cookies, COOKIE_OAUTH_STATE);
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("invalid user")),
