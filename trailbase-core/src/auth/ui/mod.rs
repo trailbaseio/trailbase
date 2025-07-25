@@ -27,8 +27,10 @@ async fn ui_login_handler(
   Query(query): Query<LoginQuery>,
   user: Option<User>,
 ) -> Response {
-  if user.is_some() {
-    // Already logged in.
+  if query.redirect_to.is_none() && user.is_some() {
+    // Already logged in. Only redirect to profile-page if no explicit other redirect is provided.
+    // For example, if we're already logged in the browser but want to sign-in with the browser
+    // from an app, we still have to go through the motions of signing in.
     return Redirect::to("/_/auth/profile").into_response();
   }
 
