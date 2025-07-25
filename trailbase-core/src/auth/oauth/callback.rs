@@ -102,6 +102,11 @@ pub(crate) async fn callback_from_external_auth_provider(
   };
 }
 
+/// Log users in using external OAuth.
+///
+/// This is the simple case, i.e. a user browses directly to `/_/auth/login` and logs in with their
+/// credentials. Client-side applications (mobile, desktop, SPAs, ...) should use PKCE (see below)
+/// to avoid man-in-the-middle attacks through malicious apps on the system.
 async fn callback_from_external_auth_provider_without_pkce(
   state: &AppState,
   cookies: &Cookies,
@@ -148,6 +153,11 @@ async fn callback_from_external_auth_provider_without_pkce(
   })));
 }
 
+/// Log users in using external OAuth. On success redirect users to a client-provided url including
+/// a secret (completely random) passed as `?code={auth_code}` query parameter. Requires the user
+/// to provide a client-generated "PKCE code challenge".
+///
+/// TODO: Needs test coverage.
 async fn callback_from_external_auth_provider_with_pkce(
   state: &AppState,
   provider: &OAuthProviderType,

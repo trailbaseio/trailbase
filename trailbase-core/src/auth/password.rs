@@ -102,7 +102,8 @@ pub fn check_user_password(
     return Err(AuthError::Unauthorized);
   }
   let attempts = ATTEMPTS.get(&db_user.email);
-  if !is_demo && attempts.as_ref().map(|a| a.tries).unwrap_or(0) >= 3 {
+
+  if !is_demo && attempts.as_ref().map(|a| a.tries).unwrap_or(0) >= LOGIN_RATE_LIMIT {
     return Err(AuthError::Unauthorized);
   }
 
@@ -129,6 +130,12 @@ pub fn check_user_password(
 }
 
 #[cfg(test)]
+const LOGIN_RATE_LIMIT: usize = 10;
+
+#[cfg(not(test))]
+const LOGIN_RATE_LIMIT: usize = 3;
+
+#[cfg(test)]
 mod tests {
   use super::*;
 
@@ -139,11 +146,13 @@ mod tests {
 
     assert!(check_user_password(&db_user, password, false).is_ok());
 
-    // Lockout after 3 failed attempts.
-    assert!(check_user_password(&db_user, "", false).is_err());
-    assert!(check_user_password(&db_user, "mismatch", false).is_err());
-    assert!(check_user_password(&db_user, "something else", false).is_err());
+    // Lock-out/rate-limit after 10 (3 in prod) failed attempts.
+    for _ in 0..10 {
+      assert!(check_user_password(&db_user, "mismatch", false).is_err());
+    }
     assert!(check_user_password(&db_user, password, false).is_err());
+
+    // By-pass lock-out in demo mode.
     assert!(check_user_password(&db_user, password, true).is_ok());
   }
 

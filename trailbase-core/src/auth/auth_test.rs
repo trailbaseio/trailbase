@@ -1,16 +1,23 @@
 use axum::extract::{Form, Json, Path, Query, State};
+use axum::http::StatusCode;
+use axum::response::Response;
+use base64::prelude::*;
+use regex::Regex;
 use std::sync::Arc;
 use tower_cookies::Cookies;
-use trailbase_sqlite::params;
+use trailbase_sqlite::{Connection, params};
+use uuid::Uuid;
 
 use crate::api::TokenClaims;
 use crate::app_state::{TestStateOptions, test_state};
+use crate::auth::AuthError;
 use crate::auth::api::change_email;
 use crate::auth::api::change_email::ChangeEmailConfigQuery;
 use crate::auth::api::change_password::{
   ChangePasswordQuery, ChangePasswordRequest, change_password_handler,
 };
 use crate::auth::api::delete::delete_handler;
+use crate::auth::api::login::{LoginQuery, LoginRequest, LoginResponse, login_handler};
 use crate::auth::api::logout::{LogoutQuery, logout_handler};
 use crate::auth::api::refresh::{RefreshRequest, refresh_handler};
 use crate::auth::api::register::{RegisterUserRequest, register_user_handler};
@@ -18,6 +25,7 @@ use crate::auth::api::reset_password::{
   ResetPasswordRequest, ResetPasswordUpdateRequest, reset_password_request_handler,
   reset_password_update_handler,
 };
+use crate::auth::api::token::{AuthCodeToTokenRequest, TokenResponse, auth_code_to_token_handler};
 use crate::auth::api::verify_email::{VerifyEmailQuery, verify_email_handler};
 use crate::auth::user::{DbUser, User};
 use crate::auth::util::login_with_password;
@@ -43,8 +51,16 @@ async fn test_auth_registration_reset_and_change_email() {
 
   let email = "user@test.org".to_string();
   let password = "secret123".to_string();
-  let session_exists_query =
-    format!(r#"SELECT EXISTS(SELECT 1 FROM "{SESSION_TABLE}" WHERE user = $1)"#);
+
+  let login_helper = async |request| {
+    return login_handler(
+      State(state.clone()),
+      Query(LoginQuery::default()),
+      Cookies::default(),
+      request,
+    )
+    .await;
+  };
 
   let user = {
     // Register new user and email verification flow.
@@ -90,11 +106,15 @@ async fn test_auth_registration_reset_and_change_email() {
     );
 
     // Check that log in pre-verification fails.
-    assert!(
-      login_with_password(&state, &email, &password)
-        .await
-        .is_err()
-    );
+    assert!(matches!(
+      login_helper(Either::Json(LoginRequest {
+        email: email.clone(),
+        password: password.clone(),
+        ..Default::default()
+      }))
+      .await,
+      Err(AuthError::Unauthorized),
+    ));
 
     let _ = verify_email_handler(
       State(state.clone()),
@@ -132,34 +152,184 @@ async fn test_auth_registration_reset_and_change_email() {
     .await;
     assert!(response.is_err());
 
-    assert!(
-      login_with_password(&state, &email, "Wrong Password")
-        .await
-        .is_err()
-    );
+    user
+  };
 
-    let tokens = login_with_password(&state, &email, &password)
+  let logout_helper = async || {
+    let _ = logout_handler(
+      State(state.clone()),
+      Query(LogoutQuery::default()),
+      Some(user.clone()),
+      Cookies::default(),
+    )
+    .await
+    .unwrap();
+  };
+
+  {
+    // Test login using the PCRE flow (?response_type="code").
+    let redirect_to = "test-scheme://foo".to_string();
+    let (pkce_code_challenge, pkce_code_verifier) = oauth2::PkceCodeChallenge::new_random_sha256();
+
+    // Missing code challenge.
+    assert!(matches!(
+      login_helper(Either::Json(LoginRequest {
+        email: email.clone(),
+        password: password.clone(),
+        response_type: Some("code".to_string()),
+        redirect_to: Some(redirect_to.clone()),
+        pkce_code_challenge: None,
+        ..Default::default()
+      }))
+      .await,
+      Err(AuthError::BadRequest(_)),
+    ));
+
+    // Missing redirect.
+    assert!(matches!(
+      login_helper(Either::Json(LoginRequest {
+        email: email.clone(),
+        password: password.clone(),
+        response_type: Some("code".to_string()),
+        redirect_to: None,
+        pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
+        ..Default::default()
+      }))
+      .await,
+      Err(AuthError::BadRequest(_)),
+    ));
+
+    // Bad password.
+    assert!(is_failed_login_redirect_response(
+      &login_helper(Either::Json(LoginRequest {
+        email: email.clone(),
+        password: "WRONG PASSWORD".to_string(),
+        response_type: Some("code".to_string()),
+        redirect_to: Some(redirect_to.clone()),
+        pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
+        ..Default::default()
+      }))
+      .await
+      .unwrap()
+    ));
+
+    // Finally let's log in successfully.
+    let login_response = login_helper(Either::Json(LoginRequest {
+      email: email.clone(),
+      password: password.clone(),
+      response_type: Some("code".to_string()),
+      redirect_to: Some(redirect_to.clone()),
+      pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
+      ..Default::default()
+    }))
+    .await
+    .unwrap();
+
+    let location = url::Url::parse(&get_see_other_location(&login_response).unwrap()).unwrap();
+    assert_eq!("test-scheme", location.scheme());
+    let auth_code_re = Regex::new(r"^code=(.*)$").unwrap();
+    let captures = auth_code_re.captures(&location.query().unwrap()).unwrap();
+    let auth_code = captures.get(1).unwrap();
+    assert!(!auth_code.is_empty());
+
+    // Make sure this didn't create a session. User is not logged in before actually upgrading
+    // using  the "auth code" + "code verifier".
+    assert!(!session_exists(conn, user.uuid).await);
+
+    // And now upgrade to tokens, i.e. complete log-in.
+    let Json(token_response): Json<TokenResponse> = auth_code_to_token_handler(
+      State(state.clone()),
+      Json(AuthCodeToTokenRequest {
+        authorization_code: Some(auth_code.as_str().to_string()),
+        pkce_code_verifier: Some(pkce_code_verifier.secret().to_string()),
+      }),
+    )
+    .await
+    .unwrap();
+
+    assert!(token_response.refresh_token != "");
+    assert!(token_response.csrf_token != "");
+
+    let decoded_claims = state
+      .jwt()
+      .decode::<TokenClaims>(&token_response.auth_token)
+      .unwrap();
+    assert_eq!(
+      BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
+      user.uuid.into_bytes()
+    );
+    assert_eq!(decoded_claims.email, email);
+
+    assert!(session_exists(conn, user.uuid).await);
+    logout_helper().await;
+    assert!(!session_exists(conn, user.uuid).await);
+  }
+
+  {
+    // Test login using non-PCRE flow
+    assert!(matches!(
+      login_helper(Either::Json(LoginRequest {
+        email: email.clone(),
+        password: "WRONG PASSWORD".to_string(),
+        ..Default::default()
+      }))
+      .await,
+      Err(AuthError::Unauthorized),
+    ));
+
+    // Assert that form-based login yields a redirect.
+    assert!(is_failed_login_redirect_response(
+      &login_helper(Either::Form(LoginRequest {
+        email: email.clone(),
+        password: "WRONG PASSWORD".to_string(),
+        ..Default::default()
+      }))
+      .await
+      .unwrap()
+    ));
+
+    // Finally, let's try logging in with the correct password.
+    let login_response: LoginResponse = {
+      let response = login_helper(Either::Json(LoginRequest {
+        email: email.clone(),
+        password: password.clone(),
+        ..Default::default()
+      }))
       .await
       .unwrap();
-    assert_eq!(tokens.id, user.uuid);
-    state
-      .jwt()
-      .decode::<TokenClaims>(&tokens.auth_token)
-      .unwrap();
 
-    let session_exists: bool = conn
+      assert_eq!(StatusCode::OK, response.status());
+      let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+
+      serde_json::from_slice(&body).unwrap()
+    };
+
+    assert!(login_response.refresh_token != "");
+    assert!(login_response.csrf_token != "");
+
+    let decoded_claims = state
+      .jwt()
+      .decode::<TokenClaims>(&login_response.auth_token)
+      .unwrap();
+    assert_eq!(
+      BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
+      user.uuid.into_bytes()
+    );
+    assert_eq!(decoded_claims.email, email);
+
+    let refresh_token: String = conn
       .read_query_row_f(
-        session_exists_query.clone(),
+        format!("SELECT refresh_token FROM {SESSION_TABLE} WHERE user = $1;"),
         (user.uuid.into_bytes().to_vec(),),
         |row| row.get(0),
       )
       .await
       .unwrap()
       .unwrap();
-    assert!(session_exists);
-
-    user
-  };
+    assert_eq!(refresh_token, login_response.refresh_token);
+  }
 
   {
     // Test refresh flow.
@@ -270,25 +440,9 @@ async fn test_auth_registration_reset_and_change_email() {
         .unwrap();
     }
 
-    let _logout_response = logout_handler(
-      State(state.clone()),
-      Query(LogoutQuery::default()),
-      Some(user.clone()),
-      Cookies::default(),
-    )
-    .await
-    .unwrap();
-
-    let session_exists: bool = conn
-      .read_query_row_f(
-        session_exists_query,
-        params!(user.uuid.into_bytes().to_vec()),
-        |row| row.get(0),
-      )
-      .await
-      .unwrap()
-      .unwrap();
-    assert!(!session_exists);
+    assert!(session_exists(conn, user.uuid).await);
+    logout_helper().await;
+    assert!(!session_exists(conn, user.uuid).await);
 
     let tokens = login_with_password(&state, &email, &new_password)
       .await
@@ -442,4 +596,30 @@ async fn test_auth_registration_reset_and_change_email() {
 
     assert!(!user_exists);
   }
+}
+
+async fn session_exists(conn: &Connection, user_id: Uuid) -> bool {
+  return conn
+    .read_query_row_f(
+      format!("SELECT EXISTS(SELECT 1 FROM {SESSION_TABLE} WHERE user = $1)"),
+      params!(user_id.into_bytes().to_vec()),
+      |row| row.get(0),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+}
+
+fn get_see_other_location(response: &Response) -> Option<String> {
+  return response
+    .headers()
+    .get("location")
+    .and_then(|h| h.to_str().map(|s| s.to_string()).ok());
+}
+
+fn is_failed_login_redirect_response(response: &Response) -> bool {
+  return response.status() == StatusCode::SEE_OTHER
+    && get_see_other_location(response).map_or(false, |location| {
+      location.starts_with("/_/auth/login?alert=")
+    });
 }

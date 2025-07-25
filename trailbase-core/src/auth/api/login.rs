@@ -32,7 +32,7 @@ pub(crate) struct LoginQuery {
   pub redirect_to: Option<String>,
 }
 
-#[derive(Debug, Deserialize, TS, ToSchema)]
+#[derive(Debug, Default, Deserialize, TS, ToSchema)]
 #[ts(export)]
 pub struct LoginRequest {
   pub email: String,
@@ -142,7 +142,7 @@ async fn login_without_pkce(
 }
 
 /// Log users in with (email, password). On success redirect users to a client-provided url
-/// including a secrect (completely random) passed as `?code={auth_code}` query parameter.
+/// including a secret (completely random) passed as `?code={auth_code}` query parameter.
 /// Requires the user to provide a client-generated "PKCE code challenge".
 ///
 /// Subsequently, clients can complete the login by visiting the `/api/auth/v1/token` endpoint
@@ -153,8 +153,6 @@ async fn login_without_pkce(
 /// tokens itself given the `auth_code` and the "PKCE code verified", which only it knows.
 ///
 /// An example using the two-step PKCE login can be found in `/examples/blog/flutter`.
-///
-/// TODO: Needs test coverage.
 async fn login_with_pkce(
   state: &AppState,
   cookies: &Cookies,
@@ -253,9 +251,12 @@ fn auth_error_to_response(err: AuthError, cookies: &Cookies, redirect: Option<St
     ),
   );
 
+  // QUESTION: Should we return a different redirect type (e.g. temporary or permenant) in the
+  // error case?
   return Redirect::to(&url).into_response();
 }
 
+#[derive(Debug)]
 pub struct NewTokens {
   pub id: uuid::Uuid,
   pub auth_token: String,
