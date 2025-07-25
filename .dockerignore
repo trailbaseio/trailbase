@@ -7,7 +7,7 @@ traildepot/
 **/dist/
 
 client
-!client/trailbase-rs
+!client/rust
 deploy/
 docs/
 !docs/examples/record_api_rs

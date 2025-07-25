@@ -1,3 +1,13 @@
+## v0.15.8
+
+* Support custom URI schmes for auth redirects like `my-app://callback`.
+* Stop auto-redirect for signed in users if explicit `?redirect_to` is provided.
+* Fix benign ghost session when login in using PKCE.
+* Fix param propagation for OAuth login flow.
+* Many more tests and better documentation.
+* Minor: clean up the repository of clients.
+* Update dependencies.
+
 ## v0.15.7
 
 * Add an official Golang client for TrailBase 🎉.
