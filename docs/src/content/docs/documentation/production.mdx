@@ -10,15 +10,15 @@ import { Aside } from "@astrojs/starlight/components";
   for feedback and are happy to help early adopters to get to production.
 </Aside>
 
-Going to production and depending on your requirements things to think about
-could be:
+Going to production and depending on your requirements, at the mimimum you may
+want to think about:
 
-- HTTPS/TLS termination
-- locking down access
-- setting up Email
-- deployment
-- introspection
-- disaster recovery
+- [TLS termination](#tls-termination)
+- [Locking down access](#locking-down-access)
+- [Email Setup](#email-setup)
+- [Deployment](#deployment)
+- [Introspection](#introspection)
+- [Disaster recovery](#disaster-recovery)
 
 ## TLS Termination
 
@@ -38,34 +38,75 @@ We therefore recommend using tools like [certbot](https://certbot.eff.org/) in
 standalone mode to periodically refresh your certificates to avoid accidentally
 being left w/o a valid one.
 
-You could also consider using a reverse proxy with first-class certbot integration
-like [nginx](https://nginx.org) or built-in support for *Let's encrypt* like
-[caddy](https://caddyserver.com/).
-We would like to add support for auto-refresh with *Let's encrypt* in the
-future.
+### Reverse Proxy
 
-## Access
+You may want to consider using a reverse proxy, e.g. [nginx](https://nginx.org)
+or [caddy](https://caddyserver.com/) with first-class *Let's encrypt*
+integration[^1].
+
+When using a reverse proxy and realtime subscriptions, some extra setup may be
+needed, e.g.
+
+```nginx
+server {
+    server_name demo.trailbase.io;
+    listen [::]:443 ssl;
+    listen 443 ssl;
+
+    location / {
+        # Proxy setup
+        proxy_pass http://127.0.0.1:<INTERNAL_PORT>/;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        # Make SSE streaming work.
+        proxy_set_header Connection '';
+        # proxy_http_version 1.1;
+        chunked_transfer_encoding off;
+        proxy_buffering off;
+        proxy_cache off;
+    }
+
+    # TLS Certificates:
+    ssl_certificate /etc/letsencrypt/live/demo.trailbase.io/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/demo.trailbase.io/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+```
+
+## Locking Down Access
+
+Following the [principle of least privilege](https://en.wikipedia.org/wiki/Principle_of_least_privilege),
+users should only be granted as much access as strictly necessary.
 
 ### API Access
 
 Make sure to use record API's authorization primitives to tighten access to
-data as much as possible. It's a good idea to check `_REQ_.<user_id> ==
-_USER_.id` on record creations and updates to avoid users can impersonate or
-touch on other users records.
+data as much as possible.
+When applicable, you should consider checking:
+
+- `_REQ_.<user_id_column> = _USER_.id` on record creation and update,
+- `_ROW_.<user_id_column> = _USER_.id` on record update and deletion
+
+to avoid users impersonating other users to access or alter their records.
 
 ### Admin Access
 
-You can expose TrailBase's admin APIs and UIs on a separate private port as an
-extra precaution and to simply expose a smaller surface.
+Optionally you can move TrailBase's admin APIs and UIs to a separate, private
+port using `--admin-address=<IP>:<PORT>` as a precaution to further reduce
+the public facing surface.
 
 ### Protect Configuration
 
-You can prevent TrailBase configuration from being accidentally changed in
-prod, e.g. when you think you're actually configuring a dev instances. To do
-so, you can read-only mount the configuration directory. However, make sure the
-data directory remains writable.
+TrailBase's production configuration should be read-only to protect against
+accidental changes when you're one coffee short and intending to change a dev
+instance instead.
 
-## Email
+This can be a simple as locking down file permissions or mounting the
+configuration as read-only if run within a container.
+In any case, make sure the data directory remains writable.
+
+## Email Setup
 
 By default TrailBase will be using your machine's sendmail setup. This can lead
 to messages not being sent at all and likely getting stuck in spam filters not
@@ -77,15 +118,22 @@ could be Brevo, Mailchimp, SendGrid, ... .
 
 ## Deployment
 
-We recommend containerization (e.g. Docker) for convenience. You can also
-consider to mount certain directories and files such as `<data_dir>/secrets`
-and `<data_dir>/config.textproto` as read only.
+Deployment is TrailBase' strong suite being a single static executable. You can
+reasonably deploy TrailBase by simply copying the executable to your host.
+
+Depending on your and your team's requirements, you can consider deploying a
+containerized TrailBase to integrate into your existing container
+orchestration, e.g. control plane, monitoring, backups, ... .
 
 ## Introspection
 
-TrailBase's introspection is fairly non-existent at this point. There is a
-`/api/healthcheck` endpoint for container orchestration systems to probe.
-You could also consider setting up probers probing other endpoints.
+TrailBase's current introspection can be considered fairly "minimalistic". Logs
+can be accessed via the admin UI or the `logs.db`. Also, there is a
+`/api/healthcheck` endpoint for container orchestrators to probe.
+You could consider setting up probers probing other endpoints.
+
+In the future we'd like to offer richer telemetry data including the ability
+for custom handlers to export their own custom metrics.
 
 ## Disaster Recovery
 
@@ -97,3 +145,8 @@ content.
 
 A more comprehensive approach may be to use [Litestream](https://litestream.io/)
 to continuously replicate your database.
+
+---
+
+[^1]:
+    TrailBase would like to support auto-rotation of certificates in the future.
