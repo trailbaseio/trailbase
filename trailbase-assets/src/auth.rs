@@ -1,9 +1,25 @@
 use askama::Template;
+use askama::filters::Safe;
+use itertools::Itertools;
 
 pub struct OAuthProvider {
   pub name: String,
   pub display_name: String,
   pub img_name: String,
+}
+
+/// Render a slice of tuples into an unescpaed query string.
+///
+/// Careful, this should only be used on safe, static inputs only. We want HTML
+/// escaping by default, it's safer for dynamic inputs like `alert`.
+pub fn render_safe_query_params(params: &[(&str, &str)]) -> Safe<String> {
+  if params.is_empty() {
+    return Safe(String::new());
+  }
+  return Safe(format!(
+    "?{}",
+    params.iter().map(|(k, v)| format!("{k}={v}")).join("&")
+  ));
 }
 
 #[derive(Template)]
@@ -13,7 +29,7 @@ pub struct LoginTemplate<'a> {
   pub alert: &'a str,
   pub enable_registration: bool,
   pub oauth_providers: &'a [OAuthProvider],
-  pub oauth_query_params: Option<String>,
+  pub oauth_query_params: &'a [(&'a str, &'a str)],
 }
 
 #[derive(Template)]
@@ -86,7 +102,7 @@ mod tests {
       alert,
       enable_registration: true,
       oauth_providers: &[],
-      oauth_query_params: Some(format!("redirect_to={redirect_to}&foo=bar")),
+      oauth_query_params: &[("redirect_to", redirect_to)],
     }
     .render()
     .unwrap();
@@ -106,7 +122,7 @@ mod tests {
         display_name: "Fancy Name".to_string(),
         img_name: "oidc".to_string(),
       }],
-      oauth_query_params: Some(format!("redirect_to={redirect_to}&foo=bar")),
+      oauth_query_params: &[("redirect_to", redirect_to), ("foo", "bar")],
     }
     .render()
     .unwrap();

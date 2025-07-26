@@ -76,8 +76,8 @@ const BASE_URL = import.meta.env.BASE_URL;
 
       {"{% for provider in oauth_providers %}"}
       <a
-        href={`${AUTH_API}/oauth/{{ provider.name }}/login{% if let Some(q) = oauth_query_params %}?{{ q }}{% endif %}`}
         class={cn("w-full", buttonVariants({ variant: "outline" }))}
+        href={`${AUTH_API}/oauth/{{ provider.name }}/login{{ self::render_safe_query_params(oauth_query_params) }}`}
       >
         <div class="flex items-center gap-2">
           <img class="size-[28px]" src={`${BASE_URL}/oauth2/{{ provider.img_name }}`} alt={`{{ provider.display_name }}`} />

@@ -6868,6 +6868,7 @@ version = "0.2.0"
 dependencies = [
  "askama",
  "axum 0.8.4",
+ "itertools 0.14.0",
  "log",
  "rust-embed",
  "tower-service",

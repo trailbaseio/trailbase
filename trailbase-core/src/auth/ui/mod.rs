@@ -31,6 +31,8 @@ async fn ui_login_handler(
     // Already logged in. Only redirect to profile-page if no explicit other redirect is provided.
     // For example, if we're already logged in the browser but want to sign-in with the browser
     // from an app, we still have to go through the motions of signing in.
+    //
+    // QUESTION: Too much magic, just remove?
     return Redirect::to("/_/auth/profile").into_response();
   }
 
@@ -61,19 +63,19 @@ async fn ui_login_handler(
     pkce_code_challenge = hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref()),
   );
 
-  let oauth_query_params: Vec<String> = [
+  let oauth_query_params: Vec<(&str, &str)> = [
     query
       .redirect_to
       .as_ref()
-      .map(|r| format!("redirect_to={r}")),
+      .map(|r| ("redirect_to", r.as_str())),
     query
       .response_type
       .as_ref()
-      .map(|r| format!("response_type={r}")),
+      .map(|r| ("response_type", r.as_str())),
     query
       .pkce_code_challenge
       .as_ref()
-      .map(|r| format!("pkce_code_challenge={r}")),
+      .map(|r| ("pkce_code_challenge", r.as_str())),
   ]
   .into_iter()
   .flatten()
@@ -84,11 +86,7 @@ async fn ui_login_handler(
     alert: query.alert.as_deref().unwrap_or_default(),
     enable_registration: !state.access_config(|c| c.auth.disable_password_auth.unwrap_or(false)),
     oauth_providers: &oauth_providers,
-    oauth_query_params: if oauth_query_params.is_empty() {
-      None
-    } else {
-      Some(oauth_query_params.join("&"))
-    },
+    oauth_query_params: &oauth_query_params,
   }
   .render();
 
@@ -274,4 +272,146 @@ pub(crate) fn auth_ui_router() -> Router<AppState> {
     .route("/_/auth/change_password", get(ui_change_password_handler))
     .route("/_/auth/change_email", get(ui_change_email_handler))
     .nest_service("/_/auth/", serve_auth_assets);
+}
+
+#[cfg(test)]
+mod tests {
+  use axum::extract::{Query, State};
+  use regex::Regex;
+  use std::borrow::Cow;
+  use std::collections::HashMap;
+
+  use super::*;
+  use crate::app_state::{AppState, TestStateOptions, test_state};
+  use crate::auth::oauth::providers::test::TestOAuthProvider;
+  use crate::config::proto::{Config, OAuthProviderConfig, OAuthProviderId};
+  use crate::constants::AUTH_API_PATH;
+
+  async fn render_html(state: &AppState, query: LoginQuery) -> String {
+    let login_response = ui_login_handler(State(state.clone()), Query(query), None).await;
+
+    let body_bytes = axum::body::to_bytes(login_response.into_body(), usize::MAX)
+      .await
+      .unwrap();
+    return String::from_utf8(body_bytes.to_vec()).unwrap();
+  }
+
+  #[tokio::test]
+  async fn test_ui_login_template() {
+    let site_url = "https://test.org";
+    let state = test_state(Some(TestStateOptions {
+      config: Some({
+        let mut config = Config::new_with_custom_defaults();
+        config.server.site_url = Some(site_url.to_string());
+        config.auth.oauth_providers = [(
+          TestOAuthProvider::NAME.to_string(),
+          OAuthProviderConfig {
+            client_id: Some("test_client_id".to_string()),
+            client_secret: Some("test_client_secret".to_string()),
+            provider_id: Some(OAuthProviderId::Test as i32),
+            ..Default::default()
+          },
+        )]
+        .into();
+        config
+      }),
+      ..Default::default()
+    }))
+    .await
+    .unwrap();
+
+    // NOTE: The build flow will strip newlines from the html/astro template.
+    let form_action_re = Regex::new(r#"<form.*action="(.*?)".*?>"#).unwrap();
+    let oauth_provider_re = Regex::new(&format!(
+      r#"<a.*?href="(/{AUTH_API_PATH}/oauth/.*?)".*?>.*?</a>"#
+    ))
+    .unwrap();
+
+    {
+      // Parameters: empty/default
+      let body = render_html(
+        &state,
+        LoginQuery {
+          redirect_to: None,
+          response_type: None,
+          pkce_code_challenge: None,
+          alert: None,
+        },
+      )
+      .await;
+
+      let form_captures = form_action_re.captures(&body).expect(&body);
+      let form_action = form_captures.get(1).unwrap();
+      assert_eq!(format!("/{AUTH_API_PATH}/login"), form_action.as_str());
+
+      // Make sure the auth provider is in there.
+      let oauth_captures = oauth_provider_re.captures(&body).expect(&body);
+      let oauth_provider = oauth_captures.get(1).unwrap();
+      assert_eq!(
+        format!("/{AUTH_API_PATH}/oauth/{}/login", TestOAuthProvider::NAME),
+        oauth_provider.as_str()
+      );
+    }
+
+    {
+      // Parameters: all login parameters
+      let redirect_to = format!("{site_url}/login-success-welcome");
+      let response_type = "code";
+      let pkce_code_challenge = "challenge";
+
+      let body = render_html(
+        &state,
+        LoginQuery {
+          redirect_to: Some(redirect_to.clone()),
+          response_type: Some(response_type.to_string()),
+          pkce_code_challenge: Some(pkce_code_challenge.to_string()),
+          alert: None,
+        },
+      )
+      .await;
+
+      // NOTE: the base action remains the same. For password-login state parameters are
+      // passed via hidden form state rather than query params.
+      let captures = form_action_re.captures(&body).expect(&body);
+      let form_action = captures.get(1).unwrap();
+      assert_eq!(format!("/{AUTH_API_PATH}/login"), form_action.as_str());
+
+      assert!(body.contains(&hidden_input("redirect_to", Some(&redirect_to))));
+      assert!(body.contains(&hidden_input("response_type", Some(response_type))));
+      assert!(body.contains(&hidden_input(
+        "pkce_code_challenge",
+        Some(pkce_code_challenge)
+      )));
+
+      // Whereas, OAuth login doesn't receive a form and thus query params instead.
+      let oauth_captures = oauth_provider_re.captures(&body).expect(&body);
+      let oauth_provider = oauth_captures.get(1).unwrap().as_str();
+      assert!(
+        oauth_provider.starts_with(&format!(
+          "/{AUTH_API_PATH}/oauth/{}/login?",
+          TestOAuthProvider::NAME
+        )),
+        "{oauth_provider}"
+      );
+
+      let url = url::Url::parse(&format!("{site_url}/{oauth_provider}")).unwrap();
+      let query_params: HashMap<Cow<'_, str>, Cow<'_, str>> = url.query_pairs().collect();
+
+      assert_eq!(
+        query_params.get("redirect_to").map(|s| &**s),
+        Some(redirect_to.as_str()),
+        "href: {oauth_provider}"
+      );
+      assert_eq!(
+        query_params.get("response_type").map(|s| &**s),
+        Some(response_type),
+        "href: {oauth_provider}"
+      );
+      assert_eq!(
+        query_params.get("pkce_code_challenge").map(|s| &**s),
+        Some(pkce_code_challenge),
+        "href: {oauth_provider}"
+      );
+    }
+  }
 }
