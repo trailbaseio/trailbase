@@ -1201,12 +1201,12 @@ fn extract_referenced_tables_by_alias(
         match join.table {
           SelectTable::Table(fqn, alias, _indexed) => {
             let join_type = extract_join_type(join.operator);
-            if !join_type.contains(JoinType::INNER) && !join_type.contains(JoinType::LEFT) {
-              return Err(precondition(&format!(
-                "Only LEFT and INNER JOINS supported yet, got: {:?}",
-                join.operator
-              )));
-            }
+            // if !join_type.contains(JoinType::INNER) && !join_type.contains(JoinType::LEFT) {
+            //   return Err(precondition(&format!(
+            //     "Only LEFT and INNER JOINS supported yet, got: {:?}",
+            //     join.operator
+            //   )));
+            // }
 
             referenced_tables.push(ReferredTable {
               alias: to_alias(alias),
@@ -1214,14 +1214,25 @@ fn extract_referenced_tables_by_alias(
               table: find_table(&fqn.into())?.clone(),
             });
           }
-          SelectTable::Select(_sub_select, _alias) => {
-            // TODO: recurse.
-            // referenced_tables.push(ReferredTable {
-            //   alias: to_alias(alias),
-            //   joins: vec![],
-            //   table: find_table(&fqn.into())?.clone(),
-            // });
-            return Err(precondition("JOIN with TABLE expected"));
+          SelectTable::Select(subselect, alias) => {
+            let join_type = extract_join_type(join.operator);
+            let alias = to_alias(alias);
+
+            let referenced_tables_in_subselect =
+              extract_referenced_tables_by_alias(*subselect, tables)?
+                .into_iter()
+                .map(|ReferredTable { joins, table, .. }| -> ReferredTable {
+                  let mut j = vec![join_type.bits()];
+                  j.extend(joins);
+
+                  return ReferredTable {
+                    alias: alias.clone(),
+                    joins: j,
+                    table,
+                  };
+                });
+
+            referenced_tables.extend(referenced_tables_in_subselect);
           }
           _ => {
             return Err(precondition("JOIN with TABLE expected"));
@@ -1231,10 +1242,11 @@ fn extract_referenced_tables_by_alias(
 
       referenced_tables
     }
-    Some(SelectTable::Select(select, alias)) => {
+    Some(SelectTable::Select(nested_select, alias)) => {
+      // Recurse for nested select.
       let alias = to_alias(alias);
       return Ok(
-        extract_referenced_tables_by_alias(*select, tables)?
+        extract_referenced_tables_by_alias(*nested_select, tables)?
           .into_iter()
           .map(|referred_table| ReferredTable {
             // NOTE: Reset the alias.
@@ -1646,16 +1658,28 @@ mod tests {
 
     {
       // JOIN on a SELECT.
-      let sql = "SELECT x.column, y.column FROM table_name AS x LEFT JOIN (SELECT * FROM table_name) AS y ON x.column = y.column";
+      let sql = "SELECT x.column, y.column AS foo FROM table_name AS x LEFT JOIN (SELECT * FROM table_name) AS y ON x.column = y.column";
       let sqlite3_parser::ast::Stmt::Select(select) = parse_into_statement(sql).unwrap().unwrap()
       else {
         panic!("Not a select");
       };
-      let err = extract_column_mapping(*select, &tables)
-        .err()
-        .unwrap()
-        .to_string();
-      assert!(err.contains("JOIN with TABLE expected"), "{err}");
+      let column_mapping = extract_column_mapping(*select, &tables).unwrap();
+      assert_eq!(column_mapping.len(), 2, "{column_mapping:?}");
+
+      let first = &column_mapping[0];
+      assert_eq!(first.column.data_type, ColumnDataType::Text);
+      assert_eq!(first.column.name, "column");
+
+      let second = &column_mapping[1];
+      assert_eq!(second.column.data_type, ColumnDataType::Text);
+      assert_eq!(second.column.name, "foo");
+      let referred_column = second.referred_column.as_ref().unwrap();
+      assert_eq!(referred_column.referred_table.table.name.name, "table_name");
+      assert_eq!(referred_column.referred_table.alias.as_deref(), Some("y"));
+      assert!(
+        JoinType::from_bits_truncate(referred_column.referred_table.joins[0])
+          .contains(JoinType::LEFT)
+      );
     }
 
     {
