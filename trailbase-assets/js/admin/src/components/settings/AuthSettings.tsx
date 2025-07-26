@@ -8,6 +8,7 @@ import {
 } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { createForm } from "@tanstack/solid-form";
+import { TbInfoCircle } from "solid-icons/tb";
 
 import {
   buildOptionalNumberFormField,
@@ -32,6 +33,11 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import {
   AuthConfig,
@@ -171,6 +177,7 @@ function ProviderSettingsSubForm(props: {
   form: FormApiT<AuthConfigProxy>;
   index: number;
   provider: OAuthProviderEntry;
+  siteUrl: string | undefined;
 }) {
   const [original, setOnce, { reset }] = createSetOnce<
     OAuthProviderConfig | undefined
@@ -246,6 +253,21 @@ function ProviderSettingsSubForm(props: {
           >
             {buildSecretFormField({ label: () => "Client Secret" })}
           </props.form.Field>
+
+          <Tooltip>
+            <TooltipTrigger
+              as="div"
+              class="flex items-center justify-end gap-1"
+            >
+              Don't forget to allow-list your instance's callback address with{" "}
+              {props.provider.display_name}
+              <TbInfoCircle />
+            </TooltipTrigger>
+
+            <TooltipContent>
+              <span class="font-mono">{`${props.siteUrl ?? window.location.origin}/api/auth/v1/oauth/${props.provider.name}/callback`}</span>
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         <div class="mr-4 flex items-center justify-end gap-2">
@@ -465,6 +487,7 @@ function AuthSettingsForm(props: {
                             form={form}
                             index={index()}
                             provider={provider.provider}
+                            siteUrl={props.config.server?.siteUrl}
                           />
                         );
                       }}
