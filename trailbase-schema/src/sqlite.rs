@@ -17,8 +17,8 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use sqlite3_parser::ast::{
   ColumnDefinition, CreateTableBody, DeferSubclause, Expr, ForeignKeyClause, FromClause,
-  IndexedColumn, JoinOperator, Literal, Name, QualifiedName as AstQualifiedName, ResultColumn,
-  SelectTable, Stmt, TabFlags, TableConstraint, fmt::ToTokens,
+  IndexedColumn, JoinOperator, JoinType, Literal, Name, QualifiedName as AstQualifiedName,
+  ResultColumn, SelectTable, Stmt, TabFlags, TableConstraint, fmt::ToTokens,
 };
 use std::hash::{Hash, Hasher};
 use thiserror::Error;
@@ -1185,38 +1185,48 @@ fn extract_referenced_tables_by_alias(
     return Ok(table);
   };
 
-  // Map from "alias" to table. Use IndexMap to preserve insertion order.
+  // List of referenced tables in insertion order (left-to-right).
   let referenced_table_by_alias: Vec<ReferredTable> = match nested_select.map(|s| *s) {
     Some(SelectTable::Table(fqn, alias, _indexed)) => {
+      // Table itself
       let mut referenced_tables = vec![ReferredTable {
         alias: to_alias(alias),
         joins: vec![],
         table: find_table(&fqn.into())?.clone(),
       }];
 
+      // Plus possible joins.
       for join in joins.unwrap_or_default() {
-        match join.operator {
-          JoinOperator::TypedJoin(Some(t)) if t.contains(sqlite3_parser::ast::JoinType::LEFT) => {}
-          _ => {
-            // Right now, we're picking the VIEW's primary key left to right. Other joins would
-            // require more sophistication. Many joins will spoil PKs, e.g. by computing a
-            // cross-product yielding a non-unique column.
-            return Err(precondition(&format!(
-              "Only LEFT JOINS supported yet, got: {:?}",
-              join.operator
-            )));
-          }
-        }
-
         // We don't currently allow joining sub-queries, etc.
-        let SelectTable::Table(fqn, alias, _indexed) = join.table else {
-          return Err(precondition("JOIN with TABLE expected"));
+        match join.table {
+          SelectTable::Table(fqn, alias, _indexed) => {
+            let join_type = extract_join_type(join.operator);
+            if !join_type.contains(JoinType::INNER) && !join_type.contains(JoinType::LEFT) {
+              return Err(precondition(&format!(
+                "Only LEFT and INNER JOINS supported yet, got: {:?}",
+                join.operator
+              )));
+            }
+
+            referenced_tables.push(ReferredTable {
+              alias: to_alias(alias),
+              joins: vec![join_type.bits()],
+              table: find_table(&fqn.into())?.clone(),
+            });
+          }
+          SelectTable::Select(_sub_select, _alias) => {
+            // TODO: recurse.
+            // referenced_tables.push(ReferredTable {
+            //   alias: to_alias(alias),
+            //   joins: vec![],
+            //   table: find_table(&fqn.into())?.clone(),
+            // });
+            return Err(precondition("JOIN with TABLE expected"));
+          }
+          _ => {
+            return Err(precondition("JOIN with TABLE expected"));
+          }
         };
-        referenced_tables.push(ReferredTable {
-          alias: to_alias(alias),
-          joins: vec![],
-          table: find_table(&fqn.into())?.clone(),
-        });
       }
 
       referenced_tables
@@ -1251,6 +1261,13 @@ fn extract_referenced_tables_by_alias(
 #[inline]
 fn precondition(m: &str) -> SchemaError {
   return SchemaError::Precondition(m.into());
+}
+
+fn extract_join_type(op: JoinOperator) -> JoinType {
+  return match op {
+    JoinOperator::TypedJoin(Some(t)) => t,
+    JoinOperator::Comma | JoinOperator::TypedJoin(None) => JoinType::INNER,
+  };
 }
 
 fn extract_result_columns(
