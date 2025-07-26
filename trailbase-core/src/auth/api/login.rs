@@ -9,10 +9,11 @@ use serde::{Deserialize, Serialize};
 use tower_cookies::Cookies;
 use trailbase_sqlite::named_params;
 use ts_rs::TS;
-use utoipa::{IntoParams, ToSchema};
+use utoipa::ToSchema;
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
+use crate::auth::login_params::{LoginArguments, validate_login_params};
 use crate::auth::password::check_user_password;
 use crate::auth::tokens::mint_new_tokens;
 use crate::auth::user::DbUser;
@@ -26,11 +27,6 @@ use crate::constants::{
 use crate::extract::Either;
 use crate::rand::generate_random_string;
 use crate::util::urlencode;
-
-#[derive(Debug, Default, Deserialize, IntoParams)]
-pub(crate) struct LoginQuery {
-  pub redirect_to: Option<String>,
-}
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
 #[ts(export)]
@@ -56,7 +52,7 @@ pub struct LoginResponse {
   post,
   path = "/login",
   tag= "auth",
-  params(LoginQuery),
+  params(LoginArguments),
   request_body = LoginRequest,
   responses(
     (status = 200, description = "Auth & refresh tokens.", body = LoginResponse)
@@ -64,10 +60,12 @@ pub struct LoginResponse {
 )]
 pub(crate) async fn login_handler(
   State(state): State<AppState>,
-  Query(query): Query<LoginQuery>,
+  Query(query): Query<LoginArguments>,
   cookies: Cookies,
   either_request: Either<LoginRequest>,
 ) -> Result<Response, AuthError> {
+  validate_login_params(&query)?;
+
   let (request, is_json) = match either_request {
     Either::Json(req) => (req, true),
     Either::Form(req) => (req, false),
