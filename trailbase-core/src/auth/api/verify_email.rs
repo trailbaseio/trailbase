@@ -10,7 +10,7 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
-use crate::auth::util::{user_by_email, validate_redirects};
+use crate::auth::util::{user_by_email, validate_redirect};
 use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;
 use crate::rand::generate_random_string;
@@ -108,9 +108,9 @@ pub(crate) struct VerifyEmailQuery {
 pub async fn verify_email_handler(
   State(state): State<AppState>,
   Path(email_verification_code): Path<String>,
-  Query(query): Query<VerifyEmailQuery>,
+  Query(VerifyEmailQuery { redirect_to }): Query<VerifyEmailQuery>,
 ) -> Result<Redirect, AuthError> {
-  let redirect = validate_redirects(&state, query.redirect_to.as_deref(), None)?;
+  validate_redirect(&state, redirect_to.as_deref())?;
 
   lazy_static! {
     static ref UPDATE_CODE_QUERY: String = format!(
@@ -134,7 +134,7 @@ pub async fn verify_email_handler(
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid verification code")),
     1 => Ok(Redirect::to(
-      redirect.as_deref().unwrap_or("/_/auth/profile/"),
+      redirect_to.as_deref().unwrap_or("/_/auth/profile/"),
     )),
     _ => panic!("email verification affected multiple users: {rows_affected}"),
   };

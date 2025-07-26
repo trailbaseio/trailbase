@@ -17,7 +17,7 @@ use crate::auth::oauth::providers::OAuthProviderType;
 use crate::auth::oauth::state::{OAuthState, ResponseType};
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
-use crate::auth::util::{get_user_by_id, new_cookie, remove_cookie, validate_redirects};
+use crate::auth::util::{get_user_by_id, new_cookie, remove_cookie, validate_redirect};
 use crate::config::proto::OAuthProviderId;
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, USER_TABLE, VERIFICATION_CODE_LENGTH,
@@ -53,7 +53,14 @@ pub(crate) async fn callback_from_external_auth_provider(
   };
 
   // Get round-tripped state from cookies, set by prior call to oauth::login.
-  let oauth_state = state
+  let OAuthState {
+    csrf_secret,
+    pkce_code_verifier,
+    user_pkce_code_challenge,
+    response_type,
+    redirect_to,
+    ..
+  } = state
     .jwt()
     .decode::<OAuthState>(
       cookies
@@ -64,27 +71,26 @@ pub(crate) async fn callback_from_external_auth_provider(
     .map_err(|_err| {
       remove_cookie(&cookies, COOKIE_OAUTH_STATE);
       return AuthError::BadRequest("invalid state");
-    })
-    .and_then(|state| {
-      if state.csrf_secret != query.state {
-        remove_cookie(&cookies, COOKIE_OAUTH_STATE);
-        return Err(AuthError::BadRequest("invalid state"));
-      }
-      return Ok(state);
     })?;
 
-  let redirect = validate_redirects(&state, oauth_state.redirect_to.as_deref(), None)?;
+  if csrf_secret != query.state {
+    remove_cookie(&cookies, COOKIE_OAUTH_STATE);
+    return Err(AuthError::BadRequest("invalid state"));
+  }
 
-  return match oauth_state.response_type {
+  // NOTE: This was already validated in the login-handler, we're just pedantic.
+  validate_redirect(&state, redirect_to.as_deref())?;
+
+  return match response_type {
     Some(ResponseType::Code) => {
       callback_from_external_auth_provider_with_pkce(
         &state,
         &cookies,
         provider,
-        redirect,
+        redirect_to,
         query.code,
-        oauth_state.pkce_code_verifier,
-        oauth_state.user_pkce_code_challenge,
+        pkce_code_verifier,
+        user_pkce_code_challenge,
       )
       .await
     }
@@ -93,9 +99,9 @@ pub(crate) async fn callback_from_external_auth_provider(
         &state,
         &cookies,
         provider,
-        redirect,
+        redirect_to,
         query.code,
-        oauth_state.pkce_code_verifier,
+        pkce_code_verifier,
       )
       .await
     }

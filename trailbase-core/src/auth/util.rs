@@ -51,7 +51,8 @@ pub fn validate_and_normalize_email_address(email_address: &str) -> Result<Strin
   return Ok(email_address.to_string());
 }
 
-pub(crate) fn validate_redirect(
+#[inline]
+fn validate_redirect_impl(
   site: Option<&url::Url>,
   custom_uri_schemes: &[String],
   redirect: &str,
@@ -95,20 +96,22 @@ pub(crate) fn validate_redirect(
 }
 
 /// Validates up to two redirects, typically from query parameter and/or request body.
-pub(crate) fn validate_redirects(
+pub(crate) fn validate_redirect(
   state: &AppState,
-  primary: Option<&str>,
-  secondary: Option<&str>,
-) -> Result<Option<String>, AuthError> {
-  let site: &Option<url::Url> = &state.site_url();
-  let custom_uri_schemes = state.access_config(|c| c.auth.custom_uri_schemes.clone());
+  redirect_to: Option<&str>,
+) -> Result<(), AuthError> {
+  if let Some(redirect_to) = redirect_to {
+    let site: &Option<url::Url> = &state.site_url();
+    let custom_uri_schemes = state.access_config(|c| c.auth.custom_uri_schemes.clone());
 
-  if let Some(r) = [primary, secondary].iter().flatten().next() {
-    validate_redirect(site.as_ref(), &custom_uri_schemes, r, state.dev_mode())?;
-    return Ok(Some((*r).to_string()));
+    validate_redirect_impl(
+      site.as_ref(),
+      &custom_uri_schemes,
+      redirect_to,
+      state.dev_mode(),
+    )?;
   }
-
-  return Ok(None);
+  return Ok(());
 }
 
 pub async fn login_with_password(
@@ -313,12 +316,12 @@ mod tests {
   }
 
   #[test]
-  fn test_validate_redirect() {
+  fn test_validate_redirect_impl() {
     let empty_site: Option<url::Url> = None;
-    assert!(validate_redirect(empty_site.as_ref(), &[], "", true).is_err());
-    assert!(validate_redirect(empty_site.as_ref(), &[], "/somewhere", false).is_ok());
+    assert!(validate_redirect_impl(empty_site.as_ref(), &[], "", true).is_err());
+    assert!(validate_redirect_impl(empty_site.as_ref(), &[], "/somewhere", false).is_ok());
     assert!(
-      validate_redirect(
+      validate_redirect_impl(
         empty_site.as_ref(),
         &["custom".to_string()],
         "custom://somewhere",
@@ -326,17 +329,23 @@ mod tests {
       )
       .is_ok()
     );
-    assert!(validate_redirect(empty_site.as_ref(), &[], "http://localhost", false).is_err());
-    assert!(validate_redirect(empty_site.as_ref(), &[], "http://127.0.0.1", false).is_err());
-    assert!(validate_redirect(empty_site.as_ref(), &[], "http://localhost", true).is_ok());
+    assert!(validate_redirect_impl(empty_site.as_ref(), &[], "http://localhost", false).is_err());
+    assert!(validate_redirect_impl(empty_site.as_ref(), &[], "http://127.0.0.1", false).is_err());
+    assert!(validate_redirect_impl(empty_site.as_ref(), &[], "http://localhost", true).is_ok());
 
     let site = Some(url::Url::parse("https://test.org").unwrap());
-    assert!(validate_redirect(site.as_ref(), &[], "/somewhere", false).is_ok());
-    assert!(validate_redirect(site.as_ref(), &[], "https://test.org/somewhere", false).is_ok());
-    assert!(validate_redirect(site.as_ref(), &[], "https://other.org/somewhere", false).is_err());
-    assert!(validate_redirect(site.as_ref(), &[], "custom://test.org/somewhere", false).is_err());
+    assert!(validate_redirect_impl(site.as_ref(), &[], "/somewhere", false).is_ok());
     assert!(
-      validate_redirect(
+      validate_redirect_impl(site.as_ref(), &[], "https://test.org/somewhere", false).is_ok()
+    );
+    assert!(
+      validate_redirect_impl(site.as_ref(), &[], "https://other.org/somewhere", false).is_err()
+    );
+    assert!(
+      validate_redirect_impl(site.as_ref(), &[], "custom://test.org/somewhere", false).is_err()
+    );
+    assert!(
+      validate_redirect_impl(
         site.as_ref(),
         &["custom".to_string()],
         "custom://test.org/somewhere",
@@ -347,35 +356,22 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn test_validate_redirects() {
+  async fn test_validate_redirect() {
     let state = test_state(None).await.unwrap();
 
-    assert!(validate_redirects(&state, None, None).is_ok());
-    assert!(validate_redirects(&state, Some("invalid"), None).is_err());
+    assert!(validate_redirect(&state, None).is_ok());
+    assert!(validate_redirect(&state, Some("invalid")).is_err());
 
     let redirect = "https://test.org";
-    assert_eq!(
-      redirect,
-      validate_redirects(&state, None, Some(redirect))
-        .unwrap()
-        .unwrap()
-    );
-    assert!(validate_redirects(&state, Some("http://invalid.org"), Some(redirect)).is_err());
-
-    assert!(validate_redirects(&state, None, Some("https://other.org")).is_err());
+    assert!(validate_redirect(&state, Some(redirect)).is_ok());
+    assert!(validate_redirect(&state, Some("http://invalid.org")).is_err());
 
     for loopback in ["http://localhost", "http://127.0.0.1"] {
-      assert_eq!(
-        Some(loopback.to_string()),
-        validate_redirects(&state, None, Some(loopback)).expect(loopback)
-      );
+      assert!(validate_redirect(&state, Some(loopback)).is_ok());
     }
 
-    assert!(validate_redirects(&state, None, Some("invalid://something")).is_err());
+    assert!(validate_redirect(&state, Some("invalid://something")).is_err());
     let custom = "test-scheme://something";
-    assert_eq!(
-      Some(custom.to_string()),
-      validate_redirects(&state, None, Some(custom)).unwrap()
-    );
+    assert!(validate_redirect(&state, Some(custom)).is_ok());
   }
 }

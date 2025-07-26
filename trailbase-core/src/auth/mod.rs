@@ -9,6 +9,7 @@ pub mod jwt;
 pub mod user;
 
 pub(crate) mod api;
+pub(crate) mod login_params;
 pub(crate) mod oauth;
 pub(crate) mod options;
 pub(crate) mod password;

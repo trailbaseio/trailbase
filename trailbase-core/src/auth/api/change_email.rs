@@ -10,7 +10,7 @@ use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
-use crate::auth::util::{user_by_id, validate_and_normalize_email_address, validate_redirects};
+use crate::auth::util::{user_by_id, validate_and_normalize_email_address, validate_redirect};
 use crate::auth::{AuthError, User};
 use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;
@@ -148,10 +148,10 @@ pub(crate) struct ChangeEmailConfigQuery {
 pub async fn change_email_confirm_handler(
   State(state): State<AppState>,
   Path(email_verification_code): Path<String>,
-  Query(query): Query<ChangeEmailConfigQuery>,
+  Query(ChangeEmailConfigQuery { redirect_to }): Query<ChangeEmailConfigQuery>,
   user: User,
 ) -> Result<Redirect, AuthError> {
-  let redirect = validate_redirects(&state, query.redirect_to.as_deref(), None)?;
+  validate_redirect(&state, redirect_to.as_deref())?;
 
   if email_verification_code.len() != VERIFICATION_CODE_LENGTH {
     return Err(AuthError::BadRequest("Invalid code"));
@@ -200,7 +200,7 @@ pub async fn change_email_confirm_handler(
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid verification code")),
     1 => Ok(Redirect::to(
-      redirect.as_deref().unwrap_or("/_/auth/profile"),
+      redirect_to.as_deref().unwrap_or("/_/auth/profile"),
     )),
     _ => panic!("emails updated for multiple users at once: {rows_affected}"),
   };

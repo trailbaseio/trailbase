@@ -15,6 +15,7 @@ use crate::app_state::{AppState, TestStateOptions, test_state};
 use crate::auth::api::token::{
   AuthCodeToTokenRequest, TokenResponse as TokenHandlerResponse, auth_code_to_token_handler,
 };
+use crate::auth::login_params::LoginInputParams;
 use crate::auth::oauth::providers::test::{TestOAuthProvider, TestUser};
 use crate::auth::oauth::state::OAuthState;
 use crate::auth::oauth::{callback, list_providers, login};
@@ -156,7 +157,7 @@ async fn test_oauth_login_flow_without_pkce() {
   let external_redirect: Redirect = login::login_with_external_auth_provider(
     State(state.clone()),
     Path(TestOAuthProvider::NAME.to_string()),
-    Query(login::LoginQuery {
+    Query(LoginInputParams {
       redirect_to: Some(redirect_to.to_string()),
       response_type: None,
       pkce_code_challenge: None,
@@ -260,7 +261,7 @@ async fn test_oauth_login_flow_with_pkce() {
   let external_redirect: Redirect = login::login_with_external_auth_provider(
     State(state.clone()),
     Path(TestOAuthProvider::NAME.to_string()),
-    Query(login::LoginQuery {
+    Query(LoginInputParams {
       redirect_to: Some(redirect_to.to_string()),
       response_type: Some("code".to_string()),
       pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),

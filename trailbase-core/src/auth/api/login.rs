@@ -2,23 +2,22 @@ use axum::{
   extract::{Json, Query, State},
   response::{IntoResponse, Redirect, Response},
 };
-use base64::prelude::*;
 use chrono::Duration;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use tower_cookies::Cookies;
 use trailbase_sqlite::named_params;
 use ts_rs::TS;
-use utoipa::{IntoParams, ToSchema};
+use utoipa::ToSchema;
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
+use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
 use crate::auth::password::check_user_password;
 use crate::auth::tokens::mint_new_tokens;
 use crate::auth::user::DbUser;
 use crate::auth::util::{
   new_cookie, remove_cookie, user_by_email, validate_and_normalize_email_address,
-  validate_redirects,
 };
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, USER_TABLE, VERIFICATION_CODE_LENGTH,
@@ -26,11 +25,6 @@ use crate::constants::{
 use crate::extract::Either;
 use crate::rand::generate_random_string;
 use crate::util::urlencode;
-
-#[derive(Debug, Default, Deserialize, IntoParams)]
-pub(crate) struct LoginQuery {
-  pub redirect_to: Option<String>,
-}
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
 #[ts(export)]
@@ -56,7 +50,7 @@ pub struct LoginResponse {
   post,
   path = "/login",
   tag= "auth",
-  params(LoginQuery),
+  params(LoginInputParams),
   request_body = LoginRequest,
   responses(
     (status = 200, description = "Auth & refresh tokens.", body = LoginResponse)
@@ -64,30 +58,51 @@ pub struct LoginResponse {
 )]
 pub(crate) async fn login_handler(
   State(state): State<AppState>,
-  Query(query): Query<LoginQuery>,
+  Query(query_login_input): Query<LoginInputParams>,
   cookies: Cookies,
   either_request: Either<LoginRequest>,
 ) -> Result<Response, AuthError> {
-  let (request, is_json) = match either_request {
+  let (
+    LoginRequest {
+      email,
+      password,
+      redirect_to,
+      response_type,
+      pkce_code_challenge,
+    },
+    is_json,
+  ) = match either_request {
     Either::Json(req) => (req, true),
     Either::Form(req) => (req, false),
     Either::Multipart(req, _) => (req, false),
   };
 
-  let redirect = validate_redirects(
+  return match build_and_validate_input_params(
     &state,
-    query.redirect_to.as_deref(),
-    request.redirect_to.as_deref(),
-  )?;
-
-  let code_response_requested: bool = request.response_type.as_ref().is_some_and(|t| t == "code");
-  if !code_response_requested {
-    // The simple, non-PKCE case.
-    return login_without_pkce(&state, &cookies, request, redirect, is_json).await;
-  }
-
-  // The PKCE code-path.
-  return login_with_pkce(&state, &cookies, request, redirect).await;
+    query_login_input.merge(LoginInputParams {
+      redirect_to,
+      response_type,
+      pkce_code_challenge,
+    }),
+  )? {
+    LoginParams::Password { redirect_to } => {
+      login_without_pkce(&state, &cookies, email, password, redirect_to, is_json).await
+    }
+    LoginParams::ProofKeyForCodeExchange {
+      redirect_to,
+      pkce_code_challenge,
+    } => {
+      login_with_pkce(
+        &state,
+        &cookies,
+        email,
+        password,
+        redirect_to,
+        pkce_code_challenge,
+      )
+      .await
+    }
+  };
 }
 
 /// Log users in with (email, password). On success return tokens (json-case) or set cookies and
@@ -99,17 +114,16 @@ pub(crate) async fn login_handler(
 async fn login_without_pkce(
   state: &AppState,
   cookies: &Cookies,
-  request: LoginRequest,
+  email: String,
+  password: String,
   redirect: Option<String>,
   is_json: bool,
 ) -> Result<Response, AuthError> {
   // Check credentials.
-  let normalized_email = validate_and_normalize_email_address(&request.email)?;
+  let normalized_email = validate_and_normalize_email_address(&email)?;
 
   let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
-  return match login_with_password(state, &normalized_email, &request.password, auth_token_ttl)
-    .await
-  {
+  return match login_with_password(state, &normalized_email, &password, auth_token_ttl).await {
     Ok(response) if is_json => Ok(Json(response.into_login_response()).into_response()),
     Ok(response) => {
       cookies.add(new_cookie(
@@ -153,42 +167,29 @@ async fn login_without_pkce(
 /// tokens itself given the `auth_code` and the "PKCE code verified", which only it knows.
 ///
 /// An example using the two-step PKCE login can be found in `/examples/blog/flutter`.
+///
+/// Note that unlike in the non-PKCE-case, we ignore `is_json` here and always respond with a
+/// redirect, as opposed to sending the *auth code* as JSON. Therefore, a valid client-provided
+/// redirect is required. Our own auth UI uses form-submissions. There could be cases where a
+/// custom auth UI submits credentials using client-side JS + JSON. Even then responding with a
+/// redirect to `{redirect_to}?code={auth_code}` is probably the right thing to do.
+///
+/// Ultimately we need to get the *auth code* to the client app, typically via a custom URI
+/// scheme the app has registered. Otherwise, the custom client-side auth UI would have to do a
+/// local redirect. There could be use-cases where the client-side JS wants to communicate the
+/// auth code back to the client application with something other than a custom URI scheme?
 async fn login_with_pkce(
   state: &AppState,
   cookies: &Cookies,
-  request: LoginRequest,
-  redirect: Option<String>,
+  email: String,
+  password: String,
+  redirect: String,
+  pkce_code_challenge: String,
 ) -> Result<Response, AuthError> {
-  // Note that unlike in the non-PKCE-case, we ignore `is_json` here and always respond with a
-  // redirect, as opposed to sending the *auth code* as JSON. Therefore, a valid client-provided
-  // redirect is required.
-  let Some(redirect) = redirect else {
-    // Our own auth UI uses form-submissions. There could be cases where a custom auth UI submits
-    // credentials using client-side JS + JSON. Even then responding with a redirect to
-    // `{redirect_to}?code={auth_code}` is probably the right thing to do.
-    //
-    // Ultimately we need to get the *auth code* to the client app, typically via a custom URI
-    // scheme the app has registered. Otherwise, the custom client-side auth UI would have to do a
-    // local redirect. There could be use-cases where the client-side JS wants to communicate the
-    // auth code back to the client application with something other than a custom URI scheme?
-    return Err(AuthError::BadRequest("missing 'redirect_to'"));
-  };
-
-  // Validate required client-provided PKCE-code-challenge.
-  //
-  // The challenge is `BASE64_URL_SAFE_NO_PAD.encode(sha256(random(length=32..96)))`. Is there
-  // more validation we can or should do?
-  let pkce_code_challenge = request.pkce_code_challenge.ok_or_else(|| {
-    return AuthError::BadRequest("missing 'pkce_code_challenge'");
-  })?;
-  if BASE64_URL_SAFE_NO_PAD.decode(&pkce_code_challenge).is_err() {
-    return Err(AuthError::BadRequest("invalid 'pkce_code_challenge'"));
-  }
-
   // Check credentials.
-  let normalized_email = validate_and_normalize_email_address(&request.email)?;
+  let normalized_email = validate_and_normalize_email_address(&email)?;
 
-  if let Err(err) = check_credentials(state, &normalized_email, &request.password).await {
+  if let Err(err) = check_credentials(state, &normalized_email, &password).await {
     return Ok(auth_error_to_response(err, cookies, Some(redirect)));
   }
 

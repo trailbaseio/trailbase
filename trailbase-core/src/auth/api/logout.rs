@@ -12,7 +12,7 @@ use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::user::User;
 use crate::auth::util::{
-  delete_all_sessions_for_user, delete_session, remove_all_cookies, validate_redirects,
+  delete_all_sessions_for_user, delete_session, remove_all_cookies, validate_redirect,
 };
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
@@ -35,11 +35,11 @@ pub struct LogoutQuery {
 )]
 pub async fn logout_handler(
   State(state): State<AppState>,
-  Query(query): Query<LogoutQuery>,
+  Query(LogoutQuery { redirect_to }): Query<LogoutQuery>,
   user: Option<User>,
   cookies: Cookies,
 ) -> Result<Redirect, AuthError> {
-  let redirect = validate_redirects(&state, query.redirect_to.as_deref(), None)?;
+  validate_redirect(&state, redirect_to.as_deref())?;
 
   remove_all_cookies(&cookies);
 
@@ -47,7 +47,7 @@ pub async fn logout_handler(
     delete_all_sessions_for_user(state.user_conn(), user.uuid).await?;
   }
 
-  return Ok(Redirect::to(redirect.as_deref().unwrap_or_else(|| {
+  return Ok(Redirect::to(redirect_to.as_deref().unwrap_or_else(|| {
     if state.public_dir().is_some() {
       "/"
     } else {

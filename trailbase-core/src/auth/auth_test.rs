@@ -18,7 +18,7 @@ use crate::auth::api::change_password::{
   ChangePasswordQuery, ChangePasswordRequest, change_password_handler,
 };
 use crate::auth::api::delete::delete_handler;
-use crate::auth::api::login::{LoginQuery, LoginRequest, LoginResponse, login_handler};
+use crate::auth::api::login::{LoginRequest, LoginResponse, login_handler};
 use crate::auth::api::logout::{LogoutQuery, logout_handler};
 use crate::auth::api::refresh::{RefreshRequest, refresh_handler};
 use crate::auth::api::register::{RegisterUserRequest, register_user_handler};
@@ -28,6 +28,7 @@ use crate::auth::api::reset_password::{
 };
 use crate::auth::api::token::{AuthCodeToTokenRequest, TokenResponse, auth_code_to_token_handler};
 use crate::auth::api::verify_email::{VerifyEmailQuery, verify_email_handler};
+use crate::auth::login_params::LoginInputParams;
 use crate::auth::user::{DbUser, User};
 use crate::auth::util::login_with_password;
 use crate::constants::*;
@@ -107,7 +108,7 @@ async fn register_test_user(
   assert!(matches!(
     login_handler(
       State(state.clone()),
-      Query(LoginQuery::default()),
+      Query(LoginInputParams::default()),
       Cookies::default(),
       Either::Json(LoginRequest {
         email: email.to_string(),
@@ -169,7 +170,7 @@ async fn test_auth_password_login_flow_with_pkce() {
   let login_helper = async |request| {
     return login_handler(
       State(state.clone()),
-      Query(LoginQuery::default()),
+      Query(LoginInputParams::default()),
       Cookies::default(),
       request,
     )
@@ -291,7 +292,7 @@ async fn test_auth_password_login_flow_without_pkce() {
   let login_helper = async |request| {
     return login_handler(
       State(state.clone()),
-      Query(LoginQuery::default()),
+      Query(LoginInputParams::default()),
       Cookies::default(),
       request,
     )
