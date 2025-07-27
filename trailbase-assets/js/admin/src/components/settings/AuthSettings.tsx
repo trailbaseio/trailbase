@@ -9,7 +9,7 @@ import {
 } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { createForm } from "@tanstack/solid-form";
-import { TbInfoCircle, TbClipboard } from "solid-icons/tb";
+import { TbInfoCircle } from "solid-icons/tb";
 
 import {
   buildOptionalNumberFormField,
@@ -293,11 +293,15 @@ function ProviderSettingsSubForm(props: {
   );
 }
 
-function InfoTooltip(props: { children: string }) {
+function InfoTooltip(props: {
+  label: string;
+  children: string;
+  class?: string;
+}) {
   return (
     <Tooltip>
-      <TooltipTrigger class="px-1">
-        <TbInfoCircle />
+      <TooltipTrigger class={props.class}>
+        {props.label} <TbInfoCircle class="mx-1" />
       </TooltipTrigger>
 
       <TooltipContent class="shrink">
@@ -360,13 +364,10 @@ function AuthSettingsForm(props: {
                 {buildOptionalNumberFormField({
                   integer: true,
                   label: () => (
-                    <div class={labelStyle}>
-                      Auth TTL [sec]
-                      <InfoTooltip>
-                        Tokens older than this TTL are considered invalid. A new
-                        AuthToken can be minted provided a valid refresh Token.
-                      </InfoTooltip>
-                    </div>
+                    <InfoTooltip label="Auth TTL [sec]" class={labelStyle}>
+                      Tokens older than this TTL are considered invalid. A new
+                      AuthToken can be minted provided a valid refresh Token.
+                    </InfoTooltip>
                   ),
                 })}
               </form.Field>
@@ -375,14 +376,10 @@ function AuthSettingsForm(props: {
                 {buildOptionalNumberFormField({
                   integer: true,
                   label: () => (
-                    <div class={labelStyle}>
-                      Refresh TTL [sec]
-                      <InfoTooltip>
-                        Refresh tokens older than this TTL are considered
-                        invalid. A refresh token can be renewed by users logging
-                        in again.
-                      </InfoTooltip>
-                    </div>
+                    <InfoTooltip label="Refresh TTL [sec]" class={labelStyle}>
+                      Refresh tokens older than this TTL are considered invalid.
+                      A refresh token can be renewed by users logging in again.
+                    </InfoTooltip>
                   ),
                 })}
               </form.Field>
@@ -400,14 +397,14 @@ function AuthSettingsForm(props: {
               <form.Field name="disablePasswordAuth">
                 {buildOptionalBoolFormField({
                   label: () => (
-                    <div class={labelStyle}>
-                      Disable Registration
-                      <InfoTooltip>
-                        When disabled new users can only sign up via OAuth.
-                        Existing users will can continue to sign in using
-                        password-based auth.
-                      </InfoTooltip>
-                    </div>
+                    <InfoTooltip
+                      label="Disable Registration"
+                      class={labelStyle}
+                    >
+                      When disabled new users can only sign up via OAuth.
+                      Existing users will can continue to sign in using
+                      password-based auth.
+                    </InfoTooltip>
                   ),
                 })}
               </form.Field>
@@ -415,14 +412,11 @@ function AuthSettingsForm(props: {
               <form.Field name="passwordMinimalLength">
                 {buildOptionalNumberFormField({
                   label: () => (
-                    <div class={labelStyle}>
-                      Min Length
-                      <InfoTooltip>
-                        Minimal length for new passwords [Default 8]. Does not
-                        affect existing registrations unless users choose to
-                        change their password.
-                      </InfoTooltip>
-                    </div>
+                    <InfoTooltip label="Min Length" class={labelStyle}>
+                      Minimal length for new passwords [Default 8]. Does not
+                      affect existing registrations unless users choose to
+                      change their password.
+                    </InfoTooltip>
                   ),
                 })}
               </form.Field>
@@ -430,14 +424,11 @@ function AuthSettingsForm(props: {
               <form.Field name="passwordMustContainUpperAndLowerCase">
                 {buildOptionalBoolFormField({
                   label: () => (
-                    <div class={labelStyle}>
-                      Require Mixed Case
-                      <InfoTooltip>
-                        Passwords must contain both, upper and lower case
-                        characters. Does not affect existing registrations
-                        unless users choose to change their password.
-                      </InfoTooltip>
-                    </div>
+                    <InfoTooltip label="Require Mixed Case" class={labelStyle}>
+                      Passwords must contain both, upper and lower case
+                      characters. Does not affect existing registrations unless
+                      users choose to change their password.
+                    </InfoTooltip>
                   ),
                 })}
               </form.Field>
@@ -445,14 +436,11 @@ function AuthSettingsForm(props: {
               <form.Field name="passwordMustContainDigits">
                 {buildOptionalBoolFormField({
                   label: () => (
-                    <div class={labelStyle}>
-                      Require Digits
-                      <InfoTooltip>
-                        Passwords must contain digits. Does not affect existing
-                        registrations unless users choose to change their
-                        password.
-                      </InfoTooltip>
-                    </div>
+                    <InfoTooltip label="Require Digits" class={labelStyle}>
+                      Passwords must contain digits. Does not affect existing
+                      registrations unless users choose to change their
+                      password.
+                    </InfoTooltip>
                   ),
                 })}
               </form.Field>
@@ -460,14 +448,11 @@ function AuthSettingsForm(props: {
               <form.Field name="passwordMustContainSpecialCharacters">
                 {buildOptionalBoolFormField({
                   label: () => (
-                    <div class={labelStyle}>
-                      Require Special
-                      <InfoTooltip>
-                        Passwords must contain special, i.e., non-alphanumeric
-                        characters. Does not affect existing registrations
-                        unless users choose to change their password.
-                      </InfoTooltip>{" "}
-                    </div>
+                    <InfoTooltip label="Require Special" class={labelStyle}>
+                      Passwords must contain special, i.e., non-alphanumeric
+                      characters. Does not affect existing registrations unless
+                      users choose to change their password.
+                    </InfoTooltip>
                   ),
                 })}
               </form.Field>
@@ -611,35 +596,22 @@ function OAuthCallbackAddressInfo(props: {
   };
 
   return (
-    <div class="flex items-center gap-4">
-      <p class="grow">
-        To use this provider, register your application with <ProviderName />,
-        allow-list your instance's
-        <Tooltip>
-          <TooltipTrigger
-            as="span"
-            onClick={() => copyToClipboard(address())}
-            class="px-1"
-          >
-            <span class="underline">callback address</span>
-            <TbInfoCircle class="inline-block" />
-          </TooltipTrigger>
+    <p class="grow">
+      To use this provider, register your application with <ProviderName />{" "}
+      using your instance's{" "}
+      <Tooltip>
+        <TooltipTrigger as="span" onClick={() => copyToClipboard(address())}>
+          <span class="underline">Redirect URI</span>{" "}
+          <TbInfoCircle class="inline-block" />
+        </TooltipTrigger>
 
-          <TooltipContent>
-            <span class="font-mono">{address()}</span>
-          </TooltipContent>
-        </Tooltip>
-        and fill in the given credentials below.
-      </p>
-
-      <Button
-        as="div"
-        variant="outline"
-        onClick={() => copyToClipboard(address())}
-      >
-        <TbClipboard size={18} />
-      </Button>
-    </div>
+        <TooltipContent>
+          <span class="font-mono">{address()}</span>
+        </TooltipContent>
+      </Tooltip>
+      . Afterwards fill the credentials issued by {props.provider.display_name}{" "}
+      into the fields below.
+    </p>
   );
 }
 

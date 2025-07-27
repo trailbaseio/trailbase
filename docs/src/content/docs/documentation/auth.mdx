@@ -54,7 +54,7 @@ There are a few considerations, which may affect your choices:
   anyway for users to sign in on the external provider's site.
 
 The `examples/blog/(web|flutter)` demonstrates how the built-in UIs, including
-OAuth via WebView, can be used by both web and mobile/desktop applications[^2].
+OAuth via WebView, can be used by both web and mobile/desktop apps[^2].
 
 When using the built-in UIs, the general approach is to send users to
 `/_/auth/(login|logout|profile)`.
@@ -64,22 +64,30 @@ When building your own UIs, login is handled by:
 * [`/api/auth/v1/login`](/api/operations/login_handler/) for password auth.
   It directly exchanges valid credentials for tokens.
 * [`/api/auth/v1/oauth/<PROVIDER_NAME>/login`](/api/operations/login_with_external_auth_provider/)
-  for OAuth. It constructs a redirect for the external provider including the
-  callback address back to your TrailBase instance (`<YOUR_SITE>/api/auth/v1/oauth/<PROVIDER_NAME>/callback`).
+  for OAuth issuing a redirect to the external provider. The redirect will also
+  contain the *redirect uri* back to your TrailBase instance for the external
+  provider to send your users to upon successful sign-in.
 
 ### Authentication Code Flow & PKCE
 
-Whenever a native client-side application (mobile, desktop, ...) or
+Whenever a native client-side app (mobile, desktop, ...) or
 different-origin web app defers to a web UI[^4] for their users to sign in, a
 protocol for exchanging the tokens is needed.
 
 The *authentication code flow* defines such a protocol. Upon successful
-off-site login, users are redirected to a `<callback>?auth_code=<code>`
-address provided by your application.
-Subsequently, your app can exchange the auth code[^5], typically together with another
-secret, for tokens via TrailBase's
+off-site sign-in with an external provider, users are redirected back,
+
+1. first to your TrailBase instance at
+   `<YOUR_SITE>/api/auth/v1/oauth/<PROVIDER_NAME>/callback?code=<AUTH_CODE>`
+2. and subsequently to a URI registered and provided by your app via
+   `?redirect_to=my-app://callback`.
+
+This allows TrailBase to observe the external provider's auth code and issue
+one to your app as well.
+After observing the callback with the auth code[^5], the app can
+exchange it, typically alongside another secret, for tokens using the
 [`/api/auth/v1/token`](/api/operations/auth_code_to_token_handler/)
-endpoint to sign the user in.
+endpoint, thus completing the signing.
 
 Proof-Key-for-Code-Exchange (PKCE) provides an elegant way to establish the
 secondary secret and also protects against man-in-the-middle attacks by
@@ -99,11 +107,11 @@ pass:
 
 - `response_type=code`,
 - `pkce_code_challenge=<urlSafeBase64(sha256(pkce_code_verifier)))>`,
-- `redirect_to=<TARGET>`, e.g. `custom-app-schema://callback`,
+- `redirect_to=<TARGET>`, e.g. `custom-app-scheme://callback`,
 
 as inputs to `/api/auth/v1/login` or `/api/auth/v1/oauth/<PROVIDER_NAME>/login`.
-Note that native applications will need to register the callback scheme first
-to receive the evnetual callback.
+Note that native apps will need to register the custom scheme first to receive
+the eventual callback.
 
 
 ## Design
