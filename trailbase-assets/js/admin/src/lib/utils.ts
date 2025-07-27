@@ -4,8 +4,23 @@ import { twMerge } from "tailwind-merge";
 import { stringify as uuidStringify } from "uuid";
 import { urlSafeBase64Decode } from "trailbase";
 
+import { showToast } from "@/components/ui/toast";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+export function pathJoin(parts: string[], sep?: string): string {
+  const separator = sep ?? "/";
+  const replace = new RegExp(`${separator}{1,}`, "g");
+  return parts.join(separator).replace(replace, separator);
+}
+
+export function copyToClipboard(contents: string) {
+  navigator.clipboard.writeText(contents);
+  showToast({
+    title: "Copied to clipboard",
+  });
 }
 
 export function tryParseInt(value: string): number | undefined {

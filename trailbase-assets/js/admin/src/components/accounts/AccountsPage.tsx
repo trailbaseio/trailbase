@@ -25,21 +25,21 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { showToast } from "@/components/ui/toast";
 
-import { Checkbox } from "@/components/ui/checkbox";
 import { Header } from "@/components/Header";
 import { DataTable, safeParseInt } from "@/components/Table";
 import { IconButton } from "@/components/IconButton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { AddUser } from "@/components/accounts/AddUser";
-import { deleteUser, updateUser, fetchUsers } from "@/lib/user";
 import {
   buildTextFormField,
   buildSecretFormField,
 } from "@/components/FormFields";
 import { SafeSheet, SheetContainer } from "@/components/SafeSheet";
 
+import { deleteUser, updateUser, fetchUsers } from "@/lib/user";
+import { copyToClipboard } from "@/lib/utils";
 import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
 import type { UserJson } from "@bindings/UserJson";
 
@@ -59,12 +59,7 @@ function buildColumns(
         return (
           <div
             class="hover:text-gray-600"
-            onClick={() => {
-              navigator.clipboard.writeText(userId);
-              showToast({
-                title: "Copied to clipboard",
-              });
-            }}
+            onClick={() => copyToClipboard(userId)}
           >
             {userId}
           </div>

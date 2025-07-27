@@ -8,7 +8,7 @@ import {
 } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { createForm } from "@tanstack/solid-form";
-import { TbInfoCircle } from "solid-icons/tb";
+import { TbInfoCircle, TbClipboard } from "solid-icons/tb";
 
 import {
   buildOptionalNumberFormField,
@@ -47,7 +47,7 @@ import {
 } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/config";
 import { adminFetch } from "@/lib/fetch";
-import { showSaveFileDialog } from "@/lib/utils";
+import { showSaveFileDialog, pathJoin, copyToClipboard } from "@/lib/utils";
 
 import type { OAuthProviderResponse } from "@bindings/OAuthProviderResponse";
 import type { OAuthProviderEntry } from "@bindings/OAuthProviderEntry";
@@ -232,6 +232,11 @@ function ProviderSettingsSubForm(props: {
 
       <AccordionContent>
         <div class="m-4 flex flex-col gap-2">
+          <OAuthCallbackAddressInfo
+            provider={props.provider}
+            siteUrl={props.siteUrl}
+          />
+
           <props.form.Field
             name={`namedOauthProviders[${props.index}].state.clientId`}
             validators={{
@@ -253,21 +258,6 @@ function ProviderSettingsSubForm(props: {
           >
             {buildSecretFormField({ label: () => "Client Secret" })}
           </props.form.Field>
-
-          <Tooltip>
-            <TooltipTrigger
-              as="div"
-              class="flex items-center justify-end gap-1"
-            >
-              Don't forget to allow-list your instance's callback address with{" "}
-              {props.provider.display_name}
-              <TbInfoCircle />
-            </TooltipTrigger>
-
-            <TooltipContent>
-              <span class="font-mono">{`${props.siteUrl ?? window.location.origin}/api/auth/v1/oauth/${props.provider.name}/callback`}</span>
-            </TooltipContent>
-          </Tooltip>
         </div>
 
         <div class="mr-4 flex items-center justify-end gap-2">
@@ -301,6 +291,7 @@ function ProviderSettingsSubForm(props: {
     </AccordionItem>
   );
 }
+
 function AuthSettingsForm(props: {
   config: Config;
   providers: OAuthProviderResponse;
@@ -569,6 +560,67 @@ function AuthSettingsForm(props: {
         </div>
       </div>
     </form>
+  );
+}
+
+const providerDashboardUrl: Record<string, string> = {
+  discord: "https://discord.com/developers/applications",
+  gitlab: "https://gitlab.com",
+};
+
+function OAuthCallbackAddressInfo(props: {
+  provider: OAuthProviderEntry;
+  siteUrl: string | undefined;
+}) {
+  const address = () =>
+    pathJoin([
+      props.siteUrl ?? window.location.origin,
+      `/api/auth/v1/oauth/${props.provider.name}/callback`,
+    ]);
+
+  const ProviderName = () => {
+    const name = props.provider.name;
+    const url = providerDashboardUrl[name];
+
+    return url ? (
+      <a class="underline" href={url}>
+        {props.provider.display_name}
+      </a>
+    ) : (
+      props.provider.display_name
+    );
+  };
+
+  return (
+    <div class="flex items-center gap-4">
+      <p class="grow">
+        To use this provider, register your application with <ProviderName />,
+        allow-list your instance's
+        <Tooltip>
+          <TooltipTrigger
+            as="span"
+            onClick={() => copyToClipboard(address())}
+            class="px-1"
+          >
+            <span class="underline">callback address</span>
+            <TbInfoCircle class="inline-block" />
+          </TooltipTrigger>
+
+          <TooltipContent>
+            <span class="font-mono">{address()}</span>
+          </TooltipContent>
+        </Tooltip>
+        and fill in the given credentials below.
+      </p>
+
+      <Button
+        as="div"
+        variant="outline"
+        onClick={() => copyToClipboard(address())}
+      >
+        <TbClipboard size={18} />
+      </Button>
+    </div>
   );
 }
 

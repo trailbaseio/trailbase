@@ -25,7 +25,6 @@ import type { FeatureCollection, Feature } from "geojson";
 import "leaflet/dist/leaflet.css";
 import * as L from "leaflet";
 
-import { showToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Header } from "@/components/Header";
 import { IconButton } from "@/components/IconButton";
@@ -44,6 +43,7 @@ import { DataTable, safeParseInt } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 
 import { getLogs } from "@/lib/logs";
+import { copyToClipboard } from "@/lib/utils";
 
 import countriesGeoJSON from "@/assets/countries-110m.json";
 
@@ -127,12 +127,7 @@ const columns: ColumnDef<LogJson>[] = [
         <Show when={userId()}>
           <div
             class="hover:text-gray-600"
-            onClick={() => {
-              navigator.clipboard.writeText(userId() ?? "");
-              showToast({
-                title: "Copied to clipboard",
-              });
-            }}
+            onClick={() => copyToClipboard(userId() ?? "")}
           >
             {userId()}
           </div>
