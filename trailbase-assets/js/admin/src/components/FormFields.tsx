@@ -1,7 +1,7 @@
 {
   /* eslint-disable @typescript-eslint/no-explicit-any */
 }
-import { createSignal, Show, type JSX } from "solid-js";
+import { createSignal, Match, Switch, Show, type JSX } from "solid-js";
 import {
   type FieldApi,
   type FormState,
@@ -93,11 +93,9 @@ function buildTextFormFieldT<T extends string | null>(opts: TextFieldOptions) {
             data-testid="input"
           />
 
-          <div class="col-start-2 ml-2 text-sm text-muted-foreground">
-            {field && <FieldInfo field={field()} />}
-          </div>
+          <GridFieldInfo field={field()} />
 
-          <div class="col-start-2 text-sm">{opts.info}</div>
+          <InfoColumn info={opts.info} />
         </div>
       </TextField>
     );
@@ -167,11 +165,9 @@ function buildOptionalNullableTextFormField<
             />
           </div>
 
-          <div class="col-start-2 ml-2 text-sm text-muted-foreground">
-            {field && <FieldInfo field={field()} />}
-          </div>
+          <GridFieldInfo field={field()} />
 
-          <div class="col-start-2 text-sm">{opts.info}</div>
+          <InfoColumn info={opts.info} />
         </div>
       </TextField>
     );
@@ -231,11 +227,9 @@ export function buildSecretFormField(
           </Button>
         </div>
 
-        <div class="col-start-2 ml-2 text-sm text-muted-foreground">
-          {field && <FieldInfo field={field()} />}
-        </div>
+        <GridFieldInfo field={field()} />
 
-        <div class="col-start-2 text-sm">{opts.info}</div>
+        <InfoColumn info={opts.info} />
       </div>
     </TextField>
   );
@@ -264,11 +258,9 @@ export function buildTextAreaFormField(
             }}
           />
 
-          <div class="col-start-2 ml-2 text-sm text-muted-foreground">
-            {field && <FieldInfo field={field()} />}
-          </div>
+          <GridFieldInfo field={field()} />
 
-          <div class="col-start-2 text-sm">{opts.info}</div>
+          <InfoColumn info={opts.info} />
         </div>
       </TextField>
     );
@@ -352,11 +344,10 @@ function buildOptionalNullableNumberFormField<
               data-testid="toggle"
             />
           </div>
-          <div class="col-start-2 ml-2 text-sm text-muted-foreground">
-            {field && <FieldInfo field={field()} />}
-          </div>
 
-          <div class="col-start-2 text-sm">{opts?.info}</div>
+          <GridFieldInfo field={field()} />
+
+          <InfoColumn info={opts.info} />
         </div>
       </TextField>
     );
@@ -422,7 +413,7 @@ export function buildOptionalBoolFormField(opts: {
         onChange={field().handleChange}
       />
 
-      <div class="col-start-2 text-sm">{opts?.info}</div>
+      <InfoColumn info={opts.info} />
     </div>
   );
 }
@@ -489,13 +480,38 @@ export function SelectField(
 }
 
 export function FieldInfo<T>(props: { field: FieldApiT<T> }) {
+  const meta = () => props.field.state.meta;
   return (
-    <>
-      {props.field.state.meta.errors ? (
-        <em class="text-sm text-red-700">{props.field.state.meta.errors}</em>
-      ) : null}
-      {props.field.state.meta.isValidating ? "Validating..." : null}
-    </>
+    <Switch>
+      <Match when={meta().errors.length > 0}>
+        <em class="text-sm text-red-700">{meta().errors}</em>
+      </Match>
+
+      <Match when={meta().isValidating}>Validating...</Match>
+    </Switch>
+  );
+}
+
+function GridFieldInfo<T>(props: { field: FieldApiT<T> }) {
+  const show = () => {
+    const meta = props.field.state.meta;
+    return meta.errors.length > 0 || meta.isValidating;
+  };
+
+  return (
+    <Show when={show()}>
+      <div class="col-start-2 ml-2 text-sm text-muted-foreground">
+        <FieldInfo {...props} />
+      </div>
+    </Show>
+  );
+}
+
+function InfoColumn(props: { info: JSX.Element | undefined }) {
+  return (
+    <Show when={props.info}>
+      <div class="col-start-2 text-sm">{props.info}</div>
+    </Show>
   );
 }
 

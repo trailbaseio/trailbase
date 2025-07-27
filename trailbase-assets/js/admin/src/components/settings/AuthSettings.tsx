@@ -4,6 +4,7 @@ import {
   For,
   Suspense,
   Switch,
+  Show,
   Match,
 } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
@@ -292,6 +293,20 @@ function ProviderSettingsSubForm(props: {
   );
 }
 
+function InfoTooltip(props: { children: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger class="px-1">
+        <TbInfoCircle />
+      </TooltipTrigger>
+
+      <TooltipContent class="shrink">
+        <div class="max-w-[50dvw] text-wrap">{props.children}</div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function AuthSettingsForm(props: {
   config: Config;
   providers: OAuthProviderResponse;
@@ -344,12 +359,14 @@ function AuthSettingsForm(props: {
               <form.Field name="authTokenTtlSec">
                 {buildOptionalNumberFormField({
                   integer: true,
-                  label: () => <div class={labelWidth}>Auth TTL [sec]</div>,
-                  info: (
-                    <p>
-                      AuthToken TTL. Older tokens are invalid. A new AuthToken
-                      can be minted given a valid refresh Token.
-                    </p>
+                  label: () => (
+                    <div class={labelStyle}>
+                      Auth TTL [sec]
+                      <InfoTooltip>
+                        Tokens older than this TTL are considered invalid. A new
+                        AuthToken can be minted provided a valid refresh Token.
+                      </InfoTooltip>
+                    </div>
                   ),
                 })}
               </form.Field>
@@ -357,12 +374,15 @@ function AuthSettingsForm(props: {
               <form.Field name="refreshTokenTtlSec">
                 {buildOptionalNumberFormField({
                   integer: true,
-                  label: () => <div class={labelWidth}>Refresh TTL [sec]</div>,
-                  info: (
-                    <p>
-                      RefreshToken TTL. Older tokens are invalid. A refresh
-                      token can only be renewed by users logging in anew.
-                    </p>
+                  label: () => (
+                    <div class={labelStyle}>
+                      Refresh TTL [sec]
+                      <InfoTooltip>
+                        Refresh tokens older than this TTL are considered
+                        invalid. A refresh token can be renewed by users logging
+                        in again.
+                      </InfoTooltip>
+                    </div>
                   ),
                 })}
               </form.Field>
@@ -380,27 +400,29 @@ function AuthSettingsForm(props: {
               <form.Field name="disablePasswordAuth">
                 {buildOptionalBoolFormField({
                   label: () => (
-                    <div class={labelWidth}>Disable Password Registration</div>
-                  ),
-                  info: (
-                    <p>
-                      When disabled new users can only sign up via OAuth.
-                      Existing users will can continue to sign in using
-                      password-based auth.
-                    </p>
+                    <div class={labelStyle}>
+                      Disable Registration
+                      <InfoTooltip>
+                        When disabled new users can only sign up via OAuth.
+                        Existing users will can continue to sign in using
+                        password-based auth.
+                      </InfoTooltip>
+                    </div>
                   ),
                 })}
               </form.Field>
 
               <form.Field name="passwordMinimalLength">
                 {buildOptionalNumberFormField({
-                  label: () => <div class={labelWidth}>Min Length</div>,
-                  info: (
-                    <p>
-                      Minimal length for new passwords [Default 8]. Does not
-                      affect existing registrations unless users choose to
-                      change their password.
-                    </p>
+                  label: () => (
+                    <div class={labelStyle}>
+                      Min Length
+                      <InfoTooltip>
+                        Minimal length for new passwords [Default 8]. Does not
+                        affect existing registrations unless users choose to
+                        change their password.
+                      </InfoTooltip>
+                    </div>
                   ),
                 })}
               </form.Field>
@@ -408,16 +430,14 @@ function AuthSettingsForm(props: {
               <form.Field name="passwordMustContainUpperAndLowerCase">
                 {buildOptionalBoolFormField({
                   label: () => (
-                    <div class={labelWidth}>
-                      Must Contain Upper {"&"} Lower Case
+                    <div class={labelStyle}>
+                      Require Mixed Case
+                      <InfoTooltip>
+                        Passwords must contain both, upper and lower case
+                        characters. Does not affect existing registrations
+                        unless users choose to change their password.
+                      </InfoTooltip>
                     </div>
-                  ),
-                  info: (
-                    <p>
-                      Passwords must contain both, upper and lower case
-                      characters. Does not affect existing registrations unless
-                      users choose to change their password.
-                    </p>
                   ),
                 })}
               </form.Field>
@@ -425,14 +445,14 @@ function AuthSettingsForm(props: {
               <form.Field name="passwordMustContainDigits">
                 {buildOptionalBoolFormField({
                   label: () => (
-                    <div class={labelWidth}>Must Contain Digits</div>
-                  ),
-                  info: (
-                    <p>
-                      Passwords must additionally contain digits. Does not
-                      affect existing registrations unless users choose to
-                      change their password.
-                    </p>
+                    <div class={labelStyle}>
+                      Require Digits
+                      <InfoTooltip>
+                        Passwords must contain digits. Does not affect existing
+                        registrations unless users choose to change their
+                        password.
+                      </InfoTooltip>
+                    </div>
                   ),
                 })}
               </form.Field>
@@ -440,15 +460,14 @@ function AuthSettingsForm(props: {
               <form.Field name="passwordMustContainSpecialCharacters">
                 {buildOptionalBoolFormField({
                   label: () => (
-                    <div class={labelWidth}>Must Contain Special</div>
-                  ),
-                  info: (
-                    <p>
-                      Passwords must additionally contain special, i.e.,
-                      non-alphanumeric characters.. Does not affect existing
-                      registrations unless users choose to change their
-                      password.
-                    </p>
+                    <div class={labelStyle}>
+                      Require Special
+                      <InfoTooltip>
+                        Passwords must contain special, i.e., non-alphanumeric
+                        characters. Does not affect existing registrations
+                        unless users choose to change their password.
+                      </InfoTooltip>{" "}
+                    </div>
                   ),
                 })}
               </form.Field>
@@ -582,12 +601,12 @@ function OAuthCallbackAddressInfo(props: {
     const name = props.provider.name;
     const url = providerDashboardUrl[name];
 
-    return url ? (
-      <a class="underline" href={url}>
-        {props.provider.display_name}
-      </a>
-    ) : (
-      props.provider.display_name
+    return (
+      <Show when={url} fallback={props.provider.display_name}>
+        <a class="underline" href={url}>
+          {props.provider.display_name}
+        </a>
+      </Show>
     );
   };
 
@@ -668,4 +687,4 @@ export function AuthSettings(props: {
   );
 }
 
-const labelWidth = "w-40";
+const labelStyle = "w-52 h-[44px] flex items-center";
