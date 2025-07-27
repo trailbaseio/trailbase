@@ -62,7 +62,7 @@ pub(crate) async fn login_with_external_auth_provider(
       response_type: None,
       user_pkce_code_challenge: None,
     },
-    LoginParams::ProofKeyForCodeExchange {
+    LoginParams::AuthorizationCodeFlowWithPkce {
       redirect_to,
       pkce_code_challenge,
     } => OAuthState {

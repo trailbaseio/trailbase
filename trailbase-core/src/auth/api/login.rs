@@ -86,13 +86,13 @@ pub(crate) async fn login_handler(
     }),
   )? {
     LoginParams::Password { redirect_to } => {
-      login_without_pkce(&state, &cookies, email, password, redirect_to, is_json).await
+      immediate_login(&state, &cookies, email, password, redirect_to, is_json).await
     }
-    LoginParams::ProofKeyForCodeExchange {
+    LoginParams::AuthorizationCodeFlowWithPkce {
       redirect_to,
       pkce_code_challenge,
     } => {
-      login_with_pkce(
+      login_with_authorization_code_flow_and_pkce(
         &state,
         &cookies,
         email,
@@ -108,10 +108,14 @@ pub(crate) async fn login_handler(
 /// Log users in with (email, password). On success return tokens (json-case) or set cookies and
 /// redirect.
 ///
-/// This is the simple case, i.e. a user browses directly to `/_/auth/login` and logs in with their
-/// credentials. Client-side applications (mobile, desktop, SPAs, ...) should use PKCE (see below)
-/// to avoid man-in-the-middle attacks through malicious apps on the system.
-async fn login_without_pkce(
+/// This is the simplest case, i.e. a client calls `/_/auth/login` directly with user credentials
+/// to log in and retrieve tokens. This works for well for password-based login and custom auth
+/// UIs.
+/// This is also what the built-in auth UI uses by default to pass tokens as cookies. However, the
+/// cookie-based approach only works for web-apps hosted with the same origin like the admin UI.
+/// Otherwise, the cookies will be inaccessible and the "authentication code" flow below is needed
+/// to get the tokens to your app.
+async fn immediate_login(
   state: &AppState,
   cookies: &Cookies,
   email: String,
@@ -155,30 +159,30 @@ async fn login_without_pkce(
   };
 }
 
-/// Log users in with (email, password). On success redirect users to a client-provided url
-/// including a secret (completely random) passed as `?code={auth_code}` query parameter.
-/// Requires the user to provide a client-generated "PKCE code challenge".
+/// Password-based login using "authentication code flow" and required Proof-Key-for-Key-Exchange
+/// (PKCE) (RFC7636).
 ///
-/// Subsequently, clients can complete the login by visiting the `/api/auth/v1/token` endpoint
-/// providing both, the `auth_code` from above and the client's "PKCE code verifier".
+/// Whenever a web auth UI is used (TrailBase's or an external OAuth provider's) the question
+/// becomes how to get the tokens to the application? - especially if it's not a web app or it is
+/// served from a different origin...
+/// The "authentication code flow" answers this question with: upon successful sign-in, redirect
+/// the user to a registered callback address: `<callback>?code=<auth_code>`.
+/// Native client-side applications or SPAs can achieve this by registering a callback with a
+/// custom scheme, e.g. "my-app://callback" and awaiting the `auth_code`.
 ///
-/// Using PKCE prevents against man-in-the-middle attacks by malicious apps, e.g. a webview or
-/// browser, interepting the user's tokens upon sign-in. Instead, the client app can fetch the
-/// tokens itself given the `auth_code` and the "PKCE code verified", which only it knows.
+/// Tokens can be lengthy, thus sending them as a query parameter is brittle (and interceptable).
+/// The "authentication code flow" therefore uses an intermediary `auth_code`, which can
+/// subsequently be exchanged (typically together with another secret) by calling an token exchange
+/// HTTP endpoint from the client directly (here `/api/auth/v1/token`).
 ///
-/// An example using the two-step PKCE login can be found in `/examples/blog/flutter`.
+/// PKCE is an elegant protocol to establish the additional secret that is send alongside the auth
+/// code w/o baking a secret into the client app (i.e. not really a secret), while protecting
+/// against man-in-the-middle attacks by a malicious or infected browser/Webview. TrailBase
+/// therefore **requires** PKCE when using "authentication code flow".
 ///
-/// Note that unlike in the non-PKCE-case, we ignore `is_json` here and always respond with a
-/// redirect, as opposed to sending the *auth code* as JSON. Therefore, a valid client-provided
-/// redirect is required. Our own auth UI uses form-submissions. There could be cases where a
-/// custom auth UI submits credentials using client-side JS + JSON. Even then responding with a
-/// redirect to `{redirect_to}?code={auth_code}` is probably the right thing to do.
-///
-/// Ultimately we need to get the *auth code* to the client app, typically via a custom URI
-/// scheme the app has registered. Otherwise, the custom client-side auth UI would have to do a
-/// local redirect. There could be use-cases where the client-side JS wants to communicate the
-/// auth code back to the client application with something other than a custom URI scheme?
-async fn login_with_pkce(
+/// An example using the two-step "authentication code flow" with PKCE can be found in
+/// `/examples/blog/flutter`.
+async fn login_with_authorization_code_flow_and_pkce(
   state: &AppState,
   cookies: &Cookies,
   email: String,

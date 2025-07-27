@@ -83,7 +83,7 @@ pub(crate) async fn callback_from_external_auth_provider(
 
   return match response_type {
     Some(ResponseType::Code) => {
-      callback_from_external_auth_provider_with_pkce(
+      callback_from_oauth_provider_using_auth_code_flow(
         &state,
         &cookies,
         provider,
@@ -95,7 +95,7 @@ pub(crate) async fn callback_from_external_auth_provider(
       .await
     }
     _ => {
-      callback_from_external_auth_provider_without_pkce(
+      callback_from_oauth_provider_setting_token_cookies(
         &state,
         &cookies,
         provider,
@@ -108,12 +108,8 @@ pub(crate) async fn callback_from_external_auth_provider(
   };
 }
 
-/// Log users in using external OAuth.
-///
-/// This is the simple case, i.e. a user browses directly to `/_/auth/login` and logs in with their
-/// credentials. Client-side applications (mobile, desktop, SPAs, ...) should use PKCE (see below)
-/// to avoid man-in-the-middle attacks through malicious apps on the system.
-async fn callback_from_external_auth_provider_without_pkce(
+/// Log users in using external OAuth setting token cookies on success.
+async fn callback_from_oauth_provider_setting_token_cookies(
   state: &AppState,
   cookies: &Cookies,
   provider: &OAuthProviderType,
@@ -163,12 +159,16 @@ async fn callback_from_external_auth_provider_without_pkce(
   })));
 }
 
-/// Log users in using external OAuth. On success redirect users to a client-provided url including
-/// a secret (completely random) passed as `?code={auth_code}` query parameter. Requires the user
-/// to provide a client-generated "PKCE code challenge".
+/// Creates a random auth code that users can use to subsequently sign in using the
+/// `/api/auth/v1/token` endpoint.
 ///
-/// TODO: Needs test coverage.
-async fn callback_from_external_auth_provider_with_pkce(
+/// Returns the auth code as a redirect to `<redirect>?auth_code=<code>`.
+///
+/// This is necessary when clients cannot access cookies, e.g. native client-side apps or apps
+/// served from a different origin. For more context, see
+/// `crate::auth::api::login::login_with_authorization_code_flow_and_pkce`.
+/// Note further that TrailBase requires the use of PKCE when using "authentication code flow".
+async fn callback_from_oauth_provider_using_auth_code_flow(
   state: &AppState,
   cookies: &Cookies,
   provider: &OAuthProviderType,

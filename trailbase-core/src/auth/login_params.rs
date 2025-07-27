@@ -33,7 +33,7 @@ pub(crate) enum LoginParams {
   Password {
     redirect_to: Option<String>,
   },
-  ProofKeyForCodeExchange {
+  AuthorizationCodeFlowWithPkce {
     redirect_to: String,
     pkce_code_challenge: String,
   },
@@ -60,7 +60,7 @@ pub(crate) fn build_and_validate_input_params(
         .decode(&pkce_code_challenge)
         .map_err(|_| AuthError::BadRequest("invalid 'pkce_code_challenge'"))?;
 
-      Ok(LoginParams::ProofKeyForCodeExchange {
+      Ok(LoginParams::AuthorizationCodeFlowWithPkce {
         redirect_to,
         pkce_code_challenge,
       })
@@ -92,7 +92,7 @@ mod tests {
     let state = test_state(None).await.unwrap();
 
     assert_eq!(
-      LoginParams::ProofKeyForCodeExchange {
+      LoginParams::AuthorizationCodeFlowWithPkce {
         redirect_to: "/redirect".to_string(),
         pkce_code_challenge: BASE64_URL_SAFE.encode("challenge"),
       },
