@@ -15,6 +15,7 @@ use crate::auth::AuthError;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
 use crate::auth::password::check_user_password;
 use crate::auth::tokens::mint_new_tokens;
+use crate::auth::ui::{LOGIN_UI, PROFILE_UI};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
   new_cookie, remove_cookie, user_by_email, validate_and_normalize_email_address,
@@ -144,13 +145,11 @@ async fn immediate_login(
       ));
 
       Ok(
-        Redirect::to(redirect.as_deref().unwrap_or_else(|| {
-          if state.public_dir().is_some() {
-            "/"
-          } else {
-            "/_/auth/profile"
-          }
-        }))
+        Redirect::to(match (redirect, state.public_dir()) {
+          (Some(ref redirect), _) => redirect,
+          (None, Some(_)) => "/",
+          (None, None) => PROFILE_UI,
+        })
         .into_response(),
       )
     }
@@ -247,18 +246,14 @@ fn auth_error_to_response(err: AuthError, cookies: &Cookies, redirect: Option<St
   remove_cookie(cookies, COOKIE_AUTH_TOKEN);
   remove_cookie(cookies, COOKIE_REFRESH_TOKEN);
 
-  let url = format!(
-    "/_/auth/login?alert={msg}&{redirect_to}",
-    msg = urlencode(&format!("Login Failed: {status}")),
-    redirect_to = redirect.map_or_else(
-      || "".to_string(),
-      |r| format!("redirect_to={}", urlencode(&r))
-    ),
-  );
-
   // QUESTION: Should we return a different redirect type (e.g. temporary or permenant) in the
   // error case?
-  return Redirect::to(&url).into_response();
+  let msg = urlencode(&format!("Login Failed: {status}"));
+  return if let Some(redirect) = redirect {
+    Redirect::to(&format!("{LOGIN_UI}?alert={msg}&redirect_to={redirect}")).into_response()
+  } else {
+    Redirect::to(&format!("{LOGIN_UI}?alert={msg}")).into_response()
+  };
 }
 
 #[derive(Debug)]

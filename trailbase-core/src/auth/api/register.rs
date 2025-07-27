@@ -10,6 +10,7 @@ use utoipa::ToSchema;
 use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::password::{hash_password, validate_password_policy};
+use crate::auth::ui::{LOGIN_UI, REGISTER_USER_UI};
 use crate::auth::user::DbUser;
 use crate::auth::util::{user_exists, validate_and_normalize_email_address};
 use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
@@ -51,13 +52,13 @@ pub async fn register_user_handler(
     auth_options.password_options(),
   ) {
     let msg = crate::util::urlencode("Invalid password");
-    return Ok(Redirect::to(&format!("/_/auth/register?alert={msg}")).into_response());
+    return Ok(Redirect::to(&format!("{REGISTER_USER_UI}?alert={msg}")).into_response());
   }
 
   let exists = user_exists(&state, &normalized_email).await?;
   if exists {
     let msg = crate::util::urlencode("E-mail already registered.");
-    return Ok(Redirect::to(&format!("/_/auth/register?alert={msg}")).into_response());
+    return Ok(Redirect::to(&format!("{REGISTER_USER_UI}?alert={msg}")).into_response());
   }
 
   let email_verification_code = generate_random_string(VERIFICATION_CODE_LENGTH);
@@ -107,5 +108,5 @@ pub async fn register_user_handler(
   let msg = format!(
     "Registered {normalized_email}. Email verification is needed before sign in. Check your inbox."
   );
-  return Ok(Redirect::to(&format!("/_/auth/login?alert={msg}")).into_response());
+  return Ok(Redirect::to(&format!("{LOGIN_UI}?alert={msg}")).into_response());
 }

@@ -16,6 +16,7 @@ use crate::auth::oauth::OAuthUser;
 use crate::auth::oauth::providers::OAuthProviderType;
 use crate::auth::oauth::state::{OAuthState, ResponseType};
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
+use crate::auth::ui::PROFILE_UI;
 use crate::auth::user::DbUser;
 use crate::auth::util::{get_user_by_id, new_cookie, remove_cookie, validate_redirect};
 use crate::config::proto::OAuthProviderId;
@@ -150,13 +151,11 @@ async fn callback_from_oauth_provider_setting_token_cookies(
   // transient issues, letting users retry.
   remove_cookie(cookies, COOKIE_OAUTH_STATE);
 
-  return Ok(Redirect::to(redirect.as_deref().unwrap_or_else(|| {
-    if state.public_dir().is_some() {
-      "/"
-    } else {
-      "/_/auth/profile"
-    }
-  })));
+  return Ok(Redirect::to(match (redirect, state.public_dir()) {
+    (Some(ref redirect), _) => redirect,
+    (None, Some(_)) => "/",
+    (None, None) => PROFILE_UI,
+  }));
 }
 
 /// Creates a random auth code that users can use to subsequently sign in using the

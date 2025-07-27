@@ -9,6 +9,7 @@ use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::auth::password::{check_user_password, hash_password, validate_password_policy};
+use crate::auth::ui::PROFILE_UI;
 use crate::auth::util::validate_redirect;
 use crate::auth::{AuthError, User};
 use crate::constants::USER_TABLE;
@@ -97,9 +98,7 @@ pub async fn change_password_handler(
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid old password")),
-    1 => Ok(Redirect::to(
-      redirect_to.as_deref().unwrap_or("/_/auth/profile"),
-    )),
+    1 => Ok(Redirect::to(redirect_to.as_deref().unwrap_or(PROFILE_UI))),
     _ => panic!("password changed for multiple users at once: {rows_affected}"),
   };
 }

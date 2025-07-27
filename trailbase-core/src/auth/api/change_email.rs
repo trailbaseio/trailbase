@@ -10,6 +10,7 @@ use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
+use crate::auth::ui::PROFILE_UI;
 use crate::auth::util::{user_by_id, validate_and_normalize_email_address, validate_redirect};
 use crate::auth::{AuthError, User};
 use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
@@ -199,9 +200,7 @@ pub async fn change_email_confirm_handler(
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid verification code")),
-    1 => Ok(Redirect::to(
-      redirect_to.as_deref().unwrap_or("/_/auth/profile"),
-    )),
+    1 => Ok(Redirect::to(redirect_to.as_deref().unwrap_or(PROFILE_UI))),
     _ => panic!("emails updated for multiple users at once: {rows_affected}"),
   };
 }

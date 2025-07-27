@@ -14,6 +14,10 @@ use trailbase_assets::auth::{
 use crate::AppState;
 use crate::auth::User;
 
+pub(crate) const LOGIN_UI: &str = "/_/auth/login";
+pub(crate) const REGISTER_USER_UI: &str = "/_/auth/register";
+pub(crate) const PROFILE_UI: &str = "/_/auth/profile";
+
 #[derive(Debug, Default, Deserialize)]
 pub struct LoginQuery {
   redirect_to: Option<String>,
@@ -33,7 +37,7 @@ async fn ui_login_handler(
     // from an app, we still have to go through the motions of signing in.
     //
     // QUESTION: Too much magic, just remove?
-    return Redirect::to("/_/auth/profile").into_response();
+    return Redirect::to(PROFILE_UI).into_response();
   }
 
   let oauth_providers: Vec<_> = state
@@ -242,25 +246,10 @@ async fn ui_logout_handler(Query(query): Query<LogoutQuery>) -> Redirect {
 
 /// HTML endpoints of core auth functionality.
 pub(crate) fn auth_ui_router() -> Router<AppState> {
-  // Static assets for auth UI .
-  let serve_auth_assets = AssetService::<trailbase_assets::AuthAssets>::with_parameters(
-    // We want as little magic as possible. The only /_/auth/subpath that isn't SSR, is profile, so
-    // we when hitting /profile or /profile, we want actually want to serve the static
-    // profile/index.html.
-    Some(Box::new(|path| {
-      if path == "profile" {
-        Some(format!("{path}/index.html"))
-      } else {
-        None
-      }
-    })),
-    None,
-  );
-
   return Router::new()
-    .route("/_/auth/login", get(ui_login_handler))
+    .route(LOGIN_UI, get(ui_login_handler))
     .route("/_/auth/logout", get(ui_logout_handler))
-    .route("/_/auth/register", get(ui_register_handler))
+    .route(REGISTER_USER_UI, get(ui_register_handler))
     .route(
       "/_/auth/reset_password/request",
       get(ui_reset_password_request_handler),
@@ -271,7 +260,23 @@ pub(crate) fn auth_ui_router() -> Router<AppState> {
     )
     .route("/_/auth/change_password", get(ui_change_password_handler))
     .route("/_/auth/change_email", get(ui_change_email_handler))
-    .nest_service("/_/auth/", serve_auth_assets);
+    // Static assets for auth UI .
+    .nest_service(
+      "/_/auth/",
+      AssetService::<trailbase_assets::AuthAssets>::with_parameters(
+        // We want as little magic as possible. The only /_/auth/subpath that isn't SSR, is profile, so
+        // we when hitting /profile or /profile, we want actually want to serve the static
+        // profile/index.html.
+        Some(Box::new(|path| {
+          if path == "profile" {
+            Some(format!("{path}/index.html"))
+          } else {
+            None
+          }
+        })),
+        None,
+      ),
+    );
 }
 
 #[cfg(test)]

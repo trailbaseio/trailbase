@@ -10,6 +10,7 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
+use crate::auth::ui::PROFILE_UI;
 use crate::auth::util::{user_by_email, validate_redirect};
 use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;
@@ -133,9 +134,7 @@ pub async fn verify_email_handler(
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid verification code")),
-    1 => Ok(Redirect::to(
-      redirect_to.as_deref().unwrap_or("/_/auth/profile"),
-    )),
+    1 => Ok(Redirect::to(redirect_to.as_deref().unwrap_or(PROFILE_UI))),
     _ => panic!("email verification affected multiple users: {rows_affected}"),
   };
 }

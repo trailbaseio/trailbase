@@ -78,9 +78,8 @@ pub(super) fn router() -> Router<crate::AppState> {
   //
   //  Avatar life-cycle: read+update are handled as record APIs.
   //
-  //  TODO: We should have periodic task to:
-  //   * expired auth, validate-email, reset-password codes.
-  //   * vacuum expired pending registrations.
+  //  TODO: We should have periodic task to vacuum expired auth, validate-email, reset-password
+  //  codes and pending registrations.
   return Router::new()
     // Sign-up new users.
     .route(
