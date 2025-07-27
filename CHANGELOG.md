@@ -1,3 +1,14 @@
+## v0.15.9
+
+* Auth settings UI:
+  * Add explicit *Redirect URI* for registration with external provider as suggested by @eugenefil.
+  * Tidy up walls of help text.
+  * Avoid rendering empty errors.
+* Fix Gitlab OAuth provider, thanks @eugenefil.
+* Unify input parameters and validation between password and OAuth login.
+* Many more auth tests.
+* Update dependencies.
+
 ## v0.15.8
 
 * Support custom URI schmes for auth redirects like `my-app://callback`.
