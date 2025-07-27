@@ -134,7 +134,7 @@ pub async fn verify_email_handler(
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid verification code")),
     1 => Ok(Redirect::to(
-      redirect_to.as_deref().unwrap_or("/_/auth/profile/"),
+      redirect_to.as_deref().unwrap_or("/_/auth/profile"),
     )),
     _ => panic!("email verification affected multiple users: {rows_affected}"),
   };
