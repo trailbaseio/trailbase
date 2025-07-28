@@ -80,7 +80,7 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
     const viewName = view.name.name;
     schema[viewName] = {
       self: { label: viewName, type: "keyword" },
-      children: view.columns?.map((c) => c.name) ?? [],
+      children: view.column_mapping?.columns.map((c) => c.column.name) ?? [],
     } satisfies SQLNamespace;
   }
 

@@ -251,14 +251,25 @@ export function viewSatisfiesRecordApiRequirements(
   view: View,
   all: Table[],
 ): boolean {
-  const columns = view.columns;
+  const columns = view.column_mapping?.columns.map((c) => c.column);
   if (columns) {
+    // FIXME: Needs to match backend.
     return columnsSatisfyRecordApiRequirements(columns, all);
   }
   return false;
 }
 
 export type TableType = "table" | "virtualTable" | "view";
+
+export function getColumns(tableOrView: Table | View): undefined | Column[] {
+  switch (tableType(tableOrView)) {
+    case "table":
+    case "virtualTable":
+      return (tableOrView as Table).columns;
+    case "view":
+      return (tableOrView as View).column_mapping?.columns.map((c) => c.column);
+  }
+}
 
 export function tableType(table: Table | View): TableType {
   if ("virtual_table" in table) {

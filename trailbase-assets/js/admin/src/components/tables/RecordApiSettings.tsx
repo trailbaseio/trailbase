@@ -62,7 +62,7 @@ import {
 } from "@/components/FormFields";
 import { createConfigQuery, setConfig } from "@/lib/config";
 import { parseSqlExpression } from "@/lib/parse";
-import { tableType, getForeignKey } from "@/lib/schema";
+import { tableType, getForeignKey, getColumns } from "@/lib/schema";
 import { buildDefaultRow } from "@/lib/convert";
 import { client } from "@/lib/fetch";
 
@@ -330,7 +330,7 @@ function getForeignKeyColumns(schema: Table | View): [string, ForeignKey][] {
     return true;
   }
 
-  return (schema.columns ?? [])
+  return (getColumns(schema) ?? [])
     .map(
       (c) =>
         [c.name, getForeignKey(c.options)] as [string, ForeignKey | undefined],

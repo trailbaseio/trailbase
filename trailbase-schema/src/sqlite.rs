@@ -863,7 +863,6 @@ pub struct View {
   ///
   /// QUESTION: Should all this inference be in ViewMetadata rather than in the plain, serializable
   /// schema representation?
-  #[serde(skip)]
   pub(crate) column_mapping: Option<ColumnMapping>,
 
   pub query: String,
@@ -923,7 +922,7 @@ impl View {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
 pub(crate) struct ViewColumn {
   // e.g. "foo" for CREATE VIEW v AS SELECT foo.bar AS baz FROM ...
   #[allow(unused)]
@@ -945,7 +944,7 @@ pub(crate) struct Join {
   pub(crate) join_type: JoinType,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize, TS)]
 pub(crate) struct ColumnMapping {
   pub(crate) columns: Vec<ViewColumn>,
 
@@ -953,6 +952,7 @@ pub(crate) struct ColumnMapping {
   pub(crate) group_by: Option<usize>,
 
   /// A list of joins.
+  #[serde(skip)]
   pub(crate) joins: Vec<Join>,
 }
 
