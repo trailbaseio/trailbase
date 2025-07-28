@@ -3,7 +3,7 @@ title: Models & Relations
 ---
 
 import { Image } from "astro:assets";
-import { Aside } from "@astrojs/starlight/components";
+import { Aside, Code } from "@astrojs/starlight/components";
 
 import foo from "./_relations.svg"
 
@@ -150,10 +150,11 @@ For example, a user deletion may trigger related data to be deleted
 automatically.
 
 <Aside type="note" title="PocketBase">
-If you're coming from PocketBase, 1:M and N:M relations are instead modeled as
-a denormalized JSON array of keys within a record.
+If you're coming from PocketBase, there 1:M and N:M relations are modeled as a
+denormalized JSON array of keys within a record.
 While this *adjacency list* approach may feel more intuitive at first, it is
-opaque to SQLite, thus breaking built-in foreign key support with actions.
+opaque to SQLite, thus requiring bespoke traversal and breaking built-in
+foreign key support (e.g. cascading deletions).
 </Aside>
 
 Let's look at the following data schema for a blog example,
@@ -196,14 +197,18 @@ There's an elephant in the room: while this is all pretty standard fair, at
 least in SQL land, connecting relations across TrailBase's record APIs without
 joins can be a lot more work.
 Naively, for N:M relations, one would have to expose 3 different APIs including
-the bridge table, manage their ACLs and then have the client manually stich the
+the bridge table, manage their ACLs and then have the client manually stitch the
 edges.
 
-For simple, single hop client ⇨ parent traversals we can use TrailBase builtin
-expansion support, i.e. a referenced parent record will be joined and then
-nested into the client response.
-First, we need to set a foreign key columns as "expand" in the API
-configuration, which changes the read schema to:
+For simple, single hop child ⇨ parent traversals we can use TrailBase's builtin
+*expansions*, i.e. a referenced parent record will be joined and then nested
+into the child record.
+To do so, we simply add the foreign key column to the record API's
+[*expand*](https://github.com/trailbaseio/trailbase/blob/e094d82f74b48b1b58a4c482dec89044114719d9/trailbase-core/proto/config.proto#L242)
+configuration property.
+This, in turn, changes the child's data representation, and thus the API
+definition, to create an affordance to nest the parent record.
+Concretely, the API's JSON schema definition of read responses changes to:
 
 ```ts
 type Schema = {
@@ -215,30 +220,42 @@ type Schema = {
 }
 ```
 
+Any pre-existing bindings for the API will need to be re-generated or updated.
+
 Subsequently, joins can be requested for any of the configured foreign key
 columns during read and list operations, e.g.:
 
-```
-await api.read<Comment>(1, { expand: ["post"] })
-► {
-  id: 1,
+export const readExpand = `
+curl -H "Content-Type: application/json" \\
+  $\{SITE\}/api/records/v1/post_tag/1?expand=post,tag
+
+{
   post: {
-    id: 'AZUECN4ZfEKDOhVAip8S3g==',
+    id: 1,
     data: {
-      id: 'AZUECN4ZfEKDOhVAip8S3g==',
+      id: 1,
       author: 'AZUECMTAfqOZJjHfEzAqkA==',
       title: 'first post',
       body: 'body'
     }
   },
-  author: { id: 'AZUECN4ZfEKDOhU6uTkLVw==' },
-  body: 'first comment'
+  tag: {
+    id: 5,
+    data: {
+      id: 5,
+      label: "whimsical"
+    }
+  }
 }
-```
+`;
 
-For more complex relations and traversals, it is recommended to push more
-responsibility to the server. Concretely, we can expose a single API tailored
-for specific client use-cases implementing a server-side join using `VIEW`s:
+<Code lang="sh" frame={false} code={readExpand} />
+
+
+For more complex relations and traversals, rather than manually stitching on
+the client-side, we recommend to push more responsibility to the server.
+Concretely, we can expose a single API tailored for specific client use-cases
+implementing a server-side join using `VIEW`s:
 
 ```sql
 CREATE VIEW post_tag_view AS SELECT * FROM post AS P
