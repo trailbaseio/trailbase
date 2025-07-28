@@ -923,26 +923,36 @@ impl View {
 }
 
 #[derive(Clone, Debug)]
-struct TableColumn {
-  referred_table: ReferredTable,
-  column_index: usize,
+pub(crate) struct TableColumn {
+  pub(crate) referred_table: ReferredTable,
+  pub(crate) column_index: usize,
 }
 
 #[derive(Clone, Debug)]
-pub struct InferredColumn {
+pub(crate) struct InferredColumn {
   // View columns. May be different from referred source table columns, e.g. different name.
-  pub column: Column,
+  pub(crate) column: Column,
 
   // We may be able to infer what underlying table column a view column points to (if at all).
-  referred_table_column: Option<TableColumn>,
+  // TODO: Will this be uesful for smarter join Handling or should we just collapse InferredColumn?
+  #[allow(unused)]
+  pub(crate) referred_table_column: Option<TableColumn>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct Join {
+  pub(crate) join_type: JoinType,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct ColumnMapping {
   pub(crate) columns: Vec<InferredColumn>,
 
-  // Group by that can be used as a key for record APIs.
+  /// Group by that can be used as a key for record APIs.
   pub(crate) group_by: Option<usize>,
+
+  /// A list of joins.
+  pub(crate) joins: Vec<Join>,
 }
 
 fn extract_column_mapping(
@@ -952,7 +962,8 @@ fn extract_column_mapping(
   let result_columns = extract_result_columns(&select)?;
   let group_by_key_candidate = extract_group_by_key_candidate(&select)?;
 
-  let referenced_table_by_alias = extract_referenced_tables_by_alias(select, tables)?;
+  let (joins, referenced_table_by_alias) =
+    extract_joins_and_referenced_tables_by_alias(select, tables)?;
 
   // SQLite checks comprehensively and will return an `ambiguous column name: <col>` error at
   // query time (as opposed to VIEW-creation-time).
@@ -1117,6 +1128,7 @@ fn extract_column_mapping(
     None => Ok(ColumnMapping {
       columns: mapping,
       group_by: None,
+      joins,
     }),
     Some(group_by_key_candidate_column_name) => {
       // NOTE: GROUP BY can technically reference any column, but only columns also exposed by the
@@ -1130,29 +1142,25 @@ fn extract_column_mapping(
       Ok(ColumnMapping {
         columns: mapping,
         group_by: Some(group_by),
+        joins,
       })
     }
   };
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-struct ReferredTable {
+#[derive(Clone, Debug)]
+pub(crate) struct ReferredTable {
   /// Optional top-most alias (nested aliases, e.g. in a sub-query,  are not accessible).
-  alias: Option<String>,
-
-  /// A sequence of joins via which the table was linked into the vie.
-  ///
-  /// TODO: Just a placeholder, needs implementing.
-  joins: Vec<u8>,
+  pub(crate) alias: Option<String>,
 
   /// The referenced table.
-  table: Table,
+  pub(crate) table: Table,
 }
 
-fn extract_referenced_tables_by_alias(
+fn extract_joins_and_referenced_tables_by_alias(
   select: sqlite3_parser::ast::Select,
   tables: &[Table],
-) -> Result<Vec<ReferredTable>, SchemaError> {
+) -> Result<(Vec<Join>, Vec<ReferredTable>), SchemaError> {
   let body = select.body;
   if body.compounds.is_some() {
     return Err(precondition("Compound queries not supported"));
@@ -1162,7 +1170,7 @@ fn extract_referenced_tables_by_alias(
     columns: _,
     distinctness,
     from,
-    group_by,
+    group_by: _,
     having: _,
     where_clause: _,
     window_clause,
@@ -1200,7 +1208,7 @@ fn extract_referenced_tables_by_alias(
     // Make sure all referenced tables are strict.
     if !table.strict {
       return Err(precondition(&format!(
-        "Referenced table: {:?} must be STRICT",
+        "Table {:?} must be STRICT to derive type",
         table.name
       )));
     }
@@ -1208,54 +1216,53 @@ fn extract_referenced_tables_by_alias(
     return Ok(table);
   };
 
+  let mut all_joins: Vec<Join> = joins
+    .as_ref()
+    .map(|joins| {
+      joins
+        .iter()
+        .map(|join| {
+          let join_type = extract_join_type(join.operator);
+          return Join { join_type };
+        })
+        .collect()
+    })
+    .unwrap_or_default();
+
   // List of referenced tables in insertion order (left-to-right).
   let referenced_table_by_alias: Vec<ReferredTable> = match nested_select.map(|s| *s) {
     Some(SelectTable::Table(fqn, alias, _indexed)) => {
       // Table itself
       let mut referenced_tables = vec![ReferredTable {
         alias: to_alias(alias),
-        joins: vec![],
         table: find_table(&fqn.into())?.clone(),
       }];
 
-      // Plus possible joins.
+      // // Plus possible joins.
       for join in joins.unwrap_or_default() {
         // We don't currently allow joining sub-queries, etc.
         match join.table {
           SelectTable::Table(fqn, alias, _indexed) => {
-            let join_type = extract_join_type(join.operator);
-            // if !join_type.contains(JoinType::INNER) && !join_type.contains(JoinType::LEFT) {
-            //   return Err(precondition(&format!(
-            //     "Only LEFT and INNER JOINS supported yet, got: {:?}",
-            //     join.operator
-            //   )));
-            // }
-
             referenced_tables.push(ReferredTable {
               alias: to_alias(alias),
-              joins: vec![join_type.bits()],
               table: find_table(&fqn.into())?.clone(),
             });
           }
           SelectTable::Select(subselect, alias) => {
-            let join_type = extract_join_type(join.operator);
             let alias = to_alias(alias);
 
-            let referenced_tables_in_subselect =
-              extract_referenced_tables_by_alias(*subselect, tables)?
-                .into_iter()
-                .map(|ReferredTable { joins, table, .. }| -> ReferredTable {
-                  let mut j = vec![join_type.bits()];
-                  j.extend(joins);
+            let (joins_in_subselect, referenced_tables_in_subselect) =
+              extract_joins_and_referenced_tables_by_alias(*subselect, tables)?;
 
-                  return ReferredTable {
-                    alias: alias.clone(),
-                    joins: j,
-                    table,
-                  };
-                });
-
-            referenced_tables.extend(referenced_tables_in_subselect);
+            all_joins.extend(joins_in_subselect);
+            referenced_tables.extend(referenced_tables_in_subselect.into_iter().map(
+              |ReferredTable { table, .. }| -> ReferredTable {
+                return ReferredTable {
+                  alias: alias.clone(),
+                  table,
+                };
+              },
+            ));
           }
           _ => {
             return Err(precondition("JOIN with TABLE expected"));
@@ -1266,19 +1273,22 @@ fn extract_referenced_tables_by_alias(
       referenced_tables
     }
     Some(SelectTable::Select(nested_select, alias)) => {
-      // Recurse for nested select.
+      // Simply recurse tu unnest the select.
       let alias = to_alias(alias);
-      return Ok(
-        extract_referenced_tables_by_alias(*nested_select, tables)?
+      let (joins_in_nested_select, referenced_tables_in_nested_select) =
+        extract_joins_and_referenced_tables_by_alias(*nested_select, tables)?;
+
+      return Ok((
+        joins_in_nested_select,
+        referenced_tables_in_nested_select
           .into_iter()
           .map(|referred_table| ReferredTable {
             // NOTE: Reset the alias.
             alias: alias.clone(),
-            joins: referred_table.joins,
             table: referred_table.table,
           })
           .collect(),
-      );
+      ));
     }
     Some(x) => {
       return Err(precondition(&format!(
@@ -1290,7 +1300,7 @@ fn extract_referenced_tables_by_alias(
     }
   };
 
-  return Ok(referenced_table_by_alias);
+  return Ok((all_joins, referenced_table_by_alias));
 }
 
 #[inline]
@@ -1728,10 +1738,6 @@ mod tests {
       let referred_column = second.referred_table_column.as_ref().unwrap();
       assert_eq!(referred_column.referred_table.table.name.name, "table_name");
       assert_eq!(referred_column.referred_table.alias.as_deref(), Some("y"));
-      assert!(
-        JoinType::from_bits_truncate(referred_column.referred_table.joins[0])
-          .contains(JoinType::LEFT)
-      );
     }
 
     {

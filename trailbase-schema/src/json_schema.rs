@@ -3,7 +3,9 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::metadata::{JsonColumnMetadata, JsonSchemaError, TableMetadata, extract_json_metadata};
+use crate::metadata::{
+  JsonColumnMetadata, JsonSchemaError, TableMetadata, extract_json_metadata, is_pk_column,
+};
 use crate::sqlite::{Column, ColumnDataType, ColumnOption};
 
 /// Influeces the generated JSON schema. In `Insert` mode columns with default values will be
@@ -120,8 +122,7 @@ pub fn build_json_schema_expanded(
             };
 
             let Some(pk_column) = (match referred_columns.len() {
-              0 => crate::metadata::find_pk_column_index(&table.schema.columns)
-                .map(|idx| &table.schema.columns[idx]),
+              0 => table.schema.columns.iter().find(|c| is_pk_column(c)),
               1 => table
                 .schema
                 .columns
