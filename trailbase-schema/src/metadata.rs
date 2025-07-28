@@ -77,9 +77,13 @@ impl JsonMetadata {
   }
 
   fn from_view(view: &View) -> Option<Self> {
-    if let Some(ref columns) = view.columns {
+    if let Some(ref mapping) = view.column_mapping {
       return Some(Self::from_columns(
-        &columns.iter().map(|m| m.column.clone()).collect::<Vec<_>>(),
+        &mapping
+          .columns
+          .iter()
+          .map(|m| m.column.clone())
+          .collect::<Vec<_>>(),
       ));
     }
     return None;
@@ -210,9 +214,10 @@ impl ViewMetadata {
   /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
   /// key relationships.
   pub fn new(view: View, tables: &[Table]) -> Self {
-    let name_to_index = if let Some(ref columns) = view.columns {
+    let name_to_index = if let Some(ref mapping) = view.column_mapping {
       HashMap::<String, usize>::from_iter(
-        columns
+        mapping
+          .columns
           .iter()
           .enumerate()
           .map(|(index, col)| (col.column.name.clone(), index)),
@@ -222,11 +227,12 @@ impl ViewMetadata {
     };
 
     let columns: Option<Vec<Column>> = view
-      .columns
+      .column_mapping
       .as_ref()
-      .map(|c| c.iter().map(|m| m.column.clone()).collect());
+      .map(|m| m.columns.iter().map(|m| m.column.clone()).collect());
 
     // TODO: Pick GROUP BY as key, if present.
+    // TODO: When GROUP BY is not present, pick smarter.
     let record_pk_column = columns
       .as_ref()
       .and_then(|c| find_record_pk_column_index(c, tables));
@@ -259,8 +265,8 @@ impl ViewMetadata {
   #[inline]
   pub fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
     let index = self.column_index_by_name(key)?;
-    let cols = self.schema.columns.as_ref()?;
-    return Some((index, &cols[index].column));
+    let mapping = self.schema.column_mapping.as_ref()?;
+    return Some((index, &mapping.columns[index].column));
   }
 }
 
@@ -573,7 +579,7 @@ mod tests {
       assert_eq!(table_view.query, "SELECT col0, col1 FROM table0");
       assert_eq!(table_view.temporary, false);
 
-      let view_columns = table_view.columns.as_ref().unwrap();
+      let view_columns = &table_view.column_mapping.as_ref().unwrap().columns;
 
       assert_eq!(view_columns.len(), 2);
       assert_eq!(view_columns[0].column.name, "col0");
@@ -618,7 +624,7 @@ mod tests {
         "CREATE VIEW view0 AS SELECT * FROM (SELECT * FROM a);",
         &tables,
       );
-      let view_columns = view.columns.as_ref().unwrap();
+      let view_columns = &view.column_mapping.as_ref().unwrap().columns;
 
       assert_eq!(view_columns.len(), 2);
       assert_eq!(view_columns[0].column.name, "id");
@@ -638,7 +644,7 @@ mod tests {
         "CREATE VIEW view0 AS SELECT id FROM (SELECT * FROM a);",
         &tables,
       );
-      let view_columns = view.columns.as_ref().unwrap();
+      let view_columns = &view.column_mapping.as_ref().unwrap().columns;
       assert_eq!(view_columns.len(), 1);
       assert_eq!(view_columns[0].column.name, "id");
       assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
@@ -654,7 +660,7 @@ mod tests {
         "CREATE VIEW view0 AS SELECT x.id FROM (SELECT * FROM a) AS x;",
         &tables,
       );
-      let view_columns = view.columns.as_ref().unwrap();
+      let view_columns = &view.column_mapping.as_ref().unwrap().columns;
       assert_eq!(view_columns.len(), 1);
       assert_eq!(view_columns[0].column.name, "id");
       assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
@@ -671,7 +677,7 @@ mod tests {
         "CREATE VIEW view0 AS SELECT x.id, y.id FROM (SELECT * FROM a) AS x, (SELECT * FROM a) AS y;",
         &tables,
       );
-      assert_eq!(view.columns, None);
+      assert!(view.column_mapping.is_none());
     }
   }
 
@@ -696,7 +702,7 @@ mod tests {
         "CREATE VIEW view0 AS SELECT a.data, b.fk, a.id FROM a AS a LEFT JOIN b AS b ON a.id = b.fk;",
         &tables,
       );
-      let view_columns = view.columns.as_ref().unwrap();
+      let view_columns = &view.column_mapping.as_ref().unwrap().columns;
 
       assert_eq!(view_columns.len(), 3);
       assert_eq!(view_columns[2].column.name, "id");

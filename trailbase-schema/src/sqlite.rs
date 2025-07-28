@@ -862,7 +862,8 @@ pub struct View {
   /// well defined.
   ///
   /// QUESTION: Should all this inference be in ViewMetadata?
-  pub columns: Option<Vec<ColumnMapping>>,
+  #[serde(skip)]
+  pub(crate) column_mapping: Option<ColumnMapping>,
 
   pub query: String,
 
@@ -887,7 +888,7 @@ impl View {
       ));
     };
 
-    let column_mapping: Option<Vec<ColumnMapping>> = if columns.is_some() {
+    let column_mapping: Option<ColumnMapping> = if columns.is_some() {
       // Example, `CREATE VIEW view0(alias0, alias1) AS SELECT * FROM table0;`
       //
       // We probably never want to support this due to its late failure mode,
@@ -913,7 +914,7 @@ impl View {
 
     return Ok(View {
       name: view_name.into(),
-      columns: column_mapping,
+      column_mapping,
       query: SelectFormatter(*select).to_string(),
       temporary,
       if_not_exists,
@@ -921,27 +922,36 @@ impl View {
   }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-struct ReferredColumn {
+#[derive(Clone, Debug)]
+struct TableColumn {
   referred_table: ReferredTable,
   column_index: usize,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, TS)]
-pub struct ColumnMapping {
+#[derive(Clone, Debug)]
+pub struct InferredColumn {
   // View columns. May be different from referred source table columns, e.g. different name.
   pub column: Column,
 
-  #[allow(unused)]
-  #[ts(skip)]
-  referred_column: Option<ReferredColumn>,
+  // We may be able to infer what underlying table column a view column points to (if at all).
+  referred_table_column: Option<TableColumn>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ColumnMapping {
+  pub(crate) columns: Vec<InferredColumn>,
+
+  // Group by that can be used as a key for record APIs.
+  pub(crate) group_by: Option<usize>,
 }
 
 fn extract_column_mapping(
   select: sqlite3_parser::ast::Select,
   tables: &[Table],
-) -> Result<Vec<ColumnMapping>, SchemaError> {
+) -> Result<ColumnMapping, SchemaError> {
   let result_columns = extract_result_columns(&select)?;
+  let group_by_key_candidate = extract_group_by_key_candidate(&select)?;
+
   let referenced_table_by_alias = extract_referenced_tables_by_alias(select, tables)?;
 
   // SQLite checks comprehensively and will return an `ambiguous column name: <col>` error at
@@ -973,17 +983,15 @@ fn extract_column_mapping(
     return Err(precondition(&format!("No table found for '{a}'")));
   };
 
-  let mut mapping: Vec<ColumnMapping> = vec![];
+  let mut mapping: Vec<InferredColumn> = vec![];
   for col in result_columns {
-    use sqlite3_parser::ast::Expr;
-
     match col {
       ResultColumn::Star => {
         for referred_table in &referenced_table_by_alias {
           for (i, c) in referred_table.table.columns.iter().enumerate() {
-            mapping.push(ColumnMapping {
+            mapping.push(InferredColumn {
               column: c.clone(),
-              referred_column: Some(ReferredColumn {
+              referred_table_column: Some(TableColumn {
                 referred_table: referred_table.clone(),
                 column_index: i,
               }),
@@ -996,9 +1004,9 @@ fn extract_column_mapping(
         let referred_table = find_table_by_alias(&name)?;
 
         for (i, c) in referred_table.table.columns.iter().enumerate() {
-          mapping.push(ColumnMapping {
+          mapping.push(InferredColumn {
             column: c.clone(),
-            referred_column: Some(ReferredColumn {
+            referred_table_column: Some(TableColumn {
               referred_table: referred_table.clone(),
               column_index: i,
             }),
@@ -1020,13 +1028,13 @@ fn extract_column_mapping(
             })
             .unwrap_or_else(|| column.name.clone());
 
-          mapping.push(ColumnMapping {
+          mapping.push(InferredColumn {
             column: Column {
               name,
               data_type: column.data_type,
               options: column.options.clone(),
             },
-            referred_column: Some(ReferredColumn {
+            referred_table_column: Some(TableColumn {
               referred_table: referred_table.clone(),
               column_index,
             }),
@@ -1036,15 +1044,15 @@ fn extract_column_mapping(
           let referred_table = find_table_by_alias(&unquote_name(qualifier))?;
 
           let col_name = unquote_name(name);
-          let Some((column_index, column)) = referred_table
+          let Some(column_index) = referred_table
             .table
             .columns
             .iter()
-            .enumerate()
-            .find(|(_idx, c)| c.name == col_name)
+            .position(|c| c.name == col_name)
           else {
             return Err(precondition(&format!("Missing col: {col_name}")));
           };
+          let column = &referred_table.table.columns[column_index];
 
           let name = alias
             .and_then(|alias| {
@@ -1055,13 +1063,13 @@ fn extract_column_mapping(
             })
             .unwrap_or_else(|| column.name.clone());
 
-          mapping.push(ColumnMapping {
+          mapping.push(InferredColumn {
             column: Column {
               name,
               data_type: column.data_type,
               options: column.options.clone(),
             },
-            referred_column: Some(ReferredColumn {
+            referred_table_column: Some(TableColumn {
               referred_table: referred_table.clone(),
               column_index,
             }),
@@ -1088,13 +1096,13 @@ fn extract_column_mapping(
             return Err(SchemaError::Precondition("Missing alias in cast".into()));
           };
 
-          mapping.push(ColumnMapping {
+          mapping.push(InferredColumn {
             column: Column {
               name,
               data_type,
               options: vec![ColumnOption::Null],
             },
-            referred_column: None,
+            referred_table_column: None,
           });
         }
         x => {
@@ -1105,7 +1113,26 @@ fn extract_column_mapping(
     };
   }
 
-  return Ok(mapping);
+  return match group_by_key_candidate {
+    None => Ok(ColumnMapping {
+      columns: mapping,
+      group_by: None,
+    }),
+    Some(group_by_key_candidate_column_name) => {
+      // NOTE: GROUP BY can technically reference any column, but only columns also exposed by the
+      // VIEW are useful to us as keys. In other words, there's no point of us to search for this
+      // column through all referenced tables.
+      let group_by = mapping
+        .iter()
+        .position(|m| m.column.name == group_by_key_candidate_column_name)
+        .ok_or_else(|| precondition("GROUP BY column not exposed"))?;
+
+      Ok(ColumnMapping {
+        columns: mapping,
+        group_by: Some(group_by),
+      })
+    }
+  };
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -1146,10 +1173,6 @@ fn extract_referenced_tables_by_alias(
       body.select
     )));
   };
-
-  if group_by.is_some() {
-    return Err(precondition("GROUP BY clause not (yet) supported"));
-  }
 
   if distinctness.is_some() {
     return Err(precondition("DISTINCT clause not (yet) supported"));
@@ -1289,6 +1312,34 @@ fn extract_result_columns(
     return Err(precondition("VALUES not supported"));
   };
   return Ok(columns.clone());
+}
+
+fn extract_group_by_key_candidate(
+  select: &sqlite3_parser::ast::Select,
+) -> Result<Option<String>, SchemaError> {
+  let sqlite3_parser::ast::OneSelect::Select { group_by, .. } = &select.body.select else {
+    return Err(precondition("VALUES not supported"));
+  };
+
+  let Some(group_by) = group_by else {
+    return Ok(None);
+  };
+
+  return match group_by.len() {
+    1 => match &group_by[0] {
+      Expr::Id(id) => Ok(Some(id.0.to_string())),
+      // Expr::Name(name) => Ok(Some(unquote_name(name.clone()))),
+      Expr::Qualified(qualifier, name) => Err(precondition(&format!(
+        "For RecordAPIs GROUP BY expressions must reference an exposed VIEW column, not internals of a table or sub-query:. {qualifier:?}.{name:?}"
+      ))),
+      expr => Err(precondition(&format!(
+        "For RecordAPIs GROUP BY expressions must reference an exposed VIEW column, got {expr:?}"
+      ))),
+    },
+    n => Err(precondition(&format!(
+      "For RecordAPIs GROUP BY expressions must reference a single VIEW column, got {n}"
+    ))),
+  };
 }
 
 fn build_foreign_key(
@@ -1664,16 +1715,17 @@ mod tests {
         panic!("Not a select");
       };
       let column_mapping = extract_column_mapping(*select, &tables).unwrap();
-      assert_eq!(column_mapping.len(), 2, "{column_mapping:?}");
+      let columns = &column_mapping.columns;
+      assert_eq!(columns.len(), 2, "{columns:?}");
 
-      let first = &column_mapping[0];
+      let first = &columns[0];
       assert_eq!(first.column.data_type, ColumnDataType::Text);
       assert_eq!(first.column.name, "column");
 
-      let second = &column_mapping[1];
+      let second = &columns[1];
       assert_eq!(second.column.data_type, ColumnDataType::Text);
       assert_eq!(second.column.name, "foo");
-      let referred_column = second.referred_column.as_ref().unwrap();
+      let referred_column = second.referred_table_column.as_ref().unwrap();
       assert_eq!(referred_column.referred_table.table.name.name, "table_name");
       assert_eq!(referred_column.referred_table.alias.as_deref(), Some("y"));
       assert!(
@@ -1695,6 +1747,38 @@ mod tests {
         .to_string();
       assert!(err.contains("Compound queries not supported"), "{err}");
     }
+  }
+
+  fn parse_create_view_select(sql: &str) -> sqlite3_parser::ast::Select {
+    let sqlite3_parser::ast::Stmt::CreateView { select, .. } =
+      parse_into_statement(sql).unwrap().unwrap()
+    else {
+      panic!("Not a CREATE VIEW: {sql}");
+    };
+    return *select;
+  }
+
+  #[test]
+  fn test_foobar() {
+    let table_a = parse_create_table(
+      "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
+    );
+
+    let tables = [table_a];
+
+    let select =
+      parse_create_view_select("CREATE VIEW view0 AS SELECT x.id FROM a AS x GROUP BY x.id");
+    assert!(extract_column_mapping(select, &tables).is_err());
+
+    let select =
+      parse_create_view_select("CREATE VIEW view0 AS SELECT x.id FROM a AS x GROUP BY id");
+    assert_eq!(
+      0,
+      extract_column_mapping(select, &tables)
+        .unwrap()
+        .group_by
+        .unwrap()
+    )
   }
 
   fn parse_create_table(create_table_sql: &str) -> Table {
@@ -1735,9 +1819,10 @@ mod tests {
 
     assert_eq!(
       mapping
+        .columns
         .iter()
         .map(|m| {
-          let referred_column = m.referred_column.as_ref().unwrap();
+          let referred_column = m.referred_table_column.as_ref().unwrap();
           let column = &referred_column.referred_table.table.columns[referred_column.column_index];
           return column.name.as_str();
         })
@@ -1749,6 +1834,7 @@ mod tests {
 
     assert_eq!(
       mapping
+        .columns
         .iter()
         .map(|m| m.column.name.as_str())
         .collect::<Vec<_>>(),
