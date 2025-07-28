@@ -802,17 +802,69 @@ mod tests {
 
     {
       // JOIN on a SELECT is not suitable for APIs. They're cross-producty nature spoils PKs.
-      //
-      // FIXME: Currently only works with aliases.
-      let view = parse_create_view(
-        "CREATE VIEW v AS SELECT a.id AS x FROM a AS a RIGHT JOIN b ON a.id = b.id GROUP BY x;",
-        &tables,
-      )
-      .unwrap();
+      {
+        for (i, sql) in [
+          "CREATE VIEW v AS SELECT data, a.id AS z FROM a RIGHT JOIN b ON a.id = b.id GROUP BY z;",
+          "CREATE VIEW v AS SELECT data, x.id AS z FROM a AS x RIGHT JOIN b ON x.id = b.id GROUP BY z;",
+          "CREATE VIEW v AS SELECT data, x.id AS z FROM a x RIGHT JOIN b ON x.id = b.id GROUP BY z;",
+        ].iter().enumerate() {
+          let view = parse_create_view(sql, &tables).unwrap();
+          assert!(view.column_mapping.is_some(), "{i}: {sql}");
 
-      let metadata = ViewMetadata::new(view, &tables);
-      assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.0));
+          let metadata = ViewMetadata::new(view, &tables);
+          assert_eq!(Some(1), metadata.record_pk_column().map(|c| c.0));
+        }
+      }
+
+      {
+        let view = parse_create_view(
+          "CREATE VIEW v AS SELECT a.data, a.id FROM a RIGHT JOIN b ON a.id = b.id GROUP BY a.id;",
+          &tables,
+        )
+        .unwrap();
+
+        let metadata = ViewMetadata::new(view, &tables);
+        assert_eq!(Some(1), metadata.record_pk_column().map(|c| c.0));
+      }
     }
+  }
+
+  #[test]
+  fn test_parse_create_view_from_issue_99() {
+    let authors_table = parse_create_table(
+      "
+        CREATE TABLE authors (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          age INTEGER DEFAULT NULL
+        ) STRICT;
+      ",
+    );
+    let posts_table = parse_create_table(
+      "
+        CREATE TABLE posts (
+          id INTEGER PRIMARY KEY,
+          author INTEGER DEFAULT NULL REFERENCES persons(id),
+          title TEXT NOT NULL
+        ) STRICT;
+      ",
+    );
+
+    let tables = [authors_table, posts_table];
+
+    let view = parse_create_view(
+      "
+        CREATE VIEW authors_view_posts AS
+          SELECT authors.* FROM authors authors
+              INNER JOIN posts posts ON posts.author = authors.id
+          GROUP BY authors.id;
+      ",
+      &tables,
+    )
+    .unwrap();
+
+    let metadata = ViewMetadata::new(view, &tables);
+    assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.0));
   }
 
   #[test]
