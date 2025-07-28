@@ -861,8 +861,9 @@ pub struct View {
   /// functions, ..., which makes them inherently not type safe and therefore their columns not
   /// well defined.
   ///
-  /// QUESTION: Should all this inference be in ViewMetadata rather than in the plain, serializable
-  /// schema representation?
+  /// QUESTION: We've been wondering if the inference should live more in ViewMetadata, however
+  /// right now the `View` is heavily used in the UI to e.g. render tables and infer record API
+  /// suitability. It's ok that this is more than just an AST.
   pub(crate) column_mapping: Option<ColumnMapping>,
 
   pub query: String,
@@ -925,23 +926,20 @@ impl View {
 #[derive(Clone, Debug, Deserialize, Serialize, TS)]
 pub(crate) struct ViewColumn {
   // e.g. "foo" for CREATE VIEW v AS SELECT foo.bar AS baz FROM ...
-  #[allow(unused)]
-  pub(crate) qualifier: Option<String>,
-
-  // e.g. "baz" for CREATE VIEW v AS SELECT foo.bar AS baz FROM ...
-  pub(crate) alias: Option<String>,
+  // #[allow(unused)]
+  // pub(crate) qualifier: Option<String>,
+  //
+  // // e.g. "baz" for CREATE VIEW v AS SELECT foo.bar AS baz FROM ...
+  // pub(crate) alias: Option<String>,
 
   // The inferred column schema, either via a cast from a computed column or the underlying table
   // column if inferable.
+  // NOTE: It would be cleaner to separate (Table)`Column` from `ViewColumn`, just pulling the in
+  // the contents here. However, the UI currently depends on `Column`.
   pub(crate) column: Column,
 
   // Would be "foo" for CREATE VIEW v AS SELECT foo.bar FROM foo;
   pub(crate) parent_name: Option<String>,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct Join {
-  pub(crate) join_type: JoinType,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
@@ -952,8 +950,7 @@ pub(crate) struct ColumnMapping {
   pub(crate) group_by: Option<usize>,
 
   /// A list of joins.
-  #[serde(skip)]
-  pub(crate) joins: Vec<Join>,
+  pub(crate) joins: Vec<u8>,
 }
 
 fn extract_column_mapping(
@@ -1005,8 +1002,6 @@ fn extract_column_mapping(
         for referred_table in &referenced_table_by_alias {
           for c in &referred_table.table.columns {
             mapping.push(ViewColumn {
-              qualifier: None,
-              alias: None,
               column: c.clone(),
               parent_name: get_parent_name(referred_table),
             });
@@ -1019,8 +1014,6 @@ fn extract_column_mapping(
 
         for c in &referred_table.table.columns {
           mapping.push(ViewColumn {
-            qualifier: Some(name.clone()),
-            alias: None,
             column: c.clone(),
             parent_name: get_parent_name(referred_table),
           });
@@ -1033,9 +1026,11 @@ fn extract_column_mapping(
           let column = &referred_table.table.columns[column_index];
 
           mapping.push(ViewColumn {
-            qualifier: None,
-            alias: to_alias(alias),
-            column: column.clone(),
+            column: Column {
+              name: to_alias(alias).unwrap_or_else(|| column.name.clone()),
+              data_type: column.data_type,
+              options: column.options.clone(),
+            },
             parent_name: get_parent_name(referred_table),
           });
         }
@@ -1053,10 +1048,14 @@ fn extract_column_mapping(
             return Err(precondition(&format!("Missing col: {col_name}")));
           };
 
+          let column = &referred_table.table.columns[column_index];
+
           mapping.push(ViewColumn {
-            qualifier: Some(qualifier),
-            alias: to_alias(alias),
-            column: referred_table.table.columns[column_index].clone(),
+            column: Column {
+              name: to_alias(alias).unwrap_or_else(|| column.name.clone()),
+              data_type: column.data_type,
+              options: column.options.clone(),
+            },
             parent_name: get_parent_name(referred_table),
           });
         }
@@ -1077,12 +1076,10 @@ fn extract_column_mapping(
           };
 
           mapping.push(ViewColumn {
-            qualifier: None,
-            alias: Some(name.clone()),
             column: Column {
               name,
               data_type,
-              options: vec![ColumnOption::Null],
+              options: vec![],
             },
             parent_name: None,
           });
@@ -1105,22 +1102,22 @@ fn extract_column_mapping(
       // NOTE: GROUP BY can technically reference any column, but only columns also exposed by the
       // VIEW are useful to us as keys. In other words, there's no point of us to search for this
       // column through all referenced tables.
-      let group_by = mapping
-        .iter()
-        .position(|v: &ViewColumn| {
-          if let Some(ref qualifier) = group_by.qualifier {
-            // If the "GROUP BY" uses a qualifier, it must reference a table or subselect, e.g.:
-            //   CREATE VIEW v AS SELECT a.id FROM a RIGHT JOIN b ON a.id = b.id GROUP BY a.id;
+      let group_by = match group_by.qualifier {
+        Some(ref qualifier) => {
+          // If the "GROUP BY" uses a qualifier, it must reference a table or subselect, e.g.:
+          //   CREATE VIEW v AS SELECT a.id FROM a RIGHT JOIN b ON a.id = b.id GROUP BY a.id;
+          mapping.iter().position(|v: &ViewColumn| {
             v.parent_name.as_ref() == Some(qualifier) && v.column.name == group_by.name
-          } else {
-            v.column.name == group_by.name || v.alias.as_ref() == Some(&group_by.name)
-          }
-        })
-        .ok_or_else(|| precondition("GROUP BY column not exposed"))?;
+          })
+        }
+        None => mapping
+          .iter()
+          .position(|v: &ViewColumn| v.column.name == group_by.name),
+      };
 
       Ok(ColumnMapping {
         columns: mapping,
-        group_by: Some(group_by),
+        group_by: Some(group_by.ok_or_else(|| precondition("GROUP BY column not exposed"))?),
         joins,
       })
     }
@@ -1149,7 +1146,7 @@ pub(crate) struct ReferredTable {
 fn extract_joins_and_referenced_tables_by_alias(
   select: sqlite3_parser::ast::Select,
   tables: &[Table],
-) -> Result<(Vec<Join>, Vec<ReferredTable>), SchemaError> {
+) -> Result<(Vec<u8>, Vec<ReferredTable>), SchemaError> {
   let body = select.body;
   if body.compounds.is_some() {
     return Err(precondition("Compound queries not supported"));
@@ -1205,15 +1202,12 @@ fn extract_joins_and_referenced_tables_by_alias(
     return Ok(table);
   };
 
-  let mut all_joins: Vec<Join> = joins
+  let mut all_joins: Vec<u8> = joins
     .as_ref()
     .map(|joins| {
       joins
         .iter()
-        .map(|join| {
-          let join_type = extract_join_type(join.operator);
-          return Join { join_type };
-        })
+        .map(|join| extract_join_type(join.operator).bits())
         .collect()
     })
     .unwrap_or_default();
@@ -1729,8 +1723,7 @@ mod tests {
 
       let second = &columns[1];
       assert_eq!(second.column.data_type, ColumnDataType::Text);
-      assert_eq!(second.column.name, "column");
-      assert_eq!(second.alias.as_deref(), Some("foo"));
+      assert_eq!(second.column.name, "foo");
     }
 
     {
@@ -1814,12 +1807,7 @@ mod tests {
       mapping
         .columns
         .iter()
-        .map(|m| {
-          if let Some(ref alias) = m.alias {
-            return alias.as_str();
-          }
-          return m.column.name.as_str();
-        })
+        .map(|m| m.column.name.as_str())
         .collect::<Vec<_>>(),
       [
         "user", "id", "author", "body", "user", "username", "id", "author", "body", "foo"

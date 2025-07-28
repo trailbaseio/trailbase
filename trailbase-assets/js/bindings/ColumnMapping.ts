@@ -5,4 +5,8 @@ export type ColumnMapping = { columns: Array<ViewColumn>,
 /**
  * Group by that can be used as a key for record APIs.
  */
-group_by: number | null, };
+group_by: number | null, 
+/**
+ * A list of joins.
+ */
+joins: Array<number>, };

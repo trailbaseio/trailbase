@@ -4,9 +4,7 @@ import { initClient, urlSafeBase64Encode } from "../../src/index";
 import type { Client, Event } from "../../src/index";
 import { status } from "http-status";
 import { v7 as uuidv7, parse as uuidParse } from "uuid";
-
-const port: number = 4005;
-const address: string = `http://127.0.0.1:${port}`;
+import { ADDRESS } from "../constants";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -33,7 +31,7 @@ type SimpleSubsetView = {
 };
 
 async function connect(): Promise<Client> {
-  const client = initClient(address);
+  const client = initClient(`http://${ADDRESS}`);
   await client.login("admin@localhost", "secret");
   return client;
 }

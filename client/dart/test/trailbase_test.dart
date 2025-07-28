@@ -6,6 +6,7 @@ import 'package:test/test.dart';
 import 'package:dio/dio.dart';
 
 const port = 4006;
+const address = '127.0.0.1:${port}';
 
 class SimpleStrict {
   final String id;
@@ -150,7 +151,7 @@ class Comment {
 }
 
 Future<Client> connect() async {
-  final client = Client('http://127.0.0.1:${port}');
+  final client = Client('http://${address}');
   await client.login('admin@localhost', 'secret');
   return client;
 }
@@ -171,7 +172,7 @@ Future<Process> initTrailBase() async {
     '--',
     '--data-dir=${depotPath}',
     'run',
-    '--address=127.0.0.1:${port}',
+    '--address=${address}',
     // We want at least some parallelism to experience isolate-local state.
     '--js-runtime-threads=2',
   ]);
@@ -179,8 +180,8 @@ Future<Process> initTrailBase() async {
   final dio = Dio();
   for (int i = 0; i < 100; ++i) {
     try {
-      final response = await dio.fetch(
-          RequestOptions(path: 'http://127.0.0.1:${port}/api/healthcheck'));
+      final response = await dio
+          .fetch(RequestOptions(path: 'http://${address}/api/healthcheck'));
       if (response.statusCode == 200) {
         return process;
       }

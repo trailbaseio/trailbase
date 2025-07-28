@@ -79,27 +79,12 @@ impl JsonMetadata {
     return Self::from_columns(&table.columns);
   }
 
-  fn from_view(view: &View) -> Option<Self> {
-    if let Some(ref mapping) = view.column_mapping {
-      return Some(Self::from_columns(
-        &mapping
-          .columns
-          .iter()
-          .map(|m| m.column.clone())
-          .collect::<Vec<_>>(),
-      ));
-    }
-    return None;
-  }
-
   fn from_columns(columns: &[Column]) -> Self {
     let columns: Vec<_> = columns.iter().map(build_json_metadata).collect();
 
-    let file_column_indexes = find_file_column_indexes(&columns);
-
     return Self {
+      file_column_indexes: find_file_column_indexes(&columns),
       columns,
-      file_column_indexes,
     };
   }
 }
@@ -136,7 +121,7 @@ impl TableMetadata {
         .map(|(index, col)| (col.name.clone(), index)),
     );
 
-    let record_pk_column = find_record_pk_column_index(&table.columns, tables);
+    let record_pk_column = find_record_pk_column_index_for_table(&table, tables);
     let user_id_columns = find_user_id_foreign_key_columns(&table.columns, user_table_name);
     let json_metadata = JsonMetadata::from_table(&table);
 
@@ -205,7 +190,10 @@ impl Borrow<QualifiedName> for Arc<TableMetadata> {
 pub struct ViewMetadata {
   pub schema: View,
 
+  // QUESTION: Why do we have copy of the columns here? Right now it's duplicate from `.schema`.
+  // This probably only exists because we have a trait impl that returns Option<&[Column]>.
   columns: Option<Vec<Column>>,
+
   name_to_index: HashMap<String, usize>,
   record_pk_column: Option<usize>,
   json_metadata: Option<JsonMetadata>,
@@ -217,31 +205,36 @@ impl ViewMetadata {
   /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
   /// key relationships.
   pub fn new(view: View, tables: &[Table]) -> Self {
-    let name_to_index = view
-      .column_mapping
-      .as_ref()
-      .map(|m| {
-        HashMap::<String, usize>::from_iter(
-          m.columns
+    return match view.column_mapping {
+      Some(ref column_mapping) => {
+        let columns: Vec<Column> = column_mapping
+          .columns
+          .iter()
+          .map(|m| m.column.clone())
+          .collect();
+
+        let name_to_index = HashMap::<String, usize>::from_iter(
+          columns
             .iter()
             .enumerate()
-            .map(|(index, col)| (col.column.name.clone(), index)),
-        )
-      })
-      .unwrap_or_default();
+            .map(|(index, col)| (col.name.clone(), index)),
+        );
 
-    return ViewMetadata {
-      name_to_index,
-      columns: view
-        .column_mapping
-        .as_ref()
-        .map(|m| m.columns.iter().map(|m| m.column.clone()).collect()),
-      record_pk_column: view
-        .column_mapping
-        .as_ref()
-        .and_then(|mapping| find_record_pk_column_index_for_view(mapping, tables)),
-      json_metadata: JsonMetadata::from_view(&view),
-      schema: view,
+        ViewMetadata {
+          name_to_index,
+          json_metadata: Some(JsonMetadata::from_columns(&columns)),
+          columns: Some(columns),
+          record_pk_column: find_record_pk_column_index_for_view(column_mapping, tables),
+          schema: view,
+        }
+      }
+      None => ViewMetadata {
+        name_to_index: HashMap::<String, usize>::default(),
+        columns: None,
+        record_pk_column: None,
+        json_metadata: None,
+        schema: view,
+      },
     };
   }
 
@@ -458,6 +451,10 @@ pub(crate) fn is_pk_column(column: &Column) -> bool {
 }
 
 fn is_suitable_record_pk_column(column: &Column, tables: &[Table]) -> bool {
+  if !is_pk_column(column) {
+    return false;
+  }
+
   return match column.data_type {
     ColumnDataType::Integer => {
       // TODO: We should detect the "integer pk" desc case and at least warn:
@@ -522,10 +519,12 @@ fn is_suitable_record_pk_column(column: &Column, tables: &[Table]) -> bool {
 /// Finds suitable Integer or UUIDv7/UUIDv4 primary key columns, if present.
 ///
 /// Cursors require certain properties like a stable, time-sortable primary key.
-fn find_record_pk_column_index(columns: &[Column], tables: &[Table]) -> Option<usize> {
-  for (index, column) in columns.iter().enumerate() {
-    if is_pk_column(column) && is_suitable_record_pk_column(column, tables) {
-      return Some(index);
+fn find_record_pk_column_index_for_table(table: &Table, tables: &[Table]) -> Option<usize> {
+  if table.strict {
+    for (index, column) in table.columns.iter().enumerate() {
+      if is_suitable_record_pk_column(column, tables) {
+        return Some(index);
+      }
     }
   }
   return None;
@@ -543,23 +542,18 @@ fn find_record_pk_column_index_for_view(
     return None;
   }
 
-  // TODO: Be smarter.
-  for join in &column_mapping.joins {
-    let join_type = &join.join_type;
-
-    if join_type.contains(JoinType::RIGHT)
-      || join_type.contains(JoinType::CROSS)
-      || join_type.contains(JoinType::NATURAL)
-    {
+  // NOTE: We could be smarter here. It's quite tricky to say with a set of arbitrary joins, which
+  // (integer, UUID) columns end up being unique afterwards. Rely on explicit GROUP BY instead.
+  let mask = JoinType::RIGHT | JoinType::CROSS | JoinType::NATURAL;
+  for join_type in &column_mapping.joins {
+    if join_type & mask.bits() != 0 {
       warn!("Only LEFT and INNER JOINS supported yet, got: {join_type:?}");
       return None;
     }
   }
 
   for (index, mapped_column) in column_mapping.columns.iter().enumerate() {
-    if is_pk_column(&mapped_column.column)
-      && is_suitable_record_pk_column(&mapped_column.column, tables)
-    {
+    if is_suitable_record_pk_column(&mapped_column.column, tables) {
       return Some(index);
     }
   }
@@ -582,6 +576,45 @@ mod tests {
   fn parse_create_view(create_view_sql: &str, tables: &[Table]) -> Result<View, SchemaError> {
     let create_view_statement = parse_into_statement(create_view_sql).unwrap().unwrap();
     return View::from(create_view_statement, tables);
+  }
+
+  #[test]
+  fn test_find_record_pk_column_index_for_table() {
+    let table = parse_create_table("CREATE TABLE t (id INTEGER PRIMARY KEY) STRICT");
+    let tables = [table.clone()];
+    assert_eq!(
+      Some(0),
+      find_record_pk_column_index_for_table(&table, &tables)
+    );
+
+    let table = parse_create_table(
+      r#"
+        CREATE TABLE t (
+            value     TEXT,
+            id        BLOB PRIMARY KEY NOT NULL CHECK(is_uuid(id))
+        ) STRICT;
+      "#,
+    );
+
+    let tables = [table.clone()];
+    assert_eq!(
+      Some(1),
+      find_record_pk_column_index_for_table(&table, &tables)
+    );
+
+    let non_strict_table = parse_create_table(
+      r#"
+        CREATE TABLE t (
+            value     TEXT,
+            id        BLOB PRIMARY KEY NOT NULL CHECK(is_uuid(id))
+        );
+      "#,
+    );
+    let tables = [non_strict_table.clone()];
+    assert_eq!(
+      None,
+      find_record_pk_column_index_for_table(&non_strict_table, &tables)
+    );
   }
 
   #[test]

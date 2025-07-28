@@ -1,8 +1,6 @@
 import { expect, test } from "vitest";
 import { OAuth2Server } from "oauth2-mock-server";
-import { PORT } from "../constants";
-
-const address: string = `http://127.0.0.1:${PORT}`;
+import { ADDRESS } from "../constants";
 
 type OpenIdConfig = {
   issuer: string;
@@ -38,7 +36,7 @@ test("OIDC", async () => {
     userInfoResponse.statusCode = 200;
   });
 
-  const login = await fetch(`${address}/api/auth/v1/oauth/oidc0/login`, {
+  const login = await fetch(`http://${ADDRESS}/api/auth/v1/oauth/oidc0/login`, {
     redirect: "manual",
   });
 
