@@ -1,3 +1,11 @@
+## v0.15.10
+
+* Significantly broaden the applicability of `VIEW`s for Record APIs.
+  * Top-level `GROUP BY` clause can be used to explicitly define a key allowing arbitrary joins.
+  * Also allow a broader set of expressions and joins in the general case.
+  * Infer the type of computed columns for some simple built-in aggregations, e.g. MIN, MAX.
+* Update dependencies.
+
 ## v0.15.9
 
 * Auth settings UI:
