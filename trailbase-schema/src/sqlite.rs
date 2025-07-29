@@ -963,37 +963,27 @@ fn extract_column_mapping(
   let (joins, referenced_table_by_alias) =
     extract_joins_and_referenced_tables_by_alias(select, tables)?;
 
-  // SQLite checks comprehensively and will return an `ambiguous column name: <col>` error at
-  // query time (as opposed to VIEW-creation-time).
+  let find_table_by_alias = |a: &str| -> Result<&ReferredTable, SchemaError> {
+    return referenced_table_by_alias
+      .iter()
+      .find(|t| t.alias.as_ref().unwrap_or(&t.table.name.name) == a)
+      .ok_or_else(|| precondition(&format!("Table '{a}' not found")));
+  };
+
+  // Search table in refernce order. SQLite checks comprehensively and will return an `ambiguous
+  // column name: <col>` error at query time (as opposed to VIEW-creation-time).
   let find_column_by_unqualified_name =
-    |col_name: &str| -> Result<(&ReferredTable, usize), SchemaError> {
-      // Search tables in index order.
-      let mut found: Option<(&ReferredTable, usize)> = None;
-      for referred_table in &referenced_table_by_alias {
-        for (i, col) in referred_table.table.columns.iter().enumerate() {
-          if col.name == col_name {
-            if found.is_some() {
-              return Err(precondition(&format!("Ambiguous column: {col_name}")));
-            }
-            found = Some((referred_table, i));
+    |colname: &str| -> Result<(&ReferredTable, &Column), SchemaError> {
+      let mut found: Option<(&ReferredTable, &Column)> = None;
+      for reft in &referenced_table_by_alias {
+        if let Some(c) = reft.table.columns.iter().find(|c| c.name == colname) {
+          if found.replace((reft, c)).is_some() {
+            return Err(precondition(&format!("Ambiguous column: {colname}")));
           }
         }
       }
-
-      return found.ok_or(precondition(&format!("Column '{col_name}' not found")));
+      return found.ok_or(precondition(&format!("Column '{colname}' not found")));
     };
-
-  let find_table_by_alias = |a: &str| -> Result<&ReferredTable, SchemaError> {
-    for referred_table in &referenced_table_by_alias {
-      if referred_table.alias.as_deref() == Some(a) {
-        return Ok(referred_table);
-      }
-      if referred_table.table.name.name == a {
-        return Ok(referred_table);
-      }
-    }
-    return Err(precondition(&format!("No table found for '{a}'")));
-  };
 
   let mut mapping: Vec<ViewColumn> = vec![];
   for col in result_columns {
@@ -1021,9 +1011,7 @@ fn extract_column_mapping(
       }
       ResultColumn::Expr(expr, alias) => match expr {
         Expr::Id(id) => {
-          let col_name = unquote_id(id.clone());
-          let (referred_table, column_index) = find_column_by_unqualified_name(&col_name)?;
-          let column = &referred_table.table.columns[column_index];
+          let (referred_table, column) = find_column_by_unqualified_name(&unquote_id(id.clone()))?;
 
           mapping.push(ViewColumn {
             column: Column {
@@ -1039,16 +1027,12 @@ fn extract_column_mapping(
           let referred_table = find_table_by_alias(&qualifier)?;
 
           let col_name = unquote_name(name);
-          let Some(column_index) = referred_table
+          let column = referred_table
             .table
             .columns
             .iter()
-            .position(|c| c.name == col_name)
-          else {
-            return Err(precondition(&format!("Missing col: {col_name}")));
-          };
-
-          let column = &referred_table.table.columns[column_index];
+            .find(|c| c.name == col_name)
+            .ok_or_else(|| precondition(&format!("Column '{col_name}' not found")))?;
 
           mapping.push(ViewColumn {
             column: Column {
@@ -1081,11 +1065,53 @@ fn extract_column_mapping(
             parent_name: None,
           });
         }
-        x => {
+        expr => {
+          // Handle type-inference of some built-in functions for convenience to reduce the need
+          // for explicit CAST(expr AS type), e.g. `MAX(column)`.
+          if let Expr::FunctionCall { name, args, .. } = expr {
+            if builtin_function_preserving_type(name) {
+              match extract_single_arg(args) {
+                Some((Some(qualifier), name)) => {
+                  let referred_table = find_table_by_alias(&qualifier)?;
+                  let column = referred_table
+                    .table
+                    .columns
+                    .iter()
+                    .find(|c| c.name == name)
+                    .ok_or_else(|| precondition(&format!("Column '{name}' not found")))?;
+
+                  mapping.push(ViewColumn {
+                    column: Column {
+                      name: to_alias(alias).unwrap_or_else(|| column.name.to_string()),
+                      data_type: column.data_type,
+                      options: column.options.clone(),
+                    },
+                    parent_name: get_parent_name(referred_table),
+                  });
+
+                  continue;
+                }
+                Some((None, name)) => {
+                  let (referred_table, column) = find_column_by_unqualified_name(&name)?;
+
+                  mapping.push(ViewColumn {
+                    column: Column {
+                      name: to_alias(alias).unwrap_or_else(|| column.name.to_string()),
+                      data_type: column.data_type,
+                      options: column.options.clone(),
+                    },
+                    parent_name: get_parent_name(referred_table),
+                  });
+
+                  continue;
+                }
+                _ => {}
+              }
+            }
+          }
+
           // We cannot map arbitrary expressions.
-          return Err(precondition(&format!(
-            "Unsupported expr, cannot derive type: {x:?}"
-          )));
+          return Err(precondition("Unsupported expr, cannot derive type"));
         }
       },
     };
@@ -1290,6 +1316,17 @@ fn precondition(m: &str) -> SchemaError {
   return SchemaError::Precondition(m.into());
 }
 
+fn extract_single_arg(args: Option<Vec<Expr>>) -> Option<(Option<String>, String)> {
+  return match args {
+    Some(mut args) if args.len() == 1 => match args.remove(0) {
+      Expr::Id(id) => Some((None, unquote_id(id))),
+      Expr::Qualified(qualifier, name) => Some((Some(unquote_name(qualifier)), unquote_name(name))),
+      _ => None,
+    },
+    _ => None,
+  };
+}
+
 fn extract_join_type(op: JoinOperator) -> JoinType {
   return match op {
     JoinOperator::TypedJoin(Some(t)) => t,
@@ -1491,6 +1528,11 @@ pub fn lookup_and_parse_table_schema(
   };
 
   return Ok(stmt.try_into()?);
+}
+
+fn builtin_function_preserving_type(name: sqlite3_parser::ast::Id) -> bool {
+  let name = unquote_id(name).to_uppercase();
+  return matches!(name.as_str(), "MAX" | "MIN" | "SUM");
 }
 
 #[cfg(test)]

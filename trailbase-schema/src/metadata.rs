@@ -885,19 +885,38 @@ mod tests {
 
     let tables = [authors_table, posts_table];
 
-    let view = parse_create_view(
-      "
-        CREATE VIEW authors_view_posts AS
-          SELECT authors.*, CAST(MAX(authors.id) AS INTEGER) FROM authors authors
-              INNER JOIN posts posts ON posts.author = authors.id
-          GROUP BY authors.id;
-      ",
-      &tables,
-    )
-    .unwrap();
+    {
+      let view = parse_create_view(
+        "
+            CREATE VIEW authors_view_posts AS
+              SELECT authors.*, CAST(MAX(age) AS INTEGER) AS age FROM authors authors
+                  INNER JOIN posts posts ON posts.author = authors.id
+              GROUP BY authors.id;
+          ",
+        &tables,
+      )
+      .unwrap();
 
-    let metadata = ViewMetadata::new(view, &tables);
-    assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.0));
+      let metadata = ViewMetadata::new(view, &tables);
+      assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.0));
+    }
+
+    {
+      // And without explicit cast for well-known built-in "MAX".
+      let view = parse_create_view(
+        "
+            CREATE VIEW authors_view_posts AS
+              SELECT authors.*, MAX(age) FROM authors authors
+                  INNER JOIN posts posts ON posts.author = authors.id
+              GROUP BY authors.id;
+          ",
+        &tables,
+      )
+      .unwrap();
+
+      let metadata = ViewMetadata::new(view, &tables);
+      assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.0));
+    }
   }
 
   #[test]
