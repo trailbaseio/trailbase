@@ -109,12 +109,10 @@ type Data = {
 function FactCard(props: { title: string; content: string; href?: string }) {
   const FCard = () => (
     <Card class="grow">
-      <div class="px-6">
+      <CardContent>
         <CardTitle>{props.title}</CardTitle>
-      </div>
 
-      <CardContent class="text-xl font-bold text-primary">
-        {props.content}
+        <div class="text-xl font-bold text-primary">{props.content}</div>
       </CardContent>
     </Card>
   );
@@ -193,11 +191,9 @@ export function IndexPage() {
         )}
 
         <Card>
-          <div class="px-6">
-            <CardTitle>Welcome to TrailBase 🚀</CardTitle>
-          </div>
-
           <CardContent>
+            <CardTitle>Welcome to TrailBase 🚀</CardTitle>
+
             <p>
               Your open-source, sub-millisecond, single-executable FireBase
               alternative with type-safe APIs, notifications, builtin JS/TS
@@ -219,11 +215,9 @@ export function IndexPage() {
         </Card>
 
         <Card>
-          <div class="px-6">
-            <CardTitle>Quick Reference</CardTitle>
-          </div>
-
           <CardContent>
+            <CardTitle>Quick Reference</CardTitle>
+
             <For each={elements}>
               {(item) => {
                 const Icon = item.icon;
