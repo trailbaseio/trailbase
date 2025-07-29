@@ -1059,7 +1059,7 @@ fn extract_column_mapping(
             parent_name: get_parent_name(referred_table),
           });
         }
-        Expr::Cast { expr: _, type_name } => {
+        Expr::Cast { expr, type_name } => {
           let Some(type_name) = type_name else {
             return Err(SchemaError::Precondition(
               "Missing type_name in cast".into(),
@@ -1071,13 +1071,10 @@ fn extract_column_mapping(
             ));
           };
 
-          let Some(name) = to_alias(alias) else {
-            return Err(SchemaError::Precondition("Missing alias in cast".into()));
-          };
-
           mapping.push(ViewColumn {
             column: Column {
-              name,
+              // NOTE: the sqlite3 CLI also simply uses the entire expr.
+              name: to_alias(alias).unwrap_or_else(|| expr.to_string()),
               data_type,
               options: vec![],
             },
@@ -1086,7 +1083,9 @@ fn extract_column_mapping(
         }
         x => {
           // We cannot map arbitrary expressions.
-          return Err(precondition(&format!("Unsupported expr: {x:?}")));
+          return Err(precondition(&format!(
+            "Unsupported expr, cannot derive type: {x:?}"
+          )));
         }
       },
     };

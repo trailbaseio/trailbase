@@ -888,7 +888,7 @@ mod tests {
     let view = parse_create_view(
       "
         CREATE VIEW authors_view_posts AS
-          SELECT authors.* FROM authors authors
+          SELECT authors.*, CAST(MAX(authors.id) AS INTEGER) FROM authors authors
               INNER JOIN posts posts ON posts.author = authors.id
           GROUP BY authors.id;
       ",
