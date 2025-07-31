@@ -701,16 +701,22 @@ export function addPeriodicCallback(
   return () => clearInterval(handle);
 }
 
+export type Blob = {
+  blob: string;
+};
+
+export type SqlType = number | string | Blob | null;
+
 /// Queries the SQLite database.
 export async function query(
   sql: string,
-  params: unknown[],
-): Promise<unknown[][]> {
+  params: SqlType[],
+): Promise<SqlType[][]> {
   return await rustyscript.async_functions.query(sql, params);
 }
 
 /// Executes given query against the SQLite database.
-export async function execute(sql: string, params: unknown[]): Promise<number> {
+export async function execute(sql: string, params: SqlType[]): Promise<number> {
   return await rustyscript.async_functions.execute(sql, params);
 }
 
@@ -721,11 +727,11 @@ export class Transaction {
     this.finalized = false;
   }
 
-  public query(queryStr: string, params: unknown[]): unknown[][] {
+  public query(queryStr: string, params: SqlType[]): SqlType[][] {
     return rustyscript.functions.transaction_query(queryStr, params);
   }
 
-  public execute(queryStr: string, params: unknown[]): number {
+  public execute(queryStr: string, params: SqlType[]): SqlType {
     return rustyscript.functions.transaction_execute(queryStr, params);
   }
 

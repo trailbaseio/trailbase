@@ -33,6 +33,7 @@ export {
 } from "./trailbase";
 
 export type {
+  Blob,
   CallbackType,
   HeaderMapType,
   HtmlResponseType,

@@ -14,6 +14,7 @@ import {
   Transaction,
 } from "../trailbase.js";
 import type {
+  Blob,
   JsonRequestType,
   ParsedPath,
   StringRequestType,
@@ -124,21 +125,25 @@ addRoute(
   "GET",
   "/addDeletePost",
   stringHandler(async (_req: StringRequestType) => {
-    const userId = (await query("SELECT id FROM _user WHERE email = 'admin@localhost'", []))[0][0];
+    const userId: Blob = (
+      await query("SELECT id FROM _user WHERE email = 'admin@localhost'", [])
+    )[0][0];
 
-    console.info("user id:", userId);
+    console.info("user id:", userId.blob);
 
     const now = Date.now().toString();
     const numInsertions = await execute(
       `INSERT INTO post (author, title, body) VALUES (?1, 'title' , ?2)`,
-      [{ blob: userId }, now],
+      [{ blob: userId.blob }, now],
     );
 
-    const numDeletions = await execute(`DELETE FROM post WHERE body = ?1`, [now]);
+    const numDeletions = await execute(`DELETE FROM post WHERE body = ?1`, [
+      now,
+    ]);
 
     console.assert(numInsertions == numDeletions);
 
-    return 'Ok';
+    return "Ok";
   }),
 );
 
@@ -155,12 +160,9 @@ class Completer<T> {
 
 const completer = new Completer<string>();
 
-addCronCallback(
-  "JS-registered Job",
-  "@hourly",
-  async () => {
-    console.info("JS-registered cron job reporting for duty 🚀");
-  });
+addCronCallback("JS-registered Job", "@hourly", async () => {
+  console.info("JS-registered cron job reporting for duty 🚀");
+});
 
 addPeriodicCallback(100, (cancel) => {
   completer.complete("resolved");
