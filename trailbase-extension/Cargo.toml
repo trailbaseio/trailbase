@@ -15,7 +15,7 @@ crate-type=["cdylib", "rlib"]
 arc-swap = "1.7.1"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash", "rand", "std"] }
 base64 = { version = "0.22.1", default-features = false }
-jsonschema = { version = "0.31.0", default-features = false }
+jsonschema = { version = "0.32.0", default-features = false }
 log = "0.4.27"
 maxminddb = "0.26.0"
 mini-moka = "0.10.3"
