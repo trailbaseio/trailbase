@@ -11,9 +11,9 @@
     "check": "tsc --noEmit --skipLibCheck && eslint"
   },
   "devDependencies": {
-    "@eslint/js": "^9.31.0",
-    "@types/node": "^24.0.15",
-    "eslint": "^9.31.0",
+    "@eslint/js": "^9.32.0",
+    "@types/node": "^24.1.0",
+    "eslint": "^9.32.0",
     "prettier": "^3.6.2",
     "quicktype": "^23.2.6",
     "ts-node": "^10.9.2",
