@@ -55,7 +55,7 @@
     </a> online
   </strong>
   <br/>Email: <em>admin@localhost</em>
-  <br/>password: <em>secret</em>.
+  <br/>password: <em>secret</em>
 </p>
 
 For more context, documentation, and a live demo, check out the website:
