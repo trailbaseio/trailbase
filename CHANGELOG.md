@@ -1,3 +1,9 @@
+## v0.15.11
+
+* Make TypeScript `query`/`execute` database APIs type-safe.
+* Consistently serialize/deserialize JS blobs as `{ blob: <urlSafeB64(bytes)> }`.
+* Update dependencies.
+
 ## v0.15.10
 
 * Significantly broaden the applicability of `VIEW`s for Record APIs.
