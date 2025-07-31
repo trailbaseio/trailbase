@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use futures_util::future::LocalBoxFuture;
 use log::*;
 use parking_lot::Mutex;
@@ -667,10 +668,22 @@ fn json_value_to_param(
 ) -> Result<trailbase_sqlite::Value, rustyscript::Error> {
   use rustyscript::Error;
   return Ok(match value {
-    serde_json::Value::Object(ref _map) => {
+    serde_json::Value::Object(map) => {
+      if let Some(blob) = map.get("blob") {
+        if let Some(str) = blob.as_str() {
+          return Ok(trailbase_sqlite::Value::Blob(
+            BASE64_URL_SAFE
+              .decode(str)
+              .map_err(|err| Error::Runtime(format!("UrlSafeB64 decode: {err}")))?,
+          ));
+        }
+        // TODO: Add a branch for arrays.
+      }
+
       return Err(Error::Runtime("Object not supported".to_string()));
     }
-    serde_json::Value::Array(ref _arr) => {
+    serde_json::Value::Array(_arr) => {
+      // Maybe we should allow it for bytes => blob?
       return Err(Error::Runtime("Array not supported".to_string()));
     }
     serde_json::Value::Null => trailbase_sqlite::Value::Null,

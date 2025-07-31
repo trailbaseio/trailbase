@@ -1,11 +1,12 @@
 import {
-  addRoute,
   addCronCallback,
   addPeriodicCallback,
-  parsePath,
-  query,
+  addRoute,
+  execute,
   htmlHandler,
   jsonHandler,
+  parsePath,
+  query,
   stringHandler,
   transaction,
   HttpError,
@@ -116,6 +117,28 @@ addRoute(
     }
 
     throw new HttpError(StatusCodes.BAD_REQUEST, "Missing ?url param");
+  }),
+);
+
+addRoute(
+  "GET",
+  "/addDeletePost",
+  stringHandler(async (_req: StringRequestType) => {
+    const userId = (await query("SELECT id FROM _user WHERE email = 'admin@localhost'", []))[0][0];
+
+    console.info("user id:", userId);
+
+    const now = Date.now().toString();
+    const numInsertions = await execute(
+      `INSERT INTO post (author, title, body) VALUES (?1, 'title' , ?2)`,
+      [{ blob: userId }, now],
+    );
+
+    const numDeletions = await execute(`DELETE FROM post WHERE body = ?1`, [now]);
+
+    console.assert(numInsertions == numDeletions);
+
+    return 'Ok';
   }),
 );
 

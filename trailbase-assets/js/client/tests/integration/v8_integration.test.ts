@@ -27,3 +27,10 @@ test("JS runtime", async () => {
   // Test that the periodic callback was called.
   expect((await fetch(`http://${ADDRESS}/await`)).status).equals(status.OK);
 });
+
+test("JS runtime DB Query & Execute", async () => {
+  const response = await (
+    await fetch(`http://${ADDRESS}/addDeletePost`)
+  ).text();
+  expect(response).toEqual("Ok");
+});

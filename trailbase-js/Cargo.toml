@@ -12,6 +12,7 @@ exclude = [
 ]
 
 [dependencies]
+base64 = "0.22.1"
 bytes = { version = "1.8.0", features = ["serde"] }
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 kanal = "0.1.1"
