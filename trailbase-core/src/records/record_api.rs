@@ -390,26 +390,12 @@ impl RecordApi {
   }
 
   pub fn id_to_sql(&self, id: &str) -> Result<Value, RecordError> {
-    return match self.state.schema.record_pk_column.1.data_type {
-      ColumnDataType::Blob => {
-        // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
-        // would be more explicit rely on CHECK(...) column options.
-        if id.len() == 36 {
-          if let Ok(id) = uuid::Uuid::parse_str(id) {
-            return Ok(Value::Blob(id.into()));
-          }
-        }
-
-        let record_id = b64_to_id(id).map_err(|_err| RecordError::BadRequest("Invalid id"))?;
-        assert_uuidv7(&record_id);
-        Ok(Value::Blob(record_id.into()))
-      }
-      ColumnDataType::Integer => Ok(Value::Integer(
-        id.parse::<i64>()
-          .map_err(|_err| RecordError::BadRequest("Invalid id"))?,
-      )),
-      _ => Err(RecordError::BadRequest("Invalid id")),
-    };
+    // For `VIEW`s we need to support primary keys other than BLOB (UUID) and INTEGER.
+    return trailbase_schema::json::fancy_parse_flat_json_string_to_value(
+      self.state.schema.record_pk_column.1.data_type,
+      id.to_string(),
+    )
+    .map_err(|_| RecordError::BadRequest("Invalid id"));
   }
 
   #[inline]

@@ -63,7 +63,7 @@ pub(crate) async fn delete_row(
     state,
     &QualifiedNameEscaped::from(&schema_metadata.schema.name),
     pk_col,
-    flat_json_to_value(column.data_type, value)?,
+    flat_json_to_value(column.data_type, value, true)?,
     schema_metadata.json_metadata.has_file_columns(),
   )
   .await?;
