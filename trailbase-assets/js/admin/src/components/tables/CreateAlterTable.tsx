@@ -64,17 +64,19 @@ export function CreateAlterTableForm(props: {
     try {
       const o = original();
       if (o !== undefined) {
+        // Alter table
         const response = await alterTable({
           source_schema: o,
           target_schema: value,
           dry_run: dryRun,
         });
-        console.debug("AlterTableResponse:", response);
+        console.debug(`AlterTableResponse [dry: ${dryRun}]:`, response);
 
         if (dryRun) {
           setSql(response.sql);
         }
       } else {
+        // Create table
         const response = await createTable({ schema: value, dry_run: dryRun });
         console.debug(`CreateTableResponse [dry: ${dryRun}]:`, response);
 
@@ -105,6 +107,7 @@ export function CreateAlterTableForm(props: {
   };
 
   const form = createForm(() => ({
+    onSubmit: async ({ value }) => await onSubmit(value, /*dryRun=*/ false),
     defaultValues:
       props.schema ??
       ({
@@ -128,7 +131,6 @@ export function CreateAlterTableForm(props: {
         virtual_table: false,
         temporary: false,
       } as Table),
-    onSubmit: async ({ value }) => await onSubmit(value, false),
   }));
 
   form.useStore((state) => {
@@ -244,7 +246,7 @@ export function CreateAlterTableForm(props: {
                         disabled={!state().canSubmit}
                         variant="outline"
                         onClick={() => {
-                          onSubmit(form.state.values, true).catch(
+                          onSubmit(form.state.values, /*dryRun=*/ true).catch(
                             console.error,
                           );
                         }}

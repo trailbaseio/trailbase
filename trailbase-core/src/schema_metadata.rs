@@ -295,12 +295,71 @@ mod tests {
   use serde_json::json;
   use trailbase_schema::QualifiedName;
   use trailbase_schema::json_schema::{Expand, JsonSchemaMode, build_json_schema_expanded};
+  use trailbase_schema::sqlite::{Column, ColumnDataType, ColumnOption};
 
   use crate::app_state::*;
   use crate::config::proto::{PermissionFlag, RecordApiConfig};
   use crate::records::list_records::list_records_handler;
   use crate::records::read_record::{ReadRecordQuery, read_record_handler};
   use crate::records::test_utils::add_record_api_config;
+
+  #[tokio::test]
+  async fn test_column_nullability() {
+    let state = test_state(None).await.unwrap();
+
+    state
+      .conn()
+      .execute_batch(
+        "
+            CREATE TABLE test (
+                id  INTEGER PRIMARY KEY,
+                a   INT NOT NULL,
+                b   INT NULL,
+                c   INT
+            ) STRICT;
+
+            INSERT INTO test (a, b, c) VALUES (5, NULL, NULL), (6, 1, 2);
+        ",
+      )
+      .await
+      .unwrap();
+
+    state.schema_metadata().invalidate_all().await.unwrap();
+
+    let test_table = state
+      .schema_metadata()
+      .get_table(&QualifiedName {
+        name: "test".to_string(),
+        database_schema: None,
+      })
+      .unwrap();
+
+    assert_eq!(4, test_table.schema.columns.len());
+    assert_eq!(
+      test_table.schema.columns[1],
+      Column {
+        name: "a".to_string(),
+        data_type: ColumnDataType::Int,
+        options: vec![ColumnOption::NotNull,],
+      }
+    );
+    assert_eq!(
+      test_table.schema.columns[2],
+      Column {
+        name: "b".to_string(),
+        data_type: ColumnDataType::Int,
+        options: vec![ColumnOption::Null,],
+      }
+    );
+    assert_eq!(
+      test_table.schema.columns[3],
+      Column {
+        name: "c".to_string(),
+        data_type: ColumnDataType::Int,
+        options: vec![],
+      }
+    );
+  }
 
   #[tokio::test]
   async fn test_expanded_foreign_key() {
@@ -527,33 +586,29 @@ mod tests {
   async fn test_expanded_with_multiple_foreign_keys() {
     let state = test_state(None).await.unwrap();
 
-    let exec = {
-      let conn = state.conn();
-      move |sql: &str| {
-        let conn = conn.clone();
-        let owned = sql.to_string();
-        return async move { conn.execute(owned, ()).await };
-      }
-    };
-
-    exec("CREATE TABLE foreign_table0 (id INTEGER PRIMARY KEY) STRICT")
-      .await
-      .unwrap();
-    exec("CREATE TABLE foreign_table1 (id INTEGER PRIMARY KEY) STRICT")
-      .await
-      .unwrap();
-
     let table_name = "test_table";
-    exec(&format!(
-      r#"CREATE TABLE {table_name} (
+    state
+      .conn()
+      .execute_batch(format!(
+        r#"
+        CREATE TABLE foreign_table0 (id INTEGER PRIMARY KEY) STRICT;
+        INSERT INTO foreign_table0 (id) VALUES (1);
+
+        CREATE TABLE foreign_table1 (id INTEGER PRIMARY KEY) STRICT;
+        INSERT INTO foreign_table1 (id) VALUES (1);
+
+        CREATE TABLE {table_name} (
           id        INTEGER PRIMARY KEY,
           fk0       INTEGER REFERENCES foreign_table0(id),
           fk0_null  INTEGER REFERENCES foreign_table0(id),
           fk1       INTEGER REFERENCES foreign_table1(id)
-        ) STRICT"#
-    ))
-    .await
-    .unwrap();
+        ) STRICT;
+
+        INSERT INTO {table_name} (id, fk0, fk0_null, fk1) VALUES (1, 1, NULL, 1);
+        "#
+      ))
+      .await
+      .unwrap();
 
     state.schema_metadata().invalidate_all().await.unwrap();
 
@@ -567,19 +622,6 @@ mod tests {
         ..Default::default()
       },
     )
-    .await
-    .unwrap();
-
-    exec("INSERT INTO foreign_table0 (id) VALUES (1);")
-      .await
-      .unwrap();
-    exec("INSERT INTO foreign_table1 (id) VALUES (1);")
-      .await
-      .unwrap();
-
-    exec(&format!(
-      "INSERT INTO {table_name} (id, fk0, fk0_null, fk1) VALUES (1, 1, NULL, 1);"
-    ))
     .await
     .unwrap();
 
@@ -686,7 +728,9 @@ mod tests {
 
       assert_eq!(expected, value);
 
-      exec(&format!("INSERT INTO {table_name} (id) VALUES (2);"))
+      state
+        .conn()
+        .execute(format!("INSERT INTO {table_name} (id) VALUES (2)"), ())
         .await
         .unwrap();
 

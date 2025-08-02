@@ -321,7 +321,13 @@ impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
           on_update: fk.on_update,
         }
       }
-      Constraint::NotNull { .. } => ColumnOption::NotNull,
+      Constraint::NotNull {
+        nullable,
+        conflict_clause: _,
+      } => match nullable {
+        true => ColumnOption::Null,
+        false => ColumnOption::NotNull,
+      },
       Constraint::Default(expr) => {
         // NOTE: This is not using unquote on purpose to avoid turning "DEFAULT ''" into "DEFAULT".
         ColumnOption::Default(expr.to_string())

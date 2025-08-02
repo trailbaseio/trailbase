@@ -476,7 +476,7 @@ function AddApiDialog(props: {
 
 export function RecordApiSettingsForm(props: {
   close: () => void;
-  markDirty: () => void;
+  markDirty: (dirty?: boolean) => void;
   schema: Table | View;
 }) {
   const config = createConfigQuery();
@@ -595,7 +595,7 @@ enum Mode {
 
 function IndividualRecordApiSettingsForm(props: {
   reset: (api?: RecordApiConfig) => void;
-  markDirty: () => void;
+  markDirty: (dirty?: boolean) => void;
   schema: Table | View;
   api: RecordApiConfig;
   mode: Mode;
@@ -618,10 +618,6 @@ function IndividualRecordApiSettingsForm(props: {
           return;
         }
 
-        // FIXME: On submit we either have to close the Sheet or unset dirty.
-        // Otherwise the user will always be prompted for dirty state even
-        // after submitting.
-
         const newConfig = updateRecordApiConfig(c, value);
         try {
           await setConfig(queryClient, newConfig);
@@ -633,6 +629,7 @@ function IndividualRecordApiSettingsForm(props: {
             variant: "success",
           });
           props.reset(value);
+          props.markDirty(false);
         } catch (err) {
           showToast({
             title: "Uncaught Error",
@@ -646,7 +643,7 @@ function IndividualRecordApiSettingsForm(props: {
 
   form.useStore((state) => {
     if (state.isDirty && !state.isSubmitted) {
-      props.markDirty();
+      props.markDirty(true);
     }
   });
 

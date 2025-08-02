@@ -11,6 +11,12 @@ use crate::app_state::AppState;
 use crate::config::proto::hash_config;
 use crate::transaction::{TransactionLog, TransactionRecorder};
 
+/// Request to alter `TABLE` schema.
+///
+/// NOTE: The current approach of (source schema) -> (target schema) is not great. It doesn't allow
+/// us to easily rename columns, e.g. is a column deleted, new or renamed?
+/// We should probably switch to (source schema + operations).
+/// Operations would be: add column, remove column, alter column.
 #[derive(Clone, Debug, Deserialize, TS)]
 #[ts(export)]
 pub struct AlterTableRequest {
