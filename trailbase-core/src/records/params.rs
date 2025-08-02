@@ -1,7 +1,7 @@
-use base64::prelude::*;
 use log::*;
 use std::collections::HashSet;
 use std::sync::Arc;
+use trailbase_schema::json::{flat_json_to_value, json_array_to_bytes};
 use trailbase_schema::sqlite::{Column, ColumnDataType};
 use trailbase_schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{NamedParams, Value};
@@ -17,6 +17,8 @@ pub enum ParamsError {
   NotANumber,
   #[error("Column error: {0}")]
   Column(&'static str),
+  #[error("Value not found")]
+  ValueNotFound,
   #[error("Unexpected type: {0}, expected {1}")]
   UnexpectedType(&'static str, String),
   #[error("Decoding error: {0}")]
@@ -50,6 +52,22 @@ impl From<serde_json::Error> for ParamsError {
 impl From<object_store::Error> for ParamsError {
   fn from(err: object_store::Error) -> Self {
     return Self::Storage(Arc::new(err));
+  }
+}
+
+impl From<trailbase_schema::json::JsonError> for ParamsError {
+  fn from(value: trailbase_schema::json::JsonError) -> Self {
+    return match value {
+      trailbase_schema::json::JsonError::Finite => Self::NotANumber,
+      trailbase_schema::json::JsonError::ValueNotFound => Self::ValueNotFound,
+      trailbase_schema::json::JsonError::NotSupported => Self::UnexpectedType("?", "?".to_string()),
+      trailbase_schema::json::JsonError::Decode(err) => Self::Decode(err),
+      trailbase_schema::json::JsonError::UnexpectedType(expected, got) => {
+        Self::UnexpectedType(expected, format!("{got:?}"))
+      }
+      trailbase_schema::json::JsonError::ParseInt(err) => Self::ParseInt(err),
+      trailbase_schema::json::JsonError::ParseFloat(err) => Self::ParseFloat(err),
+    };
   }
 }
 
@@ -335,7 +353,7 @@ fn extract_params_and_files_from_json(
       // If the we're building a Param for a schema column, unpack the json (and potentially files)
       // and validate it.
       match col.data_type {
-        ColumnDataType::Blob => return Ok((try_json_array_to_blob(arr)?, None)),
+        ColumnDataType::Blob => return Ok((Value::Blob(json_array_to_bytes(arr)?), None)),
         ColumnDataType::Text => {
           if let Some(ref json) = json_meta {
             match json {
@@ -369,163 +387,8 @@ fn extract_params_and_files_from_json(
         "Received nested array for unsuitable column: {col_name}"
       )));
     }
-    x => return Ok((simple_json_value_to_param(col.data_type, x)?, None)),
+    x => return Ok((flat_json_to_value(col.data_type, x)?, None)),
   };
-}
-
-pub fn simple_json_value_to_param(
-  col_type: ColumnDataType,
-  value: serde_json::Value,
-) -> Result<Value, ParamsError> {
-  let param = match value {
-    serde_json::Value::Object(ref _map) => {
-      return Err(ParamsError::UnexpectedType(
-        "Object",
-        format!("Trivial type: {col_type:?}"),
-      ));
-    }
-    serde_json::Value::Array(ref arr) => {
-      // NOTE: Convert Array<number> to Blob. Note, we also support blobs as base64 which are
-      // handled below in the string  case.
-      if col_type != ColumnDataType::Blob {
-        return Err(ParamsError::UnexpectedType(
-          "Array",
-          format!("Trivial type: {col_type:?}"),
-        ));
-      }
-
-      try_json_array_to_blob(arr)?
-    }
-    serde_json::Value::Null => Value::Null,
-    serde_json::Value::Bool(b) => {
-      if col_type != ColumnDataType::Integer {
-        return Err(ParamsError::UnexpectedType("Bool", format!("{col_type:?}")));
-      }
-      Value::Integer(b as i64)
-    }
-    serde_json::Value::String(str) => json_string_to_value(col_type, str)?,
-    serde_json::Value::Number(number) => {
-      if let Some(n) = number.as_i64() {
-        match col_type {
-          ColumnDataType::Integer => Value::Integer(n),
-          // NOTE: "as" is lossy conversion. Does not panic.
-          ColumnDataType::Real => Value::Real(n as f64),
-          _ => {
-            return Err(ParamsError::UnexpectedType("int", format!("{col_type:?}")));
-          }
-        }
-      } else if let Some(n) = number.as_u64() {
-        match col_type {
-          // NOTE: "as" is lossy conversion. Does not panic.
-          ColumnDataType::Integer => Value::Integer(n as i64),
-          ColumnDataType::Real => Value::Real(n as f64),
-          _ => {
-            return Err(ParamsError::UnexpectedType("uint", format!("{col_type:?}")));
-          }
-        }
-      } else if let Some(n) = number.as_f64() {
-        match col_type {
-          ColumnDataType::Real => Value::Real(n),
-          _ => {
-            return Err(ParamsError::UnexpectedType("real", format!("{col_type:?}")));
-          }
-        }
-      } else {
-        warn!("Not a valid number: {number:?}");
-        return Err(ParamsError::NotANumber);
-      }
-    }
-  };
-
-  return Ok(param);
-}
-
-fn try_json_array_to_blob(arr: &Vec<serde_json::Value>) -> Result<Value, ParamsError> {
-  let mut byte_array: Vec<u8> = vec![];
-  for el in arr {
-    match el {
-      serde_json::Value::Number(num) => {
-        let Some(int) = num.as_i64() else {
-          return Err(ParamsError::UnexpectedType(
-            "NonByteNumber",
-            format!("Number type: {num:?}"),
-          ));
-        };
-
-        let Ok(byte) = int.try_into() else {
-          return Err(ParamsError::UnexpectedType(
-            "NonByteNumber",
-            format!("Out-of-range int: {int}"),
-          ));
-        };
-
-        byte_array.push(byte);
-      }
-      x => {
-        return Err(ParamsError::InhomogenousArray(format!(
-          "Expected number, got {x:?}"
-        )));
-      }
-    };
-  }
-
-  return Ok(Value::Blob(byte_array));
-}
-
-pub(crate) fn json_string_to_value(
-  data_type: ColumnDataType,
-  value: String,
-) -> Result<Value, ParamsError> {
-  return Ok(match data_type {
-    ColumnDataType::Null => Value::Null,
-    // Strict/storage types
-    ColumnDataType::Any => Value::Text(value),
-    ColumnDataType::Text => Value::Text(value),
-    ColumnDataType::Blob => Value::Blob(match (value.len(), value) {
-      // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
-      // would be more explicit rely on CHECK(...) column options.
-      // NOTE: That uuids also parse as url-safe base64, that's why we treat it as a fall-first.
-      (36, v) => uuid::Uuid::parse_str(&v)
-        .map(|v| v.into())
-        .or_else(|_| BASE64_URL_SAFE.decode(&v))?,
-      (_, v) => BASE64_URL_SAFE.decode(&v)?,
-    }),
-    ColumnDataType::Integer => Value::Integer(value.parse::<i64>()?),
-    ColumnDataType::Real => Value::Real(value.parse::<f64>()?),
-    ColumnDataType::Numeric => Value::Integer(value.parse::<i64>()?),
-    // JSON types.
-    ColumnDataType::JSONB => Value::Blob(value.into_bytes().to_vec()),
-    ColumnDataType::JSON => Value::Text(value),
-    // Affine types
-    //
-    // Integers:
-    ColumnDataType::Int
-    | ColumnDataType::TinyInt
-    | ColumnDataType::SmallInt
-    | ColumnDataType::MediumInt
-    | ColumnDataType::BigInt
-    | ColumnDataType::UnignedBigInt
-    | ColumnDataType::Int2
-    | ColumnDataType::Int4
-    | ColumnDataType::Int8 => Value::Integer(value.parse::<i64>()?),
-    // Text:
-    ColumnDataType::Character
-    | ColumnDataType::Varchar
-    | ColumnDataType::VaryingCharacter
-    | ColumnDataType::NChar
-    | ColumnDataType::NativeCharacter
-    | ColumnDataType::NVarChar
-    | ColumnDataType::Clob => Value::Text(value),
-    // Real:
-    ColumnDataType::Double | ColumnDataType::DoublePrecision | ColumnDataType::Float => {
-      Value::Real(value.parse::<f64>()?)
-    }
-    // Numeric
-    ColumnDataType::Boolean
-    | ColumnDataType::Decimal
-    | ColumnDataType::Date
-    | ColumnDataType::DateTime => Value::Integer(value.parse::<i64>()?),
-  });
 }
 
 #[inline]
@@ -549,53 +412,6 @@ mod tests {
   use crate::records::test_utils::json_row_from_value;
   use crate::schema_metadata::TableMetadata;
   use crate::util::id_to_b64;
-
-  #[tokio::test]
-  async fn test_json_string_to_value() {
-    let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
-    conn
-      .execute(
-        r#"CREATE TABLE test (
-        id    BLOB NOT NULL,
-        text  TEXT
-    )"#,
-        (),
-      )
-      .await
-      .unwrap();
-
-    let id_string = "01950408-de17-7f13-8ef5-66d90b890bfd";
-    let id = uuid::Uuid::parse_str(id_string).unwrap();
-
-    conn
-      .execute(
-        "INSERT INTO test (id, text) VALUES ($1, $2);",
-        trailbase_sqlite::params!(id.into_bytes(), "mytext",),
-      )
-      .await
-      .unwrap();
-
-    let value = json_string_to_value(ColumnDataType::Blob, id_string.to_string()).unwrap();
-    let blob = match value {
-      rusqlite::types::Value::Blob(ref blob) => blob.clone(),
-      _ => panic!("Not a blob"),
-    };
-
-    assert_eq!(
-      blob.len(),
-      16,
-      "Blob: {value:?} {}",
-      String::from_utf8_lossy(&blob)
-    );
-    assert_eq!(uuid::Uuid::from_slice(&blob).unwrap(), id);
-
-    let rows = conn
-      .read_query_rows("SELECT * FROM test WHERE id = $1", [value])
-      .await
-      .unwrap();
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].get::<String>(1).unwrap(), "mytext");
-  }
 
   #[tokio::test]
   async fn test_params() {

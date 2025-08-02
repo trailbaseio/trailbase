@@ -12,7 +12,6 @@ exclude = [
 ]
 
 [dependencies]
-base64 = "0.22.1"
 bytes = { version = "1.8.0", features = ["serde"] }
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 kanal = "0.1.1"
@@ -26,6 +25,7 @@ serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "^1.0.117"
 tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
+trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true }
 
 [build-dependencies]

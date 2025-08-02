@@ -4,12 +4,12 @@ use axum::{
 };
 use serde::Deserialize;
 use trailbase_schema::QualifiedName;
+use trailbase_schema::json::flat_json_to_value;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::records::files::read_file_into_response;
-use crate::records::params::simple_json_value_to_param;
 use crate::records::query_builder::{GetFileQueryBuilder, GetFilesQueryBuilder};
 
 #[derive(Debug, Deserialize, TS)]
@@ -61,7 +61,7 @@ pub async fn read_files_handler(
     )));
   };
 
-  let pk_value = simple_json_value_to_param(col.data_type, request.pk_value)?;
+  let pk_value = flat_json_to_value(col.data_type, request.pk_value)?;
 
   return if let Some(file_index) = request.file_index {
     let mut file_uploads = GetFilesQueryBuilder::run(

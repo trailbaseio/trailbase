@@ -4,6 +4,7 @@
 
 pub mod error;
 pub mod file;
+pub mod json;
 pub mod json_schema;
 pub mod metadata;
 pub mod parse;

@@ -6,10 +6,10 @@ use std::sync::Arc;
 use trailbase_qs::{Cursor, CursorType, Order, OrderPrecedent, Query};
 use trailbase_schema::QualifiedName;
 use trailbase_schema::sqlite::{Column, ColumnDataType};
-use trailbase_sqlite::rows::rows_to_json_arrays;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
+use crate::admin::util::rows_to_flat_json_arrays;
 use crate::app_state::AppState;
 use crate::listing::{WhereClause, build_filter_where_clause, cursor_to_value, limit_or_default};
 use crate::schema_metadata::{TableMetadata, TableOrViewMetadata};
@@ -234,7 +234,7 @@ async fn fetch_rows(
     })?;
 
   return Ok((
-    rows_to_json_arrays(&result_rows)?,
+    rows_to_flat_json_arrays(&result_rows)?,
     crate::admin::util::rows_to_columns(&result_rows),
   ));
 }

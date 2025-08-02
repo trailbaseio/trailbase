@@ -5,12 +5,12 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use trailbase_schema::json::flat_json_to_value;
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::records::params::simple_json_value_to_param;
 use crate::records::query_builder::DeleteQueryBuilder;
 
 #[derive(Debug, Serialize, Deserialize, Default, TS)]
@@ -63,7 +63,7 @@ pub(crate) async fn delete_row(
     state,
     &QualifiedNameEscaped::from(&schema_metadata.schema.name),
     pk_col,
-    simple_json_value_to_param(column.data_type, value)?,
+    flat_json_to_value(column.data_type, value)?,
     schema_metadata.json_metadata.has_file_columns(),
   )
   .await?;

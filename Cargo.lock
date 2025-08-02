@@ -6962,7 +6962,6 @@ dependencies = [
 name = "trailbase-js"
 version = "0.2.0"
 dependencies = [
- "base64 0.22.1",
  "bytes",
  "futures-util",
  "kanal",
@@ -6977,6 +6976,7 @@ dependencies = [
  "tokio",
  "tracing-subscriber",
  "trailbase-build",
+ "trailbase-schema",
  "trailbase-sqlite",
 ]
 
@@ -7015,6 +7015,7 @@ name = "trailbase-schema"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "fallible-iterator",
  "indoc",
  "infer",
@@ -7032,6 +7033,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tokio",
  "trailbase-extension",
+ "trailbase-sqlite",
  "ts-rs",
  "uuid",
 ]
@@ -7050,7 +7052,6 @@ dependencies = [
 name = "trailbase-sqlite"
 version = "0.3.0"
 dependencies = [
- "base64 0.22.1",
  "criterion",
  "crossbeam-channel",
  "env_logger",

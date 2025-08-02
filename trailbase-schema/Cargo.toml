@@ -9,6 +9,7 @@ repository = "https://github.com/trailbaseio/trailbase"
 readme = "../README.md"
 
 [dependencies]
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 fallible-iterator = "0.3.0"
 infer = "0.19.0"
 itertools = "0.14.0"
@@ -17,6 +18,7 @@ lazy_static = "1.5.0"
 log = { version = "^0.4.21", default-features = false }
 parking_lot = { version = "0.12.3", default-features = false }
 regex = "1.11.1"
+rusqlite = { workspace = true }
 schemars = "1.0.0"
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "1.0.122"
@@ -30,4 +32,4 @@ uuid = { workspace = true }
 [dev-dependencies]
 anyhow = "1.0.97"
 indoc = "2.0.6"
-rusqlite = { workspace = true }
+trailbase-sqlite = { workspace = true }

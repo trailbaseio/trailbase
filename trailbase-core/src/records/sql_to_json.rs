@@ -1,41 +1,47 @@
 use log::*;
 use std::collections::HashMap;
 use thiserror::Error;
-use trailbase_schema::sqlite::Column;
-use trailbase_schema::sqlite::ColumnOption;
-use trailbase_sqlite::rows::value_to_json;
+use trailbase_schema::json::value_to_flat_json;
+use trailbase_schema::sqlite::{Column, ColumnOption};
 
 use crate::schema_metadata::JsonColumnMetadata;
 
 #[derive(Debug, Error)]
 pub enum JsonError {
-  #[error("SerdeJson error: {0}")]
-  SerdeJson(#[from] serde_json::Error),
   #[error("Float not finite")]
   Finite,
   #[error("Value not found")]
   ValueNotFound,
+  #[error("Unsupported type")]
+  NotSupported,
+  #[error("Decoding")]
+  Decode(#[from] base64::DecodeError),
+  #[error("Unexpected type: {0}, expected {1:?}")]
+  UnexpectedType(&'static str, trailbase_schema::sqlite::ColumnDataType),
+  #[error("Parse int error: {0}")]
+  ParseInt(#[from] std::num::ParseIntError),
+  #[error("Parse float error: {0}")]
+  ParseFloat(#[from] std::num::ParseFloatError),
   #[error("Missing col name")]
   MissingColumnName,
+  #[error("SerdeJson error: {0}")]
+  SerdeJson(#[from] serde_json::Error),
 }
 
-impl From<trailbase_sqlite::rows::JsonError> for JsonError {
-  fn from(value: trailbase_sqlite::rows::JsonError) -> Self {
+impl From<trailbase_schema::json::JsonError> for JsonError {
+  fn from(value: trailbase_schema::json::JsonError) -> Self {
     return match value {
-      trailbase_sqlite::rows::JsonError::ValueNotFound => Self::ValueNotFound,
-      trailbase_sqlite::rows::JsonError::Finite => Self::Finite,
+      trailbase_schema::json::JsonError::Finite => Self::Finite,
+      trailbase_schema::json::JsonError::ValueNotFound => Self::ValueNotFound,
+      trailbase_schema::json::JsonError::NotSupported => Self::NotSupported,
+      trailbase_schema::json::JsonError::Decode(err) => Self::Decode(err),
+      trailbase_schema::json::JsonError::UnexpectedType(expected, got) => {
+        Self::UnexpectedType(expected, got)
+      }
+      trailbase_schema::json::JsonError::ParseInt(err) => Self::ParseInt(err),
+      trailbase_schema::json::JsonError::ParseFloat(err) => Self::ParseFloat(err),
     };
   }
-}
-
-/// Serialize SQL row to json.
-pub fn row_to_json(
-  columns: &[Column],
-  json_metadata: &[Option<JsonColumnMetadata>],
-  row: &trailbase_sqlite::Row,
-  column_filter: fn(&str) -> bool,
-) -> Result<serde_json::Value, JsonError> {
-  return row_to_json_expand(columns, json_metadata, row, column_filter, None);
 }
 
 #[inline]
@@ -46,7 +52,7 @@ fn is_foreign_key(options: &[ColumnOption]) -> bool {
 }
 
 /// Serialize SQL row to json.
-pub fn row_to_json_expand(
+pub(crate) fn row_to_json_expand(
   columns: &[Column],
   json_metadata: &[Option<JsonColumnMetadata>],
   row: &trailbase_sqlite::Row,
@@ -77,7 +83,7 @@ pub fn row_to_json_expand(
 
       if let Some(foreign_value) = expand.and_then(|e| e.get(column_name)) {
         if is_foreign_key(&column.options) {
-          let id = match value_to_json(value) {
+          let id = match value_to_flat_json(value) {
             Ok(value) => value,
             Err(err) => {
               return Some(Err(err.into()));
@@ -112,7 +118,7 @@ pub fn row_to_json_expand(
         }
       }
 
-      return match value_to_json(value) {
+      return match value_to_flat_json(value) {
         Ok(value) => Some(Ok((column_name.to_string(), value))),
         Err(err) => Some(Err(err.into())),
       };
@@ -123,20 +129,7 @@ pub fn row_to_json_expand(
 }
 
 /// Turns rows into a list of json objects.
-pub fn rows_to_json(
-  columns: &[Column],
-  json_metadata: &[Option<JsonColumnMetadata>],
-  rows: trailbase_sqlite::Rows,
-  column_filter: fn(&str) -> bool,
-) -> Result<Vec<serde_json::Value>, JsonError> {
-  return rows
-    .iter()
-    .map(|row| row_to_json_expand(columns, json_metadata, row, column_filter, None))
-    .collect::<Result<Vec<_>, JsonError>>();
-}
-
-/// Turns rows into a list of json objects.
-pub fn rows_to_json_expand(
+pub(crate) fn rows_to_json_expand(
   columns: &[Column],
   json_metadata: &[Option<JsonColumnMetadata>],
   rows: trailbase_sqlite::Rows,
@@ -221,11 +214,12 @@ mod tests {
       .read_query_rows("SELECT * FROM test_table", ())
       .await
       .unwrap();
-    let parsed = rows_to_json(
+    let parsed = rows_to_json_expand(
       &metadata.schema.columns,
       &metadata.json_metadata.columns,
       rows,
       |_| true,
+      None,
     )
     .unwrap();
 

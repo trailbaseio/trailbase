@@ -21,7 +21,7 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::records::query_builder::{ExpandedTable, expand_tables};
-use crate::records::sql_to_json::{row_to_json, row_to_json_expand, rows_to_json_expand};
+use crate::records::sql_to_json::{row_to_json_expand, rows_to_json_expand};
 use crate::records::{Permission, RecordError};
 
 /// JSON response containing the listed records.
@@ -315,11 +315,12 @@ pub async fn list_records_handler(
         for expanded in &expanded_tables {
           let next = curr.split_off(expanded.num_columns);
 
-          let foreign_value = row_to_json(
+          let foreign_value = row_to_json_expand(
             &expanded.metadata.schema.columns,
             &expanded.metadata.json_metadata.columns,
             &curr,
             column_filter,
+            None,
           )
           .map_err(|err| RecordError::Internal(err.into()))?;
 

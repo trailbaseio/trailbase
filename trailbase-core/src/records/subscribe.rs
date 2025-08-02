@@ -17,8 +17,8 @@ use std::sync::{
 };
 use std::task::{Context, Poll};
 use trailbase_schema::QualifiedName;
+use trailbase_schema::json::value_to_flat_json;
 use trailbase_sqlite::connection::{extract_record_values, extract_row_id};
-use trailbase_sqlite::rows::value_to_json;
 
 use crate::AppState;
 use crate::auth::user::User;
@@ -341,7 +341,7 @@ impl SubscriptionManager {
         record
           .iter()
           .filter_map(|(name, value)| {
-            if let Ok(v) = value_to_json(value) {
+            if let Ok(v) = value_to_flat_json(value) {
               return Some(((*name).to_string(), v));
             };
             return None;

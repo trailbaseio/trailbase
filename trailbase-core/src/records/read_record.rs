@@ -12,7 +12,7 @@ use crate::records::query_builder::{
   ExpandedSelectQueryResult, GetFileQueryBuilder, GetFilesQueryBuilder, SelectQueryBuilder,
   expand_tables,
 };
-use crate::records::sql_to_json::{row_to_json, row_to_json_expand};
+use crate::records::sql_to_json::row_to_json_expand;
 use crate::records::{Permission, RecordError};
 
 #[derive(Debug, Default, Deserialize)]
@@ -95,11 +95,12 @@ pub async fn read_record_handler(
       let mut expand = expand.clone();
 
       for (col_name, (metadata, row)) in std::iter::zip(query_expand, foreign_rows) {
-        let foreign_value = row_to_json(
+        let foreign_value = row_to_json_expand(
           &metadata.schema.columns,
           &metadata.json_metadata.columns,
           &row,
           prefix_filter,
+          None,
         )
         .map_err(|err| RecordError::Internal(err.into()))?;
 

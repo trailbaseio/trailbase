@@ -15,7 +15,6 @@ path = "benches/benchmark.rs"
 harness = false
 
 [dependencies]
-base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 crossbeam-channel = "0.5.13"
 kanal = "0.1.1"
 log = { version = "^0.4.21", default-features = false }

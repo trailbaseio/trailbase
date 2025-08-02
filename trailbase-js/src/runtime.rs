@@ -1,9 +1,7 @@
-use base64::prelude::*;
 use futures_util::future::LocalBoxFuture;
 use log::*;
 use parking_lot::Mutex;
 use rusqlite::Transaction;
-use rusqlite::types;
 use rustyscript::{deno_core::PollEventLoopOptions, init_platform, js_value::Promise};
 use self_cell::{MutBorrow, self_cell};
 use serde::Serialize;
@@ -14,6 +12,7 @@ use std::sync::OnceLock;
 use tokio::sync::oneshot;
 use tokio::task::LocalSet;
 use tokio::time::Duration;
+use trailbase_schema::json::{JsonError, rich_json_to_value, value_to_rich_json};
 use trailbase_sqlite::connection::LockGuard;
 use trailbase_sqlite::{Params, Row};
 
@@ -476,7 +475,8 @@ pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlit
       let conn = conn_clone.clone();
       Box::pin(async move {
         let query: String = get_arg(&args, 0)?;
-        let params = json_values_to_sqlite_params(get_arg(&args, 1)?)?;
+        let params = json_values_to_sqlite_params(get_arg(&args, 1)?)
+          .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
         let rows = conn
           .write_query_rows(query, params)
@@ -486,7 +486,10 @@ pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlit
         let values = rows
           .iter()
           .map(|row| -> Result<serde_json::Value, rustyscript::Error> {
-            return Ok(serde_json::Value::Array(sqlite_row_to_json_array(row)?));
+            return Ok(serde_json::Value::Array(
+              row_to_rich_json_array(row)
+                .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?,
+            ));
           })
           .collect::<Result<Vec<_>, _>>()
           .map_err(error_mapper)?;
@@ -501,7 +504,8 @@ pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlit
       let conn = conn_clone.clone();
       Box::pin(async move {
         let query: String = get_arg(&args, 0)?;
-        let params = json_values_to_sqlite_params(get_arg(&args, 1)?)?;
+        let params = json_values_to_sqlite_params(get_arg(&args, 1)?)
+          .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
         let rows_affected = conn.execute(query, params).await.map_err(error_mapper)?;
 
@@ -551,7 +555,8 @@ pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlit
     runtime.register_function("transaction_query", move |args: &[serde_json::Value]| {
       assert_eq!(args.len(), 2);
       let query: String = get_arg(args, 0)?;
-      let params = json_values_to_sqlite_params(get_arg(args, 1)?)?;
+      let params = json_values_to_sqlite_params(get_arg(args, 1)?)
+        .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
       let tx = current_transaction_clone.lock();
       if let Some(tx) = &*tx {
@@ -567,7 +572,10 @@ pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlit
         let values = rows
           .iter()
           .map(|row| -> Result<serde_json::Value, rustyscript::Error> {
-            return Ok(serde_json::Value::Array(sqlite_row_to_json_array(row)?));
+            return Ok(serde_json::Value::Array(
+              row_to_rich_json_array(row)
+                .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?,
+            ));
           })
           .collect::<Result<Vec<_>, _>>()
           .map_err(error_mapper)?;
@@ -583,7 +591,8 @@ pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlit
       move |args: &[serde_json::Value]| {
         assert_eq!(args.len(), 2);
         let query: String = get_arg(args, 0)?;
-        let params = json_values_to_sqlite_params(get_arg(args, 1)?)?;
+        let params = json_values_to_sqlite_params(get_arg(args, 1)?)
+          .map_err(|err| rustyscript::Error::Runtime(err.to_string()))?;
 
         let tx = current_transaction_clone.lock();
         if let Some(tx) = &*tx {
@@ -661,106 +670,19 @@ pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlit
   }
 }
 
-// NOTE: We cannot Box the large error, since we're using this in a rustyscript callback.
-#[allow(clippy::result_large_err)]
 fn json_values_to_sqlite_params(
   values: Vec<serde_json::Value>,
-) -> Result<Vec<trailbase_sqlite::Value>, rustyscript::Error> {
-  return values.into_iter().map(json_value_to_sqlite_param).collect();
+) -> Result<Vec<trailbase_sqlite::Value>, JsonError> {
+  return values.into_iter().map(rich_json_to_value).collect();
 }
 
-#[allow(clippy::result_large_err)]
-fn array_to_bytes(values: Vec<serde_json::Value>) -> Result<Vec<u8>, rustyscript::Error> {
-  return values
-    .into_iter()
-    .map(|v| -> Result<u8, rustyscript::Error> {
-      v.as_u64()
-        .and_then(|v| u8::try_from(v).ok())
-        .ok_or_else(|| rustyscript::Error::Runtime("Not a byte".into()))
+pub fn row_to_rich_json_array(row: &Row) -> Result<Vec<serde_json::Value>, JsonError> {
+  return (0..row.column_count())
+    .map(|i| -> Result<serde_json::Value, JsonError> {
+      let value = row.get_value(i).ok_or(JsonError::ValueNotFound)?;
+      return value_to_rich_json(value);
     })
     .collect();
-}
-
-// NOTE: We cannot Box the large error, since we're using this in a rustyscript callback.
-#[allow(clippy::result_large_err)]
-fn json_value_to_sqlite_param(
-  value: serde_json::Value,
-) -> Result<trailbase_sqlite::Value, rustyscript::Error> {
-  use rustyscript::Error;
-  return Ok(match value {
-    serde_json::Value::Object(mut map) => {
-      match map.remove("blob") {
-        Some(serde_json::Value::String(str)) => {
-          return Ok(trailbase_sqlite::Value::Blob(
-            BASE64_URL_SAFE
-              .decode(&str)
-              .map_err(|err| Error::Runtime(format!("UrlSafeB64 decode: {err}")))?,
-          ));
-        }
-        Some(serde_json::Value::Array(bytes)) => {
-          return Ok(trailbase_sqlite::Value::Blob(array_to_bytes(bytes)?));
-        }
-        _ => {}
-      }
-
-      return Err(Error::Runtime("Object not supported".to_string()));
-    }
-    serde_json::Value::Array(_arr) => {
-      return Err(Error::Runtime("Array not supported".to_string()));
-    }
-    serde_json::Value::Null => trailbase_sqlite::Value::Null,
-    serde_json::Value::Bool(b) => trailbase_sqlite::Value::Integer(b as i64),
-    serde_json::Value::String(str) => trailbase_sqlite::Value::Text(str),
-    serde_json::Value::Number(number) => {
-      if let Some(n) = number.as_i64() {
-        trailbase_sqlite::Value::Integer(n)
-      } else if let Some(n) = number.as_u64() {
-        trailbase_sqlite::Value::Integer(n as i64)
-      } else if let Some(n) = number.as_f64() {
-        trailbase_sqlite::Value::Real(n)
-      } else {
-        return Err(Error::Runtime(format!("Invalid number: {number:?}")));
-      }
-    }
-  });
-}
-
-// NOTE: We cannot Box the large error, since we're using this in a rustyscript callback.
-#[allow(clippy::result_large_err)]
-fn sqlite_value_to_json(value: &types::Value) -> Result<serde_json::Value, rustyscript::Error> {
-  use rustyscript::Error;
-  return Ok(match value {
-    types::Value::Null => serde_json::Value::Null,
-    types::Value::Real(real) => {
-      let Some(number) = serde_json::Number::from_f64(*real) else {
-        return Err(Error::Runtime("NaN".to_string()));
-      };
-      serde_json::Value::Number(number)
-    }
-    types::Value::Integer(integer) => serde_json::Value::Number(serde_json::Number::from(*integer)),
-    types::Value::Blob(blob) => serde_json::json!({
-        "blob": BASE64_URL_SAFE.encode(blob)
-    }),
-    types::Value::Text(text) => serde_json::Value::String(text.clone()),
-  });
-}
-
-// NOTE: We cannot Box the large error, since we're using this in a rustyscript callback.
-#[allow(clippy::result_large_err)]
-pub fn sqlite_row_to_json_array(row: &Row) -> Result<Vec<serde_json::Value>, rustyscript::Error> {
-  use rustyscript::Error;
-
-  let cols = row.column_count();
-  let mut json_row = Vec::<serde_json::Value>::with_capacity(cols);
-
-  for i in 0..cols {
-    let value = row
-      .get_value(i)
-      .ok_or(Error::Runtime("NotFound".to_string()))?;
-    json_row.push(sqlite_value_to_json(value)?);
-  }
-
-  return Ok(json_row);
 }
 
 // NOTE: We cannot Box the large error, since we're using this in a rustyscript callback.
