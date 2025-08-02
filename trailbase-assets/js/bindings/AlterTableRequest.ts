@@ -7,6 +7,7 @@ import type { Table } from "./Table";
  * NOTE: The current approach of (source schema) -> (target schema) is not great. It doesn't allow
  * us to easily rename columns, e.g. is a column deleted, new or renamed?
  * We should probably switch to (source schema + operations).
- * Operations would be: add column, remove column, alter column.
+ * Operations would be: rename table, add column, remove column, alter column.
+ * (We shouldn't allow changing strictness).
  */
 export type AlterTableRequest = { source_schema: Table, target_schema: Table, dry_run: boolean | null, };

@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Index, Switch, Match } from "solid-js";
+import { createMemo, createSignal, Index, Match, Show, Switch } from "solid-js";
 import type { Accessor } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient } from "@tanstack/solid-query";
@@ -168,10 +168,14 @@ export function CreateAlterTableForm(props: {
             })}
           </form.Field>
 
-          <form.Field
-            name="strict"
-            children={buildBoolFormField({ label: () => "STRICT (type-safe)" })}
-          />
+          <Show when={isCreateTable()}>
+            <form.Field
+              name="strict"
+              children={buildBoolFormField({
+                label: () => "STRICT (type-safe)",
+              })}
+            />
+          </Show>
 
           {/* columns */}
           <h2>Columns</h2>
