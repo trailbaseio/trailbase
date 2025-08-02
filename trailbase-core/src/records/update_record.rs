@@ -31,8 +31,6 @@ pub async fn update_record_handler(
     return Err(RecordError::ApiRequiresTable);
   }
 
-  let record_id = api.id_to_sql(&record)?;
-
   let (mut request, multipart_files) = match either_request {
     Either::Json(value) => (value, None),
     Either::Multipart(value, files) => (value, Some(files)),
@@ -48,6 +46,8 @@ pub async fn update_record_handler(
       return Err(RecordError::BadRequest("primary key mismatch"));
     }
   }
+
+  let record_id = api.primary_key_to_value(record)?;
 
   let mut lazy_params = LazyParams::new(&api, request, multipart_files);
   api

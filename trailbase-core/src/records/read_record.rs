@@ -42,7 +42,7 @@ pub async fn read_record_handler(
     return Err(RecordError::ApiNotFound);
   };
 
-  let record_id = api.id_to_sql(&record)?;
+  let record_id = api.primary_key_to_value(record)?;
 
   api
     .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
@@ -166,7 +166,7 @@ pub async fn get_uploaded_file_from_record_handler(
     return Err(RecordError::ApiNotFound);
   };
 
-  let record_id = api.id_to_sql(&record)?;
+  let record_id = api.primary_key_to_value(record)?;
 
   let Ok(()) = api
     .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
@@ -226,7 +226,7 @@ pub async fn get_uploaded_files_from_record_handler(
     return Err(RecordError::ApiNotFound);
   };
 
-  let record_id = api.id_to_sql(&record)?;
+  let record_id = api.primary_key_to_value(record)?;
 
   let Ok(()) = api
     .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())

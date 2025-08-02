@@ -30,7 +30,7 @@ pub async fn delete_record_handler(
     return Err(RecordError::ApiRequiresTable);
   }
 
-  let record_id = api.id_to_sql(&record)?;
+  let record_id = api.primary_key_to_value(record)?;
 
   api
     .check_record_level_access(Permission::Delete, Some(&record_id), None, user.as_ref())

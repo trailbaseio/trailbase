@@ -655,7 +655,7 @@ pub async fn add_subscription_sse_handler(
 
     return Ok(Sse::new(receiver).keep_alive(KeepAlive::default()));
   } else {
-    let record_id = api.id_to_sql(&record)?;
+    let record_id = api.primary_key_to_value(record)?;
     api
       .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
       .await?;

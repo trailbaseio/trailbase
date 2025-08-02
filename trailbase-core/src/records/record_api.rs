@@ -9,7 +9,7 @@ use trailbase_schema::metadata::{
   find_user_id_foreign_key_columns,
 };
 use trailbase_schema::parse::parse_into_statement;
-use trailbase_schema::sqlite::{Column, ColumnDataType};
+use trailbase_schema::sqlite::Column;
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::{NamedParamRef, NamedParams, Params as _, Value};
 
@@ -18,7 +18,6 @@ use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
 use crate::constants::USER_TABLE;
 use crate::records::params::{LazyParams, prefix_colon};
 use crate::records::{Permission, RecordError};
-use crate::util::{assert_uuidv7, b64_to_id};
 
 #[derive(Clone)]
 pub struct RecordApi {
@@ -389,27 +388,12 @@ impl RecordApi {
     return self.state.schema.column_name_to_index.get(key).copied();
   }
 
-  pub fn id_to_sql(&self, id: &str) -> Result<Value, RecordError> {
-    return match self.state.schema.record_pk_column.1.data_type {
-      ColumnDataType::Blob => {
-        // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
-        // would be more explicit rely on CHECK(...) column options.
-        if id.len() == 36 {
-          if let Ok(id) = uuid::Uuid::parse_str(id) {
-            return Ok(Value::Blob(id.into()));
-          }
-        }
-
-        let record_id = b64_to_id(id).map_err(|_err| RecordError::BadRequest("Invalid id"))?;
-        assert_uuidv7(&record_id);
-        Ok(Value::Blob(record_id.into()))
-      }
-      ColumnDataType::Integer => Ok(Value::Integer(
-        id.parse::<i64>()
-          .map_err(|_err| RecordError::BadRequest("Invalid id"))?,
-      )),
-      _ => Err(RecordError::BadRequest("Invalid id")),
-    };
+  pub fn primary_key_to_value(&self, pk: String) -> Result<Value, RecordError> {
+    return trailbase_schema::json::parse_string_json_value(
+      self.state.schema.record_pk_column.1.data_type,
+      pk,
+    )
+    .map_err(|_| RecordError::BadRequest("Invalid id"));
   }
 
   #[inline]

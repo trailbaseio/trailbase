@@ -70,7 +70,7 @@ pub fn flat_json_to_value(
       true => Ok(SqliteValue::Integer(b as i64)),
       false => Err(JsonError::UnexpectedType("Bool", col_type)),
     },
-    serde_json::Value::String(str) => flat_json_string_to_value(col_type, str),
+    serde_json::Value::String(str) => parse_string_json_value(col_type, str),
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
         if col_type.is_integer_kind() {
@@ -163,7 +163,7 @@ pub fn rich_json_to_value(value: serde_json::Value) -> Result<SqliteValue, JsonE
   };
 }
 
-fn flat_json_string_to_value(
+pub fn parse_string_json_value(
   data_type: ColumnDataType,
   value: String,
 ) -> Result<SqliteValue, JsonError> {
@@ -237,7 +237,7 @@ mod tests {
   use trailbase_sqlite::{Connection, params};
 
   #[tokio::test]
-  async fn test_flat_json_string_to_value() {
+  async fn test_parse_string_json_value() {
     let conn = Connection::open_in_memory().unwrap();
     conn
       .execute("CREATE TABLE test (id BLOB NOT NULL, text TEXT)", ())
@@ -255,7 +255,7 @@ mod tests {
       .await
       .unwrap();
 
-    let value = flat_json_string_to_value(ColumnDataType::Blob, id_string.to_string()).unwrap();
+    let value = parse_string_json_value(ColumnDataType::Blob, id_string.to_string()).unwrap();
     let blob = match value {
       rusqlite::types::Value::Blob(ref blob) => blob.clone(),
       _ => panic!("Not a blob"),
