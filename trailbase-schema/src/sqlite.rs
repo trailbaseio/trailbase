@@ -451,6 +451,29 @@ impl ColumnDataType {
       }
     });
   }
+
+  pub(crate) fn is_integer_kind(&self) -> bool {
+    return matches!(
+      self,
+      Self::Integer
+        | Self::Int
+        | Self::TinyInt
+        | Self::SmallInt
+        | Self::MediumInt
+        | Self::BigInt
+        | Self::UnignedBigInt
+        | Self::Int2
+        | Self::Int4
+        | Self::Int8
+    );
+  }
+
+  pub(crate) fn is_float_kind(&self) -> bool {
+    return matches!(
+      self,
+      Self::Real | Self::Double | Self::DoublePrecision | Self::Float
+    );
+  }
 }
 
 impl From<sqlite3_parser::ast::Type> for ColumnDataType {

@@ -55,60 +55,56 @@ pub fn flat_json_to_value(
   col_type: ColumnDataType,
   value: serde_json::Value,
 ) -> Result<SqliteValue, JsonError> {
-  let param = match value {
-    serde_json::Value::Object(ref _map) => {
-      return Err(JsonError::UnexpectedType("Object", col_type));
-    }
+  return match value {
+    serde_json::Value::Object(ref _map) => Err(JsonError::UnexpectedType("Object", col_type)),
     serde_json::Value::Array(ref arr) => {
       // NOTE: Convert Array<number> to Blob. Note, we also support blobs as base64 which are
       // handled below in the string  case.
-      if col_type != ColumnDataType::Blob {
-        return Err(JsonError::UnexpectedType("Array", col_type));
+      match col_type {
+        ColumnDataType::Blob => Ok(SqliteValue::Blob(json_array_to_bytes(arr)?)),
+        _ => Err(JsonError::UnexpectedType("Array", col_type)),
       }
-
-      SqliteValue::Blob(json_array_to_bytes(arr)?)
     }
-    serde_json::Value::Null => SqliteValue::Null,
-    serde_json::Value::Bool(b) => {
-      if col_type != ColumnDataType::Integer {
-        return Err(JsonError::UnexpectedType("Bool", col_type));
-      }
-      SqliteValue::Integer(b as i64)
-    }
-    serde_json::Value::String(str) => flat_json_string_to_value(col_type, str)?,
+    serde_json::Value::Null => Ok(SqliteValue::Null),
+    serde_json::Value::Bool(b) => match col_type.is_integer_kind() {
+      true => Ok(SqliteValue::Integer(b as i64)),
+      false => Err(JsonError::UnexpectedType("Bool", col_type)),
+    },
+    serde_json::Value::String(str) => flat_json_string_to_value(col_type, str),
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
-        match col_type {
-          ColumnDataType::Integer => SqliteValue::Integer(n),
+        if col_type.is_integer_kind() {
+          Ok(SqliteValue::Integer(n))
+        } else if col_type.is_float_kind() {
           // NOTE: "as" is lossy conversion. Does not panic.
-          ColumnDataType::Real => SqliteValue::Real(n as f64),
-          _ => {
-            return Err(JsonError::UnexpectedType("int", col_type));
-          }
+          Ok(SqliteValue::Real(n as f64))
+        } else {
+          Err(JsonError::UnexpectedType("int", col_type))
         }
       } else if let Some(n) = number.as_u64() {
-        match col_type {
-          // NOTE: "as" is lossy conversion. Does not panic.
-          ColumnDataType::Integer => SqliteValue::Integer(n as i64),
-          ColumnDataType::Real => SqliteValue::Real(n as f64),
-          _ => {
-            return Err(JsonError::UnexpectedType("uint", col_type));
-          }
+        // NOTE: "as" is lossy conversion. Does not panic.
+        if col_type.is_integer_kind() {
+          Ok(SqliteValue::Integer(n as i64))
+        } else if col_type.is_float_kind() {
+          Ok(SqliteValue::Real(n as f64))
+        } else {
+          Err(JsonError::UnexpectedType("uint", col_type))
         }
       } else if let Some(n) = number.as_f64() {
-        match col_type {
-          ColumnDataType::Real => SqliteValue::Real(n),
-          _ => {
-            return Err(JsonError::UnexpectedType("real", col_type));
-          }
+        match col_type.is_float_kind() {
+          true => Ok(SqliteValue::Real(n)),
+          _ => Err(JsonError::UnexpectedType("real", col_type)),
         }
       } else {
+        #[cfg(not(debug_assertions))]
         return Err(JsonError::Finite);
+
+        // NOTE: It's not quite as tricial. serde_json will behave differently whether
+        // its "arbitrary_precision" feature is enabled or not.
+        panic!("we exhaustively checked for int, uint and float");
       }
     }
   };
-
-  return Ok(param);
 }
 
 /// Convert a SQLite value to "rich" JSON: String, Number, Null and **BLOB Objects**.
@@ -221,12 +217,6 @@ fn flat_json_string_to_value(
     | ColumnDataType::Date
     | ColumnDataType::DateTime => SqliteValue::Integer(value.parse::<i64>()?),
   });
-}
-
-pub fn rich_json_array_to_values(
-  values: Vec<serde_json::Value>,
-) -> Result<Vec<SqliteValue>, JsonError> {
-  return values.into_iter().map(rich_json_to_value).collect();
 }
 
 pub fn json_array_to_bytes(values: &[serde_json::Value]) -> Result<Vec<u8>, JsonError> {
