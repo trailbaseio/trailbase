@@ -176,10 +176,6 @@ pub async fn alter_table_handler(
 
     state.schema_metadata().invalidate_all().await?;
 
-    // FIXME: Hack to trigger Record API rebuild. Record APIs only rebuild on config change and not
-    // on schema invalidation.
-    state.touch_config();
-
     // Fix configuration: update all table references by existing APIs.
     if is_table_rename
       && matches!(
@@ -201,6 +197,10 @@ pub async fn alter_table_handler(
       state
         .validate_and_update_config(config, Some(old_config_hash))
         .await?;
+    } else {
+      // FIXME: Hack to trigger Record API rebuild. Record APIs only rebuild on config change and not
+      // on schema invalidation.
+      state.touch_config();
     }
   }
 

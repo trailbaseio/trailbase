@@ -75,6 +75,11 @@ pub async fn query_handler(
   // In the fallback case we always need to invalidate the cache.
   if must_invalidate_table_cache {
     state.schema_metadata().invalidate_all().await?;
+
+    // FIXME: Hack to trigger Record API rebuild. Record APIs only rebuild on config change and not
+    // on schema invalidation. This is relevant, e.g. if a column is renamed of a table exposed
+    // as API.
+    state.touch_config();
   }
 
   let batched_rows = batched_rows_result.map_err(|err| Error::BadRequest(err.into()))?;
