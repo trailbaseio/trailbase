@@ -53,6 +53,11 @@ impl<T> ValueNotifier<T> {
     self.notify(&*ptr);
   }
 
+  // TODO: Remove when statemanagement improved
+  pub(crate) fn touch(&self) {
+    self.notify(&*self.value.load());
+  }
+
   fn notify(&self, value: &T) {
     let mut lock = self.listeners.lock();
     lock.retain(|callback| callback(value));

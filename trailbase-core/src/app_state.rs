@@ -210,6 +210,10 @@ impl AppState {
     self.schema_metadata().invalidate_all().await
   }
 
+  pub(crate) fn touch_config(&self) {
+    self.state.config.touch();
+  }
+
   pub(crate) fn objectstore(&self) -> &(dyn ObjectStore + Send + Sync) {
     return &*self.state.object_store;
   }

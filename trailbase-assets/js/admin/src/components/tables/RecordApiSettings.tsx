@@ -618,6 +618,10 @@ function IndividualRecordApiSettingsForm(props: {
           return;
         }
 
+        // FIXME: On submit we either have to close the Sheet or unset dirty.
+        // Otherwise the user will always be prompted for dirty state even
+        // after submitting.
+
         const newConfig = updateRecordApiConfig(c, value);
         try {
           await setConfig(queryClient, newConfig);
