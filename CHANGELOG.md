@@ -1,3 +1,12 @@
+## v0.15.12
+
+* Rebuild Record API config on schema alterations.
+* Parse strings more leniently to JSON: all integer, all real types.
+* Accept a wider range of primary key values to support more complex `VIEW`s.
+* Fix parsing of explicit "null" column constraint.
+* Admin UI: clear dirty state on Record API submit and hide `STRICT`ness alteration in alter table form.
+* Update dependencies.
+
 ## v0.15.11
 
 * Make TypeScript `query`/`execute` database APIs type-safe.
