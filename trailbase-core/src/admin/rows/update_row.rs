@@ -55,22 +55,15 @@ pub async fn update_row_handler(
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
   }
 
-  let mut row = request.row;
-  if let Some(existing) = row.insert(
-    request.primary_key_column,
-    request.primary_key_value.clone(),
-  ) {
-    if existing != request.primary_key_value {
-      return Err(Error::BadRequest("pk mistmatch".into()));
-    }
-  }
-
   UpdateQueryBuilder::run(
     &state,
     &QualifiedNameEscaped::new(&schema_metadata.schema.name),
     &column.name,
+    trailbase_schema::json::flat_json_to_value(column.data_type, request.primary_key_value, true)?,
     schema_metadata.json_metadata.has_file_columns(),
-    Params::from(&*schema_metadata, row, None)?,
+    // NOTE: We "fancy" parse JSON string values, since the UI currently ships everything as a
+    // string. We could consider pushing some more type-awareness into the ui.
+    Params::from(&*schema_metadata, request.row, None, true)?,
   )
   .await?;
 

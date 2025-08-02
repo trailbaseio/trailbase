@@ -389,7 +389,7 @@ impl RecordApi {
   }
 
   pub fn primary_key_to_value(&self, pk: String) -> Result<Value, RecordError> {
-    return trailbase_schema::json::parse_string_json_value(
+    return trailbase_schema::json::fancy_parse_string_to_sqlite_value(
       self.state.schema.record_pk_column.1.data_type,
       pk,
     )

@@ -152,6 +152,7 @@ impl Params {
     accessor: &S,
     json: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
+    fancy_parse_string: bool,
   ) -> Result<Self, ParamsError> {
     let len = json.len();
     let mut params = Params {
@@ -168,7 +169,8 @@ impl Params {
         continue;
       };
 
-      let (param, mut json_files) = extract_params_and_files_from_json(col, json_meta, value)?;
+      let (param, mut json_files) =
+        extract_params_and_files_from_json(col, json_meta, value, fancy_parse_string)?;
       if let Some(json_files) = json_files.as_mut() {
         // Note: files provided as a multipart form upload are handled below. They need more
         // special handling to establish the field.name to column mapping.
@@ -296,6 +298,7 @@ impl<'a, S: SchemaAccessor> LazyParams<'a, S> {
         self.accessor,
         std::mem::take(&mut self.json_row),
         std::mem::take(&mut self.multipart_files),
+        false,
       )
     });
 
@@ -306,7 +309,7 @@ impl<'a, S: SchemaAccessor> LazyParams<'a, S> {
     return self
       .result
       .take()
-      .unwrap_or_else(|| Params::from(self.accessor, self.json_row, self.multipart_files));
+      .unwrap_or_else(|| Params::from(self.accessor, self.json_row, self.multipart_files, false));
   }
 }
 
@@ -314,6 +317,7 @@ fn extract_params_and_files_from_json(
   col: &Column,
   json_meta: Option<&JsonColumnMetadata>,
   value: serde_json::Value,
+  fancy_parse_string: bool,
 ) -> Result<(Value, Option<FileMetadataContents>), ParamsError> {
   let col_name = &col.name;
   match value {
@@ -387,7 +391,12 @@ fn extract_params_and_files_from_json(
         "Received nested array for unsuitable column: {col_name}"
       )));
     }
-    x => return Ok((flat_json_to_value(col.data_type, x)?, None)),
+    x => {
+      return Ok((
+        flat_json_to_value(col.data_type, x, fancy_parse_string)?,
+        None,
+      ));
+    }
   };
 }
 
@@ -503,7 +512,9 @@ mod tests {
         "real": real,
       });
 
-      assert_params(Params::from(&metadata, json_row_from_value(value).unwrap(), None).unwrap());
+      assert_params(
+        Params::from(&metadata, json_row_from_value(value).unwrap(), None, false).unwrap(),
+      );
     }
 
     {
@@ -512,11 +523,34 @@ mod tests {
         ID_COL: id,
         "blob": blob,
         "text": text,
+        "num": 5,
+        "real": 3,
+      });
+
+      assert_params(
+        Params::from(&metadata, json_row_from_value(value).unwrap(), None, false).unwrap(),
+      );
+
+      let value = json!({
+        ID_COL: id,
+        "blob": blob,
+        "text": text,
         "num": "5",
         "real": "3",
       });
 
-      assert_params(Params::from(&metadata, json_row_from_value(value).unwrap(), None).unwrap());
+      assert!(
+        Params::from(
+          &metadata,
+          json_row_from_value(value.clone()).unwrap(),
+          None,
+          false
+        )
+        .is_err()
+      );
+      assert_params(
+        Params::from(&metadata, json_row_from_value(value).unwrap(), None, true).unwrap(),
+      );
     }
 
     {
@@ -526,11 +560,11 @@ mod tests {
         "text": json!({
           "email": text,
         }),
-        "num": "5",
-        "real": "3",
+        "num": 5,
+        "real": 3,
       });
 
-      assert!(Params::from(&metadata, json_row_from_value(value).unwrap(), None).is_err());
+      assert!(Params::from(&metadata, json_row_from_value(value).unwrap(), None, false).is_err());
 
       // Test that nested JSON object can be passed.
       let value = json!({
@@ -540,11 +574,12 @@ mod tests {
         "json_col": json!({
           "text": text,
         }),
-        "num": "5",
-        "real": "3",
+        "num": 5,
+        "real": 3,
       });
 
-      let params = Params::from(&metadata, json_row_from_value(value).unwrap(), None).unwrap();
+      let params =
+        Params::from(&metadata, json_row_from_value(value).unwrap(), None, false).unwrap();
       assert_params(params);
     }
 
@@ -553,11 +588,11 @@ mod tests {
         ID_COL: id,
         "blob": blob,
         "text": json!([text, 1,2,3,4, "foo"]),
-        "num": "5",
-        "real": "3",
+        "num": 5,
+        "real": 3,
       });
 
-      assert!(Params::from(&metadata, json_row_from_value(value).unwrap(), None).is_err());
+      assert!(Params::from(&metadata, json_row_from_value(value).unwrap(), None, false).is_err());
 
       // Test that nested JSON array can be passed.
       let nested_json_blob: Vec<u8> = vec![65, 66, 67, 68];
@@ -570,11 +605,12 @@ mod tests {
           "array": [text, 1,2,3,4, "foo"],
           "blob": nested_json_blob,
         }),
-        "num": "5",
-        "real": "3",
+        "num": 5,
+        "real": 3,
       });
 
-      let params = Params::from(&metadata, json_row_from_value(value).unwrap(), None).unwrap();
+      let params =
+        Params::from(&metadata, json_row_from_value(value).unwrap(), None, false).unwrap();
 
       let json_col: Vec<Value> = params
         .named_params

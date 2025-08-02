@@ -61,7 +61,7 @@ pub async fn read_files_handler(
     )));
   };
 
-  let pk_value = flat_json_to_value(col.data_type, request.pk_value)?;
+  let pk_value = flat_json_to_value(col.data_type, request.pk_value, true)?;
 
   return if let Some(file_index) = request.file_index {
     let mut file_uploads = GetFilesQueryBuilder::run(

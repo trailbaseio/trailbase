@@ -54,6 +54,7 @@ pub fn value_to_flat_json(value: &SqliteValue) -> Result<serde_json::Value, Json
 pub fn flat_json_to_value(
   col_type: ColumnDataType,
   value: serde_json::Value,
+  fancy_parse_string: bool,
 ) -> Result<SqliteValue, JsonError> {
   return match value {
     serde_json::Value::Object(ref _map) => Err(JsonError::UnexpectedType("Object", col_type)),
@@ -70,7 +71,10 @@ pub fn flat_json_to_value(
       true => Ok(SqliteValue::Integer(b as i64)),
       false => Err(JsonError::UnexpectedType("Bool", col_type)),
     },
-    serde_json::Value::String(str) => parse_string_json_value(col_type, str),
+    serde_json::Value::String(str) => match fancy_parse_string {
+      true => fancy_parse_string_to_sqlite_value(col_type, str),
+      false => parse_string_to_sqlite_value(col_type, str),
+    },
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
         if col_type.is_integer_kind() {
@@ -163,11 +167,31 @@ pub fn rich_json_to_value(value: serde_json::Value) -> Result<SqliteValue, JsonE
   };
 }
 
-pub fn parse_string_json_value(
+fn parse_string_to_sqlite_value(
+  data_type: ColumnDataType,
+  value: String,
+) -> Result<SqliteValue, JsonError> {
+  return match data_type {
+    ColumnDataType::Text => Ok(SqliteValue::Text(value)),
+    ColumnDataType::Blob => Ok(SqliteValue::Blob(match (value.len(), value) {
+      // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
+      // would be more explicit rely on CHECK(...) column options.
+      // NOTE: That uuids also parse as url-safe base64, that's why we treat it as a fall-first.
+      (36, v) => uuid::Uuid::parse_str(&v)
+        .map(|v| v.into())
+        .or_else(|_| BASE64_URL_SAFE.decode(&v))?,
+      (_, v) => BASE64_URL_SAFE.decode(&v)?,
+    })),
+    _ => Err(JsonError::UnexpectedType("string", data_type)),
+  };
+}
+
+pub fn fancy_parse_string_to_sqlite_value(
   data_type: ColumnDataType,
   value: String,
 ) -> Result<SqliteValue, JsonError> {
   return Ok(match data_type {
+    // QUESTION: should we error or keep silently dropping value?
     ColumnDataType::Null => SqliteValue::Null,
     // Strict/storage types
     ColumnDataType::Any => SqliteValue::Text(value),
@@ -255,7 +279,8 @@ mod tests {
       .await
       .unwrap();
 
-    let value = parse_string_json_value(ColumnDataType::Blob, id_string.to_string()).unwrap();
+    let value =
+      fancy_parse_string_to_sqlite_value(ColumnDataType::Blob, id_string.to_string()).unwrap();
     let blob = match value {
       rusqlite::types::Value::Blob(ref blob) => blob.clone(),
       _ => panic!("Not a blob"),

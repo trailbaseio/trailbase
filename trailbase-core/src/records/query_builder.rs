@@ -11,7 +11,7 @@ use crate::AppState;
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_pending_files};
-use crate::records::params::{FileMetadataContents, Params};
+use crate::records::params::{FileMetadataContents, Params, prefix_colon};
 use crate::schema_metadata::{JsonColumnMetadata, SchemaMetadataCache, TableMetadata};
 
 #[derive(Debug, Error)]
@@ -428,12 +428,12 @@ impl UpdateQueryBuilder {
     state: &AppState,
     table_name: &QualifiedNameEscaped,
     pk_column: &str,
+    pk_value: Value,
     has_file_columns: bool,
     mut params: Params,
   ) -> Result<(), QueryError> {
-    if params.column_names.len() < 2 {
-      // Only the primary key. Nothing to do.
-      assert!(params.column_names.is_empty() || params.column_names[0] == pk_column);
+    if params.column_names.is_empty() {
+      // Nothing to do.
       return Ok(());
     }
 
@@ -454,6 +454,12 @@ impl UpdateQueryBuilder {
     }
     .render()
     .map_err(|err| QueryError::Internal(err.into()))?;
+
+    // Inject the pk_value. It may already be present, if redundantly provided both in the API path
+    // *and* the request. In most cases it probably wont and duplication is not an issue.
+    params
+      .named_params
+      .push((prefix_colon(pk_column).into(), pk_value));
 
     let rowid: Option<i64> = state
       .conn()
