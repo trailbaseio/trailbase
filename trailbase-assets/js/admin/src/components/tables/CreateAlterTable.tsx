@@ -67,6 +67,9 @@ export function CreateAlterTableForm(props: {
         // Alter table
         const response = await alterTable({
           source_schema: o,
+          operations: [
+            // FIXME: Switch from target schema to operations.
+          ],
           target_schema: value,
           dry_run: dryRun,
         });

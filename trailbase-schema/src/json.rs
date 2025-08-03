@@ -2,10 +2,10 @@
 ///
 /// We entertain **two** different JSON representations, we call them "flat" and "rich".
 ///
-/// The rich representation can be converted back and forth unambiguously. It is used for SQLite
-/// <=> JS/TS bindings.
-/// The flat representation requires a column type and can only be used in the context of STRICT
-/// TABLES.
+/// The rich representation can be converted back and forth unambiguously. It is used for
+/// SQLite <=> JS/TS bindings.
+/// The flat representation requires a column type and can only be used in the context of
+/// STRICT TABLES.
 use base64::prelude::*;
 use rusqlite::types::Value as SqliteValue;
 use thiserror::Error;
