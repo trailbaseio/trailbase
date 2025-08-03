@@ -3,12 +3,6 @@ import type { AlterTableOperation } from "./AlterTableOperation";
 import type { Table } from "./Table";
 
 /**
- * Request to alter `TABLE` schema.
- *
- * NOTE: The current approach of (source schema) -> (target schema) is not great. It doesn't allow
- * us to easily rename columns, e.g. is a column deleted, new or renamed?
- * We should probably switch to (source schema + operations).
- * Operations would be: rename table, add column, remove column, alter column.
- * (We shouldn't allow changing strictness).
+ * Request for altering `TABLE` schema.
  */
-export type AlterTableRequest = { source_schema: Table, operations: Array<AlterTableOperation>, target_schema: Table, dry_run: boolean | null, };
+export type AlterTableRequest = { source_schema: Table, operations: Array<AlterTableOperation>, dry_run: boolean | null, };

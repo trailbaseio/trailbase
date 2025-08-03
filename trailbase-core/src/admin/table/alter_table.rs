@@ -1,8 +1,7 @@
-use std::collections::{HashMap, HashSet};
-
 use axum::extract::{Json, State};
 use log::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use trailbase_schema::sqlite::{Column, QualifiedName, Table};
 use ts_rs::TS;
 
@@ -19,21 +18,12 @@ pub enum AlterTableOperation {
   AlterColumn { name: String, column: Column },
 }
 
-/// Request to alter `TABLE` schema.
-///
-/// NOTE: The current approach of (source schema) -> (target schema) is not great. It doesn't allow
-/// us to easily rename columns, e.g. is a column deleted, new or renamed?
-/// We should probably switch to (source schema + operations).
-/// Operations would be: rename table, add column, remove column, alter column.
-/// (We shouldn't allow changing strictness).
+/// Request for altering `TABLE` schema.
 #[derive(Clone, Debug, Deserialize, TS)]
 #[ts(export)]
 pub struct AlterTableRequest {
   pub source_schema: Table,
   pub operations: Vec<AlterTableOperation>,
-
-  // TODO: Remove
-  pub target_schema: Table,
 
   pub dry_run: Option<bool>,
 }
@@ -55,9 +45,6 @@ pub async fn alter_table_handler(
   if state.demo_mode() && request.source_schema.name.name.starts_with("_") {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
-  if request.source_schema.name.database_schema != request.target_schema.name.database_schema {
-    return Err(Error::Precondition("Cannot move between databases".into()));
-  }
 
   let dry_run = request.dry_run.unwrap_or(false);
   let source_schema = request.source_schema;
@@ -73,45 +60,45 @@ pub async fn alter_table_handler(
   let operations = request.operations;
   debug!("Alter table:\nsource: {source_schema:?}\nops: {operations:?}",);
 
-  if !operations.is_empty() {
-    if operations.is_empty() {
-      return Err(Error::BadRequest("Missing operations".into()));
-    }
+  if operations.is_empty() {
+    return Ok(Json(AlterTableResponse {
+      sql: "".to_string(),
+    }));
+  }
 
-    // Check that removing columns won't break record API configuration. Note that table renames
-    // will be fixed up automatically later.
-    check_column_removals_invalidating_config2(&state, &source_schema, &operations)?;
+  // Check that removing columns won't break record API configuration. Note that table renames
+  // will be fixed up automatically later.
+  check_column_removals_invalidating_config(&state, &source_schema, &operations)?;
 
-    let TargetSchema {
-      ephemeral_table_schema,
-      ephemeral_table_rename,
-      column_mapping,
-    } = build_ephemeral_target_schema(&source_schema, operations)?;
+  let TargetSchema {
+    ephemeral_table_schema,
+    ephemeral_table_rename,
+    column_mapping,
+  } = build_ephemeral_target_schema(&source_schema, operations)?;
 
-    let source_table_name = source_table_name.escaped_string();
-    let ephemeral_table_name = ephemeral_table_schema.name.escaped_string();
-    let ephemeral_table_rename_escaped =
-      ephemeral_table_rename.as_ref().map(|n| n.escaped_string());
-    let (source_columns, target_columns): (Vec<String>, Vec<String>) =
-      column_mapping.into_iter().unzip();
+  let source_table_name = source_table_name.escaped_string();
+  let ephemeral_table_name = ephemeral_table_schema.name.escaped_string();
+  let ephemeral_table_rename_escaped = ephemeral_table_rename.as_ref().map(|n| n.escaped_string());
+  let (source_columns, target_columns): (Vec<String>, Vec<String>) =
+    column_mapping.into_iter().unzip();
 
-    let tx_log = state
-      .conn()
-      .call(
-        move |conn| -> Result<Option<TransactionLog>, trailbase_sqlite::Error> {
-          let mut tx = TransactionRecorder::new(conn)
-            .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+  let tx_log = state
+    .conn()
+    .call(
+      move |conn| -> Result<Option<TransactionLog>, trailbase_sqlite::Error> {
+        let mut tx = TransactionRecorder::new(conn)
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
-          tx.execute("PRAGMA foreign_keys = OFF", ())?;
+        tx.execute("PRAGMA foreign_keys = OFF", ())?;
 
-          // Create new table
-          let sql = ephemeral_table_schema.create_table_statement();
-          tx.execute(&sql, ())?;
+        // Create new table
+        let sql = ephemeral_table_schema.create_table_statement();
+        tx.execute(&sql, ())?;
 
-          // Copy
-          tx.execute(
-            &format!(
-              r#"
+        // Copy
+        tx.execute(
+          &format!(
+            r#"
             INSERT INTO
               {ephemeral_table_name} ({target_columns})
             SELECT
@@ -119,202 +106,52 @@ pub async fn alter_table_handler(
             FROM
               {source_table_name}
           "#,
-              source_columns = source_columns.join(", "),
-              target_columns = target_columns.join(", "),
-            ),
+            source_columns = source_columns.join(", "),
+            target_columns = target_columns.join(", "),
+          ),
+          (),
+        )?;
+
+        tx.execute(&format!("DROP TABLE {source_table_name}"), ())?;
+
+        if let Some(target_name) = ephemeral_table_rename_escaped {
+          tx.execute(
+            &format!("ALTER TABLE {ephemeral_table_name} RENAME TO {target_name}"),
             (),
           )?;
-
-          tx.execute(&format!("DROP TABLE {source_table_name}"), ())?;
-
-          if let Some(target_name) = ephemeral_table_rename_escaped {
-            tx.execute(
-              &format!("ALTER TABLE {ephemeral_table_name} RENAME TO {target_name}"),
-              (),
-            )?;
-          }
-
-          tx.execute("PRAGMA foreign_keys = ON", ())?;
-
-          return tx
-            .rollback()
-            .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
-        },
-      )
-      .await?;
-
-    if !dry_run {
-      // Take transaction log, write a migration file and apply.
-      if let Some(ref log) = tx_log {
-        let migration_path = state.data_dir().migrations_path();
-        let report = log
-          .apply_as_migration(state.conn(), migration_path, &filename)
-          .await?;
-        debug!("Migration report: {report:?}");
-      }
-
-      state.schema_metadata().invalidate_all().await?;
-
-      // Fix configuration: update all table references by existing APIs.
-      match ephemeral_table_rename {
-        Some(rename) if matches!(rename.database_schema.as_deref(), Some("main") | None) => {
-          let mut config = state.get_config();
-          let old_config_hash = hash_config(&config);
-
-          for api in &mut config.record_apis {
-            if let Some(ref name) = api.table_name {
-              if *name == source_schema.name.name {
-                api.table_name = Some(rename.name.clone());
-              }
-            }
-          }
-
-          state
-            .validate_and_update_config(config, Some(old_config_hash))
-            .await?;
         }
-        _ => {
-          // FIXME: Hack to trigger Record API rebuild. Record APIs only rebuild on config change
-          // and not on schema invalidation.
-          state.touch_config();
-        }
-      };
+
+        tx.execute("PRAGMA foreign_keys = ON", ())?;
+
+        return tx
+          .rollback()
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+      },
+    )
+    .await?;
+
+  if !dry_run {
+    // Take transaction log, write a migration file and apply.
+    if let Some(ref log) = tx_log {
+      let migration_path = state.data_dir().migrations_path();
+      let report = log
+        .apply_as_migration(state.conn(), migration_path, &filename)
+        .await?;
+      debug!("Migration report: {report:?}");
     }
 
-    return Ok(Json(AlterTableResponse {
-      sql: tx_log.map(|l| l.build_sql()).unwrap_or_default(),
-    }));
-  } else {
-    let target_schema = request.target_schema;
-    let target_table_name = target_schema.name.clone();
-    if source_schema == target_schema {
-      return Ok(Json(AlterTableResponse {
-        sql: "".to_string(),
-      }));
-    }
+    state.schema_metadata().invalidate_all().await?;
 
-    // Check that removing columns won't break record API configuration. Note that table renames
-    // will be fixed up automatically later.
-    check_column_removals_invalidating_config(&state, &source_schema, &target_schema)?;
-
-    let is_table_rename = target_table_name != source_table_name;
-    let temp_table_name: QualifiedName = if is_table_rename {
-      // No ephemeral table needed.
-      target_table_name.clone()
-    } else {
-      QualifiedName {
-        name: format!("__alter_table_{}", target_table_name.name),
-        database_schema: target_table_name.database_schema.clone(),
-      }
-    };
-
-    let copy_columns: Vec<String> = {
-      let source_columns: HashSet<String> = source_schema
-        .columns
-        .iter()
-        .map(|c| c.name.clone())
-        .collect();
-
-      target_schema
-        .columns
-        .iter()
-        .filter_map(|c| {
-          if source_columns.contains(&c.name) {
-            return Some(c.name.clone());
-          }
-          return None;
-        })
-        .collect()
-    };
-
-    let mut target_schema_copy = target_schema.clone();
-    target_schema_copy.name = temp_table_name.clone();
-
-    let tx_log = state
-      .conn()
-      .call(
-        move |conn| -> Result<Option<TransactionLog>, trailbase_sqlite::Error> {
-          let mut tx = TransactionRecorder::new(conn)
-            .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
-
-          tx.execute("PRAGMA foreign_keys = OFF", ())?;
-
-          // Create new table
-          let sql = target_schema_copy.create_table_statement();
-          tx.execute(&sql, ())?;
-
-          // Copy
-          tx.execute(
-            &format!(
-              r#"
-            INSERT INTO
-              {temp_table_name} ({column_list})
-            SELECT
-              {column_list}
-            FROM
-              {source_table_name}
-          "#,
-              column_list = copy_columns.join(", "),
-              temp_table_name = temp_table_name.escaped_string(),
-              source_table_name = source_table_name.escaped_string(),
-            ),
-            (),
-          )?;
-
-          tx.execute(
-            &format!(
-              "DROP TABLE {source_table_name}",
-              source_table_name = source_table_name.escaped_string()
-            ),
-            (),
-          )?;
-
-          if target_table_name != temp_table_name {
-            tx.execute(
-              &format!(
-                "ALTER TABLE {temp_table_name} RENAME TO {target_table_name}",
-                temp_table_name = temp_table_name.escaped_string(),
-                target_table_name = target_table_name.escaped_string()
-              ),
-              (),
-            )?;
-          }
-
-          tx.execute("PRAGMA foreign_keys = ON", ())?;
-
-          return tx
-            .rollback()
-            .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
-        },
-      )
-      .await?;
-
-    if !dry_run {
-      // Take transaction log, write a migration file and apply.
-      if let Some(ref log) = tx_log {
-        let migration_path = state.data_dir().migrations_path();
-        let report = log
-          .apply_as_migration(state.conn(), migration_path, &filename)
-          .await?;
-        debug!("Migration report: {report:?}");
-      }
-
-      state.schema_metadata().invalidate_all().await?;
-
-      // Fix configuration: update all table references by existing APIs.
-      if is_table_rename
-        && matches!(
-          source_schema.name.database_schema.as_deref(),
-          Some("main") | None
-        )
-      {
+    // Fix configuration: update all table references by existing APIs.
+    match ephemeral_table_rename {
+      Some(rename) if matches!(rename.database_schema.as_deref(), Some("main") | None) => {
         let mut config = state.get_config();
         let old_config_hash = hash_config(&config);
 
         for api in &mut config.record_apis {
           if let Some(ref name) = api.table_name {
             if *name == source_schema.name.name {
-              api.table_name = Some(target_schema.name.name.clone());
+              api.table_name = Some(rename.name.clone());
             }
           }
         }
@@ -322,17 +159,18 @@ pub async fn alter_table_handler(
         state
           .validate_and_update_config(config, Some(old_config_hash))
           .await?;
-      } else {
-        // FIXME: Hack to trigger Record API rebuild. Record APIs only rebuild on config change and
-        // not on schema invalidation.
+      }
+      _ => {
+        // FIXME: Hack to trigger Record API rebuild. Record APIs only rebuild on config change
+        // and not on schema invalidation.
         state.touch_config();
       }
-    }
-
-    return Ok(Json(AlterTableResponse {
-      sql: tx_log.map(|l| l.build_sql()).unwrap_or_default(),
-    }));
+    };
   }
+
+  return Ok(Json(AlterTableResponse {
+    sql: tx_log.map(|l| l.build_sql()).unwrap_or_default(),
+  }));
 }
 
 struct TargetSchema {
@@ -400,7 +238,7 @@ fn build_ephemeral_target_schema(
   });
 }
 
-fn check_column_removals_invalidating_config2(
+fn check_column_removals_invalidating_config(
   state: &AppState,
   source_schema: &Table,
   operations: &[AlterTableOperation],
@@ -415,93 +253,6 @@ fn check_column_removals_invalidating_config2(
       return None;
     })
     .collect();
-
-  if deleted_columns.is_empty() {
-    return Ok(());
-  }
-
-  let config = state.get_config();
-  for api in &config.record_apis {
-    let api_name = api.table_name.as_deref().unwrap_or_default();
-    if api_name != source_schema.name.name {
-      continue;
-    }
-
-    for expanded_column in &api.expand {
-      if deleted_columns.contains(expanded_column) {
-        return Err(Error::BadRequest(
-          format!("Cannot remove column {expanded_column} referenced by API: {api_name}").into(),
-        ));
-      }
-    }
-
-    for excluded_column in &api.excluded_columns {
-      if deleted_columns.contains(excluded_column) {
-        return Err(Error::BadRequest(
-          format!("Cannot remove column {excluded_column} referenced by API: {api_name}").into(),
-        ));
-      }
-    }
-
-    // Check that column is not referenced in rules.
-    for rule in [
-      &api.read_access_rule,
-      &api.create_access_rule,
-      &api.update_access_rule,
-      &api.delete_access_rule,
-      &api.schema_access_rule,
-    ]
-    .into_iter()
-    .flatten()
-    {
-      for deleted_column in &deleted_columns {
-        // NOTE: ideally, we'd parse the rule like in crate::records::record_api::validate_rule.
-        // The current approach would fail if the column name is a keyword used as part of the rule
-        // query. In the meantime, let's error on the side of false positive.
-        const KEYWORDS: &[&str] = &[
-          "select", "in", "where", "as", "and", "or", "is", "null", "coalesce",
-        ];
-        if KEYWORDS.contains(&deleted_column.to_lowercase().as_str()) {
-          continue;
-        }
-
-        if rule.contains(deleted_column) {
-          return Err(Error::BadRequest(
-            format!("Cannot remove column {deleted_column} referenced by access rule: {rule}")
-              .into(),
-          ));
-        }
-      }
-    }
-  }
-
-  return Ok(());
-}
-
-fn check_column_removals_invalidating_config(
-  state: &AppState,
-  source_schema: &Table,
-  target_schema: &Table,
-) -> Result<(), Error> {
-  // Check that removing columns won't break record API configuration.
-  let deleted_columns: Vec<String> = {
-    let target_columns: HashSet<String> = target_schema
-      .columns
-      .iter()
-      .map(|c| c.name.clone())
-      .collect();
-
-    source_schema
-      .columns
-      .iter()
-      .filter_map(|c| {
-        if target_columns.contains(&c.name) {
-          return None;
-        }
-        return Some(c.name.clone());
-      })
-      .collect()
-  };
 
   if deleted_columns.is_empty() {
     return Ok(());
@@ -729,7 +480,6 @@ mod tests {
       let alter_table_request = AlterTableRequest {
         source_schema: create_table_request.schema.clone(),
         operations: vec![],
-        target_schema: create_table_request.schema.clone(),
         dry_run: None,
       };
 
@@ -746,23 +496,18 @@ mod tests {
 
     {
       // Add column.
-      let mut target_schema = create_table_request.schema.clone();
-
-      target_schema.columns.push(Column {
-        name: "new".to_string(),
-        data_type: ColumnDataType::Text,
-        options: vec![
-          ColumnOption::NotNull,
-          ColumnOption::Default("'default'".to_string()),
-        ],
-      });
-
-      debug!("{}", target_schema.create_table_statement());
-
       let alter_table_request = AlterTableRequest {
         source_schema: create_table_request.schema.clone(),
-        operations: vec![],
-        target_schema,
+        operations: vec![AlterTableOperation::AddColumn {
+          column: Column {
+            name: "new".to_string(),
+            data_type: ColumnDataType::Text,
+            options: vec![
+              ColumnOption::NotNull,
+              ColumnOption::Default("'default'".to_string()),
+            ],
+          },
+        }],
         dry_run: None,
       };
 
@@ -779,16 +524,11 @@ mod tests {
 
     {
       // Rename table and remove "new" column.
-      let mut target_schema = create_table_request.schema.clone();
-
-      target_schema.name = QualifiedName::parse("bar").unwrap();
-
-      debug!("{}", target_schema.create_table_statement());
-
       let alter_table_request = AlterTableRequest {
         source_schema: create_table_request.schema.clone(),
-        operations: vec![],
-        target_schema,
+        operations: vec![AlterTableOperation::RenameTableTo {
+          name: "bar".to_string(),
+        }],
         dry_run: None,
       };
 

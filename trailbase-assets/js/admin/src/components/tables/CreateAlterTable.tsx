@@ -110,7 +110,6 @@ export function CreateAlterTableForm(props: {
         const response = await alterTable({
           source_schema: o,
           operations,
-          target_schema: value,
           dry_run: dryRun,
         });
         console.debug(`AlterTableResponse [dry: ${dryRun}]:`, response);
