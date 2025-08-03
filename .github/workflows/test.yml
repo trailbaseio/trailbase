@@ -19,6 +19,12 @@ jobs:
         run: |
           sudo apt-get update && \
             sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Poetry and Python Dependencies
+        run: |
+          pipx install --python python3.13 "poetry==2.1.3" && poetry -C client/python install
       - uses: pnpm/action-setup@v4
         with:
           version: 9
@@ -38,12 +44,6 @@ jobs:
         with:
           toolchain: stable
           default: true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Poetry install
-        run: |
-          pipx install poetry && poetry -C client/python install
       # - name: Setup Go
       #   uses: actions/setup-go@v5
       #   with:

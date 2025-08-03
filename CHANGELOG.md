@@ -1,3 +1,10 @@
+## v0.15.13
+
+* Record sequence of operations when altering table schemas to enable non-destructive column changes.
+* Make columns in CreateAlterTable form append-only.
+* Chore: clean up foreign key expansion code for Record APIs.
+* Update dependencies.
+
 ## v0.15.12
 
 * Rebuild Record API config on schema alterations.
