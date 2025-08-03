@@ -7,12 +7,12 @@ use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
+use crate::records::expand::row_to_json_expand;
 use crate::records::files::read_file_into_response;
 use crate::records::query_builder::{
   ExpandedSelectQueryResult, GetFileQueryBuilder, GetFilesQueryBuilder, SelectQueryBuilder,
   expand_tables,
 };
-use crate::records::sql_to_json::row_to_json_expand;
 use crate::records::{Permission, RecordError};
 
 #[derive(Debug, Default, Deserialize)]

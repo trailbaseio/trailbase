@@ -1,4 +1,5 @@
 use log::*;
+use rusqlite::types;
 use std::collections::HashMap;
 use thiserror::Error;
 use trailbase_schema::json::value_to_flat_json;
@@ -22,8 +23,7 @@ pub enum JsonError {
   ParseInt(#[from] std::num::ParseIntError),
   #[error("Parse float error: {0}")]
   ParseFloat(#[from] std::num::ParseFloatError),
-  #[error("Missing col name")]
-  MissingColumnName,
+  // NOTE: This is the only extra error to schema::JsonError. Can we collapse?
   #[error("SerdeJson error: {0}")]
   SerdeJson(#[from] serde_json::Error),
 }
@@ -59,87 +59,55 @@ pub(crate) fn row_to_json_expand(
   column_filter: fn(&str) -> bool,
   expand: Option<&HashMap<String, serde_json::Value>>,
 ) -> Result<serde_json::Value, JsonError> {
-  let map = (0..row.column_count())
-    .filter_map(|i| {
-      let Some(column_name) = row.column_name(i) else {
-        return Some(Err(JsonError::MissingColumnName));
-      };
-      if !column_filter(column_name) {
-        return None;
-      }
+  // Row may contain extra columns like trailing "_rowid_".
+  assert!(columns.len() <= row.column_count());
+  assert_eq!(columns.len(), json_metadata.len());
 
-      assert!(i < columns.len());
-      assert!(i < json_metadata.len());
-      let column = &columns[i];
-      assert_eq!(column_name, column.name);
+  return Ok(serde_json::Value::Object(
+    (0..columns.len())
+      .filter(|i| column_filter(&columns[*i].name))
+      .map(|i| -> Result<(String, serde_json::Value), JsonError> {
+        let column = &columns[i];
 
-      let Some(value) = row.get_value(i) else {
-        return Some(Err(JsonError::ValueNotFound));
-      };
+        assert_eq!(Some(column.name.as_str()), row.column_name(i));
 
-      if matches!(value, rusqlite::types::Value::Null) {
-        return Some(Ok((column_name.to_string(), serde_json::Value::Null)));
-      }
-
-      if let Some(foreign_value) = expand.and_then(|e| e.get(column_name)) {
-        if is_foreign_key(&column.options) {
-          let id = match value_to_flat_json(value) {
-            Ok(value) => value,
-            Err(err) => {
-              return Some(Err(err.into()));
-            }
-          };
-
-          return Some(Ok(match foreign_value {
-            serde_json::Value::Null => (
-              column_name.to_string(),
-              serde_json::json!({
-                "id": id,
-              }),
-            ),
-            value => (
-              column_name.to_string(),
-              serde_json::json!({
-                "id": id,
-                "data": value,
-              }),
-            ),
-          }));
+        let value = row.get_value(i).ok_or(JsonError::ValueNotFound)?;
+        if matches!(value, types::Value::Null) {
+          return Ok((column.name.clone(), serde_json::Value::Null));
         }
-      }
 
-      if let rusqlite::types::Value::Text(str) = &value {
-        let metadata = &json_metadata[i];
-        if metadata.is_some() {
-          return match serde_json::from_str(str) {
-            Ok(json) => Some(Ok((column_name.to_string(), json))),
-            Err(err) => Some(Err(err.into())),
-          };
+        if let Some(foreign_value) = expand.and_then(|e| e.get(&column.name)) {
+          if is_foreign_key(&column.options) {
+            let id = value_to_flat_json(value)?;
+
+            return Ok(match foreign_value {
+              serde_json::Value::Null => (
+                column.name.clone(),
+                serde_json::json!({
+                  "id": id,
+                }),
+              ),
+              value => (
+                column.name.clone(),
+                serde_json::json!({
+                  "id": id,
+                  "data": value,
+                }),
+              ),
+            });
+          }
         }
-      }
 
-      return match value_to_flat_json(value) {
-        Ok(value) => Some(Ok((column_name.to_string(), value))),
-        Err(err) => Some(Err(err.into())),
-      };
-    })
-    .collect::<Result<serde_json::Map<_, _>, JsonError>>()?;
+        if let types::Value::Text(str) = &value {
+          if json_metadata[i].is_some() {
+            return Ok((column.name.clone(), serde_json::from_str(str)?));
+          }
+        }
 
-  return Ok(serde_json::Value::Object(map));
-}
-
-/// Turns rows into a list of json objects.
-pub(crate) fn rows_to_json_expand(
-  columns: &[Column],
-  json_metadata: &[Option<JsonColumnMetadata>],
-  rows: trailbase_sqlite::Rows,
-  column_filter: fn(&str) -> bool,
-  expand: Option<&HashMap<String, serde_json::Value>>,
-) -> Result<Vec<serde_json::Value>, JsonError> {
-  return rows
-    .iter()
-    .map(|row| row_to_json_expand(columns, json_metadata, row, column_filter, expand))
-    .collect::<Result<Vec<_>, JsonError>>();
+        return Ok((column.name.clone(), value_to_flat_json(value)?));
+      })
+      .collect::<Result<_, JsonError>>()?,
+  ));
 }
 
 #[cfg(test)]
@@ -214,14 +182,20 @@ mod tests {
       .read_query_rows("SELECT * FROM test_table", ())
       .await
       .unwrap();
-    let parsed = rows_to_json_expand(
-      &metadata.schema.columns,
-      &metadata.json_metadata.columns,
-      rows,
-      |_| true,
-      None,
-    )
-    .unwrap();
+
+    let parsed = rows
+      .iter()
+      .map(|row| {
+        row_to_json_expand(
+          &metadata.schema.columns,
+          &metadata.json_metadata.columns,
+          row,
+          |_| true,
+          None,
+        )
+      })
+      .collect::<Result<Vec<_>, _>>()
+      .unwrap();
 
     assert_eq!(parsed.len(), 1);
     let serde_json::Value::Object(map) = parsed.first().unwrap() else {
