@@ -93,12 +93,14 @@ pub async fn alter_table_handler(
 
         // Create new table
         let sql = ephemeral_table_schema.create_table_statement();
-        tx.execute(&sql, ())?;
+        tx.execute(&sql, ()).map_err(|err| {
+          warn!("Failed creating ephemeral table, likely invalid operations: {sql}\n\t{err}");
+          return err;
+        })?;
 
         // Copy
-        tx.execute(
-          &format!(
-            r#"
+        let insert_data_query = format!(
+          r#"
             INSERT INTO
               {ephemeral_table_name} ({target_columns})
             SELECT
@@ -106,11 +108,10 @@ pub async fn alter_table_handler(
             FROM
               {source_table_name}
           "#,
-            source_columns = source_columns.join(", "),
-            target_columns = target_columns.join(", "),
-          ),
-          (),
-        )?;
+          source_columns = source_columns.join(", "),
+          target_columns = target_columns.join(", "),
+        );
+        tx.execute(&insert_data_query, ())?;
 
         tx.execute(&format!("DROP TABLE {source_table_name}"), ())?;
 

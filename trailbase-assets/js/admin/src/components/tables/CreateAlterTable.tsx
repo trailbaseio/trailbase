@@ -1,4 +1,12 @@
-import { createMemo, createSignal, Index, Match, Show, Switch } from "solid-js";
+import {
+  createMemo,
+  createSignal,
+  onMount,
+  Index,
+  Match,
+  Show,
+  Switch,
+} from "solid-js";
 import type { Accessor } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient } from "@tanstack/solid-query";
@@ -56,16 +64,16 @@ export function CreateAlterTableForm(props: {
   const copyOriginal = (): Table | undefined =>
     props.schema ? JSON.parse(JSON.stringify(props.schema)) : undefined;
 
+  const original = createMemo<Table | undefined>(() => copyOriginal());
+  const isCreateTable = () => original() === undefined;
+
   // Map from original name to column, when altered.
   const alteredColumns = new Map<string, Column>();
-  const original = createMemo<Table | undefined>(() => {
+  let originalColumns: string[] = [];
+  onMount(() => {
     alteredColumns.clear();
-    return copyOriginal();
+    originalColumns = original()?.columns.map((c) => c.name) ?? [];
   });
-  const originalColumns = createMemo<string[]>(
-    () => original()?.columns.map((c) => c.name) ?? [],
-  );
-  const isCreateTable = () => original() === undefined;
 
   const onSubmit = async (value: Table, dryRun: boolean) => {
     /* eslint-disable solid/reactivity */
@@ -223,79 +231,78 @@ export function CreateAlterTableForm(props: {
           <h2>Columns</h2>
 
           <form.Field name="columns">
-            {(field) => {
-              return (
-                <div class="w-full">
-                  <div class="flex flex-col gap-2">
-                    <Index each={field().state.value}>
-                      {(c: Accessor<Column>, i: number) => {
-                        const originalName = c().name;
+            {(field) => (
+              <div class="w-full">
+                <div class="flex flex-col gap-2">
+                  <Index each={field().state.value}>
+                    {(c: Accessor<Column>, i: number) => {
+                      const originalName = c().name;
 
-                        return (
-                          <form.Field name={`columns[${i}]`}>
-                            {(field) => {
-                              // Subscribe state changes.
-                              field().store.subscribe(({ currentVal }) => {
-                                if (
-                                  !currentVal.meta.isDefaultValue &&
-                                  originalColumns().find(
-                                    (o) => o == originalName,
-                                  )
-                                ) {
-                                  alteredColumns.set(
-                                    originalName,
-                                    currentVal.value,
-                                  );
-                                  // console.debug(`DIFF: ${originalName}`, alteredColumns);
-                                }
-                              });
+                      return (
+                        <form.Field name={`columns[${i}]`}>
+                          {(field) => {
+                            // Subscribe state changes.
+                            field().store.subscribe(({ currentVal }) => {
+                              const isDefault = currentVal.meta.isDefaultValue;
+                              if (
+                                !isDefault &&
+                                originalColumns.find((o) => o == originalName)
+                              ) {
+                                alteredColumns.set(
+                                  originalName,
+                                  currentVal.value,
+                                );
+                              }
+                            });
 
-                              return (
-                                <Switch>
-                                  <Match when={i === 0}>
-                                    <PrimaryKeyColumnSubForm
-                                      form={form}
-                                      colIndex={i}
-                                      column={c()}
-                                      allTables={props.allTables}
-                                      disabled={!isCreateTable()}
-                                    />
-                                  </Match>
+                            return (
+                              <Switch>
+                                <Match when={i === 0}>
+                                  <PrimaryKeyColumnSubForm
+                                    form={form}
+                                    colIndex={i}
+                                    column={c()}
+                                    allTables={props.allTables}
+                                    disabled={!isCreateTable()}
+                                  />
+                                </Match>
 
-                                  <Match when={i !== 0}>
-                                    <ColumnSubForm
-                                      form={form}
-                                      colIndex={i}
-                                      column={c()}
-                                      allTables={props.allTables}
-                                      disabled={false}
-                                      onDelete={() => {
-                                        alteredColumns.delete(originalName);
-                                      }}
-                                    />
-                                  </Match>
-                                </Switch>
-                              );
-                            }}
-                          </form.Field>
-                        );
-                      }}
-                    </Index>
-                  </div>
-
-                  <Button
-                    class="m-2"
-                    onClick={() => {
-                      const length = field().state.value.length;
-                      field().pushValue(newDefaultColumn(length));
+                                <Match when={i !== 0}>
+                                  <ColumnSubForm
+                                    form={form}
+                                    colIndex={i}
+                                    column={c()}
+                                    allTables={props.allTables}
+                                    disabled={false}
+                                    onDelete={() => {
+                                      originalColumns = originalColumns.filter(
+                                        (name) => name != originalName,
+                                      );
+                                      alteredColumns.delete(originalName);
+                                    }}
+                                  />
+                                </Match>
+                              </Switch>
+                            );
+                          }}
+                        </form.Field>
+                      );
                     }}
-                    variant="default"
-                  >
-                    Add Column
-                  </Button>
+                  </Index>
                 </div>
-              );
-            }}
+
+                <Button
+                  class="m-2"
+                  onClick={() => {
+                    const length = field().state.value.length;
+                    field().pushValue(newDefaultColumn(length));
+                  }}
+                  variant="default"
+                >
+                  Add Column
+                </Button>
+              </div>
+            )}
           </form.Field>
         </div>
 

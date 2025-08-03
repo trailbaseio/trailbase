@@ -276,7 +276,7 @@ pub async fn list_records_handler(
     } else {
       first_row.len() - 1
     };
-    assert_eq!(rows.column_names()[count_index], "_total_count_");
+    assert_eq!(rows.column_name(count_index), Some("_total_count_"));
 
     let value = &first_row[count_index];
     let Value::Integer(count) = value else {

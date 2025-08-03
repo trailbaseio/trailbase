@@ -4,7 +4,7 @@ use std::ops::Index;
 use std::str::FromStr;
 use std::sync::Arc;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ValueType {
   Integer = 1,
   Real,
@@ -28,7 +28,7 @@ impl FromStr for ValueType {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Column {
   name: String,
   decl_type: Option<ValueType>,
@@ -37,24 +37,13 @@ pub struct Column {
 #[derive(Debug)]
 pub struct Rows(pub(crate) Vec<Row>, pub(crate) Arc<Vec<Column>>);
 
-pub(crate) fn columns(stmt: &Statement<'_>) -> Vec<Column> {
-  return stmt
-    .columns()
-    .into_iter()
-    .map(|c| Column {
-      name: c.name().to_string(),
-      decl_type: c.decl_type().and_then(|s| ValueType::from_str(s).ok()),
-    })
-    .collect();
-}
-
 impl Rows {
   pub fn from_rows(mut rows: rusqlite::Rows) -> rusqlite::Result<Self> {
-    let columns: Arc<Vec<Column>> = Arc::new(rows.as_ref().map_or(vec![], columns));
+    let columns: Arc<Vec<Column>> = Arc::new(rows.as_ref().map_or_else(Vec::new, columns));
 
     let mut result = vec![];
     while let Some(row) = rows.next()? {
-      result.push(Row::from_row(row, Some(columns.clone()))?);
+      result.push(Row::from_row(row, columns.clone())?);
     }
 
     return Ok(Self(result, columns));
@@ -82,10 +71,6 @@ impl Rows {
 
   pub fn column_count(&self) -> usize {
     return self.1.len();
-  }
-
-  pub fn column_names(&self) -> Vec<&str> {
-    return self.1.iter().map(|s| s.name.as_str()).collect();
   }
 
   pub fn column_name(&self, idx: usize) -> Option<&str> {
@@ -128,18 +113,30 @@ impl IntoIterator for Rows {
   }
 }
 
+pub(crate) fn columns(stmt: &Statement<'_>) -> Vec<Column> {
+  return stmt
+    .columns()
+    .into_iter()
+    .map(|c| Column {
+      name: c.name().to_string(),
+      decl_type: c.decl_type().and_then(|s| ValueType::from_str(s).ok()),
+    })
+    .collect();
+}
+
 #[derive(Debug)]
 pub struct Row(Vec<types::Value>, Arc<Vec<Column>>);
 
 impl Row {
-  pub fn from_row(row: &rusqlite::Row, cols: Option<Arc<Vec<Column>>>) -> rusqlite::Result<Self> {
-    let columns = cols.unwrap_or_else(|| Arc::new(columns(row.as_ref())));
+  pub(crate) fn from_row(row: &rusqlite::Row, cols: Arc<Vec<Column>>) -> rusqlite::Result<Self> {
+    assert_eq!(*cols, columns(row.as_ref()));
 
-    let values = (0..columns.len())
-      .map(|idx| Ok(row.get_ref(idx)?.into()))
-      .collect::<Result<Vec<types::Value>, rusqlite::Error>>()?;
+    // We have to access by index here, since names can be duplicate.
+    let values = (0..cols.len())
+      .map(|idx| row.get(idx).unwrap_or(types::Value::Null))
+      .collect();
 
-    return Ok(Self(values, columns));
+    return Ok(Self(values, cols));
   }
 
   pub fn split_off(&mut self, at: usize) -> Row {
@@ -180,10 +177,6 @@ impl Row {
   pub fn column_count(&self) -> usize {
     assert_eq!(self.1.len(), self.0.len());
     return self.1.len();
-  }
-
-  pub fn column_names(&self) -> Vec<&str> {
-    return self.1.iter().map(|s| s.name.as_str()).collect();
   }
 
   pub fn column_name(&self, idx: usize) -> Option<&str> {

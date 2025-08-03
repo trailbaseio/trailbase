@@ -455,6 +455,7 @@ export function ColumnSubForm(props: {
             <div class="flex justify-end">
               <button
                 class="my-2"
+                type="button"
                 onClick={() => {
                   // Delete this column from list of all columns.
                   const columns = [...props.form.state.values.columns];

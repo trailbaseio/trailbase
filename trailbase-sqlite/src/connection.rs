@@ -301,7 +301,9 @@ impl Connection {
     params: impl Params + Send + 'static,
   ) -> Result<Option<Row>> {
     return self
-      .read_query_row_f(sql, params, |row| Row::from_row(row, None))
+      .read_query_row_f(sql, params, |row| {
+        return Row::from_row(row, Arc::new(columns(row.as_ref())));
+      })
       .await;
   }
 
@@ -436,9 +438,9 @@ impl Connection {
               if let Some(row) = row {
                 let cols: Arc<Vec<Column>> = Arc::new(columns(row.as_ref()));
 
-                let mut result = vec![Row::from_row(row, Some(cols.clone()))?];
+                let mut result = vec![Row::from_row(row, cols.clone())?];
                 while let Some(row) = rows.next()? {
-                  result.push(Row::from_row(row, Some(cols.clone()))?);
+                  result.push(Row::from_row(row, cols.clone())?);
                 }
                 return Ok(Some(Rows(result, cols)));
               }

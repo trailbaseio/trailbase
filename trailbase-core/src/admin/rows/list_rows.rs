@@ -210,15 +210,13 @@ async fn fetch_rows(
 
   let query = format!(
     r#"
-      SELECT _ROW_.*
-      FROM
-        (SELECT * FROM {table}) as _ROW_
-      WHERE
-        {clause}
-      ORDER BY
-        {order_clause}
-      LIMIT :limit
-      OFFSET :offset
+      SELECT _ROW_.* FROM {table} AS _ROW_
+        WHERE
+          {clause}
+        ORDER BY
+          {order_clause}
+        LIMIT :limit
+        OFFSET :offset
     "#,
     table = qualified_name.escaped_string()
   );
