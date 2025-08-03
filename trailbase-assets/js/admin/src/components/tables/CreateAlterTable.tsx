@@ -1,12 +1,4 @@
-import {
-  createMemo,
-  createSignal,
-  onMount,
-  Index,
-  Match,
-  Show,
-  Switch,
-} from "solid-js";
+import { createMemo, createSignal, Index, Match, Show, Switch } from "solid-js";
 import type { Accessor } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient } from "@tanstack/solid-query";
@@ -42,12 +34,29 @@ import type { Table } from "@bindings/Table";
 import type { AlterTableOperation } from "@bindings/AlterTableOperation";
 import type { QualifiedName } from "@bindings/QualifiedName";
 
-function newDefaultColumn(index: number): Column {
+function newDefaultColumn(index: number, existingNames?: string[]): Column {
+  let name = `new_${index}`;
+  if (existingNames !== undefined) {
+    for (let i = 0; i < 1000; ++i) {
+      if (existingNames.find((n) => n === name) === undefined) {
+        break;
+      }
+      name = `new_${index + i}`;
+    }
+  }
   return {
-    name: `new_${index}`,
+    name,
     data_type: "Text",
     options: [{ Default: "''" }],
   };
+}
+
+function columnsEqual(a: Column, b: Column): boolean {
+  return (
+    a.name === b.name &&
+    a.data_type === b.data_type &&
+    JSON.stringify(a.options) === JSON.stringify(b.options)
+  );
 }
 
 export function CreateAlterTableForm(props: {
@@ -67,13 +76,11 @@ export function CreateAlterTableForm(props: {
   const original = createMemo<Table | undefined>(() => copyOriginal());
   const isCreateTable = () => original() === undefined;
 
-  // Map from original name to column, when altered.
-  const alteredColumns = new Map<string, Column>();
-  let originalColumns: string[] = [];
-  onMount(() => {
-    alteredColumns.clear();
-    originalColumns = original()?.columns.map((c) => c.name) ?? [];
-  });
+  // Columns are treated as append only. Instead of removing it and inducing animation junk and other stuff when
+  // shifting offset, we simply don't render columns that were marked as deleted.
+  const [deletedColumns, setDeletedColumn] = createSignal<number[]>([]);
+  const isDeleted = (i: number): boolean =>
+    deletedColumns().find((idx) => idx === i) !== undefined;
 
   const onSubmit = async (value: Table, dryRun: boolean) => {
     /* eslint-disable solid/reactivity */
@@ -83,37 +90,34 @@ export function CreateAlterTableForm(props: {
       const o = original();
       if (o !== undefined) {
         // Alter table
-        //
-        // Brittle: We know the original columns, the altered columns, now infer added and dropped columns.
+
+        // Build operations. Remember columns are append-only.
         const operations: AlterTableOperation[] = [];
-        const updatedColumnNames: string[] = [];
-        for (const col of o.columns) {
-          const altered = alteredColumns.get(col.name);
-          if (altered) {
-            operations.push({
-              AlterColumn: {
-                name: col.name,
-                column: altered,
-              },
-            });
-            updatedColumnNames.push(altered.name);
-            continue;
-          }
+        value.columns.forEach((column, i) => {
+          if (i < o.columns.length) {
+            // Pre-existing column.
+            const originalName = o.columns[i].name;
+            if (isDeleted(i)) {
+              operations.push({ DropColumn: { name: originalName } });
+              return;
+            }
 
-          const exists = value.columns.find((c) => c.name == col.name);
-          if (exists) {
-            updatedColumnNames.push(col.name);
+            if (!columnsEqual(o.columns[i], column)) {
+              operations.push({
+                AlterColumn: {
+                  name: originalName,
+                  column,
+                },
+              });
+              return;
+            }
           } else {
-            operations.push({ DropColumn: { name: col.name } });
+            // Newly added columns.
+            if (!isDeleted(i)) {
+              operations.push({ AddColumn: { column } });
+            }
           }
-        }
-
-        for (const col of value.columns) {
-          const notAdded = updatedColumnNames.find((name) => name == col.name);
-          if (!notAdded) {
-            operations.push({ AddColumn: { column: col } });
-          }
-        }
+        });
 
         const response = await alterTable({
           source_schema: o,
@@ -127,6 +131,7 @@ export function CreateAlterTableForm(props: {
         }
       } else {
         // Create table
+        value.columns = value.columns.filter((_, i) => !isDeleted(i));
         const response = await createTable({ schema: value, dry_run: dryRun });
         console.debug(`CreateTableResponse [dry: ${dryRun}]:`, response);
 
@@ -235,67 +240,47 @@ export function CreateAlterTableForm(props: {
               <div class="w-full">
                 <div class="flex flex-col gap-2">
                   <Index each={field().state.value}>
-                    {(c: Accessor<Column>, i: number) => {
-                      const originalName = c().name;
+                    {(c: Accessor<Column>, i: number) => (
+                      <Show when={!isDeleted(i)}>
+                        <Switch>
+                          <Match when={i === 0}>
+                            <PrimaryKeyColumnSubForm
+                              form={form}
+                              colIndex={i}
+                              column={c()}
+                              allTables={props.allTables}
+                              disabled={!isCreateTable()}
+                            />
+                          </Match>
 
-                      return (
-                        <form.Field name={`columns[${i}]`}>
-                          {(field) => {
-                            // Subscribe state changes.
-                            field().store.subscribe(({ currentVal }) => {
-                              const isDefault = currentVal.meta.isDefaultValue;
-                              if (
-                                !isDefault &&
-                                originalColumns.find((o) => o == originalName)
-                              ) {
-                                alteredColumns.set(
-                                  originalName,
-                                  currentVal.value,
-                                );
+                          <Match when={i !== 0}>
+                            <ColumnSubForm
+                              form={form}
+                              colIndex={i}
+                              column={c()}
+                              allTables={props.allTables}
+                              disabled={false}
+                              onDelete={() =>
+                                setDeletedColumn([i, ...deletedColumns()])
                               }
-                            });
-
-                            return (
-                              <Switch>
-                                <Match when={i === 0}>
-                                  <PrimaryKeyColumnSubForm
-                                    form={form}
-                                    colIndex={i}
-                                    column={c()}
-                                    allTables={props.allTables}
-                                    disabled={!isCreateTable()}
-                                  />
-                                </Match>
-
-                                <Match when={i !== 0}>
-                                  <ColumnSubForm
-                                    form={form}
-                                    colIndex={i}
-                                    column={c()}
-                                    allTables={props.allTables}
-                                    disabled={false}
-                                    onDelete={() => {
-                                      originalColumns = originalColumns.filter(
-                                        (name) => name != originalName,
-                                      );
-                                      alteredColumns.delete(originalName);
-                                    }}
-                                  />
-                                </Match>
-                              </Switch>
-                            );
-                          }}
-                        </form.Field>
-                      );
-                    }}
+                            />
+                          </Match>
+                        </Switch>
+                      </Show>
+                    )}
                   </Index>
                 </div>
 
                 <Button
                   class="m-2"
                   onClick={() => {
-                    const length = field().state.value.length;
-                    field().pushValue(newDefaultColumn(length));
+                    const columns = field().state.value;
+                    field().pushValue(
+                      newDefaultColumn(
+                        columns.length,
+                        columns.map((c) => c.name),
+                      ),
+                    );
                   }}
                   variant="default"
                 >

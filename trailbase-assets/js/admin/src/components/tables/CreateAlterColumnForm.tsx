@@ -436,7 +436,7 @@ export function ColumnSubForm(props: {
   column: Column;
   allTables: Table[];
   disabled: boolean;
-  onDelete?: () => void;
+  onDelete: () => void;
 }): JSX.Element {
   const disabled = () => props.disabled;
   const [name, setName] = createWritableMemo(() => props.column.name);
@@ -453,18 +453,7 @@ export function ColumnSubForm(props: {
           // Delete column button.
           !disabled() && (
             <div class="flex justify-end">
-              <button
-                class="my-2"
-                type="button"
-                onClick={() => {
-                  // Delete this column from list of all columns.
-                  const columns = [...props.form.state.values.columns];
-                  columns.splice(props.colIndex, 1);
-                  props.form.setFieldValue("columns", columns);
-
-                  props.onDelete?.();
-                }}
-              >
+              <button class="my-2" type="button" onClick={props.onDelete}>
                 <div class="rounded p-1 hover:bg-gray-200">
                   <TbTrash size={20} />
                 </div>
