@@ -436,6 +436,7 @@ export function ColumnSubForm(props: {
   column: Column;
   allTables: Table[];
   disabled: boolean;
+  onDelete?: () => void;
 }): JSX.Element {
   const disabled = () => props.disabled;
   const [name, setName] = createWritableMemo(() => props.column.name);
@@ -448,23 +449,28 @@ export function ColumnSubForm(props: {
       <h2>{name()}</h2>
 
       <div class="flex items-center gap-2">
-        {!disabled() && (
-          <div class="flex justify-end">
-            <button
-              class="my-2"
-              onClick={() => {
-                // Delete this column from list of all columns.
-                const columns = [...props.form.state.values.columns];
-                columns.splice(props.colIndex, 1);
-                props.form.setFieldValue("columns", columns);
-              }}
-            >
-              <div class="rounded p-1 hover:bg-gray-200">
-                <TbTrash size={20} />
-              </div>
-            </button>
-          </div>
-        )}
+        {
+          // Delete column button.
+          !disabled() && (
+            <div class="flex justify-end">
+              <button
+                class="my-2"
+                onClick={() => {
+                  // Delete this column from list of all columns.
+                  const columns = [...props.form.state.values.columns];
+                  columns.splice(props.colIndex, 1);
+                  props.form.setFieldValue("columns", columns);
+
+                  props.onDelete?.();
+                }}
+              >
+                <div class="rounded p-1 hover:bg-gray-200">
+                  <TbTrash size={20} />
+                </div>
+              </button>
+            </div>
+          )
+        }
         <TbChevronDown
           size={20}
           style={{
