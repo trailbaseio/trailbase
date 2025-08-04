@@ -22,6 +22,6 @@
   },
   "dependencies": {
     "csv-parse": "^5.6.0",
-    "trailbase": "workspace:*"
+    "trailbase": "^0.7.1"
   }
 }

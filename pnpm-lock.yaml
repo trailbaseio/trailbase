@@ -158,8 +158,8 @@ importers:
         specifier: ^1.9.7
         version: 1.9.7
       trailbase:
-        specifier: workspace:*
-        version: link:../../../trailbase-assets/js/client
+        specifier: ^0.7.1
+        version: 0.7.1
     devDependencies:
       '@astrojs/solid-js':
         specifier: ^5.1.0
@@ -262,8 +262,8 @@ importers:
         specifier: ^1.9.7
         version: 1.9.7
       trailbase:
-        specifier: workspace:*
-        version: link:../../trailbase-assets/js/client
+        specifier: ^0.7.1
+        version: 0.7.1
     devDependencies:
       '@eslint/js':
         specifier: ^9.32.0
@@ -317,8 +317,8 @@ importers:
         specifier: ^5.6.0
         version: 5.6.0
       trailbase:
-        specifier: workspace:*
-        version: link:../../trailbase-assets/js/client
+        specifier: ^0.7.1
+        version: 0.7.1
     devDependencies:
       '@eslint/js':
         specifier: ^9.32.0
@@ -372,8 +372,8 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11
       trailbase:
-        specifier: workspace:*
-        version: link:../../trailbase-assets/js/client
+        specifier: ^0.7.1
+        version: 0.7.1
     devDependencies:
       '@eslint/js':
         specifier: ^9.32.0
