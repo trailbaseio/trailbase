@@ -141,11 +141,11 @@ pub async fn alter_table_handler(
       debug!("Migration report: {report:?}");
     }
 
-    state.schema_metadata().invalidate_all().await?;
+    state.rebuild_schema_cache().await?;
 
     // Fix configuration: update all table references by existing APIs.
-    match ephemeral_table_rename {
-      Some(rename) if matches!(rename.database_schema.as_deref(), Some("main") | None) => {
+    if let Some(rename) = ephemeral_table_rename {
+      if matches!(rename.database_schema.as_deref(), Some("main") | None) {
         let mut config = state.get_config();
         let old_config_hash = hash_config(&config);
 
@@ -161,12 +161,7 @@ pub async fn alter_table_handler(
           .validate_and_update_config(config, Some(old_config_hash))
           .await?;
       }
-      _ => {
-        // FIXME: Hack to trigger Record API rebuild. Record APIs only rebuild on config change
-        // and not on schema invalidation.
-        state.touch_config();
-      }
-    };
+    }
   }
 
   return Ok(Json(AlterTableResponse {

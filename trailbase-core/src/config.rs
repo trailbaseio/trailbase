@@ -719,9 +719,7 @@ mod test {
 
   async fn test_default_config_is_valid() {
     let state = test_state(None).await.unwrap();
-    let schema_metadata = SchemaMetadataCache::new(state.conn().clone())
-      .await
-      .unwrap();
+    let schema_metadata = SchemaMetadataCache::new(state.conn()).await.unwrap();
 
     let config = Config::new_with_custom_defaults();
     validate_config(&schema_metadata, &config).unwrap();

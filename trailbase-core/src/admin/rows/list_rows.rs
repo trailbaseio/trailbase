@@ -297,7 +297,7 @@ mod tests {
       .unwrap();
     assert_eq!(cnt, 1);
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     let (data, cols) = fetch_rows(
       conn,

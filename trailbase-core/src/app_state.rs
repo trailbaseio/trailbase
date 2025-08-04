@@ -1,6 +1,6 @@
 use log::*;
 use object_store::ObjectStore;
-use reactivate::Reactive;
+use reactivate::{Merge, Reactive};
 use std::path::PathBuf;
 use std::sync::Arc;
 use trailbase_schema::QualifiedName;
@@ -37,7 +37,7 @@ struct InternalState {
 
   jwt: JwtHelper,
 
-  schema_metadata: SchemaMetadataCache,
+  schema_metadata: Reactive<Arc<SchemaMetadataCache>>,
   subscription_manager: SubscriptionManager,
   object_store: Arc<dyn ObjectStore + Send + Sync>,
 
@@ -75,7 +75,7 @@ impl AppState {
     let public_url = args.public_url.clone();
     let site_url = config.derive(move |config| {
       if let Some(ref public_url) = public_url {
-        log::info!("Public url provided: {public_url:?}");
+        debug!("Public url provided: {public_url:?}");
         return Arc::new(Some(public_url.clone()));
       }
 
@@ -90,24 +90,27 @@ impl AppState {
       );
     });
 
+    let schema_metadata = Reactive::new(Arc::new(args.schema_metadata));
     let record_apis = {
-      let schema_metadata_clone = args.schema_metadata.clone();
-      let conn_clone = args.conn.clone();
+      let conn = args.conn.clone();
+      let m = (&config, &schema_metadata).merge();
 
-      derive_unchecked(&config, move |config| {
+      derive_unchecked(&m, move |(config, metadata)| {
+        debug!("(re-)building Record APIs");
+
         return Arc::new(
           config
             .record_apis
             .iter()
-            .filter_map(|config| {
-              match build_record_api(conn_clone.clone(), &schema_metadata_clone, config.clone()) {
+            .filter_map(
+              |config| match build_record_api(conn.clone(), metadata, config.clone()) {
                 Ok(api) => Some((api.api_name().to_string(), api)),
                 Err(err) => {
                   error!("{err}");
                   None
                 }
-              }
-            })
+              },
+            )
             .collect::<Vec<_>>(),
         );
       })
@@ -134,7 +137,7 @@ impl AppState {
           Arc::new(AuthOptions::from_config(c.auth.clone()))
         }),
         jobs: derive_unchecked(&config, move |c| {
-          debug!("building jobs from config");
+          debug!("(re-)building jobs from config");
 
           let (data_dir, conn, logs_conn, object_store) = &jobs_input;
 
@@ -152,12 +155,12 @@ impl AppState {
         conn: args.conn.clone(),
         logs_conn: args.logs_conn,
         jwt: args.jwt,
-        schema_metadata: args.schema_metadata.clone(),
         subscription_manager: SubscriptionManager::new(
           args.conn,
-          args.schema_metadata,
+          schema_metadata.clone(),
           record_apis,
         ),
+        schema_metadata,
         object_store,
         runtime,
         #[cfg(test)]
@@ -200,20 +203,21 @@ impl AppState {
     return trailbase_assets::get_version_info!();
   }
 
-  pub(crate) fn schema_metadata(&self) -> &SchemaMetadataCache {
-    return &self.state.schema_metadata;
+  pub(crate) fn schema_metadata(&self) -> Arc<SchemaMetadataCache> {
+    return self.state.schema_metadata.value();
   }
 
   pub(crate) fn subscription_manager(&self) -> &SubscriptionManager {
     return &self.state.subscription_manager;
   }
 
-  pub async fn refresh_table_cache(&self) -> Result<(), crate::schema_metadata::SchemaLookupError> {
-    self.schema_metadata().invalidate_all().await
-  }
-
-  pub(crate) fn touch_config(&self) {
-    self.state.config.notify();
+  pub async fn rebuild_schema_cache(
+    &self,
+  ) -> Result<(), crate::schema_metadata::SchemaLookupError> {
+    let metadata = SchemaMetadataCache::new(&self.state.conn).await?;
+    self.state.schema_metadata.set(Arc::new(metadata));
+    return Ok(());
+    // self.schema_metadata().invalidate_all().await
   }
 
   pub(crate) fn objectstore(&self) -> &(dyn ObjectStore + Send + Sync) {
@@ -270,7 +274,7 @@ impl AppState {
     config: Config,
     hash: Option<String>,
   ) -> Result<(), crate::config::ConfigError> {
-    validate_config(self.schema_metadata(), &config)?;
+    validate_config(&self.schema_metadata(), &config)?;
 
     match hash {
       Some(hash) => {
@@ -297,7 +301,7 @@ impl AppState {
     // Write new config to the file system.
     return write_config_and_vault_textproto(
       self.data_dir(),
-      self.schema_metadata(),
+      &self.schema_metadata(),
       &self.get_config(),
     )
     .await;
@@ -318,6 +322,8 @@ pub struct TestStateOptions {
 
 #[cfg(test)]
 pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<AppState> {
+  use reactivate::Merge;
+
   use crate::auth::jwt;
   use crate::auth::oauth::providers::test::TestOAuthProvider;
   use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
@@ -334,8 +340,6 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let (conn, new) = crate::connection::init_main_db(None, None, None)?;
   assert!(new);
   let logs_conn = crate::connection::init_logs_db(None)?;
-
-  let schema_metadata = SchemaMetadataCache::new(conn.clone()).await?;
 
   let build_default_config = || {
     // Construct a fabricated config for tests and make sure it's valid.
@@ -377,6 +381,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     config
   };
 
+  let schema_metadata = Arc::new(SchemaMetadataCache::new(&conn).await?);
   let config = options
     .as_ref()
     .and_then(|o| o.config.clone())
@@ -385,7 +390,6 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let config = Reactive::new(config);
 
   let main_conn_clone = conn.clone();
-  let schema_metadata_clone = schema_metadata.clone();
 
   let data_dir = DataDir(temp_dir.path().to_path_buf());
 
@@ -408,23 +412,23 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     build_objectstore(&data_dir, None).unwrap().into()
   };
 
-  let record_apis = derive_unchecked(&config, move |c| {
-    return Arc::new(
-      c.record_apis
-        .iter()
-        .filter_map(|config| {
-          let api = build_record_api(
-            main_conn_clone.clone(),
-            &schema_metadata_clone,
-            config.clone(),
-          )
-          .unwrap();
+  let schema_metadata = Reactive::new(schema_metadata);
+  let record_apis = {
+    // let schema_metadata = schema_metadata.clone();
+    let m = (&config, &schema_metadata).merge();
+    derive_unchecked(&m, move |(c, metadata)| {
+      return Arc::new(
+        c.record_apis
+          .iter()
+          .filter_map(|config| {
+            let api = build_record_api(main_conn_clone.clone(), &metadata, config.clone()).unwrap();
 
-          return Some((api.api_name().to_string(), api));
-        })
-        .collect::<Vec<_>>(),
-    );
-  });
+            return Some((api.api_name().to_string(), api));
+          })
+          .collect::<Vec<_>>(),
+      );
+    })
+  };
 
   return Ok(AppState {
     state: Arc::new(InternalState {
@@ -447,8 +451,12 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       conn: conn.clone(),
       logs_conn,
       jwt: jwt::test_jwt_helper(),
-      schema_metadata: schema_metadata.clone(),
-      subscription_manager: SubscriptionManager::new(conn.clone(), schema_metadata, record_apis),
+      subscription_manager: SubscriptionManager::new(
+        conn.clone(),
+        schema_metadata.clone(),
+        record_apis,
+      ),
+      schema_metadata,
       object_store,
       runtime: build_js_runtime(conn, None),
       cleanup: vec![Box::new(temp_dir)],

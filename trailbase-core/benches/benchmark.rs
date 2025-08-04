@@ -115,7 +115,7 @@ async fn setup_app() -> Result<Setup, anyhow::Error> {
   let conn = app.state.conn();
 
   create_chat_message_app_tables(conn).await?;
-  app.state.refresh_table_cache().await?;
+  app.state.rebuild_schema_cache().await?;
 
   let room = add_room(conn, "room0").await?;
   let password = "Secret!1!!";

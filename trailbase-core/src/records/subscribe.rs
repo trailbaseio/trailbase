@@ -136,7 +136,7 @@ struct ManagerState {
   conn: trailbase_sqlite::Connection,
   /// Table metadata for mapping column indexes to column names needed for building JSON encoded
   /// records.
-  schema_metadata: SchemaMetadataCache,
+  schema_metadata: Reactive<Arc<SchemaMetadataCache>>,
   /// Record API configurations.
   record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
 
@@ -218,7 +218,7 @@ struct ContinuationState {
 impl SubscriptionManager {
   pub fn new(
     conn: trailbase_sqlite::Connection,
-    schema_metadata: SchemaMetadataCache,
+    schema_metadata: Reactive<Arc<SchemaMetadataCache>>,
     record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
   ) -> Self {
     return Self {
@@ -494,7 +494,7 @@ impl SubscriptionManager {
 
           let state = ContinuationState {
             state: s.clone(),
-            schema_metadata: s.schema_metadata.get_table(&qualified_table_name),
+            schema_metadata: s.schema_metadata.value().get_table(&qualified_table_name),
             action,
             table_name: qualified_table_name,
             rowid,
@@ -740,7 +740,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     // Register message table as record api with moderator read access.
     add_record_api_config(
@@ -984,7 +984,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     // Register message table as record api with moderator read access.
     add_record_api_config(

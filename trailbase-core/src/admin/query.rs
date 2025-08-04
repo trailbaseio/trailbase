@@ -42,7 +42,7 @@ pub async fn query_handler(
   let statements =
     parse_into_statements(&request.query).map_err(|err| Error::BadRequest(err.into()))?;
 
-  let mut must_invalidate_table_cache = false;
+  let mut must_invalidate_schema_cache = false;
   let mut mutation = true;
 
   for stmt in statements {
@@ -55,7 +55,7 @@ pub async fn query_handler(
       | Stmt::CreateTable { .. }
       | Stmt::CreateVirtualTable { .. }
       | Stmt::CreateView { .. } => {
-        must_invalidate_table_cache = true;
+        must_invalidate_schema_cache = true;
       }
       Stmt::Select { .. } => {
         mutation = false;
@@ -73,13 +73,8 @@ pub async fn query_handler(
   let batched_rows_result = state.conn().execute_batch(request.query).await;
 
   // In the fallback case we always need to invalidate the cache.
-  if must_invalidate_table_cache {
-    state.schema_metadata().invalidate_all().await?;
-
-    // FIXME: Hack to trigger Record API rebuild. Record APIs only rebuild on config change and not
-    // on schema invalidation. This is relevant, e.g. if a column is renamed of a table exposed
-    // as API.
-    state.touch_config();
+  if must_invalidate_schema_cache {
+    state.rebuild_schema_cache().await?;
   }
 
   let batched_rows = batched_rows_result.map_err(|err| Error::BadRequest(err.into()))?;

@@ -13,29 +13,21 @@ pub use trailbase_schema::metadata::{
 
 use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
 
-struct SchemaMetadataCacheState {
+#[derive(Default)]
+pub struct SchemaMetadataCache {
   tables: HashSet<Arc<TableMetadata>>,
   views: HashSet<Arc<ViewMetadata>>,
 }
 
-#[derive(Clone)]
-pub struct SchemaMetadataCache {
-  conn: trailbase_sqlite::Connection,
-  state: Arc<parking_lot::RwLock<SchemaMetadataCacheState>>,
-}
-
 impl SchemaMetadataCache {
-  pub async fn new(conn: trailbase_sqlite::Connection) -> Result<Self, SchemaLookupError> {
-    let tables = lookup_and_parse_all_table_schemas(&conn).await?;
-    let table_map = Self::build_tables(&conn, &tables).await?;
-    let views = Self::build_views(&conn, &tables).await?;
+  pub async fn new(conn: &trailbase_sqlite::Connection) -> Result<Self, SchemaLookupError> {
+    let tables = lookup_and_parse_all_table_schemas(conn).await?;
+    let table_map = Self::build_tables(conn, &tables).await?;
+    let views = Self::build_views(conn, &tables).await?;
 
     return Ok(SchemaMetadataCache {
-      conn,
-      state: Arc::new(parking_lot::RwLock::new(SchemaMetadataCacheState {
-        tables: table_map,
-        views,
-      })),
+      tables: table_map,
+      views,
     });
   }
 
@@ -119,46 +111,23 @@ impl SchemaMetadataCache {
   }
 
   pub fn get_table(&self, name: &QualifiedName) -> Option<Arc<TableMetadata>> {
-    return self.state.read().tables.get(name).cloned();
+    return self.tables.get(name).cloned();
   }
 
   pub fn get_view(&self, name: &QualifiedName) -> Option<Arc<ViewMetadata>> {
-    self.state.read().views.get(name).cloned()
+    self.views.get(name).cloned()
   }
 
   pub(crate) fn tables(&self) -> Vec<TableMetadata> {
-    return self
-      .state
-      .read()
-      .tables
-      .iter()
-      .map(|t| (**t).clone())
-      .collect();
-  }
-
-  pub async fn invalidate_all(&self) -> Result<(), SchemaLookupError> {
-    debug!("Rebuilding SchemaMetadataCache");
-    let conn = &self.conn;
-
-    let tables = lookup_and_parse_all_table_schemas(conn).await?;
-    let table_map = Self::build_tables(conn, &tables).await?;
-    let views = Self::build_views(conn, &tables).await?;
-
-    *self.state.write() = SchemaMetadataCacheState {
-      tables: table_map,
-      views,
-    };
-
-    Ok(())
+    return self.tables.iter().map(|t| (**t).clone()).collect();
   }
 }
 
 impl std::fmt::Debug for SchemaMetadataCache {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let state = self.state.read();
     f.debug_struct("SchemaMetadataCache")
-      .field("tables", &state.tables.iter().map(|t| &t.schema.name))
-      .field("views", &state.views.iter().map(|v| &v.schema.name))
+      .field("tables", &self.tables.iter().map(|t| &t.schema.name))
+      .field("views", &self.views.iter().map(|v| &v.schema.name))
       .finish()
   }
 }
@@ -324,7 +293,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     let test_table = state
       .schema_metadata()
@@ -393,7 +362,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     add_record_api_config(
       &state,
@@ -610,7 +579,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     add_record_api_config(
       &state,

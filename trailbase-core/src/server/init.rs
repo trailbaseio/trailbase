@@ -84,7 +84,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   let (conn, new_db) =
     crate::connection::init_main_db(Some(&args.data_dir), None, Some(extra_databases))?;
 
-  let schema_metadata = SchemaMetadataCache::new(conn.clone()).await?;
+  let schema_metadata = SchemaMetadataCache::new(&conn).await?;
 
   // Read config or write default one.
   let config = load_or_init_config_textproto(&args.data_dir, &schema_metadata).await?;

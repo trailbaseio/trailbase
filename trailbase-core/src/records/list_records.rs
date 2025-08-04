@@ -212,7 +212,7 @@ pub async fn list_records_handler(
       }
 
       expand_tables(
-        state.schema_metadata(),
+        &state.schema_metadata(),
         &api.qualified_name().database_schema,
         |column_name| {
           api
@@ -536,7 +536,7 @@ mod tests {
       .await
       .unwrap();
 
-    let schema_metadata = SchemaMetadataCache::new(conn.clone()).await.unwrap();
+    let schema_metadata = SchemaMetadataCache::new(conn).await.unwrap();
     let table_metadata = schema_metadata
       .get_table(&QualifiedName::parse("table").unwrap())
       .unwrap();
@@ -621,7 +621,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     add_record_api_config(
       &state,
@@ -1100,7 +1100,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     add_record_api_config(
       &state,

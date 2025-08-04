@@ -66,7 +66,7 @@ pub async fn read_record_handler(
       }
 
       let expanded_tables = expand_tables(
-        state.schema_metadata(),
+        &state.schema_metadata(),
         &api.qualified_name().database_schema,
         |column_name| {
           api
@@ -456,7 +456,7 @@ mod test {
       .await
       .unwrap();
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     add_record_api_config(
       &state,
@@ -756,7 +756,7 @@ mod test {
       .await
       .unwrap();
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     let room0 = add_room(conn, "room0").await.unwrap();
     let room1 = add_room(conn, "room1").await.unwrap();
@@ -824,7 +824,7 @@ mod test {
       .await
       .unwrap();
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     add_record_api_config(
       &state,
@@ -921,7 +921,7 @@ mod test {
       .await
       .unwrap();
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     add_record_api_config(
       &state,
@@ -1004,7 +1004,7 @@ mod test {
       .await
       .unwrap();
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     add_record_api_config(
       &state,

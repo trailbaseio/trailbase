@@ -114,7 +114,7 @@ mod test {
       .await
       .unwrap();
 
-    state.schema_metadata().invalidate_all().await.unwrap();
+    state.rebuild_schema_cache().await.unwrap();
 
     add_record_api_config(
       &state,

@@ -57,7 +57,7 @@ pub async fn create_table_handler(
         .await?;
     }
 
-    state.schema_metadata().invalidate_all().await?;
+    state.rebuild_schema_cache().await?;
   }
 
   return Ok(Json(CreateTableResponse {

@@ -227,7 +227,7 @@ impl Server {
 
               // NOTE: we're always invalidating: simple & safe. We could also avoid invalidation
               // when no new migrations were applied :shrug:.
-              if let Err(err) = state.schema_metadata().invalidate_all().await {
+              if let Err(err) = state.rebuild_schema_cache().await {
                 error!("Failed to invalidate schema cache: {err}");
               }
             }
@@ -236,7 +236,7 @@ impl Server {
           // Reload config:
           match crate::config::load_or_init_config_textproto(
             state.data_dir(),
-            state.schema_metadata(),
+            &state.schema_metadata(),
           )
           .await
           {
