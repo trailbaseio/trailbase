@@ -27,7 +27,7 @@ pub enum EmailError {
 }
 
 pub struct Email {
-  mailer: Arc<Mailer>,
+  mailer: Mailer,
 
   from: Mailbox,
   to: Mailbox,
@@ -53,7 +53,7 @@ impl Email {
     body: String,
   ) -> Result<Self, EmailError> {
     return Ok(Self {
-      mailer: state.mailer().clone(),
+      mailer: state.mailer(),
       from: get_sender(state)?,
       to,
       subject,
@@ -69,11 +69,11 @@ impl Email {
       .header(ContentType::TEXT_HTML)
       .body(Body::new(self.body.clone()))?;
 
-    match &*self.mailer {
-      Mailer::Smtp(mailer) => {
+    match self.mailer {
+      Mailer::Smtp(ref mailer) => {
         mailer.send(email).await?;
       }
-      Mailer::Local(mailer) => {
+      Mailer::Local(ref mailer) => {
         mailer.send(email).await?;
       }
     };

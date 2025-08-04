@@ -7,6 +7,7 @@ use futures_util::Stream;
 use log::*;
 use parking_lot::RwLock;
 use pin_project_lite::pin_project;
+use reactivate::Reactive;
 use rusqlite::hooks::{Action, PreUpdateCase};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -25,7 +26,6 @@ use crate::auth::user::User;
 use crate::records::RecordApi;
 use crate::records::{Permission, RecordError};
 use crate::schema_metadata::{SchemaMetadataCache, TableMetadata};
-use crate::value_notifier::Computed;
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
 
@@ -138,7 +138,7 @@ struct ManagerState {
   /// records.
   schema_metadata: SchemaMetadataCache,
   /// Record API configurations.
-  record_apis: Computed<Vec<(String, RecordApi)>>,
+  record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
 
   /// Map from table name to row id to list of subscriptions.
   record_subscriptions: RwLock<HashMap<QualifiedName, HashMap<i64, Vec<Subscription>>>>,
@@ -149,7 +149,7 @@ struct ManagerState {
 
 impl ManagerState {
   fn lookup_record_api(&self, name: &str) -> Option<RecordApi> {
-    for (record_api_name, record_api) in self.record_apis.load().iter() {
+    for (record_api_name, record_api) in self.record_apis.value().iter() {
       if record_api_name == name {
         return Some(record_api.clone());
       }
@@ -219,7 +219,7 @@ impl SubscriptionManager {
   pub fn new(
     conn: trailbase_sqlite::Connection,
     schema_metadata: SchemaMetadataCache,
-    record_apis: Computed<Vec<(String, RecordApi)>>,
+    record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
   ) -> Self {
     return Self {
       state: Arc::new(ManagerState {

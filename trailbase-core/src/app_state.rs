@@ -1,5 +1,6 @@
 use log::*;
 use object_store::ObjectStore;
+use reactivate::Reactive;
 use std::path::PathBuf;
 use std::sync::Arc;
 use trailbase_schema::QualifiedName;
@@ -15,22 +16,21 @@ use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
 use crate::schema_metadata::SchemaMetadataCache;
-use crate::value_notifier::{Computed, Guard, ValueNotifier};
 
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.
 struct InternalState {
   data_dir: DataDir,
   public_dir: Option<PathBuf>,
-  site_url: Computed<Option<url::Url>>,
+  site_url: Reactive<Arc<Option<url::Url>>>,
   dev: bool,
   demo: bool,
 
-  auth: Computed<AuthOptions>,
-  jobs: Computed<JobRegistry>,
-  mailer: Computed<Mailer>,
-  record_apis: Computed<Vec<(String, RecordApi)>>,
-  config: ValueNotifier<Config>,
+  auth: Reactive<Arc<AuthOptions>>,
+  jobs: Reactive<Arc<JobRegistry>>,
+  mailer: Reactive<Mailer>,
+  record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
+  config: Reactive<Config>,
 
   conn: trailbase_sqlite::Connection,
   logs_conn: trailbase_sqlite::Connection,
@@ -70,42 +70,46 @@ pub struct AppState {
 
 impl AppState {
   pub(crate) fn new(args: AppStateArgs) -> Self {
-    let config = ValueNotifier::new(args.config);
+    let config = Reactive::new(args.config);
 
     let public_url = args.public_url.clone();
-    let site_url = Computed::new(&config, move |site_url| -> Option<url::Url> {
+    let site_url = config.derive(move |config| {
       if let Some(ref public_url) = public_url {
         log::info!("Public url provided: {public_url:?}");
-        return Some(public_url.clone());
+        return Arc::new(Some(public_url.clone()));
       }
 
-      return build_site_url(site_url)
-        .map_err(|err| {
-          error!("Failed to parse `site_url`: {err}");
-          return err;
-        })
-        .ok()
-        .flatten();
+      return Arc::new(
+        build_site_url(config)
+          .map_err(|err| {
+            error!("Failed to parse `site_url`: {err}");
+            return err;
+          })
+          .ok()
+          .flatten(),
+      );
     });
 
     let record_apis = {
       let schema_metadata_clone = args.schema_metadata.clone();
       let conn_clone = args.conn.clone();
 
-      Computed::new(&config, move |c| {
-        return c
-          .record_apis
-          .iter()
-          .filter_map(|config| {
-            match build_record_api(conn_clone.clone(), &schema_metadata_clone, config.clone()) {
-              Ok(api) => Some((api.api_name().to_string(), api)),
-              Err(err) => {
-                error!("{err}");
-                None
+      derive_unchecked(&config, move |config| {
+        return Arc::new(
+          config
+            .record_apis
+            .iter()
+            .filter_map(|config| {
+              match build_record_api(conn_clone.clone(), &schema_metadata_clone, config.clone()) {
+                Ok(api) => Some((api.api_name().to_string(), api)),
+                Err(err) => {
+                  error!("{err}");
+                  None
+                }
               }
-            }
-          })
-          .collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>(),
+        );
       })
     };
 
@@ -126,25 +130,23 @@ impl AppState {
         site_url,
         dev: args.dev,
         demo: args.demo,
-        auth: Computed::new(&config, |c| AuthOptions::from_config(c.auth.clone())),
-        jobs: Computed::new(&config, move |c| {
+        auth: derive_unchecked(&config, |c| {
+          Arc::new(AuthOptions::from_config(c.auth.clone()))
+        }),
+        jobs: derive_unchecked(&config, move |c| {
           debug!("building jobs from config");
 
           let (data_dir, conn, logs_conn, object_store) = &jobs_input;
 
-          return build_job_registry_from_config(
-            c,
-            data_dir,
-            conn,
-            logs_conn,
-            object_store.clone(),
-          )
-          .unwrap_or_else(|err| {
-            error!("Failed to build JobRegistry for cron jobs: {err}");
-            return JobRegistry::new();
-          });
+          return Arc::new(
+            build_job_registry_from_config(c, data_dir, conn, logs_conn, object_store.clone())
+              .unwrap_or_else(|err| {
+                error!("Failed to build JobRegistry for cron jobs: {err}");
+                return JobRegistry::new();
+              }),
+          );
         }),
-        mailer: Computed::new(&config, Mailer::new_from_config),
+        mailer: derive_unchecked(&config, Mailer::new_from_config),
         record_apis: record_apis.clone(),
         config,
         conn: args.conn.clone(),
@@ -211,27 +213,27 @@ impl AppState {
   }
 
   pub(crate) fn touch_config(&self) {
-    self.state.config.touch();
+    self.state.config.notify();
   }
 
   pub(crate) fn objectstore(&self) -> &(dyn ObjectStore + Send + Sync) {
     return &*self.state.object_store;
   }
 
-  pub(crate) fn jobs(&self) -> Guard<Arc<JobRegistry>> {
-    return self.state.jobs.load();
+  pub(crate) fn jobs(&self) -> Arc<JobRegistry> {
+    return self.state.jobs.value();
   }
 
-  pub(crate) fn auth_options(&self) -> Guard<Arc<AuthOptions>> {
-    return self.state.auth.load();
+  pub(crate) fn auth_options(&self) -> Arc<AuthOptions> {
+    return self.state.auth.value();
   }
 
   pub fn site_url(&self) -> Arc<Option<url::Url>> {
-    return self.state.site_url.load_full();
+    return self.state.site_url.value();
   }
 
-  pub(crate) fn mailer(&self) -> Guard<Arc<Mailer>> {
-    return self.state.mailer.load();
+  pub(crate) fn mailer(&self) -> Mailer {
+    return self.state.mailer.value();
   }
 
   pub(crate) fn jwt(&self) -> &JwtHelper {
@@ -239,7 +241,7 @@ impl AppState {
   }
 
   pub fn lookup_record_api(&self, name: &str) -> Option<RecordApi> {
-    for (record_api_name, record_api) in self.state.record_apis.load().iter() {
+    for (record_api_name, record_api) in &*self.state.record_apis.value() {
       if record_api_name == name {
         return Some(record_api.clone());
       }
@@ -248,14 +250,19 @@ impl AppState {
   }
 
   pub fn get_config(&self) -> Config {
-    return (**self.state.config.load()).clone();
+    return self.state.config.value();
   }
 
   pub fn access_config<F, T>(&self, f: F) -> T
   where
-    F: Fn(&Config) -> T,
+    F: FnOnce(&Config) -> T,
   {
-    return f(&self.state.config.load());
+    let mut result: Option<T> = None;
+    let r = &mut result;
+    self.state.config.with_value(move |c| {
+      let _ = r.insert(f(c));
+    });
+    return result.expect("inserted");
   }
 
   pub async fn validate_and_update_config(
@@ -267,25 +274,24 @@ impl AppState {
 
     match hash {
       Some(hash) => {
-        let old_config = self.state.config.load();
-        if hash_config(&old_config) != hash {
-          return Err(crate::config::ConfigError::Update(
-            "Config update failed: mismatching or stale hash".to_string(),
-          ));
-        }
+        let mut error: Option<crate::config::ConfigError> = None;
+        let err = &mut error;
+        self.state.config.update(move |old| {
+          if hash_config(old) != hash {
+            let _ = err.insert(crate::config::ConfigError::Update(
+              "Config update failed: mismatching or stale hash".to_string(),
+            ));
+            return old.clone();
+          }
 
-        let success = self
-          .state
-          .config
-          .compare_and_swap(old_config, Arc::new(config));
+          return config;
+        });
 
-        if !success {
-          return Err(crate::config::ConfigError::Update(
-            "Config compare-exchange failed".to_string(),
-          ));
+        if let Some(err) = error {
+          return Err(err);
         }
       }
-      None => self.state.config.store(config.clone()),
+      None => self.state.config.set(config),
     };
 
     // Write new config to the file system.
@@ -376,7 +382,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     .and_then(|o| o.config.clone())
     .unwrap_or_else(build_default_config);
   validate_config(&schema_metadata, &config).unwrap();
-  let config = ValueNotifier::new(config);
+  let config = Reactive::new(config);
 
   let main_conn_clone = conn.clone();
   let schema_metadata_clone = schema_metadata.clone();
@@ -402,39 +408,40 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     build_objectstore(&data_dir, None).unwrap().into()
   };
 
-  let record_apis = Computed::new(&config, move |c| {
-    return c
-      .record_apis
-      .iter()
-      .filter_map(|config| {
-        let api = build_record_api(
-          main_conn_clone.clone(),
-          &schema_metadata_clone,
-          config.clone(),
-        )
-        .unwrap();
+  let record_apis = derive_unchecked(&config, move |c| {
+    return Arc::new(
+      c.record_apis
+        .iter()
+        .filter_map(|config| {
+          let api = build_record_api(
+            main_conn_clone.clone(),
+            &schema_metadata_clone,
+            config.clone(),
+          )
+          .unwrap();
 
-        return Some((api.api_name().to_string(), api));
-      })
-      .collect::<Vec<_>>();
+          return Some((api.api_name().to_string(), api));
+        })
+        .collect::<Vec<_>>(),
+    );
   });
-
-  fn build_mailer(c: &ValueNotifier<Config>, mailer: Option<Mailer>) -> Computed<Mailer> {
-    return Computed::new(c, move |c| {
-      return mailer.clone().unwrap_or_else(|| Mailer::new_from_config(c));
-    });
-  }
 
   return Ok(AppState {
     state: Arc::new(InternalState {
       data_dir,
       public_dir: None,
-      site_url: Computed::new(&config, |c| build_site_url(c).unwrap()),
+      site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
       dev: true,
       demo: false,
-      auth: Computed::new(&config, |c| AuthOptions::from_config(c.auth.clone())),
-      jobs: Computed::new(&config, |_c| JobRegistry::new()),
-      mailer: build_mailer(&config, options.and_then(|o| o.mailer)),
+      auth: derive_unchecked(&config, |c| {
+        Arc::new(AuthOptions::from_config(c.auth.clone()))
+      }),
+      jobs: derive_unchecked(&config, |_c| Arc::new(JobRegistry::new())),
+      mailer: if let Some(mailer) = options.and_then(|o| o.mailer) {
+        Reactive::new(mailer)
+      } else {
+        derive_unchecked(&config, Mailer::new_from_config)
+      },
       record_apis: record_apis.clone(),
       config,
       conn: conn.clone(),
@@ -449,8 +456,23 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   });
 }
 
-#[cfg(test)]
-static START: std::sync::Once = std::sync::Once::new();
+// Unlike Reactive::derive, doesn't require PartialEq.
+fn derive_unchecked<T, U: Clone + Send + 'static>(
+  reactive: &Reactive<T>,
+  f: impl Fn(&T) -> U + Send + 'static,
+) -> Reactive<U>
+where
+  T: Clone,
+{
+  let derived: Reactive<U> = Reactive::new(f(&reactive.value()));
+
+  reactive.add_observer({
+    let derived = derived.clone();
+    move |value| derived.update_unchecked(|_| f(value))
+  });
+
+  return derived;
+}
 
 fn build_js_runtime(conn: trailbase_sqlite::Connection, threads: Option<usize>) -> RuntimeHandle {
   let runtime = if let Some(threads) = threads {
@@ -459,13 +481,16 @@ fn build_js_runtime(conn: trailbase_sqlite::Connection, threads: Option<usize>) 
     RuntimeHandle::singleton()
   };
 
-  #[cfg(test)]
-  START.call_once(|| {
+  if cfg!(test) {
+    lazy_static::lazy_static! {
+      static ref START: std::sync::Once = std::sync::Once::new();
+    }
+    START.call_once(|| {
+      register_database_functions(&runtime, conn);
+    });
+  } else {
     register_database_functions(&runtime, conn);
-  });
-
-  #[cfg(not(test))]
-  register_database_functions(&runtime, conn);
+  }
 
   return runtime;
 }

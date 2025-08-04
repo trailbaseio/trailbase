@@ -5,6 +5,7 @@ use mini_moka::sync::Cache;
 use crate::auth::AuthError;
 use crate::auth::user::DbUser;
 
+#[derive(Clone, Debug)]
 pub struct PasswordOptions {
   pub min_length: usize,
   pub max_length: usize,

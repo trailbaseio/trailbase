@@ -22,7 +22,6 @@ mod scheduler;
 mod schema_metadata;
 mod server;
 mod transaction;
-mod value_notifier;
 
 #[cfg(test)]
 mod test;

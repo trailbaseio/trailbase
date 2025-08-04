@@ -4822,6 +4822,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "reactivate"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77f65740a3686bede8420a625bcfbc6ebc7d1c19a48f2b2fd0eb38b87f1aead1"
+dependencies = [
+ "paste",
+]
+
+[[package]]
 name = "record_api_rs"
 version = "0.1.0"
 dependencies = [
@@ -6802,6 +6811,7 @@ dependencies = [
  "quoted_printable",
  "rand 0.9.2",
  "rcgen",
+ "reactivate",
  "regex",
  "reqwest",
  "rusqlite",
