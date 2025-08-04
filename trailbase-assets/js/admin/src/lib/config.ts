@@ -63,7 +63,7 @@ async function updateConfig(request: UpdateConfigRequest): Promise<void> {
     headers: {
       "Content-Type": "application/octet-stream",
     },
-    body: UpdateConfigRequest.encode(request).finish(),
+    body: new Uint8Array(UpdateConfigRequest.encode(request).finish()),
   });
 }
 

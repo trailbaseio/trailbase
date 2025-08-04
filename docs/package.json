@@ -17,7 +17,7 @@
     "@astrojs/starlight-tailwind": "^4.0.1",
     "@iconify-json/tabler": "^1.2.20",
     "@tailwindcss/vite": "^4.1.11",
-    "astro": "^5.12.6",
+    "astro": "^5.12.8",
     "astro-icon": "^1.1.5",
     "chart.js": "^4.5.0",
     "chartjs-chart-error-bars": "^4.4.4",
@@ -29,7 +29,7 @@
     "starlight-openapi": "^0.19.1",
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.1.11",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.2"
   },
   "devDependencies": {
     "@astrojs/sitemap": "^3.4.2",
