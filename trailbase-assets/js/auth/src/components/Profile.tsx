@@ -184,7 +184,7 @@ function ProfileTable(props: { client: Client; user: User }) {
           class={buttonVariants({ variant: "outline" })}
           href="/_/auth/change_email"
         >
-          Change E-Mail
+          Change Email
         </a>
 
         <a

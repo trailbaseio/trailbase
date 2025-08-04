@@ -74,84 +74,98 @@ function ServerSettings(props: CommonProps) {
           form.handleSubmit();
         }}
       >
-        <Card>
-          <CardHeader>
-            <h2>Server Settings</h2>
-          </CardHeader>
+        <div class="flex flex-col gap-4">
+          <Card>
+            <CardHeader>
+              <h2>Server Settings</h2>
+            </CardHeader>
 
-          <CardContent class="flex flex-col gap-4">
-            <div>
-              <form.Field
-                name="applicationName"
-                validators={notEmptyValidator()}
-              >
-                {buildTextFormField({
-                  label: () => <div class={labelWidth}>App Name</div>,
-                  info: (
-                    <p>
-                      The name of your application. Used e.g. in emails sent to
-                      users.
-                    </p>
-                  ),
-                })}
-              </form.Field>
-            </div>
-
-            <div>
-              <form.Field name="siteUrl" validators={unsetOrValidUrl()}>
-                {buildOptionalTextFormField({
-                  label: () => <div class={labelWidth}>Site URL</div>,
-                  info: (
-                    <p>
-                      The public address under which the server is reachable.
-                      Used e.g. for auth, e.g. verification links sent via
-                      Email.
-                    </p>
-                  ),
-                })}
-              </form.Field>
-            </div>
-
-            <div>
-              <form.Field name="logsRetentionSec">
-                {buildOptionalNumberFormField({
-                  integer: true,
-                  label: () => (
-                    <div class={labelWidth}>Log Retention (sec)</div>
-                  ),
-                  info: (
-                    <p>
-                      A background job periodically cleans up logs older than
-                      above retention period. Setting the retention to zero
-                      turns off the cleanup and logs will be retained
-                      indefinitely.
-                    </p>
-                  ),
-                })}
-              </form.Field>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div class="flex justify-end pt-4">
-          <form.Subscribe
-            selector={(state) => ({
-              canSubmit: state.canSubmit,
-              isSubmitting: state.isSubmitting,
-            })}
-          >
-            {(state) => {
-              return (
-                <Button
-                  type="submit"
-                  disabled={!state().canSubmit}
-                  variant="default"
+            <CardContent class="flex flex-col gap-4">
+              <div>
+                <form.Field
+                  name="applicationName"
+                  validators={notEmptyValidator()}
                 >
-                  {state().isSubmitting ? "..." : "Submit"}
-                </Button>
-              );
-            }}
-          </form.Subscribe>
+                  {buildTextFormField({
+                    label: () => <div class={labelWidth}>App Name</div>,
+                    info: (
+                      <p>
+                        The name of your application. Used e.g. in emails sent
+                        to users.
+                      </p>
+                    ),
+                  })}
+                </form.Field>
+              </div>
+
+              <div>
+                <form.Field name="siteUrl" validators={unsetOrValidUrl()}>
+                  {buildOptionalTextFormField({
+                    label: () => <div class={labelWidth}>Site URL</div>,
+                    info: (
+                      <p>
+                        The public address under which the server is reachable.
+                        Used e.g. for auth, e.g. verification links sent via
+                        Email.
+                      </p>
+                    ),
+                  })}
+                </form.Field>
+              </div>
+
+              <div>
+                <form.Field name="logsRetentionSec">
+                  {buildOptionalNumberFormField({
+                    integer: true,
+                    label: () => (
+                      <div class={labelWidth}>Log Retention (sec)</div>
+                    ),
+                    info: (
+                      <p>
+                        A background job periodically cleans up logs older than
+                        above retention period. Setting the retention to zero
+                        turns off the cleanup and logs will be retained
+                        indefinitely.
+                      </p>
+                    ),
+                  })}
+                </form.Field>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div class="flex justify-end gap-4">
+            {import.meta.env.DEV && (
+              <Button
+                variant={"destructive"}
+                type="button"
+                onClick={() => {
+                  throw new Date().toLocaleString();
+                }}
+              >
+                DEV: Throw
+              </Button>
+            )}
+
+            <form.Subscribe
+              selector={(state) => ({
+                canSubmit: state.canSubmit,
+                isSubmitting: state.isSubmitting,
+              })}
+            >
+              {(state) => {
+                return (
+                  <Button
+                    type="submit"
+                    disabled={!state().canSubmit}
+                    variant="default"
+                  >
+                    {state().isSubmitting ? "..." : "Submit"}
+                  </Button>
+                );
+              }}
+            </form.Subscribe>
+          </div>
         </div>
       </form>
     );
@@ -181,7 +195,9 @@ function ServerSettings(props: CommonProps) {
             <Match when={versionInfo.error}>
               {versionInfo.error?.toString()}
             </Match>
+
             <Match when={versionInfo.isLoading}>Loading...</Match>
+
             <Match when={versionInfo.data}>
               <TextField class="w-full">
                 <div
@@ -229,19 +245,6 @@ function ServerSettings(props: CommonProps) {
       <Show when={config.isSuccess}>
         <Form config={serverConfig()} />
       </Show>
-
-      {import.meta.env.DEV && (
-        <div class="mt-4 flex justify-end">
-          <Button
-            variant={"default"}
-            onClick={() => {
-              throw new Date().toLocaleString();
-            }}
-          >
-            Throw Error
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
@@ -420,7 +423,7 @@ const sites = [
   },
   {
     route: "email",
-    label: "E-mail",
+    label: "Email",
     child: EmailSettings,
   },
   {

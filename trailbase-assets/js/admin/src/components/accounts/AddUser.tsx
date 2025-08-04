@@ -53,7 +53,7 @@ export function AddUser(props: {
       >
         <div class="flex flex-col items-start gap-4 py-4">
           <form.Field name="email" validators={notEmptyValidator()}>
-            {buildTextFormField({ label: () => <L>E-mail</L>, type: "email" })}
+            {buildTextFormField({ label: () => <L>Email</L>, type: "email" })}
           </form.Field>
 
           <form.Field name="password" validators={notEmptyValidator()}>

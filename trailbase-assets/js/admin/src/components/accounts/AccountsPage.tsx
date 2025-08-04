@@ -205,7 +205,7 @@ function EditSheetContent(props: {
         <div class="flex flex-col items-center gap-4 py-4">
           <form.Field name={"email"}>
             {buildTextFormField({
-              label: textLabel("E-mail"),
+              label: textLabel("Email"),
               type: "email",
             })}
           </form.Field>

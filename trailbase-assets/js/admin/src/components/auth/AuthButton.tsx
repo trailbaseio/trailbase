@@ -53,7 +53,7 @@ function Profile(props: { user: User }) {
       </div>
 
       <div class="flex flex-col gap-2">
-        <div>E-mail: {props.user.email}</div>
+        <div>Email: {props.user.email}</div>
 
         <div>id: {urlSafeBase64ToUuid(props.user.id)}</div>
 

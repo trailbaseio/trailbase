@@ -1,4 +1,3 @@
-import { createSignal } from "solid-js";
 import { client } from "@/lib/fetch";
 
 import { showToast } from "@/components/ui/toast";
@@ -12,8 +11,8 @@ import {
 } from "@/components/ui/text-field";
 
 export function LoginPage() {
-  const [username, setUsername] = createSignal("");
-  const [password, setPassword] = createSignal("");
+  let password: HTMLInputElement | undefined;
+  let user: HTMLInputElement | undefined;
 
   const urlParams = new URLSearchParams(window.location.search);
   const message = urlParams.get("loginMessage");
@@ -27,8 +26,12 @@ export function LoginPage() {
           onSubmit={async (ev: SubmitEvent) => {
             ev.preventDefault();
 
+            const email = user?.value;
+            const pw = password?.value;
+            if (!email || !pw) return;
+
             try {
-              await client.login(username(), password());
+              await client.login(email, pw);
             } catch (err) {
               showToast({
                 title: "Uncaught Error",
@@ -36,24 +39,18 @@ export function LoginPage() {
                 variant: "error",
               });
             }
-            // Don't reload.
-            return false;
           }}
         >
           <h1>Login</h1>
 
           <TextField class="flex items-center gap-2">
-            <TextFieldLabel class="w-[108px]">E-mail</TextFieldLabel>
+            <TextFieldLabel class="w-[108px]">Email</TextFieldLabel>
 
             <TextFieldInput
               type="email"
-              value={username()}
-              placeholder="E-mail"
+              placeholder="Email"
               autocomplete="username"
-              onChange={(e: Event) => {
-                const target = e.currentTarget as HTMLInputElement;
-                setUsername(target.value);
-              }}
+              ref={user}
             />
           </TextField>
 
@@ -62,13 +59,9 @@ export function LoginPage() {
 
             <TextFieldInput
               type="password"
-              value={password()}
               placeholder="password"
               autocomplete="current-password"
-              onChange={(e: Event) => {
-                const target = e.currentTarget as HTMLInputElement;
-                setPassword(target.value);
-              }}
+              ref={password}
             />
           </TextField>
 

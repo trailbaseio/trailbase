@@ -1,4 +1,5 @@
 mod config;
+mod email;
 mod error;
 mod info;
 mod jobs;
@@ -73,4 +74,5 @@ pub fn router() -> Router<AppState> {
     .route("/info", get(info::info_handler))
     .route("/jobs", get(jobs::list_jobs_handler))
     .route("/job/run", post(jobs::run_job_handler))
+    .route("/email/test", post(email::test_email_handler))
 }
