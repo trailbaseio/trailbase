@@ -324,6 +324,7 @@ function JobSettingsImpl(props: {
                             <div class="flex h-full items-center">
                               <IconButton
                                 tooltip="Run now"
+                                type="button"
                                 onClick={() => {
                                   const id = proxy().job?.id;
                                   if (id) {

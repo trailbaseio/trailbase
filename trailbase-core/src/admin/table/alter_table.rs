@@ -215,18 +215,35 @@ fn build_ephemeral_target_schema(
       }
       AlterTableOperation::DropColumn { name } => {
         schema.columns.retain(|c| c.name != name);
-        let res = column_mapping.remove(&name);
-        assert!(res.is_some());
-      }
-      AlterTableOperation::AlterColumn { name, column } => {
-        if let Some(pos) = schema.columns.iter().position(|c| c.name == name) {
-          let res = column_mapping.insert(name, column.name.clone());
-          assert!(res.is_some());
-          schema.columns[pos] = column;
+        if column_mapping.remove(&name).is_none() {
+          return Err(Error::BadRequest(format!("Column '{name}' missing").into()));
         }
       }
+      AlterTableOperation::AlterColumn { name, column } => {
+        let Some(pos) = schema.columns.iter().position(|c| c.name == name) else {
+          return Err(Error::BadRequest(format!("Column '{name}' missing").into()));
+        };
+
+        if name != column.name {
+          // Column rename.
+          if column_mapping.contains_key(&column.name) {
+            return Err(Error::BadRequest(
+              format!("Column '{}' already exists", column.name).into(),
+            ));
+          }
+
+          let res = column_mapping.insert(name.clone(), column.name.clone());
+          assert_eq!(res, Some(name));
+        }
+
+        schema.columns[pos] = column;
+      }
       AlterTableOperation::AddColumn { column } => {
-        assert!(!column_mapping.contains_key(&column.name));
+        if column_mapping.contains_key(&column.name) {
+          return Err(Error::BadRequest(
+            format!("Column '{}' already exists", column.name).into(),
+          ));
+        }
         schema.columns.push(column);
       }
     }
@@ -438,6 +455,48 @@ mod tests {
       assert_eq!(3, ephemeral_table_schema.columns.len());
       assert_eq!(renamed_column, ephemeral_table_schema.columns[1]);
     }
+
+    // Rename column to already existing one.
+    assert!(
+      build_ephemeral_target_schema(
+        &source_schema,
+        vec![AlterTableOperation::AlterColumn {
+          name: "a".to_string(),
+          column: Column {
+            name: "b".to_string(),
+            data_type: ColumnDataType::Text,
+            options: vec![],
+          },
+        }],
+      )
+      .is_err()
+    );
+
+    // Rename column twice.
+    assert!(
+      build_ephemeral_target_schema(
+        &source_schema,
+        vec![
+          AlterTableOperation::AlterColumn {
+            name: "a".to_string(),
+            column: Column {
+              name: "rename1".to_string(),
+              data_type: ColumnDataType::Text,
+              options: vec![],
+            },
+          },
+          AlterTableOperation::AlterColumn {
+            name: "a".to_string(),
+            column: Column {
+              name: "rename2".to_string(),
+              data_type: ColumnDataType::Text,
+              options: vec![],
+            },
+          }
+        ],
+      )
+      .is_err()
+    );
   }
 
   #[tokio::test]
