@@ -1,4 +1,4 @@
-use futures::StreamExt;
+use futures_lite::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use trailbase_client::{

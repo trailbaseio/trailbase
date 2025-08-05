@@ -8,20 +8,19 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use eventsource_stream::Eventsource;
-pub use futures::Stream;
-use futures::StreamExt;
+use futures_lite::StreamExt;
 use parking_lot::RwLock;
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::{Method, StatusCode};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::*;
 
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+pub use futures_lite::Stream;
 
-// TODO: Don't leak internals and make this non_exhaustive.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
@@ -562,7 +561,7 @@ impl RecordApi {
       response
         .bytes_stream()
         .eventsource()
-        .filter_map(|event_or| async {
+        .filter_map(|event_or| {
           if let Ok(event) = event_or {
             if let Ok(db_event) = serde_json::from_str::<DbEvent>(&event.data) {
               return Some(db_event);
