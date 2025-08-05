@@ -5,7 +5,7 @@ packages:
   - 'examples/coffee-vector-search'
   - 'examples/collab-clicker-ssr'
   - 'examples/data-cli-tutorial'
-  - 'examples/local-first'
+  - 'examples/tanstack-db-sync'
   - 'trailbase-assets/js/admin'
   - 'trailbase-assets/js/auth'
   - 'trailbase-assets/js/client'

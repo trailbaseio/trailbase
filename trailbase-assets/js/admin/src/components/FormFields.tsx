@@ -1,13 +1,6 @@
-{
-  /* eslint-disable @typescript-eslint/no-explicit-any */
-}
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createSignal, Match, Switch, Show, type JSX } from "solid-js";
-import {
-  type FieldApi,
-  type FormState,
-  type FormApi,
-  type SolidFormApi,
-} from "@tanstack/solid-form";
+import { type FieldApi, createForm } from "@tanstack/solid-form";
 import { TbEye } from "solid-icons/tb";
 import { urlSafeBase64Decode } from "trailbase";
 
@@ -42,15 +35,19 @@ import type { ColumnDataType } from "@bindings/ColumnDataType";
 
 export { type AnyFieldApi } from "@tanstack/solid-form";
 
+// A typed form field where FieldT = TFormData[Key].
 // prettier-ignore
-export type FieldApiT<T> = FieldApi<any, any, T, any, any, any, any, any, any, any, any, any, any, any, any, any, any, any, any>;
+export type FieldApiT<FieldT> = FieldApi<
+  /*TFormData=*/any, /*Key=*/any, FieldT, any, any, any, any, any, any, any, any, any, any, any, any, any, any, any, any, any, any, any, any>;
 
-// prettier-ignore
-export type FormStateT<T> = FormState<T, any, any, any, any, any, any, any, any>;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function formApiTHelper<TFormData>() {
+  return createForm(() => ({ defaultValues: {} as TFormData }));
+}
 
-// prettier-ignore
-export type FormApiT<T> = FormApi<T, any, any, any, any, any, any, any, any, any> &
-  SolidFormApi<any, any, any, any, any, any, any, any, any, any>;
+export type FormApiT<TFormData> = ReturnType<typeof formApiTHelper<TFormData>>;
+
+export type FormStateT<TFormData> = FormApiT<TFormData>["state"];
 
 type TextFieldOptions = {
   disabled?: boolean;

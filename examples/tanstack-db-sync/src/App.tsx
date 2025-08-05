@@ -157,7 +157,7 @@ function App() {
           className="mb-4 text-center text-[70px] font-bold"
           style={{ color: titleColor }}
         >
-          TrailBase Todo
+          💫 ToDos
         </h1>
 
         <div className="flex justify-end py-4">
