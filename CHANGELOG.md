@@ -1,3 +1,11 @@
+## v0.16.0
+
+* Less magic: parse JSON/Form requests more strictly during record creation/updates. Previously, `{ "int_col": "1" }` would be parsed to `{ "int_col": 1 }`. If you were using type-safe, generated bindings or properly typed your requests, this change will not affect you.
+* Rename auth query parameter `?redirect_to=` to `?redirect_uri=` in compliance with RFC 6749. I you are explicitly passing `?redirect_to=`, please update all references.
+* Add "Send Test Email" feature to the admin UI.
+* Reactively rebuild Record API configuration when database schemas change.
+* Update dependencies.
+
 ## v0.15.13
 
 * Record sequence of operations when altering table schemas to enable non-destructive column changes.
