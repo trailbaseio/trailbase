@@ -53,17 +53,17 @@ pub(crate) async fn login_with_external_auth_provider(
     .url();
 
   let oauth_state = match login_params {
-    LoginParams::Password { redirect_to } => OAuthState {
+    LoginParams::Password { redirect_uri } => OAuthState {
       // Set short-lived CSRF and PkceCodeVerifier cookies for the callback.
       exp: (chrono::Utc::now() + Duration::seconds(5 * 60)).timestamp(),
       csrf_secret: csrf_state.secret().to_string(),
       pkce_code_verifier: server_pkce_code_verifier.secret().to_string(),
-      redirect_to,
+      redirect_uri,
       response_type: None,
       user_pkce_code_challenge: None,
     },
     LoginParams::AuthorizationCodeFlowWithPkce {
-      redirect_to,
+      redirect_uri,
       pkce_code_challenge,
     } => OAuthState {
       // Set short-lived CSRF and PkceCodeVerifier cookies for the callback.
@@ -72,7 +72,7 @@ pub(crate) async fn login_with_external_auth_provider(
       pkce_code_verifier: server_pkce_code_verifier.secret().to_string(),
       user_pkce_code_challenge: Some(pkce_code_challenge),
       response_type: Some(ResponseType::Code),
-      redirect_to: Some(redirect_to),
+      redirect_uri: Some(redirect_uri),
     },
   };
 

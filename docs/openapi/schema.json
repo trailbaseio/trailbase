@@ -82,7 +82,7 @@
         "operationId": "change_password_handler",
         "parameters": [
           {
-            "name": "redirect_to",
+            "name": "redirect_uri",
             "in": "query",
             "required": false,
             "schema": {
@@ -126,7 +126,23 @@
         "operationId": "login_handler",
         "parameters": [
           {
-            "name": "redirect_to",
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "response_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "pkce_code_challenge",
             "in": "query",
             "required": false,
             "schema": {
@@ -166,7 +182,7 @@
         "operationId": "logout_handler",
         "parameters": [
           {
-            "name": "redirect_to",
+            "name": "redirect_uri",
             "in": "query",
             "required": false,
             "schema": {
@@ -266,7 +282,7 @@
         "operationId": "login_with_external_auth_provider",
         "parameters": [
           {
-            "name": "redirect_to",
+            "name": "redirect_uri",
             "in": "query",
             "required": false,
             "schema": {
@@ -511,7 +527,7 @@
         "operationId": "create_record_handler",
         "parameters": [
           {
-            "name": "redirect_to",
+            "name": "redirect_uri",
             "in": "query",
             "description": "Redirect user to this address upon successful record creation.\nThis only exists to support insertions via static HTML form actions.\n\nWe may want to have a different on-error redirect to better support the static HTML use-case.",
             "required": false,
@@ -826,7 +842,7 @@
           "pkce_code_challenge": {
             "type": ["string", "null"]
           },
-          "redirect_to": {
+          "redirect_uri": {
             "type": ["string", "null"]
           },
           "response_type": {

@@ -8,15 +8,15 @@ use crate::auth::util::validate_redirect;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, IntoParams, PartialEq)]
 pub(crate) struct LoginInputParams {
-  pub redirect_to: Option<String>,
+  pub redirect_uri: Option<String>,
   pub response_type: Option<String>,
   pub pkce_code_challenge: Option<String>,
 }
 
 impl LoginInputParams {
   pub(crate) fn merge(mut self, other: LoginInputParams) -> LoginInputParams {
-    if let Some(redirect_to) = other.redirect_to {
-      self.redirect_to.get_or_insert(redirect_to);
+    if let Some(redirect_uri) = other.redirect_uri {
+      self.redirect_uri.get_or_insert(redirect_uri);
     }
     if let Some(response_type) = other.response_type {
       self.response_type.get_or_insert(response_type);
@@ -31,10 +31,10 @@ impl LoginInputParams {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum LoginParams {
   Password {
-    redirect_to: Option<String>,
+    redirect_uri: Option<String>,
   },
   AuthorizationCodeFlowWithPkce {
-    redirect_to: String,
+    redirect_uri: String,
     pkce_code_challenge: String,
   },
 }
@@ -45,11 +45,11 @@ pub(crate) fn build_and_validate_input_params(
 ) -> Result<LoginParams, AuthError> {
   return match params.response_type.as_deref() {
     Some("code") => {
-      let Some(redirect_to) = params.redirect_to else {
-        return Err(AuthError::BadRequest("missing 'redirect_to'"));
+      let Some(redirect_uri) = params.redirect_uri else {
+        return Err(AuthError::BadRequest("missing 'redirect_uri'"));
       };
 
-      validate_redirect(state, Some(&redirect_to))?;
+      validate_redirect(state, Some(&redirect_uri))?;
 
       let Some(pkce_code_challenge) = params.pkce_code_challenge else {
         return Err(AuthError::BadRequest("missing 'pkce_code_challenge'"));
@@ -61,7 +61,7 @@ pub(crate) fn build_and_validate_input_params(
         .map_err(|_| AuthError::BadRequest("invalid 'pkce_code_challenge'"))?;
 
       Ok(LoginParams::AuthorizationCodeFlowWithPkce {
-        redirect_to,
+        redirect_uri,
         pkce_code_challenge,
       })
     }
@@ -73,10 +73,10 @@ pub(crate) fn build_and_validate_input_params(
         ));
       }
 
-      validate_redirect(state, params.redirect_to.as_deref())?;
+      validate_redirect(state, params.redirect_uri.as_deref())?;
 
       Ok(LoginParams::Password {
-        redirect_to: params.redirect_to,
+        redirect_uri: params.redirect_uri,
       })
     }
   };
@@ -93,13 +93,13 @@ mod tests {
 
     assert_eq!(
       LoginParams::AuthorizationCodeFlowWithPkce {
-        redirect_to: "/redirect".to_string(),
+        redirect_uri: "/redirect".to_string(),
         pkce_code_challenge: BASE64_URL_SAFE.encode("challenge"),
       },
       build_and_validate_input_params(
         &state,
         LoginInputParams {
-          redirect_to: Some("/redirect".to_string()),
+          redirect_uri: Some("/redirect".to_string()),
           response_type: Some("code".to_string()),
           pkce_code_challenge: Some(BASE64_URL_SAFE.encode("challenge")),
         },
@@ -109,12 +109,12 @@ mod tests {
 
     assert_eq!(
       LoginParams::Password {
-        redirect_to: Some("/redirect".to_string()),
+        redirect_uri: Some("/redirect".to_string()),
       },
       build_and_validate_input_params(
         &state,
         LoginInputParams {
-          redirect_to: Some("/redirect".to_string()),
+          redirect_uri: Some("/redirect".to_string()),
           response_type: None,
           pkce_code_challenge: None,
         },
@@ -126,7 +126,7 @@ mod tests {
       build_and_validate_input_params(
         &state,
         LoginInputParams {
-          redirect_to: Some("invalid".to_string()),
+          redirect_uri: Some("invalid".to_string()),
           response_type: None,
           pkce_code_challenge: None,
         },

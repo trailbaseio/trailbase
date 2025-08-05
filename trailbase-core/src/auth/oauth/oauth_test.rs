@@ -153,12 +153,12 @@ async fn test_oauth_login_flow_without_pkce() {
   // Call TB's OAuth login handler, which will produce a redirect for users to get the external
   // auth provider's login form.
   let cookies = Cookies::default();
-  let redirect_to = format!("{site_url}/login-success-welcome");
+  let redirect_uri = format!("{site_url}/login-success-welcome");
   let external_redirect: Redirect = login::login_with_external_auth_provider(
     State(state.clone()),
     Path(TestOAuthProvider::NAME.to_string()),
     Query(LoginInputParams {
-      redirect_to: Some(redirect_to.to_string()),
+      redirect_uri: Some(redirect_uri.to_string()),
       response_type: None,
       pkce_code_challenge: None,
     }),
@@ -174,14 +174,14 @@ async fn test_oauth_login_flow_without_pkce() {
     .unwrap();
 
   // Call the fake server's auth endpoint.
-  let redirect_to_external_login = get_redirect_location(external_redirect).unwrap();
+  let redirect_uri_external_login = get_redirect_location(external_redirect).unwrap();
   // NOTE: The dummy implementation just pipes the input query params through. We could do the
-  // following assertions equally on `redirect_to_external_login`
-  let redirect_to_external_login_url = url::Url::parse(&redirect_to_external_login).unwrap();
+  // following assertions equally on `redirect_uri_external_login`
+  let redirect_uri_external_login_url = url::Url::parse(&redirect_uri_external_login).unwrap();
   let query_params: HashMap<Cow<'_, str>, Cow<'_, str>> =
-    redirect_to_external_login_url.query_pairs().collect();
+    redirect_uri_external_login_url.query_pairs().collect();
 
-  let auth_query: AuthQuery = reqwest::get(&redirect_to_external_login)
+  let auth_query: AuthQuery = reqwest::get(&redirect_uri_external_login)
     .await
     .unwrap()
     .json()
@@ -219,7 +219,7 @@ async fn test_oauth_login_flow_without_pkce() {
   .unwrap();
 
   let location = get_redirect_location(internal_redirect).unwrap();
-  assert_eq!(location, redirect_to);
+  assert_eq!(location, redirect_uri);
 
   // Check user exists.
   let db_user = state
@@ -256,13 +256,13 @@ async fn test_oauth_login_flow_with_pkce() {
   // Call TB's OAuth login handler, which will produce a redirect for users to get the external
   // auth provider's login form.
   let cookies = Cookies::default();
-  let redirect_to = format!("{site_url}/login-success-welcome");
+  let redirect_uri = format!("{site_url}/login-success-welcome");
   let (pkce_code_challenge, pkce_code_verifier) = oauth2::PkceCodeChallenge::new_random_sha256();
   let external_redirect: Redirect = login::login_with_external_auth_provider(
     State(state.clone()),
     Path(TestOAuthProvider::NAME.to_string()),
     Query(LoginInputParams {
-      redirect_to: Some(redirect_to.to_string()),
+      redirect_uri: Some(redirect_uri.to_string()),
       response_type: Some("code".to_string()),
       pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
     }),
@@ -278,14 +278,14 @@ async fn test_oauth_login_flow_with_pkce() {
     .unwrap();
 
   // Call the fake server's auth endpoint.
-  let redirect_to_external_login = get_redirect_location(external_redirect).unwrap();
+  let redirect_uri_external_login = get_redirect_location(external_redirect).unwrap();
   // NOTE: The dummy implementation just pipes the input query params through. We could do the
-  // following assertions equally on `redirect_to_external_login`
-  let redirect_to_external_login_url = url::Url::parse(&redirect_to_external_login).unwrap();
+  // following assertions equally on `redirect_uri_external_login`
+  let redirect_uri_external_login_url = url::Url::parse(&redirect_uri_external_login).unwrap();
   let query_params: HashMap<Cow<'_, str>, Cow<'_, str>> =
-    redirect_to_external_login_url.query_pairs().collect();
+    redirect_uri_external_login_url.query_pairs().collect();
 
-  let auth_query: AuthQuery = reqwest::get(&redirect_to_external_login)
+  let auth_query: AuthQuery = reqwest::get(&redirect_uri_external_login)
     .await
     .unwrap()
     .json()
@@ -324,7 +324,7 @@ async fn test_oauth_login_flow_with_pkce() {
 
   let location_str = get_redirect_location(internal_redirect).unwrap();
   let location = url::Url::parse(&location_str).unwrap();
-  assert!(location_str.starts_with(&format!("{redirect_to}?code=")));
+  assert!(location_str.starts_with(&format!("{redirect_uri}?code=")));
 
   let auth_code_re = Regex::new(r"^code=(.*)$").unwrap();
   let captures = auth_code_re.captures(&location.query().unwrap()).unwrap();

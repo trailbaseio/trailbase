@@ -134,7 +134,7 @@ pub async fn change_email_request_handler(
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub(crate) struct ChangeEmailConfigQuery {
-  pub redirect_to: Option<String>,
+  pub redirect_uri: Option<String>,
 }
 
 /// Confirm a change of email address.
@@ -149,10 +149,10 @@ pub(crate) struct ChangeEmailConfigQuery {
 pub async fn change_email_confirm_handler(
   State(state): State<AppState>,
   Path(email_verification_code): Path<String>,
-  Query(ChangeEmailConfigQuery { redirect_to }): Query<ChangeEmailConfigQuery>,
+  Query(ChangeEmailConfigQuery { redirect_uri }): Query<ChangeEmailConfigQuery>,
   user: User,
 ) -> Result<Redirect, AuthError> {
-  validate_redirect(&state, redirect_to.as_deref())?;
+  validate_redirect(&state, redirect_uri.as_deref())?;
 
   if email_verification_code.len() != VERIFICATION_CODE_LENGTH {
     return Err(AuthError::BadRequest("Invalid code"));
@@ -200,7 +200,7 @@ pub async fn change_email_confirm_handler(
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid verification code")),
-    1 => Ok(Redirect::to(redirect_to.as_deref().unwrap_or(PROFILE_UI))),
+    1 => Ok(Redirect::to(redirect_uri.as_deref().unwrap_or(PROFILE_UI))),
     _ => panic!("emails updated for multiple users at once: {rows_affected}"),
   };
 }

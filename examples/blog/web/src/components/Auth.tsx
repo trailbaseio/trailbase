@@ -47,7 +47,7 @@ export function AuthButton() {
   return (
     <Switch>
       <Match when={!user()}>
-        <a href={`${HOST}/_/auth/login?redirect_to=${redirect}`}>Log in</a>
+        <a href={`${HOST}/_/auth/login?redirect_uri=${redirect}`}>Log in</a>
       </Match>
 
       <Match when={user()}>

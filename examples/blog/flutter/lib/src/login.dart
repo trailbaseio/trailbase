@@ -75,7 +75,7 @@ class _LoginFormState extends State<LoginFormWidget> {
                   // Construct the login page url
                   final url = Uri.parse('${widget.client.site()}/_/auth/login')
                       .replace(queryParameters: {
-                    'redirect_to': redirectUri,
+                    'redirect_uri': redirectUri,
                     'response_type': 'code',
                     'pkce_code_challenge': challenge,
                   });

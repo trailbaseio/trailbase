@@ -94,7 +94,7 @@ pub async fn request_email_verification_handler(
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub(crate) struct VerifyEmailQuery {
-  pub redirect_to: Option<String>,
+  pub redirect_uri: Option<String>,
 }
 
 /// Request a new email to verify email address.
@@ -109,9 +109,9 @@ pub(crate) struct VerifyEmailQuery {
 pub async fn verify_email_handler(
   State(state): State<AppState>,
   Path(email_verification_code): Path<String>,
-  Query(VerifyEmailQuery { redirect_to }): Query<VerifyEmailQuery>,
+  Query(VerifyEmailQuery { redirect_uri }): Query<VerifyEmailQuery>,
 ) -> Result<Redirect, AuthError> {
-  validate_redirect(&state, redirect_to.as_deref())?;
+  validate_redirect(&state, redirect_uri.as_deref())?;
 
   lazy_static! {
     static ref UPDATE_CODE_QUERY: String = format!(
@@ -134,7 +134,7 @@ pub async fn verify_email_handler(
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid verification code")),
-    1 => Ok(Redirect::to(redirect_to.as_deref().unwrap_or(PROFILE_UI))),
+    1 => Ok(Redirect::to(redirect_uri.as_deref().unwrap_or(PROFILE_UI))),
     _ => panic!("email verification affected multiple users: {rows_affected}"),
   };
 }

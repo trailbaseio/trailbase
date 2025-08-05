@@ -98,16 +98,16 @@ fn validate_redirect_impl(
 /// Validates up to two redirects, typically from query parameter and/or request body.
 pub(crate) fn validate_redirect(
   state: &AppState,
-  redirect_to: Option<&str>,
+  redirect_uri: Option<&str>,
 ) -> Result<(), AuthError> {
-  if let Some(redirect_to) = redirect_to {
+  if let Some(redirect_uri) = redirect_uri {
     let site: &Option<url::Url> = &state.site_url();
     let custom_uri_schemes = state.access_config(|c| c.auth.custom_uri_schemes.clone());
 
     validate_redirect_impl(
       site.as_ref(),
       &custom_uri_schemes,
-      redirect_to,
+      redirect_uri,
       state.dev_mode(),
     )?;
   }

@@ -42,7 +42,7 @@ pub(crate) struct OAuthState {
   pub response_type: Option<ResponseType>,
 
   /// Redirect target.
-  pub redirect_to: Option<String>,
+  pub redirect_uri: Option<String>,
 }
 
 #[cfg(test)]
@@ -60,7 +60,7 @@ mod tests {
       pkce_code_verifier: "server verifier".to_string(),
       user_pkce_code_challenge: Some("client challenge".to_string()),
       response_type: Some(ResponseType::Code),
-      redirect_to: Some("custom-sheme://test".to_string()),
+      redirect_uri: Some("custom-sheme://test".to_string()),
     };
 
     let encoded = state.jwt().encode(&oauth_state).unwrap();

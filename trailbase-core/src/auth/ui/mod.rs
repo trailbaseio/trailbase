@@ -8,7 +8,7 @@ use serde::Deserialize;
 use trailbase_assets::AssetService;
 use trailbase_assets::auth::{
   ChangeEmailTemplate, ChangePasswordTemplate, LoginTemplate, OAuthProvider, RegisterTemplate,
-  ResetPasswordRequestTemplate, ResetPasswordUpdateTemplate, hidden_input, redirect_to,
+  ResetPasswordRequestTemplate, ResetPasswordUpdateTemplate, hidden_input, redirect_uri,
 };
 
 use crate::AppState;
@@ -20,7 +20,7 @@ pub(crate) const PROFILE_UI: &str = "/_/auth/profile";
 
 #[derive(Debug, Default, Deserialize)]
 pub struct LoginQuery {
-  redirect_to: Option<String>,
+  redirect_uri: Option<String>,
   response_type: Option<String>,
   pkce_code_challenge: Option<String>,
   alert: Option<String>,
@@ -31,7 +31,7 @@ async fn ui_login_handler(
   Query(query): Query<LoginQuery>,
   user: Option<User>,
 ) -> Response {
-  if query.redirect_to.is_none() && user.is_some() {
+  if query.redirect_uri.is_none() && user.is_some() {
     // Already logged in. Only redirect to profile-page if no explicit other redirect is provided.
     // For example, if we're already logged in the browser but want to sign-in with the browser
     // from an app, we still have to go through the motions of signing in.
@@ -58,20 +58,20 @@ async fn ui_login_handler(
 
   let form_state = indoc::formatdoc!(
     r#"
-    {redirect_to}
+    {redirect_uri}
     {response_type}
     {pkce_code_challenge}
     "#,
-    redirect_to = hidden_input("redirect_to", query.redirect_to.as_ref()),
+    redirect_uri = hidden_input("redirect_uri", query.redirect_uri.as_ref()),
     response_type = hidden_input("response_type", query.response_type.as_ref()),
     pkce_code_challenge = hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref()),
   );
 
   let oauth_query_params: Vec<(&str, &str)> = [
     query
-      .redirect_to
+      .redirect_uri
       .as_ref()
-      .map(|r| ("redirect_to", r.as_str())),
+      .map(|r| ("redirect_uri", r.as_str())),
     query
       .response_type
       .as_ref()
@@ -106,13 +106,13 @@ async fn ui_login_handler(
 
 #[derive(Debug, Default, Deserialize)]
 pub struct RegisterQuery {
-  redirect_to: Option<String>,
+  redirect_uri: Option<String>,
   alert: Option<String>,
 }
 
 async fn ui_register_handler(Query(query): Query<RegisterQuery>) -> Response {
   let html = RegisterTemplate {
-    state: redirect_to(query.redirect_to.as_ref()),
+    state: redirect_uri(query.redirect_uri.as_ref()),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
@@ -129,7 +129,7 @@ async fn ui_register_handler(Query(query): Query<RegisterQuery>) -> Response {
 
 #[derive(Debug, Default, Deserialize)]
 pub struct ResetPasswordRequestQuery {
-  redirect_to: Option<String>,
+  redirect_uri: Option<String>,
   alert: Option<String>,
 }
 
@@ -137,7 +137,7 @@ async fn ui_reset_password_request_handler(
   Query(query): Query<ResetPasswordRequestQuery>,
 ) -> Response {
   let html = ResetPasswordRequestTemplate {
-    state: redirect_to(query.redirect_to.as_ref()),
+    state: redirect_uri(query.redirect_uri.as_ref()),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
@@ -154,7 +154,7 @@ async fn ui_reset_password_request_handler(
 
 #[derive(Debug, Default, Deserialize)]
 pub struct ResetPasswordUpdateQuery {
-  redirect_to: Option<String>,
+  redirect_uri: Option<String>,
   alert: Option<String>,
 }
 
@@ -162,7 +162,7 @@ async fn ui_reset_password_update_handler(
   Query(query): Query<ResetPasswordUpdateQuery>,
 ) -> Response {
   let html = ResetPasswordUpdateTemplate {
-    state: redirect_to(query.redirect_to.as_ref()),
+    state: redirect_uri(query.redirect_uri.as_ref()),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
@@ -179,13 +179,13 @@ async fn ui_reset_password_update_handler(
 
 #[derive(Debug, Default, Deserialize)]
 pub struct ChangePasswordQuery {
-  redirect_to: Option<String>,
+  redirect_uri: Option<String>,
   alert: Option<String>,
 }
 
 async fn ui_change_password_handler(Query(query): Query<ChangePasswordQuery>) -> Response {
   let html = ChangePasswordTemplate {
-    state: redirect_to(query.redirect_to.as_ref()),
+    state: redirect_uri(query.redirect_uri.as_ref()),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
@@ -202,17 +202,17 @@ async fn ui_change_password_handler(Query(query): Query<ChangePasswordQuery>) ->
 
 #[derive(Debug, Default, Deserialize)]
 pub struct ChangeEmailQuery {
-  redirect_to: Option<String>,
+  redirect_uri: Option<String>,
   alert: Option<String>,
 }
 
 async fn ui_change_email_handler(Query(query): Query<ChangeEmailQuery>, user: User) -> Response {
   let form_state = indoc::formatdoc!(
     r#"
-    {redirect_to}
+    {redirect_uri}
     {csrf_token}
   "#,
-    redirect_to = hidden_input("redirect_to", query.redirect_to.as_ref()),
+    redirect_uri = hidden_input("redirect_uri", query.redirect_uri.as_ref()),
     csrf_token = hidden_input("csrf_token", Some(&user.csrf_token)),
   );
 
@@ -234,12 +234,12 @@ async fn ui_change_email_handler(Query(query): Query<ChangeEmailQuery>, user: Us
 
 #[derive(Debug, Default, Deserialize)]
 pub struct LogoutQuery {
-  redirect_to: Option<String>,
+  redirect_uri: Option<String>,
 }
 
 async fn ui_logout_handler(Query(query): Query<LogoutQuery>) -> Redirect {
-  if let Some(redirect_to) = query.redirect_to {
-    return Redirect::to(&format!("/api/auth/v1/logout?redirect_to={redirect_to}"));
+  if let Some(redirect_uri) = query.redirect_uri {
+    return Redirect::to(&format!("/api/auth/v1/logout?redirect_uri={redirect_uri}"));
   }
   return Redirect::to("/api/auth/v1/logout");
 }
@@ -337,7 +337,7 @@ mod tests {
       let body = render_html(
         &state,
         LoginQuery {
-          redirect_to: None,
+          redirect_uri: None,
           response_type: None,
           pkce_code_challenge: None,
           alert: None,
@@ -360,14 +360,14 @@ mod tests {
 
     {
       // Parameters: all login parameters
-      let redirect_to = format!("{site_url}/login-success-welcome");
+      let redirect_uri = format!("{site_url}/login-success-welcome");
       let response_type = "code";
       let pkce_code_challenge = "challenge";
 
       let body = render_html(
         &state,
         LoginQuery {
-          redirect_to: Some(redirect_to.clone()),
+          redirect_uri: Some(redirect_uri.clone()),
           response_type: Some(response_type.to_string()),
           pkce_code_challenge: Some(pkce_code_challenge.to_string()),
           alert: None,
@@ -381,7 +381,7 @@ mod tests {
       let form_action = captures.get(1).unwrap();
       assert_eq!(format!("/{AUTH_API_PATH}/login"), form_action.as_str());
 
-      assert!(body.contains(&hidden_input("redirect_to", Some(&redirect_to))));
+      assert!(body.contains(&hidden_input("redirect_uri", Some(&redirect_uri))));
       assert!(body.contains(&hidden_input("response_type", Some(response_type))));
       assert!(body.contains(&hidden_input(
         "pkce_code_challenge",
@@ -403,8 +403,8 @@ mod tests {
       let query_params: HashMap<Cow<'_, str>, Cow<'_, str>> = url.query_pairs().collect();
 
       assert_eq!(
-        query_params.get("redirect_to").map(|s| &**s),
-        Some(redirect_to.as_str()),
+        query_params.get("redirect_uri").map(|s| &**s),
+        Some(redirect_uri.as_str()),
         "href: {oauth_provider}"
       );
       assert_eq!(

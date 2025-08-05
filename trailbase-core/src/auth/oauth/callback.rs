@@ -59,7 +59,7 @@ pub(crate) async fn callback_from_external_auth_provider(
     pkce_code_verifier,
     user_pkce_code_challenge,
     response_type,
-    redirect_to,
+    redirect_uri,
     ..
   } = state
     .jwt()
@@ -80,7 +80,7 @@ pub(crate) async fn callback_from_external_auth_provider(
   }
 
   // NOTE: This was already validated in the login-handler, we're just pedantic.
-  validate_redirect(&state, redirect_to.as_deref())?;
+  validate_redirect(&state, redirect_uri.as_deref())?;
 
   return match response_type {
     Some(ResponseType::Code) => {
@@ -88,7 +88,7 @@ pub(crate) async fn callback_from_external_auth_provider(
         &state,
         &cookies,
         provider,
-        redirect_to,
+        redirect_uri,
         query.code,
         pkce_code_verifier,
         user_pkce_code_challenge,
@@ -100,7 +100,7 @@ pub(crate) async fn callback_from_external_auth_provider(
         &state,
         &cookies,
         provider,
-        redirect_to,
+        redirect_uri,
         query.code,
         pkce_code_verifier,
       )

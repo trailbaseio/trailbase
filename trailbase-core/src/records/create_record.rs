@@ -19,7 +19,7 @@ pub struct CreateRecordQuery {
   /// This only exists to support insertions via static HTML form actions.
   ///
   /// We may want to have a different on-error redirect to better support the static HTML use-case.
-  pub redirect_to: Option<String>,
+  pub redirect_uri: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
@@ -187,8 +187,8 @@ pub async fn create_record_handler(
     }
   };
 
-  if let Some(redirect_to) = create_record_query.redirect_to {
-    return Ok(Redirect::to(&redirect_to).into_response());
+  if let Some(redirect_uri) = create_record_query.redirect_uri {
+    return Ok(Redirect::to(&redirect_uri).into_response());
   }
 
   return Ok(Json(CreateRecordResponse { ids: record_ids }).into_response());

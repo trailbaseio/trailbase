@@ -14,7 +14,7 @@ const redirect = import.meta.env.DEV ? "http://localhost:4321/" : "/";
 
     <form
       method="post"
-      action={`${RECORD_API}/articles?redirect_to=${redirect}`}
+      action={`${RECORD_API}/articles?redirect_uri=${redirect}`}
       enctype="multipart/form-data"
       target="_self"
     >

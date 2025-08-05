@@ -33,7 +33,7 @@ pub struct LoginRequest {
   pub email: String,
   pub password: String,
 
-  pub redirect_to: Option<String>,
+  pub redirect_uri: Option<String>,
   pub response_type: Option<String>,
   pub pkce_code_challenge: Option<String>,
 }
@@ -67,7 +67,7 @@ pub(crate) async fn login_handler(
     LoginRequest {
       email,
       password,
-      redirect_to,
+      redirect_uri,
       response_type,
       pkce_code_challenge,
     },
@@ -81,16 +81,16 @@ pub(crate) async fn login_handler(
   return match build_and_validate_input_params(
     &state,
     query_login_input.merge(LoginInputParams {
-      redirect_to,
+      redirect_uri,
       response_type,
       pkce_code_challenge,
     }),
   )? {
-    LoginParams::Password { redirect_to } => {
-      immediate_login(&state, &cookies, email, password, redirect_to, is_json).await
+    LoginParams::Password { redirect_uri } => {
+      immediate_login(&state, &cookies, email, password, redirect_uri, is_json).await
     }
     LoginParams::AuthorizationCodeFlowWithPkce {
-      redirect_to,
+      redirect_uri,
       pkce_code_challenge,
     } => {
       login_with_authorization_code_flow_and_pkce(
@@ -98,7 +98,7 @@ pub(crate) async fn login_handler(
         &cookies,
         email,
         password,
-        redirect_to,
+        redirect_uri,
         pkce_code_challenge,
       )
       .await
@@ -250,7 +250,7 @@ fn auth_error_to_response(err: AuthError, cookies: &Cookies, redirect: Option<St
   // error case?
   let msg = urlencode(&format!("Login Failed: {status}"));
   return if let Some(redirect) = redirect {
-    Redirect::to(&format!("{LOGIN_UI}?alert={msg}&redirect_to={redirect}")).into_response()
+    Redirect::to(&format!("{LOGIN_UI}?alert={msg}&redirect_uri={redirect}")).into_response()
   } else {
     Redirect::to(&format!("{LOGIN_UI}?alert={msg}")).into_response()
   };

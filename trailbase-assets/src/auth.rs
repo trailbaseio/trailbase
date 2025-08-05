@@ -80,11 +80,11 @@ where
   return "".to_string();
 }
 
-pub fn redirect_to<T>(redirect_to: Option<T>) -> String
+pub fn redirect_uri<T>(redirect_uri: Option<T>) -> String
 where
   T: AsRef<str>,
 {
-  return hidden_input("redirect_to", redirect_to);
+  return hidden_input("redirect_uri", redirect_uri);
 }
 
 #[cfg(test)]
@@ -95,20 +95,20 @@ mod tests {
   fn test_login_template_escaping() {
     let state = hidden_input("TEST", Some("FOO"));
     let alert = "<><>";
-    let redirect_to = "http://localhost:42";
+    let redirect_uri = "http://localhost:42";
 
     let template = LoginTemplate {
       state: state.clone(),
       alert,
       enable_registration: true,
       oauth_providers: &[],
-      oauth_query_params: &[("redirect_to", redirect_to)],
+      oauth_query_params: &[("redirect_uri", redirect_uri)],
     }
     .render()
     .unwrap();
 
     assert!(template.contains(&state), "{template}"); // Not escaped.
-    assert!(!template.contains(&redirect_to), "{template}"); // Not escaped.
+    assert!(!template.contains(&redirect_uri), "{template}"); // Not escaped.
     // Missing because no oauth provider given.
     assert!(!template.contains("foo=bar"), "{template}"); // Not escaped.
     assert!(!template.contains(alert), "{template}"); // Is escaped.
@@ -122,13 +122,13 @@ mod tests {
         display_name: "Fancy Name".to_string(),
         img_name: "oidc".to_string(),
       }],
-      oauth_query_params: &[("redirect_to", redirect_to), ("foo", "bar")],
+      oauth_query_params: &[("redirect_uri", redirect_uri), ("foo", "bar")],
     }
     .render()
     .unwrap();
 
     assert!(oauth_template.contains(&state), "{template}"); // Not escaped.
-    assert!(oauth_template.contains(&redirect_to), "{template}"); // Not escaped.
+    assert!(oauth_template.contains(&redirect_uri), "{template}"); // Not escaped.
     assert!(oauth_template.contains("foo=bar"), "{template}"); // Not escaped.
   }
 

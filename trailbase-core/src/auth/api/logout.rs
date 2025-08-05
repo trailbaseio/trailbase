@@ -18,7 +18,7 @@ use crate::auth::util::{
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub struct LogoutQuery {
-  redirect_to: Option<String>,
+  redirect_uri: Option<String>,
 }
 
 /// Logs out the current user and delete **all** pending sessions for that user.
@@ -36,11 +36,11 @@ pub struct LogoutQuery {
 )]
 pub async fn logout_handler(
   State(state): State<AppState>,
-  Query(LogoutQuery { redirect_to }): Query<LogoutQuery>,
+  Query(LogoutQuery { redirect_uri }): Query<LogoutQuery>,
   user: Option<User>,
   cookies: Cookies,
 ) -> Result<Redirect, AuthError> {
-  validate_redirect(&state, redirect_to.as_deref())?;
+  validate_redirect(&state, redirect_uri.as_deref())?;
 
   remove_all_cookies(&cookies);
 
@@ -48,7 +48,7 @@ pub async fn logout_handler(
     delete_all_sessions_for_user(state.user_conn(), user.uuid).await?;
   }
 
-  return Ok(Redirect::to(redirect_to.as_deref().unwrap_or_else(|| {
+  return Ok(Redirect::to(redirect_uri.as_deref().unwrap_or_else(|| {
     if state.public_dir().is_some() {
       "/"
     } else {

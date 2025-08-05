@@ -89,29 +89,3 @@ const BASE_URL = import.meta.env.BASE_URL;
     {"{% endif %}"}
   </div>
 </Form>
-
-{
-  // For DEV we need to fix up redirects to point back to dev server's auth APIs.
-  import.meta.env.DEV && (
-    <script is:inline>
-      const urlParams = new URLSearchParams(window.location.search);
-      // In source order
-      const form = document.forms[0];
-      const baseAction = form.dataset.base_action;
-      const baseUrl = form.dataset.base_url;
-
-      // NOTE: Only setting redirect_to should be fine since other params such
-      // as response_type are sent via the hidden form state. This is different from
-      // OAuth APIs, which expect oauth_query_params.
-      const redirect = urlParams.get("redirect_to");
-      if (redirect) {
-        form.action = `${baseAction}?redirect_to=${redirect}`;
-      } else {
-        const devRedirect = `http://${window.location.host}${baseUrl}/profile`;
-        form.action = `${baseAction}?redirect_to=${devRedirect}`;
-      }
-
-      console.debug(`Updated form action to ${form.action}, based on redirect: ${redirect}`);
-    </script>
-  )
-}

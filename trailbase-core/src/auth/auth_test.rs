@@ -178,7 +178,7 @@ async fn test_auth_password_login_flow_with_pkce() {
   };
 
   // Test login using the PKCE flow (?response_type="code").
-  let redirect_to = "test-scheme://foo".to_string();
+  let redirect_uri = "test-scheme://foo".to_string();
   let (pkce_code_challenge, pkce_code_verifier) = oauth2::PkceCodeChallenge::new_random_sha256();
 
   // Missing code challenge.
@@ -187,7 +187,7 @@ async fn test_auth_password_login_flow_with_pkce() {
       email: email.clone(),
       password: password.clone(),
       response_type: Some("code".to_string()),
-      redirect_to: Some(redirect_to.clone()),
+      redirect_uri: Some(redirect_uri.clone()),
       pkce_code_challenge: None,
       ..Default::default()
     }))
@@ -201,7 +201,7 @@ async fn test_auth_password_login_flow_with_pkce() {
       email: email.clone(),
       password: password.clone(),
       response_type: Some("code".to_string()),
-      redirect_to: None,
+      redirect_uri: None,
       pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
       ..Default::default()
     }))
@@ -215,7 +215,7 @@ async fn test_auth_password_login_flow_with_pkce() {
       email: email.clone(),
       password: "WRONG PASSWORD".to_string(),
       response_type: Some("code".to_string()),
-      redirect_to: Some(redirect_to.clone()),
+      redirect_uri: Some(redirect_uri.clone()),
       pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
       ..Default::default()
     }))
@@ -228,7 +228,7 @@ async fn test_auth_password_login_flow_with_pkce() {
     email: email.clone(),
     password: password.clone(),
     response_type: Some("code".to_string()),
-    redirect_to: Some(redirect_to.clone()),
+    redirect_uri: Some(redirect_uri.clone()),
     pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
     ..Default::default()
   }))
@@ -586,7 +586,7 @@ async fn test_auth_change_email_flow() {
   let _ = change_email::change_email_confirm_handler(
     State(state.clone()),
     Path(email_verification_code.clone()),
-    Query(ChangeEmailConfigQuery { redirect_to: None }),
+    Query(ChangeEmailConfigQuery { redirect_uri: None }),
     user.clone(),
   )
   .await

@@ -51,6 +51,7 @@ pub enum SubCommands {
   /// Export JSON Schema definitions.
   Schema(JsonSchemaArgs),
   /// Export OpenAPI definitions.
+  #[command(name = "openapi")]
   OpenApi {
     #[command(subcommand)]
     cmd: Option<OpenApiSubCommands>,

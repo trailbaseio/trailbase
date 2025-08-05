@@ -80,7 +80,7 @@ off-site sign-in with an external provider, users are redirected back,
 1. first to your TrailBase instance at
    `<YOUR_SITE>/api/auth/v1/oauth/<PROVIDER_NAME>/callback?code=<AUTH_CODE>`
 2. and subsequently to a URI registered and provided by your app via
-   `?redirect_to=my-app://callback`.
+   `?redirect_uri=my-app://callback`.
 
 This allows TrailBase to observe the external provider's auth code and issue
 one to your app as well.
@@ -107,7 +107,7 @@ pass:
 
 - `response_type=code`,
 - `pkce_code_challenge=<urlSafeBase64(sha256(pkce_code_verifier)))>`,
-- `redirect_to=<TARGET>`, e.g. `custom-app-scheme://callback`,
+- `redirect_uri=<TARGET>`, e.g. `custom-app-scheme://callback`,
 
 as inputs to `/api/auth/v1/login` or `/api/auth/v1/oauth/<PROVIDER_NAME>/login`.
 Note that native apps will need to register the custom scheme first to receive

@@ -26,6 +26,9 @@ check:
 docker:
 	docker buildx build --platform linux/arm64,linux/amd64 --output=type=registry -t trailbase/trailbase:latest .
 
+openapi:
+	cargo run -- openapi print > docs/openapi/schema.json
+
 cloc:
 	cloc --not-match-d=".*(/target|/dist|/node_modules|/vendor|.astro|.build|.venv|/traildepot|/flutter|/assets|lock|_benchmark|/bin|/obj).*" .
 
@@ -42,4 +45,4 @@ publish_crates:
 		-p trailbase-js \
 		-p trailbase
 
-.PHONY: default format check static docker cloc publish_crates
+.PHONY: default format check static docker openapi cloc publish_crates

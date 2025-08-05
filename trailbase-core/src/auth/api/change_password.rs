@@ -18,7 +18,7 @@ use crate::{app_state::AppState, auth::util::user_by_id};
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub(crate) struct ChangePasswordQuery {
-  pub redirect_to: Option<String>,
+  pub redirect_uri: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
@@ -42,11 +42,11 @@ pub struct ChangePasswordRequest {
 )]
 pub async fn change_password_handler(
   State(state): State<AppState>,
-  Query(ChangePasswordQuery { redirect_to }): Query<ChangePasswordQuery>,
+  Query(ChangePasswordQuery { redirect_uri }): Query<ChangePasswordQuery>,
   user: User,
   either_request: Either<ChangePasswordRequest>,
 ) -> Result<Redirect, AuthError> {
-  validate_redirect(&state, redirect_to.as_deref())?;
+  validate_redirect(&state, redirect_uri.as_deref())?;
 
   let request = match either_request {
     Either::Json(req) => req,
@@ -98,7 +98,7 @@ pub async fn change_password_handler(
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid old password")),
-    1 => Ok(Redirect::to(redirect_to.as_deref().unwrap_or(PROFILE_UI))),
+    1 => Ok(Redirect::to(redirect_uri.as_deref().unwrap_or(PROFILE_UI))),
     _ => panic!("password changed for multiple users at once: {rows_affected}"),
   };
 }
