@@ -5,15 +5,18 @@ title: Roadmap
 Over time, we would like to make TrailBase the best application base it can be.
 Tell us what's missing, what could be better, and what smells.
 Independently, we're very open to contributions, just talk to us first so we
-can figure out how any feature will fit into the overall picture and minimize
+can figure out how any feature will fit into the overall picture to minimize
 friction.
-For context, some larger features we have on our Roadmap:
+For context, some of the larger items on our Roadmap are:
 
+- Many SQLite databases to enable sharding or even siloed multi-tenancy.
+  (catch: joins but no foreign-key support across databases).
+- Potentially replace V8 with WASM runtime for reduced security surface,
+  improved state isolation and multi-language support.
 - Auth: more customizable settings, more customizable UI, and multi-factor.
   Also, service-accounts to auth other backends as opposed to end-users.
-- Many SQLite databases: imagine a separate database by tenant or user. Note
-  that while joins are available across databases, foreign keys are not.
-- Point-in-time-recovery via checkpointing or SQLite sessions.
+- Point-in-time-recovery via generational backups, CoW checkpoints or SQLite
+  sessions.
 - A message queue system to deal with slow tasks or bursty workloads.
-- We might want to address fan-out and the integration of external resources
+- We might want to address fan-out and the integration of side-car services
   through GraphQL or similar.
