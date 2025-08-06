@@ -1,5 +1,7 @@
 #![allow(clippy::needless_return)]
 
+pub mod version;
+
 use log::*;
 use std::fs::{self};
 use std::io::{Result, Write};

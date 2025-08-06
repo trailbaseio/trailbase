@@ -6893,6 +6893,7 @@ dependencies = [
  "log",
  "prost-build",
  "prost-reflect-build",
+ "regex",
 ]
 
 [[package]]
@@ -6909,6 +6910,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "trailbase",
+ "trailbase-build",
  "url",
  "utoipa",
  "utoipa-swagger-ui",

@@ -70,24 +70,26 @@ pub struct VersionInfo {
 
 impl std::fmt::Display for VersionInfo {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let hash = self.commit_hash.clone().unwrap_or_default();
-    let hash_trimmed = hash.trim();
-
-    let date = self.commit_date.clone().unwrap_or_default();
-    let date_trimmed = date.trim();
-
-    if (hash_trimmed.len() + date_trimmed.len()) > 0 {
-      write!(
-        f,
-        "{} {}.{}.{} ({hash_trimmed} {date_trimmed})",
-        self.crate_name, self.major, self.minor, self.patch,
-      )?;
-    } else {
-      write!(
-        f,
-        "{} {}.{}.{}",
-        self.crate_name, self.major, self.minor, self.patch
-      )?;
+    match (self.commit_hash.as_deref(), self.commit_date.as_deref()) {
+      (Some(hash), Some(date)) => {
+        write!(
+          f,
+          "{} {}.{}.{} ({} {})",
+          self.crate_name,
+          self.major,
+          self.minor,
+          self.patch,
+          hash.trim(),
+          date.trim()
+        )?;
+      }
+      _ => {
+        write!(
+          f,
+          "{} {}.{}.{}",
+          self.crate_name, self.major, self.minor, self.patch
+        )?;
+      }
     }
 
     return Ok(());
@@ -206,9 +208,8 @@ mod test {
   fn test_struct_local() {
     let vi = get_version_info!();
     assert_eq!(vi.major, 0);
-    assert_eq!(vi.minor, 2);
-    assert_eq!(vi.patch, 0);
-    assert_eq!(vi.crate_name, "trailbase-assets");
+    assert!(vi.minor >= 1);
+    assert_eq!(vi.crate_name, "trailbase-build");
     // hard to make positive tests for these since they will always change
     assert!(vi.commit_hash.is_none());
     assert!(vi.commit_date.is_none());
@@ -219,16 +220,17 @@ mod test {
   #[test]
   fn test_display_local() {
     let vi = get_version_info!();
-    assert_eq!(vi.to_string(), "trailbase-assets 0.2.0");
+    let re = regex::Regex::new("trailbase-build 0.[0-9]+.[0-9]+").unwrap();
+    assert!(re.is_match(&vi.to_string()));
   }
 
   #[test]
   fn test_debug_local() {
     let vi = get_version_info!();
-    let s = format!("{vi:?}");
-    assert_eq!(
-      s,
-      "VersionInfo { crate_name: \"trailbase-assets\", major: 0, minor: 2, patch: 0 }"
-    );
+    let re = regex::Regex::new(
+      r#"VersionInfo \{ crate_name: "trailbase-build", major: 0, minor: [0-9]+, patch: [0-9]+ \}"#,
+    )
+    .unwrap();
+    assert!(re.is_match(&format!("{vi:?}")));
   }
 }

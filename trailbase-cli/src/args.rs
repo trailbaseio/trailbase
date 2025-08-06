@@ -28,7 +28,7 @@ impl From<JsonSchemaModeArg> for JsonSchemaMode {
 /// NOTE: a good rule of thumb for thinking of proto config vs CLI options: if it requires a
 /// server restart, it should probably be a CLI option and a config option otherwise.
 #[derive(Parser, Debug, Clone, Default)]
-#[command(version, about, long_about = None)]
+#[command(version, about, long_about = None, disable_version_flag = true)]
 pub struct DefaultCommandLineArgs {
   /// Directory for runtime files including the database. Will be created by TrailBase if dir
   /// doesn't exist.
@@ -39,6 +39,10 @@ pub struct DefaultCommandLineArgs {
   /// OAuth2 redirects, i.e. after users authenticating externally.
   #[arg(long, env)]
   pub public_url: Option<url::Url>,
+
+  /// Print `trail` version.
+  #[arg(long)]
+  pub version: bool,
 
   #[command(subcommand)]
   pub cmd: Option<SubCommands>,

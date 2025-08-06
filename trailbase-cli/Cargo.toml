@@ -17,6 +17,7 @@ chrono = "^0.4.38"
 clap = { version = "^4.4.11", features=["derive", "env"] }
 env_logger = { workspace = true }
 trailbase = { workspace = true }
+trailbase-build = { workspace = true }
 log = "^0.4.21"
 mimalloc = { version = "^0.1.41", default-features = false }
 serde = { version = "^1.0.203", features = ["derive"] }
@@ -26,3 +27,6 @@ utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9.0.0", features = ["axum"], optional = true }
 uuid = { workspace = true }
 url = "2.5.4"
+
+[build-dependencies]
+trailbase-build = { workspace = true }

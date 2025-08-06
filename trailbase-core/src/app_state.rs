@@ -199,8 +199,8 @@ impl AppState {
     return &self.state.logs_conn;
   }
 
-  pub fn version(&self) -> trailbase_assets::version::VersionInfo {
-    return trailbase_assets::get_version_info!();
+  pub fn version(&self) -> trailbase_build::version::VersionInfo {
+    return trailbase_build::get_version_info!();
   }
 
   pub(crate) fn schema_metadata(&self) -> Arc<SchemaMetadataCache> {

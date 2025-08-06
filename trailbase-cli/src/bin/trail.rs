@@ -52,6 +52,18 @@ impl DbUser {
 
 async fn async_main() -> Result<(), BoxError> {
   let args = DefaultCommandLineArgs::parse();
+
+  if args.version {
+    let version = trailbase_build::get_version_info!();
+    let tag = version.version_tag.as_deref().unwrap_or("?");
+    let hash = version.commit_hash.as_deref().unwrap_or_default().trim();
+    let date = version.commit_date.as_deref().unwrap_or_default().trim();
+
+    println!("trail {tag} ({hash} {date})");
+
+    return Ok(());
+  }
+
   let data_dir = DataDir(args.data_dir.clone());
 
   match args.cmd {

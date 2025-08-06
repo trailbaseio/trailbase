@@ -3,6 +3,7 @@ name = "trailbase"
 version = "0.2.0"
 edition = "2024"
 license = "OSL-3.0"
+rust-version = "1.86"
 description = "Package to use TrailBase as a framework"
 homepage = "https://trailbase.io"
 repository = "https://github.com/trailbaseio/trailbase"
@@ -81,6 +82,7 @@ tower-service = { version = "0.3.3", default-features = false }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 trailbase-assets = { workspace = true }
+trailbase-build = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-js = { workspace = true, optional = true }
 trailbase-qs = { workspace = true }
@@ -95,7 +97,6 @@ validator = { version = "0.20.0", default-features = false }
 
 [build-dependencies]
 trailbase-build = { workspace = true }
-trailbase-assets = { workspace = true }
 
 [dev-dependencies]
 anyhow = "^1.0.86"

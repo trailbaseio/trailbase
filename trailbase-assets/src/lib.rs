@@ -4,7 +4,6 @@
 
 mod assets;
 pub mod auth;
-pub mod version;
 
 pub use assets::AssetService;
 
