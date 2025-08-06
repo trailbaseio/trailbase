@@ -113,7 +113,7 @@ pub fn flat_json_to_value(
 
 /// Convert a SQLite value to "rich" JSON: String, Number, Null and **BLOB Objects**.
 ///
-/// This is different from the "flat" representation above. We use this for
+/// This is different from the "flat" representation above.
 ///
 /// We use this for SQLite <=> JS/TS bindings.
 pub fn value_to_rich_json(value: &SqliteValue) -> Result<serde_json::Value, JsonError> {
