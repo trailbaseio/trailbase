@@ -34,7 +34,7 @@ $ pnpm run proto
 ## Rust-TypeScript codegen
 
 The TypeScript bindings for the admin APIs are checked into the repository
-under `/trailbase-assets/js/bindings`.
+under `/crates/assets/js/bindings`.
 They're generated via `ts-rs` and written every time the Rust tests execute,
 i.e. `cargo test`. They're checked in to avoid having Rust depend on
 TypesScript and TypeScript depend on Rust tests.

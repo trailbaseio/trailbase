@@ -8,7 +8,7 @@
     "build": "vite build",
     "serve": "vite preview",
     "format": "prettier -w .",
-    "proto": "protoc --plugin=protoc-gen-ts=${PWD}/node_modules/ts-proto/protoc-gen-ts_proto ../../../trailbase-core/proto/*.proto -I../../../trailbase-core//proto -I/usr/include --ts_out=./proto/ --ts_opt=esModuleInterop=true,initializeFieldsAsUndefined=false",
+    "proto": "protoc --plugin=protoc-gen-ts=${PWD}/node_modules/ts-proto/protoc-gen-ts_proto ../../../core/proto/*.proto -I../../../core//proto -I/usr/include --ts_out=./proto/ --ts_opt=esModuleInterop=true,initializeFieldsAsUndefined=false",
     "check": "tsc --noEmit --skipLibCheck && eslint && vitest run",
     "test": "vitest run"
   },

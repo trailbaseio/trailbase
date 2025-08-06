@@ -30,7 +30,7 @@ openapi:
 	cargo run -- openapi print > docs/openapi/schema.json
 
 cloc:
-	cloc --not-match-d=".*(/target|/dist|/node_modules|/vendor|.astro|.build|.venv|/traildepot|/flutter|/assets|lock|_benchmark|/bin|/obj).*" .
+	cloc --not-match-d=".*(/target|/dist|/node_modules|/vendor|.astro|.build|.venv|/traildepot|/flutter|lock|_benchmark|/bin|/obj).*" .
 
 publish_crates:
 	cargo +nightly -Z package-workspace publish --no-verify \

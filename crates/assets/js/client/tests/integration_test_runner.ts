@@ -15,7 +15,7 @@ async function initTrailBase(): Promise<{ subprocess: Subprocess }> {
     throw Error(`Unxpected CWD: ${pwd}`);
   }
 
-  const root = join(pwd, "..", "..", "..");
+  const root = join(pwd, "..", "..", "..", "..");
 
   const build = await execa({ cwd: root })`cargo build`;
   if (build.failed) {

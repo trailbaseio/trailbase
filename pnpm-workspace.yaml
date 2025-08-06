@@ -6,10 +6,10 @@ packages:
   - 'examples/collab-clicker-ssr'
   - 'examples/data-cli-tutorial'
   - 'examples/tanstack-db-sync'
-  - 'trailbase-assets/js/admin'
-  - 'trailbase-assets/js/auth'
-  - 'trailbase-assets/js/client'
-  - 'trailbase-js/assets/runtime'
+  - 'crates/assets/js/admin'
+  - 'crates/assets/js/auth'
+  - 'crates/assets/js/client'
+  - 'crates/js-runtime/assets/runtime'
 
 sharedWorkspaceLockfile: true
 linkWorkspacePackages: true

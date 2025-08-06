@@ -23,11 +23,11 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/trailbaseio/trailbase.git",
-    "directory": "client/trailbase-ts"
+    "directory": "crates/assets/js/client"
   },
   "homepage": "https://trailbase.io",
   "scripts": {
-    "start": "tsc && node dist/client/trailbase-ts/src/index.js",
+    "start": "tsc && node dist/client/src/index.js",
     "build": "tsc",
     "test": "vitest run && vite-node tests/integration_test_runner.ts",
     "format": "prettier -w src tests",

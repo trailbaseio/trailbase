@@ -6,416 +6,7 @@ settings:
 
 importers:
 
-  docs:
-    dependencies:
-      '@astrojs/check':
-        specifier: ^0.9.4
-        version: 0.9.4(prettier-plugin-astro@0.14.1)(prettier@3.6.2)(typescript@5.9.2)
-      '@astrojs/starlight':
-        specifier: ^0.35.2
-        version: 0.35.2(astro@5.12.8(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@5.9.2)(yaml@2.8.0))
-      '@astrojs/starlight-tailwind':
-        specifier: ^4.0.1
-        version: 4.0.1(@astrojs/starlight@0.35.2(astro@5.12.8(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@5.9.2)(yaml@2.8.0)))(tailwindcss@4.1.11)
-      '@iconify-json/tabler':
-        specifier: ^1.2.20
-        version: 1.2.20
-      '@tailwindcss/vite':
-        specifier: ^4.1.11
-        version: 4.1.11(vite@6.3.5(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
-      astro:
-        specifier: ^5.12.8
-        version: 5.12.8(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@5.9.2)(yaml@2.8.0)
-      astro-icon:
-        specifier: ^1.1.5
-        version: 1.1.5
-      chart.js:
-        specifier: ^4.5.0
-        version: 4.5.0
-      chartjs-chart-error-bars:
-        specifier: ^4.4.4
-        version: 4.4.4(chart.js@4.5.0)
-      chartjs-plugin-deferred:
-        specifier: ^2.0.0
-        version: 2.0.0(chart.js@4.5.0)
-      clsx:
-        specifier: ^2.1.1
-        version: 2.1.1
-      sharp:
-        specifier: ^0.34.3
-        version: 0.34.3
-      solid-js:
-        specifier: ^1.9.7
-        version: 1.9.7
-      starlight-links-validator:
-        specifier: ^0.17.0
-        version: 0.17.0(@astrojs/starlight@0.35.2(astro@5.12.8(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@5.9.2)(yaml@2.8.0)))
-      starlight-openapi:
-        specifier: ^0.19.1
-        version: 0.19.1(@astrojs/markdown-remark@6.3.5)(@astrojs/starlight@0.35.2(astro@5.12.8(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@5.9.2)(yaml@2.8.0)))(astro@5.12.8(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@5.9.2)(yaml@2.8.0))(openapi-types@12.1.3)
-      tailwind-merge:
-        specifier: ^3.3.1
-        version: 3.3.1
-      tailwindcss:
-        specifier: ^4.1.11
-        version: 4.1.11
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.2
-    devDependencies:
-      '@astrojs/sitemap':
-        specifier: ^3.4.2
-        version: 3.4.2
-      '@astrojs/solid-js':
-        specifier: ^5.1.0
-        version: 5.1.0(@testing-library/jest-dom@6.6.4)(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.7))(solid-js@1.9.7)(terser@5.39.0)(yaml@2.8.0)
-      '@eslint/js':
-        specifier: ^9.32.0
-        version: 9.32.0
-      astro-robots-txt:
-        specifier: ^1.0.0
-        version: 1.0.0
-      eslint:
-        specifier: ^9.32.0
-        version: 9.32.0(jiti@2.5.1)
-      eslint-plugin-astro:
-        specifier: ^1.3.1
-        version: 1.3.1(eslint@9.32.0(jiti@2.5.1))
-      eslint-plugin-solid:
-        specifier: ^0.14.5
-        version: 0.14.5(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
-      eslint-plugin-tailwindcss:
-        specifier: 4.0.0-alpha.0
-        version: 4.0.0-alpha.0(tailwindcss@4.1.11)(typescript@5.9.2)
-      globals:
-        specifier: ^16.3.0
-        version: 16.3.0
-      prettier:
-        specifier: ^3.6.2
-        version: 3.6.2
-      prettier-plugin-astro:
-        specifier: ^0.14.1
-        version: 0.14.1
-      prettier-plugin-tailwindcss:
-        specifier: ^0.6.14
-        version: 0.6.14(prettier-plugin-astro@0.14.1)(prettier@3.6.2)
-      typescript-eslint:
-        specifier: ^8.39.0
-        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
-
-  docs/examples/record_api_ts:
-    dependencies:
-      trailbase:
-        specifier: workspace:*
-        version: link:../../../trailbase-assets/js/client
-    devDependencies:
-      '@eslint/js':
-        specifier: ^9.32.0
-        version: 9.32.0
-      '@types/node':
-        specifier: ^24.2.0
-        version: 24.2.0
-      eslint:
-        specifier: ^9.32.0
-        version: 9.32.0(jiti@2.5.1)
-      prettier:
-        specifier: ^3.6.2
-        version: 3.6.2
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.2
-      typescript-eslint:
-        specifier: ^8.39.0
-        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@24.2.0)(happy-dom@15.11.7)(jiti@2.5.1)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
-
-  examples/blog/web:
-    dependencies:
-      '@astrojs/tailwind':
-        specifier: ^5.1.5
-        version: 5.1.5(astro@5.12.8(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@4.9.4)(yaml@2.8.0))(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)))(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4))
-      '@nanostores/persistent':
-        specifier: ^1.1.0
-        version: 1.1.0(nanostores@1.0.1)
-      '@nanostores/solid':
-        specifier: ^1.0.0
-        version: 1.0.0(nanostores@1.0.1)(solid-js@1.9.7)
-      astro:
-        specifier: ^5.12.8
-        version: 5.12.8(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@4.9.4)(yaml@2.8.0)
-      astro-icon:
-        specifier: ^1.1.5
-        version: 1.1.5
-      nanostores:
-        specifier: ^1.0.1
-        version: 1.0.1
-      solid-icons:
-        specifier: ^1.1.0
-        version: 1.1.0(solid-js@1.9.7)
-      solid-js:
-        specifier: ^1.9.7
-        version: 1.9.7
-      trailbase:
-        specifier: workspace:^
-        version: link:../../../trailbase-assets/js/client
-    devDependencies:
-      '@astrojs/solid-js':
-        specifier: ^5.1.0
-        version: 5.1.0(@testing-library/jest-dom@6.6.4)(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.7))(solid-js@1.9.7)(terser@5.39.0)(yaml@2.8.0)
-      '@eslint/js':
-        specifier: ^9.32.0
-        version: 9.32.0
-      '@iconify-json/tabler':
-        specifier: ^1.2.20
-        version: 1.2.20
-      '@tailwindcss/typography':
-        specifier: ^0.5.16
-        version: 0.5.16(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)))
-      '@types/dateformat':
-        specifier: ^5.0.3
-        version: 5.0.3
-      eslint:
-        specifier: ^9.32.0
-        version: 9.32.0(jiti@2.5.1)
-      eslint-plugin-astro:
-        specifier: ^1.3.1
-        version: 1.3.1(eslint@9.32.0(jiti@2.5.1))
-      eslint-plugin-solid:
-        specifier: ^0.14.5
-        version: 0.14.5(eslint@9.32.0(jiti@2.5.1))(typescript@4.9.4)
-      eslint-plugin-tailwindcss:
-        specifier: ^3.18.2
-        version: 3.18.2(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)))
-      globals:
-        specifier: ^16.3.0
-        version: 16.3.0
-      prettier:
-        specifier: ^3.6.2
-        version: 3.6.2
-      prettier-plugin-astro:
-        specifier: ^0.14.1
-        version: 0.14.1
-      quicktype:
-        specifier: ^23.2.6
-        version: 23.2.6
-      sharp:
-        specifier: ^0.34.3
-        version: 0.34.3
-      tailwindcss:
-        specifier: ^3.4.17
-        version: 3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4))
-      typescript-eslint:
-        specifier: ^8.39.0
-        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@4.9.4)
-
-  examples/coffee-vector-search:
-    dependencies:
-      react:
-        specifier: ^19.1.1
-        version: 19.1.1
-      react-dom:
-        specifier: ^19.1.1
-        version: 19.1.1(react@19.1.1)
-    devDependencies:
-      '@eslint/js':
-        specifier: ^9.32.0
-        version: 9.32.0
-      '@types/react':
-        specifier: ^19.1.9
-        version: 19.1.9
-      '@types/react-dom':
-        specifier: ^19.1.7
-        version: 19.1.7(@types/react@19.1.9)
-      '@vitejs/plugin-react':
-        specifier: ^4.7.0
-        version: 4.7.0(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
-      eslint:
-        specifier: ^9.32.0
-        version: 9.32.0(jiti@2.5.1)
-      eslint-plugin-react-hooks:
-        specifier: ^5.2.0
-        version: 5.2.0(eslint@9.32.0(jiti@2.5.1))
-      eslint-plugin-react-refresh:
-        specifier: ^0.4.20
-        version: 0.4.20(eslint@9.32.0(jiti@2.5.1))
-      globals:
-        specifier: ^16.3.0
-        version: 16.3.0
-      prettier:
-        specifier: ^3.6.2
-        version: 3.6.2
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.2
-      typescript-eslint:
-        specifier: ^8.39.0
-        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
-      vite:
-        specifier: ^7.0.6
-        version: 7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
-
-  examples/collab-clicker-ssr:
-    dependencies:
-      solid-js:
-        specifier: ^1.9.7
-        version: 1.9.7
-      trailbase:
-        specifier: workspace:^
-        version: link:../../trailbase-assets/js/client
-    devDependencies:
-      '@eslint/js':
-        specifier: ^9.32.0
-        version: 9.32.0
-      '@types/express':
-        specifier: ^5.0.3
-        version: 5.0.3
-      '@types/node':
-        specifier: ^24.2.0
-        version: 24.2.0
-      compression:
-        specifier: ^1.8.1
-        version: 1.8.1
-      eslint:
-        specifier: ^9.32.0
-        version: 9.32.0(jiti@2.5.1)
-      express:
-        specifier: ^5.1.0
-        version: 5.1.0
-      globals:
-        specifier: ^16.3.0
-        version: 16.3.0
-      prettier:
-        specifier: ^3.6.2
-        version: 3.6.2
-      sirv:
-        specifier: ^3.0.1
-        version: 3.0.1
-      tailwindcss:
-        specifier: ^3.4.17
-        version: 3.4.17(ts-node@10.9.2(@types/node@24.2.0)(typescript@5.9.2))
-      typescript-eslint:
-        specifier: ^8.39.0
-        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
-      vite:
-        specifier: ^7.0.6
-        version: 7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
-      vite-plugin-eslint:
-        specifier: ^1.8.1
-        version: 1.8.1(eslint@9.32.0(jiti@2.5.1))(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
-      vite-plugin-solid:
-        specifier: ^2.11.8
-        version: 2.11.8(@testing-library/jest-dom@6.6.4)(solid-js@1.9.7)(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
-
-  examples/data-cli-tutorial:
-    dependencies:
-      csv-parse:
-        specifier: ^5.6.0
-        version: 5.6.0
-      trailbase:
-        specifier: workspace:^
-        version: link:../../trailbase-assets/js/client
-    devDependencies:
-      '@eslint/js':
-        specifier: ^9.32.0
-        version: 9.32.0
-      '@types/node':
-        specifier: ^24.2.0
-        version: 24.2.0
-      eslint:
-        specifier: ^9.32.0
-        version: 9.32.0(jiti@2.5.1)
-      prettier:
-        specifier: ^3.6.2
-        version: 3.6.2
-      quicktype:
-        specifier: ^23.2.6
-        version: 23.2.6
-      ts-node:
-        specifier: ^10.9.2
-        version: 10.9.2(@types/node@24.2.0)(typescript@5.9.2)
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.2
-      typescript-eslint:
-        specifier: ^8.39.0
-        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
-
-  examples/tanstack-db-sync:
-    dependencies:
-      '@tanstack/db':
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.9.2)
-      '@tanstack/query-core':
-        specifier: ^5.83.1
-        version: 5.83.1
-      '@tanstack/query-db-collection':
-        specifier: ^0.2.0
-        version: 0.2.0(@tanstack/query-core@5.83.1)(typescript@5.9.2)
-      '@tanstack/react-db':
-        specifier: ^0.1.1
-        version: 0.1.1(react@19.1.1)(typescript@5.9.2)
-      '@tanstack/trailbase-db-collection':
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.9.2)
-      react:
-        specifier: ^19.1.1
-        version: 19.1.1
-      react-dom:
-        specifier: ^19.1.1
-        version: 19.1.1(react@19.1.1)
-      tailwindcss:
-        specifier: ^4.1.11
-        version: 4.1.11
-      trailbase:
-        specifier: workspace:^
-        version: link:../../trailbase-assets/js/client
-    devDependencies:
-      '@eslint/js':
-        specifier: ^9.32.0
-        version: 9.32.0
-      '@tailwindcss/vite':
-        specifier: ^4.1.11
-        version: 4.1.11(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
-      '@types/react':
-        specifier: ^19.1.9
-        version: 19.1.9
-      '@types/react-dom':
-        specifier: ^19.1.7
-        version: 19.1.7(@types/react@19.1.9)
-      '@vitejs/plugin-react':
-        specifier: ^4.7.0
-        version: 4.7.0(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
-      eslint:
-        specifier: ^9.32.0
-        version: 9.32.0(jiti@2.5.1)
-      eslint-plugin-react-hooks:
-        specifier: ^5.2.0
-        version: 5.2.0(eslint@9.32.0(jiti@2.5.1))
-      eslint-plugin-react-refresh:
-        specifier: ^0.4.20
-        version: 0.4.20(eslint@9.32.0(jiti@2.5.1))
-      globals:
-        specifier: ^16.3.0
-        version: 16.3.0
-      prettier:
-        specifier: ^3.6.2
-        version: 3.6.2
-      prettier-plugin-tailwindcss:
-        specifier: ^0.6.14
-        version: 0.6.14(prettier-plugin-astro@0.14.1)(prettier@3.6.2)
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.2
-      typescript-eslint:
-        specifier: ^8.39.0
-        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
-      vite:
-        specifier: ^7.0.6
-        version: 7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
-
-  trailbase-assets/js/admin:
+  crates/assets/js/admin:
     dependencies:
       '@antv/x6':
         specifier: ^2.18.1
@@ -599,14 +190,14 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@24.2.0)(happy-dom@15.11.7)(jiti@2.5.1)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
 
-  trailbase-assets/js/auth:
+  crates/assets/js/auth:
     dependencies:
       '@astrojs/check':
         specifier: ^0.9.4
         version: 0.9.4(prettier-plugin-astro@0.14.1)(prettier@3.6.2)(typescript@5.9.2)
       '@astrojs/solid-js':
         specifier: ^5.1.0
-        version: 5.1.0(@testing-library/jest-dom@6.6.4)(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.7))(solid-js@1.9.7)(terser@5.39.0)(yaml@2.8.0)
+        version: 5.1.0(@testing-library/jest-dom@6.6.4)(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.7)(vite@6.3.5(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)))(solid-js@1.9.7)(terser@5.39.0)(yaml@2.8.0)
       '@astrojs/tailwind':
         specifier: ^5.1.5
         version: 5.1.5(astro@5.12.8(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@5.9.2)(yaml@2.8.0))(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@24.2.0)(typescript@5.9.2)))(ts-node@10.9.2(@types/node@24.2.0)(typescript@5.9.2))
@@ -693,7 +284,7 @@ importers:
         specifier: ^8.39.0
         version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
 
-  trailbase-assets/js/client:
+  crates/assets/js/client:
     dependencies:
       jwt-decode:
         specifier: ^4.0.0
@@ -742,7 +333,7 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@24.2.0)(happy-dom@15.11.7)(jiti@2.5.1)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
 
-  trailbase-js/assets/runtime:
+  crates/js-runtime/assets/runtime:
     devDependencies:
       '@eslint/js':
         specifier: ^9.32.0
@@ -768,6 +359,415 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@24.2.0)(happy-dom@15.11.7)(jiti@2.5.1)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
+
+  docs:
+    dependencies:
+      '@astrojs/check':
+        specifier: ^0.9.4
+        version: 0.9.4(prettier-plugin-astro@0.14.1)(prettier@3.6.2)(typescript@5.9.2)
+      '@astrojs/starlight':
+        specifier: ^0.35.2
+        version: 0.35.2(astro@5.12.8(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@5.9.2)(yaml@2.8.0))
+      '@astrojs/starlight-tailwind':
+        specifier: ^4.0.1
+        version: 4.0.1(@astrojs/starlight@0.35.2(astro@5.12.8(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@5.9.2)(yaml@2.8.0)))(tailwindcss@4.1.11)
+      '@iconify-json/tabler':
+        specifier: ^1.2.20
+        version: 1.2.20
+      '@tailwindcss/vite':
+        specifier: ^4.1.11
+        version: 4.1.11(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
+      astro:
+        specifier: ^5.12.8
+        version: 5.12.8(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@5.9.2)(yaml@2.8.0)
+      astro-icon:
+        specifier: ^1.1.5
+        version: 1.1.5
+      chart.js:
+        specifier: ^4.5.0
+        version: 4.5.0
+      chartjs-chart-error-bars:
+        specifier: ^4.4.4
+        version: 4.4.4(chart.js@4.5.0)
+      chartjs-plugin-deferred:
+        specifier: ^2.0.0
+        version: 2.0.0(chart.js@4.5.0)
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      sharp:
+        specifier: ^0.34.3
+        version: 0.34.3
+      solid-js:
+        specifier: ^1.9.7
+        version: 1.9.7
+      starlight-links-validator:
+        specifier: ^0.17.0
+        version: 0.17.0(@astrojs/starlight@0.35.2(astro@5.12.8(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@5.9.2)(yaml@2.8.0)))
+      starlight-openapi:
+        specifier: ^0.19.1
+        version: 0.19.1(@astrojs/markdown-remark@6.3.5)(@astrojs/starlight@0.35.2(astro@5.12.8(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@5.9.2)(yaml@2.8.0)))(astro@5.12.8(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@5.9.2)(yaml@2.8.0))(openapi-types@12.1.3)
+      tailwind-merge:
+        specifier: ^3.3.1
+        version: 3.3.1
+      tailwindcss:
+        specifier: ^4.1.11
+        version: 4.1.11
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.2
+    devDependencies:
+      '@astrojs/sitemap':
+        specifier: ^3.4.2
+        version: 3.4.2
+      '@astrojs/solid-js':
+        specifier: ^5.1.0
+        version: 5.1.0(@testing-library/jest-dom@6.6.4)(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.7)(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)))(solid-js@1.9.7)(terser@5.39.0)(yaml@2.8.0)
+      '@eslint/js':
+        specifier: ^9.32.0
+        version: 9.32.0
+      astro-robots-txt:
+        specifier: ^1.0.0
+        version: 1.0.0
+      eslint:
+        specifier: ^9.32.0
+        version: 9.32.0(jiti@2.5.1)
+      eslint-plugin-astro:
+        specifier: ^1.3.1
+        version: 1.3.1(eslint@9.32.0(jiti@2.5.1))
+      eslint-plugin-solid:
+        specifier: ^0.14.5
+        version: 0.14.5(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
+      eslint-plugin-tailwindcss:
+        specifier: 4.0.0-alpha.0
+        version: 4.0.0-alpha.0(tailwindcss@4.1.11)(typescript@5.9.2)
+      globals:
+        specifier: ^16.3.0
+        version: 16.3.0
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      prettier-plugin-astro:
+        specifier: ^0.14.1
+        version: 0.14.1
+      prettier-plugin-tailwindcss:
+        specifier: ^0.6.14
+        version: 0.6.14(prettier-plugin-astro@0.14.1)(prettier@3.6.2)
+      typescript-eslint:
+        specifier: ^8.39.0
+        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
+
+  docs/examples/record_api_ts:
+    dependencies:
+      trailbase:
+        specifier: workspace:*
+        version: link:../../../crates/assets/js/client
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.32.0
+        version: 9.32.0
+      '@types/node':
+        specifier: ^24.2.0
+        version: 24.2.0
+      eslint:
+        specifier: ^9.32.0
+        version: 9.32.0(jiti@2.5.1)
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.2
+      typescript-eslint:
+        specifier: ^8.39.0
+        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@24.2.0)(happy-dom@15.11.7)(jiti@2.5.1)(jsdom@26.1.0)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
+
+  examples/blog/web:
+    dependencies:
+      '@astrojs/tailwind':
+        specifier: ^5.1.5
+        version: 5.1.5(astro@5.12.8(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@4.9.4)(yaml@2.8.0))(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)))(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4))
+      '@nanostores/persistent':
+        specifier: ^1.1.0
+        version: 1.1.0(nanostores@1.0.1)
+      '@nanostores/solid':
+        specifier: ^1.0.0
+        version: 1.0.0(nanostores@1.0.1)(solid-js@1.9.7)
+      astro:
+        specifier: ^5.12.8
+        version: 5.12.8(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.46.2)(terser@5.39.0)(typescript@4.9.4)(yaml@2.8.0)
+      astro-icon:
+        specifier: ^1.1.5
+        version: 1.1.5
+      nanostores:
+        specifier: ^1.0.1
+        version: 1.0.1
+      solid-icons:
+        specifier: ^1.1.0
+        version: 1.1.0(solid-js@1.9.7)
+      solid-js:
+        specifier: ^1.9.7
+        version: 1.9.7
+      trailbase:
+        specifier: workspace:^
+        version: link:../../../crates/assets/js/client
+    devDependencies:
+      '@astrojs/solid-js':
+        specifier: ^5.1.0
+        version: 5.1.0(@testing-library/jest-dom@6.6.4)(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.7))(solid-js@1.9.7)(terser@5.39.0)(yaml@2.8.0)
+      '@eslint/js':
+        specifier: ^9.32.0
+        version: 9.32.0
+      '@iconify-json/tabler':
+        specifier: ^1.2.20
+        version: 1.2.20
+      '@tailwindcss/typography':
+        specifier: ^0.5.16
+        version: 0.5.16(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)))
+      '@types/dateformat':
+        specifier: ^5.0.3
+        version: 5.0.3
+      eslint:
+        specifier: ^9.32.0
+        version: 9.32.0(jiti@2.5.1)
+      eslint-plugin-astro:
+        specifier: ^1.3.1
+        version: 1.3.1(eslint@9.32.0(jiti@2.5.1))
+      eslint-plugin-solid:
+        specifier: ^0.14.5
+        version: 0.14.5(eslint@9.32.0(jiti@2.5.1))(typescript@4.9.4)
+      eslint-plugin-tailwindcss:
+        specifier: ^3.18.2
+        version: 3.18.2(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)))
+      globals:
+        specifier: ^16.3.0
+        version: 16.3.0
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      prettier-plugin-astro:
+        specifier: ^0.14.1
+        version: 0.14.1
+      quicktype:
+        specifier: ^23.2.6
+        version: 23.2.6
+      sharp:
+        specifier: ^0.34.3
+        version: 0.34.3
+      tailwindcss:
+        specifier: ^3.4.17
+        version: 3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4))
+      typescript-eslint:
+        specifier: ^8.39.0
+        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@4.9.4)
+
+  examples/coffee-vector-search:
+    dependencies:
+      react:
+        specifier: ^19.1.1
+        version: 19.1.1
+      react-dom:
+        specifier: ^19.1.1
+        version: 19.1.1(react@19.1.1)
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.32.0
+        version: 9.32.0
+      '@types/react':
+        specifier: ^19.1.9
+        version: 19.1.9
+      '@types/react-dom':
+        specifier: ^19.1.7
+        version: 19.1.7(@types/react@19.1.9)
+      '@vitejs/plugin-react':
+        specifier: ^4.7.0
+        version: 4.7.0(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
+      eslint:
+        specifier: ^9.32.0
+        version: 9.32.0(jiti@2.5.1)
+      eslint-plugin-react-hooks:
+        specifier: ^5.2.0
+        version: 5.2.0(eslint@9.32.0(jiti@2.5.1))
+      eslint-plugin-react-refresh:
+        specifier: ^0.4.20
+        version: 0.4.20(eslint@9.32.0(jiti@2.5.1))
+      globals:
+        specifier: ^16.3.0
+        version: 16.3.0
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.2
+      typescript-eslint:
+        specifier: ^8.39.0
+        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
+      vite:
+        specifier: ^7.0.6
+        version: 7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
+
+  examples/collab-clicker-ssr:
+    dependencies:
+      solid-js:
+        specifier: ^1.9.7
+        version: 1.9.7
+      trailbase:
+        specifier: workspace:^
+        version: link:../../crates/assets/js/client
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.32.0
+        version: 9.32.0
+      '@types/express':
+        specifier: ^5.0.3
+        version: 5.0.3
+      '@types/node':
+        specifier: ^24.2.0
+        version: 24.2.0
+      compression:
+        specifier: ^1.8.1
+        version: 1.8.1
+      eslint:
+        specifier: ^9.32.0
+        version: 9.32.0(jiti@2.5.1)
+      express:
+        specifier: ^5.1.0
+        version: 5.1.0
+      globals:
+        specifier: ^16.3.0
+        version: 16.3.0
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      sirv:
+        specifier: ^3.0.1
+        version: 3.0.1
+      tailwindcss:
+        specifier: ^3.4.17
+        version: 3.4.17(ts-node@10.9.2(@types/node@24.2.0)(typescript@5.9.2))
+      typescript-eslint:
+        specifier: ^8.39.0
+        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
+      vite:
+        specifier: ^7.0.6
+        version: 7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
+      vite-plugin-eslint:
+        specifier: ^1.8.1
+        version: 1.8.1(eslint@9.32.0(jiti@2.5.1))(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
+      vite-plugin-solid:
+        specifier: ^2.11.8
+        version: 2.11.8(@testing-library/jest-dom@6.6.4)(solid-js@1.9.7)(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
+
+  examples/data-cli-tutorial:
+    dependencies:
+      csv-parse:
+        specifier: ^5.6.0
+        version: 5.6.0
+      trailbase:
+        specifier: workspace:^
+        version: link:../../crates/assets/js/client
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.32.0
+        version: 9.32.0
+      '@types/node':
+        specifier: ^24.2.0
+        version: 24.2.0
+      eslint:
+        specifier: ^9.32.0
+        version: 9.32.0(jiti@2.5.1)
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      quicktype:
+        specifier: ^23.2.6
+        version: 23.2.6
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@24.2.0)(typescript@5.9.2)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.2
+      typescript-eslint:
+        specifier: ^8.39.0
+        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
+
+  examples/tanstack-db-sync:
+    dependencies:
+      '@tanstack/db':
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.9.2)
+      '@tanstack/query-core':
+        specifier: ^5.83.1
+        version: 5.83.1
+      '@tanstack/query-db-collection':
+        specifier: ^0.2.0
+        version: 0.2.0(@tanstack/query-core@5.83.1)(typescript@5.9.2)
+      '@tanstack/react-db':
+        specifier: ^0.1.1
+        version: 0.1.1(react@19.1.1)(typescript@5.9.2)
+      '@tanstack/trailbase-db-collection':
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.9.2)
+      react:
+        specifier: ^19.1.1
+        version: 19.1.1
+      react-dom:
+        specifier: ^19.1.1
+        version: 19.1.1(react@19.1.1)
+      tailwindcss:
+        specifier: ^4.1.11
+        version: 4.1.11
+      trailbase:
+        specifier: workspace:^
+        version: link:../../crates/assets/js/client
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.32.0
+        version: 9.32.0
+      '@tailwindcss/vite':
+        specifier: ^4.1.11
+        version: 4.1.11(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
+      '@types/react':
+        specifier: ^19.1.9
+        version: 19.1.9
+      '@types/react-dom':
+        specifier: ^19.1.7
+        version: 19.1.7(@types/react@19.1.9)
+      '@vitejs/plugin-react':
+        specifier: ^4.7.0
+        version: 4.7.0(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
+      eslint:
+        specifier: ^9.32.0
+        version: 9.32.0(jiti@2.5.1)
+      eslint-plugin-react-hooks:
+        specifier: ^5.2.0
+        version: 5.2.0(eslint@9.32.0(jiti@2.5.1))
+      eslint-plugin-react-refresh:
+        specifier: ^0.4.20
+        version: 0.4.20(eslint@9.32.0(jiti@2.5.1))
+      globals:
+        specifier: ^16.3.0
+        version: 16.3.0
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      prettier-plugin-tailwindcss:
+        specifier: ^0.6.14
+        version: 0.6.14(prettier-plugin-astro@0.14.1)(prettier@3.6.2)
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.2
+      typescript-eslint:
+        specifier: ^8.39.0
+        version: 8.39.0(eslint@9.32.0(jiti@2.5.1))(typescript@5.9.2)
+      vite:
+        specifier: ^7.0.6
+        version: 7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
 
 packages:
 
@@ -6510,6 +6510,28 @@ snapshots:
       vite: 6.3.5(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
       vite-plugin-solid: 2.11.8(@testing-library/jest-dom@6.6.4)(solid-js@1.9.7)(vite@6.3.5(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
     optionalDependencies:
+      solid-devtools: 0.30.1(solid-js@1.9.7)
+    transitivePeerDependencies:
+      - '@testing-library/jest-dom'
+      - '@types/node'
+      - jiti
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
+
+  '@astrojs/solid-js@5.1.0(@testing-library/jest-dom@6.6.4)(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.7)(vite@6.3.5(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)))(solid-js@1.9.7)(terser@5.39.0)(yaml@2.8.0)':
+    dependencies:
+      solid-js: 1.9.7
+      vite: 6.3.5(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
+      vite-plugin-solid: 2.11.8(@testing-library/jest-dom@6.6.4)(solid-js@1.9.7)(vite@6.3.5(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
+    optionalDependencies:
       solid-devtools: 0.30.1(solid-js@1.9.7)(vite@6.3.5(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
     transitivePeerDependencies:
       - '@testing-library/jest-dom'
@@ -6526,13 +6548,13 @@ snapshots:
       - tsx
       - yaml
 
-  '@astrojs/solid-js@5.1.0(@testing-library/jest-dom@6.6.4)(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.7))(solid-js@1.9.7)(terser@5.39.0)(yaml@2.8.0)':
+  '@astrojs/solid-js@5.1.0(@testing-library/jest-dom@6.6.4)(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.7)(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)))(solid-js@1.9.7)(terser@5.39.0)(yaml@2.8.0)':
     dependencies:
       solid-js: 1.9.7
       vite: 6.3.5(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
       vite-plugin-solid: 2.11.8(@testing-library/jest-dom@6.6.4)(solid-js@1.9.7)(vite@6.3.5(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
     optionalDependencies:
-      solid-devtools: 0.30.1(solid-js@1.9.7)(vite@6.3.5(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
+      solid-devtools: 0.30.1(solid-js@1.9.7)(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))
     transitivePeerDependencies:
       - '@testing-library/jest-dom'
       - '@types/node'
@@ -7950,13 +7972,6 @@ snapshots:
       lodash.merge: 4.6.2
       postcss-selector-parser: 6.0.10
       tailwindcss: 3.4.17(ts-node@10.9.2(@types/node@24.2.0)(typescript@5.9.2))
-
-  '@tailwindcss/vite@4.1.11(vite@6.3.5(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))':
-    dependencies:
-      '@tailwindcss/node': 4.1.11
-      '@tailwindcss/oxide': 4.1.11
-      tailwindcss: 4.1.11
-      vite: 6.3.5(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
 
   '@tailwindcss/vite@4.1.11(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0))':
     dependencies:
@@ -12165,6 +12180,18 @@ snapshots:
 
   smol-toml@1.4.1: {}
 
+  solid-devtools@0.30.1(solid-js@1.9.7):
+    dependencies:
+      '@babel/core': 7.28.0
+      '@babel/plugin-syntax-typescript': 7.27.1(@babel/core@7.28.0)
+      '@babel/types': 7.28.2
+      '@solid-devtools/debugger': 0.23.4(solid-js@1.9.7)
+      '@solid-devtools/shared': 0.13.2(solid-js@1.9.7)
+      solid-js: 1.9.7
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
+
   solid-devtools@0.30.1(solid-js@1.9.7)(vite@6.3.5(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)):
     dependencies:
       '@babel/core': 7.28.0
@@ -12175,6 +12202,20 @@ snapshots:
       solid-js: 1.9.7
     optionalDependencies:
       vite: 6.3.5(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
+
+  solid-devtools@0.30.1(solid-js@1.9.7)(vite@7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)):
+    dependencies:
+      '@babel/core': 7.28.0
+      '@babel/plugin-syntax-typescript': 7.27.1(@babel/core@7.28.0)
+      '@babel/types': 7.28.2
+      '@solid-devtools/debugger': 0.23.4(solid-js@1.9.7)
+      '@solid-devtools/shared': 0.13.2(solid-js@1.9.7)
+      solid-js: 1.9.7
+    optionalDependencies:
+      vite: 7.0.6(@types/node@24.2.0)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.39.0)(yaml@2.8.0)
     transitivePeerDependencies:
       - supports-color
     optional: true

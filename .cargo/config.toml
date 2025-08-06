@@ -13,4 +13,4 @@
 # rustflags = ["-C", "target-feature=+crt-static"]
 
 [env]
-TS_RS_EXPORT_DIR = { value = "./trailbase-assets/js/bindings", relative = true }
+TS_RS_EXPORT_DIR = { value = "./crates/assets/js/bindings", relative = true }

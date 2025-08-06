@@ -1,3 +1,3 @@
 [submodule "vendor/sqlean/bundled/sqlean"]
-	path = vendor/sqlean/bundled/sqlean
+	path = crates/sqlean/bundled/sqlean
 	url = https://github.com/trailbaseio/sqlean

@@ -8,7 +8,7 @@
     "paths": {
       "@/*": ["./src/*"],
       // Only needed when "trailbase" package is pulled from workspace:
-      // "@bindings/*": ["../../../trailbase-assets/js/bindings/*"],
+      // "@bindings/*": ["../../../crates/assets/js/bindings/*"],
       "@schema/*": ["./types/*"]
     }
   },
