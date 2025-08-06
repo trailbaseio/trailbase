@@ -98,7 +98,11 @@ If you want to get started even quicker, install TrailBase with the following
 command:
 
 ```sh
-curl -sSL https://raw.githubusercontent.com/trailbaseio/trailbase/main/install.sh | bash
+# Linux & MacOS
+curl -sSL https://trailbase.io/install.sh | bash
+
+# Windows
+iwr https://trailbase.io/install.ps1 | iex
 ```
 
 Alternatively, run TrailBase using the Docker image:

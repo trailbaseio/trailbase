@@ -1,1 +1,1 @@
-../../install.sh
+../../deploy/install.sh
