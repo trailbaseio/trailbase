@@ -42,7 +42,7 @@ where
   ));
 }
 
-pub(crate) fn unexpected(value: &serde_value::Value) -> Unexpected {
+pub(crate) fn unexpected(value: &'_ serde_value::Value) -> Unexpected<'_> {
   use serde_value::Value;
 
   match *value {
