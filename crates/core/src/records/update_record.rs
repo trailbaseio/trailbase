@@ -74,6 +74,7 @@ pub async fn update_record_handler(
 #[cfg(test)]
 mod test {
   use axum::extract::Query;
+  use base64::prelude::*;
   use serde_json::json;
   use trailbase_sqlite::params;
 
@@ -316,5 +317,92 @@ mod test {
 
       assert!(update_response.is_err(), "{b64_id} {update_response:?}");
     }
+  }
+
+  #[tokio::test]
+  async fn test_check_pk_column_cannot_be_overriden() {
+    let state = test_state(None).await.unwrap();
+
+    let password = "secret123";
+
+    let user_x: [u8; 16] = create_user_for_test(&state, "x@test.org", password)
+      .await
+      .unwrap()
+      .into_bytes();
+
+    let user_y: [u8; 16] = create_user_for_test(&state, "y@test.org", password)
+      .await
+      .unwrap()
+      .into_bytes();
+
+    state
+      .conn()
+      .execute_batch(
+        r#"
+          CREATE TABLE test (
+            "user"    BLOB PRIMARY KEY REFERENCES _user(id),
+            "data"    TEXT NOT NULL
+          ) STRICT;
+
+          INSERT INTO test (user, data) SELECT id, 'secret' FROM _user WHERE email = 'x@test.org';
+        "#,
+      )
+      .await
+      .unwrap();
+
+    state.rebuild_schema_cache().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some("test_api".to_string()),
+        table_name: Some("test".to_string()),
+        acl_authenticated: [PermissionFlag::Create as i32, PermissionFlag::Update as i32].into(),
+        update_access_rule: Some("_ROW_.user = _USER_.id".to_string()),
+        create_access_rule: Some("_REQ_.user = _USER_.id".to_string()),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    let user_x_token = login_with_password(&state, "x@test.org", password)
+      .await
+      .unwrap();
+
+    let _ = update_record_handler(
+      State(state.clone()),
+      Path(("test_api".to_string(), BASE64_URL_SAFE.encode(&user_x))),
+      User::from_auth_token(&state, &user_x_token.auth_token),
+      Either::Json(
+        json_row_from_value(json!({
+            "user": BASE64_URL_SAFE.encode(&user_x),
+            "data": "updated secret",
+        }))
+        .unwrap()
+        .into(),
+      ),
+    )
+    .await
+    .unwrap();
+
+    // Ensure we cannot use update to sign a record over to another user
+    assert!(
+      update_record_handler(
+        State(state.clone()),
+        Path(("test_api".to_string(), BASE64_URL_SAFE.encode(&user_x))),
+        User::from_auth_token(&state, &user_x_token.auth_token),
+        Either::Json(
+          json_row_from_value(json!({
+              "user": BASE64_URL_SAFE.encode(&user_y),
+              "data": "updated secret",
+          }))
+          .unwrap()
+          .into(),
+        ),
+      )
+      .await
+      .is_err()
+    );
   }
 }
