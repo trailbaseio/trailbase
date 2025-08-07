@@ -16,7 +16,7 @@ use trailbase_sqlite::{NamedParamRef, NamedParams, Params as _, Value};
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
 use crate::constants::USER_TABLE;
-use crate::records::params::{LazyParams, prefix_colon};
+use crate::records::params::{LazyParams, Params, prefix_colon};
 use crate::records::{Permission, RecordError};
 
 #[derive(Clone)]
@@ -426,7 +426,7 @@ impl RecordApi {
     &self,
     p: Permission,
     record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_, RecordApi>>,
+    request_params: Option<&mut LazyParams<'_>>,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
@@ -568,7 +568,7 @@ impl RecordApi {
     &self,
     p: Permission,
     record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_, RecordApi>>,
+    request_params: Option<&mut LazyParams<'_>>,
     user: Option<&User>,
   ) -> Result<NamedParams, RecordError> {
     // We need to inject context like: record id, user, request, and row into the access
@@ -580,40 +580,49 @@ impl RecordApi {
           return Err(RecordError::ApiRequiresTable);
         };
 
-        let request_params = request_params
-          .ok_or_else(|| RecordError::Internal("missing req params".into()))?
+        let (named_params, column_names, column_indexes) = match request_params
+          .ok_or_else(|| RecordError::Internal("missing insert params".into()))?
           .params()
-          .map_err(|err| RecordError::Internal(err.into()))?;
+          .map_err(|_| RecordError::BadRequest("invalid params"))?
+        {
+          Params::Insert {
+            named_params,
+            column_names,
+            column_indexes,
+            ..
+          } => {
+            assert_eq!(p, Permission::Create);
+            (named_params, column_names, column_indexes)
+          }
+          Params::Update {
+            named_params,
+            column_names,
+            column_indexes,
+            ..
+          } => {
+            assert_eq!(p, Permission::Update);
+            (named_params, column_names, column_indexes)
+          }
+        };
+
+        assert_eq!(column_names.len(), column_indexes.len());
 
         // NOTE: We cannot have access queries access missing _REQ_.props. So we need to inject an
         // explicit NULL value for all missing fields on the request. Can we make this cheaper,
         // either by pre-processing the access query or improving construction?
-        let mut named_params = self.state.schema.named_params_template.clone();
+        let mut all_named_params = self.state.schema.named_params_template.clone();
 
-        // 'outer: for (placeholder, value) in &request_params.named_params {
-        //   for (p, ref mut v) in named_params.iter_mut() {
-        //     if *placeholder == *p {
-        //       *v = value.clone();
-        //       continue 'outer;
-        //     }
-        //   }
-        // }
-
-        assert_eq!(
-          request_params.column_names.len(),
-          request_params.column_indexes.len()
-        );
-        for (index, column_index) in request_params.column_indexes.iter().enumerate() {
+        for (index, column_index) in column_indexes.iter().enumerate() {
           // Override the default NULL value with the request value.
-          named_params[*column_index].1 = request_params.named_params[index].1.clone();
+          all_named_params[*column_index].1 = named_params[index].1.clone();
         }
 
-        named_params.push((
+        all_named_params.push((
           Cow::Borrowed(":__fields"),
-          Value::Text(serde_json::to_string(&request_params.column_names).expect("json array")),
+          Value::Text(serde_json::to_string(&column_names).expect("json array")),
         ));
 
-        named_params
+        all_named_params
       }
       Permission::Read | Permission::Delete | Permission::Schema => NamedParams::with_capacity(2),
     };

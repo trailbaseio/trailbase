@@ -11,8 +11,6 @@ use crate::schema_metadata::{self, JsonColumnMetadata, TableMetadata};
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ParamsError {
-  #[error("Not an object")]
-  NotAnObject,
   #[error("Not a Number")]
   NotANumber,
   #[error("Column error: {0}")]
@@ -22,13 +20,11 @@ pub enum ParamsError {
   #[error("Unexpected type: {0}, expected {1}")]
   UnexpectedType(&'static str, String),
   #[error("Decoding error: {0}")]
-  Decode(#[from] base64::DecodeError),
+  Base64Decode(base64::DecodeError),
   #[error("Nested object: {0}")]
   NestedObject(String),
   #[error("Nested array: {0}")]
   NestedArray(String),
-  #[error("Inhomogenous array: {0}")]
-  InhomogenousArray(String),
   #[error("Parse int error: {0}")]
   ParseInt(#[from] std::num::ParseIntError),
   #[error("Parse float error: {0}")]
@@ -61,7 +57,7 @@ impl From<trailbase_schema::json::JsonError> for ParamsError {
       trailbase_schema::json::JsonError::Finite => Self::NotANumber,
       trailbase_schema::json::JsonError::ValueNotFound => Self::ValueNotFound,
       trailbase_schema::json::JsonError::NotSupported => Self::UnexpectedType("?", "?".to_string()),
-      trailbase_schema::json::JsonError::Decode(err) => Self::Decode(err),
+      trailbase_schema::json::JsonError::Decode(err) => Self::Base64Decode(err),
       trailbase_schema::json::JsonError::UnexpectedType(expected, got) => {
         Self::UnexpectedType(expected, format!("{got:?}"))
       }
@@ -112,120 +108,74 @@ impl SchemaAccessor for RecordApi {
   }
 }
 
-pub struct PrimaryKeyParam {
-  pub column_name: String,
-  pub value: Value,
-}
-
 /// Represents a record provided by the user via request, i.e. a create or update record request.
 ///
 /// To construct a `Params`, the request will be transformed, i.e. fields for unknown columns will
 /// be filtered out and the json values will be translated into SQLite values.
-///
-/// NOTE: We could probably have two different implementations: InsertParams and UpateParams,
-/// however this would bubble all the way up to LazyParams.
-pub struct Params {
-  /// List of named params with their respective placeholders, e.g.:
-  ///   '(":col_name": Value::Text("hi"))'.
-  pub(super) named_params: NamedParams,
+pub enum Params {
+  Insert {
+    /// List of named params with their respective placeholders, e.g.:
+    ///   '(":col_name": Value::Text("hi"))'.
+    named_params: NamedParams,
 
-  /// List of files and contents to be written to an object store.
-  pub(super) files: FileMetadataContents,
+    /// List of files and contents to be written to an object store.
+    files: FileMetadataContents,
 
-  /// Metadata for mapping `named_params` back to SQL schema to construct Insert/Update queries.
-  pub(super) column_names: Vec<String>,
-  pub(super) column_indexes: Vec<usize>,
+    /// Metadata for mapping `named_params` back to SQL schema to construct Insert/Update queries.
+    column_names: Vec<String>,
+    column_indexes: Vec<usize>,
+  },
+  Update {
+    /// List of named params with their respective placeholders, e.g.:
+    ///   '(":col_name": Value::Text("hi"))'.
+    named_params: NamedParams,
 
-  pub(super) pk_column_name: Option<String>,
+    /// List of files and contents to be written to an object store.
+    files: FileMetadataContents,
+
+    /// Metadata for mapping `named_params` back to SQL schema to construct Insert/Update queries.
+    column_names: Vec<String>,
+    column_indexes: Vec<usize>,
+
+    pk_column_name: String,
+  },
 }
 
 impl Params {
-  /// Converts a top-level Json object into trailbase_sqlite::Values and extract files.
-  ///
-  /// Note: that this function by design is non-recursive, since we're mapping to a flat hierarchy
-  /// in sqlite, since even JSON/JSONB is simply text/blob that is lazily parsed.
-  ///
-  /// The expected format is:
-  ///
-  /// request = {
-  ///   "col0": "text",
-  ///   "col1": <base64(b"123")>,
-  ///   "file_col": {
-  ///     data: ...
-  ///   }
-  /// }
-  ///
-  /// The optional files parameter is there to receive files in case the input JSON was extracted
-  /// form a multipart/form. In that case files are handled separately and not embedded in the JSON
-  /// value itself in contrast to when the original request was an actual JSON request.
-  pub fn from<S: SchemaAccessor>(
+  /// Converts a Json object + optional MultiPart files into trailbase_sqlite::Values and extracted
+  /// files.
+  pub fn for_insert<S: SchemaAccessor>(
     accessor: &S,
     json: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
-    primary_key: Option<PrimaryKeyParam>,
     fancy_parse_string: bool,
   ) -> Result<Self, ParamsError> {
-    let mut named_params = NamedParams::with_capacity(json.len() + 1);
-    let mut column_names = Vec::with_capacity(json.len() + 1);
-    let mut column_indexes = Vec::with_capacity(json.len() + 1);
+    let mut named_params = NamedParams::with_capacity(json.len());
+    let mut column_names = Vec::with_capacity(json.len());
+    let mut column_indexes = Vec::with_capacity(json.len());
 
     let mut files: FileMetadataContents = vec![];
 
-    let pk_column_name = if let Some(primary_key) = primary_key {
-      // Update parameters case.
-      for (key, value) in json {
-        // We simply skip unknown columns, this could simply be malformed input or version skew. This
-        // is similar in spirit to protobuf's unknown fields behavior.
-        let Some((index, col, json_meta)) = accessor.column_by_name(&key) else {
-          continue;
-        };
+    // Insert parameters case.
+    for (key, value) in json {
+      // We simply skip unknown columns, this could simply be malformed input or version skew. This
+      // is similar in spirit to protobuf's unknown fields behavior.
+      let Some((index, col, json_meta)) = accessor.column_by_name(&key) else {
+        continue;
+      };
 
-        let (param, json_files) =
-          extract_params_and_files_from_json(col, json_meta, value, fancy_parse_string)?;
-        if let Some(json_files) = json_files {
-          // Note: files provided as a multipart form upload are handled below. They need more
-          // special handling to establish the field.name to column mapping.
-          files.extend(json_files);
-        }
-
-        if key == primary_key.column_name && primary_key.value != param {
-          return Err(ParamsError::Column(
-            "Primary key mismatch in update request",
-          ));
-        }
-
-        named_params.push((prefix_colon(&key).into(), param));
-        column_names.push(key);
-        column_indexes.push(index);
+      let (param, json_files) =
+        extract_params_and_files_from_json(col, json_meta, value, fancy_parse_string)?;
+      if let Some(json_files) = json_files {
+        // Note: files provided as a multipart form upload are handled below. They need more
+        // special handling to establish the field.name to column mapping.
+        files.extend(json_files);
       }
 
-      // Inject the pk_value. It may already be present, if redundantly provided both in the API path
-      // *and* the request. In most cases it probably wont and duplication is not an issue.
-      named_params.push((":__pk_value".into(), primary_key.value));
-      Some(primary_key.column_name)
-    } else {
-      // Insert parameters case.
-      for (key, value) in json {
-        // We simply skip unknown columns, this could simply be malformed input or version skew. This
-        // is similar in spirit to protobuf's unknown fields behavior.
-        let Some((index, col, json_meta)) = accessor.column_by_name(&key) else {
-          continue;
-        };
-
-        let (param, json_files) =
-          extract_params_and_files_from_json(col, json_meta, value, fancy_parse_string)?;
-        if let Some(json_files) = json_files {
-          // Note: files provided as a multipart form upload are handled below. They need more
-          // special handling to establish the field.name to column mapping.
-          files.extend(json_files);
-        }
-
-        named_params.push((prefix_colon(&key).into(), param));
-        column_names.push(key);
-        column_indexes.push(index);
-      }
-      None
-    };
+      named_params.push((prefix_colon(&key).into(), param));
+      column_names.push(key);
+      column_indexes.push(index);
+    }
 
     // Note: files provided as part of a JSON request are handled above.
     if let Some(multipart_files) = multipart_files {
@@ -238,7 +188,71 @@ impl Params {
       )?);
     }
 
-    return Ok(Params {
+    return Ok(Params::Insert {
+      named_params,
+      files,
+      column_names,
+      column_indexes,
+    });
+  }
+
+  pub fn for_update<S: SchemaAccessor>(
+    accessor: &S,
+    json: JsonRow,
+    multipart_files: Option<Vec<FileUploadInput>>,
+    pk_column_name: String,
+    pk_column_value: Value,
+    fancy_parse_string: bool,
+  ) -> Result<Self, ParamsError> {
+    let mut named_params = NamedParams::with_capacity(json.len() + 1);
+    let mut column_names = Vec::with_capacity(json.len() + 1);
+    let mut column_indexes = Vec::with_capacity(json.len() + 1);
+
+    let mut files: FileMetadataContents = vec![];
+
+    // Update parameters case.
+    for (key, value) in json {
+      // We simply skip unknown columns, this could simply be malformed input or version skew. This
+      // is similar in spirit to protobuf's unknown fields behavior.
+      let Some((index, col, json_meta)) = accessor.column_by_name(&key) else {
+        continue;
+      };
+
+      let (param, json_files) =
+        extract_params_and_files_from_json(col, json_meta, value, fancy_parse_string)?;
+      if let Some(json_files) = json_files {
+        // Note: files provided as a multipart form upload are handled below. They need more
+        // special handling to establish the field.name to column mapping.
+        files.extend(json_files);
+      }
+
+      if key == pk_column_name && pk_column_value != param {
+        return Err(ParamsError::Column(
+          "Primary key mismatch in update request",
+        ));
+      }
+
+      named_params.push((prefix_colon(&key).into(), param));
+      column_names.push(key);
+      column_indexes.push(index);
+    }
+
+    // Inject the pk_value. It may already be present, if redundantly provided both in the API path
+    // *and* the request. In most cases it probably wont and duplication is not an issue.
+    named_params.push((":__pk_value".into(), pk_column_value));
+
+    // Note: files provided as part of a JSON request are handled above.
+    if let Some(multipart_files) = multipart_files {
+      files.extend(extract_files_from_multipart(
+        accessor,
+        multipart_files,
+        &mut named_params,
+        &mut column_names,
+        &mut column_indexes,
+      )?);
+    }
+
+    return Ok(Params::Update {
       named_params,
       files,
       column_names,
@@ -253,78 +267,66 @@ impl Params {
 ///
 /// If the request gets rejected by the policy we want to avoid parsing the request JSON and if the
 /// engine requires a parse we don't want to re-parse in the handler.
-///
-/// NOTE: Table level access checking could probably happen even sooner before we process multipart
-/// streams at all.
-pub struct LazyParams<'a, S: SchemaAccessor> {
-  // Input
-  accessor: &'a S,
-  json_row: JsonRow,
-  multipart_files: Option<Vec<FileUploadInput>>,
-  primary_key: Option<PrimaryKeyParam>,
-
-  // Cached evaluate params. We could use a OnceCell but we don't need the synchronisation.
-  result: Option<Result<Params, ParamsError>>,
+pub enum LazyParams<'a> {
+  LazyInsert(Option<Box<dyn (FnOnce() -> Result<Params, ParamsError>) + Send + 'a>>),
+  LazyUpdate(Option<Box<dyn (FnOnce() -> Result<Params, ParamsError>) + Send + 'a>>),
+  Params(Result<Params, ParamsError>),
 }
 
-impl<'a, S: SchemaAccessor> LazyParams<'a, S> {
-  pub fn for_insert(
+impl<'a> LazyParams<'a> {
+  pub fn for_insert<S: SchemaAccessor + Sync>(
     accessor: &'a S,
     json_row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Self {
-    LazyParams {
-      accessor,
-      json_row,
-      primary_key: None,
-      multipart_files,
-      result: None,
-    }
+    return LazyParams::LazyInsert(Some(Box::new(move || {
+      return Params::for_insert(accessor, json_row, multipart_files, false);
+    })));
   }
 
-  pub fn for_update(
+  pub fn for_update<S: SchemaAccessor + Sync>(
     accessor: &'a S,
     json_row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
     primary_key_column: String,
     primary_key_value: Value,
   ) -> Self {
-    LazyParams {
-      accessor,
-      json_row,
-      primary_key: Some(PrimaryKeyParam {
-        column_name: primary_key_column,
-        value: primary_key_value,
-      }),
-      multipart_files,
-      result: None,
-    }
+    return LazyParams::LazyUpdate(Some(Box::new(move || {
+      return Params::for_update(
+        accessor,
+        json_row,
+        multipart_files,
+        primary_key_column,
+        primary_key_value,
+        false,
+      );
+    })));
   }
 
   pub fn params(&mut self) -> Result<&'_ Params, ParamsError> {
-    let result = self.result.get_or_insert_with(|| {
-      Params::from(
-        self.accessor,
-        std::mem::take(&mut self.json_row),
-        std::mem::take(&mut self.multipart_files),
-        std::mem::take(&mut self.primary_key),
-        false,
-      )
-    });
+    return match self {
+      LazyParams::Params(result) => result.as_ref().map_err(|err| err.clone()),
+      LazyParams::LazyInsert(builder) | LazyParams::LazyUpdate(builder) => {
+        let Some(builder) = std::mem::take(builder) else {
+          unreachable!("empty builder");
+        };
 
-    return result.as_ref().map_err(|err| err.clone());
+        *self = Self::Params(builder());
+        let LazyParams::Params(result) = self else {
+          unreachable!("just assigned");
+        };
+        result.as_ref().map_err(|err| err.clone())
+      }
+    };
   }
 
-  pub fn consume(mut self) -> Result<Params, ParamsError> {
-    return self.result.take().unwrap_or_else(|| {
-      Params::from(
-        self.accessor,
-        self.json_row,
-        self.multipart_files,
-        self.primary_key,
-        false,
-      )
-    });
+  pub fn consume(self) -> Result<Params, ParamsError> {
+    return match self {
+      LazyParams::Params(result) => result,
+      LazyParams::LazyInsert(builder) | LazyParams::LazyUpdate(builder) => {
+        builder.expect("unreachable")()
+      }
+    };
   }
 }
 
@@ -438,29 +440,28 @@ fn extract_params_and_files_from_json(
       match col.data_type {
         ColumnDataType::Blob => return Ok((Value::Blob(json_array_to_bytes(arr)?), None)),
         ColumnDataType::Text => {
-          if let Some(ref json) = json_meta {
-            match json {
-              JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
-                let file_upload_vec: Vec<FileUploadInput> = serde_json::from_value(value)?;
+          match json_meta {
+            Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUploads" => {
+              let file_upload_vec: Vec<FileUploadInput> = serde_json::from_value(value)?;
 
-                // TODO: Optimize the copying here. Not very critical.
-                let mut temp: Vec<FileUpload> = vec![];
-                let mut uploads: FileMetadataContents = vec![];
-                for file in file_upload_vec {
-                  let (_col_name, metadata, content) = file.consume()?;
-                  temp.push(metadata.clone());
-                  uploads.push((metadata, content));
-                }
-
-                let param = Value::Text(serde_json::to_string(&FileUploads(temp))?);
-
-                return Ok((param, Some(uploads)));
+              // TODO: Optimize the copying here. Not very critical.
+              let mut temp: Vec<FileUpload> = vec![];
+              let mut uploads: FileMetadataContents = vec![];
+              for file in file_upload_vec {
+                let (_col_name, metadata, content) = file.consume()?;
+                temp.push(metadata.clone());
+                uploads.push((metadata, content));
               }
-              schema => {
-                schema.validate(&value)?;
-                return Ok((Value::Text(value.to_string()), None));
-              }
+
+              let param = Value::Text(serde_json::to_string(&FileUploads(temp))?);
+
+              return Ok((param, Some(uploads)));
             }
+            Some(schema) => {
+              schema.validate(&value)?;
+              return Ok((Value::Text(value.to_string()), None));
+            }
+            _ => {}
           }
         }
         _ => {}
@@ -548,10 +549,20 @@ mod tests {
     let num = 5;
     let real = 3.0;
 
-    let assert_params = |p: Params| {
-      assert!(p.named_params.len() >= 5, "{:?}", p.named_params);
+    let assert_params = |p: &Params| {
+      let Params::Insert {
+        named_params,
+        files: _,
+        column_names: _,
+        column_indexes: _,
+      } = p
+      else {
+        panic!("Not an insert")
+      };
 
-      for (param, value) in &p.named_params {
+      assert!(named_params.len() >= 5, "{:?}", named_params);
+
+      for (param, value) in named_params {
         match param.as_ref() {
           ID_COL_PLACEHOLDER => {
             assert!(
@@ -590,14 +601,7 @@ mod tests {
       });
 
       assert_params(
-        Params::from(
-          &metadata,
-          json_row_from_value(value).unwrap(),
-          None,
-          None,
-          false,
-        )
-        .unwrap(),
+        &Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, false).unwrap(),
       );
     }
 
@@ -612,14 +616,7 @@ mod tests {
       });
 
       assert_params(
-        Params::from(
-          &metadata,
-          json_row_from_value(value).unwrap(),
-          None,
-          None,
-          false,
-        )
-        .unwrap(),
+        &Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, false).unwrap(),
       );
 
       let value = json!({
@@ -631,24 +628,16 @@ mod tests {
       });
 
       assert!(
-        Params::from(
+        Params::for_insert(
           &metadata,
           json_row_from_value(value.clone()).unwrap(),
-          None,
           None,
           false
         )
         .is_err()
       );
       assert_params(
-        Params::from(
-          &metadata,
-          json_row_from_value(value).unwrap(),
-          None,
-          None,
-          true,
-        )
-        .unwrap(),
+        &Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, true).unwrap(),
       );
     }
 
@@ -664,14 +653,7 @@ mod tests {
       });
 
       assert!(
-        Params::from(
-          &metadata,
-          json_row_from_value(value).unwrap(),
-          None,
-          None,
-          false
-        )
-        .is_err()
+        Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, false).is_err()
       );
 
       // Test that nested JSON object can be passed.
@@ -686,15 +668,9 @@ mod tests {
         "real": 3,
       });
 
-      let params = Params::from(
-        &metadata,
-        json_row_from_value(value).unwrap(),
-        None,
-        None,
-        false,
-      )
-      .unwrap();
-      assert_params(params);
+      let params =
+        Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, false).unwrap();
+      assert_params(&params);
     }
 
     {
@@ -707,14 +683,7 @@ mod tests {
       });
 
       assert!(
-        Params::from(
-          &metadata,
-          json_row_from_value(value).unwrap(),
-          None,
-          None,
-          false
-        )
-        .is_err()
+        Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, false).is_err()
       );
 
       // Test that nested JSON array can be passed.
@@ -732,17 +701,15 @@ mod tests {
         "real": 3,
       });
 
-      let params = Params::from(
-        &metadata,
-        json_row_from_value(value).unwrap(),
-        None,
-        None,
-        false,
-      )
-      .unwrap();
+      let params =
+        Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, false).unwrap();
 
-      let json_col: Vec<Value> = params
-        .named_params
+      assert_params(&params);
+
+      let Params::Insert { named_params, .. } = params else {
+        panic!("Not an insert");
+      };
+      let json_col: Vec<Value> = named_params
         .iter()
         .filter_map(|(name, value)| {
           if name == ":json_col" {
@@ -751,8 +718,6 @@ mod tests {
           return None;
         })
         .collect();
-
-      assert_params(params);
 
       assert_eq!(json_col.len(), 1);
       let Value::Text(ref text) = json_col[0] else {

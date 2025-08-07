@@ -44,7 +44,7 @@ pub(crate) async fn insert_row(
     schema_metadata.json_metadata.has_file_columns(),
     // NOTE: We "fancy" parse JSON string values, since the UI currently ships everything as a
     // string. We could consider pushing some more type-awareness into the ui.
-    Params::from(&*schema_metadata, json_row, None, None, true)?,
+    Params::for_insert(&*schema_metadata, json_row, None, true)?,
   )
   .await?;
 

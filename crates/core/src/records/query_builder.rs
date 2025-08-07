@@ -318,19 +318,20 @@ impl InsertQueryBuilder {
     params_list: Vec<Params>,
   ) -> Result<Vec<rusqlite::types::Value>, QueryError> {
     let mut all_files: FileMetadataContents = vec![];
-    let mut query_and_params: Vec<(String, NamedParams)> = vec![];
+    let query_and_params = params_list
+      .into_iter()
+      .map(|params| -> Result<_, QueryError> {
+        let (query, named_params, mut files) = Self::build_insert_query(
+          table_name,
+          params,
+          conflict_resolution,
+          Some(return_column_name),
+        )?;
 
-    for params in params_list {
-      let (query, named_params, mut files) = Self::build_insert_query(
-        table_name,
-        params,
-        conflict_resolution,
-        Some(return_column_name),
-      )?;
-
-      all_files.append(&mut files);
-      query_and_params.push((query, named_params));
-    }
+        all_files.append(&mut files);
+        return Ok((query, named_params));
+      })
+      .collect::<Result<Vec<_>, _>>()?;
 
     // We're storing any files to the object store first to make sure the DB entry is valid right
     // after commit and not racily pointing to soon-to-be-written files.
@@ -382,12 +383,23 @@ impl InsertQueryBuilder {
     return Ok(result.into_iter().map(|(_rowid, v)| v).collect());
   }
 
+  #[inline]
   fn build_insert_query(
     table_name: &QualifiedNameEscaped,
     params: Params,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     return_column_name: Option<&str>,
   ) -> Result<(String, NamedParams, FileMetadataContents), QueryError> {
+    let Params::Insert {
+      named_params,
+      files,
+      column_names,
+      column_indexes: _,
+    } = params
+    else {
+      return Err(QueryError::Internal("not an insert".into()));
+    };
+
     let conflict_clause = match conflict_resolution {
       Some(ConflictResolutionStrategy::Abort) => "OR ABORT",
       Some(ConflictResolutionStrategy::Rollback) => "OR ROLLBACK",
@@ -406,13 +418,13 @@ impl InsertQueryBuilder {
     let query = CreateRecordQueryTemplate {
       table_name,
       conflict_clause,
-      column_names: &params.column_names,
+      column_names: &column_names,
       returning,
     }
     .render()
     .map_err(|err| QueryError::Internal(err.into()))?;
 
-    return Ok((query, params.named_params, params.files));
+    return Ok((query, named_params, files));
   }
 }
 
@@ -432,19 +444,25 @@ impl UpdateQueryBuilder {
     state: &AppState,
     table_name: &QualifiedNameEscaped,
     has_file_columns: bool,
-    mut params: Params,
+    params: Params,
   ) -> Result<(), QueryError> {
-    if params.column_names.is_empty() {
+    let Params::Update {
+      named_params,
+      files,
+      column_names,
+      column_indexes: _,
+      pk_column_name,
+    } = params
+    else {
+      return Err(QueryError::Internal("not an update".into()));
+    };
+    if column_names.is_empty() {
       // Nothing to do.
       return Ok(());
     }
-    let Some(pk_column_name) = params.pk_column_name else {
-      return Err(QueryError::Precondition("Missing pk params"));
-    };
 
     // We're storing any files to the object store first to make sure the DB entry is valid right
     // after commit and not racily pointing to soon-to-be-written files.
-    let files = std::mem::take(&mut params.files);
     let mut file_manager = if files.is_empty() {
       FileManager::empty()
     } else {
@@ -453,7 +471,7 @@ impl UpdateQueryBuilder {
 
     let query = UpdateRecordQueryTemplate {
       table_name,
-      column_names: &params.column_names,
+      column_names: &column_names,
       pk_column_name: &pk_column_name,
       returning: Some("_rowid_"),
     }
@@ -462,7 +480,7 @@ impl UpdateQueryBuilder {
 
     let rowid: Option<i64> = state
       .conn()
-      .query_row_f(query, params.named_params, |row| row.get(0))
+      .query_row_f(query, named_params, |row| row.get(0))
       .await?;
 
     // Successful write, do not cleanup written files.
