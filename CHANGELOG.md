@@ -1,3 +1,10 @@
+## v0.16.1
+
+* Fix cleanup of pending file deletions and add comprehensive tests.
+* Override default `--version` flag to yield version tag rather than crates version.
+* Cleanup repo: all Rust code is now in a crates sub-directory.
+* Update dependencies.
+
 ## v0.16.0
 
 * Less magic: parse JSON/Form requests more strictly during record creation/updates. Previously, `{ "int_col": "1" }` would be parsed to `{ "int_col": 1 }`. If you were using type-safe, generated bindings or properly typed your requests, this change will not affect you.
