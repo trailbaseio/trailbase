@@ -1,3 +1,9 @@
+## v0.16.2
+
+* Fix regression allowing record updates to alter the primary key. In rare setups, this could be abused. For example, a primary key column referencing `_user(id)` would have allowed users to sign their records over to other users. Now covered by tests.
+* Break up input (lazy-)params into separate insert & update params to simplify the individual paths.
+* Update dependencies.
+
 ## v0.16.1
 
 * Fix cleanup of pending file deletions and add comprehensive tests.
