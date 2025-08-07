@@ -422,8 +422,8 @@ async fn delete_pending_files_job(
   object_store: &(dyn object_store::ObjectStore + Send + Sync),
 ) -> Result<(), FileError> {
   let rows: Vec<FileDeletionsDb> = match conn
-    .read_query_values(
-      "SELECT * FROM _file_deletions WHERE deleted < (UNIXEPOCH() - 900)",
+    .write_query_values(
+      "DELETE FROM _file_deletions WHERE deleted < (UNIXEPOCH() - 900) RETURNING *",
       (),
     )
     .await

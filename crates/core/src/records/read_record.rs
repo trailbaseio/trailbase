@@ -272,6 +272,8 @@ fn prefix_filter(col_name: &str) -> bool {
 
 #[cfg(test)]
 mod test {
+  use std::io::Read;
+
   use axum::Json;
   use axum::extract::{Path, Query, State};
   use serde_json::json;
@@ -652,42 +654,61 @@ mod test {
     );
   }
 
+  async fn read_objectstore_file(
+    store: &dyn object_store::ObjectStore,
+    path: &object_store::path::Path,
+  ) -> Vec<u8> {
+    let contents = store.get(&path).await.unwrap();
+
+    let object_store::GetResultPayload::File(mut file, _path) = contents.payload else {
+      panic!("expected file");
+    };
+
+    let mut buf = vec![];
+    file.read_to_end(&mut buf).unwrap();
+    return buf;
+  }
+
   #[tokio::test]
-  async fn test_multiple_file_upload_download_e2e() {
+  async fn test_multiple_file_upload_download_e2e_and_deletion() {
     let state = test_state(None).await.unwrap();
     const API_NAME: &str = "test_api";
     create_test_record_api(&state, API_NAME).await;
 
+    let bytes0: Vec<u8> = vec![0, 1, 2, 3, 4, 5];
     let bytes1: Vec<u8> = vec![0, 1, 1, 2];
     let bytes2: Vec<u8> = vec![42, 5, 42, 5];
 
-    let files_column = "files";
-    let resp: CreateRecordResponse = unpack_json_response(
+    let request = json!({
+      "file" : FileUploadInput {
+        name: Some("foo0".to_string()),
+        filename: Some("bar0".to_string()),
+        content_type: Some("baz0".to_string()),
+        data: bytes0.clone(),
+      },
+      "files": vec![
+          FileUploadInput {
+            name: Some("foo1".to_string()),
+            filename: Some("bar1".to_string()),
+            content_type: Some("baz1".to_string()),
+            data: bytes1.clone(),
+          },
+          FileUploadInput {
+            name: Some("foo2".to_string()),
+            filename: Some("bar2".to_string()),
+            content_type: Some("baz2".to_string()),
+            data: bytes2.clone(),
+          },
+      ],
+    });
+
+    let resp0: CreateRecordResponse = unpack_json_response(
       create_record_handler(
         State(state.clone()),
         Path(API_NAME.to_string()),
         Query(CreateRecordQuery::default()),
         None,
-        Either::Json(
-          json_row_from_value(json!({
-            files_column: vec![
-            FileUploadInput {
-              name: Some("foo0".to_string()),
-              filename: Some("bar0".to_string()),
-              content_type: Some("baz0".to_string()),
-              data: bytes1.clone(),
-            },
-            FileUploadInput {
-              name: Some("foo1".to_string()),
-              filename: Some("bar1".to_string()),
-              content_type: Some("baz1".to_string()),
-              data: bytes2.clone(),
-            },
-            ],
-          }))
-          .unwrap()
-          .into(),
-        ),
+        Either::Json(json_row_from_value(request.clone()).unwrap().into()),
       )
       .await
       .unwrap(),
@@ -695,45 +716,140 @@ mod test {
     .await
     .unwrap();
 
-    let record_path = Path((API_NAME.to_string(), resp.ids[0].clone()));
+    let assert_all_files_contents = async |record_id: String| -> Vec<object_store::path::Path> {
+      async fn assert_file(
+        state: &AppState,
+        index: i64,
+        expected: &[u8],
+        f: &FileUpload,
+        read: impl AsyncFnOnce() -> Response,
+      ) -> object_store::path::Path {
+        assert_eq!(f.original_filename(), Some(format!("bar{index}").as_str()));
+        assert_eq!(f.content_type(), Some(format!("baz{index}").as_str()));
 
-    let Json(value) = read_record_handler(
-      State(state.clone()),
-      record_path,
-      Query(ReadRecordQuery::default()),
-      None,
+        let file_path = object_store::path::Path::from(f.path());
+        assert_eq!(
+          *expected,
+          read_objectstore_file(state.objectstore(), &file_path).await
+        );
+
+        let response = read().await;
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+          .await
+          .unwrap();
+
+        assert_eq!(*expected, body);
+
+        return file_path;
+      }
+
+      let Json(value) = read_record_handler(
+        State(state.clone()),
+        Path((API_NAME.to_string(), record_id.clone())),
+        Query(ReadRecordQuery::default()),
+        None,
+      )
+      .await
+      .unwrap();
+
+      let serde_json::Value::Object(map) = value else {
+        panic!("Not a map");
+      };
+
+      let file: FileUpload = serde_json::from_value(map.get("file").unwrap().clone()).unwrap();
+      let files: Vec<FileUpload> =
+        serde_json::from_value(map.get("files").unwrap().clone()).unwrap();
+
+      return vec![
+        assert_file(&state, 0, &bytes0, &file, async || {
+          let api_path = Path((API_NAME.to_string(), record_id.clone(), "file".to_string()));
+          return get_uploaded_file_from_record_handler(State(state.clone()), api_path, None)
+            .await
+            .unwrap();
+        })
+        .await,
+        assert_file(&state, 1, &bytes1, &files[0], async || {
+          let api_path = Path((
+            API_NAME.to_string(),
+            record_id.clone(),
+            "files".to_string(),
+            0,
+          ));
+          return get_uploaded_files_from_record_handler(State(state.clone()), api_path, None)
+            .await
+            .unwrap();
+        })
+        .await,
+        assert_file(&state, 2, &bytes2, &files[1], async || {
+          let api_path = Path((
+            API_NAME.to_string(),
+            record_id.clone(),
+            "files".to_string(),
+            1,
+          ));
+          return get_uploaded_files_from_record_handler(State(state.clone()), api_path, None)
+            .await
+            .unwrap();
+        })
+        .await,
+      ];
+    };
+
+    let paths0 = assert_all_files_contents.clone()(resp0.ids[0].clone()).await;
+
+    // Insert two more records to check bulk creation.
+    let resp1: CreateRecordResponse = unpack_json_response(
+      create_record_handler(
+        State(state.clone()),
+        Path(API_NAME.to_string()),
+        Query(CreateRecordQuery::default()),
+        None,
+        Either::Json(serde_json::Value::Array(vec![
+          request.clone(),
+          request.clone(),
+        ])),
+      )
+      .await
+      .unwrap(),
     )
     .await
     .unwrap();
 
-    let serde_json::Value::Object(map) = value else {
-      panic!("Not a map");
+    let paths1_0 = assert_all_files_contents.clone()(resp1.ids[0].clone()).await;
+    let paths1_1 = assert_all_files_contents.clone()(resp1.ids[1].clone()).await;
+
+    let all_records_ids: Vec<String> = {
+      let mut ids = resp1.ids;
+      ids.push(resp0.ids[0].clone());
+      ids
     };
 
-    let file_uploads: Vec<FileUpload> =
-      serde_json::from_value(map.get("files").unwrap().clone()).unwrap();
-
-    for (index, bytes) in [(0, bytes1), (1, bytes2)] {
-      let f = &file_uploads[index];
-      assert_eq!(f.original_filename(), Some(format!("bar{index}").as_str()));
-      assert_eq!(f.content_type(), Some(format!("baz{index}").as_str()));
-
-      let record_file_path = Path((
-        API_NAME.to_string(),
-        resp.ids[0].clone(),
-        files_column.to_string(),
-        index,
-      ));
-
-      let response =
-        get_uploaded_files_from_record_handler(State(state.clone()), record_file_path, None)
-          .await
-          .unwrap();
-
-      let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+    for id in all_records_ids {
+      let _ = delete_record_handler(State(state.clone()), Path((API_NAME.to_string(), id)), None)
         .await
         .unwrap();
-      assert_eq!(body.to_vec(), bytes);
+    }
+
+    // Make sure the _file_deletions have been processed
+    let count: i64 = state
+      .conn()
+      .read_query_value("SELECT COUNT(*) FROM _file_deletions", ())
+      .await
+      .unwrap()
+      .unwrap();
+
+    assert_eq!(0, count);
+
+    // And the actual files are gone.
+    for paths in [paths0, paths1_0, paths1_1] {
+      for path in paths {
+        if !matches!(
+          state.objectstore().get(&path).await,
+          Err(object_store::Error::NotFound { .. })
+        ) {
+          panic!("{path} should have been deleted");
+        }
+      }
     }
   }
 

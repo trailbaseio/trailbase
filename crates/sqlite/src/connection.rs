@@ -403,6 +403,27 @@ impl Connection {
       .await;
   }
 
+  pub async fn write_query_values<T: serde::de::DeserializeOwned + Send + 'static>(
+    &self,
+    sql: impl AsRef<str> + Send + 'static,
+    params: impl Params + Send + 'static,
+  ) -> Result<Vec<T>> {
+    return self
+      .call(move |conn: &mut rusqlite::Connection| {
+        let mut stmt = conn.prepare_cached(sql.as_ref())?;
+
+        params.bind(&mut stmt)?;
+        let mut rows = stmt.raw_query();
+
+        let mut values = vec![];
+        while let Some(row) = rows.next()? {
+          values.push(serde_rusqlite::from_row(row)?);
+        }
+        return Ok(values);
+      })
+      .await;
+  }
+
   /// Execute SQL statement.
   pub async fn execute(
     &self,

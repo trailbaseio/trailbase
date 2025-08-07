@@ -10,7 +10,7 @@ use trailbase_sqlite::{NamedParams, Params as _, Value};
 use crate::AppState;
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
-use crate::records::files::{FileManager, delete_pending_files};
+use crate::records::files::{FileError, FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{FileMetadataContents, Params, prefix_colon};
 use crate::schema_metadata::{JsonColumnMetadata, SchemaMetadataCache, TableMetadata};
 
@@ -27,7 +27,7 @@ pub enum QueryError {
   #[error("ObjectStore error: {0}")]
   Storage(#[from] object_store::Error),
   #[error("File error: {0}")]
-  File(#[from] crate::records::files::FileError),
+  File(#[from] FileError),
   #[error("Not found")]
   NotFound,
   #[error("Internal: {0}")]
@@ -303,7 +303,7 @@ impl InsertQueryBuilder {
     file_manager.release();
 
     if Some(ConflictResolutionStrategy::Replace) == conflict_resolution && has_file_columns {
-      delete_pending_files(state, table_name, rowid).await?;
+      delete_files_marked_for_deletion(state, table_name, &[rowid]).await?;
     }
 
     return Ok(return_value);
@@ -366,13 +366,17 @@ impl InsertQueryBuilder {
       })
       .await?;
 
+    if result.is_empty() {
+      return Ok(vec![]);
+    }
+
     // Successful write, do not cleanup written files.
     file_manager.release();
 
     if Some(ConflictResolutionStrategy::Replace) == conflict_resolution && has_file_columns {
-      for (rowid, _) in &result {
-        delete_pending_files(state, table_name, *rowid).await?;
-      }
+      let (rowids, values): (Vec<i64>, Vec<_>) = result.into_iter().unzip();
+      delete_files_marked_for_deletion(state, table_name, &rowids).await?;
+      return Ok(values);
     }
 
     return Ok(result.into_iter().map(|(_rowid, v)| v).collect());
@@ -471,7 +475,7 @@ impl UpdateQueryBuilder {
 
     if has_file_columns {
       if let Some(rowid) = rowid {
-        delete_pending_files(state, table_name, rowid).await?;
+        delete_files_marked_for_deletion(state, table_name, &[rowid]).await?;
       }
     }
 
@@ -500,7 +504,7 @@ impl DeleteQueryBuilder {
       .ok_or_else(|| QueryError::NotFound)?;
 
     if has_file_columns {
-      delete_pending_files(state, table_name, rowid).await?;
+      delete_files_marked_for_deletion(state, table_name, &[rowid]).await?;
     }
 
     return Ok(rowid);

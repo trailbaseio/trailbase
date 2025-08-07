@@ -1,6 +1,7 @@
 use axum::body::Body;
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
+use itertools::Itertools;
 use log::*;
 use object_store::ObjectStore;
 use serde::{Deserialize, Serialize};
@@ -67,20 +68,43 @@ pub(crate) struct FileDeletionsDb {
   json: String,
 }
 
-pub(crate) async fn delete_pending_files(
+/// Deletes files already marked for deletion (by trigger) for the given rowid.
+///
+/// NOTE: We're specific on the record/rowid, rather than deleting all pending files, to avoid
+/// blocking a response on unrelated delations.
+pub(crate) async fn delete_files_marked_for_deletion(
   state: &AppState,
   table_name: &QualifiedNameEscaped,
-  rowid: i64,
+  rowids: &[i64],
 ) -> Result<(), FileError> {
-  let rows: Vec<FileDeletionsDb> = state
-    .conn()
-    .read_query_values(
-      "SELECT * FROM main._file_deletions WHERE table_name = ?1 AND record_rowid = ?2",
-      params!(table_name.to_string(), rowid),
-    )
-    .await?;
+  let rows: Vec<FileDeletionsDb> = match rowids.len() {
+    0 => {
+      return Ok(());
+    }
+    1 => {
+      state
+        .conn()
+        .write_query_values(
+          "DELETE FROM main._file_deletions WHERE table_name = ?1 AND record_rowid = ?2 RETURNING *",
+          trailbase_sqlite::params!(table_name.to_string(), rowids[0]),
+        )
+        .await?
+    }
+    _ => state
+      .conn()
+      .read_query_values(
+        format!(
+          "DELETE FROM main._file_deletions WHERE table_name = {table_name} AND record_rowid IN ({ids}) RETURNING *",
+            ids = rowids.iter().join(", "),
+        ),
+        (),
+      )
+      .await?,
+  };
 
-  delete_pending_files_impl(state.conn(), state.objectstore(), rows).await?;
+  if !rows.is_empty() {
+    delete_pending_files_impl(state.conn(), state.objectstore(), rows).await?;
+  }
 
   return Ok(());
 }
@@ -96,8 +120,12 @@ pub(crate) async fn delete_pending_files_impl(
   }
 
   let mut errors: Vec<FileDeletionsDb> = vec![];
-  let mut delete =
-    async |row: &FileDeletionsDb, file: FileUpload| match delete_file(store, &file).await {
+  let mut delete = async |row: &FileDeletionsDb, file: FileUpload| {
+    let result = store
+      .delete(&object_store::path::Path::from(file.path()))
+      .await;
+
+    match result {
       Err(object_store::Error::NotFound { .. }) | Err(object_store::Error::InvalidPath { .. }) => {
         info!("Dropping further deletion attempts for invalid file: {file:?}");
       }
@@ -108,11 +136,12 @@ pub(crate) async fn delete_pending_files_impl(
           pending_deletion.errors = Some(err.to_string());
           errors.push(pending_deletion);
         } else {
-          info!("Abandoning deletion of {file:?} after {ATTEMPTS_LIMIT} failed attemps: {err}");
+          warn!("Abandoning deletion of {file:?} after {ATTEMPTS_LIMIT} attempts: {err}");
         }
       }
       Ok(_) => {}
     };
+  };
 
   for pending_deletion in pending_deletions {
     let json = &pending_deletion.json;
@@ -157,15 +186,6 @@ pub(crate) async fn delete_pending_files_impl(
   return Ok(());
 }
 
-async fn delete_file(
-  store: &dyn ObjectStore,
-  file: &FileUpload,
-) -> Result<(), object_store::Error> {
-  return store
-    .delete(&object_store::path::Path::from(file.path()))
-    .await;
-}
-
 pub(crate) struct FileManager {
   cleanup: Option<Box<dyn FnOnce() + Send + Sync>>,
 }
@@ -179,10 +199,17 @@ impl FileManager {
     state: &AppState,
     files: FileMetadataContents,
   ) -> Result<Self, object_store::Error> {
+    let store = state.objectstore();
+
     let mut written_files = Vec::<FileUpload>::with_capacity(files.len());
     for (metadata, contents) in files {
       // TODO: We could write files in parallel.
-      write_file(state.objectstore(), &metadata, contents).await?;
+      let path = object_store::path::Path::from(metadata.path());
+
+      let mut writer = store.put_multipart(&path).await?;
+      writer.put_part(contents.into()).await?;
+      writer.complete().await?;
+
       written_files.push(metadata);
     }
 
@@ -217,18 +244,4 @@ impl Drop for FileManager {
       f();
     }
   }
-}
-
-async fn write_file(
-  store: &dyn ObjectStore,
-  metadata: &FileUpload,
-  data: Vec<u8>,
-) -> Result<(), object_store::Error> {
-  let path = object_store::path::Path::from(metadata.path());
-
-  let mut writer = store.put_multipart(&path).await?;
-  writer.put_part(data.into()).await?;
-  writer.complete().await?;
-
-  return Ok(());
 }
