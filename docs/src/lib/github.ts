@@ -31,7 +31,7 @@ export function githubCodeReference(args: {
     case 0:
       throw new Error(`Not match for '${args.match}' in: ${args.path}`);
     case 1:
-      return join(repo, `/blob/main/${args.path}#L${matches[0]}`);
+      return `${repo}/blob/main/${args.path}#L${matches[0]}`;
     default:
       throw new Error(
         `Ambiguous matches for '${args.match}' at lines: ${matches} in: ${args.path}`,
