@@ -4,6 +4,7 @@ title: Record APIs
 
 import { Aside, Code } from "@astrojs/starlight/components";
 import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { githubCodeReference } from '@/lib/github';
 
 import { apiPath, recordApiNamePlaceholder, recordApiIdPlaceholder } from "./_record_apis.ts";
 
@@ -498,11 +499,12 @@ for file downloads:
 
 ### S3 Integration
 
+export const s3StorageConfigUrl = githubCodeReference({ path: "crates/core/proto/config.proto", match: "message S3StorageConfig"});
+
 By default, TrailBase will keep the object store on the local file system under
-`<data-dir>/uploads`.
-Alternatively, one can configure an S3 bucket via the
-[configuration file](https://github.com/trailbaseio/trailbase/blob/main/crates/core/proto/config.proto#L88),
-it's not yet accessible through the admin dashboard.
+`<traildepot>/uploads`.
+Alternatively, an S3 bucket can be set up in the <a href={s3StorageConfigUrl}>configuration</a>.
+It's not yet accessible through the admin dashboard.
 If you need support for
 [other storage backends](https://docs.rs/object_store/latest/object_store/#available-objectstore-implementations),
 let us know.

@@ -4,6 +4,7 @@ title: Models & Relations
 
 import { Image } from "astro:assets";
 import { Aside, Code } from "@astrojs/starlight/components";
+import { githubCodeReference } from '@/lib/github';
 
 import foo from "./_relations.svg"
 
@@ -200,12 +201,13 @@ Naively, for N:M relations, one would have to expose 3 different APIs including
 the bridge table, manage their ACLs and then have the client manually stitch the
 edges.
 
+export const expandConfigUrl = githubCodeReference({ path: "crates/core/proto/config.proto", match: "string expand"});
+
 For simple, single hop child ⇨ parent traversals we can use TrailBase's builtin
 *expansions*, i.e. a referenced parent record will be joined and then nested
 into the child record.
 To do so, we simply add the foreign key column to the record API's
-[*expand*](https://github.com/trailbaseio/trailbase/blob/e094d82f74b48b1b58a4c482dec89044114719d9/trailbase-core/proto/config.proto#L242)
-configuration property.
+<a href={expandConfigUrl}>*expand*</a> configuration property.
 This, in turn, changes the child's data representation, and thus the API
 definition, to create an affordance to nest the parent record.
 Concretely, the API's JSON schema definition of read responses changes to:
