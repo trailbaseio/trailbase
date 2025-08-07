@@ -11,7 +11,7 @@ use crate::AppState;
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
 use crate::records::files::{FileError, FileManager, delete_files_marked_for_deletion};
-use crate::records::params::{FileMetadataContents, Params, prefix_colon};
+use crate::records::params::{FileMetadataContents, Params};
 use crate::schema_metadata::{JsonColumnMetadata, SchemaMetadataCache, TableMetadata};
 
 #[derive(Debug, Error)]
@@ -431,8 +431,6 @@ impl UpdateQueryBuilder {
   pub(crate) async fn run(
     state: &AppState,
     table_name: &QualifiedNameEscaped,
-    pk_column: &str,
-    pk_value: Value,
     has_file_columns: bool,
     mut params: Params,
   ) -> Result<(), QueryError> {
@@ -440,6 +438,9 @@ impl UpdateQueryBuilder {
       // Nothing to do.
       return Ok(());
     }
+    let Some(pk_column_name) = params.pk_column_name else {
+      return Err(QueryError::Precondition("Missing pk params"));
+    };
 
     // We're storing any files to the object store first to make sure the DB entry is valid right
     // after commit and not racily pointing to soon-to-be-written files.
@@ -453,17 +454,11 @@ impl UpdateQueryBuilder {
     let query = UpdateRecordQueryTemplate {
       table_name,
       column_names: &params.column_names,
-      pk_column_name: pk_column,
+      pk_column_name: &pk_column_name,
       returning: Some("_rowid_"),
     }
     .render()
     .map_err(|err| QueryError::Internal(err.into()))?;
-
-    // Inject the pk_value. It may already be present, if redundantly provided both in the API path
-    // *and* the request. In most cases it probably wont and duplication is not an issue.
-    params
-      .named_params
-      .push((prefix_colon(pk_column).into(), pk_value));
 
     let rowid: Option<i64> = state
       .conn()

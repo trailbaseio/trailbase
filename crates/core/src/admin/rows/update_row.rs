@@ -6,7 +6,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::records::params::{JsonRow, Params};
+use crate::records::params::{JsonRow, Params, PrimaryKeyParam};
 use crate::records::query_builder::UpdateQueryBuilder;
 
 #[derive(Debug, Serialize, Deserialize, Default, TS)]
@@ -58,12 +58,23 @@ pub async fn update_row_handler(
   UpdateQueryBuilder::run(
     &state,
     &QualifiedNameEscaped::new(&schema_metadata.schema.name),
-    &column.name,
-    trailbase_schema::json::flat_json_to_value(column.data_type, request.primary_key_value, true)?,
     schema_metadata.json_metadata.has_file_columns(),
-    // NOTE: We "fancy" parse JSON string values, since the UI currently ships everything as a
-    // string. We could consider pushing some more type-awareness into the ui.
-    Params::from(&*schema_metadata, request.row, None, true)?,
+    Params::from(
+      &*schema_metadata,
+      request.row,
+      None,
+      Some(PrimaryKeyParam {
+        column_name: pk_col.clone(),
+        // NOTE: We "fancy" parse JSON string values, since the UI currently ships everything as a
+        // string. We could consider pushing some more type-awareness into the ui.
+        value: trailbase_schema::json::flat_json_to_value(
+          column.data_type,
+          request.primary_key_value,
+          true,
+        )?,
+      }),
+      true,
+    )?,
   )
   .await?;
 

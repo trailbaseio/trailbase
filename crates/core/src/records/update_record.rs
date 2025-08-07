@@ -40,7 +40,14 @@ pub async fn update_record_handler(
   let record_id = api.primary_key_to_value(record)?;
   let (_index, pk_column) = api.record_pk_column();
 
-  let mut lazy_params = LazyParams::new(&api, request, multipart_files);
+  let mut lazy_params = LazyParams::for_update(
+    &api,
+    request,
+    multipart_files,
+    pk_column.name.clone(),
+    record_id.clone(),
+  );
+
   api
     .check_record_level_access(
       Permission::Update,
@@ -53,8 +60,6 @@ pub async fn update_record_handler(
   UpdateQueryBuilder::run(
     &state,
     api.table_name(),
-    &pk_column.name,
-    record_id,
     api.has_file_columns(),
     lazy_params
       .consume()

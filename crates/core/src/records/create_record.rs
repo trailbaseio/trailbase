@@ -129,7 +129,7 @@ pub async fn create_record_handler(
       }
     }
 
-    let mut lazy_params = LazyParams::new(&api, record, files);
+    let mut lazy_params = LazyParams::for_insert(&api, record, files);
 
     // NOTE: We're currently serializing the async checks, we could parallelize them however it's
     // unclear if this would be much faster.

@@ -87,7 +87,7 @@ pub async fn create_avatar_handler(
     serde_json::Value::String(uuid_to_b64(&user.uuid)),
   )]);
 
-  let lazy_params = LazyParams::new(&*table, record, Some(files));
+  let lazy_params = LazyParams::for_insert(&*table, record, Some(files));
   let params = lazy_params
     .consume()
     .map_err(|_| AuthError::BadRequest("parameter conversion"))?;
