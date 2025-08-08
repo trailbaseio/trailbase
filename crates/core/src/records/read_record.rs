@@ -293,6 +293,7 @@ mod test {
   use crate::records::delete_record::delete_record_handler;
   use crate::records::params::JsonRow;
   use crate::records::test_utils::*;
+  use crate::records::update_record::update_record_handler;
   use crate::test::unpack_json_response;
   use crate::util::id_to_b64;
 
@@ -469,6 +470,7 @@ mod test {
           PermissionFlag::Create as i32,
           PermissionFlag::Read as i32,
           PermissionFlag::Delete as i32,
+          PermissionFlag::Update as i32,
         ]
         .into(),
         ..Default::default()
@@ -818,17 +820,21 @@ mod test {
     let paths1_0 = assert_all_files_contents.clone()(resp1.ids[0].clone()).await;
     let paths1_1 = assert_all_files_contents.clone()(resp1.ids[1].clone()).await;
 
-    let all_records_ids: Vec<String> = {
-      let mut ids = resp1.ids;
-      ids.push(resp0.ids[0].clone());
-      ids
-    };
-
-    for id in all_records_ids {
+    for id in resp1.ids {
       let _ = delete_record_handler(State(state.clone()), Path((API_NAME.to_string(), id)), None)
         .await
         .unwrap();
     }
+
+    // Update the first record, which will also trigger deletions.
+    let _ = update_record_handler(
+      State(state.clone()),
+      Path((API_NAME.to_string(), resp0.ids[0].clone())),
+      None,
+      Either::Json(json_row_from_value(request.clone()).unwrap().into()),
+    )
+    .await
+    .unwrap();
 
     // Make sure the _file_deletions have been processed
     let count: i64 = state
