@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { createSignal, Match, Switch, Show, type JSX } from "solid-js";
+import { createSignal, Match, Switch, Show } from "solid-js";
+import type { JSX } from "solid-js";
 import { type FieldApi, createForm } from "@tanstack/solid-form";
 import { TbEye } from "solid-icons/tb";
 import { urlSafeBase64Decode } from "trailbase";
@@ -105,24 +106,55 @@ export function buildTextFormField(opts: TextFieldOptions) {
   return buildTextFormFieldT<string>(opts);
 }
 
-function buildOptionalNullableTextFormField<
-  T extends string | null | undefined,
->(opts: TextFieldOptions, unsetValue: T, handler: (e: Event) => T) {
+/// Used for Settings. Empty field is the same as absent.
+export function buildOptionalTextFormField(opts: TextFieldOptions) {
+  return function (field: () => FieldApiT<string | undefined>) {
+    return (
+      <TextField class="w-full">
+        <div
+          class={cn("grid items-center", gapStyle)}
+          style={{ "grid-template-columns": "auto 1fr" }}
+        >
+          <TextFieldLabel>{opts.label()}</TextFieldLabel>
+
+          <TextFieldInput
+            disabled={opts.disabled ?? false}
+            type={opts.type ?? "text"}
+            value={field().state.value ?? ""}
+            placeholder={opts.placeholder}
+            onBlur={field().handleBlur}
+            autocomplete={opts.autocomplete}
+            autocorrect={opts.type === "password" ? "off" : undefined}
+            onInput={(e: Event) => {
+              const value = (e.target as HTMLInputElement).value;
+              field().handleChange(value || undefined);
+            }}
+            data-testid="input"
+          />
+
+          <GridFieldInfo field={field()} />
+          <InfoColumn info={opts.info} />
+        </div>
+      </TextField>
+    );
+  };
+}
+
+/// Used for record forms. Has a checkbox to distinguish absent from empty string.
+export function buildNullableTextFormField(opts: TextFieldOptions) {
   const externDisable = opts.disabled ?? false;
 
-  function builder(field: () => FieldApiT<T>) {
-    const initialValue = field().state.value;
+  return function (field: () => FieldApiT<string | null | undefined>) {
+    const initialValue: string | null | undefined = field().state.value;
     const [enabled, setEnabled] = createSignal<boolean>(
-      !externDisable && initialValue !== undefined && initialValue !== null,
+      !externDisable && initialValue !== null && initialValue !== undefined,
     );
 
-    const value = () => {
-      return enabled() ? field().state.value?.toString() : "";
-    };
+    const value = () => (enabled() ? field().state.value : null);
     const placeholder = () => {
-      return enabled()
-        ? (field().state.value ?? opts.placeholder ?? "")
-        : "NULL";
+      if (!enabled()) return "NULL";
+
+      return field().state.value || opts.placeholder;
     };
 
     return (
@@ -137,12 +169,15 @@ function buildOptionalNullableTextFormField<
             <TextFieldInput
               disabled={!enabled()}
               type={opts.type ?? "text"}
-              value={value()}
-              placeholder={placeholder()}
+              value={value() ?? ""}
+              placeholder={placeholder() ?? ""}
               onBlur={field().handleBlur}
               autocomplete={opts.autocomplete}
               autocorrect={opts.type === "password" ? "off" : undefined}
-              onInput={(e: Event) => field().handleChange(handler(e))}
+              onInput={(e: Event) => {
+                const value = (e.target as HTMLInputElement).value;
+                field().handleChange(value ?? null);
+              }}
               data-testid="input"
             />
 
@@ -153,10 +188,7 @@ function buildOptionalNullableTextFormField<
                 setEnabled(enabled);
                 // NOTE: null is critical here to actively unset a cell, undefined
                 // would merely take it out of the patch set.
-                const value = enabled
-                  ? ((initialValue ?? "") as T)
-                  : unsetValue;
-                field().handleChange(value);
+                field().handleChange(value());
               }}
               data-testid="toggle"
             />
@@ -168,23 +200,7 @@ function buildOptionalNullableTextFormField<
         </div>
       </TextField>
     );
-  }
-
-  return builder;
-}
-
-export function buildOptionalTextFormField(opts: TextFieldOptions) {
-  const handler = (e: Event) => (e.target as HTMLInputElement).value;
-  return buildOptionalNullableTextFormField<string | undefined>(
-    opts,
-    undefined,
-    handler,
-  );
-}
-
-export function buildNullableTextFormField(opts: TextFieldOptions) {
-  const handler = (e: Event) => (e.target as HTMLInputElement).value;
-  return buildOptionalNullableTextFormField<string | null>(opts, null, handler);
+  };
 }
 
 export function buildSecretFormField(
@@ -232,7 +248,7 @@ export function buildSecretFormField(
   );
 }
 
-export function buildTextAreaFormField(
+export function buildOptionalTextAreaFormField(
   opts: Omit<TextFieldOptions, "type">,
   rows?: number,
 ) {
@@ -251,7 +267,8 @@ export function buildTextAreaFormField(
             value={field().state.value}
             onBlur={field().handleBlur}
             onInput={(e: Event) => {
-              field().handleChange((e.target as HTMLInputElement).value);
+              const value = (e.target as HTMLInputElement).value;
+              field().handleChange(value || undefined);
             }}
           />
 
@@ -274,32 +291,61 @@ type NumberFieldOptions = {
   placeholder?: string;
 };
 
-// NOTE: Optional/nullable numbers still need a dedicated toggle switch, since
-// the empty string could either mean use the default or set NULL.
-function buildOptionalNullableNumberFormField<
-  T extends string | number | null | undefined,
->(opts: NumberFieldOptions, unsetValue: T, handler: (e: Event) => T) {
+/// Used for Settings. Empty field is the same as absent.
+export function buildOptionalNumberFormField(opts: NumberFieldOptions) {
+  return function (field: () => FieldApiT<number | undefined>) {
+    const isInt = opts.integer ?? false;
+
+    return (
+      <TextField class="w-full">
+        <div
+          class={cn("grid items-center", gapStyle)}
+          style={{ "grid-template-columns": "auto 1fr" }}
+        >
+          <TextFieldLabel>{opts.label()}</TextFieldLabel>
+
+          <TextFieldInput
+            disabled={opts.disabled ?? false}
+            type={isInt ? "number" : "text"}
+            step={isInt ? "1" : undefined}
+            pattern={isInt ? "d*" : "[0-9]*[.,]?[0-9]*"}
+            value={field().state.value?.toString() ?? ""}
+            placeholder={opts.placeholder}
+            onBlur={field().handleBlur}
+            onInput={(e: Event) => {
+              const value = (e.target as HTMLInputElement).value;
+              const parsed = isInt ? tryParseInt(value) : tryParseFloat(value);
+              field().handleChange(parsed);
+            }}
+            data-testid="input"
+          />
+
+          <GridFieldInfo field={field()} />
+
+          <InfoColumn info={opts.info} />
+        </div>
+      </TextField>
+    );
+  };
+}
+
+/// Used for record forms. Has a checkbox to distinguish absent from empty string.
+function buildNullableNumberFormField(opts: NumberFieldOptions) {
   const externDisable = opts.disabled ?? false;
 
-  function builder(field: () => FieldApiT<T>) {
+  return function builder(field: () => FieldApiT<number | null | undefined>) {
+    const isInt = opts.integer ?? false;
     const initialValue = field().state.value;
     const [enabled, setEnabled] = createSignal<boolean>(
       !externDisable && initialValue !== undefined && initialValue !== null,
     );
-    const isInt = opts.integer ?? false;
 
-    const value = () => {
-      return enabled() ? field().state.value?.toString() : "";
-    };
+    const value = () => (enabled() ? field().state.value : null);
     const placeholder = () => {
-      if (enabled()) {
-        const value = field().state.value?.toString();
-        if (value === undefined || value === "") {
-          return opts.placeholder ?? "";
-        }
-        return value;
-      }
-      return "NULL";
+      if (!enabled()) return "NULL";
+
+      const value = field().state.value;
+      return value || opts.placeholder;
     };
 
     return (
@@ -317,12 +363,15 @@ function buildOptionalNullableNumberFormField<
               required={opts.required}
               step={isInt ? "1" : undefined}
               pattern={isInt ? "d+" : "[0-9]*[.,]?[0-9]*"}
-              value={value()}
-              placeholder={placeholder()}
+              value={value() ?? ""}
+              placeholder={placeholder() ?? ""}
               onBlur={field().handleBlur}
               onInput={(e: Event) => {
-                // NOTE: OnKeyUp doesn't work here, since numbers can be scrolled etc.
-                field().handleChange(handler(e));
+                const value = (e.target as HTMLInputElement).value;
+                const parsed = isInt
+                  ? tryParseInt(value)
+                  : tryParseFloat(value);
+                field().handleChange(parsed ?? null);
               }}
             />
 
@@ -333,9 +382,7 @@ function buildOptionalNullableNumberFormField<
                 setEnabled(enabled);
                 // NOTE: null is critical here to actively unset a cell, undefined
                 // would merely take it out of the patch set.
-                const value = enabled
-                  ? ((initialValue ?? "") as T)
-                  : unsetValue;
+                const value = enabled ? (initialValue ?? null) : null;
                 field().handleChange(value);
               }}
               data-testid="toggle"
@@ -348,31 +395,7 @@ function buildOptionalNullableNumberFormField<
         </div>
       </TextField>
     );
-  }
-
-  return builder;
-}
-
-export function buildOptionalNumberFormField(opts: NumberFieldOptions) {
-  return buildOptionalNullableNumberFormField<number | undefined>(
-    opts,
-    undefined,
-    opts.integer
-      ? (e: Event) => tryParseInt((e.target as HTMLInputElement).value)
-      : (e: Event) => tryParseFloat((e.target as HTMLInputElement).value),
-  );
-}
-
-function buildNullableNumberFormField(opts: NumberFieldOptions) {
-  return buildOptionalNullableNumberFormField<string | null>(
-    opts,
-    null,
-    opts.integer
-      ? (e: Event) =>
-          tryParseInt((e.target as HTMLInputElement).value)?.toString() ?? ""
-      : (e: Event) =>
-          tryParseFloat((e.target as HTMLInputElement).value)?.toString() ?? "",
-  );
+  };
 }
 
 export function buildBoolFormField(props: { label: () => JSX.Element }) {
@@ -587,7 +610,7 @@ export function buildDBCellField(opts: {
   isPk: boolean;
   isUpdate: boolean;
   defaultValue: string | undefined;
-}) {
+}): (field: () => FieldApiT<any>) => JSX.Element {
   const typeLabel = () => `[${opts.type}${opts.notNull ? "" : "?"}]`;
 
   const label = () => (

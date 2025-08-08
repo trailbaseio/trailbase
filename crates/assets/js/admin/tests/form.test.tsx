@@ -232,13 +232,6 @@ describe("form fields", () => {
       const input: HTMLInputElement = result.getByTestId("input");
       expect(input.disabled);
 
-      // The input field is disabled to to it's initial value being null.
-      // NOTE: The solid-ui Checkbox component wraps the input in a parent div.
-      const toggle = result.getByTestId("toggle")
-        .firstChild! as HTMLInputElement;
-      await user.click(toggle);
-      expect(toggle.value);
-
       await user.type(input, "optional");
       expect(input.value, "optional");
 
@@ -262,18 +255,7 @@ describe("form fields", () => {
       const input: HTMLInputElement = result.getByTestId("input");
       expect(input.disabled);
 
-      // The input field is disabled to to it's initial value being null.
-      // NOTE: The solid-ui Checkbox component wraps the input in a parent div.
-      const toggle = result.getByTestId("toggle")
-        .firstChild! as HTMLInputElement;
-      await user.click(toggle);
-      expect(toggle.value);
-
-      await user.type(input, "optional");
-      expect(input.value, "optional");
-
-      await user.click(toggle);
-      expect(!toggle.value);
+      expect(input.value, "");
 
       await user.click(result.getByTestId("sub"));
 

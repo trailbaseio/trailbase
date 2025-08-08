@@ -28,7 +28,7 @@ import {
 import {
   unsetOrLargerThanZero,
   unsetOrNotEmptyValidator,
-  buildTextAreaFormField,
+  buildOptionalTextAreaFormField,
   buildOptionalNumberFormField,
   buildOptionalTextFormField,
 } from "@/components/FormFields";
@@ -68,7 +68,7 @@ function EmailTemplate(props: {
         name="userVerificationTemplate.body"
         validators={unsetOrNotEmptyValidator()}
       >
-        {buildTextAreaFormField(
+        {buildOptionalTextAreaFormField(
           {
             label: textLabel("Body"),
             info: (
