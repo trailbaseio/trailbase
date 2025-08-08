@@ -67,6 +67,7 @@ impl From<trailbase_schema::json::JsonError> for ParamsError {
   }
 }
 
+// Contains Metadata (i.e. column contents) and file contents.
 pub(crate) type FileMetadataContents = Vec<(FileUpload, Vec<u8>)>;
 
 pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;

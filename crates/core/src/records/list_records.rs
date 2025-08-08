@@ -20,8 +20,7 @@ use trailbase_sqlite::Value;
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
-use crate::records::expand::{JsonError, row_to_json_expand};
-use crate::records::query_builder::{ExpandedTable, expand_tables};
+use crate::records::expand::{ExpandedTable, JsonError, expand_tables, row_to_json_expand};
 use crate::records::{Permission, RecordError};
 
 /// JSON response containing the listed records.
@@ -444,7 +443,6 @@ mod tests {
   use crate::auth::util::login_with_password;
   use crate::config::proto::PermissionFlag;
   use crate::records::RecordError;
-  use crate::records::query_builder::expand_tables;
   use crate::records::test_utils::*;
   use crate::schema_metadata::SchemaMetadataCache;
   use crate::util::id_to_b64;

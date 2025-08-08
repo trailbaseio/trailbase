@@ -10,7 +10,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::records::files::read_file_into_response;
-use crate::records::query_builder::{GetFileQueryBuilder, GetFilesQueryBuilder};
+use crate::records::read_queries::{run_get_file_query, run_get_files_query};
 
 #[derive(Debug, Deserialize, TS)]
 #[ts(export)]
@@ -64,7 +64,7 @@ pub async fn read_files_handler(
   let pk_value = flat_json_to_value(col.data_type, request.pk_value, true)?;
 
   return if let Some(file_index) = request.file_index {
-    let mut file_uploads = GetFilesQueryBuilder::run(
+    let mut file_uploads = run_get_files_query(
       &state,
       &table_name.into(),
       file_col_metadata,
@@ -80,7 +80,7 @@ pub async fn read_files_handler(
 
     Ok(read_file_into_response(&state, file_uploads.0.remove(file_index)).await?)
   } else {
-    let file_upload = GetFileQueryBuilder::run(
+    let file_upload = run_get_file_query(
       &state,
       &table_name.into(),
       file_col_metadata,

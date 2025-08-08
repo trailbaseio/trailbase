@@ -7,7 +7,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::records::params::{JsonRow, Params};
-use crate::records::query_builder::UpdateQueryBuilder;
+use crate::records::write_queries::run_update_query;
 
 #[derive(Debug, Serialize, Deserialize, Default, TS)]
 #[ts(export)]
@@ -55,10 +55,9 @@ pub async fn update_row_handler(
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
   }
 
-  UpdateQueryBuilder::run(
+  run_update_query(
     &state,
     &QualifiedNameEscaped::new(&schema_metadata.schema.name),
-    schema_metadata.json_metadata.has_file_columns(),
     Params::for_update(
       &*schema_metadata,
       request.row,

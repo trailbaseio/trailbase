@@ -2,14 +2,14 @@ use axum::extract::{Json, Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
-use trailbase_schema::FileUploadInput;
+use trailbase_schema::{FileUploadInput, QualifiedNameEscaped};
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
 use crate::records::params::{JsonRow, LazyParams, Params};
-use crate::records::query_builder::InsertQueryBuilder;
+use crate::records::write_queries::{WriteQuery, run_insert_query, run_queries};
 use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;
 
@@ -155,12 +155,11 @@ pub async fn create_record_handler(
       return Err(RecordError::BadRequest("no values provided"));
     }
     1 => {
-      let record_id = InsertQueryBuilder::run(
+      let record_id = run_insert_query(
         &state,
         api.table_name(),
         api.insert_conflict_resolution_strategy(),
         &pk_column.name,
-        api.has_file_columns(),
         params_list.swap_remove(0),
       )
       .await
@@ -169,18 +168,25 @@ pub async fn create_record_handler(
       vec![extract_record_id(record_id)?]
     }
     _ => {
-      let record_ids = InsertQueryBuilder::run_bulk(
-        &state,
-        api.table_name(),
-        api.insert_conflict_resolution_strategy(),
-        &pk_column.name,
-        api.has_file_columns(),
-        params_list,
-      )
-      .await
-      .map_err(|err| RecordError::Internal(err.into()))?;
+      let queries = params_list
+        .into_iter()
+        .map(|params| -> Result<_, RecordError> {
+          let table_name: QualifiedNameEscaped = api.table_name().clone();
+          let (query, files) = WriteQuery::new_insert(
+            &table_name,
+            &pk_column.name,
+            api.insert_conflict_resolution_strategy(),
+            params,
+          )
+          .map_err(|err| RecordError::Internal(err.into()))?;
 
-      record_ids
+          return Ok((query, Some((table_name, files))));
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+      run_queries(&state, queries)
+        .await
+        .map_err(|err| RecordError::Internal(err.into()))?
         .into_iter()
         .map(extract_record_id)
         .collect::<Result<Vec<_>, _>>()?

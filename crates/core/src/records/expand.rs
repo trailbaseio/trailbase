@@ -1,11 +1,15 @@
+use itertools::Itertools;
 use log::*;
 use rusqlite::types;
 use std::collections::HashMap;
+use std::sync::Arc;
 use thiserror::Error;
+use trailbase_schema::QualifiedName;
 use trailbase_schema::json::value_to_flat_json;
 use trailbase_schema::sqlite::{Column, ColumnOption};
 
-use crate::schema_metadata::JsonColumnMetadata;
+use crate::records::RecordError;
+use crate::schema_metadata::{JsonColumnMetadata, SchemaMetadataCache, TableMetadata};
 
 #[derive(Debug, Error)]
 pub enum JsonError {
@@ -108,6 +112,77 @@ pub(crate) fn row_to_json_expand(
       })
       .collect::<Result<_, JsonError>>()?,
   ));
+}
+
+pub(crate) struct ExpandedTable {
+  pub metadata: Arc<TableMetadata>,
+  pub local_column_name: String,
+  pub num_columns: usize,
+
+  pub foreign_table_name: String,
+  pub foreign_column_name: String,
+}
+
+pub(crate) fn expand_tables<'a, 'b, T: AsRef<str>>(
+  schema_metadata: &SchemaMetadataCache,
+  database_schema: &Option<String>,
+  root_column_by_name: impl Fn(&'a str) -> Option<&'b Column>,
+  expand: &'a [T],
+) -> Result<Vec<ExpandedTable>, RecordError> {
+  let mut expanded_tables = Vec::<ExpandedTable>::with_capacity(expand.len());
+
+  for col_name in expand {
+    let col_name = col_name.as_ref();
+    if col_name.is_empty() {
+      continue;
+    }
+    let Some(column) = root_column_by_name(col_name) else {
+      return Err(RecordError::Internal("Missing column".into()));
+    };
+
+    // FIXME: This only expand FKs expressed as column constraints missing table constraints.
+    let Some(ColumnOption::ForeignKey {
+      foreign_table: foreign_table_name,
+      referred_columns: _,
+      ..
+    }) = column
+      .options
+      .iter()
+      .find_or_first(|o| matches!(o, ColumnOption::ForeignKey { .. }))
+    else {
+      return Err(RecordError::Internal("not a foreign key".into()));
+    };
+
+    let Some(foreign_table) = schema_metadata.get_table(&QualifiedName {
+      name: foreign_table_name.clone(),
+      database_schema: database_schema.clone(),
+    }) else {
+      return Err(RecordError::ApiRequiresTable);
+    };
+
+    let Some(foreign_pk_column_idx) = foreign_table.record_pk_column else {
+      return Err(RecordError::Internal("invalid PK".into()));
+    };
+
+    let foreign_pk_column = &foreign_table.schema.columns[foreign_pk_column_idx].name;
+
+    // TODO: Check that `referred_columns` and foreign_pk_column are the same. It's already
+    // validated as part of config validation.
+
+    let num_columns = foreign_table.schema.columns.len();
+    let foreign_table_name = foreign_table_name.to_string();
+    let foreign_column_name = foreign_pk_column.to_string();
+
+    expanded_tables.push(ExpandedTable {
+      metadata: foreign_table,
+      local_column_name: col_name.to_string(),
+      num_columns,
+      foreign_table_name,
+      foreign_column_name,
+    });
+  }
+
+  return Ok(expanded_tables);
 }
 
 #[cfg(test)]

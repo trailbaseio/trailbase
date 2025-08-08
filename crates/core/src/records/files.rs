@@ -72,6 +72,7 @@ pub(crate) struct FileDeletionsDb {
 ///
 /// NOTE: We're specific on the record/rowid, rather than deleting all pending files, to avoid
 /// blocking a response on unrelated delations.
+/// QUESTION: Should we delete eagerly at all? We could just do this periodically.
 pub(crate) async fn delete_files_marked_for_deletion(
   state: &AppState,
   table_name: &QualifiedNameEscaped,
@@ -191,10 +192,6 @@ pub(crate) struct FileManager {
 }
 
 impl FileManager {
-  pub(crate) fn empty() -> Self {
-    return Self { cleanup: None };
-  }
-
   pub(crate) async fn write(
     state: &AppState,
     files: FileMetadataContents,

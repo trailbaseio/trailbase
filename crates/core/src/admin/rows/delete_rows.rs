@@ -11,7 +11,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::records::query_builder::DeleteQueryBuilder;
+use crate::records::write_queries::run_delete_query;
 
 #[derive(Debug, Serialize, Deserialize, Default, TS)]
 #[ts(export)]
@@ -59,7 +59,7 @@ pub(crate) async fn delete_row(
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
   }
 
-  DeleteQueryBuilder::run(
+  run_delete_query(
     state,
     &QualifiedNameEscaped::from(&schema_metadata.schema.name),
     pk_col,

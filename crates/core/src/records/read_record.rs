@@ -7,11 +7,12 @@ use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
+use crate::records::expand::expand_tables;
 use crate::records::expand::row_to_json_expand;
 use crate::records::files::read_file_into_response;
-use crate::records::query_builder::{
-  ExpandedSelectQueryResult, GetFileQueryBuilder, GetFilesQueryBuilder, SelectQueryBuilder,
-  expand_tables,
+use crate::records::read_queries::{
+  ExpandedSelectQueryResult, run_expanded_select_query, run_get_file_query, run_get_files_query,
+  run_select_query,
 };
 use crate::records::{Permission, RecordError};
 
@@ -76,16 +77,15 @@ pub async fn read_record_handler(
         &query_expand,
       )?;
 
-      let Some(ExpandedSelectQueryResult { root, foreign_rows }) =
-        SelectQueryBuilder::run_expanded(
-          state.conn(),
-          api.table_name(),
-          &column_names,
-          &pk_column.name,
-          record_id,
-          &expanded_tables,
-        )
-        .await?
+      let Some(ExpandedSelectQueryResult { root, foreign_rows }) = run_expanded_select_query(
+        state.conn(),
+        api.table_name(),
+        &column_names,
+        &pk_column.name,
+        record_id,
+        &expanded_tables,
+      )
+      .await?
       else {
         return Err(RecordError::RecordNotFound);
       };
@@ -118,7 +118,7 @@ pub async fn read_record_handler(
       .map_err(|err| RecordError::Internal(err.into()))?
     }
     Some(_) | None => {
-      let Some(row) = SelectQueryBuilder::run(
+      let Some(row) = run_select_query(
         state.conn(),
         api.table_name(),
         &column_names,
@@ -185,7 +185,7 @@ pub async fn get_uploaded_file_from_record_handler(
     return Err(RecordError::BadRequest("Invalid column"));
   };
 
-  let file_upload = GetFileQueryBuilder::run(
+  let file_upload = run_get_file_query(
     &state,
     api.table_name(),
     column,
@@ -245,7 +245,7 @@ pub async fn get_uploaded_files_from_record_handler(
     return Err(RecordError::BadRequest("Invalid column"));
   };
 
-  let mut file_uploads = GetFilesQueryBuilder::run(
+  let mut file_uploads = run_get_files_query(
     &state,
     api.table_name(),
     column,

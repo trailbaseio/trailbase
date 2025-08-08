@@ -52,7 +52,7 @@ pub enum AdminError {
   #[error("Email error: {0}")]
   Email(#[from] crate::email::EmailError),
   #[error("Query error: {0}")]
-  Query(#[from] crate::records::query_builder::QueryError),
+  Query(#[from] crate::records::read_queries::QueryError),
   #[error("File error: {0}")]
   File(#[from] crate::records::files::FileError),
 }

@@ -9,7 +9,8 @@ use crate::config::proto::ConflictResolutionStrategy;
 use crate::constants::AVATAR_TABLE;
 use crate::extract::Either;
 use crate::records::params::{JsonRow, LazyParams};
-use crate::records::query_builder::QueryError;
+use crate::records::read_queries::{QueryError, run_get_file_query};
+use crate::records::write_queries::run_insert_query;
 use crate::util::uuid_to_b64;
 
 #[utoipa::path(
@@ -37,7 +38,7 @@ pub async fn get_avatar_handler(
     return Err(AuthError::Internal("missing metadata".into()));
   };
 
-  let file_upload = crate::records::query_builder::GetFileQueryBuilder::run(
+  let file_upload = run_get_file_query(
     &state,
     &trailbase_schema::QualifiedNameEscaped::new(&table_name),
     file_column,
@@ -92,12 +93,11 @@ pub async fn create_avatar_handler(
     .consume()
     .map_err(|_| AuthError::BadRequest("parameter conversion"))?;
 
-  let _user_id_value = crate::records::query_builder::InsertQueryBuilder::run(
+  let _user_id_value = run_insert_query(
     &state,
     &trailbase_schema::QualifiedNameEscaped::new(&table_name),
     Some(ConflictResolutionStrategy::Replace),
     "user",
-    true,
     params,
   )
   .await

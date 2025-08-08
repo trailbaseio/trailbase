@@ -6,7 +6,7 @@ use axum::{
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::records::query_builder::DeleteQueryBuilder;
+use crate::records::write_queries::run_delete_query;
 use crate::records::{Permission, RecordError};
 
 /// Delete record.
@@ -38,7 +38,7 @@ pub async fn delete_record_handler(
 
   let (_index, pk_column) = api.record_pk_column();
 
-  DeleteQueryBuilder::run(
+  run_delete_query(
     &state,
     api.table_name(),
     &pk_column.name,

@@ -12,13 +12,14 @@ pub(crate) mod files;
 pub(crate) mod json_schema;
 pub(crate) mod list_records;
 pub(crate) mod params;
-pub mod query_builder;
+pub(crate) mod read_queries;
 pub(crate) mod read_record;
 mod record_api;
 pub(crate) mod subscribe;
 pub mod test_utils;
 mod update_record;
 mod validate;
+pub mod write_queries;
 
 pub(crate) use error::RecordError;
 pub use record_api::RecordApi;

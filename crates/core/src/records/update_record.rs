@@ -4,7 +4,7 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
 use crate::records::params::{JsonRow, LazyParams};
-use crate::records::query_builder::UpdateQueryBuilder;
+use crate::records::write_queries::run_update_query;
 use crate::records::{Permission, RecordError};
 
 /// Update existing record.
@@ -57,10 +57,9 @@ pub async fn update_record_handler(
     )
     .await?;
 
-  UpdateQueryBuilder::run(
+  run_update_query(
     &state,
     api.table_name(),
-    api.has_file_columns(),
     lazy_params
       .consume()
       .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?,
