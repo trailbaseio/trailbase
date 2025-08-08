@@ -267,11 +267,41 @@ pub(crate) enum Mailer {
 }
 
 impl Mailer {
-  fn new_smtp(host: String, port: u16, user: String, pass: String) -> Result<Mailer, EmailError> {
-    let mailer = AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&host)?
-      .port(port)
-      .credentials(smtp::authentication::Credentials::new(user, pass))
-      .build();
+  fn new_smtp(
+    host: String,
+    port: u16,
+    user: Option<String>,
+    pass: Option<String>,
+    encryption: Option<i32>,
+  ) -> Result<Mailer, EmailError> {
+    use crate::config::proto::SmtpEncryption;
+    
+    // Default to None if not specified (for compatibility with tools like mailpit)
+    let encryption = encryption
+      .and_then(|e| SmtpEncryption::try_from(e).ok())
+      .unwrap_or(SmtpEncryption::None);
+    
+    let mut transport = match encryption {
+      SmtpEncryption::Unspecified | SmtpEncryption::None => {
+        AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&host)
+          .port(port)
+      }
+      SmtpEncryption::Starttls => {
+        AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&host)?
+          .port(port)
+      }
+      SmtpEncryption::Tls => {
+        AsyncSmtpTransport::<Tokio1Executor>::relay(&host)?
+          .port(port)
+      }
+    };
+    
+    // Only add credentials if both username and password are provided
+    if let (Some(user), Some(pass)) = (user, pass) {
+      transport = transport.credentials(smtp::authentication::Credentials::new(user, pass));
+    }
+    
+    let mailer = transport.build();
     return Ok(Mailer::Smtp(Arc::new(mailer)));
   }
 
@@ -290,20 +320,26 @@ impl Mailer {
         .smtp_port
         .map(|port| port as u16)
         .ok_or(EmailError::Missing("SMTP port"))?;
-      let user = email
-        .smtp_username
-        .to_owned()
-        .ok_or(EmailError::Missing("SMTP username"))?;
-      let pass = email
-        .smtp_password
-        .to_owned()
-        .ok_or(EmailError::Missing("SMTP password"))?;
+      
+      // Username and password are now optional - only required if both are provided
+      let user = email.smtp_username.to_owned();
+      let pass = email.smtp_password.to_owned();
+      let encryption = email.smtp_encryption;
 
-      Self::new_smtp(host, port, user, pass)
+      debug!("Creating SMTP mailer: host={}, port={}, auth={}, encryption={:?}", 
+        host, port, user.is_some() && pass.is_some(), encryption);
+
+      Self::new_smtp(host, port, user, pass, encryption)
     };
 
-    if let Ok(mailer) = smtp_from_config() {
-      return mailer;
+    match smtp_from_config() {
+      Ok(mailer) => {
+        info!("Using SMTP mailer");
+        return mailer;
+      }
+      Err(err) => {
+        debug!("Failed to create SMTP mailer: {err}, falling back to local sendmail");
+      }
     }
 
     return Self::new_local();

@@ -187,6 +187,77 @@ export function buildNullableTextFormField(opts: TextFieldOptions) {
   return buildOptionalNullableTextFormField<string | null>(opts, null, handler);
 }
 
+// Simple optional textarea that treats empty string as undefined
+export function buildSimpleOptionalTextArea(
+  opts: TextFieldOptions & { rows?: number }
+) {
+  function builder(field: () => FieldApiT<string | undefined>) {
+    return (
+      <TextField class="w-full">
+        <div
+          class={cn("grid items-center", gapStyle)}
+          style={{ "grid-template-columns": "auto 1fr" }}
+        >
+          <TextFieldLabel>{opts.label()}</TextFieldLabel>
+
+          <textarea
+            disabled={opts.disabled ?? false}
+            value={field().state.value ?? ""}
+            placeholder={opts.placeholder}
+            onBlur={field().handleBlur}
+            onInput={(e: Event) => {
+              const target = e.target as HTMLTextAreaElement;
+              const value = target.value;
+              field().handleChange(value || undefined);
+            }}
+            rows={opts.rows ?? 5}
+            class="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+
+          <GridFieldInfo field={field()} />
+          <InfoColumn info={opts.info} />
+        </div>
+      </TextField>
+    );
+  }
+  return builder;
+}
+
+// Simple optional field that treats empty string as undefined (for SMTP settings)
+export function buildSimpleOptionalTextField(opts: TextFieldOptions) {
+  function builder(field: () => FieldApiT<string | undefined>) {
+    return (
+      <TextField class="w-full">
+        <div
+          class={cn("grid items-center", gapStyle)}
+          style={{ "grid-template-columns": "auto 1fr" }}
+        >
+          <TextFieldLabel>{opts.label()}</TextFieldLabel>
+
+          <TextFieldInput
+            disabled={opts.disabled ?? false}
+            type={opts.type ?? "text"}
+            value={field().state.value ?? ""}
+            placeholder={opts.placeholder}
+            onBlur={field().handleBlur}
+            autocomplete={opts.autocomplete}
+            autocorrect={opts.type === "password" ? "off" : undefined}
+            onInput={(e: Event) => {
+              const value = (e.target as HTMLInputElement).value;
+              field().handleChange(value === "" ? undefined : value);
+            }}
+            data-testid="input"
+          />
+
+          <GridFieldInfo field={field()} />
+          <InfoColumn info={opts.info} />
+        </div>
+      </TextField>
+    );
+  }
+  return builder;
+}
+
 export function buildSecretFormField(
   opts: Omit<TextFieldOptions, "type" | "autocomplete">,
 ) {
@@ -350,6 +421,40 @@ function buildOptionalNullableNumberFormField<
     );
   }
 
+  return builder;
+}
+
+// Simple optional number field that treats empty as undefined (for SMTP settings)
+export function buildSimpleOptionalNumberField(opts: NumberFieldOptions) {
+  function builder(field: () => FieldApiT<number | undefined>) {
+    return (
+      <TextField class="w-full">
+        <div
+          class={cn("grid items-center", gapStyle)}
+          style={{ "grid-template-columns": "auto 1fr" }}
+        >
+          <TextFieldLabel>{opts.label()}</TextFieldLabel>
+
+          <TextFieldInput
+            disabled={opts.disabled ?? false}
+            type="number"
+            value={field().state.value?.toString() ?? ""}
+            placeholder={opts.placeholder}
+            onBlur={field().handleBlur}
+            onInput={(e: Event) => {
+              const value = (e.target as HTMLInputElement).value;
+              const parsed = opts.integer ? tryParseInt(value) : tryParseFloat(value);
+              field().handleChange(parsed === undefined ? undefined : parsed);
+            }}
+            data-testid="input"
+          />
+
+          <GridFieldInfo field={field()} />
+          <InfoColumn info={opts.info} />
+        </div>
+      </TextField>
+    );
+  }
   return builder;
 }
 

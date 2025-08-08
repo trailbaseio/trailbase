@@ -593,38 +593,54 @@ pub(crate) fn validate_config(
   {
     let email = &config.email;
 
-    let mut num_smtp_fields = 0;
-    if let Some(ref host) = email.smtp_host {
-      if !format!("http://{host}/").validate_url() {
-        return ierr(format!("Invalid SMTP host {host}."));
+    // SMTP configuration validation
+    let has_host = email.smtp_host.is_some();
+    let has_port = email.smtp_port.is_some();
+    let has_username = email.smtp_username.is_some();
+    let has_password = email.smtp_password.is_some();
+    
+    // If any SMTP setting is provided, we need at least host and port
+    if has_host || has_port || has_username || has_password {
+      if !has_host {
+        return ierr("SMTP host is required when configuring SMTP");
       }
-      num_smtp_fields += 1;
-    }
-
-    if let Some(port) = email.smtp_port {
-      let port = u16::try_from(port).map_err(|_| ConfigError::Invalid("not a u16".into()))?;
-      if port == 0 {
-        return ierr("Invalid SMTP port.");
+      if !has_port {
+        return ierr("SMTP port is required when configuring SMTP");
       }
-      num_smtp_fields += 1;
-    }
-
-    if let Some(ref username) = email.smtp_username {
-      if username.is_empty() {
-        return ierr("Invalid SMTP username.");
+      
+      // Validate host
+      if let Some(ref host) = email.smtp_host {
+        if !format!("http://{host}/").validate_url() {
+          return ierr(format!("Invalid SMTP host {host}."));
+        }
       }
-      num_smtp_fields += 1;
-    }
-
-    if let Some(ref password) = email.smtp_password {
-      if password.is_empty() {
-        return ierr("Invalid SMTP username.");
+      
+      // Validate port
+      if let Some(port) = email.smtp_port {
+        let port = u16::try_from(port).map_err(|_| ConfigError::Invalid("not a u16".into()))?;
+        if port == 0 {
+          return ierr("Invalid SMTP port.");
+        }
       }
-      num_smtp_fields += 1;
-    }
-
-    if num_smtp_fields != 0 && num_smtp_fields != 4 {
-      return ierr("Only a subset of SMTP settings provided");
+      
+      // Username and password are optional, but if one is provided, both must be provided
+      if has_username != has_password {
+        return ierr("SMTP username and password must be provided together");
+      }
+      
+      // Validate username if provided
+      if let Some(ref username) = email.smtp_username {
+        if username.is_empty() {
+          return ierr("SMTP username cannot be empty");
+        }
+      }
+      
+      // Validate password if provided
+      if let Some(ref password) = email.smtp_password {
+        if password.is_empty() {
+          return ierr("SMTP password cannot be empty");
+        }
+      }
     }
 
     if let Some(ref sender_address) = email.sender_address {

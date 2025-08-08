@@ -14,3 +14,5 @@ node_modules/
 # Avoid `pnpm-lock.yaml` files when not in the root. They are produced when
 # building with `--ignore-worspace`.
 **/pnpm-lock.yaml
+
+./traildepot

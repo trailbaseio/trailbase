@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createSignal, For } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient } from "@tanstack/solid-query";
 import { useStore } from "@nanostores/solid";
@@ -24,6 +24,13 @@ import {
   TextFieldLabel,
   TextFieldInput,
 } from "@/components/ui/text-field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import {
   unsetOrLargerThanZero,
@@ -31,12 +38,15 @@ import {
   buildTextAreaFormField,
   buildOptionalNumberFormField,
   buildOptionalTextFormField,
+  buildSimpleOptionalTextField,
+  buildSimpleOptionalNumberField,
+  buildSimpleOptionalTextArea,
 } from "@/components/FormFields";
 import type { FormApiT } from "@/components/FormFields";
 
 import type { TestEmailRequest } from "@bindings/TestEmailRequest";
 
-import { Config, EmailConfig } from "@proto/config";
+import { Config, EmailConfig, SmtpEncryption } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/config";
 import { $user, adminFetch } from "@/lib/fetch";
 
@@ -50,8 +60,9 @@ function EmailTemplate(props: {
         name={`${props.fieldName}.subject`}
         validators={unsetOrNotEmptyValidator()}
       >
-        {buildOptionalTextFormField({
+        {buildSimpleOptionalTextField({
           label: textLabel("Subject"),
+          placeholder: "Email subject line",
           info: (
             <p>
               Email's subject line. Valid template parameters:{" "}
@@ -65,32 +76,31 @@ function EmailTemplate(props: {
       </props.form.Field>
 
       <props.form.Field
-        name="userVerificationTemplate.body"
+        name={`${props.fieldName}.body`}
         validators={unsetOrNotEmptyValidator()}
       >
-        {buildTextAreaFormField(
-          {
-            label: textLabel("Body"),
-            info: (
-              <p>
-                Email's body. Valid template parameters:{" "}
-                <span class="rounded bg-gray-200 font-mono">
-                  {"{{ APP_NAME }}"}
-                </span>
-                ,{" "}
-                <span class="rounded bg-gray-200 font-mono">
-                  {"{{ SITE_URL }}"}
-                </span>
-                , and{" "}
-                <span class="rounded bg-gray-200 font-mono">
-                  {"{{ CODE }}"}
-                </span>
-                .
-              </p>
-            ),
-          },
-          10,
-        )}
+        {buildSimpleOptionalTextArea({
+          label: textLabel("Body"),
+          rows: 10,
+          placeholder: "Email body HTML",
+          info: (
+            <p>
+              Email's body. Valid template parameters:{" "}
+              <span class="rounded bg-gray-200 font-mono">
+                {"{{ APP_NAME }}"}
+              </span>
+              ,{" "}
+              <span class="rounded bg-gray-200 font-mono">
+                {"{{ SITE_URL }}"}
+              </span>
+              , and{" "}
+              <span class="rounded bg-gray-200 font-mono">
+                {"{{ CODE }}"}
+              </span>
+              .
+            </p>
+          ),
+        })}
       </props.form.Field>
     </div>
   );
@@ -115,6 +125,9 @@ export function EmailSettings(props: {
           return;
         }
 
+        console.log("Submitting email config:", value);
+        console.log("Encryption value:", value.smtpEncryption);
+        
         const newConfig = Config.fromPartial(c);
         newConfig.email = value;
         await setConfig(queryClient, newConfig);
@@ -153,42 +166,92 @@ export function EmailSettings(props: {
                 <a href="https://www.brevo.com/">Brevo</a>, ...
               </p>
 
-              <form.Field
-                name="smtpHost"
-                validators={unsetOrNotEmptyValidator()}
-              >
-                {buildOptionalTextFormField({ label: textLabel("Host") })}
+              <form.Field name="smtpHost">
+                {buildSimpleOptionalTextField({ 
+                  label: textLabel("Host"),
+                  placeholder: "smtp.example.com"
+                })}
               </form.Field>
 
-              <form.Field name="smtpPort" validators={unsetOrLargerThanZero()}>
-                {buildOptionalNumberFormField({
+              <form.Field name="smtpPort">
+                {buildSimpleOptionalNumberField({
                   integer: true,
                   label: textLabel("Port"),
+                  placeholder: "587"
                 })}
               </form.Field>
 
-              <form.Field
-                name="smtpUsername"
-                validators={unsetOrNotEmptyValidator()}
-              >
-                {buildOptionalTextFormField({
-                  label: textLabel("Username"),
+              <form.Field name="smtpEncryption">
+                {(field) => {
+                  // Default to NONE (1) if not set
+                  const fieldValue = () => field().state.value ?? SmtpEncryption.SMTP_ENCRYPTION_NONE;
+                  
+                  return (
+                    <TextField class="w-full">
+                      <div
+                        class="grid items-center gap-x-2 gap-y-1"
+                        style={{ "grid-template-columns": "auto 1fr" }}
+                      >
+                        <div class="w-40">
+                          <TextFieldLabel>Encryption</TextFieldLabel>
+                        </div>
+                        <div class="w-full">
+                          <Select
+                            value={fieldValue().toString()}
+                            onChange={(value) => {
+                              const strValue = value?.toString() ?? "1";
+                              const numValue = parseInt(strValue);
+                              field().handleChange(numValue);
+                            }}
+                            options={[
+                              SmtpEncryption.SMTP_ENCRYPTION_NONE.toString(),
+                              SmtpEncryption.SMTP_ENCRYPTION_STARTTLS.toString(),
+                              SmtpEncryption.SMTP_ENCRYPTION_TLS.toString(),
+                            ]}
+                            placeholder="Select encryption type"
+                            itemComponent={(props) => (
+                              <SelectItem item={props.item}>
+                                {props.item.rawValue === "1" && "None (Plain)"}
+                                {props.item.rawValue === "2" && "STARTTLS"}
+                                {props.item.rawValue === "3" && "TLS/SSL"}
+                              </SelectItem>
+                            )}
+                          >
+                            <SelectTrigger class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                              <SelectValue<string>>
+                                {(state) => {
+                                  const currentVal = fieldValue().toString();
+                                  if (currentVal === "1") return "None (Plain)";
+                                  if (currentVal === "2") return "STARTTLS";
+                                  if (currentVal === "3") return "TLS/SSL";
+                                  return "None (Plain)";
+                                }}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent />
+                          </Select>
+                        </div>
+                      </div>
+                    </TextField>
+                  );
+                }}
+              </form.Field>
+
+              <form.Field name="smtpUsername">
+                {buildSimpleOptionalTextField({
+                  label: textLabel("Username (optional)"),
                   autocomplete: "username",
+                  placeholder: "Leave empty if no auth required"
                 })}
               </form.Field>
 
-              <form.Field
-                name="smtpPassword"
-                validators={unsetOrNotEmptyValidator()}
-              >
-                {
-                  // NOTE: we're not using buildSecretFormField here because it doesn't support optional.
-                  buildOptionalTextFormField({
-                    type: "password",
-                    autocomplete: "current-password",
-                    label: textLabel("Password"),
-                  })
-                }
+              <form.Field name="smtpPassword">
+                {buildSimpleOptionalTextField({
+                  type: "password",
+                  autocomplete: "current-password",
+                  label: textLabel("Password (optional)"),
+                  placeholder: "Leave empty if no auth required"
+                })}
               </form.Field>
             </CardContent>
           </Card>
@@ -203,15 +266,17 @@ export function EmailSettings(props: {
                 name="senderAddress"
                 validators={unsetOrNotEmptyValidator()}
               >
-                {buildOptionalTextFormField({
+                {buildSimpleOptionalTextField({
                   label: textLabel("Sender Address"),
                   type: "email",
+                  placeholder: "noreply@example.com"
                 })}
               </form.Field>
 
               <form.Field name="senderName">
-                {buildOptionalTextFormField({
+                {buildSimpleOptionalTextField({
                   label: textLabel("Sender Name"),
+                  placeholder: "Your Service Name"
                 })}
               </form.Field>
             </CardContent>

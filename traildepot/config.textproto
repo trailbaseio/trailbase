@@ -1,0 +1,27 @@
+# Auto-generated config.Config textproto
+email {
+  smtp_host: "localhost"
+  smtp_port: 1025
+  smtp_encryption: SMTP_ENCRYPTION_NONE
+  user_verification_template {
+    subject: "Verify your Email Address for {{ APP_NAME }}"
+    body: "<html>\n  <body>\n    <h1>Welcome {{ EMAIL }}</h1>\n\n    <p>\n      Thanks for joining {{ APP_NAME }}.\n    </p>\n\n    <p>\n      To be able to log in, first validate your email by clicking the link below.\n    </p>\n\n    <a class=\"btn\" href=\"{{ VERIFICATION_URL }}\">\n      {{ VERIFICATION_URL }}\n    </a>\n  </body>\n</html>"
+  }
+  password_reset_template {
+    subject: "Reset your Password for {{ APP_NAME }}"
+    body: "<html>\n  <body>\n    <h1>Password Reset</h1>\n\n    <p>\n      Click the link below to reset your password.\n    </p>\n\n    <a class=\"btn\" href=\"{{ VERIFICATION_URL }}\">\n      {{ VERIFICATION_URL }}\n    </a>\n  </body>\n</html>"
+  }
+  change_email_template {
+    subject: "Change your Email Address for {{ APP_NAME }}"
+    body: "<html>\n  <body>\n    <h1>Change E-Mail Address</h1>\n\n    <p>\n      Click the link below to verify your new E-mail address:\n    </p>\n\n    <a class=\"btn\" href=\"{{ VERIFICATION_URL }}\">\n      {{ VERIFICATION_URL }}\n    </a>\n  </body>\n</html>"
+  }
+}
+server {
+  application_name: "TrailBase"
+  logs_retention_sec: 604800
+}
+auth {
+  auth_token_ttl_sec: 3600
+  refresh_token_ttl_sec: 2592000
+}
+jobs {}
