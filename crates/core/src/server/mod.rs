@@ -335,9 +335,12 @@ impl Server {
     opts: &ServerOptions,
     custom_router: Option<Router<AppState>>,
   ) -> (String, Router<()>) {
+    let enable_transactions =
+      state.access_config(|conn| conn.server.enable_record_transactions.unwrap_or(false));
+
     let mut router = Router::new()
       // Public, stable and versioned APIs.
-      .merge(records::router())
+      .merge(records::router(enable_transactions))
       .merge(auth::router())
       .route("/api/healthcheck", get(healthcheck_handler));
 
