@@ -9,6 +9,7 @@ use crate::records::params::LazyParams;
 use crate::records::record_api::RecordApi;
 use crate::records::write_queries::WriteQuery;
 use crate::records::{Permission, RecordError};
+use crate::util::uuid_to_b64;
 
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub enum Operation {
@@ -39,11 +40,10 @@ pub struct TransactionResponse {
 }
 
 /// Execute a batch of transactions.
-#[allow(unused)]
 #[utoipa::path(
   post,
-  path = "/tx",
-  tag = "records",
+  path = "/api/transactions/v1/execute",
+  tag = "transactions",
   params(),
   request_body = TransactionRequest,
   responses(
@@ -54,9 +54,9 @@ pub async fn record_transactions_handler(
   State(state): State<AppState>,
   user: Option<User>,
   Json(request): Json<TransactionRequest>,
-) -> Result<TransactionResponse, RecordError> {
-  if request.operations.len() > 1024 {
-    return Err(RecordError::BadRequest("Transactions exceed limit: 1024"));
+) -> Result<Json<TransactionResponse>, RecordError> {
+  if request.operations.len() > 128 {
+    return Err(RecordError::BadRequest("Transactions exceed limit: 128"));
   }
 
   type Op = dyn (FnOnce(&rusqlite::Connection) -> Result<Option<String>, RecordError>) + Send;
@@ -68,11 +68,23 @@ pub async fn record_transactions_handler(
       return match op {
         Operation::Create { api_name, value } => {
           let api = get_api(&state, &api_name)?;
-          let record = extract_record(value)?;
+          let mut record = extract_record(value)?;
+
+          if api.insert_autofill_missing_user_id_columns() {
+            if let Some(ref user) = user {
+              for column_index in api.user_id_columns() {
+                let col_name = &api.columns()[*column_index].name;
+                if !record.contains_key(col_name) {
+                  record.insert(
+                    col_name.to_owned(),
+                    serde_json::Value::String(uuid_to_b64(&user.uuid)),
+                  );
+                }
+              }
+            }
+          }
+
           let mut lazy_params = LazyParams::for_insert(&api, record, None);
-
-          // TODO: auto-fill user-id columns
-
           let acl_check = api.build_record_level_access_check(
             Permission::Create,
             None,
@@ -188,7 +200,7 @@ pub async fn record_transactions_handler(
     )
     .await?;
 
-  return Ok(TransactionResponse { ids });
+  return Ok(Json(TransactionResponse { ids }));
 }
 
 #[inline]
@@ -310,6 +322,8 @@ mod tests {
     )
     .await
     .unwrap();
+
+    assert_eq!(1, response.ids.len());
 
     assert_eq!(
       2,

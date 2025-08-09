@@ -46,8 +46,8 @@ use crate::constants::RECORD_API_PATH;
 ))]
 pub(super) struct RecordOpenApi;
 
-pub(crate) fn router() -> Router<AppState> {
-  return Router::new()
+pub(crate) fn router(enable_transactions: bool) -> Router<AppState> {
+  let router = Router::new()
     .route(
       &format!("/{RECORD_API_PATH}/{{name}}/{{record}}"),
       get(read_record::read_record_handler),
@@ -84,6 +84,15 @@ pub(crate) fn router() -> Router<AppState> {
       &format!("/{RECORD_API_PATH}/{{name}}/subscribe/{{record}}"),
       get(subscribe::add_subscription_sse_handler),
     );
+
+  if enable_transactions {
+    return router.route(
+      "/api/transactions/v1/execute",
+      post(transaction::record_transactions_handler),
+    );
+  }
+
+  return router;
 }
 
 // Since this is for APIs access control, we'll use the API- space CRUD terminology instead of

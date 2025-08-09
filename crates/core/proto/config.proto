@@ -113,6 +113,9 @@ message ServerConfig {
 
   /// If present will use S3 setup over local file-system based storage.
   optional S3StorageConfig s3_storage_config = 13;
+
+  /// If enabled, batches of transactions can be submitted for attomic execution
+  optional bool enable_record_transactions = 14;
 }
 
 enum SystemJobId {
