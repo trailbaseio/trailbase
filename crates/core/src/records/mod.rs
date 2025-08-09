@@ -6,20 +6,22 @@ use utoipa::OpenApi;
 
 pub(crate) mod create_record;
 pub(crate) mod delete_record;
-mod error;
-mod expand;
 pub(crate) mod files;
 pub(crate) mod json_schema;
 pub(crate) mod list_records;
 pub(crate) mod params;
 pub(crate) mod read_queries;
 pub(crate) mod read_record;
-mod record_api;
 pub(crate) mod subscribe;
-pub mod test_utils;
+pub(crate) mod test_utils;
+pub(crate) mod write_queries;
+
+mod error;
+mod expand;
+mod record_api;
+mod transaction;
 mod update_record;
 mod validate;
-pub mod write_queries;
 
 pub(crate) use error::RecordError;
 pub use record_api::RecordApi;

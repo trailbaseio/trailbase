@@ -242,7 +242,7 @@ impl Connection {
   }
 
   #[inline]
-  async fn call_reader<F, R>(&self, function: F) -> Result<R>
+  pub async fn call_reader<F, R>(&self, function: F) -> Result<R>
   where
     F: FnOnce(&rusqlite::Connection) -> Result<R> + Send + 'static,
     R: Send + 'static,
