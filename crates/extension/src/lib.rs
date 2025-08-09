@@ -21,32 +21,22 @@ pub enum Error {
 }
 
 pub fn apply_default_pragmas(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
-  const CONFIG: &[&str] = &[
-    "PRAGMA busy_timeout       = 10000",
-    "PRAGMA journal_mode       = WAL",
-    "PRAGMA journal_size_limit = 200000000",
-    // Sync the file system less often.
-    "PRAGMA synchronous        = NORMAL",
-    "PRAGMA foreign_keys       = ON",
-    "PRAGMA temp_store         = MEMORY",
-    "PRAGMA cache_size         = -16000",
-    // TODO: Maybe worth exploring once we have a benchmark, based on
-    // https://phiresky.github.io/blog/2020/sqlite-performance-tuning/.
-    // "PRAGMA mmap_size          = 30000000000",
-    // "PRAGMA page_size          = 32768",
+  conn.pragma_update(None, "busy_timeout", 10000)?;
+  conn.pragma_update(None, "journal_mode", "WAL")?;
+  conn.pragma_update(None, "journal_size_limit", 200000000)?;
+  // Sync the file system less often.
+  conn.pragma_update(None, "synchronous", "NORMAL")?;
+  conn.pragma_update(None, "foreign_keys", "ON")?;
+  conn.pragma_update(None, "temp_store", "MEMORY")?;
+  // TODO: we could consider pushing this further down-stream to optimize
+  // for different use-cases, e.g. main vs logs.
+  conn.pragma_update(None, "cache_size", -16000)?;
+  // Keep SQLite default 4KB page_size
+  // conn.pragma_update(None, "page_size", 4096)?;
 
-    // Safety feature around application-defined functions recommended by
-    // https://sqlite.org/appfunc.html
-    "PRAGMA trusted_schema     = OFF",
-  ];
-
-  // NOTE: we're querying here since some pragmas return data.
-  for pragma in CONFIG {
-    // TODO: Use conn.pragma_update instead.
-    let mut stmt = conn.prepare(pragma)?;
-    let mut rows = stmt.query([])?;
-    let _maybe_row = rows.next()?;
-  }
+  // Safety feature around application-defined functions recommended by
+  // https://sqlite.org/appfunc.html
+  conn.pragma_update(None, "trusted_schema", "OFF")?;
 
   return Ok(());
 }
@@ -85,7 +75,7 @@ pub fn connect_sqlite(
   apply_default_pragmas(&conn)?;
 
   // Initial optimize.
-  conn.execute("PRAGMA optimize = 0x10002", ())?;
+  conn.pragma_update(None, "optimize", "0x10002")?;
 
   return Ok(conn);
 }

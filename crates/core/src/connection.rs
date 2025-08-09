@@ -62,6 +62,11 @@ pub fn init_main_db(
     }
   }
 
+  // NOTE: We could consider larger memory maps and caches for the main database.
+  // Should be driven by benchmarks.
+  // conn.pragma_update(None, "mmap_size", 268435456)?;
+  // conn.pragma_update(None, "cache_size", -32768)?; // 32MB
+
   return Ok((conn, *new_db.lock()));
 }
 
@@ -76,10 +81,7 @@ pub(crate) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, Con
       )?;
 
       // Turn off secure_deletions, i.e. don't wipe the memory with zeros.
-      conn.query_row("PRAGMA secure_delete = FALSE", (), |_row| Ok(()))?;
-
-      // Sync less often
-      conn.execute("PRAGMA synchronous = 1", ())?;
+      conn.pragma_update(None, "secure_delete", "FALSE")?;
 
       apply_logs_migrations(&mut conn)?;
       return Ok(conn);
@@ -105,7 +107,7 @@ pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
   trailbase_extension::apply_default_pragmas(&conn)?;
 
   // Initial optimize.
-  conn.execute("PRAGMA optimize = 0x10002", ())?;
+  conn.pragma_update(None, "optimize", "0x10002")?;
 
   return Ok(conn);
 }
