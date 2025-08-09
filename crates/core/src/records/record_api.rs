@@ -444,26 +444,33 @@ impl RecordApi {
         self
           .state
           .conn
-          .read_query_row_f(access_query, params, |row| row.get(0))
+          .call_reader(move |conn| {
+            Ok(Self::check_record_level_access_impl(
+              conn,
+              &access_query,
+              params,
+            )?)
+          })
           .await
       }
       _ => {
         self
           .state
           .conn
-          .query_row_f(access_query, params, |row| row.get(0))
+          .call(move |conn| {
+            Ok(Self::check_record_level_access_impl(
+              conn,
+              &access_query,
+              params,
+            )?)
+          })
           .await
       }
     };
-    // let allowed_result = self
-    //   .state
-    //   .conn
-    //   .read_query_row_f(access_query, params, |row| row.get(0))
-    //   .await;
 
     match allowed_result {
       Ok(allowed) => {
-        if allowed.unwrap_or(false) {
+        if allowed {
           return Ok(());
         }
       }
@@ -476,6 +483,44 @@ impl RecordApi {
     };
 
     return Err(RecordError::Forbidden);
+  }
+
+  pub fn build_record_level_access_check(
+    &self,
+    p: Permission,
+    record_id: Option<&Value>,
+    request_params: Option<&mut LazyParams<'_>>,
+    user: Option<&User>,
+  ) -> Result<Box<dyn (FnOnce(&rusqlite::Connection) -> Result<(), RecordError>) + Send>, RecordError>
+  {
+    // First check table level access and if present check row-level access based on access rule.
+    self.check_table_level_access(p, user)?;
+
+    let Some(access_query) = self.state.cached_access_query(p) else {
+      return Ok(Box::new(|_conn| Ok(())));
+    };
+
+    let params = self.build_named_params(p, record_id, request_params, user)?;
+    return Ok(Box::new(move |conn| {
+      return match Self::check_record_level_access_impl(conn, &access_query, params) {
+        Ok(allowed) if allowed => Ok(()),
+        _ => Err(RecordError::Forbidden),
+      };
+    }));
+  }
+
+  #[inline]
+  fn check_record_level_access_impl(
+    conn: &rusqlite::Connection,
+    query: &str,
+    named_params: NamedParams,
+  ) -> Result<bool, rusqlite::Error> {
+    let mut stmt = conn.prepare_cached(query)?;
+    named_params.bind(&mut stmt)?;
+    if let Some(row) = stmt.raw_query().next()? {
+      return row.get(0);
+    }
+    return Err(rusqlite::Error::QueryReturnedNoRows);
   }
 
   /// Check if the given user (if any) can access a record given the request and the operation.

@@ -24,7 +24,7 @@ pub struct CreateRecordQuery {
 
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct CreateRecordResponse {
-  /// Safe-url base64 encoded id of the newly created record.
+  /// Url-Safe base64 encoded ids of the newly created record.
   pub ids: Vec<String>,
 }
 
@@ -41,9 +41,7 @@ pub(crate) fn extract_record(value: serde_json::Value) -> Result<JsonRow, Record
 pub(crate) type RecordAndFiles = (JsonRow, Option<Vec<FileUploadInput>>);
 
 #[inline]
-pub(crate) fn extract_records(
-  value: serde_json::Value,
-) -> Result<Vec<RecordAndFiles>, RecordError> {
+fn extract_records(value: serde_json::Value) -> Result<Vec<RecordAndFiles>, RecordError> {
   return match value {
     serde_json::Value::Object(record) => Ok(vec![(record, None)]),
     serde_json::Value::Array(records) => {
@@ -70,18 +68,6 @@ pub(crate) fn extract_records(
   };
 }
 
-#[inline]
-fn extract_record_id(value: rusqlite::types::Value) -> Result<String, trailbase_sqlite::Error> {
-  return match value {
-    rusqlite::types::Value::Blob(blob) => Ok(BASE64_URL_SAFE.encode(blob)),
-    rusqlite::types::Value::Text(text) => Ok(text),
-    rusqlite::types::Value::Integer(i) => Ok(i.to_string()),
-    _ => Err(trailbase_sqlite::Error::Other(
-      "Unexpected data type".into(),
-    )),
-  };
-}
-
 /// Create new record.
 #[utoipa::path(
   post,
@@ -90,7 +76,7 @@ fn extract_record_id(value: rusqlite::types::Value) -> Result<String, trailbase_
   params(CreateRecordQuery),
   request_body = serde_json::Value,
   responses(
-    (status = 200, description = "Record id of successful insertion.", body = CreateRecordResponse),
+    (status = 200, description = "Ids of successfully created records.", body = CreateRecordResponse),
   )
 )]
 pub async fn create_record_handler(
@@ -198,6 +184,18 @@ pub async fn create_record_handler(
   }
 
   return Ok(Json(CreateRecordResponse { ids: record_ids }).into_response());
+}
+
+#[inline]
+fn extract_record_id(value: rusqlite::types::Value) -> Result<String, trailbase_sqlite::Error> {
+  return match value {
+    rusqlite::types::Value::Blob(blob) => Ok(BASE64_URL_SAFE.encode(blob)),
+    rusqlite::types::Value::Text(text) => Ok(text),
+    rusqlite::types::Value::Integer(i) => Ok(i.to_string()),
+    _ => Err(trailbase_sqlite::Error::Other(
+      "Unexpected data type".into(),
+    )),
+  };
 }
 
 #[cfg(test)]
