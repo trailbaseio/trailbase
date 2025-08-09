@@ -363,10 +363,11 @@ function AuthSettingsForm(props: {
               <form.Field name="authTokenTtlSec">
                 {buildOptionalNumberFormField({
                   integer: true,
+                  placeholder: `${60 * 60}`,
                   label: () => (
                     <InfoTooltip label="Auth TTL [sec]" class={labelStyle}>
                       Tokens older than this TTL are considered invalid. A new
-                      AuthToken can be minted provided a valid refresh Token.
+                      AuthToken can be minted given a valid refresh Token.
                     </InfoTooltip>
                   ),
                 })}
@@ -375,6 +376,7 @@ function AuthSettingsForm(props: {
               <form.Field name="refreshTokenTtlSec">
                 {buildOptionalNumberFormField({
                   integer: true,
+                  placeholder: `${30 * 24 * 60 * 60}`,
                   label: () => (
                     <InfoTooltip label="Refresh TTL [sec]" class={labelStyle}>
                       Refresh tokens older than this TTL are considered invalid.
@@ -401,8 +403,8 @@ function AuthSettingsForm(props: {
                       label="Disable Registration"
                       class={labelStyle}
                     >
-                      When disabled new users can only sign up via OAuth.
-                      Existing users will can continue to sign in using
+                      When disabled new users will only be able to sign up using
+                      OAuth. Existing users can continue to sign in using
                       password-based auth.
                     </InfoTooltip>
                   ),
@@ -411,11 +413,12 @@ function AuthSettingsForm(props: {
 
               <form.Field name="passwordMinimalLength">
                 {buildOptionalNumberFormField({
+                  placeholder: "8",
                   label: () => (
                     <InfoTooltip label="Min Length" class={labelStyle}>
-                      Minimal length for new passwords [Default 8]. Does not
-                      affect existing registrations unless users choose to
-                      change their password.
+                      Minimal length for new passwords. Does not affect existing
+                      registrations unless users choose to change their
+                      password.
                     </InfoTooltip>
                   ),
                 })}

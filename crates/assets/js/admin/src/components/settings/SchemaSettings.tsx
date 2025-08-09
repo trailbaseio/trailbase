@@ -115,18 +115,16 @@ export function SchemaSettings(props: {
         <Match when={schemas.isSuccess}>
           <Card>
             <CardHeader>
-              <h2>Schemas</h2>
+              <h2>JSON Schemas</h2>
             </CardHeader>
 
             <CardContent>
               <p class="text-sm">
-                Registering custom JSON schemas is not yet available in the UI.
-                However, you can register your own schemas in the{" "}
-                <span class="font-mono">`config.textproto`</span>. JSON schemas
-                can be used to enforce constraints on TEXT/JSON columns, e.g.:
+                Custom JSON schemas can be registered to enforce constraints on
+                columns of your database tables, e.g.:
               </p>
 
-              <pre class="my-2 text-sm">
+              <pre class="my-4 text-sm">
                 CREATE TABLE table (<br />
                 &nbsp;&nbsp; json &nbsp;&nbsp;&nbsp;&nbsp; TEXT
                 CHECK(jsonschema('mySchema', json))
@@ -135,6 +133,14 @@ export function SchemaSettings(props: {
                 <br />
               </pre>
 
+              <p class="text-sm">
+                Note, registration via the admin UI is not yet available. You
+                can register custom schemas in your instance's{" "}
+                <span class="text-nowrap font-mono">
+                  `{"<"}traildepot{">"}/config.textproto`
+                </span>{" "}
+                and they will show up here.
+              </p>
               <SchemaSettingsForm
                 markDirty={props.markDirty}
                 postSubmit={props.postSubmit}

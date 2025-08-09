@@ -77,7 +77,7 @@ function ServerSettings(props: CommonProps) {
         <div class="flex flex-col gap-4">
           <Card>
             <CardHeader>
-              <h2>Server Settings</h2>
+              <h2>Settings</h2>
             </CardHeader>
 
             <CardContent class="flex flex-col gap-4">
@@ -90,8 +90,8 @@ function ServerSettings(props: CommonProps) {
                     label: () => <div class={labelWidth}>App Name</div>,
                     info: (
                       <p>
-                        The name of your application. Used e.g. in emails sent
-                        to users.
+                        The name of your application, e.g. used in mails sent to
+                        users when singing up.
                       </p>
                     ),
                   })}
@@ -102,11 +102,11 @@ function ServerSettings(props: CommonProps) {
                 <form.Field name="siteUrl" validators={unsetOrValidUrl()}>
                   {buildOptionalTextFormField({
                     label: () => <div class={labelWidth}>Site URL</div>,
+                    placeholder: "https://trailbase.io",
                     info: (
                       <p>
-                        The public address under which the server is reachable.
-                        Used e.g. for auth, e.g. verification links sent via
-                        Email.
+                        The public URL of your server, e.g. used for auth
+                        redirects, email verification links.
                       </p>
                     ),
                   })}
@@ -123,9 +123,8 @@ function ServerSettings(props: CommonProps) {
                     info: (
                       <p>
                         A background job periodically cleans up logs older than
-                        above retention period. Setting the retention to zero
-                        turns off the cleanup and logs will be retained
-                        indefinitely.
+                        the above retention period. Setting the retention to
+                        zero turns off the cleanup retaining logs indefinitely.
                       </p>
                     ),
                   })}
@@ -187,7 +186,7 @@ function ServerSettings(props: CommonProps) {
     <div class="flex flex-col gap-4">
       <Card>
         <CardHeader>
-          <h2>Server Info</h2>
+          <h2>Info</h2>
         </CardHeader>
 
         <CardContent class="flex flex-col gap-4">
@@ -293,14 +292,13 @@ function ImportSettings(props: CommonProps) {
 
             <CardContent>
               <p class="mt-2">
-                Importing and exporting data via the UI is not yet supported,
-                however one can simply use the{" "}
-                <span class="font-mono">sqlite3</span> command-line utility.
-                Thanks to TrailBase's non-invasive nature, i.e. not requiring
-                special metadata, any table with{" "}
-                <span class="font-mono">STRICT</span> typing and an{" "}
-                <span class="font-mono">INTEGER</span> or UUIDv7 primary key
-                column can be exposed via APIs.
+                Importing and exporting data via the UI is not yet supported.
+                Instead, you can use the <span class="font-mono">sqlite3</span>{" "}
+                command line interface. TrailBase does not require any special
+                metadata. Any <span class="font-mono">STRICT</span>ly typed{" "}
+                <span class="font-mono">TABLE</span> with an
+                <span class="font-mono">INTEGER</span> or UUID primary key can
+                be exposed via TrailBase's Record APIs.
               </p>
 
               <p class="my-2">Import, e.g.:</p>

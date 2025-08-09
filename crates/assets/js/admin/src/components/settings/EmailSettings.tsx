@@ -156,17 +156,16 @@ export function EmailSettings(props: {
         <div class="flex flex-col gap-4">
           <Card id="smtp">
             <CardHeader>
-              <h2>SMTP Settings</h2>
+              <h2>SMTP</h2>
             </CardHeader>
 
             <CardContent class={flexColStyle}>
               <p class="mb-4 text-sm">
-                TrailBase try to use the local sendmail command if no SMTP
-                server is configured. This may be fine for development but will
-                likely result in your Emails getting classified as Spam. Please
-                add a valid SMTP server before going to production. There are
-                many specialized providers with generous free tiers such as{" "}
-                <a href="https://www.brevo.com/">Brevo</a>, ...
+                The SMTP server to be used for email delivery. When no SMTP is
+                configured, your local <span class="font-mono">sendmail</span>{" "}
+                will be used. Before going to production, please make sure to
+                set up a suitable SMTP server. Otherwise, your emails will
+                likely get classified as Spam.{" "}
               </p>
 
               <form.Field
@@ -211,7 +210,7 @@ export function EmailSettings(props: {
 
           <Card id="sender">
             <CardHeader>
-              <h2>Sender Settings</h2>
+              <h2>Sender</h2>
             </CardHeader>
 
             <CardContent class={flexColStyle}>
@@ -235,15 +234,13 @@ export function EmailSettings(props: {
 
           <Card id="templates">
             <CardHeader>
-              <h2>Email Templates</h2>
+              <h2>Templates</h2>
             </CardHeader>
 
             <CardContent>
               <Accordion multiple={true} collapsible class="w-full">
                 <AccordionItem value="item-email-verification">
-                  <AccordionTrigger>
-                    Email Verification Template
-                  </AccordionTrigger>
+                  <AccordionTrigger>Email Verification</AccordionTrigger>
 
                   <AccordionContent>
                     <EmailTemplate
@@ -256,7 +253,7 @@ export function EmailSettings(props: {
                 </AccordionItem>
 
                 <AccordionItem value="item-change-email">
-                  <AccordionTrigger>Change Email Template</AccordionTrigger>
+                  <AccordionTrigger>Change Email Address</AccordionTrigger>
 
                   <AccordionContent>
                     <EmailTemplate
@@ -269,7 +266,7 @@ export function EmailSettings(props: {
                 </AccordionItem>
 
                 <AccordionItem value="item-password-reset">
-                  <AccordionTrigger>Password Reset Template</AccordionTrigger>
+                  <AccordionTrigger>Password Reset</AccordionTrigger>
 
                   <AccordionContent>
                     <EmailTemplate
