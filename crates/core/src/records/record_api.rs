@@ -41,6 +41,8 @@ struct RecordApiSchema {
   named_params_template: NamedParams,
 }
 
+type DeferredAclCheck = dyn (FnOnce(&rusqlite::Connection) -> Result<(), RecordError>) + Send;
+
 impl RecordApiSchema {
   fn from_table(schema_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
     assert_eq!(
@@ -491,8 +493,7 @@ impl RecordApi {
     record_id: Option<&Value>,
     request_params: Option<&mut LazyParams<'_>>,
     user: Option<&User>,
-  ) -> Result<Box<dyn (FnOnce(&rusqlite::Connection) -> Result<(), RecordError>) + Send>, RecordError>
-  {
+  ) -> Result<Box<DeferredAclCheck>, RecordError> {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
