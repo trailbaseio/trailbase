@@ -8,7 +8,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::AppState;
-use crate::config::proto::{Config, EmailTemplate};
+use crate::config::proto::Config;
 
 #[derive(Debug, Error)]
 pub enum EmailError {
@@ -83,27 +83,22 @@ impl Email {
 
   pub(crate) fn verification_email(
     state: &AppState,
-    email: &str,
+    email_address: &str,
     email_verification_code: &str,
   ) -> Result<Self, EmailError> {
-    let to: Mailbox = email.parse()?;
+    let to: Mailbox = email_address.parse()?;
 
     let (server_config, template) =
       state.access_config(|c| (c.server.clone(), c.email.user_verification_template.clone()));
 
-    let (subject_template, body_template) = match template {
-      Some(EmailTemplate {
-        subject: Some(subject),
-        body: Some(body),
-      }) => (subject, body),
-      _ => {
-        debug!("Falling back to default email verification email");
-        (
-          defaults::EMAIL_VALIDATION_SUBJECT.to_string(),
-          defaults::EMAIL_VALIDATION_BODY.to_string(),
-        )
-      }
-    };
+    let subject_template = template
+      .as_ref()
+      .and_then(|t| t.subject.as_deref())
+      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_VERIFICATION_SUBJECT);
+    let body_template = template
+      .as_ref()
+      .and_then(|t| t.body.as_deref())
+      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_VERIFICATION_BODY);
 
     let site_url = get_site_url(state);
     let verification_url = site_url
@@ -115,19 +110,19 @@ impl Email {
 
     let env = Environment::empty();
     let subject = env
-      .template_from_named_str("subject", &subject_template)?
+      .template_from_named_str("subject", subject_template)?
       .render(context! {
         APP_NAME => server_config.application_name,
-        EMAIL => email,
+        EMAIL => email_address,
       })?;
     let body = env
-      .template_from_named_str("body", &body_template)?
+      .template_from_named_str("body", body_template)?
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
         SITE_URL => site_url,
         CODE => email_verification_code,
-        EMAIL => email,
+        EMAIL => email_address,
       })?;
 
     return Email::new_internal(state, to, subject, body);
@@ -135,26 +130,21 @@ impl Email {
 
   pub(crate) fn change_email_address_email(
     state: &AppState,
-    email: &str,
+    email_address: &str,
     email_verification_code: &str,
   ) -> Result<Self, EmailError> {
-    let to: Mailbox = email.parse()?;
+    let to: Mailbox = email_address.parse()?;
     let (server_config, template) =
       state.access_config(|c| (c.server.clone(), c.email.change_email_template.clone()));
 
-    let (subject_template, body_template) = match template {
-      Some(EmailTemplate {
-        subject: Some(subject),
-        body: Some(body),
-      }) => (subject, body),
-      _ => {
-        debug!("Falling back to default change email template");
-        (
-          defaults::CHANGE_EMAIL_SUBJECT.to_string(),
-          defaults::CHANGE_EMAIL_BODY.to_string(),
-        )
-      }
-    };
+    let subject_template = template
+      .as_ref()
+      .and_then(|t| t.subject.as_deref())
+      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_CHANGE_ADDRESS_SUBJECT);
+    let body_template = template
+      .as_ref()
+      .and_then(|t| t.body.as_deref())
+      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_CHANGE_ADDRESS_BODY);
 
     let site_url = get_site_url(state);
     let verification_url = site_url
@@ -166,19 +156,19 @@ impl Email {
 
     let env = Environment::empty();
     let subject = env
-      .template_from_named_str("subject", &subject_template)?
+      .template_from_named_str("subject", subject_template)?
       .render(context! {
         APP_NAME => server_config.application_name,
-        EMAIL => email,
+        EMAIL => email_address,
       })?;
     let body = env
-      .template_from_named_str("body", &body_template)?
+      .template_from_named_str("body", body_template)?
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
         SITE_URL => site_url,
         CODE => email_verification_code,
-        EMAIL => email,
+        EMAIL => email_address,
       })?;
 
     return Email::new_internal(state, to, subject, body);
@@ -186,26 +176,21 @@ impl Email {
 
   pub(crate) fn password_reset_email(
     state: &AppState,
-    email: &str,
+    email_address: &str,
     password_reset_code: &str,
   ) -> Result<Self, EmailError> {
-    let to: Mailbox = email.parse()?;
+    let to: Mailbox = email_address.parse()?;
     let (server_config, template) =
       state.access_config(|c| (c.server.clone(), c.email.password_reset_template.clone()));
 
-    let (subject_template, body_template) = match template {
-      Some(EmailTemplate {
-        subject: Some(subject),
-        body: Some(body),
-      }) => (subject, body),
-      _ => {
-        debug!("Falling back to default reset password email");
-        (
-          defaults::PASSWORD_RESET_SUBJECT.to_string(),
-          defaults::PASSWORD_RESET_BODY.to_string(),
-        )
-      }
-    };
+    let subject_template = template
+      .as_ref()
+      .and_then(|t| t.subject.as_deref())
+      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_PASSWORD_RESET_SUBJECT);
+    let body_template = template
+      .as_ref()
+      .and_then(|t| t.body.as_deref())
+      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_PASSWORD_RESET_BODY);
 
     let site_url = get_site_url(state);
     let verification_url = site_url
@@ -217,19 +202,19 @@ impl Email {
 
     let env = Environment::empty();
     let subject = env
-      .template_from_named_str("subject", &subject_template)?
+      .template_from_named_str("subject", subject_template)?
       .render(context! {
         APP_NAME => server_config.application_name,
-        EMAIL => email,
+        EMAIL => email_address,
       })?;
     let body = env
-      .template_from_named_str("body", &body_template)?
+      .template_from_named_str("body", body_template)?
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
         SITE_URL => site_url,
         CODE => password_reset_code,
-        EMAIL => email,
+        EMAIL => email_address,
       })?;
 
     return Email::new_internal(state, to, subject, body);
@@ -322,84 +307,6 @@ fn get_site_url(state: &AppState) -> url::Url {
       url::Url::parse("http://localhost:4000").expect("invariant")
     }
   };
-}
-
-pub(crate) mod defaults {
-  use crate::config::proto::EmailTemplate;
-  use indoc::indoc;
-
-  pub const EMAIL_VALIDATION_SUBJECT: &str = "Verify your Email Address for {{ APP_NAME }}";
-  pub const EMAIL_VALIDATION_BODY: &str = indoc! {r#"
-        <html>
-          <body>
-            <h1>Welcome {{ EMAIL }}</h1>
-
-            <p>
-              Thanks for joining {{ APP_NAME }}.
-            </p>
-
-            <p>
-              To be able to log in, first validate your email by clicking the link below.
-            </p>
-
-            <a class="btn" href="{{ VERIFICATION_URL }}">
-              {{ VERIFICATION_URL }}
-            </a>
-          </body>
-        </html>"#};
-
-  pub fn email_validation_email() -> EmailTemplate {
-    return EmailTemplate {
-      subject: Some(EMAIL_VALIDATION_SUBJECT.into()),
-      body: Some(EMAIL_VALIDATION_BODY.into()),
-    };
-  }
-
-  pub const PASSWORD_RESET_SUBJECT: &str = "Reset your Password for {{ APP_NAME }}";
-  pub const PASSWORD_RESET_BODY: &str = indoc! {r#"
-        <html>
-          <body>
-            <h1>Password Reset</h1>
-
-            <p>
-              Click the link below to reset your password.
-            </p>
-
-            <a class="btn" href="{{ VERIFICATION_URL }}">
-              {{ VERIFICATION_URL }}
-            </a>
-          </body>
-        </html>"#};
-
-  pub fn password_reset_email() -> EmailTemplate {
-    return EmailTemplate {
-      subject: Some(PASSWORD_RESET_SUBJECT.into()),
-      body: Some(PASSWORD_RESET_BODY.into()),
-    };
-  }
-
-  pub const CHANGE_EMAIL_SUBJECT: &str = "Change your Email Address for {{ APP_NAME }}";
-  pub const CHANGE_EMAIL_BODY: &str = indoc! {r#"
-        <html>
-          <body>
-            <h1>Change E-Mail Address</h1>
-
-            <p>
-              Click the link below to verify your new E-mail address:
-            </p>
-
-            <a class="btn" href="{{ VERIFICATION_URL }}">
-              {{ VERIFICATION_URL }}
-            </a>
-          </body>
-        </html>"#};
-
-  pub fn change_email_address_email() -> EmailTemplate {
-    return EmailTemplate {
-      subject: Some(CHANGE_EMAIL_SUBJECT.into()),
-      body: Some(CHANGE_EMAIL_BODY.into()),
-    };
-  }
 }
 
 #[cfg(test)]

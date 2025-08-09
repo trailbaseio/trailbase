@@ -263,6 +263,7 @@ export function buildOptionalTextAreaFormField(
 
           <TextFieldTextArea
             rows={rows}
+            placeholder={opts.placeholder}
             disabled={opts?.disabled ?? false}
             value={field().state.value}
             onBlur={field().handleBlur}

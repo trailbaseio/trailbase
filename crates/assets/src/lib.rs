@@ -4,6 +4,7 @@
 
 mod assets;
 pub mod auth;
+pub mod email;
 
 pub use assets::AssetService;
 

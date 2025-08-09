@@ -40,10 +40,30 @@ import { Config, EmailConfig } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/config";
 import { $user, adminFetch } from "@/lib/fetch";
 
+import DEFAULT_EMAIL_VERIFICATION_SUBJECT from "@templates/default_email_verification_subject.txt?raw";
+import DEFAULT_EMAIL_VERIFICATION_BODY from "@templates/default_email_verification_body.html?raw";
+
+import DEFAULT_EMAIL_CHANGE_ADDRESS_BODY from "@templates/default_email_change_address_body.html?inline?raw";
+import DEFAULT_EMAIL_CHANGE_ADDRESS_SUBJECT from "@templates/default_email_change_address_subject.txt?inline?raw";
+
+import DEFAULT_EMAIL_RESET_PASSWORD_SUBJECT from "@templates/default_email_reset_password_subject.txt?raw";
+import DEFAULT_EMAIL_RESET_PASSWORD_BODY from "@templates/default_email_reset_password_body.html?raw";
+
 function EmailTemplate(props: {
   form: FormApiT<EmailConfig>;
   fieldName: string;
+  subjectPlaceholder?: string;
+  bodyPlaceholder?: string;
 }) {
+  const Parameter = (props: { label: string }) => (
+    <>
+      {" "}
+      <span class="text-nowrap rounded bg-gray-200 font-mono">
+        {`{{ ${props.label} }}`}
+      </span>{" "}
+    </>
+  );
+
   return (
     <div class="my-2 mr-1 flex flex-col gap-4">
       <props.form.Field
@@ -52,13 +72,12 @@ function EmailTemplate(props: {
       >
         {buildOptionalTextFormField({
           label: textLabel("Subject"),
+          placeholder: props.subjectPlaceholder,
           info: (
             <p>
-              Email's subject line. Valid template parameters:{" "}
-              <span class="rounded bg-gray-200 font-mono">
-                {"{{APP_NAME}}"}
-              </span>
-              .
+              Valid parameters: <Parameter label="APP_NAME" />
+              and
+              <Parameter label="EMAIL" />.
             </p>
           ),
         })}
@@ -71,21 +90,18 @@ function EmailTemplate(props: {
         {buildOptionalTextAreaFormField(
           {
             label: textLabel("Body"),
+            placeholder: props.bodyPlaceholder,
             info: (
               <p>
-                Email's body. Valid template parameters:{" "}
-                <span class="rounded bg-gray-200 font-mono">
-                  {"{{ APP_NAME }}"}
-                </span>
-                ,{" "}
-                <span class="rounded bg-gray-200 font-mono">
-                  {"{{ SITE_URL }}"}
-                </span>
-                , and{" "}
-                <span class="rounded bg-gray-200 font-mono">
-                  {"{{ CODE }}"}
-                </span>
-                .
+                Valid parameters: <Parameter label="APP_NAME" />
+                ,
+                <Parameter label="SITE_URL" />
+                ,
+                <Parameter label="EMAIL" />
+                ,
+                <Parameter label="VERIFICATION_URL" />
+                and
+                <Parameter label="CODE" />.
               </p>
             ),
           },
@@ -233,6 +249,21 @@ export function EmailSettings(props: {
                     <EmailTemplate
                       form={form}
                       fieldName="userVerificationTemplate"
+                      subjectPlaceholder={DEFAULT_EMAIL_VERIFICATION_SUBJECT}
+                      bodyPlaceholder={DEFAULT_EMAIL_VERIFICATION_BODY}
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="item-change-email">
+                  <AccordionTrigger>Change Email Template</AccordionTrigger>
+
+                  <AccordionContent>
+                    <EmailTemplate
+                      form={form}
+                      fieldName="changeEmailTemplate?"
+                      subjectPlaceholder={DEFAULT_EMAIL_CHANGE_ADDRESS_SUBJECT}
+                      bodyPlaceholder={DEFAULT_EMAIL_CHANGE_ADDRESS_BODY}
                     />
                   </AccordionContent>
                 </AccordionItem>
@@ -244,6 +275,8 @@ export function EmailSettings(props: {
                     <EmailTemplate
                       form={form}
                       fieldName="passwordResetTemplate"
+                      subjectPlaceholder={DEFAULT_EMAIL_RESET_PASSWORD_SUBJECT}
+                      bodyPlaceholder={DEFAULT_EMAIL_RESET_PASSWORD_BODY}
                     />
                   </AccordionContent>
                 </AccordionItem>

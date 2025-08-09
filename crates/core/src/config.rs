@@ -78,7 +78,6 @@ pub mod proto {
   use crate::constants::{
     DEFAULT_AUTH_TOKEN_TTL, DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT,
   };
-  use crate::email;
 
   include!(concat!(env!("OUT_DIR"), "/config.rs"));
 
@@ -119,12 +118,6 @@ pub mod proto {
           application_name: Some("TrailBase".to_string()),
           site_url: None,
           logs_retention_sec: Some(LOGS_RETENTION_DEFAULT.num_seconds()),
-          ..Default::default()
-        },
-        email: EmailConfig {
-          user_verification_template: Some(email::defaults::email_validation_email()),
-          password_reset_template: Some(email::defaults::password_reset_email()),
-          change_email_template: Some(email::defaults::change_email_address_email()),
           ..Default::default()
         },
         auth: AuthConfig {
