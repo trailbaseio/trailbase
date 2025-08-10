@@ -105,6 +105,7 @@ pub fn flat_json_to_value(
 
         // NOTE: It's not quite as tricial. serde_json will behave differently whether
         // its "arbitrary_precision" feature is enabled or not.
+        #[cfg(debug_assertions)]
         panic!("we exhaustively checked for int, uint and float");
       }
     }

@@ -277,7 +277,7 @@ mod tests {
   async fn test_parse_table_schema() {
     crate::registry::try_init_schemas();
 
-    let conn = trailbase_extension::connect_sqlite(None, None).unwrap();
+    let conn = trailbase_extension::connect_sqlite(None).unwrap();
 
     let check = indoc::indoc! {r#"
         jsonschema_matches ('{

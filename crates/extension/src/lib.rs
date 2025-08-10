@@ -42,10 +42,7 @@ pub fn apply_default_pragmas(conn: &rusqlite::Connection) -> Result<(), rusqlite
 }
 
 #[allow(unsafe_code)]
-pub fn connect_sqlite(
-  path: Option<PathBuf>,
-  extensions: Option<Vec<PathBuf>>,
-) -> Result<rusqlite::Connection, Error> {
+pub fn connect_sqlite(path: Option<PathBuf>) -> Result<rusqlite::Connection, Error> {
   // First load C extensions like sqlean and vector search.
   let status =
     unsafe { rusqlite::ffi::sqlite3_auto_extension(Some(init_sqlean_and_vector_search)) };
@@ -64,13 +61,6 @@ pub fn connect_sqlite(
   } else {
     rusqlite::Connection::open_in_memory()?
   })?;
-
-  // Load user-provided extensions.
-  if let Some(extensions) = extensions {
-    for path in extensions {
-      unsafe { conn.load_extension::<_, &str>(path, None)? }
-    }
-  }
 
   apply_default_pragmas(&conn)?;
 
@@ -247,7 +237,7 @@ mod test {
 
   #[test]
   fn test_connect_and_extensions() {
-    let conn = connect_sqlite(None, None).unwrap();
+    let conn = connect_sqlite(None).unwrap();
 
     let row = conn
       .query_row("SELECT (uuid_v7())", (), |row| -> Result<[u8; 16], Error> {
@@ -282,7 +272,7 @@ mod test {
 
   #[test]
   fn test_uuids() {
-    let conn = connect_sqlite(None, None).unwrap();
+    let conn = connect_sqlite(None).unwrap();
 
     conn
       .execute(

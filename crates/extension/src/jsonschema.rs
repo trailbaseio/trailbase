@@ -178,7 +178,7 @@ mod tests {
 
   #[test]
   fn test_explicit_jsonschema() {
-    let conn = crate::connect_sqlite(None, None).unwrap();
+    let conn = crate::connect_sqlite(None).unwrap();
 
     let text0_schema = r#"
         {
@@ -226,7 +226,7 @@ mod tests {
 
   #[test]
   fn test_registerd_jsonschema() {
-    let conn = crate::connect_sqlite(None, None).unwrap();
+    let conn = crate::connect_sqlite(None).unwrap();
 
     let text0_schema = r#"
         {

@@ -1650,7 +1650,7 @@ mod tests {
 
     {
       // First Make sure the query is actually valid, as opposed to "only" parsable.
-      let conn = trailbase_extension::connect_sqlite(None, None).unwrap();
+      let conn = trailbase_extension::connect_sqlite(None).unwrap();
       conn.execute(&statement, ()).unwrap();
     }
 
@@ -1660,7 +1660,7 @@ mod tests {
     let sql = table1.create_table_statement();
     {
       // Same as above, make sure the constructed query is valid as opposed to "only" parsable.
-      let conn = trailbase_extension::connect_sqlite(None, None).unwrap();
+      let conn = trailbase_extension::connect_sqlite(None).unwrap();
       conn.execute(&sql, ()).unwrap();
     }
 

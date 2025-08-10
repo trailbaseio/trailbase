@@ -63,7 +63,7 @@ mod tests {
 
   #[test]
   fn test_regexp() {
-    let conn = crate::connect_sqlite(None, None).unwrap();
+    let conn = crate::connect_sqlite(None).unwrap();
     let create_table = "CREATE TABLE test (text0  TEXT, text1  TEXT) STRICT";
     conn.execute(create_table, ()).unwrap();
 

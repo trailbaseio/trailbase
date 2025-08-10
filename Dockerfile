@@ -1,4 +1,4 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1.86-slim AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.89-slim AS chef
 
 # Install additional build dependencies. git is needed to bake version metadata.
 RUN apt-get update && apt-get install -y --no-install-recommends \

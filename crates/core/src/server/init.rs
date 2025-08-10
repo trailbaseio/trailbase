@@ -82,7 +82,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     .collect();
 
   let (conn, new_db) =
-    crate::connection::init_main_db(Some(&args.data_dir), None, Some(extra_databases))?;
+    crate::connection::init_main_db(Some(&args.data_dir), Some(extra_databases))?;
 
   let schema_metadata = SchemaMetadataCache::new(&conn).await?;
 

@@ -26,7 +26,6 @@ pub enum ConnectionError {
 /// Returns a Connection and whether the DB was newly created..
 pub fn init_main_db(
   data_dir: Option<&DataDir>,
-  extensions: Option<Vec<PathBuf>>,
   attach: Option<Vec<(String, PathBuf)>>,
 ) -> Result<(Connection, bool), ConnectionError> {
   let new_db = Mutex::new(false);
@@ -38,7 +37,7 @@ pub fn init_main_db(
     || -> Result<_, ConnectionError> {
       trailbase_schema::registry::try_init_schemas();
 
-      let mut conn = trailbase_extension::connect_sqlite(main_path.clone(), extensions.clone())?;
+      let mut conn = trailbase_extension::connect_sqlite(main_path.clone())?;
 
       *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
 

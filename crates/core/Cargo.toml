@@ -25,7 +25,7 @@ default = ["v8"]
 v8 = ["dep:trailbase-js"]
 
 [dependencies]
-aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "rand_core"] }
+aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "alloc", "getrandom", "rand_core"] }
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
 askama = { workspace = true }
 async-channel = "2.3.1"
