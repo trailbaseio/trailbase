@@ -52,7 +52,7 @@ jobs:
         run: |
           pnpm install && \
           cd crates/cli &&  \
-          RUSTFLAGS="-C target-feature=+crt-static" CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+          RUSTFLAGS="-C target-feature=+crt-static -C relocation-model=static" CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
             cargo build --target x86_64-unknown-linux-gnu --release --bin trail && \
           cd ../.. && \
           zip -r -j trailbase_${{  github.ref_name }}_x86_64_linux.zip target/x86_64-unknown-linux-gnu/release/trail CHANGELOG.md LICENSE
@@ -88,9 +88,9 @@ jobs:
       - name: Rust Build
         run: |
           pnpm install && \
-          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
             cargo build --target aarch64-apple-darwin --release --bin trail && \
-            zip -r -j trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip target/aarch64-apple-darwin/release/trail CHANGELOG.md LICENSE
+          zip -r -j trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip target/aarch64-apple-darwin/release/trail CHANGELOG.md LICENSE
 
       - name: Release binaries
         uses: softprops/action-gh-release@v2
@@ -123,9 +123,9 @@ jobs:
       - name: Rust Build
         run: |
           pnpm install && \
-          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
             cargo build --target x86_64-apple-darwin --release --bin trail && \
-            zip -r -j trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip target/x86_64-apple-darwin/release/trail CHANGELOG.md LICENSE
+          zip -r -j trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip target/x86_64-apple-darwin/release/trail CHANGELOG.md LICENSE
 
       - name: Release binaries
         uses: softprops/action-gh-release@v2
@@ -153,9 +153,9 @@ jobs:
         shell: bash
         run: |
           pnpm install && \
-          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
             cargo build --target x86_64-pc-windows-msvc --release --bin trail && \
-            zip -r -j trailbase_${{  github.ref_name }}_x86_64_windows.zip target/x86_64-pc-windows-msvc/release/trail.exe CHANGELOG.md LICENSE
+          zip -r -j trailbase_${{  github.ref_name }}_x86_64_windows.zip target/x86_64-pc-windows-msvc/release/trail.exe CHANGELOG.md LICENSE
 
       - name: Release binaries
         uses: softprops/action-gh-release@v2
