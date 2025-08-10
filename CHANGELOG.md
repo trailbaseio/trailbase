@@ -1,3 +1,10 @@
+## v0.16.3
+
+* Admin settings UI: simplify forms by removing explicit empty string handling, better placeholders, add missing change email templates, ... .
+* Internal: add a generalized WriteQuery abstraction tyding up query building but also in preparation of a potential batched transaction feature.
+* Update Rust toolchain from 1.86 to latest stable 1.89.
+* Update dependencies
+
 ## v0.16.2
 
 * Fix regression allowing record updates to alter the primary key. In rare setups, this could be abused. For example, a primary key column referencing `_user(id)` would have allowed users to sign their records over to other users. Now covered by tests.
