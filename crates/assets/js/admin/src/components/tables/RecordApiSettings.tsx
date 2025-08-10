@@ -1031,7 +1031,7 @@ function IndividualRecordApiSettingsForm(props: {
                   custom SQL expressions. Check the{" "}
                   <a
                     class="underline"
-                    href="https://trailbase.io/documentation/apis/record_apis/#permissions"
+                    href="https://trailbase.io/documentation/apis_record/#permissions"
                   >
                     docs
                   </a>{" "}
