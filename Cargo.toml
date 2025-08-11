@@ -63,7 +63,7 @@ env_logger = { version = "^0.11.8", default-features = false, features = ["auto-
 libsqlite3-sys = { version = "0.35.0", default-features = false, features = ["bundled", "preupdate_hook"] }
 rusqlite = { version = "0.37.0", default-features = false, features = ["bundled", "column_decltype", "functions", "backup", "preupdate_hook"] }
 rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
-tokio = { version = "^1.38.0", default-features = false, features = ["macros", "rt-multi-thread", "fs", "signal", "time", "sync"] }
+tokio = { version = "^1.38.0", default-features = false, features = ["macros", "rt-multi-thread", "fs", "signal", "sync"] }
 tracing = { version = "0.1.40", default-features = false }
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["smallvec", "std", "fmt", "json"] }
 trailbase-apalis = { path = "crates/apalis", version = "0.1.0" }
