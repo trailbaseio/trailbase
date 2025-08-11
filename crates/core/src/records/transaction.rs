@@ -1,10 +1,13 @@
 use axum::extract::{Json, State};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use trailbase_schema::FileUploadInput;
 use utoipa::ToSchema;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
+use crate::extract::Either;
 use crate::records::params::LazyParams;
 use crate::records::record_api::RecordApi;
 use crate::records::write_queries::WriteQuery;
@@ -53,18 +56,32 @@ pub struct TransactionResponse {
 pub async fn record_transactions_handler(
   State(state): State<AppState>,
   user: Option<User>,
-  Json(request): Json<TransactionRequest>,
+  either_request: Either<TransactionRequest>,
 ) -> Result<Json<TransactionResponse>, RecordError> {
+  let (request, multipart_files) = match either_request {
+    Either::Json(request) => (request, None),
+    Either::Multipart(request, files) => (request, Some(files)),
+    Either::Form(request) => (request, None),
+  };
+
   if request.operations.len() > 128 {
     return Err(RecordError::BadRequest("Transactions exceed limit: 128"));
   }
 
   type Op = dyn (FnOnce(&rusqlite::Connection) -> Result<Option<String>, RecordError>) + Send;
 
+  // Parse prefixed multipart files
+  let indexed_multipart_files = if let Some(files) = multipart_files {
+    parse_prefixed_multipart_files(files)?
+  } else {
+    HashMap::new()
+  };
+
   let operations: Vec<Box<Op>> = request
     .operations
     .into_iter()
-    .map(|op| -> Result<Box<Op>, RecordError> {
+    .enumerate()
+    .map(|(index, op)| -> Result<Box<Op>, RecordError> {
       return match op {
         Operation::Create { api_name, value } => {
           let api = get_api(&state, &api_name)?;
@@ -84,7 +101,8 @@ pub async fn record_transactions_handler(
             }
           }
 
-          let mut lazy_params = LazyParams::for_insert(&api, record, None);
+          let operation_files = indexed_multipart_files.get(&index).cloned();
+          let mut lazy_params = LazyParams::for_insert(&api, record, operation_files);
           let acl_check = api.build_record_level_access_check(
             Permission::Create,
             None,
@@ -123,7 +141,8 @@ pub async fn record_transactions_handler(
           let record = extract_record(value)?;
           let record_id = api.primary_key_to_value(record_id)?;
 
-          let mut lazy_params = LazyParams::for_insert(&api, record, None);
+          let operation_files = indexed_multipart_files.get(&index).cloned();
+          let mut lazy_params = LazyParams::for_insert(&api, record, operation_files);
 
           let acl_check = api.build_record_level_access_check(
             Permission::Update,
@@ -234,6 +253,44 @@ fn extract_record(
     return Err(RecordError::BadRequest("Not a record"));
   };
   return Ok(record);
+}
+
+// Parse "files.0.field" -> (0, "field")
+fn parse_prefixed_indexed_field_name(field_name: &str) -> Option<(usize, String)> {
+  if field_name.starts_with("files.") {
+    let rest = &field_name[6..]; // Remove "files." prefix
+    if let Some((index_str, column_name)) = rest.split_once('.') {
+      if let Ok(index) = index_str.parse::<usize>() {
+        return Some((index, column_name.to_string()));
+      }
+    }
+  }
+  None
+}
+
+// Parse multipart files into operation-indexed groups
+fn parse_prefixed_multipart_files(
+  files: Vec<FileUploadInput>,
+) -> Result<HashMap<usize, Vec<FileUploadInput>>, RecordError> {
+  let mut indexed_files: HashMap<usize, Vec<FileUploadInput>> = HashMap::new();
+
+  for mut file in files {
+    if let Some(field_name) = &file.name {
+      if let Some((op_index, column_name)) = parse_prefixed_indexed_field_name(field_name) {
+        file.name = Some(column_name);
+
+        indexed_files
+          .entry(op_index)
+          .or_insert_with(Vec::new)
+          .push(file);
+      } else {
+        // Handle non-prefixed field names or just ignore them ?
+        // return Err(RecordError::BadRequest("Invalid file field name format"));
+      }
+    }
+  }
+
+  Ok(indexed_files)
 }
 
 #[cfg(test)]
