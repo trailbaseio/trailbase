@@ -428,6 +428,9 @@ export interface Client {
   ///
   /// Unlike native fetch, will throw in case !response.ok.
   fetch(path: string, init?: FetchOptions): Promise<Response>;
+
+  /// Creates a new transaction batch.
+  transaction(): TransactionBatch;
 }
 
 /// Client for interacting with TrailBase auth and record APIs.
@@ -483,6 +486,11 @@ class ClientImpl implements Client {
   /// Construct accessor for Record API with given name.
   public records<T = Record<string, unknown>>(name: string): RecordApi<T> {
     return new RecordApiImpl<T>(this, name);
+  }
+
+  /// Creates a new transaction batch.
+  public transaction(): TransactionBatch {
+    return new TransactionBatch(this);
   }
 
   public avatarUrl(userId?: string): string | undefined {
@@ -776,3 +784,153 @@ export const exportedForTesting = isDev
       base64Encode,
     }
   : undefined;
+
+/// Batch Builder Class
+export interface Operation {
+  Create?: {
+    api_name: string;
+    record: Record<string, unknown>;
+  };
+  Update?: {
+    api_name: string;
+    id: string;
+    record: Record<string, unknown>;
+  };
+  Delete?: {
+    api_name: string;
+    record_id: string;
+  };
+}
+
+export interface TransactionRequest {
+  operations: Operation[];
+}
+
+export interface TransactionResponse {
+  ids: string[];
+}
+
+/// Batch Builder Class
+export class TransactionBatch {
+  private operations: Operation[] = [];
+  private files: Map<string, File> = new Map();
+
+  constructor(private client: Client) {}
+
+  api(apiName: string): ApiBatch {
+    return new ApiBatch(this, apiName);
+  }
+
+  async send(): Promise<string[]> {
+    // Auto-detect files and add indexed names
+    this.processFilesFromOperations();
+
+    if (this.files.size > 0) {
+      return this.sendWithFiles();
+    }
+
+    const response = await this.client.fetch("/api/transactions/v1/execute", {
+      method: "POST",
+      body: JSON.stringify({ operations: this.operations }),
+      headers: jsonContentTypeHeader,
+    });
+
+    return (await response.json()).ids;
+  }
+
+  private async sendWithFiles(): Promise<string[]> {
+    const formData = new FormData();
+    formData.append(
+      "operations",
+      JSON.stringify({ operations: this.operations })
+    );
+
+    this.files.forEach((file, fieldName) => {
+      formData.append(fieldName, file);
+    });
+
+    const response = await this.client.fetch("/api/transactions/v1/execute", {
+      method: "POST",
+      body: formData,
+    });
+
+    return (await response.json()).ids;
+  }
+
+  /// Process files from operations and replace File objects with metadata
+  private processFilesFromOperations(): void {
+    this.operations.forEach((operation, index) => {
+      let record: Record<string, unknown> | undefined;
+
+      if ("Create" in operation) {
+        record = operation.Create?.record;
+      } else if ("Update" in operation) {
+        record = operation.Update?.record;
+      }
+
+      if (record) {
+        this.extractFilesFromValue(record, index);
+      }
+    });
+  }
+
+  private extractFilesFromValue(
+    record: Record<string, unknown>,
+    operationIndex: number
+  ): void {
+    Object.entries(record).forEach(([k, v]) => {
+      if (v instanceof File) {
+        this.files.set(`files.${operationIndex}.${k}`, v);
+        // Replace File object with metadata for JSON serialization
+        record[k] = {
+          name: v.name,
+          type: v.type,
+          size: v.size,
+        };
+      }
+    });
+  }
+
+  addOperation(operation: Operation): void {
+    this.operations.push(operation);
+  }
+}
+
+// Api-Specific Operations
+export class ApiBatch {
+  constructor(
+    private batch: TransactionBatch,
+    private apiName: string
+  ) {}
+
+  create(value: Record<string, unknown>): TransactionBatch {
+    this.batch.addOperation({
+      Create: {
+        api_name: this.apiName,
+        record: value,
+      },
+    });
+    return this.batch;
+  }
+
+  update(recordId: string, value: Record<string, unknown>): TransactionBatch {
+    this.batch.addOperation({
+      Update: {
+        api_name: this.apiName,
+        id: recordId,
+        record: value,
+      },
+    });
+    return this.batch;
+  }
+
+  delete(recordId: string): TransactionBatch {
+    this.batch.addOperation({
+      Delete: {
+        api_name: this.apiName,
+        record_id: recordId,
+      },
+    });
+    return this.batch;
+  }
+}
