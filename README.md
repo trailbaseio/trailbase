@@ -71,7 +71,7 @@ server, client libraries, tests, documentation and examples.
 Only the [benchmarks](https://github.com/trailbaseio/trailbase-benchmark) are
 kept separately due to their external dependencies.
 
-Pre-built static binaries are available as
+Pre-built binaries are available as
 [GitHub releases](https://github.com/trailbaseio/trailbase/releases/) for
 Linux, MacOS and Windows or [Docker images](https://hub.docker.com/r/trailbase/trailbase).
 
@@ -87,7 +87,7 @@ Client packages for various languages are available via:
 
 ## Getting Started
 
-TrailBase is a **single static executable** and therefore very easy to
+TrailBase is a **single executable** and therefore very easy to
 [deploy](https://trailbase.io/getting-started/install/).
 You can simply download the appropriate pre-built
 [GitHub release](https://github.com/trailbaseio/trailbase/releases/) bundle for
@@ -151,14 +151,7 @@ pnpm install
 cargo build --bin trail
 ```
 
-To build a static binary you'll need to explicitly specify the target platform,
-e.g. Linux with GNU glibc:
-
-```sh
-RUSTFLAGS="-C target-feature=+crt-static" cargo build --target x86_64-unknown-linux-gnu --release
-```
-
-Alternatively, if you want to build a Docker image or don't have to deal with
+Alternatively, if you want to build a Docker image or don't want to deal with
 build dependencies, you can simply run:
 
 ```sh

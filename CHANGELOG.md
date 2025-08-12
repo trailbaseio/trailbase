@@ -1,3 +1,11 @@
+## v0.16.4
+
+* Switch to dynamically linked binaries on Linux by default. Statically pre-built binaries are still available.
+  * Turns out that glibc, even in static executables, will load NSS to support `getaddrinfo`. The ABIs are less stable than the main shared-library entry-points potentially leading to crashes with "floating point exception"  (e.g. Arch).
+  * Note that linking statically against MUSL is currently not an option due to Deno's pre-built V8 requiring glibc.
+  * Note further that we were already linking dynamically for other OSs due to lack of stable syscall ABIs.
+* Update dependencies
+
 ## v0.16.3
 
 * Admin settings UI: simplify forms by removing explicit empty string handling, better placeholders, add missing change email templates, ... .

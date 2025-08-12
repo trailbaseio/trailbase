@@ -48,11 +48,11 @@ jobs:
           target: x86_64-unknown-linux-gnu
           default: true
       - name: Rust Build
-        # NOTE: static linux builds fail with toolchains >1.86 if run from workspace root?!
+        # NOTE: cargo links different binaries whether in the crate or workspace root :/.
         run: |
           pnpm install && \
           cd crates/cli &&  \
-          RUSTFLAGS="-C target-feature=+crt-static" CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
+          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
             cargo build --target x86_64-unknown-linux-gnu --release --bin trail && \
           cd ../.. && \
           zip -r -j trailbase_${{  github.ref_name }}_x86_64_linux.zip target/x86_64-unknown-linux-gnu/release/trail CHANGELOG.md LICENSE
@@ -62,6 +62,45 @@ jobs:
         with:
           fail_on_unmatched_files: true
           files: trailbase_${{  github.ref_name }}_x86_64_linux.zip
+
+  release-linux-static:
+    needs: changelog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update && \
+            sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: PNPM install
+        run: |
+          pnpm i
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.89.0
+          target: x86_64-unknown-linux-gnu
+          default: true
+      - name: Rust Build
+        # NOTE: static linux builds fail with toolchains >1.86 if run from workspace root?!
+        run: |
+          pnpm install && \
+          cd crates/cli &&  \
+          RUSTFLAGS="-C target-feature=+crt-static" CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
+            cargo build --target x86_64-unknown-linux-gnu --release --bin trail && \
+          cd ../.. && \
+          zip -r -j trailbase_${{  github.ref_name }}_x86_64_linux_static_glibc.zip target/x86_64-unknown-linux-gnu/release/trail CHANGELOG.md LICENSE
+
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: trailbase_${{  github.ref_name }}_x86_64_linux_static_glibc.zip
 
   release-aarch64-apple-darwin:
     needs: changelog
