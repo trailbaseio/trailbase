@@ -1,4 +1,5 @@
 /* eslint-disable solid/reactivity */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createSignal, type Setter, type JSX } from "solid-js";
 import { describe, test, expect } from "vitest";
 import { render } from "@solidjs/testing-library";
@@ -12,62 +13,57 @@ import {
   type FieldApiT,
 } from "@/components/FormFields";
 
-const user = userEvent.setup();
+function getCheckbox(dom: any): HTMLInputElement {
+  // NOTE: The solid-ui Checkbox component wraps the input in a parent div.
+  const div = dom.getByTestId("toggle") as HTMLDivElement;
+  return div.children[0] as HTMLInputElement;
+}
 
-describe("form fields", () => {
-  interface MyForm {
-    required: string;
-    optional: string | undefined;
-    nullable: string | null;
-    optionalNullable: string | null | undefined;
-  }
+interface MyForm {
+  required: string;
+  optional: string | undefined;
+  nullable: string | null;
+  optionalNullable: string | null | undefined;
+}
 
-  function newMyForm(
-    setter: Setter<MyForm | undefined>,
-    defaultValue?: MyForm,
-  ) {
-    const form = createForm(() => ({
-      defaultValues:
-        defaultValue ??
-        ({
-          required: "default",
-          nullable: null,
-        } as MyForm),
-      onSubmit: async ({ value }: { value: MyForm }) => setter(value),
-    }));
+function Form(props: {
+  name: DeepKeys<MyForm>;
+  setForm: Setter<MyForm | undefined>;
+  defaultValue?: MyForm;
+  field: (field: () => FieldApiT<any>) => JSX.Element;
+}) {
+  const form = createForm(() => ({
+    defaultValues:
+      props.defaultValue ??
+      ({
+        required: "default",
+        nullable: null,
+      } as MyForm),
+    onSubmit: async ({ value }: { value: MyForm }) => props.setForm(value),
+  }));
 
-    return form;
-  }
+  return (
+    <form
+      method="dialog"
+      onSubmit={(e: SubmitEvent) => {
+        e.preventDefault();
+        form.handleSubmit();
+      }}
+    >
+      <form.Field name={props.name}>{props.field}</form.Field>
 
-  function Form(props: {
-    name: DeepKeys<MyForm>;
-    setForm: Setter<MyForm | undefined>;
-    defaultValue?: MyForm;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    field: (field: () => FieldApiT<any>) => JSX.Element;
-  }) {
-    const form = newMyForm(props.setForm, props.defaultValue);
+      <form.Subscribe>
+        <button type="submit" data-testid="sub">
+          Submit
+        </button>
+      </form.Subscribe>
+    </form>
+  );
+}
 
-    return (
-      <form
-        method="dialog"
-        onSubmit={(e: SubmitEvent) => {
-          e.preventDefault();
-          form.handleSubmit();
-        }}
-      >
-        <form.Field name={props.name}>{props.field}</form.Field>
-
-        <form.Subscribe>
-          <button type="submit" data-testid="sub">
-            Submit
-          </button>
-        </form.Subscribe>
-      </form>
-    );
-  }
-
+describe("required form fields", () => {
   test("test required form", async () => {
+    const user = userEvent.setup();
     const [form, setForm] = createSignal<MyForm | undefined>();
 
     const result = render(() => (
@@ -78,189 +74,129 @@ describe("form fields", () => {
       />
     ));
 
+    {
+      const input: HTMLInputElement = result.getByTestId("input");
+      await user.type(input, " test");
+
+      await user.click(result.getByTestId("sub"));
+
+      expect(form()!.required).toBe("default test");
+    }
+
+    {
+      const input: HTMLInputElement = result.getByTestId("input");
+      await user.clear(input);
+      await user.click(result.getByTestId("sub"));
+      expect(form()!.required).toBe("");
+    }
+  });
+});
+
+describe("nullable form fields", () => {
+  test("set", async () => {
+    const user = userEvent.setup();
+    const [form, setForm] = createSignal<MyForm | undefined>();
+
+    const dom = render(() => (
+      <Form
+        name="nullable"
+        setForm={setForm}
+        field={buildNullableTextFormField({ label: () => "nullable" })}
+      />
+    ));
+
+    const input: HTMLInputElement = dom.getByTestId("input");
+    expect(input.disabled).toBe(true);
+
+    // The input field is disabled to to it's initial value being null.
+    await user.click(getCheckbox(dom));
+
+    await user.type(input, "nullable");
+    expect(input.value).toBe("nullable");
+
+    await user.click(dom.getByTestId("sub"));
+
+    const value = form()!;
+    expect(value.nullable).toBe("nullable");
+  });
+
+  test("set and unset", async () => {
+    const user = userEvent.setup();
+    const [form, setForm] = createSignal<MyForm | undefined>();
+
+    const dom = render(() => (
+      <Form
+        name="nullable"
+        setForm={setForm}
+        field={buildNullableTextFormField({ label: () => "nullable" })}
+      />
+    ));
+
+    const input: HTMLInputElement = dom.getByTestId("input");
+    expect(input.disabled).toBe(true);
+
+    // The input field is disabled to to it's initial value being null.
+    await user.click(getCheckbox(dom));
+
+    await user.type(input, "nullable");
+    expect(input.value).toBe("nullable");
+
+    // Click again to unset the value.
+    await user.click(getCheckbox(dom));
+
+    await user.click(dom.getByTestId("sub"));
+
+    const value = form()!;
+    expect(value.nullable).toBe(null);
+  });
+});
+
+describe("optional form fields", () => {
+  test("set", async () => {
+    const user = userEvent.setup();
+    const [form, setForm] = createSignal<MyForm | undefined>();
+
+    const dom = render(() => (
+      <Form
+        name="optional"
+        setForm={setForm}
+        field={buildOptionalTextFormField({ label: () => "optional" })}
+      />
+    ));
+
+    const input: HTMLInputElement = dom.getByTestId("input");
+    expect(input.disabled).toBe(false);
+
+    await user.type(input, "optional");
+    expect(input.value, "optional");
+
+    await user.click(dom.getByTestId("sub"));
+
+    const value = form()!;
+    expect(value.optional).toBe("optional");
+  });
+
+  test("set and unset", async () => {
+    const user = userEvent.setup();
+    const [form, setForm] = createSignal<MyForm | undefined>();
+
+    const result = render(() => (
+      <Form
+        name="optional"
+        setForm={setForm}
+        field={buildOptionalTextFormField({ label: () => "optional" })}
+      />
+    ));
+
     const input: HTMLInputElement = result.getByTestId("input");
-    await user.type(input, " test");
+    expect(input.value).toBe("");
+
+    await user.type(input, "optional");
+    await user.clear(input);
 
     await user.click(result.getByTestId("sub"));
 
     const value = form()!;
-    expect(value.required).toBe("default test");
-  });
-
-  describe("nullable", () => {
-    test("set", async () => {
-      const [form, setForm] = createSignal<MyForm | undefined>();
-
-      const result = render(() => (
-        <Form
-          name="nullable"
-          setForm={setForm}
-          field={buildNullableTextFormField({ label: () => "nullable" })}
-        />
-      ));
-
-      const input: HTMLInputElement = result.getByTestId("input");
-      expect(input.disabled);
-
-      // The input field is disabled to to it's initial value being null.
-      // NOTE: The solid-ui Checkbox component wraps the input in a parent div.
-      const toggle = result.getByTestId("toggle")
-        .firstChild! as HTMLInputElement;
-      await user.click(toggle);
-      expect(toggle.value);
-
-      await user.type(input, "nullable");
-      expect(input.value, "nullable");
-
-      await user.click(result.getByTestId("sub"));
-
-      const value = form()!;
-      expect(value.nullable).toBe("nullable");
-    });
-
-    test("set and unset", async () => {
-      const [form, setForm] = createSignal<MyForm | undefined>();
-
-      const result = render(() => (
-        <Form
-          name="nullable"
-          setForm={setForm}
-          field={buildNullableTextFormField({ label: () => "nullable" })}
-        />
-      ));
-
-      const input: HTMLInputElement = result.getByTestId("input");
-      expect(input.disabled);
-
-      // The input field is disabled to to it's initial value being null.
-      // NOTE: The solid-ui Checkbox component wraps the input in a parent div.
-      const toggle = result.getByTestId("toggle")
-        .firstChild! as HTMLInputElement;
-      await user.click(toggle);
-      expect(toggle.value);
-
-      await user.type(input, "nullable");
-      expect(input.value, "nullable");
-
-      await user.click(toggle);
-      expect(!toggle.value);
-
-      await user.click(result.getByTestId("sub"));
-
-      const value = form()!;
-      expect(value.nullable).toBe(null);
-    });
-  });
-
-  describe("optional nullable", () => {
-    test("set", async () => {
-      const [form, setForm] = createSignal<MyForm | undefined>();
-
-      const result = render(() => (
-        <Form
-          name="optionalNullable"
-          setForm={setForm}
-          field={buildNullableTextFormField({ label: () => "optional" })}
-        />
-      ));
-
-      const input: HTMLInputElement = result.getByTestId("input");
-      expect(input.disabled);
-
-      // The input field is disabled to to it's initial value being null.
-      // NOTE: The solid-ui Checkbox component wraps the input in a parent div.
-      const toggle = result.getByTestId("toggle")
-        .firstChild! as HTMLInputElement;
-      await user.click(toggle);
-      expect(toggle.value);
-
-      await user.type(input, "optional");
-      expect(input.value, "optional");
-
-      await user.click(result.getByTestId("sub"));
-
-      const value = form()!;
-      expect(value.optionalNullable).toBe("optional");
-    });
-
-    test("set and unset", async () => {
-      const [form, setForm] = createSignal<MyForm | undefined>();
-
-      const result = render(() => (
-        <Form
-          name="optionalNullable"
-          setForm={setForm}
-          field={buildNullableTextFormField({ label: () => "optional" })}
-        />
-      ));
-
-      const input: HTMLInputElement = result.getByTestId("input");
-      expect(input.disabled);
-
-      // The input field is disabled to to it's initial value being null.
-      // NOTE: The solid-ui Checkbox component wraps the input in a parent div.
-      const toggle = result.getByTestId("toggle")
-        .firstChild! as HTMLInputElement;
-      await user.click(toggle);
-      expect(toggle.value);
-
-      await user.type(input, "optional");
-      expect(input.value, "optional");
-
-      await user.click(toggle);
-      expect(!toggle.value);
-
-      await user.click(result.getByTestId("sub"));
-
-      const value = form()!;
-      expect(value.optionalNullable).toBe(null);
-    });
-  });
-
-  describe("optional", () => {
-    test("set", async () => {
-      const [form, setForm] = createSignal<MyForm | undefined>();
-
-      const result = render(() => (
-        <Form
-          name="optional"
-          setForm={setForm}
-          field={buildOptionalTextFormField({ label: () => "optional" })}
-        />
-      ));
-
-      const input: HTMLInputElement = result.getByTestId("input");
-      expect(input.disabled);
-
-      await user.type(input, "optional");
-      expect(input.value, "optional");
-
-      await user.click(result.getByTestId("sub"));
-
-      const value = form()!;
-      expect(value.optional).toBe("optional");
-    });
-
-    test("set and unset", async () => {
-      const [form, setForm] = createSignal<MyForm | undefined>();
-
-      const result = render(() => (
-        <Form
-          name="optional"
-          setForm={setForm}
-          field={buildOptionalTextFormField({ label: () => "optional" })}
-        />
-      ));
-
-      const input: HTMLInputElement = result.getByTestId("input");
-      expect(input.disabled);
-
-      expect(input.value, "");
-
-      await user.click(result.getByTestId("sub"));
-
-      const value = form()!;
-      expect(value.optional).toBeUndefined();
-    });
+    expect(value.optional).toBeUndefined();
   });
 });
