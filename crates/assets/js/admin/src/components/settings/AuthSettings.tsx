@@ -55,6 +55,7 @@ import type { OAuthProviderEntry } from "@bindings/OAuthProviderEntry";
 
 // OAuth2 provider assets.
 import openIdConnect from "@shared/assets/oauth2/oidc.svg";
+import apple from "@shared/assets/oauth2/apple.svg";
 import discord from "@shared/assets/oauth2/discord.svg";
 import facebook from "@shared/assets/oauth2/facebook.svg";
 import gitlab from "@shared/assets/oauth2/gitlab.svg";
@@ -64,6 +65,7 @@ import { useQueryClient } from "@tanstack/solid-query";
 
 const assets = new Map<OAuthProviderId, string>([
   [OAuthProviderId.OIDC0, openIdConnect],
+  [OAuthProviderId.APPLE, apple],
   [OAuthProviderId.DISCORD, discord],
   [OAuthProviderId.FACEBOOK, facebook],
   [OAuthProviderId.GITLAB, gitlab],

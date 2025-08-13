@@ -1,10 +1,6 @@
 use async_trait::async_trait;
-use oauth2::basic::{
-  BasicClient, BasicErrorResponse, BasicRevocationErrorResponse, BasicTokenIntrospectionResponse,
-  BasicTokenResponse,
-};
 use oauth2::{
-  AuthUrl, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl,
+  AuthUrl, Client, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl,
   StandardRevocableToken, TokenUrl,
 };
 use serde::{Deserialize, Serialize};
@@ -15,6 +11,16 @@ use crate::auth::AuthError;
 use crate::config::proto::OAuthProviderId;
 use crate::constants::AUTH_API_PATH;
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExtraTokenFields {
+  /// The `OpenID` Connect ID token returned by some providers. Expected to be in JWT format.
+  pub id_token: Option<String>,
+}
+impl oauth2::ExtraTokenFields for ExtraTokenFields {}
+
+pub type TokenResponse =
+  oauth2::StandardTokenResponse<ExtraTokenFields, oauth2::basic::BasicTokenType>;
+
 pub type OAuthClient<
   HasAuthUrl = EndpointSet,
   HasDeviceAuthUrl = EndpointNotSet,
@@ -22,11 +28,11 @@ pub type OAuthClient<
   HasRevocationUrl = EndpointNotSet,
   HasTokenUrl = EndpointSet,
 > = oauth2::Client<
-  BasicErrorResponse,
-  BasicTokenResponse,
-  BasicTokenIntrospectionResponse,
+  oauth2::basic::BasicErrorResponse,
+  TokenResponse,
+  oauth2::basic::BasicTokenIntrospectionResponse,
   StandardRevocableToken,
-  BasicRevocationErrorResponse,
+  oauth2::basic::BasicRevocationErrorResponse,
   HasAuthUrl,
   HasDeviceAuthUrl,
   HasIntrospectionUrl,
@@ -90,7 +96,7 @@ pub trait OAuthProvider {
       ));
     }
 
-    let client = BasicClient::new(ClientId::new(settings.client_id))
+    let client = Client::new(ClientId::new(settings.client_id))
       .set_client_secret(ClientSecret::new(settings.client_secret))
       .set_auth_uri(AuthUrl::from_url(settings.auth_url))
       .set_token_uri(TokenUrl::from_url(settings.token_url))
@@ -101,5 +107,6 @@ pub trait OAuthProvider {
 
   fn oauth_scopes(&self) -> Vec<&'static str>;
 
-  async fn get_user(&self, access_token: String) -> Result<OAuthUser, AuthError>;
+  //async fn get_user(&self, access_token: &oauth2::AccessToken) -> Result<OAuthUser, AuthError>;
+  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError>;
 }

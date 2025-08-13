@@ -58,6 +58,7 @@ export enum OAuthProviderId {
   OAUTH_PROVIDER_ID_UNDEFINED = 0,
   TEST = 1,
   OIDC0 = 2,
+  APPLE = 9,
   DISCORD = 10,
   GITLAB = 11,
   GOOGLE = 12,
@@ -77,6 +78,9 @@ export function oAuthProviderIdFromJSON(object: any): OAuthProviderId {
     case 2:
     case "OIDC0":
       return OAuthProviderId.OIDC0;
+    case 9:
+    case "APPLE":
+      return OAuthProviderId.APPLE;
     case 10:
     case "DISCORD":
       return OAuthProviderId.DISCORD;
@@ -107,6 +111,8 @@ export function oAuthProviderIdToJSON(object: OAuthProviderId): string {
       return "TEST";
     case OAuthProviderId.OIDC0:
       return "OIDC0";
+    case OAuthProviderId.APPLE:
+      return "APPLE";
     case OAuthProviderId.DISCORD:
       return "DISCORD";
     case OAuthProviderId.GITLAB:

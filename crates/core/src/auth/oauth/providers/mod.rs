@@ -1,3 +1,4 @@
+mod apple;
 mod discord;
 mod facebook;
 mod gitlab;
@@ -41,6 +42,7 @@ lazy_static! {
     oidc::OidcProvider::factory(0),
 
     // "Social" OAuth providers.
+    apple::AppleOAuthProvider::factory(),
     discord::DiscordOAuthProvider::factory(),
     gitlab::GitlabOAuthProvider::factory(),
     google::GoogleOAuthProvider::factory(),

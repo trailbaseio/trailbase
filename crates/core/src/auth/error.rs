@@ -6,8 +6,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AuthError {
+  // Unauthorized means: "not authenticated".
   #[error("Unauthorized")]
   Unauthorized,
+  // Forbidden means: authenticated but not authorized.
   #[error("Forbidden")]
   Forbidden,
   #[error("Conflict")]

@@ -3,7 +3,7 @@ use axum::{
   response::Redirect,
 };
 use lazy_static::lazy_static;
-use oauth2::{AuthorizationCode, PkceCodeVerifier, StandardTokenResponse, TokenResponse};
+use oauth2::{AuthorizationCode, PkceCodeVerifier, StandardTokenResponse, TokenResponse as _};
 use serde::Deserialize;
 use tower_cookies::Cookies;
 use trailbase_sqlite::{named_params, params};
@@ -14,6 +14,7 @@ use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::PROFILE_UI;
 use crate::auth::oauth::OAuthUser;
+use crate::auth::oauth::provider::TokenResponse;
 use crate::auth::oauth::providers::OAuthProviderType;
 use crate::auth::oauth::state::{OAuthState, ResponseType};
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
@@ -246,7 +247,7 @@ async fn get_or_create_user(
   // Call provider's TOKEN endpoint to exchange auth_code + (server_)pkce_code_verifier
   // for tokens. We then use these tokens to call the USER_INFO endpoint below to get
   // information, such as email address, to create a local TrailBase user.
-  let token_response: StandardTokenResponse<_, oauth2::basic::BasicTokenType> = provider
+  let token_response: TokenResponse = provider
     .oauth_client(state)?
     .exchange_code(AuthorizationCode::new(auth_code))
     .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
@@ -254,22 +255,13 @@ async fn get_or_create_user(
     .await
     .map_err(|err| AuthError::FailedDependency(err.into()))?;
 
-  if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-    return Err(AuthError::Internal(
-      format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-    ));
-  }
-
   // Call provider's USER_INFO endpoint with the tokens acquired above.
-  let oauth_user = provider
-    .get_user(token_response.access_token().secret().clone())
-    .await
-    .and_then(|user| {
-      if !user.verified {
-        return Err(AuthError::BadRequest("External OAuth user unverified"));
-      }
-      return Ok(user);
-    })?;
+  let oauth_user = provider.get_user(&token_response).await.and_then(|user| {
+    if !user.verified {
+      return Err(AuthError::BadRequest("External OAuth user unverified"));
+    }
+    return Ok(user);
+  })?;
 
   let existing_user = user_by_provider_id(
     state.user_conn(),
