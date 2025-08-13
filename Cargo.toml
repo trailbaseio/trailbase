@@ -13,6 +13,7 @@ members = [
   "crates/schema",
   "crates/sqlean",
   "crates/sqlite",
+  "crates/wasm-runtime",
   "docs/examples/record_api_rs",
   "examples/custom-binary",
 ]
@@ -76,5 +77,6 @@ trailbase-qs = { path = "crates/qs", version = "0.1.0" }
 trailbase-refinery = { path = "crates/refinery", version = "0.1.0" }
 trailbase-schema = { path = "crates/schema", version = "0.1.0" }
 trailbase-sqlite = { path = "crates/sqlite", version = "0.3.0" }
+trailbase-wasm = { path = "crates/wasm-runtime", version = "0.1.0" }
 trailbase = { path = "crates/core", version = "0.2.0" }
 uuid = { version = "1", default-features = false, features = ["std", "v4", "v7", "serde"] }
