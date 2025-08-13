@@ -1,0 +1,22 @@
+[package]
+name = "trailbase-wasm"
+version = "0.1.0"
+edition = "2024"
+license = "OSL-3.0"
+description = "WASM runtime for the TrailBase framework"
+homepage = "https://trailbase.io"
+exclude = [
+  "**/node_modules/",
+  "**/dist/",
+]
+
+[dependencies]
+bytes = "1.10.1"
+http = "1.3.1"
+http-body-util = "0.1.3"
+hyper = "1.6.0"
+tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread"] }
+tracing = "0.1.41"
+wasmtime = "35.0.0"
+wasmtime-wasi = { version = "35.0.0", default-features = false, features = [] }
+wasmtime-wasi-http = "35.0.0"

@@ -1,0 +1,15 @@
+package trailbase:runtime;
+
+interface init-endpoint  {
+  init: func();
+}
+
+world trailbase {
+  // Pull in WASIp2 http interface for outbound requests.
+  import wasi:http/outgoing-handler@0.2.6;
+
+  // Pull in WASIp2 filesystem interfaces
+  include wasi:filesystem/imports@0.2.6;
+
+  export init-endpoint;
+}

@@ -61,8 +61,9 @@ mod tests {
   pub fn to_message(v: serde_json::Value) -> Message {
     return match v {
       serde_json::Value::Object(ref obj) => {
-        let keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
-        assert_eq!(keys, vec!["mid", "room", "data", "table"], "Got: {keys:?}");
+        let mut keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
+        keys.sort();
+        assert_eq!(keys, ["data", "mid", "room", "table"], "Got: {keys:?}");
         serde_json::from_value::<Message>(v).unwrap()
       }
       _ => panic!("expected object, got {v:?}"),
