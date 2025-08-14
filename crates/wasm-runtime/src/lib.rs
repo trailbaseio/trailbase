@@ -5,6 +5,7 @@
 use bytes::Bytes;
 use futures_util::future::LocalBoxFuture;
 use http_body_util::{BodyExt, combinators::BoxBody};
+use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 use std::time::SystemTime;
 use wasmtime::component::{Component, Linker, ResourceTable};
@@ -12,6 +13,7 @@ use wasmtime::{Config, Engine, Result, Store};
 use wasmtime_wasi::p2::add_to_linker_async;
 use wasmtime_wasi::p2::{IoView, WasiCtx, WasiCtxBuilder, WasiView};
 use wasmtime_wasi::{DirPerms, FilePerms};
+use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 
 use crate::exports::trailbase::runtime::init_endpoint::InitResult;
@@ -43,7 +45,7 @@ pub enum Error {
   #[error("Channel closed")]
   ChannelClosed,
   #[error("Http Error: {0}")]
-  HttpErrorCode(wasmtime_wasi_http::bindings::http::types::ErrorCode),
+  HttpErrorCode(ErrorCode),
 }
 
 pub enum Message {
@@ -54,6 +56,8 @@ struct State {
   pub resource_table: ResourceTable,
   pub wasi_ctx: WasiCtx,
   pub http: WasiHttpCtx,
+
+  pub conn: trailbase_sqlite::Connection,
 }
 
 impl IoView for State {
@@ -68,27 +72,15 @@ impl WasiView for State {
   }
 }
 
-pub async fn custom_send_request_handler(
-  _request: hyper::Request<wasmtime_wasi_http::body::HyperOutgoingBody>,
-  _config: wasmtime_wasi_http::types::OutgoingRequestConfig,
-) -> Result<
-  wasmtime_wasi_http::types::IncomingResponse,
-  wasmtime_wasi_http::bindings::http::types::ErrorCode,
-> {
-  fn full(bytes: Bytes) -> wasmtime_wasi_http::body::HyperIncomingBody {
-    BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!()))
-  }
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct SqliteRequest {
+  query: String,
+}
 
-  let resp = http::Response::builder()
-    .status(200)
-    .body(full(Bytes::from_static(b"")))
-    .map_err(|_| wasmtime_wasi_http::bindings::http::types::ErrorCode::ConnectionReadTimeout)?;
-
-  return Ok(wasmtime_wasi_http::types::IncomingResponse {
-    resp,
-    worker: None,
-    between_bytes_timeout: std::time::Duration::ZERO,
-  });
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct SqliteResponse {
+  payload: serde_json::Value,
+  error: Option<String>,
 }
 
 impl WasiHttpView for State {
@@ -105,19 +97,47 @@ impl WasiHttpView for State {
     println!("send_request {:?}: {request:?}", request.uri().scheme());
     let scheme = request.uri().scheme();
     return match scheme.map(|s| s.as_str()) {
-      // TODO: We could hack SQLite access with a custom `__db` scheme.
-      Some("custom") => Ok(
-        wasmtime_wasi_http::types::HostFutureIncomingResponse::pending(
-          wasmtime_wasi::runtime::spawn(async move {
-            Ok(custom_send_request_handler(request, config).await)
-          }),
-        ),
-      ),
-      _ => Ok(wasmtime_wasi_http::types::default_send_request(
+      Some("__sqlite") => {
+        let conn = self.conn.clone();
+        Ok(
+          wasmtime_wasi_http::types::HostFutureIncomingResponse::pending(
+            wasmtime_wasi::runtime::spawn(
+              async move { Ok(handle_sqlite_request(conn, request).await) },
+            ),
+          ),
+        )
+      }
+      Some("http") | Some("https") => Ok(wasmtime_wasi_http::types::default_send_request(
         request, config,
       )),
+      _ => Err(ErrorCode::HttpRequestUriInvalid.into()),
     };
   }
+}
+
+async fn handle_sqlite_request(
+  _conn: trailbase_sqlite::Connection,
+  request: hyper::Request<wasmtime_wasi_http::body::HyperOutgoingBody>,
+) -> Result<wasmtime_wasi_http::types::IncomingResponse, ErrorCode> {
+  let (_parts, body) = request.into_parts();
+  let bytes: Bytes = body
+    .collect()
+    .await
+    .map_err(|_| ErrorCode::HttpRequestDenied)?
+    .to_bytes();
+  let _sqlite_request: SqliteRequest =
+    serde_json::from_slice(&bytes).map_err(|_| ErrorCode::HttpRequestDenied)?;
+
+  let resp = http::Response::builder()
+    .status(200)
+    .body(bytes_to_body(Bytes::from_static(b"")))
+    .map_err(|_| ErrorCode::InternalError(None))?;
+
+  return Ok(wasmtime_wasi_http::types::IncomingResponse {
+    resp,
+    worker: None,
+    between_bytes_timeout: std::time::Duration::ZERO,
+  });
 }
 
 pub struct Runtime {
@@ -140,7 +160,11 @@ impl Drop for Runtime {
 }
 
 impl Runtime {
-  pub fn new(n_threads: usize, wasm_source_file: std::path::PathBuf) -> Result<Self, Error> {
+  pub fn new(
+    n_threads: usize,
+    wasm_source_file: std::path::PathBuf,
+    conn: trailbase_sqlite::Connection,
+  ) -> Result<Self, Error> {
     let mut config = Config::new();
     config.async_support(true);
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
@@ -163,7 +187,7 @@ impl Runtime {
         let (private_sender, private_receiver) = kanal::unbounded_async::<Message>();
 
         let shared_receiver = shared_receiver.clone();
-        let instance = RuntimeInstance::new(engine.clone(), component.clone())?;
+        let instance = RuntimeInstance::new(engine.clone(), component.clone(), conn.clone())?;
         let handle = std::thread::spawn(move || {
           let tokio_runtime = Rc::new(
             tokio::runtime::Builder::new_current_thread()
@@ -242,10 +266,16 @@ pub struct RuntimeInstance {
   engine: Engine,
   component: Component,
   linker: Linker<State>,
+
+  conn: trailbase_sqlite::Connection,
 }
 
 impl RuntimeInstance {
-  pub fn new(engine: Engine, component: Component) -> Result<Self, Error> {
+  pub fn new(
+    engine: Engine,
+    component: Component,
+    conn: trailbase_sqlite::Connection,
+  ) -> Result<Self, Error> {
     let mut linker = Linker::new(&engine);
 
     // Adds all the default WASI implementations: clocks, random, fs, ...
@@ -258,13 +288,14 @@ impl RuntimeInstance {
       engine,
       component,
       linker,
+      conn,
     });
   }
 
   fn new_store(&self) -> Store<State> {
     let mut wasi_ctx = WasiCtxBuilder::new();
     wasi_ctx.inherit_stdio();
-    wasi_ctx.args(&["bar"]);
+    wasi_ctx.args(&[""]);
     wasi_ctx.allow_tcp(false);
     wasi_ctx.allow_udp(false);
     wasi_ctx.allow_ip_name_lookup(true);
@@ -279,6 +310,7 @@ impl RuntimeInstance {
         resource_table: ResourceTable::new(),
         wasi_ctx: wasi_ctx.build(),
         http: WasiHttpCtx::new(),
+        conn: self.conn.clone(),
       },
     );
   }
@@ -313,10 +345,7 @@ impl RuntimeInstance {
     )?;
 
     let (sender, receiver) = tokio::sync::oneshot::channel::<
-      Result<
-        hyper::Response<wasmtime_wasi_http::body::HyperOutgoingBody>,
-        wasmtime_wasi_http::bindings::http::types::ErrorCode,
-      >,
+      Result<hyper::Response<wasmtime_wasi_http::body::HyperOutgoingBody>, ErrorCode>,
     >();
 
     let out = store.data_mut().new_response_outparam(sender)?;
@@ -344,13 +373,19 @@ impl RuntimeInstance {
   }
 }
 
+#[inline]
+fn bytes_to_body<E>(bytes: Bytes) -> BoxBody<Bytes, E> {
+  BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!()))
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
 
   #[tokio::test]
   async fn test_init() {
-    let runtime = Runtime::new(2, "./testdata/rust_guest.wasm".into()).unwrap();
+    let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
+    let runtime = Runtime::new(2, "./testdata/rust_guest.wasm".into(), conn).unwrap();
 
     runtime
       .call(async |instance| {
@@ -363,9 +398,7 @@ mod tests {
       .call(async |instance| {
         let request = hyper::Request::builder()
           .uri("https://www.rust-lang.org/")
-          .body(BoxBody::new(
-            http_body_util::Full::new(Bytes::from_static(b"")).map_err(|_| unreachable!()),
-          ))
+          .body(bytes_to_body(Bytes::from_static(b"")))
           .unwrap();
 
         instance.call_incoming_http_handler(request).await.unwrap();
