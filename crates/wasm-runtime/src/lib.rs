@@ -3,7 +3,7 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use bytes::Bytes;
-use futures_util::future::BoxFuture;
+use futures_util::future::LocalBoxFuture;
 use http_body_util::BodyExt;
 use http_body_util::combinators::BoxBody;
 use std::rc::Rc;
@@ -45,7 +45,7 @@ pub enum Error {
   HttpErrorCode(wasmtime_wasi_http::bindings::http::types::ErrorCode),
 }
 
-pub type CallbackType = dyn (FnOnce(&RuntimeInstance) -> BoxFuture<Option<String>>) + Send;
+pub type CallbackType = dyn (FnOnce(&RuntimeInstance) -> LocalBoxFuture<()>) + Send;
 
 pub enum Message {
   Run(Box<CallbackType>),
@@ -121,7 +121,7 @@ impl WasiHttpView for State {
   }
 }
 
-struct Runtime {
+pub struct Runtime {
   // Shared sender.
   shared_sender: kanal::AsyncSender<Message>,
   threads: Vec<(std::thread::JoinHandle<()>, kanal::AsyncSender<Message>)>,
@@ -186,6 +186,27 @@ impl Runtime {
       shared_sender,
       threads,
     });
+  }
+
+  pub async fn call<O, F>(&self, f: F) -> Result<O, Error>
+  where
+    F: (AsyncFnOnce(&RuntimeInstance) -> O) + Send + 'static,
+    // Fut: Future<Output = O> + Send + 'static,
+    O: Send + 'static,
+  {
+    let (sender, receiver) = tokio::sync::oneshot::channel::<O>();
+
+    self
+      .shared_sender
+      .send(Message::Run(Box::new(move |runtime| {
+        return Box::pin(async move {
+          let _ = sender.send(f(runtime).await);
+        });
+      })))
+      .await
+      .map_err(|_| Error::ChannelClosed)?;
+
+    return Ok(receiver.await.map_err(|_| Error::ChannelClosed)?);
   }
 }
 
@@ -333,31 +354,23 @@ mod tests {
     let runtime = Runtime::new(2, "./testdata/rust_guest.wasm".into()).unwrap();
 
     runtime
-      .shared_sender
-      .send(Message::Run(Box::new(|instance: &RuntimeInstance| {
-        return Box::pin(async {
-          instance.call_init().await.unwrap();
-          None
-        });
-      })))
+      .call(async |instance| {
+        instance.call_init().await.unwrap();
+      })
       .await
       .unwrap();
 
     runtime
-      .shared_sender
-      .send(Message::Run(Box::new(|instance: &RuntimeInstance| {
-        return Box::pin(async {
-          let request = hyper::Request::builder()
-            .uri("https://www.rust-lang.org/")
-            .body(BoxBody::new(
-              http_body_util::Full::new(Bytes::from_static(b"")).map_err(|_| unreachable!()),
-            ))
-            .unwrap();
+      .call(async |instance| {
+        let request = hyper::Request::builder()
+          .uri("https://www.rust-lang.org/")
+          .body(BoxBody::new(
+            http_body_util::Full::new(Bytes::from_static(b"")).map_err(|_| unreachable!()),
+          ))
+          .unwrap();
 
-          instance.call_incoming_http_handler(request).await.unwrap();
-          None
-        });
-      })))
+        instance.call_incoming_http_handler(request).await.unwrap();
+      })
       .await
       .unwrap();
   }

@@ -4,6 +4,7 @@ use reactivate::{Merge, Reactive};
 use std::path::PathBuf;
 use std::sync::Arc;
 use trailbase_schema::QualifiedName;
+use trailbase_wasm::Runtime;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
@@ -42,6 +43,8 @@ struct InternalState {
   object_store: Arc<dyn ObjectStore + Send + Sync>,
 
   runtime: RuntimeHandle,
+
+  wasm_runtime: Option<Runtime>,
 
   #[cfg(test)]
   #[allow(unused)]
@@ -163,6 +166,7 @@ impl AppState {
         schema_metadata,
         object_store,
         runtime,
+        wasm_runtime: None,
         #[cfg(test)]
         cleanup: vec![],
       }),
@@ -458,6 +462,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       schema_metadata,
       object_store,
       runtime: build_js_runtime(conn, None),
+      wasm_runtime: None,
       cleanup: vec![Box::new(temp_dir)],
     }),
   });

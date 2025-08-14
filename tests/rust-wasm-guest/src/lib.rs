@@ -23,8 +23,12 @@ wit_bindgen::generate!({
 struct InitEndpoint;
 
 impl crate::exports::trailbase::runtime::init_endpoint::Guest for InitEndpoint {
-  fn init() {
+  fn init() -> crate::exports::trailbase::runtime::init_endpoint::InitResult {
     println!("init() called");
+    return crate::exports::trailbase::runtime::init_endpoint::InitResult {
+      http_handlers: vec![],
+      job_handlers: vec![],
+    };
   }
 }
 
