@@ -4,8 +4,12 @@ interface init-endpoint  {
   enum method-type {
     get,
     post,
+    head,
+    options,
     patch,
     delete,
+    put,
+    trace,
   }
 
   record init-result {
