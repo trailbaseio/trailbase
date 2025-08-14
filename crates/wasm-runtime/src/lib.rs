@@ -1,6 +1,12 @@
+#![forbid(unsafe_code, clippy::unwrap_used)]
+#![allow(clippy::needless_return)]
+#![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
+
 use bytes::Bytes;
+use futures_util::future::BoxFuture;
 use http_body_util::BodyExt;
 use http_body_util::combinators::BoxBody;
+use std::rc::Rc;
 use std::time::SystemTime;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Result, Store};
@@ -28,6 +34,22 @@ wasmtime::component::bindgen!({
     // to return traps from generated functions.
     trappable_imports: true,
 });
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+  #[error("Wasmtime: {0}")]
+  Wasmtime(#[from] wasmtime::Error),
+  #[error("Channel closed")]
+  ChannelClosed,
+  #[error("Http Error: {0}")]
+  HttpErrorCode(wasmtime_wasi_http::bindings::http::types::ErrorCode),
+}
+
+pub type CallbackType = dyn (FnOnce(&RuntimeInstance) -> BoxFuture<Option<String>>) + Send;
+
+pub enum Message {
+  Run(Box<CallbackType>),
+}
 
 struct State {
   pub resource_table: ResourceTable,
@@ -61,8 +83,7 @@ pub async fn custom_send_request_handler(
   let resp = http::Response::builder()
     .status(200)
     .body(full(Bytes::from_static(b"")))
-    .map_err(|_| wasmtime_wasi_http::bindings::http::types::ErrorCode::ConnectionReadTimeout)
-    .unwrap();
+    .map_err(|_| wasmtime_wasi_http::bindings::http::types::ErrorCode::ConnectionReadTimeout)?;
 
   return Ok(wasmtime_wasi_http::types::IncomingResponse {
     resp,
@@ -85,6 +106,7 @@ impl WasiHttpView for State {
     println!("send_request {:?}: {request:?}", request.uri().scheme());
     let scheme = request.uri().scheme();
     return match scheme.map(|s| s.as_str()) {
+      // TODO: We could hack SQLite access with a custom `__db` scheme.
       Some("custom") => Ok(
         wasmtime_wasi_http::types::HostFutureIncomingResponse::pending(
           wasmtime_wasi::runtime::spawn(async move {
@@ -99,63 +121,244 @@ impl WasiHttpView for State {
   }
 }
 
-async fn foo() -> Result<()> {
-  let wasm_source_file = std::env::args()
-    .nth(1)
-    .unwrap_or("target/wasm32-wasip2/debug/rust_guest.wasm".to_string());
+struct Runtime {
+  // Shared sender.
+  shared_sender: kanal::AsyncSender<Message>,
+  threads: Vec<(std::thread::JoinHandle<()>, kanal::AsyncSender<Message>)>,
+}
 
-  // Construct the wasm engine with async support enabled.
-  let mut config = Config::new();
-  config.async_support(true);
-  config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
-  let engine = Engine::new(&config)?;
+impl Drop for Runtime {
+  fn drop(&mut self) {
+    for (handle, ch) in std::mem::take(&mut self.threads) {
+      // Dropping the private channel will trigger the event_loop to return.
+      drop(ch);
 
-  // Load the component.
-  let component = {
-    let start = SystemTime::now();
-    let component = Component::from_file(&engine, &wasm_source_file)?;
-    println!(
-      "Component load in: {:?}",
-      SystemTime::now().duration_since(start).unwrap()
-    );
-    component
-  };
+      if let Err(err) = handle.join() {
+        log::error!("Failed to join main rt thread: {err:?}");
+      }
+    }
+  }
+}
 
-  let linker = {
+impl Runtime {
+  pub fn new(n_threads: usize, wasm_source_file: std::path::PathBuf) -> Result<Self, Error> {
+    let mut config = Config::new();
+    config.async_support(true);
+    config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
+    let engine = Engine::new(&config)?;
+
+    // Load the component.
+    let component = {
+      let start = SystemTime::now();
+      let component = Component::from_file(&engine, &wasm_source_file)?;
+
+      if let Ok(elapsed) = SystemTime::now().duration_since(start) {
+        log::debug!("Component load in: {elapsed:?}");
+      }
+      component
+    };
+
+    let (shared_sender, shared_receiver) = kanal::unbounded_async::<Message>();
+    let threads: Vec<_> = (0..n_threads)
+      .map(|index| -> Result<_, Error> {
+        let (private_sender, private_receiver) = kanal::unbounded_async::<Message>();
+
+        let shared_receiver = shared_receiver.clone();
+        let instance = RuntimeInstance::new(engine.clone(), component.clone())?;
+        let handle = std::thread::spawn(move || {
+          let tokio_runtime = Rc::new(
+            tokio::runtime::Builder::new_current_thread()
+              .enable_time()
+              .enable_io()
+              .thread_name(format!("v8-runtime-{index}"))
+              .build()
+              .expect("startup"),
+          );
+
+          event_loop(tokio_runtime, instance, private_receiver, shared_receiver);
+        });
+
+        return Ok((handle, private_sender));
+      })
+      .collect::<Result<Vec<_>, Error>>()?;
+
+    return Ok(Self {
+      shared_sender,
+      threads,
+    });
+  }
+}
+
+fn event_loop(
+  tokio_runtime: Rc<tokio::runtime::Runtime>,
+  instance: RuntimeInstance,
+  private_recv: kanal::AsyncReceiver<Message>,
+  shared_recv: kanal::AsyncReceiver<Message>,
+) {
+  let local = tokio::task::LocalSet::new();
+
+  local.spawn_local(async move {
+    loop {
+      let receive_message = async || {
+        return tokio::select! {
+          msg = private_recv.recv() => msg,
+          msg = shared_recv.recv() => msg,
+        };
+      };
+
+      match receive_message().await {
+        Ok(Message::Run(f)) => f(&instance).await,
+        Err(_) => {
+          // Channel closed
+          return;
+        }
+      };
+    }
+  });
+
+  tokio_runtime.block_on(local);
+}
+
+pub struct RuntimeInstance {
+  engine: Engine,
+  component: Component,
+  linker: Linker<State>,
+}
+
+impl RuntimeInstance {
+  pub fn new(engine: Engine, component: Component) -> Result<Self, Error> {
     let mut linker = Linker::new(&engine);
 
-    // Adds all the default implementations: clocks, random, filesystem, ...
+    // Adds all the default WASI implementations: clocks, random, fs, ...
     add_to_linker_async(&mut linker)?;
 
-    // Adds default HTTP handling - incoming and outgoing.
+    // Adds default HTTP interfaces - incoming and outgoing.
     wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
 
-    linker
-  };
+    return Ok(Self {
+      engine,
+      component,
+      linker,
+    });
+  }
 
-  let mut store = Store::new(
-    &engine,
-    State {
-      wasi_ctx: WasiCtxBuilder::new()
-        .inherit_stdio()
-        .args(&["bar"])
-        .allow_tcp(false)
-        .allow_udp(false)
-        .allow_ip_name_lookup(true)
-        .preopened_dir(".", "/host", DirPerms::READ, FilePerms::READ)
-        .unwrap()
-        .build(),
-      resource_table: ResourceTable::new(),
-      http: WasiHttpCtx::new(),
-    },
-  );
+  fn new_store(&self) -> Store<State> {
+    let mut wasi_ctx = WasiCtxBuilder::new();
+    wasi_ctx.inherit_stdio();
+    wasi_ctx.args(&["bar"]);
+    wasi_ctx.allow_tcp(false);
+    wasi_ctx.allow_udp(false);
+    wasi_ctx.allow_ip_name_lookup(true);
 
-  let bindings = Trailbase::instantiate_async(&mut store, &component, &linker).await?;
+    if let Err(err) = wasi_ctx.preopened_dir(".", "/host", DirPerms::READ, FilePerms::READ) {
+      log::error!("Failed to preopen dir: {err}");
+    }
 
-  bindings
-    .trailbase_runtime_init_endpoint()
-    .call_init(&mut store)
+    return Store::new(
+      &self.engine,
+      State {
+        resource_table: ResourceTable::new(),
+        wasi_ctx: wasi_ctx.build(),
+        http: WasiHttpCtx::new(),
+      },
+    );
+  }
+
+  pub async fn call_init(&self) -> Result<(), Error> {
+    let mut store = self.new_store();
+    let bindings = Trailbase::instantiate_async(&mut store, &self.component, &self.linker).await?;
+    bindings
+      .trailbase_runtime_init_endpoint()
+      .call_init(&mut store)
+      .await?;
+
+    return Ok(());
+  }
+
+  pub async fn call_incoming_http_handler(
+    &self,
+    request: hyper::Request<BoxBody<Bytes, hyper::Error>>,
+  ) -> Result<hyper::Response<wasmtime_wasi_http::body::HyperOutgoingBody>, Error> {
+    let mut store = self.new_store();
+    let proxy = wasmtime_wasi_http::bindings::Proxy::instantiate_async(
+      &mut store,
+      &self.component,
+      &self.linker,
+    )
     .await?;
 
-  return Ok(());
+    let req = store.data_mut().new_incoming_request(
+      wasmtime_wasi_http::bindings::http::types::Scheme::Http,
+      request,
+    )?;
+
+    let (sender, receiver) = tokio::sync::oneshot::channel::<
+      Result<
+        hyper::Response<wasmtime_wasi_http::body::HyperOutgoingBody>,
+        wasmtime_wasi_http::bindings::http::types::ErrorCode,
+      >,
+    >();
+
+    let out = store.data_mut().new_response_outparam(sender)?;
+    let handle = wasmtime_wasi::runtime::spawn(async move {
+      proxy
+        .wasi_http_incoming_handler()
+        .call_handle(&mut store, req, out)
+        .await
+    });
+
+    let resp = match receiver.await {
+      Ok(Ok(resp)) => Ok(resp),
+      Ok(Err(err)) => Err(Error::HttpErrorCode(err)),
+      Err(_) => {
+        log::debug!("channel closed");
+        Err(Error::ChannelClosed)
+      }
+    };
+
+    // Now that the response has been processed, we can wait on the guest to
+    // finish without deadlocking.
+    handle.await?;
+
+    return resp;
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[tokio::test]
+  async fn test_init() {
+    let runtime = Runtime::new(2, "./testdata/rust_guest.wasm".into()).unwrap();
+
+    runtime
+      .shared_sender
+      .send(Message::Run(Box::new(|instance: &RuntimeInstance| {
+        return Box::pin(async {
+          instance.call_init().await.unwrap();
+          None
+        });
+      })))
+      .await
+      .unwrap();
+
+    runtime
+      .shared_sender
+      .send(Message::Run(Box::new(|instance: &RuntimeInstance| {
+        return Box::pin(async {
+          let request = hyper::Request::builder()
+            .uri("https://www.rust-lang.org/")
+            .body(BoxBody::new(
+              http_body_util::Full::new(Bytes::from_static(b"")).map_err(|_| unreachable!()),
+            ))
+            .unwrap();
+
+          instance.call_incoming_http_handler(request).await.unwrap();
+          None
+        });
+      })))
+      .await
+      .unwrap();
+  }
 }

@@ -16,6 +16,7 @@ members = [
   "crates/wasm-runtime",
   "docs/examples/record_api_rs",
   "examples/custom-binary",
+  "tests/rust-wasm-guest",
 ]
 default-members = [
   "crates/assets",

@@ -1,0 +1,14 @@
+[package]
+name = "rust-guest"
+version = "0.0.0"
+authors = ["someone"]
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+anyhow = "1.0.98"
+wit-bindgen = "0.43.0"
+wstd = "0.5.3"
