@@ -8115,6 +8115,7 @@ dependencies = [
  "thiserror 2.0.16",
  "tokio",
  "tracing",
+ "trailbase-schema",
  "trailbase-sqlite",
  "wasmtime",
  "wasmtime-wasi",

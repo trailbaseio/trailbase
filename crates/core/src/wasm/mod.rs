@@ -12,6 +12,39 @@ use crate::User;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
+pub(crate) fn build_wasm_runtime(
+  data_dir: &crate::DataDir,
+  conn: trailbase_sqlite::Connection,
+) -> Result<Option<Runtime>, AnyError> {
+  let scripts_dir = data_dir.root().join("scripts");
+
+  if let Ok(entries) = std::fs::read_dir(scripts_dir) {
+    for entry in entries {
+      let Ok(entry) = entry else {
+        continue;
+      };
+
+      let Ok(metadata) = entry.metadata() else {
+        continue;
+      };
+
+      if !metadata.is_file() {
+        continue;
+      }
+      let path = entry.path();
+      let Some(extension) = path.extension().and_then(|e| e.to_str()) else {
+        continue;
+      };
+
+      if extension == "wasm" {
+        return Ok(Some(Runtime::new(2, path, conn)?));
+      }
+    }
+  }
+
+  return Ok(None);
+}
+
 async fn install_routes_and_jobs(
   state: &AppState,
   runtime: Arc<Runtime>,

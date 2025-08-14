@@ -128,6 +128,9 @@ impl AppState {
     );
 
     let runtime = build_js_runtime(args.conn.clone(), args.js_runtime_threads);
+    let wasm_runtime = crate::wasm::build_wasm_runtime(&args.data_dir, args.conn.clone())
+      .ok()
+      .flatten();
 
     AppState {
       state: Arc::new(InternalState {
@@ -166,7 +169,7 @@ impl AppState {
         schema_metadata,
         object_store,
         runtime,
-        wasm_runtime: None,
+        wasm_runtime,
         #[cfg(test)]
         cleanup: vec![],
       }),
