@@ -22,6 +22,7 @@ mod scheduler;
 mod schema_metadata;
 mod server;
 mod transaction;
+mod wasm;
 
 #[cfg(test)]
 mod test;
