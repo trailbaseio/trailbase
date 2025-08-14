@@ -8,6 +8,7 @@ use http_body_util::{BodyExt, combinators::BoxBody};
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 use std::time::SystemTime;
+use trailbase_schema::json::{JsonError, rich_json_to_value, value_to_rich_json};
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Result, Store};
 use wasmtime_wasi::p2::add_to_linker_async;
@@ -75,11 +76,12 @@ impl WasiView for State {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct SqliteRequest {
   query: String,
+  params: Vec<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct SqliteResponse {
-  payload: serde_json::Value,
+  rows: Vec<Vec<serde_json::Value>>,
   error: Option<String>,
 }
 
@@ -115,8 +117,12 @@ impl WasiHttpView for State {
   }
 }
 
+fn err_mapper<E: std::error::Error>(err: E) -> ErrorCode {
+  return ErrorCode::InternalError(Some(err.to_string()));
+}
+
 async fn handle_sqlite_request(
-  _conn: trailbase_sqlite::Connection,
+  conn: trailbase_sqlite::Connection,
   request: hyper::Request<wasmtime_wasi_http::body::HyperOutgoingBody>,
 ) -> Result<wasmtime_wasi_http::types::IncomingResponse, ErrorCode> {
   let (_parts, body) = request.into_parts();
@@ -125,13 +131,34 @@ async fn handle_sqlite_request(
     .await
     .map_err(|_| ErrorCode::HttpRequestDenied)?
     .to_bytes();
-  let _sqlite_request: SqliteRequest =
+  let sqlite_request: SqliteRequest =
     serde_json::from_slice(&bytes).map_err(|_| ErrorCode::HttpRequestDenied)?;
+
+  let params = json_values_to_sqlite_params(sqlite_request.params).map_err(err_mapper)?;
+
+  let rows = conn
+    .write_query_rows(sqlite_request.query, params)
+    .await
+    .map_err(err_mapper)?;
+
+  let values = rows
+    .iter()
+    .map(|row| -> Result<Vec<serde_json::Value>, ErrorCode> {
+      return Ok(row_to_rich_json_array(row).map_err(err_mapper)?);
+    })
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(err_mapper)?;
+
+  let body = serde_json::to_vec(&SqliteResponse {
+    rows: values,
+    error: None,
+  })
+  .map_err(err_mapper)?;
 
   let resp = http::Response::builder()
     .status(200)
-    .body(bytes_to_body(Bytes::from_static(b"")))
-    .map_err(|_| ErrorCode::InternalError(None))?;
+    .body(bytes_to_body(Bytes::from_owner(body)))
+    .map_err(err_mapper)?;
 
   return Ok(wasmtime_wasi_http::types::IncomingResponse {
     resp,
@@ -376,6 +403,23 @@ impl RuntimeInstance {
 #[inline]
 fn bytes_to_body<E>(bytes: Bytes) -> BoxBody<Bytes, E> {
   BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!()))
+}
+
+fn json_values_to_sqlite_params(
+  values: Vec<serde_json::Value>,
+) -> Result<Vec<trailbase_sqlite::Value>, JsonError> {
+  return values.into_iter().map(rich_json_to_value).collect();
+}
+
+pub fn row_to_rich_json_array(
+  row: &trailbase_sqlite::Row,
+) -> Result<Vec<serde_json::Value>, JsonError> {
+  return (0..row.column_count())
+    .map(|i| -> Result<serde_json::Value, JsonError> {
+      let value = row.get_value(i).ok_or(JsonError::ValueNotFound)?;
+      return value_to_rich_json(value);
+    })
+    .collect();
 }
 
 #[cfg(test)]
