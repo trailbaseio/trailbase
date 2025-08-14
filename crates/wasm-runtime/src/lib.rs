@@ -4,8 +4,7 @@
 
 use bytes::Bytes;
 use futures_util::future::LocalBoxFuture;
-use http_body_util::BodyExt;
-use http_body_util::combinators::BoxBody;
+use http_body_util::{BodyExt, combinators::BoxBody};
 use std::rc::Rc;
 use std::time::SystemTime;
 use wasmtime::component::{Component, Linker, ResourceTable};
@@ -14,6 +13,8 @@ use wasmtime_wasi::p2::add_to_linker_async;
 use wasmtime_wasi::p2::{IoView, WasiCtx, WasiCtxBuilder, WasiView};
 use wasmtime_wasi::{DirPerms, FilePerms};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
+
+use crate::exports::trailbase::runtime::init_endpoint::InitResult;
 
 wasmtime::component::bindgen!({
     world: "trailbase:runtime/trailbase",
@@ -45,10 +46,8 @@ pub enum Error {
   HttpErrorCode(wasmtime_wasi_http::bindings::http::types::ErrorCode),
 }
 
-pub type CallbackType = dyn (FnOnce(&RuntimeInstance) -> LocalBoxFuture<()>) + Send;
-
 pub enum Message {
-  Run(Box<CallbackType>),
+  Run(Box<dyn FnOnce(&RuntimeInstance) -> LocalBoxFuture<()> + Send>),
 }
 
 struct State {
@@ -159,7 +158,7 @@ impl Runtime {
     };
 
     let (shared_sender, shared_receiver) = kanal::unbounded_async::<Message>();
-    let threads: Vec<_> = (0..n_threads)
+    let threads = (0..n_threads)
       .map(|index| -> Result<_, Error> {
         let (private_sender, private_receiver) = kanal::unbounded_async::<Message>();
 
@@ -170,7 +169,7 @@ impl Runtime {
             tokio::runtime::Builder::new_current_thread()
               .enable_time()
               .enable_io()
-              .thread_name(format!("v8-runtime-{index}"))
+              .thread_name(format!("wasm-runtime-{index}"))
               .build()
               .expect("startup"),
           );
@@ -191,7 +190,6 @@ impl Runtime {
   pub async fn call<O, F>(&self, f: F) -> Result<O, Error>
   where
     F: (AsyncFnOnce(&RuntimeInstance) -> O) + Send + 'static,
-    // Fut: Future<Output = O> + Send + 'static,
     O: Send + 'static,
   {
     let (sender, receiver) = tokio::sync::oneshot::channel::<O>();
@@ -199,9 +197,9 @@ impl Runtime {
     self
       .shared_sender
       .send(Message::Run(Box::new(move |runtime| {
-        return Box::pin(async move {
+        Box::pin(async move {
           let _ = sender.send(f(runtime).await);
-        });
+        })
       })))
       .await
       .map_err(|_| Error::ChannelClosed)?;
@@ -285,15 +283,16 @@ impl RuntimeInstance {
     );
   }
 
-  pub async fn call_init(&self) -> Result<(), Error> {
+  pub async fn call_init(&self) -> Result<InitResult, Error> {
     let mut store = self.new_store();
     let bindings = Trailbase::instantiate_async(&mut store, &self.component, &self.linker).await?;
-    bindings
-      .trailbase_runtime_init_endpoint()
-      .call_init(&mut store)
-      .await?;
 
-    return Ok(());
+    return Ok(
+      bindings
+        .trailbase_runtime_init_endpoint()
+        .call_init(&mut store)
+        .await?,
+    );
   }
 
   pub async fn call_incoming_http_handler(
