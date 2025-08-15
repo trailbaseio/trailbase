@@ -241,7 +241,7 @@ pub fn row_to_rich_json_array(
 }
 
 #[inline]
-fn bytes_to_body<E>(bytes: Bytes) -> BoxBody<Bytes, E> {
+pub fn bytes_to_body<E>(bytes: Bytes) -> BoxBody<Bytes, E> {
   BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!()))
 }
 
