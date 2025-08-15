@@ -28,7 +28,7 @@ pub mod wit {
 pub use crate::wit::exports::trailbase::runtime::init_endpoint::{Guest, InitResult};
 
 use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
-use wstd::http::body::{BoundedBody, IntoBody};
+use wstd::http::body::IntoBody;
 use wstd::http::{Client, Request};
 
 #[derive(Debug, thiserror::Error)]
@@ -59,11 +59,9 @@ pub async fn query(query: &str, params: Vec<serde_json::Value>) -> Result<Rows, 
     .into_parts();
 
   let bytes = body.bytes().await.expect("baz");
-  let response: SqliteResponse = serde_json::from_slice(&bytes).expect("bar");
-
-  if let Some(err) = response.error {
-    return Err(Error::Sqlite(err));
-  }
-
-  return Ok(response.rows);
+  return match serde_json::from_slice(&bytes) {
+    Ok(SqliteResponse::Query { rows }) => Ok(rows),
+    Ok(_) => Err(Error::Sqlite("Unexpected response type".to_string())),
+    Err(err) => Err(Error::Sqlite(err.to_string())),
+  };
 }
