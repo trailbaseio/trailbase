@@ -1,0 +1,210 @@
+use bytes::Bytes;
+use http_body_util::{BodyExt, combinators::BoxBody};
+use parking_lot::Mutex;
+use rusqlite::Transaction;
+use self_cell::{MutBorrow, self_cell};
+use tokio::time::Duration;
+use trailbase_schema::json::{JsonError, rich_json_to_value, value_to_rich_json};
+use trailbase_sqlite::connection::LockGuard;
+use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
+use wasmtime_wasi_http::bindings::http::types::ErrorCode;
+
+self_cell!(
+  struct OwnedLock {
+    owner: trailbase_sqlite::Connection,
+
+    #[covariant]
+    dependent: LockGuard,
+  }
+);
+
+struct OwnedLockWrapper(OwnedLock);
+
+self_cell!(
+  struct OwnedTransaction {
+    owner: MutBorrow<OwnedLockWrapper>,
+
+    #[covariant]
+    dependent: Transaction,
+  }
+);
+
+std::thread_local! {
+    static CURRENT_TX: Mutex<Option<OwnedTransaction>> = Mutex::new(None);
+}
+
+fn err_mapper<E: std::error::Error>(err: E) -> ErrorCode {
+  return ErrorCode::InternalError(Some(err.to_string()));
+}
+
+async fn new_db_lock(conn: trailbase_sqlite::Connection) -> OwnedLock {
+  loop {
+    if let Ok(lock) = OwnedLock::try_new(conn.clone(), |owner| {
+      owner
+        .try_write_lock_for(Duration::from_micros(50))
+        .ok_or("timeout")
+    }) {
+      return lock;
+    }
+
+    tokio::time::sleep(Duration::from_micros(150)).await;
+  }
+}
+
+pub(crate) async fn handle_sqlite_request(
+  conn: trailbase_sqlite::Connection,
+  request: hyper::Request<wasmtime_wasi_http::body::HyperOutgoingBody>,
+) -> Result<wasmtime_wasi_http::types::IncomingResponse, ErrorCode> {
+  return match request.uri().path() {
+    "/tx_begin" => {
+      let lock = new_db_lock(conn).await;
+      let new_tx = OwnedTransaction::try_new(MutBorrow::new(OwnedLockWrapper(lock)), |lock| {
+        lock
+          .borrow_mut()
+          .0
+          .with_dependent_mut(|_owner, depdendent| depdendent.transaction())
+      })
+      .map_err(err_mapper)?;
+
+      CURRENT_TX.with(|tx: &Mutex<_>| {
+        *tx.lock() = Some(new_tx);
+      });
+
+      Ok(wasmtime_wasi_http::types::IncomingResponse {
+        resp: http::Response::builder()
+          .status(200)
+          .body(empty())
+          .map_err(err_mapper)?,
+        worker: None,
+        between_bytes_timeout: std::time::Duration::ZERO,
+      })
+    }
+    "/tx_commit" => {
+      let tx = CURRENT_TX.with(|tx: &Mutex<_>| {
+        return tx.lock().take();
+      });
+      if let Some(tx) = tx {
+        // NOTE: this is the same as `tx.commit()` just w/o consuming.
+        tx.borrow_dependent()
+          .execute_batch("COMMIT")
+          .map_err(err_mapper)?;
+      }
+      to_response(SqliteResponse {
+        rows: vec![],
+        error: None,
+      })
+    }
+    "/tx_rollback " => {
+      let tx = CURRENT_TX.with(|tx: &Mutex<_>| {
+        return tx.lock().take();
+      });
+      if let Some(tx) = tx {
+        // NOTE: this is the same as `tx.rollback()` just w/o consuming.
+        tx.borrow_dependent()
+          .execute_batch("ROLLBACK")
+          .map_err(err_mapper)?;
+      }
+      to_response(SqliteResponse {
+        rows: vec![],
+        error: None,
+      })
+    }
+    "/execute" => {
+      let sqlite_request = to_request(request).await?;
+
+      let _rows_affected = conn
+        .execute(
+          sqlite_request.query,
+          json_values_to_sqlite_params(sqlite_request.params).map_err(err_mapper)?,
+        )
+        .await
+        .map_err(err_mapper)?;
+
+      to_response(SqliteResponse {
+        rows: vec![],
+        error: None,
+      })
+    }
+    "/query" => {
+      let sqlite_request = to_request(request).await?;
+
+      let rows = conn
+        .write_query_rows(
+          sqlite_request.query,
+          json_values_to_sqlite_params(sqlite_request.params).map_err(err_mapper)?,
+        )
+        .await
+        .map_err(err_mapper)?;
+
+      let values = rows
+        .iter()
+        .map(|row| -> Result<Vec<serde_json::Value>, ErrorCode> {
+          return Ok(row_to_rich_json_array(row).map_err(err_mapper)?);
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(err_mapper)?;
+
+      to_response(SqliteResponse {
+        rows: values,
+        error: None,
+      })
+    }
+    _ => Err(ErrorCode::HttpRequestMethodInvalid),
+  };
+}
+
+async fn to_request(
+  request: hyper::Request<wasmtime_wasi_http::body::HyperOutgoingBody>,
+) -> Result<SqliteRequest, ErrorCode> {
+  let (_parts, body) = request.into_parts();
+  let bytes: Bytes = body
+    .collect()
+    .await
+    .map_err(|_| ErrorCode::HttpRequestDenied)?
+    .to_bytes();
+  return serde_json::from_slice(&bytes).map_err(|_| ErrorCode::HttpRequestDenied);
+}
+
+fn to_response(
+  response: SqliteResponse,
+) -> Result<wasmtime_wasi_http::types::IncomingResponse, ErrorCode> {
+  let body = serde_json::to_vec(&response).map_err(err_mapper)?;
+
+  let resp = http::Response::builder()
+    .status(200)
+    .body(bytes_to_body(Bytes::from_owner(body)))
+    .map_err(err_mapper)?;
+
+  return Ok(wasmtime_wasi_http::types::IncomingResponse {
+    resp,
+    worker: None,
+    between_bytes_timeout: std::time::Duration::ZERO,
+  });
+}
+
+fn json_values_to_sqlite_params(
+  values: Vec<serde_json::Value>,
+) -> Result<Vec<trailbase_sqlite::Value>, JsonError> {
+  return values.into_iter().map(rich_json_to_value).collect();
+}
+
+pub fn row_to_rich_json_array(
+  row: &trailbase_sqlite::Row,
+) -> Result<Vec<serde_json::Value>, JsonError> {
+  return (0..row.column_count())
+    .map(|i| -> Result<serde_json::Value, JsonError> {
+      let value = row.get_value(i).ok_or(JsonError::ValueNotFound)?;
+      return value_to_rich_json(value);
+    })
+    .collect();
+}
+
+#[inline]
+fn bytes_to_body<E>(bytes: Bytes) -> BoxBody<Bytes, E> {
+  BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!()))
+}
+
+#[inline]
+fn empty<E>() -> BoxBody<Bytes, E> {
+  BoxBody::new(http_body_util::Empty::new().map_err(|_| unreachable!()))
+}
