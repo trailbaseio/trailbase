@@ -58,6 +58,7 @@ struct State {
   pub wasi_ctx: WasiCtx,
   pub http: WasiHttpCtx,
 
+  pub isolate_id: usize,
   pub conn: trailbase_sqlite::Connection,
 }
 
@@ -100,6 +101,10 @@ impl WasiHttpView for State {
             }),
           ),
         )
+      }
+      Some("__isolate_id") => {
+        let id = self.isolate_id;
+        Ok(bytes_to_respone(format!("{id}").into_bytes())?)
       }
       _ => Ok(wasmtime_wasi_http::types::default_send_request(
         request, config,
@@ -155,7 +160,8 @@ impl Runtime {
         let (private_sender, private_receiver) = kanal::unbounded_async::<Message>();
 
         let shared_receiver = shared_receiver.clone();
-        let instance = RuntimeInstance::new(engine.clone(), component.clone(), conn.clone())?;
+        let instance =
+          RuntimeInstance::new(engine.clone(), component.clone(), conn.clone(), index)?;
 
         let handle = std::thread::spawn(move || {
           let tokio_runtime = Rc::new(
@@ -236,6 +242,7 @@ pub struct RuntimeInstance {
   component: Component,
   linker: Linker<State>,
 
+  isolate_id: usize,
   conn: trailbase_sqlite::Connection,
 }
 
@@ -244,6 +251,7 @@ impl RuntimeInstance {
     engine: Engine,
     component: Component,
     conn: trailbase_sqlite::Connection,
+    isolate_id: usize,
   ) -> Result<Self, Error> {
     let mut linker = Linker::new(&engine);
 
@@ -257,8 +265,8 @@ impl RuntimeInstance {
       engine,
       component,
       linker,
+      isolate_id,
       conn,
-      // current_tx: Arc::new(Mutex::new(None)),
     });
   }
 
@@ -280,6 +288,7 @@ impl RuntimeInstance {
         resource_table: ResourceTable::new(),
         wasi_ctx: wasi_ctx.build(),
         http: WasiHttpCtx::new(),
+        isolate_id: self.isolate_id,
         conn: self.conn.clone(),
       },
     );
@@ -341,6 +350,25 @@ impl RuntimeInstance {
 
     return resp;
   }
+}
+
+fn bytes_to_respone(
+  bytes: Vec<u8>,
+) -> Result<wasmtime_wasi_http::types::HostFutureIncomingResponse, ErrorCode> {
+  let resp = http::Response::builder()
+    .status(200)
+    .body(sqlite::bytes_to_body(Bytes::from_owner(bytes)))
+    .map_err(|err| ErrorCode::InternalError(Some(err.to_string())))?;
+
+  return Ok(
+    wasmtime_wasi_http::types::HostFutureIncomingResponse::ready(Ok(Ok(
+      wasmtime_wasi_http::types::IncomingResponse {
+        resp,
+        worker: None,
+        between_bytes_timeout: std::time::Duration::ZERO,
+      },
+    ))),
+  );
 }
 
 #[cfg(test)]
