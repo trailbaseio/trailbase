@@ -47,7 +47,7 @@ pub async fn query(query: &str, params: Vec<serde_json::Value>) -> Result<Rows, 
   let bytes = serde_json::to_vec(&r).expect("serialization");
 
   let request = Request::builder()
-    .uri("http://__sqlite/")
+    .uri("http://__sqlite/query")
     .method("POST")
     .body(bytes.into_body());
 
