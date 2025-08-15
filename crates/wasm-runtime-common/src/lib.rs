@@ -11,7 +11,11 @@ pub struct SqliteRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct SqliteResponse {
-  pub rows: Vec<Vec<serde_json::Value>>,
-  pub error: Option<String>,
+pub enum SqliteResponse {
+  Query { rows: Vec<Vec<serde_json::Value>> },
+  Execute { rows_affected: usize },
+  Error(String),
+  TxBegin,
+  TxCommit,
+  TxRollback,
 }
