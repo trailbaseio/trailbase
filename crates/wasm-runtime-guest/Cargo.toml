@@ -16,5 +16,5 @@ serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "^1.0.117"
 thiserror = "2.0.14"
 trailbase-wasm-common = { workspace = true }
-wit-bindgen = "0.43.0"
+wit-bindgen = "0.44.0"
 wstd = "0.5.3"
