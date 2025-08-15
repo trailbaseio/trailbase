@@ -44,7 +44,7 @@ struct InternalState {
 
   runtime: RuntimeHandle,
 
-  wasm_runtime: Option<Runtime>,
+  wasm_runtime: Option<Arc<Runtime>>,
 
   #[cfg(test)]
   #[allow(unused)]
@@ -130,7 +130,8 @@ impl AppState {
     let runtime = build_js_runtime(args.conn.clone(), args.js_runtime_threads);
     let wasm_runtime = crate::wasm::build_wasm_runtime(&args.data_dir, args.conn.clone())
       .ok()
-      .flatten();
+      .flatten()
+      .map(Arc::new);
 
     AppState {
       state: Arc::new(InternalState {
@@ -317,6 +318,10 @@ impl AppState {
   #[cfg(feature = "v8")]
   pub(crate) fn script_runtime(&self) -> RuntimeHandle {
     return self.state.runtime.clone();
+  }
+
+  pub(crate) fn wasm_runtime(&self) -> Option<Arc<Runtime>> {
+    return self.state.wasm_runtime.clone();
   }
 }
 

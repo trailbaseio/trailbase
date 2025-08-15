@@ -177,7 +177,13 @@ impl Server {
         .map_err(|err| InitError::ScriptError(err.to_string()))?;
 
     #[cfg(not(feature = "v8"))]
-    let js_routes: Option<Router<AppState>> = None;
+    let js_routes: Option<Router<AppState>> = if let Some(rt) = state.wasm_runtime() {
+      crate::wasm::install_routes_and_jobs(&state, rt)
+        .await
+        .map_err(|err| InitError::ScriptError(err.to_string()))?
+    } else {
+      None
+    };
 
     Ok(Self {
       state: state.clone(),
