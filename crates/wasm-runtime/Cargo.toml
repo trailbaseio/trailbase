@@ -23,6 +23,7 @@ serde_json = "^1.0.117"
 thiserror = "2.0.14"
 trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true }
+trailbase-wasm-common = { workspace = true }
 tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1.41"
 wasmtime = "35.0.0"

@@ -1,0 +1,20 @@
+[package]
+name = "trailbase-wasm-guest"
+version = "0.1.0"
+edition = "2024"
+license = "OSL-3.0"
+description = "WASM runtime for the TrailBase framework"
+homepage = "https://trailbase.io"
+exclude = [
+  "**/node_modules/",
+  "**/dist/",
+]
+
+[dependencies]
+bytes = "1.10.1"
+serde = { version = "^1.0.203", features = ["derive"] }
+serde_json = "^1.0.117"
+thiserror = "2.0.14"
+trailbase-wasm-common = { workspace = true }
+wit-bindgen = "0.43.0"
+wstd = "0.5.3"

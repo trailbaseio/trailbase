@@ -5910,7 +5910,9 @@ name = "rust-guest"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "wit-bindgen 0.43.0",
+ "serde",
+ "serde_json",
+ "trailbase-wasm-guest",
  "wstd",
 ]
 
@@ -8110,9 +8112,31 @@ dependencies = [
  "tracing",
  "trailbase-schema",
  "trailbase-sqlite",
+ "trailbase-wasm-common",
  "wasmtime",
  "wasmtime-wasi",
  "wasmtime-wasi-http",
+]
+
+[[package]]
+name = "trailbase-wasm-common"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "trailbase-wasm-guest"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.16",
+ "trailbase-wasm-common",
+ "wit-bindgen 0.43.0",
+ "wstd",
 ]
 
 [[package]]
