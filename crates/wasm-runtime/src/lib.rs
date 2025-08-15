@@ -5,10 +5,10 @@
 use bytes::Bytes;
 use futures_util::future::LocalBoxFuture;
 use http_body_util::{BodyExt, combinators::BoxBody};
-use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 use std::time::SystemTime;
 use trailbase_schema::json::{JsonError, rich_json_to_value, value_to_rich_json};
+use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Result, Store};
 use wasmtime_wasi::p2::add_to_linker_async;
@@ -73,18 +73,6 @@ impl WasiView for State {
   }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct SqliteRequest {
-  query: String,
-  params: Vec<serde_json::Value>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct SqliteResponse {
-  rows: Vec<Vec<serde_json::Value>>,
-  error: Option<String>,
-}
-
 impl WasiHttpView for State {
   fn ctx(&mut self) -> &mut WasiHttpCtx {
     &mut self.http
@@ -96,9 +84,9 @@ impl WasiHttpView for State {
     request: hyper::Request<wasmtime_wasi_http::body::HyperOutgoingBody>,
     config: wasmtime_wasi_http::types::OutgoingRequestConfig,
   ) -> wasmtime_wasi_http::HttpResult<wasmtime_wasi_http::types::HostFutureIncomingResponse> {
-    println!("send_request {:?}: {request:?}", request.uri().scheme());
-    let scheme = request.uri().scheme();
-    return match scheme.map(|s| s.as_str()) {
+    println!("send_request {:?}: {request:?}", request.uri().host());
+
+    return match request.uri().host() {
       Some("__sqlite") => {
         let conn = self.conn.clone();
         Ok(
@@ -109,10 +97,9 @@ impl WasiHttpView for State {
           ),
         )
       }
-      Some("http") | Some("https") => Ok(wasmtime_wasi_http::types::default_send_request(
+      _ => Ok(wasmtime_wasi_http::types::default_send_request(
         request, config,
       )),
-      _ => Err(ErrorCode::HttpRequestUriInvalid.into()),
     };
   }
 }
@@ -429,6 +416,16 @@ mod tests {
   #[tokio::test]
   async fn test_init() {
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
+    conn
+      .execute_batch(
+        "
+        CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT);
+        INSERT INTO test (value) VALUES ('test');
+        ",
+      )
+      .await
+      .unwrap();
+
     let runtime = Runtime::new(2, "./testdata/rust_guest.wasm".into(), conn).unwrap();
 
     runtime
