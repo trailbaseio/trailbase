@@ -9,7 +9,8 @@ struct InitEndpoint;
 
 impl trailbase_wasm_guest::Guest for InitEndpoint {
   fn init() -> trailbase_wasm_guest::InitResult {
-    println!("init() called");
+    let thread_id = trailbase_wasm_guest::thread_id();
+    println!("init() called (thread: {thread_id})");
     return trailbase_wasm_guest::InitResult {
       http_handlers: vec![(MethodType::Get, "/wasm".to_string())],
       job_handlers: vec![],
