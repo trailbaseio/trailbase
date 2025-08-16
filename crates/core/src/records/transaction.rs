@@ -42,7 +42,7 @@ pub struct TransactionResponse {
 /// Execute a batch of transactions.
 #[utoipa::path(
   post,
-  path = "/api/transactions/v1/execute",
+  path = "/api/transaction/v1/execute",
   tag = "transactions",
   params(),
   request_body = TransactionRequest,

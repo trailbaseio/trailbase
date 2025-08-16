@@ -29,7 +29,7 @@ pub(crate) use validate::validate_record_api_config;
 
 use crate::AppState;
 use crate::config::proto::PermissionFlag;
-use crate::constants::RECORD_API_PATH;
+use crate::constants::{RECORD_API_PATH, TRANSACTION_API_PATH};
 
 #[allow(unused)]
 #[derive(OpenApi)]
@@ -87,7 +87,7 @@ pub(crate) fn router(enable_transactions: bool) -> Router<AppState> {
 
   if enable_transactions {
     return router.route(
-      "/api/transactions/v1/execute",
+      &format!("/{TRANSACTION_API_PATH}/execute"),
       post(transaction::record_transactions_handler),
     );
   }
