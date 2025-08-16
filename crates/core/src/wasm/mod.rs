@@ -1,6 +1,5 @@
 use axum::Router;
 use axum::extract::{RawPathParams, Request};
-use axum::response::IntoResponse;
 use bytes::Bytes;
 use http_body_util::{BodyExt, combinators::BoxBody};
 use hyper::StatusCode;

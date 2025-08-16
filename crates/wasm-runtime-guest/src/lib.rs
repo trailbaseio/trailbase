@@ -26,6 +26,7 @@ pub mod wit {
 }
 
 pub use crate::wit::exports::trailbase::runtime::init_endpoint::{Guest, InitResult, MethodType};
+pub use crate::wit::trailbase::runtime::host_endpoint::thread_id;
 
 use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wstd::http::body::IntoBody;

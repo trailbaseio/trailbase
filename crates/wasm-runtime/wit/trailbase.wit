@@ -23,6 +23,14 @@ interface init-endpoint  {
   init: func() -> init-result;
 }
 
+interface host-endpoint {
+  thread-id: func() -> u64;
+}
+
+// Note:
+//  * imports are provided by the host
+//  * exports are provided by the guest
+//  * includes to include a world into another world.
 world trailbase {
   // Pull in WASIp2 http interface for outbound requests.
   import wasi:http/outgoing-handler@0.2.6;
@@ -30,5 +38,9 @@ world trailbase {
   // Pull in WASIp2 filesystem interfaces
   include wasi:filesystem/imports@0.2.6;
 
+  // Host-provided interfaces
+  import host-endpoint;
+
+  // Guest-provided interfaces.
   export init-endpoint;
 }
