@@ -1,3 +1,11 @@
+## v0.16.5
+
+* Add an experimental `/api/transaction/v1/execute` endpoint for executing multiple record mutations (create, update & delete) across multiple APIs in a single transaction.
+  * Disabled by default and needs to be enabled in config file (no UI option yet).
+  * There's no client-integrations yet. We're looking into how to best model type-safety for multi-API operations.
+* Update to JS/TS runtime to deno 2.3.3 level.
+* Update dependencies.
+
 ## v0.16.4
 
 * Switch to dynamically linked binaries on Linux by default. Statically pre-built binaries are still available.

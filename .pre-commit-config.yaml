@@ -44,7 +44,7 @@ repos:
 
     - id: cargotest
       name: Cargo Test
-      entry: sh -c 'pnpm i --frozen-lockfile --prefer-offline && cargo test --workspace -- --show-output'
+      entry: sh -c 'pnpm i --frozen-lockfile --prefer-offline && PNPM_OFFLINE=TRUE cargo test --workspace -- --show-output'
       language: system
       types: [rust]
       exclude: '^(vendor|bindings)/'
