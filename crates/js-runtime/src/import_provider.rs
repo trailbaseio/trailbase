@@ -1,6 +1,5 @@
 use rustyscript::deno_core::{
-  ModuleSpecifier, RequestedModuleType, ResolutionKind,
-  anyhow::{Error, anyhow},
+  ModuleSpecifier, RequestedModuleType, ResolutionKind, error::ModuleLoaderError,
 };
 use rustyscript::module_loader::ImportProvider as RustyScriptImportProvider;
 
@@ -15,7 +14,7 @@ impl RustyScriptImportProvider for ImportProvider {
     specifier: &ModuleSpecifier,
     _referrer: &str,
     _kind: ResolutionKind,
-  ) -> Option<Result<ModuleSpecifier, Error>> {
+  ) -> Option<Result<ModuleSpecifier, ModuleLoaderError>> {
     log::trace!("resolve: {specifier:?}");
 
     // Specifier is just a URL.
@@ -24,7 +23,9 @@ impl RustyScriptImportProvider for ImportProvider {
         return Some(Ok(specifier.clone()));
       }
       scheme => {
-        return Some(Err(anyhow!("Unsupported schema: '{scheme}'")));
+        return Some(Err(ModuleLoaderError::uri_error(format!(
+          "Unsupported schema: '{scheme}'"
+        ))));
       }
     };
   }
@@ -35,7 +36,7 @@ impl RustyScriptImportProvider for ImportProvider {
     _referrer: Option<&ModuleSpecifier>,
     _is_dyn_import: bool,
     _requested_module_type: RequestedModuleType,
-  ) -> Option<Result<String, Error>> {
+  ) -> Option<Result<String, ModuleLoaderError>> {
     log::trace!("import: {specifier:?}");
 
     match specifier.scheme() {
