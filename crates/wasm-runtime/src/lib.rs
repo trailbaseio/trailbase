@@ -2,12 +2,14 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
+mod sqlite;
+
 use bytes::Bytes;
 use futures_util::future::LocalBoxFuture;
 use http_body_util::combinators::BoxBody;
 use std::rc::Rc;
 use std::time::SystemTime;
-use wasmtime::component::{Component, Linker, ResourceTable};
+use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Result, Store};
 use wasmtime_wasi::p2::add_to_linker_async;
 use wasmtime_wasi::p2::{IoView, WasiCtx, WasiCtxBuilder, WasiView};
@@ -16,8 +18,6 @@ use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 
 use crate::exports::trailbase::runtime::init_endpoint::InitResult;
-
-mod sqlite;
 
 wasmtime::component::bindgen!({
     world: "trailbase:runtime/trailbase",
@@ -58,7 +58,7 @@ struct State {
   pub wasi_ctx: WasiCtx,
   pub http: WasiHttpCtx,
 
-  pub isolate_id: usize,
+  pub thread_id: u64,
   pub conn: trailbase_sqlite::Connection,
 }
 
@@ -102,14 +102,18 @@ impl WasiHttpView for State {
           ),
         )
       }
-      Some("__isolate_id") => {
-        let id = self.isolate_id;
-        Ok(bytes_to_respone(format!("{id}").into_bytes())?)
-      }
       _ => Ok(wasmtime_wasi_http::types::default_send_request(
         request, config,
       )),
     };
+  }
+}
+
+impl trailbase::runtime::host_endpoint::Host for State {
+  fn thread_id(
+    &mut self,
+  ) -> impl ::core::future::Future<Output = wasmtime::Result<u64>> + ::core::marker::Send {
+    return std::future::ready(Ok(self.thread_id));
   }
 }
 
@@ -160,8 +164,12 @@ impl Runtime {
         let (private_sender, private_receiver) = kanal::unbounded_async::<Message>();
 
         let shared_receiver = shared_receiver.clone();
-        let instance =
-          RuntimeInstance::new(engine.clone(), component.clone(), conn.clone(), index)?;
+        let instance = RuntimeInstance::new(
+          engine.clone(),
+          component.clone(),
+          conn.clone(),
+          index as u64,
+        )?;
 
         let handle = std::thread::spawn(move || {
           let tokio_runtime = Rc::new(
@@ -242,7 +250,7 @@ pub struct RuntimeInstance {
   component: Component,
   linker: Linker<State>,
 
-  isolate_id: usize,
+  thread_id: u64,
   conn: trailbase_sqlite::Connection,
 }
 
@@ -251,9 +259,9 @@ impl RuntimeInstance {
     engine: Engine,
     component: Component,
     conn: trailbase_sqlite::Connection,
-    isolate_id: usize,
+    thread_id: u64,
   ) -> Result<Self, Error> {
-    let mut linker = Linker::new(&engine);
+    let mut linker = Linker::<State>::new(&engine);
 
     // Adds all the default WASI implementations: clocks, random, fs, ...
     add_to_linker_async(&mut linker)?;
@@ -261,11 +269,14 @@ impl RuntimeInstance {
     // Adds default HTTP interfaces - incoming and outgoing.
     wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
 
+    // Host interfaces.
+    trailbase::runtime::host_endpoint::add_to_linker::<_, HasSelf<State>>(&mut linker, |s| s)?;
+
     return Ok(Self {
       engine,
       component,
       linker,
-      isolate_id,
+      thread_id,
       conn,
     });
   }
@@ -288,7 +299,7 @@ impl RuntimeInstance {
         resource_table: ResourceTable::new(),
         wasi_ctx: wasi_ctx.build(),
         http: WasiHttpCtx::new(),
-        isolate_id: self.isolate_id,
+        thread_id: self.thread_id,
         conn: self.conn.clone(),
       },
     );
