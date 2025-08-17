@@ -10,6 +10,7 @@ packages:
   - 'crates/assets/js/auth'
   - 'crates/assets/js/client'
   - 'crates/js-runtime/assets/runtime'
+  - 'tests/js-wasm-guest'
 
 sharedWorkspaceLockfile: true
 linkWorkspacePackages: true

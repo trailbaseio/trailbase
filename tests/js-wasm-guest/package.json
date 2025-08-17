@@ -1,0 +1,10 @@
+{
+  "type": "module",
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "*"
+  },
+  "scripts": {
+    "build": "node componentize.js",
+    "all": "npm run build"
+  }
+}

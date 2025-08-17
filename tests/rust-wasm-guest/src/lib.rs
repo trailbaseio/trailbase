@@ -12,7 +12,10 @@ impl trailbase_wasm_guest::Guest for InitEndpoint {
     let thread_id = trailbase_wasm_guest::thread_id();
     println!("init() called (thread: {thread_id})");
     return trailbase_wasm_guest::InitResult {
-      http_handlers: vec![(MethodType::Get, "/wasm".to_string())],
+      http_handlers: vec![
+        (MethodType::Get, "/wasm".to_string()),
+        (MethodType::Get, "/fibonacci".to_string()),
+      ],
       job_handlers: vec![],
     };
   }
@@ -28,6 +31,7 @@ async fn main(request: Request<IncomingBody>, responder: Responder) -> Finished 
     // TODO: Build an abstraction to sync init handlers with http handlers here both for http and
     // jobs..
     "/wasm" => write_all(responder, format!("Welcome from WASM").as_bytes()).await,
+    "/fibonacci" => write_all(responder, format!("{}", fibonacci(40)).as_bytes()).await,
     "/query" => {
       let query = std::future::ready("SELECT COUNT(*) FROM TEST").await;
       let rows = trailbase_wasm_guest::query(&query, vec![]).await.unwrap();
@@ -44,6 +48,15 @@ async fn main(request: Request<IncomingBody>, responder: Responder) -> Finished 
         .unwrap();
       responder.respond(response).await
     }
+  };
+}
+
+#[inline]
+fn fibonacci(n: usize) -> usize {
+  return match n {
+    0 => 0,
+    1 => 1,
+    n => fibonacci(n - 1) + fibonacci(n - 2),
   };
 }
 
