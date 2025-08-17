@@ -170,24 +170,28 @@ impl Server {
         .map_err(|err| InitError::CustomInit(err.to_string()))?;
     }
 
-    #[cfg(feature = "v8")]
-    let js_routes: Option<Router<AppState>> =
-      crate::js::runtime::load_routes_and_jobs_from_js_modules(&state)
-        .await
-        .map_err(|err| InitError::ScriptError(err.to_string()))?;
+    let mut custom_routers: Vec<Router<AppState>> = vec![];
 
-    #[cfg(not(feature = "v8"))]
-    let js_routes: Option<Router<AppState>> = if let Some(rt) = state.wasm_runtime() {
-      crate::wasm::install_routes_and_jobs(&state, rt)
+    #[cfg(feature = "v8")]
+    if let Some(js_router) = crate::js::runtime::load_routes_and_jobs_from_js_modules(&state)
+      .await
+      .map_err(|err| InitError::ScriptError(err.to_string()))?
+    {
+      custom_routers.push(js_router);
+    }
+
+    if let Some(rt) = state.wasm_runtime() {
+      if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt)
         .await
         .map_err(|err| InitError::ScriptError(err.to_string()))?
-    } else {
-      None
-    };
+      {
+        custom_routers.push(wasm_router);
+      }
+    }
 
     Ok(Self {
       state: state.clone(),
-      main_router: Self::build_main_router(&state, &opts, js_routes).await,
+      main_router: Self::build_main_router(&state, &opts, custom_routers).await,
       admin_router: Self::build_independent_admin_router(&state, &opts),
       tls: Self::load_tls(&opts),
     })
@@ -339,7 +343,7 @@ impl Server {
   async fn build_main_router(
     state: &AppState,
     opts: &ServerOptions,
-    custom_router: Option<Router<AppState>>,
+    custom_routers: Vec<Router<AppState>>,
   ) -> (String, Router<()>) {
     let enable_transactions =
       state.access_config(|conn| conn.server.enable_record_transactions.unwrap_or(false));
@@ -358,7 +362,7 @@ impl Server {
       router = router.merge(auth::auth_ui_router());
     }
 
-    if let Some(custom_router) = custom_router {
+    for custom_router in custom_routers {
       router = router.merge(custom_router);
     }
 
