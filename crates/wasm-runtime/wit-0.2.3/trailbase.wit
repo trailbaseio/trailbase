@@ -32,6 +32,8 @@ interface host-endpoint {
 //  * exports are provided by the guest
 //  * includes to include a world into another world.
 world trailbase {
+  // use init-endpoint.{method-type, init-result};
+
   // Pull in WASIp2 http interface for outbound requests.
   import wasi:http/outgoing-handler@0.2.3;
 
@@ -46,4 +48,8 @@ world trailbase {
 
   // Guest-provided interfaces.
   export init-endpoint;
+
+  // Note: the rust guest meddles with bindgen and exports their own handler
+  // (both spin and wstd).
+  export wasi:http/incoming-handler@0.2.3;
 }
