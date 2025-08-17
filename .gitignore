@@ -1,6 +1,7 @@
 # Build artifacts
 target/
 node_modules/
+dist/
 
 # Dart workspace artifacts
 .dart_tool
