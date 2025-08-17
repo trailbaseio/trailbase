@@ -98,9 +98,12 @@ pub(crate) async fn install_routes_and_jobs(
     job.start();
   }
 
+  log::debug!("Got {} WASM routes", init_result.http_handlers.len());
+
   let mut router = Router::<AppState>::new();
   for (method, path) in &init_result.http_handlers {
     let runtime = runtime.clone();
+    // FIXME: Wire up user somehow
     let handler = move |_params: RawPathParams, user: Option<User>, req: Request| async move {
       return runtime
         .call(
@@ -112,7 +115,6 @@ pub(crate) async fn install_routes_and_jobs(
               .map_err(|_err| trailbase_wasm::Error::ChannelClosed)?
               .to_bytes();
 
-            // FIXME: wire up user.
             let response = instance
               .call_incoming_http_handler(hyper::Request::from_parts(
                 parts,
