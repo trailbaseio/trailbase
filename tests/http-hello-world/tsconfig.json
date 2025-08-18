@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "es2022",                          /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */
+    "module": "es2022",                          /* Specify what module code is generated. */
+    "paths": {
+      "wasi:http/types@0.2.3": [ "./generated/types/wasi-http-types.d.ts" ],
+      "wasi:filesystem/preopens@0.2.3": [ "./generated/types/interfaces/wasi-filesystem-preopens.d.ts" ],
+      "wasi:random/random@0.2.3": [ "./generated/types/interfaces/wasi-random-random.d.ts" ],
+      "trailbase:runtime/init": [ "./generated/types/interfaces/trailbase-runtime-init-endpoint.d.ts" ],
+      "@wit": [ "./generated/types/wit.d.ts" ],
+    },
+    "outDir": "./dist/",                         /* Specify an output folder for all emitted files. */
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,    /* Ensure that casing is correct in imports. */
+    "strict": true,                              /* Enable all strict type-checking options. */
+    "skipLibCheck": true                         /* Skip type checking all .d.ts files. */
+  }
+}
