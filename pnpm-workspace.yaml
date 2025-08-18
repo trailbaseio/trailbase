@@ -12,6 +12,7 @@ packages:
   - 'crates/js-runtime/assets/runtime'
   - 'tests/js-wasm-guest'
   - 'tests/http-hello-world'
+  - 'tests/runtime'
 
 sharedWorkspaceLockfile: true
 linkWorkspacePackages: true
