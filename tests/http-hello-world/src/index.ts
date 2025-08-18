@@ -1,14 +1,10 @@
+// import type { InitResult } from "trailbase-wasm";
 import {
-  Fields,
-  OutgoingResponse,
   IncomingRequest,
-  ResponseOutparam,
-  OutgoingBody,
-  test,
-  threadId,
-  writeResponse,
+  defineConfig,
+  // threadId,
+  // writeResponse,
 } from "trailbase-wasm";
-import type { InitResult } from "trailbase-wasm";
 
 function fibonacci(num: number): number {
   switch (num) {
@@ -21,32 +17,56 @@ function fibonacci(num: number): number {
   }
 }
 
-export const incomingHandler = {
-  handle: async function(req: IncomingRequest, resp: ResponseOutparam) {
-    test();
+// export const incomingHandler = {
+//   handle: async function(req: IncomingRequest, resp: ResponseOutparam) {
+//     const path = req.pathWithQuery();
+//     console.log(`HTTP request [${threadId()}]: ${path}`);
+//
+//     switch (path) {
+//       case '/fibonacci':
+//         writeResponse(resp, 200, fibonacci(40).toString());
+//         break;
+//       default:
+//         writeResponse(resp, 200, 'Hello from Javascript!\n');
+//         break;
+//     }
+//   }
+// };
+//
+// export const initEndpoint = {
+//   init: function(): InitResult {
+//     return {
+//       httpHandlers: [
+//         ['get', '/fibonacci'],
+//         ['get', '/wasm'],
+//       ],
+//       jobHandlers: [],
+//     };
+//   },
+// };
 
-    const path = req.pathWithQuery();
-    console.log(`HTTP request [${threadId()}]: ${path}`);
 
-    switch (path) {
-      case '/fibonacci':
-        writeResponse(resp, 200, fibonacci(40).toString());
-        break;
-      default:
-        writeResponse(resp, 200, 'Hello from Javascript!\n');
-        break;
-    }
-  }
-};
+const config = defineConfig({
+  handlers: [
+    {
+      path: "/fibonacci",
+      method: "get",
+      handler: (_req: IncomingRequest): string => {
+        return fibonacci(40).toString();
+      },
+    },
+    {
+      path: "/wasm",
+      method: "get",
+      handler: (_req: IncomingRequest): string => {
+        return "Hello from Javascript!\n";
+      },
+    },
+  ]
+});
 
-export const initEndpoint = {
-  init: function(): InitResult {
-    return {
-      httpHandlers: [
-        ['get', '/fibonacci'],
-        ['get', '/wasm'],
-      ],
-      jobHandlers: [],
-    };
-  },
-};
+// TODO: We should be able to export them in one go.
+// export default { ...config };
+
+export const initEndpoint = config.initEndpoint;
+export const incomingHandler = config.incomingHandler;
