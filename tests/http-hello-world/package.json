@@ -1,0 +1,25 @@
+{
+  "name": "http-hello-world",
+  "version": "0.1.0",
+  "description": "A WebAssembly Component that responds to HTTP requests using the `wasi:http` WIT interface",
+  "keywords": [],
+  "author": "",
+  "main": "dist/http-hello-world.js",
+  "scripts": {
+    "generate:types": "jco types wit/ -o generated/types",
+    "build:tsc": "tsc",
+    "build:js": "jco componentize -w wit -o dist/http-hello-world.wasm dist/http-hello-world.js",
+    "build": "npm run generate:types && npm run build:tsc && npm run build:js",
+    "install-and-build": "npm install && npm run build",
+    "start": "npm run build && npm run wadm:start",
+    "reload": "npm run build && npm run wadm:stop && npm run wadm:start",
+    "stop": "npm run wadm:stop",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "^0.18.4",
+    "@bytecodealliance/jco": "^1.13.3",
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2"
+  }
+}
