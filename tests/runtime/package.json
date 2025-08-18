@@ -1,5 +1,5 @@
 {
-  "name": "trailbase-js-wasm-runtime",
+  "name": "trailbase-wasm",
   "description": "WASM Runtime for JS/TS execution within TrailBase",
   "version": "0.1.0",
   "license": "OSL-3.0",
