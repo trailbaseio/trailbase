@@ -5,7 +5,8 @@ import {
   OutgoingResponse,
   Fields,
 } from 'wasi:http/types@0.2.3';
-import { initEndpoint as init } from "@wit";
+import { InitResult } from "trailbase:runtime/init-endpoint";
+import { threadId } from "trailbase:runtime/host-endpoint";
 
 import { listDirectories as _ } from "./runtime";
 
@@ -45,7 +46,7 @@ function fibonacci(num: number): number {
 export const incomingHandler = {
   handle: async function(req: IncomingRequest, resp: ResponseOutparam) {
     const path = req.pathWithQuery();
-    console.log(`HTTP request: ${path}`);
+    console.log(`HTTP request [${threadId()}]: ${path}`);
 
     switch (path) {
       case '/fibonacci':
@@ -59,7 +60,7 @@ export const incomingHandler = {
 };
 
 export const initEndpoint = {
-  init: function(): init.InitResult {
+  init: function(): InitResult {
     return {
       httpHandlers: [
         ['get', '/fibonacci'],
