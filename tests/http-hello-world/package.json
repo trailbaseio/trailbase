@@ -4,22 +4,28 @@
   "description": "A WebAssembly Component that responds to HTTP requests using the `wasi:http` WIT interface",
   "keywords": [],
   "author": "",
-  "main": "dist/http-hello-world.js",
+  "main": "dist/index.js",
   "scripts": {
-    "generate:types": "jco types wit/ -o generated/types",
-    "build:tsc": "tsc",
-    "build:js": "jco componentize -w wit --aot -o dist/http-hello-world.wasm dist/http-hello-world.js",
-    "build": "npm run generate:types && npm run build:tsc && npm run build:js",
+    "generate:types": "jco types ../runtime/wit/ -o generated/types",
+    "build:tsc": "vite build",
+    "build:wasm": "jco componentize -w ../runtime/wit -o dist/http-hello-world.wasm dist/index.mjs",
+    "build:wasm:aot": "jco componentize -w ../runtime/wit --aot -o dist/http-hello-world.wasm dist/index.mjs",
+    "build": "npm run build:tsc && npm run build:wasm",
     "install-and-build": "npm install && npm run build",
     "start": "npm run build && npm run wadm:start",
     "reload": "npm run build && npm run wadm:stop && npm run wadm:start",
     "stop": "npm run wadm:stop",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "dependencies": {
+    "trailbase-wasm": "workspace:*"
+  },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.18.4",
     "@bytecodealliance/jco": "^1.13.3",
     "@types/node": "^24.3.0",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vite": "^7.1.2",
+    "vitest": "^3.2.4"
   }
 }
