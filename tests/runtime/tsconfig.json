@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "declaration": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": false,
+    "outDir": "./dist/",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@wit/types": [ "./generated/types/wit.d.ts" ],
+    }
+  },
+  "include": ["src/**/*", "dist/generated/**/*"],
+  "exclude": ["node_modules/", "tests/"],
+}

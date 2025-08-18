@@ -8,7 +8,7 @@
   "scripts": {
     "generate:types": "jco types wit/ -o generated/types",
     "build:tsc": "tsc",
-    "build:js": "jco componentize -w wit -o dist/http-hello-world.wasm dist/http-hello-world.js",
+    "build:js": "jco componentize -w wit --aot -o dist/http-hello-world.wasm dist/http-hello-world.js",
     "build": "npm run generate:types && npm run build:tsc && npm run build:js",
     "install-and-build": "npm install && npm run build",
     "start": "npm run build && npm run wadm:start",
