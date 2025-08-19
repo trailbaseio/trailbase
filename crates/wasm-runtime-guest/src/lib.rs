@@ -34,7 +34,21 @@ use wstd::io::{AsyncWrite, empty};
 
 pub use crate::wit::exports::trailbase::runtime::init_endpoint::{Guest, InitResult, MethodType};
 pub use crate::wit::trailbase::runtime::host_endpoint::thread_id;
-pub use wstd::http::Method;
+pub use static_assertions::assert_impl_all;
+pub use wstd::{self, http::Method};
+
+#[macro_export]
+macro_rules! export {
+    ($impl:ident) => {
+        ::trailbase_wasm_guest::assert_impl_all!($impl: ::trailbase_wasm_guest::Init);
+        // Register InitEndpoint.
+        ::trailbase_wasm_guest::wit::export!($impl);
+        // Register Incoming HTTP handler.
+        type _HttpHandlerIdent = HttpIncomingHandler<$impl>;
+        ::trailbase_wasm_guest::wstd::wasi::http::proxy::export!(
+            _HttpHandlerIdent with_types_in ::trailbase_wasm_guest::wstd::wasi);
+    };
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
