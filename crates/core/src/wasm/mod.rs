@@ -7,6 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use trailbase_wasm::Runtime;
 use trailbase_wasm::exports::trailbase::runtime::init_endpoint::MethodType;
+use trailbase_wasm_common::{HttpContext, HttpContextUser};
 
 use crate::AppState;
 use crate::User;
@@ -130,18 +131,25 @@ pub(crate) async fn install_routes_and_jobs(
                 BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!())),
               );
 
+              let context = HttpContext {
+                registered_path: path.clone(),
+                path_params: params
+                  .iter()
+                  .map(|(name, value)| (name.to_string(), value.to_string()))
+                  .collect(),
+                user: user.map(|u| HttpContextUser {
+                  id: u.id,
+                  email: u.email,
+                  csrf_token: u.csrf_token,
+                }),
+              };
+
               request.headers_mut().insert(
-                "__user",
-                if let Some(ref user) = user {
-                  let u = serde_json::to_vec(user).unwrap_or_default();
-                  hyper::http::HeaderValue::from_bytes(&u).expect("")
-                } else {
-                  hyper::http::HeaderValue::from_static("")
-                },
-              );
-              request.headers_mut().insert(
-                "__path",
-                hyper::http::HeaderValue::from_str(&path).expect(""),
+                "__context",
+                hyper::http::HeaderValue::from_bytes(
+                  &serde_json::to_vec(&context).unwrap_or_default(),
+                )
+                .expect(""),
               );
 
               let response = instance.call_incoming_http_handler(request).await?;
