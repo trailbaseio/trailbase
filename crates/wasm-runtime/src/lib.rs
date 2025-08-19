@@ -102,9 +102,12 @@ impl WasiHttpView for State {
           ),
         )
       }
-      _ => Ok(wasmtime_wasi_http::types::default_send_request(
-        request, config,
-      )),
+      _ => {
+        let handle = wasmtime_wasi::runtime::spawn(async move {
+          Ok(wasmtime_wasi_http::types::default_send_request_handler(request, config).await)
+        });
+        Ok(wasmtime_wasi_http::types::HostFutureIncomingResponse::pending(handle))
+      }
     };
   }
 }
