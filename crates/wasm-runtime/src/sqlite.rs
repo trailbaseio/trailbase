@@ -31,7 +31,7 @@ self_cell!(
 );
 
 std::thread_local! {
-    static CURRENT_TX: Mutex<Option<OwnedTransaction>> = Mutex::new(None);
+    static CURRENT_TX: Mutex<Option<OwnedTransaction>> = const { Mutex::new(None) } ;
 }
 
 fn sqlite_err<E: std::error::Error>(err: E) -> String {
@@ -131,7 +131,7 @@ async fn handle_sqlite_request_impl(
       let json_rows = rows
         .iter()
         .map(|row| -> Result<Vec<serde_json::Value>, String> {
-          return Ok(row_to_rich_json_array(row).map_err(sqlite_err)?);
+          return row_to_rich_json_array(row).map_err(sqlite_err);
         })
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -177,7 +177,7 @@ async fn handle_sqlite_request_impl(
       let json_rows = rows
         .iter()
         .map(|row| -> Result<Vec<serde_json::Value>, String> {
-          return Ok(row_to_rich_json_array(row).map_err(sqlite_err)?);
+          return row_to_rich_json_array(row).map_err(sqlite_err);
         })
         .collect::<Result<Vec<_>, _>>()?;
 

@@ -211,7 +211,7 @@ impl Runtime {
       .await
       .map_err(|_| Error::ChannelClosed)?;
 
-    return Ok(receiver.await.map_err(|_| Error::ChannelClosed)?);
+    return receiver.await.map_err(|_| Error::ChannelClosed);
   }
 }
 
