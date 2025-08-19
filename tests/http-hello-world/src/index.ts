@@ -1,10 +1,4 @@
-// import type { InitResult } from "trailbase-wasm";
-import {
-  IncomingRequest,
-  defineConfig,
-  // threadId,
-  // writeResponse,
-} from "trailbase-wasm";
+import { Request, defineConfig } from "trailbase-wasm";
 
 function fibonacci(num: number): number {
   switch (num) {
@@ -17,49 +11,22 @@ function fibonacci(num: number): number {
   }
 }
 
-// export const incomingHandler = {
-//   handle: async function(req: IncomingRequest, resp: ResponseOutparam) {
-//     const path = req.pathWithQuery();
-//     console.log(`HTTP request [${threadId()}]: ${path}`);
-//
-//     switch (path) {
-//       case '/fibonacci':
-//         writeResponse(resp, 200, fibonacci(40).toString());
-//         break;
-//       default:
-//         writeResponse(resp, 200, 'Hello from Javascript!\n');
-//         break;
-//     }
-//   }
-// };
-//
-// export const initEndpoint = {
-//   init: function(): InitResult {
-//     return {
-//       httpHandlers: [
-//         ['get', '/fibonacci'],
-//         ['get', '/wasm'],
-//       ],
-//       jobHandlers: [],
-//     };
-//   },
-// };
-
-
 const config = defineConfig({
   handlers: [
     {
       path: "/fibonacci",
       method: "get",
-      handler: (_req: IncomingRequest): string => {
+      handler: (_req: Request): string => {
         return fibonacci(40).toString();
       },
     },
     {
-      path: "/wasm",
+      path: "/wasm/{placeholder}",
       method: "get",
-      handler: (_req: IncomingRequest): string => {
-        return "Hello from Javascript!\n";
+      handler: (req: Request): string => {
+        const path = req.path;
+
+        return `Hello from Javascript ${path}!\n`;
       },
     },
   ]
