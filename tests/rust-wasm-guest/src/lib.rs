@@ -1,55 +1,39 @@
-use trailbase_wasm_guest::MethodType;
-use wstd::http::body::{BodyForthcoming, IncomingBody};
-use wstd::http::server::{Finished, Responder};
-use wstd::http::{Request, Response, StatusCode};
-use wstd::io::{AsyncWrite, empty};
+#![forbid(unsafe_code, clippy::unwrap_used)]
+#![allow(clippy::needless_return)]
+#![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
+use trailbase_wasm_guest::{HttpIncomingHandler, Method, to_handler};
 
 // Implement the function exported in this world (see above).
 struct InitEndpoint;
 
-impl trailbase_wasm_guest::Guest for InitEndpoint {
-  fn init() -> trailbase_wasm_guest::InitResult {
+impl trailbase_wasm_guest::Init for InitEndpoint {
+  fn http_handlers() -> Vec<(
+    wstd::http::Method,
+    &'static str,
+    trailbase_wasm_guest::Handler,
+  )> {
     let thread_id = trailbase_wasm_guest::thread_id();
-    println!("init() called (thread: {thread_id})");
-    return trailbase_wasm_guest::InitResult {
-      http_handlers: vec![
-        (MethodType::Get, "/wasm".to_string()),
-        (MethodType::Get, "/fibonacci".to_string()),
-      ],
-      job_handlers: vec![],
-    };
+    println!("http_handlers() called (thread: {thread_id})");
+
+    return vec![
+      (
+        Method::GET,
+        "/wasm",
+        to_handler(async |_req| Ok(b"Welcome from WASM\n".to_vec())),
+      ),
+      (
+        Method::GET,
+        "/fibonacci",
+        to_handler(async |_req| Ok(format!("{}\n", fibonacci(40)).as_bytes().to_vec())),
+      ),
+    ];
   }
 }
 
-trailbase_wasm_guest::wit::export!(InitEndpoint);
+::trailbase_wasm_guest::wit::export!(InitEndpoint);
 
-// TODO: Ship our own macro when making rust available as a supported guest language.
-#[wstd::http_server]
-async fn main(request: Request<IncomingBody>, responder: Responder) -> Finished {
-  println!("Hello from WASM guest: {}", request.uri().path());
-  return match request.uri().path() {
-    // TODO: Build an abstraction to sync init handlers with http handlers here both for http and
-    // jobs..
-    "/wasm" => write_all(responder, format!("Welcome from WASM").as_bytes()).await,
-    "/fibonacci" => write_all(responder, format!("{}", fibonacci(40)).as_bytes()).await,
-    "/query" => {
-      let query = std::future::ready("SELECT COUNT(*) FROM TEST").await;
-      let rows = trailbase_wasm_guest::query(&query, vec![]).await.unwrap();
-      if rows[0][0] != serde_json::json!(1) {
-        panic!("Expected one");
-      }
-
-      write_all(responder, format!("response: {rows:?}").as_bytes()).await
-    }
-    _ => {
-      let response = Response::builder()
-        .status(StatusCode::NOT_FOUND)
-        .body(empty())
-        .unwrap();
-      responder.respond(response).await
-    }
-  };
-}
+type Foo = HttpIncomingHandler<InitEndpoint>;
+::wstd::wasi::http::proxy::export!(Foo with_types_in ::wstd::wasi);
 
 #[inline]
 fn fibonacci(n: usize) -> usize {
@@ -58,10 +42,4 @@ fn fibonacci(n: usize) -> usize {
     1 => 1,
     n => fibonacci(n - 1) + fibonacci(n - 2),
   };
-}
-
-async fn write_all(responder: Responder, buf: &[u8]) -> Finished {
-  let mut body = responder.start_response(Response::new(BodyForthcoming));
-  let result = body.write_all(buf).await;
-  Finished::finish(body, result, None)
 }
