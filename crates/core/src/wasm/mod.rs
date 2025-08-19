@@ -103,49 +103,72 @@ pub(crate) async fn install_routes_and_jobs(
   let mut router = Router::<AppState>::new();
   for (method, path) in &init_result.http_handlers {
     let runtime = runtime.clone();
-    // FIXME: Wire up user somehow
-    let handler = move |_params: RawPathParams, user: Option<User>, req: Request| async move {
-      return runtime
-        .call(
-          async move |instance| -> Result<axum::response::Response, trailbase_wasm::Error> {
-            let (parts, body) = req.into_parts();
-            let bytes = body
-              .collect()
-              .await
-              .map_err(|_err| trailbase_wasm::Error::ChannelClosed)?
-              .to_bytes();
-
-            let response = instance
-              .call_incoming_http_handler(hyper::Request::from_parts(
-                parts,
-                BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!())),
-              ))
-              .await?;
-
-            let (parts, body) = response.into_parts();
-            let bytes = body
-              .collect()
-              .await
-              .map_err(|_err| trailbase_wasm::Error::ChannelClosed)?
-              .to_bytes();
-
-            return Ok(axum::response::Response::from_parts(parts, bytes.into()));
-          },
-        )
-        .await
-        .flatten()
-        .unwrap_or_else(|err| {
-          return axum::response::Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(err.to_string().into())
-            .expect("success");
-        });
-    };
 
     log::debug!("Installing WASM route: {method:?}: {path}");
 
+    let handler = {
+      let path = path.clone();
+
+      move |params: RawPathParams, user: Option<User>, req: Request| async move {
+        log::debug!(
+          "Host received WASM HTTP request: {params:?}, {user:?}, {}",
+          req.uri()
+        );
+
+        return runtime
+          .call(
+            async move |instance| -> Result<axum::response::Response, trailbase_wasm::Error> {
+              let (parts, body) = req.into_parts();
+              let bytes = body
+                .collect()
+                .await
+                .map_err(|_err| trailbase_wasm::Error::ChannelClosed)?
+                .to_bytes();
+
+              let mut request = hyper::Request::from_parts(
+                parts,
+                BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!())),
+              );
+
+              request.headers_mut().insert(
+                "__user",
+                if let Some(ref user) = user {
+                  let u = serde_json::to_vec(user).unwrap_or_default();
+                  hyper::http::HeaderValue::from_bytes(&u).expect("")
+                } else {
+                  hyper::http::HeaderValue::from_static("")
+                },
+              );
+              request.headers_mut().insert(
+                "__path",
+                hyper::http::HeaderValue::from_str(&path).expect(""),
+              );
+
+              let response = instance.call_incoming_http_handler(request).await?;
+
+              let (parts, body) = response.into_parts();
+              let bytes = body
+                .collect()
+                .await
+                .map_err(|_err| trailbase_wasm::Error::ChannelClosed)?
+                .to_bytes();
+
+              return Ok(axum::response::Response::from_parts(parts, bytes.into()));
+            },
+          )
+          .await
+          .flatten()
+          .unwrap_or_else(|err| {
+            return axum::response::Response::builder()
+              .status(StatusCode::INTERNAL_SERVER_ERROR)
+              .body(err.to_string().into())
+              .expect("success");
+          });
+      }
+    };
+
     router = router.route(
-      path,
+      &path,
       match method {
         MethodType::Delete => axum::routing::delete(handler),
         MethodType::Get => axum::routing::get(handler),
