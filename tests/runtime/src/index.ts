@@ -1,4 +1,5 @@
 export * from "./trailbase";
+export { StatusCode } from "./status";
 
 export {
   IncomingRequest,
