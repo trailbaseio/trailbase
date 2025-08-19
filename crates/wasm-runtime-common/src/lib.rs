@@ -19,3 +19,20 @@ pub enum SqliteResponse {
   TxCommit,
   TxRollback,
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct HttpContextUser {
+  /// Url-safe Base64 encoded id of the current user.
+  pub id: String,
+  /// E-mail of the current user.
+  pub email: String,
+  /// The "expected" CSRF token as included in the auth token claims [User] was constructed from.
+  pub csrf_token: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct HttpContext {
+  pub registered_path: String,
+  pub path_params: Vec<(String, String)>,
+  pub user: Option<HttpContextUser>,
+}
