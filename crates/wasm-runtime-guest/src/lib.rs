@@ -164,9 +164,17 @@ impl<T: Init> HttpIncomingHandler<T> {
         write_all(responder, format!("response: {rows:?}").as_bytes()).await
       }
       path => {
+        let _user = request.headers().get("__user").unwrap();
+        let registered_path = request.headers().get("__path").unwrap();
+
+        println!("WASM guest received HTTP request: {registered_path:?} {path} {_user:?}");
+
         let handlers = T::http_handlers();
 
-        if let Some((_, _, h)) = handlers.iter().find(|(m, p, _)| method == m && *p == path) {
+        if let Some((_, _, h)) = handlers
+          .iter()
+          .find(|(m, p, _)| method == m && *p == registered_path)
+        {
           match h(request).await {
             Ok(response) => {
               return write_all(responder, &response).await;

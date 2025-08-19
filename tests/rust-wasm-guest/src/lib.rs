@@ -18,8 +18,11 @@ impl trailbase_wasm_guest::Init for InitEndpoint {
     return vec![
       (
         Method::GET,
-        "/wasm",
-        to_handler(async |_req| Ok(b"Welcome from WASM\n".to_vec())),
+        "/wasm/{placeholder}",
+        to_handler(async |req| {
+          let url = req.uri();
+          return Ok(format!("Welcome from WASM: {url}\n").into_bytes());
+        }),
       ),
       (
         Method::GET,

@@ -245,7 +245,7 @@ pub fn bytes_to_body<E>(bytes: Bytes) -> BoxBody<Bytes, E> {
   BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!()))
 }
 
-#[inline]
-fn empty<E>() -> BoxBody<Bytes, E> {
-  BoxBody::new(http_body_util::Empty::new().map_err(|_| unreachable!()))
-}
+// #[inline]
+// fn empty<E>() -> BoxBody<Bytes, E> {
+//   BoxBody::new(http_body_util::Empty::new().map_err(|_| unreachable!()))
+// }
