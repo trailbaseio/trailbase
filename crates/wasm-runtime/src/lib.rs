@@ -152,6 +152,7 @@ impl Runtime {
 
     // Load the component.
     let component = {
+      log::debug!("Loading component {wasm_source_file:?}...");
       let start = SystemTime::now();
       let component = Component::from_file(&engine, &wasm_source_file)?;
 
@@ -286,7 +287,11 @@ impl RuntimeInstance {
 
   fn new_store(&self) -> Store<State> {
     let mut wasi_ctx = WasiCtxBuilder::new();
-    wasi_ctx.inherit_stdio();
+    // wasi_ctx.inherit_stdio();
+    wasi_ctx.stdin(wasmtime_wasi::p2::pipe::ClosedInputStream);
+    wasi_ctx.stdout(wasmtime_wasi::p2::Stdout);
+    wasi_ctx.stderr(wasmtime_wasi::p2::Stderr);
+
     wasi_ctx.args(&[""]);
     wasi_ctx.allow_tcp(false);
     wasi_ctx.allow_udp(false);
