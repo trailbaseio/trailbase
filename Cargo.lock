@@ -7895,6 +7895,7 @@ dependencies = [
  "trailbase-schema",
  "trailbase-sqlite",
  "trailbase-wasm",
+ "trailbase-wasm-common",
  "ts-rs",
  "url",
  "utoipa",

@@ -26,7 +26,7 @@ pub mod wit {
 }
 
 use futures_util::future::LocalBoxFuture;
-use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
+use trailbase_wasm_common::{HttpContext, SqliteRequest, SqliteResponse};
 use wstd::http::body::{BodyForthcoming, IncomingBody, IntoBody};
 use wstd::http::server::{Finished, Responder};
 use wstd::http::{Client, Request, Response, StatusCode};
@@ -164,16 +164,16 @@ impl<T: Init> HttpIncomingHandler<T> {
         write_all(responder, format!("response: {rows:?}").as_bytes()).await
       }
       path => {
-        let _user = request.headers().get("__user").unwrap();
-        let registered_path = request.headers().get("__path").unwrap();
+        let context: HttpContext =
+          serde_json::from_slice(request.headers().get("__context").unwrap().as_bytes()).unwrap();
 
-        println!("WASM guest received HTTP request: {registered_path:?} {path} {_user:?}");
+        println!("WASM guest received HTTP request {path}: {context:?}");
 
         let handlers = T::http_handlers();
 
         if let Some((_, _, h)) = handlers
-          .iter()
-          .find(|(m, p, _)| method == m && *p == registered_path)
+          .into_iter()
+          .find(|(m, p, _)| method == m && *p == context.registered_path)
         {
           match h(request).await {
             Ok(response) => {
