@@ -30,10 +30,7 @@ impl trailbase_wasm_guest::Init for InitEndpoint {
   }
 }
 
-::trailbase_wasm_guest::wit::export!(InitEndpoint);
-
-type Foo = HttpIncomingHandler<InitEndpoint>;
-::wstd::wasi::http::proxy::export!(Foo with_types_in ::wstd::wasi);
+::trailbase_wasm_guest::export!(InitEndpoint);
 
 #[inline]
 fn fibonacci(n: usize) -> usize {

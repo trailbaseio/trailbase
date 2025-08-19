@@ -8137,6 +8137,7 @@ dependencies = [
  "futures-util",
  "serde",
  "serde_json",
+ "static_assertions",
  "thiserror 2.0.16",
  "trailbase-wasm-common",
  "wit-bindgen 0.44.0",
