@@ -2,9 +2,7 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
-use trailbase_wasm_guest::{
-  HttpHandler, JobHandler, Method, SqliteRequest, export, http_handler, job_handler,
-};
+use trailbase_wasm_guest::{HttpHandler, JobHandler, Method, export, http_handler, job_handler};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
@@ -32,15 +30,10 @@ impl trailbase_wasm_guest::Guest for Endpoints {
         Method::GET,
         "/sqlitetx",
         http_handler(async |_req| {
-          trailbase_wasm_guest::tx_begin().unwrap();
-
-          let req = SqliteRequest {
-            query: "CREATE TABLE test (id INTEGER PRIMARY KEY)".to_string(),
-            params: vec![],
-          };
-          let _ = trailbase_wasm_guest::tx_execute(&serde_json::to_string(&req).unwrap()).unwrap();
-
-          trailbase_wasm_guest::tx_commit().unwrap();
+          let mut tx = trailbase_wasm_guest::db::Transaction::begin().unwrap();
+          tx.execute("CREATE TABLE test (id INTEGER PRIMARY KEY)", &[])
+            .unwrap();
+          tx.commit().unwrap();
 
           return Ok(b"".to_vec());
         }),

@@ -8137,6 +8137,7 @@ dependencies = [
  "anyhow",
  "bytes",
  "futures-util",
+ "log",
  "serde",
  "serde_json",
  "static_assertions",
