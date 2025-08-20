@@ -11,6 +11,7 @@ exclude = [
 ]
 
 [dependencies]
+anyhow = "1.0.99"
 bytes = "1.10.1"
 futures-util = "0.3.31"
 serde = { version = "^1.0.203", features = ["derive"] }

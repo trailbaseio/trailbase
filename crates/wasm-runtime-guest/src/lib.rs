@@ -26,13 +26,15 @@ pub mod wit {
 }
 
 use futures_util::future::LocalBoxFuture;
-use trailbase_wasm_common::{HttpContext, SqliteRequest, SqliteResponse};
+use trailbase_wasm_common::{HttpContext, HttpContextKind, SqliteRequest, SqliteResponse};
 use wstd::http::body::{BodyForthcoming, IncomingBody, IntoBody};
 use wstd::http::server::{Finished, Responder};
 use wstd::http::{Client, Request, Response, StatusCode};
 use wstd::io::{AsyncWrite, empty};
 
-pub use crate::wit::exports::trailbase::runtime::init_endpoint::{Guest, InitResult, MethodType};
+use crate::wit::exports::trailbase::runtime::init_endpoint::MethodType;
+
+pub use crate::wit::exports::trailbase::runtime::init_endpoint::InitResult;
 pub use crate::wit::trailbase::runtime::host_endpoint::thread_id;
 pub use static_assertions::assert_impl_all;
 pub use wstd::{self, http::Method};
@@ -40,11 +42,11 @@ pub use wstd::{self, http::Method};
 #[macro_export]
 macro_rules! export {
     ($impl:ident) => {
-        ::trailbase_wasm_guest::assert_impl_all!($impl: ::trailbase_wasm_guest::Init);
+        ::trailbase_wasm_guest::assert_impl_all!($impl: ::trailbase_wasm_guest::Guest);
         // Register InitEndpoint.
         ::trailbase_wasm_guest::wit::export!($impl);
         // Register Incoming HTTP handler.
-        type _HttpHandlerIdent = HttpIncomingHandler<$impl>;
+        type _HttpHandlerIdent = ::trailbase_wasm_guest::HttpIncomingHandler<$impl>;
         ::trailbase_wasm_guest::wstd::wasi::http::proxy::export!(
             _HttpHandlerIdent with_types_in ::trailbase_wasm_guest::wstd::wasi);
     };
@@ -85,22 +87,26 @@ pub async fn query(query: &str, params: Vec<serde_json::Value>) -> Result<Rows, 
   };
 }
 
-pub trait Init {
-  fn http_handlers() -> Vec<(Method, &'static str, Handler)>;
-  fn job_handlers() -> Vec<(String, String)> {
+pub trait Guest {
+  fn http_handlers() -> Vec<(Method, &'static str, HttpHandler)> {
+    return vec![];
+  }
+
+  fn job_handlers() -> Vec<(&'static str, &'static str, JobHandler)> {
     return vec![];
   }
 }
-impl<T: Init> Guest for T {
+impl<T: Guest> crate::wit::exports::trailbase::runtime::init_endpoint::Guest for T {
   fn init() -> InitResult {
-    let http_handlers: Vec<(MethodType, String)> = T::http_handlers()
-      .into_iter()
-      .map(|(m, p, _)| (m.into(), p.to_string()))
-      .collect();
-
     return InitResult {
-      http_handlers,
-      job_handlers: T::job_handlers(),
+      http_handlers: T::http_handlers()
+        .into_iter()
+        .map(|(m, p, _)| (m.into(), p.to_string()))
+        .collect(),
+      job_handlers: T::job_handlers()
+        .into_iter()
+        .map(|(name, spec, _)| (name.into(), spec.into()))
+        .collect(),
     };
   }
 }
@@ -116,8 +122,7 @@ impl From<Method> for MethodType {
       Method::DELETE => MethodType::Delete,
       Method::PUT => MethodType::Put,
       Method::TRACE => MethodType::Trace,
-      // FIXME:
-      Method::CONNECT => MethodType::Trace,
+      Method::CONNECT => MethodType::Connect,
       _ => unreachable!(""),
     };
   }
@@ -128,15 +133,15 @@ pub struct HttpError {
   pub message: Option<String>,
 }
 
-pub type Handler = Box<
+pub type HttpHandler = Box<
   dyn (Fn(Request<IncomingBody>) -> LocalBoxFuture<'static, Result<Vec<u8>, HttpError>>)
     + Send
     + Sync,
 >;
 
-pub fn to_handler(
+pub fn http_handler(
   f: impl (AsyncFn(Request<IncomingBody>) -> Result<Vec<u8>, HttpError>) + Send + Sync + 'static,
-) -> Handler {
+) -> HttpHandler {
   let f = std::sync::Arc::new(f);
   return Box::new(move |req: Request<IncomingBody>| {
     let f = f.clone();
@@ -144,11 +149,30 @@ pub fn to_handler(
   });
 }
 
-pub struct HttpIncomingHandler<T: Init> {
+pub type JobHandler =
+  Box<dyn (Fn() -> LocalBoxFuture<'static, Result<(), HttpError>>) + Send + Sync>;
+
+// NOTE: We use anyhow here specifically to allow guests to attach context.
+pub fn job_handler(
+  f: impl (AsyncFn() -> Result<(), anyhow::Error>) + Send + Sync + 'static,
+) -> JobHandler {
+  let f = std::sync::Arc::new(f);
+  return Box::new(move || {
+    let f = f.clone();
+    Box::pin(async move {
+      f().await.map_err(|err| HttpError {
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+        message: Some(format!("{err}")),
+      })
+    })
+  });
+}
+
+pub struct HttpIncomingHandler<T: Guest> {
   phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: Init> HttpIncomingHandler<T> {
+impl<T: Guest> HttpIncomingHandler<T> {
   async fn handle(request: Request<IncomingBody>, responder: Responder) -> Finished {
     let path = request.uri().path();
     let method = request.method();
@@ -167,26 +191,41 @@ impl<T: Init> HttpIncomingHandler<T> {
         let context: HttpContext =
           serde_json::from_slice(request.headers().get("__context").unwrap().as_bytes()).unwrap();
 
-        // TODO: Add support for job dispatch.
-
         println!("WASM guest received HTTP request {path}: {context:?}");
 
-        let handlers = T::http_handlers();
-
-        if let Some((_, _, h)) = handlers
-          .into_iter()
-          .find(|(m, p, _)| method == m && *p == context.registered_path)
-        {
-          match h(request).await {
-            Ok(response) => {
-              return write_all(responder, &response).await;
+        match context.kind {
+          HttpContextKind::Http => {
+            if let Some((_, _, h)) = T::http_handlers()
+              .into_iter()
+              .find(|(m, p, _)| method == m && *p == context.registered_path)
+            {
+              match h(request).await {
+                Ok(response) => {
+                  return write_all(responder, &response).await;
+                }
+                Err(err) => {
+                  let response = Response::builder()
+                    .status(err.status)
+                    .body(empty())
+                    .unwrap();
+                  return responder.respond(response).await;
+                }
+              }
             }
-            Err(err) => {
-              let response = Response::builder()
-                .status(err.status)
-                .body(empty())
-                .unwrap();
-              return responder.respond(response).await;
+          }
+          HttpContextKind::Job => {
+            if let Some((_, _, h)) = T::job_handlers()
+              .into_iter()
+              .find(|(m, p, _)| method == m && *p == context.registered_path)
+            {
+              if let Err(err) = h().await {
+                let response = Response::builder()
+                  .status(err.status)
+                  .body(empty())
+                  .unwrap();
+                return responder.respond(response).await;
+              }
+              return write_all(responder, b"").await;
             }
           }
         }
@@ -201,7 +240,7 @@ impl<T: Init> HttpIncomingHandler<T> {
   }
 }
 
-impl<T: Init> ::wstd::wasi::exports::http::incoming_handler::Guest for HttpIncomingHandler<T> {
+impl<T: Guest> ::wstd::wasi::exports::http::incoming_handler::Guest for HttpIncomingHandler<T> {
   fn handle(
     request: ::wstd::wasi::http::types::IncomingRequest,
     response_out: ::wstd::wasi::http::types::ResponseOutparam,
