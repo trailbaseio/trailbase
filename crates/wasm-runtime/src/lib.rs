@@ -5,10 +5,17 @@
 mod sqlite;
 
 use bytes::Bytes;
+use core::future::Future;
+use futures_util::TryFutureExt;
 use futures_util::future::LocalBoxFuture;
 use http_body_util::combinators::BoxBody;
-use std::rc::Rc;
+use parking_lot::Mutex;
+use self_cell::MutBorrow;
+use std::sync::Arc;
 use std::time::SystemTime;
+use trailbase::runtime::host_endpoint::TxError;
+use trailbase_sqlite::{Params, Rows};
+use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Result, Store};
 use wasmtime_wasi::p2::add_to_linker_async;
@@ -56,12 +63,11 @@ pub enum Message {
 }
 
 struct State {
-  pub resource_table: ResourceTable,
-  pub wasi_ctx: WasiCtx,
-  pub http: WasiHttpCtx,
+  resource_table: ResourceTable,
+  wasi_ctx: WasiCtx,
+  http: WasiHttpCtx,
 
-  pub thread_id: u64,
-  pub conn: trailbase_sqlite::Connection,
+  shared: Arc<SharedState>,
 }
 
 impl IoView for State {
@@ -95,7 +101,7 @@ impl WasiHttpView for State {
 
     return match request.uri().host() {
       Some("__sqlite") => {
-        let conn = self.conn.clone();
+        let conn = self.shared.conn.clone();
         Ok(
           wasmtime_wasi_http::types::HostFutureIncomingResponse::pending(
             wasmtime_wasi::runtime::spawn(async move {
@@ -115,34 +121,162 @@ impl WasiHttpView for State {
 }
 
 impl trailbase::runtime::host_endpoint::Host for State {
-  fn thread_id(
-    &mut self,
-  ) -> impl ::core::future::Future<Output = wasmtime::Result<u64>> + ::core::marker::Send {
-    return std::future::ready(Ok(self.thread_id));
+  fn thread_id(&mut self) -> impl Future<Output = wasmtime::Result<u64>> + ::core::marker::Send {
+    return std::future::ready(Ok(self.shared.thread_id));
   }
 
   fn tx_begin(
     &mut self,
-  ) -> impl ::core::future::Future<
-    Output = wasmtime::Result<Option<trailbase::runtime::host_endpoint::TxError>>,
-  > + ::core::marker::Send {
-    return std::future::ready(Ok(None));
+  ) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + ::core::marker::Send {
+    async fn begin(conn: trailbase_sqlite::Connection) -> Result<(), TxError> {
+      let lock = sqlite::new_db_lock(conn).await;
+      let new_tx =
+        sqlite::OwnedTransaction::try_new(MutBorrow::new(sqlite::OwnedLockWrapper(lock)), |lock| {
+          lock
+            .borrow_mut()
+            .0
+            .with_dependent_mut(|_owner, depdendent| depdendent.transaction())
+        })
+        .map_err(|err| TxError::Other(err.to_string()))?;
+
+      sqlite::CURRENT_TX.with(|tx: &Mutex<_>| {
+        *tx.lock() = Some(new_tx);
+      });
+
+      return Ok(());
+    }
+
+    return self
+      .shared
+      .runtime
+      .spawn(begin(self.shared.conn.clone()))
+      .map_err(|err| wasmtime::Error::msg(err.to_string()));
   }
 
   fn tx_commit(
     &mut self,
-  ) -> impl ::core::future::Future<
-    Output = wasmtime::Result<Option<trailbase::runtime::host_endpoint::TxError>>,
-  > + ::core::marker::Send {
-    return std::future::ready(Ok(None));
+  ) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + ::core::marker::Send {
+    fn commit() -> Result<(), TxError> {
+      let tx = sqlite::CURRENT_TX.with(|tx: &Mutex<_>| {
+        return tx.lock().take();
+      });
+
+      let Some(tx) = tx else {
+        return Err(TxError::Other("no pending tx".to_string()));
+      };
+
+      println!("COMMIT");
+
+      // NOTE: this is the same as `tx.commit()` just w/o consuming.
+      tx.borrow_dependent()
+        .execute_batch("COMMIT")
+        .map_err(|err| TxError::Other(err.to_string()))?;
+
+      return Ok(());
+    }
+
+    return std::future::ready(Ok(commit()));
   }
 
   fn tx_rollback(
     &mut self,
-  ) -> impl ::core::future::Future<
-    Output = wasmtime::Result<Option<trailbase::runtime::host_endpoint::TxError>>,
-  > + ::core::marker::Send {
-    return std::future::ready(Ok(None));
+  ) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + ::core::marker::Send {
+    fn rollback() -> Result<(), TxError> {
+      let tx = sqlite::CURRENT_TX.with(|tx: &Mutex<_>| {
+        return tx.lock().take();
+      });
+
+      let Some(tx) = tx else {
+        return Err(TxError::Other("no pending tx".to_string()));
+      };
+
+      // NOTE: this is the same as `tx.rollback()` just w/o consuming.
+      tx.borrow_dependent()
+        .execute_batch("ROLLBACK")
+        .map_err(|err| TxError::Other(err.to_string()))?;
+
+      return Ok(());
+    }
+
+    return std::future::ready(Ok(rollback()));
+  }
+
+  fn tx_execute(
+    &mut self,
+    query: String,
+  ) -> impl Future<Output = wasmtime::Result<Result<u64, TxError>>> + ::core::marker::Send {
+    fn execute(query: String) -> Result<u64, TxError> {
+      let sqlite_request = serde_json::from_str::<SqliteRequest>(&query)
+        .map_err(|err| TxError::Other(err.to_string()))?;
+
+      let params = sqlite::json_values_to_sqlite_params(sqlite_request.params)
+        .map_err(|err| TxError::Other(err.to_string()))?;
+
+      return sqlite::CURRENT_TX.with(move |tx: &Mutex<_>| {
+        let Some(ref tx) = *tx.lock() else {
+          return Err(TxError::Other("No open transaction".to_string()));
+        };
+
+        let mut stmt = tx
+          .borrow_dependent()
+          .prepare(&sqlite_request.query)
+          .map_err(|err| TxError::Other(err.to_string()))?;
+
+        params
+          .bind(&mut stmt)
+          .map_err(|err| TxError::Other(err.to_string()))?;
+
+        return Ok(
+          stmt
+            .raw_execute()
+            .map_err(|err| TxError::Other(err.to_string()))? as u64,
+        );
+      });
+    }
+
+    return std::future::ready(Ok(execute(query)));
+  }
+
+  fn tx_query(
+    &mut self,
+    query: String,
+  ) -> impl Future<Output = wasmtime::Result<Result<String, TxError>>> + ::core::marker::Send {
+    fn query_fn(query: String) -> Result<String, TxError> {
+      let sqlite_request = serde_json::from_str::<SqliteRequest>(&query)
+        .map_err(|err| TxError::Other(err.to_string()))?;
+
+      let params = sqlite::json_values_to_sqlite_params(sqlite_request.params)
+        .map_err(|err| TxError::Other(err.to_string()))?;
+
+      return sqlite::CURRENT_TX.with(move |tx: &Mutex<_>| {
+        let Some(ref tx) = *tx.lock() else {
+          return Err(TxError::Other("No open transaction".to_string()));
+        };
+
+        let mut stmt = tx
+          .borrow_dependent()
+          .prepare(&sqlite_request.query)
+          .map_err(|err| TxError::Other(err.to_string()))?;
+
+        params
+          .bind(&mut stmt)
+          .map_err(|err| TxError::Other(err.to_string()))?;
+
+        let rows =
+          Rows::from_rows(stmt.raw_query()).map_err(|err| TxError::Other(err.to_string()))?;
+
+        let json_rows = rows
+          .iter()
+          .map(sqlite::row_to_rich_json_array)
+          .collect::<Result<Vec<_>, _>>()
+          .map_err(|err| TxError::Other(err.to_string()))?;
+
+        return serde_json::to_string(&SqliteResponse::Query { rows: json_rows })
+          .map_err(|err| TxError::Other(err.to_string()));
+      });
+    }
+
+    return std::future::ready(Ok(query_fn(query)));
   }
 }
 
@@ -194,25 +328,28 @@ impl Runtime {
         let (private_sender, private_receiver) = kanal::unbounded_async::<Message>();
 
         let shared_receiver = shared_receiver.clone();
-        let instance = RuntimeInstance::new(
-          engine.clone(),
-          component.clone(),
-          conn.clone(),
-          index as u64,
-        )?;
+        let engine = engine.clone();
+        let component = component.clone();
+        let conn = conn.clone();
 
-        let handle = std::thread::spawn(move || {
-          let tokio_runtime = Rc::new(
-            tokio::runtime::Builder::new_current_thread()
-              .enable_time()
-              .enable_io()
-              .thread_name(format!("wasm-runtime-{index}"))
-              .build()
-              .expect("startup"),
-          );
+        let handle = std::thread::Builder::new()
+          .name(format!("wasm-runtime-{index}"))
+          .spawn(move || {
+            let tokio_runtime = Arc::new(
+              tokio::runtime::Builder::new_current_thread()
+                .enable_time()
+                .enable_io()
+                .build()
+                .expect("startup"),
+            );
 
-          event_loop(tokio_runtime, instance, private_receiver, shared_receiver);
-        });
+            let instance =
+              RuntimeInstance::new(engine, component, tokio_runtime.clone(), conn, index as u64)
+                .expect("startup");
+
+            event_loop(tokio_runtime, instance, private_receiver, shared_receiver);
+          })
+          .expect("failed to spawn thread");
 
         return Ok((handle, private_sender));
       })
@@ -246,7 +383,7 @@ impl Runtime {
 }
 
 fn event_loop(
-  tokio_runtime: Rc<tokio::runtime::Runtime>,
+  tokio_runtime: Arc<tokio::runtime::Runtime>,
   instance: RuntimeInstance,
   private_recv: kanal::AsyncReceiver<Message>,
   shared_recv: kanal::AsyncReceiver<Message>,
@@ -275,19 +412,25 @@ fn event_loop(
   tokio_runtime.block_on(local);
 }
 
+struct SharedState {
+  thread_id: u64,
+  runtime: Arc<tokio::runtime::Runtime>,
+  conn: trailbase_sqlite::Connection,
+}
+
 pub struct RuntimeInstance {
   engine: Engine,
   component: Component,
   linker: Linker<State>,
 
-  thread_id: u64,
-  conn: trailbase_sqlite::Connection,
+  shared: Arc<SharedState>,
 }
 
 impl RuntimeInstance {
   pub fn new(
     engine: Engine,
     component: Component,
+    runtime: Arc<tokio::runtime::Runtime>,
     conn: trailbase_sqlite::Connection,
     thread_id: u64,
   ) -> Result<Self, Error> {
@@ -306,8 +449,11 @@ impl RuntimeInstance {
       engine,
       component,
       linker,
-      thread_id,
-      conn,
+      shared: Arc::new(SharedState {
+        runtime,
+        thread_id,
+        conn,
+      }),
     });
   }
 
@@ -333,8 +479,7 @@ impl RuntimeInstance {
         resource_table: ResourceTable::new(),
         wasi_ctx: wasi_ctx.build(),
         http: WasiHttpCtx::new(),
-        thread_id: self.thread_id,
-        conn: self.conn.clone(),
+        shared: self.shared.clone(),
       },
     );
   }
@@ -423,6 +568,7 @@ mod tests {
 
   use http::StatusCode;
   use http_body_util::{BodyExt, combinators::BoxBody};
+  use trailbase_wasm_common::{HttpContext, HttpContextKind};
 
   fn bytes_to_body<E>(bytes: Bytes) -> BoxBody<Bytes, E> {
     BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!()))
@@ -431,17 +577,17 @@ mod tests {
   #[tokio::test]
   async fn test_init() {
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
-    conn
-      .execute_batch(
-        "
-        CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT);
-        INSERT INTO test (value) VALUES ('test');
-        ",
-      )
-      .await
-      .unwrap();
+    // conn
+    //   .execute_batch(
+    //     "
+    //     CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT);
+    //     INSERT INTO test (value) VALUES ('test');
+    //     ",
+    //   )
+    //   .await
+    //   .unwrap();
 
-    let runtime = Runtime::new(2, "./testdata/rust_guest.wasm".into(), conn).unwrap();
+    let runtime = Runtime::new(2, "./testdata/rust_guest.wasm".into(), conn.clone()).unwrap();
 
     runtime
       .call(async |instance| {
@@ -452,8 +598,18 @@ mod tests {
 
     let result = runtime
       .call(async |instance| {
+        let context = HttpContext {
+          kind: HttpContextKind::Http,
+          // registered_path: "/wasm/{placeholder}".to_string(),
+          registered_path: "/sqlitetx".to_string(),
+          path_params: vec![],
+          user: None,
+        };
+
         let request = hyper::Request::builder()
-          .uri("https://www.rust-lang.org/")
+          //.uri("http://localhost:4000/wasm/test")
+          .uri("http://localhost:4000/sqlitetx")
+          .header("__context", to_header_value(&context).unwrap())
           .body(bytes_to_body(Bytes::from_static(b"")))
           .unwrap();
 
@@ -465,6 +621,20 @@ mod tests {
     let response = result.unwrap();
 
     // NOTE: Because we're not supplying a valid context.
-    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(response.status(), StatusCode::OK);
+
+    assert_eq!(
+      0,
+      conn
+        .query_row_f("SELECT COUNT(*) FROM test;", (), |row| row.get::<_, i64>(0))
+        .await
+        .unwrap()
+        .unwrap()
+    )
+  }
+
+  fn to_header_value(context: &HttpContext) -> Result<hyper::http::HeaderValue, crate::Error> {
+    return hyper::http::HeaderValue::from_bytes(&serde_json::to_vec(&context).unwrap_or_default())
+      .map_err(|_err| crate::Error::Encoding);
   }
 }
