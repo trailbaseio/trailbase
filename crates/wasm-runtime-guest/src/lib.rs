@@ -188,8 +188,15 @@ impl<T: Guest> HttpIncomingHandler<T> {
         write_all(responder, format!("response: {rows:?}").as_bytes()).await
       }
       path => {
-        let context: HttpContext =
-          serde_json::from_slice(request.headers().get("__context").unwrap().as_bytes()).unwrap();
+        let Some(context) = request
+          .headers()
+          .get("__context")
+          .and_then(|h| serde_json::from_slice::<HttpContext>(h.as_bytes()).ok())
+        else {
+          return responder
+            .respond(error_response(StatusCode::INTERNAL_SERVER_ERROR))
+            .await;
+        };
 
         println!("WASM guest received HTTP request {path}: {context:?}");
 
@@ -204,11 +211,7 @@ impl<T: Guest> HttpIncomingHandler<T> {
                   return write_all(responder, &response).await;
                 }
                 Err(err) => {
-                  let response = Response::builder()
-                    .status(err.status)
-                    .body(empty())
-                    .unwrap();
-                  return responder.respond(response).await;
+                  return responder.respond(error_response(err.status)).await;
                 }
               }
             }
@@ -219,22 +222,16 @@ impl<T: Guest> HttpIncomingHandler<T> {
               .find(|(m, p, _)| method == m && *p == context.registered_path)
             {
               if let Err(err) = h().await {
-                let response = Response::builder()
-                  .status(err.status)
-                  .body(empty())
-                  .unwrap();
-                return responder.respond(response).await;
+                return responder.respond(error_response(err.status)).await;
               }
               return write_all(responder, b"").await;
             }
           }
         }
 
-        let response = Response::builder()
-          .status(StatusCode::NOT_FOUND)
-          .body(empty())
-          .unwrap();
-        responder.respond(response).await
+        responder
+          .respond(error_response(StatusCode::NOT_FOUND))
+          .await
       }
     };
   }
@@ -259,4 +256,8 @@ async fn write_all(responder: Responder, buf: &[u8]) -> Finished {
   let mut body = responder.start_response(Response::new(BodyForthcoming));
   let result = body.write_all(buf).await;
   Finished::finish(body, result, None)
+}
+
+fn error_response(status: StatusCode) -> Response<wstd::io::Empty> {
+  return Response::builder().status(status).body(empty()).unwrap();
 }
