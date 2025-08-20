@@ -15,7 +15,6 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use trailbase::runtime::host_endpoint::{TxError, Value};
 use trailbase_sqlite::{Params, Rows};
-use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Result, Store};
 use wasmtime_wasi::p2::add_to_linker_async;
@@ -123,6 +122,58 @@ impl WasiHttpView for State {
 impl trailbase::runtime::host_endpoint::Host for State {
   fn thread_id(&mut self) -> impl Future<Output = wasmtime::Result<u64>> + ::core::marker::Send {
     return std::future::ready(Ok(self.shared.thread_id));
+  }
+
+  fn execute(
+    &mut self,
+    query: String,
+    params: Vec<Value>,
+  ) -> impl Future<Output = wasmtime::Result<Result<u64, TxError>>> + ::core::marker::Send {
+    let conn = self.shared.conn.clone();
+    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
+
+    return self
+      .shared
+      .runtime
+      .spawn((async move || {
+        return Ok(
+          conn
+            .execute(query, params)
+            .await
+            .map_err(|err| TxError::Other(err.to_string()))? as u64,
+        );
+      })())
+      .map_err(|err| wasmtime::Error::msg(err.to_string()));
+  }
+
+  fn query(
+    &mut self,
+    query: String,
+    params: Vec<Value>,
+  ) -> impl Future<Output = wasmtime::Result<Result<Vec<Vec<Value>>, TxError>>> + ::core::marker::Send
+  {
+    let conn = self.shared.conn.clone();
+    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
+
+    return self
+      .shared
+      .runtime
+      .spawn((async move || {
+        let rows = conn
+          .write_query_rows(query, params)
+          .await
+          .map_err(|err| TxError::Other(err.to_string()))?;
+
+        let values: Vec<_> = rows
+          .into_iter()
+          .map(|trailbase_sqlite::Row(row, _col)| {
+            return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
+          })
+          .collect();
+
+        return Ok(values);
+      })())
+      .map_err(|err| wasmtime::Error::msg(err.to_string()));
   }
 
   fn tx_begin(
@@ -592,16 +643,6 @@ mod tests {
   #[tokio::test]
   async fn test_init() {
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
-    // conn
-    //   .execute_batch(
-    //     "
-    //     CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT);
-    //     INSERT INTO test (value) VALUES ('test');
-    //     ",
-    //   )
-    //   .await
-    //   .unwrap();
-
     let runtime = Runtime::new(2, "./testdata/rust_guest.wasm".into(), conn.clone()).unwrap();
 
     runtime
@@ -639,7 +680,7 @@ mod tests {
     assert_eq!(response.status(), StatusCode::OK);
 
     assert_eq!(
-      0,
+      1,
       conn
         .query_row_f("SELECT COUNT(*) FROM test;", (), |row| row.get::<_, i64>(0))
         .await

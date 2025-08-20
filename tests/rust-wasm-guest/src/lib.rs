@@ -2,6 +2,7 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
+use trailbase_wasm_guest::db::Value;
 use trailbase_wasm_guest::{HttpHandler, JobHandler, Method, export, http_handler, job_handler};
 
 // Implement the function exported in this world (see above).
@@ -33,6 +34,10 @@ impl trailbase_wasm_guest::Guest for Endpoints {
           let mut tx = trailbase_wasm_guest::db::Transaction::begin().unwrap();
           tx.execute("CREATE TABLE test (id INTEGER PRIMARY KEY)", &[])
             .unwrap();
+          let rows_affected = tx
+            .execute("INSERT INTO test (id) VALUES (?1)", &[Value::Integer(2)])
+            .unwrap();
+          assert_eq!(1, rows_affected);
           tx.commit().unwrap();
 
           return Ok(b"".to_vec());
