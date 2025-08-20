@@ -1,13 +1,9 @@
-import { listDirectories } from "./runtime.js";
-
 import {
   ResponseOutparam,
   OutgoingBody,
   OutgoingResponse,
   Fields,
 } from 'wasi:http/types@0.2.3';
-
-// import { MethodType } from 'trailbase:runtime/init-endpoint'
 
 function writeResponse(responseOutparam, status, body) {
   const outgoingResponse = new OutgoingResponse(new Fields());
@@ -39,7 +35,7 @@ function fibonacci(num) {
   }
 }
 
-export const incomingHandler = {
+const incomingHandler = {
   handle: async function(incomingRequest, responseOutparam) {
     const path = incomingRequest.pathWithQuery();
     console.log(`HTTP request: ${path}`);
@@ -63,13 +59,19 @@ export const incomingHandler = {
 //   ),
 // );
 
-export const initEndpoint = {
+const initEndpoint = {
   init: async function() {
     return {
       httpHandlers: [
         ['get', '/fibonacci'],
+        ['get', '/wasm/{placeholder}'],
       ],
       jobHandlers: [],
     };
   }
 };
+
+export {
+  incomingHandler,
+  initEndpoint,
+}
