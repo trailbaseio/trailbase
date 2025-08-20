@@ -2,13 +2,19 @@
   "type": "module",
   "scripts": {
     "all": "npm run build",
-    "build:wasm": "jco componentize -w ../runtime/wit -o dist/index.wasm index.js",
-    "build:wasm:aot": "jco componentize -w ../runtime/wit --aot -o dist/index.wasm index.js",
+    "build:wasm": "jco componentize dist/index.js -w ../runtime/wit -o dist/index.wasm",
+    "build:wasm:aot": "jco componentize dist/index.js -w ../runtime/wit --aot -o dist/index.wasm",
     "build": "npm run build:wasm",
-    "install": "npm run build && rm -rf ../../client/testfixture/scripts/*.wasm && cp ./dist/index.wasm ../../client/testfixture/scripts/"
+    "format": "prettier -w src",
+    "deploy": "npm run build && rm -rf ../../client/testfixture/scripts/*.wasm && cp ./dist/index.wasm ../../client/testfixture/scripts/"
+  },
+  "dependencies": {
+    "trailbase-wasm": "workspace:*"
   },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.18.4",
-    "@bytecodealliance/jco": "^1.13.3"
+    "@bytecodealliance/jco": "^1.13.3",
+    "prettier": "^3.6.2",
+    "vite": "^7.1.2"
   }
 }
