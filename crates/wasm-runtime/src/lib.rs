@@ -47,6 +47,8 @@ pub enum Error {
   ChannelClosed,
   #[error("Http Error: {0}")]
   HttpErrorCode(ErrorCode),
+  #[error("Encoding")]
+  Encoding,
 }
 
 pub enum Message {
@@ -371,6 +373,7 @@ impl RuntimeInstance {
   }
 }
 
+#[allow(unused)]
 fn bytes_to_respone(
   bytes: Vec<u8>,
 ) -> Result<wasmtime_wasi_http::types::HostFutureIncomingResponse, ErrorCode> {
@@ -402,9 +405,6 @@ mod tests {
 
   #[tokio::test]
   async fn test_init() {
-    // let t = Test::default();
-    // test(t);
-
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
     conn
       .execute_batch(

@@ -167,6 +167,8 @@ impl<T: Init> HttpIncomingHandler<T> {
         let context: HttpContext =
           serde_json::from_slice(request.headers().get("__context").unwrap().as_bytes()).unwrap();
 
+        // TODO: Add support for job dispatch.
+
         println!("WASM guest received HTTP request {path}: {context:?}");
 
         let handlers = T::http_handlers();
@@ -213,8 +215,6 @@ impl<T: Init> ::wstd::wasi::exports::http::incoming_handler::Guest for HttpIncom
       };
   }
 }
-
-// ::wstd::wasi::http::proxy::export!(TheServer with_types_in ::wstd::wasi);
 
 async fn write_all(responder: Responder, buf: &[u8]) -> Finished {
   let mut body = responder.start_response(Response::new(BodyForthcoming));

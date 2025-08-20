@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use trailbase_wasm::Runtime;
 use trailbase_wasm::exports::trailbase::runtime::init_endpoint::MethodType;
-use trailbase_wasm_common::{HttpContext, HttpContextUser};
+use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
 
 use crate::AppState;
 use crate::User;
@@ -75,13 +75,21 @@ pub(crate) async fn install_routes_and_jobs(
         return async move {
           runtime
             .call(async move |instance| -> Result<(), trailbase_wasm::Error> {
-              // FIXME: Add a custom scheme handler.
               let request = hyper::Request::builder()
+                // NOTE: We cannot use a custom-scheme, since the wasi http
+                // implementation rejects everything but http and https.
                 .uri(format!("http://__job/?name={name}"))
-                .body(BoxBody::new(
-                  http_body_util::Full::new(Bytes::from_static(b"")).map_err(|_| unreachable!()),
-                ))
-                .expect("constant");
+                .header(
+                  "__context",
+                  to_header_value(&HttpContext {
+                    kind: HttpContextKind::Job,
+                    registered_path: name.clone(),
+                    path_params: vec![],
+                    user: None,
+                  })?,
+                )
+                .body(empty())
+                .unwrap_or_default();
 
               instance.call_incoming_http_handler(request).await?;
 
@@ -119,37 +127,33 @@ pub(crate) async fn install_routes_and_jobs(
         return runtime
           .call(
             async move |instance| -> Result<axum::response::Response, trailbase_wasm::Error> {
-              let (parts, body) = req.into_parts();
+              let (mut parts, body) = req.into_parts();
               let bytes = body
                 .collect()
                 .await
                 .map_err(|_err| trailbase_wasm::Error::ChannelClosed)?
                 .to_bytes();
 
-              let mut request = hyper::Request::from_parts(
-                parts,
-                BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!())),
+              parts.headers.insert(
+                "__context",
+                to_header_value(&HttpContext {
+                  kind: HttpContextKind::Http,
+                  registered_path: path.clone(),
+                  path_params: params
+                    .iter()
+                    .map(|(name, value)| (name.to_string(), value.to_string()))
+                    .collect(),
+                  user: user.map(|u| HttpContextUser {
+                    id: u.id,
+                    email: u.email,
+                    csrf_token: u.csrf_token,
+                  }),
+                })?,
               );
 
-              let context = HttpContext {
-                registered_path: path.clone(),
-                path_params: params
-                  .iter()
-                  .map(|(name, value)| (name.to_string(), value.to_string()))
-                  .collect(),
-                user: user.map(|u| HttpContextUser {
-                  id: u.id,
-                  email: u.email,
-                  csrf_token: u.csrf_token,
-                }),
-              };
-
-              request.headers_mut().insert(
-                "__context",
-                hyper::http::HeaderValue::from_bytes(
-                  &serde_json::to_vec(&context).unwrap_or_default(),
-                )
-                .expect(""),
+              let request = hyper::Request::from_parts(
+                parts,
+                BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!())),
               );
 
               let response = instance.call_incoming_http_handler(request).await?;
@@ -170,7 +174,7 @@ pub(crate) async fn install_routes_and_jobs(
             return axum::response::Response::builder()
               .status(StatusCode::INTERNAL_SERVER_ERROR)
               .body(err.to_string().into())
-              .expect("success");
+              .unwrap_or_default();
           });
       }
     };
@@ -191,4 +195,15 @@ pub(crate) async fn install_routes_and_jobs(
   }
 
   return Ok(Some(router));
+}
+
+fn empty() -> BoxBody<Bytes, hyper::Error> {
+  return BoxBody::new(http_body_util::Empty::new().map_err(|_| unreachable!()));
+}
+
+fn to_header_value(
+  context: &HttpContext,
+) -> Result<hyper::http::HeaderValue, trailbase_wasm::Error> {
+  return hyper::http::HeaderValue::from_bytes(&serde_json::to_vec(&context).unwrap_or_default())
+    .map_err(|_err| trailbase_wasm::Error::Encoding);
 }
