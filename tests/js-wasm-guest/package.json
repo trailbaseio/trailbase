@@ -1,10 +1,14 @@
 {
   "type": "module",
-  "devDependencies": {
-    "@bytecodealliance/componentize-js": "*"
-  },
   "scripts": {
-    "build": "node componentize.js",
-    "all": "npm run build"
+    "all": "npm run build",
+    "build:wasm": "jco componentize -w ../runtime/wit -o dist/index.wasm index.js",
+    "build:wasm:aot": "jco componentize -w ../runtime/wit --aot -o dist/index.wasm index.js",
+    "build": "npm run build:wasm",
+    "install": "npm run build && rm -rf ../../client/testfixture/scripts/*.wasm && cp ./dist/index.wasm ../../client/testfixture/scripts/"
+  },
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "^0.18.4",
+    "@bytecodealliance/jco": "^1.13.3"
   }
 }

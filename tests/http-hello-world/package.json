@@ -11,7 +11,7 @@
     "build:wasm": "jco componentize -w ../runtime/wit -o dist/http-hello-world.wasm dist/index.mjs",
     "build:wasm:aot": "jco componentize -w ../runtime/wit --aot -o dist/http-hello-world.wasm dist/index.mjs",
     "build": "npm run build:tsc && npm run build:wasm",
-    "install-and-build": "npm install && npm run build",
+    "install": "npm run build && rm -rf ../../client/testfixture/scripts/*.wasm && cp ./dist/http-hello-world.wasm client/testfixture/scripts/",
     "start": "npm run build && npm run wadm:start",
     "reload": "npm run build && npm run wadm:stop && npm run wadm:start",
     "stop": "npm run wadm:stop",
