@@ -13,7 +13,7 @@ use parking_lot::Mutex;
 use self_cell::MutBorrow;
 use std::sync::Arc;
 use std::time::SystemTime;
-use trailbase::runtime::host_endpoint::TxError;
+use trailbase::runtime::host_endpoint::{TxError, Value};
 use trailbase_sqlite::{Params, Rows};
 use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
@@ -204,13 +204,10 @@ impl trailbase::runtime::host_endpoint::Host for State {
   fn tx_execute(
     &mut self,
     query: String,
+    params: Vec<Value>,
   ) -> impl Future<Output = wasmtime::Result<Result<u64, TxError>>> + ::core::marker::Send {
-    fn execute(query: String) -> Result<u64, TxError> {
-      let sqlite_request = serde_json::from_str::<SqliteRequest>(&query)
-        .map_err(|err| TxError::Other(err.to_string()))?;
-
-      let params = sqlite::json_values_to_sqlite_params(sqlite_request.params)
-        .map_err(|err| TxError::Other(err.to_string()))?;
+    fn execute(query: String, params: Vec<Value>) -> Result<u64, TxError> {
+      let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
 
       return sqlite::CURRENT_TX.with(move |tx: &Mutex<_>| {
         let Some(ref tx) = *tx.lock() else {
@@ -219,7 +216,7 @@ impl trailbase::runtime::host_endpoint::Host for State {
 
         let mut stmt = tx
           .borrow_dependent()
-          .prepare(&sqlite_request.query)
+          .prepare(&query)
           .map_err(|err| TxError::Other(err.to_string()))?;
 
         params
@@ -234,19 +231,17 @@ impl trailbase::runtime::host_endpoint::Host for State {
       });
     }
 
-    return std::future::ready(Ok(execute(query)));
+    return std::future::ready(Ok(execute(query, params)));
   }
 
   fn tx_query(
     &mut self,
     query: String,
-  ) -> impl Future<Output = wasmtime::Result<Result<String, TxError>>> + ::core::marker::Send {
-    fn query_fn(query: String) -> Result<String, TxError> {
-      let sqlite_request = serde_json::from_str::<SqliteRequest>(&query)
-        .map_err(|err| TxError::Other(err.to_string()))?;
-
-      let params = sqlite::json_values_to_sqlite_params(sqlite_request.params)
-        .map_err(|err| TxError::Other(err.to_string()))?;
+    params: Vec<Value>,
+  ) -> impl Future<Output = wasmtime::Result<Result<Vec<Vec<Value>>, TxError>>> + ::core::marker::Send
+  {
+    fn query_fn(query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>, TxError> {
+      let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
 
       return sqlite::CURRENT_TX.with(move |tx: &Mutex<_>| {
         let Some(ref tx) = *tx.lock() else {
@@ -255,7 +250,7 @@ impl trailbase::runtime::host_endpoint::Host for State {
 
         let mut stmt = tx
           .borrow_dependent()
-          .prepare(&sqlite_request.query)
+          .prepare(&query)
           .map_err(|err| TxError::Other(err.to_string()))?;
 
         params
@@ -265,18 +260,18 @@ impl trailbase::runtime::host_endpoint::Host for State {
         let rows =
           Rows::from_rows(stmt.raw_query()).map_err(|err| TxError::Other(err.to_string()))?;
 
-        let json_rows = rows
-          .iter()
-          .map(sqlite::row_to_rich_json_array)
-          .collect::<Result<Vec<_>, _>>()
-          .map_err(|err| TxError::Other(err.to_string()))?;
+        let values: Vec<_> = rows
+          .into_iter()
+          .map(|trailbase_sqlite::Row(row, _col)| {
+            return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
+          })
+          .collect();
 
-        return serde_json::to_string(&SqliteResponse::Query { rows: json_rows })
-          .map_err(|err| TxError::Other(err.to_string()));
+        return Ok(values);
       });
     }
 
-    return std::future::ready(Ok(query_fn(query)));
+    return std::future::ready(Ok(query_fn(query, params)));
   }
 }
 
@@ -560,6 +555,26 @@ fn bytes_to_respone(
       },
     ))),
   );
+}
+
+fn to_sqlite_value(value: Value) -> trailbase_sqlite::Value {
+  return match value {
+    Value::Null => trailbase_sqlite::Value::Null,
+    Value::Text(s) => trailbase_sqlite::Value::Text(s),
+    Value::Real(f) => trailbase_sqlite::Value::Real(f),
+    Value::Integer(i) => trailbase_sqlite::Value::Integer(i),
+    Value::Blob(b) => trailbase_sqlite::Value::Blob(b),
+  };
+}
+
+fn from_sqlite_value(value: trailbase_sqlite::Value) -> Value {
+  return match value {
+    trailbase_sqlite::Value::Null => Value::Null,
+    trailbase_sqlite::Value::Text(s) => Value::Text(s),
+    trailbase_sqlite::Value::Real(f) => Value::Real(f),
+    trailbase_sqlite::Value::Integer(i) => Value::Integer(i),
+    trailbase_sqlite::Value::Blob(b) => Value::Blob(b),
+  };
 }
 
 #[cfg(test)]

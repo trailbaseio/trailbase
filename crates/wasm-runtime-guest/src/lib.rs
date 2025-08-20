@@ -25,6 +25,8 @@ pub mod wit {
   });
 }
 
+pub mod db;
+
 use futures_util::future::LocalBoxFuture;
 use trailbase_wasm_common::{HttpContext, HttpContextKind};
 use wstd::http::body::{BodyForthcoming, IncomingBody, IntoBody};
@@ -35,9 +37,7 @@ use wstd::io::{AsyncWrite, empty};
 use crate::wit::exports::trailbase::runtime::init_endpoint::MethodType;
 
 pub use crate::wit::exports::trailbase::runtime::init_endpoint::InitResult;
-pub use crate::wit::trailbase::runtime::host_endpoint::{
-  thread_id, tx_begin, tx_commit, tx_execute, tx_rollback,
-};
+pub use crate::wit::trailbase::runtime::host_endpoint::thread_id;
 pub use static_assertions::assert_impl_all;
 pub use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 pub use wstd::{self, http::Method};
