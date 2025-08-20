@@ -40,11 +40,15 @@ interface host-endpoint {
     real(f64),
   }
 
+  // NOTE: Ideally, we'd use these but they currently block guests.
+  execute: func(query: string, params: list<value>) -> result<u64, tx-error>;
+  query: func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
+
+  // However, transactions have to be sync.
   tx-begin: func() -> result<_, tx-error>;
   tx-commit: func() -> result<_, tx-error>;
   tx-rollback: func() -> result<_, tx-error>;
 
-  // TODO: We could make this more transparent, i.e. query: string + params: list<variant>.
   tx-execute: func(query: string, params: list<value>) -> result<u64, tx-error>;
   tx-query: func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
 }
