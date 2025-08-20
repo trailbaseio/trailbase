@@ -29,11 +29,12 @@ pub mod db;
 
 use futures_util::future::LocalBoxFuture;
 use trailbase_wasm_common::{HttpContext, HttpContextKind};
-use wstd::http::body::{BodyForthcoming, IncomingBody, IntoBody};
+use wstd::http::body::{BodyForthcoming, IncomingBody};
 use wstd::http::server::{Finished, Responder};
-use wstd::http::{Client, Request, Response, StatusCode};
+use wstd::http::{Request, Response, StatusCode};
 use wstd::io::{AsyncWrite, empty};
 
+use crate::db::Value;
 use crate::wit::exports::trailbase::runtime::init_endpoint::MethodType;
 
 pub use crate::wit::exports::trailbase::runtime::init_endpoint::InitResult;
@@ -53,41 +54,6 @@ macro_rules! export {
         ::trailbase_wasm_guest::wstd::wasi::http::proxy::export!(
             _HttpHandlerIdent with_types_in ::trailbase_wasm_guest::wstd::wasi);
     };
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-  #[error("Sqlite: {0}")]
-  Sqlite(String),
-}
-
-pub type Rows = Vec<Vec<serde_json::Value>>;
-
-pub async fn query(query: &str, params: Vec<serde_json::Value>) -> Result<Rows, Error> {
-  let r = SqliteRequest {
-    query: query.to_string(),
-    params,
-  };
-  let bytes = serde_json::to_vec(&r).expect("serialization");
-
-  let request = Request::builder()
-    .uri("http://__sqlite/query")
-    .method("POST")
-    .body(bytes.into_body());
-
-  let client = Client::new();
-  let (_parts, mut body) = client
-    .send(request.unwrap())
-    .await
-    .expect("foo")
-    .into_parts();
-
-  let bytes = body.bytes().await.expect("baz");
-  return match serde_json::from_slice(&bytes) {
-    Ok(SqliteResponse::Query { rows }) => Ok(rows),
-    Ok(_) => Err(Error::Sqlite("Unexpected response type".to_string())),
-    Err(err) => Err(Error::Sqlite(err.to_string())),
-  };
 }
 
 pub trait Guest {
@@ -182,11 +148,12 @@ impl<T: Guest> HttpIncomingHandler<T> {
 
     return match path {
       "/query" => {
-        let query = std::future::ready("SELECT COUNT(*) FROM TEST".to_string()).await;
-        let rows = crate::query(&query, vec![]).await.unwrap();
-        if rows[0][0] != serde_json::json!(1) {
+        let query = std::future::ready("SELECT COUNT(*) FROM test".to_string()).await;
+        let rows = crate::db::query(query, vec![]).await.unwrap();
+        let Value::Integer(count) = rows[0][0] else {
           panic!("Expected one");
-        }
+        };
+        assert_eq!(count, 1);
 
         write_all(responder, format!("response: {rows:?}").as_bytes()).await
       }
