@@ -11,7 +11,7 @@ function fibonacci(num: number): number {
   }
 }
 
-const config = defineConfig({
+export default defineConfig({
   handlers: [
     {
       path: "/fibonacci",
@@ -29,11 +29,5 @@ const config = defineConfig({
         return `Hello from Javascript ${path}!\n`;
       },
     },
-  ]
+  ],
 });
-
-// TODO: We should be able to export them in one go.
-// export default { ...config };
-
-export const initEndpoint = config.initEndpoint;
-export const incomingHandler = config.incomingHandler;
