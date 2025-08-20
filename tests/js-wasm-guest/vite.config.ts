@@ -6,7 +6,6 @@ export default defineConfig({
     minify: false,
     lib: {
       entry: "./src/component.js",
-      name: "runtime",
       fileName: "index",
       formats: ["es"],
     },
