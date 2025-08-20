@@ -1,4 +1,4 @@
-import { Request, defineConfig } from "trailbase-wasm";
+import { Request, defineConfig, threadId } from "trailbase-wasm";
 
 function fibonacci(num: number): number {
   switch (num) {
@@ -26,7 +26,7 @@ export default defineConfig({
       handler: (req: Request): string => {
         const path = req.path;
 
-        return `Hello from Javascript ${path}!\n`;
+        return `Hello from Javascript (${threadId()}): ${path}!\n`;
       },
     },
   ],

@@ -12,7 +12,7 @@
     "build:wasm:aot": "jco componentize  dist/index.mjs -w ../runtime/wit --aot -o dist/http-hello-world.wasm",
     "build": "npm run build:tsc && npm run build:wasm",
     "format": "prettier -w src",
-    "deploy": "npm run build && rm -rf ../../client/testfixture/scripts/*.wasm && cp ./dist/http-hello-world.wasm client/testfixture/scripts/"
+    "deploy": "npm run build && rm -rf ../../client/testfixture/scripts/*.wasm && cp ./dist/http-hello-world.wasm ../../client/testfixture/scripts/"
   },
   "dependencies": {
     "trailbase-wasm": "workspace:*"

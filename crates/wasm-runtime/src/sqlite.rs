@@ -11,7 +11,7 @@ use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 
 self_cell!(
-  struct OwnedLock {
+  pub(crate) struct OwnedLock {
     owner: trailbase_sqlite::Connection,
 
     #[covariant]
@@ -19,10 +19,10 @@ self_cell!(
   }
 );
 
-struct OwnedLockWrapper(OwnedLock);
+pub(crate) struct OwnedLockWrapper(pub OwnedLock);
 
 self_cell!(
-  struct OwnedTransaction {
+  pub(crate) struct OwnedTransaction {
     owner: MutBorrow<OwnedLockWrapper>,
 
     #[covariant]
@@ -31,14 +31,14 @@ self_cell!(
 );
 
 std::thread_local! {
-    static CURRENT_TX: Mutex<Option<OwnedTransaction>> = const { Mutex::new(None) } ;
+    pub(crate) static CURRENT_TX: Mutex<Option<OwnedTransaction>> = const { Mutex::new(None) } ;
 }
 
-fn sqlite_err<E: std::error::Error>(err: E) -> String {
+pub(crate) fn sqlite_err<E: std::error::Error>(err: E) -> String {
   return err.to_string();
 }
 
-async fn new_db_lock(conn: trailbase_sqlite::Connection) -> OwnedLock {
+pub(crate) async fn new_db_lock(conn: trailbase_sqlite::Connection) -> OwnedLock {
   loop {
     if let Ok(lock) = OwnedLock::try_new(conn.clone(), |owner| {
       owner
@@ -223,7 +223,7 @@ fn to_response(
   });
 }
 
-fn json_values_to_sqlite_params(
+pub(crate) fn json_values_to_sqlite_params(
   values: Vec<serde_json::Value>,
 ) -> Result<Vec<trailbase_sqlite::Value>, JsonError> {
   return values.into_iter().map(rich_json_to_value).collect();

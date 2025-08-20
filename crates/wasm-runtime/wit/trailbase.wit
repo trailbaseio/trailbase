@@ -32,9 +32,11 @@ interface host-endpoint {
     other(string)
   }
 
-  tx-begin: func() -> option<tx-error>;
-  tx-commit: func() -> option<tx-error>;
-  tx-rollback: func() -> option<tx-error>;
+  tx-begin: func() -> result<_, tx-error>;
+  tx-commit: func() -> result<_, tx-error>;
+  tx-rollback: func() -> result<_, tx-error>;
+  tx-execute: func(query: string) -> result<u64, tx-error>;
+  tx-query: func(query: string) -> result<string, tx-error>;
 }
 
 // Note:
