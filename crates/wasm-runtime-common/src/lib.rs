@@ -21,6 +21,14 @@ pub enum SqliteResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum HttpContextKind {
+  /// An incoming http request.
+  Http,
+  /// An incoming job request.
+  Job,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct HttpContextUser {
   /// Url-safe Base64 encoded id of the current user.
   pub id: String,
@@ -32,6 +40,7 @@ pub struct HttpContextUser {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct HttpContext {
+  pub kind: HttpContextKind,
   pub registered_path: String,
   pub path_params: Vec<(String, String)>,
   pub user: Option<HttpContextUser>,

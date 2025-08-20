@@ -125,7 +125,8 @@ export function defineConfig({ handlers }: { handlers: Handlers[] }): Config {
     jobHandlers: [],
   };
 
-  const cb = Object.fromEntries(handlers.map((h) => [h.path, h.handler]));
+  const httpHandlers = Object.fromEntries(handlers.map((h) => [h.path, h.handler]));
+
   async function handle(req: IncomingRequest): Promise<ResponseType> {
     const path: string | undefined = req.pathWithQuery();
     if (!path) {
@@ -135,7 +136,10 @@ export function defineConfig({ handlers }: { handlers: Handlers[] }): Config {
     const context: HttpContext = JSON.parse(
       new TextDecoder().decode(req.headers().get("__context")[0]),
     );
-    const handler = cb[context.registered_path];
+
+    // TODO: Add support for job dispatch.
+
+    const handler = httpHandlers[context.registered_path];
     if (!handler) {
       throw new HttpError(StatusCode.NOT_FOUND, "impl not found");
     }
@@ -159,7 +163,7 @@ export function defineConfig({ handlers }: { handlers: Handlers[] }): Config {
 
   return {
     incomingHandler: {
-      handle: async function (
+      handle: async function(
         req: IncomingRequest,
         respOutparam: ResponseOutparam,
       ) {
@@ -184,7 +188,7 @@ export function defineConfig({ handlers }: { handlers: Handlers[] }): Config {
       },
     },
     initEndpoint: {
-      init: function (): InitResult {
+      init: function(): InitResult {
         return init;
       },
     },
