@@ -12,7 +12,7 @@ function fibonacci(num: number): number {
 }
 
 export default defineConfig({
-  handlers: [
+  httpHandlers: [
     {
       path: "/fibonacci",
       method: "get",
@@ -30,4 +30,13 @@ export default defineConfig({
       },
     },
   ],
+  jobHandlers: [
+    {
+      name: "mywasmjob",
+      spec: "@hourly",
+      handler: async () => {
+        console.log("mywasmjob");
+      },
+    }
+  ]
 });

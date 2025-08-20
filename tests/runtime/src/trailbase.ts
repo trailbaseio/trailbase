@@ -81,6 +81,7 @@ type HttpContextUser = {
 };
 
 type HttpContext = {
+  kind: "Http" | "Job";
   registered_path: string;
   path_params: [string, string][];
   user: HttpContextUser | undefined;
@@ -101,10 +102,16 @@ export type Request = {
 };
 
 type ResponseType = string | Uint8Array;
-type Handlers = {
+type HttpHandler = {
   path: string;
   method: MethodType;
   handler: (req: Request) => ResponseType | Promise<ResponseType>;
+};
+
+type JobHandler = {
+  name: string;
+  spec: string;
+  handler: () => void | Promise<void>;
 };
 
 export interface Config {
@@ -119,13 +126,21 @@ export interface Config {
   };
 }
 
-export function defineConfig({ handlers }: { handlers: Handlers[] }): Config {
+export function defineConfig(args: {
+  httpHandlers?: HttpHandler[];
+  jobHandlers?: JobHandler[];
+}): Config {
   const init: InitResult = {
-    httpHandlers: handlers.map((h) => [h.method, h.path]),
-    jobHandlers: [],
+    httpHandlers: (args.httpHandlers ?? []).map((h) => [h.method, h.path]),
+    jobHandlers: (args.jobHandlers ?? []).map((h) => [h.name, h.spec]),
   };
 
-  const httpHandlers = Object.fromEntries(handlers.map((h) => [h.path, h.handler]));
+  const httpHandlers = Object.fromEntries(
+    (args.httpHandlers ?? []).map((h) => [h.path, h.handler]),
+  );
+  const jobHandlers = Object.fromEntries(
+    (args.jobHandlers ?? []).map((h) => [h.name, h.handler]),
+  );
 
   async function handle(req: IncomingRequest): Promise<ResponseType> {
     const path: string | undefined = req.pathWithQuery();
@@ -137,28 +152,32 @@ export function defineConfig({ handlers }: { handlers: Handlers[] }): Config {
       new TextDecoder().decode(req.headers().get("__context")[0]),
     );
 
-    // TODO: Add support for job dispatch.
+    if (context.kind === "Job") {
+      const handler = jobHandlers[context.registered_path];
+      await handler();
+      return new Uint8Array();
+    } else {
+      const handler = httpHandlers[context.registered_path];
+      if (!handler) {
+        throw new HttpError(StatusCode.NOT_FOUND, "impl not found");
+      }
 
-    const handler = httpHandlers[context.registered_path];
-    if (!handler) {
-      throw new HttpError(StatusCode.NOT_FOUND, "impl not found");
+      const request: Request = {
+        method: req.method(),
+        path: req.pathWithQuery() ?? "",
+        params: context.path_params,
+        scheme: req.scheme(),
+        authority: req.authority() ?? "",
+        headers: req.headers(),
+        body: req.consume(),
+      };
+
+      console.error(
+        `Request: ${JSON.stringify(request)}, context: ${JSON.stringify(context)}`,
+      );
+
+      return await handler(request);
     }
-
-    const request: Request = {
-      method: req.method(),
-      path: req.pathWithQuery() ?? "",
-      params: context.path_params,
-      scheme: req.scheme(),
-      authority: req.authority() ?? "",
-      headers: req.headers(),
-      body: req.consume(),
-    };
-
-    console.error(
-      `Request: ${JSON.stringify(request)}, context: ${JSON.stringify(context)}`,
-    );
-
-    return await handler(request);
   }
 
   return {
