@@ -190,6 +190,7 @@ pub(crate) async fn install_routes_and_jobs(
         MethodType::Post => axum::routing::post(handler),
         MethodType::Put => axum::routing::put(handler),
         MethodType::Trace => axum::routing::trace(handler),
+        MethodType::Connect => axum::routing::connect(handler),
       },
     );
   }
