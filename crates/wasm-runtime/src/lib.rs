@@ -120,6 +120,30 @@ impl trailbase::runtime::host_endpoint::Host for State {
   ) -> impl ::core::future::Future<Output = wasmtime::Result<u64>> + ::core::marker::Send {
     return std::future::ready(Ok(self.thread_id));
   }
+
+  fn tx_begin(
+    &mut self,
+  ) -> impl ::core::future::Future<
+    Output = wasmtime::Result<Option<trailbase::runtime::host_endpoint::TxError>>,
+  > + ::core::marker::Send {
+    return std::future::ready(Ok(None));
+  }
+
+  fn tx_commit(
+    &mut self,
+  ) -> impl ::core::future::Future<
+    Output = wasmtime::Result<Option<trailbase::runtime::host_endpoint::TxError>>,
+  > + ::core::marker::Send {
+    return std::future::ready(Ok(None));
+  }
+
+  fn tx_rollback(
+    &mut self,
+  ) -> impl ::core::future::Future<
+    Output = wasmtime::Result<Option<trailbase::runtime::host_endpoint::TxError>>,
+  > + ::core::marker::Send {
+    return std::future::ready(Ok(None));
+  }
 }
 
 pub struct Runtime {
@@ -397,6 +421,7 @@ fn bytes_to_respone(
 mod tests {
   use super::*;
 
+  use http::StatusCode;
   use http_body_util::{BodyExt, combinators::BoxBody};
 
   fn bytes_to_body<E>(bytes: Bytes) -> BoxBody<Bytes, E> {
@@ -425,16 +450,21 @@ mod tests {
       .await
       .unwrap();
 
-    runtime
+    let result = runtime
       .call(async |instance| {
         let request = hyper::Request::builder()
           .uri("https://www.rust-lang.org/")
           .body(bytes_to_body(Bytes::from_static(b"")))
           .unwrap();
 
-        instance.call_incoming_http_handler(request).await.unwrap();
+        return instance.call_incoming_http_handler(request).await;
       })
       .await
       .unwrap();
+
+    let response = result.unwrap();
+
+    // NOTE: Because we're not supplying a valid context.
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
   }
 }

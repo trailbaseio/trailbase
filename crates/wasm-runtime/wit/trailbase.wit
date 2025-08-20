@@ -26,6 +26,15 @@ interface init-endpoint  {
 
 interface host-endpoint {
   thread-id: func() -> u64;
+
+
+  variant tx-error {
+    other(string)
+  }
+
+  tx-begin: func() -> option<tx-error>;
+  tx-commit: func() -> option<tx-error>;
+  tx-rollback: func() -> option<tx-error>;
 }
 
 // Note:
