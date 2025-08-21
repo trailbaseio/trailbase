@@ -2,8 +2,8 @@
   "type": "module",
   "scripts": {
     "all": "npm run build",
-    "build:wasm": "jco componentize dist/index.js -w ../runtime/wit -o dist/index.wasm",
-    "build:wasm:aot": "jco componentize dist/index.js -w ../runtime/wit --aot -o dist/index.wasm",
+    "build:wasm": "jco componentize dist/index.js -w ../../guests/typescript/wit -o dist/index.wasm",
+    "build:wasm:aot": "jco componentize dist/index.js -w ../../guests/typescript/wit --aot -o dist/index.wasm",
     "build": "npm run build:wasm",
     "format": "prettier -w src",
     "deploy": "npm run build && rm -rf ../../client/testfixture/scripts/*.wasm && cp ./dist/index.wasm ../../client/testfixture/scripts/"

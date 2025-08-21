@@ -13,10 +13,12 @@ members = [
   "crates/schema",
   "crates/sqlean",
   "crates/sqlite",
-  "crates/wasm-runtime", "crates/wasm-runtime-common", "crates/wasm-runtime-guest",
+  "crates/wasm-runtime",
+  "crates/wasm-runtime-common",
+  "crates/wasm-runtime-guest",
   "docs/examples/record_api_rs",
   "examples/custom-binary",
-  "tests/rust-wasm-guest",
+  "examples/wasm-guest-rust",
 ]
 default-members = [
   "crates/assets",
