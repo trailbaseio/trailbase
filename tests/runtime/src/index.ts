@@ -1,13 +1,13 @@
-export * from "./trailbase";
-export { StatusCode } from "./status";
-
-export {
-  IncomingRequest,
-  ResponseOutparam,
-  OutgoingBody,
-  OutgoingResponse,
-  Fields,
-} from "wasi:http/types@0.2.3";
+export * from "./http";
+export * from "./db";
 
 export { threadId } from "trailbase:runtime/host-endpoint";
-export { type InitResult } from "trailbase:runtime/init-endpoint";
+
+import { getRandomBytes as _ } from "wasi:random/random@0.2.3";
+import { getDirectories } from "wasi:filesystem/preopens@0.2.3";
+
+export function listDirectories(): string[] {
+  return getDirectories().map(([_fd, name]) => {
+    return name;
+  });
+}
