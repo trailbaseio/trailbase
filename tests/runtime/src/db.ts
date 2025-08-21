@@ -1,4 +1,12 @@
-import type { TxError } from "trailbase:runtime/host-endpoint";
+import type { Value as WitValue } from "trailbase:runtime/host-endpoint";
+import {
+  txBegin,
+  txCommit,
+  txRollback,
+  txExecute,
+  txQuery,
+} from "trailbase:runtime/host-endpoint";
+
 import type { SqliteRequest } from "@common/SqliteRequest";
 import { JsonValue } from "@common/serde_json/JsonValue";
 
@@ -16,6 +24,29 @@ export type { Value as DbValue } from "trailbase:runtime/host-endpoint";
 //     return `DbError(${this.error})`;
 //   }
 // }
+
+class Transaction {
+  constructor() {
+    txBegin();
+  }
+
+  query(query: string, params: Value[]): Value[][] {
+    return txQuery(query, params.map(toWitValue)).map((row) =>
+      row.map(fromWitValue),
+    );
+  }
+
+  execute(query: string, params: Value[]): number {
+    return Number(txExecute(query, params.map(toWitValue)));
+  }
+
+  commit(): void {
+    txCommit();
+  }
+  rollback(): void {
+    txRollback();
+  }
+}
 
 export type Blob = { blob: string };
 export type Value = number | string | boolean | Uint8Array | Blob | null;
@@ -54,6 +85,42 @@ function fromJsonValue(value: JsonValue): Value {
   }
 
   throw new Error(`Invalid value: ${value}`);
+}
+
+function toWitValue(val: Value): WitValue {
+  if (val === null) {
+    return { tag: "null" };
+  } else if (typeof val === "number") {
+    if (Number.isInteger(val)) {
+      return { tag: "integer", val: BigInt(val) };
+    }
+    return { tag: "real", val };
+  } else if (typeof val === "string") {
+    return { tag: "text", val };
+  } else if (typeof val === "boolean") {
+    return { tag: "integer", val: val ? BigInt(1) : BigInt(0) };
+  } else if (val instanceof Uint8Array) {
+    return { tag: "blob", val };
+  } else if ("blob" in val) {
+    return { tag: "blob", val: urlSafeBase64Decode(val.blob) };
+  }
+
+  throw new Error(`Invalid value: ${val}`);
+}
+
+function fromWitValue(val: WitValue): Value {
+  switch (val.tag) {
+    case "null":
+      return null;
+    case "integer":
+      return Number(val.val);
+    case "real":
+      return val.val;
+    case "text":
+      return val.val;
+    case "blob":
+      return val.val;
+  }
 }
 
 export async function query(
