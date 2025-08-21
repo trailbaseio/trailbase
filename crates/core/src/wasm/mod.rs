@@ -180,7 +180,7 @@ pub(crate) async fn install_routes_and_jobs(
     };
 
     router = router.route(
-      &path,
+      path,
       match method {
         MethodType::Delete => axum::routing::delete(handler),
         MethodType::Get => axum::routing::get(handler),
