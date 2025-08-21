@@ -1,7 +1,7 @@
 /** @module Interface wasi:clocks/monotonic-clock@0.2.3 **/
 /**
  * Read the current value of the clock.
- * 
+ *
  * The clock is monotonic, therefore calling this function repeatedly will
  * produce a sequence of non-decreasing values.
  */
