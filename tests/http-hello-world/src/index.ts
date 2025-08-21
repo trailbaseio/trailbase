@@ -17,6 +17,10 @@ function fibonacci(num: number): number {
   }
 }
 
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export default defineConfig({
   httpHandlers: [
     {
@@ -24,6 +28,14 @@ export default defineConfig({
       method: "get",
       handler: (_req: Request): string => {
         return fibonacci(40).toString();
+      },
+    },
+    {
+      path: "/sleep",
+      method: "get",
+      handler: async (_req: Request): Promise<string> => {
+        await delay(10 * 1000);
+        return '';
       },
     },
     {

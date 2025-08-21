@@ -11,6 +11,7 @@ use futures_util::future::LocalBoxFuture;
 use http_body_util::combinators::BoxBody;
 use parking_lot::Mutex;
 use self_cell::MutBorrow;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::SystemTime;
 use trailbase::runtime::host_endpoint::{TxError, Value};
@@ -58,7 +59,7 @@ pub enum Error {
 }
 
 pub enum Message {
-  Run(Box<dyn FnOnce(&RuntimeInstance) -> LocalBoxFuture<()> + Send>),
+  Run(Box<dyn FnOnce(Rc<RuntimeInstance>) -> LocalBoxFuture<'static, ()> + Send>),
 }
 
 struct State {
@@ -418,7 +419,7 @@ impl Runtime {
       .shared_sender
       .send(Message::Run(Box::new(move |runtime| {
         Box::pin(async move {
-          let _ = sender.send(f(runtime).await);
+          let _ = sender.send(f(&*runtime).await);
         })
       })))
       .await
@@ -429,14 +430,15 @@ impl Runtime {
 }
 
 fn event_loop(
-  tokio_runtime: Arc<tokio::runtime::Runtime>,
+  rt: Arc<tokio::runtime::Runtime>,
   instance: RuntimeInstance,
   private_recv: kanal::AsyncReceiver<Message>,
   shared_recv: kanal::AsyncReceiver<Message>,
 ) {
   let local = tokio::task::LocalSet::new();
+  let instance = Rc::new(instance);
 
-  local.spawn_local(async move {
+  local.block_on(&*rt, async move {
     loop {
       let receive_message = async || {
         return tokio::select! {
@@ -445,8 +447,9 @@ fn event_loop(
         };
       };
 
+      log::debug!("WASM {} waiting for work", instance.shared.thread_id);
       match receive_message().await {
-        Ok(Message::Run(f)) => f(&instance).await,
+        Ok(Message::Run(f)) => tokio::task::spawn_local(f(instance.clone())),
         Err(_) => {
           // Channel closed
           return;
@@ -454,8 +457,6 @@ fn event_loop(
       };
     }
   });
-
-  tokio_runtime.block_on(local);
 }
 
 struct SharedState {

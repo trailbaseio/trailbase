@@ -7,6 +7,7 @@ use trailbase_wasm_guest::{
   HttpError, HttpHandler, JobHandler, Method, export, http_handler, job_handler, thread_id,
 };
 use wstd::http::StatusCode;
+use wstd::time::{Duration, Timer};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
@@ -21,6 +22,20 @@ fn map_err(err: impl std::error::Error) -> HttpError {
 impl trailbase_wasm_guest::Guest for Endpoints {
   fn http_handlers() -> Vec<(Method, &'static str, HttpHandler)> {
     return vec![
+      (
+        Method::GET,
+        "/fibonacci",
+        http_handler(async |_req| Ok(format!("{}\n", fibonacci(40)).as_bytes().to_vec())),
+      ),
+      (
+        Method::GET,
+        "/sleep",
+        http_handler(async |_req| {
+          Timer::after(Duration::from_secs(10)).wait().await;
+
+          Ok(b"".to_vec())
+        }),
+      ),
       (
         Method::GET,
         "/wasm/{placeholder}",
@@ -46,11 +61,6 @@ impl trailbase_wasm_guest::Guest for Endpoints {
 
           return Ok(format!("rows: {:?}", rows[0][0]).into_bytes().to_vec());
         }),
-      ),
-      (
-        Method::GET,
-        "/fibonacci",
-        http_handler(async |_req| Ok(format!("{}\n", fibonacci(40)).as_bytes().to_vec())),
       ),
       (
         Method::GET,
