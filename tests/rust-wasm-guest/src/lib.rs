@@ -81,6 +81,24 @@ impl trailbase_wasm_guest::Guest for Endpoints {
           return Ok(b"".to_vec());
         }),
       ),
+      (
+        Method::GET,
+        "/sqlitetxread",
+        http_handler(async |_req| {
+          let mut tx = trailbase_wasm_guest::db::Transaction::begin().map_err(map_err)?;
+          tx.execute(
+            "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY)",
+            &[],
+          )
+          .map_err(map_err)?;
+          let rows = tx
+            .query("SELECT COUNT(*) FROM test", &[])
+            .map_err(map_err)?;
+          tx.commit().map_err(map_err)?;
+
+          return Ok(format!("{:?}", rows[0][0]).into_bytes().to_vec());
+        }),
+      ),
     ];
   }
 
