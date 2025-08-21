@@ -122,8 +122,9 @@ pub async fn record_transactions_handler(
           let api = get_api(&state, &api_name)?;
           let record = extract_record(value)?;
           let record_id = api.primary_key_to_value(record_id)?;
+          let (_index, pk_column) = api.record_pk_column();
 
-          let mut lazy_params = LazyParams::for_insert(&api, record, None);
+          let mut lazy_params = LazyParams::for_update(&api, record, None, pk_column.name.clone(), record_id.clone());
 
           let acl_check = api.build_record_level_access_check(
             Permission::Update,
