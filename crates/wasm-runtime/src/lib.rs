@@ -92,7 +92,7 @@ impl WasiHttpView for State {
     request: hyper::Request<wasmtime_wasi_http::body::HyperOutgoingBody>,
     config: wasmtime_wasi_http::types::OutgoingRequestConfig,
   ) -> wasmtime_wasi_http::HttpResult<wasmtime_wasi_http::types::HostFutureIncomingResponse> {
-    println!(
+    log::debug!(
       "send_request {:?} {}: {request:?}",
       request.uri().host(),
       request.uri().path()
