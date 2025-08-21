@@ -2,13 +2,13 @@
 /**
  * Attempts to extract a http-related `error` from the wasi:io `error`
  * provided.
- * 
+ *
  * Stream operations which return
  * `wasi:io/stream/stream-error::last-operation-failed` have a payload of
  * type `wasi:io/error/error` with more information about the operation
  * that failed. This payload can be passed through to this function to see
  * if there's http-related information about the error to return.
- * 
+ *
  * Note that this function is fallible because not all io-errors are
  * http-related errors.
  */
@@ -261,18 +261,18 @@ export interface HeaderErrorImmutable {
 }
 /**
  * Field keys are always strings.
- * 
+ *
  * Field keys should always be treated as case insensitive by the `fields`
  * resource for the purposes of equality checking.
- * 
+ *
  * # Deprecation
- * 
+ *
  * This type has been deprecated in favor of the `field-name` type.
  */
 export type FieldKey = string;
 /**
  * Field names are always strings.
- * 
+ *
  * Field names should always be treated as case insensitive by the `fields`
  * resource for the purposes of equality checking.
  */
@@ -300,22 +300,22 @@ export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 export class Fields implements Partial<Disposable> {
   /**
   * Construct an empty HTTP Fields.
-  * 
+  *
   * The resulting `fields` is mutable.
   */
   constructor()
   /**
   * Construct an HTTP Fields.
-  * 
+  *
   * The resulting `fields` is mutable.
-  * 
+  *
   * The list represents each name-value pair in the Fields. Names
   * which have multiple values are represented by multiple entries in this
   * list with the same name.
-  * 
+  *
   * The tuple is a pair of the field name, represented as a string, and
   * Value, represented as a list of bytes.
-  * 
+  *
   * An error result will be returned if any `field-name` or `field-value` is
   * syntactically invalid, or if a field is forbidden.
   */
@@ -335,9 +335,9 @@ export class Fields implements Partial<Disposable> {
   /**
   * Set all of the values for a name. Clears any existing values for that
   * name, if they have been set.
-  * 
+  *
   * Fails with `header-error.immutable` if the `fields` are immutable.
-  * 
+  *
   * Fails with `header-error.invalid-syntax` if the `field-name` or any of
   * the `field-value`s are syntactically invalid.
   */
@@ -345,9 +345,9 @@ export class Fields implements Partial<Disposable> {
   /**
   * Delete all values for a name. Does nothing if no values for the name
   * exist.
-  * 
+  *
   * Fails with `header-error.immutable` if the `fields` are immutable.
-  * 
+  *
   * Fails with `header-error.invalid-syntax` if the `field-name` is
   * syntactically invalid.
   */
@@ -355,9 +355,9 @@ export class Fields implements Partial<Disposable> {
   /**
   * Append a value for a name. Does not change or delete any existing
   * values for that name.
-  * 
+  *
   * Fails with `header-error.immutable` if the `fields` are immutable.
-  * 
+  *
   * Fails with `header-error.invalid-syntax` if the `field-name` or
   * `field-value` are syntactically invalid.
   */
@@ -365,11 +365,11 @@ export class Fields implements Partial<Disposable> {
   /**
   * Retrieve the full set of names and values in the Fields. Like the
   * constructor, the list represents each name-value pair.
-  * 
+  *
   * The outer list represents each name-value pair in the Fields. Names
   * which have multiple values are represented by multiple entries in this
   * list with the same name.
-  * 
+  *
   * The names and values are always returned in the original casing and in
   * the order in which they will be serialized for transport.
   */
@@ -396,14 +396,14 @@ export class FutureIncomingResponse implements Partial<Disposable> {
   subscribe(): Pollable;
   /**
   * Returns the incoming HTTP Response, or an error, once one is ready.
-  * 
+  *
   * The outer `option` represents future readiness. Users can wait on this
   * `option` to become `some` using the `subscribe` method.
-  * 
+  *
   * The outer `result` is used to retrieve the response or error at most
   * once. It will be success on the first call in which the outer option
   * is `some`, and error on subsequent calls.
-  * 
+  *
   * The inner `result` represents that either the incoming HTTP Response
   * status and headers have received successfully, or that an error
   * occurred. Errors may also occur while consuming the response body,
@@ -428,19 +428,19 @@ export class FutureTrailers implements Partial<Disposable> {
   /**
   * Returns the contents of the trailers, or an error which occurred,
   * once the future is ready.
-  * 
+  *
   * The outer `option` represents future readiness. Users can wait on this
   * `option` to become `some` using the `subscribe` method.
-  * 
+  *
   * The outer `result` is used to retrieve the trailers or error at most
   * once. It will be success on the first call in which the outer option
   * is `some`, and error on subsequent calls.
-  * 
+  *
   * The inner `result` represents that either the HTTP Request or Response
   * body, as well as any trailers, were received successfully, or that an
   * error occurred receiving them. The optional `trailers` indicates whether
   * or not trailers were present in the body.
-  * 
+  *
   * When some `trailers` are returned by this method, the `trailers`
   * resource is immutable, and a child. Use of the `set`, `append`, or
   * `delete` methods will return an error, and the resource must be
@@ -457,14 +457,14 @@ export class IncomingBody implements Partial<Disposable> {
   private constructor();
   /**
   * Returns the contents of the body, as a stream of bytes.
-  * 
+  *
   * Returns success on first call: the stream representing the contents
   * can be retrieved at most once. Subsequent calls will return error.
-  * 
+  *
   * The returned `input-stream` resource is a child: it must be dropped
   * before the parent `incoming-body` is dropped, or consumed by
   * `incoming-body.finish`.
-  * 
+  *
   * This invariant ensures that the implementation can determine whether
   * the user is consuming the contents of the body, waiting on the
   * `future-trailers` to be ready, or neither. This allows for network
@@ -504,10 +504,10 @@ export class IncomingRequest implements Partial<Disposable> {
   authority(): string | undefined;
   /**
   * Get the `headers` associated with the request.
-  * 
+  *
   * The returned `headers` resource is immutable: `set`, `append`, and
   * `delete` operations will fail with `header-error.immutable`.
-  * 
+  *
   * The `headers` returned are a child resource: it must be dropped before
   * the parent `incoming-request` is dropped. Dropping this
   * `incoming-request` before all children are dropped will trap.
@@ -532,10 +532,10 @@ export class IncomingResponse implements Partial<Disposable> {
   status(): StatusCode;
   /**
   * Returns the headers from the incoming response.
-  * 
+  *
   * The returned `headers` resource is immutable: `set`, `append`, and
   * `delete` operations will fail with `header-error.immutable`.
-  * 
+  *
   * This headers resource is a child: it must be dropped before the parent
   * `incoming-response` is dropped.
   */
@@ -555,11 +555,11 @@ export class OutgoingBody implements Partial<Disposable> {
   private constructor();
   /**
   * Returns a stream for writing the body contents.
-  * 
+  *
   * The returned `output-stream` is a child resource: it must be dropped
   * before the parent `outgoing-body` resource is dropped (or finished),
   * otherwise the `outgoing-body` drop or `finish` will trap.
-  * 
+  *
   * Returns success on the first call: the `output-stream` resource for
   * this `outgoing-body` may be retrieved at most once. Subsequent calls
   * will return error.
@@ -570,7 +570,7 @@ export class OutgoingBody implements Partial<Disposable> {
   * called to signal that the response is complete. If the `outgoing-body`
   * is dropped without calling `outgoing-body.finalize`, the implementation
   * should treat the body as corrupted.
-  * 
+  *
   * Fails if the body's `outgoing-request` or `outgoing-response` was
   * constructed with a Content-Length header, and the contents written
   * to the body (via `write`) does not match the value given in the
@@ -584,9 +584,9 @@ export class OutgoingRequest implements Partial<Disposable> {
   /**
   * Construct a new `outgoing-request` with a default `method` of `GET`, and
   * `none` values for `path-with-query`, `scheme`, and `authority`.
-  * 
+  *
   * * `headers` is the HTTP Headers for the Request.
-  * 
+  *
   * It is possible to construct, or manipulate with the accessor functions
   * below, an `outgoing-request` with an invalid combination of `scheme`
   * and `authority`, or `headers` which are not permitted to be sent.
@@ -597,7 +597,7 @@ export class OutgoingRequest implements Partial<Disposable> {
   /**
   * Returns the resource corresponding to the outgoing Body for this
   * Request.
-  * 
+  *
   * Returns success on the first call: the `outgoing-body` resource for
   * this `outgoing-request` can be retrieved at most once. Subsequent
   * calls will return error.
@@ -649,10 +649,10 @@ export class OutgoingRequest implements Partial<Disposable> {
   setAuthority(authority: string | undefined): void;
   /**
   * Get the headers associated with the Request.
-  * 
+  *
   * The returned `headers` resource is immutable: `set`, `append`, and
   * `delete` operations will fail with `header-error.immutable`.
-  * 
+  *
   * This headers resource is a child: it must be dropped before the parent
   * `outgoing-request` is dropped, or its ownership is transferred to
   * another component by e.g. `outgoing-handler.handle`.
@@ -666,7 +666,7 @@ export class OutgoingResponse implements Partial<Disposable> {
   * Construct an `outgoing-response`, with a default `status-code` of `200`.
   * If a different `status-code` is needed, it must be set via the
   * `set-status-code` method.
-  * 
+  *
   * * `headers` is the HTTP Headers for the Response.
   */
   constructor(headers: Headers)
@@ -681,10 +681,10 @@ export class OutgoingResponse implements Partial<Disposable> {
   setStatusCode(statusCode: StatusCode): void;
   /**
   * Get the headers associated with the Request.
-  * 
+  *
   * The returned `headers` resource is immutable: `set`, `append`, and
   * `delete` operations will fail with `header-error.immutable`.
-  * 
+  *
   * This headers resource is a child: it must be dropped before the parent
   * `outgoing-request` is dropped, or its ownership is transferred to
   * another component by e.g. `outgoing-handler.handle`.
@@ -692,7 +692,7 @@ export class OutgoingResponse implements Partial<Disposable> {
   headers(): Headers;
   /**
   * Returns the resource corresponding to the outgoing Body for this Response.
-  * 
+  *
   * Returns success on the first call: the `outgoing-body` resource for
   * this `outgoing-response` can be retrieved at most once. Subsequent
   * calls will return error.
@@ -746,11 +746,11 @@ export class ResponseOutparam implements Partial<Disposable> {
   /**
   * Set the value of the `response-outparam` to either send a response,
   * or indicate an error.
-  * 
+  *
   * This method consumes the `response-outparam` to ensure that it is
   * called at most once. If it is never called, the implementation
   * will respond with an error.
-  * 
+  *
   * The user may provide an `error` to `response` to allow the
   * implementation determine how to respond with an HTTP error response.
   */

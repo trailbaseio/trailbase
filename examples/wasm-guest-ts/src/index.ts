@@ -18,7 +18,7 @@ function fibonacci(num: number): number {
 }
 
 function delay(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export default defineConfig({
@@ -35,7 +35,7 @@ export default defineConfig({
       method: "get",
       handler: async (_req: Request): Promise<string> => {
         await delay(10 * 1000);
-        return '';
+        return "";
       },
     },
     {
