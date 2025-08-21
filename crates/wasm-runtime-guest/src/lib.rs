@@ -168,7 +168,7 @@ impl<T: Guest> HttpIncomingHandler<T> {
             .await;
         };
 
-        println!("WASM guest received HTTP request {path}: {context:?}");
+        log::debug!("WASM guest received HTTP request {path}: {context:?}");
 
         match context.kind {
           HttpContextKind::Http => {

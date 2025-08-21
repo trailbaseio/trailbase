@@ -136,14 +136,13 @@ impl trailbase::runtime::host_endpoint::Host for State {
     return self
       .shared
       .runtime
-      .spawn((async move || {
-        return Ok(
-          conn
-            .execute(query, params)
-            .await
-            .map_err(|err| TxError::Other(err.to_string()))? as u64,
-        );
-      })())
+      .spawn(async move {
+        conn
+          .execute(query, params)
+          .await
+          .map_err(|err| TxError::Other(err.to_string()))
+          .map(|v| v as u64)
+      })
       .map_err(|err| wasmtime::Error::msg(err.to_string()));
   }
 
@@ -438,7 +437,7 @@ fn event_loop(
   let local = tokio::task::LocalSet::new();
   let instance = Rc::new(instance);
 
-  local.block_on(&*rt, async move {
+  local.block_on(&rt, async move {
     loop {
       let receive_message = async || {
         return tokio::select! {
@@ -633,7 +632,7 @@ fn from_sqlite_value(value: trailbase_sqlite::Value) -> Value {
 mod tests {
   use super::*;
 
-  use http::StatusCode;
+  use http::{Response, StatusCode};
   use http_body_util::{BodyExt, combinators::BoxBody};
   use trailbase_wasm_common::{HttpContext, HttpContextKind};
 
@@ -653,29 +652,9 @@ mod tests {
       .await
       .unwrap();
 
-    let result = runtime
-      .call(async |instance| {
-        let context = HttpContext {
-          kind: HttpContextKind::Http,
-          // registered_path: "/wasm/{placeholder}".to_string(),
-          registered_path: "/sqlitetx".to_string(),
-          path_params: vec![],
-          user: None,
-        };
-
-        let request = hyper::Request::builder()
-          //.uri("http://localhost:4000/wasm/test")
-          .uri("http://localhost:4000/sqlitetx")
-          .header("__context", to_header_value(&context).unwrap())
-          .body(bytes_to_body(Bytes::from_static(b"")))
-          .unwrap();
-
-        return instance.call_incoming_http_handler(request).await;
-      })
+    let response = send_http_request(&runtime, "http://localhost:4000/sqlitetx".to_string())
       .await
       .unwrap();
-
-    let response = result.unwrap();
 
     // NOTE: Because we're not supplying a valid context.
     assert_eq!(response.status(), StatusCode::OK);
@@ -690,8 +669,54 @@ mod tests {
     )
   }
 
+  async fn send_http_request(
+    runtime: &Runtime,
+    uri: String,
+  ) -> Result<Response<BoxBody<Bytes, ErrorCode>>, Error> {
+    return runtime
+      .call(async |instance| {
+        let context = HttpContext {
+          kind: HttpContextKind::Http,
+          // registered_path: "/wasm/{placeholder}".to_string(),
+          registered_path: "/sqlitetx".to_string(),
+          path_params: vec![],
+          user: None,
+        };
+
+        let request = hyper::Request::builder()
+          .uri(uri)
+          .header("__context", to_header_value(&context).unwrap())
+          .body(bytes_to_body(Bytes::from_static(b"")))
+          .unwrap();
+
+        return instance.call_incoming_http_handler(request).await;
+      })
+      .await
+      .unwrap();
+  }
+
   fn to_header_value(context: &HttpContext) -> Result<hyper::http::HeaderValue, crate::Error> {
     return hyper::http::HeaderValue::from_bytes(&serde_json::to_vec(&context).unwrap_or_default())
       .map_err(|_err| crate::Error::Encoding);
+  }
+
+  #[tokio::test]
+  async fn test_transaction() {
+    let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
+    let runtime =
+      Arc::new(Runtime::new(2, "./testdata/rust_guest.wasm".into(), conn.clone()).unwrap());
+
+    let futures: Vec<_> = (0..256)
+      .map(|_| {
+        let runtime = runtime.clone();
+        tokio::spawn(async move {
+          send_http_request(&runtime, "http://localhost:4000/sqlitetxread".to_string()).await
+        })
+      })
+      .collect();
+
+    for future in futures {
+      future.await.unwrap().unwrap();
+    }
   }
 }
