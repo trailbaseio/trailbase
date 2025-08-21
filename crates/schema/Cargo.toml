@@ -26,7 +26,7 @@ sqlite3-parser = "0.15.0"
 thiserror = "2.0.12"
 tokio = { workspace = true }
 trailbase-extension = { workspace = true }
-ts-rs = { version = "11", features = ["uuid-impl", "serde-json-impl"] }
+ts-rs = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

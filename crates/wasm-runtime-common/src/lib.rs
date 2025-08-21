@@ -3,14 +3,17 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[ts(export)]
 pub struct SqliteRequest {
   pub query: String,
   pub params: Vec<serde_json::Value>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[ts(export)]
 pub enum SqliteResponse {
   Query { rows: Vec<Vec<serde_json::Value>> },
   Execute { rows_affected: usize },
@@ -20,7 +23,7 @@ pub enum SqliteResponse {
   TxRollback,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
 pub enum HttpContextKind {
   /// An incoming http request.
   Http,
@@ -28,7 +31,7 @@ pub enum HttpContextKind {
   Job,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
 pub struct HttpContextUser {
   /// Url-safe Base64 encoded id of the current user.
   pub id: String,
@@ -38,7 +41,8 @@ pub struct HttpContextUser {
   pub csrf_token: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[ts(export)]
 pub struct HttpContext {
   pub kind: HttpContextKind,
   pub registered_path: String,

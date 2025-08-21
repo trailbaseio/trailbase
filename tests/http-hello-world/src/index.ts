@@ -1,4 +1,10 @@
-import { Request, defineConfig, threadId } from "trailbase-wasm";
+import {
+  Request,
+  defineConfig,
+  threadId,
+  query,
+  execute,
+} from "trailbase-wasm";
 
 function fibonacci(num: number): number {
   switch (num) {
@@ -24,9 +30,26 @@ export default defineConfig({
       path: "/wasm/{placeholder}",
       method: "get",
       handler: (req: Request): string => {
-        const path = req.path;
+        return `Hello from Javascript (${threadId()}): ${req.path}!\n`;
+      },
+    },
+    {
+      path: "/wasm_query",
+      method: "get",
+      handler: async (_req: Request): Promise<string> => {
+        await execute(
+          "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY)",
+          [],
+        );
+        try {
+          await execute("INSERT INTO test (id) VALUES (2), (4)", []);
+        } catch (e) {
+          console.error(`other: ${e}`);
+        }
 
-        return `Hello from Javascript (${threadId()}): ${path}!\n`;
+        const r = await query("SELECT COUNT(*) FROM test", []);
+        const count = r[0][0] as number;
+        return `Got ${count} rows\n`;
       },
     },
   ],
@@ -37,6 +60,6 @@ export default defineConfig({
       handler: async () => {
         console.log("mywasmjob");
       },
-    }
-  ]
+    },
+  ],
 });

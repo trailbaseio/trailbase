@@ -2,24 +2,26 @@
 export function init(): InitResult;
 /**
  * # Variants
- * 
+ *
  * ## `"get"`
- * 
+ *
  * ## `"post"`
- * 
+ *
  * ## `"head"`
- * 
+ *
  * ## `"options"`
- * 
+ *
  * ## `"patch"`
- * 
+ *
  * ## `"delete"`
- * 
+ *
  * ## `"put"`
- * 
+ *
  * ## `"trace"`
+ *
+ * ## `"connect"`
  */
-export type MethodType = 'get' | 'post' | 'head' | 'options' | 'patch' | 'delete' | 'put' | 'trace';
+export type MethodType = 'get' | 'post' | 'head' | 'options' | 'patch' | 'delete' | 'put' | 'trace' | 'connect';
 export interface InitResult {
   /**
    * Registered http handlers (method, path)[].

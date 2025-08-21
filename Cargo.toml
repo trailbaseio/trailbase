@@ -82,4 +82,5 @@ trailbase-wasm = { path = "crates/wasm-runtime", version = "0.1.0" }
 trailbase-wasm-common = { path = "crates/wasm-runtime-common", version = "0.1.0" }
 trailbase-wasm-guest = { path = "crates/wasm-runtime-guest", version = "0.1.0" }
 trailbase = { path = "crates/core", version = "0.2.0" }
+ts-rs = { version = "11", features = ["uuid-impl", "serde-json-impl"] }
 uuid = { version = "1", default-features = false, features = ["std", "v4", "v7", "serde"] }

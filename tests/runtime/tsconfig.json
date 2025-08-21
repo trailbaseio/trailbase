@@ -12,11 +12,13 @@
     "outDir": "./dist/",
     "paths": {
       // "@/*": ["./src/*"],
+      "@common/*": [ "./generated/common/*" ],
+
       "wasi:http/types@0.2.3": [ "./generated/types/interfaces/wasi-http-types.d.ts" ],
       "wasi:random/random@0.2.3": [ "./generated/types/interfaces/wasi-random-random.d.ts" ],
       "wasi:filesystem/preopens@0.2.3": [ "./generated/types/interfaces/wasi-filesystem-preopens.d.ts" ],
       "trailbase:runtime/init-endpoint": [ "./generated/types/interfaces/trailbase-runtime-init-endpoint.d.ts" ],
-      "trailbase:runtime/host-endpoint": [ "./generated/types/interfaces/trailbase-runtime-host-endpoint.d.ts" ],
+      "trailbase:runtime/host-endpoint": [ "./generated/types/interfaces/trailbase-runtime-host-endpoint.d.ts" ]
     }
   },
   "include": ["src/**/*", "dist/generated/**/*"],
