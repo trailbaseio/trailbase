@@ -5,52 +5,75 @@ use rusqlite::Transaction;
 use self_cell::{MutBorrow, self_cell};
 use tokio::time::Duration;
 use trailbase_schema::json::{JsonError, rich_json_to_value, value_to_rich_json};
-use trailbase_sqlite::connection::LockGuard;
+use trailbase_sqlite::connection::ArcLockGuard;
 use trailbase_sqlite::{Params, Rows};
 use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 
-self_cell!(
-  pub(crate) struct OwnedLock {
-    owner: trailbase_sqlite::Connection,
+// self_cell!(
+//   pub(crate) struct OwnedLock {
+//     owner: trailbase_sqlite::Connection,
+//
+//     #[covariant]
+//     dependent: LockGuard,
+//   }
+// );
+//
+// self_cell!(
+//   pub(crate) struct OwnedTransaction {
+//     owner: MutBorrow<OwnedLock>,
+//
+//     #[covariant]
+//     dependent: Transaction,
+//   }
+// );
+//
+// pub(crate) async fn new_transaction(
+//   conn: trailbase_sqlite::Connection,
+// ) -> Result<OwnedTransaction, rusqlite::Error> {
+//   loop {
+//     let Ok(lock) = OwnedLock::try_new(conn.clone(), |owner| {
+//       owner
+//         .try_write_lock_for(Duration::from_micros(50))
+//         .ok_or("timeout")
+//     }) else {
+//       tokio::time::sleep(Duration::from_micros(150)).await;
+//       continue;
+//     };
+//
+//     return OwnedTransaction::try_new(MutBorrow::new(lock), |owner| {
+//       owner
+//         .borrow_mut()
+//         .with_dependent_mut(|_owner, depdendent| depdendent.transaction())
+//     });
+//   }
+// }
 
-    #[covariant]
-    dependent: LockGuard,
-  }
-);
-
 self_cell!(
-  pub(crate) struct OwnedTransaction {
-    owner: MutBorrow<OwnedLock>,
+  pub(crate) struct OwnedTx {
+    owner: MutBorrow<ArcLockGuard>,
 
     #[covariant]
     dependent: Transaction,
   }
 );
 
-std::thread_local! {
-    pub(crate) static CURRENT_TX: Mutex<Option<OwnedTransaction>> = const { Mutex::new(None) } ;
-}
-
-pub(crate) async fn new_transaction(
-  conn: trailbase_sqlite::Connection,
-) -> Result<OwnedTransaction, rusqlite::Error> {
+pub(crate) async fn new_tx(conn: trailbase_sqlite::Connection) -> Result<OwnedTx, rusqlite::Error> {
   loop {
-    let Ok(lock) = OwnedLock::try_new(conn.clone(), |owner| {
-      owner
-        .try_write_lock_for(Duration::from_micros(50))
-        .ok_or("timeout")
-    }) else {
+    let Some(lock) = conn.try_write_arc_lock_for(Duration::from_micros(50)) else {
       tokio::time::sleep(Duration::from_micros(150)).await;
       continue;
     };
 
-    return OwnedTransaction::try_new(MutBorrow::new(lock), |owner| {
-      owner
-        .borrow_mut()
-        .with_dependent_mut(|_owner, depdendent| depdendent.transaction())
+    return OwnedTx::try_new(MutBorrow::new(lock), |owner| {
+      return owner.borrow_mut().transaction();
     });
   }
+}
+
+std::thread_local! {
+    // TODO: Could be a RefCell instead of a Mutex.
+    pub(crate) static CURRENT_TX: Mutex<Option<OwnedTx>> = const { Mutex::new(None) } ;
 }
 
 async fn handle_sqlite_request_impl(
@@ -59,7 +82,7 @@ async fn handle_sqlite_request_impl(
 ) -> Result<SqliteResponse, String> {
   return match request.uri().path() {
     "/tx_begin" => {
-      let new_tx = new_transaction(conn).await.map_err(sqlite_err)?;
+      let new_tx = new_tx(conn).await.map_err(sqlite_err)?;
 
       CURRENT_TX.with(|tx: &Mutex<_>| {
         *tx.lock() = Some(new_tx);
