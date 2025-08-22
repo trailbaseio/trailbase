@@ -12,6 +12,7 @@ use http_body_util::combinators::BoxBody;
 use parking_lot::Mutex;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
 use trailbase::runtime::host_endpoint::{TxError, Value};
 use trailbase_sqlite::{Params, Rows};
@@ -25,6 +26,8 @@ use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 use wasmtime_wasi_io::IoView;
 
 use crate::exports::trailbase::runtime::init_endpoint::InitResult;
+
+static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 
 wasmtime::component::bindgen!({
     world: "trailbase:runtime/trailbase",
@@ -86,6 +89,8 @@ struct State {
 
 impl Drop for State {
   fn drop(&mut self) {
+    IN_FLIGHT.fetch_sub(1, Ordering::Relaxed);
+
     #[cfg(debug_assertions)]
     if self.tx.0.lock().is_some() {
       log::warn!("pending transaction locking the DB");
@@ -239,8 +244,6 @@ impl trailbase::runtime::host_endpoint::Host for State {
       let Some(tx) = tx.0.lock().take() else {
         return Err(TxError::Other("no pending tx".to_string()));
       };
-
-      println!("COMMIT");
 
       // NOTE: this is the same as `tx.commit()` just w/o consuming.
       let lock = tx.borrow_dependent();
@@ -468,7 +471,12 @@ fn event_loop(
         };
       };
 
-      log::debug!("WASM {} waiting for work", instance.shared.thread_id);
+      log::debug!(
+        "WASM {} waiting for work: {:?}",
+        instance.shared.thread_id,
+        IN_FLIGHT
+      );
+
       match receive_message().await {
         Ok(Message::Run(f)) => tokio::task::spawn_local(f(instance.clone())),
         Err(_) => {
@@ -540,6 +548,8 @@ impl RuntimeInstance {
     if let Err(err) = wasi_ctx.preopened_dir(".", "/host", DirPerms::READ, FilePerms::READ) {
       log::error!("Failed to preopen dir: {err}");
     }
+
+    IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
 
     return Store::new(
       &self.engine,
