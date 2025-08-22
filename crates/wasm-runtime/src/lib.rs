@@ -19,10 +19,11 @@ use trailbase_sqlite::{Params, Rows};
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Result, Store};
 use wasmtime_wasi::p2::add_to_linker_async;
-use wasmtime_wasi::p2::{IoView, WasiCtx, WasiCtxBuilder, WasiView};
-use wasmtime_wasi::{DirPerms, FilePerms};
+use wasmtime_wasi::{DirPerms, FilePerms, WasiCtxView};
+use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
 use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
+use wasmtime_wasi_io::IoView;
 
 use crate::exports::trailbase::runtime::init_endpoint::InitResult;
 
@@ -40,10 +41,14 @@ wasmtime::component::bindgen!({
         // Ours:
         "wit/trailbase.wit",
     ],
-    async: true,
+    require_store_data_send: false,
     // Interactions with `ResourceTable` can possibly trap so enable the ability
     // to return traps from generated functions.
-    trappable_imports: true,
+    imports: {
+        // "wasi:io/poll/poll": async | trappable,
+        default: async | trappable,
+    },
+    exports: { default: async },
 });
 
 #[derive(Debug, thiserror::Error)]
@@ -72,19 +77,26 @@ struct State {
 
 impl IoView for State {
   fn table(&mut self) -> &mut ResourceTable {
-    &mut self.resource_table
+    return &mut self.resource_table;
   }
 }
 
 impl WasiView for State {
-  fn ctx(&mut self) -> &mut WasiCtx {
-    &mut self.wasi_ctx
+  fn ctx(&mut self) -> WasiCtxView<'_> {
+    return WasiCtxView {
+      ctx: &mut self.wasi_ctx,
+      table: &mut self.resource_table,
+    };
   }
 }
 
 impl WasiHttpView for State {
   fn ctx(&mut self) -> &mut WasiHttpCtx {
-    &mut self.http
+    return &mut self.http;
+  }
+
+  fn table(&mut self) -> &mut ResourceTable {
+    return &mut self.resource_table;
   }
 
   // NOTE: Based on `WasiView`' default implementation.
@@ -505,10 +517,10 @@ impl RuntimeInstance {
 
   fn new_store(&self) -> Store<State> {
     let mut wasi_ctx = WasiCtxBuilder::new();
-    // wasi_ctx.inherit_stdio();
+    wasi_ctx.inherit_stdio();
     wasi_ctx.stdin(wasmtime_wasi::p2::pipe::ClosedInputStream);
-    wasi_ctx.stdout(wasmtime_wasi::p2::Stdout);
-    wasi_ctx.stderr(wasmtime_wasi::p2::Stderr);
+    // wasi_ctx.stdout(wasmtime_wasi::p2::Stdout);
+    // wasi_ctx.stderr(wasmtime_wasi::p2::Stderr);
 
     wasi_ctx.args(&[""]);
     wasi_ctx.allow_tcp(false);
