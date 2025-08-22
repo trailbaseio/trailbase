@@ -140,7 +140,7 @@ func (op CompareOp) toString() string {
 	case Like:
 		return "$like"
 	case Regex:
-		return "re"
+		return "$re"
 	default:
 		panic(fmt.Sprint("Unknown operation:", op))
 	}
