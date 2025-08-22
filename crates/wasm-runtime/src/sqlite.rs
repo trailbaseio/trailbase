@@ -8,45 +8,6 @@ use trailbase_sqlite::connection::ArcLockGuard;
 use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 
-// self_cell!(
-//   pub(crate) struct OwnedLock {
-//     owner: trailbase_sqlite::Connection,
-//
-//     #[covariant]
-//     dependent: LockGuard,
-//   }
-// );
-//
-// self_cell!(
-//   pub(crate) struct OwnedTransaction {
-//     owner: MutBorrow<OwnedLock>,
-//
-//     #[covariant]
-//     dependent: Transaction,
-//   }
-// );
-//
-// pub(crate) async fn new_transaction(
-//   conn: trailbase_sqlite::Connection,
-// ) -> Result<OwnedTransaction, rusqlite::Error> {
-//   loop {
-//     let Ok(lock) = OwnedLock::try_new(conn.clone(), |owner| {
-//       owner
-//         .try_write_lock_for(Duration::from_micros(50))
-//         .ok_or("timeout")
-//     }) else {
-//       tokio::time::sleep(Duration::from_micros(150)).await;
-//       continue;
-//     };
-//
-//     return OwnedTransaction::try_new(MutBorrow::new(lock), |owner| {
-//       owner
-//         .borrow_mut()
-//         .with_dependent_mut(|_owner, depdendent| depdendent.transaction())
-//     });
-//   }
-// }
-
 self_cell!(
   pub(crate) struct OwnedTx {
     owner: MutBorrow<ArcLockGuard>,
@@ -55,8 +16,6 @@ self_cell!(
     dependent: Transaction,
   }
 );
-
-// unsafe impl Sync for OwnedTx {}
 
 pub(crate) async fn new_tx(conn: trailbase_sqlite::Connection) -> Result<OwnedTx, rusqlite::Error> {
   loop {
@@ -70,11 +29,6 @@ pub(crate) async fn new_tx(conn: trailbase_sqlite::Connection) -> Result<OwnedTx
     });
   }
 }
-
-// std::thread_local! {
-//     // TODO: Could be a RefCell instead of a Mutex.
-//     pub(crate) static CURRENT_TX: Mutex<Option<OwnedTx>> = const { Mutex::new(None) } ;
-// }
 
 async fn handle_sqlite_request_impl(
   conn: trailbase_sqlite::Connection,
