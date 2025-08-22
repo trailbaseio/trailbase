@@ -40,6 +40,9 @@ wasmtime::component::bindgen!({
         // Ours:
         "wit/trailbase.wit",
     ],
+    // NOTE: This doesn't seem to work even though it should be fixed:
+    //   https://github.com/bytecodealliance/wasmtime/issues/10677
+    // i.e. can't add db locks to shared state.
     require_store_data_send: false,
     // Interactions with `ResourceTable` can possibly trap so enable the ability
     // to return traps from generated functions.
@@ -191,7 +194,7 @@ impl trailbase::runtime::host_endpoint::Host for State {
     &mut self,
   ) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + ::core::marker::Send {
     async fn begin(conn: trailbase_sqlite::Connection) -> Result<(), TxError> {
-      let new_tx = sqlite::new_transaction(conn)
+      let new_tx = sqlite::new_tx(conn)
         .await
         .map_err(|err| TxError::Other(err.to_string()))?;
 
@@ -467,6 +470,7 @@ struct SharedState {
   thread_id: u64,
   runtime: Arc<tokio::runtime::Runtime>,
   conn: trailbase_sqlite::Connection,
+  // tx: RwLock<Option<sqlite::OwnedTx>>,
 }
 
 pub struct RuntimeInstance {
@@ -504,6 +508,7 @@ impl RuntimeInstance {
         runtime,
         thread_id,
         conn,
+        // tx: RwLock::new(None),
       }),
     });
   }
