@@ -1,4 +1,4 @@
-#![forbid(unsafe_code, clippy::unwrap_used)]
+#![forbid(clippy::unwrap_used)]
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
@@ -69,12 +69,19 @@ pub enum Message {
   Run(Box<dyn FnOnce(Rc<RuntimeInstance>) -> LocalBoxFuture<'static, ()> + Send>),
 }
 
+#[derive(Clone)]
+struct LockedTransaction(Arc<Mutex<Option<sqlite::OwnedTx>>>);
+
+unsafe impl Send for LockedTransaction {}
+
 struct State {
   resource_table: ResourceTable,
   wasi_ctx: WasiCtx,
   http: WasiHttpCtx,
 
   shared: Arc<SharedState>,
+
+  tx: LockedTransaction,
 }
 
 impl IoView for State {
@@ -193,71 +200,69 @@ impl trailbase::runtime::host_endpoint::Host for State {
   fn tx_begin(
     &mut self,
   ) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + ::core::marker::Send {
-    async fn begin(conn: trailbase_sqlite::Connection) -> Result<(), TxError> {
-      let new_tx = sqlite::new_tx(conn)
-        .await
-        .map_err(|err| TxError::Other(err.to_string()))?;
+    async fn begin(
+      conn: trailbase_sqlite::Connection,
+      tx: LockedTransaction,
+    ) -> Result<(), TxError> {
+      assert!(tx.0.lock().is_none());
 
-      sqlite::CURRENT_TX.with(|tx: &Mutex<_>| {
-        *tx.lock() = Some(new_tx);
-      });
+      *tx.0.lock() = Some(
+        sqlite::new_tx(conn)
+          .await
+          .map_err(|err| TxError::Other(err.to_string()))?,
+      );
 
       return Ok(());
     }
 
+    let tx = self.tx.clone();
     return self
       .shared
       .runtime
-      .spawn(begin(self.shared.conn.clone()))
+      .spawn(begin(self.shared.conn.clone(), tx))
       .map_err(|err| wasmtime::Error::msg(err.to_string()));
   }
 
   fn tx_commit(
     &mut self,
   ) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + ::core::marker::Send {
-    fn commit() -> Result<(), TxError> {
-      let tx = sqlite::CURRENT_TX.with(|tx: &Mutex<_>| {
-        return tx.lock().take();
-      });
-
-      let Some(tx) = tx else {
+    fn commit(tx: LockedTransaction) -> Result<(), TxError> {
+      let Some(tx) = tx.0.lock().take() else {
         return Err(TxError::Other("no pending tx".to_string()));
       };
 
       println!("COMMIT");
 
       // NOTE: this is the same as `tx.commit()` just w/o consuming.
-      tx.borrow_dependent()
+      let lock = tx.borrow_dependent();
+      lock
         .execute_batch("COMMIT")
         .map_err(|err| TxError::Other(err.to_string()))?;
 
       return Ok(());
     }
 
-    return std::future::ready(Ok(commit()));
+    return std::future::ready(Ok(commit(self.tx.clone())));
   }
 
   fn tx_rollback(
     &mut self,
   ) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + ::core::marker::Send {
-    fn rollback() -> Result<(), TxError> {
-      let tx = sqlite::CURRENT_TX.with(|tx: &Mutex<_>| {
-        return tx.lock().take();
-      });
-
-      let Some(tx) = tx else {
+    fn rollback(tx: LockedTransaction) -> Result<(), TxError> {
+      let Some(tx) = tx.0.lock().take() else {
         return Err(TxError::Other("no pending tx".to_string()));
       };
 
       // NOTE: this is the same as `tx.rollback()` just w/o consuming.
-      tx.borrow_dependent()
+      let lock = tx.borrow_dependent();
+      lock
         .execute_batch("ROLLBACK")
         .map_err(|err| TxError::Other(err.to_string()))?;
 
       return Ok(());
     }
 
-    return std::future::ready(Ok(rollback()));
+    return std::future::ready(Ok(rollback(self.tx.clone())));
   }
 
   fn tx_execute(
@@ -265,32 +270,30 @@ impl trailbase::runtime::host_endpoint::Host for State {
     query: String,
     params: Vec<Value>,
   ) -> impl Future<Output = wasmtime::Result<Result<u64, TxError>>> + ::core::marker::Send {
-    fn execute(query: String, params: Vec<Value>) -> Result<u64, TxError> {
+    fn execute(tx: LockedTransaction, query: String, params: Vec<Value>) -> Result<u64, TxError> {
       let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
 
-      return sqlite::CURRENT_TX.with(move |tx: &Mutex<_>| {
-        let Some(ref tx) = *tx.lock() else {
-          return Err(TxError::Other("No open transaction".to_string()));
-        };
+      let Some(ref tx) = *tx.0.lock() else {
+        return Err(TxError::Other("No open transaction".to_string()));
+      };
 
-        let mut stmt = tx
-          .borrow_dependent()
-          .prepare(&query)
-          .map_err(|err| TxError::Other(err.to_string()))?;
+      let lock = tx.borrow_dependent();
+      let mut stmt = lock
+        .prepare(&query)
+        .map_err(|err| TxError::Other(err.to_string()))?;
 
-        params
-          .bind(&mut stmt)
-          .map_err(|err| TxError::Other(err.to_string()))?;
+      params
+        .bind(&mut stmt)
+        .map_err(|err| TxError::Other(err.to_string()))?;
 
-        return Ok(
-          stmt
-            .raw_execute()
-            .map_err(|err| TxError::Other(err.to_string()))? as u64,
-        );
-      });
+      return Ok(
+        stmt
+          .raw_execute()
+          .map_err(|err| TxError::Other(err.to_string()))? as u64,
+      );
     }
 
-    return std::future::ready(Ok(execute(query, params)));
+    return std::future::ready(Ok(execute(self.tx.clone(), query, params)));
   }
 
   fn tx_query(
@@ -299,38 +302,40 @@ impl trailbase::runtime::host_endpoint::Host for State {
     params: Vec<Value>,
   ) -> impl Future<Output = wasmtime::Result<Result<Vec<Vec<Value>>, TxError>>> + ::core::marker::Send
   {
-    fn query_fn(query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>, TxError> {
+    fn query_fn(
+      tx: LockedTransaction,
+      query: String,
+      params: Vec<Value>,
+    ) -> Result<Vec<Vec<Value>>, TxError> {
       let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
 
-      return sqlite::CURRENT_TX.with(move |tx: &Mutex<_>| {
-        let Some(ref tx) = *tx.lock() else {
-          return Err(TxError::Other("No open transaction".to_string()));
-        };
+      let Some(ref tx) = *tx.0.lock() else {
+        return Err(TxError::Other("No open transaction".to_string()));
+      };
 
-        let mut stmt = tx
-          .borrow_dependent()
-          .prepare(&query)
-          .map_err(|err| TxError::Other(err.to_string()))?;
+      let lock = tx.borrow_dependent();
+      let mut stmt = lock
+        .prepare(&query)
+        .map_err(|err| TxError::Other(err.to_string()))?;
 
-        params
-          .bind(&mut stmt)
-          .map_err(|err| TxError::Other(err.to_string()))?;
+      params
+        .bind(&mut stmt)
+        .map_err(|err| TxError::Other(err.to_string()))?;
 
-        let rows =
-          Rows::from_rows(stmt.raw_query()).map_err(|err| TxError::Other(err.to_string()))?;
+      let rows =
+        Rows::from_rows(stmt.raw_query()).map_err(|err| TxError::Other(err.to_string()))?;
 
-        let values: Vec<_> = rows
-          .into_iter()
-          .map(|trailbase_sqlite::Row(row, _col)| {
-            return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
-          })
-          .collect();
+      let values: Vec<_> = rows
+        .into_iter()
+        .map(|trailbase_sqlite::Row(row, _col)| {
+          return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
+        })
+        .collect();
 
-        return Ok(values);
-      });
+      return Ok(values);
     }
 
-    return std::future::ready(Ok(query_fn(query, params)));
+    return std::future::ready(Ok(query_fn(self.tx.clone(), query, params)));
   }
 }
 
@@ -470,7 +475,6 @@ struct SharedState {
   thread_id: u64,
   runtime: Arc<tokio::runtime::Runtime>,
   conn: trailbase_sqlite::Connection,
-  // tx: RwLock<Option<sqlite::OwnedTx>>,
 }
 
 pub struct RuntimeInstance {
@@ -508,7 +512,6 @@ impl RuntimeInstance {
         runtime,
         thread_id,
         conn,
-        // tx: RwLock::new(None),
       }),
     });
   }
@@ -536,6 +539,7 @@ impl RuntimeInstance {
         wasi_ctx: wasi_ctx.build(),
         http: WasiHttpCtx::new(),
         shared: self.shared.clone(),
+        tx: LockedTransaction(Arc::new(Mutex::new(None))),
       },
     );
   }
