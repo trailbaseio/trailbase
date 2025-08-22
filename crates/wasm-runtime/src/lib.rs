@@ -10,7 +10,6 @@ use futures_util::TryFutureExt;
 use futures_util::future::LocalBoxFuture;
 use http_body_util::combinators::BoxBody;
 use parking_lot::Mutex;
-use self_cell::MutBorrow;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -192,14 +191,8 @@ impl trailbase::runtime::host_endpoint::Host for State {
     &mut self,
   ) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + ::core::marker::Send {
     async fn begin(conn: trailbase_sqlite::Connection) -> Result<(), TxError> {
-      let lock = sqlite::new_db_lock(conn).await;
-      let new_tx =
-        sqlite::OwnedTransaction::try_new(MutBorrow::new(sqlite::OwnedLockWrapper(lock)), |lock| {
-          lock
-            .borrow_mut()
-            .0
-            .with_dependent_mut(|_owner, depdendent| depdendent.transaction())
-        })
+      let new_tx = sqlite::new_transaction(conn)
+        .await
         .map_err(|err| TxError::Other(err.to_string()))?;
 
       sqlite::CURRENT_TX.with(|tx: &Mutex<_>| {

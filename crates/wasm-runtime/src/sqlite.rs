@@ -19,11 +19,9 @@ self_cell!(
   }
 );
 
-pub(crate) struct OwnedLockWrapper(pub OwnedLock);
-
 self_cell!(
   pub(crate) struct OwnedTransaction {
-    owner: MutBorrow<OwnedLockWrapper>,
+    owner: MutBorrow<OwnedLock>,
 
     #[covariant]
     dependent: Transaction,
@@ -34,21 +32,24 @@ std::thread_local! {
     pub(crate) static CURRENT_TX: Mutex<Option<OwnedTransaction>> = const { Mutex::new(None) } ;
 }
 
-pub(crate) fn sqlite_err<E: std::error::Error>(err: E) -> String {
-  return err.to_string();
-}
-
-pub(crate) async fn new_db_lock(conn: trailbase_sqlite::Connection) -> OwnedLock {
+pub(crate) async fn new_transaction(
+  conn: trailbase_sqlite::Connection,
+) -> Result<OwnedTransaction, rusqlite::Error> {
   loop {
-    if let Ok(lock) = OwnedLock::try_new(conn.clone(), |owner| {
+    let Ok(lock) = OwnedLock::try_new(conn.clone(), |owner| {
       owner
         .try_write_lock_for(Duration::from_micros(50))
         .ok_or("timeout")
-    }) {
-      return lock;
-    }
+    }) else {
+      tokio::time::sleep(Duration::from_micros(150)).await;
+      continue;
+    };
 
-    tokio::time::sleep(Duration::from_micros(150)).await;
+    return OwnedTransaction::try_new(MutBorrow::new(lock), |owner| {
+      owner
+        .borrow_mut()
+        .with_dependent_mut(|_owner, depdendent| depdendent.transaction())
+    });
   }
 }
 
@@ -58,14 +59,7 @@ async fn handle_sqlite_request_impl(
 ) -> Result<SqliteResponse, String> {
   return match request.uri().path() {
     "/tx_begin" => {
-      let lock = new_db_lock(conn).await;
-      let new_tx = OwnedTransaction::try_new(MutBorrow::new(OwnedLockWrapper(lock)), |lock| {
-        lock
-          .borrow_mut()
-          .0
-          .with_dependent_mut(|_owner, depdendent| depdendent.transaction())
-      })
-      .map_err(sqlite_err)?;
+      let new_tx = new_transaction(conn).await.map_err(sqlite_err)?;
 
       CURRENT_TX.with(|tx: &Mutex<_>| {
         *tx.lock() = Some(new_tx);
@@ -243,6 +237,11 @@ pub fn row_to_rich_json_array(
 #[inline]
 pub fn bytes_to_body<E>(bytes: Bytes) -> BoxBody<Bytes, E> {
   BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!()))
+}
+
+#[inline]
+pub fn sqlite_err<E: std::error::Error>(err: E) -> String {
+  return err.to_string();
 }
 
 // #[inline]
