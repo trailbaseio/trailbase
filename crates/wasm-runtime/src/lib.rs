@@ -84,6 +84,15 @@ struct State {
   tx: LockedTransaction,
 }
 
+impl Drop for State {
+  fn drop(&mut self) {
+    #[cfg(debug_assertions)]
+    if self.tx.0.lock().is_some() {
+      log::warn!("pending transaction locking the DB");
+    }
+  }
+}
+
 impl IoView for State {
   fn table(&mut self) -> &mut ResourceTable {
     return &mut self.resource_table;
