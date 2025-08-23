@@ -64,7 +64,8 @@ test("auth integration tests", async () => {
 
 test("Record integration tests", async () => {
   const client = await connect();
-  const api = client.records<NewSimpleStrict>("simple_strict_table");
+  const apiName = "simple_strict_table";
+  const api = client.records<NewSimpleStrict>(apiName);
 
   const now = new Date().getTime();
   // Throw in some url characters for good measure.
@@ -83,6 +84,27 @@ test("Record integration tests", async () => {
       { text_not_null: "ts bulk create 0" },
       { text_not_null: "ts bulk create 1" },
     ]);
+    expect(bulkIds.length).toBe(2);
+  }
+
+  {
+    const op: {
+      Create: {
+        api_name: string;
+        value: Record<string, unknown>;
+      };
+    } = JSON.parse(JSON.stringify(api.createOp({ text_not_null: "test" })));
+
+    expect(op.Create.api_name).toBe(apiName);
+    expect(op.Create.value.text_not_null).toBe("test");
+
+    const bulkIds = await client.execute(
+      [
+        api.createOp({ text_not_null: "ts bulk execute 0" }),
+        api.createOp({ text_not_null: "ts bulk execute 1" }),
+      ],
+      false,
+    );
     expect(bulkIds.length).toBe(2);
   }
 
@@ -121,7 +143,7 @@ test("Record integration tests", async () => {
   }
 
   {
-    const response = await api.list<SimpleStrict>({
+    const response = await api.list({
       filters: [
         {
           column: "text_not_null",
@@ -136,20 +158,20 @@ test("Record integration tests", async () => {
     ).toStrictEqual(messages);
   }
 
-  const record: SimpleStrict = await api.read(ids[0]);
+  const record = await api.read(ids[0]);
   expect(record.id).toStrictEqual(ids[0]);
   expect(record.text_not_null).toStrictEqual(messages[0]);
 
   // Test 1:1 view-bases record API.
   const view_record: SimpleCompleteView = await client
-    .records("simple_complete_view")
+    .records<SimpleCompleteView>("simple_complete_view")
     .read(ids[0]);
   expect(view_record.id).toStrictEqual(ids[0]);
   expect(view_record.text_not_null).toStrictEqual(messages[0]);
 
   // Test view-based record API with column renames.
   const subset_view_record: SimpleSubsetView = await client
-    .records("simple_subset_view")
+    .records<SimpleSubsetView>("simple_subset_view")
     .read(ids[0]);
   expect(subset_view_record.id).toStrictEqual(ids[0]);
   expect(subset_view_record.t_not_null).toStrictEqual(messages[0]);
@@ -160,7 +182,7 @@ test("Record integration tests", async () => {
     text_null: "updated null",
   };
   await api.update(ids[1], updated_value);
-  const updated_record: SimpleStrict = await api.read(ids[1]);
+  const updated_record = await api.read(ids[1]);
   expect(updated_record).toEqual(
     expect.objectContaining({
       id: ids[1],
@@ -173,9 +195,7 @@ test("Record integration tests", async () => {
   expect(await client.logout()).toBe(true);
   expect(client.user()).toBe(undefined);
 
-  await expect(
-    async () => await api.read<SimpleStrict>(ids[0]),
-  ).rejects.toThrowError(
+  await expect(async () => await api.read(ids[0])).rejects.toThrowError(
     expect.objectContaining({
       status: status.FORBIDDEN,
     }),
@@ -206,10 +226,10 @@ type Comment = {
 
 test("expand foreign records", async () => {
   const client = await connect();
-  const api = client.records("comment");
+  const api = client.records<Comment>("comment");
 
   {
-    const comment = await api.read<Comment>(1);
+    const comment = await api.read(1);
     expect(comment.id).toBe(1);
     expect(comment.body).toBe("first comment");
     expect(comment.author.data).toBeUndefined();
@@ -217,7 +237,7 @@ test("expand foreign records", async () => {
   }
 
   {
-    const comment = await api.read<Comment>(1, { expand: ["post"] });
+    const comment = await api.read(1, { expand: ["post"] });
     expect(comment.id).toBe(1);
     expect(comment.body).toBe("first comment");
     expect(comment.author.data).toBeUndefined();
@@ -225,7 +245,7 @@ test("expand foreign records", async () => {
   }
 
   {
-    const response = await api.list<Comment>({
+    const response = await api.list({
       expand: ["author", "post"],
       order: ["-id"],
       pagination: {
@@ -243,7 +263,7 @@ test("expand foreign records", async () => {
   }
 
   {
-    const response = await api.list<Comment>({
+    const response = await api.list({
       expand: ["author", "post"],
       order: ["-id"],
       pagination: {
@@ -254,7 +274,7 @@ test("expand foreign records", async () => {
     expect(response.records.length).toBe(2);
     const second = response.records[1];
 
-    const offsetResponse = await api.list<Comment>({
+    const offsetResponse = await api.list({
       expand: ["author", "post"],
       order: ["-id"],
       pagination: {
@@ -278,7 +298,7 @@ test("record error tests", async () => {
   );
   const nonExistantApi = client.records("non-existant");
   await expect(
-    async () => await nonExistantApi.read<SimpleStrict>(nonExistantId),
+    async () => await nonExistantApi.read(nonExistantId),
   ).rejects.toThrowError(
     expect.objectContaining({
       status: status.METHOD_NOT_ALLOWED,
@@ -286,16 +306,12 @@ test("record error tests", async () => {
   );
 
   const api = client.records("simple_strict_table");
-  await expect(
-    async () => await api.read<SimpleStrict>("invalid id"),
-  ).rejects.toThrowError(
+  await expect(async () => await api.read("invalid id")).rejects.toThrowError(
     expect.objectContaining({
       status: status.BAD_REQUEST,
     }),
   );
-  await expect(
-    async () => await api.read<SimpleStrict>(nonExistantId),
-  ).rejects.toThrowError(
+  await expect(async () => await api.read(nonExistantId)).rejects.toThrowError(
     expect.objectContaining({
       status: status.NOT_FOUND,
     }),
@@ -304,11 +320,11 @@ test("record error tests", async () => {
 
 test("realtime subscribe specific record tests", async () => {
   const client = await connect();
-  const api = client.records("simple_strict_table");
+  const api = client.records<NewSimpleStrict>("simple_strict_table");
 
   const now = new Date().getTime();
   const createMessage = `ts client realtime test 0: =?&${now}`;
-  const id = (await api.create<NewSimpleStrict>({
+  const id = (await api.create({
     text_not_null: createMessage,
   })) as string;
 
@@ -331,14 +347,57 @@ test("realtime subscribe specific record tests", async () => {
   expect(events[1]["Delete"]["text_not_null"]).equals(updatedMessage);
 });
 
+test("transaction tests", async () => {
+  const client = await connect();
+  const api = client.records<NewSimpleStrict>("simple_strict_table");
+  const now = new Date().getTime();
+
+  // Test transaction with create operation
+  {
+    const record = { text_not_null: `ts transaction create test: =?&${now}` };
+    const ids = await client.execute([api.createOp(record)]);
+
+    expect(ids).toHaveLength(1);
+
+    // Verify record was created
+    const createdRecord = await api.read(ids[0]);
+    expect(createdRecord.text_not_null).toBe(record.text_not_null);
+  }
+
+  // Test transaction with update operation
+  {
+    const record = {
+      text_not_null: `ts transaction update test original: =?&${now}`,
+    };
+    const id = await api.create(record);
+    const updatedRecord = {
+      text_not_null: `ts transaction update test modified: =?&${now}`,
+    };
+    await client.execute([api.updateOp(id, updatedRecord)]);
+
+    const readRecord = await api.read(id);
+    expect(readRecord.text_not_null).toBe(updatedRecord.text_not_null);
+  }
+
+  // Test transaction with delete operation
+  {
+    const record = { text_not_null: `ts transaction delete test: =?&${now}` };
+    const id = await api.create(record);
+
+    await client.execute([api.deleteOp(id)]);
+
+    await expect(api.read(id)).rejects.toThrow();
+  }
+});
+
 test("realtime subscribe table tests", async () => {
   const client = await connect();
-  const api = client.records("simple_strict_table");
+  const api = client.records<NewSimpleStrict>("simple_strict_table");
   const eventStream = await api.subscribe("*");
 
   const now = new Date().getTime();
   const createMessage = `ts client realtime test 0: =?&${now}`;
-  const id = (await api.create<NewSimpleStrict>({
+  const id = (await api.create({
     text_not_null: createMessage,
   })) as string;
 
