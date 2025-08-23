@@ -18,9 +18,9 @@ self_cell!(
 );
 
 pub(crate) async fn new_tx(conn: trailbase_sqlite::Connection) -> Result<OwnedTx, rusqlite::Error> {
-  loop {
-    let Some(lock) = conn.try_write_arc_lock_for(Duration::from_micros(50)) else {
-      tokio::time::sleep(Duration::from_micros(150)).await;
+  for _ in 0..200 {
+    let Some(lock) = conn.try_write_arc_lock_for(Duration::from_micros(100)) else {
+      tokio::time::sleep(Duration::from_micros(400)).await;
       continue;
     };
 
@@ -28,6 +28,10 @@ pub(crate) async fn new_tx(conn: trailbase_sqlite::Connection) -> Result<OwnedTx
       return Ok(owner.borrow_mut().transaction()?);
     });
   }
+
+  return Err(rusqlite::Error::ToSqlConversionFailure(
+    "Failed to acquire lock".into(),
+  ));
 }
 
 async fn handle_sqlite_request_impl(
