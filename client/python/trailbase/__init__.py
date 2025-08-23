@@ -315,6 +315,8 @@ class IApiBatch(Protocol):
 
 
 class TransactionBatch:
+    _transactionApi: str = "api/transaction/v1/execute"
+
     _client: "Client"
     _operations: List[Operation]
 
@@ -329,7 +331,7 @@ class TransactionBatch:
         ops_json = [dict(op) for op in self._operations]
 
         response = self._client.fetch(
-            "api/transaction/v1/execute",
+            self._transactionApi,
             method="POST",
             data=cast(JSON, {"operations": ops_json}),
         )

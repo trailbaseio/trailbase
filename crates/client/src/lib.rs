@@ -734,7 +734,7 @@ impl TransactionBatch {
     }
   }
 
-  pub fn api(&mut self, api_name: impl Into<String>) -> ApiBatch {
+  pub fn api(&mut self, api_name: impl Into<String>) -> ApiBatch<'_> {
     ApiBatch {
       batch: self,
       api_name: api_name.into(),
@@ -748,12 +748,7 @@ impl TransactionBatch {
 
     let response = self
       .client
-      .fetch(
-        "api/transaction/v1/execute",
-        Method::POST,
-        Some(&request),
-        None,
-      )
+      .fetch(TRANSACTION_API, Method::POST, Some(&request), None)
       .await?;
 
     let result: TransactionResponse = json(response).await?;
@@ -980,6 +975,7 @@ async fn json<T: DeserializeOwned>(resp: reqwest::Response) -> Result<T, Error> 
 
 const AUTH_API: &str = "api/auth/v1";
 const RECORD_API: &str = "api/records/v1";
+const TRANSACTION_API: &str = "/api/transaction/v1/execute";
 
 #[cfg(test)]
 mod tests {

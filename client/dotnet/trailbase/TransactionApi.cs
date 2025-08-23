@@ -115,6 +115,7 @@ public interface IApiBatch {
 
 /// <summary>New transaction batch.</summary>
 public class TransactionBatch : ITransactionBatch {
+  static readonly string _transactionApi = "api/transaction/v1/execute";
   private readonly Client _client;
   private readonly List<Operation> _operations = new();
 
@@ -134,7 +135,7 @@ public class TransactionBatch : ITransactionBatch {
   public async Task<List<string>> Send() {
     var request = new TransactionRequest { Operations = _operations };
     var response = await _client.Fetch(
-        "api/transaction/v1/execute",
+        TransactionBatch._transactionApi,
         HttpMethod.Post,
         JsonContent.Create(request),
         null
