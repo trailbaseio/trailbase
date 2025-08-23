@@ -29,6 +29,7 @@ use crate::exports::trailbase::runtime::init_endpoint::InitResult;
 
 static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 
+// Documentation: https://docs.wasmtime.dev/api/wasmtime/component/macro.bindgen.html
 wasmtime::component::bindgen!({
     world: "trailbase:runtime/trailbase",
     path: [
@@ -50,10 +51,16 @@ wasmtime::component::bindgen!({
     // Interactions with `ResourceTable` can possibly trap so enable the ability
     // to return traps from generated functions.
     imports: {
-        // "wasi:io/poll/poll": async | trappable,
+        "trailbase:runtime/host-endpoint/tx-commit": trappable,
+        "trailbase:runtime/host-endpoint/tx-rollback": trappable,
+        "trailbase:runtime/host-endpoint/tx-execute": trappable,
+        "trailbase:runtime/host-endpoint/tx-query": trappable,
+        "trailbase:runtime/host-endpoint/thread-id": trappable,
         default: async | trappable,
     },
-    exports: { default: async },
+    exports: {
+        default: async,
+    },
 });
 
 #[derive(Debug, thiserror::Error)]
@@ -156,15 +163,15 @@ impl WasiHttpView for State {
 }
 
 impl trailbase::runtime::host_endpoint::Host for State {
-  fn thread_id(&mut self) -> impl Future<Output = wasmtime::Result<u64>> + ::core::marker::Send {
-    return std::future::ready(Ok(self.shared.thread_id));
+  fn thread_id(&mut self) -> wasmtime::Result<u64> {
+    return Ok(self.shared.thread_id);
   }
 
   fn execute(
     &mut self,
     query: String,
     params: Vec<Value>,
-  ) -> impl Future<Output = wasmtime::Result<Result<u64, TxError>>> + ::core::marker::Send {
+  ) -> impl Future<Output = wasmtime::Result<Result<u64, TxError>>> + Send {
     let conn = self.shared.conn.clone();
     let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
 
@@ -185,8 +192,7 @@ impl trailbase::runtime::host_endpoint::Host for State {
     &mut self,
     query: String,
     params: Vec<Value>,
-  ) -> impl Future<Output = wasmtime::Result<Result<Vec<Vec<Value>>, TxError>>> + ::core::marker::Send
-  {
+  ) -> impl Future<Output = wasmtime::Result<Result<Vec<Vec<Value>>, TxError>>> + Send {
     let conn = self.shared.conn.clone();
     let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
 
@@ -211,9 +217,7 @@ impl trailbase::runtime::host_endpoint::Host for State {
       .map_err(|err| wasmtime::Error::msg(err.to_string()));
   }
 
-  fn tx_begin(
-    &mut self,
-  ) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + ::core::marker::Send {
+  fn tx_begin(&mut self) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + Send {
     async fn begin(
       conn: trailbase_sqlite::Connection,
       tx: LockedTransaction,
@@ -237,9 +241,7 @@ impl trailbase::runtime::host_endpoint::Host for State {
       .map_err(|err| wasmtime::Error::msg(err.to_string()));
   }
 
-  fn tx_commit(
-    &mut self,
-  ) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + ::core::marker::Send {
+  fn tx_commit(&mut self) -> wasmtime::Result<Result<(), TxError>> {
     fn commit(tx: LockedTransaction) -> Result<(), TxError> {
       let Some(tx) = tx.0.lock().take() else {
         return Err(TxError::Other("no pending tx".to_string()));
@@ -254,12 +256,10 @@ impl trailbase::runtime::host_endpoint::Host for State {
       return Ok(());
     }
 
-    return std::future::ready(Ok(commit(self.tx.clone())));
+    return Ok(commit(self.tx.clone()));
   }
 
-  fn tx_rollback(
-    &mut self,
-  ) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + ::core::marker::Send {
+  fn tx_rollback(&mut self) -> wasmtime::Result<Result<(), TxError>> {
     fn rollback(tx: LockedTransaction) -> Result<(), TxError> {
       let Some(tx) = tx.0.lock().take() else {
         return Err(TxError::Other("no pending tx".to_string()));
@@ -274,14 +274,14 @@ impl trailbase::runtime::host_endpoint::Host for State {
       return Ok(());
     }
 
-    return std::future::ready(Ok(rollback(self.tx.clone())));
+    return Ok(rollback(self.tx.clone()));
   }
 
   fn tx_execute(
     &mut self,
     query: String,
     params: Vec<Value>,
-  ) -> impl Future<Output = wasmtime::Result<Result<u64, TxError>>> + ::core::marker::Send {
+  ) -> wasmtime::Result<Result<u64, TxError>> {
     fn execute(tx: LockedTransaction, query: String, params: Vec<Value>) -> Result<u64, TxError> {
       let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
 
@@ -305,15 +305,14 @@ impl trailbase::runtime::host_endpoint::Host for State {
       );
     }
 
-    return std::future::ready(Ok(execute(self.tx.clone(), query, params)));
+    return Ok(execute(self.tx.clone(), query, params));
   }
 
   fn tx_query(
     &mut self,
     query: String,
     params: Vec<Value>,
-  ) -> impl Future<Output = wasmtime::Result<Result<Vec<Vec<Value>>, TxError>>> + ::core::marker::Send
-  {
+  ) -> wasmtime::Result<Result<Vec<Vec<Value>>, TxError>> {
     fn query_fn(
       tx: LockedTransaction,
       query: String,
@@ -347,7 +346,7 @@ impl trailbase::runtime::host_endpoint::Host for State {
       return Ok(values);
     }
 
-    return std::future::ready(Ok(query_fn(self.tx.clone(), query, params)));
+    return Ok(query_fn(self.tx.clone(), query, params));
   }
 }
 
