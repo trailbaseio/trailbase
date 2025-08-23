@@ -331,6 +331,58 @@ test("realtime subscribe specific record tests", async () => {
   expect(events[1]["Delete"]["text_not_null"]).equals(updatedMessage);
 });
 
+test("transaction tests", async () => {
+  const client = await connect();
+  const now = new Date().getTime();
+
+  // Test transaction with create operation
+  {
+    const batch = client.transaction();
+    const record = { text_not_null: `ts transaction create test: =?&${now}` };
+    batch.api("simple_strict_table").create(record);
+
+    const ids = await batch.send();
+    expect(ids).toHaveLength(1);
+
+    // Verify record was created
+    const api = client.records("simple_strict_table");
+    const createdRecord = await api.read(ids[0]);
+    expect(createdRecord.text_not_null).toBe(record.text_not_null);
+  }
+
+  // Test transaction with update operation
+  {
+    const api = client.records("simple_strict_table");
+    const record = {
+      text_not_null: `ts transaction update test original: =?&${now}`,
+    };
+    const id = await api.create(record);
+
+    const batch = client.transaction();
+    const updatedRecord = {
+      text_not_null: `ts transaction update test modified: =?&${now}`,
+    };
+    batch.api("simple_strict_table").update(id, updatedRecord);
+
+    await batch.send();
+    const readRecord = await api.read(id);
+    expect(readRecord.text_not_null).toBe(updatedRecord.text_not_null);
+  }
+
+  // Test transaction with delete operation
+  {
+    const api = client.records("simple_strict_table");
+    const record = { text_not_null: `ts transaction delete test: =?&${now}` };
+    const id = await api.create(record);
+
+    const batch = client.transaction();
+    batch.api("simple_strict_table").delete(id);
+
+    await batch.send();
+    await expect(api.read(id)).rejects.toThrow();
+  }
+});
+
 test("realtime subscribe table tests", async () => {
   const client = await connect();
   const api = client.records("simple_strict_table");

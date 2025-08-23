@@ -251,6 +251,52 @@ func TestRecordApi(t *testing.T) {
 	assert(t, r == nil, "expected nil value reading delete record")
 }
 
+func TestTransaction(t *testing.T) {
+	client := connect(t)
+	batch := client.Transaction()
+	api := NewRecordApi[SimpleStrict](client, "simple_strict_table")
+
+	now := time.Now().Unix()
+
+	var ids []RecordId
+
+	// Create
+	createdMessage := fmt.Sprint("go transaction create test: =?&", now)
+	batch.API("simple_strict_table").Create(SimpleStrict{
+		TextNotNull: createdMessage,
+	})
+	ids, err := batch.Send()
+	assertFine(t, err)
+	assert(t, len(ids) == 1, "Expected one ID from create operation")
+
+	simpleStrict1, err := api.Read(ids[0])
+	assertFine(t, err)
+	assertEqual(t, createdMessage, simpleStrict1.TextNotNull)
+
+	// Update
+	{
+		updatedMessage := fmt.Sprint("go transaction update test: =?&", now)
+		batch.API("simple_strict_table").Update(ids[0], SimpleStrict{
+			TextNotNull: updatedMessage,
+		})
+		_, err := batch.Send()
+		assertFine(t, err)
+
+		simpleStrict2, err := api.Read(ids[0])
+		assertFine(t, err)
+		assertEqual(t, updatedMessage, simpleStrict2.TextNotNull)
+	}
+	// Delete
+	{
+		batch.API("simple_strict_table").Delete(ids[0])
+		_, err := batch.Send()
+		assertFine(t, err)
+		r, err := api.Read(ids[0])
+		assert(t, err != nil, "expected error reading delete record")
+		assert(t, r == nil, "expected nil value reading delete record")
+	}
+}
+
 func assertEqual[T comparable](t *testing.T, expected T, got T) {
 	if expected != got {
 		buf := make([]byte, 1<<16)

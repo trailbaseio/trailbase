@@ -132,6 +132,8 @@ type Client interface {
 
 	// Internal
 	do(method string, path string, body []byte, queryParams []QueryParam) (*http.Response, error)
+
+	Transaction() *TransactionBatch
 }
 
 type ClientImpl struct {
@@ -267,6 +269,13 @@ func (c *ClientImpl) do(method string, path string, body []byte, queryParams []Q
 	}
 
 	return c.client.do(method, path, headers, body, queryParams)
+}
+
+func (c *ClientImpl) Transaction() *TransactionBatch {
+	return &TransactionBatch{
+		client:     c,
+		operations: make([]Operation, 0),
+	}
 }
 
 func (c *ClientImpl) updateTokens(tokens *Tokens) (*Tokens, error) {

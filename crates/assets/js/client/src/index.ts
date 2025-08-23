@@ -428,6 +428,9 @@ export interface Client {
   ///
   /// Unlike native fetch, will throw in case !response.ok.
   fetch(path: string, init?: FetchOptions): Promise<Response>;
+
+  /// Creates a new transaction batch.
+  transaction(): TransactionBatch;
 }
 
 /// Client for interacting with TrailBase auth and record APIs.
@@ -483,6 +486,11 @@ class ClientImpl implements Client {
   /// Construct accessor for Record API with given name.
   public records<T = Record<string, unknown>>(name: string): RecordApi<T> {
     return new RecordApiImpl<T>(this, name);
+  }
+
+  /// Creates a new transaction batch.
+  public transaction(): TransactionBatch {
+    return new TransactionBatch(this);
   }
 
   public avatarUrl(userId?: string): string | undefined {
@@ -776,3 +784,95 @@ export const exportedForTesting = isDev
       base64Encode,
     }
   : undefined;
+
+/// Batch Builder Class
+export interface Operation {
+  Create?: {
+    api_name: string;
+    value: Record<string, unknown>;
+  };
+  Update?: {
+    api_name: string;
+    record_id: string;
+    value: Record<string, unknown>;
+  };
+  Delete?: {
+    api_name: string;
+    record_id: string;
+  };
+}
+
+export interface TransactionRequest {
+  operations: Operation[];
+}
+
+export interface TransactionResponse {
+  ids: string[];
+}
+
+/// Batch Builder Class
+export class TransactionBatch {
+  private operations: Operation[] = [];
+
+  constructor(private client: Client) {}
+
+  api(apiName: string): ApiBatch {
+    return new ApiBatch(this, apiName);
+  }
+
+  async send(): Promise<string[]> {
+    const response = await this.client.fetch("/api/transaction/v1/execute", {
+      method: "POST",
+      body: JSON.stringify({ operations: this.operations }),
+      headers: jsonContentTypeHeader,
+    });
+
+    return (await response.json()).ids;
+  }
+
+  addOperation(operation: Operation): void {
+    this.operations.push(operation);
+  }
+}
+
+// Api-Specific Operations
+export class ApiBatch {
+  constructor(
+    private batch: TransactionBatch,
+    private apiName: string,
+  ) {}
+
+  create(value: Record<string, unknown>): TransactionBatch {
+    this.batch.addOperation({
+      Create: {
+        api_name: this.apiName,
+        value: value,
+      },
+    });
+    return this.batch;
+  }
+
+  update(
+    recordId: string | number,
+    value: Record<string, unknown>,
+  ): TransactionBatch {
+    this.batch.addOperation({
+      Update: {
+        api_name: this.apiName,
+        record_id: `${recordId}`,
+        value: value,
+      },
+    });
+    return this.batch;
+  }
+
+  delete(recordId: string | number): TransactionBatch {
+    this.batch.addOperation({
+      Delete: {
+        api_name: this.apiName,
+        record_id: `${recordId}`,
+      },
+    });
+    return this.batch;
+  }
+}
