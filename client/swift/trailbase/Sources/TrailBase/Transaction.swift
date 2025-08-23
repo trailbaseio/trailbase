@@ -96,7 +96,7 @@ public class TransactionBatch {
         let body = try JSONEncoder().encode(request)
 
         let (_, data) = try await client.fetch(
-            path: "api/transaction/v1/execute",
+            path: TRANSACTION_API,
             method: "POST",
             body: body
         )
@@ -185,3 +185,5 @@ public struct AnyCodable: Codable {
         }
     }
 }
+
+private let TRANSACTION_API = "api/transaction/v1/execute"

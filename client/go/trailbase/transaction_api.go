@@ -97,7 +97,7 @@ func (tb *TransactionBatch) Send() ([]RecordId, error) {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := tb.client.do("POST", "api/transaction/v1/execute", jsonData, []QueryParam{})
+	resp, err := tb.client.do("POST", transactionApi, jsonData, []QueryParam{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
@@ -157,3 +157,5 @@ func (ab *ApiBatch) Delete(recordID RecordId) *TransactionBatch {
 	})
 	return ab.batch
 }
+
+const transactionApi string = "api/transaction/v1/execute"

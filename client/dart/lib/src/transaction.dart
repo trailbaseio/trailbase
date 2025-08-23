@@ -1,9 +1,9 @@
 import 'package:trailbase/src/client.dart';
 
 class Operation {
-  CreateOperation? create;
-  UpdateOperation? update;
-  DeleteOperation? delete;
+  _CreateOperation? create;
+  _UpdateOperation? update;
+  _DeleteOperation? delete;
 
   Operation({this.create, this.update, this.delete});
 
@@ -22,11 +22,11 @@ class Operation {
   }
 }
 
-class CreateOperation {
+class _CreateOperation {
   String apiName;
   Map<String, dynamic> value;
 
-  CreateOperation({required this.apiName, required this.value});
+  _CreateOperation({required this.apiName, required this.value});
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = {};
@@ -36,12 +36,12 @@ class CreateOperation {
   }
 }
 
-class UpdateOperation {
+class _UpdateOperation {
   String apiName;
   RecordId recordId;
   Map<String, dynamic> value;
 
-  UpdateOperation({
+  _UpdateOperation({
     required this.apiName,
     required this.recordId,
     required this.value,
@@ -56,11 +56,11 @@ class UpdateOperation {
   }
 }
 
-class DeleteOperation {
+class _DeleteOperation {
   String apiName;
   RecordId recordId;
 
-  DeleteOperation({required this.apiName, required this.recordId});
+  _DeleteOperation({required this.apiName, required this.recordId});
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = {};
@@ -94,6 +94,8 @@ abstract class IApiBatch {
 }
 
 class TransactionBatch implements ITransactionBatch {
+  static const String _transactionApi = 'api/transaction/v1/execute';
+
   final Client _client;
   final List<Operation> _operations = [];
 
@@ -108,7 +110,7 @@ class TransactionBatch implements ITransactionBatch {
   Future<List<RecordId>> send() async {
     final request = TransactionRequest(operations: _operations);
     final response = await _client.fetch(
-      'api/transaction/v1/execute',
+      TransactionBatch._transactionApi,
       method: 'POST',
       data: request.toJson(),
     );
@@ -121,7 +123,7 @@ class TransactionBatch implements ITransactionBatch {
     return result.toRecordIds();
   }
 
-  void addOperation(Operation operation) {
+  void _addOperation(Operation operation) {
     _operations.add(operation);
   }
 }
@@ -134,17 +136,17 @@ class ApiBatch implements IApiBatch {
 
   @override
   ITransactionBatch create(Map<String, dynamic> value) {
-    _batch.addOperation(
-      Operation(create: CreateOperation(apiName: _apiName, value: value)),
+    _batch._addOperation(
+      Operation(create: _CreateOperation(apiName: _apiName, value: value)),
     );
     return _batch;
   }
 
   @override
   ITransactionBatch update(RecordId recordId, Map<String, dynamic> value) {
-    _batch.addOperation(
+    _batch._addOperation(
       Operation(
-        update: UpdateOperation(
+        update: _UpdateOperation(
           apiName: _apiName,
           recordId: recordId,
           value: value,
@@ -156,8 +158,9 @@ class ApiBatch implements IApiBatch {
 
   @override
   ITransactionBatch delete(RecordId recordId) {
-    _batch.addOperation(
-      Operation(delete: DeleteOperation(apiName: _apiName, recordId: recordId)),
+    _batch._addOperation(
+      Operation(
+          delete: _DeleteOperation(apiName: _apiName, recordId: recordId)),
     );
     return _batch;
   }
