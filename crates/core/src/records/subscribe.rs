@@ -444,72 +444,68 @@ impl SubscriptionManager {
     }
   }
 
-  async fn add_hook(&self) -> trailbase_sqlite::connection::Result<()> {
-    let state = &self.state;
-    let conn = state.conn.clone();
-    let s = state.clone();
+  fn add_hook(&self) {
+    let s = self.state.clone();
+    let write_conn = self.state.conn.write_lock();
 
-    return state
-      .conn
-      .add_preupdate_hook(Some(
-        move |action: Action, db: &str, table_name: &str, case: &PreUpdateCase| {
-          let action: RecordAction = match action {
-            Action::SQLITE_UPDATE | Action::SQLITE_INSERT | Action::SQLITE_DELETE => action.into(),
-            a => {
-              error!("Unknown action: {a:?}");
-              return;
-            }
-          };
-
-          let Some(rowid) = extract_row_id(case) else {
-            error!("Failed to extract row id");
-            return;
-          };
-
-          let qualified_table_name = QualifiedName {
-            name: table_name.to_string(),
-            database_schema: Some(db.to_string()),
-          };
-
-          // If there are no subscriptions, do nothing.
-          let record_subs_candidate = s
-            .record_subscriptions
-            .read()
-            .get(&qualified_table_name)
-            .and_then(|m| m.get(&rowid))
-            .is_some();
-          let table_subs_candidate = s
-            .table_subscriptions
-            .read()
-            .get(&qualified_table_name)
-            .is_some();
-          if !record_subs_candidate && !table_subs_candidate {
+    write_conn.preupdate_hook(Some(
+      move |action: Action, db: &str, table_name: &str, case: &PreUpdateCase| {
+        let action: RecordAction = match action {
+          Action::SQLITE_UPDATE | Action::SQLITE_INSERT | Action::SQLITE_DELETE => action.into(),
+          a => {
+            error!("Unknown action: {a:?}");
             return;
           }
+        };
 
-          let Some(record_values) = extract_record_values(case) else {
-            error!("Failed to extract values");
-            return;
-          };
+        let Some(rowid) = extract_row_id(case) else {
+          error!("Failed to extract row id");
+          return;
+        };
 
-          let state = ContinuationState {
-            state: s.clone(),
-            schema_metadata: s.schema_metadata.value().get_table(&qualified_table_name),
-            action,
-            table_name: qualified_table_name,
-            rowid,
-            record_values,
-          };
+        let qualified_table_name = QualifiedName {
+          name: table_name.to_string(),
+          database_schema: Some(db.to_string()),
+        };
 
-          // TODO: Optimization: in cases where there's only table-level access restrictions, we
-          // could avoid the continuation and even dispatch the subscription handling to a
-          // different thread entirely to take more work off the SQLite thread.
-          conn.call_and_forget(move |conn| {
-            Self::hook_continuation(conn, state);
-          });
-        },
-      ))
-      .await;
+        // If there are no subscriptions, do nothing.
+        let record_subs_candidate = s
+          .record_subscriptions
+          .read()
+          .get(&qualified_table_name)
+          .and_then(|m| m.get(&rowid))
+          .is_some();
+        let table_subs_candidate = s
+          .table_subscriptions
+          .read()
+          .get(&qualified_table_name)
+          .is_some();
+        if !record_subs_candidate && !table_subs_candidate {
+          return;
+        }
+
+        let Some(record_values) = extract_record_values(case) else {
+          error!("Failed to extract values");
+          return;
+        };
+
+        let state = ContinuationState {
+          state: s.clone(),
+          schema_metadata: s.schema_metadata.value().get_table(&qualified_table_name),
+          action,
+          table_name: qualified_table_name,
+          rowid,
+          record_values,
+        };
+
+        // TODO: Optimization: in cases where there's only table-level access restrictions, we
+        // could avoid the continuation and even dispatch the subscription handling to a
+        // different thread entirely to take more work off the SQLite thread.
+        s.conn.call_and_forget(move |conn| {
+          Self::hook_continuation(conn, state);
+        });
+      },
+    ));
   }
 
   async fn add_record_subscription(
@@ -541,6 +537,7 @@ impl SubscriptionManager {
     let empty = {
       let mut lock = self.state.record_subscriptions.write();
       let empty = lock.is_empty();
+
       let m: &mut HashMap<i64, Vec<Subscription>> =
         lock.entry(api.qualified_name().clone()).or_default();
 
@@ -549,18 +546,20 @@ impl SubscriptionManager {
         record_api_name: api.api_name().to_string(),
         // record_id: Some(record),
         user,
-        sender,
+        sender: sender.clone(),
       });
 
       empty
     };
 
     if empty {
-      self
-        .add_hook()
-        .await
-        .map_err(|err| RecordError::Internal(err.into()))?;
+      self.add_hook();
     }
+
+    // Send an immediate comment to flush SSE headers and establish the connection
+    let _ = sender
+      .send(Event::default().comment("subscription established"))
+      .await;
 
     return Ok(AutoCleanupEventStream {
       cleanup: CleanupSubscription {
@@ -595,18 +594,20 @@ impl SubscriptionManager {
         subscription_id,
         record_api_name: api.api_name().to_string(),
         user,
-        sender,
+        sender: sender.clone(),
       });
 
       empty
     };
 
     if empty {
-      self
-        .add_hook()
-        .await
-        .map_err(|err| RecordError::Internal(err.into()))?;
+      self.add_hook();
     }
+
+    // Send an immediate comment to flush SSE headers and establish the connection
+    let _ = sender
+      .send(Event::default().comment("subscription established"))
+      .await;
 
     return Ok(AutoCleanupEventStream {
       cleanup: CleanupSubscription {
@@ -670,33 +671,9 @@ pub async fn add_subscription_sse_handler(
 }
 
 #[cfg(test)]
-async fn decode_sse_json_event(event: Event) -> serde_json::Value {
-  use axum::response::IntoResponse;
-  use futures_util::stream::StreamExt;
-
-  let (sender, receiver) = async_channel::unbounded::<Event>();
-  let sse = Sse::new(receiver.map(|ev| -> Result<Event, axum::Error> { Ok(ev) }));
-
-  sender.send(event).await.unwrap();
-  sender.close();
-
-  let resp = sse.into_response();
-  let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
-    .await
-    .unwrap();
-
-  let str = String::from_utf8_lossy(&bytes);
-  let x = str
-    .strip_prefix("data: ")
-    .unwrap()
-    .strip_suffix("\n\n")
-    .unwrap();
-  return serde_json::from_str(x).unwrap();
-}
-
-#[cfg(test)]
 mod tests {
   use async_channel::TryRecvError;
+  use axum::response::IntoResponse;
   use futures_util::StreamExt;
   use trailbase_sqlite::params;
 
@@ -711,9 +688,26 @@ mod tests {
   use crate::records::test_utils::add_record_api_config;
   use crate::util::uuid_to_b64;
 
-  async fn decode_db_event(event: Event) -> DbEvent {
-    let json = decode_sse_json_event(event).await;
-    return serde_json::from_value(json).unwrap();
+  async fn decode_db_event(event: Event) -> Option<DbEvent> {
+    let (sender, receiver) = async_channel::unbounded::<Event>();
+    let sse = Sse::new(receiver.map(|ev| -> Result<Event, axum::Error> { Ok(ev) }));
+
+    sender.send(event.clone()).await.unwrap();
+    sender.close();
+
+    let resp = sse.into_response();
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+      .await
+      .unwrap();
+
+    let str = String::from_utf8_lossy(&bytes);
+    let Some(data) = str.strip_prefix("data: ") else {
+      // There are non-data events such as "subscription established" or heartbeat.
+      return None;
+    };
+
+    let x = data.strip_suffix("\n\n").unwrap();
+    return serde_json::from_str(x).unwrap();
   }
 
   #[tokio::test]
@@ -725,7 +719,7 @@ mod tests {
     let db_event = DbEvent::Delete(Some(json));
     let event = Event::default().json_data(db_event.clone()).unwrap();
 
-    assert_eq!(decode_db_event(event).await, db_event);
+    assert_eq!(decode_db_event(event).await.unwrap(), db_event);
   }
 
   async fn setup_world_readable() -> AppState {
@@ -791,6 +785,12 @@ mod tests {
       .unwrap();
 
     assert_eq!(1, manager.num_record_subscriptions());
+    // First event is "connection established".
+    assert!(
+      decode_db_event(stream.receiver.recv().await.unwrap())
+        .await
+        .is_none(),
+    );
 
     // This should do nothing since nobody is subscribed to id = 5.
     let _ = conn
@@ -814,11 +814,11 @@ mod tests {
       "text": "bar",
     });
     match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-      DbEvent::Update(Some(value)) => {
+      Some(DbEvent::Update(Some(value))) => {
         assert_eq!(value, expected);
       }
       x => {
-        assert!(false, "Expected update, got: {x:?}");
+        panic!("Expected update, got: {x:?}");
       }
     };
 
@@ -828,11 +828,11 @@ mod tests {
       .unwrap();
 
     match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-      DbEvent::Delete(Some(value)) => {
+      Some(DbEvent::Delete(Some(value))) => {
         assert_eq!(value, expected);
       }
       x => {
-        assert!(false, "Expected delete, got: {x:?}");
+        panic!("Expected delete, got: {x:?}");
       }
     }
 
@@ -860,6 +860,12 @@ mod tests {
         .unwrap();
 
       assert_eq!(1, manager.num_table_subscriptions());
+      // First event is "connection established".
+      assert!(
+        decode_db_event(stream.receiver.recv().await.unwrap())
+          .await
+          .is_none(),
+      );
 
       let record_id_raw = 0;
       conn
@@ -879,7 +885,7 @@ mod tests {
         .unwrap();
 
       match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-        DbEvent::Insert(Some(value)) => {
+        Some(DbEvent::Insert(Some(value))) => {
           let expected = serde_json::json!({
             "id": record_id_raw,
             "text": "foo",
@@ -887,7 +893,7 @@ mod tests {
           assert_eq!(value, expected);
         }
         x => {
-          assert!(false, "Expected insert, got: {x:?}");
+          panic!("Expected insert, got: {x:?}");
         }
       };
 
@@ -896,11 +902,11 @@ mod tests {
         "text": "bar",
       });
       match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-        DbEvent::Update(Some(value)) => {
+        Some(DbEvent::Update(Some(value))) => {
           assert_eq!(value, expected);
         }
         x => {
-          assert!(false, "Expected update, got: {x:?}");
+          panic!("Expected update, got: {x:?}");
         }
       };
 
@@ -910,11 +916,11 @@ mod tests {
         .unwrap();
 
       match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-        DbEvent::Delete(Some(value)) => {
+        Some(DbEvent::Delete(Some(value))) => {
           assert_eq!(value, expected);
         }
         x => {
-          assert!(false, "Expected delete, got: {x:?}");
+          panic!("Expected delete, got: {x:?}");
         }
       }
     }
@@ -1127,6 +1133,13 @@ mod tests {
         .await
         .unwrap();
 
+      // First event is "connection established".
+      assert!(
+        decode_db_event(user_x_subscription.receiver.recv().await.unwrap())
+          .await
+          .is_none(),
+      );
+
       let user_y_subscription = manager
         .add_table_subscription(
           state.clone(),
@@ -1151,7 +1164,7 @@ mod tests {
         .unwrap();
 
       match decode_db_event(user_x_subscription.receiver.recv().await.unwrap()).await {
-        DbEvent::Insert(Some(value)) => {
+        Some(DbEvent::Insert(Some(value))) => {
           let expected = serde_json::json!({
             "id": record_id_raw,
             "user": uuid_to_b64(&user_x),
@@ -1160,7 +1173,7 @@ mod tests {
           assert_eq!(value, expected);
         }
         x => {
-          assert!(false, "Expected insert, got: {x:?}");
+          panic!("Expected insert, got: {x:?}");
         }
       };
 
@@ -1231,6 +1244,12 @@ mod tests {
       .unwrap();
 
     assert_eq!(1, manager.num_record_subscriptions());
+    // First event is "connection established".
+    assert!(
+      decode_db_event(stream.receiver.recv().await.unwrap())
+        .await
+        .is_none(),
+    );
 
     conn
       .execute(
@@ -1250,7 +1269,7 @@ mod tests {
       .unwrap();
 
     match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-      DbEvent::Update(Some(value)) => {
+      Some(DbEvent::Update(Some(value))) => {
         let expected = serde_json::json!({
           "id": record_id,
           "user": uuid_to_b64(&user_x_id),
@@ -1259,14 +1278,14 @@ mod tests {
         assert_eq!(value, expected);
       }
       x => {
-        assert!(false, "Expected update, got: {x:?}");
+        panic!("Expected update, got: {x:?}");
       }
     }
 
     match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-      DbEvent::Error(_msg) => {}
+      Some(DbEvent::Error(_msg)) => {}
       x => {
-        assert!(false, "Expected error, got: {x:?}");
+        panic!("Expected error, got: {x:?}");
       }
     }
 
