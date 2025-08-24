@@ -549,7 +549,7 @@ impl SubscriptionManager {
         record_api_name: api.api_name().to_string(),
         // record_id: Some(record),
         user,
-        sender,
+        sender: sender.clone(),
       });
 
       empty
@@ -561,6 +561,11 @@ impl SubscriptionManager {
         .await
         .map_err(|err| RecordError::Internal(err.into()))?;
     }
+
+    // Send an immediate comment to flush SSE headers and establish the connection
+    let _ = sender
+      .send(Event::default().comment("subscription established"))
+      .await;
 
     return Ok(AutoCleanupEventStream {
       cleanup: CleanupSubscription {
@@ -595,7 +600,7 @@ impl SubscriptionManager {
         subscription_id,
         record_api_name: api.api_name().to_string(),
         user,
-        sender,
+        sender: sender.clone(),
       });
 
       empty
@@ -607,6 +612,11 @@ impl SubscriptionManager {
         .await
         .map_err(|err| RecordError::Internal(err.into()))?;
     }
+
+    // Send an immediate comment to flush SSE headers and establish the connection
+    let _ = sender
+      .send(Event::default().comment("subscription established"))
+      .await;
 
     return Ok(AutoCleanupEventStream {
       cleanup: CleanupSubscription {
