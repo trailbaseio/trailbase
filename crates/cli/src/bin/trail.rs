@@ -22,10 +22,7 @@ use trailbase_cli::{
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 fn init_logger(dev: bool) {
-  // SWC is very spammy in in debug builds and complaints about source maps when compiling
-  // typescript to javascript. Since we don't care about source maps and didn't find a better
-  // option to mute the errors, turn it off in debug builds.
-  const DEFAULT: &str = "info,trailbase_refinery=warn,tracing::span=warn,swc_ecma_codegen=off";
+  const DEFAULT: &str = "info,trailbase_refinery=warn,tracing::span=warn";
 
   env_logger::Builder::from_env(if dev {
     env_logger::Env::new().default_filter_or(format!("{DEFAULT},trailbase=debug"))

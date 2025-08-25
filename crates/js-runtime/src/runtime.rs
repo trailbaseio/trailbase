@@ -163,17 +163,6 @@ impl RuntimeState {
 
     let handle = if n_threads > 0 {
       Some(std::thread::spawn(move || {
-        use tracing_subscriber::prelude::*;
-
-        // swc_ecma_codegen is very spammy (or at least used to be):
-        //   https://github.com/swc-project/swc/pull/9604
-        tracing_subscriber::Registry::default()
-          .with(tracing_subscriber::filter::Targets::new().with_target(
-            "tracing::span",
-            tracing_subscriber::filter::LevelFilter::WARN,
-          ))
-          .set_default();
-
         init_platform(n_threads as u32, true);
 
         let threads: Vec<_> = receivers
@@ -737,14 +726,9 @@ mod tests {
   use super::*;
 
   use rustyscript::Module;
-  use tracing_subscriber::prelude::*;
 
   #[tokio::test]
   async fn test_serial_tests() {
-    tracing_subscriber::Registry::default()
-      .with(tracing_subscriber::filter::LevelFilter::WARN)
-      .set_default();
-
     // Run on a single thread to make sure that any potential blocking is maximally bad.
     let handle = RuntimeHandle::singleton_or_init_with_threads(1);
 
