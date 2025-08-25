@@ -8676,6 +8676,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-rust-guest-testfixture"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "trailbase-wasm-guest",
+ "wstd",
+]
+
+[[package]]
 name = "wasm-streams"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
