@@ -45,7 +45,7 @@ hyper = "1.6.0"
 hyper-util = "0.1.7"
 indoc = "2.0.5"
 itertools = "0.14.0"
-jsonschema = { version = "0.32.0", default-features = false }
+jsonschema = { version = "0.33.0", default-features = false }
 jsonwebtoken = { version = "^9.3.0", default-features = false, features = ["use_pem"] }
 kanal = "0.1.1"
 lazy_static = "1.4.0"
