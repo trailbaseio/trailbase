@@ -96,7 +96,7 @@ impl Connection {
     };
 
     let write_conn = new_conn()?;
-    let in_memory = write_conn.path().map_or(true, |s| {
+    let in_memory = write_conn.path().is_none_or(|s| {
       // Returns empty string for in-memory databases.
       return !s.is_empty();
     });

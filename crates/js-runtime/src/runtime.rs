@@ -451,16 +451,39 @@ self_cell!(
   }
 );
 
-struct OwnedLockWrapper(OwnedLock);
-
 self_cell!(
   struct OwnedTransaction {
-    owner: MutBorrow<OwnedLockWrapper>,
+    owner: MutBorrow<OwnedLock>,
 
     #[covariant]
     dependent: Transaction,
   }
 );
+
+async fn new_transaction(
+  conn: trailbase_sqlite::Connection,
+) -> Result<OwnedTransaction, rusqlite::Error> {
+  for _ in 0..200 {
+    let Ok(lock) = OwnedLock::try_new(conn.clone(), |owner| {
+      return owner
+        .try_write_lock_for(Duration::from_micros(50))
+        .ok_or("timeout");
+    }) else {
+      tokio::time::sleep(Duration::from_micros(400)).await;
+      continue;
+    };
+
+    return OwnedTransaction::try_new(MutBorrow::new(lock), |owner| {
+      return owner
+        .borrow_mut()
+        .with_dependent_mut(|_owner, dep| dep.transaction());
+    });
+  }
+
+  return Err(rusqlite::Error::ToSqlConversionFailure(
+    "Failed to acquire lock".into(),
+  ));
+}
 
 pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlite::Connection) {
   fn error_mapper(err: impl std::error::Error) -> rustyscript::Error {
@@ -520,30 +543,9 @@ pub fn register_database_functions(handle: &RuntimeHandle, conn: trailbase_sqlit
       assert!(current_transaction_clone.lock().is_none());
 
       let conn = conn.clone();
-      let get_lock = async move || {
-        loop {
-          if let Ok(lock) = OwnedLock::try_new(conn.clone(), |owner| {
-            owner
-              .try_write_lock_for(Duration::from_micros(50))
-              .ok_or("timeout")
-          }) {
-            return lock;
-          }
-
-          tokio::time::sleep(Duration::from_micros(150)).await;
-        }
-      };
-
       let current_transaction = current_transaction_clone.clone();
       return Box::pin(async move {
-        let lock = get_lock().await;
-        let tx = OwnedTransaction::try_new(MutBorrow::new(OwnedLockWrapper(lock)), |lock| {
-          lock
-            .borrow_mut()
-            .0
-            .with_dependent_mut(|_owner, depdendent| depdendent.transaction())
-        })
-        .map_err(error_mapper)?;
+        let tx = new_transaction(conn).await.map_err(error_mapper)?;
 
         *current_transaction.lock() = Some(tx);
 
