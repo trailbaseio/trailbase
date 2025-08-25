@@ -127,7 +127,7 @@ addRoute(
   stringHandler(async (_req: StringRequestType) => {
     const userId: Blob = (
       await query("SELECT id FROM _user WHERE email = 'admin@localhost'", [])
-    )[0][0];
+    )[0][0] as Blob;
 
     console.info("user id:", userId.blob);
 
