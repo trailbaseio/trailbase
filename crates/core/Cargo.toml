@@ -55,7 +55,7 @@ mini-moka = "0.10.3"
 minijinja = { version = "2.1.2", default-features = false }
 oauth2 = { version = "5.0.0-alpha.4", default-features = false, features = ["reqwest", "rustls-tls"] }
 object_store = { version = "0.12.0", default-features = false, features = ["aws", "fs"] }
-parking_lot = { version = "0.12.3", default-features = false }
+parking_lot = { workspace = true }
 pin-project-lite = "0.2.16"
 prost = { version = "^0.14.1", default-features = false }
 prost-reflect = { version = "^0.16.0", default-features = false, features = ["derive", "text-format"] }

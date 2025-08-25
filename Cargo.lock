@@ -7607,6 +7607,7 @@ dependencies = [
  "parking_lot",
  "rand 0.9.2",
  "rusqlite",
+ "self_cell",
  "serde",
  "serde_json",
  "serde_rusqlite",

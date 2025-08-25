@@ -125,7 +125,7 @@ pub(crate) fn columns(stmt: &Statement<'_>) -> Vec<Column> {
 }
 
 #[derive(Debug)]
-pub struct Row(Vec<types::Value>, Arc<Vec<Column>>);
+pub struct Row(pub Vec<types::Value>, pub Arc<Vec<Column>>);
 
 impl Row {
   pub(crate) fn from_row(row: &rusqlite::Row, cols: Arc<Vec<Column>>) -> rusqlite::Result<Self> {

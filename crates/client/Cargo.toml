@@ -15,7 +15,7 @@ exclude = [
 eventsource-stream = { version = "0.2.3", features = [] }
 futures-lite = "2.6.1"
 jsonwebtoken = { version = "9.3.0", default-features = false }
-parking_lot = "0.12.3"
+parking_lot = { workspace = true }
 reqwest = { version = "0.12.8", features = ["stream"] }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.135"

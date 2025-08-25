@@ -16,7 +16,7 @@ bytes = { version = "1.8.0", features = ["serde"] }
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 kanal = "0.1.1"
 log = { version = "^0.4.21", default-features = false }
-parking_lot = { version = "0.12.3", default-features = false }
+parking_lot = { workspace = true }
 rusqlite = { workspace = true }
 rust-embed = { workspace = true }
 rustyscript = { version = "^0.12.0", features = ["web", "fs"] }

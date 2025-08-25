@@ -16,7 +16,7 @@ itertools = "0.14.0"
 jsonschema = { version = "0.32.0", default-features = false }
 lazy_static = "1.5.0"
 log = { version = "^0.4.21", default-features = false }
-parking_lot = { version = "0.12.3", default-features = false }
+parking_lot = { workspace = true }
 regex = "1.11.1"
 rusqlite = { workspace = true }
 schemars = "1.0.0"
