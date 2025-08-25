@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+  "client/testfixture/guests/rust",
   "crates/assets",
   "crates/build",
   "crates/cli",
