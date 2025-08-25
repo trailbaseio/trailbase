@@ -1,0 +1,66 @@
+---
+import { getEntry } from "astro:content";
+import type { CollectionEntry } from "astro:content";
+import { Image } from "astro:assets";
+
+import AuthorInfo from "@/components/blog/AuthorInfo.astro";
+import PublishDate from "@/components/blog/PublishDate.astro";
+import Tag from "@/components/blog/Tag.astro";
+
+interface Props {
+  postData: CollectionEntry<"blog">;
+  num: number;
+}
+
+const { postData, num } = Astro.props;
+
+const author = await getEntry("author", postData.data.author.id);
+const isOdd = num % 2;
+---
+
+<article class:list={["lg:prose-xl", "prose"]}>
+  <div
+    class="grid grid-cols-1 items-center gap-10 md:grid-cols-[200px_auto] lg:grid-cols-[200px_auto]"
+  >
+    <div class="post_image">
+      <a href={"/blog/" + postData.slug}>
+        {
+          postData?.data?.image && (
+            <Image
+              src={postData?.data?.image}
+              width="750"
+              alt={postData.data.title + "Thumbnail"}
+              loading="eager"
+              class:list={[
+                "image-shine h-[200px] rounded-[15px] object-cover",
+                { "rotate-2": isOdd, "-rotate-2": !isOdd },
+              ]}
+            />
+          )
+        }
+      </a>
+    </div>
+
+    <div>
+      <a
+        href={"/blog/" + postData.slug}
+        class="text-pacamara-dark hover:text-pacamara-accent"
+      >
+        <h2>{postData.data.title}</h2>
+      </a>
+
+      <p>
+        {postData.data.intro}
+      </p>
+
+      <div class="flex flex-col gap-4">
+        <div class="flex w-full flex-wrap items-center gap-4">
+          <AuthorInfo authorData={author} />
+          <PublishDate date={postData.data.pubDate} />
+        </div>
+
+        <Tag tags={postData.data.tags} />
+      </div>
+    </div>
+  </div>
+</article>

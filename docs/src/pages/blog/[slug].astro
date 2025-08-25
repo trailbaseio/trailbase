@@ -1,0 +1,122 @@
+---
+import { getCollection, getEntry } from "astro:content";
+// import { Image } from "astro:assets";
+
+import Base from "@/layouts/Base.astro";
+import AuthorInfo from "@/components/blog/AuthorInfo.astro";
+import PublishDate from "@/components/blog/PublishDate.astro";
+// import Tag from "@/components/blog/Tag.astro";
+
+export async function getStaticPaths() {
+  const blogEntries = await getCollection("blog");
+
+  return blogEntries.map((entry) => ({
+    params: { slug: entry.slug },
+    props: { entry },
+  }));
+}
+const { entry } = Astro.props;
+
+const { Content } = await entry.render();
+const author = await getEntry(entry.data.author);
+
+const avgWordsPerMinute = 220;
+const readMinutes = entry.body.split(" ").length / avgWordsPerMinute;
+
+const proseStyle: string[] = [
+  "prose",
+  "lg:prose-xl",
+
+  // Headings
+  "prose-headings:transition-all",
+  "prose-headings:duration-300",
+  "prose-headings:font-bold",
+
+  // Paragraph
+  "prose-p:transition-all",
+  "prose-p:duration-300",
+
+  // Lists
+  "prose-li:transition-all",
+  "prose-li:duration-300",
+
+  // Tables
+  "prose-td:transition-all",
+  "prose-td:duration-300",
+
+  // Links
+  "prose-a:no-underline",
+  "prose-a:font-semibold",
+  "prose-a:transition-all",
+  "prose-a:duration-300",
+
+  // Strong/Bold
+  "prose-strong:transition-all",
+  "prose-strong:duration-300",
+  "prose-strong:font-bold",
+
+  // Image
+
+  "prose-img:rounded-lg",
+  "prose-img:mx-auto",
+
+  // Code
+  "prose-code:transition-all",
+  "prose-code:duration-300",
+];
+---
+
+<Base title={entry.data.title} description={entry.data.intro} draft={true}>
+  <article>
+    {/* Header stuff: title, subtitle, tags, read time, ... */}
+    <div class:list={[...proseStyle]}>
+      <!-- <h1>{entry.data.title}</h1> -->
+
+      {/* Metadata */}
+      <div class="flex items-center gap-4">
+        {/* Author info */}
+        <AuthorInfo authorData={author} />
+
+        <PublishDate date={entry.data.pubDate} />
+
+        <span class:list={["text-[16px]", "transition-all", "duration-300"]}>
+          ~{Math.floor(readMinutes) + 1} minutes
+        </span>
+      </div>
+
+      {/* Tags */}
+      <!-- <div class="flex gap-2"><Tag tags={entry.data.tags} /></div> -->
+    </div>
+
+    {
+      // entry.data.intro && (
+      //   <div class="strong mb-2 transition-all duration-300 dark:text-white/70">
+      //     {entry.data.intro}
+      //   </div>
+      // )
+    }
+
+    {/* Opening Image */}
+    <!--
+    {
+      entry.data.image && (
+        <Image
+          src={entry.data.image}
+          width="1200"
+          height="250"
+          alt=""
+          loading="eager"
+          decoding="sync"
+          class="image-shine relative mx-auto mt-10 block h-72 rounded-[15px] object-cover md:h-[350px]"
+          loading="eager"
+        />
+      )
+    }
+    -->
+
+    {/* Actual contents/text */}
+    <div class:list={proseStyle}>
+      <Content />
+    </div>
+  </article>
+</Base>

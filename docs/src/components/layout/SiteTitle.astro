@@ -5,18 +5,46 @@ import config from "virtual:starlight/user-config";
 import type { ImageMetadata } from "astro";
 import { Image } from "astro:assets";
 
-const { data } = Astro.locals.starlightRoute.entry;
-const { actions = [] } = data.hero ?? {};
+// NOTE: We define the actions/links manually below, since actions are only defined on the landing-page otherwise.
+// const { data } = Astro.locals.starlightRoute.entry;
+// const { actions = [] } = data.hero ?? {};
+
+const actions = [
+  {
+    text: "Documentation",
+    link: "/getting-started/install",
+    variant: "primary",
+    icon: { type: "icon", name: "open-book" },
+  },
+  {
+    text: "FAQ",
+    link: "/reference/faq/",
+    variant: "secondary",
+    icon: { type: "icon", name: "external" },
+  },
+  {
+    text: "GitHub",
+    link: "https://github.com/trailbaseio/trailbase",
+    variant: "secondary",
+    icon: { type: "icon", name: "github" },
+  },
+  {
+    text: "Demo",
+    link: "https://demo.trailbase.io",
+    variant: "secondary",
+    icon: { type: "icon", name: "rocket" },
+  },
+];
 
 import nut from "@/assets/nut.svg";
 
-function stripLeadingSlash(href: string) {
-  if (href[0] === "/") href = href.slice(1);
+function stripLeadingSlash(href: string): string {
+  if (href[0] === "/") return href.slice(1);
   return href;
 }
 
-function stripTrailingSlash(href: string) {
-  if (href[href.length - 1] === "/") href = href.slice(0, -1);
+function stripTrailingSlash(href: string): string {
+  if (href[href.length - 1] === "/") return href.slice(0, -1);
   return href;
 }
 
@@ -108,6 +136,12 @@ const href = pathWithBase(Astro.props.locale || "/");
                 {text}
               </a>
             ),
+          )}
+
+          {import.meta.env.DEV && (
+            <a class="site-title-link" href="/blog">
+              Blog
+            </a>
           )}
         </div>
       </div>

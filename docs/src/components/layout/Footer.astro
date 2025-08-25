@@ -1,5 +1,5 @@
 ---
-import Default from "@astrojs/starlight/components/Footer.astro";
+import DefaultFooter from "@astrojs/starlight/components/Footer.astro";
 import config from "virtual:starlight/user-config";
 
 import nut from "@/assets/nut.svg";
@@ -69,8 +69,8 @@ const columnStyle = "flex flex-col gap-1 items-center justify-start";
       </div>
     </footer>
   ) : (
-    <Default>
+    <DefaultFooter>
       <slot />
-    </Default>
+    </DefaultFooter>
   )
 }

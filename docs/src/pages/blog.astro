@@ -1,0 +1,51 @@
+---
+import { getCollection } from "astro:content";
+import type { CollectionEntry } from "astro:content";
+
+import Base from "@/layouts/Base.astro";
+import PostItem from "@/components/blog/PostItem.astro";
+
+interface Props {
+  blogPosts?: CollectionEntry<"blog">[];
+  postLimit?: number;
+  skipPost?: string;
+}
+
+const { blogPosts, postLimit, skipPost } = Astro.props;
+
+async function getPosts() {
+  const posts = await getCollection("blog", ({ data }) => {
+    return data.title !== skipPost;
+  });
+  posts.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+
+  if (postLimit && postLimit > 0) {
+    posts.slice(0, postLimit);
+  }
+
+  return posts;
+}
+
+// Either display injected posts (used when using pagination) or display
+// latest [postLimit] posts.
+const posts = blogPosts ?? (await getPosts());
+---
+
+<Base title="Updates" draft={true}>
+  <section class="container mx-auto mb-10 max-w-screen-lg px-7 py-4">
+    {
+      posts.map((post, index: number) => {
+        return (
+          <>
+            <PostItem postData={post} num={index} />
+
+            {/* Dashed line spacer */}
+            {index < posts.length - 1 && (
+              <div class="gradient-line my-10 h-[1px] w-full overflow-hidden group-last:hidden lg:my-12" />
+            )}
+          </>
+        );
+      })
+    }
+  </section>
+</Base>

@@ -9,11 +9,13 @@ import starlight from "@astrojs/starlight";
 import starlightLinksValidator from "starlight-links-validator";
 import tailwindcss from "@tailwindcss/vite";
 
+import config from "./src/config";
+
 const openApiBase = "api";
 
 // https://astro.build/config
 export default defineConfig({
-  site: "https://trailbase.io",
+  site: config.site,
   // NOTE: Since we're serving static content, these redirects are actual
   // pages with a meta refresh tag rather than redirect HTTP responses.
   redirects: {
@@ -26,7 +28,8 @@ export default defineConfig({
     sitemap(),
     solid(),
     starlight({
-      title: "TrailBase",
+      title: config.title,
+      description: config.description,
       editLink: {
         baseUrl: "https://github.com/trailbaseio/trailbase/edit/main/docs/",
       },
@@ -150,13 +153,16 @@ export default defineConfig({
         ...openAPISidebarGroups,
       ],
       components: {
-        Footer: "./src/components/Footer.astro",
-        Hero: "./src/components/Hero.astro",
-        SiteTitle: "./src/components/SiteTitle.astro",
+        Footer: "./src/components/layout/Footer.astro",
+        Hero: "./src/components/layout/Hero.astro",
+        SiteTitle: "./src/components/layout/SiteTitle.astro",
       },
     }),
   ],
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [
+      // @ts-expect-error: https://github.com/withastro/astro/issues/14030
+      tailwindcss(),
+    ],
   },
 });

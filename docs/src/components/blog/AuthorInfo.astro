@@ -1,0 +1,17 @@
+---
+import { Image } from "astro:assets";
+const { authorData } = Astro.props;
+---
+
+<div class:list={["flex", "flex-nowrap", "items-center", "gap-2"]}>
+  {
+    authorData.data.photo && (
+      <Image
+        src={authorData.data.photo}
+        class="relative size-[28px] rounded-full"
+        alt="Author's photo"
+      />
+    )
+  }
+  <span class="font-bold">{authorData.data.displayName}</span>
+</div>

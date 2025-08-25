@@ -1,0 +1,18 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+
+const { title = "", description, draft } = Astro.props;
+---
+
+<StarlightPage
+  hasSidebar={false}
+  frontmatter={{
+    title,
+    description,
+    template: "splash",
+    hero: undefined,
+    draft,
+  }}
+>
+  <slot />
+</StarlightPage>

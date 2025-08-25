@@ -1,0 +1,13 @@
+---
+// import dateFormat from "dateformat";
+const { date } = Astro.props;
+
+console.log("Date", date);
+function format(date: Date): string {
+  return `${date.toDateString()}`;
+}
+---
+
+<span>
+  {format(date)}
+</span>

@@ -19,6 +19,7 @@ const imageAttrs = {
 
 let darkImage: ImageMetadata | undefined;
 let lightImage: ImageMetadata | undefined;
+
 let rawHtml: string | undefined;
 if (image) {
   if ("file" in image) {
@@ -78,7 +79,7 @@ if (image) {
               <Code
                 lang="sh"
                 code={"curl -sSL https://trailbase.io/install.sh | bash"}
-                frame={false}
+                frame="none"
               />
             </TabItem>
 
@@ -86,7 +87,7 @@ if (image) {
               <Code
                 lang="sh"
                 code={"iwr https://trailbase.io/install.ps1 | iex"}
-                frame={false}
+                frame="none"
               />
             </TabItem>
 
@@ -94,7 +95,7 @@ if (image) {
               <Code
                 lang="sh"
                 code={"docker run -p 4000:4000 trailbase/trailbase"}
-                frame={false}
+                frame="none"
               />
             </TabItem>
           </Tabs>
