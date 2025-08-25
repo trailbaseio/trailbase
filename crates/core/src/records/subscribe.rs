@@ -536,6 +536,10 @@ impl SubscriptionManager {
     };
 
     let (sender, receiver) = async_channel::bounded::<Event>(16);
+    sender
+      .send(Event::default().comment("stream start"))
+      .await
+      .map_err(|err| RecordError::Internal(err.into()))?;
 
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let empty = {
@@ -585,6 +589,11 @@ impl SubscriptionManager {
     let state = &self.state;
 
     let (sender, receiver) = async_channel::bounded::<Event>(16);
+    sender
+      .send(Event::default().comment("stream start"))
+      .await
+      .map_err(|err| RecordError::Internal(err.into()))?;
+
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let empty = {
       let mut lock = state.table_subscriptions.write();
