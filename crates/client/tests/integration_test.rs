@@ -410,6 +410,50 @@ fn integration_test() {
 
   runtime.block_on(subscription_test());
   println!("Ran subscription tests");
+
+  runtime.block_on(transaction_tests());
+  println!("Ran transaction tests");
+}
+
+async fn transaction_tests() {
+  let client = connect().await;
+  let api = client.records("simple_strict_table");
+  let now = now();
+  let ids;
+
+  {
+    let mut batch = client.transaction();
+    let message = format!("rust transaction create test: {now}");
+    batch
+      .api("simple_strict_table")
+      .create(json!({"text_not_null": message}));
+    ids = batch.send().await.unwrap();
+    assert_eq!(ids.len(), 1);
+
+    let record: SimpleStrict = api.read(&ids[0]).await.unwrap();
+    assert_eq!(record.text_not_null, message);
+  }
+
+  {
+    let mut batch = client.transaction();
+    let message = format!("rust transaction update test: {now}");
+    batch
+      .api("simple_strict_table")
+      .update(&ids[0], json!({"text_not_null": message}));
+    batch.send().await.unwrap();
+
+    let record: SimpleStrict = api.read(&ids[0]).await.unwrap();
+    assert_eq!(record.text_not_null, message);
+  }
+
+  {
+    let mut batch = client.transaction();
+    batch.api("simple_strict_table").delete(&ids[0]);
+    batch.send().await.unwrap();
+
+    let response = api.read::<SimpleStrict>(&ids[0]).await;
+    assert!(response.is_err());
+  }
 }
 
 fn now() -> u64 {

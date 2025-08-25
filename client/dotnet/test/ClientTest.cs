@@ -435,4 +435,71 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     Assert.True(tableEvents[2] is DeleteEvent);
     Assert.Equal(UpdatedMessage, tableEvents[2].Value!["text_not_null"]?.ToString());
   }
+
+  [Fact]
+  [RequiresDynamicCode("Testing dynamic code")]
+  [RequiresUnreferencedCode("testing dynamic code")]
+  public async Task TransactionCreateOperationTest() {
+    var client = await ClientTest.Connect();
+    var batch = client.Transaction();
+    var api = client.Records("simple_strict_table");
+
+    var now = DateTimeOffset.Now.ToUnixTimeSeconds();
+    var suffix = $"{now} {System.Environment.Version} transaction";
+    var record = new SimpleStrict(null, null, null, $"C# transaction create test: {suffix}");
+
+    batch.Api("simple_strict_table").Create(record, SerializeSimpleStrictContext.Default.SimpleStrict);
+
+    // Test actual creation
+    var ids = await batch.Send();
+    Assert.Single(ids);
+
+    var createdRecord = await api.Read<SimpleStrict>(ids[0]);
+    Assert.Equal(record.text_not_null, createdRecord!.text_not_null);
+  }
+
+  [Fact]
+  [RequiresDynamicCode("Testing dynamic code")]
+  [RequiresUnreferencedCode("testing dynamic code")]
+  public async Task TransactionUpdateOperationTest() {
+    var client = await ClientTest.Connect();
+    var batch = client.Transaction();
+    var api = client.Records("simple_strict_table");
+
+    // First create a record to update
+    var now = DateTimeOffset.Now.ToUnixTimeSeconds();
+    var suffix = $"{now} {System.Environment.Version} transaction";
+    var createRecord = new SimpleStrict(null, null, null, $"C# transaction update test original: {suffix}");
+    var id = await api.Create(createRecord, SerializeSimpleStrictContext.Default.SimpleStrict);
+
+    // Update operation
+    var updateRecord = new SimpleStrict(null, null, null, $"C# transaction update test modified: {suffix}");
+    batch.Api("simple_strict_table").Update(id, updateRecord, SerializeSimpleStrictContext.Default.SimpleStrict);
+
+    // Test actual update
+    await batch.Send();
+    var updatedRecord = await api.Read<SimpleStrict>(id);
+    Assert.Equal(updateRecord.text_not_null, updatedRecord!.text_not_null);
+  }
+
+  [Fact]
+  [RequiresDynamicCode("Testing dynamic code")]
+  [RequiresUnreferencedCode("testing dynamic code")]
+  public async Task TransactionDeleteOperationTest() {
+    var client = await ClientTest.Connect();
+    var batch = client.Transaction();
+    var api = client.Records("simple_strict_table");
+
+    // First create a record to delete
+    var now = DateTimeOffset.Now.ToUnixTimeSeconds();
+    var suffix = $"{now} {System.Environment.Version} transaction";
+    var createRecord = new SimpleStrict(null, null, null, $"C# transaction delete test: {suffix}");
+    var id = await api.Create(createRecord, SerializeSimpleStrictContext.Default.SimpleStrict);
+
+    batch.Api("simple_strict_table").Delete(id);
+
+    // Test actual deletion
+    await batch.Send();
+    await Assert.ThrowsAsync<Exception>(() => api.Read<SimpleStrict>(id));
+  }
 }
