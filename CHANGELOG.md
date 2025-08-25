@@ -1,3 +1,11 @@
+## v0.16.6
+
+* Fix slow startup of streaming connections. Previously, clients would consider connections established only after first observed change or heartbeat. Thanks @daniel-vainsencher and meghprkh!
+* Fix update-params in experimental record transaction API. Thanks @ibilux!
+* Minor: improve tb-sqlite connection setup and support arc locks (backport from ongoing WASM work).
+* Simplify JS runtime's handling of transactions.
+* Update Rust dependencies.
+
 ## v0.16.5
 
 * Add an experimental `/api/transaction/v1/execute` endpoint for executing multiple record mutations (create, update & delete) across multiple APIs in a single transaction.
