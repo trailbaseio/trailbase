@@ -48,6 +48,11 @@ wasmtime::component::bindgen!({
     //   https://github.com/bytecodealliance/wasmtime/issues/10677
     // i.e. can't add db locks to shared state.
     require_store_data_send: false,
+    // NOTE: Doesn't work: https://github.com/bytecodealliance/wit-bindgen/issues/812.
+    // additional_derives: [
+    //     serde::Deserialize,
+    //     serde::Serialize,
+    // ],
     // Interactions with `ResourceTable` can possibly trap so enable the ability
     // to return traps from generated functions.
     imports: {

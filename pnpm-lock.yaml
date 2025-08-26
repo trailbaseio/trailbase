@@ -774,7 +774,7 @@ importers:
 
   examples/wasm-guest-js:
     dependencies:
-      trailbase-wasm:
+      trailbase-guest:
         specifier: workspace:*
         version: link:../../guests/typescript
     devDependencies:
@@ -793,7 +793,7 @@ importers:
 
   examples/wasm-guest-ts:
     dependencies:
-      trailbase-wasm:
+      trailbase-guest:
         specifier: workspace:*
         version: link:../../guests/typescript
     devDependencies:

@@ -59,26 +59,6 @@ impl trailbase_wasm_guest::Guest for Endpoints {
       }),
       // Test Database interactions
       HttpRoute::new(Method::GET, "/addDeletePost", async |_req| {
-        // const userId: Blob = (
-        //   await query("SELECT id FROM _user WHERE email = 'admin@localhost'", [])
-        // )[0][0] as Blob;
-        //
-        // console.info("user id:", userId.blob);
-        //
-        // const now = Date.now().toString();
-        // const numInsertions = await execute(
-        //   `INSERT INTO post (author, title, body) VALUES (?1, 'title' , ?2)`,
-        //   [{ blob: userId.blob }, now],
-        // );
-        //
-        // const numDeletions = await execute(`DELETE FROM post WHERE body = ?1`, [
-        //   now,
-        // ]);
-        //
-        // console.assert(numInsertions == numDeletions);
-        //
-        // return "Ok";
-
         let ref user_id = query(
           "SELECT id FROM _user WHERE email = 'admin@localhost'".to_string(),
           vec![],

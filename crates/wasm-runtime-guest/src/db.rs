@@ -61,10 +61,7 @@ pub enum Error {
 pub async fn query(query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>, Error> {
   let r = SqliteRequest {
     query,
-    params: params
-      .into_iter()
-      .map(to_json_value)
-      .collect::<Result<Vec<_>, _>>()?,
+    params: params.into_iter().map(to_json_value).collect(),
   };
   let request = Request::builder()
     .uri("http://__sqlite/query")
@@ -99,10 +96,7 @@ pub async fn query(query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>,
 pub async fn execute(query: String, params: Vec<Value>) -> Result<usize, Error> {
   let r = SqliteRequest {
     query,
-    params: params
-      .into_iter()
-      .map(to_json_value)
-      .collect::<Result<Vec<_>, _>>()?,
+    params: params.into_iter().map(to_json_value).collect(),
   };
   let request = Request::builder()
     .uri("http://__sqlite/execute")
@@ -147,16 +141,17 @@ fn from_json_value(value: serde_json::Value) -> Result<Value, Error> {
   };
 }
 
-fn to_json_value(value: Value) -> Result<serde_json::Value, Error> {
+pub fn to_json_value(value: Value) -> serde_json::Value {
   return match value {
-    Value::Null => Ok(serde_json::Value::Null),
-    Value::Text(s) => Ok(serde_json::Value::String(s)),
-    Value::Integer(i) => Ok(serde_json::Value::Number(serde_json::Number::from(i))),
-    Value::Real(f) => Ok(serde_json::Value::Number(
-      serde_json::Number::from_f64(f).unwrap(),
-    )),
-    Value::Blob(blob) => Ok(serde_json::json!({
+    Value::Null => serde_json::Value::Null,
+    Value::Text(s) => serde_json::Value::String(s),
+    Value::Integer(i) => serde_json::Value::Number(serde_json::Number::from(i)),
+    Value::Real(f) => match serde_json::Number::from_f64(f) {
+      Some(n) => serde_json::Value::Number(n),
+      None => serde_json::Value::Null,
+    },
+    Value::Blob(blob) => serde_json::json!({
         "blob": BASE64_URL_SAFE.encode(blob)
-    })),
+    }),
   };
 }
