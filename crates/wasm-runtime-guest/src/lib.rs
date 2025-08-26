@@ -26,22 +26,23 @@ pub mod wit {
 }
 
 pub mod db;
+mod http;
+mod job;
 
-use futures_util::future::LocalBoxFuture;
 use trailbase_wasm_common::{HttpContext, HttpContextKind};
-use wstd::http::body::{BodyForthcoming, IncomingBody};
+use wstd::http::body::IncomingBody;
 use wstd::http::server::{Finished, Responder};
 use wstd::http::{Request, Response, StatusCode};
-use wstd::io::{AsyncWrite, empty};
+use wstd::io::empty;
 
-use crate::db::Value;
-use crate::wit::exports::trailbase::runtime::init_endpoint::MethodType;
-
-pub use crate::wit::exports::trailbase::runtime::init_endpoint::InitResult;
-pub use crate::wit::trailbase::runtime::host_endpoint::thread_id;
 pub use static_assertions::assert_impl_all;
 pub use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 pub use wstd::{self, http::Method};
+
+pub use crate::http::{HttpError, HttpRoute};
+pub use crate::job::{JobHandler, job_handler};
+pub use crate::wit::exports::trailbase::runtime::init_endpoint::InitResult;
+pub use crate::wit::trailbase::runtime::host_endpoint::thread_id;
 
 #[macro_export]
 macro_rules! export {
@@ -56,85 +57,35 @@ macro_rules! export {
     };
 }
 
+pub struct JobConfig {
+  pub name: String,
+  pub spec: String,
+  pub handler: JobHandler,
+}
+
 pub trait Guest {
-  fn http_handlers() -> Vec<(Method, &'static str, HttpHandler)> {
+  fn http_handlers() -> Vec<HttpRoute> {
     return vec![];
   }
 
-  fn job_handlers() -> Vec<(&'static str, &'static str, JobHandler)> {
+  fn job_handlers() -> Vec<JobConfig> {
     return vec![];
   }
 }
+
 impl<T: Guest> crate::wit::exports::trailbase::runtime::init_endpoint::Guest for T {
   fn init() -> InitResult {
     return InitResult {
       http_handlers: T::http_handlers()
         .into_iter()
-        .map(|(m, p, _)| (m.into(), p.to_string()))
+        .map(|route| (route.method.into(), route.path))
         .collect(),
       job_handlers: T::job_handlers()
         .into_iter()
-        .map(|(name, spec, _)| (name.into(), spec.into()))
+        .map(|config| (config.name, config.spec))
         .collect(),
     };
   }
-}
-
-impl From<Method> for MethodType {
-  fn from(m: Method) -> MethodType {
-    return match m {
-      Method::GET => MethodType::Get,
-      Method::POST => MethodType::Post,
-      Method::HEAD => MethodType::Head,
-      Method::OPTIONS => MethodType::Options,
-      Method::PATCH => MethodType::Patch,
-      Method::DELETE => MethodType::Delete,
-      Method::PUT => MethodType::Put,
-      Method::TRACE => MethodType::Trace,
-      Method::CONNECT => MethodType::Connect,
-      _ => unreachable!(""),
-    };
-  }
-}
-
-pub struct HttpError {
-  pub status: wstd::http::StatusCode,
-  pub message: Option<String>,
-}
-
-pub type HttpHandler = Box<
-  dyn (Fn(Request<IncomingBody>) -> LocalBoxFuture<'static, Result<Vec<u8>, HttpError>>)
-    + Send
-    + Sync,
->;
-
-pub fn http_handler(
-  f: impl (AsyncFn(Request<IncomingBody>) -> Result<Vec<u8>, HttpError>) + Send + Sync + 'static,
-) -> HttpHandler {
-  let f = std::sync::Arc::new(f);
-  return Box::new(move |req: Request<IncomingBody>| {
-    let f = f.clone();
-    Box::pin(async move { f(req).await })
-  });
-}
-
-pub type JobHandler =
-  Box<dyn (Fn() -> LocalBoxFuture<'static, Result<(), HttpError>>) + Send + Sync>;
-
-// NOTE: We use anyhow here specifically to allow guests to attach context.
-pub fn job_handler(
-  f: impl (AsyncFn() -> Result<(), anyhow::Error>) + Send + Sync + 'static,
-) -> JobHandler {
-  let f = std::sync::Arc::new(f);
-  return Box::new(move || {
-    let f = f.clone();
-    Box::pin(async move {
-      f().await.map_err(|err| HttpError {
-        status: StatusCode::INTERNAL_SERVER_ERROR,
-        message: Some(format!("{err}")),
-      })
-    })
-  });
 }
 
 pub struct HttpIncomingHandler<T: Guest> {
@@ -146,64 +97,46 @@ impl<T: Guest> HttpIncomingHandler<T> {
     let path = request.uri().path();
     let method = request.method();
 
-    return match path {
-      "/query" => {
-        let query = std::future::ready("SELECT COUNT(*) FROM test".to_string()).await;
-        let rows = crate::db::query(query, vec![]).await.unwrap();
-        let Value::Integer(count) = rows[0][0] else {
-          panic!("Expected one");
-        };
-        assert_eq!(count, 1);
-
-        write_all(responder, format!("response: {rows:?}").as_bytes()).await
-      }
-      path => {
-        let Some(context) = request
-          .headers()
-          .get("__context")
-          .and_then(|h| serde_json::from_slice::<HttpContext>(h.as_bytes()).ok())
-        else {
-          return responder
-            .respond(error_response(StatusCode::INTERNAL_SERVER_ERROR))
-            .await;
-        };
-
-        log::debug!("WASM guest received HTTP request {path}: {context:?}");
-
-        match context.kind {
-          HttpContextKind::Http => {
-            if let Some((_, _, h)) = T::http_handlers()
-              .into_iter()
-              .find(|(m, p, _)| method == m && *p == context.registered_path)
-            {
-              match h(request).await {
-                Ok(response) => {
-                  return write_all(responder, &response).await;
-                }
-                Err(err) => {
-                  return responder.respond(error_response(err.status)).await;
-                }
-              }
-            }
-          }
-          HttpContextKind::Job => {
-            if let Some((_, _, h)) = T::job_handlers()
-              .into_iter()
-              .find(|(m, p, _)| method == m && *p == context.registered_path)
-            {
-              if let Err(err) = h().await {
-                return responder.respond(error_response(err.status)).await;
-              }
-              return write_all(responder, b"").await;
-            }
-          }
-        }
-
-        responder
-          .respond(error_response(StatusCode::NOT_FOUND))
-          .await
-      }
+    let Some(context) = request
+      .headers()
+      .get("__context")
+      .and_then(|h| serde_json::from_slice::<HttpContext>(h.as_bytes()).ok())
+    else {
+      return responder
+        .respond(error_response(StatusCode::INTERNAL_SERVER_ERROR))
+        .await;
     };
+
+    log::debug!("WASM guest received HTTP request {path}: {context:?}");
+
+    match context.kind {
+      HttpContextKind::Http => {
+        if let Some(HttpRoute { handler, .. }) = T::http_handlers()
+          .into_iter()
+          .find(|route| route.method == method && route.path == context.registered_path)
+        {
+          return handler(context.user, request, responder).await;
+        }
+      }
+      HttpContextKind::Job => {
+        if let Some(JobConfig { handler, .. }) = T::job_handlers()
+          .into_iter()
+          .find(|config| method == Method::GET && config.name == context.registered_path)
+        {
+          if let Err(err) = handler().await {
+            return responder.respond(error_response(err.status)).await;
+          }
+
+          return responder
+            .respond(Response::builder().body(empty()).unwrap())
+            .await;
+        }
+      }
+    }
+
+    return responder
+      .respond(error_response(StatusCode::NOT_FOUND))
+      .await;
   }
 }
 
@@ -212,22 +145,16 @@ impl<T: Guest> ::wstd::wasi::exports::http::incoming_handler::Guest for HttpInco
     request: ::wstd::wasi::http::types::IncomingRequest,
     response_out: ::wstd::wasi::http::types::ResponseOutparam,
   ) {
-    let responder = ::wstd::http::server::Responder::new(response_out);
+    let responder = Responder::new(response_out);
 
-    let _finished: ::wstd::http::server::Finished =
-      match ::wstd::http::request::try_from_incoming(request) {
-        Ok(request) => ::wstd::runtime::block_on(async { Self::handle(request, responder).await }),
-        Err(err) => responder.fail(err),
-      };
+    let _finished: Finished = match ::wstd::http::request::try_from_incoming(request) {
+      Ok(request) => ::wstd::runtime::block_on(async { Self::handle(request, responder).await }),
+      Err(err) => responder.fail(err),
+    };
   }
 }
 
-async fn write_all(responder: Responder, buf: &[u8]) -> Finished {
-  let mut body = responder.start_response(Response::new(BodyForthcoming));
-  let result = body.write_all(buf).await;
-  Finished::finish(body, result, None)
-}
-
+#[inline]
 fn error_response(status: StatusCode) -> Response<wstd::io::Empty> {
   return Response::builder().status(status).body(empty()).unwrap();
 }
