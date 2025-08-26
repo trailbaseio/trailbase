@@ -242,4 +242,3 @@ export class OutputStream implements Partial<Disposable> {
       blockingSplice(src: InputStream, len: bigint): bigint;
         [Symbol.dispose]?: () => void;
     }
-
