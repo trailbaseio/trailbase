@@ -589,6 +589,10 @@ async fn start_listen(
         }
       };
 
+      tokio_rustls::rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install TLS provider");
+
       let server_config = ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(vec![cert], key)
