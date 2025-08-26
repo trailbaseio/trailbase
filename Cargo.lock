@@ -1335,6 +1335,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "coffee-vector-search-guest"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "trailbase-wasm-guest",
+ "wstd",
+]
+
+[[package]]
+name = "collab-clicker-ssr-guest"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "trailbase-wasm-guest",
+ "wstd",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8687,7 +8707,6 @@ dependencies = [
 name = "wasm-rust-guest-testfixture"
 version = "0.0.0"
 dependencies = [
- "anyhow",
  "serde",
  "serde_json",
  "trailbase-wasm-guest",
