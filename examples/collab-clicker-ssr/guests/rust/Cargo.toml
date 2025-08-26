@@ -1,5 +1,5 @@
 [package]
-name = "wasm-rust-guest-testfixture"
+name = "collab-clicker-ssr-guest"
 version = "0.0.0"
 authors = ["someone"]
 edition = "2024"

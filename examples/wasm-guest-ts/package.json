@@ -15,7 +15,7 @@
     "deploy": "npm run build && rm -rf ../../client/testfixture/scripts/*.wasm && cp ./dist/http-hello-world.wasm ../../client/testfixture/scripts/"
   },
   "dependencies": {
-    "trailbase-wasm": "workspace:*"
+    "trailbase-guest": "workspace:*"
   },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.18.4",
