@@ -1,82 +1,143 @@
-#![forbid(unsafe_code, clippy::unwrap_used)]
+#![forbid(unsafe_code)]
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use serde_json::json;
 use trailbase_wasm_guest::db::{Value, execute, query};
-use trailbase_wasm_guest::{
-  HttpError, HttpHandler, JobHandler, Method, export, http_handler, job_handler,
-};
-use wstd::http::StatusCode;
-use wstd::time::{Duration, Timer};
+use trailbase_wasm_guest::{HttpError, HttpRoute, JobConfig, Method, export, job_handler};
+use wstd::http::{Client, Request, StatusCode};
+use wstd::io::empty;
+use wstd::time::{Duration, SystemTime, Timer};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
 
 impl trailbase_wasm_guest::Guest for Endpoints {
-  fn http_handlers() -> Vec<(Method, &'static str, HttpHandler)> {
+  fn http_handlers() -> Vec<HttpRoute> {
     return vec![
-      (
-        Method::GET,
-        "/json",
-        http_handler(async |_req| {
-          return Ok(
-            serde_json::to_vec(&json!({
+      HttpRoute::new(Method::GET, "/json", async |_req| {
+        let value = json!({
             "int": 5,
             "real": 4.2,
             "msg": "foo",
             "obj": {
               "nested": true,
             },
+        });
 
-                      }))
-            .unwrap(),
-          );
-        }),
-      ),
-      (
+        return serde_json::to_vec(&value).map_err(map_err);
+      }),
+      HttpRoute::new(Method::GET, "/fetch", async |req| {
+        for (param, value) in req.url().query_pairs() {
+          if param == "url" {
+            let request = Request::builder().uri(value.to_string()).body(empty());
+
+            let client = Client::new();
+            let response = client.send(request.unwrap()).await.map_err(map_err)?;
+
+            return response.into_body().bytes().await.map_err(map_err);
+          }
+        }
+
+        return Err(HttpError {
+          status: StatusCode::BAD_REQUEST,
+          message: Some("Missing ?url= param".to_string()),
+        });
+      }),
+      HttpRoute::new(
         Method::GET,
-        "/test",
-        http_handler(async |_req| {
-          execute(
-            "CREATE TABLE test (id INTEGER PRIMARY KEY)".to_string(),
-            vec![],
-          )
-          .await
-          .map_err(map_err)?;
-          let _ = execute("INSERT INTO test (id) VALUES (2), (4)".to_string(), vec![]).await;
-          let rows = query("SELECT COUNT(*) FROM test".to_string(), vec![])
-            .await
-            .map_err(map_err)?;
-
-          return Ok(format!("rows: {:?}", rows[0][0]).into_bytes().to_vec());
-        }),
+        "/error",
+        async |_req| -> Result<(), HttpError> {
+          return Err(HttpError {
+            status: StatusCode::IM_A_TEAPOT,
+            message: Some("I'm a teapot".to_string()),
+          });
+        },
       ),
+      HttpRoute::new(Method::GET, "/await", async |_req| {
+        Timer::after(Duration::from_millis(100)).wait().await;
+      }),
+      // Test Database interactions
+      HttpRoute::new(Method::GET, "/addDeletePost", async |_req| {
+        // const userId: Blob = (
+        //   await query("SELECT id FROM _user WHERE email = 'admin@localhost'", [])
+        // )[0][0] as Blob;
+        //
+        // console.info("user id:", userId.blob);
+        //
+        // const now = Date.now().toString();
+        // const numInsertions = await execute(
+        //   `INSERT INTO post (author, title, body) VALUES (?1, 'title' , ?2)`,
+        //   [{ blob: userId.blob }, now],
+        // );
+        //
+        // const numDeletions = await execute(`DELETE FROM post WHERE body = ?1`, [
+        //   now,
+        // ]);
+        //
+        // console.assert(numInsertions == numDeletions);
+        //
+        // return "Ok";
+
+        let ref user_id = query(
+          "SELECT id FROM _user WHERE email = 'admin@localhost'".to_string(),
+          vec![],
+        )
+        .await
+        .map_err(map_err)?[0][0];
+
+        println!("user id: {user_id:?}");
+
+        let now = SystemTime::now();
+        let num_insertions = execute(
+          "INSERT INTO post (author, title, body) VALUES (?1, 'title' , ?2)".to_string(),
+          vec![user_id.clone(), Value::Text(format!("{now:?}"))],
+        )
+        .await
+        .unwrap();
+
+        let num_deletions = execute(
+          "DELETE FROM post WHERE body = ?1".to_string(),
+          vec![Value::Text(format!("{now:?}"))],
+        )
+        .await
+        .unwrap();
+
+        if num_insertions != num_deletions {
+          panic!("{num_insertions} insertions vs {num_deletions} deletions");
+        }
+
+        return Ok("Ok");
+      }),
+      // Benchmark runtime performance.
+      HttpRoute::new(Method::GET, "/fibonacci", async |_req| {
+        format!("{}\n", fibonacci(40))
+      }),
     ];
   }
 
-  fn job_handlers() -> Vec<(&'static str, &'static str, JobHandler)> {
-    return vec![(
-      "myjobhandler",
-      "@hourly",
-      job_handler(async || {
-        println!("My JobHandler");
+  fn job_handlers() -> Vec<JobConfig> {
+    return vec![JobConfig {
+      name: "WASM-registered Job".into(),
+      spec: "@hourly".into(),
+      handler: job_handler(async || {
+        println!("JS-registered cron job reporting for duty 🚀");
         return Ok(());
       }),
-    )];
+    }];
   }
 }
 
 export!(Endpoints);
 
-// #[inline]
-// fn fibonacci(n: usize) -> usize {
-//   return match n {
-//     0 => 0,
-//     1 => 1,
-//     n => fibonacci(n - 1) + fibonacci(n - 2),
-//   };
-// }
+#[inline]
+fn fibonacci(n: usize) -> usize {
+  return match n {
+    0 => 0,
+    1 => 1,
+    n => fibonacci(n - 1) + fibonacci(n - 2),
+  };
+}
 
 fn map_err(err: impl std::error::Error) -> HttpError {
   return HttpError {
