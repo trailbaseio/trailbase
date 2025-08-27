@@ -9,6 +9,7 @@ homepage = "https://trailbase.io"
 
 [dependencies]
 anyhow = "1.0.99"
+parking_lot = { workspace = true }
 wasmtime = { workspace = true }
 
 [dev-dependencies]
