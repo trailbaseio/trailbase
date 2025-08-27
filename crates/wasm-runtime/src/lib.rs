@@ -28,6 +28,8 @@ use wasmtime_wasi_keyvalue::WasiKeyValueCtx;
 
 use crate::exports::trailbase::runtime::init_endpoint::InitResult;
 
+pub use wasmtime_wasi_keyvalue::Store as KvStore;
+
 static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 
 // Documentation: https://docs.wasmtime.dev/api/wasmtime/component/macro.bindgen.html
@@ -380,6 +382,7 @@ impl Runtime {
     n_threads: usize,
     wasm_source_file: std::path::PathBuf,
     conn: trailbase_sqlite::Connection,
+    kv_store: KvStore,
   ) -> Result<Self, Error> {
     let mut config = Config::new();
     config.async_support(true);
@@ -407,6 +410,7 @@ impl Runtime {
         let engine = engine.clone();
         let component = component.clone();
         let conn = conn.clone();
+        let kv_store = kv_store.clone();
 
         let handle = std::thread::Builder::new()
           .name(format!("wasm-runtime-{index}"))
@@ -419,9 +423,14 @@ impl Runtime {
                 .expect("startup"),
             );
 
-            let instance =
-              RuntimeInstance::new(engine, component, tokio_runtime.clone(), conn, index as u64)
-                .expect("startup");
+            let shared_state = SharedState {
+              runtime: tokio_runtime.clone(),
+              conn,
+              thread_id: index as u64,
+              kv_store,
+            };
+
+            let instance = RuntimeInstance::new(engine, component, shared_state).expect("startup");
 
             event_loop(tokio_runtime, instance, private_receiver, shared_receiver);
           })
@@ -493,10 +502,11 @@ fn event_loop(
   });
 }
 
-struct SharedState {
-  thread_id: u64,
-  runtime: Arc<tokio::runtime::Runtime>,
-  conn: trailbase_sqlite::Connection,
+pub struct SharedState {
+  pub thread_id: u64,
+  pub runtime: Arc<tokio::runtime::Runtime>,
+  pub conn: trailbase_sqlite::Connection,
+  pub kv_store: KvStore,
 }
 
 pub struct RuntimeInstance {
@@ -511,9 +521,7 @@ impl RuntimeInstance {
   pub fn new(
     engine: Engine,
     component: Component,
-    runtime: Arc<tokio::runtime::Runtime>,
-    conn: trailbase_sqlite::Connection,
-    thread_id: u64,
+    shared_state: SharedState,
   ) -> Result<Self, Error> {
     let mut linker = Linker::<State>::new(&engine);
 
@@ -535,11 +543,7 @@ impl RuntimeInstance {
       engine,
       component,
       linker,
-      shared: Arc::new(SharedState {
-        runtime,
-        thread_id,
-        conn,
-      }),
+      shared: Arc::new(shared_state),
     });
   }
 
@@ -567,7 +571,7 @@ impl RuntimeInstance {
         resource_table: ResourceTable::new(),
         wasi_ctx: wasi_ctx.build(),
         http: WasiHttpCtx::new(),
-        kv: WasiKeyValueCtx::builder().build(),
+        kv: WasiKeyValueCtx::new(self.shared.kv_store.clone()),
         shared: self.shared.clone(),
         tx: LockedTransaction(Arc::new(Mutex::new(None))),
       },
@@ -687,7 +691,14 @@ mod tests {
   #[tokio::test]
   async fn test_init() {
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
-    let runtime = Runtime::new(2, "./testdata/rust_guest.wasm".into(), conn.clone()).unwrap();
+    let kv_store = KvStore::new();
+    let runtime = Runtime::new(
+      2,
+      "./testdata/rust_guest.wasm".into(),
+      conn.clone(),
+      kv_store,
+    )
+    .unwrap();
 
     runtime
       .call(async |instance| {
@@ -721,7 +732,6 @@ mod tests {
       .call(async |instance| {
         let context = HttpContext {
           kind: HttpContextKind::Http,
-          // registered_path: "/wasm/{placeholder}".to_string(),
           registered_path: "/sqlitetx".to_string(),
           path_params: vec![],
           user: None,
@@ -747,8 +757,16 @@ mod tests {
   #[tokio::test]
   async fn test_transaction() {
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
-    let runtime =
-      Arc::new(Runtime::new(2, "./testdata/rust_guest.wasm".into(), conn.clone()).unwrap());
+    let kv_store = KvStore::new();
+    let runtime = Arc::new(
+      Runtime::new(
+        2,
+        "./testdata/rust_guest.wasm".into(),
+        conn.clone(),
+        kv_store,
+      )
+      .unwrap(),
+    );
 
     let futures: Vec<_> = (0..256)
       .map(|_| {
