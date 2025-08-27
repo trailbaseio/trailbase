@@ -1,0 +1,127 @@
+---
+title: >
+  Switching to a WebAssembly Runtime
+pubDate: 2025-08-25
+intro: Going forward TrailBase will rely on a WebAssembly rather than a V8 JavaScript runtime.
+tags: ["WASM"]
+author: sebastian
+image: ./_wasm_logo.svg
+---
+
+TrailBase has been embedding a V8 runtime for the last 10 months allowing users
+to implement custom HTTP and job handlers.
+In this time we've experienced several issues and therefore are excited to
+announce that we'll be moving towards a WebAssembly (WASM) runtime.
+v0.17 is a transitional release supporting both runtimes with the eventual goal
+to retire the v8 runtime.
+In this article we're going to explain the rational, the opportunities and what
+to look out for.
+
+## Rational
+
+V8 is a amazing piece of engineering. It's primary target is browsers. It
+itself isn't enough for backends leading to embedders like Node.js and Deno to
+extend it with sprawling APIs, which themselves have sprawling dependencies.
+Even though we weren't linking a fully Node compatible environment it was
+already 2/3 of TrailBase binary, mostly well written but notoriously complex
+C++ code, with v8 drawing a lot of eyeballs.
+
+We got caught in a game of whack-a-mole of trying to run a recent version for
+safety, while not being able to link a satisfyingly complete environment due to
+package conflicts. Turns out deno links its own stale version of SQLite. Also
+deno doesn't build with MUSL preventing us from building truly static binaries[^1].
+
+Wasmtime, our WASM runtime, on the other hand supports WASI[^2] and is
+specifically designed for embedding.
+It's a lot more minimal, safe and yet high-performant.
+
+## Opportunities
+
+* No accidental state sharing!
+* Many more languages can be supported: C#, Python, Go, Dart, Ruby, C/C++, ...
+* Safe Rust code. Consistent TLS.
+* We would like this to become the de-facto path to extend TrailBase (as opposed
+  to using it as a framework), while providing a lot of flexibility in terms of
+  languages, ...
+* This may also open up the path to using a more mainstream copy-left license.
+* Better sandboxing for I/O.
+* Support custom efficient SQLite extensions w/o accidental state sharing.
+
+## Regressions
+
+V8 is highly optimized both for loading and executing JS.
+From a JS-centric perspective this may feel like a step backwards.
+However, TB's integration was never a complete Node or Deno compatible runtime,
+thus power-users were likely already inclined to run their preferred runtime -
+Node, Deno, Bun - as a side-car.
+
+In practice, JS is probably the least-efficient compile-to-WASM language due to
+it's inherently dynamic nature (`eval()`).
+While this may change, currently all ES6 compliant compilers bundle a JS
+interpreter (SpiderMonkey or QuickJS). Since the interpreter's input is static,
+some optimizations can be applied, i.e.
+[Futamura projection using weval](https://github.com/bytecodealliance/weval).
+
+For folks migrating, this means:
+
+* A separate build step is needed to translate JS/TS to WASM, as opposed to
+  lazily loading and just-in-time compiling a script.
+* The resulting bundle, including the interpreter, tends to be large resulting
+  in non-trivial initial load time in the order of seconds.
+* Execution for JS is slower. Using weval, JS executing is roughly 10x slower
+  than V8 but still 2x faster than non-JIT'ed runtimes like Goja while
+  supporting modern ECMA standards.
+  However, we can support multiple WASM components in different languages with
+  many languages outperforming V8. For example, Rust-WASM components tend ot be
+  X times faster than JS with V8, while requiring a significantly lower memory
+  footprint and providing strict isolation between requests.
+
+## Migration
+
+The biggest difference you'll experience right away is the need for a build-step.
+We therefore recommend to just copy the template in `examples/wasm-guest-ts`, which
+supports both JavaScript and TypeScript and uses vite for building. To build
+the wasm file you can simply run `pnpm install && pnpm build`.
+
+The APIs also had to change. Previously we were relying on global state to register
+handlers. However, global state is no longer shared, to avoid initialization on
+every request and allow for symmetry with other guest languages that don't
+support eager global initialization, we're now relying on module exports for
+registering custom HTTP and Job handlers.
+
+For state sharing between requests you'll need should rely on the database. Note
+that even with long-lived V8 isolates that was already the case, since state
+was only shared coincidentally within the same isolate, i.e. subsequent
+requests may or may not be able to see that state.
+
+Also the new runtime doesn't yet support file IO. That's something we'd love to
+add back in the future, in a more sandboxed fashion. If that's something that
+you're relying on please let us know.
+
+## Next-Steps
+
+Once the new runtime integration has seen some mileage and any unexpected
+surprises are worked out, we'd like to remove the V8 integration as soon as
+possible. This will provide immediate benefits in terms of portability,
+security, build-times and binary sizes.
+
+From that point on we plan to invest heavily into making the integration
+best-in-class. Something we were hesitant to do with the previous integration
+due to all of its rough edges and unstable APIs. We'd like to introduce support
+for more guest languages, making TrailBase easier to extend for a wider range
+of developers developers and use-cases. If you think there's any language that
+would be particularly valuable, e.g. due to its ecosystem, let us know.
+
+When it becomes available, we'd also like to transparently upgrade the WASM
+runtime to WASIp3, which will be the next standard making asynchronous
+interactions between host and guest more of a first-class citizen.
+
+---
+
+[^1]:
+    GLIBC static binaries aren't really static.
+
+[^2]:
+    As system to express cross-component interfaces for WASM in a
+    language-agnostic manner. It's like gRPC but FFIi, i.e. no I/O
+    thus allowing both asynchronous and synchronous interactions.
