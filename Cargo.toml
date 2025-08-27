@@ -100,3 +100,4 @@ wasmtime = "36.0.1"
 wasmtime-wasi = { version = "36.0.1", default-features = false, features = [] }
 wasmtime-wasi-http = "36.0.1"
 wasmtime-wasi-io = "36.0.1"
+wasmtime-wasi-keyvalue = { path = "crates/wasi-keyvalue", version = "0.1.0" }

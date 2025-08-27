@@ -24,6 +24,7 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
 use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 use wasmtime_wasi_io::IoView;
+use wasmtime_wasi_keyvalue::WasiKeyValueCtx;
 
 use crate::exports::trailbase::runtime::init_endpoint::InitResult;
 
@@ -93,9 +94,9 @@ struct State {
   resource_table: ResourceTable,
   wasi_ctx: WasiCtx,
   http: WasiHttpCtx,
+  kv: WasiKeyValueCtx,
 
   shared: Arc<SharedState>,
-
   tx: LockedTransaction,
 }
 
@@ -522,6 +523,11 @@ impl RuntimeInstance {
     // Adds default HTTP interfaces - incoming and outgoing.
     wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
 
+    // Add default KV interfaces.
+    wasmtime_wasi_keyvalue::add_to_linker(&mut linker, |cx| {
+      wasmtime_wasi_keyvalue::WasiKeyValue::new(&cx.kv, &mut cx.resource_table)
+    })?;
+
     // Host interfaces.
     trailbase::runtime::host_endpoint::add_to_linker::<_, HasSelf<State>>(&mut linker, |s| s)?;
 
@@ -561,6 +567,7 @@ impl RuntimeInstance {
         resource_table: ResourceTable::new(),
         wasi_ctx: wasi_ctx.build(),
         http: WasiHttpCtx::new(),
+        kv: WasiKeyValueCtx::builder().build(),
         shared: self.shared.clone(),
         tx: LockedTransaction(Arc::new(Mutex::new(None))),
       },
