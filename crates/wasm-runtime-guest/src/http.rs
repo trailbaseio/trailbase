@@ -60,7 +60,13 @@ impl HttpRoute {
             body,
           };
 
-          return Box::pin(async move { responder.respond(f(req).await.into_response()).await });
+          return Box::pin(async move {
+            let resp = f(req).await.into_response();
+            // println!("Got response");
+            let finished = responder.respond(resp).await;
+            // println!("responded");
+            finished
+          });
         },
       ),
     };

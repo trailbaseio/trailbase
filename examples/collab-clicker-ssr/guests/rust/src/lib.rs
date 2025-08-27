@@ -3,7 +3,8 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver};
-use rquickjs::{Context, Module, Object, Runtime};
+use rquickjs::prelude::{Async, Ctx, Func};
+use rquickjs::{AsyncContext, AsyncRuntime, Function, Module, Object, async_with};
 use trailbase_wasm_guest::db::{Value, query};
 use trailbase_wasm_guest::fs::read_file;
 use trailbase_wasm_guest::kv::Store;
@@ -16,6 +17,14 @@ struct Endpoints;
 impl trailbase_wasm_guest::Guest for Endpoints {
   fn http_handlers() -> Vec<HttpRoute> {
     return vec![
+      HttpRoute::new(
+        Method::GET,
+        "/test",
+        async |_req| -> Result<Vec<u8>, HttpError> {
+          let data: Vec<u8> = vec![65; 2049];
+          return Ok(data);
+        },
+      ),
       HttpRoute::new(
         Method::GET,
         "/clicked",
@@ -48,10 +57,8 @@ impl trailbase_wasm_guest::Guest for Endpoints {
             return Err(internal(""));
           };
 
-          let result = render(count);
-          println!("Render: {result:?}");
-
-          // NOTE: This is where we'd run the JS render function if we could.
+          // Call the JS render function using embedded QuickJS.
+          let result = render(count).await;
 
           let template = read_cached_file("/dist/client/index.html").map_err(internal)?;
           let mut template_str = String::from_utf8_lossy(&template).to_string();
@@ -59,6 +66,8 @@ impl trailbase_wasm_guest::Guest for Endpoints {
           template_str = template_str.replace("<!--app-head-->", &result.head);
           template_str = template_str.replace("<!--app-data-->", &result.data);
           template_str = template_str.replace("<!--app-html-->", &result.html);
+
+          println!("template: {}", template_str.len());
 
           return Ok(template_str);
         },
@@ -79,15 +88,15 @@ fn read_cached_file(path: &str) -> Result<Vec<u8>, String> {
   return Ok(template);
 }
 
-const MODULE: &str = r#"
-export function render(uri, count) {
-  return {
-    head: "",
-    data: "",
-    html: `count: ${count}`,
-  };
-}
-"#;
+// const MODULE: &str = r#"
+// export function render(uri, count) {
+//   return {
+//     head: "",
+//     data: "",
+//     html: `count: ${count}`,
+//   };
+// }
+// "#;
 
 #[derive(Debug)]
 struct RenderResult {
@@ -96,50 +105,80 @@ struct RenderResult {
   html: String,
 }
 
-fn render(count: i64) -> RenderResult {
+// NOTE: SolidJS calls it only with one argument and rquickjs doesn't seem to care for `Option` to
+// make the function variadic.
+async fn set_timeout<'js>(
+  _ctx: Ctx<'js>,
+  callback: Function<'js>,
+  // millis: Option<usize>,
+) -> rquickjs::Result<()> {
+  wstd::time::Timer::after(wstd::time::Duration::from_millis(0))
+    .wait()
+    .await;
+  callback.call::<_, ()>(()).unwrap();
+  println!("called callback");
+
+  Ok(())
+}
+
+// fn set_timeout_sync<'js>(
+//   ctx: Ctx<'js>,
+//   callback: Function<'js>,
+//   // millis: Option<usize>,
+// ) -> rquickjs::Result<()> {
+//   ctx.spawn(async move {
+//     wstd::time::Timer::after(wstd::time::Duration::from_millis(0))
+//       .wait()
+//       .await;
+//     callback.call::<_, ()>(()).unwrap();
+//   });
+//
+//   Ok(())
+// }
+
+async fn render(count: i64) -> RenderResult {
   let resolver = BuiltinResolver::default()
     .with_module("server/entry-server.js")
-    .with_module("other")
     .with_module("count");
 
   let module = read_cached_file("/dist/server/entry-server.js").unwrap();
   // println!("read: {}", String::from_utf8_lossy(&module));
 
   let loader = BuiltinLoader::default()
-    .with_module("server/entry-server.js", MODULE)
-    .with_module("other", module)
+    .with_module("server/entry-server.js", module)
     .with_module("count", format!("export const count = {count};"));
 
-  let rt = Runtime::new().unwrap();
-  let ctx = Context::full(&rt).unwrap();
+  let rt = AsyncRuntime::new().unwrap();
+  let ctx = AsyncContext::full(&rt).await.unwrap();
 
-  rt.set_loader(resolver, loader);
+  rt.set_loader(resolver, loader).await;
 
-  return ctx.with(|ctx| {
+  let result: RenderResult = async_with!(ctx => |ctx| {
+    ctx
+      .globals()
+      //.set("setTimeout", Func::from(set_timeout_sync))
+      .set("setTimeout", Func::from(Async(set_timeout)))
+      .unwrap();
+
     let (module, promise) = Module::declare(
-      ctx,
+      ctx.clone(),
       "ssr",
       r#"
         import { render } from "server/entry-server.js";
-        import { render as r } from "other";
         import { count } from "count";
 
-        const url = "ignored";
-
-        export const output = render(url, count);
+        export const output = render("ignored", count);
       "#,
     )
     .unwrap()
     .eval()
     .unwrap();
 
-    promise
-      .finish::<()>()
-      .map_err(|err| {
-        println!("PROMISE: {err}");
-        return err;
-      })
-      .unwrap();
+    if let Err(err) = promise.finish::<()>() {
+      panic!("PROMISE '{err}'");
+      // let value = ctx.catch();
+      // panic!("PROMISE '{err}': {value:?}");
+    }
 
     let obj: Object = module.get("output").unwrap();
 
@@ -148,7 +187,12 @@ fn render(count: i64) -> RenderResult {
       data: obj.get("data").unwrap(),
       html: obj.get("html").unwrap(),
     };
-  });
+  })
+  .await;
+
+  rt.idle().await;
+
+  return result;
 }
 
 fn internal(err: impl std::string::ToString) -> HttpError {
