@@ -9101,6 +9101,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasmtime-wasi-keyvalue"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tokio",
+ "wasmtime",
+ "wasmtime-wasi",
+]
+
+[[package]]
 name = "wast"
 version = "238.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

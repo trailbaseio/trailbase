@@ -1,0 +1,17 @@
+# Forked from wasmtime/crates/wasi-keyvalue.
+[package]
+name = "wasmtime-wasi-keyvalue"
+version = "0.1.0"
+edition = "2024"
+license = "OSL-3.0"
+description = "WASM runtime for the TrailBase framework"
+homepage = "https://trailbase.io"
+
+[dependencies]
+anyhow = "1.0.99"
+wasmtime = { workspace = true }
+
+[dev-dependencies]
+# test-programs-artifacts = { workspace = true }
+wasmtime-wasi = { workspace = true }
+tokio = { workspace = true }

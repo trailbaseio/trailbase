@@ -29,7 +29,7 @@ trailbase-sqlite = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1.41"
-wasmtime = "36.0.1"
-wasmtime-wasi = { version = "36.0.1", default-features = false, features = [] }
-wasmtime-wasi-http = "36.0.1"
-wasmtime-wasi-io = "36.0.1"
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+wasmtime-wasi-http = { workspace = true }
+wasmtime-wasi-io = { workspace = true }
