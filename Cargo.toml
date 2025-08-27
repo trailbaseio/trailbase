@@ -14,6 +14,7 @@ members = [
   "crates/schema",
   "crates/sqlean",
   "crates/sqlite",
+  "crates/wasi-keyvalue",
   "crates/wasm-runtime",
   "crates/wasm-runtime-common",
   "crates/wasm-runtime-guest",
@@ -32,8 +33,14 @@ default-members = [
   "crates/extension",
   "crates/js-runtime",
   "crates/qs",
+  "crates/refinery",
   "crates/schema",
+  "crates/sqlean",
   "crates/sqlite",
+  "crates/wasi-keyvalue",
+  "crates/wasm-runtime",
+  "crates/wasm-runtime-common",
+  "crates/wasm-runtime-guest",
 ]
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html
@@ -89,3 +96,7 @@ trailbase-wasm-guest = { path = "crates/wasm-runtime-guest", version = "0.1.0" }
 trailbase = { path = "crates/core", version = "0.2.0" }
 ts-rs = { version = "11", features = ["uuid-impl", "serde-json-impl"] }
 uuid = { version = "1", default-features = false, features = ["std", "v4", "v7", "serde"] }
+wasmtime = "36.0.1"
+wasmtime-wasi = { version = "36.0.1", default-features = false, features = [] }
+wasmtime-wasi-http = "36.0.1"
+wasmtime-wasi-io = "36.0.1"
