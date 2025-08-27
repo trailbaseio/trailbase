@@ -33,3 +33,4 @@ wasmtime = { workspace = true }
 wasmtime-wasi = { workspace = true }
 wasmtime-wasi-http = { workspace = true }
 wasmtime-wasi-io = { workspace = true }
+wasmtime-wasi-keyvalue = { workspace = true }

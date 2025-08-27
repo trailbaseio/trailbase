@@ -8166,6 +8166,7 @@ dependencies = [
  "wasmtime-wasi",
  "wasmtime-wasi-http",
  "wasmtime-wasi-io",
+ "wasmtime-wasi-keyvalue",
 ]
 
 [[package]]
