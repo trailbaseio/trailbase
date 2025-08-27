@@ -44,6 +44,7 @@ wasmtime::component::bindgen!({
         "wit/deps-0.2.6/sockets",
         "wit/deps-0.2.6/cli",
         "wit/deps-0.2.6/http",
+        "wit/keyvalue-0.2.0-draft",
         // Ours:
         "wit/trailbase.wit",
     ],

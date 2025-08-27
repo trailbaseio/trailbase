@@ -15,6 +15,7 @@ pub mod wit {
           "../wasm-runtime/wit/deps-0.2.6/sockets",
           "../wasm-runtime/wit/deps-0.2.6/cli",
           "../wasm-runtime/wit/deps-0.2.6/http",
+          "../wasm-runtime/wit/keyvalue-0.2.0-draft",
           // Ours:
           "../wasm-runtime/wit/trailbase.wit",
       ],
@@ -29,6 +30,7 @@ pub mod db;
 pub mod fs;
 mod http;
 mod job;
+pub mod kv;
 
 use trailbase_wasm_common::{HttpContext, HttpContextKind};
 use wstd::http::body::IncomingBody;
