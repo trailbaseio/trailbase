@@ -41,7 +41,16 @@ const posts = blogPosts ?? (await getPosts());
 
             {/* Dashed line spacer */}
             {index < posts.length - 1 && (
-              <div class="gradient-line my-10 h-[1px] w-full overflow-hidden group-last:hidden lg:my-12" />
+              <div
+                class:list={[
+                  "my-10",
+                  "h-[1px]",
+                  "w-full",
+                  "overflow-hidden",
+                  "group-last:hidden",
+                  "lg:my-12",
+                ]}
+              />
             )}
           </>
         );

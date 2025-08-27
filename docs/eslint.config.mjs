@@ -2,14 +2,24 @@ import globals from "globals";
 
 import jsPlugin from "@eslint/js";
 import tsPlugin from "typescript-eslint";
-import tailwindPlugin from "eslint-plugin-tailwindcss";
+import tailwindPlugin from "eslint-plugin-better-tailwindcss";
 import solidPlugin from "eslint-plugin-solid/configs/recommended";
 import astroPlugin from "eslint-plugin-astro";
 
-console.info(
-  "TODO: Tailwind v4 eslint missing (https://github.com/francoismassart/eslint-plugin-tailwindcss/issues/325): ",
-  Object.keys(tailwindPlugin),
-);
+// Starlight utility classes used by forked layouts. Ideally, we'd install them
+// from our `src/styles/global.css` so the linter just works, however we haven't
+// found a good way to do so.
+const ignoredStarlightCustomTailwindClasses = [
+  "sl-.+",
+  "hero",
+  "hero-html",
+  "stack",
+  "copy",
+  "tagline",
+  "actions",
+  "site-title",
+  "site-title-link",
+];
 
 export default [
   {
@@ -19,6 +29,30 @@ export default [
   ...tsPlugin.configs.recommended,
   // tailwindPlugin.configs["flat/recommended"],
   ...astroPlugin.configs.recommended,
+  {
+    plugins: {
+      "better-tailwindcss": tailwindPlugin,
+    },
+    rules: {
+      ...tailwindPlugin.configs["recommended-warn"].rules,
+      ...tailwindPlugin.configs["recommended-error"].rules,
+
+      "better-tailwindcss/enforce-consistent-line-wrapping": "off",
+      // Order is different from what prettier enforces.
+      "better-tailwindcss/enforce-consistent-class-order": "off",
+      "better-tailwindcss/no-unregistered-classes": [
+        "error",
+        {
+          ignore: ignoredStarlightCustomTailwindClasses,
+        },
+      ],
+    },
+    settings: {
+      "better-tailwindcss": {
+        entryPoint: "src/styles/global.css",
+      },
+    },
+  },
   {
     files: ["**/*.{js,jsx,ts,tsx}"],
     ...solidPlugin,

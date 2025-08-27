@@ -18,11 +18,18 @@ const author = await getEntry("author", postData.data.author.id);
 const isOdd = num % 2;
 ---
 
-<article class:list={["lg:prose-xl", "prose"]}>
+<article>
   <div
-    class="grid grid-cols-1 items-center gap-10 md:grid-cols-[200px_auto] lg:grid-cols-[200px_auto]"
+    class:list={[
+      "grid",
+      "grid-cols-1",
+      "items-center",
+      "gap-8",
+      "md:grid-cols-[200px_auto]",
+      "lg:grid-cols-[200px_auto]",
+    ]}
   >
-    <div class="post_image">
+    <div>
       <a href={"/blog/" + postData.slug}>
         {
           postData?.data?.image && (
@@ -42,10 +49,7 @@ const isOdd = num % 2;
     </div>
 
     <div>
-      <a
-        href={"/blog/" + postData.slug}
-        class="text-pacamara-dark hover:text-pacamara-accent"
-      >
+      <a href={"/blog/" + postData.slug}>
         <h2>{postData.data.title}</h2>
       </a>
 
