@@ -6,65 +6,11 @@
 //!
 //! Currently supported storage backends:
 //! * In-Memory (empty identifier)
-//!
-//! # Examples
-//!
-//! The usage of this crate is very similar to other WASI API implementations
-//! such as [wasi:cli] and [wasi:http].
-//!
-//! A common scenario is accessing KV store in a [wasi:cli] component.
-//! A standalone example of doing all this looks like:
-//!
-//! ```
-//! use wasmtime::{
-//!     component::{Linker, ResourceTable},
-//!     Config, Engine, Result, Store,
-//! };
-//! use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
-//! use wasmtime_wasi_keyvalue::{WasiKeyValue, WasiKeyValueCtx, WasiKeyValueCtxBuilder};
-//!
-//! #[tokio::main]
-//! async fn main() -> Result<()> {
-//!     let mut config = Config::new();
-//!     config.async_support(true);
-//!     let engine = Engine::new(&config)?;
-//!
-//!     let mut store = Store::new(&engine, Ctx {
-//!         table: ResourceTable::new(),
-//!         wasi_ctx: WasiCtx::builder().build(),
-//!         wasi_keyvalue_ctx: WasiKeyValueCtxBuilder::new().build(),
-//!     });
-//!
-//!     let mut linker = Linker::<Ctx>::new(&engine);
-//!     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
-//!     // add `wasi-keyvalue` world's interfaces to the linker
-//!     wasmtime_wasi_keyvalue::add_to_linker(&mut linker, |h: &mut Ctx| {
-//!         WasiKeyValue::new(&h.wasi_keyvalue_ctx, &mut h.table)
-//!     })?;
-//!
-//!     // ... use `linker` to instantiate within `store` ...
-//!
-//!     Ok(())
-//! }
-//!
-//! struct Ctx {
-//!     table: ResourceTable,
-//!     wasi_ctx: WasiCtx,
-//!     wasi_keyvalue_ctx: WasiKeyValueCtx,
-//! }
-//!
-//! impl WasiView for Ctx {
-//!     fn ctx(&mut self) -> WasiCtxView<'_> {
-//!         WasiCtxView { ctx: &mut self.wasi_ctx, table: &mut self.table }
-//!     }
-//! }
-//! ```
-//!
-//! [wasi-keyvalue]: https://github.com/WebAssembly/wasi-keyvalue
-//! [wasi:cli]: https://docs.rs/wasmtime-wasi/latest
-//! [wasi:http]: https://docs.rs/wasmtime-wasi-http/latest
 
+#![allow(clippy::needless_return)]
 #![deny(missing_docs)]
+#![forbid(clippy::unwrap_used)]
+#![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 mod generated {
   wasmtime::component::bindgen!({
@@ -81,8 +27,11 @@ mod generated {
 }
 
 use self::generated::wasi::keyvalue;
+
 use anyhow::Result;
+use parking_lot::RwLock;
 use std::collections::HashMap;
+use std::sync::Arc;
 use wasmtime::component::{HasData, Resource, ResourceTable, ResourceTableError};
 
 #[doc(hidden)]
@@ -98,54 +47,39 @@ impl From<ResourceTableError> for Error {
   }
 }
 
+type InternalStore = Arc<RwLock<HashMap<String, Vec<u8>>>>;
+
+/// The practical type for the inmemory Store.
+#[derive(Clone, Default)]
+pub struct Store {
+  store: Arc<RwLock<HashMap<String, Vec<u8>>>>,
+}
+
+impl Store {
+  /// New shared storage for WASI KV implementation.
+  pub fn new() -> Self {
+    return Store {
+      store: Arc::new(RwLock::new(HashMap::new())),
+    };
+  }
+}
+
 #[doc(hidden)]
 pub struct Bucket {
-  in_memory_data: HashMap<String, Vec<u8>>,
-}
-
-/// Builder-style structure used to create a [`WasiKeyValueCtx`].
-#[derive(Default)]
-pub struct WasiKeyValueCtxBuilder {
-  in_memory_data: HashMap<String, Vec<u8>>,
-}
-
-impl WasiKeyValueCtxBuilder {
-  /// Creates a builder for a new context with default parameters set.
-  pub fn new() -> Self {
-    Default::default()
-  }
-
-  /// Preset data for the In-Memory provider.
-  pub fn in_memory_data<I, K, V>(mut self, data: I) -> Self
-  where
-    I: IntoIterator<Item = (K, V)>,
-    K: Into<String>,
-    V: Into<Vec<u8>>,
-  {
-    self.in_memory_data = data
-      .into_iter()
-      .map(|(k, v)| (k.into(), v.into()))
-      .collect();
-    self
-  }
-
-  /// Uses the configured context so far to construct the final [`WasiKeyValueCtx`].
-  pub fn build(self) -> WasiKeyValueCtx {
-    WasiKeyValueCtx {
-      in_memory_data: self.in_memory_data,
-    }
-  }
+  in_memory_data: InternalStore,
 }
 
 /// Capture the state necessary for use in the `wasi-keyvalue` API implementation.
 pub struct WasiKeyValueCtx {
-  in_memory_data: HashMap<String, Vec<u8>>,
+  in_memory_data: InternalStore,
 }
 
 impl WasiKeyValueCtx {
-  /// Convenience function for calling [`WasiKeyValueCtxBuilder::new`].
-  pub fn builder() -> WasiKeyValueCtxBuilder {
-    WasiKeyValueCtxBuilder::new()
+  /// Inject shared data.
+  pub fn new(data: Store) -> Self {
+    return Self {
+      in_memory_data: data.store,
+    };
   }
 }
 
@@ -184,24 +118,24 @@ impl keyvalue::store::Host for WasiKeyValue<'_> {
 impl keyvalue::store::HostBucket for WasiKeyValue<'_> {
   fn get(&mut self, bucket: Resource<Bucket>, key: String) -> Result<Option<Vec<u8>>, Error> {
     let bucket = self.table.get_mut(&bucket)?;
-    Ok(bucket.in_memory_data.get(&key).cloned())
+    Ok(bucket.in_memory_data.read().get(&key).cloned())
   }
 
   fn set(&mut self, bucket: Resource<Bucket>, key: String, value: Vec<u8>) -> Result<(), Error> {
     let bucket = self.table.get_mut(&bucket)?;
-    bucket.in_memory_data.insert(key, value);
+    bucket.in_memory_data.write().insert(key, value);
     Ok(())
   }
 
   fn delete(&mut self, bucket: Resource<Bucket>, key: String) -> Result<(), Error> {
     let bucket = self.table.get_mut(&bucket)?;
-    bucket.in_memory_data.remove(&key);
+    bucket.in_memory_data.write().remove(&key);
     Ok(())
   }
 
   fn exists(&mut self, bucket: Resource<Bucket>, key: String) -> Result<bool, Error> {
     let bucket = self.table.get_mut(&bucket)?;
-    Ok(bucket.in_memory_data.contains_key(&key))
+    Ok(bucket.in_memory_data.read().contains_key(&key))
   }
 
   fn list_keys(
@@ -210,7 +144,7 @@ impl keyvalue::store::HostBucket for WasiKeyValue<'_> {
     cursor: Option<u64>,
   ) -> Result<keyvalue::store::KeyResponse, Error> {
     let bucket = self.table.get_mut(&bucket)?;
-    let keys: Vec<String> = bucket.in_memory_data.keys().cloned().collect();
+    let keys: Vec<String> = bucket.in_memory_data.read().keys().cloned().collect();
     let cursor = cursor.unwrap_or(0) as usize;
     let keys_slice = &keys[cursor..];
     Ok(keyvalue::store::KeyResponse {
@@ -228,15 +162,15 @@ impl keyvalue::store::HostBucket for WasiKeyValue<'_> {
 impl keyvalue::atomics::Host for WasiKeyValue<'_> {
   fn increment(&mut self, bucket: Resource<Bucket>, key: String, delta: u64) -> Result<u64, Error> {
     let bucket = self.table.get_mut(&bucket)?;
-    let value = bucket
-      .in_memory_data
-      .entry(key.clone())
-      .or_insert("0".to_string().into_bytes());
+    let mut data = bucket.in_memory_data.write();
+    let value = data.entry(key.clone()).or_insert(b"0".to_vec());
+
     let current_value = String::from_utf8(value.clone())
       .map_err(|e| Error::Other(e.to_string()))?
       .parse::<u64>()
       .map_err(|e| Error::Other(e.to_string()))?;
     let new_value = current_value + delta;
+
     *value = new_value.to_string().into_bytes();
     Ok(new_value)
   }
@@ -249,15 +183,11 @@ impl keyvalue::batch::Host for WasiKeyValue<'_> {
     keys: Vec<String>,
   ) -> Result<Vec<Option<(String, Vec<u8>)>>, Error> {
     let bucket = self.table.get_mut(&bucket)?;
+    let lock = bucket.in_memory_data.read();
     Ok(
       keys
         .into_iter()
-        .map(|key| {
-          bucket
-            .in_memory_data
-            .get(&key)
-            .map(|value| (key.clone(), value.clone()))
-        })
+        .map(|key| lock.get(&key).map(|value| (key.clone(), value.clone())))
         .collect(),
     )
   }
@@ -268,16 +198,18 @@ impl keyvalue::batch::Host for WasiKeyValue<'_> {
     key_values: Vec<(String, Vec<u8>)>,
   ) -> Result<(), Error> {
     let bucket = self.table.get_mut(&bucket)?;
+    let mut lock = bucket.in_memory_data.write();
     for (key, value) in key_values {
-      bucket.in_memory_data.insert(key, value);
+      lock.insert(key, value);
     }
     Ok(())
   }
 
   fn delete_many(&mut self, bucket: Resource<Bucket>, keys: Vec<String>) -> Result<(), Error> {
     let bucket = self.table.get_mut(&bucket)?;
+    let mut lock = bucket.in_memory_data.write();
     for key in keys {
-      bucket.in_memory_data.remove(&key);
+      lock.remove(&key);
     }
     Ok(())
   }

@@ -9133,6 +9133,7 @@ name = "wasmtime-wasi-keyvalue"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "parking_lot",
  "tokio",
  "wasmtime",
  "wasmtime-wasi",

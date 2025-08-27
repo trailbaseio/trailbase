@@ -6,8 +6,8 @@ use hyper::StatusCode;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use trailbase_wasm::Runtime;
 use trailbase_wasm::exports::trailbase::runtime::init_endpoint::MethodType;
+use trailbase_wasm::{KvStore, Runtime};
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
 
 use crate::AppState;
@@ -19,6 +19,7 @@ pub(crate) fn build_wasm_runtimes_for_components(
   conn: trailbase_sqlite::Connection,
   components_path: PathBuf,
 ) -> Result<Vec<Arc<Runtime>>, AnyError> {
+  let shared_kv_store = KvStore::new();
   let mut runtimes: Vec<Arc<Runtime>> = vec![];
 
   if let Ok(entries) = std::fs::read_dir(components_path) {
@@ -40,7 +41,12 @@ pub(crate) fn build_wasm_runtimes_for_components(
       };
 
       if extension == "wasm" {
-        runtimes.push(Arc::new(Runtime::new(2, path, conn.clone())?));
+        runtimes.push(Arc::new(Runtime::new(
+          2,
+          path,
+          conn.clone(),
+          shared_kv_store.clone(),
+        )?));
       }
     }
   }
