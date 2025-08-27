@@ -7,6 +7,7 @@ use axum::response::{IntoResponse, Response};
 use futures_util::FutureExt;
 use log::*;
 use serde::Deserialize;
+use std::path::PathBuf;
 use std::str::FromStr;
 use thiserror::Error;
 use tokio::sync::oneshot;
@@ -324,6 +325,7 @@ async fn install_routes_and_jobs(
 
 pub(crate) async fn load_routes_and_jobs_from_js_modules(
   state: &AppState,
+  scripts_dir: PathBuf,
 ) -> Result<Option<Router<AppState>>, AnyError> {
   let runtime_handle = state.script_runtime();
   if runtime_handle.num_threads() == 0 {
@@ -331,7 +333,6 @@ pub(crate) async fn load_routes_and_jobs_from_js_modules(
     return Ok(None);
   }
 
-  let scripts_dir = state.data_dir().root().join("scripts");
   let modules = match Module::load_dir(scripts_dir.clone()) {
     Ok(modules) => modules,
     Err(err) => {
