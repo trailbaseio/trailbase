@@ -13,7 +13,6 @@ pub fn read_file(path: impl AsRef<Path>) -> Result<Vec<u8>, String> {
 
   let mut descriptor: Descriptor = root;
   for (i, segment) in segments.iter().enumerate() {
-    println!("Path segment: {segment:?}");
     let path = segment
       .to_str()
       .ok_or_else(|| format!("invalid path segment: {segment:?}"))?;
