@@ -15,6 +15,16 @@ struct Endpoints;
 impl trailbase_wasm_guest::Guest for Endpoints {
   fn http_handlers() -> Vec<HttpRoute> {
     return vec![
+      HttpRoute::new(Method::GET, "/readfile", async |_req| {
+        let Ok(r) = trailbase_wasm_guest::fs::read_file("/crates/sqlite/Cargo.toml") else {
+          return Err(HttpError {
+            status: StatusCode::NOT_FOUND,
+            message: Some("file not found".into()),
+          });
+        };
+        println!("result: {}", String::from_utf8_lossy(&r));
+        return Ok(());
+      }),
       HttpRoute::new(Method::GET, "/json", async |_req| {
         let value = json!({
             "int": 5,
