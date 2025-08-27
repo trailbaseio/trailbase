@@ -559,7 +559,8 @@ impl RuntimeInstance {
     wasi_ctx.allow_udp(false);
     wasi_ctx.allow_ip_name_lookup(true);
 
-    if let Err(err) = wasi_ctx.preopened_dir(".", "/host", DirPerms::READ, FilePerms::READ) {
+    // FIXME: Should be behind a command line flag to select a sandbox dir.
+    if let Err(err) = wasi_ctx.preopened_dir(".", "/", DirPerms::READ, FilePerms::READ) {
       log::error!("Failed to preopen dir: {err}");
     }
 

@@ -26,6 +26,7 @@ pub mod wit {
 }
 
 pub mod db;
+pub mod fs;
 mod http;
 mod job;
 
