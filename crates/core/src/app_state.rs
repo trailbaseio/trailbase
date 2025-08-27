@@ -44,7 +44,7 @@ struct InternalState {
 
   runtime: RuntimeHandle,
 
-  wasm_runtime: Option<Arc<Runtime>>,
+  wasm_runtimes: Vec<Arc<Runtime>>,
 
   #[cfg(test)]
   #[allow(unused)]
@@ -128,10 +128,11 @@ impl AppState {
     );
 
     let runtime = build_js_runtime(args.conn.clone(), args.js_runtime_threads);
-    let wasm_runtime = crate::wasm::build_wasm_runtime(&args.data_dir, args.conn.clone())
-      .ok()
-      .flatten()
-      .map(Arc::new);
+    let wasm_runtimes = crate::wasm::build_wasm_runtimes_for_components(
+      args.conn.clone(),
+      args.data_dir.root().join("wasm"),
+    )
+    .expect("startup");
 
     AppState {
       state: Arc::new(InternalState {
@@ -170,7 +171,7 @@ impl AppState {
         schema_metadata,
         object_store,
         runtime,
-        wasm_runtime,
+        wasm_runtimes,
         #[cfg(test)]
         cleanup: vec![],
       }),
@@ -320,8 +321,8 @@ impl AppState {
     return self.state.runtime.clone();
   }
 
-  pub(crate) fn wasm_runtime(&self) -> Option<Arc<Runtime>> {
-    return self.state.wasm_runtime.clone();
+  pub(crate) fn wasm_runtimes(&self) -> &[Arc<Runtime>] {
+    return &self.state.wasm_runtimes;
   }
 }
 
@@ -470,7 +471,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       schema_metadata,
       object_store,
       runtime: build_js_runtime(conn, None),
-      wasm_runtime: None,
+      wasm_runtimes: vec![],
       cleanup: vec![Box::new(temp_dir)],
     }),
   });

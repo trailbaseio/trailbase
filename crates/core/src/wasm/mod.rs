@@ -3,6 +3,7 @@ use axum::extract::{RawPathParams, Request};
 use bytes::Bytes;
 use http_body_util::{BodyExt, combinators::BoxBody};
 use hyper::StatusCode;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use trailbase_wasm::Runtime;
@@ -14,13 +15,13 @@ use crate::User;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
-pub(crate) fn build_wasm_runtime(
-  data_dir: &crate::DataDir,
+pub(crate) fn build_wasm_runtimes_for_components(
   conn: trailbase_sqlite::Connection,
-) -> Result<Option<Runtime>, AnyError> {
-  let scripts_dir = data_dir.root().join("scripts");
+  components_path: PathBuf,
+) -> Result<Vec<Arc<Runtime>>, AnyError> {
+  let mut runtimes: Vec<Arc<Runtime>> = vec![];
 
-  if let Ok(entries) = std::fs::read_dir(scripts_dir) {
+  if let Ok(entries) = std::fs::read_dir(components_path) {
     for entry in entries {
       let Ok(entry) = entry else {
         continue;
@@ -39,14 +40,16 @@ pub(crate) fn build_wasm_runtime(
       };
 
       if extension == "wasm" {
-        return Ok(Some(Runtime::new(2, path, conn)?));
+        runtimes.push(Arc::new(Runtime::new(2, path, conn.clone())?));
       }
     }
   }
 
-  log::debug!("No WASM file found");
+  if runtimes.is_empty() {
+    log::debug!("No WASM component found");
+  }
 
-  return Ok(None);
+  return Ok(runtimes);
 }
 
 pub(crate) async fn install_routes_and_jobs(

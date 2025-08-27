@@ -67,6 +67,7 @@ impl DataDir {
       self.migrations_path(),
       self.uploads_path(),
       self.key_path(),
+      self.root().join("wasm/"),
     ];
   }
 
@@ -101,4 +102,13 @@ backups/
 data/
 secrets/
 uploads/
+wasm/
+scripts/
+
+# Runtime files, will be overriden by `trail`.
+trailbase.d.ts
+trailbase.js
+
+# Any potential MaxMind GeoIP dbs.
+*.mmdb
 "#;

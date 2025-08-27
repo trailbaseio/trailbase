@@ -173,15 +173,18 @@ impl Server {
     let mut custom_routers: Vec<Router<AppState>> = vec![];
 
     #[cfg(feature = "v8")]
-    if let Some(js_router) = crate::js::runtime::load_routes_and_jobs_from_js_modules(&state)
-      .await
-      .map_err(|err| InitError::ScriptError(err.to_string()))?
+    if let Some(js_router) = crate::js::runtime::load_routes_and_jobs_from_js_modules(
+      &state,
+      state.data_dir().root().join("scripts"),
+    )
+    .await
+    .map_err(|err| InitError::ScriptError(err.to_string()))?
     {
       custom_routers.push(js_router);
     }
 
-    if let Some(rt) = state.wasm_runtime() {
-      if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt)
+    for rt in state.wasm_runtimes() {
+      if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt.clone())
         .await
         .map_err(|err| InitError::ScriptError(err.to_string()))?
       {
