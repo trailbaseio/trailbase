@@ -642,12 +642,16 @@ impl RuntimeInstance {
         Ok(resp)
       }
       Ok(Err(err)) => {
-        handle.await.map_err(|err| Error::Other(err.to_string()))??;
+        handle
+          .await
+          .map_err(|err| Error::Other(err.to_string()))??;
         Err(Error::HttpErrorCode(err))
       }
       Err(_) => {
         log::debug!("channel closed");
-        handle.await.map_err(|err| Error::Other(err.to_string()))??;
+        handle
+          .await
+          .map_err(|err| Error::Other(err.to_string()))??;
         Err(Error::ChannelClosed)
       }
     };

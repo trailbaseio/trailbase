@@ -35,14 +35,14 @@ pub mod kv;
 use trailbase_wasm_common::{HttpContext, HttpContextKind};
 use wstd::http::body::IncomingBody;
 use wstd::http::server::{Finished, Responder};
-use wstd::http::{Request, Response, StatusCode};
+use wstd::http::{Request, Response};
 use wstd::io::empty;
 
 pub use static_assertions::assert_impl_all;
 pub use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 pub use wstd::{self, http::Method};
 
-pub use crate::http::{HttpError, HttpRoute};
+pub use crate::http::{HttpError, HttpRoute, StatusCode};
 pub use crate::job::{JobHandler, job_handler};
 pub use crate::wit::exports::trailbase::runtime::init_endpoint::InitResult;
 pub use crate::wit::trailbase::runtime::host_endpoint::thread_id;
@@ -81,7 +81,7 @@ impl<T: Guest> crate::wit::exports::trailbase::runtime::init_endpoint::Guest for
     return InitResult {
       http_handlers: T::http_handlers()
         .into_iter()
-        .map(|route| (route.method.into(), route.path))
+        .map(|route| (to_method_type(route.method), route.path))
         .collect(),
       job_handlers: T::job_handlers()
         .into_iter()
@@ -160,4 +160,21 @@ impl<T: Guest> ::wstd::wasi::exports::http::incoming_handler::Guest for HttpInco
 #[inline]
 fn error_response(status: StatusCode) -> Response<wstd::io::Empty> {
   return Response::builder().status(status).body(empty()).unwrap();
+}
+
+fn to_method_type(m: Method) -> crate::wit::exports::trailbase::runtime::init_endpoint::MethodType {
+  use crate::wit::exports::trailbase::runtime::init_endpoint::MethodType;
+
+  return match m {
+    Method::GET => MethodType::Get,
+    Method::POST => MethodType::Post,
+    Method::HEAD => MethodType::Head,
+    Method::OPTIONS => MethodType::Options,
+    Method::PATCH => MethodType::Patch,
+    Method::DELETE => MethodType::Delete,
+    Method::PUT => MethodType::Put,
+    Method::TRACE => MethodType::Trace,
+    Method::CONNECT => MethodType::Connect,
+    _ => panic!("extension"),
+  };
 }
