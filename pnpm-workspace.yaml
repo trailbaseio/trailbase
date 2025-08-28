@@ -7,6 +7,7 @@ packages:
   - 'docs/examples/record_api_ts'
   - 'examples/blog/web'
   - 'examples/coffee-vector-search'
+  - 'examples/collab-clicker-ssr/guests/typescript'
   - 'examples/collab-clicker-ssr'
   - 'examples/data-cli-tutorial'
   - 'examples/tanstack-db-sync'
