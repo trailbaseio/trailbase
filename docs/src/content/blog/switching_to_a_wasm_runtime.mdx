@@ -11,29 +11,47 @@ image: ./_wasm_logo.svg
 TrailBase has been embedding a V8 runtime for the last 10 months allowing users
 to implement custom HTTP and job handlers.
 In this time we've experienced several issues and therefore are excited to
-announce that we'll be moving towards a WebAssembly (WASM) runtime.
-v0.17 is a transitional release supporting both runtimes with the eventual goal
-to retire the v8 runtime.
-In this article we're going to explain the rational, the opportunities and what
-to look out for.
+announce that TrailBase is moving to a WebAssembly (WASM) runtime.
+
+The plan is for releases v0.17 and v0.18 to be transitional, i.e. supporting
+both runtimes.
+In v0.17 we'll first make the WASM runtime available, collect early feedback,
+address any issues and stabilize the WASM guest abstractions for JS/TS and
+Rust.
+The subsequent v0.18 release will then mark the point when users will need to
+migrate to the WASM runtime for the V8 runtime to be retired in subsequent
+releases. We'll ensure that the necessary code changes will be relatively
+small.
+
+In the following article we're going to explain the rational, the opportunities
+and what to watch out for.
 
 ## Rational
 
-V8 is a amazing piece of engineering. It's primary target is browsers. It
-itself isn't enough for backends leading to embedders like Node.js and Deno to
-extend it with sprawling APIs, which themselves have sprawling dependencies.
-Even though we weren't linking a fully Node compatible environment it was
-already 2/3 of TrailBase binary, mostly well written but notoriously complex
-C++ code, with v8 drawing a lot of eyeballs.
+The V8 JavaScript runtime is a amazing piece of engineering.
+However, it was never designed as a backend-first solution. It's primary target
+is browsers.
+It was then up to third-party vendors like Node.js and Deno to extend V8,
+with a rich ecosystem to access the filessytem, sockets, etc.
+These integrations are extensive and themselves have sprawling dependencies,
+they're primarily developed to serve their respective CLIs rather than be
+embedded elsewhere.
+Just to give a sense of the size, 2/3rds of TrailBase's executable are V8 and
+deno, even though we're linking only a subset of a Node.js compatible
+environment.
+While certainly well written, this is a bug chunk of unsafe code receiving
+particular scrutiny.
+Thus running even somewhat stale versions will greatly elevate risk.
 
-We got caught in a game of whack-a-mole of trying to run a recent version for
-safety, while not being able to link a satisfyingly complete environment due to
-package conflicts. Turns out deno links its own stale version of SQLite. Also
-deno doesn't build with MUSL preventing us from building truly static binaries[^1].
+Ultimately, it became a game of whack-a-mole, while not even providing a a
+fully Node.js compatible environment, thus serving nobody very well.
+Turns out deno links its own stale version of SQLite. Also deno doesn't build
+with MUSL preventing us from building truly static binaries[^1].
 
-Wasmtime, our WASM runtime, on the other hand supports WASI[^2] and is
-specifically designed for embedding.
-It's a lot more minimal, safe and yet high-performant.
+The [wasmtime](https://github.com/bytecodealliance/wasmtime) WebAssembly
+runtime, on the other hand is a lot simpler, safer, yet high-performant and
+supports WASI[^2], which greatly eases embedding and allows us ot support guest
+runtimes in multiple languages.
 
 ## Opportunities
 
@@ -89,14 +107,10 @@ every request and allow for symmetry with other guest languages that don't
 support eager global initialization, we're now relying on module exports for
 registering custom HTTP and Job handlers.
 
-For state sharing between requests you'll need should rely on the database. Note
-that even with long-lived V8 isolates that was already the case, since state
-was only shared coincidentally within the same isolate, i.e. subsequent
-requests may or may not be able to see that state.
-
-Also the new runtime doesn't yet support file IO. That's something we'd love to
-add back in the future, in a more sandboxed fashion. If that's something that
-you're relying on please let us know.
+For state sharing between requests you'll need should rely on SQLite or
+KVStore. Note that even with long-lived V8 isolates that was already the case,
+since state was only shared coincidentally within the same isolate, i.e.
+subsequent requests may or may not be able to see that state.
 
 ## Next-Steps
 

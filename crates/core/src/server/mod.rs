@@ -221,6 +221,7 @@ impl Server {
           stream.recv().await;
 
           // TODO: Re-load JS/TS.
+          // TODO: Re-load WASM.
           info!("Received SIGHUP: re-apply migations then re-load config.");
 
           // Re-apply migrations. This needs to happen before reloading the config, which is
