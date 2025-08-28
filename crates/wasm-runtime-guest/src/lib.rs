@@ -27,10 +27,12 @@ pub mod wit {
 }
 
 pub mod db;
+pub mod fetch;
 pub mod fs;
-mod http;
-mod job;
+pub mod http;
+pub mod job;
 pub mod kv;
+pub mod time;
 
 use trailbase_wasm_common::{HttpContext, HttpContextKind};
 use wstd::http::body::IncomingBody;
