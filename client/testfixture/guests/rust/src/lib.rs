@@ -6,7 +6,7 @@ use trailbase_wasm_guest::db::{Value, execute, query};
 use trailbase_wasm_guest::fetch::{Uri, get};
 use trailbase_wasm_guest::fs::read_file;
 use trailbase_wasm_guest::http::{HttpError, HttpRoute, Json, Method, StatusCode};
-use trailbase_wasm_guest::job::{JobConfig, job_handler};
+use trailbase_wasm_guest::job::Job;
 use trailbase_wasm_guest::time::{Duration, SystemTime, Timer};
 use trailbase_wasm_guest::{Guest, export};
 
@@ -103,15 +103,11 @@ impl Guest for Endpoints {
     ];
   }
 
-  fn job_handlers() -> Vec<JobConfig> {
-    return vec![JobConfig {
-      name: "WASM-registered Job".into(),
-      spec: "@hourly".into(),
-      handler: job_handler(async || {
-        println!("JS-registered cron job reporting for duty 🚀");
-        return Ok(());
-      }),
-    }];
+  fn job_handlers() -> Vec<Job> {
+    return vec![Job::new("WASM-registered Job", "@hourly", async || {
+      println!("JS-registered cron job reporting for duty 🚀");
+      return Ok(());
+    })];
   }
 }
 

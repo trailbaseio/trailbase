@@ -4,7 +4,7 @@
 
 use trailbase_wasm_guest::db::{Value, execute, query};
 use trailbase_wasm_guest::http::{HttpError, HttpRoute, Method, StatusCode};
-use trailbase_wasm_guest::job::{JobConfig, job_handler};
+use trailbase_wasm_guest::job::Job;
 use trailbase_wasm_guest::time::{Duration, Timer};
 use trailbase_wasm_guest::{Guest, export, thread_id};
 
@@ -70,15 +70,11 @@ impl Guest for Endpoints {
     ];
   }
 
-  fn job_handlers() -> Vec<JobConfig> {
-    return vec![JobConfig {
-      name: "myjobhandler".to_string(),
-      spec: "@hourly".to_string(),
-      handler: job_handler(async || {
-        println!("My jobhandler");
-        return Ok(());
-      }),
-    }];
+  fn job_handlers() -> Vec<Job> {
+    return vec![Job::new("myjobhandler", "@hourly", async || {
+      println!("My jobhandler");
+      return Ok(());
+    })];
   }
 }
 
