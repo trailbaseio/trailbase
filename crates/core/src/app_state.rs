@@ -130,6 +130,7 @@ impl AppState {
 
     let runtime = build_js_runtime(args.conn.clone(), args.js_runtime_threads);
     let wasm_runtimes = crate::wasm::build_wasm_runtimes_for_components(
+      args.js_runtime_threads,
       args.conn.clone(),
       args.data_dir.root().join("wasm"),
       args.wasm_root_dir,

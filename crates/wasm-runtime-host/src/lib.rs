@@ -395,12 +395,13 @@ impl Runtime {
 
     // Load the component.
     let component = {
-      log::debug!("Loading component {wasm_source_file:?}...");
       let start = SystemTime::now();
       let component = Component::from_file(&engine, &wasm_source_file)?;
 
       if let Ok(elapsed) = SystemTime::now().duration_since(start) {
-        log::debug!("Component load in: {elapsed:?}");
+        log::info!(
+          "Loaded component {wasm_source_file:?} in: {elapsed:?}. Starting WASM runtime with {n_threads} threads."
+        );
       }
       component
     };

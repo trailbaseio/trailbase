@@ -16,6 +16,7 @@ use crate::User;
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
 pub(crate) fn build_wasm_runtimes_for_components(
+  n_threads: Option<usize>,
   conn: trailbase_sqlite::Connection,
   components_path: PathBuf,
   fs_root_path: Option<PathBuf>,
@@ -42,8 +43,12 @@ pub(crate) fn build_wasm_runtimes_for_components(
       };
 
       if extension == "wasm" {
+        let n_threads = n_threads
+          .or(std::thread::available_parallelism().ok().map(|n| n.get()))
+          .unwrap_or(1);
+
         runtimes.push(Arc::new(Runtime::new(
-          2,
+          n_threads,
           path,
           conn.clone(),
           shared_kv_store.clone(),
