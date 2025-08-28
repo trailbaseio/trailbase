@@ -9,6 +9,9 @@ export type * as WasiHttpTypes023 from './interfaces/wasi-http-types.js'; // imp
 export type * as WasiIoError023 from './interfaces/wasi-io-error.js'; // import wasi:io/error@0.2.3
 export type * as WasiIoPoll023 from './interfaces/wasi-io-poll.js'; // import wasi:io/poll@0.2.3
 export type * as WasiIoStreams023 from './interfaces/wasi-io-streams.js'; // import wasi:io/streams@0.2.3
+export type * as WasiKeyvalueAtomics020Draft from './interfaces/wasi-keyvalue-atomics.js'; // import wasi:keyvalue/atomics@0.2.0-draft
+export type * as WasiKeyvalueBatch020Draft from './interfaces/wasi-keyvalue-batch.js'; // import wasi:keyvalue/batch@0.2.0-draft
+export type * as WasiKeyvalueStore020Draft from './interfaces/wasi-keyvalue-store.js'; // import wasi:keyvalue/store@0.2.0-draft
 export type * as WasiRandomInsecureSeed023 from './interfaces/wasi-random-insecure-seed.js'; // import wasi:random/insecure-seed@0.2.3
 export type * as WasiRandomInsecure023 from './interfaces/wasi-random-insecure.js'; // import wasi:random/insecure@0.2.3
 export type * as WasiRandomRandom023 from './interfaces/wasi-random-random.js'; // import wasi:random/random@0.2.3

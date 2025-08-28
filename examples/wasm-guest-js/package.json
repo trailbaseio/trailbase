@@ -9,7 +9,7 @@
     "deploy": "npm run build && rm -rf ../../client/testfixture/scripts/*.wasm && cp ./dist/index.wasm ../../client/testfixture/scripts/"
   },
   "dependencies": {
-    "trailbase-guest": "workspace:*"
+    "trailbase-wasm": "workspace:*"
   },
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.18.4",
