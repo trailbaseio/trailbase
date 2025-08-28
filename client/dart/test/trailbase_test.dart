@@ -446,5 +446,42 @@ Future<void> main() async {
             textNotNull: createMessage,
           ));
     });
+
+    test('transaction', () async {
+      final client = await connect();
+      final api = client.records('simple_strict_table');
+
+      var ids = [];
+
+      {
+        final batch = client.transaction();
+        final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final message = 'dart transaction test create: ${now}';
+        batch.api('simple_strict_table').create({'text_not_null': message});
+        ids = await batch.send();
+        expect(ids.length, equals(1));
+        final record = SimpleStrict.fromJson(await api.read(ids[0]));
+        expect(record.textNotNull, message);
+      }
+
+      {
+        final batch = client.transaction();
+        final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final message = 'dart transaction test update: ${now}';
+        batch.api('simple_strict_table').update(ids[0], {
+          'text_not_null': message,
+        });
+        await batch.send();
+        final record = SimpleStrict.fromJson(await api.read(ids[0]));
+        expect(record.textNotNull, message);
+      }
+
+      {
+        final batch = client.transaction();
+        batch.api('simple_strict_table').delete(ids[0]);
+        await batch.send();
+        expect(() async => await api.read(ids[0]), throwsException);
+      }
+    });
   });
 }
