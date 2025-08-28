@@ -23,5 +23,5 @@ static_assertions = "1.1.0"
 thiserror = "2.0.14"
 trailbase-wasm-common = { workspace = true }
 url = "2.5.7"
-wit-bindgen = "0.44.0"
+wit-bindgen = "0.45.0"
 wstd = "0.5.3"
