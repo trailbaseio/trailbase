@@ -6,9 +6,9 @@ use hyper::StatusCode;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use trailbase_wasm::exports::trailbase::runtime::init_endpoint::MethodType;
-use trailbase_wasm::{KvStore, Runtime};
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
+use trailbase_wasm_runtime_host::exports::trailbase::runtime::init_endpoint::MethodType;
+use trailbase_wasm_runtime_host::{Error as WasmError, KvStore, Runtime};
 
 use crate::AppState;
 use crate::User;
@@ -83,7 +83,7 @@ pub(crate) async fn install_routes_and_jobs(
 
         return async move {
           runtime
-            .call(async move |instance| -> Result<(), trailbase_wasm::Error> {
+            .call(async move |instance| -> Result<(), WasmError> {
               let request = hyper::Request::builder()
                 // NOTE: We cannot use a custom-scheme, since the wasi http
                 // implementation rejects everything but http and https.
@@ -135,12 +135,12 @@ pub(crate) async fn install_routes_and_jobs(
 
         return runtime
           .call(
-            async move |instance| -> Result<axum::response::Response, trailbase_wasm::Error> {
+            async move |instance| -> Result<axum::response::Response, WasmError> {
               let (mut parts, body) = req.into_parts();
               let bytes = body
                 .collect()
                 .await
-                .map_err(|_err| trailbase_wasm::Error::ChannelClosed)?
+                .map_err(|_err| WasmError::ChannelClosed)?
                 .to_bytes();
 
               parts.headers.insert(
@@ -171,7 +171,7 @@ pub(crate) async fn install_routes_and_jobs(
               let bytes = body
                 .collect()
                 .await
-                .map_err(|_err| trailbase_wasm::Error::ChannelClosed)?
+                .map_err(|_err| WasmError::ChannelClosed)?
                 .to_bytes();
 
               return Ok(axum::response::Response::from_parts(parts, bytes.into()));
@@ -211,9 +211,7 @@ fn empty() -> BoxBody<Bytes, hyper::Error> {
   return BoxBody::new(http_body_util::Empty::new().map_err(|_| unreachable!()));
 }
 
-fn to_header_value(
-  context: &HttpContext,
-) -> Result<hyper::http::HeaderValue, trailbase_wasm::Error> {
+fn to_header_value(context: &HttpContext) -> Result<hyper::http::HeaderValue, WasmError> {
   return hyper::http::HeaderValue::from_bytes(&serde_json::to_vec(&context).unwrap_or_default())
-    .map_err(|_err| trailbase_wasm::Error::Encoding);
+    .map_err(|_err| WasmError::Encoding);
 }

@@ -1342,7 +1342,7 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "serde_json",
- "trailbase-wasm-guest",
+ "trailbase-wasm",
 ]
 
 [[package]]
@@ -1352,7 +1352,7 @@ dependencies = [
  "rquickjs",
  "serde",
  "serde_json",
- "trailbase-wasm-guest",
+ "trailbase-wasm",
 ]
 
 [[package]]
@@ -6018,7 +6018,7 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
- "trailbase-wasm-guest",
+ "trailbase-wasm",
 ]
 
 [[package]]
@@ -7993,8 +7993,8 @@ dependencies = [
  "trailbase-refinery",
  "trailbase-schema",
  "trailbase-sqlite",
- "trailbase-wasm",
  "trailbase-wasm-common",
+ "trailbase-wasm-runtime-host",
  "ts-rs",
  "url",
  "utoipa",
@@ -8202,7 +8202,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "trailbase-wasi-keyvalue"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "parking_lot",
+ "tokio",
+ "wasmtime",
+ "wasmtime-wasi",
+]
+
+[[package]]
 name = "trailbase-wasm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "bytes",
+ "futures-util",
+ "http",
+ "log",
+ "serde",
+ "serde_json",
+ "static_assertions",
+ "thiserror 2.0.16",
+ "trailbase-wasm-common",
+ "url",
+ "wit-bindgen",
+ "wstd",
+]
+
+[[package]]
+name = "trailbase-wasm-common"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "ts-rs",
+]
+
+[[package]]
+name = "trailbase-wasm-runtime-host"
 version = "0.1.0"
 dependencies = [
  "bytes",
@@ -8222,41 +8262,12 @@ dependencies = [
  "tracing",
  "trailbase-schema",
  "trailbase-sqlite",
+ "trailbase-wasi-keyvalue",
  "trailbase-wasm-common",
  "wasmtime",
  "wasmtime-wasi",
  "wasmtime-wasi-http",
  "wasmtime-wasi-io",
- "wasmtime-wasi-keyvalue",
-]
-
-[[package]]
-name = "trailbase-wasm-common"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "ts-rs",
-]
-
-[[package]]
-name = "trailbase-wasm-guest"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64",
- "bytes",
- "futures-util",
- "http",
- "log",
- "serde",
- "serde_json",
- "static_assertions",
- "thiserror 2.0.16",
- "trailbase-wasm-common",
- "url",
- "wit-bindgen",
- "wstd",
 ]
 
 [[package]]
@@ -8764,7 +8775,7 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "serde_json",
- "trailbase-wasm-guest",
+ "trailbase-wasm",
 ]
 
 [[package]]
@@ -9158,17 +9169,6 @@ dependencies = [
  "bytes",
  "futures",
  "wasmtime",
-]
-
-[[package]]
-name = "wasmtime-wasi-keyvalue"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "parking_lot",
- "tokio",
- "wasmtime",
- "wasmtime-wasi",
 ]
 
 [[package]]

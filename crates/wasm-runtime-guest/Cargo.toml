@@ -1,5 +1,5 @@
 [package]
-name = "trailbase-wasm-guest"
+name = "trailbase-wasm"
 version = "0.1.0"
 edition = "2024"
 license = "OSL-3.0"
