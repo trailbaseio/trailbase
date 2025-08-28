@@ -97,8 +97,15 @@ impl Guest for Endpoints {
         return Ok("Ok");
       }),
       // Benchmark runtime performance.
-      HttpRoute::new(Method::GET, "/fibonacci", async |_req| {
-        format!("{}\n", fibonacci(40))
+      HttpRoute::new(Method::GET, "/fibonacci", async |req| {
+        let param = req.url().query_pairs().find(|(param, _v)| param == "n");
+        let n = param
+          .as_ref()
+          .map_or("40", |(_param, v)| v)
+          .parse::<usize>()
+          .map_err(|_| HttpError::status(StatusCode::BAD_REQUEST))?;
+
+        return Ok(format!("{}\n", fibonacci(n)));
       }),
     ];
   }
