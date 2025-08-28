@@ -5,13 +5,21 @@ APPDIR := .
 DISTDIR := ${APPDIR}/dist
 ADDRESS := 127.0.0.1:4000
 
-run: ${DISTDIR}/server/entry-server.js
-	${TRAILBIN} --data-dir=${TRAILDEPOT} run --public-dir=${DISTDIR}/client --address=${ADDRESS}
+run: assets guest
+	${TRAILBIN} --data-dir=${TRAILDEPOT} run --public-dir=${DISTDIR}/client --wasm-root-dir=. --address=${ADDRESS}
+
+guest: ${TRAILDEPOT}/wasm/collab_clicker_ssr_guest.wasm
+assets: ${DISTDIR}/server/entry-server.js
 
 ${DISTDIR}/server/entry-server.js: $(shell find ${APPDIR}/src/ -type f)
 	pnpm run build
 
-clean:
-	rm -rf ${DISTDIR} ${TRAILDEPOT}/data
+${TRAILDEPOT}/wasm/collab_clicker_ssr_guest.wasm:
+	cargo build -p collab-clicker-ssr-guest --target wasm32-wasip2  --release \
+		&& mkdir -p ${TRAILDEPOT}/wasm \
+		&& cp ../../target/wasm32-wasip2/release/collab_clicker_ssr_guest.wasm ${TRAILDEPOT}/wasm/
 
-.PHONY: run clean
+clean:
+	rm -rf ${DISTDIR} ${TRAILDEPOT}/data ${TRAILDEPOT}/wasm
+
+.PHONY: run clean guest assets

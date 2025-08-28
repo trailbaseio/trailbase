@@ -93,6 +93,10 @@ pub struct ServerArgs {
   #[arg(long, env)]
   pub public_dir: Option<String>,
 
+  /// Optional path to sandboxed FS root for WASM runtime.
+  #[arg(long, env)]
+  pub wasm_root_dir: Option<String>,
+
   /// Optional path to MaxmindDB geoip database. Can be used to map logged IPs to a geo location.
   #[arg(long, env)]
   pub geoip_db_path: Option<String>,

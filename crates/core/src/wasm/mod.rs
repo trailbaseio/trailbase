@@ -18,6 +18,7 @@ type AnyError = Box<dyn std::error::Error + Send + Sync>;
 pub(crate) fn build_wasm_runtimes_for_components(
   conn: trailbase_sqlite::Connection,
   components_path: PathBuf,
+  fs_root_path: Option<PathBuf>,
 ) -> Result<Vec<Arc<Runtime>>, AnyError> {
   let shared_kv_store = KvStore::new();
   let mut runtimes: Vec<Arc<Runtime>> = vec![];
@@ -46,6 +47,7 @@ pub(crate) fn build_wasm_runtimes_for_components(
           path,
           conn.clone(),
           shared_kv_store.clone(),
+          fs_root_path.clone(),
         )?));
       }
     }
