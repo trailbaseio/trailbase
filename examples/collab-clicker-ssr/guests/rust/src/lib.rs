@@ -19,14 +19,6 @@ impl trailbase_wasm_guest::Guest for Endpoints {
     return vec![
       HttpRoute::new(
         Method::GET,
-        "/test",
-        async |_req| -> Result<Vec<u8>, HttpError> {
-          let data: Vec<u8> = vec![65; 2049];
-          return Ok(data);
-        },
-      ),
-      HttpRoute::new(
-        Method::GET,
         "/clicked",
         async |_req| -> Result<String, HttpError> {
           const QUERY: &str = "UPDATE counter SET value = value + 1 WHERE id = 1 RETURNING value";
