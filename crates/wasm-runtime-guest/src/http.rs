@@ -1,10 +1,9 @@
 use futures_util::future::LocalBoxFuture;
-use http::{HeaderMap, HeaderValue, Method, Version};
 use trailbase_wasm_common::HttpContextUser as User;
 use wstd::http::server::{Finished, Responder};
 use wstd::io::{Cursor, Empty, empty};
 
-pub use http::{Response, StatusCode};
+pub use http::{HeaderMap, HeaderValue, Method, Response, StatusCode, Version};
 
 #[derive(Clone, Debug)]
 pub struct HttpError {
@@ -247,6 +246,44 @@ impl IntoResponse<BoundedBody<Vec<u8>>> for Result<(), HttpError> {
   fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
     return match self {
       Ok(_) => Response::builder().body("".into_body()).unwrap(),
+      Err(err) => Response::builder()
+        .status(err.status)
+        .body(err.message.unwrap_or_default().into_body())
+        .unwrap(),
+    };
+  }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+#[must_use]
+pub struct Json<T>(pub T);
+
+impl<T> IntoResponse<BoundedBody<Vec<u8>>> for Json<T>
+where
+  T: serde::Serialize,
+{
+  fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
+    let bytes = serde_json::to_vec(&self.0).unwrap();
+    return Response::builder()
+      .header(http::header::CONTENT_TYPE, "application/json")
+      .body(bytes.into_body())
+      .unwrap();
+  }
+}
+
+impl<T> IntoResponse<BoundedBody<Vec<u8>>> for std::result::Result<Json<T>, HttpError>
+where
+  T: serde::Serialize,
+{
+  fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
+    return match self {
+      Ok(json) => {
+        let bytes = serde_json::to_vec(&json.0).unwrap();
+        Response::builder()
+          .header(http::header::CONTENT_TYPE, "application/json")
+          .body(bytes.into_body())
+          .unwrap()
+      }
       Err(err) => Response::builder()
         .status(err.status)
         .body(err.message.unwrap_or_default().into_body())

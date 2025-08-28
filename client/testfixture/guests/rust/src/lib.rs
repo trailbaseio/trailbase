@@ -2,14 +2,13 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
-use serde_json::json;
 use trailbase_wasm_guest::db::{Value, execute, query};
 use trailbase_wasm_guest::fetch::{Uri, get};
 use trailbase_wasm_guest::fs::read_file;
+use trailbase_wasm_guest::http::{HttpError, HttpRoute, Json, Method, StatusCode};
+use trailbase_wasm_guest::job::{JobConfig, job_handler};
 use trailbase_wasm_guest::time::{Duration, SystemTime, Timer};
-use trailbase_wasm_guest::{
-  Guest, HttpError, HttpRoute, JobConfig, Method, StatusCode, export, job_handler,
-};
+use trailbase_wasm_guest::{Guest, export};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
@@ -28,7 +27,7 @@ impl Guest for Endpoints {
         return Ok(());
       }),
       HttpRoute::new(Method::GET, "/json", async |_req| {
-        let value = json!({
+        let value = serde_json::json!({
             "int": 5,
             "real": 4.2,
             "msg": "foo",
@@ -37,7 +36,7 @@ impl Guest for Endpoints {
             },
         });
 
-        return serde_json::to_vec(&value).map_err(internal);
+        return Json(value);
       }),
       HttpRoute::new(Method::GET, "/fetch", async |req| {
         for (param, value) in req.url().query_pairs() {

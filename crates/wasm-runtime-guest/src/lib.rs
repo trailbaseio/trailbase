@@ -40,12 +40,13 @@ use wstd::http::server::{Finished, Responder};
 use wstd::http::{Request, Response};
 use wstd::io::empty;
 
-pub use static_assertions::assert_impl_all;
-pub use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
-pub use wstd::{self, http::Method};
+use crate::http::{HttpRoute, Method, StatusCode};
+use crate::job::JobConfig;
 
-pub use crate::http::{HttpError, HttpRoute, StatusCode};
-pub use crate::job::{JobHandler, job_handler};
+// Needed for export macro
+pub use static_assertions::assert_impl_all;
+pub use wstd::wasi;
+
 pub use crate::wit::exports::trailbase::runtime::init_endpoint::InitResult;
 pub use crate::wit::trailbase::runtime::host_endpoint::thread_id;
 
@@ -57,15 +58,9 @@ macro_rules! export {
         ::trailbase_wasm_guest::wit::export!($impl);
         // Register Incoming HTTP handler.
         type _HttpHandlerIdent = ::trailbase_wasm_guest::HttpIncomingHandler<$impl>;
-        ::trailbase_wasm_guest::wstd::wasi::http::proxy::export!(
-            _HttpHandlerIdent with_types_in ::trailbase_wasm_guest::wstd::wasi);
+        ::trailbase_wasm_guest::wasi::http::proxy::export!(
+            _HttpHandlerIdent with_types_in ::trailbase_wasm_guest::wasi);
     };
-}
-
-pub struct JobConfig {
-  pub name: String,
-  pub spec: String,
-  pub handler: JobHandler,
 }
 
 pub trait Guest {
