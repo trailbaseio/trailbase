@@ -1,11 +1,10 @@
 use futures_util::future::LocalBoxFuture;
 use http::{HeaderMap, HeaderValue, Method, Version};
 use trailbase_wasm_common::HttpContextUser as User;
-use wstd::http::body::IncomingBody;
 use wstd::http::server::{Finished, Responder};
 use wstd::io::{Cursor, Empty, empty};
 
-pub use wstd::http::{Response, StatusCode};
+pub use http::{Response, StatusCode};
 
 #[derive(Clone, Debug)]
 pub struct HttpError {
@@ -32,7 +31,7 @@ impl HttpError {
 type HttpHandler = Box<
   dyn (Fn(
       Option<User>,
-      wstd::http::Request<IncomingBody>,
+      http::Request<wstd::http::body::IncomingBody>,
       wstd::http::server::Responder,
     ) -> LocalBoxFuture<'static, Finished>)
     + Send
@@ -57,12 +56,14 @@ impl HttpRoute {
       method,
       path: path.into(),
       handler: Box::new(
-        move |user: Option<User>, req: wstd::http::Request<IncomingBody>, responder: Responder| {
+        move |user: Option<User>,
+              req: http::Request<wstd::http::body::IncomingBody>,
+              responder: Responder| {
           let f = f.clone();
 
           let (head, body) = req.into_parts();
           let Ok(url) = to_url(head.uri) else {
-            return Box::pin(responder.respond(error_response(StatusCode::INTERNAL_SERVER_ERROR)));
+            return Box::pin(responder.respond(error_response(StatusCode::BAD_REQUEST)));
           };
 
           let req = Request {
@@ -106,12 +107,12 @@ pub struct Parts {
 #[derive(Debug)]
 pub struct Request {
   head: Parts,
-  body: IncomingBody,
+  body: wstd::http::body::IncomingBody,
 }
 
 impl Request {
   #[inline]
-  pub fn body(&self) -> &IncomingBody {
+  pub fn body(&self) -> &wstd::http::body::IncomingBody {
     return &self.body;
   }
 
@@ -154,26 +155,6 @@ fn to_url(uri: http::Uri) -> Result<url::Url, url::ParseError> {
     (_, _, Some(p)) => url::Url::parse(p.as_str()),
     _ => Err(url::ParseError::RelativeUrlWithCannotBeABaseBase),
   };
-}
-
-impl TryFrom<wstd::http::Request<IncomingBody>> for Request {
-  type Error = url::ParseError;
-
-  fn try_from(req: wstd::http::Request<IncomingBody>) -> Result<Self, Self::Error> {
-    let (head, body) = req.into_parts();
-
-    return Ok(Request {
-      head: Parts {
-        method: head.method,
-        uri: to_url(head.uri)?,
-        version: head.version,
-        headers: head.headers,
-        // FIXME:
-        user: None,
-      },
-      body,
-    });
-  }
 }
 
 /// An HTTP body with a known length
