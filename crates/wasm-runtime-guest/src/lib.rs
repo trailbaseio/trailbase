@@ -41,7 +41,7 @@ use wstd::http::{Request, Response};
 use wstd::io::empty;
 
 use crate::http::{HttpRoute, Method, StatusCode};
-use crate::job::JobConfig;
+use crate::job::Job;
 
 // Needed for export macro
 pub use static_assertions::assert_impl_all;
@@ -68,7 +68,7 @@ pub trait Guest {
     return vec![];
   }
 
-  fn job_handlers() -> Vec<JobConfig> {
+  fn job_handlers() -> Vec<Job> {
     return vec![];
   }
 }
@@ -119,7 +119,7 @@ impl<T: Guest> HttpIncomingHandler<T> {
         }
       }
       HttpContextKind::Job => {
-        if let Some(JobConfig { handler, .. }) = T::job_handlers()
+        if let Some(Job { handler, .. }) = T::job_handlers()
           .into_iter()
           .find(|config| method == Method::GET && config.name == context.registered_path)
         {
