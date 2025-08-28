@@ -82,6 +82,8 @@ pub enum Error {
   HttpErrorCode(ErrorCode),
   #[error("Encoding")]
   Encoding,
+  #[error("Other: {0}")]
+  Other(String),
 }
 
 pub enum Message {
@@ -614,27 +616,41 @@ impl RuntimeInstance {
     >();
 
     let out = store.data_mut().new_response_outparam(sender)?;
-    let handle = wasmtime_wasi::runtime::spawn(async move {
+
+    // NOTE: wstd streams out responses in chunks of 2kB. Only once everything has been streamed,
+    // `call_handle` will complete. This is also when the streaming response body completes.
+    //
+    // We cannot use `wasmtime_wasi::runtime::spawn` here, which aborts the call when the handle
+    // gets dropped, since we're not awaiting the response stream here. We'd either have to consume
+    // the entire response here, keep the handle alive or as we currently do use a non-aborting
+    // spawn.
+    //
+    // In the current setup, if the listening side hangs-up the they call may not be aborted.
+    // Depends on what the implementation does when the streaming body's receiving end gets
+    // out of scope.
+    let handle = self.shared.runtime.spawn(async move {
       proxy
         .wasi_http_incoming_handler()
         .call_handle(&mut store, req, out)
         .await
     });
 
-    let resp = match receiver.await {
-      Ok(Ok(resp)) => Ok(resp),
-      Ok(Err(err)) => Err(Error::HttpErrorCode(err)),
+    return match receiver.await {
+      Ok(Ok(resp)) => {
+        // NOTE: We cannot await the completion `call_handle` here with `handle.await?;`, since
+        // we're not consuming the response body, see above.
+        Ok(resp)
+      }
+      Ok(Err(err)) => {
+        handle.await.map_err(|err| Error::Other(err.to_string()))??;
+        Err(Error::HttpErrorCode(err))
+      }
       Err(_) => {
         log::debug!("channel closed");
+        handle.await.map_err(|err| Error::Other(err.to_string()))??;
         Err(Error::ChannelClosed)
       }
     };
-
-    // Now that the response has been processed, we can wait on the guest to
-    // finish without deadlocking.
-    handle.await?;
-
-    return resp;
   }
 }
 
