@@ -4,6 +4,7 @@
 
 use serde_json::json;
 use trailbase_wasm_guest::db::{Value, execute, query};
+use trailbase_wasm_guest::fs::read_file;
 use trailbase_wasm_guest::{HttpError, HttpRoute, JobConfig, Method, export, job_handler};
 use wstd::http::{Client, Request, StatusCode};
 use wstd::io::empty;
@@ -16,7 +17,7 @@ impl trailbase_wasm_guest::Guest for Endpoints {
   fn http_handlers() -> Vec<HttpRoute> {
     return vec![
       HttpRoute::new(Method::GET, "/readfile", async |_req| {
-        let Ok(r) = trailbase_wasm_guest::fs::read_file("/crates/sqlite/Cargo.toml") else {
+        let Ok(r) = read_file("/crates/sqlite/Cargo.toml") else {
           return Err(HttpError {
             status: StatusCode::NOT_FOUND,
             message: Some("file not found".into()),
@@ -35,7 +36,7 @@ impl trailbase_wasm_guest::Guest for Endpoints {
             },
         });
 
-        return serde_json::to_vec(&value).map_err(map_err);
+        return serde_json::to_vec(&value).map_err(internal);
       }),
       HttpRoute::new(Method::GET, "/fetch", async |req| {
         for (param, value) in req.url().query_pairs() {
@@ -43,9 +44,9 @@ impl trailbase_wasm_guest::Guest for Endpoints {
             let request = Request::builder().uri(value.to_string()).body(empty());
 
             let client = Client::new();
-            let response = client.send(request.unwrap()).await.map_err(map_err)?;
+            let response = client.send(request.unwrap()).await.map_err(internal)?;
 
-            return response.into_body().bytes().await.map_err(map_err);
+            return response.into_body().bytes().await.map_err(internal);
           }
         }
 
@@ -74,7 +75,7 @@ impl trailbase_wasm_guest::Guest for Endpoints {
           vec![],
         )
         .await
-        .map_err(map_err)?[0][0];
+        .map_err(internal)?[0][0];
 
         println!("user id: {user_id:?}");
 
@@ -129,9 +130,6 @@ fn fibonacci(n: usize) -> usize {
   };
 }
 
-fn map_err(err: impl std::error::Error) -> HttpError {
-  return HttpError {
-    status: StatusCode::INTERNAL_SERVER_ERROR,
-    message: Some(err.to_string()),
-  };
+fn internal(err: impl std::string::ToString) -> HttpError {
+  return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err.to_string());
 }
