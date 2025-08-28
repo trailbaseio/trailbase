@@ -4,16 +4,17 @@
 
 use serde_json::json;
 use trailbase_wasm_guest::db::{Value, execute, query};
+use trailbase_wasm_guest::fetch::{Uri, get};
 use trailbase_wasm_guest::fs::read_file;
-use trailbase_wasm_guest::{HttpError, HttpRoute, JobConfig, Method, export, job_handler};
-use wstd::http::{Client, Request, StatusCode};
-use wstd::io::empty;
-use wstd::time::{Duration, SystemTime, Timer};
+use trailbase_wasm_guest::time::{Duration, SystemTime, Timer};
+use trailbase_wasm_guest::{
+  Guest, HttpError, HttpRoute, JobConfig, Method, StatusCode, export, job_handler,
+};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
 
-impl trailbase_wasm_guest::Guest for Endpoints {
+impl Guest for Endpoints {
   fn http_handlers() -> Vec<HttpRoute> {
     return vec![
       HttpRoute::new(Method::GET, "/readfile", async |_req| {
@@ -41,19 +42,15 @@ impl trailbase_wasm_guest::Guest for Endpoints {
       HttpRoute::new(Method::GET, "/fetch", async |req| {
         for (param, value) in req.url().query_pairs() {
           if param == "url" {
-            let request = Request::builder().uri(value.to_string()).body(empty());
-
-            let client = Client::new();
-            let response = client.send(request.unwrap()).await.map_err(internal)?;
-
-            return response.into_body().bytes().await.map_err(internal);
+            let uri: Uri = Uri::try_from(value.to_string()).map_err(internal)?;
+            return get(uri).await.map_err(internal);
           }
         }
 
-        return Err(HttpError {
-          status: StatusCode::BAD_REQUEST,
-          message: Some("Missing ?url= param".to_string()),
-        });
+        return Err(HttpError::message(
+          StatusCode::BAD_REQUEST,
+          "Missing ?url= param",
+        ));
       }),
       HttpRoute::new(
         Method::GET,

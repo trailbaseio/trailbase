@@ -8,6 +8,7 @@ use rquickjs::{AsyncContext, AsyncRuntime, Function, Module, Object, async_with}
 use trailbase_wasm_guest::db::{Value, query};
 use trailbase_wasm_guest::fs::read_file;
 use trailbase_wasm_guest::kv::Store;
+use trailbase_wasm_guest::time::{Duration, Timer};
 use trailbase_wasm_guest::{Guest, HttpError, HttpRoute, Method, StatusCode, export};
 
 // Implement the function exported in this world (see above).
@@ -91,9 +92,7 @@ async fn set_timeout<'js>(
   callback: Function<'js>,
   // millis: Option<usize>,
 ) -> rquickjs::Result<()> {
-  wstd::time::Timer::after(wstd::time::Duration::from_millis(0))
-    .wait()
-    .await;
+  Timer::after(Duration::from_millis(0)).wait().await;
   callback.call::<_, ()>(()).unwrap();
 
   Ok(())

@@ -1353,7 +1353,6 @@ dependencies = [
  "serde",
  "serde_json",
  "trailbase-wasm-guest",
- "wstd",
 ]
 
 [[package]]
@@ -6020,7 +6019,6 @@ dependencies = [
  "serde",
  "serde_json",
  "trailbase-wasm-guest",
- "wstd",
 ]
 
 [[package]]
@@ -8767,7 +8765,6 @@ dependencies = [
  "serde",
  "serde_json",
  "trailbase-wasm-guest",
- "wstd",
 ]
 
 [[package]]
