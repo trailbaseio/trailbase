@@ -3,10 +3,10 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use trailbase_wasm_guest::db::{Value, execute, query};
+use trailbase_wasm_guest::http::{HttpError, HttpRoute, Method, StatusCode};
+use trailbase_wasm_guest::job::{JobConfig, job_handler};
 use trailbase_wasm_guest::time::{Duration, Timer};
-use trailbase_wasm_guest::{
-  Guest, HttpError, HttpRoute, JobConfig, Method, StatusCode, export, job_handler, thread_id,
-};
+use trailbase_wasm_guest::{Guest, export, thread_id};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
