@@ -55,6 +55,7 @@ pub(crate) struct AppStateArgs {
   pub data_dir: DataDir,
   pub public_url: Option<url::Url>,
   pub public_dir: Option<PathBuf>,
+  pub wasm_root_dir: Option<PathBuf>,
   pub dev: bool,
   pub demo: bool,
   pub schema_metadata: SchemaMetadataCache,
@@ -131,6 +132,7 @@ impl AppState {
     let wasm_runtimes = crate::wasm::build_wasm_runtimes_for_components(
       args.conn.clone(),
       args.data_dir.root().join("wasm"),
+      args.wasm_root_dir,
     )
     .expect("startup");
 

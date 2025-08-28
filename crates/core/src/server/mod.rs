@@ -54,6 +54,9 @@ pub struct ServerOptions {
   /// Optional path to static assets that will be served at the HTTP root.
   pub public_dir: Option<PathBuf>,
 
+  /// Optional path to sandboxed FS root for WASM runtime.
+  pub wasm_root_dir: Option<PathBuf>,
+
   /// Optional path to MaxmindDB geoip database. Can be used to map logged IPs to a geo location.
   pub geoip_db_path: Option<PathBuf>,
 
@@ -120,10 +123,15 @@ impl Server {
       date = version_info.commit_date.unwrap_or_default(),
     );
 
+    validate_path(opts.public_dir.as_ref())?;
+    validate_path(opts.wasm_root_dir.as_ref())?;
+    validate_path(opts.geoip_db_path.as_ref())?;
+
     let (new_data_dir, state) = init::init_app_state(InitArgs {
       data_dir: opts.data_dir.clone(),
       public_url: opts.public_url.clone(),
       public_dir: opts.public_dir.clone(),
+      wasm_root_dir: opts.wasm_root_dir.clone(),
       geoip_db_path: opts.geoip_db_path.clone(),
       address: opts.address.clone(),
       dev: opts.dev,
@@ -632,4 +640,13 @@ async fn start_listen(
       }
     }
   };
+}
+
+fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
+  if let Some(path) = path {
+    if !std::fs::exists(path)? {
+      return Err(InitError::CustomInit(format!("Path not found: {path:?}")));
+    };
+  }
+  return Ok(());
 }
