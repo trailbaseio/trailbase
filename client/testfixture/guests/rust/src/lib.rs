@@ -2,13 +2,13 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
-use trailbase_wasm_guest::db::{Value, execute, query};
-use trailbase_wasm_guest::fetch::{Uri, get};
-use trailbase_wasm_guest::fs::read_file;
-use trailbase_wasm_guest::http::{HttpError, HttpRoute, Json, Method, StatusCode};
-use trailbase_wasm_guest::job::Job;
-use trailbase_wasm_guest::time::{Duration, SystemTime, Timer};
-use trailbase_wasm_guest::{Guest, export};
+use trailbase_wasm::db::{Value, execute, query};
+use trailbase_wasm::fetch::{Uri, get};
+use trailbase_wasm::fs::read_file;
+use trailbase_wasm::http::{HttpError, HttpRoute, Json, Method, StatusCode};
+use trailbase_wasm::job::Job;
+use trailbase_wasm::time::{Duration, SystemTime, Timer};
+use trailbase_wasm::{Guest, export};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;

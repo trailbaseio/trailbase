@@ -1,6 +1,6 @@
-# Forked from wasmtime/crates/wasi-keyvalue.
+# Fork of wasmtime/crates/wasi-keyvalue.
 [package]
-name = "wasmtime-wasi-keyvalue"
+name = "trailbase-wasi-keyvalue"
 version = "0.1.0"
 edition = "2024"
 license = "OSL-3.0"

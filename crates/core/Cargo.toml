@@ -89,7 +89,7 @@ trailbase-qs = { workspace = true }
 trailbase-refinery = { workspace = true }
 trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true }
-trailbase-wasm = { workspace = true }
+trailbase-wasm-runtime-host = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 ts-rs = { workspace = true }
 url = { version = "^2.4.1", default-features = false }

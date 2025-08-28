@@ -2,11 +2,11 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
-use trailbase_wasm_guest::db::{Value, execute, query};
-use trailbase_wasm_guest::http::{HttpError, HttpRoute, Method, StatusCode};
-use trailbase_wasm_guest::job::Job;
-use trailbase_wasm_guest::time::{Duration, Timer};
-use trailbase_wasm_guest::{Guest, export, thread_id};
+use trailbase_wasm::db::{Transaction, Value, execute, query};
+use trailbase_wasm::http::{HttpError, HttpRoute, Method, StatusCode};
+use trailbase_wasm::job::Job;
+use trailbase_wasm::time::{Duration, Timer};
+use trailbase_wasm::{Guest, export, thread_id};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
@@ -39,7 +39,7 @@ impl Guest for Endpoints {
         return Ok(format!("rows: {:?}", rows[0][0]).into_bytes().to_vec());
       }),
       HttpRoute::new(Method::GET, "/sqlitetx", async |_req| {
-        let mut tx = trailbase_wasm_guest::db::Transaction::begin().map_err(internal)?;
+        let mut tx = Transaction::begin().map_err(internal)?;
         tx.execute(
           "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY)",
           &[],
@@ -54,7 +54,7 @@ impl Guest for Endpoints {
         return Ok(b"".to_vec());
       }),
       HttpRoute::new(Method::GET, "/sqlitetxread", async |_req| {
-        let mut tx = trailbase_wasm_guest::db::Transaction::begin().map_err(internal)?;
+        let mut tx = Transaction::begin().map_err(internal)?;
         tx.execute(
           "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY)",
           &[],

@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
 use trailbase::runtime::host_endpoint::{TxError, Value};
 use trailbase_sqlite::{Params, Rows};
+use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Result, Store};
 use wasmtime_wasi::p2::add_to_linker_async;
@@ -24,11 +25,10 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
 use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 use wasmtime_wasi_io::IoView;
-use wasmtime_wasi_keyvalue::WasiKeyValueCtx;
 
 use crate::exports::trailbase::runtime::init_endpoint::InitResult;
 
-pub use wasmtime_wasi_keyvalue::Store as KvStore;
+pub use trailbase_wasi_keyvalue::Store as KvStore;
 
 static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 
@@ -535,8 +535,8 @@ impl RuntimeInstance {
     wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
 
     // Add default KV interfaces.
-    wasmtime_wasi_keyvalue::add_to_linker(&mut linker, |cx| {
-      wasmtime_wasi_keyvalue::WasiKeyValue::new(&cx.kv, &mut cx.resource_table)
+    trailbase_wasi_keyvalue::add_to_linker(&mut linker, |cx| {
+      trailbase_wasi_keyvalue::WasiKeyValue::new(&cx.kv, &mut cx.resource_table)
     })?;
 
     // Host interfaces.

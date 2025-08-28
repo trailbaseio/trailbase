@@ -8,19 +8,19 @@ pub mod wit {
       world: "trailbase:runtime/trailbase",
       path: [
           // Order-sensitive: will import *.wit from the folder.
-          "../wasm-runtime/wit/deps-0.2.6/random",
-          "../wasm-runtime/wit/deps-0.2.6/io",
-          "../wasm-runtime/wit/deps-0.2.6/clocks",
-          "../wasm-runtime/wit/deps-0.2.6/filesystem",
-          "../wasm-runtime/wit/deps-0.2.6/sockets",
-          "../wasm-runtime/wit/deps-0.2.6/cli",
-          "../wasm-runtime/wit/deps-0.2.6/http",
-          "../wasm-runtime/wit/keyvalue-0.2.0-draft",
+          "../wasm-runtime-host/wit/deps-0.2.6/random",
+          "../wasm-runtime-host/wit/deps-0.2.6/io",
+          "../wasm-runtime-host/wit/deps-0.2.6/clocks",
+          "../wasm-runtime-host/wit/deps-0.2.6/filesystem",
+          "../wasm-runtime-host/wit/deps-0.2.6/sockets",
+          "../wasm-runtime-host/wit/deps-0.2.6/cli",
+          "../wasm-runtime-host/wit/deps-0.2.6/http",
+          "../wasm-runtime-host/wit/keyvalue-0.2.0-draft",
           // Ours:
-          "../wasm-runtime/wit/trailbase.wit",
+          "../wasm-runtime-host/wit/trailbase.wit",
       ],
       pub_export_macro: true,
-      default_bindings_module: "trailbase_wasm_guest::wit",
+      default_bindings_module: "trailbase_wasm::wit",
       // additional_derives: [PartialEq, Eq, Hash, Clone],
       generate_all,
   });
@@ -53,13 +53,13 @@ pub use crate::wit::trailbase::runtime::host_endpoint::thread_id;
 #[macro_export]
 macro_rules! export {
     ($impl:ident) => {
-        ::trailbase_wasm_guest::assert_impl_all!($impl: ::trailbase_wasm_guest::Guest);
+        ::trailbase_wasm::assert_impl_all!($impl: ::trailbase_wasm::Guest);
         // Register InitEndpoint.
-        ::trailbase_wasm_guest::wit::export!($impl);
+        ::trailbase_wasm::wit::export!($impl);
         // Register Incoming HTTP handler.
-        type _HttpHandlerIdent = ::trailbase_wasm_guest::HttpIncomingHandler<$impl>;
-        ::trailbase_wasm_guest::wasi::http::proxy::export!(
-            _HttpHandlerIdent with_types_in ::trailbase_wasm_guest::wasi);
+        type _HttpHandlerIdent = ::trailbase_wasm::HttpIncomingHandler<$impl>;
+        ::trailbase_wasm::wasi::http::proxy::export!(
+            _HttpHandlerIdent with_types_in ::trailbase_wasm::wasi);
     };
 }
 

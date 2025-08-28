@@ -2,9 +2,9 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
-use trailbase_wasm_guest::db::{self, Value, query};
-use trailbase_wasm_guest::http::{HttpError, HttpRoute, Method, StatusCode};
-use trailbase_wasm_guest::{Guest, export};
+use trailbase_wasm::db::{self, Value, query};
+use trailbase_wasm::http::{HttpError, HttpRoute, Method, StatusCode};
+use trailbase_wasm::{Guest, export};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
