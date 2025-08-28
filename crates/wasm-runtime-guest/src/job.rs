@@ -6,6 +6,12 @@ use crate::http::HttpError;
 pub type JobHandler =
   Box<dyn (Fn() -> LocalBoxFuture<'static, Result<(), HttpError>>) + Send + Sync>;
 
+pub struct JobConfig {
+  pub name: String,
+  pub spec: String,
+  pub handler: JobHandler,
+}
+
 // NOTE: We use anyhow here specifically to allow guests to attach context.
 pub fn job_handler(
   f: impl (AsyncFn() -> Result<(), anyhow::Error>) + Send + Sync + 'static,

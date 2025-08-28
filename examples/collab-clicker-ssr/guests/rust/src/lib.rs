@@ -7,9 +7,10 @@ use rquickjs::prelude::{Async, Ctx, Func};
 use rquickjs::{AsyncContext, AsyncRuntime, Function, Module, Object, async_with};
 use trailbase_wasm_guest::db::{Value, query};
 use trailbase_wasm_guest::fs::read_file;
+use trailbase_wasm_guest::http::{HttpError, HttpRoute, Method, StatusCode};
 use trailbase_wasm_guest::kv::Store;
 use trailbase_wasm_guest::time::{Duration, Timer};
-use trailbase_wasm_guest::{Guest, HttpError, HttpRoute, Method, StatusCode, export};
+use trailbase_wasm_guest::{Guest, export};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
