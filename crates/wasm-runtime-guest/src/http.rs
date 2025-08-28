@@ -1,16 +1,32 @@
 use futures_util::future::LocalBoxFuture;
 use http::{HeaderMap, HeaderValue, Method, Version};
 use trailbase_wasm_common::HttpContextUser as User;
-use wstd::http::body::{IncomingBody, IntoBody};
+use wstd::http::body::IncomingBody;
 use wstd::http::server::{Finished, Responder};
-use wstd::http::{Response, StatusCode};
-use wstd::io::empty;
+use wstd::io::{Cursor, Empty, empty};
 
-use crate::wit::exports::trailbase::runtime::init_endpoint::MethodType;
+pub use wstd::http::{Response, StatusCode};
 
+#[derive(Clone, Debug)]
 pub struct HttpError {
-  pub status: wstd::http::StatusCode,
+  pub status: StatusCode,
   pub message: Option<String>,
+}
+
+impl HttpError {
+  pub fn status(status: StatusCode) -> Self {
+    return Self {
+      status,
+      message: None,
+    };
+  }
+
+  pub fn message(status: StatusCode, message: impl Into<String>) -> Self {
+    return Self {
+      status,
+      message: Some(message.into()),
+    };
+  }
 }
 
 type HttpHandler = Box<
@@ -30,7 +46,7 @@ pub struct HttpRoute {
 }
 
 impl HttpRoute {
-  pub fn new<F, R, B>(method: Method, path: &str, f: F) -> Self
+  pub fn new<F, R, B>(method: Method, path: impl Into<String>, f: F) -> Self
   where
     F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
     R: IntoResponse<B>,
@@ -39,7 +55,7 @@ impl HttpRoute {
     let f = std::sync::Arc::new(f);
     return Self {
       method,
-      path: path.to_string(),
+      path: path.into(),
       handler: Box::new(
         move |user: Option<User>, req: wstd::http::Request<IncomingBody>, responder: Responder| {
           let f = f.clone();
@@ -61,11 +77,7 @@ impl HttpRoute {
           };
 
           return Box::pin(async move {
-            let resp = f(req).await.into_response();
-            // println!("Got response");
-            let finished = responder.respond(resp).await;
-            // println!("responded");
-            finished
+            return responder.respond(f(req).await.into_response()).await;
           });
         },
       ),
@@ -164,44 +176,82 @@ impl TryFrom<wstd::http::Request<IncomingBody>> for Request {
   }
 }
 
-pub trait IntoResponse<B: wstd::http::body::Body> {
+/// An HTTP body with a known length
+#[derive(Debug)]
+pub struct BoundedBody<T>(Cursor<T>);
+
+impl<T: AsRef<[u8]>> wstd::io::AsyncRead for BoundedBody<T> {
+  async fn read(&mut self, buf: &mut [u8]) -> wstd::io::Result<usize> {
+    self.0.read(buf).await
+  }
+}
+impl<T: AsRef<[u8]>> wstd::http::body::Body for BoundedBody<T> {
+  fn len(&self) -> Option<usize> {
+    Some(self.0.get_ref().as_ref().len())
+  }
+}
+
+/// Conversion into a `Body`.
+///
+/// NOTE: We have our own trait over wstd::http::body::IntoBody to avoid possible future conflicts
+/// when implementing IntoResponse for Result<B: IntoBody, HttpError>.
+pub trait IntoBody {
+  /// What type of `Body` are we turning this into?
+  type IntoBody: wstd::http::body::Body;
+  /// Convert into `Body`.
+  fn into_body(self) -> Self::IntoBody;
+}
+
+impl IntoBody for () {
+  type IntoBody = wstd::io::Empty;
+
+  fn into_body(self) -> Self::IntoBody {
+    return wstd::io::empty();
+  }
+}
+
+impl IntoBody for String {
+  type IntoBody = BoundedBody<Vec<u8>>;
+  fn into_body(self) -> Self::IntoBody {
+    BoundedBody(Cursor::new(self.into_bytes()))
+  }
+}
+
+impl IntoBody for &str {
+  type IntoBody = BoundedBody<Vec<u8>>;
+  fn into_body(self) -> Self::IntoBody {
+    BoundedBody(Cursor::new(self.to_owned().into_bytes()))
+  }
+}
+
+impl IntoBody for Vec<u8> {
+  type IntoBody = BoundedBody<Vec<u8>>;
+  fn into_body(self) -> Self::IntoBody {
+    BoundedBody(Cursor::new(self))
+  }
+}
+
+impl IntoBody for &[u8] {
+  type IntoBody = BoundedBody<Vec<u8>>;
+  fn into_body(self) -> Self::IntoBody {
+    BoundedBody(Cursor::new(self.to_owned()))
+  }
+}
+
+pub trait IntoResponse<B> {
   fn into_response(self) -> http::Response<B>;
 }
 
-type BoundedBody = wstd::http::body::BoundedBody<Vec<u8>>;
-
-impl IntoResponse<BoundedBody> for Vec<u8> {
-  fn into_response(self) -> http::Response<BoundedBody> {
+impl<B: IntoBody> IntoResponse<B::IntoBody> for B {
+  fn into_response(self) -> http::Response<B::IntoBody> {
     return Response::builder().body(self.into_body()).unwrap();
   }
 }
 
-impl IntoResponse<BoundedBody> for &[u8] {
-  fn into_response(self) -> http::Response<BoundedBody> {
-    return Response::builder().body(self.into_body()).unwrap();
-  }
-}
-
-impl IntoResponse<BoundedBody> for String {
-  fn into_response(self) -> http::Response<BoundedBody> {
-    return Response::builder().body(self.into_body()).unwrap();
-  }
-}
-
-impl IntoResponse<BoundedBody> for &str {
-  fn into_response(self) -> http::Response<BoundedBody> {
-    return Response::builder().body(self.into_body()).unwrap();
-  }
-}
-
-impl IntoResponse<BoundedBody> for () {
-  fn into_response(self) -> http::Response<BoundedBody> {
-    return Response::builder().body(b"".into_body()).unwrap();
-  }
-}
-
-impl IntoResponse<BoundedBody> for Result<Vec<u8>, HttpError> {
-  fn into_response(self) -> http::Response<BoundedBody> {
+impl<B: IntoBody<IntoBody = BoundedBody<Vec<u8>>>> IntoResponse<BoundedBody<Vec<u8>>>
+  for Result<B, HttpError>
+{
+  fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
     return match self {
       Ok(body) => Response::builder().body(body.into_body()).unwrap(),
       Err(err) => Response::builder()
@@ -212,72 +262,19 @@ impl IntoResponse<BoundedBody> for Result<Vec<u8>, HttpError> {
   }
 }
 
-impl IntoResponse<BoundedBody> for Result<&[u8], HttpError> {
-  fn into_response(self) -> http::Response<BoundedBody> {
+impl IntoResponse<BoundedBody<Vec<u8>>> for Result<(), HttpError> {
+  fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
     return match self {
-      Ok(body) => Response::builder().body(body.into_body()).unwrap(),
+      Ok(_) => Response::builder().body("".into_body()).unwrap(),
       Err(err) => Response::builder()
         .status(err.status)
         .body(err.message.unwrap_or_default().into_body())
         .unwrap(),
-    };
-  }
-}
-
-impl IntoResponse<BoundedBody> for Result<String, HttpError> {
-  fn into_response(self) -> http::Response<BoundedBody> {
-    return match self {
-      Ok(body) => Response::builder().body(body.into_body()).unwrap(),
-      Err(err) => Response::builder()
-        .status(err.status)
-        .body(err.message.unwrap_or_default().into_body())
-        .unwrap(),
-    };
-  }
-}
-
-impl IntoResponse<BoundedBody> for Result<(), HttpError> {
-  fn into_response(self) -> http::Response<BoundedBody> {
-    return match self {
-      Ok(_) => Response::builder().body(b"".into_body()).unwrap(),
-      Err(err) => Response::builder()
-        .status(err.status)
-        .body(err.message.unwrap_or_default().into_body())
-        .unwrap(),
-    };
-  }
-}
-
-impl IntoResponse<BoundedBody> for Result<&str, HttpError> {
-  fn into_response(self) -> http::Response<BoundedBody> {
-    return match self {
-      Ok(body) => Response::builder().body(body.into_body()).unwrap(),
-      Err(err) => Response::builder()
-        .status(err.status)
-        .body(err.message.unwrap_or_default().into_body())
-        .unwrap(),
-    };
-  }
-}
-
-impl From<Method> for MethodType {
-  fn from(m: Method) -> MethodType {
-    return match m {
-      Method::GET => MethodType::Get,
-      Method::POST => MethodType::Post,
-      Method::HEAD => MethodType::Head,
-      Method::OPTIONS => MethodType::Options,
-      Method::PATCH => MethodType::Patch,
-      Method::DELETE => MethodType::Delete,
-      Method::PUT => MethodType::Put,
-      Method::TRACE => MethodType::Trace,
-      Method::CONNECT => MethodType::Connect,
-      _ => unreachable!(""),
     };
   }
 }
 
 #[inline]
-fn error_response(status: StatusCode) -> Response<wstd::io::Empty> {
+fn error_response(status: StatusCode) -> Response<Empty> {
   return Response::builder().status(status).body(empty()).unwrap();
 }

@@ -8,13 +8,12 @@ use rquickjs::{AsyncContext, AsyncRuntime, Function, Module, Object, async_with}
 use trailbase_wasm_guest::db::{Value, query};
 use trailbase_wasm_guest::fs::read_file;
 use trailbase_wasm_guest::kv::Store;
-use trailbase_wasm_guest::{HttpError, HttpRoute, Method, export};
-use wstd::http::StatusCode;
+use trailbase_wasm_guest::{Guest, HttpError, HttpRoute, Method, StatusCode, export};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
 
-impl trailbase_wasm_guest::Guest for Endpoints {
+impl Guest for Endpoints {
   fn http_handlers() -> Vec<HttpRoute> {
     return vec![
       HttpRoute::new(
@@ -59,8 +58,6 @@ impl trailbase_wasm_guest::Guest for Endpoints {
           template_str = template_str.replace("<!--app-data-->", &result.data);
           template_str = template_str.replace("<!--app-html-->", &result.html);
 
-          println!("template: {}", template_str.len());
-
           return Ok(template_str);
         },
       ),
@@ -80,16 +77,6 @@ fn read_cached_file(path: &str) -> Result<Vec<u8>, String> {
   return Ok(template);
 }
 
-// const MODULE: &str = r#"
-// export function render(uri, count) {
-//   return {
-//     head: "",
-//     data: "",
-//     html: `count: ${count}`,
-//   };
-// }
-// "#;
-
 #[derive(Debug)]
 struct RenderResult {
   head: String,
@@ -97,8 +84,8 @@ struct RenderResult {
   html: String,
 }
 
-// NOTE: SolidJS calls it only with one argument and rquickjs doesn't seem to care for `Option` to
-// make the function variadic.
+// NOTE: SolidJS calls `setTimeout` without a `millis` argument just to yield, however rquickjs
+// doesn't seem to care for variadic functions even if argument is `Option`.
 async fn set_timeout<'js>(
   _ctx: Ctx<'js>,
   callback: Function<'js>,
@@ -108,37 +95,16 @@ async fn set_timeout<'js>(
     .wait()
     .await;
   callback.call::<_, ()>(()).unwrap();
-  println!("called callback");
 
   Ok(())
 }
 
-// fn set_timeout_sync<'js>(
-//   ctx: Ctx<'js>,
-//   callback: Function<'js>,
-//   // millis: Option<usize>,
-// ) -> rquickjs::Result<()> {
-//   ctx.spawn(async move {
-//     wstd::time::Timer::after(wstd::time::Duration::from_millis(0))
-//       .wait()
-//       .await;
-//     callback.call::<_, ()>(()).unwrap();
-//   });
-//
-//   Ok(())
-// }
-
 async fn render(count: i64) -> RenderResult {
-  let resolver = BuiltinResolver::default()
-    .with_module("server/entry-server.js")
-    .with_module("count");
+  let resolver = BuiltinResolver::default().with_module("server/entry-server.js");
 
   let module = read_cached_file("/dist/server/entry-server.js").unwrap();
-  // println!("read: {}", String::from_utf8_lossy(&module));
 
-  let loader = BuiltinLoader::default()
-    .with_module("server/entry-server.js", module)
-    .with_module("count", format!("export const count = {count};"));
+  let loader = BuiltinLoader::default().with_module("server/entry-server.js", module);
 
   let rt = AsyncRuntime::new().unwrap();
   let ctx = AsyncContext::full(&rt).await.unwrap();
@@ -148,29 +114,24 @@ async fn render(count: i64) -> RenderResult {
   let result: RenderResult = async_with!(ctx => |ctx| {
     ctx
       .globals()
-      //.set("setTimeout", Func::from(set_timeout_sync))
       .set("setTimeout", Func::from(Async(set_timeout)))
       .unwrap();
 
     let (module, promise) = Module::declare(
       ctx.clone(),
       "ssr",
-      r#"
-        import { render } from "server/entry-server.js";
-        import { count } from "count";
+      format!(r#"
+        import {{ render }} from "server/entry-server.js";
 
+        const count = {count};
         export const output = render("ignored", count);
-      "#,
+      "#),
     )
     .unwrap()
     .eval()
     .unwrap();
 
-    if let Err(err) = promise.finish::<()>() {
-      panic!("PROMISE '{err}'");
-      // let value = ctx.catch();
-      // panic!("PROMISE '{err}': {value:?}");
-    }
+    promise.finish::<()>().unwrap();
 
     let obj: Object = module.get("output").unwrap();
 
@@ -182,16 +143,14 @@ async fn render(count: i64) -> RenderResult {
   })
   .await;
 
+  // Drain event-loop giving pending timers a chance to run.
   rt.idle().await;
 
   return result;
 }
 
 fn internal(err: impl std::string::ToString) -> HttpError {
-  return HttpError {
-    status: StatusCode::INTERNAL_SERVER_ERROR,
-    message: Some(err.to_string()),
-  };
+  return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err.to_string());
 }
 
 export!(Endpoints);
