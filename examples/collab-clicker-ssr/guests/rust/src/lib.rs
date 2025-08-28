@@ -5,12 +5,12 @@
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver};
 use rquickjs::prelude::{Async, Ctx, Func};
 use rquickjs::{AsyncContext, AsyncRuntime, Function, Module, Object, async_with};
-use trailbase_wasm_guest::db::{Value, query};
-use trailbase_wasm_guest::fs::read_file;
-use trailbase_wasm_guest::http::{HttpError, HttpRoute, Method, StatusCode};
-use trailbase_wasm_guest::kv::Store;
-use trailbase_wasm_guest::time::{Duration, Timer};
-use trailbase_wasm_guest::{Guest, export};
+use trailbase_wasm::db::{Value, query};
+use trailbase_wasm::fs::read_file;
+use trailbase_wasm::http::{HttpError, HttpRoute, Method, StatusCode};
+use trailbase_wasm::kv::Store;
+use trailbase_wasm::time::{Duration, Timer};
+use trailbase_wasm::{Guest, export};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;

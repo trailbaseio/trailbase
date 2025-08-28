@@ -4,7 +4,7 @@ use reactivate::{Merge, Reactive};
 use std::path::PathBuf;
 use std::sync::Arc;
 use trailbase_schema::QualifiedName;
-use trailbase_wasm::Runtime;
+use trailbase_wasm_runtime_host::Runtime;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
