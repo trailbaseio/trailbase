@@ -386,6 +386,7 @@ impl Runtime {
     wasm_source_file: std::path::PathBuf,
     conn: trailbase_sqlite::Connection,
     kv_store: KvStore,
+    fs_root_path: Option<std::path::PathBuf>,
   ) -> Result<Self, Error> {
     let mut config = Config::new();
     config.async_support(true);
@@ -414,6 +415,7 @@ impl Runtime {
         let component = component.clone();
         let conn = conn.clone();
         let kv_store = kv_store.clone();
+        let fs_root_path = fs_root_path.clone();
 
         let handle = std::thread::Builder::new()
           .name(format!("wasm-runtime-{index}"))
@@ -431,6 +433,7 @@ impl Runtime {
               conn,
               thread_id: index as u64,
               kv_store,
+              fs_root_path,
             };
 
             let instance = RuntimeInstance::new(engine, component, shared_state).expect("startup");
@@ -510,6 +513,7 @@ pub struct SharedState {
   pub runtime: Arc<tokio::runtime::Runtime>,
   pub conn: trailbase_sqlite::Connection,
   pub kv_store: KvStore,
+  pub fs_root_path: Option<std::path::PathBuf>,
 }
 
 pub struct RuntimeInstance {
@@ -550,7 +554,7 @@ impl RuntimeInstance {
     });
   }
 
-  fn new_store(&self) -> Store<State> {
+  fn new_store(&self) -> Result<Store<State>, Error> {
     let mut wasi_ctx = WasiCtxBuilder::new();
     wasi_ctx.inherit_stdio();
     wasi_ctx.stdin(wasmtime_wasi::p2::pipe::ClosedInputStream);
@@ -562,14 +566,15 @@ impl RuntimeInstance {
     wasi_ctx.allow_udp(false);
     wasi_ctx.allow_ip_name_lookup(true);
 
-    // FIXME: Should be behind a command line flag to select a sandbox dir.
-    if let Err(err) = wasi_ctx.preopened_dir(".", "/", DirPerms::READ, FilePerms::READ) {
-      log::error!("Failed to preopen dir: {err}");
+    if let Some(ref path) = self.shared.fs_root_path {
+      wasi_ctx
+        .preopened_dir(path, "/", DirPerms::READ, FilePerms::READ)
+        .map_err(|err| Error::Other(err.to_string()))?;
     }
 
     IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
 
-    return Store::new(
+    return Ok(Store::new(
       &self.engine,
       State {
         resource_table: ResourceTable::new(),
@@ -579,11 +584,11 @@ impl RuntimeInstance {
         shared: self.shared.clone(),
         tx: LockedTransaction(Arc::new(Mutex::new(None))),
       },
-    );
+    ));
   }
 
   pub async fn call_init(&self) -> Result<InitResult, Error> {
-    let mut store = self.new_store();
+    let mut store = self.new_store()?;
     let bindings = Trailbase::instantiate_async(&mut store, &self.component, &self.linker).await?;
 
     return Ok(
@@ -598,7 +603,7 @@ impl RuntimeInstance {
     &self,
     request: hyper::Request<BoxBody<Bytes, hyper::Error>>,
   ) -> Result<hyper::Response<wasmtime_wasi_http::body::HyperOutgoingBody>, Error> {
-    let mut store = self.new_store();
+    let mut store = self.new_store()?;
     let proxy = wasmtime_wasi_http::bindings::Proxy::instantiate_async(
       &mut store,
       &self.component,
@@ -719,6 +724,7 @@ mod tests {
       "./testdata/rust_guest.wasm".into(),
       conn.clone(),
       kv_store,
+      None,
     )
     .unwrap();
 
@@ -786,6 +792,7 @@ mod tests {
         "./testdata/rust_guest.wasm".into(),
         conn.clone(),
         kv_store,
+        None,
       )
       .unwrap(),
     );
