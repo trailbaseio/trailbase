@@ -1,10 +1,53 @@
 import {
+  HttpHandler,
   Request,
   defineConfig,
   threadId,
   query,
   execute,
 } from "trailbase-wasm";
+
+export default defineConfig({
+  httpHandlers: [
+    HttpHandler.get("/fibonacci", (req: Request): string => {
+      const n = req.getQueryParam("n");
+      return fibonacci(n ? parseInt(n) : 40).toString();
+    }),
+    HttpHandler.get("/sleep", async (_req: Request): Promise<string> => {
+      await delay(10 * 1000);
+      return "A".repeat(2049);
+    }),
+    HttpHandler.get("/wasm/{placeholder}", (req: Request): string => {
+      const param = req.getPathParam("placeholder");
+      return `Hello from Javascript (${threadId()}): ${param}!\n`;
+    }),
+    HttpHandler.get("/wasm_query", async (_req: Request): Promise<string> => {
+      await execute(
+        "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY)",
+        [],
+      );
+
+      try {
+        await execute("INSERT INTO test (id) VALUES (2), (4)", []);
+      } catch (e) {
+        console.error(`other: ${e}`);
+      }
+
+      const r = await query("SELECT COUNT(*) FROM test", []);
+      const count = r[0][0] as number;
+      return `Got ${count} rows\n`;
+    }),
+  ],
+  jobHandlers: [
+    {
+      name: "mywasmjob",
+      spec: "@hourly",
+      handler: async () => {
+        console.log("mywasmjob");
+      },
+    },
+  ],
+});
 
 function fibonacci(num: number): number {
   switch (num) {
@@ -20,58 +63,3 @@ function fibonacci(num: number): number {
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-export default defineConfig({
-  httpHandlers: [
-    {
-      path: "/fibonacci",
-      method: "get",
-      handler: (_req: Request): string => {
-        return fibonacci(40).toString();
-      },
-    },
-    {
-      path: "/sleep",
-      method: "get",
-      handler: async (_req: Request): Promise<string> => {
-        await delay(10 * 1000);
-        return "";
-      },
-    },
-    {
-      path: "/wasm/{placeholder}",
-      method: "get",
-      handler: (req: Request): string => {
-        return `Hello from Javascript (${threadId()}): ${req.path}!\n`;
-      },
-    },
-    {
-      path: "/wasm_query",
-      method: "get",
-      handler: async (_req: Request): Promise<string> => {
-        await execute(
-          "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY)",
-          [],
-        );
-        try {
-          await execute("INSERT INTO test (id) VALUES (2), (4)", []);
-        } catch (e) {
-          console.error(`other: ${e}`);
-        }
-
-        const r = await query("SELECT COUNT(*) FROM test", []);
-        const count = r[0][0] as number;
-        return `Got ${count} rows\n`;
-      },
-    },
-  ],
-  jobHandlers: [
-    {
-      name: "mywasmjob",
-      spec: "@hourly",
-      handler: async () => {
-        console.log("mywasmjob");
-      },
-    },
-  ],
-});

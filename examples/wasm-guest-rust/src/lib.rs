@@ -31,7 +31,9 @@ impl Guest for Endpoints {
         )
         .await
         .map_err(internal)?;
+
         let _ = execute("INSERT INTO test (id) VALUES (2), (4)".to_string(), vec![]).await;
+
         let rows = query("SELECT COUNT(*) FROM test".to_string(), vec![])
           .await
           .map_err(internal)?;
