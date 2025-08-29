@@ -64,11 +64,51 @@ export class Request {
 }
 
 export type ResponseType = string | Uint8Array | OutgoingResponse;
-export type HttpHandler = {
+export type HttpHandlerCallback = (
+  req: Request,
+) => ResponseType | Promise<ResponseType>;
+
+export interface HttpHandlerInterface {
   path: string;
   method: MethodType;
-  handler: (req: Request) => ResponseType | Promise<ResponseType>;
-};
+  handler: HttpHandlerCallback;
+}
+
+export class HttpHandler implements HttpHandlerInterface {
+  constructor(
+    public readonly path: string,
+    public readonly method: MethodType,
+    public readonly handler: HttpHandlerCallback,
+  ) {}
+
+  static get(path: string, handler: HttpHandlerCallback): HttpHandler {
+    return new HttpHandler(path, "get", handler);
+  }
+
+  static post(path: string, handler: HttpHandlerCallback): HttpHandler {
+    return new HttpHandler(path, "post", handler);
+  }
+
+  static head(path: string, handler: HttpHandlerCallback): HttpHandler {
+    return new HttpHandler(path, "head", handler);
+  }
+
+  static options(path: string, handler: HttpHandlerCallback): HttpHandler {
+    return new HttpHandler(path, "options", handler);
+  }
+
+  static patch(path: string, handler: HttpHandlerCallback): HttpHandler {
+    return new HttpHandler(path, "patch", handler);
+  }
+
+  static delete(path: string, handler: HttpHandlerCallback): HttpHandler {
+    return new HttpHandler(path, "delete", handler);
+  }
+
+  static put(path: string, handler: HttpHandlerCallback): HttpHandler {
+    return new HttpHandler(path, "put", handler);
+  }
+}
 
 export type JobHandler = {
   name: string;
@@ -108,7 +148,7 @@ export class HttpError extends Error {
 }
 
 export function defineConfig(args: {
-  httpHandlers?: HttpHandler[];
+  httpHandlers?: HttpHandlerInterface[];
   jobHandlers?: JobHandler[];
 }): Config {
   const init: InitResult = {
