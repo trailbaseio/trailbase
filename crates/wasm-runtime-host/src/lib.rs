@@ -382,6 +382,22 @@ impl Drop for Runtime {
   }
 }
 
+fn build_config(cache: Option<wasmtime::Cache>) -> Config {
+  let mut config = Config::new();
+
+  // Execution settings.
+  config.async_support(true);
+  config.memory_reservation(64 * 1024 * 1024 /*bytes*/);
+  // config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
+
+  // Compilation settings.
+  config.cache(cache);
+  config.cranelift_opt_level(wasmtime::OptLevel::Speed);
+  config.parallel_compilation(true);
+
+  return config;
+}
+
 impl Runtime {
   pub fn new(
     n_threads: usize,
@@ -390,10 +406,9 @@ impl Runtime {
     kv_store: KvStore,
     fs_root_path: Option<std::path::PathBuf>,
   ) -> Result<Self, Error> {
-    let mut config = Config::new();
-    config.async_support(true);
-    config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
-    let engine = Engine::new(&config)?;
+    let engine = Engine::new(&build_config(Some(wasmtime::Cache::new(
+      wasmtime::CacheConfig::default(),
+    )?)))?;
 
     // Load the component - a very espensive operation genrating code. Compilation happens in
     // parallel and will saturate the entire machine.
