@@ -11,7 +11,7 @@
     "generate:types": "jco types wit/ -o generated/types",
     "build": "npm run generate:types && vite build",
     "check": "tsc --noEmit --skipLibCheck && eslint && vitest run",
-    "format": "prettier -w src",
+    "format": "prettier -w src tests",
     "test": "vitest run"
   },
   "devDependencies": {
@@ -27,6 +27,5 @@
     "vite-plugin-dts": "^4.5.4",
     "vitest": "^3.2.4"
   },
-  "dependencies": {
-  }
+  "dependencies": {}
 }

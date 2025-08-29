@@ -6,7 +6,7 @@ export default [
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ["dist/", "node_modules/", "traildepot/"],
+    ignores: ["**/dist/", "node_modules/", "traildepot/", "guests/"],
   },
   {
     files: ["**/*.{js,mjs,cjs,mts,ts,tsx,jsx}"],
