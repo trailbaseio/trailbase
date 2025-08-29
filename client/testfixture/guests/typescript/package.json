@@ -1,15 +1,14 @@
 {
-  "name": "collab-clicker-ssr-guest",
-  "version": "0.1.0",
-  "keywords": [],
-  "author": "",
-  "main": "dist/index.js",
+  "name": "wasm-ts-guest-testfixture",
+  "private": true,
+  "version": "0.0.0",
   "scripts": {
     "generate:types": "jco types ../../../../guests/typescript/wit/ -o generated/types",
     "build:tsc": "vite build",
-    "build:wasm": "jco componentize dist/index.mjs -w ../../../../guests/typescript/wit -o dist/component.wasm",
-    "build:wasm:aot": "jco componentize  dist/index.mjs -w ../../../../guests/typescript/wit --aot -o dist/component.wasm",
+    "build:wasm": "jco componentize dist/index.mjs -w ../../../../guests/typescript/wit -o dist/wasm_ts_guest_testfixture.wasm",
+    "build:wasm:aot": "jco componentize  dist/index.mjs -w ../../../../guests/typescript/wit --aot -o dist/wasm_ts_guest_testfixture.wasm",
     "build": "npm run build:tsc && npm run build:wasm",
+    "deploy": "npm run build && rm -rf ../../wasm/* && cp dist/wasm_ts_guest_testfixture.wasm ../../wasm/",
     "format": "prettier -w src"
   },
   "dependencies": {

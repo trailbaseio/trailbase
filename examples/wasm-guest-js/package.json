@@ -1,8 +1,10 @@
 {
-  "type": "module",
+  "name": "example-wasm-guest-js",
+  "private": true,
+  "version": "0.0.0",
   "scripts": {
-    "build:wasm": "jco componentize dist/index.js -w ../../guests/typescript/wit -o dist/index.wasm",
-    "build:wasm:aot": "jco componentize dist/index.js -w ../../guests/typescript/wit --aot -o dist/index.wasm",
+    "build:wasm": "jco componentize dist/index.js -w ../../guests/typescript/wit -o dist/component.wasm",
+    "build:wasm:aot": "jco componentize dist/index.js -w ../../guests/typescript/wit --aot -o dist/component.wasm",
     "build": "npm run build:wasm",
     "format": "prettier -w src"
   },

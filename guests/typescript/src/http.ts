@@ -10,34 +10,67 @@ import {
   Scheme,
 } from "wasi:http/types@0.2.3";
 import type { InitResult, MethodType } from "trailbase:runtime/init-endpoint";
-import { StatusCode } from "./status";
 
+import { StatusCode } from "./status";
+import type { HttpContext } from "@common/HttpContext";
+import type { HttpContextUser } from "@common/HttpContextUser";
+
+export { OutgoingResponse } from "wasi:http/types@0.2.3";
 export type { InitResult } from "trailbase:runtime/init-endpoint";
 export { StatusCode } from "./status";
 
-export type Request = {
-  method: Method;
+function printScheme(scheme: Scheme): string {
+  switch (scheme.tag) {
+    case "HTTP":
+      return "http";
+    case "HTTPS":
+      return "https";
+    case "other":
+      return scheme.val;
+  }
+}
 
-  path: string;
-  params: [string, string][];
+export class Request {
+  constructor(
+    public readonly method: Method,
+    public readonly path: string,
+    // Path params, e.g. /{placeholder}/test.
+    public readonly params: [string, string][],
+    public readonly scheme: Scheme | undefined,
+    public readonly authority: string,
+    public readonly headers: Headers,
+    public readonly user: HttpContextUser | null,
+    public readonly body: IncomingBody,
+  ) {}
 
-  scheme: Scheme | undefined;
-  authority: string;
+  url(): URL {
+    const base =
+      this.scheme !== undefined
+        ? `${printScheme(this.scheme)}://${this.authority}/${this.path}`
+        : `/${this.path}`;
+    return new URL(base);
+  }
 
-  headers: Headers;
+  getQueryParam(param: string): string | null {
+    return this.url().searchParams.get(param);
+  }
 
-  user: HttpContextUser | undefined;
-  body: IncomingBody;
-};
+  getPathParam(param: string): string | null {
+    for (const [p, v] of this.params) {
+      if (p === param) return v;
+    }
+    return null;
+  }
+}
 
-type ResponseType = string | Uint8Array;
-type HttpHandler = {
+export type ResponseType = string | Uint8Array | OutgoingResponse;
+export type HttpHandler = {
   path: string;
   method: MethodType;
   handler: (req: Request) => ResponseType | Promise<ResponseType>;
 };
 
-type JobHandler = {
+export type JobHandler = {
   name: string;
   spec: string;
   handler: () => void | Promise<void>;
@@ -110,16 +143,18 @@ export function defineConfig(args: {
         throw new HttpError(StatusCode.NOT_FOUND, "impl not found");
       }
 
-      return await handler({
-        method: req.method(),
-        path: req.pathWithQuery() ?? "",
-        params: context.path_params,
-        scheme: req.scheme(),
-        authority: req.authority() ?? "",
-        headers: req.headers(),
-        user: context.user,
-        body: req.consume(),
-      });
+      return await handler(
+        new Request(
+          req.method(),
+          req.pathWithQuery() ?? "",
+          context.path_params,
+          req.scheme(),
+          req.authority() ?? "",
+          req.headers(),
+          context.user,
+          req.consume(),
+        ),
+      );
     }
   }
 
@@ -133,22 +168,27 @@ export function defineConfig(args: {
           const resp: ResponseType = await handle(req);
           return writeResponse(
             respOutparam,
-            StatusCode.OK,
-            resp instanceof Uint8Array ? resp : encodeBytes(resp),
+            resp instanceof OutgoingResponse
+              ? resp
+              : buildResponse(
+                  resp instanceof Uint8Array ? resp : encodeBytes(resp),
+                ),
           );
         } catch (err) {
           if (err instanceof HttpError) {
             return writeResponse(
               respOutparam,
-              err.statusCode,
-              encodeBytes(err.message),
+              buildResponse(encodeBytes(err.message), {
+                status: err.statusCode,
+              }),
             );
           }
 
           return writeResponse(
             respOutparam,
-            StatusCode.INTERNAL_SERVER_ERROR,
-            encodeBytes(`Caught: ${err}`),
+            buildResponse(encodeBytes(`Caught: ${err}`), {
+              status: StatusCode.INTERNAL_SERVER_ERROR,
+            }),
           );
         }
       },
@@ -161,18 +201,37 @@ export function defineConfig(args: {
   };
 }
 
-export function writeResponse(
-  responseOutparam: ResponseOutparam,
-  status: number,
-  body: Uint8Array,
-) {
-  /* eslint-disable prefer-const */
-  const outgoingResponse = new OutgoingResponse(new Fields());
+type ResponseOptions = {
+  status?: StatusCode;
+  headers?: [string, Uint8Array][];
+};
 
-  let outgoingBody = outgoingResponse.body();
+export function buildJsonResponse(
+  body: object,
+  opts?: ResponseOptions,
+): OutgoingResponse {
+  return buildResponse(encodeBytes(JSON.stringify(body)), {
+    ...opts,
+
+    headers: [
+      ["Content-Type", encodeBytes("application/json")],
+      ...(opts?.headers ?? []),
+    ],
+  });
+}
+
+function buildResponse(
+  body: Uint8Array,
+  opts?: ResponseOptions,
+): OutgoingResponse {
+  const outgoingResponse = new OutgoingResponse(
+    Fields.fromList(opts?.headers ?? []),
+  );
+
+  const outgoingBody = outgoingResponse.body();
   {
     // Create a stream for the response body
-    let outputStream = outgoingBody.write();
+    const outputStream = outgoingBody.write();
     outputStream.blockingWriteAndFlush(body);
 
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -181,24 +240,44 @@ export function writeResponse(
     //outputStream[Symbol.dispose]?.();
   }
 
-  outgoingResponse.setStatusCode(status);
+  outgoingResponse.setStatusCode(opts?.status ?? StatusCode.OK);
+
   OutgoingBody.finish(outgoingBody, undefined);
-  ResponseOutparam.set(responseOutparam, { tag: "ok", val: outgoingResponse });
+
+  return outgoingResponse;
 }
 
-type HttpContextUser = {
-  id: string;
-  email: string;
-  csrf_token: string;
-};
+// function writeResponse(
+//   responseOutparam: ResponseOutparam,
+//   status: number,
+//   body: Uint8Array,
+// ) {
+//   /* eslint-disable prefer-const */
+//   const outgoingResponse = new OutgoingResponse(new Fields());
+//
+//   let outgoingBody = outgoingResponse.body();
+//   {
+//     // Create a stream for the response body
+//     let outputStream = outgoingBody.write();
+//     outputStream.blockingWriteAndFlush(body);
+//
+//     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+//     // @ts-ignore: This is required in order to dispose the stream before we return
+//     outputStream[Symbol.dispose]();
+//     //outputStream[Symbol.dispose]?.();
+//   }
+//
+//   outgoingResponse.setStatusCode(status);
+//   OutgoingBody.finish(outgoingBody, undefined);
+//   ResponseOutparam.set(responseOutparam, { tag: "ok", val: outgoingResponse });
+// }
 
-// TODO: We could auto-generate this from the common crate.
-type HttpContext = {
-  kind: "Http" | "Job";
-  registered_path: string;
-  path_params: [string, string][];
-  user: HttpContextUser | undefined;
-};
+function writeResponse(
+  responseOutparam: ResponseOutparam,
+  response: OutgoingResponse,
+) {
+  ResponseOutparam.set(responseOutparam, { tag: "ok", val: response });
+}
 
 export function encodeBytes(body: string): Uint8Array {
   return new Uint8Array(new TextEncoder().encode(body));

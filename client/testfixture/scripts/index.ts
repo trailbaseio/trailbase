@@ -117,7 +117,7 @@ addRoute(
       return await response.text();
     }
 
-    throw new HttpError(StatusCodes.BAD_REQUEST, "Missing ?url param");
+    throw new HttpError(StatusCodes.BAD_REQUEST, `Missing ?url param: ${req.params}`);
   }),
 );
 
@@ -160,13 +160,13 @@ class Completer<T> {
 
 const completer = new Completer<string>();
 
-addCronCallback("JS-registered Job", "@hourly", async () => {
-  console.info("JS-registered cron job reporting for duty 🚀");
-});
-
 addPeriodicCallback(100, (cancel) => {
   completer.complete("resolved");
   cancel();
+});
+
+addCronCallback("JS-registered Job", "@hourly", async () => {
+  console.info("JS-registered cron job reporting for duty 🚀");
 });
 
 addRoute(

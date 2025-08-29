@@ -63,6 +63,7 @@ impl Guest for Endpoints {
       ),
       HttpRoute::new(Method::GET, "/await", async |_req| {
         Timer::after(Duration::from_millis(100)).wait().await;
+        return vec![b'A'; 5000];
       }),
       // Test Database interactions
       HttpRoute::new(Method::GET, "/addDeletePost", async |_req| {

@@ -492,12 +492,6 @@ fn event_loop(
         };
       };
 
-      log::debug!(
-        "WASM {} waiting for work: {:?}",
-        instance.shared.thread_id,
-        IN_FLIGHT
-      );
-
       match receive_message().await {
         Ok(Message::Run(f)) => tokio::task::spawn_local(f(instance.clone())),
         Err(_) => {

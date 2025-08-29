@@ -7,10 +7,10 @@ import {
 } from "trailbase:runtime/host-endpoint";
 
 import type { SqliteRequest } from "@common/SqliteRequest";
-import type { Value } from "@/value";
+import type { Value } from "./value";
 
 import { JsonValue } from "@common/serde_json/JsonValue";
-import { fromJsonValue, toJsonValue, toWitValue, fromWitValue } from "@/value";
+import { fromJsonValue, toJsonValue, toWitValue, fromWitValue } from "./value";
 
 export type { Value as DbValue } from "trailbase:runtime/host-endpoint";
 

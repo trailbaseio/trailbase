@@ -1,15 +1,13 @@
 {
-  "name": "http-hello-world",
-  "version": "0.1.0",
-  "description": "A WebAssembly Component that responds to HTTP requests using the `wasi:http` WIT interface",
-  "keywords": [],
-  "author": "",
+  "name": "example-wasm-guest-ts",
+  "private": true,
+  "version": "0.0.0",
   "main": "dist/index.js",
   "scripts": {
     "generate:types": "jco types ../../guests/typescript/wit/ -o generated/types",
     "build:tsc": "vite build",
-    "build:wasm": "jco componentize dist/index.mjs -w ../../guests/typescript/wit -o dist/http-hello-world.wasm",
-    "build:wasm:aot": "jco componentize  dist/index.mjs -w ../../guests/typescript/wit --aot -o dist/http-hello-world.wasm",
+    "build:wasm": "jco componentize dist/index.mjs -w ../../guests/typescript/wit -o dist/component.wasm",
+    "build:wasm:aot": "jco componentize  dist/index.mjs -w ../../guests/typescript/wit --aot -o dist/component.wasm",
     "build": "npm run build:tsc && npm run build:wasm",
     "format": "prettier -w src"
   },
