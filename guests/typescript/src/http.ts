@@ -166,12 +166,16 @@ export function writeResponse(
   status: number,
   body: Uint8Array,
 ) {
+  /* eslint-disable prefer-const */
   const outgoingResponse = new OutgoingResponse(new Fields());
+
   let outgoingBody = outgoingResponse.body();
   {
     // Create a stream for the response body
     let outputStream = outgoingBody.write();
     outputStream.blockingWriteAndFlush(body);
+
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore: This is required in order to dispose the stream before we return
     outputStream[Symbol.dispose]();
     //outputStream[Symbol.dispose]?.();
