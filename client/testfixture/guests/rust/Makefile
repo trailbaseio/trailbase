@@ -1,5 +1,5 @@
 deploy: clean build
-	cp ../../../../target/wasm32-wasip2/release/wasm_rust_guest_testfixture.wasm ../../wasm/
+	rm -rf ../../wasm/* && cp ../../../../target/wasm32-wasip2/release/wasm_rust_guest_testfixture.wasm ../../wasm/
 
 build:
 	cargo build --target wasm32-wasip2  --release
