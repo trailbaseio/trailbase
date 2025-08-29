@@ -140,17 +140,19 @@ impl WasiHttpView for State {
     return &mut self.resource_table;
   }
 
-  // NOTE: Based on `WasiView`' default implementation.
+  /// Receives HTTP fetches from the guest.
+  ///
+  /// Based on `WasiView`' default implementation.
   fn send_request(
     &mut self,
     request: hyper::Request<wasmtime_wasi_http::body::HyperOutgoingBody>,
     config: wasmtime_wasi_http::types::OutgoingRequestConfig,
   ) -> wasmtime_wasi_http::HttpResult<wasmtime_wasi_http::types::HostFutureIncomingResponse> {
-    log::debug!(
-      "send_request {:?} {}: {request:?}",
-      request.uri().host(),
-      request.uri().path()
-    );
+    // log::debug!(
+    //   "send_request {:?} {}: {request:?}",
+    //   request.uri().host(),
+    //   request.uri().path()
+    // );
 
     return match request.uri().host() {
       Some("__sqlite") => {
@@ -393,18 +395,44 @@ impl Runtime {
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
     let engine = Engine::new(&config)?;
 
-    // Load the component.
+    // Load the component - a very espensive operation genrating code. Compilation happens in
+    // parallel and will saturate the entire machine.
     let component = {
       let start = SystemTime::now();
-      let component = Component::from_file(&engine, &wasm_source_file)?;
+      let component = wasmtime::CodeBuilder::new(&engine)
+        .wasm_binary_or_text_file(&wasm_source_file)?
+        .compile_component()?;
+
+      // NOTE: According to docs, this shouldn't do anything.
+      component.initialize_copy_on_write_image()?;
 
       if let Ok(elapsed) = SystemTime::now().duration_since(start) {
-        log::info!(
-          "Loaded component {wasm_source_file:?} in: {elapsed:?}. Starting WASM runtime with {n_threads} threads."
-        );
+        log::info!("Loaded component {wasm_source_file:?} in: {elapsed:?}.");
       }
       component
     };
+
+    let linker = {
+      let mut linker = Linker::<State>::new(&engine);
+
+      // Adds all the default WASI implementations: clocks, random, fs, ...
+      add_to_linker_async(&mut linker)?;
+
+      // Adds default HTTP interfaces - incoming and outgoing.
+      wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
+
+      // Add default KV interfaces.
+      trailbase_wasi_keyvalue::add_to_linker(&mut linker, |cx| {
+        trailbase_wasi_keyvalue::WasiKeyValue::new(&cx.kv, &mut cx.resource_table)
+      })?;
+
+      // Host interfaces.
+      trailbase::runtime::host_endpoint::add_to_linker::<_, HasSelf<State>>(&mut linker, |s| s)?;
+
+      linker
+    };
+
+    log::info!("Starting WASM runtime with {n_threads} threads.");
 
     let (shared_sender, shared_receiver) = kanal::unbounded_async::<Message>();
     let threads = (0..n_threads)
@@ -412,8 +440,11 @@ impl Runtime {
         let (private_sender, private_receiver) = kanal::unbounded_async::<Message>();
 
         let shared_receiver = shared_receiver.clone();
+
         let engine = engine.clone();
         let component = component.clone();
+        let linker = linker.clone();
+
         let conn = conn.clone();
         let kv_store = kv_store.clone();
         let fs_root_path = fs_root_path.clone();
@@ -421,6 +452,7 @@ impl Runtime {
         let handle = std::thread::Builder::new()
           .name(format!("wasm-runtime-{index}"))
           .spawn(move || {
+            // Note: Arc rather than Rc, since State and thus SharedState needs to be Send + Sync.
             let tokio_runtime = Arc::new(
               tokio::runtime::Builder::new_current_thread()
                 .enable_time()
@@ -437,7 +469,13 @@ impl Runtime {
               fs_root_path,
             };
 
-            let instance = RuntimeInstance::new(engine, component, shared_state).expect("startup");
+            let instance = RuntimeInstance {
+              engine,
+              component,
+              linker,
+              shared: Arc::new(shared_state),
+            };
+            // RuntimeInstance::new(engine, component, linker, shared_state).expect("startup");
 
             event_loop(tokio_runtime, instance, private_receiver, shared_receiver);
           })
@@ -520,34 +558,35 @@ pub struct RuntimeInstance {
 }
 
 impl RuntimeInstance {
-  pub fn new(
-    engine: Engine,
-    component: Component,
-    shared_state: SharedState,
-  ) -> Result<Self, Error> {
-    let mut linker = Linker::<State>::new(&engine);
-
-    // Adds all the default WASI implementations: clocks, random, fs, ...
-    add_to_linker_async(&mut linker)?;
-
-    // Adds default HTTP interfaces - incoming and outgoing.
-    wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
-
-    // Add default KV interfaces.
-    trailbase_wasi_keyvalue::add_to_linker(&mut linker, |cx| {
-      trailbase_wasi_keyvalue::WasiKeyValue::new(&cx.kv, &mut cx.resource_table)
-    })?;
-
-    // Host interfaces.
-    trailbase::runtime::host_endpoint::add_to_linker::<_, HasSelf<State>>(&mut linker, |s| s)?;
-
-    return Ok(Self {
-      engine,
-      component,
-      linker,
-      shared: Arc::new(shared_state),
-    });
-  }
+  // pub fn new(
+  //   engine: Engine,
+  //   component: Component,
+  //   linker: Linker<State>,
+  //   shared_state: SharedState,
+  // ) -> Result<Self, Error> {
+  //   // let mut linker = Linker::<State>::new(&engine);
+  //   //
+  //   // // Adds all the default WASI implementations: clocks, random, fs, ...
+  //   // add_to_linker_async(&mut linker)?;
+  //   //
+  //   // // Adds default HTTP interfaces - incoming and outgoing.
+  //   // wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
+  //   //
+  //   // // Add default KV interfaces.
+  //   // trailbase_wasi_keyvalue::add_to_linker(&mut linker, |cx| {
+  //   //   trailbase_wasi_keyvalue::WasiKeyValue::new(&cx.kv, &mut cx.resource_table)
+  //   // })?;
+  //   //
+  //   // // Host interfaces.
+  //   // trailbase::runtime::host_endpoint::add_to_linker::<_, HasSelf<State>>(&mut linker, |s| s)?;
+  //
+  //   return Ok(Self {
+  //     engine,
+  //     component,
+  //     linker,
+  //     shared: Arc::new(shared_state),
+  //   });
+  // }
 
   fn new_store(&self) -> Result<Store<State>, Error> {
     let mut wasi_ctx = WasiCtxBuilder::new();
@@ -599,6 +638,7 @@ impl RuntimeInstance {
     request: hyper::Request<BoxBody<Bytes, hyper::Error>>,
   ) -> Result<hyper::Response<wasmtime_wasi_http::body::HyperOutgoingBody>, Error> {
     let mut store = self.new_store()?;
+
     let proxy = wasmtime_wasi_http::bindings::Proxy::instantiate_async(
       &mut store,
       &self.component,
