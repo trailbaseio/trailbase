@@ -123,6 +123,17 @@ addRoute(
 
 addRoute(
   "GET",
+  "/fibonacci",
+  stringHandler((req: StringRequestType) => {
+    const uri: ParsedPath = parsePath(req.uri);
+    const n = uri.query.get("n");
+
+    return fibonacci(n ? parseInt(n) : 40).toString();
+  }),
+);
+
+addRoute(
+  "GET",
   "/addDeletePost",
   stringHandler(async (_req: StringRequestType) => {
     const userId: Blob = (
@@ -174,3 +185,14 @@ addRoute(
   "/await",
   stringHandler(async (_req) => await completer.promise),
 );
+
+function fibonacci(num: number): number {
+  switch (num) {
+    case 0:
+      return 0;
+    case 1:
+      return 1;
+    default:
+      return fibonacci(num - 1) + fibonacci(num - 2);
+  }
+}

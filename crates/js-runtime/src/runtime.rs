@@ -354,6 +354,12 @@ fn event_loop(
             error!("JS event loop: {err}");
           }
         },
+        // Periodically poll the event-loop to give registered timers a chance to run.
+        // _timer = tokio::time::sleep(tokio::time::Duration::from_micros(1000)) => {
+        //   if let Err(err) = js_runtime.await_event_loop(OPTS, DURATION).await {
+        //     error!("JS event loop: {err}");
+        //   }
+        // },
         msg = listen_for_messages() => {
           let completer = match msg {
             Message::Run(module, f) => {
