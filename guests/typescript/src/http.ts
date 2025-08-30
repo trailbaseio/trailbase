@@ -41,7 +41,7 @@ export class Request {
     public readonly headers: Headers,
     public readonly user: HttpContextUser | null,
     public readonly body: IncomingBody,
-  ) {}
+  ) { }
 
   url(): URL {
     const base =
@@ -79,7 +79,7 @@ export class HttpHandler implements HttpHandlerInterface {
     public readonly path: string,
     public readonly method: MethodType,
     public readonly handler: HttpHandlerCallback,
-  ) {}
+  ) { }
 
   static get(path: string, handler: HttpHandlerCallback): HttpHandler {
     return new HttpHandler(path, "get", handler);
@@ -121,7 +121,7 @@ export interface Config {
     handle: (
       req: IncomingRequest,
       respOutparam: ResponseOutparam,
-    ) => Promise<void>;
+    ) => void;
   };
   initEndpoint: {
     init: () => InitResult;
@@ -200,45 +200,66 @@ export function defineConfig(args: {
 
   return {
     incomingHandler: {
-      handle: async function (
+      handle: function(
         req: IncomingRequest,
         respOutparam: ResponseOutparam,
       ) {
-        try {
-          const resp: ResponseType = await handle(req);
-          return writeResponse(
-            respOutparam,
-            resp instanceof OutgoingResponse
-              ? resp
-              : buildResponse(
-                  resp instanceof Uint8Array ? resp : encodeBytes(resp),
-                ),
-          );
-        } catch (err) {
-          if (err instanceof HttpError) {
-            return writeResponse(
-              respOutparam,
-              buildResponse(encodeBytes(err.message), {
-                status: err.statusCode,
-              }),
-            );
-          }
 
-          return writeResponse(
-            respOutparam,
-            buildResponse(encodeBytes(`Caught: ${err}`), {
-              status: StatusCode.INTERNAL_SERVER_ERROR,
-            }),
-          );
-        }
+        console.log("start");
+        const body = fibonacci(40).toString();
+        console.log("finished");
+        const bytes = new Uint8Array(new TextEncoder().encode(body));
+        const response = writeResponseOriginal(respOutparam, StatusCode.OK, bytes);
+        console.log("written");
+
+        return response;
+
+        //   try {
+        //     const resp: ResponseType = await handle(req);
+        //     return writeResponse(
+        //       respOutparam,
+        //       resp instanceof OutgoingResponse
+        //         ? resp
+        //         : buildResponse(
+        //           resp instanceof Uint8Array ? resp : encodeBytes(resp),
+        //         ),
+        //     );
+        //   } catch (err) {
+        //     if (err instanceof HttpError) {
+        //       return writeResponse(
+        //         respOutparam,
+        //         buildResponse(encodeBytes(err.message), {
+        //           status: err.statusCode,
+        //         }),
+        //       );
+        //     }
+        //
+        //     return writeResponse(
+        //       respOutparam,
+        //       buildResponse(encodeBytes(`Caught: ${err}`), {
+        //         status: StatusCode.INTERNAL_SERVER_ERROR,
+        //       }),
+        //     );
+        //   }
       },
     },
     initEndpoint: {
-      init: function (): InitResult {
+      init: function(): InitResult {
         return init;
       },
     },
   };
+}
+
+function fibonacci(num: number): number {
+  switch (num) {
+    case 0:
+      return 0;
+    case 1:
+      return 1;
+    default:
+      return fibonacci(num - 1) + fibonacci(num - 2);
+  }
 }
 
 type ResponseOptions = {
@@ -287,30 +308,30 @@ function buildResponse(
   return outgoingResponse;
 }
 
-// function writeResponse(
-//   responseOutparam: ResponseOutparam,
-//   status: number,
-//   body: Uint8Array,
-// ) {
-//   /* eslint-disable prefer-const */
-//   const outgoingResponse = new OutgoingResponse(new Fields());
-//
-//   let outgoingBody = outgoingResponse.body();
-//   {
-//     // Create a stream for the response body
-//     let outputStream = outgoingBody.write();
-//     outputStream.blockingWriteAndFlush(body);
-//
-//     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-//     // @ts-ignore: This is required in order to dispose the stream before we return
-//     outputStream[Symbol.dispose]();
-//     //outputStream[Symbol.dispose]?.();
-//   }
-//
-//   outgoingResponse.setStatusCode(status);
-//   OutgoingBody.finish(outgoingBody, undefined);
-//   ResponseOutparam.set(responseOutparam, { tag: "ok", val: outgoingResponse });
-// }
+function writeResponseOriginal(
+  responseOutparam: ResponseOutparam,
+  status: number,
+  body: Uint8Array,
+) {
+  /* eslint-disable prefer-const */
+  const outgoingResponse = new OutgoingResponse(new Fields());
+
+  let outgoingBody = outgoingResponse.body();
+  {
+    // Create a stream for the response body
+    let outputStream = outgoingBody.write();
+    outputStream.blockingWriteAndFlush(body);
+
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore: This is required in order to dispose the stream before we return
+    outputStream[Symbol.dispose]();
+    //outputStream[Symbol.dispose]?.();
+  }
+
+  outgoingResponse.setStatusCode(status);
+  OutgoingBody.finish(outgoingBody, undefined);
+  ResponseOutparam.set(responseOutparam, { tag: "ok", val: outgoingResponse });
+}
 
 function writeResponse(
   responseOutparam: ResponseOutparam,

@@ -365,8 +365,8 @@ impl trailbase::runtime::host_endpoint::Host for State {
 
 pub struct Runtime {
   // Shared sender.
-  shared_sender: kanal::AsyncSender<Message>,
-  threads: Vec<(std::thread::JoinHandle<()>, kanal::AsyncSender<Message>)>,
+  shared_sender: async_channel::Sender<Message>,
+  threads: Vec<(std::thread::JoinHandle<()>, async_channel::Sender<Message>)>,
 }
 
 impl Drop for Runtime {
@@ -387,12 +387,15 @@ fn build_config(cache: Option<wasmtime::Cache>) -> Config {
 
   // Execution settings.
   config.async_support(true);
+  config.epoch_interruption(false);
   config.memory_reservation(64 * 1024 * 1024 /*bytes*/);
   // config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
 
   // Compilation settings.
   config.cache(cache);
-  config.cranelift_opt_level(wasmtime::OptLevel::Speed);
+  //config.cranelift_opt_level(wasmtime::OptLevel::Speed);
+  config.cranelift_opt_level(wasmtime::OptLevel::None);
+  config.debug_info(true);
   config.parallel_compilation(true);
 
   return config;
@@ -449,10 +452,10 @@ impl Runtime {
 
     log::info!("Starting WASM runtime with {n_threads} threads.");
 
-    let (shared_sender, shared_receiver) = kanal::unbounded_async::<Message>();
+    let (shared_sender, shared_receiver) = async_channel::unbounded::<Message>();
     let threads = (0..n_threads)
       .map(|index| -> Result<_, Error> {
-        let (private_sender, private_receiver) = kanal::unbounded_async::<Message>();
+        let (private_sender, private_receiver) = async_channel::unbounded::<Message>();
 
         let shared_receiver = shared_receiver.clone();
 
@@ -530,8 +533,8 @@ impl Runtime {
 fn event_loop(
   rt: Arc<tokio::runtime::Runtime>,
   instance: RuntimeInstance,
-  private_recv: kanal::AsyncReceiver<Message>,
-  shared_recv: kanal::AsyncReceiver<Message>,
+  private_recv: async_channel::Receiver<Message>,
+  shared_recv: async_channel::Receiver<Message>,
 ) {
   let local = tokio::task::LocalSet::new();
   let instance = Rc::new(instance);
@@ -546,7 +549,10 @@ fn event_loop(
       };
 
       match receive_message().await {
-        Ok(Message::Run(f)) => tokio::task::spawn_local(f(instance.clone())),
+        // TODO: May need some more load-balancing. At least with kanal, we saw one thread grab
+        // most.
+        // Ok(Message::Run(f)) => tokio::task::spawn_local(f(instance.clone())),
+        Ok(Message::Run(f)) => f(instance.clone()).await,
         Err(_) => {
           // Channel closed
           return;
@@ -690,7 +696,14 @@ impl RuntimeInstance {
         .await
     });
 
-    return match receiver.await {
+    // let handle = wasmtime_wasi::runtime::spawn(async move {
+    //   proxy
+    //     .wasi_http_incoming_handler()
+    //     .call_handle(&mut store, req, out)
+    //     .await
+    // });
+
+    let response = match receiver.await {
       Ok(Ok(resp)) => {
         // NOTE: We cannot await the completion `call_handle` here with `handle.await?;`, since
         // we're not consuming the response body, see above.
@@ -710,6 +723,10 @@ impl RuntimeInstance {
         Err(Error::ChannelClosed)
       }
     };
+
+    // handle.await.map_err(|err| Error::Other(err.to_string()))?;
+
+    return response;
   }
 }
 

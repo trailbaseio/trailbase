@@ -8245,6 +8245,7 @@ dependencies = [
 name = "trailbase-wasm-runtime-host"
 version = "0.1.0"
 dependencies = [
+ "async-channel 2.5.0",
  "bytes",
  "futures-util",
  "http",

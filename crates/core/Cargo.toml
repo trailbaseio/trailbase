@@ -22,6 +22,7 @@ harness = false
 
 [features]
 default = []
+#default = ["v8"]
 v8 = ["dep:trailbase-js"]
 
 [dependencies]
