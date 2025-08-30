@@ -84,7 +84,7 @@ function EmailTemplate(props: {
       </props.form.Field>
 
       <props.form.Field
-        name="userVerificationTemplate.body"
+        name={`${props.fieldName}.body`}
         validators={unsetOrNotEmptyValidator()}
       >
         {buildOptionalTextAreaFormField(
@@ -258,7 +258,7 @@ export function EmailSettings(props: {
                   <AccordionContent>
                     <EmailTemplate
                       form={form}
-                      fieldName="changeEmailTemplate?"
+                      fieldName="changeEmailTemplate"
                       subjectPlaceholder={DEFAULT_EMAIL_CHANGE_ADDRESS_SUBJECT}
                       bodyPlaceholder={DEFAULT_EMAIL_CHANGE_ADDRESS_BODY}
                     />
