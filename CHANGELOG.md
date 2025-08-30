@@ -1,3 +1,11 @@
+## v0.16.7
+
+* Fix and improve email-template forms in admin UI
+  * Fix mapping of form to config fields
+  * Allow individual setting of subject or body as well es un-setting either.
+  * Check that body contains `{{CODE}}` or `{{VERIFICATION _URL}}`.
+* Update Rust dependencies.
+
 ## v0.16.6
 
 * Fix slow startup of streaming connections. Previously, clients would consider connections established only after first observed change or heartbeat. Thanks @daniel-vainsencher and meghprkh!
