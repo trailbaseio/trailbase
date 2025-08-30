@@ -629,14 +629,28 @@ pub(crate) fn validate_config(
       }
     }
 
-    let validate_template = |template: Option<&EmailTemplate>| {
-      if let Some(template) = template {
-        if template.subject.is_none() || template.body.is_none() {
-          return ierr("Email template missing subject or body.");
+    fn validate_template(template: Option<&EmailTemplate>) -> Result<(), ConfigError> {
+      // NOTE: It's ok for either subject or body to be empty, we'll simply fall back to the
+      // defaults.
+
+      // Check that VERIFICATION_URL is present.
+      if let Some(ref body) = template.as_ref().and_then(|t| t.body.as_ref()) {
+        lazy_static! {
+          static ref URL_PATTERN: regex::Regex =
+            regex::Regex::new(r#"\{\{[ ]*VERIFICATION_URL[ ]*\}\}"#).expect("static");
+          static ref CODE_PATTERN: regex::Regex =
+            regex::Regex::new(r#"\{\{[ ]*CODE[ ]*\}\}"#).expect("static");
+        };
+
+        if !(URL_PATTERN.is_match(body) || CODE_PATTERN.is_match(body)) {
+          return ierr(format!(
+            "Body needs to contain '{{{{ VERIFICATION_URL }}}}, got: {body}'"
+          ));
         }
-      };
-      Ok(())
-    };
+      }
+
+      return Ok(());
+    }
 
     validate_template(email.user_verification_template.as_ref())?;
     validate_template(email.change_email_template.as_ref())?;
