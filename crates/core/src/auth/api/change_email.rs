@@ -5,12 +5,12 @@ use axum::{
 };
 use lazy_static::lazy_static;
 use serde::Deserialize;
-use trailbase_sqlite::named_params;
+use trailbase_sqlite::{named_params, params};
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
-use crate::auth::ui::PROFILE_UI;
+use crate::auth::ui::{LOGIN_UI, PROFILE_UI};
 use crate::auth::util::{user_by_id, validate_and_normalize_email_address, validate_redirect};
 use crate::auth::{AuthError, User};
 use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
@@ -19,9 +19,6 @@ use crate::extract::Either;
 use crate::rand::generate_random_string;
 
 const TTL_SEC: i64 = 3600;
-// Short rate limit, since changing email requires users to be authed already. There's still an
-// abuse vector where an authenticated uses this TrailBase instance's email setup to spam.
-const RATE_LIMIT_SEC: i64 = 600;
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
 #[ts(export)]
@@ -73,6 +70,9 @@ pub async fn change_email_request_handler(
       return Err(AuthError::Internal("Invalid timestamp".into()));
     };
 
+    // NOTE: rate limiting isn't strictly needed since user is authed. Short limit just egregious
+    // abuse prevention.
+    const RATE_LIMIT_SEC: i64 = 10;
     let age: chrono::Duration = chrono::Utc::now() - timestamp;
     if age < chrono::Duration::seconds(RATE_LIMIT_SEC) {
       return Err(AuthError::BadRequest("verification sent already"));
@@ -125,6 +125,8 @@ pub async fn change_email_request_handler(
         .map_err(|err| AuthError::Internal(err.into()))?;
 
       Ok((StatusCode::OK, "Verification email sent.").into_response())
+      // TODO: Redirect, however profile page doesn't support `?alert=`.
+      // Ok(Redirect::to(&format!("{PROFILE_UI}?alert=Verification email sent.")).into_response())
     }
     _ => {
       panic!("Email change request affected multiple users: {rows_affected}");
@@ -150,7 +152,7 @@ pub async fn change_email_confirm_handler(
   State(state): State<AppState>,
   Path(email_verification_code): Path<String>,
   Query(ChangeEmailConfigQuery { redirect_uri }): Query<ChangeEmailConfigQuery>,
-  user: User,
+  user: Option<User>,
 ) -> Result<Redirect, AuthError> {
   validate_redirect(&state, redirect_uri.as_deref())?;
 
@@ -158,49 +160,39 @@ pub async fn change_email_confirm_handler(
     return Err(AuthError::BadRequest("Invalid code"));
   }
 
-  let db_user = user_by_id(&state, &user.uuid).await?;
-  let Some(db_email_verification_code) = db_user.email_verification_code else {
-    return Err(AuthError::BadRequest("Invalid code"));
-  };
-  if db_email_verification_code != email_verification_code {
-    return Err(AuthError::BadRequest("Invalid code"));
-  }
-
-  let Some(new_email) = db_user.pending_email else {
-    return Err(AuthError::Conflict);
-  };
-
   lazy_static! {
     pub static ref QUERY: String = format!(
       r#"
         UPDATE
           '{USER_TABLE}'
         SET
-          email = :new_email,
+          email = pending_email,
           verified = TRUE,
           pending_email = NULL,
           email_verification_code = NULL,
           email_verification_code_sent_at = NULL
         WHERE
-          email_verification_code = :email_verification_code AND email_verification_code_sent_at > (UNIXEPOCH() - {TTL_SEC})
+          email_verification_code = $1
+            AND email_verification_code_sent_at > (UNIXEPOCH() - {TTL_SEC})
+            AND pending_email IS NOT NULL
       "#
     );
   }
 
   let rows_affected = state
     .user_conn()
-    .execute(
-      &*QUERY,
-      named_params! {
-        ":new_email": new_email,
-        ":email_verification_code": email_verification_code,
-      },
-    )
+    .execute(&*QUERY, params!(email_verification_code))
     .await?;
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid verification code")),
-    1 => Ok(Redirect::to(redirect_uri.as_deref().unwrap_or(PROFILE_UI))),
+    1 => {
+      if user.is_some() {
+        Ok(Redirect::to(redirect_uri.as_deref().unwrap_or(PROFILE_UI)))
+      } else {
+        Ok(Redirect::to(redirect_uri.as_deref().unwrap_or(LOGIN_UI)))
+      }
+    }
     _ => panic!("emails updated for multiple users at once: {rows_affected}"),
   };
 }

@@ -588,7 +588,7 @@ async fn test_auth_change_email_flow() {
     State(state.clone()),
     Path(email_verification_code.clone()),
     Query(ChangeEmailConfigQuery { redirect_uri: None }),
-    user.clone(),
+    None,
   )
   .await
   .expect(&format!("CODE: '{email_verification_code}'"));

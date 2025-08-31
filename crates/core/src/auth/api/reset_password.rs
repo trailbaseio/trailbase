@@ -17,7 +17,7 @@ use crate::rand::generate_random_string;
 
 use crate::auth::AuthError;
 use crate::auth::password::{hash_password, validate_password_policy};
-use crate::auth::util::{user_by_email, validate_and_normalize_email_address};
+use crate::auth::util::{user_by_email, validate_and_normalize_email_address, validate_redirect};
 
 const TTL_SEC: i64 = 3600;
 const RATE_LIMIT_SEC: i64 = 4 * 3600;
@@ -133,6 +133,8 @@ pub async fn reset_password_update_handler(
     Either::Multipart(req, _) => req,
     Either::Form(req) => req,
   };
+
+  validate_redirect(&state, request.redirect_uri.as_deref())?;
 
   let auth_options = state.auth_options();
   validate_password_policy(
