@@ -1,3 +1,9 @@
+## v0.16.8
+
+* Allow signed-out change-email verification. This allows validation from a different browser or device, e.g. pivot to phone.
+* Fix change-password auth flow.
+* Update JS dependencies.
+
 ## v0.16.7
 
 * Fix and improve email-template forms in admin UI
