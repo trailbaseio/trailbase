@@ -472,10 +472,11 @@ async fn test_auth_reset_password_flow() {
   let new_password = reset_password.to_string();
   reset_password_update_handler(
     State(state.clone()),
-    Path(reset_code.clone()),
     Either::Form(ResetPasswordUpdateRequest {
       password: new_password.clone(),
       password_repeat: new_password.clone(),
+      password_reset_code: reset_code.clone(),
+      redirect_uri: None,
     }),
   )
   .await

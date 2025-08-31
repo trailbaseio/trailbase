@@ -109,7 +109,7 @@ pub(super) fn router() -> Router<crate::AppState> {
       post(api::reset_password::reset_password_request_handler),
     )
     .route(
-      &format!("/{AUTH_API_PATH}/reset_password/update/{{password_reset_code}}"),
+      &format!("/{AUTH_API_PATH}/reset_password/update"),
       post(api::reset_password::reset_password_update_handler),
     )
     // Change password flow.

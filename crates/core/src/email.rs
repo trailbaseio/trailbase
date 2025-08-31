@@ -9,6 +9,7 @@ use thiserror::Error;
 
 use crate::AppState;
 use crate::config::proto::Config;
+use crate::constants::AUTH_API_PATH;
 
 #[derive(Debug, Error)]
 pub enum EmailError {
@@ -103,7 +104,7 @@ impl Email {
     let site_url = get_site_url(state);
     let verification_url = site_url
       .join(&format!(
-        "/api/auth/v1/verify_email/confirm/{email_verification_code}"
+        "/{AUTH_API_PATH}/verify_email/confirm/{email_verification_code}"
       ))
       .map_err(|_err| EmailError::Missing("email verification URL"))?
       .to_string();
@@ -149,7 +150,7 @@ impl Email {
     let site_url = get_site_url(state);
     let verification_url = site_url
       .join(&format!(
-        "/api/auth/v1/change_email/confirm/{email_verification_code}"
+        "/{AUTH_API_PATH}/change_email/confirm/{email_verification_code}"
       ))
       .map_err(|_err| EmailError::Missing("change email confirmation URL"))?
       .to_string();
@@ -193,9 +194,12 @@ impl Email {
       .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_PASSWORD_RESET_BODY);
 
     let site_url = get_site_url(state);
+    // NOTE: Unlike verify_email and change_email, we're linking to page for users to input their
+    // new password.
+    // TODO: For a custom change password UI, this would need to be configurable.
     let verification_url = site_url
       .join(&format!(
-        "/api/auth/v1/reset_password/update/{password_reset_code}"
+        "/_/auth/reset_password/update/{password_reset_code}"
       ))
       .map_err(|_err| EmailError::Missing("password reset URL"))?
       .to_string();
@@ -386,7 +390,7 @@ pub mod testing {
       let email = Email::password_reset_email(&state, "foo@bar.org", code).unwrap();
       assert_eq!(email.subject, "Reset your Password for TrailBase");
       assert!(email.body.contains(&format!(
-        "https://test.org/api/auth/v1/reset_password/update/{code}"
+        "https://test.org/_/auth/reset_password/update/{code}"
       )));
     }
   }

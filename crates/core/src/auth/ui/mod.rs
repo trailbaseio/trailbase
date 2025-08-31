@@ -1,6 +1,6 @@
 use askama::Template;
 use axum::Router;
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::routing::get;
 use reqwest::StatusCode;
@@ -160,9 +160,19 @@ pub struct ResetPasswordUpdateQuery {
 
 async fn ui_reset_password_update_handler(
   Query(query): Query<ResetPasswordUpdateQuery>,
+  Path(password_reset_code): Path<String>,
 ) -> Response {
+  let form_state = indoc::formatdoc!(
+    r#"
+    {redirect_uri}
+    {password_reset_code}
+  "#,
+    redirect_uri = hidden_input("redirect_uri", query.redirect_uri.as_ref()),
+    password_reset_code = hidden_input("password_reset_code", Some(&password_reset_code)),
+  );
+
   let html = ResetPasswordUpdateTemplate {
-    state: redirect_uri(query.redirect_uri.as_ref()),
+    state: form_state,
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
@@ -255,7 +265,7 @@ pub(crate) fn auth_ui_router() -> Router<AppState> {
       get(ui_reset_password_request_handler),
     )
     .route(
-      "/_/auth/reset_password/update",
+      "/_/auth/reset_password/update/{password_reset_code}",
       get(ui_reset_password_update_handler),
     )
     .route("/_/auth/change_password", get(ui_change_password_handler))

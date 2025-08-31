@@ -1,7 +1,6 @@
 use axum::{
-  extract::{Path, State},
-  http::StatusCode,
-  response::{IntoResponse, Response},
+  extract::State,
+  response::{IntoResponse, Redirect, Response},
 };
 use lazy_static::lazy_static;
 use serde::Deserialize;
@@ -10,6 +9,7 @@ use ts_rs::TS;
 use utoipa::ToSchema;
 
 use crate::app_state::AppState;
+use crate::auth::ui::LOGIN_UI;
 use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
@@ -95,10 +95,10 @@ pub async fn reset_password_request_handler(
         .await
         .map_err(|err| AuthError::Internal(err.into()))?;
 
-      Ok((StatusCode::OK, "Password reset mail sent").into_response())
+      Ok(Redirect::to(&format!("{LOGIN_UI}?alert=Password reset email sent")).into_response())
     }
     _ => {
-      panic!();
+      panic!("non-unique email");
     }
   };
 }
@@ -107,6 +107,10 @@ pub async fn reset_password_request_handler(
 pub struct ResetPasswordUpdateRequest {
   pub password: String,
   pub password_repeat: String,
+
+  pub password_reset_code: String,
+
+  pub redirect_uri: Option<String>,
 }
 
 /// Endpoint for setting a new password after the user has requested a reset and provided a
@@ -122,7 +126,6 @@ pub struct ResetPasswordUpdateRequest {
 )]
 pub async fn reset_password_update_handler(
   State(state): State<AppState>,
-  Path(password_reset_code): Path<String>,
   either_request: Either<ResetPasswordUpdateRequest>,
 ) -> Result<Response, AuthError> {
   let request = match either_request {
@@ -145,7 +148,8 @@ pub async fn reset_password_update_handler(
         UPDATE '{USER_TABLE}'
         SET
           password_hash = $1,
-          password_reset_code = NULL
+          password_reset_code = NULL,
+          password_reset_code_sent_at = NULL
         WHERE
           password_reset_code = $2 AND password_reset_code_sent_at > (UNIXEPOCH() - {TTL_SEC})
       "#
@@ -156,13 +160,13 @@ pub async fn reset_password_update_handler(
     .user_conn()
     .execute(
       &*UPDATE_PASSWORD_QUERY,
-      params!(hashed_password, password_reset_code),
+      params!(hashed_password, request.password_reset_code),
     )
     .await?;
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid reset code.")),
-    1 => Ok((StatusCode::OK, "Password updated").into_response()),
+    1 => Ok(Redirect::to(request.redirect_uri.as_deref().unwrap_or(LOGIN_UI)).into_response()),
     _ => {
       panic!("multiple users with same verification code.");
     }
