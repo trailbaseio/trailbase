@@ -107,8 +107,6 @@ struct State {
 
 impl Drop for State {
   fn drop(&mut self) {
-    IN_FLIGHT.fetch_sub(1, Ordering::Relaxed);
-
     #[cfg(debug_assertions)]
     if self.tx.0.lock().is_some() {
       log::warn!("pending transaction locking the DB");
@@ -387,6 +385,7 @@ fn build_config(cache: Option<wasmtime::Cache>) -> Config {
 
   // Execution settings.
   config.async_support(true);
+  config.epoch_interruption(false);
   config.memory_reservation(64 * 1024 * 1024 /*bytes*/);
   // config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
 
@@ -468,31 +467,29 @@ impl Runtime {
           .name(format!("wasm-runtime-{index}"))
           .spawn(move || {
             // Note: Arc rather than Rc, since State and thus SharedState needs to be Send + Sync.
-            let tokio_runtime = Arc::new(
-              tokio::runtime::Builder::new_current_thread()
-                .enable_time()
-                .enable_io()
-                .build()
-                .expect("startup"),
-            );
+            let tokio_runtime = tokio::runtime::Builder::new_current_thread()
+              .enable_time()
+              .enable_io()
+              .build()
+              .expect("startup");
 
-            let shared_state = SharedState {
-              runtime: tokio_runtime.clone(),
+            let shared_state = Arc::new(SharedState {
+              runtime: tokio_runtime,
               conn,
               thread_id: index as u64,
               kv_store,
               fs_root_path,
-            };
+            });
 
             let instance = RuntimeInstance {
               engine,
               component,
               linker,
-              shared: Arc::new(shared_state),
+              shared: shared_state.clone(),
             };
             // RuntimeInstance::new(engine, component, linker, shared_state).expect("startup");
 
-            event_loop(tokio_runtime, instance, private_receiver, shared_receiver);
+            event_loop(shared_state, instance, private_receiver, shared_receiver);
           })
           .expect("failed to spawn thread");
 
@@ -528,15 +525,18 @@ impl Runtime {
 }
 
 fn event_loop(
-  rt: Arc<tokio::runtime::Runtime>,
+  shared_state: Arc<SharedState>,
   instance: RuntimeInstance,
   private_recv: kanal::AsyncReceiver<Message>,
   shared_recv: kanal::AsyncReceiver<Message>,
 ) {
+  let thread_id = shared_state.thread_id;
   let local = tokio::task::LocalSet::new();
   let instance = Rc::new(instance);
 
-  local.block_on(&rt, async move {
+  local.block_on(&shared_state.runtime, async move {
+    let local_in_flight = Rc::new(AtomicUsize::new(0));
+
     loop {
       let receive_message = async || {
         return tokio::select! {
@@ -545,8 +545,28 @@ fn event_loop(
         };
       };
 
+      log::debug!(
+        "Waiting for new messages (thread: {thread_id}). In flight: {}, {}",
+        local_in_flight.load(Ordering::Relaxed),
+        IN_FLIGHT.load(Ordering::Relaxed)
+      );
+
       match receive_message().await {
-        Ok(Message::Run(f)) => tokio::task::spawn_local(f(instance.clone())),
+        Ok(Message::Run(f)) => {
+          let instance = instance.clone();
+
+          let local_in_flight = local_in_flight.clone();
+          local_in_flight.fetch_add(1, Ordering::Relaxed);
+
+          IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
+
+          tokio::task::spawn_local(async move {
+            f(instance).await;
+
+            IN_FLIGHT.fetch_sub(1, Ordering::Relaxed);
+            local_in_flight.fetch_sub(1, Ordering::Relaxed);
+          })
+        }
         Err(_) => {
           // Channel closed
           return;
@@ -558,7 +578,7 @@ fn event_loop(
 
 pub struct SharedState {
   pub thread_id: u64,
-  pub runtime: Arc<tokio::runtime::Runtime>,
+  pub runtime: tokio::runtime::Runtime,
   pub conn: trailbase_sqlite::Connection,
   pub kv_store: KvStore,
   pub fs_root_path: Option<std::path::PathBuf>,
@@ -620,8 +640,6 @@ impl RuntimeInstance {
         .preopened_dir(path, "/", DirPerms::READ, FilePerms::READ)
         .map_err(|err| Error::Other(err.to_string()))?;
     }
-
-    IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
 
     return Ok(Store::new(
       &self.engine,

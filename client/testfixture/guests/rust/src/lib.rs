@@ -61,10 +61,21 @@ impl Guest for Endpoints {
           });
         },
       ),
-      HttpRoute::new(Method::GET, "/await", async |_req| {
-        Timer::after(Duration::from_millis(100)).wait().await;
-        return vec![b'A'; 5000];
-      }),
+      HttpRoute::new(
+        Method::GET,
+        "/await",
+        async |req| -> Result<Vec<u8>, HttpError> {
+          let param = req.url().query_pairs().find(|(param, _v)| param == "ms");
+          let ms = param
+            .as_ref()
+            .map_or("10", |(_param, v)| v)
+            .parse::<u64>()
+            .map_err(|_| HttpError::status(StatusCode::BAD_REQUEST))?;
+
+          Timer::after(Duration::from_millis(ms)).wait().await;
+          return Ok(vec![b'A'; 5000]);
+        },
+      ),
       // Test Database interactions
       HttpRoute::new(Method::GET, "/addDeletePost", async |_req| {
         let ref user_id = query(
