@@ -36,9 +36,12 @@ export default defineConfig({
     HttpHandler.get("/error", () => {
       throw new HttpError(StatusCode.IM_A_TEAPOT, "I'm a teapot");
     }),
-    HttpHandler.get("/await", async () => {
-      await delay(10);
-      return "".repeat(5000);
+    HttpHandler.get("/await", async (req) => {
+      const ms = req.getQueryParam("ms");
+      await delay(ms ? parseInt(ms) : 10);
+
+      // Bodies over 2kB/4kB are streamed.
+      return "A".repeat(5000);
     }),
     HttpHandler.get("/addDeletePost", async () => {
       const userId = (
@@ -70,7 +73,7 @@ function delay(ms: number): Promise<void> {
 
 function fibonacciHandler(req: Request): string {
   const n = req.getQueryParam("n");
-  return fibonacci(n ? parseInt(n) : 40).toString();
+  return `${fibonacci(n ? parseInt(n) : 40)}\n`;
 }
 
 function fibonacci(num: number): number {
