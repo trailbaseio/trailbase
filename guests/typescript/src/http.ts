@@ -264,6 +264,17 @@ function buildResponse(
   body: Uint8Array,
   opts?: ResponseOptions,
 ): OutgoingResponse {
+  // NOTE: `outputStream.blockingWriteAndFlush` only writes up to 4kB.
+  if (body.length <= 4096) {
+    return buildSmallResponse(body, opts);
+  }
+  return buildLargeResponse(body, opts);
+}
+
+function buildSmallResponse(
+  body: Uint8Array,
+  opts?: ResponseOptions,
+): OutgoingResponse {
   const outgoingResponse = new OutgoingResponse(
     Fields.fromList(opts?.headers ?? []),
   );
@@ -287,7 +298,67 @@ function buildResponse(
   return outgoingResponse;
 }
 
-// function writeResponse(
+function buildLargeResponse(
+  body: Uint8Array,
+  opts?: ResponseOptions,
+): OutgoingResponse {
+  const outgoingResponse = new OutgoingResponse(
+    Fields.fromList(opts?.headers ?? []),
+  );
+
+  const outgoingBody = outgoingResponse.body();
+  {
+    const outputStream = outgoingBody.write();
+
+    // Retrieve a Preview 2 I/O pollable to coordinate writing to the output stream
+    const pollable = outputStream.subscribe();
+
+    let written = 0n;
+    let remaining = BigInt(body.length);
+    while (remaining > 0) {
+      // Wait for the stream to become writable
+      pollable.block();
+
+      // Get the amount of bytes that we're allowed to write
+      let writableByteCount = outputStream.checkWrite();
+      if (remaining <= writableByteCount) {
+        writableByteCount = BigInt(remaining);
+      }
+
+      // If we are not allowed to write any more, but there are still bytes
+      // remaining then flush and try again
+      if (writableByteCount === 0n && remaining !== 0n) {
+        outputStream.flush();
+        continue;
+      }
+
+      outputStream.write(
+        new Uint8Array(body.buffer, Number(written), Number(writableByteCount)),
+      );
+      written += writableByteCount;
+      remaining -= written;
+
+      // While we can track *when* to flush separately and implement our own logic,
+      // the simplest way is to flush the written chunk immediately
+      outputStream.flush();
+    }
+
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore: While TS does not *know* that the dispose symbols are registered, they are.
+    pollable[Symbol.dispose]();
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore: While TS does not *know* that the dispose symbols are registered, they are.
+    outputStream[Symbol.dispose]();
+  }
+
+  outgoingResponse.setStatusCode(opts?.status ?? StatusCode.OK);
+
+  OutgoingBody.finish(outgoingBody, undefined);
+
+  return outgoingResponse;
+}
+
+// function writeResponseOriginal(
 //   responseOutparam: ResponseOutparam,
 //   status: number,
 //   body: Uint8Array,
@@ -309,6 +380,7 @@ function buildResponse(
 //
 //   outgoingResponse.setStatusCode(status);
 //   OutgoingBody.finish(outgoingBody, undefined);
+//
 //   ResponseOutparam.set(responseOutparam, { tag: "ok", val: outgoingResponse });
 // }
 
