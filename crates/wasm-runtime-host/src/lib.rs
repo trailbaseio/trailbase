@@ -565,7 +565,10 @@ fn event_loop(
 
             IN_FLIGHT.fetch_sub(1, Ordering::Relaxed);
             local_in_flight.fetch_sub(1, Ordering::Relaxed);
-          })
+          });
+
+          // Yield before listening for more messages to give JS a chance to run.
+          tokio::task::yield_now().await;
         }
         Err(_) => {
           // Channel closed
