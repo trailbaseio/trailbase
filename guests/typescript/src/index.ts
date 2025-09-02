@@ -1,5 +1,7 @@
-export * from "./http";
 export * from "./db";
+export * from "./fs";
+export * from "./http";
+export * from "./kv";
 
 export { threadId } from "trailbase:runtime/host-endpoint";
 

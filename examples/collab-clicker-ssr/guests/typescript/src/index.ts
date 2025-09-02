@@ -1,10 +1,28 @@
-import { Request, defineConfig, query } from "trailbase-wasm";
+import { Request, defineConfig, query, Store, readFileSync } from "trailbase-wasm";
 
 // @ts-ignore
 import { render } from "../../../dist/server/entry-server.js";
 
-// NOTE: Should we read this via fs APIs rather than baking it into the js?
-import template from "../../../dist/client/index.html?raw";
+function readTemplate(): string {
+  // NOTE: Since we're using vite, we could also bake the template rather than
+  // reading it from the file-system?
+  // import template from "../../../dist/client/index.html?raw";
+
+  return new TextDecoder().decode(readCachedFileSync("/dist/client/index.html"));
+}
+
+function readCachedFileSync(path: string): Uint8Array {
+  const store = Store.open();
+
+  const template = store.get(path);
+  if (template !== undefined) {
+    return template
+  }
+
+  const contents = readFileSync(path);
+  store.set(path, contents);
+  return contents;
+}
 
 async function clicked(_: Request): Promise<string> {
   const rows = await query(
@@ -22,7 +40,7 @@ async function ssr(_: Request): Promise<string> {
   const count = rows.length > 0 ? (rows[0][0] as number) : 0;
   const rendered = render("ignored", count);
 
-  const html = template
+  const html = readTemplate()
     .replace(`<!--app-head-->`, rendered.head ?? "")
     .replace(`<!--app-html-->`, rendered.html ?? "")
     .replace(`<!--app-data-->`, rendered.data ?? "");
