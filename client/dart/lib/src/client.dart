@@ -6,7 +6,6 @@ import 'package:logging/logging.dart';
 import 'package:dio/dio.dart' as dio;
 
 import 'sse.dart';
-import 'transaction.dart';
 
 class User {
   final String id;
@@ -136,12 +135,12 @@ abstract class RecordId {
   factory RecordId.uuid(String id) => _UuidRecordId(id);
 }
 
-class ResponseRecordIds {
+class _ResponseRecordIds {
   final List<String> _ids;
 
-  const ResponseRecordIds(this._ids);
+  const _ResponseRecordIds(this._ids);
 
-  ResponseRecordIds.fromJson(Map<String, dynamic> json)
+  _ResponseRecordIds.fromJson(Map<String, dynamic> json)
       : _ids = (json['ids'] as List).cast<String>();
 
   List<RecordId> toRecordIds() {
@@ -417,7 +416,7 @@ class RecordApi {
     if ((response.statusCode ?? 400) > 200) {
       throw Exception('${response.data} ${response.statusMessage}');
     }
-    final responseIds = ResponseRecordIds.fromJson(response.data);
+    final responseIds = _ResponseRecordIds.fromJson(response.data);
     assert(responseIds._ids.length == 1);
     return responseIds.toRecordIds()[0];
   }
@@ -432,7 +431,7 @@ class RecordApi {
     if ((response.statusCode ?? 400) > 200) {
       throw Exception('${response.data} ${response.statusMessage}');
     }
-    final responseIds = ResponseRecordIds.fromJson(response.data);
+    final responseIds = _ResponseRecordIds.fromJson(response.data);
     return responseIds.toRecordIds();
   }
 
@@ -587,8 +586,6 @@ class Client {
   String site() => _site;
 
   RecordApi records(String name) => RecordApi(this, name);
-
-  TransactionBatch transaction() => TransactionBatch(this);
 
   _TokenState _updateTokens(Tokens? tokens) {
     final state = _TokenState.build(tokens);

@@ -3,7 +3,6 @@ email {}
 server {
   application_name: "TrailBase"
   logs_retention_sec: 604800
-  enable_record_transactions: true
 }
 auth {
   oauth_providers: [{

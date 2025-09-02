@@ -199,49 +199,4 @@ extension Trait where Self == SetupTrailBaseTrait {
         } catch {
         }
     }
-
-    @Test("Test Transaction") func testTransaction() async throws {
-        let client = try await connect()
-        let now = NSDate().timeIntervalSince1970
-
-        // Test create operation
-        let batch = client.transaction()
-        let createRecord: [String: AnyCodable] = [
-            "text_not_null": AnyCodable("swift transaction create test: =?&\(now)")
-        ]
-        batch.api("simple_strict_table").create(value: createRecord)
-
-        // Test actual creation
-        let ids: [RecordId] = try await batch.send()
-        #expect(ids.count == 1)
-
-        // Verify record was created
-        let api = client.records("simple_strict_table")
-        let createdRecord: SimpleStrict = try await api.read(recordId: ids[0])
-        #expect(createdRecord.text_not_null == createRecord["text_not_null"]?.value as? String)
-
-        // Test update operation
-        let updateBatch = client.transaction()
-        let updateRecord: [String: AnyCodable] = [
-            "text_not_null": AnyCodable("swift transaction update test: =?&\(now)")
-        ]
-        updateBatch.api("simple_strict_table").update(recordId: ids[0], value: updateRecord)
-
-        // Test actual update
-        let _ = try await updateBatch.send()
-        let updatedRecord: SimpleStrict = try await api.read(recordId: ids[0])
-        #expect(updatedRecord.text_not_null == updateRecord["text_not_null"]?.value as? String)
-
-        // Test delete operation
-        let deleteBatch = client.transaction()
-        deleteBatch.api("simple_strict_table").delete(recordId: ids[0])
-
-        // Test actual deletion
-        let _ = try await deleteBatch.send()
-        do {
-            let _: SimpleStrict = try await api.read(recordId: ids[0])
-            #expect(Bool(false))
-        } catch {
-        }
-    }
 }
