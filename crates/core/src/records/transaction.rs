@@ -31,6 +31,7 @@ pub enum Operation {
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct TransactionRequest {
   operations: Vec<Operation>,
+  transaction: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
@@ -187,25 +188,42 @@ pub async fn record_transactions_handler(
     })
     .collect::<Result<Vec<_>, _>>()?;
 
-  let ids = state
-    .conn()
-    .call(
-      move |conn: &mut rusqlite::Connection| -> Result<Vec<String>, trailbase_sqlite::Error> {
-        let tx = conn.transaction()?;
+  let ids = if request.transaction.unwrap_or(true) {
+    state
+      .conn()
+      .call(
+        move |conn: &mut rusqlite::Connection| -> Result<Vec<String>, trailbase_sqlite::Error> {
+          let tx = conn.transaction()?;
 
-        let mut ids: Vec<String> = vec![];
-        for op in operations {
-          if let Some(id) = op(&tx).map_err(|err| trailbase_sqlite::Error::Other(err.into()))? {
-            ids.push(id);
+          let mut ids: Vec<String> = vec![];
+          for op in operations {
+            if let Some(id) = op(&tx).map_err(|err| trailbase_sqlite::Error::Other(err.into()))? {
+              ids.push(id);
+            }
           }
-        }
 
-        tx.commit()?;
+          tx.commit()?;
 
-        return Ok(ids);
-      },
-    )
-    .await?;
+          return Ok(ids);
+        },
+      )
+      .await?
+  } else {
+    state
+      .conn()
+      .call(
+        move |conn: &mut rusqlite::Connection| -> Result<Vec<String>, trailbase_sqlite::Error> {
+          let mut ids: Vec<String> = vec![];
+          for op in operations {
+            if let Some(id) = op(conn).map_err(|err| trailbase_sqlite::Error::Other(err.into()))? {
+              ids.push(id);
+            }
+          }
+          return Ok(ids);
+        },
+      )
+      .await?
+  };
 
   return Ok(Json(TransactionResponse { ids }));
 }
@@ -304,6 +322,7 @@ mod tests {
             value: json!({"value": 2}),
           },
         ],
+        transaction: None,
       }),
     )
     .await
@@ -325,6 +344,7 @@ mod tests {
             value: json!({"value": 3}),
           },
         ],
+        transaction: None,
       }),
     )
     .await
