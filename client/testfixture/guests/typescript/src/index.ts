@@ -64,6 +64,23 @@ export default defineConfig({
 
       return "Ok";
     }),
+    HttpHandler.get("/set_interval", async (_req: Request): string => {
+      var cnt = 0;
+
+      console.log(`Registering callback`);
+      const handle = setInterval(() => {
+        console.log(`Interval: ${cnt}`);
+        cnt += 1;
+
+        if (cnt > 10) {
+          clearInterval(handle);
+        }
+      }, 300);
+
+      await delay(700);
+
+      return `setInterval from Javascript`;
+    }),
   ],
 });
 
