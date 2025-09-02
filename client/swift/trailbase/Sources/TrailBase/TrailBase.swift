@@ -328,10 +328,6 @@ public class Client {
         return RecordApi(client: self, name: name)
     }
 
-    public func transaction() -> TransactionBatch {
-        return TransactionBatch(client: self)
-    }
-
     public func refresh() async throws {
         guard let (headers, refreshToken) = getHeaderAndRefreshToken() else {
             throw ClientError.unauthenticated
@@ -385,7 +381,7 @@ public class Client {
         return state
     }
 
-    internal func fetch(
+    fileprivate func fetch(
         path: String,
         method: String,
         body: Data? = nil,

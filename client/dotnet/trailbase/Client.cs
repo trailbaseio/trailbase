@@ -292,11 +292,6 @@ public class Client {
     return new RecordApi(this, name);
   }
 
-  /// <summary>Create a new transaction batch.</summary>
-  public ITransactionBatch Transaction() {
-    return new TransactionBatch(this);
-  }
-
   /// <summary>Log in with the given credentials.</summary>
   public async Task<Tokens> Login(string email, string password) {
     var response = await Fetch(

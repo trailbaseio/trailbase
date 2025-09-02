@@ -142,23 +142,6 @@ repos:
       types: [python]
       pass_filenames: false
 
-    ### Go client
-    - id: go_format
-      name: Go format
-      # gofmt always returns zero exit code :sigh:
-      entry: sh -c 'DIFF=$(gofmt -d -e client/go/trailbase/) && echo "${DIFF}" && test -z "${DIFF}"'
-      language: system
-      types: [go]
-      files: .*\.(go)$
-      pass_filenames: false
-
-    - id: go_test
-      name: Go test
-      entry: sh -c 'cd client/go/trailbase && go test -v'
-      language: system
-      types: [go]
-      pass_filenames: false
-
     ### Swift client
     - id: swift_format
       name: Swift format
@@ -176,4 +159,21 @@ repos:
       entry: swift test --package-path client/swift/trailbase
       language: system
       types: [swift]
+      pass_filenames: false
+
+    ### Go client
+    - id: go_format
+      name: Go format
+      # gofmt always returns zero exit code :sigh:
+      entry: sh -c 'DIFF=$(gofmt -d -e client/go/trailbase/) && echo "${DIFF}" && test -z "${DIFF}"'
+      language: system
+      types: [go]
+      files: .*\.(go)$
+      pass_filenames: false
+
+    - id: go_test
+      name: Go test
+      entry: sh -c 'cd client/go/trailbase && go test -v'
+      language: system
+      types: [go]
       pass_filenames: false

@@ -269,38 +269,4 @@ def test_subscriptions(trailbase: TrailBaseFixture):
     assert "Insert" in events[0]
 
 
-def test_transaction(trailbase: TrailBaseFixture):
-    assert trailbase.isUp()
-
-    client = connect()
-    api = client.records("simple_strict_table")
-    ids: List[RecordId] = []
-
-    if True:
-        now = int(time())
-        batch = client.transaction()
-        message = f"transaction test create: {now}"
-        batch.api("simple_strict_table").create({"text_not_null": message})
-        ids = batch.send()
-        record = api.read(ids[0])
-        assert record["text_not_null"] == message
-
-    if True:
-        now = int(time())
-        batch = client.transaction()
-        updatedMessage = f"transaction test update: {now}"
-        batch.api("simple_strict_table").update(ids[0], {"text_not_null": updatedMessage})
-        batch.send()
-        record = api.read(ids[0])
-        assert record["text_not_null"] == updatedMessage
-
-    if True:
-        batch = client.transaction()
-        batch.api("simple_strict_table").delete(ids[0])
-        batch.send()
-
-        with pytest.raises(Exception):
-            api.read(ids[0])
-
-
 logger = logging.getLogger(__name__)

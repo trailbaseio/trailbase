@@ -689,108 +689,6 @@ impl ClientState {
   }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum Operation {
-  Create {
-    api_name: String,
-    value: serde_json::Value,
-  },
-  Update {
-    api_name: String,
-    record_id: String,
-    value: serde_json::Value,
-  },
-  Delete {
-    api_name: String,
-    record_id: String,
-  },
-}
-
-#[derive(Serialize)]
-pub struct TransactionRequest {
-  pub operations: Vec<Operation>,
-}
-
-#[derive(Deserialize)]
-pub struct TransactionResponse {
-  pub ids: Vec<String>,
-}
-
-pub struct TransactionBatch {
-  client: Arc<ClientState>,
-  operations: Vec<Operation>,
-}
-
-pub struct ApiBatch<'a> {
-  batch: &'a mut TransactionBatch,
-  api_name: String,
-}
-
-impl TransactionBatch {
-  fn new(client: Arc<ClientState>) -> Self {
-    Self {
-      client,
-      operations: Vec::new(),
-    }
-  }
-
-  pub fn api(&mut self, api_name: impl Into<String>) -> ApiBatch<'_> {
-    ApiBatch {
-      batch: self,
-      api_name: api_name.into(),
-    }
-  }
-
-  pub async fn send(self) -> Result<Vec<String>, Error> {
-    let request = TransactionRequest {
-      operations: self.operations,
-    };
-
-    let response = self
-      .client
-      .fetch(TRANSACTION_API, Method::POST, Some(&request), None)
-      .await?;
-
-    let result: TransactionResponse = json(response).await?;
-    Ok(result.ids)
-  }
-
-  fn add_operation(&mut self, operation: Operation) {
-    self.operations.push(operation);
-  }
-}
-
-impl<'a> ApiBatch<'a> {
-  pub fn create(self, value: impl Into<serde_json::Value>) -> &'a mut TransactionBatch {
-    self.batch.add_operation(Operation::Create {
-      api_name: self.api_name,
-      value: value.into(),
-    });
-    self.batch
-  }
-
-  pub fn update(
-    self,
-    record_id: impl RecordId<'a>,
-    value: impl Into<serde_json::Value>,
-  ) -> &'a mut TransactionBatch {
-    self.batch.add_operation(Operation::Update {
-      api_name: self.api_name,
-      record_id: record_id.serialized_id().to_string(),
-      value: value.into(),
-    });
-    self.batch
-  }
-
-  pub fn delete(self, record_id: impl RecordId<'a>) -> &'a mut TransactionBatch {
-    self.batch.add_operation(Operation::Delete {
-      api_name: self.api_name,
-      record_id: record_id.serialized_id().to_string(),
-    });
-    self.batch
-  }
-}
-
 #[derive(Clone)]
 pub struct Client {
   state: Arc<ClientState>,
@@ -920,10 +818,6 @@ impl Client {
 
     return state;
   }
-
-  pub fn transaction(&self) -> TransactionBatch {
-    TransactionBatch::new(self.state.clone())
-  }
 }
 
 fn build_headers(tokens: Option<&Tokens>) -> HeaderMap {
@@ -975,7 +869,6 @@ async fn json<T: DeserializeOwned>(resp: reqwest::Response) -> Result<T, Error> 
 
 const AUTH_API: &str = "api/auth/v1";
 const RECORD_API: &str = "api/records/v1";
-const TRANSACTION_API: &str = "/api/transaction/v1/execute";
 
 #[cfg(test)]
 mod tests {
