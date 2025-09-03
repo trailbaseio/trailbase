@@ -41,7 +41,7 @@ export class Request {
     public readonly headers: Headers,
     public readonly user: HttpContextUser | null,
     public readonly body: IncomingBody,
-  ) {}
+  ) { }
 
   url(): URL {
     const base =
@@ -79,7 +79,7 @@ export class HttpHandler implements HttpHandlerInterface {
     public readonly path: string,
     public readonly method: MethodType,
     public readonly handler: HttpHandlerCallback,
-  ) {}
+  ) { }
 
   static get(path: string, handler: HttpHandlerCallback): HttpHandler {
     return new HttpHandler(path, "get", handler);
@@ -147,6 +147,19 @@ export class HttpError extends Error {
   }
 }
 
+const PENDING: Promise<void>[] = [];
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function addTask(f: () => void, ms: number) {
+  PENDING.push((async () => {
+    await delay(ms);
+    f();
+  })());
+}
+
 export function defineConfig(args: {
   httpHandlers?: HttpHandlerInterface[];
   jobHandlers?: JobHandler[];
@@ -200,41 +213,44 @@ export function defineConfig(args: {
 
   return {
     incomingHandler: {
-      handle: async function (
+      handle: async function(
         req: IncomingRequest,
         respOutparam: ResponseOutparam,
       ) {
         try {
           const resp: ResponseType = await handle(req);
-          return writeResponse(
+          writeResponse(
             respOutparam,
             resp instanceof OutgoingResponse
               ? resp
               : buildResponse(
-                  resp instanceof Uint8Array ? resp : encodeBytes(resp),
-                ),
+                resp instanceof Uint8Array ? resp : encodeBytes(resp),
+              ),
           );
         } catch (err) {
           if (err instanceof HttpError) {
-            return writeResponse(
+            writeResponse(
               respOutparam,
               buildResponse(encodeBytes(err.message), {
                 status: err.statusCode,
               }),
             );
-          }
+          } else {
 
-          return writeResponse(
-            respOutparam,
-            buildResponse(encodeBytes(`Caught: ${err}`), {
-              status: StatusCode.INTERNAL_SERVER_ERROR,
-            }),
-          );
+            writeResponse(
+              respOutparam,
+              buildResponse(encodeBytes(`Caught: ${err}`), {
+                status: StatusCode.INTERNAL_SERVER_ERROR,
+              }),
+            );
+          }
+        } finally {
+          await Promise.all(PENDING);
         }
       },
     },
     initEndpoint: {
-      init: function (): InitResult {
+      init: function(): InitResult {
         return init;
       },
     },
