@@ -8,6 +8,7 @@ import {
   defineConfig,
   execute,
   query,
+  addTask,
 } from "trailbase-wasm";
 
 export default defineConfig({
@@ -64,7 +65,7 @@ export default defineConfig({
 
       return "Ok";
     }),
-    HttpHandler.get("/set_interval", async (_req: Request): string => {
+    HttpHandler.get("/set_interval", async (_req: Request): Promise<string> => {
       var cnt = 0;
 
       console.log(`Registering callback`);
@@ -77,7 +78,12 @@ export default defineConfig({
         }
       }, 300);
 
+
       await delay(700);
+
+      addTask(() => {
+        console.log('TASK');
+      }, 2000);
 
       return `setInterval from Javascript`;
     }),
