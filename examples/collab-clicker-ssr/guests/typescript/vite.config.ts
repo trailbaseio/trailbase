@@ -11,7 +11,9 @@ export default defineConfig({
       formats: ["es"],
     },
     rollupOptions: {
-      external: (source) => source.startsWith("wasi:") || source.startsWith("trailbase:"),
+      external: (source) => {
+        return source.startsWith("wasi:") || source.startsWith("trailbase:");
+      },
     },
   },
 })

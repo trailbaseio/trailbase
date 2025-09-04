@@ -7,6 +7,10 @@
   "homepage": "https://trailbase.io",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./kv": "./dist/kv.js"
+  },
   "scripts": {
     "generate:types": "jco types wit/ -o generated/types",
     "build": "npm run generate:types && vite build",
