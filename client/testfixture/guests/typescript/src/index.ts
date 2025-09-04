@@ -6,9 +6,8 @@ import {
   StatusCode,
   buildJsonResponse,
   defineConfig,
-  execute,
-  query,
 } from "trailbase-wasm";
+import { execute, query } from "trailbase-wasm/db";
 
 export default defineConfig({
   httpHandlers: [
