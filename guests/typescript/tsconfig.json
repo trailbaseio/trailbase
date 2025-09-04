@@ -1,9 +1,8 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
     "target": "es2024",
     "module": "esnext",
-    "lib": ["es2024", "DOM"],
+    "lib": ["es2024", "DOM", "esnext.disposable"],
     "moduleResolution": "bundler",
     "declaration": true,
     "strict": true,
@@ -37,6 +36,6 @@
       ]
     }
   },
-  "include": ["src/**/*", "dist/generated/**/*"],
+  "include": ["./src/**/*", "./generated/**/*"],
   "exclude": ["node_modules/", "tests/"]
 }

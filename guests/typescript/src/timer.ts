@@ -21,15 +21,15 @@ function setTimeout<TArgs>(
   ms?: number,
   ...args: TArgs[]
 ): Timeout {
+  if (typeof handler === "string") {
+    // Avoid a dependency on `eval`.
+    throw new Error("string handlers not supported");
+  }
+
   const promiseWithResolvers = Promise.withResolvers<void>();
 
   const handle: Timeout = intrinsicSetTimeout(() => {
-    if (typeof handler === "string") {
-      eval(handler);
-    } else {
-      handler(...args);
-    }
-
+    handler(...args);
     promiseWithResolvers.resolve();
   }, ms);
 
@@ -55,6 +55,11 @@ function setInterval<TArgs>(
   ms?: number,
   ...args: TArgs[]
 ): Timeout {
+  if (typeof handler === "string") {
+    // Avoid a dependency on `eval`.
+    throw new Error("string handlers not supported");
+  }
+
   const handle: Timeout = intrinsicSetInterval(handler, ms, ...args);
   PENDING_INTERVALS.set(handle, Promise.withResolvers());
   return handle;
