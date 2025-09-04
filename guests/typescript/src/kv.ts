@@ -1,11 +1,11 @@
-import { Bucket, open as witOpen } from 'wasi:keyvalue/store@0.2.0-draft';
+import { Bucket, open as witOpen } from "wasi:keyvalue/store@0.2.0-draft";
 
 export function open(): Store {
   return new Store(witOpen(""));
 }
 
 export class Store {
-  constructor(private readonly bucket: Bucket) { }
+  constructor(private readonly bucket: Bucket) {}
 
   static open(): Store {
     return new Store(witOpen(""));
