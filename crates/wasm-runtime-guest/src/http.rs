@@ -77,7 +77,11 @@ impl HttpRoute {
           };
 
           return Box::pin(async move {
-            return responder.respond(f(req).await.into_response()).await;
+            let response = responder.respond(f(req).await.into_response()).await;
+
+            // TODO: Poll tasks.
+
+            response
           });
         },
       ),
