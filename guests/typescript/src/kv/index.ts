@@ -1,5 +1,8 @@
 import { Bucket, open as witOpen } from "wasi:keyvalue/store@0.2.0-draft";
 
+// Override setInterval/setTimeout.
+import "../timer";
+
 export function open(): Store {
   return new Store(witOpen(""));
 }

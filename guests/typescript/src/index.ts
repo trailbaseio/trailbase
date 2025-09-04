@@ -1,5 +1,4 @@
 export * from "./db";
-export * from "./fs";
 export * from "./http";
 
 import { addPeriodicCallback } from "./timer";

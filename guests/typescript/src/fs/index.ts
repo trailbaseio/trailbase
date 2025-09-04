@@ -4,6 +4,9 @@ import {
 } from "wasi:filesystem/preopens@0.2.3";
 import type { PathFlags } from "wasi:filesystem/types@0.2.3";
 
+// Override setInterval/setTimeout.
+import "../timer";
+
 export function readFileSync(path: string): Uint8Array {
   const root = getDirectories().find(([_, path]) => path === "/")?.[0];
   if (!root) {

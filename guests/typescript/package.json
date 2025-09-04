@@ -9,6 +9,7 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js",
+    "./fs": "./dist/fs.js",
     "./kv": "./dist/kv.js"
   },
   "scripts": {
