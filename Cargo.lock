@@ -8744,8 +8744,8 @@ checksum = "a587a83ac49c2feb922b7ec5d504419320d5da41cf0726f44b2968c78fa2ee2a"
 dependencies = [
  "anyhow",
  "indexmap 2.11.0",
- "wasm-encoder 0.238.0",
- "wasmparser 0.238.0",
+ "wasm-encoder 0.238.1",
+ "wasmparser 0.238.1",
 ]
 
 [[package]]
@@ -9784,9 +9784,9 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "wasm-encoder 0.238.0",
+ "wasm-encoder 0.238.1",
  "wasm-metadata",
- "wasmparser 0.238.0",
+ "wasmparser 0.238.1",
  "wit-parser 0.238.0",
 ]
 
@@ -9823,7 +9823,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "unicode-xid",
- "wasmparser 0.238.0",
+ "wasmparser 0.238.1",
 ]
 
 [[package]]

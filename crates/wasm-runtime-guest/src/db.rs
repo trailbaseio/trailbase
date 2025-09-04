@@ -48,14 +48,14 @@ impl Drop for Transaction {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-  #[error("Sqlite: {0}")]
-  Sqlite(String),
-  #[error("Unsexpected Type")]
+  #[error("Unexpected Type")]
   UnexpectedType,
   #[error("Not a Number")]
   NotANumber,
   #[error("Decoding")]
   Decording(#[from] base64::DecodeError),
+  #[error("Other: {0}")]
+  Other(String),
 }
 
 pub async fn query(query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>, Error> {
@@ -66,16 +66,25 @@ pub async fn query(query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>,
   let request = Request::builder()
     .uri("http://__sqlite/query")
     .method("POST")
-    .body(serde_json::to_vec(&r).expect("serialization").into_body());
+    .body(
+      serde_json::to_vec(&r)
+        .map_err(|_| Error::UnexpectedType)?
+        .into_body(),
+    )
+    .map_err(|err| Error::Other(err.to_string()))?;
 
   let client = Client::new();
   let (_parts, mut body) = client
-    .send(request.unwrap())
+    .send(request)
     .await
-    .expect("foo")
+    .map_err(|err| Error::Other(err.to_string()))?
     .into_parts();
 
-  let bytes = body.bytes().await.expect("baz");
+  let bytes = body
+    .bytes()
+    .await
+    .map_err(|err| Error::Other(err.to_string()))?;
+
   return match serde_json::from_slice(&bytes) {
     Ok(SqliteResponse::Query { rows }) => Ok(
       rows
@@ -88,8 +97,8 @@ pub async fn query(query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>,
         })
         .collect::<Result<Vec<_>, _>>()?,
     ),
-    Ok(_) => Err(Error::Sqlite("Unexpected response type".to_string())),
-    Err(err) => Err(Error::Sqlite(err.to_string())),
+    Ok(_) => Err(Error::UnexpectedType),
+    Err(err) => Err(Error::Other(err.to_string())),
   };
 }
 
@@ -101,20 +110,29 @@ pub async fn execute(query: String, params: Vec<Value>) -> Result<usize, Error> 
   let request = Request::builder()
     .uri("http://__sqlite/execute")
     .method("POST")
-    .body(serde_json::to_vec(&r).expect("serialization").into_body());
+    .body(
+      serde_json::to_vec(&r)
+        .map_err(|_| Error::UnexpectedType)?
+        .into_body(),
+    )
+    .map_err(|err| Error::Other(err.to_string()))?;
 
   let client = Client::new();
   let (_parts, mut body) = client
-    .send(request.unwrap())
+    .send(request)
     .await
-    .expect("foo")
+    .map_err(|err| Error::Other(err.to_string()))?
     .into_parts();
 
-  let bytes = body.bytes().await.expect("baz");
+  let bytes = body
+    .bytes()
+    .await
+    .map_err(|err| Error::Other(err.to_string()))?;
+
   return match serde_json::from_slice(&bytes) {
     Ok(SqliteResponse::Execute { rows_affected }) => Ok(rows_affected),
-    Ok(_) => Err(Error::Sqlite("Unexpected response type".to_string())),
-    Err(err) => Err(Error::Sqlite(err.to_string())),
+    Ok(_) => Err(Error::UnexpectedType),
+    Err(err) => Err(Error::Other(err.to_string())),
   };
 }
 

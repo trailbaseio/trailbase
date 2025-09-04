@@ -1,3 +1,4 @@
+pub use crate::wit::wasi::keyvalue::store::Error;
 use crate::wit::wasi::keyvalue::store::{Bucket, open as wit_open};
 
 pub fn open() -> Result<Bucket, String> {
@@ -13,19 +14,19 @@ impl Store {
     return Ok(Self { bucket: open()? });
   }
 
-  pub fn get(&self, key: &str) -> Option<Vec<u8>> {
-    return self.bucket.get(key).ok().flatten();
+  pub fn get(&self, key: &str) -> Result<Option<Vec<u8>>, Error> {
+    return self.bucket.get(key);
   }
 
-  pub fn set(&mut self, key: &str, value: &[u8]) {
-    self.bucket.set(key, value).unwrap();
+  pub fn set(&mut self, key: &str, value: &[u8]) -> Result<(), Error> {
+    return self.bucket.set(key, value);
   }
 
-  pub fn delete(&mut self, key: &str) {
-    self.bucket.delete(key).unwrap();
+  pub fn delete(&mut self, key: &str) -> Result<(), Error> {
+    return self.bucket.delete(key);
   }
 
-  pub fn exists(&mut self, key: &str) -> bool {
-    return self.bucket.exists(key).unwrap_or(false);
+  pub fn exists(&mut self, key: &str) -> Result<bool, Error> {
+    return self.bucket.exists(key);
   }
 }
