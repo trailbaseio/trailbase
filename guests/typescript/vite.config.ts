@@ -6,6 +6,7 @@ const entryPoints = {
   "index": resolve(__dirname, 'src/index.ts'),
   "db": resolve(__dirname, 'src/db/index.ts'),
   "fs": resolve(__dirname, 'src/fs/index.ts'),
+  "http": resolve(__dirname, 'src/http/index.ts'),
   "kv": resolve(__dirname, 'src/kv/index.ts'),
 };
 

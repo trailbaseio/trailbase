@@ -76,13 +76,12 @@ export default defineConfig({
         }
       }, 300);
 
-      await delay(700);
-
-      setTimeout(() => {
-        console.log("TASK");
-      }, 2000);
+      await delay(300);
 
       return `setInterval from Javascript`;
+    }),
+    HttpHandler.get("/random", async (_req: Request): Promise<string> => {
+      return `${Math.random().toString()}\n`;
     }),
   ],
 });
