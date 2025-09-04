@@ -1,4 +1,5 @@
-import { Request, defineConfig, query, readFileSync } from "trailbase-wasm";
+import { Request, defineConfig, query } from "trailbase-wasm";
+import { readFileSync } from "trailbase-wasm/fs";
 import { Store } from "trailbase-wasm/kv";
 
 // @ts-ignore

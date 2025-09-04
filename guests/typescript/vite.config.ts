@@ -1,17 +1,24 @@
-import { defineConfig } from "vite";
 import { resolve } from "path";
-
+import { defineConfig } from "vite";
 import dts from "vite-plugin-dts";
+
+const entryPoints = {
+  "index": resolve(__dirname, 'src/index.ts'),
+  "fs": resolve(__dirname, 'src/fs/index.ts'),
+  "kv": resolve(__dirname, 'src/kv/index.ts'),
+};
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function external(source: string, _importer: string | undefined, _isResolved: boolean): boolean {
+  return source.startsWith("wasi:") || source.startsWith("trailbase:");
+}
 
 export default defineConfig({
   build: {
     outDir: "./dist",
     minify: false,
     lib: {
-      entry: [
-        "./src/index.ts",
-        "./src/kv/index.ts",
-      ],
+      entry: Object.values(entryPoints),
       formats: ["es"],
     },
     rollupOptions: {
@@ -25,16 +32,11 @@ export default defineConfig({
           staticImport: true,
         }),
       ],
-      input: {
-        "index": resolve(__dirname, 'src/index.ts'),
-        "kv": resolve(__dirname, 'src/kv/index.ts'),
-      },
+      input: entryPoints,
       output: {
         entryFileNames: "[name].js",
       },
-      external: (source) => {
-        return source.startsWith("wasi:") || source.startsWith("trailbase:");
-      },
+      external,
     },
   },
 });
