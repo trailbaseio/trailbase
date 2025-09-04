@@ -8,55 +8,65 @@ author: sebastian
 image: ./_wasm_logo.svg
 ---
 
-TrailBase has been embedding a V8 runtime for the last 10 months allowing users
-to implement custom HTTP and job handlers.
-In this time we've experienced several issues and therefore are excited to
-announce that TrailBase is moving to a WebAssembly (WASM) runtime.
+TrailBase has been embedding a V8 JavaScript runtime for the last 10 months
+allowing users to implement custom HTTP and job handlers.
+During this time we've experienced several issues and limitations - we're
+therefore excited to announce that TrailBase is adopting the
+[wasmtime](https://github.com/bytecodealliance/wasmtime) WebAssembly (WASM)
+runtime.
 
-The plan is for releases v0.17 and v0.18 to be transitional, i.e. supporting
-both runtimes.
-In v0.17 we'll first make the WASM runtime available, collect early feedback,
-address any issues and stabilize the WASM guest abstractions for JS/TS and
-Rust.
-The subsequent v0.18 release will then mark the point when users will need to
-migrate to the WASM runtime for the V8 runtime to be retired in subsequent
-releases. We'll ensure that the necessary code changes will be relatively
-small.
+This is TrailBase biggest user-facing change, and likely will be for a long time.
+To ease migration, the plan for releases v0.17 and v0.it 18 to be transitional,
+i.e. support both runtimes.
+First, v0.17 will make the new WASM runtime available, we'll collect early
+feedback, address issues and stabilize the guest APIs.
+The v0.18 release will then mark the point when users will need to migrate. If
+everything goes to plan, subsequent releases will remove V8.
 
 In the following article we're going to explain the rational, the opportunities
 and what to watch out for.
 
 ## Rational
 
+Before getting into the benefits of the new runtime, let's quickly touch on some
+of the issues we had with the previous one.
+
 The V8 JavaScript runtime is a amazing piece of engineering.
-However, it was never designed as a backend-first solution. It's primary target
-is browsers.
-It was then up to third-party vendors like Node.js and Deno to extend V8,
-with a rich ecosystem to access the filessytem, sockets, etc.
-These integrations are extensive and themselves have sprawling dependencies,
-they're primarily developed to serve their respective CLIs rather than be
+However, it was never designed as an embeddable or backend-first solution.
+It's primary target remains browsers.
+Third-party vendors like Node.js and Deno have taken it upon themselves to
+extend V8, with APIs for accessing the file-system, sockets, etc.
+These extensions themselves are extensive and have sprawling dependencies.
+They're also primarily designed to serve their own ecosystem rather than be
 embedded elsewhere.
-Just to give a sense of the size, 2/3rds of TrailBase's executable are V8 and
-deno, even though we're linking only a subset of a Node.js compatible
-environment.
-While certainly well written, this is a bug chunk of unsafe code receiving
-particular scrutiny.
-Thus running even somewhat stale versions will greatly elevate risk.
+For reference, the JS runtime makes up two thirds of TrailBase binary, even
+though only a subset of APIs are linked.
+Tis is a big chunk of unsafe code - despite well written - receiving particular
+scrutiny due to its critical nature.
 
-Ultimately, it became a game of whack-a-mole, while not even providing a a
-fully Node.js compatible environment, thus serving nobody very well.
-Turns out deno links its own stale version of SQLite. Also deno doesn't build
-with MUSL preventing us from building truly static binaries[^1].
+{/* Running stale versions poses an elevated security risk. */}
 
-The [wasmtime](https://github.com/bytecodealliance/wasmtime) WebAssembly
-runtime, on the other hand is a lot simpler, safer, yet high-performant and
-supports WASI[^2], which greatly eases embedding and allows us ot support guest
-runtimes in multiple languages.
+{/*
+Ultimately, it has become a game of whack-a-mole, while at the same time not
+even providing a fully Node.js compatible environment.
+*/}
+
+In practice, the current JS runtime isn't serving anyone particularly well:
+
+* it's not Node.js compatible,
+* it inflates binary size and the security surface,
+* newer deno versions bundle a stale SQLite causing linker issues, and
+* prevents us from building "truly" static binaries with MUSL[^1].
+
+The new WASM runtime, on the other hand, is a lot simpler, safer and yet
+high-performant. It also supports WASI[^2], which greatly eases embedding and
+allows us to support guests in multiple languages.
 
 ## Opportunities
 
-* No accidental state sharing!
+* No accidental state sharing![^4]
 * Many more languages can be supported: C#, Python, Go, Dart, Ruby, C/C++, ...
+* Support for multiple WASI components, in arbitrary languages to combine, e.g. JS + Rust.
 * Safe Rust code. Consistent TLS.
 * We would like this to become the de-facto path to extend TrailBase (as opposed
   to using it as a framework), while providing a lot of flexibility in terms of
@@ -64,60 +74,97 @@ runtimes in multiple languages.
 * This may also open up the path to using a more mainstream copy-left license.
 * Better sandboxing for I/O.
 * Support custom efficient SQLite extensions w/o accidental state sharing.
+* Fix interval and callback timeres are now working reliably.
 
 ## Regressions
 
-V8 is highly optimized both for loading and executing JS.
-From a JS-centric perspective this may feel like a step backwards.
-However, TB's integration was never a complete Node or Deno compatible runtime,
-thus power-users were likely already inclined to run their preferred runtime -
-Node, Deno, Bun - as a side-car.
+While WASM can be handily faster than V8, JS in particular loads and runs
+significantly slower when compared to a highly specialized and optimized
+runtime like V8.
+What may feel like a step backward from a JS-centric point of view also provides
+opportunity to optimize individual handlers in different languages based on
+specific needs.
 
-In practice, JS is probably the least-efficient compile-to-WASM language due to
-it's inherently dynamic nature (`eval()`).
-While this may change, currently all ES6 compliant compilers bundle a JS
-interpreter (SpiderMonkey or QuickJS). Since the interpreter's input is static,
-some optimizations can be applied, i.e.
-[Futamura projection using weval](https://github.com/bytecodealliance/weval).
+In practice, JS is probably one of the least-efficient compile-to-WASM
+languages. Instead of emitting immediate WebAssembly, current build flows
+bundle an interpreter like SpiderMonkey to work around JS' dynamic nature, e.g.
+`eval('console.log()')`[^3].
 
-For folks migrating, this means:
+In practice, using `weval` execution is about as fast as Goja - PocketBase's JS
+interpreter - and about 40x slower than V8.
+On the other hand, Rust compiled to WASM is about 4x faster than V8 with more
+predictable latency and lower resource footprint.
+A benefit of the new integration is that different endpoints can be implemented
+in different languages.
 
+{/*
 * A separate build step is needed to translate JS/TS to WASM, as opposed to
   lazily loading and just-in-time compiling a script.
 * The resulting bundle, including the interpreter, tends to be large resulting
-  in non-trivial initial load time in the order of seconds.
-* Execution for JS is slower. Using weval, JS executing is roughly 10x slower
-  than V8 but still 2x faster than non-JIT'ed runtimes like Goja while
-  supporting modern ECMA standards.
-  However, we can support multiple WASM components in different languages with
-  many languages outperforming V8. For example, Rust-WASM components tend ot be
-  X times faster than JS with V8, while requiring a significantly lower memory
-  footprint and providing strict isolation between requests.
+  in non-trivial initial load time in the order of seconds. Builds are being
+  cached, restarts will thus be siginificantly faster.
+*/}
 
 ## Migration
 
-The biggest difference you'll experience right away is the need for a build-step.
-We therefore recommend to just copy the template in `examples/wasm-guest-ts`, which
-supports both JavaScript and TypeScript and uses vite for building. To build
-the wasm file you can simply run `pnpm install && pnpm build`.
+The first difference you'll encounter is the need for a build-step: JS/TS -> WASM[^5].
+For now, we recommend to copy the template in `examples/wasm-guest-ts` or
+`examples/wasm-guest-ts`, dependning on whether you prefer TypeScript or
+JavaScript respectively.
+You can then simply run `pnpm install && pnpm build` to build the WASM component.
 
-The APIs also had to change. Previously we were relying on global state to register
-handlers. However, global state is no longer shared, to avoid initialization on
-every request and allow for symmetry with other guest languages that don't
-support eager global initialization, we're now relying on module exports for
-registering custom HTTP and Job handlers.
+Moreover, due to the new rigorous state-isolation and short-live nature of runtime instances, the
+APIs for registering handlers had to change.
+Previously we were heavily relying on global state for routing.
+To avoid re-initialization on every request and for better symmetry with future
+guest languages that may not support support eager initialization, we're now
+relying on module exports for registering custom HTTP and Job handlers.
 
-For state sharing between requests you'll need should rely on SQLite or
-KVStore. Note that even with long-lived V8 isolates that was already the case,
-since state was only shared coincidentally within the same isolate, i.e.
-subsequent requests may or may not be able to see that state.
+Before:
+
+```ts
+addRoute(
+  "GET",
+  "/test",
+  stringHandler(async (req: StringRequestType) => {
+    const uri: ParsedPath = parsePath(req.uri);
+
+    const table = uri.query.get("table");
+    if (table) {
+      const rows = await query(`SELECT COUNT(*) FROM "${table}"`, []);
+      return `entries: ${rows[0][0]}`;
+    }
+
+    return `test: ${req.uri}`;
+  }
+```
+
+After:
+
+```ts
+export default defineConfig({
+  httpHandlers: [
+    HttpHandler.get("/test", (req: Request) : string => {
+      const table = uri.getQueryParam("table");
+      if (table) {
+        const rows = await query(`SELECT COUNT(*) FROM "${table}"`, []);
+        return `entries: ${rows[0][0]}`;
+      }
+
+      return `test: ${req.url()}`;
+    },
+  ],
+});
+```
 
 ## Next-Steps
 
-Once the new runtime integration has seen some mileage and any unexpected
-surprises are worked out, we'd like to remove the V8 integration as soon as
-possible. This will provide immediate benefits in terms of portability,
-security, build-times and binary sizes.
+First and foremost, we'd like to hear from you 🙏.
+
+Once the new runtime integration has seen some mileage and unforeseen surprises
+are worked out, we'd like to sunset V8 expediently.
+This will provide immediate benefits in terms of portability, security,
+build-times and binary sizes.
 
 From that point on we plan to invest heavily into making the integration
 best-in-class. Something we were hesitant to do with the previous integration
@@ -139,3 +186,20 @@ interactions between host and guest more of a first-class citizen.
     As system to express cross-component interfaces for WASM in a
     language-agnostic manner. It's like gRPC but FFIi, i.e. no I/O
     thus allowing both asynchronous and synchronous interactions.
+
+[^3]:
+    That said, bundling the interpreter with static input unlocks some
+    optimizations, e.g.
+    [Futamura projection using weval](https://github.com/bytecodealliance/weval).
+
+[^4]:
+    For state sharing between requests you'll need should rely on SQLite or
+    KVStore. Note that even with long-lived V8 isolates that was already the case,
+    since state was only shared coincidentally within the same isolate, i.e.
+    subsequent requests may or may not be able to see that state.
+
+[^5]:
+    A long-standing feature request for us has been to support hot-restart when
+    components change. We're still planning to get there. A separate watcher
+    process would re-build the WASM component and signal the `trail` binary to
+    reload the WASM component.
