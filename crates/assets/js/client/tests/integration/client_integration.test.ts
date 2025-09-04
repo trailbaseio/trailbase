@@ -75,14 +75,14 @@ test("Record integration tests", async () => {
 
   const ids: string[] = [];
   for (const msg of messages) {
-    ids.push((await api.create({ text_not_null: msg }).query()) as string);
+    ids.push((await api.create({ text_not_null: msg })) as string);
   }
 
   {
     const bulkIds = await client.execute(
       [
-        api.create({ text_not_null: "ts bulk create 0" }),
-        api.create({ text_not_null: "ts bulk create 1" }),
+        api.createOp({ text_not_null: "ts bulk create 0" }),
+        api.createOp({ text_not_null: "ts bulk create 1" }),
       ],
       false,
     );
@@ -90,16 +90,14 @@ test("Record integration tests", async () => {
   }
 
   {
-    const response = await api
-      .list({
-        filters: [
-          {
-            column: "text_not_null",
-            value: messages[0],
-          },
-        ],
-      })
-      .query();
+    const response = await api.list({
+      filters: [
+        {
+          column: "text_not_null",
+          value: messages[0],
+        },
+      ],
+    });
     expect(response.total_count).toBeUndefined();
     expect(response.cursor).not.undefined.and.not.toBe("");
     const records = response.records;
@@ -108,19 +106,17 @@ test("Record integration tests", async () => {
   }
 
   {
-    const response = await api
-      .list({
-        filters: [
-          {
-            column: "text_not_null",
-            op: "like",
-            value: `% =?&${now}`,
-          },
-        ],
-        order: ["+text_not_null"],
-        count: true,
-      })
-      .query();
+    const response = await api.list({
+      filters: [
+        {
+          column: "text_not_null",
+          op: "like",
+          value: `% =?&${now}`,
+        },
+      ],
+      order: ["+text_not_null"],
+      count: true,
+    });
     expect(response.total_count).toBe(2);
     expect(response.records.map((el) => el.text_not_null)).toStrictEqual(
       messages,
@@ -128,40 +124,36 @@ test("Record integration tests", async () => {
   }
 
   {
-    const response = await api
-      .list({
-        filters: [
-          {
-            column: "text_not_null",
-            op: "like",
-            value: `%${now}`,
-          },
-        ],
-        order: ["-text_not_null"],
-      })
-      .query();
+    const response = await api.list({
+      filters: [
+        {
+          column: "text_not_null",
+          op: "like",
+          value: `%${now}`,
+        },
+      ],
+      order: ["-text_not_null"],
+    });
     expect(
       response.records.map((el) => el.text_not_null).reverse(),
     ).toStrictEqual(messages);
   }
 
-  const record = await api.read(ids[0]).query();
+  const record = await api.read(ids[0]);
   expect(record.id).toStrictEqual(ids[0]);
   expect(record.text_not_null).toStrictEqual(messages[0]);
 
   // Test 1:1 view-bases record API.
   const view_record: SimpleCompleteView = await client
     .records<SimpleCompleteView>("simple_complete_view")
-    .read(ids[0])
-    .query();
+    .read(ids[0]);
   expect(view_record.id).toStrictEqual(ids[0]);
   expect(view_record.text_not_null).toStrictEqual(messages[0]);
 
   // Test view-based record API with column renames.
   const subset_view_record: SimpleSubsetView = await client
     .records<SimpleSubsetView>("simple_subset_view")
-    .read(ids[0])
-    .query();
+    .read(ids[0]);
   expect(subset_view_record.id).toStrictEqual(ids[0]);
   expect(subset_view_record.t_not_null).toStrictEqual(messages[0]);
 
@@ -170,8 +162,8 @@ test("Record integration tests", async () => {
     text_default: "updated default",
     text_null: "updated null",
   };
-  await api.update(ids[1], updated_value).query();
-  const updated_record = await api.read(ids[1]).query();
+  await api.update(ids[1], updated_value);
+  const updated_record = await api.read(ids[1]);
   expect(updated_record).toEqual(
     expect.objectContaining({
       id: ids[1],
@@ -179,12 +171,12 @@ test("Record integration tests", async () => {
     }),
   );
 
-  await api.delete(ids[1]).query();
+  await api.delete(ids[1]);
 
   expect(await client.logout()).toBe(true);
   expect(client.user()).toBe(undefined);
 
-  await expect(async () => await api.read(ids[0]).query()).rejects.toThrowError(
+  await expect(async () => await api.read(ids[0])).rejects.toThrowError(
     expect.objectContaining({
       status: status.FORBIDDEN,
     }),
@@ -218,7 +210,7 @@ test("expand foreign records", async () => {
   const api = client.records<Comment>("comment");
 
   {
-    const comment = await api.read(1).query();
+    const comment = await api.read(1);
     expect(comment.id).toBe(1);
     expect(comment.body).toBe("first comment");
     expect(comment.author.data).toBeUndefined();
@@ -226,7 +218,7 @@ test("expand foreign records", async () => {
   }
 
   {
-    const comment = await api.read(1, { expand: ["post"] }).query();
+    const comment = await api.read(1, { expand: ["post"] });
     expect(comment.id).toBe(1);
     expect(comment.body).toBe("first comment");
     expect(comment.author.data).toBeUndefined();
@@ -234,15 +226,13 @@ test("expand foreign records", async () => {
   }
 
   {
-    const response = await api
-      .list({
-        expand: ["author", "post"],
-        order: ["-id"],
-        pagination: {
-          limit: 1,
-        },
-      })
-      .query();
+    const response = await api.list({
+      expand: ["author", "post"],
+      order: ["-id"],
+      pagination: {
+        limit: 1,
+      },
+    });
 
     expect(response.records.length).toBe(1);
     const comment = response.records[0];
@@ -254,29 +244,25 @@ test("expand foreign records", async () => {
   }
 
   {
-    const response = await api
-      .list({
-        expand: ["author", "post"],
-        order: ["-id"],
-        pagination: {
-          limit: 2,
-        },
-      })
-      .query();
+    const response = await api.list({
+      expand: ["author", "post"],
+      order: ["-id"],
+      pagination: {
+        limit: 2,
+      },
+    });
 
     expect(response.records.length).toBe(2);
     const second = response.records[1];
 
-    const offsetResponse = await api
-      .list({
-        expand: ["author", "post"],
-        order: ["-id"],
-        pagination: {
-          limit: 1,
-          offset: 1,
-        },
-      })
-      .query();
+    const offsetResponse = await api.list({
+      expand: ["author", "post"],
+      order: ["-id"],
+      pagination: {
+        limit: 1,
+        offset: 1,
+      },
+    });
 
     expect(offsetResponse.records.length).toBe(1);
     const offsetFirst = offsetResponse.records[0];
@@ -293,7 +279,7 @@ test("record error tests", async () => {
   );
   const nonExistantApi = client.records("non-existant");
   await expect(
-    async () => await nonExistantApi.read(nonExistantId).query(),
+    async () => await nonExistantApi.read(nonExistantId),
   ).rejects.toThrowError(
     expect.objectContaining({
       status: status.METHOD_NOT_ALLOWED,
@@ -301,16 +287,12 @@ test("record error tests", async () => {
   );
 
   const api = client.records("simple_strict_table");
-  await expect(
-    async () => await api.read("invalid id").query(),
-  ).rejects.toThrowError(
+  await expect(async () => await api.read("invalid id")).rejects.toThrowError(
     expect.objectContaining({
       status: status.BAD_REQUEST,
     }),
   );
-  await expect(
-    async () => await api.read(nonExistantId).query(),
-  ).rejects.toThrowError(
+  await expect(async () => await api.read(nonExistantId)).rejects.toThrowError(
     expect.objectContaining({
       status: status.NOT_FOUND,
     }),
@@ -323,11 +305,9 @@ test("realtime subscribe specific record tests", async () => {
 
   const now = new Date().getTime();
   const createMessage = `ts client realtime test 0: =?&${now}`;
-  const id = (await api
-    .create({
-      text_not_null: createMessage,
-    })
-    .query()) as string;
+  const id = (await api.create({
+    text_not_null: createMessage,
+  })) as string;
 
   const eventStream = await api.subscribe(id);
 
@@ -335,8 +315,8 @@ test("realtime subscribe specific record tests", async () => {
   const updatedValue: Partial<SimpleStrict> = {
     text_not_null: updatedMessage,
   };
-  await api.update(id, updatedValue).query();
-  await api.delete(id).query();
+  await api.update(id, updatedValue);
+  await api.delete(id);
 
   const events: Event[] = [];
   for await (const event of eventStream) {
@@ -356,12 +336,12 @@ test("transaction tests", async () => {
   // Test transaction with create operation
   {
     const record = { text_not_null: `ts transaction create test: =?&${now}` };
-    const ids = await client.execute([api.create(record)]);
+    const ids = await client.execute([api.createOp(record)]);
 
     expect(ids).toHaveLength(1);
 
     // Verify record was created
-    const createdRecord = await api.read(ids[0]).query();
+    const createdRecord = await api.read(ids[0]);
     expect(createdRecord.text_not_null).toBe(record.text_not_null);
   }
 
@@ -370,24 +350,24 @@ test("transaction tests", async () => {
     const record = {
       text_not_null: `ts transaction update test original: =?&${now}`,
     };
-    const id = await api.create(record).query();
+    const id = await api.create(record);
     const updatedRecord = {
       text_not_null: `ts transaction update test modified: =?&${now}`,
     };
-    await client.execute([api.update(id, updatedRecord)]);
+    await client.execute([api.updateOp(id, updatedRecord)]);
 
-    const readRecord = await api.read(id).query();
+    const readRecord = await api.read(id);
     expect(readRecord.text_not_null).toBe(updatedRecord.text_not_null);
   }
 
   // Test transaction with delete operation
   {
     const record = { text_not_null: `ts transaction delete test: =?&${now}` };
-    const id = await api.create(record).query();
+    const id = await api.create(record);
 
-    await client.execute([api.delete(id)]);
+    await client.execute([api.deleteOp(id)]);
 
-    await expect(api.read(id).query()).rejects.toThrow();
+    await expect(api.read(id)).rejects.toThrow();
   }
 });
 
@@ -398,18 +378,16 @@ test("realtime subscribe table tests", async () => {
 
   const now = new Date().getTime();
   const createMessage = `ts client realtime test 0: =?&${now}`;
-  const id = (await api
-    .create({
-      text_not_null: createMessage,
-    })
-    .query()) as string;
+  const id = (await api.create({
+    text_not_null: createMessage,
+  })) as string;
 
   const updatedMessage = `ts client updated realtime test 0: ${now}`;
   const updatedValue: Partial<SimpleStrict> = {
     text_not_null: updatedMessage,
   };
-  await api.update(id, updatedValue).query();
-  await api.delete(id).query();
+  await api.update(id, updatedValue);
+  await api.delete(id);
 
   const events: Event[] = [];
   for await (const event of eventStream) {
