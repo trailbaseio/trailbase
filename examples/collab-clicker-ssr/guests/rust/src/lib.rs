@@ -70,9 +70,9 @@ impl Guest for Endpoints {
 fn read_cached_file(path: &str) -> Result<Vec<u8>, String> {
   let mut store = Store::open()?;
 
-  let Some(template) = store.get(path) else {
+  let Ok(Some(template)) = store.get(path) else {
     let contents = read_file(path)?;
-    store.set(path, &contents);
+    store.set(path, &contents).unwrap();
     return Ok(contents);
   };
 

@@ -1,5 +1,4 @@
-//#![forbid(unsafe_code, clippy::unwrap_used)]
-#![forbid(unsafe_code)]
+#![forbid(unsafe_code, clippy::unwrap_used)]
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
@@ -40,7 +39,7 @@ use wstd::http::server::{Finished, Responder};
 use wstd::http::{Request, Response};
 use wstd::io::empty;
 
-use crate::http::{HttpRoute, Method, StatusCode};
+use crate::http::{HttpRoute, Method, StatusCode, empty_error_response};
 use crate::job::Job;
 
 // Needed for export macro
@@ -103,7 +102,7 @@ impl<T: Guest> HttpIncomingHandler<T> {
       .and_then(|h| serde_json::from_slice::<HttpContext>(h.as_bytes()).ok())
     else {
       return responder
-        .respond(error_response(StatusCode::INTERNAL_SERVER_ERROR))
+        .respond(empty_error_response(StatusCode::INTERNAL_SERVER_ERROR))
         .await;
     };
 
@@ -124,18 +123,16 @@ impl<T: Guest> HttpIncomingHandler<T> {
           .find(|config| method == Method::GET && config.name == context.registered_path)
         {
           if let Err(err) = handler().await {
-            return responder.respond(error_response(err.status)).await;
+            return responder.respond(empty_error_response(err.status)).await;
           }
 
-          return responder
-            .respond(Response::builder().body(empty()).unwrap())
-            .await;
+          return responder.respond(Response::new(empty())).await;
         }
       }
     }
 
     return responder
-      .respond(error_response(StatusCode::NOT_FOUND))
+      .respond(empty_error_response(StatusCode::NOT_FOUND))
       .await;
   }
 }
@@ -152,11 +149,6 @@ impl<T: Guest> ::wstd::wasi::exports::http::incoming_handler::Guest for HttpInco
       Err(err) => responder.fail(err),
     };
   }
-}
-
-#[inline]
-fn error_response(status: StatusCode) -> Response<wstd::io::Empty> {
-  return Response::builder().status(status).body(empty()).unwrap();
 }
 
 fn to_method_type(m: Method) -> crate::wit::exports::trailbase::runtime::init_endpoint::MethodType {

@@ -62,7 +62,7 @@ impl HttpRoute {
 
           let (head, body) = req.into_parts();
           let Ok(url) = to_url(head.uri) else {
-            return Box::pin(responder.respond(error_response(StatusCode::BAD_REQUEST)));
+            return Box::pin(responder.respond(empty_error_response(StatusCode::BAD_REQUEST)));
           };
 
           let req = Request {
@@ -224,7 +224,7 @@ pub trait IntoResponse<B> {
 
 impl<B: IntoBody> IntoResponse<B::IntoBody> for B {
   fn into_response(self) -> http::Response<B::IntoBody> {
-    return Response::builder().body(self.into_body()).unwrap();
+    return Response::new(self.into_body());
   }
 }
 
@@ -233,11 +233,8 @@ impl<B: IntoBody<IntoBody = BoundedBody<Vec<u8>>>> IntoResponse<BoundedBody<Vec<
 {
   fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
     return match self {
-      Ok(body) => Response::builder().body(body.into_body()).unwrap(),
-      Err(err) => Response::builder()
-        .status(err.status)
-        .body(err.message.unwrap_or_default().into_body())
-        .unwrap(),
+      Ok(body) => Response::new(body.into_body()),
+      Err(err) => build_response(err.status, err.message.unwrap_or_default().into_body()),
     };
   }
 }
@@ -245,11 +242,8 @@ impl<B: IntoBody<IntoBody = BoundedBody<Vec<u8>>>> IntoResponse<BoundedBody<Vec<
 impl IntoResponse<BoundedBody<Vec<u8>>> for Result<(), HttpError> {
   fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
     return match self {
-      Ok(_) => Response::builder().body("".into_body()).unwrap(),
-      Err(err) => Response::builder()
-        .status(err.status)
-        .body(err.message.unwrap_or_default().into_body())
-        .unwrap(),
+      Ok(_) => Response::new("".into_body()),
+      Err(err) => build_response(err.status, err.message.unwrap_or_default().into_body()),
     };
   }
 }
@@ -263,11 +257,7 @@ where
   T: serde::Serialize,
 {
   fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
-    let bytes = serde_json::to_vec(&self.0).unwrap();
-    return Response::builder()
-      .header(http::header::CONTENT_TYPE, "application/json")
-      .body(bytes.into_body())
-      .unwrap();
+    return build_json_response(StatusCode::OK, self.0);
   }
 }
 
@@ -278,21 +268,47 @@ where
   fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
     return match self {
       Ok(json) => {
-        let bytes = serde_json::to_vec(&json.0).unwrap();
-        Response::builder()
-          .header(http::header::CONTENT_TYPE, "application/json")
-          .body(bytes.into_body())
-          .unwrap()
+        return build_json_response(StatusCode::OK, json.0);
       }
-      Err(err) => Response::builder()
-        .status(err.status)
-        .body(err.message.unwrap_or_default().into_body())
-        .unwrap(),
+      Err(err) => build_response(err.status, err.message.unwrap_or_default().into_body()),
     };
   }
 }
 
+pub(crate) fn empty_error_response(status: StatusCode) -> Response<Empty> {
+  let mut response = Response::new(empty());
+  *response.status_mut() = status;
+  return response;
+}
+
+fn internal_error_response() -> Response<BoundedBody<Vec<u8>>> {
+  return build_response(StatusCode::INTERNAL_SERVER_ERROR, "".into_body());
+}
+
 #[inline]
-fn error_response(status: StatusCode) -> Response<Empty> {
-  return Response::builder().status(status).body(empty()).unwrap();
+fn build_response(
+  status: StatusCode,
+  body: BoundedBody<Vec<u8>>,
+) -> Response<BoundedBody<Vec<u8>>> {
+  let mut response = Response::new(body);
+  *response.status_mut() = status;
+  return response;
+}
+
+#[inline]
+fn build_json_response<T: serde::Serialize>(
+  status: StatusCode,
+  value: T,
+) -> Response<BoundedBody<Vec<u8>>> {
+  let Ok(bytes) = serde_json::to_vec(&value) else {
+    return internal_error_response();
+  };
+
+  let mut response = build_response(status, bytes.into_body());
+  response.headers_mut().insert(
+    http::header::CONTENT_TYPE,
+    HeaderValue::from_static("application/json"),
+  );
+
+  return response;
 }
