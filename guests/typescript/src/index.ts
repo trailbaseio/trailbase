@@ -1,7 +1,6 @@
 export * from "./db";
 export * from "./fs";
 export * from "./http";
-export * from "./kv";
 
 import { addPeriodicCallback } from "./timer";
 export const timer = {

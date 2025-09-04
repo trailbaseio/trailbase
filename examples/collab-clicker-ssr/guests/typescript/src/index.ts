@@ -1,10 +1,5 @@
-import {
-  Request,
-  defineConfig,
-  query,
-  Store,
-  readFileSync,
-} from "trailbase-wasm";
+import { Request, defineConfig, query, readFileSync } from "trailbase-wasm";
+import { Store } from "trailbase-wasm/kv";
 
 // @ts-ignore
 import { render } from "../../../dist/server/entry-server.js";
