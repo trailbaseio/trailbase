@@ -1,4 +1,10 @@
-import { Request, defineConfig, query, Store, readFileSync } from "trailbase-wasm";
+import {
+  Request,
+  defineConfig,
+  query,
+  Store,
+  readFileSync,
+} from "trailbase-wasm";
 
 // @ts-ignore
 import { render } from "../../../dist/server/entry-server.js";
@@ -8,7 +14,9 @@ function readTemplate(): string {
   // reading it from the file-system?
   // import template from "../../../dist/client/index.html?raw";
 
-  return new TextDecoder().decode(readCachedFileSync("/dist/client/index.html"));
+  return new TextDecoder().decode(
+    readCachedFileSync("/dist/client/index.html"),
+  );
 }
 
 function readCachedFileSync(path: string): Uint8Array {
@@ -16,7 +24,7 @@ function readCachedFileSync(path: string): Uint8Array {
 
   const template = store.get(path);
   if (template !== undefined) {
-    return template
+    return template;
   }
 
   const contents = readFileSync(path);

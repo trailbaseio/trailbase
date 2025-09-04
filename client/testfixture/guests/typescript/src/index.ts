@@ -8,7 +8,6 @@ import {
   defineConfig,
   execute,
   query,
-  addTask,
 } from "trailbase-wasm";
 
 export default defineConfig({
@@ -78,11 +77,10 @@ export default defineConfig({
         }
       }, 300);
 
-
       await delay(700);
 
-      addTask(() => {
-        console.log('TASK');
+      setTimeout(() => {
+        console.log("TASK");
       }, 2000);
 
       return `setInterval from Javascript`;

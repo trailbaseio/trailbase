@@ -1,4 +1,7 @@
-import { getDirectories, type Descriptor } from "wasi:filesystem/preopens@0.2.3";
+import {
+  getDirectories,
+  type Descriptor,
+} from "wasi:filesystem/preopens@0.2.3";
 import type { PathFlags } from "wasi:filesystem/types@0.2.3";
 
 export function readFileSync(path: string): Uint8Array {
@@ -7,7 +10,7 @@ export function readFileSync(path: string): Uint8Array {
     throw new Error("Missing '/'");
   }
 
-  const segments = path.split('/');
+  const segments = path.split("/");
   let descriptor: Descriptor = root;
 
   for (const [i, segment] of segments.entries()) {
@@ -23,11 +26,16 @@ export function readFileSync(path: string): Uint8Array {
       symlinkFollow: false,
     };
 
-    descriptor = descriptor.openAt(flags, segment, last ? {} : { directory: true }, { read: true });
+    descriptor = descriptor.openAt(
+      flags,
+      segment,
+      last ? {} : { directory: true },
+      { read: true },
+    );
 
     if (last) {
       const MAX = BigInt(1024 * 1024);
-      let buffer = [];
+      const buffer = [];
 
       while (true) {
         const [bytes, eof] = descriptor.read(MAX, BigInt(buffer.length));

@@ -12,6 +12,7 @@ import {
 import type { InitResult, MethodType } from "trailbase:runtime/init-endpoint";
 
 import { StatusCode } from "./status";
+import { awaitPendingTimers } from "./timer";
 import type { HttpContext } from "@common/HttpContext";
 import type { HttpContextUser } from "@common/HttpContextUser";
 
@@ -41,7 +42,7 @@ export class Request {
     public readonly headers: Headers,
     public readonly user: HttpContextUser | null,
     public readonly body: IncomingBody,
-  ) { }
+  ) {}
 
   url(): URL {
     const base =
@@ -79,7 +80,7 @@ export class HttpHandler implements HttpHandlerInterface {
     public readonly path: string,
     public readonly method: MethodType,
     public readonly handler: HttpHandlerCallback,
-  ) { }
+  ) {}
 
   static get(path: string, handler: HttpHandlerCallback): HttpHandler {
     return new HttpHandler(path, "get", handler);
@@ -147,19 +148,6 @@ export class HttpError extends Error {
   }
 }
 
-const PENDING: Promise<void>[] = [];
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-export function addTask(f: () => void, ms: number) {
-  PENDING.push((async () => {
-    await delay(ms);
-    f();
-  })());
-}
-
 export function defineConfig(args: {
   httpHandlers?: HttpHandlerInterface[];
   jobHandlers?: JobHandler[];
@@ -213,7 +201,7 @@ export function defineConfig(args: {
 
   return {
     incomingHandler: {
-      handle: async function(
+      handle: async function (
         req: IncomingRequest,
         respOutparam: ResponseOutparam,
       ) {
@@ -224,8 +212,8 @@ export function defineConfig(args: {
             resp instanceof OutgoingResponse
               ? resp
               : buildResponse(
-                resp instanceof Uint8Array ? resp : encodeBytes(resp),
-              ),
+                  resp instanceof Uint8Array ? resp : encodeBytes(resp),
+                ),
           );
         } catch (err) {
           if (err instanceof HttpError) {
@@ -236,7 +224,6 @@ export function defineConfig(args: {
               }),
             );
           } else {
-
             writeResponse(
               respOutparam,
               buildResponse(encodeBytes(`Caught: ${err}`), {
@@ -245,12 +232,12 @@ export function defineConfig(args: {
             );
           }
         } finally {
-          await Promise.all(PENDING);
+          await awaitPendingTimers();
         }
       },
     },
     initEndpoint: {
-      init: function(): InitResult {
+      init: function (): InitResult {
         return init;
       },
     },
