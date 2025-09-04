@@ -186,12 +186,7 @@ pub(crate) async fn install_routes_and_jobs(
           )
           .await
           .flatten()
-          .unwrap_or_else(|err| {
-            return axum::response::Response::builder()
-              .status(StatusCode::INTERNAL_SERVER_ERROR)
-              .body(err.to_string().into())
-              .unwrap_or_default();
-          });
+          .unwrap_or_else(internal_error_response);
       }
     };
 
@@ -221,4 +216,11 @@ fn empty() -> BoxBody<Bytes, hyper::Error> {
 fn to_header_value(context: &HttpContext) -> Result<hyper::http::HeaderValue, WasmError> {
   return hyper::http::HeaderValue::from_bytes(&serde_json::to_vec(&context).unwrap_or_default())
     .map_err(|_err| WasmError::Encoding);
+}
+
+fn internal_error_response(err: impl std::string::ToString) -> axum::response::Response {
+  return axum::response::Response::builder()
+    .status(StatusCode::INTERNAL_SERVER_ERROR)
+    .body(err.to_string().into())
+    .unwrap_or_default();
 }
