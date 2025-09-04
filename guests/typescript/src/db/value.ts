@@ -1,6 +1,8 @@
 import type { Value as WitValue } from "trailbase:runtime/host-endpoint";
 import { JsonValue } from "@common/serde_json/JsonValue";
 
+import { urlSafeBase64Encode, urlSafeBase64Decode } from "../util";
+
 export type Blob = { blob: string };
 export type Value = number | string | boolean | Uint8Array | Blob | null;
 
@@ -74,24 +76,4 @@ export function fromWitValue(val: WitValue): Value {
     case "blob":
       return val.val;
   }
-}
-
-/// Decode a base64 string to bytes.
-export function base64Decode(base64: string): Uint8Array {
-  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-}
-
-/// Decode a "url-safe" base64 string to bytes.
-export function urlSafeBase64Decode(base64: string): Uint8Array {
-  return base64Decode(base64.replace(/_/g, "/").replace(/-/g, "+"));
-}
-
-/// Encode an arbitrary string input as base64 string.
-export function base64Encode(b: Uint8Array): string {
-  return btoa(String.fromCharCode(...b));
-}
-
-/// Encode an arbitrary string input as a "url-safe" base64 string.
-export function urlSafeBase64Encode(b: Uint8Array): string {
-  return base64Encode(b).replace(/\//g, "_").replace(/\+/g, "-");
 }

@@ -1,11 +1,5 @@
-import {
-  HttpHandler,
-  Request,
-  defineConfig,
-  threadId,
-  query,
-  execute,
-} from "trailbase-wasm";
+import { HttpHandler, Request, defineConfig, threadId } from "trailbase-wasm";
+import { query, execute } from "trailbase-wasm/db";
 
 export default defineConfig({
   httpHandlers: [

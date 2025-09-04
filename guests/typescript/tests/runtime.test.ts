@@ -4,9 +4,8 @@ import {
   toJsonValue,
   fromWitValue,
   toWitValue,
-  urlSafeBase64Encode,
-  urlSafeBase64Decode,
-} from "../src/value";
+} from "../src/db/value";
+import { urlSafeBase64Encode, urlSafeBase64Decode } from "../src/util";
 
 test("base64", () => {
   expect(

@@ -12,7 +12,7 @@ import type { Value } from "./value";
 import { JsonValue } from "@common/serde_json/JsonValue";
 import { fromJsonValue, toJsonValue, toWitValue, fromWitValue } from "./value";
 
-export type { Value as DbValue } from "trailbase:runtime/host-endpoint";
+export type { Value } from "trailbase:runtime/host-endpoint";
 
 // export class DbError extends Error {
 //   readonly error: TxError;

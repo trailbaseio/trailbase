@@ -4,6 +4,7 @@ import dts from "vite-plugin-dts";
 
 const entryPoints = {
   "index": resolve(__dirname, 'src/index.ts'),
+  "db": resolve(__dirname, 'src/db/index.ts'),
   "fs": resolve(__dirname, 'src/fs/index.ts'),
   "kv": resolve(__dirname, 'src/kv/index.ts'),
 };
