@@ -25,7 +25,7 @@ pub(crate) async fn new_tx(conn: trailbase_sqlite::Connection) -> Result<OwnedTx
     };
 
     return OwnedTx::try_new(MutBorrow::new(lock), |owner| {
-      return Ok(owner.borrow_mut().transaction()?);
+      return owner.borrow_mut().transaction();
     });
   }
 

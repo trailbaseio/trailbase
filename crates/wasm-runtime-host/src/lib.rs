@@ -210,7 +210,7 @@ impl trailbase::runtime::host_endpoint::Host for State {
     return self
       .shared
       .runtime
-      .spawn((async move || {
+      .spawn(async move {
         let rows = conn
           .write_query_rows(query, params)
           .await
@@ -223,8 +223,8 @@ impl trailbase::runtime::host_endpoint::Host for State {
           })
           .collect();
 
-        return Ok(values);
-      })())
+        Ok(values)
+      })
       .map_err(|err| wasmtime::Error::msg(err.to_string()));
   }
 
