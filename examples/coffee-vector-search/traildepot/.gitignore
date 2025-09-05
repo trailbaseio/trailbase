@@ -4,7 +4,7 @@ data/
 secrets/
 uploads/
 wasm/
-scripts/
+scripts.delme/
 
 # Runtime files, will be overriden by `trail`.
 trailbase.d.ts
