@@ -87,6 +87,42 @@ impl HttpRoute {
   }
 }
 
+pub fn get<F, R, B>(path: impl std::string::ToString, f: F) -> HttpRoute
+where
+  F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
+  R: IntoResponse<B>,
+  B: wstd::http::body::Body,
+{
+  return HttpRoute::new(Method::GET, path, f);
+}
+
+pub fn post<F, R, B>(path: impl std::string::ToString, f: F) -> HttpRoute
+where
+  F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
+  R: IntoResponse<B>,
+  B: wstd::http::body::Body,
+{
+  return HttpRoute::new(Method::POST, path, f);
+}
+
+pub fn patch<F, R, B>(path: impl std::string::ToString, f: F) -> HttpRoute
+where
+  F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
+  R: IntoResponse<B>,
+  B: wstd::http::body::Body,
+{
+  return HttpRoute::new(Method::PATCH, path, f);
+}
+
+pub fn delete<F, R, B>(path: impl std::string::ToString, f: F) -> HttpRoute
+where
+  F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
+  R: IntoResponse<B>,
+  B: wstd::http::body::Body,
+{
+  return HttpRoute::new(Method::DELETE, path, f);
+}
+
 #[derive(Clone, Debug)]
 pub struct Parts {
   /// The request's method
