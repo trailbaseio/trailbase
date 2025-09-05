@@ -9,7 +9,7 @@
 <p align="center">
   An open, <a href="https://trailbase.io/reference/benchmarks/">blazingly fast</a>,
   single-executable Firebase alternative with type-safe REST & realtime APIs, built-in JS/ES6/TS
-  runtime, SSR, auth and admin UI built on Rust, SQLite & V8.
+  runtime, SSR, auth and admin UI built on Rust, SQLite & WebAssembly.
 <p>
 
 <p align="center">

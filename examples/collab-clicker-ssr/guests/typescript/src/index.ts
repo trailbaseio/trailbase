@@ -1,4 +1,4 @@
-import { Request, defineConfig } from "trailbase-wasm";
+import { HttpHandler, Request, defineConfig } from "trailbase-wasm";
 import { query } from "trailbase-wasm/db";
 import { readFileSync } from "trailbase-wasm/fs";
 import { Store } from "trailbase-wasm/kv";
@@ -55,15 +55,7 @@ async function ssr(_: Request): Promise<string> {
 
 export default defineConfig({
   httpHandlers: [
-    {
-      path: "/clicked",
-      method: "get",
-      handler: clicked,
-    },
-    {
-      path: "/",
-      method: "get",
-      handler: ssr,
-    },
+    HttpHandler.get("/clicked", clicked),
+    HttpHandler.get("/", ssr),
   ],
 });

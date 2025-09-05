@@ -14,7 +14,7 @@ experience. Gani, the person behind it, is a mad scientist 🙏.
 
 From a distance PocketBase and TrailBase are both single-executables providing
 almost identical feature sets: REST APIs, realtime updates, authentication, file
-storage, JavaScript (JS) runtimes, admin dashboard..., all on top of SQLite.
+storage, a runtime for custom endpoints, admin dashboard..., all on top of SQLite.
 
 For the sake of this comparison, we'll dive a little deeper to have a closer
 look at their differences both technically and philosophically.
@@ -59,8 +59,11 @@ Measuring we found that TrailBase's APIs are roughly [10x faster](/reference/ben
 This may sound like a lot but is the result of SQLite itself being extremely
 fast meaning that even small overheads weigh heavily.
 
-Independently, TrailBase choice of V8 as its JS runtime allows code to run
-roughly 40x faster.
+Independently, TrailBase offers a WebAssembly runtime over PocketBase's
+JavaScript interpreter.
+This allows for strict state isolation between requests and supports a
+wide-range of guest languages - currently JS/TS and Rust with more to come.
+A custom Rust endpoint can be up to 140x faster than a PocketBase JS one.
 
 ### Framework Use
 
@@ -94,10 +97,8 @@ sleeve:
 
 - Language independent bindings via JSON-schema with strict type-safety
   being enforced from the client all the way to the database[^4].
-- A more Node-like JS runtime with full ES6 support, built-in TypeScript
-  transpilation, and V8 performance unlocking more of the JS ecosystem and enabling
-  <a href={githubPath("examples/collab-clicker-ssr")}>server-side rendering (SSR)</a>
-  with any popular JS framework.
+- A WASM runtime, supporting multiple guest languages for custom endpoints and
+  up to 140x speed-up[^5].
 - Untethered access to SQLite with all its features and capabilities.
 - A wider set of first-class client libraries beyond JS/TS and Dart, including
   C#, Python and Rust.
@@ -154,3 +155,8 @@ flexibility and performance matter.
 [^4]:
     Note that SQLite is not strictly typed by default. Instead column types
     merely a type affinity for value conversions.
+
+[^5]:
+    Depends a lot on the guest language and the specific taks in question. 140x
+    is what we measured in heavy computational tasks comparing Goja with
+    Rust->WASM. It's apples to oranges, yet practically applicable.

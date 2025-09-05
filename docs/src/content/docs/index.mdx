@@ -55,15 +55,11 @@ export const demoLink = "https://demo.trailbase.io";
       * Rust: one of the lowest overhead languages,
       * Axum: one of the fastest HTTP servers,
       * SQLite: one of the fastest full-SQL databases,
-      * V8: one of the fastest JS engines.
+      * Wasmtime: compiles custom endpoints to efficient native code.
 
       TrailBase's APIs are [11x faster than PocketBase's and almost 40x faster than SupaBase's
       with a fraction of the footprint](/reference/benchmarks) allowing you to
       serve millions of customers from a tiny box.
-
-      In terms of JS/TS performance, V8 is roughly
-      [40x faster](/reference/benchmarks#javascript)
-      than goja used by PocketBase.
     </div>
 
     <div slot="second">
@@ -184,8 +180,8 @@ export const demoLink = "https://demo.trailbase.io";
     <Card title="APIs & File Storage" icon="random">
       Provide access to your tables and views through fast, flexible and
       **type-safe** restful CRUD APIs.
-      Listen for data changes with realtime APIs and extend functionality
-      using a fast V8 JS/ES6 runtime with built-in support for TypeScript.
+      Listen for data changes with realtime APIs and extend functionality using
+      a fast WebAssembly runtime with support for many guest languages.
 
       Authorize users based on ACLs and SQL access rules letting you
       easily build higher-level access management or moderation facilities
