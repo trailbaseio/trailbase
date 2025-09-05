@@ -3,10 +3,7 @@ import type { InitResult } from "trailbase:runtime/init-endpoint";
 import type { HttpHandlerInterface } from "./http";
 import { buildIncomingHttpHandler } from "./http/incoming";
 
-import { addPeriodicCallback } from "./timer";
-export const timer = {
-  addPeriodicCallback,
-};
+export { addPeriodicCallback } from "./timer";
 
 export * from "./util";
 export type { InitResult } from "trailbase:runtime/init-endpoint";
@@ -39,7 +36,7 @@ export function defineConfig(args: {
       handle: buildIncomingHttpHandler(args),
     },
     initEndpoint: {
-      init: function (): InitResult {
+      init: function(): InitResult {
         return {
           httpHandlers: (args.httpHandlers ?? []).map((h) => [
             h.method,

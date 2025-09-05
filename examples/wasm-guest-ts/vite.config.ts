@@ -5,7 +5,7 @@ export default defineConfig({
     outDir: "./dist",
     minify: false,
     lib: {
-      entry: "./src/component.js",
+      entry: "./src/component.ts",
       name: "runtime",
       fileName: "index",
       formats: ["es"],

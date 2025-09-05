@@ -12,7 +12,7 @@ export { OutgoingResponse } from "wasi:http/types@0.2.3";
 export { StatusCode } from "./status";
 export type { Request, Scheme, User } from "./request";
 
-export type ResponseType = string | Uint8Array | OutgoingResponse;
+export type ResponseType = string | Uint8Array | OutgoingResponse | void;
 export type HttpHandlerCallback = (
   req: Request,
 ) => ResponseType | Promise<ResponseType>;
@@ -28,7 +28,7 @@ export class HttpHandler implements HttpHandlerInterface {
     public readonly path: string,
     public readonly method: MethodType,
     public readonly handler: HttpHandlerCallback,
-  ) {}
+  ) { }
 
   static get(path: string, handler: HttpHandlerCallback): HttpHandler {
     return new HttpHandler(path, "get", handler);

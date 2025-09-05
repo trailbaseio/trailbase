@@ -409,9 +409,11 @@ impl Runtime {
       wasmtime::CacheConfig::default(),
     )?)))?;
 
-    // Load the component - a very espensive operation genrating code. Compilation happens in
+    // Load the component - a very expensive operation generating code. Compilation happens in
     // parallel and will saturate the entire machine.
     let component = {
+      log::info!("Compiling: {wasm_source_file:?}. May take some time...");
+
       let start = SystemTime::now();
       let component = wasmtime::CodeBuilder::new(&engine)
         .wasm_binary_or_text_file(&wasm_source_file)?

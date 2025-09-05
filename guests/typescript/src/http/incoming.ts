@@ -67,7 +67,7 @@ export function buildIncomingHttpHandler(args: {
     }
   }
 
-  return async function (req: IncomingRequest, respOutparam: ResponseOutparam) {
+  return async function(req: IncomingRequest, respOutparam: ResponseOutparam) {
     try {
       const resp: ResponseType = await handle(req);
       writeResponse(
@@ -75,8 +75,8 @@ export function buildIncomingHttpHandler(args: {
         resp instanceof OutgoingResponse
           ? resp
           : buildResponse(
-              resp instanceof Uint8Array ? resp : encodeBytes(resp),
-            ),
+            resp instanceof Uint8Array ? resp : encodeBytes(resp ?? ""),
+          ),
       );
     } catch (err) {
       if (err instanceof HttpError) {

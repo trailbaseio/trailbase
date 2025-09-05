@@ -3,9 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build:wasm": "jco componentize dist/index.js -w ../../guests/typescript/wit -o dist/component.wasm",
-    "build:wasm:aot": "jco componentize dist/index.js -w ../../guests/typescript/wit --aot -o dist/component.wasm",
-    "build": "npm run build:wasm",
+    "build:wasm": "jco componentize dist/index.mjs -w ../../guests/typescript/wit -o dist/component.wasm",
+    "build:wasm:aot": "jco componentize dist/index.mjs -w ../../guests/typescript/wit --aot -o dist/component.wasm",
+    "build": "vite build && npm run build:wasm",
+    "check": "eslint",
     "format": "prettier -w src"
   },
   "dependencies": {
@@ -14,6 +15,9 @@
   "devDependencies": {
     "@bytecodealliance/componentize-js": "^0.18.4",
     "@bytecodealliance/jco": "^1.13.3",
+    "@eslint/js": "^9.33.0",
+    "eslint": "^9.33.0",
+    "globals": "^16.3.0",
     "prettier": "^3.6.2",
     "vite": "^7.1.2"
   }
