@@ -1,92 +1,16 @@
-import {
-  Fields,
-  Headers,
-  IncomingBody,
-  Method,
-  OutgoingBody,
-  OutgoingResponse,
-  Scheme,
-} from "wasi:http/types@0.2.3";
+import { Fields, OutgoingBody, OutgoingResponse } from "wasi:http/types@0.2.3";
 import type { MethodType } from "trailbase:runtime/init-endpoint";
 
-import type { HttpContextUser } from "@common/HttpContextUser";
 import { StatusCode } from "./status";
+import { Request } from "./request";
+import { encodeBytes } from "./incoming";
 
 // Override setInterval/setTimeout.
 import "../timer";
 
 export { OutgoingResponse } from "wasi:http/types@0.2.3";
 export { StatusCode } from "./status";
-
-export interface Request {
-  readonly path: string;
-  // Path params, e.g. /{placeholder}/test.
-  readonly params: [string, string][];
-  readonly scheme: Scheme | undefined;
-  readonly authority: string;
-  readonly headers: Headers;
-  readonly user: HttpContextUser | null;
-
-  url(): URL;
-  getQueryParam(param: string): string | null;
-  getPathParam(param: string): string | null;
-  body(): Uint8Array | undefined;
-  json(): object | undefined;
-}
-
-export class RequestImpl implements Request {
-  constructor(
-    public readonly method: Method,
-    public readonly path: string,
-    // Path params, e.g. /{placeholder}/test.
-    public readonly params: [string, string][],
-    public readonly scheme: Scheme | undefined,
-    public readonly authority: string,
-    public readonly headers: Headers,
-    public readonly user: HttpContextUser | null,
-    private readonly _body: IncomingBody,
-  ) {}
-
-  url(): URL {
-    const base =
-      this.scheme !== undefined
-        ? `${printScheme(this.scheme)}://${this.authority}/${this.path}`
-        : `/${this.path}`;
-    return new URL(base);
-  }
-
-  getQueryParam(param: string): string | null {
-    return this.url().searchParams.get(param);
-  }
-
-  getPathParam(param: string): string | null {
-    for (const [p, v] of this.params) {
-      if (p === param) return v;
-    }
-    return null;
-  }
-
-  body(): Uint8Array | undefined {
-    switch (this.method.tag) {
-      case "get":
-      case "head":
-        // NOTE: Otherwise throws stream closed.
-        return undefined;
-      default: {
-        const s = this._body.stream();
-        return s.read(BigInt(Number.MAX_SAFE_INTEGER));
-      }
-    }
-  }
-
-  json(): object | undefined {
-    const b = this.body();
-    if (b !== undefined) {
-      return JSON.parse(new TextDecoder().decode(b));
-    }
-    return undefined;
-  }
-}
+export type { Request, Scheme, User } from "./request";
 
 export type ResponseType = string | Uint8Array | OutgoingResponse;
 export type HttpHandlerCallback = (
@@ -198,10 +122,7 @@ function buildSmallResponse(
     const outputStream = outgoingBody.write();
     outputStream.blockingWriteAndFlush(body);
 
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore: This is required in order to dispose the stream before we return
-    outputStream[Symbol.dispose]();
-    //outputStream[Symbol.dispose]?.();
+    outputStream[Symbol.dispose]?.();
   }
 
   outgoingResponse.setStatusCode(opts?.status ?? StatusCode.OK);
@@ -256,12 +177,8 @@ function buildLargeResponse(
       outputStream.flush();
     }
 
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore: While TS does not *know* that the dispose symbols are registered, they are.
-    pollable[Symbol.dispose]();
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore: While TS does not *know* that the dispose symbols are registered, they are.
-    outputStream[Symbol.dispose]();
+    pollable[Symbol.dispose]?.();
+    outputStream[Symbol.dispose]?.();
   }
 
   outgoingResponse.setStatusCode(opts?.status ?? StatusCode.OK);
@@ -296,18 +213,3 @@ function buildLargeResponse(
 //
 //   ResponseOutparam.set(responseOutparam, { tag: "ok", val: outgoingResponse });
 // }
-
-export function encodeBytes(body: string): Uint8Array {
-  return new TextEncoder().encode(body);
-}
-
-function printScheme(scheme: Scheme): string {
-  switch (scheme.tag) {
-    case "HTTP":
-      return "http";
-    case "HTTPS":
-      return "https";
-    case "other":
-      return scheme.val;
-  }
-}
