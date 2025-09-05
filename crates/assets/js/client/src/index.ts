@@ -208,15 +208,13 @@ export interface DeleteOp {
   };
 }
 
-export type Operation = CreateOp | UpdateOp | DeleteOp;
-
-export interface DeferredOperation<ResponseType> {
+interface DeferredOperation<ResponseType> {
   query(): Promise<ResponseType>;
 }
 
-export interface DeferredMutation<ResponseType>
+interface DeferredMutation<ResponseType>
   extends DeferredOperation<ResponseType> {
-  toJSON(): Operation;
+  toJSON(): CreateOp | UpdateOp | DeleteOp;
 }
 
 export class CreateOperation<T = Record<string, unknown>>
@@ -227,7 +225,7 @@ export class CreateOperation<T = Record<string, unknown>>
     private readonly apiName: string,
     private readonly record: Partial<T>,
   ) {}
-  async query(): Promise<string> {
+  async query(): Promise<string | number> {
     const response = await this.client.fetch(
       `${recordApiBasePath}/${this.apiName}`,
       {
@@ -390,7 +388,6 @@ export class ListOperation<T = Record<string, unknown>>
 }
 
 export interface RecordApi<T = Record<string, unknown>> {
-  // Immediate operations
   list(opts?: {
     pagination?: Pagination;
     order?: string[];
@@ -399,22 +396,6 @@ export interface RecordApi<T = Record<string, unknown>> {
     expand?: string[];
   }): Promise<ListResponse<T>>;
 
-  read(
-    id: string | number,
-    opt?: {
-      expand?: string[];
-    },
-  ): Promise<T>;
-
-  create(record: T): Promise<string | number>;
-
-  update(id: string | number, record: Partial<T>): Promise<void>;
-
-  delete(id: string | number): Promise<void>;
-
-  subscribe(id: string | number): Promise<ReadableStream<Event>>;
-
-  // Deferred operations
   listOp(opts?: {
     pagination?: Pagination;
     order?: string[];
@@ -423,6 +404,13 @@ export interface RecordApi<T = Record<string, unknown>> {
     expand?: string[];
   }): ListOperation<T>;
 
+  read(
+    id: string | number,
+    opt?: {
+      expand?: string[];
+    },
+  ): Promise<T>;
+
   readOp(
     id: string | number,
     opt?: {
@@ -430,25 +418,29 @@ export interface RecordApi<T = Record<string, unknown>> {
     },
   ): ReadOperation<T>;
 
+  create(record: T): Promise<string | number>;
+
   createOp(record: T): CreateOperation<T>;
+
+  update(id: string | number, record: Partial<T>): Promise<void>;
 
   updateOp(id: string | number, record: Partial<T>): UpdateOperation;
 
+  delete(id: string | number): Promise<void>;
+
   deleteOp(id: string | number): DeleteOperation;
+
+  subscribe(id: string | number): Promise<ReadableStream<Event>>;
 }
 
 /// Provides CRUD access to records through TrailBase's record API.
 export class RecordApiImpl<T = Record<string, unknown>>
   implements RecordApi<T>
 {
-  private readonly _path: string;
-
   constructor(
     private readonly client: Client,
     private readonly name: string,
-  ) {
-    this._path = `${recordApiBasePath}/${this.name}`;
-  }
+  ) {}
 
   public async list(opts?: {
     pagination?: Pagination;
@@ -460,6 +452,16 @@ export class RecordApiImpl<T = Record<string, unknown>>
     return new ListOperation<T>(this.client, this.name, opts).query();
   }
 
+  public listOp(opts?: {
+    pagination?: Pagination;
+    order?: string[];
+    filters?: FilterOrComposite[];
+    count?: boolean;
+    expand?: string[];
+  }): ListOperation<T> {
+    return new ListOperation<T>(this.client, this.name, opts);
+  }
+
   public async read<T = Record<string, unknown>>(
     id: string | number,
     opt?: {
@@ -469,20 +471,43 @@ export class RecordApiImpl<T = Record<string, unknown>>
     return new ReadOperation<T>(this.client, this.name, id, opt).query();
   }
 
+  public readOp(
+    id: string | number,
+    opt?: {
+      expand?: string[];
+    },
+  ): ReadOperation<T> {
+    return new ReadOperation<T>(this.client, this.name, id, opt);
+  }
+
   public async create(record: T): Promise<string | number> {
     return new CreateOperation<T>(this.client, this.name, record).query();
+  }
+
+  public createOp(record: T): CreateOperation<T> {
+    return new CreateOperation<T>(this.client, this.name, record);
   }
 
   public async update(id: string | number, record: Partial<T>): Promise<void> {
     return new UpdateOperation<T>(this.client, this.name, id, record).query();
   }
 
+  public updateOp(id: string | number, record: Partial<T>): UpdateOperation<T> {
+    return new UpdateOperation<T>(this.client, this.name, id, record);
+  }
+
   public async delete(id: string | number): Promise<void> {
     return new DeleteOperation(this.client, this.name, id).query();
   }
 
+  public deleteOp(id: string | number): DeleteOperation {
+    return new DeleteOperation(this.client, this.name, id);
+  }
+
   public async subscribe(id: string | number): Promise<ReadableStream<Event>> {
-    const response = await this.client.fetch(`${this._path}/subscribe/${id}`);
+    const response = await this.client.fetch(
+      `${recordApiBasePath}/${this.name}/subscribe/${id}`,
+    );
     const body = response.body;
     if (!body) {
       throw Error("Subscription reader is null.");
@@ -504,37 +529,6 @@ export class RecordApiImpl<T = Record<string, unknown>>
     });
 
     return body.pipeThrough(transformStream);
-  }
-
-  public listOp(opts?: {
-    pagination?: Pagination;
-    order?: string[];
-    filters?: FilterOrComposite[];
-    count?: boolean;
-    expand?: string[];
-  }): ListOperation<T> {
-    return new ListOperation<T>(this.client, this.name, opts);
-  }
-
-  public readOp(
-    id: string | number,
-    opt?: {
-      expand?: string[];
-    },
-  ): ReadOperation<T> {
-    return new ReadOperation<T>(this.client, this.name, id, opt);
-  }
-
-  public createOp(record: T): CreateOperation<T> {
-    return new CreateOperation<T>(this.client, this.name, record);
-  }
-
-  public updateOp(id: string | number, record: Partial<T>): UpdateOperation<T> {
-    return new UpdateOperation<T>(this.client, this.name, id, record);
-  }
-
-  public deleteOp(id: string | number): DeleteOperation {
-    return new DeleteOperation(this.client, this.name, id);
   }
 }
 
