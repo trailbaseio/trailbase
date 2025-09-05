@@ -34,10 +34,9 @@ pub mod kv;
 pub mod time;
 
 use trailbase_wasm_common::{HttpContext, HttpContextKind};
+use wstd::http::Request;
 use wstd::http::body::IncomingBody;
 use wstd::http::server::{Finished, Responder};
-use wstd::http::{Request, Response};
-use wstd::io::empty;
 
 use crate::http::{HttpRoute, Method, StatusCode, empty_error_response};
 use crate::job::Job;
@@ -122,11 +121,7 @@ impl<T: Guest> HttpIncomingHandler<T> {
           .into_iter()
           .find(|config| method == Method::GET && config.name == context.registered_path)
         {
-          if let Err(err) = handler().await {
-            return responder.respond(empty_error_response(err.status)).await;
-          }
-
-          return responder.respond(Response::new(empty())).await;
+          return handler(responder).await;
         }
       }
     }
