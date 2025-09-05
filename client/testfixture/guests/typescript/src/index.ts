@@ -22,10 +22,7 @@ export default defineConfig({
       if (url) {
         return await (await fetch(url)).text();
       }
-      throw new HttpError(
-        StatusCode.BAD_REQUEST,
-        `Missing ?url param: ${req.params}`,
-      );
+      throw new HttpError(StatusCode.BAD_REQUEST, `Missing ?url param`);
     }),
     HttpHandler.get("/error", () => {
       throw new HttpError(StatusCode.IM_A_TEAPOT, "I'm a teapot");
