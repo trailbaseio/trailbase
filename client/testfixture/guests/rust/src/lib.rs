@@ -3,9 +3,9 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use trailbase_wasm::db::{Value, execute, query};
-use trailbase_wasm::fetch::{Uri, get};
+use trailbase_wasm::fetch::{Uri, get as fetch};
 use trailbase_wasm::fs::read_file;
-use trailbase_wasm::http::{HttpError, HttpRoute, Json, Method, StatusCode};
+use trailbase_wasm::http::{HttpError, HttpRoute, Json, StatusCode, get};
 use trailbase_wasm::job::Job;
 use trailbase_wasm::time::{Duration, SystemTime, Timer};
 use trailbase_wasm::{Guest, export};
@@ -16,17 +16,13 @@ struct Endpoints;
 impl Guest for Endpoints {
   fn http_handlers() -> Vec<HttpRoute> {
     return vec![
-      HttpRoute::new(Method::GET, "/readfile", async |_req| {
-        let Ok(r) = read_file("/crates/sqlite/Cargo.toml") else {
-          return Err(HttpError {
-            status: StatusCode::NOT_FOUND,
-            message: Some("file not found".into()),
-          });
-        };
+      get("/readfile", async |_req| {
+        let r = read_file("/crates/sqlite/Cargo.toml")
+          .map_err(|err| HttpError::message(StatusCode::NOT_FOUND, err))?;
         println!("result: {}", String::from_utf8_lossy(&r));
         return Ok(());
       }),
-      HttpRoute::new(Method::GET, "/json", async |_req| {
+      get("/json", async |_req| {
         let value = serde_json::json!({
             "int": 5,
             "real": 4.2,
@@ -38,11 +34,11 @@ impl Guest for Endpoints {
 
         return Json(value);
       }),
-      HttpRoute::new(Method::GET, "/fetch", async |req| {
+      get("/fetch", async |req| {
         for (param, value) in req.url().query_pairs() {
           if param == "url" {
             let uri: Uri = Uri::try_from(value.to_string()).map_err(internal)?;
-            return get(uri).await.map_err(internal);
+            return fetch(uri).await.map_err(internal);
           }
         }
 
@@ -51,33 +47,25 @@ impl Guest for Endpoints {
           "Missing ?url= param",
         ));
       }),
-      HttpRoute::new(
-        Method::GET,
-        "/error",
-        async |_req| -> Result<(), HttpError> {
-          return Err(HttpError {
-            status: StatusCode::IM_A_TEAPOT,
-            message: Some("I'm a teapot".to_string()),
-          });
-        },
-      ),
-      HttpRoute::new(
-        Method::GET,
-        "/await",
-        async |req| -> Result<Vec<u8>, HttpError> {
-          let param = req.url().query_pairs().find(|(param, _v)| param == "ms");
-          let ms = param
-            .as_ref()
-            .map_or("10", |(_param, v)| v)
-            .parse::<u64>()
-            .map_err(|_| HttpError::status(StatusCode::BAD_REQUEST))?;
+      get("/error", async |_req| -> Result<(), HttpError> {
+        return Err(HttpError {
+          status: StatusCode::IM_A_TEAPOT,
+          message: Some("I'm a teapot".to_string()),
+        });
+      }),
+      get("/await", async |req| -> Result<Vec<u8>, HttpError> {
+        let param = req.url().query_pairs().find(|(param, _v)| param == "ms");
+        let ms = param
+          .as_ref()
+          .map_or("10", |(_param, v)| v)
+          .parse::<u64>()
+          .map_err(|_| HttpError::status(StatusCode::BAD_REQUEST))?;
 
-          Timer::after(Duration::from_millis(ms)).wait().await;
-          return Ok(vec![b'A'; 5000]);
-        },
-      ),
+        Timer::after(Duration::from_millis(ms)).wait().await;
+        return Ok(vec![b'A'; 5000]);
+      }),
       // Test Database interactions
-      HttpRoute::new(Method::GET, "/addDeletePost", async |_req| {
+      get("/addDeletePost", async |_req| {
         let ref user_id = query(
           "SELECT id FROM _user WHERE email = 'admin@localhost'".to_string(),
           vec![],
@@ -109,7 +97,7 @@ impl Guest for Endpoints {
         return Ok("Ok");
       }),
       // Benchmark runtime performance.
-      HttpRoute::new(Method::GET, "/fibonacci", async |req| {
+      get("/fibonacci", async |req| {
         let param = req.url().query_pairs().find(|(param, _v)| param == "n");
         let n = param
           .as_ref()
