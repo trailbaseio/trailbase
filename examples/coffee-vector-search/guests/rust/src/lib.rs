@@ -2,11 +2,11 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
-use trailbase_wasm::db::{self, Value, query};
-use trailbase_wasm::http::{HttpError, HttpRoute, Method, Request, StatusCode};
+use trailbase_wasm::db::{Value, query};
+use trailbase_wasm::http::{HttpError, HttpRoute, Json, Method, Request, StatusCode};
 use trailbase_wasm::{Guest, export};
 
-async fn search_handler(req: Request) -> Result<String, HttpError> {
+async fn search_handler(req: Request) -> Result<Json<Vec<Vec<Value>>>, HttpError> {
   let mut aroma: i64 = 8;
   let mut flavor: i64 = 8;
   let mut acidity: i64 = 8;
@@ -40,22 +40,9 @@ async fn search_handler(req: Request) -> Result<String, HttpError> {
     ],
   )
   .await
-  .map_err(internal)?;
+  .map_err(|err| HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err))?;
 
-  return Ok(
-    serde_json::to_string(
-      &rows
-        .into_iter()
-        .map(|row| {
-          row
-            .into_iter()
-            .map(|v| db::to_json_value(v))
-            .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>(),
-    )
-    .map_err(internal)?,
-  );
+  return Ok(Json(rows));
 }
 
 // Implement the function exported in this world (see above).
@@ -68,7 +55,3 @@ impl Guest for Endpoints {
 }
 
 export!(Endpoints);
-
-fn internal(err: impl std::string::ToString) -> HttpError {
-  return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err.to_string());
-}

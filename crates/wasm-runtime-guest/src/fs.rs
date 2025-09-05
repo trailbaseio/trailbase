@@ -1,26 +1,38 @@
 pub use crate::wit::wasi::filesystem::preopens::{Descriptor, get_directories};
-pub use crate::wit::wasi::filesystem::types::{DescriptorFlags, OpenFlags, PathFlags};
+pub use crate::wit::wasi::filesystem::types::{DescriptorFlags, ErrorCode, OpenFlags, PathFlags};
 use std::path::Path;
 
-pub fn read_file(path: impl AsRef<Path>) -> Result<Vec<u8>, String> {
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+  #[error("MissingRoot")]
+  MissingRoot,
+  #[error("NotFound")]
+  NotFound,
+  #[error("InvalidPath")]
+  InvalidPath,
+  #[error("Open {0}")]
+  Open(ErrorCode),
+  #[error("Read {0}")]
+  Read(ErrorCode),
+}
+
+pub fn read_file(path: impl AsRef<Path>) -> Result<Vec<u8>, Error> {
   let path = path.as_ref();
   let segments: Vec<_> = path.iter().collect();
 
   let (root, _) = get_directories()
     .into_iter()
     .find(|(_, path)| path == "/")
-    .expect("root");
+    .ok_or_else(|| Error::MissingRoot)?;
 
   let mut descriptor: Descriptor = root;
   for (i, segment) in segments.iter().enumerate() {
-    let path = segment
-      .to_str()
-      .ok_or_else(|| format!("invalid path segment: {segment:?}"))?;
+    let path = segment.to_str().ok_or_else(|| Error::InvalidPath)?;
 
     // First.
     if i == 0 {
       if path != "/" {
-        return Err("Only absolute paths".to_string());
+        return Err(Error::InvalidPath);
       }
       continue;
     }
@@ -37,7 +49,7 @@ pub fn read_file(path: impl AsRef<Path>) -> Result<Vec<u8>, String> {
         },
         DescriptorFlags::READ,
       )
-      .map_err(|err| err.to_string())?;
+      .map_err(|err| Error::Open(err))?;
 
     if last {
       const MAX: u64 = 1024 * 1024;
@@ -46,7 +58,7 @@ pub fn read_file(path: impl AsRef<Path>) -> Result<Vec<u8>, String> {
       loop {
         let (bytes, eof) = descriptor
           .read(MAX, buffer.len() as u64)
-          .map_err(|err| err.to_string())?;
+          .map_err(|err| Error::Read(err))?;
 
         buffer.extend(bytes);
 
@@ -59,5 +71,5 @@ pub fn read_file(path: impl AsRef<Path>) -> Result<Vec<u8>, String> {
     }
   }
 
-  return Err("not found".to_string());
+  return Err(Error::NotFound);
 }

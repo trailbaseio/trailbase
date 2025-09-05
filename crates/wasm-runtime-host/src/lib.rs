@@ -386,7 +386,7 @@ fn build_config(cache: Option<wasmtime::Cache>) -> Config {
   // Execution settings.
   config.async_support(true);
   config.epoch_interruption(false);
-  config.memory_reservation(64 * 1024 * 1024 /*bytes*/);
+  config.memory_reservation(64 * 1024 * 1024 /* bytes */);
   // config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
 
   // Compilation settings.
@@ -618,7 +618,8 @@ impl RuntimeInstance {
   //   // })?;
   //   //
   //   // // Host interfaces.
-  //   // trailbase::runtime::host_endpoint::add_to_linker::<_, HasSelf<State>>(&mut linker, |s| s)?;
+  //   // trailbase::runtime::host_endpoint::add_to_linker::<_, HasSelf<State>>(&mut linker, |s|
+  // s)?;
   //
   //   return Ok(Self {
   //     engine,
