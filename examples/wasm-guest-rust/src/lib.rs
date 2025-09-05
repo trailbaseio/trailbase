@@ -3,7 +3,7 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use trailbase_wasm::db::{Transaction, Value, execute, query};
-use trailbase_wasm::http::{HttpError, HttpRoute, StatusCode, get};
+use trailbase_wasm::http::{HttpError, HttpRoute, StatusCode, routing};
 use trailbase_wasm::job::Job;
 use trailbase_wasm::time::{Duration, Timer};
 use trailbase_wasm::{Guest, export, thread_id};
@@ -14,15 +14,15 @@ struct Endpoints;
 impl Guest for Endpoints {
   fn http_handlers() -> Vec<HttpRoute> {
     return vec![
-      get("/fibonacci", async |_req| format!("{}\n", fibonacci(40))),
-      get("/sleep", async |_req| {
+      routing::get("/fibonacci", async |_req| format!("{}\n", fibonacci(40))),
+      routing::get("/sleep", async |_req| {
         Timer::after(Duration::from_secs(10)).wait().await;
       }),
-      get("/wasm/{placeholder}", async |req| {
+      routing::get("/wasm/{placeholder}", async |req| {
         let url = req.url();
         return Ok(format!("Welcome from WASM [{}]: {url}\n", thread_id()));
       }),
-      get("/wasm_query", async |_req| {
+      routing::get("/wasm_query", async |_req| {
         execute("CREATE TABLE test (id INTEGER PRIMARY KEY)", [])
           .await
           .map_err(internal)?;
@@ -35,7 +35,7 @@ impl Guest for Endpoints {
 
         return Ok(format!("rows: {:?}", rows[0][0]).into_bytes().to_vec());
       }),
-      get("/sqlitetx", async |_req| {
+      routing::get("/sqlitetx", async |_req| {
         let mut tx = Transaction::begin().map_err(internal)?;
         tx.execute(
           "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY)",
@@ -50,7 +50,7 @@ impl Guest for Endpoints {
 
         return Ok(b"".to_vec());
       }),
-      get("/sqlitetxread", async |_req| {
+      routing::get("/sqlitetxread", async |_req| {
         let mut tx = Transaction::begin().map_err(internal)?;
         tx.execute(
           "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY)",

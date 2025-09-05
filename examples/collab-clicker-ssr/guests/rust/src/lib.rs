@@ -7,7 +7,7 @@ use rquickjs::prelude::{Async, Ctx, Func};
 use rquickjs::{AsyncContext, AsyncRuntime, Function, Module, Object, async_with};
 use trailbase_wasm::db::{Value, query};
 use trailbase_wasm::fs::read_file;
-use trailbase_wasm::http::{HttpError, HttpRoute, Json, Method, StatusCode};
+use trailbase_wasm::http::{HttpError, HttpRoute, Json, StatusCode, routing};
 use trailbase_wasm::kv::Store;
 use trailbase_wasm::time::{Duration, Timer};
 use trailbase_wasm::{Guest, export};
@@ -18,52 +18,44 @@ struct Endpoints;
 impl Guest for Endpoints {
   fn http_handlers() -> Vec<HttpRoute> {
     return vec![
-      HttpRoute::new(
-        Method::GET,
-        "/clicked",
-        async |_req| -> Result<Json<_>, HttpError> {
-          let rows = query(
-            "UPDATE counter SET value = value + 1 WHERE id = 1 RETURNING value",
-            [],
-          )
+      routing::get("/clicked", async |_req| -> Result<Json<_>, HttpError> {
+        let rows = query(
+          "UPDATE counter SET value = value + 1 WHERE id = 1 RETURNING value",
+          [],
+        )
+        .await
+        .map_err(internal)?;
+
+        let Value::Integer(count) = rows[0][0] else {
+          panic!("expected integer");
+        };
+
+        return Ok(Json(serde_json::json!({
+            "count": count,
+        })));
+      }),
+      routing::get("/", async |_req| -> Result<String, HttpError> {
+        // NOTE: this is replicating vite SSR template's server.js;
+        let rows = query("SELECT value FROM counter WHERE id = 1", [])
           .await
           .map_err(internal)?;
 
-          let Value::Integer(count) = rows[0][0] else {
-            panic!("expected integer");
-          };
+        let Value::Integer(count) = rows[0][0] else {
+          panic!("expected integer");
+        };
 
-          return Ok(Json(serde_json::json!({
-              "count": count,
-          })));
-        },
-      ),
-      HttpRoute::new(
-        Method::GET,
-        "/",
-        async |_req| -> Result<String, HttpError> {
-          // NOTE: this is replicating vite SSR template's server.js;
-          let rows = query("SELECT value FROM counter WHERE id = 1", [])
-            .await
-            .map_err(internal)?;
+        // Call the JS render function using embedded QuickJS.
+        let result = render(count).await?;
 
-          let Value::Integer(count) = rows[0][0] else {
-            panic!("expected integer");
-          };
+        let template = read_cached_file("/dist/client/index.html")?;
+        let mut template_str = String::from_utf8_lossy(&template).to_string();
 
-          // Call the JS render function using embedded QuickJS.
-          let result = render(count).await?;
+        template_str = template_str.replace("<!--app-head-->", &result.head);
+        template_str = template_str.replace("<!--app-data-->", &result.data);
+        template_str = template_str.replace("<!--app-html-->", &result.html);
 
-          let template = read_cached_file("/dist/client/index.html")?;
-          let mut template_str = String::from_utf8_lossy(&template).to_string();
-
-          template_str = template_str.replace("<!--app-head-->", &result.head);
-          template_str = template_str.replace("<!--app-data-->", &result.data);
-          template_str = template_str.replace("<!--app-html-->", &result.html);
-
-          return Ok(template_str);
-        },
-      ),
+        return Ok(template_str);
+      }),
     ];
   }
 }
