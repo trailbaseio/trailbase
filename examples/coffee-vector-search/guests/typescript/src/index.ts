@@ -22,7 +22,5 @@ async function searchHandler(req: Request): Promise<string> {
 }
 
 export default defineConfig({
-  httpHandlers: [
-    HttpHandler.get("/search", searchHandler),
-  ],
+  httpHandlers: [HttpHandler.get("/search", searchHandler)],
 });
