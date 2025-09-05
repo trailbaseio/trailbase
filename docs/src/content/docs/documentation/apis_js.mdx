@@ -19,7 +19,8 @@ The following example illustrates a few things:
 * How to return an error.
 
 ```ts
-import { Request, HttpError, HttpHandler, StatusCode, defineConfig } from "trailbase-wasm";
+import { defineConfig } from "trailbase-wasm";
+import { Request, HttpError, HttpHandler, StatusCode } from "trailbase-wasm/http";
 import { query } from "trailbase-wasm/db";
 
 async function handler(req: Request): Promise<string> {

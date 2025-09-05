@@ -7,7 +7,7 @@ import type { InitResult } from "trailbase:runtime/init-endpoint";
 import type { HttpHandlerInterface, ResponseType } from "./http";
 import {
   HttpError,
-  Request,
+  RequestImpl,
   StatusCode,
   encodeBytes,
   buildResponse,
@@ -19,8 +19,9 @@ export const timer = {
   addPeriodicCallback,
 };
 
-export * from "./http";
+// export { Request, OutgoingResponse, StatusCode, ResponseType, HttpError, HttpHandler, HttpHandlerCallback, HttpHandlerInterface, ResponseOptions, buildJsonResponse, buildResponse } from "./http";
 export * from "./util";
+export type { InitResult } from "trailbase:runtime/init-endpoint";
 export { threadId } from "trailbase:runtime/host-endpoint";
 
 export type JobHandler = {
@@ -78,7 +79,7 @@ export function defineConfig(args: {
       }
 
       return await handler(
-        new Request(
+        new RequestImpl(
           req.method(),
           req.pathWithQuery() ?? "",
           context.path_params,
@@ -112,14 +113,14 @@ export function defineConfig(args: {
           if (err instanceof HttpError) {
             writeResponse(
               respOutparam,
-              buildResponse(encodeBytes(err.message), {
+              buildResponse(encodeBytes(`${err.message}\n`), {
                 status: err.statusCode,
               }),
             );
           } else {
             writeResponse(
               respOutparam,
-              buildResponse(encodeBytes(`Caught: ${err}`), {
+              buildResponse(encodeBytes(`Other: ${err}\n`), {
                 status: StatusCode.INTERNAL_SERVER_ERROR,
               }),
             );

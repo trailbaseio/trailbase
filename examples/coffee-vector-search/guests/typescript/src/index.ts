@@ -1,4 +1,5 @@
-import { Request, HttpHandler, defineConfig } from "trailbase-wasm";
+import { defineConfig } from "trailbase-wasm";
+import { Request, HttpHandler } from "trailbase-wasm/http";
 import { query } from "trailbase-wasm/db";
 
 async function searchHandler(req: Request): Promise<string> {

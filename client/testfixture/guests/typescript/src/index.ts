@@ -1,3 +1,4 @@
+import { defineConfig } from "trailbase-wasm";
 import {
   HttpError,
   HttpHandler,
@@ -5,23 +6,17 @@ import {
   Request,
   StatusCode,
   buildJsonResponse,
-  defineConfig,
-} from "trailbase-wasm";
+} from "trailbase-wasm/http";
 import { execute, query } from "trailbase-wasm/db";
 
 export default defineConfig({
   httpHandlers: [
-    HttpHandler.get("/fibonacci", fibonacciHandler),
-    HttpHandler.get("/json", (_: Request): OutgoingResponse => {
-      return buildJsonResponse({
-        int: 5,
-        real: 4.2,
-        msg: "foo",
-        obj: {
-          nested: true,
-        },
-      });
+    HttpHandler.get("/fibonacci", (req: Request): string => {
+      const n = req.getQueryParam("n");
+      return `${fibonacci(n ? parseInt(n) : 40)}\n`;
     }),
+    HttpHandler.get("/json", jsonHandler),
+    HttpHandler.post("/json", jsonHandler),
     HttpHandler.get("/fetch", async (req: Request): Promise<string> => {
       const url = req.getQueryParam("url");
       if (url) {
@@ -63,7 +58,7 @@ export default defineConfig({
 
       return "Ok";
     }),
-    HttpHandler.get("/set_interval", async (_req: Request): Promise<string> => {
+    HttpHandler.get("/set_interval", async (): Promise<string> => {
       var cnt = 0;
 
       console.log(`Registering callback`);
@@ -76,23 +71,30 @@ export default defineConfig({
         }
       }, 300);
 
-      await delay(300);
-
       return `setInterval from Javascript`;
     }),
-    HttpHandler.get("/random", async (_req: Request): Promise<string> => {
+    HttpHandler.get("/random", async (): Promise<string> => {
       return `${Math.random().toString()}\n`;
     }),
   ],
 });
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function jsonHandler(req: Request): OutgoingResponse {
+  const json = req.json();
+  return buildJsonResponse(
+    json ?? {
+      int: 5,
+      real: 4.2,
+      msg: "foo",
+      obj: {
+        nested: true,
+      },
+    },
+  );
 }
 
-function fibonacciHandler(req: Request): string {
-  const n = req.getQueryParam("n");
-  return `${fibonacci(n ? parseInt(n) : 40)}\n`;
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function fibonacci(num: number): number {

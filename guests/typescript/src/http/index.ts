@@ -16,10 +16,25 @@ import { StatusCode } from "./status";
 import "../timer";
 
 export { OutgoingResponse } from "wasi:http/types@0.2.3";
-export type { InitResult } from "trailbase:runtime/init-endpoint";
 export { StatusCode } from "./status";
 
-export class Request {
+export interface Request {
+  readonly path: string;
+  // Path params, e.g. /{placeholder}/test.
+  readonly params: [string, string][];
+  readonly scheme: Scheme | undefined;
+  readonly authority: string;
+  readonly headers: Headers;
+  readonly user: HttpContextUser | null;
+
+  url(): URL;
+  getQueryParam(param: string): string | null;
+  getPathParam(param: string): string | null;
+  body(): Uint8Array | undefined;
+  json(): object | undefined;
+}
+
+export class RequestImpl implements Request {
   constructor(
     public readonly method: Method,
     public readonly path: string,
@@ -29,7 +44,7 @@ export class Request {
     public readonly authority: string,
     public readonly headers: Headers,
     public readonly user: HttpContextUser | null,
-    public readonly body: IncomingBody,
+    private readonly _body: IncomingBody,
   ) {}
 
   url(): URL {
@@ -49,6 +64,27 @@ export class Request {
       if (p === param) return v;
     }
     return null;
+  }
+
+  body(): Uint8Array | undefined {
+    switch (this.method.tag) {
+      case "get":
+      case "head":
+        // NOTE: Otherwise throws stream closed.
+        return undefined;
+      default: {
+        const s = this._body.stream();
+        return s.read(BigInt(Number.MAX_SAFE_INTEGER));
+      }
+    }
+  }
+
+  json(): object | undefined {
+    const b = this.body();
+    if (b !== undefined) {
+      return JSON.parse(new TextDecoder().decode(b));
+    }
+    return undefined;
   }
 }
 
@@ -141,7 +177,7 @@ export function buildResponse(
   body: Uint8Array,
   opts?: ResponseOptions,
 ): OutgoingResponse {
-  // NOTE: `outputStream.blockingWriteAndFlush` only writes up to 4kB.
+  // NOTE: `outputStream.blockingWriteAndFlush` only writes up to 4kB, see documentation.
   if (body.length <= 4096) {
     return buildSmallResponse(body, opts);
   }
@@ -262,7 +298,7 @@ function buildLargeResponse(
 // }
 
 export function encodeBytes(body: string): Uint8Array {
-  return new Uint8Array(new TextEncoder().encode(body));
+  return new TextEncoder().encode(body);
 }
 
 function printScheme(scheme: Scheme): string {
