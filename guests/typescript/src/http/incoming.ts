@@ -9,7 +9,7 @@ import type { HttpContext } from "@common/HttpContext";
 import type { HttpHandlerInterface, ResponseType } from "./index";
 import { HttpError, StatusCode, buildResponse } from "./index";
 import { type Method, RequestImpl } from "./request";
-import { JobHandler } from "../index";
+import { JobHandlerInterface } from "../job";
 import { awaitPendingTimers } from "../timer";
 
 type IncomingHandler = (
@@ -23,7 +23,7 @@ export function encodeBytes(body: string): Uint8Array {
 
 export function buildIncomingHttpHandler(args: {
   httpHandlers?: HttpHandlerInterface[];
-  jobHandlers?: JobHandler[];
+  jobHandlers?: JobHandlerInterface[];
 }): IncomingHandler {
   const httpHandlers = Object.fromEntries(
     (args.httpHandlers ?? []).map((h) => [h.path, h.handler]),
@@ -67,7 +67,7 @@ export function buildIncomingHttpHandler(args: {
     }
   }
 
-  return async function(req: IncomingRequest, respOutparam: ResponseOutparam) {
+  return async function (req: IncomingRequest, respOutparam: ResponseOutparam) {
     try {
       const resp: ResponseType = await handle(req);
       writeResponse(
@@ -75,8 +75,8 @@ export function buildIncomingHttpHandler(args: {
         resp instanceof OutgoingResponse
           ? resp
           : buildResponse(
-            resp instanceof Uint8Array ? resp : encodeBytes(resp ?? ""),
-          ),
+              resp instanceof Uint8Array ? resp : encodeBytes(resp ?? ""),
+            ),
       );
     } catch (err) {
       if (err instanceof HttpError) {

@@ -13,7 +13,7 @@ guest: ${TRAILDEPOT}/wasm/component.wasm
 ${TRAILDEPOT}/wasm/component.wasm: ${DISTDIR}/component.wasm
 	mkdir -p ${TRAILDEPOT}/wasm && cp $< $@
 
-${DISTDIR}/component.wasm:
+${DISTDIR}/component.wasm: src/*.js
 	pnpm i && pnpm build
 
 clean:

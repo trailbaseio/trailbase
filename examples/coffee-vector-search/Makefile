@@ -17,13 +17,13 @@ assets:
 init:
 	rm -rf traildepot/data && mkdir -p traildepot/data && cat import.sql | sqlite3 traildepot/data/main.db -
 
-${TRAILDEPOT}/wasm/coffee_vector_search_rust_guest.wasm:
+${TRAILDEPOT}/wasm/coffee_vector_search_rust_guest.wasm: guests/rust/src/*.rs
 	cargo build -p coffee-vector-search-guest --target wasm32-wasip2  --release \
 		&& mkdir -p ${TRAILDEPOT}/wasm \
 		&& rm -rf ${TRAILDEPOT}/wasm/* \
 		&& cp ../../target/wasm32-wasip2/release/coffee_vector_search_guest.wasm $@
 
-${TRAILDEPOT}/wasm/coffee_vector_search_ts_guest.wasm:
+${TRAILDEPOT}/wasm/coffee_vector_search_ts_guest.wasm: guests/typescript/src/*.ts
 	cd guests/typescript \
 		&& pnpm install \
 		&& pnpm build \
@@ -34,6 +34,5 @@ ${TRAILDEPOT}/wasm/coffee_vector_search_ts_guest.wasm:
 
 clean:
 	rm -rf dist traildepot/data ${TRAILDEPOT}/wasm/*
-
 
 .PHONY: init assets guest run clean
