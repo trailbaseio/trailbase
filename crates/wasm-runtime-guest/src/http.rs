@@ -152,13 +152,22 @@ pub struct Request {
 
 impl Request {
   #[inline]
-  pub fn body(&self) -> &wstd::http::body::IncomingBody {
-    return &self.body;
+  pub fn body(&mut self) -> &mut wstd::http::body::IncomingBody {
+    return &mut self.body;
   }
 
   #[inline]
   pub fn url(&self) -> &url::Url {
     return &self.head.uri;
+  }
+
+  pub fn query_param(&self, param: &str) -> Option<String> {
+    return self
+      .head
+      .uri
+      .query_pairs()
+      .find(|(p, _v)| p == param)
+      .map(|(_p, v)| v.to_string());
   }
 
   #[inline]
