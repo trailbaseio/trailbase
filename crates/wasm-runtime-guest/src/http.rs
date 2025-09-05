@@ -29,12 +29,10 @@ impl HttpError {
 
 type HttpHandler = Box<
   dyn (Fn(
-      Option<User>,
-      http::Request<wstd::http::body::IncomingBody>,
-      wstd::http::server::Responder,
-    ) -> LocalBoxFuture<'static, Finished>)
-    + Send
-    + Sync,
+    Option<User>,
+    http::Request<wstd::http::body::IncomingBody>,
+    wstd::http::server::Responder,
+  ) -> LocalBoxFuture<'static, Finished>),
 >;
 
 pub struct HttpRoute {
@@ -44,22 +42,21 @@ pub struct HttpRoute {
 }
 
 impl HttpRoute {
-  pub fn new<F, R, B>(method: Method, path: impl Into<String>, f: F) -> Self
+  pub fn new<F, R, B>(method: Method, path: impl std::string::ToString, f: F) -> Self
   where
     F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
     R: IntoResponse<B>,
     B: wstd::http::body::Body,
   {
-    let f = std::sync::Arc::new(f);
+    let f = std::rc::Rc::new(f);
+
     return Self {
       method,
-      path: path.into(),
+      path: path.to_string(),
       handler: Box::new(
         move |user: Option<User>,
               req: http::Request<wstd::http::body::IncomingBody>,
               responder: Responder| {
-          let f = f.clone();
-
           let (head, body) = req.into_parts();
           let Ok(url) = to_url(head.uri) else {
             return Box::pin(responder.respond(empty_error_response(StatusCode::BAD_REQUEST)));
@@ -76,6 +73,7 @@ impl HttpRoute {
             body,
           };
 
+          let f = f.clone();
           return Box::pin(async move {
             let response = responder.respond(f(req).await.into_response()).await;
 
