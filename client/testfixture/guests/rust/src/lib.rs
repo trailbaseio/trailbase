@@ -2,7 +2,7 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
-use trailbase_wasm::db::{Value, execute, query};
+use trailbase_wasm::db::{Transaction, Value, execute, query};
 use trailbase_wasm::fetch::{Uri, get};
 use trailbase_wasm::fs::read_file;
 use trailbase_wasm::http::{HttpError, HttpRoute, Json, StatusCode, routing};
@@ -35,11 +35,9 @@ impl Guest for Endpoints {
         return Json(value);
       }),
       routing::get("/fetch", async |req| {
-        for (param, value) in req.url().query_pairs() {
-          if param == "url" {
-            let uri: Uri = Uri::try_from(value.to_string()).map_err(internal)?;
-            return get(uri).await.map_err(internal);
-          }
+        if let Some(url) = req.query_param("url") {
+          let uri: Uri = Uri::try_from(url).map_err(internal)?;
+          return get(uri).await.map_err(internal);
         }
 
         return Err(HttpError::message(
@@ -54,12 +52,7 @@ impl Guest for Endpoints {
         });
       }),
       routing::get("/await", async |req| -> Result<Vec<u8>, HttpError> {
-        let param = req.url().query_pairs().find(|(param, _v)| param == "ms");
-        let ms = param
-          .as_ref()
-          .map_or("10", |(_param, v)| v)
-          .parse::<u64>()
-          .map_err(|_| HttpError::status(StatusCode::BAD_REQUEST))?;
+        let ms: u64 = req.query_param("ms").map_or(10, |p| p.parse().unwrap());
 
         Timer::after(Duration::from_millis(ms)).wait().await;
         return Ok(vec![b'A'; 5000]);
@@ -96,16 +89,36 @@ impl Guest for Endpoints {
 
         return Ok("Ok");
       }),
+      routing::get("/transaction", async |_req| {
+        let mut tx = Transaction::begin().map_err(internal)?;
+        tx.execute(
+          "CREATE TABLE IF NOT EXISTS tx (id INTEGER PRIMARY KEY)",
+          &[],
+        )
+        .map_err(internal)?;
+
+        let rows = tx.query("SELECT COUNT(*) FROM tx", &[]).map_err(internal)?;
+        let Value::Integer(count) = &rows[0][0] else {
+          return Err(internal("expected int"));
+        };
+
+        let rows_affected = tx
+          .execute(
+            "INSERT INTO tx (id) VALUES (?1)",
+            &[Value::Integer(count + 1)],
+          )
+          .map_err(internal)?;
+
+        assert_eq!(1, rows_affected);
+
+        tx.commit().map_err(internal)?;
+
+        return Ok(());
+      }),
       // Benchmark runtime performance.
       routing::get("/fibonacci", async |req| {
-        let param = req.url().query_pairs().find(|(param, _v)| param == "n");
-        let n = param
-          .as_ref()
-          .map_or("40", |(_param, v)| v)
-          .parse::<usize>()
-          .map_err(|_| HttpError::status(StatusCode::BAD_REQUEST))?;
-
-        return Ok(format!("{}\n", fibonacci(n)));
+        let n: usize = req.query_param("n").map_or(40, |p| p.parse().unwrap());
+        return format!("{}\n", fibonacci(n));
       }),
     ];
   }
@@ -129,5 +142,5 @@ fn fibonacci(n: usize) -> usize {
 }
 
 fn internal(err: impl std::string::ToString) -> HttpError {
-  return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err.to_string());
+  return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err);
 }

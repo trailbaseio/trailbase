@@ -782,12 +782,8 @@ mod tests {
   use super::*;
 
   use http::{Response, StatusCode};
-  use http_body_util::{BodyExt, combinators::BoxBody};
+  use http_body_util::combinators::BoxBody;
   use trailbase_wasm_common::{HttpContext, HttpContextKind};
-
-  fn bytes_to_body<E>(bytes: Bytes) -> BoxBody<Bytes, E> {
-    BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!()))
-  }
 
   #[tokio::test]
   async fn test_init() {
@@ -795,7 +791,7 @@ mod tests {
     let kv_store = KvStore::new();
     let runtime = Runtime::new(
       2,
-      "./testdata/rust_guest.wasm".into(),
+      "../../client/testfixture/wasm/wasm_rust_guest_testfixture.wasm".into(),
       conn.clone(),
       kv_store,
       None,
@@ -809,51 +805,24 @@ mod tests {
       .await
       .unwrap();
 
-    let response = send_http_request(&runtime, "http://localhost:4000/sqlitetx".to_string())
-      .await
-      .unwrap();
+    let response = send_http_request(
+      &runtime,
+      "http://localhost:4000/transaction",
+      "/transaction",
+    )
+    .await
+    .unwrap();
 
-    // NOTE: Because we're not supplying a valid context.
     assert_eq!(response.status(), StatusCode::OK);
 
     assert_eq!(
       1,
       conn
-        .query_row_f("SELECT COUNT(*) FROM test;", (), |row| row.get::<_, i64>(0))
+        .query_row_f("SELECT COUNT(*) FROM tx;", (), |row| row.get::<_, i64>(0))
         .await
         .unwrap()
         .unwrap()
     )
-  }
-
-  async fn send_http_request(
-    runtime: &Runtime,
-    uri: String,
-  ) -> Result<Response<BoxBody<Bytes, ErrorCode>>, Error> {
-    return runtime
-      .call(async |instance| {
-        let context = HttpContext {
-          kind: HttpContextKind::Http,
-          registered_path: "/sqlitetx".to_string(),
-          path_params: vec![],
-          user: None,
-        };
-
-        let request = hyper::Request::builder()
-          .uri(uri)
-          .header("__context", to_header_value(&context).unwrap())
-          .body(bytes_to_body(Bytes::from_static(b"")))
-          .unwrap();
-
-        return instance.call_incoming_http_handler(request).await;
-      })
-      .await
-      .unwrap();
-  }
-
-  fn to_header_value(context: &HttpContext) -> Result<hyper::http::HeaderValue, crate::Error> {
-    return hyper::http::HeaderValue::from_bytes(&serde_json::to_vec(&context).unwrap_or_default())
-      .map_err(|_err| crate::Error::Encoding);
   }
 
   #[tokio::test]
@@ -863,7 +832,7 @@ mod tests {
     let runtime = Arc::new(
       Runtime::new(
         2,
-        "./testdata/rust_guest.wasm".into(),
+        "../../client/testfixture/wasm/wasm_rust_guest_testfixture.wasm".into(),
         conn.clone(),
         kv_store,
         None,
@@ -875,7 +844,12 @@ mod tests {
       .map(|_| {
         let runtime = runtime.clone();
         tokio::spawn(async move {
-          send_http_request(&runtime, "http://localhost:4000/sqlitetxread".to_string()).await
+          send_http_request(
+            &runtime,
+            "http://localhost:4000/transaction",
+            "/transaction",
+          )
+          .await
         })
       })
       .collect();
@@ -883,5 +857,40 @@ mod tests {
     for future in futures {
       future.await.unwrap().unwrap();
     }
+  }
+
+  async fn send_http_request(
+    runtime: &Runtime,
+    uri: &str,
+    registered_path: &str,
+  ) -> Result<Response<BoxBody<Bytes, ErrorCode>>, Error> {
+    fn to_header_value(context: &HttpContext) -> hyper::http::HeaderValue {
+      return hyper::http::HeaderValue::from_bytes(
+        &serde_json::to_vec(&context).unwrap_or_default(),
+      )
+      .unwrap();
+    }
+
+    let uri = uri.to_string();
+    let registered_path = registered_path.to_string();
+    return runtime
+      .call(async |instance| {
+        let context = HttpContext {
+          kind: HttpContextKind::Http,
+          registered_path,
+          path_params: vec![],
+          user: None,
+        };
+
+        let request = hyper::Request::builder()
+          .uri(uri)
+          .header("__context", to_header_value(&context))
+          .body(sqlite::bytes_to_body(Bytes::from_static(b"")))
+          .unwrap();
+
+        return instance.call_incoming_http_handler(request).await;
+      })
+      .await
+      .unwrap();
   }
 }
