@@ -111,9 +111,8 @@ impl Guest for Endpoints {
   }
 
   fn job_handlers() -> Vec<Job> {
-    return vec![Job::new("WASM-registered Job", "@hourly", async || {
+    return vec![Job::hourly("WASM-registered Job", async || {
       println!("JS-registered cron job reporting for duty 🚀");
-      return Ok(());
     })];
   }
 }

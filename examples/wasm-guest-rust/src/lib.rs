@@ -68,9 +68,8 @@ impl Guest for Endpoints {
   }
 
   fn job_handlers() -> Vec<Job> {
-    return vec![Job::new("myjobhandler", "@hourly", async || {
+    return vec![Job::hourly("myjobhandler", async || {
       println!("My jobhandler");
-      return Ok(());
     })];
   }
 }
