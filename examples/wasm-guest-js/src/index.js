@@ -1,5 +1,6 @@
 import { defineConfig, addPeriodicCallback } from "trailbase-wasm";
 import { HttpHandler, buildJsonResponse } from "trailbase-wasm/http";
+import { JobHandler } from "trailbase-wasm/job";
 import { query } from "trailbase-wasm/db";
 
 export default defineConfig({
@@ -24,6 +25,12 @@ export default defineConfig({
         }
       });
     }),
+    HttpHandler.get("/sleep", async (req) => {
+      const param = req.getQueryParam("ms");
+      const ms = param ? parseInt(param) : 500;
+      await sleep(ms);
+      return `slept: ${ms}ms`;
+    }),
     HttpHandler.get("/count/{table}/", async (req) => {
       const table = req.getPathParam("table");
       if (table) {
@@ -32,15 +39,7 @@ export default defineConfig({
       }
     }),
   ],
-  jobHandlers: [
-    {
-      name: "myjob",
-      spec: "5 * * * * * *",
-      handler: () => {
-        console.log("Hello Job!");
-      },
-    },
-  ],
+  jobHandlers: [JobHandler.minutely("myjob", () => console.log("Hello Job!"))],
 });
 
 function jsonHandler(req) {
@@ -65,4 +64,8 @@ function fibonacci(num) {
     default:
       return fibonacci(num - 1) + fibonacci(num - 2);
   }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

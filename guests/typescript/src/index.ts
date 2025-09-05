@@ -1,6 +1,7 @@
 import { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.3";
 import type { InitResult } from "trailbase:runtime/init-endpoint";
 import type { HttpHandlerInterface } from "./http";
+import type { JobHandlerInterface } from "./job";
 import { buildIncomingHttpHandler } from "./http/incoming";
 
 export { addPeriodicCallback } from "./timer";
@@ -8,12 +9,6 @@ export { addPeriodicCallback } from "./timer";
 export * from "./util";
 export type { InitResult } from "trailbase:runtime/init-endpoint";
 export { threadId } from "trailbase:runtime/host-endpoint";
-
-export type JobHandler = {
-  name: string;
-  spec: string;
-  handler: () => void | Promise<void>;
-};
 
 export interface Config {
   incomingHandler: {
@@ -29,14 +24,14 @@ export interface Config {
 
 export function defineConfig(args: {
   httpHandlers?: HttpHandlerInterface[];
-  jobHandlers?: JobHandler[];
+  jobHandlers?: JobHandlerInterface[];
 }): Config {
   return {
     incomingHandler: {
       handle: buildIncomingHttpHandler(args),
     },
     initEndpoint: {
-      init: function(): InitResult {
+      init: function (): InitResult {
         return {
           httpHandlers: (args.httpHandlers ?? []).map((h) => [
             h.method,

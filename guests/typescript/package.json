@@ -12,6 +12,7 @@
     "./db": "./dist/db.js",
     "./fs": "./dist/fs.js",
     "./http": "./dist/http.js",
+    "./job": "./dist/job.js",
     "./kv": "./dist/kv.js"
   },
   "scripts": {
