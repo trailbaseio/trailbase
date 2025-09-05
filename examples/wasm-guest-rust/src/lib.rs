@@ -25,16 +25,13 @@ impl Guest for Endpoints {
         return Ok(format!("Welcome from WASM [{}]: {url}\n", thread_id()));
       }),
       HttpRoute::new(Method::GET, "/wasm_query", async |_req| {
-        execute(
-          "CREATE TABLE test (id INTEGER PRIMARY KEY)".to_string(),
-          vec![],
-        )
-        .await
-        .map_err(internal)?;
+        execute("CREATE TABLE test (id INTEGER PRIMARY KEY)", [])
+          .await
+          .map_err(internal)?;
 
-        let _ = execute("INSERT INTO test (id) VALUES (2), (4)".to_string(), vec![]).await;
+        let _ = execute("INSERT INTO test (id) VALUES (2), (4)", []).await;
 
-        let rows = query("SELECT COUNT(*) FROM test".to_string(), vec![])
+        let rows = query("SELECT COUNT(*) FROM test", [])
           .await
           .map_err(internal)?;
 

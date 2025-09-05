@@ -1,4 +1,5 @@
 use base64::prelude::*;
+use serde::Serialize;
 use wstd::http::body::IntoBody;
 use wstd::http::{Client, Request};
 
@@ -58,10 +59,13 @@ pub enum Error {
   Other(String),
 }
 
-pub async fn query(query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>, Error> {
+pub async fn query(
+  query: impl std::string::ToString,
+  params: impl Into<Vec<Value>>,
+) -> Result<Vec<Vec<Value>>, Error> {
   let r = SqliteRequest {
-    query,
-    params: params.into_iter().map(to_json_value).collect(),
+    query: query.to_string(),
+    params: params.into().into_iter().map(to_json_value).collect(),
   };
   let request = Request::builder()
     .uri("http://__sqlite/query")
@@ -102,10 +106,13 @@ pub async fn query(query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>,
   };
 }
 
-pub async fn execute(query: String, params: Vec<Value>) -> Result<usize, Error> {
+pub async fn execute(
+  query: impl std::string::ToString,
+  params: impl Into<Vec<Value>>,
+) -> Result<usize, Error> {
   let r = SqliteRequest {
-    query,
-    params: params.into_iter().map(to_json_value).collect(),
+    query: query.to_string(),
+    params: params.into().into_iter().map(to_json_value).collect(),
   };
   let request = Request::builder()
     .uri("http://__sqlite/execute")
@@ -157,6 +164,28 @@ fn from_json_value(value: serde_json::Value) -> Result<Value, Error> {
     }
     _ => Err(Error::UnexpectedType),
   };
+}
+
+#[derive(Serialize)]
+struct Blob {
+  blob: String,
+}
+
+impl serde::ser::Serialize for Value {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::ser::Serializer,
+  {
+    return match self {
+      Value::Null => serializer.serialize_unit(),
+      Value::Text(s) => serializer.serialize_str(s),
+      Value::Integer(i) => serializer.serialize_i64(*i),
+      Value::Real(f) => serializer.serialize_f64(*f),
+      Value::Blob(blob) => serializer.serialize_some(&Blob {
+        blob: BASE64_URL_SAFE.encode(blob),
+      }),
+    };
+  }
 }
 
 pub fn to_json_value(value: Value) -> serde_json::Value {

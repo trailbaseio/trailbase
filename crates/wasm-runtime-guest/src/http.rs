@@ -19,10 +19,10 @@ impl HttpError {
     };
   }
 
-  pub fn message(status: StatusCode, message: impl Into<String>) -> Self {
+  pub fn message(status: StatusCode, message: impl std::string::ToString) -> Self {
     return Self {
       status,
-      message: Some(message.into()),
+      message: Some(message.to_string()),
     };
   }
 }
