@@ -28,7 +28,7 @@ impl HttpError {
 }
 
 type HttpHandler = Box<
-  dyn (Fn(
+  dyn (FnOnce(
     Option<User>,
     http::Request<wstd::http::body::IncomingBody>,
     wstd::http::server::Responder,
@@ -44,12 +44,12 @@ pub struct HttpRoute {
 impl HttpRoute {
   pub fn new<F, R, B>(method: Method, path: impl std::string::ToString, f: F) -> Self
   where
+    // NOTE: Send + Sync aren't strictly needed. We could also accept AsyncFnOnce, however let's
+    // start more constraint and see where it takes us.
     F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
     R: IntoResponse<B>,
     B: wstd::http::body::Body,
   {
-    let f = std::rc::Rc::new(f);
-
     return Self {
       method,
       path: path.to_string(),
@@ -73,7 +73,6 @@ impl HttpRoute {
             body,
           };
 
-          let f = f.clone();
           return Box::pin(async move {
             let response = responder.respond(f(req).await.into_response()).await;
 
@@ -87,40 +86,44 @@ impl HttpRoute {
   }
 }
 
-pub fn get<F, R, B>(path: impl std::string::ToString, f: F) -> HttpRoute
-where
-  F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
-  R: IntoResponse<B>,
-  B: wstd::http::body::Body,
-{
-  return HttpRoute::new(Method::GET, path, f);
-}
+pub mod routing {
+  use super::{HttpRoute, IntoResponse, Method, Request};
 
-pub fn post<F, R, B>(path: impl std::string::ToString, f: F) -> HttpRoute
-where
-  F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
-  R: IntoResponse<B>,
-  B: wstd::http::body::Body,
-{
-  return HttpRoute::new(Method::POST, path, f);
-}
+  pub fn get<F, R, B>(path: impl std::string::ToString, f: F) -> HttpRoute
+  where
+    F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
+    R: IntoResponse<B>,
+    B: wstd::http::body::Body,
+  {
+    return HttpRoute::new(Method::GET, path, f);
+  }
 
-pub fn patch<F, R, B>(path: impl std::string::ToString, f: F) -> HttpRoute
-where
-  F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
-  R: IntoResponse<B>,
-  B: wstd::http::body::Body,
-{
-  return HttpRoute::new(Method::PATCH, path, f);
-}
+  pub fn post<F, R, B>(path: impl std::string::ToString, f: F) -> HttpRoute
+  where
+    F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
+    R: IntoResponse<B>,
+    B: wstd::http::body::Body,
+  {
+    return HttpRoute::new(Method::POST, path, f);
+  }
 
-pub fn delete<F, R, B>(path: impl std::string::ToString, f: F) -> HttpRoute
-where
-  F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
-  R: IntoResponse<B>,
-  B: wstd::http::body::Body,
-{
-  return HttpRoute::new(Method::DELETE, path, f);
+  pub fn patch<F, R, B>(path: impl std::string::ToString, f: F) -> HttpRoute
+  where
+    F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
+    R: IntoResponse<B>,
+    B: wstd::http::body::Body,
+  {
+    return HttpRoute::new(Method::PATCH, path, f);
+  }
+
+  pub fn delete<F, R, B>(path: impl std::string::ToString, f: F) -> HttpRoute
+  where
+    F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
+    R: IntoResponse<B>,
+    B: wstd::http::body::Body,
+  {
+    return HttpRoute::new(Method::DELETE, path, f);
+  }
 }
 
 #[derive(Clone, Debug)]

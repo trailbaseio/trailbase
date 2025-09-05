@@ -3,7 +3,7 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use trailbase_wasm::db::{Value, query};
-use trailbase_wasm::http::{HttpError, HttpRoute, Json, Method, Request, StatusCode};
+use trailbase_wasm::http::{HttpError, HttpRoute, Json, Request, StatusCode, routing};
 use trailbase_wasm::{Guest, export};
 
 async fn search_handler(req: Request) -> Result<Json<Vec<Vec<Value>>>, HttpError> {
@@ -50,7 +50,7 @@ struct Endpoints;
 
 impl Guest for Endpoints {
   fn http_handlers() -> Vec<HttpRoute> {
-    return vec![HttpRoute::new(Method::GET, "/search", search_handler)];
+    return vec![routing::get("/search", search_handler)];
   }
 }
 

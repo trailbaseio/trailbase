@@ -23,11 +23,11 @@ pub fn read_file(path: impl AsRef<Path>) -> Result<Vec<u8>, Error> {
   let (root, _) = get_directories()
     .into_iter()
     .find(|(_, path)| path == "/")
-    .ok_or_else(|| Error::MissingRoot)?;
+    .ok_or(Error::MissingRoot)?;
 
   let mut descriptor: Descriptor = root;
   for (i, segment) in segments.iter().enumerate() {
-    let path = segment.to_str().ok_or_else(|| Error::InvalidPath)?;
+    let path = segment.to_str().ok_or(Error::InvalidPath)?;
 
     // First.
     if i == 0 {
@@ -49,7 +49,7 @@ pub fn read_file(path: impl AsRef<Path>) -> Result<Vec<u8>, Error> {
         },
         DescriptorFlags::READ,
       )
-      .map_err(|err| Error::Open(err))?;
+      .map_err(Error::Open)?;
 
     if last {
       const MAX: u64 = 1024 * 1024;
@@ -58,7 +58,7 @@ pub fn read_file(path: impl AsRef<Path>) -> Result<Vec<u8>, Error> {
       loop {
         let (bytes, eof) = descriptor
           .read(MAX, buffer.len() as u64)
-          .map_err(|err| Error::Read(err))?;
+          .map_err(Error::Read)?;
 
         buffer.extend(bytes);
 
