@@ -186,54 +186,153 @@ export type Or = {
 
 export type FilterOrComposite = Filter | And | Or;
 
-export interface RecordApi<T = Record<string, unknown>> {
-  list(opts?: {
-    pagination?: Pagination;
-    order?: string[];
-    filters?: FilterOrComposite[];
-    count?: boolean;
-    expand?: string[];
-  }): Promise<ListResponse<T>>;
-
-  read(
-    id: string | number,
-    opt?: {
-      expand?: string[];
-    },
-  ): Promise<T>;
-
-  create(record: T): Promise<string | number>;
-  createBulk(records: T[]): Promise<(string | number)[]>;
-
-  update(id: string | number, record: Partial<T>): Promise<void>;
-
-  delete(id: string | number): Promise<void>;
-
-  subscribe(id: string | number): Promise<ReadableStream<Event>>;
+// TODO: consider generating these types with ts-rs to reduce manual duplication.
+export interface CreateOp {
+  Create: {
+    api_name: string;
+    value: Record<string, unknown>;
+  };
 }
 
-/// Provides CRUD access to records through TrailBase's record API.
-export class RecordApiImpl<T = Record<string, unknown>>
-  implements RecordApi<T>
-{
-  private readonly _path: string;
+export interface UpdateOp {
+  Update: {
+    api_name: string;
+    record_id: string | number;
+    value: Record<string, unknown>;
+  };
+}
 
+export interface DeleteOp {
+  Delete: {
+    api_name: string;
+    record_id: string | number;
+  };
+}
+
+interface DeferredOperation<ResponseType> {
+  query(): Promise<ResponseType>;
+}
+
+interface DeferredMutation<ResponseType>
+  extends DeferredOperation<ResponseType> {
+  toJSON(): CreateOp | UpdateOp | DeleteOp;
+}
+
+export class CreateOperation<T = Record<string, unknown>>
+  implements DeferredMutation<string | number>
+{
   constructor(
     private readonly client: Client,
-    private readonly name: string,
-  ) {
-    this._path = `${recordApiBasePath}/${this.name}`;
-  }
+    private readonly apiName: string,
+    private readonly record: Partial<T>,
+  ) {}
+  async query(): Promise<string | number> {
+    const response = await this.client.fetch(
+      `${recordApiBasePath}/${this.apiName}`,
+      {
+        method: "POST",
+        body: JSON.stringify(this.record),
+        headers: jsonContentTypeHeader,
+      },
+    );
 
-  public async list<T = Record<string, unknown>>(opts?: {
-    pagination?: Pagination;
-    order?: string[];
-    filters?: FilterOrComposite[];
-    count?: boolean;
-    expand?: string[];
-  }): Promise<ListResponse<T>> {
+    return (await response.json()).ids[0];
+  }
+  toJSON(): CreateOp {
+    return {
+      Create: {
+        api_name: this.apiName,
+        value: this.record,
+      },
+    };
+  }
+}
+
+export class UpdateOperation<T = Record<string, unknown>>
+  implements DeferredMutation<void>
+{
+  constructor(
+    private readonly client: Client,
+    private readonly apiName: string,
+    private readonly id: string | number,
+    private readonly record: Partial<T>,
+  ) {}
+  async query(): Promise<void> {
+    await this.client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(this.record),
+      headers: jsonContentTypeHeader,
+    });
+  }
+  toJSON(): UpdateOp {
+    return {
+      Update: {
+        api_name: this.apiName,
+        record_id: this.id,
+        value: this.record,
+      },
+    };
+  }
+}
+
+export class DeleteOperation implements DeferredMutation<void> {
+  constructor(
+    private readonly client: Client,
+    private readonly apiName: string,
+    private readonly id: string | number,
+  ) {}
+  async query(): Promise<void> {
+    await this.client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
+      method: "DELETE",
+    });
+  }
+  toJSON(): DeleteOp {
+    return {
+      Delete: {
+        api_name: this.apiName,
+        record_id: this.id,
+      },
+    };
+  }
+}
+
+export class ReadOperation<T = Record<string, unknown>>
+  implements DeferredOperation<T>
+{
+  constructor(
+    private readonly client: Client,
+    private readonly apiName: string,
+    private readonly id: string | number,
+    private readonly opt?: { expand?: string[] },
+  ) {}
+  async query(): Promise<T> {
+    const expand = this.opt?.expand;
+    const response = await this.client.fetch(
+      expand
+        ? `${recordApiBasePath}/${this.apiName}/${this.id}?expand=${expand.join(",")}`
+        : `${recordApiBasePath}/${this.apiName}/${this.id}`,
+    );
+    return (await response.json()) as T;
+  }
+}
+
+export class ListOperation<T = Record<string, unknown>>
+  implements DeferredOperation<ListResponse<T>>
+{
+  constructor(
+    private readonly client: Client,
+    private readonly apiName: string,
+    private readonly opts?: {
+      pagination?: Pagination;
+      order?: string[];
+      filters?: FilterOrComposite[];
+      count?: boolean;
+      expand?: string[];
+    },
+  ) {}
+  async query(): Promise<ListResponse<T>> {
     const params = new URLSearchParams();
-    const pagination = opts?.pagination;
+    const pagination = this.opts?.pagination;
     if (pagination) {
       const cursor = pagination.cursor;
       if (cursor) params.append("cursor", cursor);
@@ -244,12 +343,12 @@ export class RecordApiImpl<T = Record<string, unknown>>
       const offset = pagination.offset;
       if (offset) params.append("offset", offset.toString());
     }
-    const order = opts?.order;
+    const order = this.opts?.order;
     if (order) params.append("order", order.join(","));
 
-    if (opts?.count) params.append("count", "true");
+    if (this.opts?.count) params.append("count", "true");
 
-    const expand = opts?.expand;
+    const expand = this.opts?.expand;
     if (expand) params.append("expand", expand.join(","));
 
     function traverseFilters(path: string, filter: FilterOrComposite) {
@@ -275,15 +374,93 @@ export class RecordApiImpl<T = Record<string, unknown>>
       }
     }
 
-    const filters = opts?.filters;
+    const filters = this.opts?.filters;
     if (filters) {
       for (const filter of filters) {
         traverseFilters("filter", filter);
       }
     }
 
-    const response = await this.client.fetch(`${this._path}?${params}`);
+    const response = await this.client.fetch(
+      `${recordApiBasePath}/${this.apiName}?${params}`,
+    );
     return (await response.json()) as ListResponse<T>;
+  }
+}
+
+export interface RecordApi<T = Record<string, unknown>> {
+  list(opts?: {
+    pagination?: Pagination;
+    order?: string[];
+    filters?: FilterOrComposite[];
+    count?: boolean;
+    expand?: string[];
+  }): Promise<ListResponse<T>>;
+
+  listOp(opts?: {
+    pagination?: Pagination;
+    order?: string[];
+    filters?: FilterOrComposite[];
+    count?: boolean;
+    expand?: string[];
+  }): ListOperation<T>;
+
+  read(
+    id: string | number,
+    opt?: {
+      expand?: string[];
+    },
+  ): Promise<T>;
+
+  readOp(
+    id: string | number,
+    opt?: {
+      expand?: string[];
+    },
+  ): ReadOperation<T>;
+
+  create(record: T): Promise<string | number>;
+
+  createOp(record: T): CreateOperation<T>;
+
+  update(id: string | number, record: Partial<T>): Promise<void>;
+
+  updateOp(id: string | number, record: Partial<T>): UpdateOperation;
+
+  delete(id: string | number): Promise<void>;
+
+  deleteOp(id: string | number): DeleteOperation;
+
+  subscribe(id: string | number): Promise<ReadableStream<Event>>;
+}
+
+/// Provides CRUD access to records through TrailBase's record API.
+export class RecordApiImpl<T = Record<string, unknown>>
+  implements RecordApi<T>
+{
+  constructor(
+    private readonly client: Client,
+    private readonly name: string,
+  ) {}
+
+  public async list(opts?: {
+    pagination?: Pagination;
+    order?: string[];
+    filters?: FilterOrComposite[];
+    count?: boolean;
+    expand?: string[];
+  }): Promise<ListResponse<T>> {
+    return new ListOperation<T>(this.client, this.name, opts).query();
+  }
+
+  public listOp(opts?: {
+    pagination?: Pagination;
+    order?: string[];
+    filters?: FilterOrComposite[];
+    count?: boolean;
+    expand?: string[];
+  }): ListOperation<T> {
+    return new ListOperation<T>(this.client, this.name, opts);
   }
 
   public async read<T = Record<string, unknown>>(
@@ -292,58 +469,46 @@ export class RecordApiImpl<T = Record<string, unknown>>
       expand?: string[];
     },
   ): Promise<T> {
-    const expand = opt?.expand;
-    const response = await this.client.fetch(
-      expand
-        ? `${this._path}/${id}?expand=${expand.join(",")}`
-        : `${this._path}/${id}`,
-    );
-    return (await response.json()) as T;
+    return new ReadOperation<T>(this.client, this.name, id, opt).query();
   }
 
-  public async create<T = Record<string, unknown>>(
-    record: T,
-  ): Promise<string | number> {
-    const response = await this.client.fetch(this._path, {
-      method: "POST",
-      body: JSON.stringify(record),
-      headers: jsonContentTypeHeader,
-    });
-
-    return (await response.json()).ids[0];
-  }
-
-  public async createBulk<T = Record<string, unknown>>(
-    records: T[],
-  ): Promise<(string | number)[]> {
-    const response = await this.client.fetch(this._path, {
-      method: "POST",
-      body: JSON.stringify(records),
-      headers: jsonContentTypeHeader,
-    });
-
-    return (await response.json()).ids;
-  }
-
-  public async update<T = Record<string, unknown>>(
+  public readOp(
     id: string | number,
-    record: Partial<T>,
-  ): Promise<void> {
-    await this.client.fetch(`${this._path}/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(record),
-      headers: jsonContentTypeHeader,
-    });
+    opt?: {
+      expand?: string[];
+    },
+  ): ReadOperation<T> {
+    return new ReadOperation<T>(this.client, this.name, id, opt);
+  }
+
+  public async create(record: T): Promise<string | number> {
+    return new CreateOperation<T>(this.client, this.name, record).query();
+  }
+
+  public createOp(record: T): CreateOperation<T> {
+    return new CreateOperation<T>(this.client, this.name, record);
+  }
+
+  public async update(id: string | number, record: Partial<T>): Promise<void> {
+    return new UpdateOperation<T>(this.client, this.name, id, record).query();
+  }
+
+  public updateOp(id: string | number, record: Partial<T>): UpdateOperation<T> {
+    return new UpdateOperation<T>(this.client, this.name, id, record);
   }
 
   public async delete(id: string | number): Promise<void> {
-    await this.client.fetch(`${this._path}/${id}`, {
-      method: "DELETE",
-    });
+    return new DeleteOperation(this.client, this.name, id).query();
+  }
+
+  public deleteOp(id: string | number): DeleteOperation {
+    return new DeleteOperation(this.client, this.name, id);
   }
 
   public async subscribe(id: string | number): Promise<ReadableStream<Event>> {
-    const response = await this.client.fetch(`${this._path}/subscribe/${id}`);
+    const response = await this.client.fetch(
+      `${recordApiBasePath}/${this.name}/subscribe/${id}`,
+    );
     const body = response.body;
     if (!body) {
       throw Error("Subscription reader is null.");
@@ -428,6 +593,12 @@ export interface Client {
   ///
   /// Unlike native fetch, will throw in case !response.ok.
   fetch(path: string, init?: FetchOptions): Promise<Response>;
+
+  /// Excute a batch query.
+  execute(
+    operations: (CreateOperation | UpdateOperation | DeleteOperation)[],
+    transaction?: boolean,
+  ): Promise<(string | number)[]>;
 }
 
 /// Client for interacting with TrailBase auth and record APIs.
@@ -483,6 +654,20 @@ class ClientImpl implements Client {
   /// Construct accessor for Record API with given name.
   public records<T = Record<string, unknown>>(name: string): RecordApi<T> {
     return new RecordApiImpl<T>(this, name);
+  }
+
+  /// Excute a batch query.
+  async execute(
+    operations: (CreateOperation | UpdateOperation | DeleteOperation)[],
+    transaction: boolean = true,
+  ): Promise<(string | number)[]> {
+    const response = await this.fetch(transactionApiBasePath, {
+      method: "POST",
+      body: JSON.stringify({ operations, transaction }),
+      headers: jsonContentTypeHeader,
+    });
+
+    return (await response.json()).ids;
   }
 
   public avatarUrl(userId?: string): string | undefined {
@@ -681,6 +866,7 @@ export async function initClientFromCookies(
 
 const recordApiBasePath = "/api/records/v1";
 const authApiBasePath = "/api/auth/v1";
+const transactionApiBasePath = "/api/transaction/v1/execute";
 
 export function filePath(
   apiName: string,
