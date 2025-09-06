@@ -73,8 +73,9 @@ allows us to support guests in multiple languages.
   languages, ...
 * This may also open up the path to using a more mainstream copy-left license.
 * Better sandboxing for I/O.
-* Support custom efficient SQLite extensions w/o accidental state sharing.
-* Fix interval and callback timeres are now working reliably.
+  * File-IO is now limited to R/O of an explicitly specified root path `--wasm-root-dir`.
+* We may support custom efficient SQLite extensions w/o accidental state sharing.
+* Fix interval and callback timers are now working reliably.
 
 ## Regressions
 
