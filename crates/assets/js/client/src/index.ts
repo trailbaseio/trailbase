@@ -186,6 +186,7 @@ export type Or = {
 
 export type FilterOrComposite = Filter | And | Or;
 
+// TODO: consider generating these types with ts-rs to reduce manual duplication.
 export interface CreateOp {
   Create: {
     api_name: string;
