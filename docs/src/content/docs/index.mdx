@@ -26,6 +26,7 @@ hero:
 
 import { Image } from "astro:assets";
 import { Aside, Card, CardGrid } from "@astrojs/starlight/components";
+
 import SplitCard from "@/components/SplitCard.astro";
 import Footer from "@/components/layout/Footer.astro";
 
@@ -41,8 +42,11 @@ import tsLogo from "@/assets/ts_logo.svg";
 import tanstackLogo from "@/assets/tanstack_logo.svg";
 
 import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx";
+import { githubPath } from "@/lib/github";
 
+export const tanstackExample = githubPath({ path: "examples/tanstack-db-sync" });
 export const demoLink = "https://demo.trailbase.io";
+
 
 <div class="flex flex-col gap-4">
 
@@ -148,8 +152,7 @@ export const demoLink = "https://demo.trailbase.io";
       synchronize your clients.
 
       [TanStack/db](https://tanstack.com/db/latest) ships with a TrailBase
-      integration out-of-the-box, check out our
-      [example](https://github.com/trailbaseio/trailbase/tree/main/examples/local-first).
+      integration out-of-the-box, check out the <a href={tanstackExample}>example</a>.
 
       <div class="flex justify-center items-center">
         <a href="https://github.com/TanStack/db/tree/main/packages/trailbase-db-collection">

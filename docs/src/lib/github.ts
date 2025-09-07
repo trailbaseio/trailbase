@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { cwd } from "node:process";
 
 const repo = "https://github.com/trailbaseio/trailbase";
@@ -37,4 +37,16 @@ export function githubCodeReference(args: {
         `Ambiguous matches for '${args.match}' at lines: ${matches} in: ${args.path}`,
       );
   }
+}
+
+export function githubPath(args: { path: string }): string {
+  const pwd = cwd();
+  const root = join(pwd, "..");
+  const path = join(root, args.path);
+
+  if (!existsSync(path)) {
+    throw new Error(`Path not found: ${path}`);
+  }
+
+  return `${repo}/blob/main/${args.path}`;
 }
