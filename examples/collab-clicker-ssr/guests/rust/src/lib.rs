@@ -4,7 +4,9 @@
 
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver};
 use rquickjs::prelude::{Async, Ctx, Func};
-use rquickjs::{AsyncContext, AsyncRuntime, Function, Module, Object, async_with};
+use rquickjs::{
+  AsyncContext, AsyncRuntime, Context, Function, Module, Object, Runtime, async_with,
+};
 use trailbase_wasm::db::{Value, query};
 use trailbase_wasm::fs::read_file;
 use trailbase_wasm::http::{HttpError, HttpRoute, Json, StatusCode, routing};
@@ -56,6 +58,14 @@ impl Guest for Endpoints {
 
         return Ok(template_str);
       }),
+      routing::get("/fibonacci", async |req| {
+        let n: usize = req
+          .query_param("n")
+          .and_then(|p| p.parse().ok())
+          .unwrap_or(40);
+
+        return Ok(format!("{}\n", fibonacci(n)?));
+      }),
     ];
   }
 }
@@ -94,16 +104,13 @@ async fn set_timeout<'js>(
 
 async fn render(count: i64) -> Result<RenderResult, HttpError> {
   let resolver = BuiltinResolver::default().with_module("server/entry-server.js");
-
   let module = read_cached_file("/dist/server/entry-server.js")?;
-
   let loader = BuiltinLoader::default().with_module("server/entry-server.js", module);
 
   let rt = AsyncRuntime::new().map_err(internal)?;
-  let ctx = AsyncContext::full(&rt).await.map_err(internal)?;
-
   rt.set_loader(resolver, loader).await;
 
+  let ctx = AsyncContext::full(&rt).await.map_err(internal)?;
   let result: Result<RenderResult, HttpError> = async_with!(ctx => |ctx| {
     ctx
       .globals()
@@ -140,6 +147,45 @@ async fn render(count: i64) -> Result<RenderResult, HttpError> {
   rt.idle().await;
 
   return result;
+}
+
+fn fibonacci(n: usize) -> Result<usize, HttpError> {
+  let resolver = BuiltinResolver::default();
+  let loader = BuiltinLoader::default();
+
+  let rt = Runtime::new().map_err(internal)?;
+  rt.set_loader(resolver, loader);
+
+  let ctx = Context::full(&rt).map_err(internal)?;
+  return ctx.with(|ctx| -> Result<usize, HttpError> {
+    let (module, promise) = Module::declare(
+      ctx,
+      "fibonacci",
+      format!(
+        r#"
+function fibonacci(num) {{
+  switch (num) {{
+    case 0:
+      return 0;
+    case 1:
+      return 1;
+    default:
+      return fibonacci(num - 1) + fibonacci(num - 2);
+  }}
+}}
+
+export const output = fibonacci({n});
+"#
+      ),
+    )
+    .map_err(internal)?
+    .eval()
+    .map_err(internal)?;
+
+    promise.finish::<()>().map_err(internal)?;
+
+    return module.get("output").map_err(internal);
+  });
 }
 
 fn internal(err: impl std::string::ToString) -> HttpError {
