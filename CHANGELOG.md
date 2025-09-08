@@ -1,3 +1,8 @@
+## v0.16.9
+
+* Add support for non-transactional bulk edits to experimental "transacation record API" and expose it in the JS/TS client. Thanks so much @ibilux 🙏.
+* Update Rust dependencies.
+
 ## v0.16.8
 
 * Allow signed-out change-email verification. This allows validation from a different browser or device, e.g. pivot to phone.
