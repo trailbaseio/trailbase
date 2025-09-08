@@ -8,6 +8,14 @@ author: sebastian
 image: ./_wasm_logo.svg
 ---
 
+import { RuntimeFib40Times } from "./_switching_to_a_wasm_runtime.tsx";
+
+<div class="flex justify-center">
+  <div class="h-[400px] w-[90%]">
+    <RuntimeFib40Times client:only="solid-js" />
+  </div>
+</div>
+
 TrailBase has been embedding a V8 JavaScript runtime for the last 10 months
 allowing users to implement custom HTTP and job handlers.
 During this time we've experienced several issues and limitations - we're
