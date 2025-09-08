@@ -10,8 +10,11 @@ export function githubCodeReference(args: {
   path: string;
   match: string;
 }): string {
-  const pwd = cwd();
-  const root = join(pwd, "..");
+  if (args.path.startsWith("/")) {
+    throw new Error("expected relative path");
+  }
+
+  const root = join(cwd(), "..");
   const path = join(root, args.path);
 
   const buffer = readFileSync(path);
@@ -31,7 +34,7 @@ export function githubCodeReference(args: {
     case 0:
       throw new Error(`Not match for '${args.match}' in: ${args.path}`);
     case 1:
-      return join(`${repo}/blob/main/`, args.path) + `#L${matches[0]}`;
+      return `${repo}/blob/main/${args.path}#L${matches[0]}`;
     default:
       throw new Error(
         `Ambiguous matches for '${args.match}' at lines: ${matches} in: ${args.path}`,
@@ -42,12 +45,14 @@ export function githubCodeReference(args: {
 /// Creates and validates a Github repository link, like:
 ///   https://github.com/trailbaseio/trailbase/tree/main/examples/blog.
 export function githubPath(path: string): string {
-  const pwd = cwd();
-  const root = join(pwd, "..");
+  if (path.startsWith("/")) {
+    throw new Error("expected relative path");
+  }
 
+  const root = join(cwd(), "..");
   if (!existsSync(join(root, path))) {
     throw new Error(`Path not found: ${path}`);
   }
 
-  return join(`${repo}/blob/main/`, path);
+  return `${repo}/blob/main/${path}`;
 }
