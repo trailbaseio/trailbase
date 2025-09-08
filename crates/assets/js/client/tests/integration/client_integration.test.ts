@@ -64,7 +64,8 @@ test("auth integration tests", async () => {
 
 test("Record integration tests", async () => {
   const client = await connect();
-  const api = client.records<NewSimpleStrict>("simple_strict_table");
+  const apiName = "simple_strict_table";
+  const api = client.records<NewSimpleStrict>(apiName);
 
   const now = new Date().getTime();
   // Throw in some url characters for good measure.
@@ -79,10 +80,28 @@ test("Record integration tests", async () => {
   }
 
   {
+    const bulkIds = await api.createBulk([
+      { text_not_null: "ts bulk create 0" },
+      { text_not_null: "ts bulk create 1" },
+    ]);
+    expect(bulkIds.length).toBe(2);
+  }
+
+  {
+    const op: {
+      Create: {
+        api_name: string;
+        value: Record<string, unknown>;
+      };
+    } = JSON.parse(JSON.stringify(api.createOp({ text_not_null: "test" })));
+
+    expect(op.Create.api_name).toBe(apiName);
+    expect(op.Create.value.text_not_null).toBe("test");
+
     const bulkIds = await client.execute(
       [
-        api.createOp({ text_not_null: "ts bulk create 0" }),
-        api.createOp({ text_not_null: "ts bulk create 1" }),
+        api.createOp({ text_not_null: "ts bulk execute 0" }),
+        api.createOp({ text_not_null: "ts bulk execute 1" }),
       ],
       false,
     );
