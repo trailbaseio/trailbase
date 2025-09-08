@@ -4,6 +4,7 @@
 import config from "virtual:starlight/user-config";
 import type { ImageMetadata } from "astro";
 import { Image } from "astro:assets";
+import { repo } from "@/config";
 
 // NOTE: We define the actions/links manually below, since actions are only defined on the landing-page otherwise.
 // const { data } = Astro.locals.starlightRoute.entry;
@@ -24,7 +25,7 @@ const actions = [
   },
   {
     text: "GitHub",
-    link: "https://github.com/trailbaseio/trailbase",
+    link: repo,
     variant: "secondary",
     icon: { type: "icon", name: "github" },
   },

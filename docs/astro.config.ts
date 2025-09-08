@@ -91,7 +91,7 @@ export default defineConfig({
                   slug: "getting-started/first-cli-app",
                 },
                 {
-                  label: "Realtime-sync & SSR",
+                  label: "Realtime-Sync & SSR",
                   slug: "getting-started/first-realtime-app",
                 },
               ],

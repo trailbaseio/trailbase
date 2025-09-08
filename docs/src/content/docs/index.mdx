@@ -44,9 +44,7 @@ import tanstackLogo from "@/assets/tanstack_logo.svg";
 import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx";
 import { githubPath } from "@/lib/github";
 
-export const tanstackExample = githubPath({ path: "examples/tanstack-db-sync" });
 export const demoLink = "https://demo.trailbase.io";
-
 
 <div class="flex flex-col gap-4">
 
@@ -123,7 +121,7 @@ export const demoLink = "https://demo.trailbase.io";
         <Image margin={0} class="p-0 m-0" width={42} height={52} src={flutterLogo} alt="Flutter" />
       </a>
 
-      <a href="https://github.com/trailbaseio/trailbase/tree/main/client/swift/trailbase">
+      <a href={githubPath("/client/swift/trailbase")}>
         <Image margin={0} class="p-0 m-0" width={52} height={52} src={swiftLogo} alt="Swift" />
       </a>
 
@@ -139,7 +137,7 @@ export const demoLink = "https://demo.trailbase.io";
         <Image margin={0} class="p-0 m-0" width={52} height={52} src={rustLogo} alt="Rust" />
       </a>
 
-      <a href="https://github.com/trailbaseio/trailbase/tree/main/client/go/trailbase">
+      <a href={githubPath("/client/go/trailbase")}>
         <Image margin={0} class="p-0 m-0" width={52} height={52} src={goLogo} alt="Go" />
       </a>
     </div>
@@ -152,7 +150,8 @@ export const demoLink = "https://demo.trailbase.io";
       synchronize your clients.
 
       [TanStack/db](https://tanstack.com/db/latest) ships with a TrailBase
-      integration out-of-the-box, check out the <a href={tanstackExample}>example</a>.
+      integration out-of-the-box, check out
+      <a href={githubPath("/examples/tanstack-db-sync")}>example</a>.
 
       <div class="flex justify-center items-center">
         <a href="https://github.com/TanStack/db/tree/main/packages/trailbase-db-collection">

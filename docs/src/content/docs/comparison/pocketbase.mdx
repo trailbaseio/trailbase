@@ -4,6 +4,8 @@ description: Comparing TrailBase & PocketBase.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
+import { githubPath } from "@/lib/github";
+
 import GettingTrailBase from "../getting-started/_getting_trailbase.mdx";
 
 Firstly, PocketBase is amazing! It paved the way for single-executable
@@ -94,7 +96,7 @@ sleeve:
   being enforced from the client all the way to the database[^4].
 - A more Node-like JS runtime with full ES6 support, built-in TypeScript
   transpilation, and V8 performance unlocking more of the JS ecosystem and enabling
-  [server-side rendering (SSR)](https://github.com/trailbaseio/trailbase/tree/main/examples/collab-clicker-ssr)
+  <a href={githubPath("/examples/collab-clicker-ssr")}>server-side rendering (SSR)</a>
   with any popular JS framework.
 - Untethered access to SQLite with all its features and capabilities.
 - A wider set of first-class client libraries beyond JS/TS and Dart, including

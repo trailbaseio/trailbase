@@ -4,6 +4,7 @@ title: A Movie Data CLI App
 
 import { Code } from "@astrojs/starlight/components";
 import { Aside } from "@astrojs/starlight/components";
+import { githubPath } from "@/lib/github";
 
 In this tutorial, we'll set up a database with an IMDB test dataset, spin up
 TrailBase and write a simple client CLI application to query the data using
@@ -184,7 +185,7 @@ import fillCode from "@root/examples/data-cli-tutorial/src/fill.ts?raw";
 Thanks for making it to the end.
 Beyond the basic example above, the repository contains a more involved examples, such as:
 
-* A [Blog](https://github.com/trailbaseio/trailbase/tree/main/examples/blog)
+* A <a href={githubPath("examples/blog")}>Blog</a>
   with both, a Web and Flutter UI, more complex APIs, authorization and custom
   user profiles.
 * A collaborative clicker *game* demonstrating server-side rendering (SSR) with
