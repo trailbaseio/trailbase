@@ -64,18 +64,69 @@ allows us to support guests in multiple languages.
 
 ## Opportunities
 
+### Rigorous State Isolation & Performance
+
+V8's isolates and JIT are expensive, they thus typically re-used across
+requests, opening up the gatas for accidental state sharing. There are
+specialized JIT-free runtimes like [LLRT](https://github.com/awslabs/llrt) to
+specifically solve this issue at the expense of performance.
+Our WASM runtime, on the other hand, makes it cheap and easy to spawn fully isolated
+instances per request[^4].
+Combined with efficient guest environments it can even outperform V8 by a factor of ~4.
+
+### Flexible Guest Language Choice
+
+Many languages support compilation to WASM. This gives users more freedom in
+choosing and customizing their server-side environment.
+For now, TrailBase supports JS/TS and Rust, but we're planning to support
+[more](https://github.com/bytecodealliance/wasmtime/blob/main/README.md#language-support)
+in the future.
+
+Moreover, different endpoints can be implemented in different WASM components
+and thus different languages, allowing you to optimize performance as you go.
+For example, an expensive, high-QPS endpoint could be rewritten in Rust
+yielding 10x-100x performance gains.
+
+### Better I/O Sandboxing
+
+Previously, isolates were given untethered I/O access, which together with a
+very dynamic guest language can be a security risk.
+We now limit I/O to read-only file access at an explicitly provided sandbox root.
+We're planning ot extend I/O capabilities over time on a per-need basis.
+If you're missing anything, let us know.
+
+The new integration also fixes timers - such as `setTimeout` and `setInterval`, which
+were unreliable in our previous V8 integration.
+
+### Less Code
+
+As mentioned before, switching off V8 removes a lot of high-scrunity code, cuts
+binary size roughly in half and lets us build truly static binaries with MUSL.
+
+### Rethinking Composition & Licensing Model
+
+The increased flexibility and performance provided by the new WASM runtime
+opens up a path to making this a singular entry-point for extending TrailBase
+(including SQLite extensions) as opposed to framework use-caess.
+In turn, this may allow us to adopt a more popular copyleft license w/o
+inflicting obligations on your business-logic.
+
+{/*
+
 * No accidental state sharing![^4]
 * Many more languages can be supported: C#, Python, Go, Dart, Ruby, C/C++, ...
 * Support for multiple WASI components, in arbitrary languages to combine, e.g. JS + Rust.
+* Better sandboxing for I/O.
+  * File-IO is now limited to R/O of an explicitly specified root path `--wasm-root-dir`.
 * Safe Rust code. Consistent TLS.
 * We would like this to become the de-facto path to extend TrailBase (as opposed
   to using it as a framework), while providing a lot of flexibility in terms of
   languages, ...
 * This may also open up the path to using a more mainstream copy-left license.
-* Better sandboxing for I/O.
-  * File-IO is now limited to R/O of an explicitly specified root path `--wasm-root-dir`.
 * We may support custom efficient SQLite extensions w/o accidental state sharing.
 * Fix interval and callback timers are now working reliably.
+
+*/}
 
 ## Regressions
 
