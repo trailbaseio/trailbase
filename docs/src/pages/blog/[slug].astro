@@ -66,7 +66,7 @@ const proseStyle: string[] = [
 ];
 ---
 
-<Base title={entry.data.title} description={entry.data.intro} draft={true}>
+<Base title={entry.data.title} description={entry.data.intro}>
   <article>
     {/* Header stuff: title, subtitle, tags, read time, ... */}
     <div class:list={[...proseStyle]}>
@@ -80,7 +80,7 @@ const proseStyle: string[] = [
         <PublishDate date={entry.data.pubDate} />
 
         <span class:list={["text-[16px]", "transition-all", "duration-300"]}>
-          ~{Math.floor(readMinutes) + 1} minutes
+          ~{Math.floor(readMinutes) + 1} minute read
         </span>
       </div>
 

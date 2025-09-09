@@ -187,6 +187,28 @@ being roughly 3 times slower than p50.
 Slower insertions can take north of 100ms. This may be related to GC pauses,
 scheduling, or more generally the same CPU variability we observed earlier.
 
+## Runtimes
+
+[TrailBase is currently going through a transition from a V8-based runtime to a
+WASM one](/blog/switching_to_a_wasm_runtime).
+
+V8's execution with just-in-time (JIT) compilation is quite speedy and is about
+40x faster than Goja, PocketBase's interpreter and similar other interpreters
+(the graph's y-axis is logarithmic).
+With the new WASM-based runtime, execution of JS relies on bundling an
+interpreter and thus performance has regressed to be roughly on-par with Goja
+and other JIT-less engines.
+However, guests languages that can compile natively to WASM, e.g. Rust, can shine
+with roughly a 135x speed-up with strong state isolation between requests.
+
+import { RuntimeFib40Times } from "./_benchmarks/wasm_runtime.tsx";
+
+<div class="flex justify-center">
+  <div class="h-[300px] w-[90%]">
+    <RuntimeFib40Times client:only="solid-js" />
+  </div>
+</div>
+
 ## File System
 
 File systems play an important role for the performance of storage systems,
@@ -230,6 +252,8 @@ disc space and feature sets. For example, CoW snapshots may or may not be
 important to you.
 
 
+{/*
+
 ## JavaScript
 
 The benchmark sets up a custom HTTP endpoint `/fibonacci?n=<N>` using the same
@@ -242,12 +266,6 @@ benchmark the performance of the underlying JavaScript engines:
 In other words, the impact of any overhead within PocketBase or TrailBase is
 diminished by the time it takes to compute `fibonacci(N)` for sufficiently
 large `N`.
-
-{/*
-Output:
-  TB: Called "/fibonacci" for fib(40) 100 times, took 0:00:14.988703 (limit=64)
-  PB: Called "/fibonacci" for fib(40) 100 times, took 0:10:01.096053 (limit=64)
-*/}
 
 We found that for `N=40`, V8 (TrailBase) is around 40 times faster than
 goja (PocketBase):
@@ -270,7 +288,15 @@ With the addition of V8 to TrailBase, we've experienced a significant increase
 in the memory baseline dominating the overall footprint.
 In this setup, TrailBase consumes roughly 4 times more memory than PocketBase.
 If memory footprint is a major concern for you, constraining the number of V8
-threads will be an effective remedy (`--js-runtime-threads`).
+threads will be an effective remedy (`--runtime-threads`).
+
+*/}
+
+{/*
+Output:
+  TB: Called "/fibonacci" for fib(40) 100 times, took 0:00:14.988703 (limit=64)
+  PB: Called "/fibonacci" for fib(40) 100 times, took 0:10:01.096053 (limit=64)
+*/}
 
 ## Final Words
 

@@ -17,7 +17,9 @@ Chart.register(BarWithErrorBarsController, BarWithErrorBar, ChartDeferred);
 
 interface BarChartProps {
   data: ChartData<"bar">;
-  scales?: { [key: string]: ScaleOptions<"linear"> };
+  scales?: {
+    [key: string]: ScaleOptions<"linear"> | ScaleOptions<"logarithmic">;
+  };
 }
 
 export function BarChart(props: BarChartProps) {

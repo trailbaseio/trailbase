@@ -68,6 +68,7 @@ export default defineConfig({
             "http://localhost:4000/**/*",
             // The link validator fails to validate the OpenAPI pages injected above.
             `/${openApiBase}/**/*`,
+            "/blog/**/*",
           ],
         }),
       ],

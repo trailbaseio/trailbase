@@ -1,57 +1,41 @@
 ---
-title: JS/TS APIs
+title: Custom APIs
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-On startup TrailBase will automatically load any JavaScript and TypeScript
-files in `traildepot/scripts`.
-This can be used to implement arbitrary HTTP APIs using custom handlers.
+On startup TrailBase will automatically load any WASM component, i.e. `*.wasm`
+files in `traildepot/wasm`.
+This can be used to implement arbitrary HTTP APIs with custom handlers.
 
 ## Example HTTP Endpoint
 
-The following example illustrates a few things:
+The following TypeScript WASM example illustrates a few things:
 
 * How to register a parameterized route with `{table}`.
-* How to implement a handler that returns `text/plain` content. There is also
-  `jsonHandler` and `htmlHandler`.
 * How to query the database.
-* How to return an error.
+* How to return an HTTP error.
 
-```js
-import {
-  addRoute,
-  query,
-  stringHandler,
-  HttpError,
-  StatusCodes
-} from "../trailbase.js";
+```ts
+import { defineConfig } from "trailbase-wasm";
+import { Request, HttpError, HttpHandler, StatusCode } from "trailbase-wasm/http";
+import { query } from "trailbase-wasm/db";
 
-addRoute("GET", "/test/{table}", stringHandler(async (req) => {
-  const table = req.params["table"];
+async function handler(req: Request): Promise<string> {
+  const table = req.getPathParam("table");
   if (table) {
     const rows = await query(`SELECT COUNT(*) FROM ${table}`, [])
     return `entries: ${rows[0][0]}`;
   }
 
   throw new HttpError(
-      StatusCodes.BAD_REQUEST, "Missing '?table=' search query param");
-}));
+      StatusCode.BAD_REQUEST, "Missing '?table=' search query param");
+}
+
+export default defineConfig({
+  httpHandlers: [ HttpHandler.get("/test/{table}", handler) ],
+});
 ```
 
-More examples can be found in the repository in
-`client/testfixture/scripts/index.ts`.
-
-## Runtime Details
-
-At its heart, TrailBase's runtime is a pool of V8 worker threads - called
-*isolates* - alongside a runtime that supports basic tasks such as file I/O, web
-requests, timers, etc.
-While it uses Deno's V8-integration under the hood, it is *not* a full Node.js
-runtime, at least for now.
-
-<Aside type="note" title="State Sharing">
-  Different *isolates* do not share state, i.e. you cannot use global state to
-  reliably share state across requests. Instead, state can be persisted using
-  the database.
-</Aside>
+More examples can be found in the repository under `examples/wasm-guest-ts/`,
+`examples/wasm-guest-js/` and `examples/wasm-guest-rust/`.

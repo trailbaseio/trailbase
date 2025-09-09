@@ -3,7 +3,7 @@ title: >
   TypeScript API, Vector Search & UI
 ---
 
-import { Aside, Code } from "@astrojs/starlight/components";
+import { Aside, Code, Tabs, TabItem } from '@astrojs/starlight/components';
 
 import { githubPath } from "@/lib/github";
 import { repo } from "@/config";
@@ -84,30 +84,38 @@ UPDATE coffee SET embedding = vec_f32(FORMAT("[%f, %f, %f, %f]", Aroma, Flavor, 
 initializing the previously skipped `coffee.embedding` for all records.
 
 
-## Custom TypeScript Endpoint
+## Custom Endpoints
 
-Any time you start `trail run`[^3], JavaScript and TypeScript files under
-`traildepot/scripts` will be executed.
+Any time you start `trail run`[^3], WebAssembly components, i.e. `.wasm` files,
+under `traildepot/wasm` will be compiled and initialized.
 
-<Aside type="note">
-  TrailBase will automatically transpile TypeScript to JavaScript which can
-  then execute on the underlying V8 engine. You don't need a separate build
-  step.
-</Aside>
+We can use this to declare custom HTTP API routes among other things.
+Let's have a quick look at `examples/coffee-vector-search/guests`,
+which define a `/search` API route using vector search, which we'll later need
+to find coffees most closely matching our desired coffee:
 
-We can use this to register custom HTTP API routes among other things.
-Let's have a quick look at `examples/coffee-vector-search/traildepot/scripts/main.ts`,
-which defines a `/search` API route we'll later use in our application to
-find coffees most closely matching our desired coffee notes:
+import handlerTsCode from "@root/examples/coffee-vector-search/guests/typescript/src/index.ts?raw";
+import handlerRustCode from "@root/examples/coffee-vector-search/guests/rust/src/lib.rs?raw";
 
-import handlerCode from "@root/examples/coffee-vector-search/traildepot/scripts.delme/main.ts?raw";
+<Tabs>
+  <TabItem label="TypeScript">
+    <Code
+      code={handlerTsCode}
+      lang="ts"
+      title={"examples/coffee-vector-search/guests/typescript/src/index.ts"}
+      mark={[]}
+    />
+  </TabItem>
 
-<Code
-  code={handlerCode}
-  lang="ts"
-  title={"examples/coffee-vector-search/traildepot/scripts/main.ts"}
-  mark={[]}
-/>
+  <TabItem label="Rust">
+    <Code
+      code={handlerRustCode}
+      lang="rust"
+      title={"examples/coffee-vector-search/guests/rust/src/lib.rs"}
+      mark={[]}
+    />
+  </TabItem>
+</Tabs>
 
 While `trail run` is up, we can test the public `/search` endpoint simply by
 running:
