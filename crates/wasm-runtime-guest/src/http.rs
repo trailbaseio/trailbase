@@ -1,9 +1,10 @@
 use futures_util::future::LocalBoxFuture;
-use trailbase_wasm_common::HttpContextUser as User;
+use trailbase_wasm_common::HttpContext;
 use wstd::http::server::{Finished, Responder};
 use wstd::io::{Cursor, Empty, empty};
 
 pub use http::{HeaderMap, HeaderValue, Method, Response, StatusCode, Version};
+pub use trailbase_wasm_common::HttpContextUser as User;
 
 #[derive(Clone, Debug)]
 pub struct HttpError {
@@ -29,7 +30,7 @@ impl HttpError {
 
 type HttpHandler = Box<
   dyn (FnOnce(
-    Option<User>,
+    HttpContext,
     http::Request<wstd::http::body::IncomingBody>,
     wstd::http::server::Responder,
   ) -> LocalBoxFuture<'static, Finished>),
@@ -54,7 +55,7 @@ impl HttpRoute {
       method,
       path: path.to_string(),
       handler: Box::new(
-        move |user: Option<User>,
+        move |context: HttpContext,
               req: http::Request<wstd::http::body::IncomingBody>,
               responder: Responder| {
           let (head, body) = req.into_parts();
@@ -68,7 +69,8 @@ impl HttpRoute {
               uri: url,
               version: head.version,
               headers: head.headers,
-              user,
+              user: context.user,
+              path_params: context.path_params,
             },
             body,
           };
@@ -142,6 +144,9 @@ pub struct Parts {
 
   /// User metadata
   pub user: Option<User>,
+
+  /// Path params, e.g. /test/{param}/.
+  pub path_params: Vec<(String, String)>,
 }
 
 #[derive(Debug)]
@@ -168,6 +173,15 @@ impl Request {
       .query_pairs()
       .find(|(p, _v)| p == param)
       .map(|(_p, v)| v.to_string());
+  }
+
+  pub fn path_param(&self, param: &str) -> Option<&str> {
+    return self
+      .head
+      .path_params
+      .iter()
+      .find(|(p, _v)| p == param)
+      .map(|(_p, v)| v.as_str());
   }
 
   #[inline]

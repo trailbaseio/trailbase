@@ -11,7 +11,7 @@ const yellow = "#e6bb1eff";
 
 export function RuntimeFib40Times() {
   const data: ChartData<"bar"> = {
-    labels: ["p50"],
+    labels: ["100 runs fib(40)"],
     datasets: [
       {
         label: "V8",
@@ -19,27 +19,27 @@ export function RuntimeFib40Times() {
         backgroundColor: green1,
       },
       {
-        label: "Rust",
+        label: "WASM Rust",
         data: [7.14],
         backgroundColor: blue,
       },
       {
-        label: "SpiderMonkey",
+        label: "WASM SpiderMonkey JS",
         data: [29 * 60 + 43],
         backgroundColor: purple0,
       },
       {
-        label: "SpiderMonkey + weval",
+        label: "WASM SpiderMonkey JS + weval",
         data: [18 * 60 + 47],
         backgroundColor: purple1,
       },
       {
-        label: "Custom QuickJS",
+        label: "WASM custom QuickJS",
         data: [11 * 60 + 36],
         backgroundColor: purple2,
       },
       {
-        label: "PocketBase",
+        label: "PocketBase (Goja JS)",
         data: [16 * 60 + 12],
         backgroundColor: yellow,
       },
@@ -51,9 +51,10 @@ export function RuntimeFib40Times() {
       data={data}
       scales={{
         y: {
+          type: "logarithmic",
           title: {
             display: true,
-            text: "Time 100 fib(40) [s]",
+            text: "Time [s]",
           },
         },
       }}

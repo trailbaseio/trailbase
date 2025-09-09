@@ -1,7 +1,7 @@
 ---
 title: >
   Switching to a WebAssembly Runtime
-pubDate: 2025-08-25
+pubDate: 2025-09-09
 intro: Going forward TrailBase will rely on a WebAssembly rather than a V8 JavaScript runtime.
 tags: ["WASM"]
 author: sebastian
@@ -10,54 +10,44 @@ image: ./_wasm_logo.svg
 
 import { RuntimeFib40Times } from "./_switching_to_a_wasm_runtime.tsx";
 
-<div class="flex justify-center">
-  <div class="h-[400px] w-[90%]">
-    <RuntimeFib40Times client:only="solid-js" />
-  </div>
-</div>
-
 TrailBase has been embedding a V8 JavaScript runtime for the last 10 months
 allowing users to implement custom HTTP and job handlers.
 During this time we've experienced several issues and limitations - we're
-therefore excited to announce that TrailBase is adopting the
-[wasmtime](https://github.com/bytecodealliance/wasmtime) WebAssembly (WASM)
+therefore excited to announce that TrailBase is adopting
+[wasmtime](https://github.com/bytecodealliance/wasmtime) as a WebAssembly (WASM)
 runtime.
 
-This is TrailBase biggest user-facing change, and likely will be for a long time.
-To ease migration, the plan for releases v0.17 and v0.it 18 to be transitional,
+This is - and likely will remain - the biggest user-facing change to TrailBase
+🙏.
+To ease migration, the plan for releases v0.17 and v0.18 is to be transitional,
 i.e. support both runtimes.
-First, v0.17 will make the new WASM runtime available, we'll collect early
-feedback, address issues and stabilize the guest APIs.
-The v0.18 release will then mark the point when users will need to migrate. If
-everything goes to plan, subsequent releases will remove V8.
+First, v0.17 makes the new WASM runtime available allowing us to collect early
+feedback and address issues.
+We don't expect major changes to the guest APIs. We put a lot of effort into
+making the first release usable and all examples have already been migrated.
+If everything goes to plan 🤞, v0.18 will then mark V8 for deprecation to
+remove it in subsequent releases.
 
-In the following article we're going to explain the rational, the opportunities
-and what to watch out for.
+In the following we're going to touch a bit more about the rational, the
+opportunities and what to watch out for.
 
 ## Rational
 
 Before getting into the benefits of the new runtime, let's quickly touch on some
-of the issues we had with the previous one.
+of the issues we had.
 
-The V8 JavaScript runtime is a amazing piece of engineering.
+The V8 JavaScript engine is a amazing piece of engineering.
 However, it was never designed as an embeddable or backend-first solution.
-It's primary target remains browsers.
+It's primary target remains the Chrome browser.
 Third-party vendors like Node.js and Deno have taken it upon themselves to
 extend V8, with APIs for accessing the file-system, sockets, etc.
 These extensions themselves are extensive and have sprawling dependencies.
 They're also primarily designed to serve their own ecosystem rather than be
 embedded elsewhere.
-For reference, the JS runtime makes up two thirds of TrailBase binary, even
-though only a subset of APIs are linked.
-Tis is a big chunk of unsafe code - despite well written - receiving particular
-scrutiny due to its critical nature.
-
-{/* Running stale versions poses an elevated security risk. */}
-
-{/*
-Ultimately, it has become a game of whack-a-mole, while at the same time not
-even providing a fully Node.js compatible environment.
-*/}
+For reference, ~70% of the `trail` binary are the JavaScript runtime while only
+linking a subset of Node.js APIs.
+Despite well written, this is a huge chunk of unsafe code with a heightened
+level of scrutiny on it due to its pivotal role in browsers.
 
 In practice, the current JS runtime isn't serving anyone particularly well:
 
@@ -66,40 +56,61 @@ In practice, the current JS runtime isn't serving anyone particularly well:
 * newer deno versions bundle a stale SQLite causing linker issues, and
 * prevents us from building "truly" static binaries with MUSL[^1].
 
-The new WASM runtime, on the other hand, is a lot simpler, safer and yet
-high-performant. It also supports WASI[^2], which greatly eases embedding and
-allows us to support guests in multiple languages.
+Comparably, the new WASM runtime is a lot simpler, safer and yet
+high-performant.
+It also supports [WASI](https://wasi.dev/)[^2], which greatly eases embedding and allows us to
+support guests in multiple languages.
 
 ## Opportunities
 
-### Rigorous State Isolation & Performance
+Finally, let's talk about some of the immediate and future benefits we expect...
 
-V8's isolates and JIT are expensive, they thus typically re-used across
-requests, opening up the gatas for accidental state sharing. There are
-specialized JIT-free runtimes like [LLRT](https://github.com/awslabs/llrt) to
-specifically solve this issue at the expense of performance.
-Our WASM runtime, on the other hand, makes it cheap and easy to spawn fully isolated
+### Rigorous State Isolation
+
+V8's isolates and JIT are expensive, thus they're typically re-used across
+requests opening up the gates for accidental state sharing.
+There are specialized JIT-free "edge" runtimes like
+[LLRT](https://github.com/awslabs/llrt) to specifically solve this issue at the
+expense of performance/throughput.
+Wasmtime, on the other hand, makes it cheap and easy to spawn fully isolated
 instances per request[^4].
-Combined with efficient guest environments it can even outperform V8 by a factor of ~4.
+We expect this provide immediate safety benefits for users.
+
+
+### Performance
+
+This one is a bit more mixed, however combined with an efficient guest environment
+(e.g. Rust, C++, ...), wasmtime can outperform V8 by a factor of almost 4.
+On the flip side, JS guests will be slower. More on that later.
+
+<div class="flex justify-center">
+  <div class="h-[400px] w-[90%]">
+    <RuntimeFib40Times client:only="solid-js" />
+  </div>
+</div>
 
 ### Flexible Guest Language Choice
 
 Many languages support compilation to WASM. This gives users more freedom in
 choosing and customizing their server-side environment.
-For now, TrailBase supports JS/TS and Rust, but we're planning to support
+For now, TrailBase supports JS/TS and Rust out-of-the-box.
+We have plans to support
 [more](https://github.com/bytecodealliance/wasmtime/blob/main/README.md#language-support)
 in the future.
+Independently and maybe more importantly, WASI makes it straight-forward to
+support custom guests.
 
 Moreover, different endpoints can be implemented in different WASM components
 and thus different languages, allowing you to optimize performance as you go.
-For example, an expensive, high-QPS endpoint could be rewritten in Rust
-yielding 10x-100x performance gains.
+For example, an expensive, high-QPS endpoint could be rewritten in Rust, which
+could yield 10x-100x performance gains.
 
 ### Better I/O Sandboxing
 
 Previously, isolates were given untethered I/O access, which together with a
-very dynamic guest language can be a security risk.
-We now limit I/O to read-only file access at an explicitly provided sandbox root.
+very dynamic guest language can pose a security risk.
+I/O is now limited to read-only file access for an explicitly provided sandbox
+root (`--wasm-root-dir`).
 We're planning ot extend I/O capabilities over time on a per-need basis.
 If you're missing anything, let us know.
 
@@ -119,51 +130,30 @@ opens up a path to making this a singular entry-point for extending TrailBase
 In turn, this may allow us to adopt a more popular copyleft license w/o
 inflicting obligations on your business-logic.
 
-{/*
-
-* No accidental state sharing![^4]
-* Many more languages can be supported: C#, Python, Go, Dart, Ruby, C/C++, ...
-* Support for multiple WASI components, in arbitrary languages to combine, e.g. JS + Rust.
-* Better sandboxing for I/O.
-  * File-IO is now limited to R/O of an explicitly specified root path `--wasm-root-dir`.
-* Safe Rust code. Consistent TLS.
-* We would like this to become the de-facto path to extend TrailBase (as opposed
-  to using it as a framework), while providing a lot of flexibility in terms of
-  languages, ...
-* This may also open up the path to using a more mainstream copy-left license.
-* We may support custom efficient SQLite extensions w/o accidental state sharing.
-* Fix interval and callback timers are now working reliably.
-
-*/}
 
 ## Regressions
 
-While WASM can be handily faster than V8, JS in particular loads and runs
-significantly slower when compared to a highly specialized and optimized
-runtime like V8.
-What may feel like a step backward from a JS-centric point of view also provides
-opportunity to optimize individual handlers in different languages based on
-specific needs.
+While WASM can be handily faster than V8 - as seen above - JavaScript in
+particular loads and runs significantly slower when compared to a highly
+specialized and optimized runtime like V8.
+What may feel like a step backward from a JS-centric point of view, may also
+provide opportunities to optimize individual endpoints in different languages
+based on specific needs.
 
 In practice, JS is probably one of the least-efficient compile-to-WASM
 languages. Instead of emitting immediate WebAssembly, current build flows
-bundle an interpreter like SpiderMonkey to work around JS' dynamic nature, e.g.
-`eval('console.log()')`[^3].
+bundle an interpreter like SpiderMonkey to work around JS' dynamic nature, i.e.
+`eval('/* ... */')`[^3].
 
-In practice, using `weval` execution is about as fast as Goja - PocketBase's JS
-interpreter - and about 40x slower than V8.
-On the other hand, Rust compiled to WASM is about 4x faster than V8 with more
-predictable latency and lower resource footprint.
-A benefit of the new integration is that different endpoints can be implemented
-in different languages.
+In practice, using [JCO with SpiderMonkey and weval](https://github.com/bytecodealliance/jco.git)
+is about as fast as Goja - PocketBase's JS interpreter - but about 40x slower
+than V8.
+On the other hand, Rust compiled to WASM is almost 4x faster than V8 with more
+predictable latency and a lower resource footprint.
+A benefit of the new runtime integration is that different endpoints can be
+implemented in different languages providing extra flexibility and potential to
+optimize.
 
-{/*
-* A separate build step is needed to translate JS/TS to WASM, as opposed to
-  lazily loading and just-in-time compiling a script.
-* The resulting bundle, including the interpreter, tends to be large resulting
-  in non-trivial initial load time in the order of seconds. Builds are being
-  cached, restarts will thus be siginificantly faster.
-*/}
 
 ## Migration
 
@@ -172,15 +162,18 @@ For now, we recommend to copy the template in `examples/wasm-guest-ts` or
 `examples/wasm-guest-ts`, dependning on whether you prefer TypeScript or
 JavaScript respectively.
 You can then simply run `pnpm install && pnpm build` to build the WASM component.
+For TrailBase to pick up you `*.wasm` component, they need to be placed in
+`<traildepot>/wasm/`.
 
-Moreover, due to the new rigorous state-isolation and short-live nature of runtime instances, the
-APIs for registering handlers had to change.
-Previously we were heavily relying on global state for routing.
-To avoid re-initialization on every request and for better symmetry with future
-guest languages that may not support support eager initialization, we're now
-relying on module exports for registering custom HTTP and Job handlers.
+The second big difference you'll notice right away is that the APIs for
+registering endpoints had to change to work in the context of the short-lived
+and isolated runtime instances.
+Previously we were relying on global state for routing.
+To avoid re-initialization on every request and for consistency with guest
+languages that do not support eager initialization of globals, we're now
+using module exports.
 
-Before:
+TypeScript endpoint before:
 
 ```ts
 addRoute(
@@ -199,7 +192,7 @@ addRoute(
   }
 ```
 
-After:
+and after:
 
 ```ts
 export default defineConfig({
@@ -217,25 +210,63 @@ export default defineConfig({
 });
 ```
 
+Alternatively in Rust:
+
+```rust
+use trailbase_wasm::db::{query, Value};
+use trailbase_wasm::http::{HttpError, HttpRoute, StatusCode, routing};
+use trailbase_wasm::{Guest, export};
+
+struct Endpoints;
+
+impl Guest for Endpoints {
+  fn http_handlers() -> Vec<HttpRoute> {
+    return vec![
+      routing::get("/test", async |req| {
+        let Some(table) = req.query_param("table") else {
+          return Ok(format!("test: {:?}", req.url()));
+        };
+
+        let rows = query(format!("SELECT COUNT(*) FROM '{table}'"), [])
+          .await
+          .map_err(|err| HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err))?;
+
+        return Ok(format!("entries: {:?}", rows[0][0]));
+      }),
+    ];
+  }
+}
+
+export!(Endpoints);
+```
+
+See `/examples/wasm-guest-(js|rust|ts)` for further examples while we continue
+to improve the documentation.
+
 ## Next-Steps
 
-First and foremost, we'd like to hear from you 🙏.
+First and foremost, we'd love to hear from you, make the transition as smooth
+as possible and the WASM runtime best-in-class 🙏.
 
-Once the new runtime integration has seen some mileage and unforeseen surprises
+Once the new runtime integration has seen more mileage and unforeseen surprises
 are worked out, we'd like to sunset V8 expediently.
 This will provide immediate benefits in terms of portability, security,
 build-times and binary sizes.
 
-From that point on we plan to invest heavily into making the integration
-best-in-class. Something we were hesitant to do with the previous integration
-due to all of its rough edges and unstable APIs. We'd like to introduce support
-for more guest languages, making TrailBase easier to extend for a wider range
-of developers developers and use-cases. If you think there's any language that
-would be particularly valuable, e.g. due to its ecosystem, let us know.
+From that point on we plan to invest heavily into making the integration the
+best we can.
+With the previous V8 integration, given its rough edges and unstable APIs, we
+were unsure and limiting the effort.
+The plans is to support a wider range of extension points and guest languages,
+thus supporting more use-cases and making it suitable for wider range of
+developers.
+If you think there's any language that would be particularly valuable, e.g. due
+to its unique and important ecosystem, let us know.
+When WASIp3 becomes available, hopefully in the near future, we're also
+planning to transparently upgrade making asynchronous interactions between host
+and guest more of a first-class citizen.
 
-When it becomes available, we'd also like to transparently upgrade the WASM
-runtime to WASIp3, which will be the next standard making asynchronous
-interactions between host and guest more of a first-class citizen.
+Thank you for making it this far and your time 🙏.
 
 ---
 
@@ -244,8 +275,8 @@ interactions between host and guest more of a first-class citizen.
 
 [^2]:
     As system to express cross-component interfaces for WASM in a
-    language-agnostic manner. It's like gRPC but FFIi, i.e. no I/O
-    thus allowing both asynchronous and synchronous interactions.
+    language-agnostic manner. It's like gRPC but FFI, i.e. no I/O
+    thus allowing both synchronous and asynchronous interactions.
 
 [^3]:
     That said, bundling the interpreter with static input unlocks some

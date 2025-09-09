@@ -2,7 +2,7 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
-use trailbase_wasm::db::query;
+use trailbase_wasm::db::{Value, query};
 use trailbase_wasm::http::{HttpError, HttpRoute, Json, Request, StatusCode, routing};
 use trailbase_wasm::job::Job;
 use trailbase_wasm::time::{Duration, Timer};
@@ -33,13 +33,20 @@ impl Guest for Endpoints {
           .unwrap_or(500);
         Timer::after(Duration::from_millis(ms)).wait().await;
       }),
-      routing::get("/count/{table}", async |_req| {
-        // const table = req.getPathParam("table");
-        let rows = query("SELECT COUNT(*) FROM test", [])
+      routing::get("/count/{table}", async |req| {
+        let table = req
+          .path_param("table")
+          .ok_or_else(|| internal("missing {table}"))?;
+
+        let rows = query(format!("SELECT COUNT(*) FROM {table}"), [])
           .await
           .map_err(internal)?;
 
-        return Ok(format!("rows: {:?}", rows[0][0]).into_bytes().to_vec());
+        let Value::Integer(i) = rows[0][0] else {
+          panic!("expected integer");
+        };
+
+        return Ok(format!("Got {i} rows\n"));
       }),
     ];
   }

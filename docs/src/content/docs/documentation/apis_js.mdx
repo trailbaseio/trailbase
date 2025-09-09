@@ -10,13 +10,11 @@ This can be used to implement arbitrary HTTP APIs with custom handlers.
 
 ## Example HTTP Endpoint
 
-The following example illustrates a few things:
+The following TypeScript WASM example illustrates a few things:
 
 * How to register a parameterized route with `{table}`.
-* How to implement a handler that returns `text/plain` content. There is also
-  `jsonHandler` and `htmlHandler`.
 * How to query the database.
-* How to return an error.
+* How to return an HTTP error.
 
 ```ts
 import { defineConfig } from "trailbase-wasm";

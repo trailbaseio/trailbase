@@ -113,7 +113,7 @@ impl<T: Guest> HttpIncomingHandler<T> {
           .into_iter()
           .find(|route| route.method == method && route.path == context.registered_path)
         {
-          return handler(context.user, request, responder).await;
+          return handler(context, request, responder).await;
         }
       }
       HttpContextKind::Job => {
