@@ -1,0 +1,81 @@
+package trailbase:runtime;
+
+interface init-endpoint  {
+  enum method-type {
+    get,
+    post,
+    head,
+    options,
+    patch,
+    delete,
+    put,
+    trace,
+    connect,
+  }
+
+  record init-result {
+    /// Registered http handlers (method, path)[].
+    http-handlers: list<tuple<method-type, string>>,
+
+    /// Registered jobs (name, spec)[].
+    job-handlers: list<tuple<string, string>>,
+  }
+
+  init: func() -> init-result;
+}
+
+interface host-endpoint {
+  thread-id: func() -> u64;
+
+
+  variant tx-error {
+    other(string)
+  }
+
+  variant value {
+    null,
+    text(string),
+    blob(list<u8>),
+    integer(s64),
+    real(f64),
+  }
+
+  // NOTE: Ideally, we'd use these but they currently block guests.
+  execute: func(query: string, params: list<value>) -> result<u64, tx-error>;
+  query: func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
+
+  // However, transactions have to be sync.
+  tx-begin: func() -> result<_, tx-error>;
+  tx-commit: func() -> result<_, tx-error>;
+  tx-rollback: func() -> result<_, tx-error>;
+
+  tx-execute: func(query: string, params: list<value>) -> result<u64, tx-error>;
+  tx-query: func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
+}
+
+// Note:
+//  * imports are provided by the host
+//  * exports are provided by the guest
+//  * includes to include a world into another world.
+world trailbase {
+  // Pull in WASIp2 http interface for outbound requests.
+  import wasi:http/outgoing-handler@0.2.3;
+
+  // Pull in WASIp2 filesystem interfaces
+  include wasi:filesystem/imports@0.2.3;
+
+  // Pull in WASI random interfaces
+  include wasi:random/imports@0.2.3;
+
+  // Pull in WSAI Key-Value interfaces.
+  include wasi:keyvalue/imports@0.2.0-draft;
+
+  // Host-provided interfaces
+  import host-endpoint;
+
+  // Guest-provided interfaces.
+  export init-endpoint;
+
+  // Note: not needed in rust due to better modularity.
+  export wasi:http/incoming-handler@0.2.3;
+}

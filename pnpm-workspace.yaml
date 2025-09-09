@@ -1,4 +1,9 @@
 packages:
+  - 'client/testfixture/guests/typescript'
+  - 'crates/assets/js/admin'
+  - 'crates/assets/js/auth'
+  - 'crates/assets/js/client'
+  - 'crates/js-runtime/assets/runtime'
   - 'docs'
   - 'docs/examples/record_api_ts'
   - 'examples/blog/web'
@@ -6,10 +11,9 @@ packages:
   - 'examples/collab-clicker-ssr'
   - 'examples/data-cli-tutorial'
   - 'examples/tanstack-db-sync'
-  - 'crates/assets/js/admin'
-  - 'crates/assets/js/auth'
-  - 'crates/assets/js/client'
-  - 'crates/js-runtime/assets/runtime'
+  - 'examples/wasm-guest-js'
+  - 'examples/wasm-guest-ts'
+  - 'guests/typescript'
 
 sharedWorkspaceLockfile: true
 linkWorkspacePackages: true

@@ -1,0 +1,38 @@
+{
+  "name": "trailbase-wasm",
+  "description": "WASM Runtime for JS/TS execution within TrailBase",
+  "version": "0.1.0",
+  "license": "OSL-3.0",
+  "type": "module",
+  "homepage": "https://trailbase.io",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./db": "./dist/db.js",
+    "./fs": "./dist/fs.js",
+    "./http": "./dist/http.js",
+    "./job": "./dist/job.js",
+    "./kv": "./dist/kv.js"
+  },
+  "scripts": {
+    "generate:types": "jco types wit/ -o generated/types",
+    "build": "npm run generate:types && vite build",
+    "check": "tsc --noEmit --skipLibCheck && vite build && eslint",
+    "format": "prettier -w src tests",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "^0.18.4",
+    "@bytecodealliance/jco": "=1.13.3",
+    "@eslint/js": "^9.33.0",
+    "eslint": "^9.33.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.39.1",
+    "vite": "^7.1.2",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {}
+}
