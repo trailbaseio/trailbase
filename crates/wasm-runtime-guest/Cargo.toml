@@ -1,0 +1,27 @@
+[package]
+name = "trailbase-wasm"
+version = "0.1.0"
+edition = "2024"
+license = "OSL-3.0"
+description = "WASM runtime for the TrailBase framework"
+homepage = "https://trailbase.io"
+exclude = [
+  "**/node_modules/",
+  "**/dist/",
+]
+
+[dependencies]
+anyhow = "1.0.99"
+base64 = "0.22.1"
+bytes = "1.10.1"
+futures-util = "0.3.31"
+http = "1.3.1"
+log = "0.4.27"
+serde = { version = "^1.0.203", features = ["derive"] }
+serde_json = "^1.0.117"
+static_assertions = "1.1.0"
+thiserror = "2.0.14"
+trailbase-wasm-common = { workspace = true }
+url = "2.5.7"
+wit-bindgen = "0.45.0"
+wstd = "0.5.3"

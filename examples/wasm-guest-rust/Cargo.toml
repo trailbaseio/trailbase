@@ -1,0 +1,15 @@
+[package]
+name = "rust-guest"
+version = "0.0.0"
+authors = ["someone"]
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+anyhow = "1.0.98"
+serde = { version = "^1.0.203", features = ["derive"] }
+serde_json = "^1.0.117"
+trailbase-wasm = { workspace = true }

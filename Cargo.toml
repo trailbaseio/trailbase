@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+  "client/testfixture/guests/rust",
   "crates/assets",
   "crates/build",
   "crates/cli",
@@ -16,8 +17,10 @@ members = [
   "crates/wasi-keyvalue",
   "crates/wasm-runtime-host",
   "crates/wasm-runtime-common",
+  "crates/wasm-runtime-guest",
   "docs/examples/record_api_rs",
   "examples/custom-binary",
+  "examples/wasm-guest-rust",
 ]
 default-members = [
   "crates/assets",
@@ -35,6 +38,7 @@ default-members = [
   "crates/wasi-keyvalue",
   "crates/wasm-runtime-host",
   "crates/wasm-runtime-common",
+  "crates/wasm-runtime-guest",
 ]
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html
