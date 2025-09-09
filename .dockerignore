@@ -8,11 +8,15 @@ traildepot/
 
 client
 !client/rust
+!client/testfixture/guests/rust
 deploy/
 docs/
 !docs/examples/record_api_rs
 examples/
 !examples/custom-binary
+!examples/wasm-guest-rust
+!examples/coffee-vector-search/guests/rust
+!examples/collab-clicker-ssr/guests/rust
 
 Dockerfile*
 .docker*

@@ -119,14 +119,14 @@ were unreliable in our previous V8 integration.
 
 ### Less Code
 
-As mentioned before, switching off V8 removes a lot of high-scrunity code, cuts
+As mentioned before, switching off V8 removes a lot of high-scrutiny code, cuts
 binary size roughly in half and lets us build truly static binaries with MUSL.
 
 ### Rethinking Composition & Licensing Model
 
 The increased flexibility and performance provided by the new WASM runtime
 opens up a path to making this a singular entry-point for extending TrailBase
-(including SQLite extensions) as opposed to framework use-caess.
+(including SQLite extensions) as opposed to framework use-cases.
 In turn, this may allow us to adopt a more popular copyleft license w/o
 inflicting obligations on your business-logic.
 
@@ -159,7 +159,7 @@ optimize.
 
 The first difference you'll encounter is the need for a build-step: JS/TS -> WASM[^5].
 For now, we recommend to copy the template in `examples/wasm-guest-ts` or
-`examples/wasm-guest-ts`, dependning on whether you prefer TypeScript or
+`examples/wasm-guest-ts`, depending on whether you prefer TypeScript or
 JavaScript respectively.
 You can then simply run `pnpm install && pnpm build` to build the WASM component.
 For TrailBase to pick up you `*.wasm` component, they need to be placed in
@@ -245,8 +245,8 @@ to improve the documentation.
 
 ## Next-Steps
 
-First and foremost, we'd love to hear from you, make the transition as smooth
-as possible and the WASM runtime best-in-class 🙏.
+First and foremost, we'd love to hear from you. We'd like to make the
+transition as smooth as possible and the WASM runtime best-in-class 🙏.
 
 Once the new runtime integration has seen more mileage and unforeseen surprises
 are worked out, we'd like to sunset V8 expediently.

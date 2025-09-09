@@ -1,6 +1,13 @@
+## v0.17.0
+
+* Add new WASM runtime based on [wasmtime](https://github.com/bytecodealliance/wasmtime). More information in a dedicated update [article](https://trailbase.io/blog/switching_to_a_wasm_runtime).
+  * This is a transitional release containing both the V8 and WASM runtime. The plan is to eventually remove V8.
+  * We expect WASM to unlock a lot of opportunities going forward, from increased performance (though JS is slower), strict state isolation, flexible guets language choice, more extensibility... check the [article](https://trailbase.io/blog/switching_to_a_wasm_runtime).
+* Update JavaScript and Rust dependencies.
+
 ## v0.16.9
 
-* Add support for non-transactional bulk edits to experimental "transacation record API" and expose it in the JS/TS client. Thanks so much @ibilux 🙏.
+* Add support for non-transactional bulk edits to experimental "transaction record API" and expose it in the JS/TS client. Thanks so much @ibilux 🙏.
 * Update Rust dependencies.
 
 ## v0.16.8
