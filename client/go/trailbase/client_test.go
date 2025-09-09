@@ -52,7 +52,7 @@ func startTrailBase() (*exec.Cmd, error) {
 		fmt.Sprint("--data-dir=", traildepot),
 		"run",
 		fmt.Sprintf("--address=127.0.0.1:%d", PORT),
-		"--js-runtime-threads=2",
+		"--runtime-threads=2",
 	}
 	cmd := buildCommand("cargo", cwd, args...)
 	cmd.Start()

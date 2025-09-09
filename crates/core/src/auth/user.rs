@@ -82,7 +82,7 @@ impl DbUser {
 
 /// Representing an authenticated and *valid* user, as opposed to DbUser, which is merely an entry
 /// for any user including users that haven't been validated.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct User {
   /// Url-safe Base64 encoded id of the current user.
   pub id: String,

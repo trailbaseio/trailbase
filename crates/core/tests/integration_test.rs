@@ -48,7 +48,7 @@ async fn test_record_apis() {
     dev: false,
     disable_auth_ui: false,
     cors_allowed_origins: vec![],
-    js_runtime_threads: None,
+    runtime_threads: None,
     ..Default::default()
   })
   .await

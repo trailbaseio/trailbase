@@ -174,7 +174,7 @@ Future<Process> initTrailBase() async {
     'run',
     '--address=${address}',
     // We want at least some parallelism to experience isolate-local state.
-    '--js-runtime-threads=2',
+    '--runtime-threads=2',
   ]);
 
   final dio = Dio();

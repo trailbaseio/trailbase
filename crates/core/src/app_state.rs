@@ -4,6 +4,7 @@ use reactivate::{Merge, Reactive};
 use std::path::PathBuf;
 use std::sync::Arc;
 use trailbase_schema::QualifiedName;
+use trailbase_wasm_runtime_host::Runtime;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
@@ -43,6 +44,8 @@ struct InternalState {
 
   runtime: RuntimeHandle,
 
+  wasm_runtimes: Vec<Arc<Runtime>>,
+
   #[cfg(test)]
   #[allow(unused)]
   cleanup: Vec<Box<dyn std::any::Any + Send + Sync>>,
@@ -52,6 +55,7 @@ pub(crate) struct AppStateArgs {
   pub data_dir: DataDir,
   pub public_url: Option<url::Url>,
   pub public_dir: Option<PathBuf>,
+  pub runtime_root_fs: Option<PathBuf>,
   pub dev: bool,
   pub demo: bool,
   pub schema_metadata: SchemaMetadataCache,
@@ -60,7 +64,7 @@ pub(crate) struct AppStateArgs {
   pub logs_conn: trailbase_sqlite::Connection,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore + Send + Sync>,
-  pub js_runtime_threads: Option<usize>,
+  pub runtime_threads: Option<usize>,
 }
 
 #[derive(Clone)]
@@ -124,7 +128,14 @@ impl AppState {
       object_store.clone(),
     );
 
-    let runtime = build_js_runtime(args.conn.clone(), args.js_runtime_threads);
+    let runtime = build_js_runtime(args.conn.clone(), args.runtime_threads);
+    let wasm_runtimes = crate::wasm::build_wasm_runtimes_for_components(
+      args.runtime_threads,
+      args.conn.clone(),
+      args.data_dir.root().join("wasm"),
+      args.runtime_root_fs,
+    )
+    .expect("startup");
 
     AppState {
       state: Arc::new(InternalState {
@@ -163,6 +174,7 @@ impl AppState {
         schema_metadata,
         object_store,
         runtime,
+        wasm_runtimes,
         #[cfg(test)]
         cleanup: vec![],
       }),
@@ -311,6 +323,10 @@ impl AppState {
   pub(crate) fn script_runtime(&self) -> RuntimeHandle {
     return self.state.runtime.clone();
   }
+
+  pub(crate) fn wasm_runtimes(&self) -> &[Arc<Runtime>] {
+    return &self.state.wasm_runtimes;
+  }
 }
 
 #[cfg(test)]
@@ -458,6 +474,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       schema_metadata,
       object_store,
       runtime: build_js_runtime(conn, None),
+      wasm_runtimes: vec![],
       cleanup: vec![Box::new(temp_dir)],
     }),
   });

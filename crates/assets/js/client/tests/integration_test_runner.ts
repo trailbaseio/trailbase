@@ -28,7 +28,7 @@ async function initTrailBase(): Promise<{ subprocess: Subprocess }> {
     cwd: root,
     stdout: process.stdout,
     stderr: process.stdout,
-  })`cargo run -- --data-dir client/testfixture --public-url http://${ADDRESS} run -a ${ADDRESS} --js-runtime-threads 1`;
+  })`cargo run -- --data-dir client/testfixture --public-url http://${ADDRESS} run -a ${ADDRESS} --runtime-threads 1`;
 
   for (let i = 0; i < 100; ++i) {
     if ((subprocess.exitCode ?? 0) > 0) {

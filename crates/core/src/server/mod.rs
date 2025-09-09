@@ -54,6 +54,9 @@ pub struct ServerOptions {
   /// Optional path to static assets that will be served at the HTTP root.
   pub public_dir: Option<PathBuf>,
 
+  /// Optional path to sandboxed FS root for WASM runtime.
+  pub runtime_root_fs: Option<PathBuf>,
+
   /// Optional path to MaxmindDB geoip database. Can be used to map logged IPs to a geo location.
   pub geoip_db_path: Option<PathBuf>,
 
@@ -75,7 +78,7 @@ pub struct ServerOptions {
   pub cors_allowed_origins: Vec<String>,
 
   /// Number of V8 worker threads. If set to None, default of num available cores will be used.
-  pub js_runtime_threads: Option<usize>,
+  pub runtime_threads: Option<usize>,
 
   /// TLS certificate path.
   pub tls_cert: Option<CertificateDer<'static>>,
@@ -120,15 +123,20 @@ impl Server {
       date = version_info.commit_date.unwrap_or_default(),
     );
 
+    validate_path(opts.public_dir.as_ref())?;
+    validate_path(opts.runtime_root_fs.as_ref())?;
+    validate_path(opts.geoip_db_path.as_ref())?;
+
     let (new_data_dir, state) = init::init_app_state(InitArgs {
       data_dir: opts.data_dir.clone(),
       public_url: opts.public_url.clone(),
       public_dir: opts.public_dir.clone(),
+      runtime_root_fs: opts.runtime_root_fs.clone(),
       geoip_db_path: opts.geoip_db_path.clone(),
       address: opts.address.clone(),
       dev: opts.dev,
       demo: opts.demo,
-      js_runtime_threads: opts.js_runtime_threads,
+      runtime_threads: opts.runtime_threads,
     })
     .await?;
 
@@ -170,18 +178,31 @@ impl Server {
         .map_err(|err| InitError::CustomInit(err.to_string()))?;
     }
 
-    #[cfg(feature = "v8")]
-    let js_routes: Option<Router<AppState>> =
-      crate::js::runtime::load_routes_and_jobs_from_js_modules(&state)
-        .await
-        .map_err(|err| InitError::ScriptError(err.to_string()))?;
+    let mut custom_routers: Vec<Router<AppState>> = vec![];
 
-    #[cfg(not(feature = "v8"))]
-    let js_routes: Option<Router<AppState>> = None;
+    #[cfg(feature = "v8")]
+    if let Some(js_router) = crate::js::runtime::load_routes_and_jobs_from_js_modules(
+      &state,
+      state.data_dir().root().join("scripts"),
+    )
+    .await
+    .map_err(|err| InitError::ScriptError(err.to_string()))?
+    {
+      custom_routers.push(js_router);
+    }
+
+    for rt in state.wasm_runtimes() {
+      if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt.clone())
+        .await
+        .map_err(|err| InitError::ScriptError(err.to_string()))?
+      {
+        custom_routers.push(wasm_router);
+      }
+    }
 
     Ok(Self {
       state: state.clone(),
-      main_router: Self::build_main_router(&state, &opts, js_routes).await,
+      main_router: Self::build_main_router(&state, &opts, custom_routers).await,
       admin_router: Self::build_independent_admin_router(&state, &opts),
       tls: Self::load_tls(&opts),
     })
@@ -200,6 +221,7 @@ impl Server {
           stream.recv().await;
 
           // TODO: Re-load JS/TS.
+          // TODO: Re-load WASM.
           info!("Received SIGHUP: re-apply migations then re-load config.");
 
           // Re-apply migrations. This needs to happen before reloading the config, which is
@@ -333,7 +355,7 @@ impl Server {
   async fn build_main_router(
     state: &AppState,
     opts: &ServerOptions,
-    custom_router: Option<Router<AppState>>,
+    custom_routers: Vec<Router<AppState>>,
   ) -> (String, Router<()>) {
     let enable_transactions =
       state.access_config(|conn| conn.server.enable_record_transactions.unwrap_or(false));
@@ -352,7 +374,7 @@ impl Server {
       router = router.merge(auth::auth_ui_router());
     }
 
-    if let Some(custom_router) = custom_router {
+    for custom_router in custom_routers {
       router = router.merge(custom_router);
     }
 
@@ -579,6 +601,11 @@ async fn start_listen(
         }
       };
 
+      #[cfg(not(feature = "v8"))]
+      tokio_rustls::rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install TLS provider");
+
       let server_config = ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(vec![cert], key)
@@ -615,4 +642,13 @@ async fn start_listen(
       }
     }
   };
+}
+
+fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
+  if let Some(path) = path {
+    if !std::fs::exists(path)? {
+      return Err(InitError::CustomInit(format!("Path not found: {path:?}")));
+    };
+  }
+  return Ok(());
 }

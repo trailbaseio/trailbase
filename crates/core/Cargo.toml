@@ -7,7 +7,7 @@ rust-version = "1.86"
 description = "Package to use TrailBase as a framework"
 homepage = "https://trailbase.io"
 repository = "https://github.com/trailbaseio/trailbase"
-readme = "../README.md"
+readme = "../../README.md"
 exclude = [
   "benches/",
   "tests/",
@@ -89,7 +89,9 @@ trailbase-qs = { workspace = true }
 trailbase-refinery = { workspace = true }
 trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true }
-ts-rs = { version = "11", features = ["uuid-impl", "serde-json-impl"] }
+trailbase-wasm-runtime-host = { workspace = true }
+trailbase-wasm-common = { workspace = true }
+ts-rs = { workspace = true }
 url = { version = "^2.4.1", default-features = false }
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 uuid = { workspace = true }

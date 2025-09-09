@@ -117,7 +117,18 @@ addRoute(
       return await response.text();
     }
 
-    throw new HttpError(StatusCodes.BAD_REQUEST, "Missing ?url param");
+    throw new HttpError(StatusCodes.BAD_REQUEST, `Missing ?url param: ${req.params}`);
+  }),
+);
+
+addRoute(
+  "GET",
+  "/fibonacci",
+  stringHandler((req: StringRequestType) => {
+    const uri: ParsedPath = parsePath(req.uri);
+    const n = uri.query.get("n");
+
+    return fibonacci(n ? parseInt(n) : 40).toString();
   }),
 );
 
@@ -160,13 +171,13 @@ class Completer<T> {
 
 const completer = new Completer<string>();
 
-addCronCallback("JS-registered Job", "@hourly", async () => {
-  console.info("JS-registered cron job reporting for duty 🚀");
-});
-
 addPeriodicCallback(100, (cancel) => {
   completer.complete("resolved");
   cancel();
+});
+
+addCronCallback("JS-registered Job", "@hourly", async () => {
+  console.info("JS-registered cron job reporting for duty 🚀");
 });
 
 addRoute(
@@ -174,3 +185,14 @@ addRoute(
   "/await",
   stringHandler(async (_req) => await completer.promise),
 );
+
+function fibonacci(num: number): number {
+  switch (num) {
+    case 0:
+      return 0;
+    case 1:
+      return 1;
+    default:
+      return fibonacci(num - 1) + fibonacci(num - 2);
+  }
+}

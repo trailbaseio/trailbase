@@ -1,0 +1,17 @@
+# Fork of wasmtime/crates/wasi-keyvalue.
+[package]
+name = "trailbase-wasi-keyvalue"
+version = "0.1.0"
+edition = "2024"
+license = "OSL-3.0"
+description = "Sync WASI KV store - fork of upstream"
+homepage = "https://trailbase.io"
+
+[dependencies]
+anyhow = "1.0.99"
+parking_lot = { workspace = true }
+wasmtime = { workspace = true }
+
+[dev-dependencies]
+wasmtime-wasi = { workspace = true }
+tokio = { workspace = true }
