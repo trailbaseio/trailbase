@@ -38,7 +38,7 @@ class TrailBaseFixture:
                 "run",
                 "-a",
                 address,
-                "--js-runtime-threads",
+                "--runtime-threads",
                 "1",
             ]
         )

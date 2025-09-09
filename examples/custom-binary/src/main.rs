@@ -46,7 +46,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
       dev: false,
       disable_auth_ui: false,
       cors_allowed_origins: vec![],
-      js_runtime_threads: None,
       ..Default::default()
     },
     |state: AppState| async move {

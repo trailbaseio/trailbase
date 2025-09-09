@@ -43,13 +43,13 @@ pub struct InitArgs {
   pub data_dir: DataDir,
   pub public_url: Option<url::Url>,
   pub public_dir: Option<PathBuf>,
-  pub wasm_root_dir: Option<PathBuf>,
+  pub runtime_root_fs: Option<PathBuf>,
   pub geoip_db_path: Option<PathBuf>,
 
   pub address: String,
   pub dev: bool,
   pub demo: bool,
-  pub js_runtime_threads: Option<usize>,
+  pub runtime_threads: Option<usize>,
 }
 
 pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitError> {
@@ -139,7 +139,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     data_dir: args.data_dir.clone(),
     public_url: args.public_url,
     public_dir: args.public_dir,
-    wasm_root_dir: args.wasm_root_dir,
+    runtime_root_fs: args.runtime_root_fs,
     dev: args.dev,
     demo: args.demo,
     schema_metadata,
@@ -148,7 +148,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     logs_conn,
     jwt,
     object_store,
-    js_runtime_threads: args.js_runtime_threads,
+    runtime_threads: args.runtime_threads,
   });
 
   if new_db {

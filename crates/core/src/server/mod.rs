@@ -55,7 +55,7 @@ pub struct ServerOptions {
   pub public_dir: Option<PathBuf>,
 
   /// Optional path to sandboxed FS root for WASM runtime.
-  pub wasm_root_dir: Option<PathBuf>,
+  pub runtime_root_fs: Option<PathBuf>,
 
   /// Optional path to MaxmindDB geoip database. Can be used to map logged IPs to a geo location.
   pub geoip_db_path: Option<PathBuf>,
@@ -78,7 +78,7 @@ pub struct ServerOptions {
   pub cors_allowed_origins: Vec<String>,
 
   /// Number of V8 worker threads. If set to None, default of num available cores will be used.
-  pub js_runtime_threads: Option<usize>,
+  pub runtime_threads: Option<usize>,
 
   /// TLS certificate path.
   pub tls_cert: Option<CertificateDer<'static>>,
@@ -124,19 +124,19 @@ impl Server {
     );
 
     validate_path(opts.public_dir.as_ref())?;
-    validate_path(opts.wasm_root_dir.as_ref())?;
+    validate_path(opts.runtime_root_fs.as_ref())?;
     validate_path(opts.geoip_db_path.as_ref())?;
 
     let (new_data_dir, state) = init::init_app_state(InitArgs {
       data_dir: opts.data_dir.clone(),
       public_url: opts.public_url.clone(),
       public_dir: opts.public_dir.clone(),
-      wasm_root_dir: opts.wasm_root_dir.clone(),
+      runtime_root_fs: opts.runtime_root_fs.clone(),
       geoip_db_path: opts.geoip_db_path.clone(),
       address: opts.address.clone(),
       dev: opts.dev,
       demo: opts.demo,
-      js_runtime_threads: opts.js_runtime_threads,
+      runtime_threads: opts.runtime_threads,
     })
     .await?;
 
@@ -601,6 +601,7 @@ async fn start_listen(
         }
       };
 
+      #[cfg(not(feature = "v8"))]
       tokio_rustls::rustls::crypto::ring::default_provider()
         .install_default()
         .expect("Failed to install TLS provider");

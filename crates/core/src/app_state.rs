@@ -55,7 +55,7 @@ pub(crate) struct AppStateArgs {
   pub data_dir: DataDir,
   pub public_url: Option<url::Url>,
   pub public_dir: Option<PathBuf>,
-  pub wasm_root_dir: Option<PathBuf>,
+  pub runtime_root_fs: Option<PathBuf>,
   pub dev: bool,
   pub demo: bool,
   pub schema_metadata: SchemaMetadataCache,
@@ -64,7 +64,7 @@ pub(crate) struct AppStateArgs {
   pub logs_conn: trailbase_sqlite::Connection,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore + Send + Sync>,
-  pub js_runtime_threads: Option<usize>,
+  pub runtime_threads: Option<usize>,
 }
 
 #[derive(Clone)]
@@ -128,12 +128,12 @@ impl AppState {
       object_store.clone(),
     );
 
-    let runtime = build_js_runtime(args.conn.clone(), args.js_runtime_threads);
+    let runtime = build_js_runtime(args.conn.clone(), args.runtime_threads);
     let wasm_runtimes = crate::wasm::build_wasm_runtimes_for_components(
-      args.js_runtime_threads,
+      args.runtime_threads,
       args.conn.clone(),
       args.data_dir.root().join("wasm"),
-      args.wasm_root_dir,
+      args.runtime_root_fs,
     )
     .expect("startup");
 

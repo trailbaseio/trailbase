@@ -56,7 +56,7 @@ func startTrailBase() async throws -> ProcessIdentifier {
         "--data-dir=\(depotPath)",
         "run",
         "--address=127.0.0.1:\(PORT)",
-        "--js-runtime-threads=2",
+        "--runtime-threads=2",
     ]
 
     let process = try Subprocess.runDetached(

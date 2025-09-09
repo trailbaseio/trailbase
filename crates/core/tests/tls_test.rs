@@ -32,7 +32,7 @@ fn test_https_serving() {
       dev: false,
       disable_auth_ui: false,
       cors_allowed_origins: vec![],
-      js_runtime_threads: None,
+      runtime_threads: None,
       tls_key: Some(tls_key),
       tls_cert: Some(cert.der().clone()),
       ..Default::default()

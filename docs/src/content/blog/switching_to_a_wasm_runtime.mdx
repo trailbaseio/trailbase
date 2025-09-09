@@ -110,7 +110,7 @@ could yield 10x-100x performance gains.
 Previously, isolates were given untethered I/O access, which together with a
 very dynamic guest language can pose a security risk.
 I/O is now limited to read-only file access for an explicitly provided sandbox
-root (`--wasm-root-dir`).
+root (`--runtime-root-fs`).
 We're planning ot extend I/O capabilities over time on a per-need basis.
 If you're missing anything, let us know.
 

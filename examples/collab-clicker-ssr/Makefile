@@ -6,7 +6,7 @@ DISTDIR := ${APPDIR}/dist
 ADDRESS := 127.0.0.1:4000
 
 run: assets guest
-	${TRAILBIN} --data-dir=${TRAILDEPOT} run --public-dir=${DISTDIR}/client --wasm-root-dir=. --address=${ADDRESS}
+	${TRAILBIN} --data-dir=${TRAILDEPOT} run --public-dir=${DISTDIR}/client --runtime-root-fs=. --address=${ADDRESS}
 
 guest: ${TRAILDEPOT}/wasm/collab_clicker_ssr_rust_guest.wasm
 #guest: ${TRAILDEPOT}/wasm/collab_clicker_ssr_ts_guest.wasm

@@ -36,7 +36,7 @@ impl Job {
 
     return Ok(Self {
       name: name.to_string(),
-      spec: spec,
+      spec,
       handler: Box::new(move |responder| {
         let f = f.clone();
         Box::pin(async move { responder.respond(f().await.into_response()).await })

@@ -35,7 +35,7 @@ fn start_server() -> Result<Server, std::io::Error> {
     format!("--data-dir={depot_path}"),
     "run".to_string(),
     format!("--address=127.0.0.1:{PORT}"),
-    "--js-runtime-threads=2".to_string(),
+    "--runtime-threads=2".to_string(),
   ];
   let child = std::process::Command::new("cargo")
     .args(&args)

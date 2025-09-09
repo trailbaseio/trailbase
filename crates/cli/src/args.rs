@@ -95,7 +95,7 @@ pub struct ServerArgs {
 
   /// Optional path to sandboxed FS root for WASM runtime.
   #[arg(long, env)]
-  pub wasm_root_dir: Option<String>,
+  pub runtime_root_fs: Option<String>,
 
   /// Optional path to MaxmindDB geoip database. Can be used to map logged IPs to a geo location.
   #[arg(long, env)]
@@ -123,7 +123,7 @@ pub struct ServerArgs {
 
   /// Number of JavaScript isolates/workers to start (Default: #cpus).
   #[arg(long, env)]
-  pub js_runtime_threads: Option<usize>,
+  pub runtime_threads: Option<usize>,
 }
 
 #[derive(Args, Clone, Debug)]
