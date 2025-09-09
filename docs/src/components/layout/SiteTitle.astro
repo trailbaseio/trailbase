@@ -139,11 +139,9 @@ const href = pathWithBase(Astro.props.locale || "/");
             ),
           )}
 
-          {import.meta.env.DEV && (
-            <a class="site-title-link" href="/blog">
-              Blog
-            </a>
-          )}
+          <a class="site-title-link" href="/blog">
+            Blog
+          </a>
         </div>
       </div>
     )

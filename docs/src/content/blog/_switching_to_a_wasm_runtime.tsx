@@ -11,7 +11,7 @@ const yellow = "#e6bb1eff";
 
 export function RuntimeFib40Times() {
   const data: ChartData<"bar"> = {
-    labels: ["100 runs fib(40)"],
+    labels: ["100 runs fib(40) [less is faster]"],
     datasets: [
       {
         label: "V8",

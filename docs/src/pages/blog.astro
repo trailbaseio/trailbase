@@ -31,7 +31,7 @@ async function getPosts() {
 const posts = blogPosts ?? (await getPosts());
 ---
 
-<Base title="Updates" draft={true}>
+<Base title="Updates">
   <section class="container mx-auto mb-10 max-w-screen-lg px-7 py-4">
     {
       posts.map((post, index: number) => {
