@@ -22,6 +22,7 @@ members = [
   "examples/custom-binary",
   "examples/wasm-guest-rust",
   "examples/coffee-vector-search/guests/rust",
+  "examples/collab-clicker-ssr/guests/rust",
 ]
 default-members = [
   "crates/assets",

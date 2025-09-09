@@ -10,6 +10,7 @@ packages:
   - 'examples/coffee-vector-search'
   - 'examples/coffee-vector-search/guests/typescript'
   - 'examples/collab-clicker-ssr'
+  - 'examples/collab-clicker-ssr/guests/typescript'
   - 'examples/data-cli-tutorial'
   - 'examples/tanstack-db-sync'
   - 'examples/wasm-guest-js'
