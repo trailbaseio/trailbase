@@ -91,7 +91,7 @@ pub enum Message {
 }
 
 #[derive(Clone)]
-struct LockedTransaction(Arc<Mutex<Option<sqlite::OwnedTx>>>);
+struct LockedTransaction(Rc<Mutex<Option<sqlite::OwnedTx>>>);
 
 unsafe impl Send for LockedTransaction {}
 
@@ -655,7 +655,7 @@ impl RuntimeInstance {
         http: WasiHttpCtx::new(),
         kv: WasiKeyValueCtx::new(self.shared.kv_store.clone()),
         shared: self.shared.clone(),
-        tx: LockedTransaction(Arc::new(Mutex::new(None))),
+        tx: LockedTransaction(Rc::new(Mutex::new(None))),
       },
     ));
   }

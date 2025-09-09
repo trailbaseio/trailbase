@@ -140,7 +140,7 @@ pub(crate) async fn install_routes_and_jobs(
           req.uri()
         );
 
-        return runtime
+        let result = runtime
           .call(
             async move |instance| -> Result<axum::response::Response, WasmError> {
               let (mut parts, body) = req.into_parts();
@@ -184,9 +184,13 @@ pub(crate) async fn install_routes_and_jobs(
               return Ok(axum::response::Response::from_parts(parts, bytes.into()));
             },
           )
-          .await
-          .flatten()
-          .unwrap_or_else(internal_error_response);
+          .await;
+
+        return match result {
+          Ok(Ok(r)) => r,
+          Ok(Err(err)) => internal_error_response(err),
+          Err(err) => internal_error_response(err),
+        };
       }
     };
 
