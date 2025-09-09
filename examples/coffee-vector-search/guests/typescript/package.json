@@ -16,12 +16,12 @@
     "trailbase-wasm": "workspace:*"
   },
   "devDependencies": {
-    "@bytecodealliance/componentize-js": "^0.18.4",
-    "@bytecodealliance/jco": "^1.13.3",
-    "@types/node": "^24.3.0",
+    "@bytecodealliance/componentize-js": "^0.18.5",
+    "@bytecodealliance/jco": "^1.14.0",
+    "@types/node": "^24.3.1",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2",
-    "vite": "^7.1.2",
+    "vite": "^7.1.5",
     "vitest": "^3.2.4"
   }
 }
