@@ -1328,6 +1328,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "coffee-vector-search-guest"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "trailbase-wasm",
+]
+
+[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
