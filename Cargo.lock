@@ -1310,7 +1310,7 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "serde_json",
- "trailbase-wasm",
+ "trailbase-wasm 0.1.0",
 ]
 
 [[package]]
@@ -1320,7 +1320,7 @@ dependencies = [
  "rquickjs",
  "serde",
  "serde_json",
- "trailbase-wasm",
+ "trailbase-wasm 0.1.0",
 ]
 
 [[package]]
@@ -5953,7 +5953,7 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
- "trailbase-wasm",
+ "trailbase-wasm 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -7921,7 +7921,7 @@ dependencies = [
  "trailbase-refinery",
  "trailbase-schema",
  "trailbase-sqlite",
- "trailbase-wasm-common",
+ "trailbase-wasm-common 0.1.0",
  "trailbase-wasm-runtime-host",
  "ts-rs",
  "url",
@@ -8154,7 +8154,29 @@ dependencies = [
  "serde_json",
  "static_assertions",
  "thiserror 2.0.16",
- "trailbase-wasm-common",
+ "trailbase-wasm-common 0.1.0",
+ "url",
+ "wit-bindgen",
+ "wstd",
+]
+
+[[package]]
+name = "trailbase-wasm"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3da8c2bc4fbaaf791ea02789d35c319f3c6f467be74bc626c5dd1c006c20da86"
+dependencies = [
+ "anyhow",
+ "base64",
+ "bytes",
+ "futures-util",
+ "http",
+ "log",
+ "serde",
+ "serde_json",
+ "static_assertions",
+ "thiserror 2.0.16",
+ "trailbase-wasm-common 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "url",
  "wit-bindgen",
  "wstd",
@@ -8163,6 +8185,17 @@ dependencies = [
 [[package]]
 name = "trailbase-wasm-common"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "ts-rs",
+]
+
+[[package]]
+name = "trailbase-wasm-common"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf8c2732de90edc81c2a408c83f082bbf62a1ecb7c61f9c396a6ce575f9c0f71"
 dependencies = [
  "serde",
  "serde_json",
@@ -8191,7 +8224,7 @@ dependencies = [
  "trailbase-schema",
  "trailbase-sqlite",
  "trailbase-wasi-keyvalue",
- "trailbase-wasm-common",
+ "trailbase-wasm-common 0.1.0",
  "wasmtime",
  "wasmtime-wasi",
  "wasmtime-wasi-http",
@@ -8714,7 +8747,7 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "serde_json",
- "trailbase-wasm",
+ "trailbase-wasm 0.1.0",
 ]
 
 [[package]]
