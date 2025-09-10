@@ -1,8 +1,8 @@
 ## v0.17.0
 
-* Add new WASM runtime based on [wasmtime](https://github.com/bytecodealliance/wasmtime). More information in a dedicated update [article](https://trailbase.io/blog/switching_to_a_wasm_runtime).
+* Add new WASM runtime based on [wasmtime](https://github.com/bytecodealliance/wasmtime). More information in our dedicated update [article](https://trailbase.io/blog/switching_to_a_wasm_runtime).
   * This is a transitional release containing both the V8 and WASM runtime. The plan is to eventually remove V8.
-  * We expect WASM to unlock a lot of opportunities going forward, from increased performance (though JS is slower), strict state isolation, flexible guets language choice, more extensibility... check the [article](https://trailbase.io/blog/switching_to_a_wasm_runtime).
+  * We expect WASM to unlock a lot of opportunities going forward, from increased performance (though JS is slower), strict state isolation, flexible guest language choice, more extensibility... if we peaked your interest, check out the article.
 * Update JavaScript and Rust dependencies.
 
 ## v0.16.9

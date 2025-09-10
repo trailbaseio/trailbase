@@ -1,23 +1,23 @@
 ---
-title: SupaBase
-description: Comparing TrailBase & SupaBase.
+title: Supabase
+description: Comparing TrailBase & Supabase.
 ---
 
-Both SupaBase and Postgres are amazing. Comparing either to TrailBase and
+Both Supabase and Postgres are amazing. Comparing either to TrailBase and
 SQLite, respectively, is challenging given how different they are
 architecturally.
 
-For one, both Postgres and SupaBase are heck of a lot more modular. "Rule 34" of
+For one, both Postgres and Supabase are heck of a lot more modular. "Rule 34" of
 the database world: if you can think of it, there's a Postgres extension for it.
-And SupaBase does an excellent job at making all that flexibility available
+And Supabase does an excellent job at making all that flexibility available
 without getting in the way and giving you untethered access while further
 expanding upon it.
 In many ways, TrailBase is trying to eventually do the same for SQLite:
-combining PocketBase's simplicity with SupaBase's layering.
+combining PocketBase's simplicity with Supabase's layering.
 
 One foundational difference is that Postgres itself is a multi-user,
 client-server architecture already.
-Extending it by building a layered services around it, like SupaBase did,
+Extending it by building a layered services around it, like Supabase did,
 feels very natural.
 However, SQLite is neither a multi-user system nor a server. Hence, extending
 it by embedding it into a monolith, like PocketBase did,  feels fairly natural
@@ -29,14 +29,14 @@ can have fewer interaction points, fewer moving parts making it fundamentally
 simpler, cheaper, and
 [lower overhead (10+x performance difference)](/reference/benchmarks).
 
-Ultimately, the biggest difference is that SupaBase is a polished product with
+Ultimately, the biggest difference is that Supabase is a polished product with
 a lot of mileage under its belt. Our simpler architecture will hopefully let us
-get there but for now SupaBase is our north star.
+get there but for now Supabase is our north star.
 
 ---
 
 [^1]:
     For example, in our performance testing we've found that PostgREST,
-    SupaBase's RESTful API layer in front of Postgres, is relatively resource
+    Supabase's RESTful API layer in front of Postgres, is relatively resource
     hungry. This might not be an issue since one can simply scale by pointing
     many independent instances at the same database instance.

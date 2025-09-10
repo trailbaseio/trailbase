@@ -10,8 +10,9 @@ image: ./_wasm_logo.svg
 
 import { RuntimeFib40Times } from "./_switching_to_a_wasm_runtime.tsx";
 
-TrailBase has been embedding a V8 JavaScript runtime for the last 10 months
-allowing users to implement custom HTTP and job handlers.
+[TrailBase](https://github.com/trailbaseio/trailbase) has been embedding a
+[V8](https://v8.dev/) JavaScript runtime for the last 10 months allowing users
+to implement custom HTTP and job handlers.
 During this time we've experienced several issues and limitations - we're
 therefore excited to announce that TrailBase is adopting
 [wasmtime](https://github.com/bytecodealliance/wasmtime) as a WebAssembly (WASM)
@@ -97,7 +98,7 @@ For now, TrailBase supports JS/TS and Rust out-of-the-box.
 We have plans to support
 [more](https://github.com/bytecodealliance/wasmtime/blob/main/README.md#language-support)
 in the future.
-Independently and maybe more importantly, WASI makes it straight-forward to
+Independently and maybe more importantly, [WASI](https://wasi.dev/) makes it straight-forward to
 support custom guests.
 
 Moreover, different endpoints can be implemented in different WASM components
@@ -262,7 +263,9 @@ thus supporting more use-cases and making it suitable for wider range of
 developers.
 If you think there's any language that would be particularly valuable, e.g. due
 to its unique and important ecosystem, let us know.
-When WASIp3 becomes available, hopefully in the near future, we're also
+When
+[WASIp3](https://github.com/WebAssembly/WASI/tree/main/wasip2#looking-forward-to-preview-3)
+becomes available, hopefully in the near future, we're also
 planning to transparently upgrade making asynchronous interactions between host
 and guest more of a first-class citizen.
 
@@ -275,7 +278,7 @@ Thank you for making it this far and your time 🙏.
 
 [^2]:
     As system to express cross-component interfaces for WASM in a
-    language-agnostic manner. It's like gRPC but FFI, i.e. no I/O
+    language-agnostic manner. It's like gRPC but in-process FFI, i.e. no I/O
     thus allowing both synchronous and asynchronous interactions.
 
 [^3]:
