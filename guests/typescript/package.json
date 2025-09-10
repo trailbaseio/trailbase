@@ -1,19 +1,74 @@
 {
   "name": "trailbase-wasm",
-  "description": "WASM Runtime for JS/TS execution within TrailBase",
-  "version": "0.1.0",
+  "description": "WASM Guest Runtime for custom JS/TS endpoints in TrailBase",
+  "homepage": "https://trailbase.io",
+  "version": "0.1.1",
   "license": "OSL-3.0",
   "type": "module",
-  "homepage": "https://trailbase.io",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js",
-    "./db": "./dist/db.js",
-    "./fs": "./dist/fs.js",
-    "./http": "./dist/http.js",
-    "./job": "./dist/job.js",
-    "./kv": "./dist/kv.js"
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./db": {
+      "import": "./dist/db.js",
+      "types": "./dist/db.d.ts"
+    },
+    "./fs": {
+      "import": "./dist/fs.js",
+      "types": "./dist/fs.d.ts"
+    },
+    "./http": {
+      "import": "./dist/http.js",
+      "types": "./dist/http.d.ts"
+    },
+    "./job": {
+      "import": "./dist/job.js",
+      "types": "./dist/job.d.ts"
+    },
+    "./kv": {
+      "import": "./dist/kv.js",
+      "types": "./dist/kv.d.ts"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "types": "./dist/index.d.ts"
+      },
+      "./db": {
+        "import": "./dist/db.js",
+        "types": "./dist/db.d.ts"
+      },
+      "./fs": {
+        "import": "./dist/fs.js",
+        "types": "./dist/fs.d.ts"
+      },
+      "./http": {
+        "import": "./dist/http.js",
+        "types": "./dist/http.d.ts"
+      },
+      "./job": {
+        "import": "./dist/job.js",
+        "types": "./dist/job.d.ts"
+      },
+      "./kv": {
+        "import": "./dist/kv.js",
+        "types": "./dist/kv.d.ts"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "package.json",
+    "wit"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/trailbaseio/trailbase.git",
+    "directory": "guests/typescript"
   },
   "scripts": {
     "generate:types": "jco types wit/ -o generated/types",

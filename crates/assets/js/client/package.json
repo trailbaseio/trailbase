@@ -1,6 +1,7 @@
 {
   "name": "trailbase",
   "description": "Official TrailBase Client",
+  "homepage": "https://trailbase.io",
   "version": "0.7.2",
   "license": "OSL-3.0",
   "type": "module",
@@ -25,7 +26,6 @@
     "url": "https://github.com/trailbaseio/trailbase.git",
     "directory": "crates/assets/js/client"
   },
-  "homepage": "https://trailbase.io",
   "scripts": {
     "start": "tsc && node dist/client/src/index.js",
     "build": "tsc",

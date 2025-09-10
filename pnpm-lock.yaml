@@ -865,8 +865,8 @@ importers:
   examples/wasm-guest-js:
     dependencies:
       trailbase-wasm:
-        specifier: workspace:*
-        version: link:../../guests/typescript
+        specifier: ^0.1.1
+        version: 0.1.1
     devDependencies:
       '@bytecodealliance/componentize-js':
         specifier: ^0.18.5
@@ -893,8 +893,8 @@ importers:
   examples/wasm-guest-ts:
     dependencies:
       trailbase-wasm:
-        specifier: workspace:*
-        version: link:../../guests/typescript
+        specifier: ^0.1.1
+        version: 0.1.1
     devDependencies:
       '@bytecodealliance/componentize-js':
         specifier: ^0.18.5
@@ -6123,6 +6123,9 @@ packages:
   tr46@5.1.1:
     resolution: {integrity: sha512-hdF5ZgjTqgAntKkklYw0R03MG2x/bSzTtkxmIRw/sTNV8YXsCJ1tfLAX23lhxhHJlEf3CRCOCGGWw3vI3GaSPw==}
     engines: {node: '>=18'}
+
+  trailbase-wasm@0.1.1:
+    resolution: {integrity: sha512-0/85pRpQPO96d89wBoHDuDbQycXCaw4D+vNSr9lJw2yJJ2fdhQuRr87nLftMM3sQqZk7zplDAY3lMYP4l94i/Q==}
 
   trailbase@0.7.2:
     resolution: {integrity: sha512-r+e4FcqWSR99qsVmXzOjW+Fu876EzsVBA57EDcQpFd514f5bolpopGXSx106cWocIkxg68LBciytmfUpVGIOXw==}
@@ -13316,6 +13319,8 @@ snapshots:
   tr46@5.1.1:
     dependencies:
       punycode: 2.3.1
+
+  trailbase-wasm@0.1.1: {}
 
   trailbase@0.7.2:
     dependencies:

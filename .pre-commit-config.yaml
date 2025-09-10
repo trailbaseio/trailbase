@@ -36,7 +36,7 @@ repos:
       name: Cargo Clippy
       # Be verbose to at least still see warnings scroll by.
       verbose: true
-      entry: sh -c 'pnpm i --frozen-lockfile --prefer-offline && cargo clippy --workspace --no-deps'
+      entry: sh -c 'pnpm i --frozen-lockfile --prefer-offline && PNPM_OFFLINE=TRUE cargo clippy --workspace --no-deps'
       language: system
       types: [rust]
       exclude: '^vendor/'
