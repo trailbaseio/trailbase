@@ -461,11 +461,9 @@ class Client {
       } else {
         await fetch('${_authApi}/logout');
       }
-    } catch (err) {
-      _logger.warning(err);
+    } finally {
+      _updateTokens(null);
     }
-
-    _updateTokens(null);
   }
 
   // Future<void> deleteUser() async {
@@ -617,10 +615,7 @@ class _TokenState {
 
   User? user() {
     final jwt = state?.$2;
-    if (jwt != null) {
-      return User(id: jwt.sub, email: jwt.email);
-    }
-    return null;
+    return (jwt != null) ? User(id: jwt.sub, email: jwt.email) : null;
   }
 
   /// Returns refresh token if refresh is warranted.

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 64 63.999999"
+   version="1.1"
+   id="svg9"
+   sodipodi:docname="Kotlin_logo_(2021-present).svg"
+   width="64"
+   height="64"
+   inkscape:version="1.4 (e7c3feb100, 2024-10-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs9" />
+  <sodipodi:namedview
+     id="namedview9"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="true"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="5.7443475"
+     inkscape:cx="21.151227"
+     inkscape:cy="23.153195"
+     inkscape:window-width="1920"
+     inkscape:window-height="1131"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg9" />
+  <radialGradient
+     id="a"
+     cx="22.431999"
+     cy="3.493"
+     r="21.679001"
+     gradientTransform="matrix(3.380286,0,0,3.3820961,-13.962674,-9.1932836)"
+     gradientUnits="userSpaceOnUse">
+    <stop
+       stop-color="#e44857"
+       offset=".003"
+       id="stop1" />
+    <stop
+       stop-color="#c711e1"
+       offset=".469"
+       id="stop2" />
+    <stop
+       stop-color="#7f52ff"
+       offset="1"
+       id="stop3" />
+  </radialGradient>
+  <path
+     d="M 64,64.000001 H 2.5e-7 V -1e-6 H 64 l -32.660115,31.5249 z"
+     fill="url(#a)"
+     stroke-width="1.0858"
+     id="path9"
+     style="fill:url(#a)" />
+</svg>

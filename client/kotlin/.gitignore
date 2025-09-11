@@ -1,0 +1,10 @@
+# Ignore Gradle/Kotlin project-specific cache directory
+.gradle
+.kotlin
+
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Ignore Gradle build output directory
+build
+*.db
