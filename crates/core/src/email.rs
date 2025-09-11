@@ -8,7 +8,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::AppState;
-use crate::config::proto::Config;
+use crate::config::proto::{Config, EmailConfig, SmtpEncryption};
 use crate::constants::AUTH_API_PATH;
 
 #[derive(Debug, Error)]
@@ -256,12 +256,34 @@ pub(crate) enum Mailer {
 }
 
 impl Mailer {
-  fn new_smtp(host: String, port: u16, user: String, pass: String) -> Result<Mailer, EmailError> {
-    let mailer = AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&host)?
-      .port(port)
-      .credentials(smtp::authentication::Credentials::new(user, pass))
-      .build();
-    return Ok(Mailer::Smtp(Arc::new(mailer)));
+  fn new_smtp(
+    host: &str,
+    port: u16,
+    user: Option<String>,
+    pass: Option<String>,
+    encryption: SmtpEncryption,
+  ) -> Result<Mailer, EmailError> {
+    let transport = match encryption {
+      SmtpEncryption::None => {
+        AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host).port(port)
+      }
+      SmtpEncryption::Starttls | SmtpEncryption::Undefined => {
+        AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(host)?
+          .port(port)
+          .credentials(smtp::authentication::Credentials::new(
+            user.ok_or(EmailError::Missing("SMTP username"))?,
+            pass.ok_or(EmailError::Missing("SMTP password"))?,
+          ))
+      }
+      SmtpEncryption::Tls => AsyncSmtpTransport::<Tokio1Executor>::relay(host)?
+        .port(port)
+        .credentials(smtp::authentication::Credentials::new(
+          user.ok_or(EmailError::Missing("SMTP username"))?,
+          pass.ok_or(EmailError::Missing("SMTP password"))?,
+        )),
+    };
+
+    return Ok(Mailer::Smtp(Arc::new(transport.build())));
   }
 
   fn new_local() -> Mailer {
@@ -269,33 +291,32 @@ impl Mailer {
   }
 
   pub(crate) fn new_from_config(config: &Config) -> Mailer {
-    let smtp_from_config = || -> Result<Mailer, EmailError> {
-      let email = &config.email;
+    fn smtp_from_config(email: &EmailConfig) -> Result<Mailer, EmailError> {
       let host = email
         .smtp_host
-        .to_owned()
+        .as_deref()
         .ok_or(EmailError::Missing("SMTP host"))?;
       let port = email
         .smtp_port
-        .map(|port| port as u16)
+        .and_then(|port| u16::try_from(port).ok())
         .ok_or(EmailError::Missing("SMTP port"))?;
-      let user = email
-        .smtp_username
-        .to_owned()
-        .ok_or(EmailError::Missing("SMTP username"))?;
-      let pass = email
-        .smtp_password
-        .to_owned()
-        .ok_or(EmailError::Missing("SMTP password"))?;
 
-      Self::new_smtp(host, port, user, pass)
-    };
-
-    if let Ok(mailer) = smtp_from_config() {
-      return mailer;
+      return Mailer::new_smtp(
+        host,
+        port,
+        email.smtp_username.clone(),
+        email.smtp_password.clone(),
+        email.smtp_encryption(),
+      );
     }
 
-    return Self::new_local();
+    return match smtp_from_config(&config.email) {
+      Ok(mailer) => mailer,
+      Err(err) => {
+        info!("Falling back to local sendmail: {err}");
+        Self::new_local()
+      }
+    };
   }
 }
 

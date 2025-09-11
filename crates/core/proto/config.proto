@@ -11,11 +11,21 @@ message EmailTemplate {
   optional string body = 2;
 }
 
+enum SmtpEncryption {
+  SMTP_ENCRYPTION_UNDEFINED = 0;
+  SMTP_ENCRYPTION_NONE = 1;
+  SMTP_ENCRYPTION_STARTTLS = 2;
+  SMTP_ENCRYPTION_TLS = 3;
+}
+
 message EmailConfig {
   optional string smtp_host = 1;
   optional uint32 smtp_port = 2;
   optional string smtp_username = 3;
   optional string smtp_password = 4 [ (secret) = true ];
+
+  // Which encryption method to use. STARTTLS by default.
+  optional SmtpEncryption smtp_encryption = 5;
 
   optional string sender_name = 11;
   optional string sender_address = 12;

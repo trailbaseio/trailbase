@@ -3,7 +3,7 @@ use log::*;
 use prost_reflect::{
   DynamicMessage, ExtensionDescriptor, FieldDescriptor, Kind, MapKey, ReflectMessage, Value,
 };
-use proto::{EmailTemplate, OAuthProviderId};
+use proto::{EmailTemplate, OAuthProviderId, SmtpEncryption};
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::str::FromStr;
@@ -480,10 +480,6 @@ pub(crate) fn validate_config(
   tables: &SchemaMetadataCache,
   config: &proto::Config,
 ) -> Result<(), ConfigError> {
-  fn ierr(msg: impl Into<String>) -> Result<(), ConfigError> {
-    return Err(ConfigError::Invalid(msg.into()));
-  }
-
   // Check server settings.
   let Some(ref app_name) = config.server.application_name else {
     return ierr("Missing application name");
@@ -583,79 +579,7 @@ pub(crate) fn validate_config(
   }
 
   // Check email config.
-  {
-    let email = &config.email;
-
-    let mut num_smtp_fields = 0;
-    if let Some(ref host) = email.smtp_host {
-      if !format!("http://{host}/").validate_url() {
-        return ierr(format!("Invalid SMTP host {host}."));
-      }
-      num_smtp_fields += 1;
-    }
-
-    if let Some(port) = email.smtp_port {
-      let port = u16::try_from(port).map_err(|_| ConfigError::Invalid("not a u16".into()))?;
-      if port == 0 {
-        return ierr("Invalid SMTP port.");
-      }
-      num_smtp_fields += 1;
-    }
-
-    if let Some(ref username) = email.smtp_username {
-      if username.is_empty() {
-        return ierr("Invalid SMTP username.");
-      }
-      num_smtp_fields += 1;
-    }
-
-    if let Some(ref password) = email.smtp_password {
-      if password.is_empty() {
-        return ierr("Invalid SMTP username.");
-      }
-      num_smtp_fields += 1;
-    }
-
-    if num_smtp_fields != 0 && num_smtp_fields != 4 {
-      return ierr("Only a subset of SMTP settings provided");
-    }
-
-    if let Some(ref sender_address) = email.sender_address {
-      if !sender_address.validate_email() {
-        return ierr("Invalid sender address.");
-      };
-      if email.sender_name.is_none() {
-        return ierr("Sender address but missing sender name.");
-      }
-    }
-
-    fn validate_template(template: Option<&EmailTemplate>) -> Result<(), ConfigError> {
-      // NOTE: It's ok for either subject or body to be empty, we'll simply fall back to the
-      // defaults.
-
-      // Check that VERIFICATION_URL is present.
-      if let Some(ref body) = template.as_ref().and_then(|t| t.body.as_ref()) {
-        lazy_static! {
-          static ref URL_PATTERN: regex::Regex =
-            regex::Regex::new(r#"\{\{[ ]*VERIFICATION_URL[ ]*\}\}"#).expect("static");
-          static ref CODE_PATTERN: regex::Regex =
-            regex::Regex::new(r#"\{\{[ ]*CODE[ ]*\}\}"#).expect("static");
-        };
-
-        if !(URL_PATTERN.is_match(body) || CODE_PATTERN.is_match(body)) {
-          return ierr(format!(
-            "Body needs to contain '{{{{ VERIFICATION_URL }}}}, got: {body}'"
-          ));
-        }
-      }
-
-      return Ok(());
-    }
-
-    validate_template(email.user_verification_template.as_ref())?;
-    validate_template(email.change_email_template.as_ref())?;
-    validate_template(email.password_reset_template.as_ref())?;
-  }
+  validate_email_config(&config.email)?;
 
   // Check job config.
   for job in &config.jobs.system_jobs {
@@ -673,6 +597,108 @@ pub(crate) fn validate_config(
   }
 
   return Ok(());
+}
+
+pub(crate) fn validate_email_config(email: &proto::EmailConfig) -> Result<(), ConfigError> {
+  validate_email_template(email.user_verification_template.as_ref())?;
+  validate_email_template(email.change_email_template.as_ref())?;
+  validate_email_template(email.password_reset_template.as_ref())?;
+
+  let Some(_host) = &email.smtp_host else {
+    match (email.smtp_port, &email.smtp_username, &email.smtp_password) {
+      (None, None, None) => {
+        // No SMTP configured
+        return Ok(());
+      }
+      _ => {
+        return ierr("Partial SMTP configuration provided. Host missing.");
+      }
+    }
+  };
+
+  // TODO: check that `_host` is a valid hostname or IP.
+
+  // NOTE: When no explicit sender is given, we fall back to noreply@host.
+  if let Some(ref sender_address) = email.sender_address {
+    if !sender_address.validate_email() {
+      return ierr("Invalid sender address.");
+    };
+    if email.sender_name.is_none() {
+      return ierr("Sender address but missing sender name.");
+    }
+  }
+
+  let _port: u16 = match email.smtp_port {
+    Some(port) => {
+      // NOTE: Protobuf doesn't support uint16 types natively, so we have to range-check.
+      let port = u16::try_from(port).map_err(|_| ConfigError::Invalid("not a u16".into()))?;
+      if port == 0 {
+        return ierr("Invalid SMTP port.");
+      }
+      port
+    }
+    None => {
+      return ierr("SMTP port missing.");
+    }
+  };
+
+  let user = &email.smtp_username;
+  let pw = &email.smtp_password;
+
+  match email.smtp_encryption() {
+    SmtpEncryption::None => {
+      return match (user, pw) {
+        (None, None) => Ok(()),
+        _ => ierr("SMTP username or password provided, though encryption turned off."),
+      };
+    }
+    _enc => {
+      if let Some(user) = user {
+        if user.is_empty() {
+          return ierr("Invalid SMTP username.");
+        }
+      } else {
+        return ierr("Missing SMTP username.");
+      }
+
+      if let Some(pw) = pw {
+        if pw.is_empty() {
+          return ierr("Invalid SMTP username.");
+        }
+      } else {
+        return ierr("Missing SMTP password.");
+      }
+    }
+  }
+
+  return Ok(());
+}
+
+fn validate_email_template(template: Option<&EmailTemplate>) -> Result<(), ConfigError> {
+  // NOTE: It's ok for either subject or body to be empty, we'll simply fall back to the
+  // defaults.
+
+  // Check that VERIFICATION_URL is present.
+  if let Some(ref body) = template.as_ref().and_then(|t| t.body.as_ref()) {
+    lazy_static! {
+      static ref URL_PATTERN: regex::Regex =
+        regex::Regex::new(r#"\{\{[ ]*VERIFICATION_URL[ ]*\}\}"#).expect("static");
+      static ref CODE_PATTERN: regex::Regex =
+        regex::Regex::new(r#"\{\{[ ]*CODE[ ]*\}\}"#).expect("static");
+    };
+
+    if !(URL_PATTERN.is_match(body) || CODE_PATTERN.is_match(body)) {
+      return ierr(format!(
+        "Body needs to contain '{{{{ VERIFICATION_URL }}}}, got: {body}'"
+      ));
+    }
+  }
+
+  return Ok(());
+}
+
+fn ierr(msg: impl std::string::ToString) -> Result<(), ConfigError> {
+  return Err(ConfigError::Invalid(msg.to_string()));
 }
 
 #[cfg(test)]
