@@ -265,7 +265,14 @@ impl Mailer {
   ) -> Result<Mailer, EmailError> {
     let transport = match encryption {
       SmtpEncryption::None => {
-        AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host).port(port)
+        let mut transport =
+          AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host).port(port);
+        if let (Some(user), Some(pass)) = (user, pass) {
+          warn!("Encryption is None. SMTP password will be sent in plain text");
+          transport = transport.credentials(smtp::authentication::Credentials::new(user, pass));
+        }
+
+        transport
       }
       SmtpEncryption::Starttls | SmtpEncryption::Undefined => {
         AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(host)?

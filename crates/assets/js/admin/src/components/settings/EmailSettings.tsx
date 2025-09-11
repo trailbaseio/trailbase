@@ -20,6 +20,13 @@ import {
 import { Label } from "@/components/ui/label";
 import { showToast } from "@/components/ui/toast";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   TextField,
   TextFieldLabel,
   TextFieldInput,
@@ -36,7 +43,7 @@ import type { FormApiT } from "@/components/FormFields";
 
 import type { TestEmailRequest } from "@bindings/TestEmailRequest";
 
-import { Config, EmailConfig } from "@proto/config";
+import { Config, EmailConfig, SmtpEncryption } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/config";
 import { $user, adminFetch } from "@/lib/fetch";
 
@@ -180,6 +187,30 @@ export function EmailSettings(props: {
                   integer: true,
                   label: textLabel("Port"),
                 })}
+              </form.Field>
+
+              <form.Field name="smtpEncryption">
+                {(field) => {
+                  return (
+                    <TextField class="w-full">
+                      <div
+                        class="grid items-center gap-x-2 gap-y-1"
+                        style={{ "grid-template-columns": "auto 1fr" }}
+                      >
+                        <div class="w-40">
+                          <TextFieldLabel>Encryption</TextFieldLabel>
+                        </div>
+
+                        <div class="w-full">
+                          <SmtpEncryptionSelect
+                            value={field().state.value}
+                            handleChange={field().handleChange}
+                          />
+                        </div>
+                      </div>
+                    </TextField>
+                  );
+                }}
               </form.Field>
 
               <form.Field
@@ -407,6 +438,56 @@ function textLabel(label: string) {
       <Label>{label}</Label>
     </div>
   );
+}
+
+function SmtpEncryptionSelect(props: {
+  value: SmtpEncryption | undefined;
+  handleChange: (v: SmtpEncryption | undefined) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Select<SmtpEncryption | undefined>
+      value={props.value}
+      disabled={props.disabled}
+      options={[
+        undefined,
+        SmtpEncryption.SMTP_ENCRYPTION_STARTTLS,
+        SmtpEncryption.SMTP_ENCRYPTION_TLS,
+        SmtpEncryption.SMTP_ENCRYPTION_NONE,
+      ]}
+      placeholder={smtpEncryptionLabel(undefined)}
+      itemComponent={(props) => (
+        <SelectItem item={props.item}>
+          {smtpEncryptionLabel(props.item.rawValue)}
+        </SelectItem>
+      )}
+      onChange={(value) => {
+        props.handleChange(value ?? SmtpEncryption.SMTP_ENCRYPTION_UNDEFINED);
+      }}
+    >
+      <SelectTrigger>
+        <SelectValue<SmtpEncryption>>
+          {(_state) => smtpEncryptionLabel(props.value)}
+        </SelectValue>
+      </SelectTrigger>
+
+      <SelectContent />
+    </Select>
+  );
+}
+
+function smtpEncryptionLabel(enc: SmtpEncryption | undefined): string {
+  switch (enc) {
+    case SmtpEncryption.SMTP_ENCRYPTION_NONE:
+      return "None (Plain)";
+    case SmtpEncryption.SMTP_ENCRYPTION_TLS:
+      return "STARTTLS";
+    case SmtpEncryption.SMTP_ENCRYPTION_STARTTLS:
+      return "TLS/SSL";
+    case SmtpEncryption.SMTP_ENCRYPTION_UNDEFINED:
+    default:
+      return "Default";
+  }
 }
 
 const flexColStyle = "flex flex-col gap-2";

@@ -645,13 +645,8 @@ pub(crate) fn validate_email_config(email: &proto::EmailConfig) -> Result<(), Co
   let user = &email.smtp_username;
   let pw = &email.smtp_password;
 
-  match email.smtp_encryption() {
-    SmtpEncryption::None => {
-      return match (user, pw) {
-        (None, None) => Ok(()),
-        _ => ierr("SMTP username or password provided, though encryption turned off."),
-      };
-    }
+  return match email.smtp_encryption() {
+    SmtpEncryption::None => Ok(()),
     _enc => {
       if let Some(user) = user {
         if user.is_empty() {
@@ -668,10 +663,10 @@ pub(crate) fn validate_email_config(email: &proto::EmailConfig) -> Result<(), Co
       } else {
         return ierr("Missing SMTP password.");
       }
-    }
-  }
 
-  return Ok(());
+      Ok(())
+    }
+  };
 }
 
 fn validate_email_template(template: Option<&EmailTemplate>) -> Result<(), ConfigError> {
