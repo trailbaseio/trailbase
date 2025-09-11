@@ -120,8 +120,11 @@ were unreliable in our previous V8 integration.
 
 ### Less Code
 
-As mentioned before, switching off V8 removes a lot of high-scrutiny code, cuts
-binary size roughly in half and lets us build truly static binaries with MUSL.
+As mentioned before, switching off V8 removes a lot of high-scrutiny codex and
+roughly cuts our binary size in half.
+Moreover, our Deno dependency bundles V8 as a pre-compiled binary limiting
+portability including static builds with MUSL instead of GLIBC[^1], but also
+increasing the surface for supply-chain attacks.
 
 ### Rethinking Composition & Licensing Model
 
