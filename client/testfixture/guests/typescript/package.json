@@ -3,7 +3,6 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "generate:types": "jco types ../../../../guests/typescript/wit/ -o generated/types",
     "build:tsc": "vite build",
     "build:wasm": "jco componentize dist/index.mjs -w ../../../../guests/typescript/wit -o dist/wasm_ts_guest_testfixture.wasm",
     "build:wasm:aot": "jco componentize  dist/index.mjs -w ../../../../guests/typescript/wit --aot -o dist/wasm_ts_guest_testfixture.wasm",
@@ -16,8 +15,7 @@
     "trailbase-wasm": "workspace:*"
   },
   "devDependencies": {
-    "@bytecodealliance/componentize-js": "^0.18.5",
-    "@bytecodealliance/jco": "^1.14.0",
+    "@bytecodealliance/jco": "^1.15.0",
     "@eslint/js": "^9.35.0",
     "@types/node": "^24.3.1",
     "eslint": "^9.35.0",

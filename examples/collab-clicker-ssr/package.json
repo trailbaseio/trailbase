@@ -22,7 +22,7 @@
     "compression": "^1.8.1",
     "eslint": "^9.35.0",
     "express": "^5.1.0",
-    "globals": "^16.3.0",
+    "globals": "^16.4.0",
     "prettier": "^3.6.2",
     "sirv": "^3.0.2",
     "tailwindcss": "^3.4.17",

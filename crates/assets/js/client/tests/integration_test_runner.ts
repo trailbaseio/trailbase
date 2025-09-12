@@ -30,7 +30,8 @@ async function initTrailBase(): Promise<{ subprocess: Subprocess }> {
     stderr: process.stdout,
   })`cargo run -- --data-dir client/testfixture --public-url http://${ADDRESS} run -a ${ADDRESS} --runtime-threads 1`;
 
-  for (let i = 0; i < 100; ++i) {
+  // NOTE: debug builds of trail loading JS-WASM can take a long time.
+  for (let i = 0; i < 300; ++i) {
     if ((subprocess.exitCode ?? 0) > 0) {
       break;
     }

@@ -12,12 +12,9 @@ importers:
         specifier: workspace:*
         version: link:../../../../guests/typescript
     devDependencies:
-      '@bytecodealliance/componentize-js':
-        specifier: ^0.18.5
-        version: 0.18.5
       '@bytecodealliance/jco':
-        specifier: ^1.14.0
-        version: 1.14.0
+        specifier: ^1.15.0
+        version: 1.15.0
       '@eslint/js':
         specifier: ^9.35.0
         version: 9.35.0
@@ -46,8 +43,8 @@ importers:
         specifier: ^2.18.1
         version: 2.18.1
       '@bufbuild/protobuf':
-        specifier: ^2.7.0
-        version: 2.7.0
+        specifier: ^2.8.0
+        version: 2.8.0
       '@codemirror/autocomplete':
         specifier: ^6.18.7
         version: 6.18.7
@@ -88,8 +85,8 @@ importers:
         specifier: ^1.19.5
         version: 1.19.5(solid-js@1.9.9)
       '@tanstack/solid-query':
-        specifier: ^5.87.1
-        version: 5.87.1(solid-js@1.9.9)
+        specifier: ^5.87.4
+        version: 5.87.4(solid-js@1.9.9)
       '@tanstack/solid-table':
         specifier: ^8.21.3
         version: 8.21.3(solid-js@1.9.9)
@@ -142,8 +139,8 @@ importers:
         specifier: file:../client
         version: link:../client
       uuid:
-        specifier: ^11.1.0
-        version: 11.1.0
+        specifier: ^13.0.0
+        version: 13.0.0
     devDependencies:
       '@eslint/js':
         specifier: ^9.35.0
@@ -185,8 +182,8 @@ importers:
         specifier: ^3.18.2
         version: 3.18.2(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@24.3.1)(typescript@5.9.2)))
       globals:
-        specifier: ^16.3.0
-        version: 16.3.0
+        specifier: ^16.4.0
+        version: 16.4.0
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
@@ -294,8 +291,8 @@ importers:
         specifier: ^3.18.2
         version: 3.18.2(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@24.3.1)(typescript@5.9.2)))
       globals:
-        specifier: ^16.3.0
-        version: 16.3.0
+        specifier: ^16.4.0
+        version: 16.4.0
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
@@ -324,8 +321,8 @@ importers:
         specifier: ^4.0.0
         version: 4.0.0
       uuid:
-        specifier: ^11.1.0
-        version: 11.1.0
+        specifier: ^13.0.0
+        version: 13.0.0
     devDependencies:
       '@eslint/js':
         specifier: ^9.35.0
@@ -337,8 +334,8 @@ importers:
         specifier: ^9.6.0
         version: 9.6.0
       globals:
-        specifier: ^16.3.0
-        version: 16.3.0
+        specifier: ^16.4.0
+        version: 16.4.0
       http-status:
         specifier: ^2.1.0
         version: 2.1.0
@@ -473,14 +470,14 @@ importers:
         specifier: ^1.3.1
         version: 1.3.1(eslint@9.35.0(jiti@2.5.1))
       eslint-plugin-better-tailwindcss:
-        specifier: ^3.7.7
-        version: 3.7.7(eslint@9.35.0(jiti@2.5.1))(tailwindcss@4.1.13)
+        specifier: ^3.7.8
+        version: 3.7.8(eslint@9.35.0(jiti@2.5.1))(tailwindcss@4.1.13)
       eslint-plugin-solid:
         specifier: ^0.14.5
         version: 0.14.5(eslint@9.35.0(jiti@2.5.1))(typescript@5.9.2)
       globals:
-        specifier: ^16.3.0
-        version: 16.3.0
+        specifier: ^16.4.0
+        version: 16.4.0
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
@@ -580,8 +577,8 @@ importers:
         specifier: ^3.18.2
         version: 3.18.2(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)))
       globals:
-        specifier: ^16.3.0
-        version: 16.3.0
+        specifier: ^16.4.0
+        version: 16.4.0
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
@@ -632,8 +629,8 @@ importers:
         specifier: ^0.4.20
         version: 0.4.20(eslint@9.35.0(jiti@2.5.1))
       globals:
-        specifier: ^16.3.0
-        version: 16.3.0
+        specifier: ^16.4.0
+        version: 16.4.0
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
@@ -653,12 +650,9 @@ importers:
         specifier: workspace:*
         version: link:../../../../guests/typescript
     devDependencies:
-      '@bytecodealliance/componentize-js':
-        specifier: ^0.18.5
-        version: 0.18.5
       '@bytecodealliance/jco':
-        specifier: ^1.14.0
-        version: 1.14.0
+        specifier: ^1.15.0
+        version: 1.15.0
       '@types/node':
         specifier: ^24.3.1
         version: 24.3.1
@@ -703,8 +697,8 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0
       globals:
-        specifier: ^16.3.0
-        version: 16.3.0
+        specifier: ^16.4.0
+        version: 16.4.0
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
@@ -733,12 +727,9 @@ importers:
         specifier: workspace:*
         version: link:../../../../guests/typescript
     devDependencies:
-      '@bytecodealliance/componentize-js':
-        specifier: ^0.18.5
-        version: 0.18.5
       '@bytecodealliance/jco':
-        specifier: ^1.14.0
-        version: 1.14.0
+        specifier: ^1.15.0
+        version: 1.15.0
       '@types/node':
         specifier: ^24.3.1
         version: 24.3.1
@@ -795,17 +786,17 @@ importers:
         specifier: ^0.1.12
         version: 0.1.12(typescript@5.9.2)
       '@tanstack/query-core':
-        specifier: ^5.87.1
-        version: 5.87.1
+        specifier: ^5.87.4
+        version: 5.87.4
       '@tanstack/query-db-collection':
-        specifier: ^0.2.14
-        version: 0.2.14(@tanstack/query-core@5.87.1)(typescript@5.9.2)
+        specifier: ^0.2.16
+        version: 0.2.16(@tanstack/query-core@5.87.4)(typescript@5.9.2)
       '@tanstack/react-db':
-        specifier: ^0.1.15
-        version: 0.1.15(react@19.1.1)(typescript@5.9.2)
+        specifier: ^0.1.17
+        version: 0.1.17(react@19.1.1)(typescript@5.9.2)
       '@tanstack/trailbase-db-collection':
-        specifier: ^0.1.15
-        version: 0.1.15(typescript@5.9.2)
+        specifier: ^0.1.17
+        version: 0.1.17(typescript@5.9.2)
       react:
         specifier: ^19.1.1
         version: 19.1.1
@@ -844,8 +835,8 @@ importers:
         specifier: ^0.4.20
         version: 0.4.20(eslint@9.35.0(jiti@2.5.1))
       globals:
-        specifier: ^16.3.0
-        version: 16.3.0
+        specifier: ^16.4.0
+        version: 16.4.0
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
@@ -865,15 +856,12 @@ importers:
   examples/wasm-guest-js:
     dependencies:
       trailbase-wasm:
-        specifier: ^0.1.1
-        version: 0.1.1
+        specifier: workspace:^
+        version: link:../../guests/typescript
     devDependencies:
-      '@bytecodealliance/componentize-js':
-        specifier: ^0.18.5
-        version: 0.18.5
       '@bytecodealliance/jco':
-        specifier: ^1.14.0
-        version: 1.14.0
+        specifier: ^1.15.0
+        version: 1.15.0
       '@eslint/js':
         specifier: ^9.35.0
         version: 9.35.0
@@ -881,8 +869,8 @@ importers:
         specifier: ^9.35.0
         version: 9.35.0(jiti@2.5.1)
       globals:
-        specifier: ^16.3.0
-        version: 16.3.0
+        specifier: ^16.4.0
+        version: 16.4.0
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
@@ -893,15 +881,12 @@ importers:
   examples/wasm-guest-ts:
     dependencies:
       trailbase-wasm:
-        specifier: ^0.1.1
-        version: 0.1.1
+        specifier: workspace:^
+        version: link:../../guests/typescript
     devDependencies:
-      '@bytecodealliance/componentize-js':
-        specifier: ^0.18.5
-        version: 0.18.5
       '@bytecodealliance/jco':
-        specifier: ^1.14.0
-        version: 1.14.0
+        specifier: ^1.15.0
+        version: 1.15.0
       '@eslint/js':
         specifier: ^9.35.0
         version: 9.35.0
@@ -929,12 +914,9 @@ importers:
 
   guests/typescript:
     devDependencies:
-      '@bytecodealliance/componentize-js':
-        specifier: ^0.18.5
-        version: 0.18.5
       '@bytecodealliance/jco':
-        specifier: ^1.13.3
-        version: 1.13.3
+        specifier: ^1.15.0
+        version: 1.15.0
       '@eslint/js':
         specifier: ^9.35.0
         version: 9.35.0
@@ -1171,19 +1153,15 @@ packages:
     resolution: {integrity: sha512-bkFqkLhh3pMBUQQkpVgWDWq/lqzc2678eUyDlTBhRqhCHFguYYGM0Efga7tYk4TogG/3x0EEl66/OQ+WGbWB/Q==}
     engines: {node: '>=6.9.0'}
 
-  '@bufbuild/protobuf@2.7.0':
-    resolution: {integrity: sha512-qn6tAIZEw5i/wiESBF4nQxZkl86aY4KoO0IkUa2Lh+rya64oTOdJQFlZuMwI1Qz9VBJQrQC4QlSA2DNek5gCOA==}
+  '@bufbuild/protobuf@2.8.0':
+    resolution: {integrity: sha512-r1/0w5C9dkbcdjyxY8ZHsC5AOWg4Pnzhm2zu7LO4UHSounp2tMm6Y+oioV9zlGbLveE7YaWRDUk48WLxRDgoqg==}
 
   '@bytecodealliance/componentize-js@0.18.5':
     resolution: {integrity: sha512-5iFhwpij4uauxmcCbMSdfx+QCB0swLl9g5Z3LlV95PgeVwRfp8gtNmps2oZ8/sSK1hXNYpGmMEq+XOKSRfS+Iw==}
     hasBin: true
 
-  '@bytecodealliance/jco@1.13.3':
-    resolution: {integrity: sha512-MyiiNk94XZQE1ML43DPJ9EUn/+8/c5PhG2bxMJn+9ccBfDJ6dxLpNH8nFgiaV+mUGebvW5Daj3dcRNxx28w9aA==}
-    hasBin: true
-
-  '@bytecodealliance/jco@1.14.0':
-    resolution: {integrity: sha512-AahjCVeaaLGHIip88UUhMIb9YhGf3v8khSK3h9yajUYnzxhV1/AbKcHHfUcmNlhiOu5JQ4i0STzkhyqThuqlsg==}
+  '@bytecodealliance/jco@1.15.0':
+    resolution: {integrity: sha512-i1WaE+8i/n2JTVjvXtAIL2fyZV+CScWkrzp0M6gIEHsf6L0Z1S8oPqUbxmEUlRpx8+LiMaBB9wJJoEYghrwtCg==}
     hasBin: true
 
   '@bytecodealliance/preview2-shim@0.17.4':
@@ -1754,8 +1732,8 @@ packages:
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
 
-  '@jridgewell/trace-mapping@0.3.30':
-    resolution: {integrity: sha512-GQ7Nw5G2lTu/BtHTKfXhKHok2WGetd4XYcVKGx00SjAk8GMwgJM3zr6zORiPGuOE+/vkc90KtTosSSvaCjKb2Q==}
+  '@jridgewell/trace-mapping@0.3.31':
+    resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
@@ -1795,8 +1773,8 @@ packages:
   '@microsoft/api-extractor-model@7.30.7':
     resolution: {integrity: sha512-TBbmSI2/BHpfR9YhQA7nH0nqVmGgJ0xH0Ex4D99/qBDAUpnhA2oikGmdXanbw9AWWY/ExBYIpkmY8dBHdla3YQ==}
 
-  '@microsoft/api-extractor@7.52.11':
-    resolution: {integrity: sha512-IKQ7bHg6f/Io3dQds6r9QPYk4q0OlR9A4nFDtNhUt3UUIhyitbxAqRN1CLjUVtk6IBk3xzyCMOdwwtIXQ7AlGg==}
+  '@microsoft/api-extractor@7.52.12':
+    resolution: {integrity: sha512-f1UNgOLCMydwCJ+eZvH0dMxMq3lEEvXsLqlvDOdx136cRITK6xPES2xxgN/0NPCFpQad2HtMHxtPM9oGuqQx6g==}
     hasBin: true
 
   '@microsoft/tsdoc-config@0.17.1':
@@ -1925,8 +1903,8 @@ packages:
   '@napi-rs/wasm-runtime@0.2.12':
     resolution: {integrity: sha512-ZVWUcfwY4E/yPitQJl481FjFo3K22D6qF0DuFH6Y/nbnE11GY5uguDxZMGXPQ8WQ0128MXQD7TnfHyK4oWoIJQ==}
 
-  '@napi-rs/wasm-runtime@1.0.3':
-    resolution: {integrity: sha512-rZxtMsLwjdXkMUGC3WwsPwLNVqVqnTJT6MNIB6e+5fhMcSCPP0AOsNWuMQ5mdCq6HNjs/ZeWAEchpqeprqBD2Q==}
+  '@napi-rs/wasm-runtime@1.0.4':
+    resolution: {integrity: sha512-+ZEtJPp8EF8h4kN6rLQECRor00H7jtDgBVtttIUoxuDkXLiQMaSBqju3LV/IEsMvqVG5pviUvR4jYhIA1xNm8w==}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -2263,16 +2241,16 @@ packages:
   '@rushstack/rig-package@0.5.3':
     resolution: {integrity: sha512-olzSSjYrvCNxUFZowevC3uz8gvKr3WTpHQ7BkpjtRpA3wK+T0ybep/SRUMfr195gBzJm5gaXw0ZMgjIyHqJUow==}
 
-  '@rushstack/terminal@0.15.4':
-    resolution: {integrity: sha512-OQSThV0itlwVNHV6thoXiAYZlQh4Fgvie2CzxFABsbO2MWQsI4zOh3LRNigYSTrmS+ba2j0B3EObakPzf/x6Zg==}
+  '@rushstack/terminal@0.16.0':
+    resolution: {integrity: sha512-WEvNuKkoR1PXorr9SxO0dqFdSp1BA+xzDrIm/Bwlc5YHg2FFg6oS+uCTYjerOhFuqCW+A3vKBm6EmKWSHfgx/A==}
     peerDependencies:
       '@types/node': '*'
     peerDependenciesMeta:
       '@types/node':
         optional: true
 
-  '@rushstack/ts-command-line@5.0.2':
-    resolution: {integrity: sha512-+AkJDbu1GFMPIU8Sb7TLVXDv/Q7Mkvx+wAjEl8XiXVVq+p1FmWW6M3LYpJMmoHNckSofeMecgWg5lfMwNAAsEQ==}
+  '@rushstack/ts-command-line@5.0.3':
+    resolution: {integrity: sha512-bgPhQEqLVv/2hwKLYv/XvsTWNZ9B/+X1zJ7WgQE9rO5oiLzrOZvkIW4pk13yOQBhHyjcND5qMOa6p83t+Z66iQ==}
 
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
@@ -2533,8 +2511,8 @@ packages:
     peerDependencies:
       typescript: '>=4.7'
 
-  '@tanstack/db-ivm@0.1.4':
-    resolution: {integrity: sha512-4ItrJ5qxLTK+LjhpyuLkQvpD7EfUYDDtv5oY3RiUCXSFR8MinUxq0NV5Q+W/UhIC5sdl3BXKYy4IS9XPZPAEQg==}
+  '@tanstack/db-ivm@0.1.6':
+    resolution: {integrity: sha512-E9M4lP4PlUW6Su54xmqYjGRLMrjtq9akDC3G1DNYr7sqlDKQeR654kGbFc+XNqajr4pFZvA9hV/oQO8DTHNYxQ==}
     peerDependencies:
       typescript: '>=4.7'
 
@@ -2543,25 +2521,25 @@ packages:
     peerDependencies:
       typescript: '>=4.7'
 
-  '@tanstack/db@0.2.2':
-    resolution: {integrity: sha512-kNp85JaBd9JiNmrcABeFppTRYsuq3ATy0e/PQGPI8FEUKN05KhPV4oKt6OQpizIoQDA2a3PuHsRa6wfpUkPlVQ==}
+  '@tanstack/db@0.2.4':
+    resolution: {integrity: sha512-cVMbfLhvb9HFeNBFOEwyfZFXI6k636eYA5mrALRnEUrVXeKvW1uRR6FZMlkR0UJft2rzypyHeIlLjU7QS17knA==}
     peerDependencies:
       typescript: '>=4.7'
 
   '@tanstack/form-core@1.19.5':
     resolution: {integrity: sha512-MhHk/f3fOVhm2kHAEOg+yJklSY84C3qSwwYwAUzAQw6i5ZQquBdB2aYzg89FFXNkhmLcEl9hJCqRZVw4NHzDMQ==}
 
-  '@tanstack/query-core@5.87.1':
-    resolution: {integrity: sha512-HOFHVvhOCprrWvtccSzc7+RNqpnLlZ5R6lTmngb8aq7b4rc2/jDT0w+vLdQ4lD9bNtQ+/A4GsFXy030Gk4ollA==}
+  '@tanstack/query-core@5.87.4':
+    resolution: {integrity: sha512-uNsg6zMxraEPDVO2Bn+F3/ctHi+Zsk+MMpcN8h6P7ozqD088F6mFY5TfGM7zuyIrL7HKpDyu6QHfLWiDxh3cuw==}
 
-  '@tanstack/query-db-collection@0.2.14':
-    resolution: {integrity: sha512-ei4bqMDeb8XSrTIFxcHh2fp8zbdZaG0NKXBLNRZO9JtOJToABXf5QmchV9A6nSWlCgISi4YfW6Prd3ym0p4YwQ==}
+  '@tanstack/query-db-collection@0.2.16':
+    resolution: {integrity: sha512-ZQuw8w93jrL4Bv4ZomLEeErho2R3E/VfXm5pEiNcabpO9ouRS3pnSZq2qjVP5xq//h3RR4deccv/0QqqBr4fJQ==}
     peerDependencies:
       '@tanstack/query-core': ^5.0.0
       typescript: '>=4.7'
 
-  '@tanstack/react-db@0.1.15':
-    resolution: {integrity: sha512-AjsmzUV4hSblZFKteAqWbFbYIQSoK+ONHhzo5X7lu/XNTddgeEqnmXeferocvO1cxLyzvy33i9KtiT5U7ZWGzA==}
+  '@tanstack/react-db@0.1.17':
+    resolution: {integrity: sha512-B9i5rUK1O8RYTo6mUPqBrVPFHt19bfffpKogUzp2ODht4h+weAfIV8fOyrQTliH/4ddjBSCj/EhdDL0i6T+gXg==}
     peerDependencies:
       react: '>=16.8.0'
 
@@ -2570,8 +2548,8 @@ packages:
     peerDependencies:
       solid-js: ^1.6.0
 
-  '@tanstack/solid-query@5.87.1':
-    resolution: {integrity: sha512-ETm+gX1vG8I3nta+u+D68+0VLKMEJsSWantDUPIJLIGjuWmPOWe7ex9HcxRU6HwYHar7kvscY5Uv7msjaa6Bdg==}
+  '@tanstack/solid-query@5.87.4':
+    resolution: {integrity: sha512-JF/gKC9qatXg8KWsrpJsTgeIVMeOaHFFYfsvBqnpXZL1l9x46etZz+ek40SJy1ET7afFoc4PG3N4HBbS9+88lQ==}
     peerDependencies:
       solid-js: ^1.6.0
 
@@ -2593,8 +2571,8 @@ packages:
     resolution: {integrity: sha512-ldZXEhOBb8Is7xLs01fR3YEc3DERiz5silj8tnGkFZytt1abEvl/GhUmCE0PMLaMPTa3Jk4HbKmRlHmu+gCftg==}
     engines: {node: '>=12'}
 
-  '@tanstack/trailbase-db-collection@0.1.15':
-    resolution: {integrity: sha512-ihTGFzI3t6pHUnSMVqr+Ca75nDxae1v7EkjqlgdBUgR0cACXWJAT1N4UGaxTG31q1ElGACwhOXlyOvffBKaBkw==}
+  '@tanstack/trailbase-db-collection@0.1.17':
+    resolution: {integrity: sha512-QQSOeeAF8q+sja3t4xV6OR2mXNsGTlD8uxO8KD1l/7O8llwZ9kOgX1r5SoecYkQ21u/WSSo9xKJIs8IPMKjfwQ==}
     peerDependencies:
       typescript: '>=4.7'
 
@@ -2628,8 +2606,8 @@ packages:
   '@tsconfig/node16@1.0.4':
     resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
 
-  '@tybys/wasm-util@0.10.0':
-    resolution: {integrity: sha512-VyyPYFlOMNylG45GoAe0xDoLwWuowvf92F9kySqzYh8vmYm7D2u4iUJKa1tOUpS70Ku13ASrOkS4ScXFsTaCNQ==}
+  '@tybys/wasm-util@0.10.1':
+    resolution: {integrity: sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==}
 
   '@types/argparse@1.0.38':
     resolution: {integrity: sha512-ebDJ9b0e702Yr7pWgB0jzm+CX4Srzz8RcXtLJDJB+BSccqMa36uyH/zUsSYao5+BD1ytv3k3rPYCq4mAE1hsXA==}
@@ -3076,8 +3054,8 @@ packages:
     resolution: {integrity: sha512-wvUjBtSGN7+7SjNpq/9M2Tg350UZD3q62IFZLbRAR1bSMlCo1ZaeW+BJ+D090e4hIIZLBcTDWe4Mh4jvUDajzQ==}
     engines: {node: '>= 0.4'}
 
-  axios@1.11.0:
-    resolution: {integrity: sha512-1Lx3WLFQWm3ooKDYZD1eXmoGO9fxYQjrycfHFC8P0sCfQVXyROp0p9PFWBehewBOdCwHc+f/b8I0fMto5eSfwA==}
+  axios@1.12.0:
+    resolution: {integrity: sha512-oXTDccv8PcfjZmPGlWsPSwtOJCZ/b6W5jAMCNcfwJbCzDckwG0jrYJFaWH1yvivfCXjVzV/SPDEhMB3Q+DSurg==}
 
   axobject-query@4.1.0:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
@@ -3236,10 +3214,6 @@ packages:
     resolution: {integrity: sha512-/ghrgmhfY8RaSdeo43hNXxpoHAtxdbskUHjPpfqUWGttFgycUhYPGx3YZBCnUCvOa7Doivn1IZec3DEGFoMgLg==}
     engines: {node: '>=12'}
 
-  chalk-template@1.1.2:
-    resolution: {integrity: sha512-2bxTP2yUH7AJj/VAXfcA+4IcWGdQ87HwBANLt5XxGTeomo8yG0y95N1um9i5StvhT/Bl0/2cARA5v1PpPXUxUA==}
-    engines: {node: '>=14.16'}
-
   chalk@4.1.2:
     resolution: {integrity: sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==}
     engines: {node: '>=10'}
@@ -3370,8 +3344,8 @@ packages:
     resolution: {integrity: sha512-PqMLy5+YGwhMh1wS04mVG44oqDsgyLRSKJBdOo1bnYhMKBW65gZF1dRp2OZRhiTjgUHljy99qkO7bsctLaw35Q==}
     engines: {node: '>=12.20.0'}
 
-  commander@14.0.0:
-    resolution: {integrity: sha512-2uM9rYjPvyq39NwLRqaiLtWHyDC1FvryJDa2ATTVims5YAS4PupsEQsDvP14FqhFr0P49CYDugi59xaxJlTXRA==}
+  commander@14.0.1:
+    resolution: {integrity: sha512-2JkV3gUZUVrbNA+1sjBOYLsMZ5cEEl8GTFP2a4AVz5hvasAMCQ1D2l2le/cX+pV4N6ZU17zjUahLpIXRrnWL8A==}
     engines: {node: '>=20'}
 
   commander@2.20.3:
@@ -3662,8 +3636,8 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
-  electron-to-chromium@1.5.215:
-    resolution: {integrity: sha512-TIvGp57UpeNetj/wV/xpFNpWGb0b/ROw372lHPx5Aafx02gjTBtWnEEcaSX3W2dLM3OSdGGyHX/cHl01JQsLaQ==}
+  electron-to-chromium@1.5.218:
+    resolution: {integrity: sha512-uwwdN0TUHs8u6iRgN8vKeWZMRll4gBkz+QMqdS7DDe49uiK68/UX92lFb61oiFPrpYZNeZIqa4bA7O6Aiasnzg==}
 
   emmet@2.4.11:
     resolution: {integrity: sha512-23QPJB3moh/U9sT4rQzGgeyyGIrcM+GH5uVYg2C6wZIxAIJq7Ng3QLT79tl8FUwDXhyq9SusfknOrofAKqvgyQ==}
@@ -3756,8 +3730,8 @@ packages:
     peerDependencies:
       eslint: '>=8.57.0'
 
-  eslint-plugin-better-tailwindcss@3.7.7:
-    resolution: {integrity: sha512-EoXskusjdGPO+GydpvbO0Orzby7w+xl8kFn6Y1fwLXzcZQ5Ba60zcWdW4Gi0o4thfOxBAQBX6Cof4CUl0Ig4yA==}
+  eslint-plugin-better-tailwindcss@3.7.8:
+    resolution: {integrity: sha512-B8njRNTI89lTLaX0Usc7n51+AJwXtwYq8jmsLhafSJlmnk5U41ahKH/IsvS37evYpFpNod4kYF0AOQeOguulSQ==}
     engines: {node: ^20.11.0 || >=21.2.0}
     peerDependencies:
       eslint: ^7.0.0 || ^8.0.0 || ^9.0.0
@@ -4056,8 +4030,8 @@ packages:
     resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==}
     engines: {node: 6.* || 8.* || >= 10.*}
 
-  get-east-asian-width@1.3.1:
-    resolution: {integrity: sha512-R1QfovbPsKmosqTnPoRFiJ7CF9MLRgb53ChvMZm+r4p76/+8yKDy17qLL2PKInORy2RkZZekuK0efYgmzTkXyQ==}
+  get-east-asian-width@1.4.0:
+    resolution: {integrity: sha512-QZjmEOC+IT1uk6Rx0sX22V6uHWVwbdbxf1faPqJ1QhLdGgsRGCZoyaQBm/piRdJy/D2um6hM1UP7ZEeQ4EkP+Q==}
     engines: {node: '>=18'}
 
   get-intrinsic@1.3.0:
@@ -4107,8 +4081,8 @@ packages:
     resolution: {integrity: sha512-7ACyT3wmyp3I61S4fG682L0VA2RGD9otkqGJIwNUMF1SWUombIIk+af1unuDYgMm082aHYwD+mzJvv9Iu8dsgg==}
     engines: {node: '>=18'}
 
-  globals@16.3.0:
-    resolution: {integrity: sha512-bqWEnJ1Nt3neqx2q5SFfGS8r/ahumIakg3HcwtNlrVlwXIeNumWn/c7Pn/wKzGhf6SaW6H6uWXLqC30STCMchQ==}
+  globals@16.4.0:
+    resolution: {integrity: sha512-ob/2LcVVaVGCYN+r14cnwnoDPUufjiYgSqRhiFD0Q1iI4Odora5RE8Iv1D24hAz5oMophRGkGz+yuvQmmUMnMw==}
     engines: {node: '>=18'}
 
   globrex@0.1.2:
@@ -6124,9 +6098,6 @@ packages:
     resolution: {integrity: sha512-hdF5ZgjTqgAntKkklYw0R03MG2x/bSzTtkxmIRw/sTNV8YXsCJ1tfLAX23lhxhHJlEf3CRCOCGGWw3vI3GaSPw==}
     engines: {node: '>=18'}
 
-  trailbase-wasm@0.1.1:
-    resolution: {integrity: sha512-0/85pRpQPO96d89wBoHDuDbQycXCaw4D+vNSr9lJw2yJJ2fdhQuRr87nLftMM3sQqZk7zplDAY3lMYP4l94i/Q==}
-
   trailbase@0.7.2:
     resolution: {integrity: sha512-r+e4FcqWSR99qsVmXzOjW+Fu876EzsVBA57EDcQpFd514f5bolpopGXSx106cWocIkxg68LBciytmfUpVGIOXw==}
 
@@ -6417,6 +6388,10 @@ packages:
 
   uuid@11.1.0:
     resolution: {integrity: sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A==}
+    hasBin: true
+
+  uuid@13.0.0:
+    resolution: {integrity: sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w==}
     hasBin: true
 
   v8-compile-cache-lib@3.0.1:
@@ -7200,7 +7175,7 @@ snapshots:
       '@babel/parser': 7.28.4
       '@babel/types': 7.28.4
       '@jridgewell/gen-mapping': 0.3.13
-      '@jridgewell/trace-mapping': 0.3.30
+      '@jridgewell/trace-mapping': 0.3.31
       jsesc: 3.1.0
 
   '@babel/helper-compilation-targets@7.27.2':
@@ -7296,34 +7271,22 @@ snapshots:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.27.1
 
-  '@bufbuild/protobuf@2.7.0': {}
+  '@bufbuild/protobuf@2.8.0': {}
 
   '@bytecodealliance/componentize-js@0.18.5':
     dependencies:
-      '@bytecodealliance/jco': 1.14.0
+      '@bytecodealliance/jco': 1.15.0
       '@bytecodealliance/weval': 0.3.4
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
       oxc-parser: 0.76.0
 
-  '@bytecodealliance/jco@1.13.3':
+  '@bytecodealliance/jco@1.15.0':
     dependencies:
       '@bytecodealliance/componentize-js': 0.18.5
       '@bytecodealliance/preview2-shim': 0.17.4
       binaryen: 123.0.0
-      chalk-template: 1.1.2
-      commander: 14.0.0
-      mkdirp: 3.0.1
-      ora: 8.2.0
-      terser: 5.44.0
-
-  '@bytecodealliance/jco@1.14.0':
-    dependencies:
-      '@bytecodealliance/componentize-js': 0.18.5
-      '@bytecodealliance/preview2-shim': 0.17.4
-      binaryen: 123.0.0
-      chalk-template: 1.1.2
-      commander: 14.0.0
+      commander: 14.0.1
       mkdirp: 3.0.1
       ora: 8.2.0
       terser: 5.44.0
@@ -7691,7 +7654,7 @@ snapshots:
       '@iconify/types': 2.0.0
       '@iconify/utils': 2.3.0
       '@types/tar': 6.1.13
-      axios: 1.11.0
+      axios: 1.12.0
       cheerio: 1.0.0
       domhandler: 5.0.3
       extract-zip: 2.0.1
@@ -7834,23 +7797,23 @@ snapshots:
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
-      '@jridgewell/trace-mapping': 0.3.30
+      '@jridgewell/trace-mapping': 0.3.31
 
   '@jridgewell/remapping@2.3.5':
     dependencies:
       '@jridgewell/gen-mapping': 0.3.13
-      '@jridgewell/trace-mapping': 0.3.30
+      '@jridgewell/trace-mapping': 0.3.31
 
   '@jridgewell/resolve-uri@3.1.2': {}
 
   '@jridgewell/source-map@0.3.11':
     dependencies:
       '@jridgewell/gen-mapping': 0.3.13
-      '@jridgewell/trace-mapping': 0.3.30
+      '@jridgewell/trace-mapping': 0.3.31
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
-  '@jridgewell/trace-mapping@0.3.30':
+  '@jridgewell/trace-mapping@0.3.31':
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
@@ -7949,15 +7912,15 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  '@microsoft/api-extractor@7.52.11(@types/node@24.3.1)':
+  '@microsoft/api-extractor@7.52.12(@types/node@24.3.1)':
     dependencies:
       '@microsoft/api-extractor-model': 7.30.7(@types/node@24.3.1)
       '@microsoft/tsdoc': 0.15.1
       '@microsoft/tsdoc-config': 0.17.1
       '@rushstack/node-core-library': 5.14.0(@types/node@24.3.1)
       '@rushstack/rig-package': 0.5.3
-      '@rushstack/terminal': 0.15.4(@types/node@24.3.1)
-      '@rushstack/ts-command-line': 5.0.2(@types/node@24.3.1)
+      '@rushstack/terminal': 0.16.0(@types/node@24.3.1)
+      '@rushstack/ts-command-line': 5.0.3(@types/node@24.3.1)
       lodash: 4.17.21
       minimatch: 10.0.3
       resolve: 1.22.10
@@ -8026,7 +7989,7 @@ snapshots:
 
   '@napi-rs/lzma-wasm32-wasi@1.4.5':
     dependencies:
-      '@napi-rs/wasm-runtime': 1.0.3
+      '@napi-rs/wasm-runtime': 1.0.4
     optional: true
 
   '@napi-rs/lzma-win32-arm64-msvc@1.4.5':
@@ -8062,14 +8025,14 @@ snapshots:
     dependencies:
       '@emnapi/core': 1.5.0
       '@emnapi/runtime': 1.5.0
-      '@tybys/wasm-util': 0.10.0
+      '@tybys/wasm-util': 0.10.1
     optional: true
 
-  '@napi-rs/wasm-runtime@1.0.3':
+  '@napi-rs/wasm-runtime@1.0.4':
     dependencies:
       '@emnapi/core': 1.5.0
       '@emnapi/runtime': 1.5.0
-      '@tybys/wasm-util': 0.10.0
+      '@tybys/wasm-util': 0.10.1
     optional: true
 
   '@nodelib/fs.scandir@2.1.5':
@@ -8308,16 +8271,16 @@ snapshots:
       resolve: 1.22.10
       strip-json-comments: 3.1.1
 
-  '@rushstack/terminal@0.15.4(@types/node@24.3.1)':
+  '@rushstack/terminal@0.16.0(@types/node@24.3.1)':
     dependencies:
       '@rushstack/node-core-library': 5.14.0(@types/node@24.3.1)
       supports-color: 8.1.1
     optionalDependencies:
       '@types/node': 24.3.1
 
-  '@rushstack/ts-command-line@5.0.2(@types/node@24.3.1)':
+  '@rushstack/ts-command-line@5.0.3(@types/node@24.3.1)':
     dependencies:
-      '@rushstack/terminal': 0.15.4(@types/node@24.3.1)
+      '@rushstack/terminal': 0.16.0(@types/node@24.3.1)
       '@types/argparse': 1.0.38
       argparse: 1.0.10
       string-argv: 0.3.2
@@ -8619,7 +8582,7 @@ snapshots:
       sorted-btree: 1.8.1
       typescript: 5.9.2
 
-  '@tanstack/db-ivm@0.1.4(typescript@5.9.2)':
+  '@tanstack/db-ivm@0.1.6(typescript@5.9.2)':
     dependencies:
       fractional-indexing: 3.2.0
       sorted-btree: 1.8.1
@@ -8631,28 +8594,28 @@ snapshots:
       '@tanstack/db-ivm': 0.1.2(typescript@5.9.2)
       typescript: 5.9.2
 
-  '@tanstack/db@0.2.2(typescript@5.9.2)':
+  '@tanstack/db@0.2.4(typescript@5.9.2)':
     dependencies:
       '@standard-schema/spec': 1.0.0
-      '@tanstack/db-ivm': 0.1.4(typescript@5.9.2)
+      '@tanstack/db-ivm': 0.1.6(typescript@5.9.2)
       typescript: 5.9.2
 
   '@tanstack/form-core@1.19.5':
     dependencies:
       '@tanstack/store': 0.7.5
 
-  '@tanstack/query-core@5.87.1': {}
+  '@tanstack/query-core@5.87.4': {}
 
-  '@tanstack/query-db-collection@0.2.14(@tanstack/query-core@5.87.1)(typescript@5.9.2)':
+  '@tanstack/query-db-collection@0.2.16(@tanstack/query-core@5.87.4)(typescript@5.9.2)':
     dependencies:
       '@standard-schema/spec': 1.0.0
-      '@tanstack/db': 0.2.2(typescript@5.9.2)
-      '@tanstack/query-core': 5.87.1
+      '@tanstack/db': 0.2.4(typescript@5.9.2)
+      '@tanstack/query-core': 5.87.4
       typescript: 5.9.2
 
-  '@tanstack/react-db@0.1.15(react@19.1.1)(typescript@5.9.2)':
+  '@tanstack/react-db@0.1.17(react@19.1.1)(typescript@5.9.2)':
     dependencies:
-      '@tanstack/db': 0.2.2(typescript@5.9.2)
+      '@tanstack/db': 0.2.4(typescript@5.9.2)
       react: 19.1.1
       use-sync-external-store: 1.5.0(react@19.1.1)
     transitivePeerDependencies:
@@ -8664,9 +8627,9 @@ snapshots:
       '@tanstack/solid-store': 0.7.5(solid-js@1.9.9)
       solid-js: 1.9.9
 
-  '@tanstack/solid-query@5.87.1(solid-js@1.9.9)':
+  '@tanstack/solid-query@5.87.4(solid-js@1.9.9)':
     dependencies:
-      '@tanstack/query-core': 5.87.1
+      '@tanstack/query-core': 5.87.4
       solid-js: 1.9.9
 
   '@tanstack/solid-store@0.7.5(solid-js@1.9.9)':
@@ -8683,10 +8646,10 @@ snapshots:
 
   '@tanstack/table-core@8.21.3': {}
 
-  '@tanstack/trailbase-db-collection@0.1.15(typescript@5.9.2)':
+  '@tanstack/trailbase-db-collection@0.1.17(typescript@5.9.2)':
     dependencies:
       '@standard-schema/spec': 1.0.0
-      '@tanstack/db': 0.2.2(typescript@5.9.2)
+      '@tanstack/db': 0.2.4(typescript@5.9.2)
       '@tanstack/store': 0.7.5
       debug: 4.4.1
       trailbase: 0.7.2
@@ -8728,7 +8691,7 @@ snapshots:
 
   '@tsconfig/node16@1.0.4': {}
 
-  '@tybys/wasm-util@0.10.0':
+  '@tybys/wasm-util@0.10.1':
     dependencies:
       tslib: 2.8.1
     optional: true
@@ -9576,7 +9539,7 @@ snapshots:
     dependencies:
       possible-typed-array-names: 1.1.0
 
-  axios@1.11.0:
+  axios@1.12.0:
     dependencies:
       follow-redirects: 1.15.11
       form-data: 4.0.4
@@ -9683,7 +9646,7 @@ snapshots:
   browserslist@4.25.4:
     dependencies:
       caniuse-lite: 1.0.30001741
-      electron-to-chromium: 1.5.215
+      electron-to-chromium: 1.5.218
       node-releases: 2.0.20
       update-browserslist-db: 1.1.3(browserslist@4.25.4)
 
@@ -9754,10 +9717,6 @@ snapshots:
   chalk-template@0.4.0:
     dependencies:
       chalk: 4.1.2
-
-  chalk-template@1.1.2:
-    dependencies:
-      chalk: 5.6.2
 
   chalk@4.1.2:
     dependencies:
@@ -9905,7 +9864,7 @@ snapshots:
       table-layout: 4.1.1
       typical: 7.3.0
 
-  commander@14.0.0: {}
+  commander@14.0.1: {}
 
   commander@2.20.3: {}
 
@@ -10177,7 +10136,7 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  electron-to-chromium@1.5.215: {}
+  electron-to-chromium@1.5.218: {}
 
   emmet@2.4.11:
     dependencies:
@@ -10297,7 +10256,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-better-tailwindcss@3.7.7(eslint@9.35.0(jiti@2.5.1))(tailwindcss@4.1.13):
+  eslint-plugin-better-tailwindcss@3.7.8(eslint@9.35.0(jiti@2.5.1))(tailwindcss@4.1.13):
     dependencies:
       '@eslint/css-tree': 3.6.5
       enhanced-resolve: 5.18.3
@@ -10688,7 +10647,7 @@ snapshots:
 
   get-caller-file@2.0.5: {}
 
-  get-east-asian-width@1.3.1: {}
+  get-east-asian-width@1.4.0: {}
 
   get-intrinsic@1.3.0:
     dependencies:
@@ -10754,7 +10713,7 @@ snapshots:
 
   globals@15.15.0: {}
 
-  globals@16.3.0: {}
+  globals@16.4.0: {}
 
   globrex@0.1.2: {}
 
@@ -13059,7 +13018,7 @@ snapshots:
   string-width@7.2.0:
     dependencies:
       emoji-regex: 10.5.0
-      get-east-asian-width: 1.3.1
+      get-east-asian-width: 1.4.0
       strip-ansi: 7.1.2
 
   string_decoder@1.1.1:
@@ -13320,8 +13279,6 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  trailbase-wasm@0.1.1: {}
-
   trailbase@0.7.2:
     dependencies:
       jwt-decode: 4.0.0
@@ -13383,11 +13340,11 @@ snapshots:
 
   ts-proto-descriptors@2.0.0:
     dependencies:
-      '@bufbuild/protobuf': 2.7.0
+      '@bufbuild/protobuf': 2.8.0
 
   ts-proto@2.7.7:
     dependencies:
-      '@bufbuild/protobuf': 2.7.0
+      '@bufbuild/protobuf': 2.8.0
       case-anything: 2.1.13
       ts-poet: 6.12.0
       ts-proto-descriptors: 2.0.0
@@ -13603,6 +13560,8 @@ snapshots:
 
   uuid@11.1.0: {}
 
+  uuid@13.0.0: {}
+
   v8-compile-cache-lib@3.0.1: {}
 
   valid-filename@4.0.0:
@@ -13651,7 +13610,7 @@ snapshots:
 
   vite-plugin-dts@4.5.4(@types/node@24.3.1)(rollup@4.50.1)(typescript@5.9.2)(vite@7.1.5(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)):
     dependencies:
-      '@microsoft/api-extractor': 7.52.11(@types/node@24.3.1)
+      '@microsoft/api-extractor': 7.52.12(@types/node@24.3.1)
       '@rollup/pluginutils': 5.3.0(rollup@4.50.1)
       '@volar/typescript': 2.4.23
       '@vue/language-core': 2.2.0(typescript@5.9.2)

@@ -10,11 +10,10 @@
     "format": "prettier -w src"
   },
   "dependencies": {
-    "trailbase-wasm": "^0.1.1"
+    "trailbase-wasm": "workspace:^"
   },
   "devDependencies": {
-    "@bytecodealliance/componentize-js": "^0.18.5",
-    "@bytecodealliance/jco": "^1.14.0",
+    "@bytecodealliance/jco": "^1.15.0",
     "@eslint/js": "^9.35.0",
     "@types/node": "^24.3.1",
     "eslint": "^9.35.0",

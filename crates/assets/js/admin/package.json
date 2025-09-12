@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@antv/x6": "^2.18.1",
-    "@bufbuild/protobuf": "^2.7.0",
+    "@bufbuild/protobuf": "^2.8.0",
     "@codemirror/autocomplete": "^6.18.7",
     "@codemirror/lang-sql": "^6.9.1",
     "@codemirror/state": "^6.5.2",
@@ -28,7 +28,7 @@
     "@solid-primitives/memo": "^1.4.3",
     "@solidjs/router": "^0.15.3",
     "@tanstack/solid-form": "^1.19.5",
-    "@tanstack/solid-query": "^5.87.1",
+    "@tanstack/solid-query": "^5.87.4",
     "@tanstack/solid-table": "^8.21.3",
     "@tanstack/table-core": "^8.21.3",
     "chart.js": "^4.5.0",
@@ -46,7 +46,7 @@
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
     "trailbase": "file:../client",
-    "uuid": "^11.1.0"
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",
@@ -62,7 +62,7 @@
     "eslint": "^9.35.0",
     "eslint-plugin-solid": "^0.14.5",
     "eslint-plugin-tailwindcss": "^3.18.2",
-    "globals": "^16.3.0",
+    "globals": "^16.4.0",
     "jsdom": "^26.1.0",
     "postcss": "^8.5.6",
     "prettier": "^3.6.2",

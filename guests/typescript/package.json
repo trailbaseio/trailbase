@@ -72,14 +72,13 @@
   },
   "scripts": {
     "generate:types": "jco types wit/ -o generated/types",
-    "build": "npm run generate:types && vite build",
+    "build": "vite build",
     "check": "tsc --noEmit --skipLibCheck && vite build && eslint",
     "format": "prettier -w src tests",
     "test": "vitest run"
   },
   "devDependencies": {
-    "@bytecodealliance/componentize-js": "^0.18.5",
-    "@bytecodealliance/jco": "^1.13.3",
+    "@bytecodealliance/jco": "^1.15.0",
     "@eslint/js": "^9.35.0",
     "eslint": "^9.35.0",
     "prettier": "^3.6.2",

@@ -5,7 +5,6 @@
   "author": "",
   "main": "dist/index.js",
   "scripts": {
-    "generate:types": "jco types ../../../../guests/typescript/wit/ -o generated/types",
     "build:tsc": "vite build",
     "build:wasm": "jco componentize dist/index.mjs -w ../../../../guests/typescript/wit -o dist/component.wasm",
     "build:wasm:aot": "jco componentize  dist/index.mjs -w ../../../../guests/typescript/wit --aot -o dist/component.wasm",
@@ -16,8 +15,7 @@
     "trailbase-wasm": "workspace:*"
   },
   "devDependencies": {
-    "@bytecodealliance/componentize-js": "^0.18.5",
-    "@bytecodealliance/jco": "^1.14.0",
+    "@bytecodealliance/jco": "^1.15.0",
     "@types/node": "^24.3.1",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2",
