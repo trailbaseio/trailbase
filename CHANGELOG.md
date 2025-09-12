@@ -1,3 +1,11 @@
+## v0.17.1
+
+* Add a SMTP encryption setting (plain, STARTTLS, TLS).
+* Migrate all UIs to Tailwind v4.
+* Fix job name encoding for WASM jobs.
+* Make examples/wasm-guest-(js|ts|rust) standalone to just be copyable.
+* Update Rust & JavaScript dependencies.
+
 ## v0.17.0
 
 * Add new WASM runtime based on [wasmtime](https://github.com/bytecodealliance/wasmtime). More information in our dedicated update [article](https://trailbase.io/blog/switching_to_a_wasm_runtime).
