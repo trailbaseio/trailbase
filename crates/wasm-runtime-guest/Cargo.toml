@@ -5,10 +5,8 @@ edition = "2024"
 license = "OSL-3.0"
 description = "WASM runtime for the TrailBase framework"
 homepage = "https://trailbase.io"
-exclude = [
-  "**/node_modules/",
-  "**/dist/",
-]
+repository = "https://github.com/trailbaseio/trailbase"
+readme = "../../README.md"
 
 [dependencies]
 anyhow = "1.0.99"
@@ -23,5 +21,5 @@ static_assertions = "1.1.0"
 thiserror = "2.0.14"
 trailbase-wasm-common = { workspace = true }
 url = "2.5.7"
-wit-bindgen = "0.45.0"
+wit-bindgen = "0.46.0"
 wstd = "0.5.3"

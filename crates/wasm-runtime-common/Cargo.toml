@@ -5,10 +5,8 @@ edition = "2024"
 license = "OSL-3.0"
 description = "WASM runtime for the TrailBase framework"
 homepage = "https://trailbase.io"
-exclude = [
-  "**/node_modules/",
-  "**/dist/",
-]
+repository = "https://github.com/trailbaseio/trailbase"
+readme = "../../README.md"
 
 [dependencies]
 serde = { version = "^1.0.203", features = ["derive"] }
