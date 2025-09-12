@@ -451,7 +451,7 @@ function SmtpEncryptionSelect(props: {
       disabled={props.disabled}
       options={[
         undefined,
-        SmtpEncryption.SMTP_ENCRYPTION_STARTTLS,
+        // SmtpEncryption.SMTP_ENCRYPTION_STARTTLS,
         SmtpEncryption.SMTP_ENCRYPTION_TLS,
         SmtpEncryption.SMTP_ENCRYPTION_NONE,
       ]}
@@ -481,12 +481,12 @@ function smtpEncryptionLabel(enc: SmtpEncryption | undefined): string {
     case SmtpEncryption.SMTP_ENCRYPTION_NONE:
       return "None (Plain)";
     case SmtpEncryption.SMTP_ENCRYPTION_TLS:
-      return "STARTTLS";
-    case SmtpEncryption.SMTP_ENCRYPTION_STARTTLS:
       return "TLS/SSL";
+    // Server falls back to starttls.
+    case SmtpEncryption.SMTP_ENCRYPTION_STARTTLS:
     case SmtpEncryption.SMTP_ENCRYPTION_UNDEFINED:
     default:
-      return "Default";
+      return "STARTTLS (Default)";
   }
 }
 
