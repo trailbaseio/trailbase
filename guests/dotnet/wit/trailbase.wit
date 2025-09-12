@@ -13,10 +13,6 @@ interface init-endpoint  {
     connect,
   }
 
-  record init-arguments {
-    version: option<string>,
-  }
-
   record init-result {
     /// Registered http handlers (method, path)[].
     http-handlers: list<tuple<method-type, string>>,
@@ -25,10 +21,13 @@ interface init-endpoint  {
     job-handlers: list<tuple<string, string>>,
   }
 
-  init: func(args: init-arguments) -> init-result;
+  init: func() -> init-result;
 }
 
 interface host-endpoint {
+  thread-id: func() -> u64;
+
+
   variant tx-error {
     other(string)
   }
@@ -59,17 +58,17 @@ interface host-endpoint {
 //  * exports are provided by the guest
 //  * includes to include a world into another world.
 world trailbase {
-  // Pull in WASIp2 http interface for outbound requests.
-  import wasi:http/outgoing-handler@0.2.3;
-
-  // Pull in WASIp2 filesystem interfaces
-  include wasi:filesystem/imports@0.2.3;
-
-  // Pull in WASI random interfaces
-  include wasi:random/imports@0.2.3;
-
-  // Pull in WSAI Key-Value interfaces.
-  include wasi:keyvalue/imports@0.2.0-draft;
+//   // Pull in WASIp2 http interface for outbound requests.
+//   import wasi:http/outgoing-handler@0.2.0;
+//
+//   // Pull in WASIp2 filesystem interfaces
+//   include wasi:filesystem/imports@0.2.1;
+//
+//   // Pull in WASI random interfaces
+//   include wasi:random/imports@0.2.1;
+//
+//   // Pull in WSAI Key-Value interfaces.
+//   include wasi:keyvalue/imports@0.2.0-draft;
 
   // Host-provided interfaces
   import host-endpoint;
@@ -78,5 +77,5 @@ world trailbase {
   export init-endpoint;
 
   // Note: not needed in rust.
-  export wasi:http/incoming-handler@0.2.3;
+  // export wasi:http/incoming-handler@0.2.0;
 }

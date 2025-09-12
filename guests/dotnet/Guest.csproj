@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RuntimeIdentifier>wasi-wasm</RuntimeIdentifier>
+    <PublishTrimmed>true</PublishTrimmed>
+
+    <!-- <RootNamespace>dotnet_counter</RootNamespace> -->
+    <!-- <UseAppHost>false</UseAppHost> -->
+    <!-- <InvariantGlobalization>true</InvariantGlobalization> -->
+    <!-- <SelfContained>true</SelfContained> -->
+
+    <IlcExportUnmanagedEntrypoints>true</IlcExportUnmanagedEntrypoints>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- <PackageReference Update="Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-preview.2.25220.1" /> -->
+    <PackageReference Include="BytecodeAlliance.Componentize.DotNet.Wasm.SDK" Version="0.7.0-preview00010" />
+    <PackageReference Include="runtime.$(NETCoreSdkPortableRuntimeIdentifier).microsoft.dotnet.ilcompiler.llvm" Version="10.0.0-preview.2.25220.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- <Wit Remove="**\*.wit" /> -->
+    <!-- <Wit Update="wit/trailbase.wit" World="trailbase" /> -->
+    <Wit Include="wit/http.wasm" World="proxy" Registry="ghcr.io/webassembly/wasi/http:0.2.0" />
+  </ItemGroup>
+</Project>
