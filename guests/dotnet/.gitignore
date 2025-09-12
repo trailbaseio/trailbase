@@ -1,0 +1,7 @@
+bin/
+obj/
+*.wasm
+
+# docfx documentation.
+_site/
+api/
