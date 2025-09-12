@@ -14,7 +14,6 @@
   "dependencies": {
     "@astrojs/check": "^0.9.4",
     "@astrojs/solid-js": "^5.1.1",
-    "@astrojs/tailwind": "^5.1.5",
     "@kobalte/core": "^0.13.11",
     "@nanostores/solid": "^1.1.1",
     "astro": "^5.13.7",
@@ -31,17 +30,20 @@
   "devDependencies": {
     "@eslint/js": "^9.35.0",
     "@iconify-json/tabler": "^1.2.22",
+    "@kobalte/tailwindcss": "^0.9.0",
     "@tailwindcss/typography": "^0.5.16",
+    "@tailwindcss/vite": "^4.1.13",
     "eslint": "^9.35.0",
     "eslint-plugin-astro": "^1.3.1",
+    "eslint-plugin-better-tailwindcss": "^3.7.8",
     "eslint-plugin-solid": "^0.14.5",
-    "eslint-plugin-tailwindcss": "^3.18.2",
     "globals": "^16.4.0",
     "prettier": "^3.6.2",
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-tailwindcss": "^0.6.14",
     "sharp": "^0.34.3",
-    "tailwindcss": "^3.4.17",
+    "tailwindcss": "^4.1.13",
+    "tw-animate-css": "^1.3.8",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.43.0"
   }

@@ -133,7 +133,7 @@ function Avatar(props: { client: Client; user: User }) {
         </button>
 
         {!failed() && (
-          <div class="absolute right-0 top-0">
+          <div class="absolute top-0 right-0">
             <button
               class={cn(DESTRUCTIVE_ICON_STYLE, "rounded-full bg-white/75")}
               onClick={async () => {
