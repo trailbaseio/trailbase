@@ -671,6 +671,9 @@ importers:
 
   examples/collab-clicker-ssr:
     dependencies:
+      '@tailwindcss/vite':
+        specifier: ^4.1.13
+        version: 4.1.13(vite@7.1.5(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1))
       solid-js:
         specifier: ^1.9.9
         version: 1.9.9
@@ -706,8 +709,8 @@ importers:
         specifier: ^3.0.2
         version: 3.0.2
       tailwindcss:
-        specifier: ^3.4.17
-        version: 3.4.17(ts-node@10.9.2(@types/node@24.3.1)(typescript@5.9.2))
+        specifier: ^4.1.13
+        version: 4.1.13
       typescript-eslint:
         specifier: ^8.43.0
         version: 8.43.0(eslint@9.35.0(jiti@2.5.1))(typescript@5.9.2)

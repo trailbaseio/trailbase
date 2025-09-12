@@ -1,6 +1,25 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+body {
+    font-family: 'Inter', sans-serif;
+}
+
+@theme {
+  /* Generated accent color palettes for "Ocean AA". */
+  --color-accent-200: #92d1fe;
+  --color-accent-600: #0073aa;
+  --color-accent-900: #003653;
+  --color-accent-950: #00273d;
+  /* Generated gray color palettes "Ocean AA". */
+  --color-gray-100: #f3f7f9;
+  --color-gray-200: #e7eff2;
+  --color-gray-300: #bac4c8;
+  --color-gray-400: #7b8f96;
+  --color-gray-500: #495c62;
+  --color-gray-700: #2a3b41;
+  --color-gray-800: #182a2f;
+  --color-gray-900: #121a1c;
+}
 
 @layer base {
   h1 {
