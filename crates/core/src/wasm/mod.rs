@@ -3,6 +3,7 @@ use axum::extract::{RawPathParams, Request};
 use bytes::Bytes;
 use http_body_util::{BodyExt, combinators::BoxBody};
 use hyper::StatusCode;
+use log::*;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -12,6 +13,7 @@ use trailbase_wasm_runtime_host::{Error as WasmError, KvStore, Runtime};
 
 use crate::AppState;
 use crate::User;
+use crate::util::urlencode;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -59,7 +61,7 @@ pub(crate) fn build_wasm_runtimes_for_components(
   }
 
   if runtimes.is_empty() {
-    log::debug!("No WASM component found");
+    debug!("No WASM component found");
   }
 
   return Ok(runtimes);
@@ -91,10 +93,14 @@ pub(crate) async fn install_routes_and_jobs(
         return async move {
           runtime
             .call(async move |instance| -> Result<(), WasmError> {
+              let uri =
+                hyper::http::Uri::from_str(&format!("http://__job/?name={}", urlencode(&name)))
+                  .map_err(|err| WasmError::Other(format!("Job URI: {err}")))?;
+
               let request = hyper::Request::builder()
                 // NOTE: We cannot use a custom-scheme, since the wasi http
                 // implementation rejects everything but http and https.
-                .uri(format!("http://__job/?name={name}"))
+                .uri(uri)
                 .header(
                   "__context",
                   to_header_value(&HttpContext {
@@ -105,7 +111,7 @@ pub(crate) async fn install_routes_and_jobs(
                   })?,
                 )
                 .body(empty())
-                .unwrap_or_default();
+                .map_err(|err| WasmError::Other(err.to_string()))?;
 
               instance.call_incoming_http_handler(request).await?;
 
@@ -123,19 +129,19 @@ pub(crate) async fn install_routes_and_jobs(
     job.start();
   }
 
-  log::debug!("Got {} WASM routes", init_result.http_handlers.len());
+  debug!("Got {} WASM routes", init_result.http_handlers.len());
 
   let mut router = Router::<AppState>::new();
   for (method, path) in &init_result.http_handlers {
     let runtime = runtime.clone();
 
-    log::debug!("Installing WASM route: {method:?}: {path}");
+    debug!("Installing WASM route: {method:?}: {path}");
 
     let handler = {
       let path = path.clone();
 
       move |params: RawPathParams, user: Option<User>, req: Request| async move {
-        log::debug!(
+        debug!(
           "Host received WASM HTTP request: {params:?}, {user:?}, {}",
           req.uri()
         );
