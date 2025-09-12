@@ -503,7 +503,7 @@ function EditorPanel(props: {
 
             {/* Editor */}
             <div
-              class="max-h-[70dvh] grow overflow-y-scroll rounded outline outline-1"
+              class="max-h-[70dvh] grow overflow-y-scroll rounded outline"
               ref={ref}
             />
 

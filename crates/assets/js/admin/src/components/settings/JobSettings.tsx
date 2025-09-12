@@ -181,7 +181,7 @@ function JobSettingsImpl(props: {
 
                   <TooltipContent>
                     <p>6/7-component cron spec:</p>
-                    <p class="break-keep font-bold">
+                    <p class="font-bold break-keep">
                       second minute hour day-of-month month day-of-week [year]
                     </p>
                   </TooltipContent>

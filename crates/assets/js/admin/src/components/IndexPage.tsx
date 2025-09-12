@@ -112,7 +112,7 @@ function FactCard(props: { title: string; content: string; href?: string }) {
       <CardContent>
         <CardTitle>{props.title}</CardTitle>
 
-        <div class="text-xl font-bold text-primary">{props.content}</div>
+        <div class="text-primary text-xl font-bold">{props.content}</div>
       </CardContent>
     </Card>
   );

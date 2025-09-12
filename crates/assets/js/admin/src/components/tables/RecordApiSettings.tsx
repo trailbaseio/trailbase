@@ -346,7 +346,7 @@ function siteUrl(config: Config | undefined): string {
 }
 
 function CodeBlock(props: { text: string }) {
-  return <pre class="text-wrap break-all font-mono text-sm">{props.text}</pre>;
+  return <pre class="font-mono text-sm text-wrap break-all">{props.text}</pre>;
 }
 
 function ReadExample(props: { apiName: string; config: Config | undefined }) {

@@ -136,7 +136,7 @@ export function SchemaSettings(props: {
               <p class="text-sm">
                 Note, registration via the admin UI is not yet available. You
                 can register custom schemas in your instance's{" "}
-                <span class="text-nowrap font-mono">
+                <span class="font-mono text-nowrap">
                   `{"<"}traildepot{">"}/config.textproto`
                 </span>{" "}
                 and they will show up here.

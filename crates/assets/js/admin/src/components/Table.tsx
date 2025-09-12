@@ -254,7 +254,7 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
                       <For each={row.getVisibleCells()}>
                         {(cell) => (
                           <TableCell>
-                            <div class="max-h-[80px] overflow-y-auto overflow-x-hidden break-words">
+                            <div class="max-h-[80px] overflow-x-hidden overflow-y-auto break-words">
                               {flexRender(
                                 cell.column.columnDef.cell,
                                 cell.getContext(),
@@ -306,7 +306,7 @@ function PaginationControl<TData>(props: {
         </SelectTrigger>
         <SelectContent />
       </Select>
-      <span class="whitespace-nowrap text-sm font-medium">per page</span>
+      <span class="text-sm font-medium whitespace-nowrap">per page</span>
     </div>
   );
 
@@ -431,7 +431,7 @@ function PaginationControl<TData>(props: {
           */}
         </div>
 
-        <div class="flex items-center justify-center whitespace-nowrap text-sm font-medium">
+        <div class="flex items-center justify-center text-sm font-medium whitespace-nowrap">
           <PaginationInfoText />
         </div>
       </div>

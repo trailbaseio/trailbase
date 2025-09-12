@@ -108,7 +108,7 @@ const columns: ColumnDef<LogJson>[] = [
         <div class="flex items-center">
           <Tooltip>
             <TooltipTrigger>
-              <div class="line-clamp-2 text-ellipsis text-left">
+              <div class="line-clamp-2 text-left text-ellipsis">
                 {ctx.row.original.user_agent}
               </div>
             </TooltipTrigger>

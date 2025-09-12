@@ -402,7 +402,7 @@ function buildNullableNumberFormField(opts: NumberFieldOptions) {
 export function buildBoolFormField(props: { label: () => JSX.Element }) {
   return (field: () => FieldApiT<boolean>) => (
     <div class="flex w-full justify-end gap-4">
-      <Label class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+      <Label class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
         {props.label()}
       </Label>
 
@@ -424,7 +424,7 @@ export function buildOptionalBoolFormField(opts: {
       class={`grid items-center ${gapStyle}`}
       style={{ "grid-template-columns": "auto 1fr" }}
     >
-      <Label class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+      <Label class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
         {opts.label()}
       </Label>
 
@@ -521,7 +521,7 @@ function GridFieldInfo<T>(props: { field: FieldApiT<T> }) {
 
   return (
     <Show when={show()}>
-      <div class="col-start-2 ml-2 text-sm text-muted-foreground">
+      <div class="text-muted-foreground col-start-2 ml-2 text-sm">
         <FieldInfo {...props} />
       </div>
     </Show>

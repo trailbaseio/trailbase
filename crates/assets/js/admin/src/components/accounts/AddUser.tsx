@@ -38,7 +38,7 @@ export function AddUser(props: {
   }));
 
   return (
-    <div class="overflow-y-auto overflow-x-hidden pr-1">
+    <div class="overflow-x-hidden overflow-y-auto pr-1">
       <SheetHeader>
         <SheetTitle>{"Add new user"}</SheetTitle>
       </SheetHeader>

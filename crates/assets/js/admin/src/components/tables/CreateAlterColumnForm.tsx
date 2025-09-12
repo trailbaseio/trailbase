@@ -388,7 +388,7 @@ function ColumnOptionsFields(props: {
 
       {/* NOT NULL constraint */}
       <div class="flex justify-end py-1">
-        <Label class="text-right text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+        <Label class="text-right text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
           NOT NULL
         </Label>
 
@@ -404,7 +404,7 @@ function ColumnOptionsFields(props: {
       {/* UNIQUE (pk) constraint */}
       {!props.pk && (
         <div class="flex justify-end py-1">
-          <Label class="text-right text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+          <Label class="text-right text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
             UNIQUE {getUnique(props.value)?.is_primary && "(PRIMARY KEY)"}
           </Label>
 

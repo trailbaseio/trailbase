@@ -39,7 +39,7 @@ export function FilterBar(props: {
         <Button type="button">Filter</Button>
       </form>
 
-      {props.example && <span class="ml-2 mt-1 text-sm">{props.example}</span>}
+      {props.example && <span class="mt-1 ml-2 text-sm">{props.example}</span>}
     </div>
   );
 }

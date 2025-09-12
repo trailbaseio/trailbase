@@ -77,10 +77,5 @@ export default [
       "solid/no-unknown-namespaces": "off",
     },
     languageOptions: { globals: globals.browser },
-    settings: {
-      tailwindcss: {
-        whitelist: ["hide-scrollbars", "collapsible.*"],
-      },
-    },
   },
 ];

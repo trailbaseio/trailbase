@@ -12,12 +12,12 @@
     "check": "tsc --noEmit --skipLibCheck && eslint"
   },
   "dependencies": {
-    "@tailwindcss/vite": "^4.1.13",
     "solid-js": "^1.9.9",
     "trailbase": "workspace:^"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",
+    "@tailwindcss/vite": "^4.1.13",
     "@types/express": "^5.0.3",
     "@types/node": "^24.3.1",
     "compression": "^1.8.1",
@@ -29,7 +29,6 @@
     "tailwindcss": "^4.1.13",
     "typescript-eslint": "^8.43.0",
     "vite": "^7.1.5",
-    "vite-plugin-eslint": "^1.8.1",
     "vite-plugin-solid": "^2.11.8"
   }
 }
