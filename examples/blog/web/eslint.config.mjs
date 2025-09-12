@@ -1,18 +1,41 @@
 import globals from "globals";
 import pluginJs from "@eslint/js";
 import tseslint from "typescript-eslint";
-import tailwind from "eslint-plugin-tailwindcss";
+import tailwind from "eslint-plugin-better-tailwindcss";
 import solid from "eslint-plugin-solid/configs/recommended";
 import astro from "eslint-plugin-astro";
 
 export default [
+  {
+    ignores: ["dist/", "node_modules/", ".astro/", "src/env.d.ts", "types/"],
+  },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
   solid,
-  ...tailwind.configs["flat/recommended"],
   ...astro.configs.recommended,
   {
-    ignores: ["dist/", "node_modules/", ".astro/", "src/env.d.ts", "types/"],
+    plugins: {
+      "better-tailwindcss": tailwind,
+    },
+    rules: {
+      ...tailwind.configs["recommended-warn"].rules,
+      ...tailwind.configs["recommended-error"].rules,
+
+      "better-tailwindcss/enforce-consistent-line-wrapping": "off",
+      // Order is different from what prettier enforces.
+      "better-tailwindcss/enforce-consistent-class-order": "off",
+      "better-tailwindcss/no-unregistered-classes": [
+        "error",
+        {
+          ignore: ["image-shine", "gradient-line"],
+        },
+      ],
+    },
+    settings: {
+      "better-tailwindcss": {
+        entryPoint: "src/css/style.css",
+      },
+    },
   },
   {
     files: ["**/*.{js,mjs,cjs,mts,ts,tsx,jsx,astro}"],
@@ -36,10 +59,5 @@ export default [
       "solid/self-closing-comp": "off",
     },
     languageOptions: { globals: globals.browser },
-    settings: {
-      tailwindcss: {
-        whitelist: ["hide-scrollbars", "collapsible.*"],
-      },
-    },
   },
 ];

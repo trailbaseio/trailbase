@@ -234,7 +234,7 @@ importers:
         version: 0.9.4(prettier-plugin-astro@0.14.1)(prettier@3.6.2)(typescript@5.9.2)
       '@astrojs/solid-js':
         specifier: ^5.1.1
-        version: 5.1.1(@testing-library/jest-dom@6.8.0)(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.9)(vite@6.3.6(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)))(solid-js@1.9.9)(terser@5.44.0)(yaml@2.8.1)
+        version: 5.1.1(@testing-library/jest-dom@6.8.0)(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.9))(solid-js@1.9.9)(terser@5.44.0)(yaml@2.8.1)
       '@astrojs/tailwind':
         specifier: ^5.1.5
         version: 5.1.5(astro@5.13.7(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.50.1)(terser@5.44.0)(typescript@5.9.2)(yaml@2.8.1))(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@24.3.1)(typescript@5.9.2)))(ts-node@10.9.2(@types/node@24.3.1)(typescript@5.9.2))
@@ -527,9 +527,6 @@ importers:
 
   examples/blog/web:
     dependencies:
-      '@astrojs/tailwind':
-        specifier: ^5.1.5
-        version: 5.1.5(astro@5.13.7(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.50.1)(terser@5.44.0)(typescript@4.9.4)(yaml@2.8.1))(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)))(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4))
       '@nanostores/persistent':
         specifier: ^1.1.0
         version: 1.1.0(nanostores@1.0.1)
@@ -557,7 +554,7 @@ importers:
     devDependencies:
       '@astrojs/solid-js':
         specifier: ^5.1.1
-        version: 5.1.1(@testing-library/jest-dom@6.8.0)(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.9))(solid-js@1.9.9)(terser@5.44.0)(yaml@2.8.1)
+        version: 5.1.1(@testing-library/jest-dom@6.8.0)(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.9)(vite@6.3.6(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)))(solid-js@1.9.9)(terser@5.44.0)(yaml@2.8.1)
       '@eslint/js':
         specifier: ^9.35.0
         version: 9.35.0
@@ -566,7 +563,10 @@ importers:
         version: 1.2.22
       '@tailwindcss/typography':
         specifier: ^0.5.16
-        version: 0.5.16(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)))
+        version: 0.5.16(tailwindcss@4.1.13)
+      '@tailwindcss/vite':
+        specifier: ^4.1.13
+        version: 4.1.13(vite@6.3.6(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1))
       '@types/dateformat':
         specifier: ^5.0.3
         version: 5.0.3
@@ -576,12 +576,12 @@ importers:
       eslint-plugin-astro:
         specifier: ^1.3.1
         version: 1.3.1(eslint@9.35.0(jiti@2.5.1))
+      eslint-plugin-better-tailwindcss:
+        specifier: ^3.7.8
+        version: 3.7.8(eslint@9.35.0(jiti@2.5.1))(tailwindcss@4.1.13)
       eslint-plugin-solid:
         specifier: ^0.14.5
         version: 0.14.5(eslint@9.35.0(jiti@2.5.1))(typescript@4.9.4)
-      eslint-plugin-tailwindcss:
-        specifier: ^3.18.2
-        version: 3.18.2(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)))
       globals:
         specifier: ^16.4.0
         version: 16.4.0
@@ -598,8 +598,8 @@ importers:
         specifier: ^0.34.3
         version: 0.34.3
       tailwindcss:
-        specifier: ^3.4.17
-        version: 3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4))
+        specifier: ^4.1.13
+        version: 4.1.13
       typescript-eslint:
         specifier: ^8.43.0
         version: 8.43.0(eslint@9.35.0(jiti@2.5.1))(typescript@4.9.4)
@@ -6998,35 +6998,13 @@ snapshots:
       stream-replace-string: 2.0.0
       zod: 3.25.76
 
-  '@astrojs/solid-js@5.1.1(@testing-library/jest-dom@6.8.0)(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.9))(solid-js@1.9.9)(terser@5.44.0)(yaml@2.8.1)':
+  '@astrojs/solid-js@5.1.1(@testing-library/jest-dom@6.8.0)(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.9)(vite@6.3.6(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)))(solid-js@1.9.9)(terser@5.44.0)(yaml@2.8.1)':
     dependencies:
       solid-js: 1.9.9
       vite: 6.3.6(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)
       vite-plugin-solid: 2.11.8(@testing-library/jest-dom@6.8.0)(solid-js@1.9.9)(vite@6.3.6(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1))
     optionalDependencies:
-      solid-devtools: 0.30.1(solid-js@1.9.9)
-    transitivePeerDependencies:
-      - '@testing-library/jest-dom'
-      - '@types/node'
-      - jiti
-      - less
-      - lightningcss
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - supports-color
-      - terser
-      - tsx
-      - yaml
-
-  '@astrojs/solid-js@5.1.1(@testing-library/jest-dom@6.8.0)(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.9)(vite@6.3.6(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)))(solid-js@1.9.9)(terser@5.44.0)(yaml@2.8.1)':
-    dependencies:
-      solid-js: 1.9.9
-      vite: 6.3.6(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)
-      vite-plugin-solid: 2.11.8(@testing-library/jest-dom@6.8.0)(solid-js@1.9.9)(vite@6.3.6(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1))
-    optionalDependencies:
-      solid-devtools: 0.30.1(solid-js@1.9.9)(vite@6.3.6(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1))
+      solid-devtools: 0.30.1(solid-js@1.9.9)(vite@6.3.6(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1))
     transitivePeerDependencies:
       - '@testing-library/jest-dom'
       - '@types/node'
@@ -7049,6 +7027,28 @@ snapshots:
       vite-plugin-solid: 2.11.8(@testing-library/jest-dom@6.8.0)(solid-js@1.9.9)(vite@6.3.6(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1))
     optionalDependencies:
       solid-devtools: 0.30.1(solid-js@1.9.9)(vite@7.1.5(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1))
+    transitivePeerDependencies:
+      - '@testing-library/jest-dom'
+      - '@types/node'
+      - jiti
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
+
+  '@astrojs/solid-js@5.1.1(@testing-library/jest-dom@6.8.0)(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(solid-devtools@0.30.1(solid-js@1.9.9))(solid-js@1.9.9)(terser@5.44.0)(yaml@2.8.1)':
+    dependencies:
+      solid-js: 1.9.9
+      vite: 6.3.6(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)
+      vite-plugin-solid: 2.11.8(@testing-library/jest-dom@6.8.0)(solid-js@1.9.9)(vite@6.3.6(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1))
+    optionalDependencies:
+      solid-devtools: 0.30.1(solid-js@1.9.9)
     transitivePeerDependencies:
       - '@testing-library/jest-dom'
       - '@types/node'
@@ -7101,16 +7101,6 @@ snapshots:
       vfile: 6.0.3
     transitivePeerDependencies:
       - supports-color
-
-  '@astrojs/tailwind@5.1.5(astro@5.13.7(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.50.1)(terser@5.44.0)(typescript@4.9.4)(yaml@2.8.1))(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)))(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4))':
-    dependencies:
-      astro: 5.13.7(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.50.1)(terser@5.44.0)(typescript@4.9.4)(yaml@2.8.1)
-      autoprefixer: 10.4.21(postcss@8.5.6)
-      postcss: 8.5.6
-      postcss-load-config: 4.0.2(postcss@8.5.6)(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4))
-      tailwindcss: 3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4))
-    transitivePeerDependencies:
-      - ts-node
 
   '@astrojs/tailwind@5.1.5(astro@5.13.7(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(rollup@4.50.1)(terser@5.44.0)(typescript@5.9.2)(yaml@2.8.1))(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@24.3.1)(typescript@5.9.2)))(ts-node@10.9.2(@types/node@24.3.1)(typescript@5.9.2))':
     dependencies:
@@ -8547,14 +8537,6 @@ snapshots:
       '@tailwindcss/oxide-win32-arm64-msvc': 4.1.13
       '@tailwindcss/oxide-win32-x64-msvc': 4.1.13
 
-  '@tailwindcss/typography@0.5.16(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)))':
-    dependencies:
-      lodash.castarray: 4.4.0
-      lodash.isplainobject: 4.0.6
-      lodash.merge: 4.6.2
-      postcss-selector-parser: 6.0.10
-      tailwindcss: 3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4))
-
   '@tailwindcss/typography@0.5.16(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@24.3.1)(typescript@5.9.2)))':
     dependencies:
       lodash.castarray: 4.4.0
@@ -8570,6 +8552,13 @@ snapshots:
       lodash.merge: 4.6.2
       postcss-selector-parser: 6.0.10
       tailwindcss: 4.1.13
+
+  '@tailwindcss/vite@4.1.13(vite@6.3.6(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1))':
+    dependencies:
+      '@tailwindcss/node': 4.1.13
+      '@tailwindcss/oxide': 4.1.13
+      tailwindcss: 4.1.13
+      vite: 6.3.6(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)
 
   '@tailwindcss/vite@4.1.13(vite@7.1.5(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1))':
     dependencies:
@@ -10300,12 +10289,6 @@ snapshots:
       typescript: 5.9.2
     transitivePeerDependencies:
       - supports-color
-
-  eslint-plugin-tailwindcss@3.18.2(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4))):
-    dependencies:
-      fast-glob: 3.3.3
-      postcss: 8.5.6
-      tailwindcss: 3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4))
 
   eslint-plugin-tailwindcss@3.18.2(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@24.3.1)(typescript@5.9.2))):
     dependencies:
@@ -12200,14 +12183,6 @@ snapshots:
       camelcase-css: 2.0.1
       postcss: 8.5.6
 
-  postcss-load-config@4.0.2(postcss@8.5.6)(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)):
-    dependencies:
-      lilconfig: 3.1.3
-      yaml: 2.8.1
-    optionalDependencies:
-      postcss: 8.5.6
-      ts-node: 10.9.2(@types/node@16.18.126)(typescript@4.9.4)
-
   postcss-load-config@4.0.2(postcss@8.5.6)(ts-node@10.9.2(@types/node@24.3.1)(typescript@5.9.2)):
     dependencies:
       lilconfig: 3.1.3
@@ -12872,7 +12847,7 @@ snapshots:
       - supports-color
     optional: true
 
-  solid-devtools@0.30.1(solid-js@1.9.9)(vite@6.3.6(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)):
+  solid-devtools@0.30.1(solid-js@1.9.9)(vite@6.3.6(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)):
     dependencies:
       '@babel/core': 7.28.4
       '@babel/plugin-syntax-typescript': 7.27.1(@babel/core@7.28.4)
@@ -12881,7 +12856,7 @@ snapshots:
       '@solid-devtools/shared': 0.13.2(solid-js@1.9.9)
       solid-js: 1.9.9
     optionalDependencies:
-      vite: 6.3.6(@types/node@24.3.1)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)
+      vite: 6.3.6(@types/node@16.18.126)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)
     transitivePeerDependencies:
       - supports-color
     optional: true
@@ -13122,33 +13097,6 @@ snapshots:
   tailwindcss-animate@1.0.7(tailwindcss@4.1.13):
     dependencies:
       tailwindcss: 4.1.13
-
-  tailwindcss@3.4.17(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4)):
-    dependencies:
-      '@alloc/quick-lru': 5.2.0
-      arg: 5.0.2
-      chokidar: 3.6.0
-      didyoumean: 1.2.2
-      dlv: 1.1.3
-      fast-glob: 3.3.3
-      glob-parent: 6.0.2
-      is-glob: 4.0.3
-      jiti: 1.21.7
-      lilconfig: 3.1.3
-      micromatch: 4.0.8
-      normalize-path: 3.0.0
-      object-hash: 3.0.0
-      picocolors: 1.1.1
-      postcss: 8.5.6
-      postcss-import: 15.1.0(postcss@8.5.6)
-      postcss-js: 4.0.1(postcss@8.5.6)
-      postcss-load-config: 4.0.2(postcss@8.5.6)(ts-node@10.9.2(@types/node@16.18.126)(typescript@4.9.4))
-      postcss-nested: 6.2.0(postcss@8.5.6)
-      postcss-selector-parser: 6.1.2
-      resolve: 1.22.10
-      sucrase: 3.35.0
-    transitivePeerDependencies:
-      - ts-node
 
   tailwindcss@3.4.17(ts-node@10.9.2(@types/node@24.3.1)(typescript@5.9.2)):
     dependencies:

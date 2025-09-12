@@ -1,3 +1,36 @@
+@import "tailwindcss";
+
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-pacamara-primary: #003049;
+  --color-pacamara-secondary: #b2a4ff;
+  --color-pacamara-accent: #ffb4b4;
+  --color-pacamara-dark: #000e14;
+  --color-pacamara-white: #ffffff;
+
+  --font-pacamara-inter: "Inter", sans-serif;
+  --font-pacamara-space: "Space Grotesk", sans-serif;
+}
+
+@layer base {
+  body {
+    font-family: "Inter", sans-serif;
+  }
+
+  h1 {
+    @apply !text-5xl !font-bold;
+  }
+
+  h2 {
+    @apply !text-3xl !font-bold;
+  }
+
+  h3 {
+    @apply !text-2xl !font-bold;
+  }
+}
+
 :root {
   --gradient-space: 20px;
   --gradient-height: 2px;

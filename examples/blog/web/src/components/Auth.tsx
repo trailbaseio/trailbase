@@ -23,7 +23,7 @@ function UserBadge(props: { user: User | undefined }) {
 
   return (
     <Suspense fallback={<p>...</p>}>
-      <div class="flex items-center gap-2 ">
+      <div class="flex items-center gap-2">
         <Switch fallback={<Fallback />}>
           <Match when={avatar()}>
             <img

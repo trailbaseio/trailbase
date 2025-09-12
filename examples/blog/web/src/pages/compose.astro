@@ -4,7 +4,7 @@ import { HOST } from "@/lib/client";
 
 const RECORD_API = `${HOST}/api/records/v1`;
 
-const inputStyle = "outline outline-1 outline-black rounded p-1 col-span-4";
+const inputStyle = "outline outline-black rounded p-1 col-span-4";
 const redirect = import.meta.env.DEV ? "http://localhost:4321/" : "/";
 ---
 
@@ -41,9 +41,7 @@ const redirect = import.meta.env.DEV ? "http://localhost:4321/" : "/";
       </div>
 
       <div class="flex justify-end">
-        <button class="rounded bg-pacamara-accent p-2 outline outline-1">
-          Submit
-        </button>
+        <button class="rounded bg-pacamara-accent p-2 outline"> Submit </button>
       </div>
     </form>
   </div>
