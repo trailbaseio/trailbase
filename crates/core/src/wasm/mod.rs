@@ -8,8 +8,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
-use trailbase_wasm_runtime_host::exports::trailbase::runtime::init_endpoint::MethodType;
-use trailbase_wasm_runtime_host::{Error as WasmError, KvStore, Runtime};
 
 use crate::AppState;
 use crate::User;
@@ -17,12 +15,40 @@ use crate::util::urlencode;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
+#[cfg(not(feature = "wasm"))]
+pub(crate) struct Runtime;
+
+#[cfg(not(feature = "wasm"))]
+pub(crate) fn build_wasm_runtimes_for_components(
+  _n_threads: Option<usize>,
+  _conn: trailbase_sqlite::Connection,
+  _components_path: PathBuf,
+  _fs_root_path: Option<PathBuf>,
+) -> Result<Vec<Arc<Runtime>>, AnyError> {
+  return Ok(vec![]);
+}
+
+#[cfg(not(feature = "wasm"))]
+pub(crate) async fn install_routes_and_jobs(
+  state: &AppState,
+  runtime: Arc<Runtime>,
+) -> Result<Option<Router<AppState>>, AnyError> {
+  return Ok(None);
+}
+
+#[cfg(feature = "wasm")]
+pub(crate) use trailbase_wasm_runtime_host::Runtime;
+
+#[cfg(feature = "wasm")]
 pub(crate) fn build_wasm_runtimes_for_components(
   n_threads: Option<usize>,
   conn: trailbase_sqlite::Connection,
   components_path: PathBuf,
   fs_root_path: Option<PathBuf>,
 ) -> Result<Vec<Arc<Runtime>>, AnyError> {
+  use trailbase_wasm_runtime_host::exports::trailbase::runtime::init_endpoint::MethodType;
+  use trailbase_wasm_runtime_host::{Error as WasmError, KvStore};
+
   let shared_kv_store = KvStore::new();
   let mut runtimes: Vec<Arc<Runtime>> = vec![];
 
@@ -67,10 +93,14 @@ pub(crate) fn build_wasm_runtimes_for_components(
   return Ok(runtimes);
 }
 
+#[cfg(feature = "wasm")]
 pub(crate) async fn install_routes_and_jobs(
   state: &AppState,
   runtime: Arc<Runtime>,
 ) -> Result<Option<Router<AppState>>, AnyError> {
+  use trailbase_wasm_runtime_host::exports::trailbase::runtime::init_endpoint::MethodType;
+  use trailbase_wasm_runtime_host::{Error as WasmError, KvStore};
+
   let init_result = runtime
     .call(async |instance| {
       return instance.call_init().await;
@@ -223,9 +253,10 @@ fn empty() -> BoxBody<Bytes, hyper::Error> {
   return BoxBody::new(http_body_util::Empty::new().map_err(|_| unreachable!()));
 }
 
+#[cfg(feature = "wasm")]
 fn to_header_value(context: &HttpContext) -> Result<hyper::http::HeaderValue, WasmError> {
   return hyper::http::HeaderValue::from_bytes(&serde_json::to_vec(&context).unwrap_or_default())
-    .map_err(|_err| WasmError::Encoding);
+    .map_err(|_err| trailbase_wasm_runtime_host::Error::Encoding);
 }
 
 fn internal_error_response(err: impl std::string::ToString) -> axum::response::Response {
