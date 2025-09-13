@@ -21,8 +21,9 @@ name = "benchmark"
 harness = false
 
 [features]
-default = ["v8"]
+default = ["v8", "wasm"]
 v8 = ["dep:trailbase-js"]
+wasm = ["dep:trailbase-wasm-runtime-host"]
 
 [dependencies]
 aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "alloc", "getrandom", "rand_core"] }
@@ -89,7 +90,7 @@ trailbase-qs = { workspace = true }
 trailbase-refinery = { workspace = true }
 trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true }
-trailbase-wasm-runtime-host = { workspace = true }
+trailbase-wasm-runtime-host = { workspace = true, optional = true }
 trailbase-wasm-common = { workspace = true }
 ts-rs = { workspace = true }
 url = { version = "^2.4.1", default-features = false }

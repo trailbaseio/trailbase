@@ -4,7 +4,6 @@ use reactivate::{Merge, Reactive};
 use std::path::PathBuf;
 use std::sync::Arc;
 use trailbase_schema::QualifiedName;
-use trailbase_wasm_runtime_host::Runtime;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
@@ -17,6 +16,7 @@ use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
 use crate::schema_metadata::SchemaMetadataCache;
+use crate::wasm::Runtime;
 
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.

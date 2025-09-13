@@ -22,7 +22,39 @@ mod scheduler;
 mod schema_metadata;
 mod server;
 mod transaction;
+
+#[cfg(feature = "wasm")]
 mod wasm;
+
+#[cfg(not(feature = "wasm"))]
+mod wasm {
+  use axum::Router;
+  use std::path::PathBuf;
+  use std::sync::Arc;
+
+  use crate::AppState;
+
+  type AnyError = Box<dyn std::error::Error + Send + Sync>;
+
+  pub(crate) struct Runtime;
+
+  pub(crate) fn build_wasm_runtimes_for_components(
+    _n_threads: Option<usize>,
+    _conn: trailbase_sqlite::Connection,
+    _components_path: PathBuf,
+    _fs_root_path: Option<PathBuf>,
+  ) -> Result<Vec<Arc<Runtime>>, AnyError> {
+    return Ok(vec![]);
+  }
+
+  #[cfg(not(feature = "wasm"))]
+  pub(crate) async fn install_routes_and_jobs(
+    _state: &AppState,
+    _runtime: Arc<Runtime>,
+  ) -> Result<Option<Router<AppState>>, AnyError> {
+    return Ok(None);
+  }
+}
 
 #[cfg(test)]
 mod test;
