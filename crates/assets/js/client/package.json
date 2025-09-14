@@ -27,12 +27,12 @@
     "directory": "crates/assets/js/client"
   },
   "scripts": {
-    "start": "tsc && node dist/client/src/index.js",
     "build": "tsc",
-    "test": "vitest run && vite-node tests/integration_test_runner.ts",
+    "check": "tsc --noEmit --skipLibCheck && eslint",
     "format": "prettier -w src tests",
-    "run-publish": "rm -rf ./dist && pnpm build && test -e ./dist/client/src/index.js && pnpm publish . --no-git-checks",
-    "check": "tsc --noEmit --skipLibCheck && eslint"
+    "prepack": "rm -rf ./dist && pnpm build && test -e ./dist/client/src/index.js",
+    "start": "tsc && node dist/client/src/index.js",
+    "test": "vitest run && vite-node tests/integration_test_runner.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",
