@@ -71,10 +71,11 @@
     "directory": "guests/typescript"
   },
   "scripts": {
-    "generate:types": "jco types wit/ -o generated/types",
     "build": "vite build",
     "check": "tsc --noEmit --skipLibCheck && vite build && eslint",
     "format": "prettier -w src tests",
+    "generate:types": "jco types wit/ -o generated/types",
+    "prepack": "rm -rf ./dist && pnpm build && test -e ./dist/index.js",
     "test": "vitest run"
   },
   "devDependencies": {
