@@ -4,15 +4,15 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
     <RuntimeIdentifier>wasi-wasm</RuntimeIdentifier>
+    <UseAppHost>false</UseAppHost>
     <PublishTrimmed>true</PublishTrimmed>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SelfContained>true</SelfContained>
 
-    <!-- <RootNamespace>dotnet_counter</RootNamespace> -->
-    <!-- <UseAppHost>false</UseAppHost> -->
-    <!-- <InvariantGlobalization>true</InvariantGlobalization> -->
-    <!-- <SelfContained>true</SelfContained> -->
-
-    <IlcExportUnmanagedEntrypoints>true</IlcExportUnmanagedEntrypoints>
+    <!-- <IlcExportUnmanagedEntrypoints>true</IlcExportUnmanagedEntrypoints> -->
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,8 +22,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- <Wit Remove="**\*.wit" /> -->
-    <!-- <Wit Update="wit/trailbase.wit" World="trailbase" /> -->
     <Wit Include="wit/http.wasm" World="proxy" Registry="ghcr.io/webassembly/wasi/http:0.2.0" />
   </ItemGroup>
 </Project>
