@@ -43,7 +43,7 @@ namespace ProxyWorld.wit.exports.wasi.http.v0_2_0
             Console.WriteLine($"http.IncomingHandler.Handle");
 
             var fib = Utilities.fibonacci(40);
-            var content = Encoding.ASCII.GetBytes($"Hello, from C#! {fib}\n");
+            var content = Encoding.ASCII.GetBytes($"{fib}\n");
 
             var headers = new List<(string, byte[])> {
                 ("content-type", Encoding.ASCII.GetBytes("text/plain")),
