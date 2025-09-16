@@ -12,7 +12,7 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <SelfContained>true</SelfContained>
 
-    <!-- <IlcExportUnmanagedEntrypoints>true</IlcExportUnmanagedEntrypoints> -->
+    <IlcExportUnmanagedEntrypoints>true</IlcExportUnmanagedEntrypoints>
   </PropertyGroup>
 
   <ItemGroup>
