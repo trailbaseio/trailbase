@@ -8,7 +8,6 @@ namespace TrailbaseWorld.wit.exports.trailbase.runtime
         public static IInitEndpoint.InitResult Init()
         {
             Console.WriteLine("HERE");
-            throw new Exception("test");
             return new IInitEndpoint.InitResult(httpHandlers: [], jobHandlers: []);
         }
     }
