@@ -16,9 +16,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- <PackageReference Update="Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-preview.2.25220.1" /> -->
     <PackageReference Include="BytecodeAlliance.Componentize.DotNet.Wasm.SDK" Version="0.7.0-preview00010" />
-    <PackageReference Include="runtime.$(NETCoreSdkPortableRuntimeIdentifier).microsoft.dotnet.ilcompiler.llvm" Version="10.0.0-preview.2.25220.1" />
+
+    <!-- Need to be consistent version. Upstream tested: "10.0.0-alpha.1.25162.1" -->
+    <PackageVersion Update="Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-alpha.1.25162.1" />
+    <PackageReference Include="runtime.$(NETCoreSdkPortableRuntimeIdentifier).microsoft.dotnet.ilcompiler.llvm" Version="10.0.0-alpha.1.25162.1" />
+
+    <!-- NOTE: Failed to consistently use a newer version: https://github.com/bytecodealliance/componentize-dotnet/issues/97 -->
+    <!-- <PackageReference Update="Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-preview.2.25220.1" />  -->
+    <!-- <PackageVersion Update="Microsoft.DotNet.ILCompiler.LLVM" Version="10.0.0-preview.2.25220.1" />  -->
+    <!-- <PackageReference Include="runtime.$(NETCoreSdkPortableRuntimeIdentifier).microsoft.dotnet.ilcompiler.llvm" Version="10.0.0-preview.2.25220.1" /> -->
   </ItemGroup>
 
   <ItemGroup>
