@@ -1,10 +1,13 @@
 use futures_util::future::LocalBoxFuture;
+use serde::de::DeserializeOwned;
 use trailbase_wasm_common::HttpContext;
 use wstd::http::server::{Finished, Responder};
 use wstd::io::{Cursor, Empty, empty};
 
-pub use http::{HeaderMap, HeaderValue, Method, Response, StatusCode, Version};
+pub use http::{HeaderMap, HeaderValue, Method, StatusCode, Version};
 pub use trailbase_wasm_common::HttpContextUser as User;
+
+pub type Response<T = BoundedBody<Vec<u8>>> = http::Response<T>;
 
 #[derive(Clone, Debug)]
 pub struct HttpError {
@@ -25,6 +28,12 @@ impl HttpError {
       status,
       message: Some(message.to_string()),
     };
+  }
+}
+
+impl From<HttpError> for Response {
+  fn from(value: HttpError) -> Self {
+    return value.into_response();
   }
 }
 
@@ -128,6 +137,8 @@ pub mod routing {
   }
 }
 
+// Disallow external construction.
+#[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Parts {
   /// The request's method
@@ -165,6 +176,18 @@ impl Request {
   pub fn url(&self) -> &url::Url {
     return &self.head.uri;
   }
+
+  pub fn query_parse<T: DeserializeOwned>(&self) -> Result<T, HttpError> {
+    let query = self.head.uri.query().unwrap_or_default();
+    let deserializer =
+      serde_urlencoded::Deserializer::new(url::form_urlencoded::parse(query.as_bytes()));
+    return serde_path_to_error::deserialize(deserializer)
+      .map_err(|err| HttpError::message(StatusCode::BAD_REQUEST, err));
+  }
+
+  // pub fn query_pairs(&self) -> url::form_urlencoded::Parse<'_> {
+  //   self.head.uri.query_pairs()
+  // }
 
   pub fn query_param(&self, param: &str) -> Option<String> {
     return self
@@ -221,7 +244,7 @@ fn to_url(uri: http::Uri) -> Result<url::Url, url::ParseError> {
 }
 
 /// An HTTP body with a known length
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BoundedBody<T>(Cursor<T>);
 
 impl<T: AsRef<[u8]>> wstd::io::AsyncRead for BoundedBody<T> {
@@ -229,6 +252,7 @@ impl<T: AsRef<[u8]>> wstd::io::AsyncRead for BoundedBody<T> {
     self.0.read(buf).await
   }
 }
+
 impl<T: AsRef<[u8]>> wstd::http::body::Body for BoundedBody<T> {
   fn len(&self) -> Option<usize> {
     Some(self.0.get_ref().as_ref().len())
@@ -286,9 +310,24 @@ pub trait IntoResponse<B> {
   fn into_response(self) -> http::Response<B>;
 }
 
+impl<B: wstd::http::body::Body> IntoResponse<B> for Response<B> {
+  fn into_response(self) -> http::Response<B> {
+    return self;
+  }
+}
+
+impl<B: wstd::http::body::Body, Err: IntoResponse<B>> IntoResponse<B> for Result<Response<B>, Err> {
+  fn into_response(self) -> http::Response<B> {
+    return match self {
+      Ok(resp) => resp,
+      Err(err) => err.into_response(),
+    };
+  }
+}
+
 impl<B: IntoBody> IntoResponse<B::IntoBody> for B {
   fn into_response(self) -> http::Response<B::IntoBody> {
-    return Response::new(self.into_body());
+    return http::Response::new(self.into_body());
   }
 }
 
@@ -297,17 +336,23 @@ impl<B: IntoBody<IntoBody = BoundedBody<Vec<u8>>>> IntoResponse<BoundedBody<Vec<
 {
   fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
     return match self {
-      Ok(body) => Response::new(body.into_body()),
+      Ok(body) => http::Response::new(body.into_body()),
       Err(err) => build_response(err.status, err.message.unwrap_or_default().into_body()),
     };
+  }
+}
+
+impl IntoResponse<BoundedBody<Vec<u8>>> for HttpError {
+  fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
+    return build_response(self.status, self.message.unwrap_or_default().into_body());
   }
 }
 
 impl IntoResponse<BoundedBody<Vec<u8>>> for Result<(), HttpError> {
   fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
     return match self {
-      Ok(_) => Response::new("".into_body()),
-      Err(err) => build_response(err.status, err.message.unwrap_or_default().into_body()),
+      Ok(_) => http::Response::new("".into_body()),
+      Err(err) => err.into_response(),
     };
   }
 }
@@ -339,13 +384,78 @@ where
   }
 }
 
-pub(crate) fn empty_error_response(status: StatusCode) -> Response<Empty> {
-  let mut response = Response::new(empty());
+/// An HTML response.
+///
+/// Will automatically get `Content-Type: text/html`.
+#[derive(Clone, Copy, Debug)]
+#[must_use]
+pub struct Html<T>(pub T);
+
+impl<T> IntoResponse<BoundedBody<Vec<u8>>> for Html<T>
+where
+  T: IntoResponse<BoundedBody<Vec<u8>>>,
+{
+  fn into_response(self) -> Response {
+    let mut r = self.0.into_response();
+    r.headers_mut().insert(
+      http::header::CONTENT_TYPE,
+      http::HeaderValue::from_static(mime::TEXT_HTML_UTF_8.as_ref()),
+    );
+    return r;
+  }
+}
+
+#[derive(Debug, Clone)]
+#[must_use = "needs to be returned from a handler or otherwise turned into a Response to be useful"]
+pub struct Redirect {
+  status_code: StatusCode,
+  location: http::header::HeaderValue,
+}
+
+impl Redirect {
+  pub fn to(uri: &str) -> Self {
+    Self::with_status_code(StatusCode::SEE_OTHER, uri)
+  }
+
+  pub fn temporary(uri: &str) -> Self {
+    Self::with_status_code(StatusCode::TEMPORARY_REDIRECT, uri)
+  }
+
+  pub fn permanent(uri: &str) -> Self {
+    Self::with_status_code(StatusCode::PERMANENT_REDIRECT, uri)
+  }
+
+  fn with_status_code(status_code: StatusCode, uri: &str) -> Self {
+    assert!(
+      status_code.is_redirection(),
+      "not a redirection status code"
+    );
+
+    Self {
+      status_code,
+      location: HeaderValue::try_from(uri).expect("URI isn't a valid header value"),
+    }
+  }
+}
+
+impl<B: wstd::http::body::Body + Default> IntoResponse<B> for Redirect {
+  fn into_response(self) -> http::Response<B> {
+    let mut response = http::Response::<B>::default();
+    *response.status_mut() = self.status_code;
+    response
+      .headers_mut()
+      .insert(http::header::LOCATION, self.location);
+    return response;
+  }
+}
+
+pub(crate) fn empty_error_response(status: StatusCode) -> http::Response<Empty> {
+  let mut response = http::Response::new(empty());
   *response.status_mut() = status;
   return response;
 }
 
-fn internal_error_response() -> Response<BoundedBody<Vec<u8>>> {
+fn internal_error_response() -> http::Response<BoundedBody<Vec<u8>>> {
   return build_response(StatusCode::INTERNAL_SERVER_ERROR, "".into_body());
 }
 
@@ -353,8 +463,8 @@ fn internal_error_response() -> Response<BoundedBody<Vec<u8>>> {
 fn build_response(
   status: StatusCode,
   body: BoundedBody<Vec<u8>>,
-) -> Response<BoundedBody<Vec<u8>>> {
-  let mut response = Response::new(body);
+) -> http::Response<BoundedBody<Vec<u8>>> {
+  let mut response = http::Response::new(body);
   *response.status_mut() = status;
   return response;
 }
@@ -363,7 +473,7 @@ fn build_response(
 fn build_json_response<T: serde::Serialize>(
   status: StatusCode,
   value: T,
-) -> Response<BoundedBody<Vec<u8>>> {
+) -> http::Response<BoundedBody<Vec<u8>>> {
   let Ok(bytes) = serde_json::to_vec(&value) else {
     return internal_error_response();
   };
