@@ -71,7 +71,7 @@ serde_json = "^1.0.117"
 serde_path_to_error = "0.1.16"
 serde_urlencoded = "0.7.1"
 sha2 = "0.10.8"
-sqlformat = "0.3.1"
+sqlformat = "0.4.0"
 sqlite3-parser = "0.15.0"
 thiserror = "2.0.12"
 tokio = { workspace = true }

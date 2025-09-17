@@ -49,6 +49,7 @@ impl TransactionLog {
         indent: sqlformat::Indent::Spaces(4),
         uppercase: Some(true),
         lines_between_queries: 2,
+        ..Default::default()
       },
     );
   }
