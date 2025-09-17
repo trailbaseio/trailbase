@@ -1,6 +1,13 @@
+## v0.17.2
+
+* PoC: release built-in Auth UI as separate WASM component. In the future we may want to unbundle the UI and allow installing it as a plugin.
+* Allow disabling WASM runtime via feature flag in the core crate.
+* Improved Rust guest runtime: query param de-serialization and response.
+* Update Rust dependencies.
+
 ## v0.17.1
 
-* Add a SMTP encryption setting (plain, STARTTLS, TLS).
+* Add an SMTP encryption setting (plain, STARTTLS, TLS).
 * Migrate all UIs to Tailwind v4.
 * Fix job name encoding for WASM jobs.
 * Make examples/wasm-guest-(js|ts|rust) standalone to just be copyable.
