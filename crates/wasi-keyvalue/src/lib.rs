@@ -62,6 +62,16 @@ impl Store {
       store: Arc::new(RwLock::new(HashMap::new())),
     };
   }
+
+  /// Insert new value. Returns not-None if value with key already existed.
+  pub fn set(&self, key: String, value: Vec<u8>) -> Option<Vec<u8>> {
+    return self.store.write().insert(key, value);
+  }
+
+  /// Get a store value.
+  pub fn get(&self, key: &str) -> Option<Vec<u8>> {
+    return self.store.read().get(key).cloned();
+  }
 }
 
 #[doc(hidden)]
