@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "client/testfixture/guests/rust",
   "crates/assets",
+  "crates/auth-ui",
   "crates/build",
   "crates/cli",
   "crates/client",

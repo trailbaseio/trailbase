@@ -1,0 +1,3 @@
+[general]
+dirs = ["../assets/js/auth/dist"]
+whitespace = "preserve"

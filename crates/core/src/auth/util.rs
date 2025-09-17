@@ -297,6 +297,15 @@ pub(crate) fn derive_pkce_code_challenge(pkce_code_verifier: &str) -> String {
   return BASE64_URL_SAFE_NO_PAD.encode(sha.finalize());
 }
 
+pub(crate) fn oauth_provider_name_to_img(name: &str) -> String {
+  return match name {
+    "discord" | "facebook" | "gitlab" | "google" | "microsoft" => {
+      format!("{name}.svg")
+    }
+    _ => "oidc.svg".to_string(),
+  };
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

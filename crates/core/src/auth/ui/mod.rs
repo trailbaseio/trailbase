@@ -45,27 +45,15 @@ async fn ui_login_handler(
     .list_oauth_providers()
     .into_iter()
     .map(|p| OAuthProvider {
-      img_name: match p.name.as_str() {
-        "discord" | "facebook" | "gitlab" | "google" | "microsoft" => {
-          format!("{name}.svg", name = p.name)
-        }
-        _ => "oidc.svg".to_string(),
-      },
+      img_name: crate::auth::util::oauth_provider_name_to_img(&p.name),
       name: p.name,
       display_name: p.display_name,
     })
     .collect();
 
-  let form_state = indoc::formatdoc!(
-    r#"
-    {redirect_uri}
-    {response_type}
-    {pkce_code_challenge}
-    "#,
-    redirect_uri = hidden_input("redirect_uri", query.redirect_uri.as_ref()),
-    response_type = hidden_input("response_type", query.response_type.as_ref()),
-    pkce_code_challenge = hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref()),
-  );
+  let redirect_uri = hidden_input("redirect_uri", query.redirect_uri.as_ref());
+  let response_type = hidden_input("response_type", query.response_type.as_ref());
+  let pkce_code_challenge = hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref());
 
   let oauth_query_params: Vec<(&str, &str)> = [
     query
@@ -86,7 +74,7 @@ async fn ui_login_handler(
   .collect();
 
   let html = LoginTemplate {
-    state: form_state,
+    state: format!("{redirect_uri}\n{response_type}\n{pkce_code_challenge}"),
     alert: query.alert.as_deref().unwrap_or_default(),
     enable_registration: !state.access_config(|c| c.auth.disable_password_auth.unwrap_or(false)),
     oauth_providers: &oauth_providers,
@@ -162,17 +150,11 @@ async fn ui_reset_password_update_handler(
   Query(query): Query<ResetPasswordUpdateQuery>,
   Path(password_reset_code): Path<String>,
 ) -> Response {
-  let form_state = indoc::formatdoc!(
-    r#"
-    {redirect_uri}
-    {password_reset_code}
-  "#,
-    redirect_uri = hidden_input("redirect_uri", query.redirect_uri.as_ref()),
-    password_reset_code = hidden_input("password_reset_code", Some(&password_reset_code)),
-  );
+  let redirect_uri = hidden_input("redirect_uri", query.redirect_uri.as_ref());
+  let password_reset_code = hidden_input("password_reset_code", Some(&password_reset_code));
 
   let html = ResetPasswordUpdateTemplate {
-    state: form_state,
+    state: format!("{redirect_uri}\n{password_reset_code}"),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
@@ -217,17 +199,11 @@ pub struct ChangeEmailQuery {
 }
 
 async fn ui_change_email_handler(Query(query): Query<ChangeEmailQuery>, user: User) -> Response {
-  let form_state = indoc::formatdoc!(
-    r#"
-    {redirect_uri}
-    {csrf_token}
-  "#,
-    redirect_uri = hidden_input("redirect_uri", query.redirect_uri.as_ref()),
-    csrf_token = hidden_input("csrf_token", Some(&user.csrf_token)),
-  );
+  let redirect_uri = hidden_input("redirect_uri", query.redirect_uri.as_ref());
+  let csrf_token = hidden_input("csrf_token", Some(&user.csrf_token));
 
   let html = ChangeEmailTemplate {
-    state: form_state,
+    state: format!("{redirect_uri}\n{csrf_token}"),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();

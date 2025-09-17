@@ -4,7 +4,7 @@ use trailbase_wasm_common::HttpContext;
 use wstd::http::server::{Finished, Responder};
 use wstd::io::{Cursor, Empty, empty};
 
-pub use http::{HeaderMap, HeaderValue, Method, StatusCode, Version};
+pub use http::{HeaderMap, HeaderValue, Method, StatusCode, Version, header};
 pub use trailbase_wasm_common::HttpContextUser as User;
 
 pub type Response<T = BoundedBody<Vec<u8>>> = http::Response<T>;

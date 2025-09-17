@@ -92,9 +92,6 @@ impl<E: RustEmbed> Future for ServeFuture<E> {
       x => x,
     };
 
-    #[cfg(test)]
-    log::debug!("asset path: {:?}", self.request.uri());
-
     let Some(file) = E::get(path).or_else(|| {
       self
         .state

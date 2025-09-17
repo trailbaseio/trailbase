@@ -1,6 +1,7 @@
 use log::*;
 use object_store::ObjectStore;
 use reactivate::{Merge, Reactive};
+use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use trailbase_schema::QualifiedName;
@@ -129,13 +130,29 @@ impl AppState {
     );
 
     let runtime = build_js_runtime(args.conn.clone(), args.runtime_threads);
+
+    let shared_kv_store = crate::wasm::KvStore::new();
+    config.with_value(|c| {
+      shared_kv_store.set(
+        AUTH_CONFIG_KEY.to_string(),
+        serde_json::to_vec(&build_auth_config(c)).expect("startup"),
+      );
+    });
+
     let wasm_runtimes = crate::wasm::build_wasm_runtimes_for_components(
       args.runtime_threads,
       args.conn.clone(),
+      shared_kv_store.clone(),
       args.data_dir.root().join("wasm"),
       args.runtime_root_fs,
     )
     .expect("startup");
+
+    config.add_observer(move |c| {
+      if let Ok(v) = serde_json::to_vec(&build_auth_config(c)) {
+        shared_kv_store.set(AUTH_CONFIG_KEY.to_string(), v);
+      }
+    });
 
     AppState {
       state: Arc::new(InternalState {
@@ -588,3 +605,44 @@ fn build_site_url(c: &Config) -> Result<Option<url::Url>, url::ParseError> {
 
   return Ok(None);
 }
+
+#[derive(Serialize)]
+pub struct OAuthProvider {
+  pub name: String,
+  pub display_name: String,
+  pub img_name: String,
+}
+
+#[derive(Serialize)]
+struct AuthConfig {
+  disable_password_auth: bool,
+  oauth_providers: Vec<OAuthProvider>,
+}
+
+fn build_auth_config(config: &Config) -> AuthConfig {
+  let oauth_providers: Vec<_> = config
+    .auth
+    .oauth_providers
+    .iter()
+    .filter_map(|(key, config)| {
+      let entry = crate::auth::oauth::providers::oauth_provider_registry
+        .iter()
+        .find(|registered| config.provider_id == Some(registered.id as i32))?;
+
+      let provider = (entry.factory)(key, config).ok()?;
+      let name = provider.name();
+      return Some(OAuthProvider {
+        name: name.to_string(),
+        display_name: provider.display_name().to_string(),
+        img_name: crate::auth::util::oauth_provider_name_to_img(name),
+      });
+    })
+    .collect();
+
+  return AuthConfig {
+    disable_password_auth: config.auth.disable_password_auth(),
+    oauth_providers,
+  };
+}
+
+const AUTH_CONFIG_KEY: &str = "config:auth";

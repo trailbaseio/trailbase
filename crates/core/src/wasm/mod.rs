@@ -15,15 +15,15 @@ use crate::util::urlencode;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
-pub(crate) use trailbase_wasm_runtime_host::Runtime;
+pub(crate) use trailbase_wasm_runtime_host::{KvStore, Runtime};
 
 pub(crate) fn build_wasm_runtimes_for_components(
   n_threads: Option<usize>,
   conn: trailbase_sqlite::Connection,
+  shared_kv_store: KvStore,
   components_path: PathBuf,
   fs_root_path: Option<PathBuf>,
 ) -> Result<Vec<Arc<Runtime>>, AnyError> {
-  let shared_kv_store = trailbase_wasm_runtime_host::KvStore::new();
   let mut runtimes: Vec<Arc<Runtime>> = vec![];
 
   if let Ok(entries) = std::fs::read_dir(components_path) {

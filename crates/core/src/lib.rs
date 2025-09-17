@@ -36,6 +36,14 @@ mod wasm {
 
   type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
+  pub(crate) struct KvStore;
+
+  impl KvStore {
+    pub(crate) fn set(&self, _key: String, _value: Vec<u8>) -> Option<Vec<u8>> {
+      return None;
+    }
+  }
+
   pub(crate) struct Runtime;
 
   pub(crate) fn build_wasm_runtimes_for_components(

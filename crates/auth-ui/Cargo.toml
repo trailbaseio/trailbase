@@ -1,0 +1,24 @@
+[package]
+name = "auth-ui-component"
+version = "0.0.0"
+edition = "2024"
+license = "OSL-3.0"
+description = "TrailBase default Auth UI WASM component"
+homepage = "https://trailbase.io"
+repository = "https://github.com/trailbaseio/trailbase"
+readme = "../../README.md"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+askama = { workspace = true }
+itertools = "0.14.0"
+rust-embed = { workspace = true }
+serde = { version = "^1.0.203", features = ["derive"] }
+serde_json = "^1.0.117"
+trailbase-wasm = { workspace = true }
+
+[build-dependencies]
+trailbase-assets = { workspace = true }
+trailbase-build = { workspace = true }
