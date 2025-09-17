@@ -35,13 +35,12 @@ jobs:
         run: |
           sudo apt-get update && \
             sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip
-
       - uses: pnpm/action-setup@v4
         with:
           version: 9
       - name: PNPM install
         run: |
-          pnpm i
+          pnpm install
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: 1.89.0
@@ -50,7 +49,6 @@ jobs:
       - name: Rust Build
         # NOTE: cargo links different binaries whether in the crate or workspace root :/.
         run: |
-          pnpm install && \
           cd crates/cli &&  \
           CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
             cargo build --target x86_64-unknown-linux-gnu --release --bin trail && \
@@ -74,13 +72,12 @@ jobs:
         run: |
           sudo apt-get update && \
             sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip
-
       - uses: pnpm/action-setup@v4
         with:
           version: 9
       - name: PNPM install
         run: |
-          pnpm i
+          pnpm install
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: 1.89.0
@@ -89,7 +86,6 @@ jobs:
       - name: Rust Build
         # NOTE: static linux builds fail with toolchains >1.86 if run from workspace root?!
         run: |
-          pnpm install && \
           cd crates/cli &&  \
           RUSTFLAGS="-C target-feature=+crt-static" CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
             cargo build --target x86_64-unknown-linux-gnu --release --bin trail && \
@@ -101,6 +97,41 @@ jobs:
         with:
           fail_on_unmatched_files: true
           files: trailbase_${{  github.ref_name }}_x86_64_linux_static_glibc.zip
+
+  release-linux-auth-ui:
+    needs: changelog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update && \
+            sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: PNPM install
+        run: |
+          pnpm install
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.89.0
+          target: wasm32-wasip2
+          default: true
+      - name: Rust Build
+        run: |
+          cd crates/auth-ui && \
+          make && \
+          cd ../.. && \
+          zip -r -j trailbase_${{  github.ref_name }}_wasm_auth_ui.zip target/wasm32-wasip2/release/auth_ui_component.wasm CHANGELOG.md LICENSE
+
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: trailbase_${{  github.ref_name }}_wasm_auth_ui.zip
 
   release-aarch64-apple-darwin:
     needs: changelog
@@ -118,7 +149,7 @@ jobs:
           version: 9
       - name: PNPM install
         run: |
-          pnpm i
+          pnpm install
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: 1.89.0
@@ -126,7 +157,6 @@ jobs:
           default: true
       - name: Rust Build
         run: |
-          pnpm install && \
           CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
             cargo build --target aarch64-apple-darwin --release --bin trail && \
           zip -r -j trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip target/aarch64-apple-darwin/release/trail CHANGELOG.md LICENSE
@@ -153,7 +183,7 @@ jobs:
           version: 9
       - name: PNPM install
         run: |
-          pnpm i
+          pnpm install
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: 1.89.0
@@ -161,7 +191,6 @@ jobs:
           default: true
       - name: Rust Build
         run: |
-          pnpm install && \
           CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
             cargo build --target x86_64-apple-darwin --release --bin trail && \
           zip -r -j trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip target/x86_64-apple-darwin/release/trail CHANGELOG.md LICENSE
