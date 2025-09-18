@@ -24,6 +24,8 @@ pub enum JsonSchemaError {
   NotFound(String),
   #[error("Json serialization error: {0}")]
   JsonSerialization(Arc<serde_json::Error>),
+  #[error("Other: {0}")]
+  Other(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]

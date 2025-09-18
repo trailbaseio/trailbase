@@ -1,8 +1,6 @@
 #![allow(clippy::needless_return)]
 
-use std::{io::Result, path::PathBuf};
-
-fn main() -> Result<()> {
+fn main() -> std::io::Result<()> {
   trailbase_build::init_env_logger();
 
   // Rely on trailbase-asset dep for now to build.

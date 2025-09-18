@@ -68,10 +68,28 @@ pub fn build_json_schema_expanded(
             let new_def_name = &col.name;
             match json_metadata {
               JsonColumnMetadata::SchemaName(name) => {
-                let Some(schema) = crate::registry::get_schema(&name) else {
+                let Some(crate::registry::Schema { schema, .. }) =
+                  crate::registry::get_schema(&name)
+                else {
                   return Err(JsonSchemaError::NotFound(name.to_string()));
                 };
-                defs.insert(new_def_name.clone(), schema.schema);
+
+                let Some(ref schema_obj) = schema.as_object() else {
+                  return Err(JsonSchemaError::Other("expected object".to_string()));
+                };
+
+                // Re-parent nested references to the schema root, to continue to be reference-able
+                // via: `{"$ref": "#/$defs/<name>"}`, otherwise they won't be found.
+                //
+                // QUESTION: is there a better API for us to merge JSON schemas, w/o that manual
+                // work
+                if let Some(nested_defs) = schema_obj.get("$defs").and_then(|d| d.as_object()) {
+                  for (k, v) in nested_defs {
+                    defs.insert(k.clone(), v.clone());
+                  }
+                }
+
+                defs.insert(new_def_name.clone(), schema);
                 def_name = Some(new_def_name.clone());
               }
               JsonColumnMetadata::Pattern(pattern) => {
@@ -269,38 +287,36 @@ mod tests {
   use serde_json::json;
 
   use crate::FileUpload;
-  use crate::sqlite::{ColumnOption, lookup_and_parse_table_schema};
+  use crate::sqlite::{ColumnOption, Table, lookup_and_parse_table_schema};
 
   use super::*;
 
-  #[tokio::test]
-  async fn test_parse_table_schema() {
+  #[test]
+  fn test_parse_table_schema() {
     crate::registry::try_init_schemas();
 
     let conn = trailbase_extension::connect_sqlite(None).unwrap();
 
-    let check = indoc::indoc! {r#"
-        jsonschema_matches ('{
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "name": {
-              "type": "string"
-            },
-            "age": {
-              "type": "integer",
-              "minimum": 0
-            }
-          },
-          "required": ["name", "age"]
-        }', col0)"#
-    };
+    let col0_schema = json!({
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "age": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": ["name", "age"]
+    });
 
     conn
       .execute(
         &format!(
           r#"CREATE TABLE test_table (
-            col0 TEXT CHECK({check}),
+            col0 TEXT CHECK(jsonschema_matches('{col0_schema}', col0)),
             col1 TEXT CHECK(jsonschema('std.FileUpload', col1)),
             col2 TEXT,
             col3 TEXT CHECK(jsonschema('std.FileUpload', col3, 'image/jpeg, image/png'))
@@ -310,6 +326,41 @@ mod tests {
       )
       .unwrap();
 
+    let (table, schema) = get_and_build_table_schema(&conn, "test_table");
+
+    let col = table.columns.first().unwrap();
+    let check_expr = col
+      .options
+      .iter()
+      .filter_map(|c| match c {
+        ColumnOption::Check(check) => Some(check),
+        _ => None,
+      })
+      .collect::<Vec<_>>()[0];
+
+    assert_eq!(
+      &format!("jsonschema_matches ('{col0_schema}', col0)"),
+      check_expr
+    );
+
+    assert!(schema.is_valid(&json!({
+      "col2": "test",
+    })));
+
+    assert!(schema.is_valid(&json!({
+      "col0": json!({
+        "name": "Alice", "age": 23,
+      }),
+    })));
+
+    assert!(!schema.is_valid(&json!({
+      "col0": json!({
+        "name": 42, "age": "23",
+      }),
+    })));
+
+    // Make sure, schemas are applied correctly by inserting records with appropriate and
+    // inappropriate shapes.
     let insert = |col: &'static str, json: serde_json::Value| {
       conn.execute(
         &format!(
@@ -375,42 +426,44 @@ mod tests {
       .unwrap();
 
     assert_eq!(cnt, 4);
+  }
 
-    let table = lookup_and_parse_table_schema(&conn, "test_table").unwrap();
+  #[test]
+  fn test_file_uploads_schema() {
+    crate::registry::try_init_schemas();
 
-    let col = table.columns.first().unwrap();
-    let check_expr = col
-      .options
-      .iter()
-      .filter_map(|c| match c {
-        ColumnOption::Check(check) => Some(check),
-        _ => None,
-      })
-      .collect::<Vec<_>>()[0];
+    let conn = trailbase_extension::connect_sqlite(None).unwrap();
 
-    assert_eq!(check_expr, check);
-    let table_metadata = TableMetadata::new(table.clone(), &[table], "_user");
+    conn
+      .execute(
+        &format!(
+          r#"CREATE TABLE test_table (
+            files TEXT CHECK(jsonschema('std.FileUploads', files))
+          ) STRICT"#
+        ),
+        (),
+      )
+      .unwrap();
 
+    let (_table, schema) = get_and_build_table_schema(&conn, "test_table");
+
+    assert!(schema.is_valid(&json!({})));
+  }
+
+  fn get_and_build_table_schema(
+    conn: &rusqlite::Connection,
+    table_name: &str,
+  ) -> (Table, Validator) {
+    let table = lookup_and_parse_table_schema(conn, table_name).unwrap();
+
+    let table_metadata = TableMetadata::new(table.clone(), &[table.clone()], "_user");
     let (schema, _) = build_json_schema(
       &table_metadata.name().name,
       &table_metadata.schema.columns,
       JsonSchemaMode::Insert,
     )
     .unwrap();
-    assert!(schema.is_valid(&json!({
-      "col2": "test",
-    })));
 
-    assert!(schema.is_valid(&json!({
-      "col0": json!({
-        "name": "Alice", "age": 23,
-      }),
-    })));
-
-    assert!(!schema.is_valid(&json!({
-      "col0": json!({
-        "name": 42, "age": "23",
-      }),
-    })));
+    return (table, schema);
   }
 }
