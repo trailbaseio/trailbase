@@ -4,6 +4,7 @@ use reactivate::{Merge, Reactive};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use trailbase_schema::QualifiedName;
 
 use crate::auth::jwt::JwtHelper;
@@ -45,11 +46,12 @@ struct InternalState {
 
   runtime: RuntimeHandle,
 
-  wasm_runtimes: Vec<Arc<Runtime>>,
+  wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
+  build_wasm_runtimes: Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>,
 
   #[cfg(test)]
   #[allow(unused)]
-  cleanup: Vec<Box<dyn std::any::Any + Send + Sync>>,
+  test_cleanup: Vec<Box<dyn std::any::Any + Send + Sync>>,
 }
 
 pub(crate) struct AppStateArgs {
@@ -131,28 +133,43 @@ impl AppState {
 
     let runtime = build_js_runtime(args.conn.clone(), args.runtime_threads);
 
-    let shared_kv_store = crate::wasm::KvStore::new();
-    config.with_value(|c| {
-      shared_kv_store.set(
-        AUTH_CONFIG_KEY.to_string(),
-        serde_json::to_vec(&build_auth_config(c)).expect("startup"),
-      );
-    });
+    let shared_kv_store = {
+      let shared_kv_store = crate::wasm::KvStore::new();
 
-    let wasm_runtimes = crate::wasm::build_wasm_runtimes_for_components(
-      args.runtime_threads,
-      args.conn.clone(),
-      shared_kv_store.clone(),
-      args.data_dir.root().join("wasm"),
-      args.runtime_root_fs,
-    )
-    .expect("startup");
+      // Assign right away.
+      config.with_value(|c| {
+        shared_kv_store.set(
+          AUTH_CONFIG_KEY.to_string(),
+          serde_json::to_vec(&build_auth_config(c)).expect("startup"),
+        );
+      });
 
-    config.add_observer(move |c| {
-      if let Ok(v) = serde_json::to_vec(&build_auth_config(c)) {
-        shared_kv_store.set(AUTH_CONFIG_KEY.to_string(), v);
+      // Register an observer for continuous updates.
+      {
+        let shared_kv_store = shared_kv_store.clone();
+        config.add_observer(move |c| {
+          if let Ok(v) = serde_json::to_vec(&build_auth_config(c)) {
+            shared_kv_store.set(AUTH_CONFIG_KEY.to_string(), v);
+          }
+        });
       }
-    });
+
+      shared_kv_store
+    };
+
+    let build_wasm_runtimes = {
+      let conn = args.conn.clone();
+      let wasm_dir = args.data_dir.root().join("wasm");
+      move || {
+        return crate::wasm::build_wasm_runtimes_for_components(
+          args.runtime_threads,
+          conn.clone(),
+          shared_kv_store.clone(),
+          wasm_dir.clone(),
+          args.runtime_root_fs.clone(),
+        );
+      }
+    };
 
     AppState {
       state: Arc::new(InternalState {
@@ -191,9 +208,14 @@ impl AppState {
         schema_metadata,
         object_store,
         runtime,
-        wasm_runtimes,
+        wasm_runtimes: build_wasm_runtimes()
+          .expect("startup")
+          .into_iter()
+          .map(|rt| Arc::new(RwLock::new(rt)))
+          .collect(),
+        build_wasm_runtimes: Box::new(build_wasm_runtimes),
         #[cfg(test)]
-        cleanup: vec![],
+        test_cleanup: vec![],
       }),
     }
   }
@@ -341,8 +363,43 @@ impl AppState {
     return self.state.runtime.clone();
   }
 
-  pub(crate) fn wasm_runtimes(&self) -> &[Arc<Runtime>] {
+  pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<Runtime>>] {
     return &self.state.wasm_runtimes;
+  }
+
+  pub(crate) async fn reload_wasm_runtimes(&self) -> Result<(), crate::wasm::AnyError> {
+    let mut new_runtimes = (self.state.build_wasm_runtimes)()?;
+    if new_runtimes.is_empty() {
+      return Ok(());
+    }
+
+    // TODO: Differentiate between an actual rebuild vs a cached re-build to warn users
+    // about routes not being able to be changed.
+    info!("Reloading WASM components. New HTTP routes and Jobs require a server restart.");
+
+    for old_rt in &self.state.wasm_runtimes {
+      let component_path = old_rt.read().await.component_path.clone();
+
+      let Some(index) = new_runtimes
+        .iter()
+        .position(|rt| rt.component_path == component_path)
+      else {
+        warn!("WASM component: {component_path:?} was removed. Required server restart");
+        continue;
+      };
+
+      // Swap out old with new WASM runtime for the given component.
+      *old_rt.write().await = new_runtimes.remove(index);
+    }
+
+    for new_rt in new_runtimes {
+      warn!(
+        "New WASM component found {:?}. Requires server restart.",
+        new_rt.component_path
+      );
+    }
+
+    return Ok(());
   }
 }
 
@@ -492,7 +549,8 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       object_store,
       runtime: build_js_runtime(conn, None),
       wasm_runtimes: vec![],
-      cleanup: vec![Box::new(temp_dir)],
+      build_wasm_runtimes: Box::new(|| Ok(vec![])),
+      test_cleanup: vec![Box::new(temp_dir)],
     }),
   });
 }

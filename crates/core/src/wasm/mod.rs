@@ -7,13 +7,15 @@ use log::*;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
+use trailbase_wasm_runtime_host::RuntimeOptions;
 
 use crate::AppState;
 use crate::User;
 use crate::util::urlencode;
 
-type AnyError = Box<dyn std::error::Error + Send + Sync>;
+pub(crate) type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
 pub(crate) use trailbase_wasm_runtime_host::{KvStore, Runtime};
 
@@ -23,45 +25,46 @@ pub(crate) fn build_wasm_runtimes_for_components(
   shared_kv_store: KvStore,
   components_path: PathBuf,
   fs_root_path: Option<PathBuf>,
-) -> Result<Vec<Arc<Runtime>>, AnyError> {
-  let mut runtimes: Vec<Arc<Runtime>> = vec![];
+) -> Result<Vec<Runtime>, AnyError> {
+  let runtimes: Vec<Runtime> = std::fs::read_dir(&components_path).map_or_else(
+    |_err| Ok(vec![]),
+    |entries| {
+      entries
+        .into_iter()
+        .flat_map(|entry| {
+          let Ok(entry) = entry else {
+            return None;
+          };
 
-  if let Ok(entries) = std::fs::read_dir(components_path) {
-    for entry in entries {
-      let Ok(entry) = entry else {
-        continue;
-      };
+          let Ok(metadata) = entry.metadata() else {
+            return None;
+          };
 
-      let Ok(metadata) = entry.metadata() else {
-        continue;
-      };
+          if !metadata.is_file() {
+            return None;
+          }
+          let path = entry.path();
+          // let extension = path.extension().and_then(|e| e.to_str())?;
 
-      if !metadata.is_file() {
-        continue;
-      }
-      let path = entry.path();
-      let Some(extension) = path.extension().and_then(|e| e.to_str()) else {
-        continue;
-      };
-
-      if extension == "wasm" {
-        let n_threads = n_threads
-          .or(std::thread::available_parallelism().ok().map(|n| n.get()))
-          .unwrap_or(1);
-
-        runtimes.push(Arc::new(Runtime::new(
-          n_threads,
-          path,
-          conn.clone(),
-          shared_kv_store.clone(),
-          fs_root_path.clone(),
-        )?));
-      }
-    }
-  }
+          if path.extension()? == "wasm" {
+            return Some(Runtime::new(
+              path,
+              conn.clone(),
+              shared_kv_store.clone(),
+              RuntimeOptions {
+                n_threads,
+                fs_root_path: fs_root_path.clone(),
+              },
+            ));
+          }
+          return None;
+        })
+        .collect::<Result<Vec<Runtime>, _>>()
+    },
+  )?;
 
   if runtimes.is_empty() {
-    debug!("No WASM component found");
+    debug!("No WASM component found in {components_path:?}");
   }
 
   return Ok(runtimes);
@@ -69,12 +72,14 @@ pub(crate) fn build_wasm_runtimes_for_components(
 
 pub(crate) async fn install_routes_and_jobs(
   state: &AppState,
-  runtime: Arc<Runtime>,
+  runtime: Arc<RwLock<Runtime>>,
 ) -> Result<Option<Router<AppState>>, AnyError> {
   use trailbase_wasm_runtime_host::Error as WasmError;
   use trailbase_wasm_runtime_host::exports::trailbase::runtime::init_endpoint::MethodType;
 
   let init_result = runtime
+    .read()
+    .await
     .call(async |instance| {
       return instance.call_init().await;
     })
@@ -95,6 +100,8 @@ pub(crate) async fn install_routes_and_jobs(
 
         return async move {
           runtime
+            .read()
+            .await
             .call(async move |instance| -> Result<(), WasmError> {
               let uri =
                 hyper::http::Uri::from_str(&format!("http://__job/?name={}", urlencode(&name)))
@@ -150,6 +157,8 @@ pub(crate) async fn install_routes_and_jobs(
         );
 
         let result = runtime
+          .read()
+          .await
           .call(
             async move |instance| -> Result<axum::response::Response, WasmError> {
               let (mut parts, body) = req.into_parts();

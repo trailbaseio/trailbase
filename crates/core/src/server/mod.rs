@@ -213,16 +213,23 @@ impl Server {
     #[cfg(unix)]
     {
       let state = self.state.clone();
-      tokio::spawn(async move {
-        // An infinite stream of hangup signals.
-        let mut stream = signal::unix::signal(signal::unix::SignalKind::hangup()).expect("startup");
 
+      // An infinite stream of hangup signals.
+      let mut stream = signal::unix::signal(signal::unix::SignalKind::hangup()).expect("startup");
+
+      tokio::spawn(async move {
         loop {
           stream.recv().await;
 
-          // TODO: Re-load JS/TS.
-          // TODO: Re-load WASM.
-          info!("Received SIGHUP: re-apply migations then re-load config.");
+          info!(
+            "Received SIGHUP: reloading WASM components (dev), re-apply db migrations, and finally re-load config."
+          );
+
+          if state.dev_mode() {
+            if let Err(err) = state.reload_wasm_runtimes().await {
+              warn!("Reloading WASM failed: {err}");
+            }
+          }
 
           // Re-apply migrations. This needs to happen before reloading the config, which is
           // consistent with the startup order. Otherwise, we may validate a configuration
@@ -230,7 +237,7 @@ impl Server {
           let user_migrations_path = state.data_dir().migrations_path();
           match state
             .conn()
-            .call(move |conn: &mut rusqlite::Connection| {
+            .call(|conn: &mut rusqlite::Connection| {
               return crate::migrations::apply_main_migrations(conn, Some(user_migrations_path))
                 .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
             })

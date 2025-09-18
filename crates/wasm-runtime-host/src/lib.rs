@@ -362,6 +362,9 @@ impl trailbase::runtime::host_endpoint::Host for State {
 }
 
 pub struct Runtime {
+  /// Path to original .wasm component file.
+  pub component_path: std::path::PathBuf,
+
   // Shared sender.
   shared_sender: kanal::AsyncSender<Message>,
   threads: Vec<(std::thread::JoinHandle<()>, kanal::AsyncSender<Message>)>,
@@ -397,13 +400,21 @@ fn build_config(cache: Option<wasmtime::Cache>) -> Config {
   return config;
 }
 
+#[derive(Clone, Default, Debug)]
+pub struct RuntimeOptions {
+  /// Number of threads the runtime will schedule on.
+  pub n_threads: Option<usize>,
+
+  /// Optional file-system sandbox root for r/o file access.
+  pub fs_root_path: Option<std::path::PathBuf>,
+}
+
 impl Runtime {
   pub fn new(
-    n_threads: usize,
     wasm_source_file: std::path::PathBuf,
     conn: trailbase_sqlite::Connection,
     kv_store: KvStore,
-    fs_root_path: Option<std::path::PathBuf>,
+    opts: RuntimeOptions,
   ) -> Result<Self, Error> {
     let engine = Engine::new(&build_config(Some(wasmtime::Cache::new(
       wasmtime::CacheConfig::default(),
@@ -448,6 +459,11 @@ impl Runtime {
       linker
     };
 
+    let n_threads = opts
+      .n_threads
+      .or(std::thread::available_parallelism().ok().map(|n| n.get()))
+      .unwrap_or(1);
+
     log::info!("Starting WASM runtime with {n_threads} threads.");
 
     let (shared_sender, shared_receiver) = kanal::unbounded_async::<Message>();
@@ -463,7 +479,7 @@ impl Runtime {
 
         let conn = conn.clone();
         let kv_store = kv_store.clone();
-        let fs_root_path = fs_root_path.clone();
+        let fs_root_path = opts.fs_root_path.clone();
 
         let handle = std::thread::Builder::new()
           .name(format!("wasm-runtime-{index}"))
@@ -500,6 +516,7 @@ impl Runtime {
       .collect::<Result<Vec<_>, Error>>()?;
 
     return Ok(Self {
+      component_path: wasm_source_file,
       shared_sender,
       threads,
     });
@@ -790,11 +807,13 @@ mod tests {
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
     let kv_store = KvStore::new();
     let runtime = Runtime::new(
-      2,
       "../../client/testfixture/wasm/wasm_rust_guest_testfixture.wasm".into(),
       conn.clone(),
       kv_store,
-      None,
+      RuntimeOptions {
+        n_threads: Some(2),
+        ..Default::default()
+      },
     )
     .unwrap();
 
@@ -831,11 +850,13 @@ mod tests {
     let kv_store = KvStore::new();
     let runtime = Arc::new(
       Runtime::new(
-        2,
         "../../client/testfixture/wasm/wasm_rust_guest_testfixture.wasm".into(),
         conn.clone(),
         kv_store,
-        None,
+        RuntimeOptions {
+          n_threads: Some(2),
+          ..Default::default()
+        },
       )
       .unwrap(),
     );

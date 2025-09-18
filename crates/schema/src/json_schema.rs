@@ -74,7 +74,7 @@ pub fn build_json_schema_expanded(
                   return Err(JsonSchemaError::NotFound(name.to_string()));
                 };
 
-                let Some(ref schema_obj) = schema.as_object() else {
+                let Some(schema_obj) = schema.as_object() else {
                   return Err(JsonSchemaError::Other("expected object".to_string()));
                 };
 
