@@ -111,7 +111,7 @@ function AclForm(props: {
           >
             {(key, index) => (
               <div
-                class="col-span-1 ml-1 text-sm [writing-mode:vertical-rl]"
+                class="col-span-1 text-sm [writing-mode:vertical-lr]"
                 style={{ "grid-column-start": index() + 2 }}
               >
                 {key}

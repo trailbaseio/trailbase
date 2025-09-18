@@ -164,7 +164,7 @@ function ColumnOptionCheckField(props: {
           </TextFieldLabel>
         </L>
 
-        <div class="flex items-center">
+        <div class={customCheckBoxStyle}>
           <TextFieldInput
             disabled={disabled()}
             type="text"
@@ -253,7 +253,7 @@ function ColumnOptionDefaultField(props: {
           </TextFieldLabel>
         </L>
 
-        <div class="flex items-center">
+        <div class={customCheckBoxStyle}>
           <TextFieldInput
             disabled={disabled()}
             type="text"
@@ -387,7 +387,7 @@ function ColumnOptionsFields(props: {
       />
 
       {/* NOT NULL constraint */}
-      <div class="flex justify-end py-1">
+      <div class={customCheckBoxStyle}>
         <Label class="text-right text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
           NOT NULL
         </Label>
@@ -403,7 +403,7 @@ function ColumnOptionsFields(props: {
 
       {/* UNIQUE (pk) constraint */}
       {!props.pk && (
-        <div class="flex justify-end py-1">
+        <div class={customCheckBoxStyle}>
           <Label class="text-right text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
             UNIQUE {getUnique(props.value)?.is_primary && "(PRIMARY KEY)"}
           </Label>
@@ -839,3 +839,5 @@ const presets: [string, (colName: string) => Preset][] = [
     },
   ],
 ];
+
+const customCheckBoxStyle = "flex items-center justify-end py-1 gap-2";
