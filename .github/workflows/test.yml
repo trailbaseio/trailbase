@@ -42,7 +42,9 @@ jobs:
           dotnet-version: '9.x'
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          profile: minimal
+          toolchain: 1.90.0
+          components: rustfmt, clippy
           default: true
       # - name: Setup Go
       #   uses: actions/setup-go@v5
