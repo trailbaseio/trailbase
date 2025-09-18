@@ -1,7 +1,7 @@
 // Reference: https://github.com/bytecodealliance/componentize-dotnet/tree/main/test//WasmComponentSdkTest/testapps/OciWit
 using System.Text;
 
-public static class Utilities
+public static class Fibonacci
 {
     public static int fibonacci(int num)
     {
@@ -29,26 +29,32 @@ namespace TrailbaseWorld.wit.exports.trailbase.runtime
     }
 }
 
-namespace ProxyWorld.wit.exports.wasi.http.v0_2_0
+namespace Http
 {
-    using ProxyWorld.wit.imports.wasi.http.v0_2_0;
     using static ProxyWorld.wit.imports.wasi.http.v0_2_0.ITypes;
 
-    public class IncomingHandlerImpl : IIncomingHandler
+    public interface Handler
     {
+        public static abstract void Handle(ref String output);
+    }
 
-
+    public abstract class Impl<T> : ProxyWorld.wit.exports.wasi.http.v0_2_0.IIncomingHandler where T : Handler
+    {
         public static void Handle(IncomingRequest request, ResponseOutparam responseOut)
         {
             Console.WriteLine($"http.IncomingHandler.Handle");
 
-            var fib = Utilities.fibonacci(40);
-            var content = Encoding.ASCII.GetBytes($"{fib}\n");
+            var body = "";
+            T.Handle(ref body);
+
+            Console.WriteLine($"Got {body}");
+
+            var content = Encoding.ASCII.GetBytes(body);
 
             var headers = new List<(string, byte[])> {
-                ("content-type", Encoding.ASCII.GetBytes("text/plain")),
-                ("content-length", Encoding.ASCII.GetBytes(content.Count().ToString()))
-            };
+                    ("content-type", Encoding.ASCII.GetBytes("text/plain")),
+                    ("content-length", Encoding.ASCII.GetBytes(content.Count().ToString()))
+                };
 
             SendResponse(responseOut, headers, content);
         }
@@ -71,7 +77,7 @@ namespace ProxyWorld.wit.exports.wasi.http.v0_2_0
             response.SetStatusCode(200);
             var body = response.Body();
 
-            ResponseOutparam.Set(responseOut, Result<OutgoingResponse, ErrorCode>.Ok(response));
+            ResponseOutparam.Set(responseOut, ProxyWorld.Result<OutgoingResponse, ErrorCode>.Ok(response));
             using (var stream = body.Write())
             {
                 stream.BlockingWriteAndFlush(bodyBytes);
@@ -80,4 +86,17 @@ namespace ProxyWorld.wit.exports.wasi.http.v0_2_0
             OutgoingBody.Finish(body, null);
         }
     }
+}
+
+namespace ProxyWorld.wit.exports.wasi.http.v0_2_0
+{
+    public class Handler : Http.Handler
+    {
+        public static void Handle(ref String output)
+        {
+            output = $"{Fibonacci.fibonacci(40)}\n";
+        }
+    }
+
+    public class IncomingHandlerImpl : Http.Impl<Handler>;
 }
