@@ -2,7 +2,7 @@ use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Extensions, HeaderMap, HeaderValue, Request, header};
 use axum::response::Response;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::json;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
@@ -14,6 +14,17 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::util::get_header;
+
+// NOTE: Tracing is quite sweet but also utterly decoupled. There are several moving parts.
+//
+//  * In `server/mod.rs` we install some tower/axum middleware: `tower_http::trace::TraceLayer` to
+//    install hooks for managing tracing spans, events, ... .
+//  * These hooks (in this file) are where we define *what* gets put into a trace span and what
+//    events are emitted.
+//  * Independently, we install the `SqliteLogLayer` as a tracing subscriber listening for above
+//    events, building request-response log entries and ultimately sending them to a writer task.
+//  * The writer task receives the request-response log entries writes them to the logs database.
+//  * Lastly, there's also a period task to wipe expired logs past their retention.
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 enum HttpMethod {
@@ -138,25 +149,6 @@ impl From<&str> for HttpVersion {
       _ => HttpVersion::Unknown,
     };
   }
-}
-
-// NOTE: Tracing is quite sweet but also utterly decoupled. There are several moving parts.
-//
-//  * In `server/mod.rs` we install some tower/axum middleware: `tower_http::trace::TraceLayer` to
-//    install hooks for managing tracing spans, events, ... .
-//  * These hooks (in this file) are where we define *what* gets put into a trace span and what
-//    events are emitted.
-//  * Independently, we install the `SqliteLogLayer` as a tracing subscriber listening for above
-//    events, building request-response log entries and ultimately sending them to a writer task.
-//  * The writer task receives the request-response log entries writes them to the logs database.
-//  * Lastly, there's also a period task to wipe expired logs past their retention.
-#[repr(i64)]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-enum LogType {
-  Undefined = 0,
-  AdminRequest = 1,
-  HttpRequest = 2,
-  RecordApiRequest = 3,
 }
 
 const SPAN_NAME: &str = "http_span";

@@ -42,7 +42,7 @@ jobs:
           dotnet-version: '9.x'
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.90.0
           default: true
       # - name: Setup Go
       #   uses: actions/setup-go@v5
