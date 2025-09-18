@@ -1,3 +1,10 @@
+## v0.17.3
+
+* Reload WASM components on SIGHUP in dev mode.
+* Fix JSON schema construction for schemas with nested references.
+* Small styling fixes for admin UI.
+* Update `wstd`, publish updated `trailbase-wasm` crate and update JavaScript dependencies.
+
 ## v0.17.2
 
 * PoC: release built-in Auth UI as separate WASM component. In the future we may want to unbundle the UI and allow installing it as a plugin.
