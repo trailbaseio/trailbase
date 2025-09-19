@@ -6,6 +6,7 @@ use crate::app_state::{AppState, AppStateArgs, build_objectstore};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;
+use crate::metadata::load_or_init_metadata_textproto;
 use crate::rand::generate_random_string;
 use crate::schema_metadata::SchemaMetadataCache;
 use crate::server::DataDir;
@@ -89,6 +90,8 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
 
   // Read config or write default one.
   let config = load_or_init_config_textproto(&args.data_dir, &schema_metadata).await?;
+
+  let _metadata = load_or_init_metadata_textproto(&args.data_dir).await?;
 
   debug!("Initializing JSON schemas from config");
   trailbase_schema::registry::set_user_schemas(

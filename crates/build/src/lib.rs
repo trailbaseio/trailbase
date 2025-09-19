@@ -20,6 +20,7 @@ pub fn build_protos(proto_path: impl AsRef<Path>) -> Result<()> {
   let proto_files = vec![
     PathBuf::from(format!("{path}/config.proto")),
     PathBuf::from(format!("{path}/config_api.proto")),
+    PathBuf::from(format!("{path}/metadata.proto")),
     PathBuf::from(format!("{path}/vault.proto")),
   ];
 

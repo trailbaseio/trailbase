@@ -1,0 +1,9 @@
+syntax = "proto2";
+
+package metadata;
+
+message Metadata {
+  /// Last executed version of the `trail` binary. Can be used to detect
+  /// and react to binary changes across runs.
+  optional string last_executed_version = 1;
+}
