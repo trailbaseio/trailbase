@@ -38,11 +38,11 @@ impl From<HttpError> for Response {
 }
 
 type HttpHandler = Box<
-  dyn (FnOnce(
+  dyn FnOnce(
     HttpContext,
     http::Request<wstd::http::body::IncomingBody>,
     wstd::http::server::Responder,
-  ) -> LocalBoxFuture<'static, Finished>),
+  ) -> LocalBoxFuture<'static, Finished>,
 >;
 
 pub struct HttpRoute {

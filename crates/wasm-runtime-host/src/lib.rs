@@ -26,7 +26,7 @@ use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 use wasmtime_wasi_io::IoView;
 
-use crate::exports::trailbase::runtime::init_endpoint::InitResult;
+use crate::exports::trailbase::runtime::init_endpoint::{InitArguments, InitResult};
 
 pub use trailbase_wasi_keyvalue::Store as KvStore;
 
@@ -614,38 +614,11 @@ pub struct RuntimeInstance {
   shared: Arc<SharedState>,
 }
 
-impl RuntimeInstance {
-  // pub fn new(
-  //   engine: Engine,
-  //   component: Component,
-  //   linker: Linker<State>,
-  //   shared_state: SharedState,
-  // ) -> Result<Self, Error> {
-  //   // let mut linker = Linker::<State>::new(&engine);
-  //   //
-  //   // // Adds all the default WASI implementations: clocks, random, fs, ...
-  //   // add_to_linker_async(&mut linker)?;
-  //   //
-  //   // // Adds default HTTP interfaces - incoming and outgoing.
-  //   // wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
-  //   //
-  //   // // Add default KV interfaces.
-  //   // trailbase_wasi_keyvalue::add_to_linker(&mut linker, |cx| {
-  //   //   trailbase_wasi_keyvalue::WasiKeyValue::new(&cx.kv, &mut cx.resource_table)
-  //   // })?;
-  //   //
-  //   // // Host interfaces.
-  //   // trailbase::runtime::host_endpoint::add_to_linker::<_, HasSelf<State>>(&mut linker, |s|
-  // s)?;
-  //
-  //   return Ok(Self {
-  //     engine,
-  //     component,
-  //     linker,
-  //     shared: Arc::new(shared_state),
-  //   });
-  // }
+pub struct InitArgs {
+  pub version: Option<String>,
+}
 
+impl RuntimeInstance {
   fn new_store(&self) -> Result<Store<State>, Error> {
     let mut wasi_ctx = WasiCtxBuilder::new();
     wasi_ctx.inherit_stdio();
@@ -677,14 +650,19 @@ impl RuntimeInstance {
     ));
   }
 
-  pub async fn call_init(&self) -> Result<InitResult, Error> {
+  pub async fn call_init(&self, args: InitArgs) -> Result<InitResult, Error> {
     let mut store = self.new_store()?;
     let bindings = Trailbase::instantiate_async(&mut store, &self.component, &self.linker).await?;
 
     return Ok(
       bindings
         .trailbase_runtime_init_endpoint()
-        .call_init(&mut store)
+        .call_init(
+          &mut store,
+          &InitArguments {
+            version: args.version,
+          },
+        )
         .await?,
     );
   }
@@ -819,7 +797,10 @@ mod tests {
 
     runtime
       .call(async |instance| {
-        instance.call_init().await.unwrap();
+        instance
+          .call_init(InitArgs { version: None })
+          .await
+          .unwrap();
       })
       .await
       .unwrap();

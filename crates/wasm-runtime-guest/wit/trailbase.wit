@@ -13,6 +13,10 @@ interface init-endpoint  {
     connect,
   }
 
+  record init-arguments {
+    version: option<string>,
+  }
+
   record init-result {
     /// Registered http handlers (method, path)[].
     http-handlers: list<tuple<method-type, string>>,
@@ -21,7 +25,7 @@ interface init-endpoint  {
     job-handlers: list<tuple<string, string>>,
   }
 
-  init: func() -> init-result;
+  init: func(args: init-arguments) -> init-result;
 }
 
 interface host-endpoint {

@@ -9,7 +9,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
-use trailbase_wasm_runtime_host::RuntimeOptions;
+use trailbase_wasm_runtime_host::{InitArgs, RuntimeOptions};
 
 use crate::AppState;
 use crate::User;
@@ -77,11 +77,13 @@ pub(crate) async fn install_routes_and_jobs(
   use trailbase_wasm_runtime_host::Error as WasmError;
   use trailbase_wasm_runtime_host::exports::trailbase::runtime::init_endpoint::MethodType;
 
+  let version = state.version().version_tag.clone();
+
   let init_result = runtime
     .read()
     .await
-    .call(async |instance| {
-      return instance.call_init().await;
+    .call(async move |instance| {
+      return instance.call_init(InitArgs { version }).await;
     })
     .await??;
 

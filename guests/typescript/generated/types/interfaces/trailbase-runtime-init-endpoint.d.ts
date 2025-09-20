@@ -1,5 +1,5 @@
 /** @module Interface trailbase:runtime/init-endpoint **/
-export function init(): InitResult;
+export function init(args: InitArguments): InitResult;
 /**
  * # Variants
  *
@@ -22,6 +22,9 @@ export function init(): InitResult;
  * ## `"connect"`
  */
 export type MethodType = 'get' | 'post' | 'head' | 'options' | 'patch' | 'delete' | 'put' | 'trace' | 'connect';
+export interface InitArguments {
+  version?: string,
+}
 export interface InitResult {
   /**
    * Registered http handlers (method, path)[].

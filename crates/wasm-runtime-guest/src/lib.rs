@@ -41,7 +41,7 @@ use wstd::http::server::{Finished, Responder};
 use crate::http::{HttpRoute, Method, StatusCode, empty_error_response};
 use crate::job::Job;
 
-pub use crate::wit::exports::trailbase::runtime::init_endpoint::InitResult;
+pub use crate::wit::exports::trailbase::runtime::init_endpoint::{InitArguments, InitResult};
 pub use crate::wit::trailbase::runtime::host_endpoint::thread_id;
 
 // Needed for export macro
@@ -61,7 +61,14 @@ macro_rules! export {
     };
 }
 
+#[derive(Debug)]
+pub struct Args {
+  pub version: Option<String>,
+}
+
 pub trait Guest {
+  fn init(_: Args) {}
+
   fn http_handlers() -> Vec<HttpRoute> {
     return vec![];
   }
@@ -72,7 +79,11 @@ pub trait Guest {
 }
 
 impl<T: Guest> crate::wit::exports::trailbase::runtime::init_endpoint::Guest for T {
-  fn init() -> InitResult {
+  fn init(args: InitArguments) -> InitResult {
+    T::init(Args {
+      version: args.version,
+    });
+
     return InitResult {
       http_handlers: T::http_handlers()
         .into_iter()

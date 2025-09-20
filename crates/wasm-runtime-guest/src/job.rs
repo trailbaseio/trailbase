@@ -9,7 +9,7 @@ pub enum Error {
   InvalidSpec,
 }
 
-pub type JobHandler = Box<dyn (Fn(Responder) -> LocalBoxFuture<'static, Finished>)>;
+pub type JobHandler = Box<dyn Fn(Responder) -> LocalBoxFuture<'static, Finished>>;
 
 pub struct Job {
   pub name: String,

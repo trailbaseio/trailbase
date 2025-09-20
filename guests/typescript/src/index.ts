@@ -1,5 +1,8 @@
 import { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.3";
-import type { InitResult } from "trailbase:runtime/init-endpoint";
+import type {
+  InitResult,
+  InitArguments,
+} from "trailbase:runtime/init-endpoint";
 import type { HttpHandlerInterface } from "./http";
 import type { JobHandlerInterface } from "./job";
 import { buildIncomingHttpHandler } from "./http/incoming";
@@ -18,26 +21,35 @@ export interface Config {
     ) => Promise<void>;
   };
   initEndpoint: {
-    init: () => InitResult;
+    init: (args: InitArguments) => InitResult;
   };
 }
 
-export function defineConfig(args: {
+export interface InitArgs {
+  version: string | undefined;
+}
+
+export function defineConfig(opts: {
+  init?: (args: InitArgs) => void;
   httpHandlers?: HttpHandlerInterface[];
   jobHandlers?: JobHandlerInterface[];
 }): Config {
   return {
     incomingHandler: {
-      handle: buildIncomingHttpHandler(args),
+      handle: buildIncomingHttpHandler(opts),
     },
     initEndpoint: {
-      init: function (): InitResult {
+      init: function (args: InitArguments): InitResult {
+        opts.init?.({
+          version: args.version,
+        });
+
         return {
-          httpHandlers: (args.httpHandlers ?? []).map((h) => [
+          httpHandlers: (opts.httpHandlers ?? []).map((h) => [
             h.method,
             h.path,
           ]),
-          jobHandlers: (args.jobHandlers ?? []).map((h) => [h.name, h.spec]),
+          jobHandlers: (opts.jobHandlers ?? []).map((h) => [h.name, h.spec]),
         };
       },
     },
