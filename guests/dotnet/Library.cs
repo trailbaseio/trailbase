@@ -21,7 +21,7 @@ namespace TrailbaseWorld.wit.exports.trailbase.runtime
 {
     public class InitEndpointImpl : IInitEndpoint
     {
-        public static IInitEndpoint.InitResult Init()
+        public static IInitEndpoint.InitResult Init(IInitEndpoint.InitArguments args)
         {
             Console.WriteLine("InitEndpoint.Init");
             return new IInitEndpoint.InitResult(httpHandlers: [(IInitEndpoint.MethodType.GET, "/fibonacci")], jobHandlers: []);
