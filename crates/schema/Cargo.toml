@@ -22,6 +22,7 @@ rusqlite = { workspace = true }
 schemars = "1.0.0"
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "1.0.122"
+serde-value = "0.7.0"
 sqlite3-parser = "0.15.0"
 thiserror = "2.0.12"
 tokio = { workspace = true }

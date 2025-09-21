@@ -50,6 +50,11 @@ record_apis: [{
   table_name: "comment"
   acl_world: [READ]
   expand: ["author", "post"]
+}, {
+  name: "file_upload_table"
+  table_name: "file_upload_table"
+  acl_world: [CREATE, READ, DELETE]
+  acl_authenticated: [CREATE, READ, UPDATE, DELETE]
 }]
 schemas: [{
   name: "simple_schema"

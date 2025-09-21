@@ -20,6 +20,7 @@ pub struct FileUploadInput {
   pub content_type: Option<String>,
 
   /// The file's data
+  #[serde(deserialize_with = "deserialize_data")]
   pub data: Vec<u8>,
 }
 
@@ -87,3 +88,26 @@ impl FileUpload {
 
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct FileUploads(pub Vec<FileUpload>);
+
+fn deserialize_data<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+where
+  D: serde::de::Deserializer<'de>,
+{
+  use base64::prelude::*;
+  use serde::de::{Error, IntoDeserializer};
+  use serde_value::Value;
+
+  let value = Value::deserialize(deserializer)?;
+  match value {
+    Value::String(ref s) => {
+      if let Ok(bytes) = BASE64_URL_SAFE.decode(s) {
+        return Ok(bytes);
+      }
+      if let Ok(bytes) = BASE64_STANDARD.decode(s) {
+        return Ok(bytes);
+      }
+      Vec::<u8>::deserialize(value.into_deserializer()).map_err(|e| Error::custom(e))
+    }
+    _ => Vec::<u8>::deserialize(value.into_deserializer()).map_err(|e| Error::custom(e)),
+  }
+}

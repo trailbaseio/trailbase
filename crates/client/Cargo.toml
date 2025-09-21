@@ -12,6 +12,7 @@ exclude = [
 ]
 
 [dependencies]
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 eventsource-stream = { version = "0.2.3", features = [] }
 futures-lite = "2.6.1"
 jsonwebtoken = { version = "9.3.0", default-features = false }

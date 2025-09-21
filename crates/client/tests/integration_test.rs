@@ -390,6 +390,100 @@ async fn subscription_test() {
   }
 }
 
+async fn file_upload_base64_test() {
+  use base64::prelude::*;
+
+  let client = connect().await;
+  let api = client.records("file_upload_table");
+  let http_client = reqwest::Client::new();
+
+  let test_bytes1 = vec![0, 1, 2, 3, 4, 5];
+  let test_bytes2 = vec![42, 5, 42, 5];
+  let test_bytes3 = vec![255, 128, 64, 32];
+
+  // Test creating a record with multiple base64 encoded files
+  let record_id = api
+    .create(json!({
+      "name": "Base64 File Upload Test",
+      "single_file": {
+        "name": "single_test",
+        "filename": "test1.bin",
+        "content_type": "application/octet-stream",
+        "data": BASE64_URL_SAFE.encode(&test_bytes1)
+      },
+      "multiple_files": [
+        {
+          "name": "multi_test_1",
+          "filename": "test2.bin",
+          "content_type": "application/octet-stream",
+          "data": BASE64_URL_SAFE.encode(&test_bytes2)
+        },
+        {
+          "name": "multi_test_2",
+          "filename": "test3.bin",
+          "content_type": "application/octet-stream",
+          "data": BASE64_STANDARD.encode(&test_bytes3)
+        }
+      ]
+    }))
+    .await
+    .unwrap();
+
+  // Read the record back to verify file metadata was stored correctly
+  let record: serde_json::Value = api.read(&record_id).await.unwrap();
+
+  // Verify single file metadata
+  let single_file = record.get("single_file").unwrap();
+  assert_eq!(single_file.get("filename").unwrap(), "test1.bin");
+  assert_eq!(
+    single_file.get("content_type").unwrap(),
+    "application/octet-stream"
+  );
+
+  // Verify multiple files metadata
+  let multiple_files = record.get("multiple_files").unwrap().as_array().unwrap();
+  assert_eq!(multiple_files.len(), 2);
+  assert_eq!(multiple_files[0].get("filename").unwrap(), "test2.bin");
+  assert_eq!(multiple_files[1].get("filename").unwrap(), "test3.bin");
+
+  // Test file download endpoints to verify actual file content
+  let single_file_response = http_client
+    .get(&format!(
+      "http://127.0.0.1:{}/api/records/v1/file_upload_table/{}/file/single_file",
+      PORT, record_id
+    ))
+    .send()
+    .await
+    .unwrap();
+  let single_file_bytes = single_file_response.bytes().await.unwrap();
+  assert_eq!(single_file_bytes.to_vec(), test_bytes1);
+
+  let multi_file_1_response = http_client
+    .get(&format!(
+      "http://127.0.0.1:{}/api/records/v1/file_upload_table/{}/files/multiple_files/0",
+      PORT, record_id
+    ))
+    .send()
+    .await
+    .unwrap();
+  let multi_file_1_bytes = multi_file_1_response.bytes().await.unwrap();
+  assert_eq!(multi_file_1_bytes.to_vec(), test_bytes2);
+
+  let multi_file_2_response = http_client
+    .get(&format!(
+      "http://127.0.0.1:{}/api/records/v1/file_upload_table/{}/files/multiple_files/1",
+      PORT, record_id
+    ))
+    .send()
+    .await
+    .unwrap();
+  let multi_file_2_bytes = multi_file_2_response.bytes().await.unwrap();
+  assert_eq!(multi_file_2_bytes.to_vec(), test_bytes3);
+
+  // Clean up
+  api.delete(&record_id).await.unwrap();
+}
+
 #[test]
 fn integration_test() {
   let _server = start_server().unwrap();
@@ -410,6 +504,9 @@ fn integration_test() {
 
   runtime.block_on(subscription_test());
   println!("Ran subscription tests");
+
+  runtime.block_on(file_upload_base64_test());
+  println!("Ran file upload base64 tests");
 }
 
 fn now() -> u64 {

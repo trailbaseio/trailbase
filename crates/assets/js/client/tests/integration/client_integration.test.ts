@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 import { expect, test } from "vitest";
-import { initClient, urlSafeBase64Encode } from "../../src/index";
+import {
+  initClient,
+  urlSafeBase64Encode,
+  filePath,
+  filesPath,
+} from "../../src/index";
 import type { Client, Event } from "../../src/index";
 import { status } from "http-status";
 import { v7 as uuidv7, parse as uuidParse } from "uuid";
@@ -421,4 +426,78 @@ test("realtime subscribe table tests", async () => {
   expect(events[0]["Insert"]["text_not_null"]).equals(createMessage);
   expect(events[1]["Update"]["text_not_null"]).equals(updatedMessage);
   expect(events[2]["Delete"]["text_not_null"]).equals(updatedMessage);
+});
+
+test("file upload base64 tests", async () => {
+  const client = await connect();
+  const api = client.records("file_upload_table");
+
+  const testBytes1 = new Uint8Array([0, 1, 2, 3, 4, 5]);
+  const testBytes2 = new Uint8Array([42, 5, 42, 5]);
+  const testBytes3 = new Uint8Array([255, 128, 64, 32]);
+
+  // Test creating a record with multiple base64 encoded files
+  const recordId = await api.create({
+    name: "Base64 File Upload Test",
+    single_file: {
+      name: "single_test",
+      filename: "test1.bin",
+      content_type: "application/octet-stream",
+      data: urlSafeBase64Encode(String.fromCharCode(...testBytes1)),
+    },
+    multiple_files: [
+      {
+        name: "multi_test_1",
+        filename: "test2.bin",
+        content_type: "application/octet-stream",
+        data: urlSafeBase64Encode(String.fromCharCode(...testBytes2)),
+      },
+      {
+        name: "multi_test_2",
+        filename: "test3.bin",
+        content_type: "application/octet-stream",
+        data: btoa(String.fromCharCode(...testBytes3)), // Standard base64
+      },
+    ],
+  });
+
+  // Read the record back to verify file metadata was stored correctly
+  const record = await api.read(recordId);
+
+  // Verify single file metadata
+  expect(record.single_file.filename).toBe("test1.bin");
+  expect(record.single_file.content_type).toBe("application/octet-stream");
+
+  // Verify multiple files metadata
+  expect(record.multiple_files.length).toBe(2);
+  expect(record.multiple_files[0].filename).toBe("test2.bin");
+  expect(record.multiple_files[1].filename).toBe("test3.bin");
+
+  // Test file download endpoints to verify actual file content
+  const singleFileResponse = await fetch(
+    `http://${ADDRESS}${filePath("file_upload_table", recordId, "single_file")}`,
+  );
+  const singleFileBytes = new Uint8Array(
+    await singleFileResponse.arrayBuffer(),
+  );
+  expect(Array.from(singleFileBytes)).toEqual(Array.from(testBytes1));
+
+  const multiFile1Response = await fetch(
+    `http://${ADDRESS}${filesPath("file_upload_table", recordId, "multiple_files", 0)}`,
+  );
+  const multiFile1Bytes = new Uint8Array(
+    await multiFile1Response.arrayBuffer(),
+  );
+  expect(Array.from(multiFile1Bytes)).toEqual(Array.from(testBytes2));
+
+  const multiFile2Response = await fetch(
+    `http://${ADDRESS}${filesPath("file_upload_table", recordId, "multiple_files", 1)}`,
+  );
+  const multiFile2Bytes = new Uint8Array(
+    await multiFile2Response.arrayBuffer(),
+  );
+  expect(Array.from(multiFile2Bytes)).toEqual(Array.from(testBytes3));
+
+  // Clean up
+  await api.delete(recordId);
 });
