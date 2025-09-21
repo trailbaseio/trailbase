@@ -24,4 +24,5 @@ tracing = "0.1.41"
 url = "2.5.4"
 
 [dev-dependencies]
+base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }

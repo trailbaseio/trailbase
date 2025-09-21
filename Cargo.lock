@@ -8008,6 +8008,7 @@ dependencies = [
 name = "trailbase-client"
 version = "0.5.0"
 dependencies = [
+ "base64",
  "eventsource-stream",
  "futures-lite",
  "jsonwebtoken",
