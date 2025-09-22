@@ -77,6 +77,12 @@ pub struct GitVersion {
   pub commits_since: Option<u16>,
 }
 
+impl GitVersion {
+  pub fn tag(&self) -> String {
+    return format!("v{}.{}.{}", self.major, self.minor, self.patch);
+  }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct VersionInfo {
   /// Name of the crate as defined in its Cargo.toml.

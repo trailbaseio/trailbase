@@ -5,8 +5,14 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
+use itertools::Itertools;
+use minijinja::{Environment, context};
 use serde::Deserialize;
-use std::rc::Rc;
+use std::{
+  collections::HashMap,
+  io::{Read, Seek},
+  rc::Rc,
+};
 use tokio::{fs, io::AsyncWriteExt};
 use trailbase::{
   DataDir, Server, ServerOptions,
@@ -16,7 +22,8 @@ use trailbase::{
 use utoipa::OpenApi;
 
 use trailbase_cli::{
-  AdminSubCommands, DefaultCommandLineArgs, OpenApiSubCommands, SubCommands, UserSubCommands,
+  AdminSubCommands, ComponentReference, ComponentSubCommands, DefaultCommandLineArgs,
+  OpenApiSubCommands, SubCommands, UserSubCommands,
 };
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -246,12 +253,87 @@ async fn async_main() -> Result<(), BoxError> {
         }
       };
     }
+    Some(SubCommands::Components { cmd }) => {
+      init_logger(false);
+
+      match cmd {
+        Some(ComponentSubCommands::Add { reference }) => {
+          match ComponentReference::try_from(reference.as_str())? {
+            ComponentReference::Name(name) => {
+              let component_def = find_component(&name)?;
+
+              let version = trailbase_build::get_version_info!();
+              let Some(git_version) = version.git_version() else {
+                return Err("missing version".into());
+              };
+
+              let env = Environment::empty();
+              let url_str = env
+                .template_from_named_str("url", &component_def.url_template)?
+                .render(context! {
+                    release => git_version.tag(),
+                })?;
+              let url = url::Url::parse(&url_str)?;
+
+              log::info!("Downloading {url}");
+
+              let bytes = reqwest::get(url.clone()).await?.bytes().await?;
+              install_wasm_component(&data_dir, url.path(), std::io::Cursor::new(bytes)).await?;
+            }
+            ComponentReference::Url(url) => {
+              log::info!("Downloading {url}");
+              let bytes = reqwest::get(url.clone()).await?.bytes().await?;
+              install_wasm_component(&data_dir, url.path(), std::io::Cursor::new(bytes)).await?;
+            }
+            ComponentReference::Path(path) => {
+              let bytes = std::fs::read(&path)?;
+              install_wasm_component(&data_dir, &path, std::io::Cursor::new(bytes)).await?;
+            }
+          }
+        }
+        Some(ComponentSubCommands::Remove { reference }) => {
+          match ComponentReference::try_from(reference.as_str())? {
+            ComponentReference::Url(_) => {
+              return Err("URLs not supported for component removal".into());
+            }
+            ComponentReference::Name(name) => {
+              let component_def = find_component(&name)?;
+              let wasm_dir = data_dir.root().join("wasm");
+
+              let filenames: Vec<_> = component_def
+                .wasm_filenames
+                .into_iter()
+                .map(|f| wasm_dir.join(f))
+                .collect();
+
+              for filename in &filenames {
+                std::fs::remove_file(filename)?;
+              }
+              println!("Removed: {filenames:?}");
+            }
+            ComponentReference::Path(path) => {
+              std::fs::remove_file(&path)?;
+
+              println!("Removed: {path:?}");
+            }
+          }
+        }
+        Some(ComponentSubCommands::List) => {
+          println!("Components:\n\n{}", repo().keys().join("\n"));
+        }
+        _ => {
+          DefaultCommandLineArgs::command()
+            .find_subcommand_mut("component")
+            .map(|cmd| cmd.print_help());
+        }
+      };
+    }
     None => {
       let _ = DefaultCommandLineArgs::command().print_help();
     }
   }
 
-  Ok(())
+  return Ok(());
 }
 
 fn to_user_reference(user: String) -> api::cli::UserReference {
@@ -259,6 +341,81 @@ fn to_user_reference(user: String) -> api::cli::UserReference {
     return api::cli::UserReference::Email(user);
   }
   return api::cli::UserReference::Id(user);
+}
+
+#[derive(Debug, Clone)]
+struct ComponentDefinition {
+  url_template: String,
+  wasm_filenames: Vec<String>,
+}
+
+fn repo() -> HashMap<String, ComponentDefinition> {
+  return HashMap::from([
+        ("trailbase/auth_ui".to_string(), ComponentDefinition {
+            url_template: "https://github.com/trailbaseio/trailbase/releases/download/{{ release }}/trailbase_{{ release }}_wasm_auth_ui.zip".to_string(),
+            wasm_filenames: vec!["auth_ui_component.wasm".to_string()],
+        })
+    ]);
+}
+
+fn find_component(name: &str) -> Result<ComponentDefinition, BoxError> {
+  return repo()
+    .get(name)
+    .cloned()
+    .ok_or_else(|| "component not found".into());
+}
+
+async fn install_wasm_component(
+  data_dir: &DataDir,
+  path: impl AsRef<std::path::Path>,
+  mut reader: impl Read + Seek,
+) -> Result<(), BoxError> {
+  let path = path.as_ref();
+  let wasm_dir = data_dir.root().join("wasm");
+
+  match path
+    .extension()
+    .map(|p| p.to_string_lossy().to_string())
+    .as_deref()
+  {
+    Some("zip") => {
+      let mut archive = zip::ZipArchive::new(reader)?;
+
+      for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        if let Some(path) = file.enclosed_name() {
+          if path.extension().and_then(|e| e.to_str()) != Some("wasm") {
+            continue;
+          }
+
+          let Some(filename) = path.file_name().and_then(|e| e.to_str()) else {
+            return Err(format!("Invalid filename: {:?}", file.name()).into());
+          };
+          let component_file_path = wasm_dir.join(filename);
+          let mut component_file = std::fs::File::create(&component_file_path)?;
+          std::io::copy(&mut file, &mut component_file)?;
+
+          println!("Added: {component_file_path:?}");
+        }
+      }
+    }
+    Some("wasm") => {
+      let Some(filename) = path.file_name().and_then(|e| e.to_str()) else {
+        return Err(format!("Invalid filename: {path:?}").into());
+      };
+
+      let component_file_path = wasm_dir.join(filename);
+      let mut component_file = std::fs::File::create(&component_file_path)?;
+      std::io::copy(&mut reader, &mut component_file)?;
+
+      println!("Added: {component_file_path:?}");
+    }
+    _ => {
+      return Err("unexpected format".into());
+    }
+  }
+
+  return Ok(());
 }
 
 fn main() -> Result<(), BoxError> {

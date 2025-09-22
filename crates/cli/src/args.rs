@@ -77,6 +77,11 @@ pub enum SubCommands {
   },
   /// Programmatically send emails.
   Email(EmailArgs),
+  /// Manage WASM components
+  Components {
+    #[command(subcommand)]
+    cmd: Option<ComponentSubCommands>,
+  },
 }
 
 #[derive(Args, Clone, Debug)]
@@ -219,4 +224,57 @@ pub enum UserSubCommands {
     /// User in question, either email or UUID.
     user: String,
   },
+}
+
+#[derive(Clone, Debug)]
+pub enum ComponentReference {
+  Path(std::path::PathBuf),
+  Url(url::Url),
+  Name(String),
+}
+
+impl TryFrom<&str> for ComponentReference {
+  type Error = String;
+
+  fn try_from(reference: &str) -> Result<Self, Self::Error> {
+    if let Ok(url) = url::Url::parse(reference) {
+      if url.scheme() != "https" {
+        return Err("Only HTTPS supported".into());
+      }
+
+      return Ok(ComponentReference::Url(url));
+    }
+
+    let path = std::path::PathBuf::from(reference);
+    if let Some(ext) = path.extension() {
+      match &*ext.to_string_lossy() {
+        "wasm" | "zip" => {
+          return Ok(ComponentReference::Path(path));
+        }
+        _ => {}
+      }
+    }
+
+    if reference
+      .chars()
+      .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '/')
+    {
+      return Ok(ComponentReference::Name(reference.into()));
+    }
+
+    return Err("Failed to parse component reference".into());
+  }
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum ComponentSubCommands {
+  /// Add new WASM component.
+  Add {
+    /// File-system path or url for wasm component to install.
+    reference: String,
+  },
+  /// Remove/delete WASM component.
+  Remove { reference: String },
+  /// List first-party components.
+  List,
 }

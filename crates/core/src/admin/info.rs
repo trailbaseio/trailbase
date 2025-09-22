@@ -1,6 +1,5 @@
 use axum::{Json, extract::State};
 use serde::Serialize;
-use trailbase_build::version::GitVersion;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -26,20 +25,9 @@ pub async fn info_handler(State(state): State<AppState>) -> Result<Json<InfoResp
 
 fn build_info_response(state: &AppState) -> InfoResponse {
   let version_info = state.version();
-  let git_version = version_info.git_version().map(
-    |GitVersion {
-       major,
-       minor,
-       patch,
-       commits_since,
-       ..
-     }| {
-      (
-        format!("v{major}.{minor}.{patch}"),
-        commits_since.unwrap_or(0) as usize,
-      )
-    },
-  );
+  let git_version = version_info
+    .git_version()
+    .map(|v| (v.tag(), v.commits_since.unwrap_or(0) as usize));
 
   return InfoResponse {
     compiler: version_info.host_compiler,
