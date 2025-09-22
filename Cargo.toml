@@ -98,7 +98,7 @@ trailbase-wasm-common = { path = "crates/wasm-runtime-common", version = "0.1.0"
 trailbase-wasm-runtime-host = { path = "crates/wasm-runtime-host", version = "0.1.0" }
 ts-rs = { version = "11", features = ["uuid-impl", "serde-json-impl"] }
 uuid = { version = "1", default-features = false, features = ["std", "v4", "v7", "serde"] }
-wasmtime = "36.0.1"
-wasmtime-wasi = { version = "36.0.1", default-features = false, features = [] }
-wasmtime-wasi-http = "36.0.1"
-wasmtime-wasi-io = "36.0.1"
+wasmtime = "37.0.0"
+wasmtime-wasi = { version = "37.0.0", default-features = false, features = [] }
+wasmtime-wasi-http = "37.0.0"
+wasmtime-wasi-io = "37.0.0"
