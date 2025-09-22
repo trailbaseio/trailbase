@@ -1,10 +1,16 @@
-
+# Deployment-specific directories:
 backups/
 data/
 secrets/
 uploads/
+wasm/
+scripts.delme/
 
-!migrations/
+metadata.textproto
 
-trailbase.js
+# Runtime files, will be overriden by `trail`.
 trailbase.d.ts
+trailbase.js
+
+# Any potential MaxMind GeoIP dbs.
+*.mmdb

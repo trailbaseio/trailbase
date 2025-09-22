@@ -105,6 +105,8 @@ uploads/
 wasm/
 scripts/
 
+metadata.textproto
+
 # Runtime files, will be overriden by `trail`.
 trailbase.d.ts
 trailbase.js

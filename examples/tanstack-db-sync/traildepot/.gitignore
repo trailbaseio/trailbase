@@ -3,6 +3,14 @@ backups/
 data/
 secrets/
 uploads/
+wasm/
+scripts.delme/
 
-trailbase.js
+metadata.textproto
+
+# Runtime files, will be overriden by `trail`.
 trailbase.d.ts
+trailbase.js
+
+# Any potential MaxMind GeoIP dbs.
+*.mmdb
