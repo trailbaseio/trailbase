@@ -36,9 +36,9 @@ mod bytes_or_base64 {
   // means to only implement for test across crate boundaries.
   pub fn serialize<S: Serializer>(v: &Vec<u8>, s: S) -> Result<S::Ok, S::Error> {
     return if s.is_human_readable() {
-      String::serialize(&BASE64_URL_SAFE.encode(&v), s)
+      String::serialize(&BASE64_URL_SAFE.encode(v), s)
     } else {
-      Vec::<u8>::serialize(&v, s)
+      Vec::<u8>::serialize(v, s)
     };
   }
 
@@ -52,7 +52,7 @@ mod bytes_or_base64 {
     return BASE64_URL_SAFE
       .decode(&str)
       .or_else(|_| BASE64_STANDARD.decode(&str))
-      .map_err(|e| serde::de::Error::custom(e));
+      .map_err(serde::de::Error::custom);
   }
 }
 

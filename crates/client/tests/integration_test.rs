@@ -1,6 +1,8 @@
+use base64::prelude::*;
 use futures_lite::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use temp_dir::TempDir;
 use trailbase_client::{
   Client, CompareOp, DbEvent, Filter, ListArguments, ListResponse, Pagination, ReadArguments,
 };
@@ -390,12 +392,9 @@ async fn subscription_test() {
   }
 }
 
-async fn file_upload_base64_test() {
-  use base64::prelude::*;
-
+async fn file_upload_json_base64_test() {
   let client = connect().await;
   let api = client.records("file_upload_table");
-  let http_client = reqwest::Client::new();
 
   let test_bytes1 = vec![0, 1, 2, 3, 4, 5];
   let test_bytes2 = vec![42, 5, 42, 5];
@@ -447,10 +446,10 @@ async fn file_upload_base64_test() {
   assert_eq!(multiple_files[1].get("filename").unwrap(), "test3.bin");
 
   // Test file download endpoints to verify actual file content
+  let http_client = reqwest::Client::new();
   let single_file_response = http_client
     .get(&format!(
-      "http://127.0.0.1:{}/api/records/v1/file_upload_table/{}/file/single_file",
-      PORT, record_id
+      "http://127.0.0.1:{PORT}/api/records/v1/file_upload_table/{record_id}/file/single_file",
     ))
     .send()
     .await
@@ -460,8 +459,7 @@ async fn file_upload_base64_test() {
 
   let multi_file_1_response = http_client
     .get(&format!(
-      "http://127.0.0.1:{}/api/records/v1/file_upload_table/{}/files/multiple_files/0",
-      PORT, record_id
+      "http://127.0.0.1:{PORT}/api/records/v1/file_upload_table/{record_id}/files/multiple_files/0",
     ))
     .send()
     .await
@@ -471,8 +469,7 @@ async fn file_upload_base64_test() {
 
   let multi_file_2_response = http_client
     .get(&format!(
-      "http://127.0.0.1:{}/api/records/v1/file_upload_table/{}/files/multiple_files/1",
-      PORT, record_id
+      "http://127.0.0.1:{PORT}/api/records/v1/file_upload_table/{record_id}/files/multiple_files/1",
     ))
     .send()
     .await
@@ -482,6 +479,55 @@ async fn file_upload_base64_test() {
 
   // Clean up
   api.delete(&record_id).await.unwrap();
+}
+
+async fn file_upload_multipart_form_test() {
+  let d = TempDir::new().unwrap();
+  let f = d.child("test.text");
+  let contents = b"contents";
+  std::fs::write(&f, contents).unwrap();
+
+  let client = connect().await;
+  let api = client.records("file_upload_table");
+  let http_client = reqwest::Client::new();
+  let form = reqwest::multipart::Form::new()
+    .text("name", "Base64 Multipart-Form Test")
+    .file("single_file", f.as_path())
+    .await
+    .unwrap();
+
+  #[derive(Deserialize)]
+  pub struct RecordIdResponse {
+    pub ids: Vec<String>,
+  }
+
+  let response: RecordIdResponse = http_client
+    .post(&format!(
+      "http://127.0.0.1:{PORT}/api/records/v1/file_upload_table"
+    ))
+    .multipart(form)
+    .send()
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+
+  let record_id = &response.ids[0];
+
+  let single_file_response = http_client
+    .get(&format!(
+      "http://127.0.0.1:{PORT}/api/records/v1/file_upload_table/{record_id}/file/single_file",
+    ))
+    .send()
+    .await
+    .unwrap();
+
+  let single_file_bytes = single_file_response.bytes().await.unwrap();
+  assert_eq!(single_file_bytes.to_vec(), contents);
+
+  // Clean up
+  api.delete(record_id).await.unwrap();
 }
 
 #[test]
@@ -505,8 +551,11 @@ fn integration_test() {
   runtime.block_on(subscription_test());
   println!("Ran subscription tests");
 
-  runtime.block_on(file_upload_base64_test());
-  println!("Ran file upload base64 tests");
+  runtime.block_on(file_upload_json_base64_test());
+  println!("Ran file upload JSON base64 tests");
+
+  runtime.block_on(file_upload_multipart_form_test());
+  println!("Ran file upload multipart form tests");
 }
 
 fn now() -> u64 {
