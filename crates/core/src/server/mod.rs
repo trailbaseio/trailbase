@@ -118,9 +118,9 @@ impl Server {
   ) -> Result<Self, InitError> {
     let version_info = trailbase_build::get_version_info!();
     info!(
-      "Initializing server version: {hash} {date}",
-      hash = version_info.commit_hash.unwrap_or_default(),
-      date = version_info.commit_date.unwrap_or_default(),
+      "Initializing server version: {version} {date}",
+      version = version_info.git_version_tag.unwrap_or_default(),
+      date = version_info.git_commit_date.unwrap_or_default(),
     );
 
     validate_path(opts.public_dir.as_ref())?;

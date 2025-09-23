@@ -214,7 +214,7 @@ function ServerSettings(props: CommonProps) {
                     <a
                       href={`https://github.com/trailbaseio/trailbase/commit/${versionInfo.data?.commit_hash}`}
                     >
-                      {versionInfo.data?.commit_hash}
+                      {versionInfo.data?.commit_hash?.substring(0, 10)}
                     </a>
                   </span>
 

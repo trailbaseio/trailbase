@@ -1,38 +1,52 @@
 use axum::{Json, extract::State};
 use serde::Serialize;
+use trailbase_build::version::GitVersion;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 
-#[derive(Debug, Default, Serialize, TS)]
+#[derive(Clone, Debug, Default, Serialize, TS)]
 #[ts(export)]
 pub struct InfoResponse {
-  version: String,
+  /// Build metadata.
   compiler: Option<String>,
+  /// Git metadata
   commit_hash: Option<String>,
   commit_date: Option<String>,
-  version_tag: Option<String>,
+  git_version: Option<(String, usize)>,
+  /// Runtime metadata.
   threads: usize,
   command_line_arguments: Option<Vec<String>>,
 }
 
 pub async fn info_handler(State(state): State<AppState>) -> Result<Json<InfoResponse>, Error> {
+  return Ok(Json(build_info_response(&state)));
+}
+
+fn build_info_response(state: &AppState) -> InfoResponse {
   let version_info = state.version();
-  let version = format!(
-    "{major}.{minor}.{patch}",
-    major = version_info.major,
-    minor = version_info.minor,
-    patch = version_info.patch
+  let git_version = version_info.git_version().map(
+    |GitVersion {
+       major,
+       minor,
+       patch,
+       commits_since,
+       ..
+     }| {
+      (
+        format!("v{major}.{minor}.{patch}"),
+        commits_since.unwrap_or(0) as usize,
+      )
+    },
   );
 
-  return Ok(Json(InfoResponse {
-    version,
+  return InfoResponse {
     compiler: version_info.host_compiler,
-    commit_hash: version_info.commit_hash,
-    commit_date: version_info.commit_date,
-    version_tag: version_info.version_tag,
+    commit_hash: version_info.git_commit_hash,
+    commit_date: version_info.git_commit_date,
+    git_version,
     threads: std::thread::available_parallelism().map_or(0, |v| v.into()),
     command_line_arguments: Some(std::env::args().collect()),
-  }));
+  };
 }

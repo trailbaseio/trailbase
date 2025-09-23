@@ -24,7 +24,7 @@ pub mod proto {
     pub fn new_with_custom_defaults() -> Self {
       let version_info = trailbase_build::get_version_info!();
       return Self {
-        last_executed_version: version_info.version_tag,
+        last_executed_version: version_info.git_version_tag,
       };
     }
 

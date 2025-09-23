@@ -77,7 +77,7 @@ pub(crate) async fn install_routes_and_jobs(
   use trailbase_wasm_runtime_host::Error as WasmError;
   use trailbase_wasm_runtime_host::exports::trailbase::runtime::init_endpoint::MethodType;
 
-  let version = state.version().version_tag.clone();
+  let version = state.version().git_version_tag.clone();
 
   let init_result = runtime
     .read()

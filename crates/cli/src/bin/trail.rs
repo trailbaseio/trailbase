@@ -52,11 +52,14 @@ async fn async_main() -> Result<(), BoxError> {
 
   if args.version {
     let version = trailbase_build::get_version_info!();
-    let tag = version.version_tag.as_deref().unwrap_or("?");
-    let hash = version.commit_hash.as_deref().unwrap_or_default().trim();
-    let date = version.commit_date.as_deref().unwrap_or_default().trim();
+    let tag = version.git_version_tag.as_deref().unwrap_or("?");
+    let date = version
+      .git_commit_date
+      .as_deref()
+      .unwrap_or_default()
+      .trim();
 
-    println!("trail {tag} ({hash} {date})");
+    println!("trail {tag} ({date})");
 
     return Ok(());
   }

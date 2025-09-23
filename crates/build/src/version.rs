@@ -7,25 +7,30 @@ use std::str;
 #[macro_export]
 macro_rules! get_version_info {
   () => {{
-    let major = std::env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
-    let minor = std::env!("CARGO_PKG_VERSION_MINOR").parse::<u8>().unwrap();
-    let patch = std::env!("CARGO_PKG_VERSION_PATCH").parse::<u16>().unwrap();
-    let crate_name = String::from(std::env!("CARGO_PKG_NAME"));
+    use std::{env, option_env};
 
-    let host_compiler = std::option_env!("RUSTC_RELEASE_CHANNEL").map(str::to_string);
-    let commit_hash = std::option_env!("GIT_HASH").map(str::to_string);
-    let commit_date = std::option_env!("GIT_COMMIT_DATE").map(str::to_string);
-    let version_tag = std::option_env!("GIT_VERSION_TAG").map(str::to_string);
+    let crate_name = env!("CARGO_PKG_NAME").to_string();
+    let major = env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
+    let minor = env!("CARGO_PKG_VERSION_MINOR").parse::<u8>().unwrap();
+    let patch = env!("CARGO_PKG_VERSION_PATCH").parse::<u16>().unwrap();
+
+    let host_compiler = option_env!("RUSTC_RELEASE_CHANNEL").map(str::to_string);
+
+    let git_commit_hash = option_env!("GIT_HASH").map(str::to_string);
+    let git_commit_date = option_env!("GIT_COMMIT_DATE").map(str::to_string);
+    let git_version_tag = option_env!("GIT_VERSION_TAG").map(str::to_string);
 
     $crate::version::VersionInfo {
-      major,
-      minor,
-      patch,
-      host_compiler,
-      commit_hash,
-      commit_date,
-      version_tag,
       crate_name,
+      crate_version: $crate::version::CrateVersion {
+        major,
+        minor,
+        patch,
+      },
+      host_compiler,
+      git_commit_hash,
+      git_commit_date,
+      git_version_tag,
     }
   }};
 }
@@ -56,64 +61,83 @@ macro_rules! setup_version_info {
   }};
 }
 
-// some code taken and adapted from RLS and cargo
-pub struct VersionInfo {
+#[derive(Clone, Debug, Default)]
+pub struct CrateVersion {
   pub major: u8,
   pub minor: u8,
   pub patch: u16,
-  pub host_compiler: Option<String>,
-  pub commit_hash: Option<String>,
-  pub commit_date: Option<String>,
-  pub version_tag: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct GitVersion {
+  pub major: u8,
+  pub minor: u8,
+  pub patch: u16,
+
+  pub commits_since: Option<u16>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct VersionInfo {
+  /// Name of the crate as defined in its Cargo.toml.
   pub crate_name: String,
+  /// Version as defined by the crate. This is different from the git version.
+  pub crate_version: CrateVersion,
+
+  /// Build metadata.
+  pub host_compiler: Option<String>,
+
+  /// Git metadata.
+
+  /// Full git commit hash.
+  pub git_commit_hash: Option<String>,
+  /// Pretty-printed git commit date.
+  pub git_commit_date: Option<String>,
+
+  /// Git description of latest "version tag", i.e. vX.Y.Z. Format:
+  ///   `vX.Y.Z-<#commits since>-<commit hash>`.
+  pub git_version_tag: Option<String>,
+}
+
+impl VersionInfo {
+  pub fn git_version(&self) -> Option<GitVersion> {
+    let version_tag = self.git_version_tag.as_ref()?;
+
+    let re =
+      regex::Regex::new(r#"v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)-(?P<since>[0-9a-z]+)"#)
+        .unwrap();
+
+    let cap = re.captures(version_tag)?;
+    return Some(GitVersion {
+      major: cap["major"].parse().ok()?,
+      minor: cap["minor"].parse().ok()?,
+      patch: cap["patch"].parse().ok()?,
+      commits_since: cap["since"].parse().ok(),
+    });
+  }
 }
 
 impl std::fmt::Display for VersionInfo {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match (self.commit_hash.as_deref(), self.commit_date.as_deref()) {
+    let v = &self.crate_version;
+
+    match (&self.git_commit_hash, &self.git_commit_date) {
       (Some(hash), Some(date)) => {
         write!(
           f,
           "{} {}.{}.{} ({} {})",
           self.crate_name,
-          self.major,
-          self.minor,
-          self.patch,
+          v.major,
+          v.minor,
+          v.patch,
           hash.trim(),
           date.trim()
         )?;
       }
       _ => {
-        write!(
-          f,
-          "{} {}.{}.{}",
-          self.crate_name, self.major, self.minor, self.patch
-        )?;
+        write!(f, "{} {}.{}.{}", self.crate_name, v.major, v.minor, v.patch)?;
       }
     }
-
-    return Ok(());
-  }
-}
-
-impl std::fmt::Debug for VersionInfo {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(
-      f,
-      "VersionInfo {{ crate_name: \"{}\", major: {}, minor: {}, patch: {}",
-      self.crate_name, self.major, self.minor, self.patch,
-    )?;
-    if let Some(ref commit_hash) = self.commit_hash {
-      write!(f, ", commit_hash: \"{}\"", commit_hash.trim(),)?;
-    }
-    if let Some(ref commit_date) = self.commit_date {
-      write!(f, ", commit_date: \"{}\"", commit_date.trim())?;
-    }
-    if let Some(ref host_compiler) = self.host_compiler {
-      write!(f, ", host_compiler: \"{}\"", host_compiler.trim())?;
-    }
-
-    write!(f, " }}")?;
 
     return Ok(());
   }
@@ -161,9 +185,7 @@ pub fn rerun_if_git_changes() -> Option<()> {
 
 #[must_use]
 pub fn get_commit_hash() -> Option<String> {
-  let mut stdout = get_output("git", &["rev-parse", "HEAD"])?;
-  stdout.truncate(10);
-  return Some(stdout);
+  return get_output("git", &["rev-parse", "HEAD"]);
 }
 
 #[must_use]
@@ -173,7 +195,7 @@ pub fn get_commit_date() -> Option<String> {
 
 #[must_use]
 pub fn get_version_tag() -> Option<String> {
-  return get_output("git", &["describe", "--tags", "--match=v*"]);
+  return get_output("git", &["describe", "--tags", "--match=v*", "--long"]);
 }
 
 #[must_use]
@@ -207,12 +229,12 @@ mod test {
   #[test]
   fn test_struct_local() {
     let vi = get_version_info!();
-    assert_eq!(vi.major, 0);
-    assert!(vi.minor >= 1);
+    assert_eq!(vi.crate_version.major, 0);
+    assert!(vi.crate_version.minor >= 1);
     assert_eq!(vi.crate_name, "trailbase-build");
     // hard to make positive tests for these since they will always change
-    assert!(vi.commit_hash.is_none());
-    assert!(vi.commit_date.is_none());
+    assert!(vi.git_commit_hash.is_none());
+    assert!(vi.git_commit_date.is_none());
 
     assert!(vi.host_compiler.is_none());
   }
@@ -225,12 +247,13 @@ mod test {
   }
 
   #[test]
-  fn test_debug_local() {
-    let vi = get_version_info!();
-    let re = regex::Regex::new(
-      r#"VersionInfo \{ crate_name: "trailbase-build", major: 0, minor: [0-9]+, patch: [0-9]+ \}"#,
-    )
-    .unwrap();
-    assert!(re.is_match(&format!("{vi:?}")));
+  fn test_git_version() {
+    let vi = VersionInfo {
+      git_version_tag: Some("v0.17.3-9-g5d422ec7".to_string()),
+      ..Default::default()
+    };
+    let git = vi.git_version().unwrap();
+
+    assert!(git.commits_since.is_some())
   }
 }
