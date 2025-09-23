@@ -1,8 +1,17 @@
+## v0.18.0
+
+* If everything goes to [plan](https://trailbase.io/blog/switching_to_a_wasm_runtime), v0.18.x will be the last releases containing the v8 JavaScript engine. It's time to move to WASM. If you have any issues or enocunter any limitations, please reach out 🙏.
+* **Remove built-in auth UI** in favor of a matching WASM component. To get the auth UI back, simply run: `trail components add trailbase/auth_ui`. Why did we remove it?
+  * Moving the UI into a component in `crates/auth-ui` offers a starting point for folks to **customize or build their own**. We plan to further streamline the process of customization, both in structure and documentation.
+  * The component serves as a proof-of-concept for the new WASM compositional model, our commitment and also makes us eat our own dogfood.
+  * We hope that the current, extremely basic component management may inform a possible future of a more open plugin ecosystem. We would love to hear your feedback 🙏.
+* Update Rust dependencies.
+
 ## v0.17.4
 
 * Fix/change JSON file-upload to expect contents as (url-safe) base64 rather than verbose JSON arrays. Also add integration tests - thanks @ibilux 🙏.
 * Add very basic WASM component management functionality to the CLI, e.g.: `trail components add trailbase/auth_ui`.
-  * Note that this is far from being a third-party plugin system. For now this is merely more than a short-hand to install the auth-ui component in a versioned fashion.
+  * Note that this is far from being a third-party plugin system. For now this is barely more than a short-hand to install the auth-ui component in a versioned fashion.
 * Add a new `traildepot/metadata.textproto` to persist ephemeral metadata in human-readable form - currently only the previously run version of `trail` to detect version transitions.
 * Add an argument to the WASI `init-endpoint` for future-proofing and to pass metadata, e.g. to let a component validate itself against the host version.
 * Update Rust dependencies and toolchain to v1.90.
