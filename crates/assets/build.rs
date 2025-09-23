@@ -19,15 +19,5 @@ fn main() -> Result<()> {
     trailbase_build::build_js(path)?;
   }
 
-  {
-    let path = base.join("auth");
-    trailbase_build::rerun_if_changed(path.join("src").join("components"));
-    trailbase_build::rerun_if_changed(path.join("src").join("lib"));
-    trailbase_build::rerun_if_changed(path.join("src").join("pages"));
-    trailbase_build::rerun_if_changed(path.join("src").join("layouts"));
-
-    trailbase_build::build_js(path)?;
-  }
-
   return Ok(());
 }

@@ -9,7 +9,7 @@ use ts_rs::TS;
 use utoipa::ToSchema;
 
 use crate::app_state::AppState;
-use crate::auth::ui::LOGIN_UI;
+use crate::auth::LOGIN_UI;
 use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;

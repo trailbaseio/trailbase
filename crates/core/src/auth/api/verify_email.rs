@@ -10,7 +10,7 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
-use crate::auth::ui::PROFILE_UI;
+use crate::auth::PROFILE_UI;
 use crate::auth::util::{user_by_email, validate_redirect};
 use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;

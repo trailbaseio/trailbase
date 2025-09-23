@@ -526,7 +526,6 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
- "trailbase-assets",
  "trailbase-build",
  "trailbase-wasm 0.2.0",
 ]

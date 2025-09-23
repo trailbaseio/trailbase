@@ -8,8 +8,8 @@ use trailbase_sqlite::named_params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
+use crate::auth::PROFILE_UI;
 use crate::auth::password::{check_user_password, hash_password, validate_password_policy};
-use crate::auth::ui::PROFILE_UI;
 use crate::auth::util::validate_redirect;
 use crate::auth::{AuthError, User};
 use crate::constants::USER_TABLE;

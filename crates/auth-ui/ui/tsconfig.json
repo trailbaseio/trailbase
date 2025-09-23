@@ -6,8 +6,8 @@
     "baseUrl": "./",
     "paths": {
       "@/*": ["./src/*"],
-      "@bindings/*": ["../bindings/*"],
-      "@shared/*": ["../shared/*"]
+      "@bindings/*": ["../../assets/js/bindings/*"],
+      "@shared/*": ["../../assets/js/shared/*"]
     }
   },
   "exclude": ["dist", "node_modules", "public"]

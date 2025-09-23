@@ -20,5 +20,4 @@ serde_json = "^1.0.117"
 trailbase-wasm = { workspace = true }
 
 [build-dependencies]
-trailbase-assets = { workspace = true }
 trailbase-build = { workspace = true }

@@ -118,10 +118,6 @@ pub struct ServerArgs {
   #[arg(long, default_value_t = false)]
   pub stderr_logging: bool,
 
-  /// Disable the built-in public authentication (login, logout, ...) UI.
-  #[arg(long, default_value_t = false)]
-  pub disable_auth_ui: bool,
-
   /// Limit the set of allowed origins the HTTP server will answer to.
   #[arg(long, default_value = "*")]
   pub cors_allowed_origins: Vec<String>,

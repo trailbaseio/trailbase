@@ -5,6 +5,9 @@ edition = "2024"
 license = "OSL-3.0"
 publish = false
 
+[lib]
+doctest = false
+
 [[bin]]
 name = "trail"
 

@@ -71,9 +71,6 @@ pub struct ServerOptions {
   // Enabling demo mode, e.g. to redact PII from Admin UI.
   pub demo: bool,
 
-  /// Disable the built-in public authentication (login, logout, ...) UI.
-  pub disable_auth_ui: bool,
-
   /// Limit the set of allowed origins the HTTP server will answer to.
   pub cors_allowed_origins: Vec<String>,
 
@@ -375,10 +372,6 @@ impl Server {
 
     if !has_indepenedent_admin_router(opts) {
       router = router.merge(Self::build_admin_router(state));
-    }
-
-    if !opts.disable_auth_ui {
-      router = router.merge(auth::auth_ui_router());
     }
 
     for custom_router in custom_routers {

@@ -5,7 +5,7 @@ use rust_embed::RustEmbed;
 use serde::Deserialize;
 
 #[derive(RustEmbed, Clone)]
-#[folder = "../assets/js/auth/dist/"]
+#[folder = "ui/dist/"]
 pub struct AuthAssets;
 
 #[derive(Deserialize)]

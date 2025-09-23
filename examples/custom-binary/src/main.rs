@@ -44,7 +44,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
       public_dir: None,
       log_responses: true,
       dev: false,
-      disable_auth_ui: false,
       cors_allowed_origins: vec![],
       ..Default::default()
     },

@@ -1,8 +1,8 @@
 packages:
   - 'client/testfixture/guests/typescript'
   - 'crates/assets/js/admin'
-  - 'crates/assets/js/auth'
   - 'crates/assets/js/client'
+  - 'crates/auth-ui/ui'
   - 'crates/js-runtime/assets/runtime'
   - 'docs'
   - 'docs/examples/record_api_ts'

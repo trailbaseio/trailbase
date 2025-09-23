@@ -15,11 +15,11 @@ use crate::auth::AuthError;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
 use crate::auth::password::check_user_password;
 use crate::auth::tokens::mint_new_tokens;
-use crate::auth::ui::{LOGIN_UI, PROFILE_UI};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
   new_cookie, remove_cookie, user_by_email, validate_and_normalize_email_address,
 };
+use crate::auth::{LOGIN_UI, PROFILE_UI};
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, USER_TABLE, VERIFICATION_CODE_LENGTH,
 };

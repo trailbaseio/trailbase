@@ -10,9 +10,9 @@ use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
-use crate::auth::ui::{LOGIN_UI, PROFILE_UI};
 use crate::auth::util::{user_by_id, validate_and_normalize_email_address, validate_redirect};
 use crate::auth::{AuthError, User};
+use crate::auth::{LOGIN_UI, PROFILE_UI};
 use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;
 use crate::extract::Either;

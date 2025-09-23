@@ -88,7 +88,6 @@ async fn async_main() -> Result<(), BoxError> {
         log_responses: cmd.dev || cmd.stderr_logging,
         dev: cmd.dev,
         demo: cmd.demo,
-        disable_auth_ui: cmd.disable_auth_ui,
         cors_allowed_origins: cmd.cors_allowed_origins,
         runtime_threads: cmd.runtime_threads,
         tls_key: None,

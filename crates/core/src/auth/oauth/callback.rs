@@ -12,11 +12,11 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::AuthError;
+use crate::auth::PROFILE_UI;
 use crate::auth::oauth::OAuthUser;
 use crate::auth::oauth::providers::OAuthProviderType;
 use crate::auth::oauth::state::{OAuthState, ResponseType};
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
-use crate::auth::ui::PROFILE_UI;
 use crate::auth::user::DbUser;
 use crate::auth::util::{get_user_by_id, new_cookie, remove_cookie, validate_redirect};
 use crate::config::proto::OAuthProviderId;

@@ -227,7 +227,56 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@24.5.2)(happy-dom@15.11.7)(jiti@2.5.1)(jsdom@27.0.0(postcss@8.5.6))(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)
 
-  crates/assets/js/auth:
+  crates/assets/js/client:
+    dependencies:
+      jwt-decode:
+        specifier: ^4.0.0
+        version: 4.0.0
+      uuid:
+        specifier: ^13.0.0
+        version: 13.0.0
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.35.0
+        version: 9.35.0
+      eslint:
+        specifier: ^9.35.0
+        version: 9.35.0(jiti@2.5.1)
+      execa:
+        specifier: ^9.6.0
+        version: 9.6.0
+      globals:
+        specifier: ^16.4.0
+        version: 16.4.0
+      http-status:
+        specifier: ^2.1.0
+        version: 2.1.0
+      jsdom:
+        specifier: ^27.0.0
+        version: 27.0.0(postcss@8.5.6)
+      oauth2-mock-server:
+        specifier: ^8.1.0
+        version: 8.1.0
+      prettier:
+        specifier: ^3.6.2
+        version: 3.6.2
+      tinybench:
+        specifier: ^5.0.1
+        version: 5.0.1
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.2
+      typescript-eslint:
+        specifier: ^8.44.0
+        version: 8.44.0(eslint@9.35.0(jiti@2.5.1))(typescript@5.9.2)
+      vite-node:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.5.2)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@24.5.2)(happy-dom@15.11.7)(jiti@2.5.1)(jsdom@27.0.0(postcss@8.5.6))(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)
+
+  crates/auth-ui/ui:
     dependencies:
       '@astrojs/check':
         specifier: ^0.9.4
@@ -269,8 +318,8 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@4.1.13)
       trailbase:
-        specifier: file:../client
-        version: link:../client
+        specifier: file:../../assets/js/client
+        version: link:../../assets/js/client
     devDependencies:
       '@eslint/js':
         specifier: ^9.35.0
@@ -326,55 +375,6 @@ importers:
       typescript-eslint:
         specifier: ^8.44.0
         version: 8.44.0(eslint@9.35.0(jiti@2.5.1))(typescript@5.9.2)
-
-  crates/assets/js/client:
-    dependencies:
-      jwt-decode:
-        specifier: ^4.0.0
-        version: 4.0.0
-      uuid:
-        specifier: ^13.0.0
-        version: 13.0.0
-    devDependencies:
-      '@eslint/js':
-        specifier: ^9.35.0
-        version: 9.35.0
-      eslint:
-        specifier: ^9.35.0
-        version: 9.35.0(jiti@2.5.1)
-      execa:
-        specifier: ^9.6.0
-        version: 9.6.0
-      globals:
-        specifier: ^16.4.0
-        version: 16.4.0
-      http-status:
-        specifier: ^2.1.0
-        version: 2.1.0
-      jsdom:
-        specifier: ^27.0.0
-        version: 27.0.0(postcss@8.5.6)
-      oauth2-mock-server:
-        specifier: ^8.1.0
-        version: 8.1.0
-      prettier:
-        specifier: ^3.6.2
-        version: 3.6.2
-      tinybench:
-        specifier: ^5.0.1
-        version: 5.0.1
-      typescript:
-        specifier: ^5.9.2
-        version: 5.9.2
-      typescript-eslint:
-        specifier: ^8.44.0
-        version: 8.44.0(eslint@9.35.0(jiti@2.5.1))(typescript@5.9.2)
-      vite-node:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/node@24.5.2)(jiti@2.5.1)(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/debug@4.1.12)(@types/node@24.5.2)(happy-dom@15.11.7)(jiti@2.5.1)(jsdom@27.0.0(postcss@8.5.6))(lightningcss@1.30.1)(terser@5.44.0)(yaml@2.8.1)
 
   crates/js-runtime/assets/runtime:
     devDependencies:

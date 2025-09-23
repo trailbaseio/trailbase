@@ -25,7 +25,7 @@
     "solid-js": "^1.9.9",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
-    "trailbase": "file:../client"
+    "trailbase": "file:../../assets/js/client"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",

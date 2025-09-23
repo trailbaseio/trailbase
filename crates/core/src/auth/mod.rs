@@ -17,14 +17,18 @@ pub(crate) mod tokens;
 pub(crate) mod util;
 
 mod error;
-mod ui;
+// mod ui;
 
 pub use error::AuthError;
 pub use jwt::{JwtHelper, TokenClaims};
-pub(crate) use ui::auth_ui_router;
+// pub(crate) use ui::auth_ui_router;
 pub use user::User;
 
 use crate::constants::AUTH_API_PATH;
+
+pub(crate) const LOGIN_UI: &str = "/_/auth/login";
+pub(crate) const REGISTER_USER_UI: &str = "/_/auth/register";
+pub(crate) const PROFILE_UI: &str = "/_/auth/profile";
 
 // NOTE: This import is needed to not mangle names in OpenAPI export.
 use api::*;

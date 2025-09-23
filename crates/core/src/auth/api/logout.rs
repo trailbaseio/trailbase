@@ -10,7 +10,7 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::AppState;
 use crate::auth::AuthError;
-use crate::auth::ui::LOGIN_UI;
+use crate::auth::LOGIN_UI;
 use crate::auth::user::User;
 use crate::auth::util::{
   delete_all_sessions_for_user, delete_session, remove_all_cookies, validate_redirect,
