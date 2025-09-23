@@ -14,12 +14,11 @@ fn builtin_schemas() -> &'static HashMap<String, SchemaEntry> {
       return true;
     };
 
-    if let serde_json::Value::Object(map) = value {
-      if let Some(serde_json::Value::String(mime_type)) = map.get("mime_type") {
-        if valid_mime_types.contains(mime_type) {
-          return true;
-        }
-      }
+    if let serde_json::Value::Object(map) = value
+      && let Some(serde_json::Value::String(mime_type)) = map.get("mime_type")
+      && valid_mime_types.contains(mime_type)
+    {
+      return true;
     }
 
     return false;

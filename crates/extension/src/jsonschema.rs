@@ -97,10 +97,10 @@ pub(crate) fn jsonschema_by_name(context: &Context) -> Result<bool, Error> {
     return Ok(false);
   }
 
-  if let Some(validator) = entry.custom_validator {
-    if !validator(&json, None) {
-      return Ok(false);
-    }
+  if let Some(validator) = entry.custom_validator
+    && !validator(&json, None)
+  {
+    return Ok(false);
   }
 
   return Ok(true);
@@ -129,10 +129,10 @@ pub(crate) fn jsonschema_by_name_with_extra_args(context: &Context) -> Result<bo
     return Ok(false);
   }
 
-  if let Some(validator) = entry.custom_validator {
-    if !validator(&json, Some(extra_args)) {
-      return Ok(false);
-    }
+  if let Some(validator) = entry.custom_validator
+    && !validator(&json, Some(extra_args))
+  {
+    return Ok(false);
   }
 
   return Ok(true);

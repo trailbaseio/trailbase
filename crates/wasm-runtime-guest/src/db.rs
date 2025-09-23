@@ -39,10 +39,10 @@ impl Transaction {
 
 impl Drop for Transaction {
   fn drop(&mut self) {
-    if !self.committed {
-      if let Err(err) = tx_rollback() {
-        log::warn!("TX rollback failed: {err}");
-      }
+    if !self.committed
+      && let Err(err) = tx_rollback()
+    {
+      log::warn!("TX rollback failed: {err}");
     }
   }
 }

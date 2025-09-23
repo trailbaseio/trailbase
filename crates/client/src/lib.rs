@@ -381,16 +381,16 @@ impl RecordApi {
       return slice.join(",");
     }
 
-    if let Some(order) = args.order {
-      if !order.is_empty() {
-        params.push((Cow::Borrowed("order"), Cow::Owned(to_list(&order))));
-      }
+    if let Some(order) = args.order
+      && !order.is_empty()
+    {
+      params.push((Cow::Borrowed("order"), Cow::Owned(to_list(&order))));
     }
 
-    if let Some(expand) = args.expand {
-      if !expand.is_empty() {
-        params.push((Cow::Borrowed("expand"), Cow::Owned(to_list(&expand))));
-      }
+    if let Some(expand) = args.expand
+      && !expand.is_empty()
+    {
+      params.push((Cow::Borrowed("expand"), Cow::Owned(to_list(&expand))));
     }
 
     if args.count {
@@ -562,10 +562,10 @@ impl RecordApi {
         .bytes_stream()
         .eventsource()
         .filter_map(|event_or| {
-          if let Ok(event) = event_or {
-            if let Ok(db_event) = serde_json::from_str::<DbEvent>(&event.data) {
-              return Some(db_event);
-            }
+          if let Ok(event) = event_or
+            && let Ok(db_event) = serde_json::from_str::<DbEvent>(&event.data)
+          {
+            return Some(db_event);
           }
           return None;
         }),

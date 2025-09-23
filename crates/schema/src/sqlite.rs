@@ -1005,10 +1005,10 @@ fn extract_column_mapping(
     |colname: &str| -> Result<(&ReferredTable, &Column), SchemaError> {
       let mut found: Option<(&ReferredTable, &Column)> = None;
       for reft in &referenced_table_by_alias {
-        if let Some(c) = reft.table.columns.iter().find(|c| c.name == colname) {
-          if found.replace((reft, c)).is_some() {
-            return Err(precondition(&format!("Ambiguous column: {colname}")));
-          }
+        if let Some(c) = reft.table.columns.iter().find(|c| c.name == colname)
+          && found.replace((reft, c)).is_some()
+        {
+          return Err(precondition(&format!("Ambiguous column: {colname}")));
         }
       }
       return found.ok_or(precondition(&format!("Column '{colname}' not found")));
@@ -1097,45 +1097,45 @@ fn extract_column_mapping(
         expr => {
           // Handle type-inference of some built-in functions for convenience to reduce the need
           // for explicit CAST(expr AS type), e.g. `MAX(column)`.
-          if let Expr::FunctionCall { name, args, .. } = expr {
-            if builtin_function_preserving_type(name) {
-              match extract_single_arg(args) {
-                Some((Some(qualifier), name)) => {
-                  let referred_table = find_table_by_alias(&qualifier)?;
-                  let column = referred_table
-                    .table
-                    .columns
-                    .iter()
-                    .find(|c| c.name == name)
-                    .ok_or_else(|| precondition(&format!("Column '{name}' not found")))?;
+          if let Expr::FunctionCall { name, args, .. } = expr
+            && builtin_function_preserving_type(name)
+          {
+            match extract_single_arg(args) {
+              Some((Some(qualifier), name)) => {
+                let referred_table = find_table_by_alias(&qualifier)?;
+                let column = referred_table
+                  .table
+                  .columns
+                  .iter()
+                  .find(|c| c.name == name)
+                  .ok_or_else(|| precondition(&format!("Column '{name}' not found")))?;
 
-                  mapping.push(ViewColumn {
-                    column: Column {
-                      name: to_alias(alias).unwrap_or_else(|| column.name.to_string()),
-                      data_type: column.data_type,
-                      options: column.options.clone(),
-                    },
-                    parent_name: get_parent_name(referred_table),
-                  });
+                mapping.push(ViewColumn {
+                  column: Column {
+                    name: to_alias(alias).unwrap_or_else(|| column.name.to_string()),
+                    data_type: column.data_type,
+                    options: column.options.clone(),
+                  },
+                  parent_name: get_parent_name(referred_table),
+                });
 
-                  continue;
-                }
-                Some((None, name)) => {
-                  let (referred_table, column) = find_column_by_unqualified_name(&name)?;
-
-                  mapping.push(ViewColumn {
-                    column: Column {
-                      name: to_alias(alias).unwrap_or_else(|| column.name.to_string()),
-                      data_type: column.data_type,
-                      options: column.options.clone(),
-                    },
-                    parent_name: get_parent_name(referred_table),
-                  });
-
-                  continue;
-                }
-                _ => {}
+                continue;
               }
+              Some((None, name)) => {
+                let (referred_table, column) = find_column_by_unqualified_name(&name)?;
+
+                mapping.push(ViewColumn {
+                  column: Column {
+                    name: to_alias(alias).unwrap_or_else(|| column.name.to_string()),
+                    data_type: column.data_type,
+                    options: column.options.clone(),
+                  },
+                  parent_name: get_parent_name(referred_table),
+                });
+
+                continue;
+              }
+              _ => {}
             }
           }
 

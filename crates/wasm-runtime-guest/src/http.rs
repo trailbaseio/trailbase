@@ -85,6 +85,7 @@ impl HttpRoute {
           };
 
           return Box::pin(async move {
+            #[allow(clippy::let_and_return)]
             let response = responder.respond(f(req).await.into_response()).await;
 
             // TODO: Poll tasks.

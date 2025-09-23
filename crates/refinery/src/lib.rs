@@ -1,3 +1,5 @@
+#![allow(clippy::collapsible_if)]
+
 mod drivers;
 pub mod error;
 mod runner;

@@ -111,13 +111,13 @@ impl Connection {
         0
       }
       (false, n) => {
-        if let Ok(max) = std::thread::available_parallelism() {
-          if n > max.get() {
-            debug!(
-              "Num read threads '{n}' exceeds hardware parallelism: {}",
-              max.get()
-            );
-          }
+        if let Ok(max) = std::thread::available_parallelism()
+          && n > max.get()
+        {
+          warn!(
+            "Num read threads '{n}' exceeds hardware parallelism: {}",
+            max.get()
+          );
         }
         n as i64
       }
