@@ -1,3 +1,12 @@
+## v0.17.4
+
+* Fix/change JSON file-upload to expect contents as (url-safe) base64 rather than verbose JSON arrays. Also add integration tests - thanks @ibilux 🙏.
+* Add very basic WASM component management functionality to the CLI, e.g.: `trail components add trailbase/auth_ui`.
+  * Note that this is far from being a third-party plugin system. For now this is merely more than a short-hand to install the auth-ui component in a versioned fashion.
+* Add a new `traildepot/metadata.textproto` to persist ephemeral metadata in human-readable form - currently only the previously run version of `trail` to detect version transitions.
+* Add an argument to the WASI `init-endpoint` for future-proofing and to pass metadata, e.g. to let a component validate itself against the host version.
+* Update Rust dependencies and toolchain to v1.90.
+
 ## v0.17.3
 
 * Reload WASM components on SIGHUP in dev mode.
