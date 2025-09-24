@@ -29,6 +29,15 @@ Once installed, you can run
 to check that the executable is properly installed and list all available
 command line options.
 
+## Optional Auth UI
+
+If you want to install the auth UI, you can simply run:
+
+```sh
+trail components add trailbase/auth_ui
+```
+
+, which will add a WASM component exposing additional UI endpoints.
 
 ## Starting the Server & Admin Dashboard
 
@@ -61,7 +70,8 @@ trail user change-email admin@localhost me@mydomain.org
 Don't worry about breaking anything, you can always delete `traildepot` and start from scratch.
 </Aside>
 
-Armed with your new credentials, open http://localhost:4000/_/admin/ in your
+Armed with your new credentials, open
+[http://localhost:4000/_/admin/](http://localhost:4000/_/admin/) in your
 browser and log in.
 
 We encourage you to take a few minutes, click around, and maybe create a table
@@ -70,6 +80,9 @@ Note that when creating, altering, or deleting tables, indexes or views a
 schema migration file will be created in `traildepot/migrations`. This allows
 TrailBase to enforce consistent schemas across multiple database instances for
 dev, test, prod, ... .
+
+If you installed the auth UI above, feel free to also explore
+[http://localhost:4000/_/auth/login](http://localhost:4000/_/auth/login).
 
 If you like what you see and want to get your hands dirty, consider checking
 out some of the tutorials.

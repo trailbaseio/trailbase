@@ -127,8 +127,18 @@ trail run
 
 On first start, a `./traildepot` folder will be bootstrapped, an admin user
 created and their credentials printed to the terminal.
-Afterwards open http://localhost:4000/_/admin/ in your browser and use the
-credentials to log into the admin dashboard.
+Afterwards open [http://localhost:4000/\_/admin/](http://localhost:4000/_/admin/)
+in your browser and use the credentials to log into the admin dashboard.
+
+If you want to install the auth UI, you can simply run:
+
+```sh
+trail components add trailbase/auth_ui
+```
+
+, which will add a WASM component in `./traildepot/wasm` exposing additional UI
+endpoints, e.g.
+[http://localhost:4000/\_/auth/login](http://localhost:4000/_/auth/login).
 
 ## Building
 
