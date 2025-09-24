@@ -392,6 +392,28 @@ async fn subscription_test() {
   }
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct FileUpload {
+  /// The file's unique id from which the objectstore path is derived.
+  id: String,
+
+  /// The file's original file name.
+  filename: Option<String>,
+
+  /// The file's user-provided content type.
+  content_type: Option<String>,
+
+  /// The file's inferred mime type. Not user provided.
+  mime_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct FileUploadTable {
+  name: Option<String>,
+  single_file: Option<FileUpload>,
+  multiple_files: Vec<FileUpload>,
+}
+
 async fn file_upload_json_base64_test() {
   let client = connect().await;
   let api = client.records("file_upload_table");
@@ -429,21 +451,23 @@ async fn file_upload_json_base64_test() {
     .unwrap();
 
   // Read the record back to verify file metadata was stored correctly
-  let record: serde_json::Value = api.read(&record_id).await.unwrap();
+  let record: FileUploadTable = api.read(&record_id).await.unwrap();
 
   // Verify single file metadata
-  let single_file = record.get("single_file").unwrap();
-  assert_eq!(single_file.get("filename").unwrap(), "test1.bin");
   assert_eq!(
-    single_file.get("content_type").unwrap(),
-    "application/octet-stream"
+    record.single_file.as_ref().unwrap().filename.as_deref(),
+    Some("test1.bin")
+  );
+  assert_eq!(
+    record.single_file.as_ref().unwrap().content_type.as_deref(),
+    Some("application/octet-stream")
   );
 
   // Verify multiple files metadata
-  let multiple_files = record.get("multiple_files").unwrap().as_array().unwrap();
+  let multiple_files = &record.multiple_files;
   assert_eq!(multiple_files.len(), 2);
-  assert_eq!(multiple_files[0].get("filename").unwrap(), "test2.bin");
-  assert_eq!(multiple_files[1].get("filename").unwrap(), "test3.bin");
+  assert_eq!(multiple_files[0].filename.as_deref(), Some("test2.bin"));
+  assert_eq!(multiple_files[1].filename.as_deref(), Some("test3.bin"));
 
   // Test file download endpoints to verify actual file content
   let http_client = reqwest::Client::new();
@@ -467,7 +491,7 @@ async fn file_upload_json_base64_test() {
   let multi_file_1_bytes = multi_file_1_response.bytes().await.unwrap();
   assert_eq!(multi_file_1_bytes, test_bytes2);
 
-  let uuid = multiple_files[1].get("id").unwrap().as_str().unwrap();
+  let uuid = &multiple_files[1].id;
   let multi_file_2_response = http_client
     .get(&format!(
       "http://127.0.0.1:{PORT}/api/records/v1/file_upload_table/{record_id}/files/multiple_files/{uuid}"
