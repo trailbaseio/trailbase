@@ -17,7 +17,6 @@ pub(crate) mod tokens;
 pub(crate) mod util;
 
 mod error;
-// mod ui;
 
 pub use error::AuthError;
 pub use jwt::{JwtHelper, TokenClaims};
