@@ -5,7 +5,6 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::records::expand::expand_tables;
 use crate::records::expand::row_to_json_expand;
@@ -15,6 +14,7 @@ use crate::records::read_queries::{
   run_select_query,
 };
 use crate::records::{Permission, RecordError};
+use crate::{app_state::AppState, records::params::SchemaAccessor};
 
 #[derive(Debug, Default, Deserialize)]
 pub struct ReadRecordQuery {
@@ -204,8 +204,8 @@ pub async fn get_uploaded_file_from_record_handler(
 type GetUploadedFilesFromRecordPath = Path<(
   String, // RecordApi name
   String, // Record id
-  String, // Column name,
-  usize,  // Index
+  String, // Column name
+  String, // Index or UUID
 )>;
 
 /// Read single file from list associated with record.
@@ -219,7 +219,7 @@ type GetUploadedFilesFromRecordPath = Path<(
 )]
 pub async fn get_uploaded_files_from_record_handler(
   State(state): State<AppState>,
-  Path((api_name, record, column_name, file_index)): GetUploadedFilesFromRecordPath,
+  Path((api_name, record, column_name, file_id)): GetUploadedFilesFromRecordPath,
   user: Option<User>,
 ) -> Result<Response, RecordError> {
   let Some(api) = state.lookup_record_api(&api_name) else {
@@ -227,22 +227,12 @@ pub async fn get_uploaded_files_from_record_handler(
   };
 
   let record_id = api.primary_key_to_value(record)?;
-
-  let Ok(()) = api
+  api
     .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
-    .await
-  else {
-    return Err(RecordError::Forbidden);
-  };
+    .await?;
 
-  let (_index, pk_column) = api.record_pk_column();
-  let Some(index) = api.column_index_by_name(&column_name) else {
+  let Some((_index, column, Some(column_json_metadata))) = api.column_by_name(&column_name) else {
     return Err(RecordError::BadRequest("Invalid field/column name"));
-  };
-
-  let column = &api.columns()[index];
-  let Some(ref column_json_metadata) = api.json_column_metadata()[index] else {
-    return Err(RecordError::BadRequest("Invalid column"));
   };
 
   let mut file_uploads = run_get_files_query(
@@ -250,19 +240,33 @@ pub async fn get_uploaded_files_from_record_handler(
     api.table_name(),
     column,
     column_json_metadata,
-    &pk_column.name,
+    &api.record_pk_column().1.name,
     record_id,
   )
   .await
   .map_err(|err| RecordError::Internal(err.into()))?;
 
-  if file_index >= file_uploads.0.len() {
-    return Err(RecordError::RecordNotFound);
-  }
+  let file_upload = if let Ok(uuid) = uuid::Uuid::parse_str(&file_id) {
+    // NOTE: reserialize for consistent econding to avoid issues like capitalization.
+    let uuid = uuid.to_string();
+    file_uploads.0.into_iter().find(|f| f.path() == uuid)
+  } else {
+    let index: usize = file_id
+      .parse()
+      .map_err(|_| RecordError::BadRequest("Expected UUID or index"))?;
+    if index < file_uploads.0.len() {
+      Some(file_uploads.0.remove(index))
+    } else {
+      None
+    }
+  };
 
-  return read_file_into_response(&state, file_uploads.0.remove(file_index))
-    .await
-    .map_err(|err| RecordError::Internal(err.into()));
+  return read_file_into_response(
+    &state,
+    file_upload.ok_or_else(|| RecordError::RecordNotFound)?,
+  )
+  .await
+  .map_err(|err| RecordError::Internal(err.into()));
 }
 
 #[inline]
@@ -764,34 +768,43 @@ mod test {
 
       return vec![
         assert_file(&state, 0, &bytes0, &file, async || {
-          let api_path = Path((API_NAME.to_string(), record_id.clone(), "file".to_string()));
-          return get_uploaded_file_from_record_handler(State(state.clone()), api_path, None)
-            .await
-            .unwrap();
+          return get_uploaded_file_from_record_handler(
+            State(state.clone()),
+            Path((API_NAME.to_string(), record_id.clone(), "file".to_string())),
+            None,
+          )
+          .await
+          .unwrap();
         })
         .await,
         assert_file(&state, 1, &bytes1, &files[0], async || {
-          let api_path = Path((
-            API_NAME.to_string(),
-            record_id.clone(),
-            "files".to_string(),
-            0,
-          ));
-          return get_uploaded_files_from_record_handler(State(state.clone()), api_path, None)
-            .await
-            .unwrap();
+          return get_uploaded_files_from_record_handler(
+            State(state.clone()),
+            Path((
+              API_NAME.to_string(),
+              record_id.clone(),
+              "files".to_string(),
+              0.to_string(),
+            )),
+            None,
+          )
+          .await
+          .unwrap();
         })
         .await,
         assert_file(&state, 2, &bytes2, &files[1], async || {
-          let api_path = Path((
-            API_NAME.to_string(),
-            record_id.clone(),
-            "files".to_string(),
-            1,
-          ));
-          return get_uploaded_files_from_record_handler(State(state.clone()), api_path, None)
-            .await
-            .unwrap();
+          return get_uploaded_files_from_record_handler(
+            State(state.clone()),
+            Path((
+              API_NAME.to_string(),
+              record_id.clone(),
+              "files".to_string(),
+              1.to_string(),
+            )),
+            None,
+          )
+          .await
+          .unwrap();
         })
         .await,
       ];

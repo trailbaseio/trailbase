@@ -465,17 +465,25 @@ async fn file_upload_json_base64_test() {
     .await
     .unwrap();
   let multi_file_1_bytes = multi_file_1_response.bytes().await.unwrap();
-  assert_eq!(multi_file_1_bytes.to_vec(), test_bytes2);
+  assert_eq!(multi_file_1_bytes, test_bytes2);
 
+  let uuid = multiple_files[1].get("id").unwrap().as_str().unwrap();
   let multi_file_2_response = http_client
     .get(&format!(
-      "http://127.0.0.1:{PORT}/api/records/v1/file_upload_table/{record_id}/files/multiple_files/1",
+      "http://127.0.0.1:{PORT}/api/records/v1/file_upload_table/{record_id}/files/multiple_files/{uuid}"
     ))
     .send()
     .await
     .unwrap();
+
+  assert!(
+    multi_file_2_response.status().is_success(),
+    "{:?}",
+    multi_file_2_response.text().await
+  );
   let multi_file_2_bytes = multi_file_2_response.bytes().await.unwrap();
-  assert_eq!(multi_file_2_bytes.to_vec(), test_bytes3);
+
+  assert_eq!(multi_file_2_bytes, test_bytes3,);
 
   // Clean up
   api.delete(&record_id).await.unwrap();
