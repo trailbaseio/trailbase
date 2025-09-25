@@ -398,7 +398,7 @@ test("transaction tests", async () => {
 test("realtime subscribe table tests", async () => {
   const client = await connect();
   const api = client.records<NewSimpleStrict>("simple_strict_table");
-  const eventStream = await api.subscribe("*");
+  const eventStream = await api.subscribeAll();
 
   const now = new Date().getTime();
   const createMessage = `ts client realtime test 0: =?&${now}`;
@@ -426,6 +426,49 @@ test("realtime subscribe table tests", async () => {
   expect(events[0]["Insert"]["text_not_null"]).equals(createMessage);
   expect(events[1]["Update"]["text_not_null"]).equals(updatedMessage);
   expect(events[2]["Delete"]["text_not_null"]).equals(updatedMessage);
+});
+
+test("realtime subscribe to table with filters tests", async () => {
+  const client = await connect();
+  const api = client.records<NewSimpleStrict>("simple_strict_table");
+
+  const now = new Date().getTime();
+
+  const updatedMessage = `ts client updated realtime test 42: ${now}`;
+  const eventStream = await api.subscribeAll({
+    filters: [
+      {
+        column: "text_not_null",
+        op: "equal",
+        value: updatedMessage,
+      },
+    ],
+  });
+
+  const createMessage = `ts client realtime test 42: =?&${now}`;
+  const id = (await api.create({
+    text_not_null: createMessage,
+  })) as string;
+
+  const updatedValue: Partial<SimpleStrict> = {
+    text_not_null: updatedMessage,
+  };
+  await api.update(id, updatedValue);
+  await api.delete(id);
+
+  const events: Event[] = [];
+  for await (const event of eventStream) {
+    events.push(event);
+
+    if (events.length === 2) {
+      break;
+    }
+  }
+
+  // We should have skipped the creation.
+  expect(events).toHaveLength(2);
+  expect(events[0]["Update"]["text_not_null"]).equals(updatedMessage);
+  expect(events[1]["Delete"]["text_not_null"]).equals(updatedMessage);
 });
 
 test("file upload base64 tests", async () => {

@@ -365,33 +365,10 @@ export class ListOperation<T = Record<string, unknown>>
     const expand = this.opts?.expand;
     if (expand) params.append("expand", expand.join(","));
 
-    function traverseFilters(path: string, filter: FilterOrComposite) {
-      if ("and" in filter) {
-        for (const [i, f] of (filter as And).and.entries()) {
-          traverseFilters(`${path}[$and][${i}]`, f);
-        }
-      } else if ("or" in filter) {
-        for (const [i, f] of (filter as Or).or.entries()) {
-          traverseFilters(`${path}[$or][${i}]`, f);
-        }
-      } else {
-        const f = filter as Filter;
-        const op = f.op;
-        if (op) {
-          params.append(
-            `${path}[${f.column}][${formatCompareOp(op)}]`,
-            f.value,
-          );
-        } else {
-          params.append(`${path}[${f.column}]`, f.value);
-        }
-      }
-    }
-
     const filters = this.opts?.filters;
     if (filters) {
       for (const filter of filters) {
-        traverseFilters("filter", filter);
+        addFiltersToParams(params, "filter", filter);
       }
     }
 
@@ -400,6 +377,10 @@ export class ListOperation<T = Record<string, unknown>>
     );
     return (await response.json()) as ListResponse<T>;
   }
+}
+
+export interface SubscribeOpts {
+  filters?: FilterOrComposite[];
 }
 
 export interface RecordApi<T = Record<string, unknown>> {
@@ -421,6 +402,7 @@ export interface RecordApi<T = Record<string, unknown>> {
   deleteOp(id: RecordId): DeleteOperation;
 
   subscribe(id: RecordId): Promise<ReadableStream<Event>>;
+  subscribeAll(opts?: SubscribeOpts): Promise<ReadableStream<Event>>;
 }
 
 /// Provides CRUD access to records through TrailBase's record API.
@@ -490,8 +472,31 @@ export class RecordApiImpl<T = Record<string, unknown>>
   }
 
   public async subscribe(id: RecordId): Promise<ReadableStream<Event>> {
+    return await this.subscribeImpl(id);
+  }
+
+  public async subscribeAll(
+    opts?: SubscribeOpts,
+  ): Promise<ReadableStream<Event>> {
+    return await this.subscribeImpl("*", opts);
+  }
+
+  private async subscribeImpl(
+    id: RecordId,
+    opts?: SubscribeOpts,
+  ): Promise<ReadableStream<Event>> {
+    const params = new URLSearchParams();
+    const filters = opts?.filters ?? [];
+    if (filters.length > 0) {
+      for (const filter of filters) {
+        addFiltersToParams(params, "filter", filter);
+      }
+    }
+
     const response = await this.client.fetch(
-      `${recordApiBasePath}/${this.name}/subscribe/${id}`,
+      filters.length > 0
+        ? `${recordApiBasePath}/${this.name}/subscribe/${id}?${params}`
+        : `${recordApiBasePath}/${this.name}/subscribe/${id}`,
     );
     const body = response.body;
     if (!body) {
@@ -938,6 +943,30 @@ export function asyncBase64Encode(blob: Blob): Promise<string> {
     reader.onloadend = () => resolve(reader.result as string);
     reader.readAsDataURL(blob);
   });
+}
+
+function addFiltersToParams(
+  params: URLSearchParams,
+  path: string,
+  filter: FilterOrComposite,
+) {
+  if ("and" in filter) {
+    for (const [i, f] of (filter as And).and.entries()) {
+      addFiltersToParams(params, `${path}[$and][${i}]`, f);
+    }
+  } else if ("or" in filter) {
+    for (const [i, f] of (filter as Or).or.entries()) {
+      addFiltersToParams(params, `${path}[$or][${i}]`, f);
+    }
+  } else {
+    const f = filter as Filter;
+    const op = f.op;
+    if (op) {
+      params.append(`${path}[${f.column}][${formatCompareOp(op)}]`, f.value);
+    } else {
+      params.append(`${path}[${f.column}]`, f.value);
+    }
+  }
 }
 
 export const exportedForTesting = isDev
