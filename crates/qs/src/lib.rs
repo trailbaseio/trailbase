@@ -8,6 +8,7 @@ mod query;
 mod util;
 mod value;
 
+pub use column_rel_value::{ColumnOpValue, CompareOp};
 pub use filter::{Combiner, ValueOrComposite};
-pub use query::{Cursor, CursorType, Expand, Order, OrderPrecedent, Query};
+pub use query::{Cursor, CursorType, Expand, FilterQuery, Order, OrderPrecedent, Query};
 pub use value::Value;

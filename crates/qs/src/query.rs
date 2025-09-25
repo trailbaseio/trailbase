@@ -184,6 +184,21 @@ impl Query {
   }
 }
 
+#[derive(Clone, Default, Debug, PartialEq, Deserialize)]
+pub struct FilterQuery {
+  /// Map from filter params to filter value. It's a vector in cases like:
+  ///   `col0[$gte]=2&col0[$lte]=10`.
+  pub filter: Option<ValueOrComposite>,
+}
+
+impl FilterQuery {
+  pub fn parse(query: &str) -> Result<FilterQuery, Error> {
+    // NOTE: We rely on non-strict mode to parse `filter[col0]=a&b%filter[col1]=c`.
+    let qs = serde_qs::Config::new(9, false);
+    return qs.deserialize_bytes::<FilterQuery>(query.as_bytes());
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

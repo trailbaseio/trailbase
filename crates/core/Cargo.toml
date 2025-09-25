@@ -100,6 +100,7 @@ url = { version = "^2.4.1", default-features = false }
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 uuid = { workspace = true }
 validator = { version = "0.20.0", default-features = false }
+indexmap = "2.11.4"
 
 [build-dependencies]
 trailbase-build = { workspace = true }

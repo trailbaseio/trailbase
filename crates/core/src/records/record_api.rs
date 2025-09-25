@@ -1,6 +1,5 @@
 use askama::Template;
 use log::*;
-use rusqlite::types::ToSqlOutput;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,7 +10,7 @@ use trailbase_schema::metadata::{
 use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::Column;
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
-use trailbase_sqlite::{NamedParamRef, NamedParams, Params as _, Value};
+use trailbase_sqlite::{NamedParams, Params as _, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
@@ -502,6 +501,7 @@ impl RecordApi {
     };
 
     let params = self.build_named_params(p, record_id, request_params, user)?;
+
     return Ok(Box::new(move |conn| {
       return match Self::check_record_level_access_impl(conn, &access_query, params) {
         Ok(allowed) if allowed => Ok(()),
@@ -518,6 +518,7 @@ impl RecordApi {
   ) -> Result<bool, rusqlite::Error> {
     let mut stmt = conn.prepare_cached(query)?;
     named_params.bind(&mut stmt)?;
+
     if let Some(row) = stmt.raw_query().next()? {
       return row.get(0);
     }
@@ -525,46 +526,24 @@ impl RecordApi {
   }
 
   /// Check if the given user (if any) can access a record given the request and the operation.
-  ///
-  /// NOTE: We could inline this in `SubscriptionManager::broker_subscriptions` and reduce some
-  /// redundant work over sql parameter construction.
   #[inline]
   pub(crate) fn check_record_level_read_access_for_subscriptions(
     &self,
     conn: &rusqlite::Connection,
-    record: &[(&str, &rusqlite::types::Value)],
-    user: Option<&User>,
+    params: SubscriptionAclParams<'_>,
   ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
-    self.check_table_level_access(Permission::Read, user)?;
+    self.check_table_level_access(Permission::Read, params.user)?;
 
     let Some(ref access_query) = self.state.subscription_read_access_query else {
       return Ok(());
     };
 
-    let params = {
-      let mut params = Vec::<NamedParamRef<'_>>::with_capacity(record.len() + 1);
-      params.push((
-        Cow::Borrowed(":__user_id"),
-        user.map_or_else(
-          || ToSqlOutput::Owned(Value::Null),
-          |u| ToSqlOutput::Owned(Value::Blob(u.uuid.into())),
-        ),
-      ));
-
-      params.extend(record.iter().map(|(name, value)| {
-        (
-          Cow::Owned(prefix_colon(name)),
-          ToSqlOutput::Borrowed((*value).into()),
-        )
-      }));
-
-      params
-    };
-
     let mut stmt = conn
       .prepare_cached(access_query)
       .map_err(|_err| RecordError::Forbidden)?;
+
+    // NOTE: the `bind` impl does the heavy lifting.
     params
       .bind(&mut stmt)
       .map_err(|_err| RecordError::Forbidden)?;
@@ -610,6 +589,8 @@ impl RecordApi {
   // TODO: We should probably break this up into separate functions for CRUD, to only do and inject
   // what's actually needed. Maybe even break up the entire check_access_and_rls_then. It's pretty
   // winding right now.
+  // TODO: It may be cheaper to implement trailbase_sqlite::Params for LazyParams than convert to
+  // NamedParams :shrug:.
   fn build_named_params(
     &self,
     p: Permission,
@@ -683,6 +664,29 @@ impl RecordApi {
     ));
 
     return Ok(params);
+  }
+}
+
+pub(crate) struct SubscriptionAclParams<'a> {
+  pub params: &'a indexmap::IndexMap<&'a str, rusqlite::types::Value>,
+  pub user: Option<&'a User>,
+}
+
+impl<'a> trailbase_sqlite::Params for SubscriptionAclParams<'a> {
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> rusqlite::Result<()> {
+    for (name, v) in self.params {
+      if let Some(idx) = stmt.parameter_index(&prefix_colon(name))? {
+        stmt.raw_bind_parameter(idx, v)?;
+      };
+    }
+
+    if let Some(user) = self.user
+      && let Some(idx) = stmt.parameter_index(":__user_id")?
+    {
+      stmt.raw_bind_parameter(idx, rusqlite::types::Value::Blob(user.uuid.into()))?;
+    }
+
+    return Ok(());
   }
 }
 

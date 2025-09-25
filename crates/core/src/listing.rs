@@ -1,8 +1,7 @@
-use base64::prelude::*;
 use log::*;
 use std::borrow::Cow;
 use thiserror::Error;
-use trailbase_qs::{Cursor as QsCursor, Value as QsValue, ValueOrComposite};
+use trailbase_qs::{Cursor as QsCursor, ValueOrComposite};
 use trailbase_schema::sqlite::Column;
 
 #[derive(Debug, Error)]
@@ -69,18 +68,7 @@ pub(crate) fn build_filter_where_clause(
     .map(|(name, value)| {
       return (
         Cow::Owned(name),
-        match value {
-          QsValue::String(s) => {
-            if let Ok(b) = BASE64_URL_SAFE.decode(&s) {
-              Value::Blob(b)
-            } else {
-              Value::Text(s)
-            }
-          }
-          QsValue::Integer(i) => Value::Integer(i),
-          QsValue::Double(d) => Value::Real(d),
-          QsValue::Bool(b) => Value::Integer(if b { 1 } else { 0 }),
-        },
+        crate::records::filter::qs_value_to_sql(value),
       );
     })
     .collect();

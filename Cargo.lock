@@ -7844,6 +7844,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "indexmap 2.11.4",
  "indoc",
  "itertools 0.14.0",
  "jsonschema",
