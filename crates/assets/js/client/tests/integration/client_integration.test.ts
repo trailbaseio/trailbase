@@ -471,9 +471,29 @@ test("realtime subscribe to table with filters tests", async () => {
   expect(events[1]["Delete"]["text_not_null"]).equals(updatedMessage);
 });
 
+type FileUpload = {
+  // Upload
+  name?: string;
+  data?: string;
+
+  // Both.
+  filename: string;
+  content_type?: string;
+
+  // Download
+  original_filename?: string;
+  mime_type?: string;
+};
+
+type FileUploadTable = {
+  name: string | undefined;
+  single_file: FileUpload | undefined;
+  multiple_files: FileUpload[] | undefined;
+};
+
 test("file upload base64 tests", async () => {
   const client = await connect();
-  const api = client.records("file_upload_table");
+  const api = client.records<FileUploadTable>("file_upload_table");
 
   const testBytes1 = new Uint8Array([0, 1, 2, 3, 4, 5]);
   const testBytes2 = new Uint8Array([42, 5, 42, 5]);
@@ -507,14 +527,22 @@ test("file upload base64 tests", async () => {
   // Read the record back to verify file metadata was stored correctly
   const record = await api.read(recordId);
 
+  expect(record.single_file).not.toBeUndefined();
+  expect(record.multiple_files).not.toBeUndefined();
+
+  const singleFile = record.single_file!;
+  const multipleFiles = record.multiple_files!;
+
   // Verify single file metadata
-  expect(record.single_file.filename).toBe("test1.bin");
-  expect(record.single_file.content_type).toBe("application/octet-stream");
+  expect(singleFile.original_filename).toBe("test1.bin");
+  expect(singleFile.content_type).toBe("application/octet-stream");
 
   // Verify multiple files metadata
-  expect(record.multiple_files.length).toBe(2);
-  expect(record.multiple_files[0].filename).toBe("test2.bin");
-  expect(record.multiple_files[1].filename).toBe("test3.bin");
+  expect(multipleFiles.length).toBe(2);
+  expect(multipleFiles[0].original_filename).toBe("test2.bin");
+  expect(multipleFiles[0].filename.startsWith("test2"));
+  expect(multipleFiles[0].filename.endsWith(".bin"));
+  expect(multipleFiles[1].original_filename).toBe("test3.bin");
 
   // Test file download endpoints to verify actual file content
   const singleFileResponse = await fetch(

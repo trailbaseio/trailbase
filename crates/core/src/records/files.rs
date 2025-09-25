@@ -29,8 +29,11 @@ pub(crate) async fn read_file_into_response(
   file_upload: FileUpload,
 ) -> Result<Response, FileError> {
   let store = state.objectstore();
-  let path = object_store::path::Path::from(file_upload.path());
-  let result = store.get(&path).await?;
+  let result = store
+    .get(&object_store::path::Path::from(
+      file_upload.objectstore_id(),
+    ))
+    .await?;
 
   let headers = || {
     return [
@@ -123,7 +126,7 @@ pub(crate) async fn delete_pending_files_impl(
   let mut errors: Vec<FileDeletionsDb> = vec![];
   let mut delete = async |row: &FileDeletionsDb, file: FileUpload| {
     let result = store
-      .delete(&object_store::path::Path::from(file.path()))
+      .delete(&object_store::path::Path::from(file.objectstore_id()))
       .await;
 
     match result {
@@ -201,7 +204,7 @@ impl FileManager {
     let mut written_files = Vec::<FileUpload>::with_capacity(files.len());
     for (metadata, contents) in files {
       // TODO: We could write files in parallel.
-      let path = object_store::path::Path::from(metadata.path());
+      let path = object_store::path::Path::from(metadata.objectstore_id());
 
       let mut writer = store.put_multipart(&path).await?;
       writer.put_part(contents.into()).await?;
@@ -218,7 +221,7 @@ impl FileManager {
         tokio::spawn(async move {
           let store = state.objectstore();
           for file in written_files {
-            let path = object_store::path::Path::from(file.path());
+            let path = object_store::path::Path::from(file.objectstore_id());
             if let Err(err) = store.delete(&path).await {
               warn!("Failed to cleanup just written file: {err}");
             }

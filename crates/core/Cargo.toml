@@ -63,7 +63,7 @@ parking_lot = { workspace = true }
 pin-project-lite = "0.2.16"
 prost = { version = "^0.14.1", default-features = false }
 prost-reflect = { version = "^0.16.0", default-features = false, features = ["derive", "text-format"] }
-rand = "^0.9.0"
+rand = { workspace = true }
 reactivate = { version = "0.4.2", features = ["threadsafe"] }
 regex = "1.11.0"
 reqwest = { workspace = true }

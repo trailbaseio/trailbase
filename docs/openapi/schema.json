@@ -554,7 +554,7 @@
         },
         "responses": {
           "200": {
-            "description": "Record id of successful insertion.",
+            "description": "Ids of successfully created records.",
             "content": {
               "application/json": {
                 "schema": {
@@ -721,6 +721,7 @@
       "get": {
         "tags": ["records"],
         "summary": "Read file associated with record.",
+        "description": "You may prefer using the more general \"files\" (plural) handler below. Since using unique\nfilenames does help with the content lifecycle, such as caching.",
         "operationId": "get_uploaded_file_from_record_handler",
         "responses": {
           "200": {
@@ -729,7 +730,7 @@
         }
       }
     },
-    "/api/records/v1/{name}/{record}/files/{column_name}/{file_index}": {
+    "/api/records/v1/{name}/{record}/files/{column_name}/{file_id}": {
       "get": {
         "tags": ["records"],
         "summary": "Read single file from list associated with record.",
@@ -816,7 +817,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Safe-url base64 encoded id of the newly created record."
+            "description": "Url-Safe base64 encoded ids of the newly created record."
           }
         }
       },
@@ -935,13 +936,19 @@
       },
       "ResetPasswordUpdateRequest": {
         "type": "object",
-        "required": ["password", "password_repeat"],
+        "required": ["password", "password_repeat", "password_reset_code"],
         "properties": {
           "password": {
             "type": "string"
           },
           "password_repeat": {
             "type": "string"
+          },
+          "password_reset_code": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": ["string", "null"]
           }
         }
       },
