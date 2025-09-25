@@ -13,7 +13,7 @@ format:
 	       	dotnet format client/dotnet/test; \
 		poetry -C client/python run black --config pyproject.toml .; \
 		swift format -r -i client/swift/trailbase/**/*.swift; \
-		gofmt -w **/*.go;
+		gofmt -w client/go/trailbase;
 
 check:
 	pnpm -r check; \

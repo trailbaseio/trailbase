@@ -16,6 +16,9 @@ exclude = [
 ]
 autobenches = false
 
+[lib]
+doctest = false
+
 [[bench]]
 name = "benchmark"
 harness = false

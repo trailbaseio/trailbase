@@ -12,7 +12,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function initTrailBase(): Promise<{ subprocess: Subprocess }> {
   const pwd = cwd();
   if (!pwd.endsWith("client")) {
-    throw Error(`Unxpected CWD: ${pwd}`);
+    throw Error(`Unexpected CWD: ${pwd}`);
   }
 
   const root = join(pwd, "..", "..", "..", "..");

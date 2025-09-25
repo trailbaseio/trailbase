@@ -12,6 +12,9 @@ doctest = false
 name = "trail"
 
 [features]
+default = ["v8"]
+# Conditionally enable "v8" feature of dep:trailbase.
+v8 = ["trailbase/v8"]
 swagger = ["dep:utoipa-swagger-ui"]
 
 [dependencies]

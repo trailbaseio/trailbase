@@ -83,7 +83,7 @@ rust-embed = { version = "8.4.0", default-features = false, features = ["mime-gu
 tokio = { version = "^1.38.0", default-features = false, features = ["macros", "net", "rt-multi-thread", "fs", "signal", "time", "sync"] }
 tracing = { version = "0.1.40", default-features = false }
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["smallvec", "std", "fmt", "json"] }
-trailbase = { path = "crates/core", version = "0.2.0" }
+trailbase = { path = "crates/core", version = "0.2.0", default-features = false, features=["wasm"] }
 trailbase-assets = { path = "crates/assets", version = "0.2.0" }
 trailbase-build = { path = "crates/build", version = "0.1.1" }
 trailbase-client = { path = "crates/client", version = "0.5.0" }
