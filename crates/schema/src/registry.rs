@@ -156,7 +156,8 @@ mod tests {
       let schema = get_schema("std.FileUpload").unwrap();
       let compiled_schema = Validator::new(&schema.schema).unwrap();
       let input = json!({
-        "id": "foo",
+        "id": uuid::Uuid::new_v4().to_string(),
+        "filename": "foo_8435o3.png",
         "mime_type": "my_foo",
       });
       if let Err(err) = compiled_schema.validate(&input) {
@@ -171,11 +172,13 @@ mod tests {
         compiled_schema
           .validate(&json!([
             {
-              "id": "foo0",
+              "id": uuid::Uuid::new_v4().to_string(),
+              "filename": "foo0_8435o3.png",
               "mime_type": "my_foo0",
             },
             {
-              "id": "foo1",
+              "id": uuid::Uuid::new_v4().to_string(),
+              "filename": "foo1_xex5o3.png",
               "mime_type": "my_foo1",
             },
           ]))

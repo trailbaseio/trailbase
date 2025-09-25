@@ -150,6 +150,19 @@ pub(crate) async fn run_get_files_query(
       let file_uploads: FileUploads = serde_json::from_str(&contents)?;
       Ok(file_uploads)
     }
+    JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
+      return Ok(FileUploads(vec![
+        run_get_file_query(
+          state,
+          table_name,
+          file_column,
+          json_metadata,
+          pk_column,
+          pk_value,
+        )
+        .await?,
+      ]));
+    }
     _ => Err(QueryError::Precondition("Not a files list")),
   };
 }

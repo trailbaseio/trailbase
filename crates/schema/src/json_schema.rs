@@ -414,7 +414,8 @@ mod tests {
       insert(
         "col3",
         json!({
-          "id": uuid::Uuid::now_v7().to_string(),
+          "id": uuid::Uuid::new_v4().to_string(),
+          "filename": "foo_o3uoiuo.png",
           "mime_type": "image/png"
         })
       )

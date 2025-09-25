@@ -149,6 +149,9 @@ type GetUploadedFileFromRecordPath = Path<(
 )>;
 
 /// Read file associated with record.
+///
+/// You may prefer using the more general "files" (plural) handler below. Since using unique
+/// filenames does help with the content lifecycle, such as caching.
 #[utoipa::path(
   get,
   path = "/{name}/{record}/file/{column_name}",
@@ -205,13 +208,15 @@ type GetUploadedFilesFromRecordPath = Path<(
   String, // RecordApi name
   String, // Record id
   String, // Column name
-  String, // Index or UUID
+  // NOTE: We may want to remove index-based access in the future. A stable, unique identifier
+  // makes a lot more sense in the context of mutations, caching, ... .
+  String, // Index or filename
 )>;
 
 /// Read single file from list associated with record.
 #[utoipa::path(
   get,
-  path = "/{name}/{record}/files/{column_name}/{file_index}",
+  path = "/{name}/{record}/files/{column_name}/{file_id}",
   tag = "records",
   responses(
     (status = 200, description = "File contents.")
@@ -246,19 +251,14 @@ pub async fn get_uploaded_files_from_record_handler(
   .await
   .map_err(|err| RecordError::Internal(err.into()))?;
 
-  let file_upload = if let Ok(uuid) = uuid::Uuid::parse_str(&file_id) {
-    // NOTE: reserialize for consistent econding to avoid issues like capitalization.
-    let uuid = uuid.to_string();
-    file_uploads.0.into_iter().find(|f| f.path() == uuid)
-  } else {
-    let index: usize = file_id
-      .parse()
-      .map_err(|_| RecordError::BadRequest("Expected UUID or index"))?;
+  let file_upload = if let Ok(index) = file_id.parse::<usize>() {
     if index < file_uploads.0.len() {
       Some(file_uploads.0.remove(index))
     } else {
       None
     }
+  } else {
+    file_uploads.0.into_iter().find(|f| f.filename() == file_id)
   };
 
   return read_file_into_response(
@@ -733,7 +733,7 @@ mod test {
         assert_eq!(f.original_filename(), Some(format!("bar{index}").as_str()));
         assert_eq!(f.content_type(), Some(format!("baz{index}").as_str()));
 
-        let file_path = object_store::path::Path::from(f.path());
+        let file_path = object_store::path::Path::from(f.objectstore_id());
         assert_eq!(
           *expected,
           read_objectstore_file(state.objectstore(), &file_path).await

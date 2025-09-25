@@ -12,7 +12,9 @@
   "paths": {
     "/api/auth/v1/avatar/": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "operationId": "create_avatar_handler",
         "responses": {
           "200": {
@@ -21,7 +23,9 @@
         }
       },
       "delete": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "operationId": "delete_avatar_handler",
         "responses": {
           "200": {
@@ -32,7 +36,9 @@
     },
     "/api/auth/v1/avatar/:b64_user_id": {
       "get": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "operationId": "get_avatar_handler",
         "responses": {
           "200": {
@@ -43,7 +49,9 @@
     },
     "/api/auth/v1/change_email/confirm/:email_verification_code": {
       "get": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Confirm a change of email address.",
         "operationId": "change_email_confirm_handler",
         "responses": {
@@ -55,7 +63,9 @@
     },
     "/api/auth/v1/change_email/request": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Request an email change.",
         "operationId": "change_email_request_handler",
         "requestBody": {
@@ -77,7 +87,9 @@
     },
     "/api/auth/v1/change_password": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Request a change of password.",
         "operationId": "change_password_handler",
         "parameters": [
@@ -86,7 +98,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         ],
@@ -109,7 +124,9 @@
     },
     "/api/auth/v1/delete": {
       "delete": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Get public profile of the given user.",
         "operationId": "delete_handler",
         "responses": {
@@ -121,7 +138,9 @@
     },
     "/api/auth/v1/login": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Log in users by email and password.",
         "operationId": "login_handler",
         "parameters": [
@@ -130,7 +149,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -138,7 +160,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -146,7 +171,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         ],
@@ -176,7 +204,9 @@
     },
     "/api/auth/v1/logout": {
       "get": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Logs out the current user and delete **all** pending sessions for that user.",
         "description": "Relies on the client to drop any auth tokens. We delete the session to avoid refresh tokens\nbringing a logged out session back to live.",
         "operationId": "logout_handler",
@@ -186,7 +216,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         ],
@@ -197,7 +230,9 @@
         }
       },
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Logs out the current user and deletes the specific session for the given refresh token.",
         "description": "Relies on the client to drop any auth tokens.",
         "operationId": "post_logout_handler",
@@ -220,7 +255,9 @@
     },
     "/api/auth/v1/oauth/providers": {
       "get": {
-        "tags": ["oauth"],
+        "tags": [
+          "oauth"
+        ],
         "summary": "List configured OAuth providers.",
         "operationId": "list_configured_providers_handler",
         "responses": {
@@ -239,7 +276,9 @@
     },
     "/api/auth/v1/oauth/{provider}/callback": {
       "get": {
-        "tags": ["oauth"],
+        "tags": [
+          "oauth"
+        ],
         "summary": "This handler receives the ?code=<>&state=<>, uses it to get an external oauth token, gets the\nuser's information, creates a new local user if needed, and finally mints our own tokens.",
         "operationId": "callback_from_external_auth_provider",
         "parameters": [
@@ -277,7 +316,9 @@
     },
     "/api/auth/v1/oauth/{provider}/login": {
       "get": {
-        "tags": ["oauth"],
+        "tags": [
+          "oauth"
+        ],
         "summary": "Log in via external OAuth provider.",
         "operationId": "login_with_external_auth_provider",
         "parameters": [
@@ -286,7 +327,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -294,7 +338,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -302,7 +349,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -323,7 +373,9 @@
     },
     "/api/auth/v1/refresh": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Refreshes auth tokens given a refresh token.",
         "description": "NOTE: This is a json-only API, since cookies will be auto-refreshed.",
         "operationId": "refresh_handler",
@@ -353,7 +405,9 @@
     },
     "/api/auth/v1/register": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Registers a new user with email and password.",
         "operationId": "register_user_handler",
         "requestBody": {
@@ -375,7 +429,9 @@
     },
     "/api/auth/v1/reset_password/request": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Request a password reset.",
         "operationId": "reset_password_request_handler",
         "requestBody": {
@@ -397,7 +453,9 @@
     },
     "/api/auth/v1/reset_password/update/:password_reset_code": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Endpoint for setting a new password after the user has requested a reset and provided a\nreplacement password.",
         "operationId": "reset_password_update_handler",
         "requestBody": {
@@ -419,7 +477,9 @@
     },
     "/api/auth/v1/status": {
       "get": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Check login status.",
         "operationId": "login_status_handler",
         "responses": {
@@ -438,7 +498,9 @@
     },
     "/api/auth/v1/token": {
       "post": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Exchange authorization code for auth tokens.",
         "description": "This API endpoint is meant for client-side applications (SPA, mobile, desktop, ...) using the\nweb-auth flow.",
         "operationId": "auth_code_to_token_handler",
@@ -468,7 +530,9 @@
     },
     "/api/auth/v1/verify_email/confirm/:email_verification_code": {
       "get": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Request a new email to verify email address.",
         "operationId": "verify_email_handler",
         "responses": {
@@ -480,7 +544,9 @@
     },
     "/api/auth/v1/verify_email/trigger": {
       "get": {
-        "tags": ["auth"],
+        "tags": [
+          "auth"
+        ],
         "summary": "Request a new email to verify email address.",
         "operationId": "request_email_verification_handler",
         "requestBody": {
@@ -502,7 +568,9 @@
     },
     "/api/records/v1/{name}": {
       "get": {
-        "tags": ["records"],
+        "tags": [
+          "records"
+        ],
         "summary": "Lists records matching the given filters",
         "operationId": "list_records_handler",
         "parameters": [
@@ -522,7 +590,9 @@
         }
       },
       "post": {
-        "tags": ["records"],
+        "tags": [
+          "records"
+        ],
         "summary": "Create new record.",
         "operationId": "create_record_handler",
         "parameters": [
@@ -532,7 +602,10 @@
             "description": "Redirect user to this address upon successful record creation.\nThis only exists to support insertions via static HTML form actions.\n\nWe may want to have a different on-error redirect to better support the static HTML use-case.",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -554,7 +627,7 @@
         },
         "responses": {
           "200": {
-            "description": "Record id of successful insertion.",
+            "description": "Ids of successfully created records.",
             "content": {
               "application/json": {
                 "schema": {
@@ -568,7 +641,9 @@
     },
     "/api/records/v1/{name}/schema": {
       "get": {
-        "tags": ["records"],
+        "tags": [
+          "records"
+        ],
         "summary": "Retrieve json schema associated with given record api.",
         "operationId": "json_schema_handler",
         "parameters": [
@@ -590,7 +665,9 @@
     },
     "/api/records/v1/{name}/subscribe/{record}": {
       "get": {
-        "tags": ["records"],
+        "tags": [
+          "records"
+        ],
         "summary": "Read record.",
         "operationId": "add_subscription_sse_handler",
         "parameters": [
@@ -620,7 +697,9 @@
     },
     "/api/records/v1/{name}/{record}": {
       "get": {
-        "tags": ["records"],
+        "tags": [
+          "records"
+        ],
         "summary": "Read record.",
         "operationId": "read_record_handler",
         "parameters": [
@@ -653,7 +732,9 @@
         }
       },
       "delete": {
-        "tags": ["records"],
+        "tags": [
+          "records"
+        ],
         "summary": "Delete record.",
         "operationId": "delete_record_handler",
         "parameters": [
@@ -681,7 +762,9 @@
         }
       },
       "patch": {
-        "tags": ["records"],
+        "tags": [
+          "records"
+        ],
         "summary": "Update existing record.",
         "operationId": "update_record_handler",
         "parameters": [
@@ -719,8 +802,11 @@
     },
     "/api/records/v1/{name}/{record}/file/{column_name}": {
       "get": {
-        "tags": ["records"],
+        "tags": [
+          "records"
+        ],
         "summary": "Read file associated with record.",
+        "description": "You may prefer using the more general \"files\" (plural) handler below. Since using unique\nfilenames does help with the content lifecycle, such as caching.",
         "operationId": "get_uploaded_file_from_record_handler",
         "responses": {
           "200": {
@@ -729,9 +815,11 @@
         }
       }
     },
-    "/api/records/v1/{name}/{record}/files/{column_name}/{file_index}": {
+    "/api/records/v1/{name}/{record}/files/{column_name}/{file_id}": {
       "get": {
-        "tags": ["records"],
+        "tags": [
+          "records"
+        ],
         "summary": "Read single file from list associated with record.",
         "operationId": "get_uploaded_files_from_record_handler",
         "responses": {
@@ -748,16 +836,25 @@
         "type": "object",
         "properties": {
           "authorization_code": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "pkce_code_verifier": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "ChangeEmailRequest": {
         "type": "object",
-        "required": ["csrf_token", "new_email"],
+        "required": [
+          "csrf_token",
+          "new_email"
+        ],
         "properties": {
           "csrf_token": {
             "type": "string"
@@ -766,13 +863,20 @@
             "type": "string"
           },
           "old_email": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "ChangePasswordRequest": {
         "type": "object",
-        "required": ["old_password", "new_password", "new_password_repeat"],
+        "required": [
+          "old_password",
+          "new_password",
+          "new_password_repeat"
+        ],
         "properties": {
           "new_password": {
             "type": "string"
@@ -787,7 +891,9 @@
       },
       "ConfiguredOAuthProvidersResponse": {
         "type": "object",
-        "required": ["providers"],
+        "required": [
+          "providers"
+        ],
         "properties": {
           "providers": {
             "type": "array",
@@ -809,20 +915,24 @@
       },
       "CreateRecordResponse": {
         "type": "object",
-        "required": ["ids"],
+        "required": [
+          "ids"
+        ],
         "properties": {
           "ids": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Safe-url base64 encoded id of the newly created record."
+            "description": "Url-Safe base64 encoded ids of the newly created record."
           }
         }
       },
       "EmailVerificationRequest": {
         "type": "object",
-        "required": ["email"],
+        "required": [
+          "email"
+        ],
         "properties": {
           "email": {
             "type": "string"
@@ -831,7 +941,10 @@
       },
       "LoginRequest": {
         "type": "object",
-        "required": ["email", "password"],
+        "required": [
+          "email",
+          "password"
+        ],
         "properties": {
           "email": {
             "type": "string"
@@ -840,19 +953,32 @@
             "type": "string"
           },
           "pkce_code_challenge": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "redirect_uri": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "response_type": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "LoginResponse": {
         "type": "object",
-        "required": ["auth_token", "refresh_token", "csrf_token"],
+        "required": [
+          "auth_token",
+          "refresh_token",
+          "csrf_token"
+        ],
         "properties": {
           "auth_token": {
             "type": "string"
@@ -869,19 +995,30 @@
         "type": "object",
         "properties": {
           "auth_token": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "csrf_token": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "refresh_token": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "LogoutRequest": {
         "type": "object",
-        "required": ["refresh_token"],
+        "required": [
+          "refresh_token"
+        ],
         "properties": {
           "refresh_token": {
             "type": "string"
@@ -890,7 +1027,9 @@
       },
       "RefreshRequest": {
         "type": "object",
-        "required": ["refresh_token"],
+        "required": [
+          "refresh_token"
+        ],
         "properties": {
           "refresh_token": {
             "type": "string"
@@ -899,7 +1038,10 @@
       },
       "RefreshResponse": {
         "type": "object",
-        "required": ["auth_token", "csrf_token"],
+        "required": [
+          "auth_token",
+          "csrf_token"
+        ],
         "properties": {
           "auth_token": {
             "type": "string"
@@ -911,7 +1053,11 @@
       },
       "RegisterUserRequest": {
         "type": "object",
-        "required": ["email", "password", "password_repeat"],
+        "required": [
+          "email",
+          "password",
+          "password_repeat"
+        ],
         "properties": {
           "email": {
             "type": "string"
@@ -926,7 +1072,9 @@
       },
       "ResetPasswordRequest": {
         "type": "object",
-        "required": ["email"],
+        "required": [
+          "email"
+        ],
         "properties": {
           "email": {
             "type": "string"
@@ -935,19 +1083,36 @@
       },
       "ResetPasswordUpdateRequest": {
         "type": "object",
-        "required": ["password", "password_repeat"],
+        "required": [
+          "password",
+          "password_repeat",
+          "password_reset_code"
+        ],
         "properties": {
           "password": {
             "type": "string"
           },
           "password_repeat": {
             "type": "string"
+          },
+          "password_reset_code": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
       "TokenResponse": {
         "type": "object",
-        "required": ["auth_token", "refresh_token", "csrf_token"],
+        "required": [
+          "auth_token",
+          "refresh_token",
+          "csrf_token"
+        ],
         "properties": {
           "auth_token": {
             "type": "string"

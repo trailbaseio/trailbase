@@ -394,10 +394,13 @@ async fn subscription_test() {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct FileUpload {
-  /// The file's unique id from which the objectstore path is derived.
-  id: String,
+  /// The file's UUID, should be stripped.
+  id: Option<String>,
 
-  /// The file's original file name.
+  /// The file's original filename
+  original_filename: Option<String>,
+
+  /// The file's unique filename.
   filename: Option<String>,
 
   /// The file's user-provided content type.
@@ -454,32 +457,47 @@ async fn file_upload_json_base64_test() {
   let record: FileUploadTable = api.read(&record_id).await.unwrap();
 
   // Verify single file metadata
+  let single_file = record.single_file.as_ref().unwrap();
+  assert_eq!(None, single_file.id);
+  assert_eq!(single_file.original_filename.as_deref(), Some("test1.bin"));
   assert_eq!(
-    record.single_file.as_ref().unwrap().filename.as_deref(),
-    Some("test1.bin")
-  );
-  assert_eq!(
-    record.single_file.as_ref().unwrap().content_type.as_deref(),
+    single_file.content_type.as_deref(),
     Some("application/octet-stream")
   );
 
   // Verify multiple files metadata
   let multiple_files = &record.multiple_files;
   assert_eq!(multiple_files.len(), 2);
-  assert_eq!(multiple_files[0].filename.as_deref(), Some("test2.bin"));
-  assert_eq!(multiple_files[1].filename.as_deref(), Some("test3.bin"));
+  assert_eq!(
+    multiple_files[0].original_filename.as_deref(),
+    Some("test2.bin")
+  );
+  assert_eq!(
+    multiple_files[1].original_filename.as_deref(),
+    Some("test3.bin")
+  );
+
+  let http_client = reqwest::Client::new();
 
   // Test file download endpoints to verify actual file content
-  let http_client = reqwest::Client::new();
-  let single_file_response = http_client
-    .get(&format!(
-      "http://127.0.0.1:{PORT}/api/records/v1/file_upload_table/{record_id}/file/single_file",
-    ))
-    .send()
-    .await
-    .unwrap();
-  let single_file_bytes = single_file_response.bytes().await.unwrap();
-  assert_eq!(single_file_bytes.to_vec(), test_bytes1);
+  let single_file_fname = single_file.filename.as_deref().unwrap();
+  for single_file_url in [
+    format!(
+      "http://127.0.0.1:{PORT}/api/records/v1/file_upload_table/{record_id}/file/single_file"
+    ),
+    format!(
+      "http://127.0.0.1:{PORT}/api/records/v1/file_upload_table/{record_id}/files/single_file/{single_file_fname}"
+    ),
+  ] {
+    let single_file_response = http_client.get(&single_file_url).send().await.unwrap();
+    let single_file_bytes = single_file_response.bytes().await.unwrap();
+    assert_eq!(
+      single_file_bytes.to_vec(),
+      test_bytes1,
+      "{}",
+      String::from_utf8_lossy(&single_file_bytes)
+    );
+  }
 
   let multi_file_1_response = http_client
     .get(&format!(
@@ -491,10 +509,10 @@ async fn file_upload_json_base64_test() {
   let multi_file_1_bytes = multi_file_1_response.bytes().await.unwrap();
   assert_eq!(multi_file_1_bytes, test_bytes2);
 
-  let uuid = &multiple_files[1].id;
+  let filename = multiple_files[1].filename.as_ref().unwrap();
   let multi_file_2_response = http_client
     .get(&format!(
-      "http://127.0.0.1:{PORT}/api/records/v1/file_upload_table/{record_id}/files/multiple_files/{uuid}"
+      "http://127.0.0.1:{PORT}/api/records/v1/file_upload_table/{record_id}/files/multiple_files/{filename}"
     ))
     .send()
     .await
