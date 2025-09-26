@@ -105,6 +105,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.8"
+  dart_http_sse:
+    dependency: transitive
+    description:
+      name: dart_http_sse
+      sha256: d77a85f63e2b71a1d056e0037a4b558242e7dffa4c821afba1e90f9b44b49e2e
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.3"
   desktop_webview_window:
     dependency: transitive
     description:
@@ -208,6 +216,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.3"
+  http:
+    dependency: transitive
+    description:
+      name: http
+      sha256: bb2ce4590bc2667c96f318d68cac1b5a7987ec819351d32b1c987239a815e007
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.5.0"
   http_multi_server:
     dependency: transitive
     description:

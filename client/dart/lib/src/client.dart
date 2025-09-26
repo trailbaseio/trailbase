@@ -4,6 +4,10 @@ import 'dart:typed_data';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:logging/logging.dart';
 import 'package:dio/dio.dart' as dio;
+import 'package:http/http.dart' as http;
+import 'package:dart_http_sse/client/sse_client.dart' as sse;
+import 'package:dart_http_sse/model/sse_request.dart' as sse;
+import 'package:dart_http_sse/model/sse_response.dart' as sse;
 
 import 'sse.dart';
 
@@ -84,7 +88,7 @@ class JwtToken {
 
 class _TokenState {
   final (Tokens, JwtToken)? state;
-  final Map<String, dynamic> headers;
+  final Map<String, String> headers;
 
   const _TokenState(this.state, this.headers);
 
@@ -349,7 +353,7 @@ class RecordApi {
     bool? count,
     List<String>? expand,
   }) async {
-    final params = <String, dynamic>{};
+    final params = <String, String>{};
     if (pagination != null) {
       final cursor = pagination.cursor;
       if (cursor != null) params['cursor'] = cursor;
@@ -358,7 +362,7 @@ class RecordApi {
       if (limit != null) params['limit'] = limit.toString();
 
       final offset = pagination.offset;
-      if (offset != null) params['offset'] = offset;
+      if (offset != null) params['offset'] = offset.toString();
     }
 
     if (order != null) params['order'] = order.join(',');
@@ -369,47 +373,51 @@ class RecordApi {
       _addFiltersToParams(params, 'filter', filter);
     }
 
-    final response = await _client.fetch(
+    final response = await _client.fetch2(
       '${RecordApi._recordApi}/${_name}',
       queryParams: params,
     );
 
-    return ListResponse.fromJson(response.data);
+    return ListResponse.fromJson(jsonDecode(response.body));
   }
 
   Future<Map<String, dynamic>> read(RecordId id, {List<String>? expand}) async {
-    final response = await _client.fetch(expand == null
-        ? '${RecordApi._recordApi}/${_name}/${id}'
-        : '${RecordApi._recordApi}/${_name}/${id}?expand=${expand.join(",")}');
-    return response.data;
+    final response = await switch (expand) {
+      null => _client.fetch2('${RecordApi._recordApi}/${_name}/${id}'),
+      _ =>
+        _client.fetch2('${RecordApi._recordApi}/${_name}/${id}', queryParams: {
+          'expand': expand.join(','),
+        })
+    };
+    return jsonDecode(response.body);
   }
 
   Future<RecordId> create(Map<String, dynamic> record) async {
-    final response = await _client.fetch(
+    final response = await _client.fetch2(
       '${RecordApi._recordApi}/${_name}',
       method: 'POST',
-      data: record,
+      data: jsonEncode(record),
     );
 
-    if ((response.statusCode ?? 400) > 200) {
-      throw Exception('${response.data} ${response.statusMessage}');
+    if (response.statusCode > 200) {
+      throw Exception('[${response.statusCode}] ${response.body}');
     }
-    final responseIds = _ResponseRecordIds.fromJson(response.data);
+    final responseIds = _ResponseRecordIds.fromJson(jsonDecode(response.body));
     assert(responseIds._ids.length == 1);
     return responseIds.toRecordIds()[0];
   }
 
   Future<List<RecordId>> createBulk(List<Map<String, dynamic>> records) async {
-    final response = await _client.fetch(
+    final response = await _client.fetch2(
       '${RecordApi._recordApi}/${_name}',
       method: 'POST',
-      data: records,
+      data: jsonEncode(records),
     );
 
-    if ((response.statusCode ?? 400) > 200) {
-      throw Exception('${response.data} ${response.statusMessage}');
+    if (response.statusCode > 200) {
+      throw Exception('[${response.statusCode}] ${response.body}');
     }
-    final responseIds = _ResponseRecordIds.fromJson(response.data);
+    final responseIds = _ResponseRecordIds.fromJson(jsonDecode(response.body));
     return responseIds.toRecordIds();
   }
 
@@ -417,15 +425,15 @@ class RecordApi {
     RecordId id,
     Map<String, dynamic> record,
   ) async {
-    await _client.fetch(
+    await _client.fetch2(
       '${RecordApi._recordApi}/${_name}/${id}',
       method: 'PATCH',
-      data: record,
+      data: jsonEncode(record),
     );
   }
 
   Future<void> delete(RecordId id) async {
-    await _client.fetch(
+    await _client.fetch2(
       '${RecordApi._recordApi}/${_name}/${id}',
       method: 'DELETE',
     );
@@ -455,19 +463,39 @@ class RecordApi {
     required RecordId id,
     List<FilterBase>? filters,
   }) async {
-    final params = <String, dynamic>{};
+    final params = <String, String>{};
     for (final filter in filters ?? []) {
       _addFiltersToParams(params, 'filter', filter);
     }
 
-    final resp = await _client.fetch(
+    var tokenState = _client._tokenState;
+    final refreshToken = Client._shouldRefresh(tokenState);
+    if (refreshToken != null) {
+      tokenState =
+          _client._tokenState = await _client._refreshTokensImpl(refreshToken);
+    }
+
+    final resp = await _client._client.stream(
       '${RecordApi._recordApi}/${_name}/subscribe/${id}',
-      responseType: dio.ResponseType.stream,
+      tokenState,
       queryParams: params,
     );
 
     final Stream<Uint8List> stream = resp.data.stream;
     return stream.expand(_decodeEvent);
+
+    // final stream = _client._client.stream2(
+    //   '${RecordApi._recordApi}/${_name}/subscribe/${id}',
+    //   tokenState,
+    //   queryParams: params,
+    // );
+    //
+    // return stream.expand((r) {
+    //   print('Event ${r}');
+    //
+    //   return [Event.fromJson(r.data)];
+    //   // return _decodeEvent(r.data);
+    // });
   }
 
   Uri imageUri(RecordId id, String colName, {int? index}) {
@@ -482,18 +510,40 @@ class RecordApi {
 
 class _ThinClient {
   static final _dio = dio.Dio()..interceptors.add(SeeInterceptor());
+  static final _http = http.Client();
 
-  final String site;
+  final Uri site;
 
   const _ThinClient(this.site);
 
-  Future<dio.Response> fetch(
+  Future<http.Response> fetch2(
     String path,
     _TokenState tokenState, {
-    Object? data,
+    String? data,
     String? method,
-    Map<String, dynamic>? queryParams,
-    dio.ResponseType? responseType,
+    Map<String, String>? queryParams,
+  }) async {
+    final uri = site.replace(path: path, queryParameters: queryParams);
+
+    print('URI: ${uri} ${path} ${queryParams}');
+
+    final headers = tokenState.headers;
+
+    final response = switch (method ?? 'GET') {
+      'GET' => await _http.get(uri, headers: headers),
+      'POST' => await _http.post(uri, headers: headers, body: data),
+      'PATCH' => await _http.patch(uri, headers: headers, body: data),
+      'DELETE' => await _http.delete(uri, headers: headers, body: data),
+      _ => throw Exception('unknown method: ${method}'),
+    };
+
+    return response;
+  }
+
+  Future<dio.Response> stream(
+    String path,
+    _TokenState tokenState, {
+    Map<String, String>? queryParams,
   }) async {
     if (path.startsWith('/')) {
       throw Exception('Path starts with "/". Relative path expected.');
@@ -501,17 +551,54 @@ class _ThinClient {
 
     final response = await _dio.request(
       '${site}/${path}',
-      data: data,
       queryParameters: queryParams,
       options: dio.Options(
-        method: method,
+        // method: 'GET',
         headers: tokenState.headers,
         validateStatus: (int? status) => true,
-        responseType: responseType,
+        responseType: dio.ResponseType.stream,
       ),
     );
 
     return response;
+  }
+
+  Stream<sse.SSEResponse> stream2(
+    String path,
+    _TokenState tokenState, {
+    Object? data,
+    String? method,
+    Map<String, String>? queryParams,
+  }) {
+    if (path.startsWith('/')) {
+      throw Exception('Path starts with "/". Relative path expected.');
+    }
+
+    var uri = Uri.parse('${site}/${path}');
+    if (queryParams != null) {
+      uri = uri.replace(queryParameters: queryParams);
+    }
+
+    final headers = tokenState.headers;
+
+    final request = sse.SSERequest(
+      url: uri.toString(),
+      headers: headers,
+      onData: (response) {
+        print('New SSE Event: ${response.data}');
+      },
+      onError: (error) {
+        print('SSE Error: $error');
+      },
+      onDone: () {
+        print('SSE Connection Closed');
+      },
+      retry: false,
+    );
+
+    final stream = sse.SSEClient().connect('unique id 0', request);
+
+    return stream;
   }
 }
 
@@ -527,7 +614,7 @@ class Client {
     String site, {
     Tokens? tokens,
     void Function(Client, Tokens?)? onAuthChange,
-  })  : _client = _ThinClient(site),
+  })  : _client = _ThinClient(Uri.parse(site)),
         _site = site,
         _tokenState = _TokenState.build(tokens),
         _authChange = onAuthChange;
@@ -543,8 +630,8 @@ class Client {
 
     try {
       final statusResponse = await client._client
-          .fetch('${_authApi}/status', _TokenState.build(tokens));
-      final Map<String, dynamic> response = statusResponse.data;
+          .fetch2('${_authApi}/status', _TokenState.build(tokens));
+      final Map<String, dynamic> response = jsonDecode(statusResponse.body);
 
       final newTokens = Tokens(
         response['auth_token'],
@@ -592,16 +679,16 @@ class Client {
   }
 
   Future<Tokens> login(String email, String password) async {
-    final response = await fetch(
+    final response = await fetch2(
       '${_authApi}/login',
       method: 'POST',
-      data: {
+      data: jsonEncode({
         'email': email,
         'password': password,
-      },
+      }),
     );
 
-    final Map<String, dynamic> json = response.data;
+    final Map<String, dynamic> json = jsonDecode(response.body);
     final tokens = Tokens(
       json['auth_token']!,
       json['refresh_token'],
@@ -616,16 +703,16 @@ class Client {
     String authCode, {
     String? pkceCodeVerifier,
   }) async {
-    final response = await fetch(
+    final response = await fetch2(
       '${Client._authApi}/token',
       method: 'POST',
-      data: {
+      data: jsonEncode({
         'authorization_code': authCode,
         'pkce_code_verifier': pkceCodeVerifier,
-      },
+      }),
     );
 
-    final Map<String, dynamic> tokenResponse = await response.data;
+    final Map<String, dynamic> tokenResponse = jsonDecode(response.body);
     final tokens = Tokens(
       tokenResponse['auth_token']!,
       tokenResponse['refresh_token']!,
@@ -640,11 +727,13 @@ class Client {
     final refreshToken = _tokenState.state?.$1.refresh;
     try {
       if (refreshToken != null) {
-        await fetch('${_authApi}/logout', method: 'POST', data: {
-          'refresh_token': refreshToken,
-        });
+        await fetch2('${_authApi}/logout',
+            method: 'POST',
+            data: jsonEncode({
+              'refresh_token': refreshToken,
+            }));
       } else {
-        await fetch('${_authApi}/logout');
+        await fetch2('${_authApi}/logout');
       }
     } catch (err) {
       _logger.warning(err);
@@ -654,17 +743,17 @@ class Client {
   }
 
   Future<void> deleteUser() async {
-    await fetch('${Client._authApi}/delete');
+    await fetch2('${Client._authApi}/delete');
     _updateTokens(null);
   }
 
   Future<void> changeEmail(String email) async {
-    await fetch(
+    await fetch2(
       '${Client._authApi}/change_email',
       method: 'POST',
-      data: {
+      data: jsonEncode({
         'new_email': email,
-      },
+      }),
     );
   }
 
@@ -676,16 +765,16 @@ class Client {
   }
 
   Future<_TokenState> _refreshTokensImpl(String refreshToken) async {
-    final response = await _client.fetch(
+    final response = await _client.fetch2(
       '${_authApi}/refresh',
       _tokenState,
       method: 'POST',
-      data: {
+      data: jsonEncode({
         'refresh_token': refreshToken,
-      },
+      }),
     );
 
-    final Map<String, dynamic> tokenResponse = await response.data;
+    final Map<String, dynamic> tokenResponse = jsonDecode(response.body);
     return _TokenState.build(Tokens(
       tokenResponse['auth_token']!,
       refreshToken,
@@ -702,13 +791,12 @@ class Client {
     return null;
   }
 
-  Future<dio.Response> fetch(
+  Future<http.Response> fetch2(
     String path, {
     bool? throwOnError,
-    Object? data,
+    String? data,
     String? method,
-    Map<String, dynamic>? queryParams,
-    dio.ResponseType? responseType,
+    Map<String, String>? queryParams,
   }) async {
     var tokenState = _tokenState;
     final refreshToken = _shouldRefresh(tokenState);
@@ -716,27 +804,25 @@ class Client {
       tokenState = _tokenState = await _refreshTokensImpl(refreshToken);
     }
 
-    final response = await _client.fetch(
+    final response = await _client.fetch2(
       path,
       tokenState,
       data: data,
       method: method,
       queryParams: queryParams,
-      responseType: responseType,
     );
 
     if (response.statusCode != 200 && (throwOnError ?? true)) {
-      final errMsg = await response.data;
-      throw Exception(
-          '[${response.statusCode}] ${response.statusMessage}}: ${errMsg}');
+      final errMsg = response.body;
+      throw Exception('[${response.statusCode}]: ${errMsg}');
     }
 
     return response;
   }
 }
 
-Map<String, dynamic> buildHeaders(Tokens? tokens) {
-  final Map<String, dynamic> base = {
+Map<String, String> buildHeaders(Tokens? tokens) {
+  final Map<String, String> base = {
     'Content-Type': 'application/json',
   };
 
