@@ -365,30 +365,8 @@ class RecordApi {
     if (count ?? false) params['count'] = 'true';
     if (expand != null) params['expand'] = expand.join(',');
 
-    void traverseFilters(String path, FilterBase filter) {
-      final _ = switch (filter) {
-        Filter(column: final c, op: final op, value: final v) => () {
-            if (op != null) {
-              params['${path}[${c}][${_opToSring(op)}]'] = v;
-            } else {
-              params['${path}[${c}]'] = v;
-            }
-          }(),
-        And(filters: final filters) => () {
-            filters.asMap().forEach((index, filter) {
-              traverseFilters('${path}[\$and][${index}]', filter);
-            });
-          }(),
-        Or(filters: final filters) => () {
-            filters.asMap().forEach((index, filter) {
-              traverseFilters('${path}[\$or][${index}]', filter);
-            });
-          }(),
-      };
-    }
-
     for (final filter in filters ?? []) {
-      traverseFilters('filter', filter);
+      _addFiltersToParams(params, 'filter', filter);
     }
 
     final response = await _client.fetch(
@@ -464,19 +442,28 @@ class RecordApi {
   }
 
   Future<Stream<Event>> subscribe(RecordId id) async {
+    return await _subscribeImpl(id: id);
+  }
+
+  Future<Stream<Event>> subscribeAll({
+    List<FilterBase>? filters,
+  }) async {
+    return await _subscribeImpl(id: '*'.id(), filters: filters);
+  }
+
+  Future<Stream<Event>> _subscribeImpl({
+    required RecordId id,
+    List<FilterBase>? filters,
+  }) async {
+    final params = <String, dynamic>{};
+    for (final filter in filters ?? []) {
+      _addFiltersToParams(params, 'filter', filter);
+    }
+
     final resp = await _client.fetch(
       '${RecordApi._recordApi}/${_name}/subscribe/${id}',
       responseType: dio.ResponseType.stream,
-    );
-
-    final Stream<Uint8List> stream = resp.data.stream;
-    return stream.expand(_decodeEvent);
-  }
-
-  Future<Stream<Event>> subscribeAll() async {
-    final resp = await _client.fetch(
-      '${RecordApi._recordApi}/${_name}/subscribe/*',
-      responseType: dio.ResponseType.stream,
+      queryParams: params,
     );
 
     final Stream<Uint8List> stream = resp.data.stream;
@@ -770,12 +757,35 @@ Map<String, dynamic> buildHeaders(Tokens? tokens) {
   return base;
 }
 
-(String, String?) splitOnce(String s, Pattern pattern) {
-  final int idx = s.indexOf(pattern);
-  if (idx < 0) {
-    return (s, null);
-  }
-  return (s.substring(0, idx), s.substring(idx + 1));
+// (String, String?) splitOnce(String s, Pattern pattern) {
+//   final int idx = s.indexOf(pattern);
+//   if (idx < 0) {
+//     return (s, null);
+//   }
+//   return (s.substring(0, idx), s.substring(idx + 1));
+// }
+
+void _addFiltersToParams(
+    Map<String, dynamic> params, String path, FilterBase filter) {
+  final _ = switch (filter) {
+    Filter(column: final c, op: final op, value: final v) => () {
+        if (op != null) {
+          params['${path}[${c}][${_opToSring(op)}]'] = v;
+        } else {
+          params['${path}[${c}]'] = v;
+        }
+      }(),
+    And(filters: final filters) => () {
+        filters.asMap().forEach((index, filter) {
+          _addFiltersToParams(params, '${path}[\$and][${index}]', filter);
+        });
+      }(),
+    Or(filters: final filters) => () {
+        filters.asMap().forEach((index, filter) {
+          _addFiltersToParams(params, '${path}[\$or][${index}]', filter);
+        });
+      }(),
+  };
 }
 
 final _logger = Logger('trailbase');

@@ -446,5 +446,45 @@ Future<void> main() async {
             textNotNull: createMessage,
           ));
     });
+
+    test('subscription filter', () async {
+      final client = await connect();
+      final api = client.records('simple_strict_table');
+
+      final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final updatedMessage = 'dart client updated realtime test 42: ${now}';
+
+      final tableEvents = await api.subscribeAll(
+          filters: [Filter(column: 'text_not_null', value: updatedMessage)]);
+
+      final createMessage = 'dart client realtime test 42: =?&${now}';
+      final id = await api.create({'text_not_null': createMessage});
+
+      await api.update(id, {'text_not_null': updatedMessage});
+      await api.delete(id);
+
+      final eventList =
+          await tableEvents.timeout(Duration(seconds: 10), onTimeout: (sink) {
+        print('Stream timeout');
+        sink.close();
+      }).toList();
+
+      expect(eventList.length, equals(2));
+      expect(eventList[0].runtimeType, equals(UpdateEvent));
+      expect(
+          SimpleStrict.fromJson(eventList[0].value()!),
+          SimpleStrict(
+            id: id.toString(),
+            textNotNull: updatedMessage,
+          ));
+
+      expect(eventList[1].runtimeType, equals(DeleteEvent));
+      expect(
+          SimpleStrict.fromJson(eventList[1].value()!),
+          SimpleStrict(
+            id: id.toString(),
+            textNotNull: updatedMessage,
+          ));
+    });
   });
 }
