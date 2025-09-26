@@ -295,15 +295,8 @@ impl SubscriptionManager {
       }
 
       if let Filter::Record(ref filter) = sub.filter {
-        match apply_filter_to_record(filter, record) {
-          Ok(true) => {}
-          Ok(false) => {
-            continue;
-          }
-          Err(err) => {
-            log::debug!("subscription filter err: {err}");
-            continue;
-          }
+        if !apply_filter_to_record(filter, record) {
+          continue;
         }
       }
 
