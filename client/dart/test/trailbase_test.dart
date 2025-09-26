@@ -391,7 +391,7 @@ Future<void> main() async {
       }
     });
 
-    test('realtime', () async {
+    test('realtime table and record subscriptions', () async {
       final client = await connect();
       final api = client.records('simple_strict_table');
 
@@ -409,7 +409,7 @@ Future<void> main() async {
 
       final eventList =
           await events.timeout(Duration(seconds: 10), onTimeout: (sink) {
-        print('Stream timeout');
+        print('Expected: stream timed-out');
         sink.close();
       }).toList();
 
@@ -432,7 +432,7 @@ Future<void> main() async {
 
       final tableEventList =
           await tableEvents.timeout(Duration(seconds: 10), onTimeout: (sink) {
-        print('Stream timeout');
+        print('Expected: stream timed-out');
         sink.close();
       }).toList();
       expect(tableEventList.length, equals(3));
@@ -464,7 +464,7 @@ Future<void> main() async {
 
       final eventList =
           await tableEvents.timeout(Duration(seconds: 10), onTimeout: (sink) {
-        print('Stream timeout');
+        print('Expected: stream timed-out');
         sink.close();
       }).toList();
 

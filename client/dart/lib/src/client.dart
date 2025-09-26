@@ -6,8 +6,6 @@ import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:logging/logging.dart';
 import 'package:http/http.dart' as http;
 
-// import 'sse.dart';
-
 class User {
   final String id;
   final String email;
@@ -370,7 +368,7 @@ class RecordApi {
       _addFiltersToParams(params, 'filter', filter);
     }
 
-    final response = await _client.fetch2(
+    final response = await _client.fetch(
       '${RecordApi._recordApi}/${_name}',
       queryParams: params,
     );
@@ -380,9 +378,9 @@ class RecordApi {
 
   Future<Map<String, dynamic>> read(RecordId id, {List<String>? expand}) async {
     final response = await switch (expand) {
-      null => _client.fetch2('${RecordApi._recordApi}/${_name}/${id}'),
+      null => _client.fetch('${RecordApi._recordApi}/${_name}/${id}'),
       _ =>
-        _client.fetch2('${RecordApi._recordApi}/${_name}/${id}', queryParams: {
+        _client.fetch('${RecordApi._recordApi}/${_name}/${id}', queryParams: {
           'expand': expand.join(','),
         })
     };
@@ -390,7 +388,7 @@ class RecordApi {
   }
 
   Future<RecordId> create(Map<String, dynamic> record) async {
-    final response = await _client.fetch2(
+    final response = await _client.fetch(
       '${RecordApi._recordApi}/${_name}',
       method: 'POST',
       data: jsonEncode(record),
@@ -405,7 +403,7 @@ class RecordApi {
   }
 
   Future<List<RecordId>> createBulk(List<Map<String, dynamic>> records) async {
-    final response = await _client.fetch2(
+    final response = await _client.fetch(
       '${RecordApi._recordApi}/${_name}',
       method: 'POST',
       data: jsonEncode(records),
@@ -422,7 +420,7 @@ class RecordApi {
     RecordId id,
     Map<String, dynamic> record,
   ) async {
-    await _client.fetch2(
+    await _client.fetch(
       '${RecordApi._recordApi}/${_name}/${id}',
       method: 'PATCH',
       data: jsonEncode(record),
@@ -430,20 +428,10 @@ class RecordApi {
   }
 
   Future<void> delete(RecordId id) async {
-    await _client.fetch2(
+    await _client.fetch(
       '${RecordApi._recordApi}/${_name}/${id}',
       method: 'DELETE',
     );
-  }
-
-  static List<Event> _decodeEvent(Uint8List bytes) {
-    final decoded = utf8.decode(bytes);
-    if (decoded.startsWith('data: ')) {
-      return [Event.fromJson(jsonDecode(decoded.substring(6)))];
-    }
-
-    // Heart-beat, do nothing.
-    return [];
   }
 
   Future<Stream<Event>> subscribe(RecordId id) async {
@@ -472,16 +460,7 @@ class RecordApi {
           _client._tokenState = await _client._refreshTokensImpl(refreshToken);
     }
 
-    // final resp = await _client._client.stream(
-    //   '${RecordApi._recordApi}/${_name}/subscribe/${id}',
-    //   tokenState,
-    //   queryParams: params,
-    // );
-    //
-    // final Stream<Uint8List> stream = resp.data.stream;
-    // return stream.expand(_decodeEvent);
-
-    final stream = await _client._client.stream3(
+    final stream = await _client._client.sse(
       '${RecordApi._recordApi}/${_name}/subscribe/${id}',
       tokenState,
       queryParams: params,
@@ -500,14 +479,12 @@ class RecordApi {
 }
 
 class _ThinClient {
-  // static final _dio = dio.Dio()..interceptors.add(SeeInterceptor());
   static final _http = http.Client();
-
   final Uri site;
 
   const _ThinClient(this.site);
 
-  Future<http.Response> fetch2(
+  Future<http.Response> fetch(
     String path,
     _TokenState tokenState, {
     String? data,
@@ -515,7 +492,6 @@ class _ThinClient {
     Map<String, String>? queryParams,
   }) async {
     final uri = site.replace(path: path, queryParameters: queryParams);
-
     final headers = tokenState.headers;
 
     final response = switch (method ?? 'GET') {
@@ -529,38 +505,16 @@ class _ThinClient {
     return response;
   }
 
-  // Future<dio.Response> stream(
-  //   String path,
-  //   _TokenState tokenState, {
-  //   Map<String, String>? queryParams,
-  // }) async {
-  //   if (path.startsWith('/')) {
-  //     throw Exception('Path starts with "/". Relative path expected.');
-  //   }
-  //
-  //   final response = await _dio.request(
-  //     '${site}/${path}',
-  //     queryParameters: queryParams,
-  //     options: dio.Options(
-  //       // method: 'GET',
-  //       headers: tokenState.headers,
-  //       validateStatus: (int? status) => true,
-  //       responseType: dio.ResponseType.stream,
-  //     ),
-  //   );
-  //
-  //   return response;
-  // }
-
-  Future<Stream<Uint8List>> stream3(
+  Future<Stream<Uint8List>> sse(
     String path,
     _TokenState tokenState, {
     Map<String, String>? queryParams,
   }) async {
+    // NOTE: We could use a `StreamController.broadcase()` and track existing
+    // streams keyed by `uri` to merge multiple conurrent subscriptions.
     final uri = site.replace(path: path, queryParameters: queryParams);
-
-    var request = http.Request('GET', uri);
-    request.headers.addAll(tokenState.headers);
+    final request = http.Request('GET', uri)
+      ..headers.addAll(tokenState.headers);
 
     final response = await _http.send(request);
     if (response.statusCode != 200) {
@@ -583,12 +537,8 @@ class _ThinClient {
           buffer.add(data);
         }
       },
-      onDone: () {
-        sink.close();
-      },
-      onError: (error) {
-        sink.addError(error);
-      },
+      onDone: () => sink.close(),
+      onError: (error) => sink.addError(error),
       cancelOnError: true,
     );
 
@@ -624,7 +574,7 @@ class Client {
 
     try {
       final statusResponse = await client._client
-          .fetch2('${_authApi}/status', _TokenState.build(tokens));
+          .fetch('${_authApi}/status', _TokenState.build(tokens));
       final Map<String, dynamic> response = jsonDecode(statusResponse.body);
 
       final newTokens = Tokens(
@@ -673,7 +623,7 @@ class Client {
   }
 
   Future<Tokens> login(String email, String password) async {
-    final response = await fetch2(
+    final response = await fetch(
       '${_authApi}/login',
       method: 'POST',
       data: jsonEncode({
@@ -697,7 +647,7 @@ class Client {
     String authCode, {
     String? pkceCodeVerifier,
   }) async {
-    final response = await fetch2(
+    final response = await fetch(
       '${Client._authApi}/token',
       method: 'POST',
       data: jsonEncode({
@@ -721,13 +671,13 @@ class Client {
     final refreshToken = _tokenState.state?.$1.refresh;
     try {
       if (refreshToken != null) {
-        await fetch2('${_authApi}/logout',
+        await fetch('${_authApi}/logout',
             method: 'POST',
             data: jsonEncode({
               'refresh_token': refreshToken,
             }));
       } else {
-        await fetch2('${_authApi}/logout');
+        await fetch('${_authApi}/logout');
       }
     } catch (err) {
       _logger.warning(err);
@@ -737,12 +687,12 @@ class Client {
   }
 
   Future<void> deleteUser() async {
-    await fetch2('${Client._authApi}/delete');
+    await fetch('${Client._authApi}/delete');
     _updateTokens(null);
   }
 
   Future<void> changeEmail(String email) async {
-    await fetch2(
+    await fetch(
       '${Client._authApi}/change_email',
       method: 'POST',
       data: jsonEncode({
@@ -759,7 +709,7 @@ class Client {
   }
 
   Future<_TokenState> _refreshTokensImpl(String refreshToken) async {
-    final response = await _client.fetch2(
+    final response = await _client.fetch(
       '${_authApi}/refresh',
       _tokenState,
       method: 'POST',
@@ -785,7 +735,7 @@ class Client {
     return null;
   }
 
-  Future<http.Response> fetch2(
+  Future<http.Response> fetch(
     String path, {
     bool? throwOnError,
     String? data,
@@ -798,7 +748,7 @@ class Client {
       tokenState = _tokenState = await _refreshTokensImpl(refreshToken);
     }
 
-    final response = await _client.fetch2(
+    final response = await _client.fetch(
       path,
       tokenState,
       data: data,
@@ -837,14 +787,6 @@ Map<String, String> buildHeaders(Tokens? tokens) {
   return base;
 }
 
-// (String, String?) splitOnce(String s, Pattern pattern) {
-//   final int idx = s.indexOf(pattern);
-//   if (idx < 0) {
-//     return (s, null);
-//   }
-//   return (s.substring(0, idx), s.substring(idx + 1));
-// }
-
 void _addFiltersToParams(
     Map<String, dynamic> params, String path, FilterBase filter) {
   final _ = switch (filter) {
@@ -869,11 +811,21 @@ void _addFiltersToParams(
 }
 
 bool _endsWithNewlineNewline(List<int> bytes) {
-  if (bytes.length < 2) {
-    return false;
+  if (bytes.length >= 2) {
+    return bytes[bytes.length - 1] == 10 && bytes[bytes.length - 2] == 10;
+  }
+  return false;
+}
+
+List<Event> _decodeEvent(Uint8List bytes) {
+  final decoded = utf8.decode(bytes);
+  if (decoded.startsWith('data: ')) {
+    // Cut off "data: " and decode.
+    return [Event.fromJson(jsonDecode(decoded.substring(6)))];
   }
 
-  return bytes[bytes.length - 1] == 10 && bytes[bytes.length - 2] == 10;
+  // Heart-beat, do nothing.
+  return [];
 }
 
 final _logger = Logger('trailbase');
