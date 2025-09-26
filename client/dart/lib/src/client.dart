@@ -1,15 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:logging/logging.dart';
-import 'package:dio/dio.dart' as dio;
 import 'package:http/http.dart' as http;
-import 'package:dart_http_sse/client/sse_client.dart' as sse;
-import 'package:dart_http_sse/model/sse_request.dart' as sse;
-import 'package:dart_http_sse/model/sse_response.dart' as sse;
 
-import 'sse.dart';
+// import 'sse.dart';
 
 class User {
   final String id;
@@ -475,27 +472,21 @@ class RecordApi {
           _client._tokenState = await _client._refreshTokensImpl(refreshToken);
     }
 
-    final resp = await _client._client.stream(
-      '${RecordApi._recordApi}/${_name}/subscribe/${id}',
-      tokenState,
-      queryParams: params,
-    );
-
-    final Stream<Uint8List> stream = resp.data.stream;
-    return stream.expand(_decodeEvent);
-
-    // final stream = _client._client.stream2(
+    // final resp = await _client._client.stream(
     //   '${RecordApi._recordApi}/${_name}/subscribe/${id}',
     //   tokenState,
     //   queryParams: params,
     // );
     //
-    // return stream.expand((r) {
-    //   print('Event ${r}');
-    //
-    //   return [Event.fromJson(r.data)];
-    //   // return _decodeEvent(r.data);
-    // });
+    // final Stream<Uint8List> stream = resp.data.stream;
+    // return stream.expand(_decodeEvent);
+
+    final stream = await _client._client.stream3(
+      '${RecordApi._recordApi}/${_name}/subscribe/${id}',
+      tokenState,
+      queryParams: params,
+    );
+    return stream.expand(_decodeEvent);
   }
 
   Uri imageUri(RecordId id, String colName, {int? index}) {
@@ -509,7 +500,7 @@ class RecordApi {
 }
 
 class _ThinClient {
-  static final _dio = dio.Dio()..interceptors.add(SeeInterceptor());
+  // static final _dio = dio.Dio()..interceptors.add(SeeInterceptor());
   static final _http = http.Client();
 
   final Uri site;
@@ -525,8 +516,6 @@ class _ThinClient {
   }) async {
     final uri = site.replace(path: path, queryParameters: queryParams);
 
-    print('URI: ${uri} ${path} ${queryParams}');
-
     final headers = tokenState.headers;
 
     final response = switch (method ?? 'GET') {
@@ -540,65 +529,70 @@ class _ThinClient {
     return response;
   }
 
-  Future<dio.Response> stream(
+  // Future<dio.Response> stream(
+  //   String path,
+  //   _TokenState tokenState, {
+  //   Map<String, String>? queryParams,
+  // }) async {
+  //   if (path.startsWith('/')) {
+  //     throw Exception('Path starts with "/". Relative path expected.');
+  //   }
+  //
+  //   final response = await _dio.request(
+  //     '${site}/${path}',
+  //     queryParameters: queryParams,
+  //     options: dio.Options(
+  //       // method: 'GET',
+  //       headers: tokenState.headers,
+  //       validateStatus: (int? status) => true,
+  //       responseType: dio.ResponseType.stream,
+  //     ),
+  //   );
+  //
+  //   return response;
+  // }
+
+  Future<Stream<Uint8List>> stream3(
     String path,
     _TokenState tokenState, {
     Map<String, String>? queryParams,
   }) async {
-    if (path.startsWith('/')) {
-      throw Exception('Path starts with "/". Relative path expected.');
+    final uri = site.replace(path: path, queryParameters: queryParams);
+
+    var request = http.Request('GET', uri);
+    request.headers.addAll(tokenState.headers);
+
+    final response = await _http.send(request);
+    if (response.statusCode != 200) {
+      throw Exception('[${response.statusCode}] ${response}');
     }
 
-    final response = await _dio.request(
-      '${site}/${path}',
-      queryParameters: queryParams,
-      options: dio.Options(
-        // method: 'GET',
-        headers: tokenState.headers,
-        validateStatus: (int? status) => true,
-        responseType: dio.ResponseType.stream,
-      ),
-    );
+    final buffer = BytesBuilder();
+    final sink = StreamController<Uint8List>();
 
-    return response;
-  }
-
-  Stream<sse.SSEResponse> stream2(
-    String path,
-    _TokenState tokenState, {
-    Object? data,
-    String? method,
-    Map<String, String>? queryParams,
-  }) {
-    if (path.startsWith('/')) {
-      throw Exception('Path starts with "/". Relative path expected.');
-    }
-
-    var uri = Uri.parse('${site}/${path}');
-    if (queryParams != null) {
-      uri = uri.replace(queryParameters: queryParams);
-    }
-
-    final headers = tokenState.headers;
-
-    final request = sse.SSERequest(
-      url: uri.toString(),
-      headers: headers,
-      onData: (response) {
-        print('New SSE Event: ${response.data}');
-      },
-      onError: (error) {
-        print('SSE Error: $error');
+    response.stream.listen(
+      (List<int> data) {
+        if (_endsWithNewlineNewline(data)) {
+          if (buffer.isNotEmpty) {
+            buffer.add(data);
+            sink.add(buffer.takeBytes());
+          } else {
+            sink.add(Uint8List.fromList(data));
+          }
+        } else {
+          buffer.add(data);
+        }
       },
       onDone: () {
-        print('SSE Connection Closed');
+        sink.close();
       },
-      retry: false,
+      onError: (error) {
+        sink.addError(error);
+      },
+      cancelOnError: true,
     );
 
-    final stream = sse.SSEClient().connect('unique id 0', request);
-
-    return stream;
+    return sink.stream;
   }
 }
 
@@ -872,6 +866,14 @@ void _addFiltersToParams(
         });
       }(),
   };
+}
+
+bool _endsWithNewlineNewline(List<int> bytes) {
+  if (bytes.length < 2) {
+    return false;
+  }
+
+  return bytes[bytes.length - 1] == 10 && bytes[bytes.length - 2] == 10;
 }
 
 final _logger = Logger('trailbase');
