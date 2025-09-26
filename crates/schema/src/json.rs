@@ -62,22 +62,26 @@ pub fn flat_json_to_value(
       // NOTE: Convert Array<number> to Blob. Note, we also support blobs as base64 which are
       // handled below in the string  case.
       match col_type {
-        ColumnDataType::Blob => Ok(SqliteValue::Blob(json_array_to_bytes(arr)?)),
+        ColumnDataType::Blob | ColumnDataType::Any => {
+          Ok(SqliteValue::Blob(json_array_to_bytes(arr)?))
+        }
         _ => Err(JsonError::UnexpectedType("Array", col_type)),
       }
     }
     serde_json::Value::Null => Ok(SqliteValue::Null),
-    serde_json::Value::Bool(b) => match col_type.is_integer_kind() {
-      true => Ok(SqliteValue::Integer(b as i64)),
-      false => Err(JsonError::UnexpectedType("Bool", col_type)),
-    },
+    serde_json::Value::Bool(b) => {
+      match col_type.is_integer_kind() || col_type == ColumnDataType::Any {
+        true => Ok(SqliteValue::Integer(b as i64)),
+        false => Err(JsonError::UnexpectedType("Bool", col_type)),
+      }
+    }
     serde_json::Value::String(str) => match fancy_parse_string {
       true => fancy_parse_string_to_sqlite_value(col_type, str),
       false => parse_string_to_sqlite_value(col_type, str),
     },
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
-        if col_type.is_integer_kind() {
+        if col_type.is_integer_kind() || col_type == ColumnDataType::Any {
           Ok(SqliteValue::Integer(n))
         } else if col_type.is_float_kind() {
           // NOTE: "as" is lossy conversion. Does not panic.
@@ -87,7 +91,7 @@ pub fn flat_json_to_value(
         }
       } else if let Some(n) = number.as_u64() {
         // NOTE: "as" is lossy conversion. Does not panic.
-        if col_type.is_integer_kind() {
+        if col_type.is_integer_kind() || col_type == ColumnDataType::Any {
           Ok(SqliteValue::Integer(n as i64))
         } else if col_type.is_float_kind() {
           Ok(SqliteValue::Real(n as f64))
@@ -95,7 +99,7 @@ pub fn flat_json_to_value(
           Err(JsonError::UnexpectedType("uint", col_type))
         }
       } else if let Some(n) = number.as_f64() {
-        match col_type.is_float_kind() {
+        match col_type.is_float_kind() || col_type == ColumnDataType::Any {
           true => Ok(SqliteValue::Real(n)),
           _ => Err(JsonError::UnexpectedType("real", col_type)),
         }
@@ -173,7 +177,7 @@ fn parse_string_to_sqlite_value(
   value: String,
 ) -> Result<SqliteValue, JsonError> {
   return match data_type {
-    ColumnDataType::Text => Ok(SqliteValue::Text(value)),
+    ColumnDataType::Text | ColumnDataType::Any => Ok(SqliteValue::Text(value)),
     ColumnDataType::Blob => Ok(SqliteValue::Blob(match (value.len(), value) {
       // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
       // would be more explicit rely on CHECK(...) column options.

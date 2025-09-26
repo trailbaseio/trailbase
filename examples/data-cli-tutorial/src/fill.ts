@@ -39,17 +39,19 @@ const records = parse(file, {
 });
 
 for (const movie of records) {
-  await api.create({
+  const record: Movie = {
     rank: parseInt(movie.rank),
     name: movie.name,
     year: movie.year,
     watch_time: parseInt(movie.watch_time),
-    rating: parseInt(movie.rating),
+    rating: parseFloat(movie.rating),
     metascore: movie.metascore,
     gross: movie.gross,
     votes: movie.votes,
     description: movie.description,
-  });
+  };
+
+  await api.create(record);
 }
 
 console.log(`Inserted ${records.length} movies`);

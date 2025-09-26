@@ -167,6 +167,7 @@ impl Params {
 
       let (param, json_files) =
         extract_params_and_files_from_json(col, json_meta, value, fancy_parse_string)?;
+
       if let Some(json_files) = json_files {
         // Note: files provided as a multipart form upload are handled below. They need more
         // special handling to establish the field.name to column mapping.
@@ -324,9 +325,10 @@ impl<'a> LazyParams<'a> {
   pub fn consume(self) -> Result<Params, ParamsError> {
     return match self {
       LazyParams::Params(result) => result,
-      LazyParams::LazyInsert(builder) | LazyParams::LazyUpdate(builder) => {
-        builder.expect("unreachable")()
-      }
+      LazyParams::LazyInsert(builder) | LazyParams::LazyUpdate(builder) => match builder {
+        Some(f) => f(),
+        None => unreachable!("missing builder"),
+      },
     };
   }
 }

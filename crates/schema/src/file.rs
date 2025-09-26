@@ -123,10 +123,7 @@ impl FileUpload {
   }
 
   pub fn content_type(&self) -> Option<&str> {
-    return self
-      .mime_type
-      .as_deref()
-      .or_else(|| self.content_type.as_deref());
+    return self.mime_type.as_deref().or(self.content_type.as_deref());
   }
 
   pub fn original_filename(&self) -> Option<&str> {
