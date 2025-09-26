@@ -1,23 +1,24 @@
 {
-  "$defs": {},
+  "title": "profiles_view",
+  "type": "object",
   "properties": {
-    "avatar_url": {
-      "type": "string"
-    },
-    "created": {
-      "type": "integer"
-    },
-    "is_editor": {
-      "type": "boolean"
-    },
-    "updated": {
-      "type": "integer"
-    },
     "user": {
       "type": "string"
     },
     "username": {
       "type": "string"
+    },
+    "created": {
+      "type": "integer"
+    },
+    "updated": {
+      "type": "integer"
+    },
+    "avatar_url": {
+      "type": "string"
+    },
+    "is_editor": {
+      "type": "boolean"
     }
   },
   "required": [
@@ -25,7 +26,5 @@
     "username",
     "created",
     "updated"
-  ],
-  "title": "profiles_view",
-  "type": "object"
+  ]
 }

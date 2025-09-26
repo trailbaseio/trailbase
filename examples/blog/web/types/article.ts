@@ -26,14 +26,22 @@ export interface FileUpload {
      */
     content_type?: null | string;
     /**
-     * The file's original file name.
+     * A unique filename derived from original. Helps to address content caching issues with
+     * proxies, CDNs, ... .
      */
-    filename?: null | string;
-    id:        string;
+    filename: string;
+    /**
+     * The file's text-encoded UUID from which the objectstore path is derived.
+     */
+    id?: string;
     /**
      * The file's inferred mime type. Not user provided.
      */
     mime_type?: null | string;
+    /**
+     * The file's original file name.
+     */
+    original_filename?: null | string;
 }
 
 // Converts JSON strings to/from your types
@@ -214,8 +222,9 @@ const typeMap: any = {
     ], "any"),
     "FileUpload": o([
         { json: "content_type", js: "content_type", typ: u(undefined, u(null, "")) },
-        { json: "filename", js: "filename", typ: u(undefined, u(null, "")) },
-        { json: "id", js: "id", typ: "" },
+        { json: "filename", js: "filename", typ: "" },
+        { json: "id", js: "id", typ: u(undefined, "") },
         { json: "mime_type", js: "mime_type", typ: u(undefined, u(null, "")) },
+        { json: "original_filename", js: "original_filename", typ: u(undefined, u(null, "")) },
     ], false),
 };

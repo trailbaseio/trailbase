@@ -10,7 +10,7 @@
 export interface NewProfile {
     created?: number;
     updated?: number;
-    user:     string;
+    user?:    string;
     username: string;
     [property: string]: any;
 }
@@ -183,7 +183,7 @@ const typeMap: any = {
     "NewProfile": o([
         { json: "created", js: "created", typ: u(undefined, 0) },
         { json: "updated", js: "updated", typ: u(undefined, 0) },
-        { json: "user", js: "user", typ: "" },
+        { json: "user", js: "user", typ: u(undefined, "") },
         { json: "username", js: "username", typ: "" },
     ], "any"),
 };

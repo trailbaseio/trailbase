@@ -47,15 +47,19 @@
       "type": "object",
       "properties": {
         "id": {
-          "description": "The file's unique id from which the objectstore path is derived.",
+          "description": "The file's text-encoded UUID from which the objectstore path is derived.",
           "type": "string"
         },
-        "filename": {
+        "original_filename": {
           "description": "The file's original file name.",
           "type": [
             "string",
             "null"
           ]
+        },
+        "filename": {
+          "description": "A unique filename derived from original. Helps to address content caching issues with\nproxies, CDNs, ... .",
+          "type": "string"
         },
         "content_type": {
           "description": "The file's user-provided content type.",
@@ -74,7 +78,7 @@
       },
       "additionalProperties": false,
       "required": [
-        "id"
+        "filename"
       ]
     }
   }

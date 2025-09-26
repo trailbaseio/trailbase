@@ -12,13 +12,13 @@ String newProfileToJson(NewProfile data) => json.encode(data.toJson());
 class NewProfile {
   int? created;
   int? updated;
-  String user;
+  String? user;
   String username;
 
   NewProfile({
     this.created,
     this.updated,
-    required this.user,
+    this.user,
     required this.username,
   });
 

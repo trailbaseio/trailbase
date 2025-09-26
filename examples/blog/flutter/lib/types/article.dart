@@ -61,20 +61,25 @@ class FileUpload {
   ///The file's user-provided content type.
   String? contentType;
 
-  ///The file's original file name.
-  String? filename;
+  ///A unique filename derived from original. Helps to address content caching issues with
+  ///proxies, CDNs, ... .
+  String filename;
 
-  ///The file's unique id from which the objectstore path is derived.
-  String id;
+  ///The file's text-encoded UUID from which the objectstore path is derived.
+  String? id;
 
   ///The file's inferred mime type. Not user provided.
   String? mimeType;
 
+  ///The file's original file name.
+  String? originalFilename;
+
   FileUpload({
     this.contentType,
-    this.filename,
-    required this.id,
+    required this.filename,
+    this.id,
     this.mimeType,
+    this.originalFilename,
   });
 
   factory FileUpload.fromJson(Map<String, dynamic> json) => FileUpload(
@@ -82,6 +87,7 @@ class FileUpload {
         filename: json["filename"],
         id: json["id"],
         mimeType: json["mime_type"],
+        originalFilename: json["original_filename"],
       );
 
   Map<String, dynamic> toJson() => {
@@ -89,5 +95,6 @@ class FileUpload {
         "filename": filename,
         "id": id,
         "mime_type": mimeType,
+        "original_filename": originalFilename,
       };
 }

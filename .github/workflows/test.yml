@@ -52,7 +52,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.32.5
+          flutter-version: 3.35.4
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:

@@ -1,7 +1,7 @@
 ## v0.18.1
 
 - Allow realtime subscriptions to define record-based filters 🎉. This could be used, e.g. to subscribe to only to changes within a GIS bounding-box. The query API is consistent with listing records. The TypeScript client has been updated to support it.
-- Create a unique filenames for uploads: `{stem}_{rand#10}.{ext}` and allow accessing their contents using said filename.
+- Create unique filenames for uploads: `{stem}_{rand#10}.{ext}` and allow accessing their contents using said filename.
   - We may want to deprecate indexed-based access in the future - there's clear advantages for stable unique ids, e.g. for content caching strategies when using a proxy or CDN.
 - Address issue with `@tanstack/form`s missing `crypto.randomUUID` #157.
 - Update Rust and JavaScript dependencies.
