@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:trailbase/trailbase.dart';
 import 'package:test/test.dart';
-import 'package:dio/dio.dart';
+import 'package:http/http.dart' as http;
 
 const port = 4006;
 const address = '127.0.0.1:${port}';
@@ -177,11 +177,10 @@ Future<Process> initTrailBase() async {
     '--runtime-threads=2',
   ]);
 
-  final dio = Dio();
+  final uri = Uri.parse('http://${address}/api/healthcheck');
   for (int i = 0; i < 100; ++i) {
     try {
-      final response = await dio
-          .fetch(RequestOptions(path: 'http://${address}/api/healthcheck'));
+      final response = await http.get(uri);
       if (response.statusCode == 200) {
         return process;
       }
@@ -392,7 +391,7 @@ Future<void> main() async {
       }
     });
 
-    test('realtime', () async {
+    test('realtime table and record subscriptions', () async {
       final client = await connect();
       final api = client.records('simple_strict_table');
 
@@ -410,7 +409,7 @@ Future<void> main() async {
 
       final eventList =
           await events.timeout(Duration(seconds: 10), onTimeout: (sink) {
-        print('Stream timeout');
+        print('Expected: stream timed-out');
         sink.close();
       }).toList();
 
@@ -433,7 +432,7 @@ Future<void> main() async {
 
       final tableEventList =
           await tableEvents.timeout(Duration(seconds: 10), onTimeout: (sink) {
-        print('Stream timeout');
+        print('Expected: stream timed-out');
         sink.close();
       }).toList();
       expect(tableEventList.length, equals(3));
@@ -465,7 +464,7 @@ Future<void> main() async {
 
       final eventList =
           await tableEvents.timeout(Duration(seconds: 10), onTimeout: (sink) {
-        print('Stream timeout');
+        print('Expected: stream timed-out');
         sink.close();
       }).toList();
 

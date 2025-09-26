@@ -1,16 +1,17 @@
 name: trailbase
-description: Thing client library for TrailBase.
+description: Official client library for TrailBase.
 homepage: https://trailbase.io
 repository: https://github.com/trailbaseio/trailbase
-version: 0.4.0
+version: 0.5.0
 
 environment:
   sdk: ^3.6.1
+
 resolution: workspace
 
 dependencies:
   crypto: ^3.0.6
-  dio: ^5.8.0+1
+  http: ^1.5.0
   jwt_decoder: ^2.0.1
   logging: ^1.3.0
 
