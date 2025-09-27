@@ -435,17 +435,17 @@ class RecordApi {
   }
 
   Future<Stream<Event>> subscribe(RecordId id) async {
-    return await _subscribeImpl(id: id);
+    return await _subscribeImpl(id: id.toString());
   }
 
   Future<Stream<Event>> subscribeAll({
     List<FilterBase>? filters,
   }) async {
-    return await _subscribeImpl(id: '*'.id(), filters: filters);
+    return await _subscribeImpl(id: '*', filters: filters);
   }
 
   Future<Stream<Event>> _subscribeImpl({
-    required RecordId id,
+    required String id,
     List<FilterBase>? filters,
   }) async {
     final params = <String, String>{};

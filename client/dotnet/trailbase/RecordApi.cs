@@ -227,7 +227,50 @@ public enum CompareOp {
 }
 
 /// <summary>Abstract base class for filters.</summary>
-public abstract class FilterBase { }
+public abstract class FilterBase {
+  /// <summary>Helper function to traverse nested filters and add them to the "queryParams".</summary>
+  internal static void addFiltersToParams(ref Dictionary<string, string> queryParams, String path, FilterBase filter) {
+    String op(CompareOp op) {
+      return op switch {
+        CompareOp.Equal => "$eq",
+        CompareOp.NotEqual => "$eq",
+        CompareOp.LessThan => "$lt",
+        CompareOp.LessThanEqual => "$lte",
+        CompareOp.GreaterThan => "$gt",
+        CompareOp.GreaterThanEqual => "$gte",
+        CompareOp.Like => "$like",
+        CompareOp.Regexp => "$re",
+        _ => "??",
+      };
+    }
+
+    switch (filter) {
+      case Filter f:
+        if (f.op != null) {
+          var o = op((CompareOp)f.op);
+          queryParams.Add($"{path}[{f.column}][{o}]", f.value);
+        }
+        else {
+          queryParams.Add($"{path}[{f.column}]", f.value);
+        }
+        break;
+      case And f:
+        var i = 0;
+        foreach (var fil in f.filters) {
+          addFiltersToParams(ref queryParams, $"{path}[$and][{i++}]", fil);
+        }
+        break;
+      case Or f:
+        var j = 0;
+        foreach (var fil in f.filters) {
+          addFiltersToParams(ref queryParams, $"{path}[$or][{j++}]", fil);
+        }
+        break;
+      default:
+        break;
+    }
+  }
+}
 
 /// <summary>Column filters.</summary>
 sealed public class Filter : FilterBase {
@@ -473,50 +516,8 @@ public class RecordApi {
       param.Add("expand", String.Join(",", expand.ToArray()));
     }
 
-    String op(CompareOp op) {
-      return op switch {
-        CompareOp.Equal => "$eq",
-        CompareOp.NotEqual => "$eq",
-        CompareOp.LessThan => "$lt",
-        CompareOp.LessThanEqual => "$lte",
-        CompareOp.GreaterThan => "$gt",
-        CompareOp.GreaterThanEqual => "$gte",
-        CompareOp.Like => "$like",
-        CompareOp.Regexp => "$re",
-        _ => "??",
-      };
-    }
-
-    void traverseFilters(String path, FilterBase filter) {
-      switch (filter) {
-        case Filter f:
-          if (f.op != null) {
-            var o = op((CompareOp)f.op);
-            param.Add($"{path}[{f.column}][{o}]", f.value);
-          }
-          else {
-            param.Add($"{path}[{f.column}]", f.value);
-          }
-          break;
-        case And f:
-          var i = 0;
-          foreach (var fil in f.filters) {
-            traverseFilters($"{path}[$and][{i++}]", fil);
-          }
-          break;
-        case Or f:
-          var j = 0;
-          foreach (var fil in f.filters) {
-            traverseFilters($"{path}[$or][{j++}]", fil);
-          }
-          break;
-        default:
-          break;
-      }
-    }
-
     foreach (var filter in filters ?? []) {
-      traverseFilters("filter", filter);
+      FilterBase.addFiltersToParams(ref param, "filter", filter);
     }
 
     var response = await client.Fetch(
@@ -582,17 +583,25 @@ public class RecordApi {
   }
 
   /// <summary>Listen for all accessible changes to this Record API.</summary>
-  public async Task<IAsyncEnumerable<Event>> SubscribeAll() {
-    var response = await SubscribeImpl("*");
+  public async Task<IAsyncEnumerable<Event>> SubscribeAll(List<FilterBase>? filters = null) {
+    var response = await SubscribeImpl("*", filters);
     return StreamToEnumerableImpl(await response.ReadAsStreamAsync());
   }
 
-  private async Task<HttpContent> SubscribeImpl(string id) {
+  private async Task<HttpContent> SubscribeImpl(string id, List<FilterBase>? filters = null) {
+    Dictionary<string, string>? queryParams = null;
+    if (filters != null) {
+      queryParams = new Dictionary<string, string>();
+      foreach (var filter in filters ?? []) {
+        FilterBase.addFiltersToParams(ref queryParams, "filter", filter);
+      }
+    }
+
     var response = await client.Fetch(
       $"{RecordApi._recordApi}/{name}/subscribe/{id}",
       HttpMethod.Get,
       null,
-      null,
+      queryParams,
       HttpCompletionOption.ResponseHeadersRead
     );
 

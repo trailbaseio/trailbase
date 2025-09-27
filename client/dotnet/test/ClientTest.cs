@@ -167,9 +167,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
         null,
         false
       )!;
-      Console.WriteLine("FFFFIIII");
       Assert.Single(response.records);
-      Console.WriteLine("FFFFIIII AFTER");
       Assert.Null(response.total_count);
       Assert.Equal(messages[0], response.records[0].text_not_null);
     }
@@ -382,21 +380,20 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     // underlying database file. We include the runtime version in the filter
     // query to avoid a race between both tests. This feels a bit hacky.
     // Ideally, we'd run the tests sequentially or with better isolation :/.
-    var now = DateTimeOffset.Now.ToUnixTimeSeconds();
-    var suffix = $"{now} {System.Environment.Version} static";
-    var CreateMessage = $"C# client test 0:  =?&{suffix}";
+    var suffix = $"{DateTimeOffset.Now.ToUnixTimeSeconds()} {System.Environment.Version} static";
 
+    var createMessage = $"C# client realtime test 0:  =?&{suffix}";
     RecordId id = await api.Create(
-        new SimpleStrict(null, null, null, CreateMessage),
+        new SimpleStrict(null, null, null, createMessage),
         SerializeSimpleStrictContext.Default.SimpleStrict
     );
 
     var eventStream = await api.Subscribe(id);
 
-    var UpdatedMessage = $"C# client update test 0:  =?&{suffix}";
+    var updatedMessage = $"C# client realtime update test 0:  =?&{suffix}";
     await api.Update(
         id,
-        new SimpleStrict(null, null, null, UpdatedMessage),
+        new SimpleStrict(null, null, null, updatedMessage),
         SerializeSimpleStrictContext.Default.SimpleStrict
     );
 
@@ -410,15 +407,16 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     Assert.Equal(2, events.Count);
 
     Assert.True(events[0] is UpdateEvent);
-    Assert.Equal(UpdatedMessage, events[0].Value!["text_not_null"]?.ToString());
+    Assert.Equal(updatedMessage, events[0].Value!["text_not_null"]?.ToString());
 
     Assert.True(events[1] is DeleteEvent);
-    Assert.Equal(UpdatedMessage, events[1].Value!["text_not_null"]?.ToString());
+    Assert.Equal(updatedMessage, events[1].Value!["text_not_null"]?.ToString());
 
     List<Event> tableEvents = [];
     await foreach (Event msg in tableEventStream) {
       tableEvents.Add(msg);
 
+      // TODO: Maybe use a timeout instead.
       if (tableEvents.Count >= 3) {
         break;
       }
@@ -427,12 +425,62 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     Assert.Equal(3, tableEvents.Count);
 
     Assert.True(tableEvents[0] is InsertEvent);
-    Assert.Equal(CreateMessage, tableEvents[0].Value!["text_not_null"]?.ToString());
+    Assert.Equal(createMessage, tableEvents[0].Value!["text_not_null"]?.ToString());
 
     Assert.True(tableEvents[1] is UpdateEvent);
-    Assert.Equal(UpdatedMessage, tableEvents[1].Value!["text_not_null"]?.ToString());
+    Assert.Equal(updatedMessage, tableEvents[1].Value!["text_not_null"]?.ToString());
 
     Assert.True(tableEvents[2] is DeleteEvent);
-    Assert.Equal(UpdatedMessage, tableEvents[2].Value!["text_not_null"]?.ToString());
+    Assert.Equal(updatedMessage, tableEvents[2].Value!["text_not_null"]?.ToString());
+  }
+
+  [Fact]
+  public async Task RealtimeTableSubscriptionWithFilterTest() {
+    var client = await ClientTest.Connect();
+    var api = client.Records("simple_strict_table");
+
+    // Dotnet runs tests for multiple target framework versions in parallel.
+    // Each test currently brings up its own server but pointing at the same
+    // underlying database file. We include the runtime version in the filter
+    // query to avoid a race between both tests. This feels a bit hacky.
+    // Ideally, we'd run the tests sequentially or with better isolation :/.
+    var suffix = $"{DateTimeOffset.Now.ToUnixTimeSeconds()} {System.Environment.Version} static";
+    var updatedMessage = $"C# client updated realtime test 42: {suffix}";
+
+    var tableEventStream = await api.SubscribeAll(filters: [new Filter(column: "text_not_null", value: updatedMessage)]);
+
+    var createMessage = $"C# client realtime test 42:  =?&{suffix}";
+    RecordId id = await api.Create(
+        new SimpleStrict(null, null, null, createMessage),
+        SerializeSimpleStrictContext.Default.SimpleStrict
+    );
+
+    var eventStream = await api.Subscribe(id);
+
+    await api.Update(
+        id,
+        new SimpleStrict(null, null, null, updatedMessage),
+        SerializeSimpleStrictContext.Default.SimpleStrict
+    );
+
+    await api.Delete(id);
+
+    List<Event> events = [];
+    await foreach (Event msg in tableEventStream) {
+      events.Add(msg);
+
+      // TODO: Maybe use a timeout instead.
+      if (events.Count >= 2) {
+        break;
+      }
+    }
+
+    Assert.Equal(2, events.Count);
+
+    Assert.True(events[0] is UpdateEvent);
+    Assert.Equal(updatedMessage, events[0].Value!["text_not_null"]?.ToString());
+
+    Assert.True(events[1] is DeleteEvent);
+    Assert.Equal(updatedMessage, events[1].Value!["text_not_null"]?.ToString());
   }
 }
