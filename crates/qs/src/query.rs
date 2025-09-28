@@ -432,6 +432,34 @@ mod tests {
   }
 
   #[test]
+  fn test_date_range_filter() {
+    // Test that multiple operators on the same column (e.g., date range filters) work correctly
+    let result = Query::parse("filter[contact_datetime][$gte]=2025-09-25&filter[contact_datetime][$lte]=2025-09-27");
+
+    let query = result.expect("Should parse date range filter");
+    let filter = query.filter.expect("Should have filter");
+
+    // Verify it creates an AND composite with two conditions
+    match filter {
+      ValueOrComposite::Composite(Combiner::And, values) => {
+        assert_eq!(values.len(), 2, "Should have two date conditions");
+
+        // Check the conditions are correct
+        if let ValueOrComposite::Value(first) = &values[0] {
+          assert_eq!(first.column, "contact_datetime");
+          assert_eq!(first.op, CompareOp::GreaterThanEqual);
+        }
+
+        if let ValueOrComposite::Value(second) = &values[1] {
+          assert_eq!(second.column, "contact_datetime");
+          assert_eq!(second.op, CompareOp::LessThanEqual);
+        }
+      }
+      _ => panic!("Expected AND composite filter for date range"),
+    }
+  }
+
+  #[test]
   fn test_query_cursor_parsing() {
     let qs = Config::new(5, false);
 

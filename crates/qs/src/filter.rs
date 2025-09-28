@@ -109,9 +109,27 @@ where
               Value::Map(BTreeMap::from([(Value::String(key), v)])),
               depth + 1,
             ),
-            _ => Ok(ValueOrComposite::Value(
-              serde_value_to_single_column_rel_value::<D>(key, v)?,
-            )),
+            _ => {
+              // Handle case where v might be a map with multiple operators
+              match v {
+                Value::Map(ref m) if m.len() > 1 => {
+                  // Multiple operators on same column (e.g., $gte and $lte)
+                  // Convert to AND composite of multiple conditions
+                  let conditions = m
+                    .iter()
+                    .map(|(op_key, op_value)| {
+                      let single_op_map = BTreeMap::from([(op_key.clone(), op_value.clone())]);
+                      serde_value_to_single_column_rel_value::<D>(key.clone(), Value::Map(single_op_map))
+                        .map(ValueOrComposite::Value)
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                  Ok(ValueOrComposite::Composite(Combiner::And, conditions))
+                }
+                _ => Ok(ValueOrComposite::Value(
+                  serde_value_to_single_column_rel_value::<D>(key, v)?,
+                )),
+              }
+            }
           },
           _ => Err(Error::invalid_type(
             crate::util::unexpected(&k),
@@ -153,9 +171,27 @@ where
     (Value::String(str), v) => match str.as_str() {
       "$and" => combine(Combiner::And, v),
       "$or" => combine(Combiner::Or, v),
-      _ => Ok(ValueOrComposite::Value(
-        serde_value_to_single_column_rel_value::<D>(str, v)?,
-      )),
+      _ => {
+        // Handle case where v might be a map with multiple operators
+        match v {
+          Value::Map(ref m) if m.len() > 1 => {
+            // Multiple operators on same column (e.g., $gte and $lte)
+            // Convert to AND composite of multiple conditions
+            let conditions = m
+              .iter()
+              .map(|(op_key, op_value)| {
+                let single_op_map = BTreeMap::from([(op_key.clone(), op_value.clone())]);
+                serde_value_to_single_column_rel_value::<D>(str.clone(), Value::Map(single_op_map))
+                  .map(ValueOrComposite::Value)
+              })
+              .collect::<Result<Vec<_>, _>>()?;
+            Ok(ValueOrComposite::Composite(Combiner::And, conditions))
+          }
+          _ => Ok(ValueOrComposite::Value(
+            serde_value_to_single_column_rel_value::<D>(str, v)?,
+          )),
+        }
+      }
     },
     (k, _) => Err(Error::invalid_type(crate::util::unexpected(&k), &"String")),
   }
