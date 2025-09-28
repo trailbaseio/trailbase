@@ -150,12 +150,33 @@ where
   };
 
   match m.pop_first().expect("len == 1") {
-    (Value::String(str), v) => match str.as_str() {
-      "$and" => combine(Combiner::And, v),
-      "$or" => combine(Combiner::Or, v),
-      _ => Ok(ValueOrComposite::Value(
-        serde_value_to_single_column_rel_value::<D>(str, v)?,
-      )),
+    (Value::String(str), v) => match (str.as_str(), v) {
+      ("$and", v) => combine(Combiner::And, v),
+      ("$or", v) => combine(Combiner::Or, v),
+      (_key, v) => {
+        // For any other string-type key, turn into a value.
+        match v {
+          Value::Map(m) if m.len() > 1 => {
+            // This is the case where a key, i.e. column_name, is matched several times.
+            Ok(ValueOrComposite::Composite(
+              Combiner::And,
+              m.into_iter()
+                .map(|(key, value)| {
+                  return Ok(ValueOrComposite::Value(
+                    serde_value_to_single_column_rel_value::<D>(
+                      str.clone(),
+                      Value::Map(BTreeMap::from([(key, value)])),
+                    )?,
+                  ));
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+            ))
+          }
+          v => Ok(ValueOrComposite::Value(
+            serde_value_to_single_column_rel_value::<D>(str, v)?,
+          )),
+        }
+      }
     },
     (k, _) => Err(Error::invalid_type(crate::util::unexpected(&k), &"String")),
   }
