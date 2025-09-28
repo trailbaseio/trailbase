@@ -9,7 +9,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
-use trailbase_wasm_runtime_host::{InitArgs, RuntimeOptions};
+use trailbase_wasm_runtime_host::{InitArgs, RuntimeOptions, SharedExecutor};
 
 use crate::AppState;
 use crate::User;
@@ -26,6 +26,8 @@ pub(crate) fn build_wasm_runtimes_for_components(
   components_path: PathBuf,
   fs_root_path: Option<PathBuf>,
 ) -> Result<Vec<Runtime>, AnyError> {
+  let executor = SharedExecutor::new(n_threads);
+
   let runtimes: Vec<Runtime> = std::fs::read_dir(&components_path).map_or_else(
     |_err| Ok(vec![]),
     |entries| {
@@ -48,11 +50,11 @@ pub(crate) fn build_wasm_runtimes_for_components(
 
           if path.extension()? == "wasm" {
             return Some(Runtime::new(
+              executor.clone(),
               path,
               conn.clone(),
               shared_kv_store.clone(),
               RuntimeOptions {
-                n_threads,
                 fs_root_path: fs_root_path.clone(),
               },
             ));
