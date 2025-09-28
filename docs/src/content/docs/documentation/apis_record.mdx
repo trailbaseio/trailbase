@@ -382,6 +382,8 @@ Parameters:
 * Filtering can be controlled by passing one or more
   `filter[<column_name>][op]=<value>` parameters.
   For example, `filter[revenue][$gt]=0` would list records with a positive `revenue` only.
+  Multiple filters on the same column are supported and combined with AND logic,
+  e.g. `filter[date][$gte]=2025-01-01&filter[date][$lte]=2025-12-31` for date ranges.
 * Supported operators are:
   * **$eq**: equal, which is also the default if no explicit operator is
     specified, i.e. `?success[$eq]=TRUE` and `?success=TRUE` are identical.
@@ -397,7 +399,19 @@ Parameters:
   expanded using the `?expand=<col0>,<col`>` parameter, if the respective columns
   were allow-listed in the API configuration.
 
-For example, to query the top-3 ranked movies with a watch time below 2 hours
+#### Examples
+
+**Date range filtering** - Get all events between two dates:
+```
+GET /api/records/v1/events?filter[date][$gte]=2025-01-01&filter[date][$lte]=2025-12-31
+```
+
+**Numeric range** - Find products within a price range:
+```
+GET /api/records/v1/products?filter[price][$gte]=10.00&filter[price][$lt]=50.00
+```
+
+For a more complex example, to query the top-3 ranked movies with a watch time below 2 hours
 and "love" in their description:
 
 import listDartCode from "@examples/record_api_dart/lib/src/list.dart?raw";

@@ -13,8 +13,12 @@ func List(client trailbase.Client) (*trailbase.ListResponse[Movie], error) {
 		},
 		Order: []string{"rank"},
 		Filters: []trailbase.Filter{
+			// Multiple filters on same column: watch_time between 90 and 120 minutes
+			trailbase.FilterColumn{Column: "watch_time", Op: trailbase.GreaterThanOrEqual, Value: "90"},
 			trailbase.FilterColumn{Column: "watch_time", Op: trailbase.LessThan, Value: "120"},
-			trailbase.FilterColumn{Column: "description", Op: trailbase.Like, Value: "%love%"},
+			// Date range: movies released between 2020 and 2023
+			trailbase.FilterColumn{Column: "release_date", Op: trailbase.GreaterThanOrEqual, Value: "2020-01-01"},
+			trailbase.FilterColumn{Column: "release_date", Op: trailbase.LessThanOrEqual, Value: "2023-12-31"},
 		},
 	})
 }

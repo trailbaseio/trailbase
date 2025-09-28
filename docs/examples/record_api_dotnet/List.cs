@@ -7,7 +7,11 @@ public partial class Examples {
         pagination: new Pagination(limit: 3),
         order: ["rank"],
         filters: [
+          // Multiple filters on same column: watch_time between 90 and 120 minutes
+          new Filter(column:"watch_time", op:CompareOp.GreaterThanOrEqual, value:"90"),
           new Filter(column:"watch_time", op:CompareOp.LessThan, value:"120"),
-          new Filter(column:"description", op:CompareOp.Like, value:"%love%"),
+          // Date range: movies released between 2020 and 2023
+          new Filter(column:"release_date", op:CompareOp.GreaterThanOrEqual, value:"2020-01-01"),
+          new Filter(column:"release_date", op:CompareOp.LessThanOrEqual, value:"2023-12-31"),
         ]);
 }

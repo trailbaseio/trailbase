@@ -6,8 +6,12 @@ def list_movies(client: Client) -> list[JSON_OBJECT]:
         limit=3,
         order=["rank"],
         filters=[
+            # Multiple filters on same column: watch_time between 90 and 120 minutes
+            Filter(column="watch_time", value="90", op=CompareOp.GREATER_THAN_OR_EQUAL),
             Filter(column="watch_time", value="120", op=CompareOp.LESS_THAN),
-            Filter(column="description", value="%love%", op=CompareOp.LIKE),
+            # Date range: movies released between 2020 and 2023
+            Filter(column="release_date", value="2020-01-01", op=CompareOp.GREATER_THAN_OR_EQUAL),
+            Filter(column="release_date", value="2023-12-31", op=CompareOp.LESS_THAN_OR_EQUAL),
         ],
     )
 
