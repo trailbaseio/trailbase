@@ -1,3 +1,12 @@
+## v0.18.2
+
+* Add support for record-filters for realtime subscriptions to Dart and .NET clients.
+* Fix parsing of implicit `$and` filter on expressions touching the same column, e.g. `?filter[col0][$gt]=0&filter[col0][$lt]=5`. Thanks @kokroo 🙏.
+  * Also further streamline the parsing and allow single element sequences in accordance with QS.
+* Restore ability to parse record inputs for `STRICT` tables with `ANY` columns.
+* Fix blog example after `FileUpload` changes in previous release (which should have arguably been a major release :hide:)
+* Update Rust dependencies.
+
 ## v0.18.1
 
 - Allow realtime subscriptions to define record-based filters 🎉. This could be used, e.g. to subscribe to only to changes within a GIS bounding-box. The query API is consistent with listing records. The TypeScript client has been updated to support it.
@@ -8,7 +17,7 @@
 
 ## v0.18.0
 
-- If everything goes to [plan](https://trailbase.io/blog/switching_to_a_wasm_runtime), v0.18.x will be the last releases containing the v8 JavaScript engine. It's time to move to WASM. If you have any issues or enocunter any limitations, please reach out 🙏.
+- If everything goes to [plan](https://trailbase.io/blog/switching_to_a_wasm_runtime), v0.18.x will be the last releases containing the v8 JavaScript engine. It's time to move to WASM. If you have any issues or encounter any limitations, please reach out 🙏.
 - **Remove built-in auth UI** in favor of a matching WASM component. To get the auth UI back, simply run: `trail components add trailbase/auth_ui`. Why did we remove it?
   - Moving the UI into a component in `crates/auth-ui` offers a starting point for folks to **customize or build their own**. We plan to further streamline the process of customization, both in structure and documentation.
   - The component serves as a proof-of-concept for the new WASM compositional model, our commitment and also makes us eat our own dogfood.
