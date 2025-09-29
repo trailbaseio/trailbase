@@ -149,7 +149,7 @@ where
   use serde_value::Value;
 
   if !crate::util::sanitize_column_name(&key) {
-    // NOTE: This may trigger if serde_qs parse depth is not enough. In this case, square brakets
+    // NOTE: This may trigger if serde_qs parse depth is not enough. In this case, square brackets
     // will end up in the column name.
     return Err(Error::custom(format!(
       "invalid column name for filter: {key}. Nesting too deep?"
@@ -157,11 +157,13 @@ where
   }
 
   return match value {
+    // The simple ?filter[col]=val case.
     Value::String(_) => Ok(ColumnOpValue {
       column: key,
       op: CompareOp::Equal,
       value: parse_value::<D>(CompareOp::Equal, value)?,
     }),
+    // The operator case ?filter[col][$ne]=val case.
     Value::Map(mut m) if m.len() == 1 => {
       let (k, v) = m.pop_first().expect("len() == 1");
 
