@@ -92,10 +92,8 @@ pub enum ExecutorMessage {
   Run(Box<dyn (FnOnce() -> BoxFuture<'static, ()>) + Send>),
 }
 
-#[derive(Clone)]
-struct LockedTransaction(Arc<Mutex<Option<sqlite::OwnedTx>>>);
-
-unsafe impl Send for LockedTransaction {}
+/// NOTE: This is needed due to State needing to be Send.
+unsafe impl Send for sqlite::OwnedTx {}
 
 struct State {
   resource_table: ResourceTable,
@@ -104,13 +102,13 @@ struct State {
   kv: WasiKeyValueCtx,
 
   shared: Arc<SharedState>,
-  tx: LockedTransaction,
+  tx: Arc<Mutex<Option<sqlite::OwnedTx>>>,
 }
 
 impl Drop for State {
   fn drop(&mut self) {
     #[cfg(debug_assertions)]
-    if self.tx.0.lock().is_some() {
+    if self.tx.lock().is_some() {
       log::warn!("pending transaction locking the DB");
     }
   }
@@ -223,11 +221,11 @@ impl trailbase::runtime::host_endpoint::Host for State {
   fn tx_begin(&mut self) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + Send {
     async fn begin(
       conn: trailbase_sqlite::Connection,
-      tx: LockedTransaction,
+      tx: &Mutex<Option<sqlite::OwnedTx>>,
     ) -> Result<(), TxError> {
-      assert!(tx.0.lock().is_none());
+      assert!(tx.lock().is_none());
 
-      *tx.0.lock() = Some(
+      *tx.lock() = Some(
         sqlite::new_tx(conn)
           .await
           .map_err(|err| TxError::Other(err.to_string()))?,
@@ -237,12 +235,12 @@ impl trailbase::runtime::host_endpoint::Host for State {
     }
 
     let tx = self.tx.clone();
-    return async move { Ok(begin(self.shared.conn.clone(), tx).await) };
+    return async move { Ok(begin(self.shared.conn.clone(), &tx).await) };
   }
 
   fn tx_commit(&mut self) -> wasmtime::Result<Result<(), TxError>> {
-    fn commit(tx: LockedTransaction) -> Result<(), TxError> {
-      let Some(tx) = tx.0.lock().take() else {
+    fn commit(tx: &Mutex<Option<sqlite::OwnedTx>>) -> Result<(), TxError> {
+      let Some(tx) = tx.lock().take() else {
         return Err(TxError::Other("no pending tx".to_string()));
       };
 
@@ -255,12 +253,12 @@ impl trailbase::runtime::host_endpoint::Host for State {
       return Ok(());
     }
 
-    return Ok(commit(self.tx.clone()));
+    return Ok(commit(&self.tx));
   }
 
   fn tx_rollback(&mut self) -> wasmtime::Result<Result<(), TxError>> {
-    fn rollback(tx: LockedTransaction) -> Result<(), TxError> {
-      let Some(tx) = tx.0.lock().take() else {
+    fn rollback(tx: &Mutex<Option<sqlite::OwnedTx>>) -> Result<(), TxError> {
+      let Some(tx) = tx.lock().take() else {
         return Err(TxError::Other("no pending tx".to_string()));
       };
 
@@ -273,7 +271,7 @@ impl trailbase::runtime::host_endpoint::Host for State {
       return Ok(());
     }
 
-    return Ok(rollback(self.tx.clone()));
+    return Ok(rollback(&self.tx));
   }
 
   fn tx_execute(
@@ -281,10 +279,14 @@ impl trailbase::runtime::host_endpoint::Host for State {
     query: String,
     params: Vec<Value>,
   ) -> wasmtime::Result<Result<u64, TxError>> {
-    fn execute(tx: LockedTransaction, query: String, params: Vec<Value>) -> Result<u64, TxError> {
+    fn execute(
+      tx: &Mutex<Option<sqlite::OwnedTx>>,
+      query: String,
+      params: Vec<Value>,
+    ) -> Result<u64, TxError> {
       let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
 
-      let Some(ref tx) = *tx.0.lock() else {
+      let Some(ref tx) = *tx.lock() else {
         return Err(TxError::Other("No open transaction".to_string()));
       };
 
@@ -304,7 +306,7 @@ impl trailbase::runtime::host_endpoint::Host for State {
       );
     }
 
-    return Ok(execute(self.tx.clone(), query, params));
+    return Ok(execute(&self.tx, query, params));
   }
 
   fn tx_query(
@@ -313,13 +315,13 @@ impl trailbase::runtime::host_endpoint::Host for State {
     params: Vec<Value>,
   ) -> wasmtime::Result<Result<Vec<Vec<Value>>, TxError>> {
     fn query_fn(
-      tx: LockedTransaction,
+      tx: &Mutex<Option<sqlite::OwnedTx>>,
       query: String,
       params: Vec<Value>,
     ) -> Result<Vec<Vec<Value>>, TxError> {
       let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
 
-      let Some(ref tx) = *tx.0.lock() else {
+      let Some(ref tx) = *tx.lock() else {
         return Err(TxError::Other("No open transaction".to_string()));
       };
 
@@ -345,7 +347,7 @@ impl trailbase::runtime::host_endpoint::Host for State {
       return Ok(values);
     }
 
-    return Ok(query_fn(self.tx.clone(), query, params));
+    return Ok(query_fn(&self.tx, query, params));
   }
 }
 
@@ -649,7 +651,7 @@ impl RuntimeInstance {
         http: WasiHttpCtx::new(),
         kv: WasiKeyValueCtx::new(self.shared.kv_store.clone()),
         shared: self.shared.clone(),
-        tx: LockedTransaction(Arc::new(Mutex::new(None))),
+        tx: Arc::new(Mutex::new(None)),
       },
     ));
   }
