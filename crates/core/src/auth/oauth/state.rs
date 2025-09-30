@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub(crate) enum ResponseType {
   #[serde(rename = "code")]
   Code,
@@ -9,7 +9,7 @@ pub(crate) enum ResponseType {
 /// State that will be round-tripped from login -> remote oauth -> callback via the user's cookies.
 ///
 /// NOTE: Consider encrypting the state to make it tamper-proof.
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub(crate) struct OAuthState {
   /// Expiration timestamp. Required for JWT. We could remove this is we made this tamper-proof w/o
   /// JWT.

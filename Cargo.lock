@@ -153,9 +153,9 @@ dependencies = [
 
 [[package]]
 name = "anstyle"
-version = "1.0.11"
+version = "1.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "862ed96ca487e809f1c8e5a8447f6ee2cf102f846893800b20cebdf541fc6bbd"
+checksum = "5192cca8006f1fd4f7237516f40fa183bb07f8fbdfedaa0036de5ea9b0b45e78"
 
 [[package]]
 name = "anstyle-parse"
@@ -587,11 +587,11 @@ dependencies = [
 
 [[package]]
 name = "axum"
-version = "0.8.5"
+version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98e529aee37b5c8206bb4bf4c44797127566d72f76952c970bd3d1e85de8f4e2"
+checksum = "8a18ed336352031311f4e0b4dd2ff392d4fbb370777c9d18d7fc9d7359f73871"
 dependencies = [
- "axum-core 0.5.4",
+ "axum-core 0.5.5",
  "bytes",
  "form_urlencoded",
  "futures-util",
@@ -641,9 +641,9 @@ dependencies = [
 
 [[package]]
 name = "axum-core"
-version = "0.5.4"
+version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ac7a6beb1182c7e30253ee75c3e918080bfb83f5a3023bcdf7209d85fd147e6"
+checksum = "59446ce19cd142f8833f856eb31f3eb097812d1479ab224f54d72428ca21ea22"
 dependencies = [
  "bytes",
  "futures-core",
@@ -667,7 +667,7 @@ dependencies = [
  "anyhow",
  "assert-json-diff",
  "auto-future",
- "axum 0.8.5",
+ "axum 0.8.6",
  "bytes",
  "bytesize",
  "cookie",
@@ -964,9 +964,9 @@ checksum = "f5c434ae3cf0089ca203e9019ebe529c47ff45cefe8af7c85ecb734ef541822f"
 
 [[package]]
 name = "camino"
-version = "1.2.0"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1de8bc0aa9e9385ceb3bf0c152e3a9b9544f6c4a912c8ae504e80c1f0368603"
+checksum = "276a59bf2b2c967788139340c9f0c5b12d7fd6630315c15c217e559de85d2609"
 dependencies = [
  "serde_core",
 ]
@@ -1734,7 +1734,7 @@ dependencies = [
 name = "custom-binary"
 version = "0.1.0"
 dependencies = [
- "axum 0.8.5",
+ "axum 0.8.6",
  "env_logger",
  "tokio",
  "trailbase",
@@ -3925,10 +3925,31 @@ checksum = "5a87cc7a48537badeae96744432de36f4be2b4a34a05a5ef32e9dd8a1c169dde"
 dependencies = [
  "base64",
  "js-sys",
- "pem",
  "ring",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "jsonwebtoken"
+version = "10.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1417155a38e99d7704ddb3ea7445fe57fdbd5d756d727740a9ed8b9ebaed6e1"
+dependencies = [
+ "base64",
+ "ed25519-dalek",
+ "getrandom 0.2.16",
+ "hmac",
+ "js-sys",
+ "p256",
+ "p384",
+ "pem",
+ "rand 0.8.5",
+ "rsa",
+ "serde",
+ "serde_json",
+ "sha2",
+ "signature",
  "simple_asn1",
 ]
 
@@ -7686,7 +7707,7 @@ version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "151b5a3e3c45df17466454bb74e9ecedecc955269bdedbf4d150dfa393b55a36"
 dependencies = [
- "axum-core 0.5.4",
+ "axum-core 0.5.5",
  "cookie",
  "futures-util",
  "http",
@@ -7803,7 +7824,7 @@ dependencies = [
  "askama",
  "async-channel 2.5.0",
  "async-trait",
- "axum 0.8.5",
+ "axum 0.8.6",
  "axum-test",
  "base64",
  "bytes",
@@ -7823,7 +7844,7 @@ dependencies = [
  "indoc",
  "itertools 0.14.0",
  "jsonschema",
- "jsonwebtoken",
+ "jsonwebtoken 10.0.0",
  "kanal",
  "lazy_static",
  "lettre",
@@ -7884,7 +7905,7 @@ name = "trailbase-assets"
 version = "0.2.0"
 dependencies = [
  "askama",
- "axum 0.8.5",
+ "axum 0.8.6",
  "itertools 0.14.0",
  "log",
  "rust-embed",
@@ -7907,7 +7928,7 @@ dependencies = [
 name = "trailbase-cli"
 version = "0.2.0"
 dependencies = [
- "axum 0.8.5",
+ "axum 0.8.6",
  "chrono",
  "clap",
  "env_logger",
@@ -7935,7 +7956,7 @@ dependencies = [
  "base64",
  "eventsource-stream",
  "futures-lite",
- "jsonwebtoken",
+ "jsonwebtoken 9.3.1",
  "parking_lot",
  "reqwest",
  "serde",
@@ -8437,7 +8458,7 @@ version = "9.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d047458f1b5b65237c2f6dc6db136945667f40a7668627b3490b9513a3d43a55"
 dependencies = [
- "axum 0.8.5",
+ "axum 0.8.6",
  "base64",
  "mime_guess",
  "regex",
@@ -9823,9 +9844,9 @@ dependencies = [
 
 [[package]]
 name = "zeroize"
-version = "1.8.1"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
+checksum = "b97154e67e32c85465826e8bcc1c59429aaaf107c1e4a9e53c8d8ccd5eff88d0"
 dependencies = [
  "zeroize_derive",
 ]

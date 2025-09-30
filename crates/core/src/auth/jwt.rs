@@ -117,7 +117,7 @@ impl JwtHelper {
     return self.public_key.clone();
   }
 
-  pub fn decode<T: DeserializeOwned>(&self, token: &str) -> Result<T, JwtError> {
+  pub fn decode<T: DeserializeOwned + Clone>(&self, token: &str) -> Result<T, JwtError> {
     // Note: we don't need to expose the token headers.
     return jsonwebtoken::decode::<T>(token, &self.decoding_key, &self.validation)
       .map(|data| data.claims);
