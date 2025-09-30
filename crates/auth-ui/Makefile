@@ -20,4 +20,4 @@ ${TRAILDEPOT}/wasm/component.wasm: ../../target/wasm32-wasip2/release/${NAME}.wa
 ../../target/wasm32-wasip2/release/${NAME}.wasm: src/*.rs
 	cargo build --target wasm32-wasip2  --release
 
-.PHONY: guest run
+.PHONY: guest deploy run

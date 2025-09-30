@@ -11,7 +11,6 @@ export { addPeriodicCallback } from "./timer";
 
 export * from "./util";
 export type { InitResult } from "trailbase:runtime/init-endpoint";
-export { threadId } from "trailbase:runtime/host-endpoint";
 
 export interface Config {
   incomingHandler: {

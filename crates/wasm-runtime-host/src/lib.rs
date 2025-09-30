@@ -63,7 +63,6 @@ wasmtime::component::bindgen!({
         "trailbase:runtime/host-endpoint/tx-rollback": trappable,
         "trailbase:runtime/host-endpoint/tx-execute": trappable,
         "trailbase:runtime/host-endpoint/tx-query": trappable,
-        "trailbase:runtime/host-endpoint/thread-id": trappable,
         default: async | trappable,
     },
     exports: {
@@ -177,11 +176,6 @@ impl WasiHttpView for State {
 }
 
 impl trailbase::runtime::host_endpoint::Host for State {
-  // FIXME: Makes no sense with shared executor.
-  fn thread_id(&mut self) -> wasmtime::Result<u64> {
-    return Err(wasmtime::Error::msg("not supported"));
-  }
-
   fn execute(
     &mut self,
     query: String,

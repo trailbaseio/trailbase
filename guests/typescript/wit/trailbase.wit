@@ -29,9 +29,6 @@ interface init-endpoint  {
 }
 
 interface host-endpoint {
-  thread-id: func() -> u64;
-
-
   variant tx-error {
     other(string)
   }

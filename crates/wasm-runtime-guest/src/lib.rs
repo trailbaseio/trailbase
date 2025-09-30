@@ -42,7 +42,6 @@ use crate::http::{HttpRoute, Method, StatusCode, empty_error_response};
 use crate::job::Job;
 
 pub use crate::wit::exports::trailbase::runtime::init_endpoint::{InitArguments, InitResult};
-pub use crate::wit::trailbase::runtime::host_endpoint::thread_id;
 
 // Needed for export macro
 pub use static_assertions::assert_impl_all;

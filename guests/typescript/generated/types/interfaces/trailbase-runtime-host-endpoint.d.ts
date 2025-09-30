@@ -1,5 +1,4 @@
 /** @module Interface trailbase:runtime/host-endpoint **/
-export function threadId(): bigint;
 /**
  * NOTE: Ideally, we'd use these but they currently block guests.
  */
