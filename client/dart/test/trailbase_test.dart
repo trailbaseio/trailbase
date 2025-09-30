@@ -225,7 +225,6 @@ Future<void> main() async {
 
       final oldTokens = client.tokens();
       expect(oldTokens, isNotNull);
-      expect(oldTokens!.valid, isTrue);
 
       final user = client.user()!;
       expect(user.id, isNot(equals('')));
@@ -239,7 +238,6 @@ Future<void> main() async {
 
       final newTokens = await client.login('admin@localhost', 'secret');
       expect(newTokens, isNotNull);
-      expect(newTokens.valid, isTrue);
 
       expect(newTokens, isNot(equals(oldTokens)));
 

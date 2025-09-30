@@ -2,7 +2,7 @@ name: trailbase
 description: Official client library for TrailBase.
 homepage: https://trailbase.io
 repository: https://github.com/trailbaseio/trailbase
-version: 0.5.0
+version: 0.6.0
 
 environment:
   sdk: ^3.6.1
