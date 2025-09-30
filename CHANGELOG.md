@@ -1,3 +1,10 @@
+## v0.18.3
+
+* Change WASM execution model to share a single executor across components and allow work-stealing.
+  * The prior model was simple with low overhead but would not scale well to many components.
+  * Remove `host-endpoint::thread-id`, which doesn't make sense with the new execution model.
+* Update Rust dependencies.
+
 ## v0.18.2
 
 * Add support for record-filters for realtime subscriptions to Dart and .NET clients.

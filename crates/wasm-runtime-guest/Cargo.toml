@@ -1,6 +1,6 @@
 [package]
 name = "trailbase-wasm"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "OSL-3.0"
 description = "WASM runtime for the TrailBase framework"
