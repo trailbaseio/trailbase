@@ -177,3 +177,11 @@ repos:
       language: system
       types: [go]
       pass_filenames: false
+
+    # Kotlin test
+    - id: kotlin_test
+      name: Kotlin test
+      entry: sh -c 'cd client/kotlin && ./gradlew test'
+      language: system
+      types: [kotlin]
+      pass_filenames: false
