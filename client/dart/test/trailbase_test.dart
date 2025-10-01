@@ -219,6 +219,20 @@ Future<void> main() async {
     // await process.stdout.forEach(stdout.add);
   });
 
+  test('filter', () {
+    final params = <String, String>{};
+    final filters = [
+      Filter(column: 'col0', value: '0', op: CompareOp.greaterThan),
+      Filter(column: 'col0', value: '5', op: CompareOp.lessThan),
+    ];
+
+    for (final filter in filters) {
+      addFiltersToParams(params, 'filter', filter);
+    }
+
+    expect(params.length, 2);
+  });
+
   group('client tests', () {
     test('auth', () async {
       final client = await connect();

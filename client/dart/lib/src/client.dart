@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:meta/meta.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:logging/logging.dart';
 import 'package:http/http.dart' as http;
@@ -244,7 +245,7 @@ class RecordApi {
     if (expand != null) params['expand'] = expand.join(',');
 
     for (final filter in filters ?? []) {
-      _addFiltersToParams(params, 'filter', filter);
+      addFiltersToParams(params, 'filter', filter);
     }
 
     final response = await _client.fetch(
@@ -322,7 +323,7 @@ class RecordApi {
   }) async {
     final params = <String, String>{};
     for (final filter in filters ?? []) {
-      _addFiltersToParams(params, 'filter', filter);
+      addFiltersToParams(params, 'filter', filter);
     }
 
     final refreshToken = _client._tokenState._shouldRefresh();
@@ -391,19 +392,14 @@ class Client {
       {void Function(Client, Tokens?)? onAuthChange}) async {
     final client = Client(site, onAuthChange: onAuthChange);
 
-    try {
-      final uri = client.site().replace(path: '${_authApi}/status');
-      final statusResponse =
-          await client._http.get(uri, headers: _buildHeaders(tokens));
-
-      final newTokens = Tokens.fromJson(jsonDecode(statusResponse.body));
-
-      client._tokenState = _TokenState.build(newTokens);
-      client._authChange?.call(client, newTokens);
-    } catch (err) {
-      // Do nothing
-      _logger.warning(err);
-    }
+    // Initial check if tokens are valid and potentially refresh auth token.
+    // Do not use _updateToken to not call [onAuthChange] on intial tokens.
+    client._tokenState = _TokenState.build(tokens);
+    await client.refreshAuthToken();
+    // final uri = client.site().replace(path: '${_authApi}/status');
+    // final statusResponse =
+    //     await client._http.get(uri, headers: _buildHeaders(tokens));
+    // client._updateTokens(Tokens.fromJson(jsonDecode(statusResponse.body)));
 
     return client;
   }
@@ -498,7 +494,7 @@ class Client {
     String path, {
     Method method = Method.get,
     String? data,
-    Map<String, String>? queryParams,
+    Map<String, dynamic>? queryParams,
     bool throwOnError = true,
   }) async {
     final refreshToken = _tokenState._shouldRefresh();
@@ -640,8 +636,9 @@ class _TokenState {
   }
 }
 
-void _addFiltersToParams(
-    Map<String, dynamic> params, String path, FilterBase filter) {
+@visibleForTesting
+void addFiltersToParams(
+    Map<String, String> params, String path, FilterBase filter) {
   final _ = switch (filter) {
     Filter(column: final c, op: final op, value: final v) => () {
         if (op != null) {
@@ -652,12 +649,12 @@ void _addFiltersToParams(
       }(),
     And(filters: final filters) => () {
         filters.asMap().forEach((index, filter) {
-          _addFiltersToParams(params, '${path}[\$and][${index}]', filter);
+          addFiltersToParams(params, '${path}[\$and][${index}]', filter);
         });
       }(),
     Or(filters: final filters) => () {
         filters.asMap().forEach((index, filter) {
-          _addFiltersToParams(params, '${path}[\$or][${index}]', filter);
+          addFiltersToParams(params, '${path}[\$or][${index}]', filter);
         });
       }(),
   };
