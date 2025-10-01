@@ -82,6 +82,7 @@ Client packages for various languages are available via:
 - [Rust](https://crates.io/crates/trailbase-client)
 - [C#/.Net](https://www.nuget.org/packages/TrailBase/)
 - [Swift](https://github.com/trailbaseio/trailbase/tree/main/client/swift/trailbase)
+- [Kotlin](https://github.com/trailbaseio/trailbase/tree/main/client/kotlin)
 - [Go](https://github.com/trailbaseio/trailbase/tree/main/client/go/trailbase)
 - [Python](https://pypi.org/project/trailbase/)
 

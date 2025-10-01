@@ -39,6 +39,7 @@ import rustLogo from "@/assets/rust_unofficial_logo.svg";
 import goLogo from "@/assets/go_logo.svg";
 import swiftLogo from "@/assets/swift_logo.svg";
 import tsLogo from "@/assets/ts_logo.svg";
+import kotlinLogo from "@/assets/kotlin_logo.svg";
 import tanstackLogo from "@/assets/tanstack_logo.svg";
 
 import { Duration100kInsertsChart } from "./reference/_benchmarks/benchmarks.tsx";
@@ -108,17 +109,21 @@ export const demoLink = "https://demo.trailbase.io";
     Clients as well as code-generation examples for TypeScript,
     Dart/Flutter, Python, C#/.NET and Rust are provided out of the box.
 
-    <div class="pt-4 m-0 gap-4 grid grid-cols-7 justify-center items-start">
+    <div class="pt-4 m-0 gap-4 grid grid-cols-8 justify-center items-start">
       <a href="https://www.npmjs.com/package/trailbase">
-        <Image class="p-0 m-0" height={52} src={tsLogo} alt="TypeScript" />
+        <Image class="p-0 m-0" width={52} height={52} src={tsLogo} alt="TypeScript" />
       </a>
 
       <a href="https://pub.dev/packages/trailbase">
-        <Image margin={0} class="p-0 m-0" width={42} height={52} src={flutterLogo} alt="Flutter" />
+        <Image margin={0} class="p-0 m-0" width={52} height={52} src={flutterLogo} alt="Flutter" />
       </a>
 
       <a href={githubPath("client/swift/trailbase")}>
         <Image margin={0} class="p-0 m-0" width={52} height={52} src={swiftLogo} alt="Swift" />
+      </a>
+
+      <a href={githubPath("client/kotlin")}>
+        <Image margin={0} class="p-0 m-0" width={52} height={52} src={kotlinLogo} alt="Kotlin" />
       </a>
 
       <a href="https://pypi.org/project/trailbase/">
