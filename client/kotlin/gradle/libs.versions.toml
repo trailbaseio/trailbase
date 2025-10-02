@@ -7,6 +7,7 @@ guava = "33.4.5-jre"
 kotlin = "2.2.20"
 ktor = "3.2.3"
 spotless = "6.21.0"
+maven-publish = "0.34.0"
 
 [libraries]
 commons-math3 = { module = "org.apache.commons:commons-math3", version.ref = "commons-math3" }
@@ -20,7 +21,9 @@ ktor-serialization-json = { group = "io.ktor", name = "ktor-serialization-kotlin
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.9.0" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version = "1.10.2" }
 
+
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "maven-publish" }

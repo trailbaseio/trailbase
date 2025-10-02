@@ -8,8 +8,10 @@ plugins {
     // Code formatting, linting, ...
     alias(libs.plugins.spotless)
 
+    alias(libs.plugins.maven.publish)
+
     // Apply the java-library plugin for API and implementation separation.
-    `java-library`
+    id("java-library")
 }
 
 repositories {
@@ -60,6 +62,39 @@ allprojects {
     }
 }
 
+group = "io.trailbase"
+
+version = "0.1.0"
+
+mavenPublishing {
+    publishToMavenCentral()
+
+    signAllPublications()
+
+    coordinates(group.toString(), "trailbase-client", version.toString())
+
+    pom {
+        name = "TrailBase"
+        description = "The official TrailBase kotlin client library"
+        url = "https://trailbase.io"
+        licenses {
+            license {
+                name = "OSL-3.0"
+                url = "https://opensource.org/license/osl-3-0"
+                distribution = "https://opensource.org/license/osl-3-0"
+            }
+        }
+        developers {
+            developer {
+                id = "sebastian"
+                name = "Sebastian"
+                email = "contact@trailbase.io"
+            }
+        }
+        scm { url = "https://github.com/trailbaseio/trailbase" }
+    }
+}
+
 spotless {
     kotlin {
         ktfmt().kotlinlangStyle()
@@ -73,5 +108,12 @@ spotless {
     }
 }
 
-// Apply a specific Java toolchain to ease working on different environments.
-java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(22) }
+
+    // Packaging
+    // withJavadocJar()
+    withSourcesJar()
+
+    modularity.inferModulePath = true
+}
