@@ -1,4 +1,5 @@
 use rcgen::{CertifiedKey, generate_simple_self_signed};
+use std::sync::Arc;
 use tokio_rustls::rustls::pki_types::{PrivateKeyDer, pem::PemObject};
 use tracing::*;
 use trailbase::{DataDir, Server, ServerOptions};
@@ -32,7 +33,7 @@ fn test_https_serving() {
       dev: false,
       cors_allowed_origins: vec![],
       runtime_threads: None,
-      tls_key: Some(tls_key),
+      tls_key: Some(Arc::new(tls_key)),
       tls_cert: Some(cert.der().clone()),
       ..Default::default()
     })

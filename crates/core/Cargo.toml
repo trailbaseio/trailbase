@@ -27,6 +27,7 @@ harness = false
 default = ["wasm"]
 v8 = ["dep:trailbase-js"]
 wasm = ["dep:trailbase-wasm-runtime-host"]
+otel = ["dep:axum-tracing-opentelemetry", "dep:init-tracing-opentelemetry"]
 
 [dependencies]
 aes-gcm-siv = "0.11.1"
@@ -36,6 +37,7 @@ async-channel = "2.3.1"
 async-trait = "0.1.80"
 axum = { workspace = true }
 base64 = { workspace = true }
+axum-tracing-opentelemetry = { version = "0.32.0", optional = true }
 bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
 client-ip = "0.1.1"
@@ -49,6 +51,7 @@ hyper = "1.6.0"
 hyper-util = "0.1.7"
 indexmap = "2.11.4"
 indoc = "2.0.5"
+init-tracing-opentelemetry = { version = "0.32.0", features = ["tracing_subscriber_ext", "metrics"], optional = true }
 itertools = "0.14.0"
 jsonschema = { version = "0.35.0", default-features = false }
 jsonwebtoken = { version = "^10.2.0", default-features = false, features = ["use_pem", "rust_crypto"] }
@@ -85,6 +88,7 @@ tower-cookies = "0.11.0"
 tower-http = { version = "^0.6.0", default-features = false, features = ["cors", "trace", "fs", "limit"] }
 tower-service = { version = "0.3.3", default-features = false }
 tracing = { workspace = true }
+tracing-opentelemetry-instrumentation-sdk = "0.32.0"
 tracing-subscriber = { workspace = true }
 trailbase-assets = { workspace = true }
 trailbase-build = { workspace = true }

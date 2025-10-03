@@ -40,7 +40,7 @@ pub use init::{InitArgs, InitError, init_app_state};
 /// A set of options to configure serving behaviors. Changing any of these options
 /// requires a server restart, which makes them a natural fit for being exposed as command line
 /// arguments.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ServerOptions {
   /// Optional path to static assets that will be served at the HTTP root.
   pub data_dir: DataDir,
@@ -84,7 +84,7 @@ pub struct ServerOptions {
   /// TLS certificate path.
   pub tls_cert: Option<CertificateDer<'static>>,
   /// TLS key path.
-  pub tls_key: Option<PrivateKeyDer<'static>>,
+  pub tls_key: Option<Arc<PrivateKeyDer<'static>>>,
 }
 
 pub struct Server {
@@ -141,37 +141,7 @@ impl Server {
     })
     .await?;
 
-    // Initialize tracing subscribers/layers.
-    //
-    // A few notes in case initialization below panics. The `log` and `tracing` crates/systems are
-    // mostly independent. Both like to be initialized only once given their global nature. There
-    // is a `.try_init()`, which has not effect when already initialized.
-    //
-    // Here we specifically only initialize `tracing`, since we critically rely on the
-    // `SqliteLogLayer`. We leave `log` initialization to the program level.
-    //
-    // The current setup prevents users from initializing tracing themselves. This is only relevant
-    // for the frameworks-use-case. If we wanted to allow it, we could check that if already
-    // initialized, the "logging::SqliteLogLayer" is present.
-    //
-    // If the `tracing_subscriber` crate is built with the default feature `tracing-log`,
-    // initializing `tracing` will also initialize the `log` crate. So this approach will only
-    // work if built w/o `tracing-log`. Otherwise, initializing `log` before will lead to a panic
-    // here. We do *not* want to use a `.try_init()` here, otherwise may silently miss
-    // `SqliteLogLayer`.
-    //
-    // Response log events are emitted at the INFO level, see `logging.rs`
-    let filter_layer = filter::Targets::new()
-      .with_default(filter::LevelFilter::OFF)
-      .with_target(crate::logging::EVENT_TARGET, crate::logging::LEVEL);
-
-    tracing_subscriber::Registry::default()
-      .with(filter_layer)
-      .with(logging::SqliteLogLayer::new(
-        &state,
-        /* log-to-stdout= */ opts.log_responses,
-      ))
-      .init();
+    Self::build_tracing(&state, opts.log_responses).init();
 
     if new_data_dir {
       on_first_init(state.clone())
@@ -207,6 +177,61 @@ impl Server {
       admin_router: Self::build_independent_admin_router(&state, &opts),
       tls: Self::load_tls(&opts),
     })
+  }
+
+  fn build_tracing(
+    state: &AppState,
+    log_responses: bool,
+  ) -> impl tracing_subscriber::layer::SubscriberExt {
+    // Initialize tracing subscribers/layers.
+    //
+    // A few notes in case initialization below panics. The `log` and `tracing` crates/systems are
+    // mostly independent. Both like to be initialized only once given their global nature. There
+    // is a `.try_init()`, which has not effect when already initialized.
+    //
+    // Here we specifically only initialize `tracing`, since we critically rely on the
+    // `SqliteLogLayer`. We leave `log` initialization to the program level.
+    //
+    // The current setup prevents users from initializing tracing themselves. This is only relevant
+    // for the frameworks-use-case. If we wanted to allow it, we could check that if already
+    // initialized, the "logging::SqliteLogLayer" is present.
+    //
+    // If the `tracing_subscriber` crate is built with the default feature `tracing-log`,
+    // initializing `tracing` will also initialize the `log` crate. So this approach will only
+    // work if built w/o `tracing-log`. Otherwise, initializing `log` before will lead to a panic
+    // here. We do *not* want to use a `.try_init()` here, otherwise may silently miss
+    // `SqliteLogLayer`.
+    //
+    // Response log events are emitted at the INFO level, see `logging.rs`
+    #[cfg(not(feature = "otel"))]
+    let subscriber = tracing_subscriber::Registry::default();
+
+    #[cfg(feature = "otel")]
+    let subscriber = {
+      let (subscriber, otel_guard) =
+        init_tracing_opentelemetry::tracing_subscriber_ext::regiter_otel_layers(
+          tracing_subscriber::Registry::default(),
+        )
+        .expect("startup");
+
+      // TODO: We have to keep this alive. Let's find something better than a singleton.
+      use std::sync::OnceLock;
+      static SINGLETON: OnceLock<init_tracing_opentelemetry::Guard> = OnceLock::new();
+      SINGLETON.get_or_init(move || init_tracing_opentelemetry::Guard::global(Some(otel_guard)));
+
+      subscriber
+    };
+
+    let filter_layer = filter::Targets::new()
+      .with_default(filter::LevelFilter::OFF)
+      .with_target(crate::logging::EVENT_TARGET, crate::logging::LEVEL);
+
+    return subscriber
+      .with(filter_layer)
+      .with(logging::SqliteLogLayer::new(
+        state,
+        /* log-to-stdout= */ log_responses,
+      ));
   }
 
   pub async fn serve(self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -409,11 +434,16 @@ impl Server {
     );
   }
 
-  fn wrap_with_default_layers(
+  pub fn wrap_with_default_layers(
     state: &AppState,
     opts: &ServerOptions,
     router: Router<AppState>,
   ) -> Router<()> {
+    #[cfg(feature = "otel")]
+    let router = router
+      .layer(axum_tracing_opentelemetry::middleware::OtelInResponseLayer)
+      .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default());
+
     return router
       .layer(CookieManagerLayer::new())
       .layer(build_cors(opts))
