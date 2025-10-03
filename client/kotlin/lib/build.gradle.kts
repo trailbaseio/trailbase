@@ -2,11 +2,7 @@ import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 plugins {
-    alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.kotlin.serialization)
-
-    // Code formatting, linting, ...
-    alias(libs.plugins.spotless)
+    id("buildlogic.kotlin-common-conventions")
 
     alias(libs.plugins.maven.publish)
 
@@ -25,17 +21,7 @@ dependencies {
     implementation(libs.ktor.client.negotiation)
     implementation(libs.ktor.serialization.json)
 
-    implementation(libs.kotlinx.serialization.json)
-
     testImplementation(libs.kotlinx.coroutines.test)
-
-    // This dependency is exported to consumers, that is to say found on their compile
-    // classpath.
-    api(libs.commons.math3)
-
-    // This dependency is used internally, and not exposed to consumers on their own compile
-    // classpath.
-    implementation(libs.guava)
 }
 
 testing {
@@ -93,27 +79,4 @@ mavenPublishing {
         }
         scm { url = "https://github.com/trailbaseio/trailbase" }
     }
-}
-
-spotless {
-    kotlin {
-        ktfmt().kotlinlangStyle()
-        // ktlint()
-        // diktat()
-    }
-    kotlinGradle {
-        target("*.gradle.kts")
-        ktfmt().kotlinlangStyle()
-        // ktlint()
-    }
-}
-
-java {
-    toolchain { languageVersion = JavaLanguageVersion.of(22) }
-
-    // Packaging
-    // withJavadocJar()
-    withSourcesJar()
-
-    modularity.inferModulePath = true
 }

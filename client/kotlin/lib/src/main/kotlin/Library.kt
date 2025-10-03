@@ -74,6 +74,10 @@ sealed class RecordId {
     override fun equals(other: Any?): Boolean {
         return other is RecordId && id() == other.id()
     }
+
+    override fun toString(): String {
+        return id()
+    }
 }
 
 class StringRecordId(private val id: String) : RecordId() {

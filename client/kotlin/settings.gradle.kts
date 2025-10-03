@@ -12,4 +12,4 @@ plugins {
 }
 
 rootProject.name = "trailbase"
-include("lib")
+include("lib", "examples:record_api")

@@ -1,6 +1,10 @@
 test:
 	gradle test
 
+# Note `gradle build` also runs the tests.
+build:
+	gradle assemble
+
 # Setting up publishing requires extracting your private key into a binary
 # key-ring file with:
 #
@@ -28,4 +32,4 @@ format:
 list:
 	gradle tasks
 
-.PHONY: test publish release format list
+.PHONY: test build publish release format list
