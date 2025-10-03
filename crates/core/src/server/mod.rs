@@ -8,9 +8,11 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{RequestExt, Router};
+use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use log::*;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio::signal;
 use tokio::task::JoinSet;
 use tokio_rustls::{
@@ -157,11 +159,20 @@ impl Server {
     // `SqliteLogLayer`.
     //
     // Response log events are emitted at the INFO level, see `logging.rs`
+    let subscriber = tracing_subscriber::Registry::default();
+    let (subscriber, otel_guard) =
+      init_tracing_opentelemetry::tracing_subscriber_ext::regiter_otel_layers(subscriber)
+        .expect("startup");
+
+    // TODO: We have to keep this alive. Let's find something better than a singleton.
+    static SINGLETON: OnceLock<init_tracing_opentelemetry::Guard> = OnceLock::new();
+    SINGLETON.get_or_init(move || init_tracing_opentelemetry::Guard::global(Some(otel_guard)));
+
     let filter_layer = filter::Targets::new()
       .with_default(filter::LevelFilter::OFF)
       .with_target(crate::logging::EVENT_TARGET, crate::logging::LEVEL);
 
-    tracing_subscriber::Registry::default()
+    subscriber
       .with(filter_layer)
       .with(logging::SqliteLogLayer::new(
         &state,
@@ -403,6 +414,10 @@ impl Server {
     router: Router<AppState>,
   ) -> Router<()> {
     return router
+      // TODO: Remove. Just for testing.
+      .route("/trace", get(trace_id))
+      .layer(OtelInResponseLayer)
+      .layer(OtelAxumLayer::default())
       .layer(CookieManagerLayer::new())
       .layer(build_cors(opts))
       .layer(
@@ -651,4 +666,14 @@ fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
     };
   }
   return Ok(());
+}
+
+#[tracing::instrument]
+async fn trace_id() -> impl IntoResponse {
+  tracing::info!(monotonic_counter.index = 1);
+
+  let trace_id = tracing_opentelemetry_instrumentation_sdk::find_current_trace_id();
+  dbg!(&trace_id);
+
+  axum::Json(serde_json::json!({ "my_trace_id": trace_id }))
 }
