@@ -4,69 +4,48 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
-abstract class Event {
-  Event();
+class HttpException implements Exception {
+  final int status;
+  final String? message;
 
-  Map<String, dynamic>? value();
+  const HttpException(this.status, this.message);
 
-  static Event fromJson(Map<String, dynamic> json) {
-    final insert = json['Insert'];
-    if (insert != null) {
-      return InsertEvent(insert as Map<String, dynamic>);
-    }
+  @override
+  String toString() => 'HttpException(${status}, msg=${message})';
+}
 
-    final update = json['Update'];
-    if (update != null) {
-      return UpdateEvent(update as Map<String, dynamic>);
-    }
-
-    final delete = json['Delete'];
-    if (delete != null) {
-      return DeleteEvent(delete as Map<String, dynamic>);
-    }
-
-    final error = json['Error'];
-    if (error != null) {
-      return ErrorEvent(error as String);
-    }
-    throw Exception('Failed to parse event: ${json}');
-  }
+sealed class Event {
+  Map<String, dynamic>? get value;
 }
 
 class InsertEvent extends Event {
-  final Map<String, dynamic>? _value;
+  @override
+  final Map<String, dynamic> value;
 
-  InsertEvent(this._value);
+  InsertEvent(this.value);
 
   @override
-  Map<String, dynamic>? value() => _value;
-
-  @override
-  String toString() => 'InsertEvent(${_value})';
+  String toString() => 'InsertEvent(${value})';
 }
 
 class UpdateEvent extends Event {
-  final Map<String, dynamic>? _value;
+  @override
+  final Map<String, dynamic> value;
 
-  UpdateEvent(this._value);
+  UpdateEvent(this.value);
 
   @override
-  Map<String, dynamic>? value() => _value;
-
-  @override
-  String toString() => 'UpdateEvent(${_value})';
+  String toString() => 'UpdateEvent(${value})';
 }
 
 class DeleteEvent extends Event {
-  final Map<String, dynamic>? _value;
+  @override
+  final Map<String, dynamic> value;
 
-  DeleteEvent(this._value);
+  DeleteEvent(this.value);
 
   @override
-  Map<String, dynamic>? value() => _value;
-
-  @override
-  String toString() => 'DeleteEvent(${_value})';
+  String toString() => 'DeleteEvent(${value})';
 }
 
 class ErrorEvent extends Event {
@@ -75,7 +54,7 @@ class ErrorEvent extends Event {
   ErrorEvent(this._error);
 
   @override
-  Map<String, dynamic>? value() => null;
+  Map<String, dynamic>? get value => null;
 
   @override
   String toString() => 'ErrorEvent(${_error})';
@@ -83,37 +62,62 @@ class ErrorEvent extends Event {
 
 Future<Stream<Event>> connectSse(
   http.Client client,
-  http.Request request,
-) async {
-  // NOTE: We could use a `StreamController.broadcast()` and track existing
-  // streams keyed by `uri` to merge multiple concurrent subscriptions.
-  final response = await client.send(request);
-  if (response.statusCode != 200) {
-    throw Exception('[${response.statusCode}] ${response}');
+  http.Request request, {
+  Map<String, Future<StreamController<Event>>>? cache,
+}) async {
+  final key = request.url.toString();
+
+  Future<StreamController<Event>> connectSseImpl() async {
+    final response = await client.send(request);
+    if (response.statusCode != 200) {
+      throw HttpException(response.statusCode, response.toString());
+    }
+
+    late final StreamController<Event> ctrl;
+    StreamSubscription<List<int>>? subscription;
+
+    ctrl = StreamController<Event>.broadcast(
+      onCancel: () {
+        subscription?.cancel();
+        cache?.remove(key);
+      },
+      onListen: () {
+        // NOTE: Unlike the default StreamController, the broadcast one doesn't
+        // buffer. Hence we have to delay listening until somebody starts
+        // listening.
+        final buffer = BytesBuilder();
+        subscription = response.stream.listen(
+          (List<int> data) {
+            if (_endsWithNewlineNewline(data)) {
+              if (buffer.isNotEmpty) {
+                buffer.add(data);
+
+                final event = _decodeEvent(buffer.takeBytes());
+                if (event != null) ctrl.add(event);
+              } else {
+                final event = _decodeEvent(data);
+                if (event != null) ctrl.add(event);
+              }
+            } else {
+              buffer.add(data);
+            }
+          },
+          onDone: () => ctrl.close(),
+          onError: (error) => ctrl.addError(error),
+          cancelOnError: true,
+        );
+      },
+    );
+
+    return ctrl;
   }
 
-  final buffer = BytesBuilder();
-  final sink = StreamController<Uint8List>();
+  if (cache != null) {
+    final ctrl = cache.putIfAbsent(key, () => connectSseImpl());
+    return (await ctrl).stream;
+  }
 
-  response.stream.listen(
-    (List<int> data) {
-      if (_endsWithNewlineNewline(data)) {
-        if (buffer.isNotEmpty) {
-          buffer.add(data);
-          sink.add(buffer.takeBytes());
-        } else {
-          sink.add(Uint8List.fromList(data));
-        }
-      } else {
-        buffer.add(data);
-      }
-    },
-    onDone: () => sink.close(),
-    onError: (error) => sink.addError(error),
-    cancelOnError: true,
-  );
-
-  return sink.stream.expand(_decodeEvent);
+  return (await connectSseImpl()).stream;
 }
 
 bool _endsWithNewlineNewline(List<int> bytes) {
@@ -123,13 +127,37 @@ bool _endsWithNewlineNewline(List<int> bytes) {
   return false;
 }
 
-List<Event> _decodeEvent(Uint8List bytes) {
+Event _eventfromJson(Map<String, dynamic> json) {
+  final insert = json['Insert'];
+  if (insert != null) {
+    return InsertEvent(insert as Map<String, dynamic>);
+  }
+
+  final update = json['Update'];
+  if (update != null) {
+    return UpdateEvent(update as Map<String, dynamic>);
+  }
+
+  final delete = json['Delete'];
+  if (delete != null) {
+    return DeleteEvent(delete as Map<String, dynamic>);
+  }
+
+  final error = json['Error'];
+  if (error != null) {
+    return ErrorEvent(error as String);
+  }
+
+  throw Exception('Failed to parse event: ${json}');
+}
+
+Event? _decodeEvent(List<int> bytes) {
   final decoded = utf8.decode(bytes);
   if (decoded.startsWith('data: ')) {
     // Cut off "data: " and decode.
-    return [Event.fromJson(jsonDecode(decoded.substring(6)))];
+    return _eventfromJson(jsonDecode(decoded.substring(6)));
   }
 
   // Heart-beat, do nothing.
-  return [];
+  return null;
 }

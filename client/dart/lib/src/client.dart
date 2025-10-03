@@ -337,7 +337,11 @@ class RecordApi {
     final request = http.Request('GET', uri)
       ..headers.addAll(_client._tokenState.headers);
 
-    return await connectSse(_client._http, request);
+    return await connectSse(
+      _client._http,
+      request,
+      cache: _client.cache.cast<String, Future<StreamController<Event>>>(),
+    );
   }
 
   Uri imageUri(RecordId id, String column, {String? filename}) {
@@ -349,16 +353,6 @@ class RecordApi {
         .site()
         .replace(path: '${_recordApi}/${_name}/${id}/file/${column}');
   }
-}
-
-class HttpException implements Exception {
-  final int status;
-  final String? message;
-
-  const HttpException(this.status, this.message);
-
-  @override
-  String toString() => 'HttpException(${status}, msg=${message})';
 }
 
 enum Method {
@@ -374,6 +368,9 @@ class Client {
 
   _TokenState _tokenState;
   final void Function(Client, Tokens?)? _authChange;
+
+  @visibleForTesting
+  final Map<String, dynamic> cache = {};
 
   Client._(
     String site, {

@@ -414,10 +414,16 @@ Future<void> main() async {
       final id = await api.create({'text_not_null': createMessage});
 
       final events = await api.subscribe(id);
+      {
+        // Should not trigger new subscriptions but rather join in the cached broadcast.
+        final _ = await api.subscribe(id);
+      }
 
       final updatedMessage = 'dart client updated realtime test 0: ${now}';
       await api.update(id, {'text_not_null': updatedMessage});
       await api.delete(id);
+
+      expect(client.cache.length, equals(2));
 
       final eventList =
           await events.timeout(Duration(seconds: 10), onTimeout: (sink) {
@@ -428,15 +434,20 @@ Future<void> main() async {
       expect(eventList.length, equals(2));
       expect(eventList[0].runtimeType, equals(UpdateEvent));
       expect(
-          SimpleStrict.fromJson(eventList[0].value()!),
+          SimpleStrict.fromJson(eventList[0].value!),
           SimpleStrict(
             id: id.toString(),
             textNotNull: updatedMessage,
           ));
 
+      {
+        await Future.delayed(const Duration());
+        expect(client.cache.length, equals(1), reason: '${client.cache}');
+      }
+
       expect(eventList[1].runtimeType, equals(DeleteEvent));
       expect(
-          SimpleStrict.fromJson(eventList[1].value()!),
+          SimpleStrict.fromJson(eventList[1].value!),
           SimpleStrict(
             id: id.toString(),
             textNotNull: updatedMessage,
@@ -447,15 +458,21 @@ Future<void> main() async {
         print('Expected: stream timed-out');
         sink.close();
       }).toList();
+
       expect(tableEventList.length, equals(3));
 
       expect(tableEventList[0].runtimeType, equals(InsertEvent));
       expect(
-          SimpleStrict.fromJson(tableEventList[0].value()!),
+          SimpleStrict.fromJson(tableEventList[0].value!),
           SimpleStrict(
             id: id.toString(),
             textNotNull: createMessage,
           ));
+
+      {
+        await Future.delayed(const Duration());
+        expect(client.cache.length, equals(0), reason: '${client.cache}');
+      }
     });
 
     test('subscription filter', () async {
@@ -483,19 +500,23 @@ Future<void> main() async {
       expect(eventList.length, equals(2));
       expect(eventList[0].runtimeType, equals(UpdateEvent));
       expect(
-          SimpleStrict.fromJson(eventList[0].value()!),
+          SimpleStrict.fromJson(eventList[0].value!),
           SimpleStrict(
             id: id.toString(),
             textNotNull: updatedMessage,
           ));
 
-      expect(eventList[1].runtimeType, equals(DeleteEvent));
-      expect(
-          SimpleStrict.fromJson(eventList[1].value()!),
-          SimpleStrict(
-            id: id.toString(),
-            textNotNull: updatedMessage,
-          ));
+      // Demonstrate pattern-mathching/destructuring.
+      if (eventList[1] case DeleteEvent(value: final v)) {
+        expect(
+            SimpleStrict.fromJson(v),
+            SimpleStrict(
+              id: id.toString(),
+              textNotNull: updatedMessage,
+            ));
+      } else {
+        throw ArgumentError.value('expected DeleteEvent, got ${eventList[1]}');
+      }
     });
   });
 }
