@@ -7,7 +7,6 @@ use trailbase_schema::metadata::{
   JsonColumnMetadata, TableMetadata, TableOrViewMetadata, ViewMetadata, find_file_column_indexes,
   find_user_id_foreign_key_columns,
 };
-use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::Column;
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::{NamedParams, Params as _, Value};
@@ -690,63 +689,6 @@ impl<'a> trailbase_sqlite::Params for SubscriptionAclParams<'a> {
   }
 }
 
-pub(crate) fn validate_rule(rule: &str) -> Result<(), String> {
-  let stmt = parse_into_statement(&format!("SELECT {rule}"))
-    .map_err(|err| format!("'{rule}' not a valid SQL expression: {err}"))?;
-
-  let Some(sqlite3_parser::ast::Stmt::Select(select)) = stmt else {
-    panic!("Expected SELECT");
-  };
-
-  let sqlite3_parser::ast::OneSelect::Select { mut columns, .. } = select.body.select else {
-    panic!("Expected SELECT");
-  };
-
-  if columns.len() != 1 {
-    return Err("Expected single column".to_string());
-  }
-
-  let sqlite3_parser::ast::ResultColumn::Expr(expr, _) = columns.swap_remove(0) else {
-    return Err("Expected expr".to_string());
-  };
-
-  validate_expr_recursively(&expr)?;
-
-  return Ok(());
-}
-
-fn validate_expr_recursively(expr: &sqlite3_parser::ast::Expr) -> Result<(), String> {
-  use sqlite3_parser::ast;
-
-  match &expr {
-    ast::Expr::Binary(lhs, _op, rhs) => {
-      validate_expr_recursively(lhs)?;
-      validate_expr_recursively(rhs)?;
-    }
-    ast::Expr::IsNull(inner) => {
-      validate_expr_recursively(inner)?;
-    }
-    ast::Expr::InTable { lhs, rhs, .. } => {
-      match rhs {
-        ast::QualifiedName {
-          name: ast::Name(name),
-          ..
-        } if **name == *"_REQ_FIELDS_" => {
-          if !matches!(**lhs, ast::Expr::Literal(ast::Literal::String(_))) {
-            return Err(format!("Expected literal string: {lhs:?}"));
-          }
-        }
-        _ => {}
-      };
-
-      validate_expr_recursively(lhs)?;
-    }
-    _ => {}
-  }
-
-  return Ok(());
-}
-
 #[derive(Template)]
 #[template(
   escape = "none",
@@ -1013,19 +955,5 @@ mod tests {
       assert!(has_access(acl, Permission::Delete));
       assert!(has_access(acl, Permission::Update), "ACL: {acl}");
     }
-  }
-
-  #[test]
-  fn test_validate_rule() {
-    assert!(validate_rule("").is_err());
-    assert!(validate_rule("1, 1").is_err());
-    assert!(validate_rule("1").is_ok());
-
-    validate_rule("_USER_.id IS NOT NULL").unwrap();
-    validate_rule("_USER_.id IS NOT NULL AND _ROW_.userid = _USER_.id").unwrap();
-    validate_rule("_USER_.id IS NOT NULL AND _REQ_.field IS NOT NULL").unwrap();
-
-    assert!(validate_rule("'field' IN _REQ_FIELDS_").is_ok());
-    assert!(validate_rule("field IN _REQ_FIELDS_").is_err());
   }
 }
