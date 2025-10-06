@@ -1,7 +1,7 @@
 //! A client library to connect to a TrailBase server via HTTP.
 //!
 //! TrailBase is a sub-millisecond, open-source application server with type-safe APIs, built-in
-//! JS/ES6/TS runtime, realtime, auth, and admin UI built on Rust, SQLite & V8.
+//! WASM runtime, realtime, auth, and admin UI built on Rust, SQLite & Wasmtime.
 
 #![forbid(unsafe_code, clippy::unwrap_used)]
 #![allow(clippy::needless_return)]
