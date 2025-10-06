@@ -1,3 +1,11 @@
+## v0.18.4
+
+* Add an official Kotlin client.
+* Overhaul Dart client and allow for cheap, shared realtime subscriptions using broadcast streams.
+* Add access rules validations to discover misuse of magic `_REQ_`, `_ROW_`, ... in inappropriate methods.
+* Avoid `workspace:*` deps for all JS examples to ease copy & paste re-use.
+* Update Rust and JavaScript dependencies.
+
 ## v0.18.3
 
 * Change WASM execution model to share a single executor across components and allow work-stealing.
@@ -24,7 +32,7 @@
 
 ## v0.18.0
 
-- If everything goes to [plan](https://trailbase.io/blog/switching_to_a_wasm_runtime), v0.18.x will be the last releases containing the v8 JavaScript engine. It's time to move to WASM. If you have any issues or encounter any limitations, please reach out 🙏.
+- If everything goes to [plan](https://trailbase.io/blog/switching_to_a_wasm_runtime), v0.18.x will be the last releases containing the V8 JavaScript engine. It's time to move to WASM. If you have any issues or encounter any limitations, please reach out 🙏.
 - **Remove built-in auth UI** in favor of a matching WASM component. To get the auth UI back, simply run: `trail components add trailbase/auth_ui`. Why did we remove it?
   - Moving the UI into a component in `crates/auth-ui` offers a starting point for folks to **customize or build their own**. We plan to further streamline the process of customization, both in structure and documentation.
   - The component serves as a proof-of-concept for the new WASM compositional model, our commitment and also makes us eat our own dogfood.
