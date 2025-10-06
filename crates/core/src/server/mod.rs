@@ -74,7 +74,8 @@ pub struct ServerOptions {
   /// Limit the set of allowed origins the HTTP server will answer to.
   pub cors_allowed_origins: Vec<String>,
 
-  /// Number of V8 worker threads. If set to None, default of num available cores will be used.
+  /// Number of dedicated runtime threads. If set to None, default of num available cores will be
+  /// used.
   pub runtime_threads: Option<usize>,
 
   /// TLS certificate path.

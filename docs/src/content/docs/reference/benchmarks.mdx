@@ -189,10 +189,9 @@ scheduling, or more generally the same CPU variability we observed earlier.
 
 ## Runtimes
 
-[TrailBase is currently going through a transition from a V8-based runtime to a
-WASM one](/blog/switching_to_a_wasm_runtime).
+[TrailBase went through a transition from a V8-based runtime to a WASM one, which can support many guest languges such as JS, TS and Rust](/blog/switching_to_a_wasm_runtime).
 
-V8's execution with just-in-time (JIT) compilation is quite speedy and is about
+V8's execution with just-in-time (JIT) compilation is quite speedy and was about
 40x faster than Goja, PocketBase's interpreter and similar other interpreters
 (the graph's y-axis is logarithmic).
 With the new WASM-based runtime, execution of JS relies on bundling an
@@ -300,8 +299,7 @@ Output:
 
 ## Final Words
 
-We're very happy to confirm that TrailBase's APIs and JS/ES6/TS runtime are
-quick.
+We're very happy to confirm that TrailBase's APIs and WASM runtime are quick.
 The significant performance gap we observed for API access is a consequence of
 how fast SQLite itself is making even small overheads matter that much more.
 

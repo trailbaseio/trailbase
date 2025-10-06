@@ -24,7 +24,7 @@ name = "benchmark"
 harness = false
 
 [features]
-default = ["v8", "wasm"]
+default = ["wasm"]
 v8 = ["dep:trailbase-js"]
 wasm = ["dep:trailbase-wasm-runtime-host"]
 
