@@ -189,17 +189,14 @@ scheduling, or more generally the same CPU variability we observed earlier.
 
 ## Runtimes
 
-[TrailBase is currently going through a transition from a V8-based runtime to a
-WASM one](/blog/switching_to_a_wasm_runtime).
+[TrailBase went through a transition from a V8-based runtime to a WASM one, which can support many guest languages such as JS, TS and Rust](/blog/switching_to_a_wasm_runtime).
 
-V8's execution with just-in-time (JIT) compilation is quite speedy and is about
-40x faster than Goja, PocketBase's interpreter and similar other interpreters
-(the graph's y-axis is logarithmic).
-With the new WASM-based runtime, execution of JS relies on bundling an
+With the new WebAssembly-based runtime, execution of JS relies on bundling an
 interpreter and thus performance has regressed to be roughly on-par with Goja
 and other JIT-less engines.
 However, guests languages that can compile natively to WASM, e.g. Rust, can shine
-with roughly a 135x speed-up with strong state isolation between requests.
+with roughly a 135x speed-up with strong state isolation between requests (the
+graph's y-axis is logarithmic).
 
 import { RuntimeFib40Times } from "./_benchmarks/wasm_runtime.tsx";
 

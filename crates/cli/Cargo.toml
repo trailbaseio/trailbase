@@ -12,10 +12,11 @@ doctest = false
 name = "trail"
 
 [features]
-default = ["v8"]
+default = []
 # Conditionally enable "v8" feature of dep:trailbase.
 v8 = ["trailbase/v8"]
 swagger = ["dep:utoipa-swagger-ui"]
+vendor-ssl = ["dep:openssl"]
 
 [dependencies]
 axum = { version = "^0.8.1", features=["multipart"] }
@@ -26,6 +27,7 @@ itertools = "0.14.0"
 log = "^0.4.21"
 mimalloc = { version = "^0.1.41", default-features = false }
 minijinja = { workspace = true }
+openssl = { version = "0.10.73", features = ["vendored"], optional = true }
 reqwest = { workspace = true }
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = "^1.0.117"
