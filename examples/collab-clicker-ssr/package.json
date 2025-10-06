@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "solid-js": "^1.9.9",
-    "trailbase": "workspace:^"
+    "trailbase": "*"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

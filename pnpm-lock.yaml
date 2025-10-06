@@ -555,8 +555,8 @@ importers:
         specifier: ^1.9.9
         version: 1.9.9
       trailbase:
-        specifier: workspace:^
-        version: link:../../../crates/assets/js/client
+        specifier: '*'
+        version: 0.7.3
     devDependencies:
       '@astrojs/solid-js':
         specifier: ^5.1.1
@@ -659,8 +659,8 @@ importers:
   examples/coffee-vector-search/guests/typescript:
     dependencies:
       trailbase-wasm:
-        specifier: workspace:*
-        version: link:../../../../guests/typescript
+        specifier: '*'
+        version: 0.2.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.15.0
@@ -687,8 +687,8 @@ importers:
         specifier: ^1.9.9
         version: 1.9.9
       trailbase:
-        specifier: workspace:^
-        version: link:../../crates/assets/js/client
+        specifier: '*'
+        version: 0.7.3
     devDependencies:
       '@eslint/js':
         specifier: ^9.36.0
@@ -736,8 +736,8 @@ importers:
   examples/collab-clicker-ssr/guests/typescript:
     dependencies:
       trailbase-wasm:
-        specifier: workspace:*
-        version: link:../../../../guests/typescript
+        specifier: '*'
+        version: 0.2.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.15.0
@@ -764,8 +764,8 @@ importers:
         specifier: ^5.6.0
         version: 5.6.0
       trailbase:
-        specifier: workspace:^
-        version: link:../../crates/assets/js/client
+        specifier: '*'
+        version: 0.7.3
     devDependencies:
       '@eslint/js':
         specifier: ^9.36.0
@@ -868,8 +868,8 @@ importers:
   examples/wasm-guest-js:
     dependencies:
       trailbase-wasm:
-        specifier: workspace:^
-        version: link:../../guests/typescript
+        specifier: '*'
+        version: 0.2.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.15.0
@@ -893,8 +893,8 @@ importers:
   examples/wasm-guest-ts:
     dependencies:
       trailbase-wasm:
-        specifier: workspace:^
-        version: link:../../guests/typescript
+        specifier: '*'
+        version: 0.2.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.15.0
@@ -5982,6 +5982,9 @@ packages:
   tr46@6.0.0:
     resolution: {integrity: sha512-bLVMLPtstlZ4iMQHpFHTR7GAGj2jxi8Dg0s2h2MafAE4uSWF98FC/3MomU51iQAMf8/qDUbKWf5GxuvvVcXEhw==}
     engines: {node: '>=20'}
+
+  trailbase-wasm@0.2.0:
+    resolution: {integrity: sha512-YriJe4Q7VzxR2mooWINX9e0EHrSvSIwogNhrQXXq3Kd555JZlFD/BFYyNLXgrPGxBhoDkkbS2mNQ4ocRoHEZdQ==}
 
   trailbase@0.7.3:
     resolution: {integrity: sha512-Ems0woJUCdBuYdYyqZdjgkKTRHJziZOvHVOw6ymoQFuW6RhCyp0qoOc0w+RtLtZJAQuF71HJnD7hQk2BKtVcRA==}
@@ -12938,6 +12941,8 @@ snapshots:
   tr46@6.0.0:
     dependencies:
       punycode: 2.3.1
+
+  trailbase-wasm@0.2.0: {}
 
   trailbase@0.7.3:
     dependencies:
