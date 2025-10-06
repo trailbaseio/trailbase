@@ -24,6 +24,7 @@ members = [
   "examples/wasm-guest-rust",
   "examples/coffee-vector-search/guests/rust",
   "examples/collab-clicker-ssr/guests/rust",
+  "vendor/sqlite-vec/bindings/rust",
 ]
 default-members = [
   "crates/assets",
@@ -81,6 +82,7 @@ rand = { version = "^0.9.0" }
 reqwest = { version = "0.12.8", default-features = false, features = ["rustls-tls", "json"] }
 rusqlite = { version = "0.37.0", default-features = false, features = ["bundled", "column_decltype", "functions", "backup", "preupdate_hook"] }
 rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
+sqlite-vec = { path = "vendor/sqlite-vec/bindings/rust", default-features = false }
 tokio = { version = "^1.38.0", default-features = false, features = ["macros", "net", "rt-multi-thread", "fs", "signal", "time", "sync"] }
 tracing = { version = "0.1.40", default-features = false }
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["smallvec", "std", "fmt", "json"] }
