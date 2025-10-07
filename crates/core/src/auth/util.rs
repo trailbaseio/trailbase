@@ -65,10 +65,11 @@ fn validate_redirect_impl(
 
   if let Ok(url) = url::Url::parse(redirect) {
     let scheme = url.scheme();
-    if let Some(site) = site {
-      if url.host() == site.host() && scheme == site.scheme() {
-        return Ok(());
-      }
+    if let Some(site) = site
+      && url.host() == site.host()
+      && scheme == site.scheme()
+    {
+      return Ok(());
     }
 
     // Allow custom schemes for mobile apps, desktop and SPAs.

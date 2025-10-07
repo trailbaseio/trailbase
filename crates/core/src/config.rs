@@ -263,19 +263,18 @@ fn recursively_merge_vault_and_env(
         // secrets.
         if let Some(value) = parse_env_var::<String>(&var_name).expect("infalliable") {
           msg.set_field(&field_descr, Value::String(value));
-        } else if secret {
-          if let Value::String(ref field) = *msg.get_field(&field_descr) {
-            if field == PLACEHOLDER {
-              // We found a secret field with a placeholder, we can expect a corresponding secret.
-              let Some(stored_secret) = vault.secrets.get(&var_name) else {
-                return Err(ConfigError::Invalid(format!(
-                  "Missing secret for: {path:?}"
-                )));
-              };
+        } else if secret
+          && let Value::String(ref field) = *msg.get_field(&field_descr)
+          && field == PLACEHOLDER
+        {
+          // We found a secret field with a placeholder, we can expect a corresponding secret.
+          let Some(stored_secret) = vault.secrets.get(&var_name) else {
+            return Err(ConfigError::Invalid(format!(
+              "Missing secret for: {path:?}"
+            )));
+          };
 
-              msg.set_field(&field_descr, Value::String(stored_secret.clone()));
-            }
-          }
+          msg.set_field(&field_descr, Value::String(stored_secret.clone()));
         }
       }
       Kind::Int32 => apply_parsed_env_var::<i32>(msg, &field_descr, &var_name, Value::I32)?,

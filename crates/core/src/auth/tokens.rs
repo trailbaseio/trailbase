@@ -109,13 +109,13 @@ async fn extract_tokens_from_cookies_and_maybe_refresh(
     .get(COOKIE_REFRESH_TOKEN)
     .map(|cookie| cookie.value().to_string());
 
-  if let Some(ref auth_token) = auth_token {
-    if let Ok(claims) = state.jwt().decode(auth_token.value()) {
-      return Ok(Tokens {
-        auth_token_claims: claims,
-        refresh_token,
-      });
-    }
+  if let Some(ref auth_token) = auth_token
+    && let Ok(claims) = state.jwt().decode(auth_token.value())
+  {
+    return Ok(Tokens {
+      auth_token_claims: claims,
+      refresh_token,
+    });
   }
 
   if let Some(refresh_token) = refresh_token {

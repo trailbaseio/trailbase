@@ -80,26 +80,26 @@ pub(crate) fn row_to_json_expand(
           return Ok((column.name.clone(), serde_json::Value::Null));
         }
 
-        if let Some(foreign_value) = expand.and_then(|e| e.get(&column.name)) {
-          if is_foreign_key(&column.options) {
-            let id = value_to_flat_json(value)?;
+        if let Some(foreign_value) = expand.and_then(|e| e.get(&column.name))
+          && is_foreign_key(&column.options)
+        {
+          let id = value_to_flat_json(value)?;
 
-            return Ok(match foreign_value {
-              serde_json::Value::Null => (
-                column.name.clone(),
-                serde_json::json!({
-                  "id": id,
-                }),
-              ),
-              value => (
-                column.name.clone(),
-                serde_json::json!({
-                  "id": id,
-                  "data": value,
-                }),
-              ),
-            });
-          }
+          return Ok(match foreign_value {
+            serde_json::Value::Null => (
+              column.name.clone(),
+              serde_json::json!({
+                "id": id,
+              }),
+            ),
+            value => (
+              column.name.clone(),
+              serde_json::json!({
+                "id": id,
+                "data": value,
+              }),
+            ),
+          });
         }
 
         // Deserialize JSON.

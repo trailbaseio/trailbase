@@ -296,10 +296,10 @@ impl SubscriptionManager {
         continue;
       }
 
-      if let Filter::Record(ref filter) = sub.filter {
-        if !apply_filter_recursively_to_record(filter, record) {
-          continue;
-        }
+      if let Filter::Record(ref filter) = sub.filter
+        && !apply_filter_recursively_to_record(filter, record)
+      {
+        continue;
       }
 
       if let Err(err) = sub.sender.try_send(event.clone()) {

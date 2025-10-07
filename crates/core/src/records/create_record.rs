@@ -101,16 +101,16 @@ pub async fn create_record_handler(
 
   let mut params_list: Vec<Params> = Vec::with_capacity(records_and_files.len());
   for (mut record, files) in records_and_files {
-    if api.insert_autofill_missing_user_id_columns() {
-      if let Some(ref user) = user {
-        for column_index in api.user_id_columns() {
-          let col_name = &api.columns()[*column_index].name;
-          if !record.contains_key(col_name) {
-            record.insert(
-              col_name.to_owned(),
-              serde_json::Value::String(uuid_to_b64(&user.uuid)),
-            );
-          }
+    if api.insert_autofill_missing_user_id_columns()
+      && let Some(ref user) = user
+    {
+      for column_index in api.user_id_columns() {
+        let col_name = &api.columns()[*column_index].name;
+        if !record.contains_key(col_name) {
+          record.insert(
+            col_name.to_owned(),
+            serde_json::Value::String(uuid_to_b64(&user.uuid)),
+          );
         }
       }
     }

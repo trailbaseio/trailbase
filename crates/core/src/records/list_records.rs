@@ -151,20 +151,19 @@ pub async fn list_records_handler(
     };
 
     let mut pk_order = OrderPrecedent::Descending;
-    if let Some(ref order) = order {
-      if let Some((col, ord)) = order.columns.first() {
-        if *ord == OrderPrecedent::Ascending {
-          if pk_column.data_type != ColumnDataType::Integer || *col != pk_column.name {
-            // NOTE: This relies on the fact that _rowid_ is an alias for integer primary key
-            // columns.
-            return Err(RecordError::BadRequest(
-              "Cannot cursor on queries where the primary order criterion is not an integer primary key",
-            ));
-          }
-
-          pk_order = OrderPrecedent::Ascending;
-        }
+    if let Some(ref order) = order
+      && let Some((col, ord)) = order.columns.first()
+      && *ord == OrderPrecedent::Ascending
+    {
+      if pk_column.data_type != ColumnDataType::Integer || *col != pk_column.name {
+        // NOTE: This relies on the fact that _rowid_ is an alias for integer primary key
+        // columns.
+        return Err(RecordError::BadRequest(
+          "Cannot cursor on queries where the primary order criterion is not an integer primary key",
+        ));
       }
+
+      pk_order = OrderPrecedent::Ascending;
     }
 
     params.push((Cow::Borrowed(":cursor"), Value::Integer(cursor)));

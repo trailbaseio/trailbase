@@ -51,10 +51,10 @@ pub(crate) fn get_header_owned(
   headers: &HeaderMap,
   header_name: impl AsHeaderName,
 ) -> Option<String> {
-  if let Some(header) = headers.get(header_name) {
-    if let Ok(str) = header.to_str() {
-      return Some(str.to_string());
-    }
+  if let Some(header) = headers.get(header_name)
+    && let Ok(str) = header.to_str()
+  {
+    return Some(str.to_string());
   }
   return None;
 }

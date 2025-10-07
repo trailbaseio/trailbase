@@ -45,10 +45,10 @@ pub async fn update_row_handler(
     return Err(Error::Precondition(format!("Missing column: {pk_col}")));
   };
 
-  if let Some(pk_index) = schema_metadata.record_pk_column {
-    if index != pk_index {
-      return Err(Error::Precondition(format!("Pk column mismatch: {pk_col}")));
-    }
+  if let Some(pk_index) = schema_metadata.record_pk_column
+    && index != pk_index
+  {
+    return Err(Error::Precondition(format!("Pk column mismatch: {pk_col}")));
   }
 
   if !column.is_primary() {

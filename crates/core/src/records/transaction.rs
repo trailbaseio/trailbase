@@ -71,16 +71,16 @@ pub async fn record_transactions_handler(
           let api = get_api(&state, &api_name)?;
           let mut record = extract_record(value)?;
 
-          if api.insert_autofill_missing_user_id_columns() {
-            if let Some(ref user) = user {
-              for column_index in api.user_id_columns() {
-                let col_name = &api.columns()[*column_index].name;
-                if !record.contains_key(col_name) {
-                  record.insert(
-                    col_name.to_owned(),
-                    serde_json::Value::String(uuid_to_b64(&user.uuid)),
-                  );
-                }
+          if api.insert_autofill_missing_user_id_columns()
+            && let Some(ref user) = user
+          {
+            for column_index in api.user_id_columns() {
+              let col_name = &api.columns()[*column_index].name;
+              if !record.contains_key(col_name) {
+                record.insert(
+                  col_name.to_owned(),
+                  serde_json::Value::String(uuid_to_b64(&user.uuid)),
+                );
               }
             }
           }

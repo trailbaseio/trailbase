@@ -102,10 +102,10 @@ fn add_route_to_router(
     let headers: Vec<(String, String)> = headers
       .into_iter()
       .filter_map(|(key, value)| {
-        if let Some(key) = key {
-          if let Ok(value) = value.to_str() {
-            return Some((key.to_string(), value.to_string()));
-          }
+        if let Some(key) = key
+          && let Ok(value) = value.to_str()
+        {
+          return Some((key.to_string(), value.to_string()));
         }
         return None;
       })

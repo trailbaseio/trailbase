@@ -222,10 +222,10 @@ impl Server {
             "Received SIGHUP: reloading WASM components (dev), re-apply db migrations, and finally re-load config."
           );
 
-          if state.dev_mode() {
-            if let Err(err) = state.reload_wasm_runtimes().await {
-              warn!("Reloading WASM failed: {err}");
-            }
+          if state.dev_mode()
+            && let Err(err) = state.reload_wasm_runtimes().await
+          {
+            warn!("Reloading WASM failed: {err}");
           }
 
           // Re-apply migrations. This needs to happen before reloading the config, which is
@@ -645,10 +645,10 @@ async fn start_listen(
 }
 
 fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
-  if let Some(path) = path {
-    if !std::fs::exists(path)? {
-      return Err(InitError::CustomInit(format!("Path not found: {path:?}")));
-    };
+  if let Some(path) = path
+    && !std::fs::exists(path)?
+  {
+    return Err(InitError::CustomInit(format!("Path not found: {path:?}")));
   }
   return Ok(());
 }

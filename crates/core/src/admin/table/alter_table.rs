@@ -144,23 +144,23 @@ pub async fn alter_table_handler(
     state.rebuild_schema_cache().await?;
 
     // Fix configuration: update all table references by existing APIs.
-    if let Some(rename) = ephemeral_table_rename {
-      if matches!(rename.database_schema.as_deref(), Some("main") | None) {
-        let mut config = state.get_config();
-        let old_config_hash = hash_config(&config);
+    if let Some(rename) = ephemeral_table_rename
+      && matches!(rename.database_schema.as_deref(), Some("main") | None)
+    {
+      let mut config = state.get_config();
+      let old_config_hash = hash_config(&config);
 
-        for api in &mut config.record_apis {
-          if let Some(ref name) = api.table_name {
-            if *name == source_schema.name.name {
-              api.table_name = Some(rename.name.clone());
-            }
-          }
+      for api in &mut config.record_apis {
+        if let Some(name) = api.table_name.as_deref()
+          && name == source_schema.name.name
+        {
+          api.table_name = Some(rename.name.clone());
         }
-
-        state
-          .validate_and_update_config(config, Some(old_config_hash))
-          .await?;
       }
+
+      state
+        .validate_and_update_config(config, Some(old_config_hash))
+        .await?;
     }
   }
 
