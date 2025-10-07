@@ -730,7 +730,7 @@
         }
       }
     },
-    "/api/records/v1/{name}/{record}/files/{column_name}/{file_id}": {
+    "/api/records/v1/{name}/{record}/files/{column_name}/{file_name}": {
       "get": {
         "tags": ["records"],
         "summary": "Read single file from list associated with record.",

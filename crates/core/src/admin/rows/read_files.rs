@@ -37,20 +37,23 @@ pub async fn read_files_handler(
       "Table {table_name:?} not found"
     )));
   };
-  let pk_col = &query.pk_column;
-
-  let Some((_index, col)) = schema_metadata.column_by_name(pk_col) else {
-    return Err(Error::Precondition(format!("Missing column: {pk_col}")));
+  let Some((_index, pk_col)) = schema_metadata.column_by_name(&query.pk_column) else {
+    return Err(Error::Precondition(format!(
+      "Missing PK column: {}",
+      query.pk_column
+    )));
   };
 
-  if !col.is_primary() {
-    return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
+  if !pk_col.is_primary() {
+    return Err(Error::Precondition(format!(
+      "Not a primary key: {pk_col:?}"
+    )));
   }
 
   let Some((index, file_col_metadata)) = schema_metadata.column_by_name(&query.file_column_name)
   else {
     return Err(Error::Precondition(format!(
-      "Missing column: {}",
+      "Missing file column: {}",
       query.file_column_name
     )));
   };
@@ -61,7 +64,7 @@ pub async fn read_files_handler(
     )));
   };
 
-  let pk_value = flat_json_to_value(col.data_type, query.pk_value, true)?;
+  let pk_value = flat_json_to_value(pk_col.data_type, query.pk_value, true)?;
 
   let FileUploads(mut file_uploads) = run_get_files_query(
     &state,

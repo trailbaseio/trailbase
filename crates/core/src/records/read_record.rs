@@ -4,6 +4,7 @@ use axum::{
   response::Response,
 };
 use serde::Deserialize;
+use trailbase_schema::FileUploads;
 
 use crate::auth::user::User;
 use crate::records::expand::expand_tables;
@@ -210,13 +211,13 @@ type GetUploadedFilesFromRecordPath = Path<(
   String, // Column name
   // NOTE: We may want to remove index-based access in the future. A stable, unique identifier
   // makes a lot more sense in the context of mutations, caching, ... .
-  String, // Index or filename
+  String, // Filename
 )>;
 
 /// Read single file from list associated with record.
 #[utoipa::path(
   get,
-  path = "/{name}/{record}/files/{column_name}/{file_id}",
+  path = "/{name}/{record}/files/{column_name}/{file_name}",
   tag = "records",
   responses(
     (status = 200, description = "File contents.")
@@ -224,7 +225,7 @@ type GetUploadedFilesFromRecordPath = Path<(
 )]
 pub async fn get_uploaded_files_from_record_handler(
   State(state): State<AppState>,
-  Path((api_name, record, column_name, file_id)): GetUploadedFilesFromRecordPath,
+  Path((api_name, record, column_name, file_name)): GetUploadedFilesFromRecordPath,
   user: Option<User>,
 ) -> Result<Response, RecordError> {
   let Some(api) = state.lookup_record_api(&api_name) else {
@@ -240,7 +241,7 @@ pub async fn get_uploaded_files_from_record_handler(
     return Err(RecordError::BadRequest("Invalid field/column name"));
   };
 
-  let mut file_uploads = run_get_files_query(
+  let FileUploads(file_uploads) = run_get_files_query(
     &state,
     api.table_name(),
     column,
@@ -251,22 +252,14 @@ pub async fn get_uploaded_files_from_record_handler(
   .await
   .map_err(|err| RecordError::Internal(err.into()))?;
 
-  let file_upload = if let Ok(index) = file_id.parse::<usize>() {
-    if index < file_uploads.0.len() {
-      Some(file_uploads.0.remove(index))
-    } else {
-      None
-    }
-  } else {
-    file_uploads.0.into_iter().find(|f| f.filename() == file_id)
-  };
+  let file_upload = file_uploads
+    .into_iter()
+    .find(|f| f.filename() == file_name)
+    .ok_or_else(|| RecordError::RecordNotFound)?;
 
-  return read_file_into_response(
-    &state,
-    file_upload.ok_or_else(|| RecordError::RecordNotFound)?,
-  )
-  .await
-  .map_err(|err| RecordError::Internal(err.into()));
+  return read_file_into_response(&state, file_upload)
+    .await
+    .map_err(|err| RecordError::Internal(err.into()));
 }
 
 #[inline]
@@ -784,7 +777,7 @@ mod test {
               API_NAME.to_string(),
               record_id.clone(),
               "files".to_string(),
-              0.to_string(),
+              files[0].filename().to_string(),
             )),
             None,
           )
@@ -799,7 +792,7 @@ mod test {
               API_NAME.to_string(),
               record_id.clone(),
               "files".to_string(),
-              1.to_string(),
+              files[1].filename().to_string(),
             )),
             None,
           )

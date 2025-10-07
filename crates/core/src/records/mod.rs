@@ -74,7 +74,7 @@ pub(crate) fn router(enable_transactions: bool) -> Router<AppState> {
       get(read_record::get_uploaded_file_from_record_handler),
     )
     .route(
-      &format!("/{RECORD_API_PATH}/{{name}}/{{record}}/files/{{column_name}}/{{file_id}}"),
+      &format!("/{RECORD_API_PATH}/{{name}}/{{record}}/files/{{column_name}}/{{file_name}}"),
       get(read_record::get_uploaded_files_from_record_handler),
     )
     .route(

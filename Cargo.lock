@@ -7967,6 +7967,7 @@ dependencies = [
  "eventsource-stream",
  "futures-lite",
  "jsonwebtoken 9.3.1",
+ "lazy_static",
  "parking_lot",
  "reqwest",
  "serde",
