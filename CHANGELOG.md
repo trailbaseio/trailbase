@@ -1,6 +1,18 @@
+## v0.19.0
+
+- First WASM-only relese dropping support for the V8 runtime (technically, custom binary builds can still enable it as a stop-gap but complete removal will follow)
+  - The default Linux release is now build with MUSL rather than GLibc and thus truly static and portable.
+- Drop support for index-based file reads via `api/records/v1/{api}/{record_id}/files/{column_name}/{uniq_file_name}` in favor of unique filenames following the convention: `{original_stem}_{rand#10}.{suffix}`. This is a breaking change.
+  - Before, index-based access for read-after-write access patterns could lead to stale cache reads, which is avoided using unique identifiers.
+- Notable updates since the previous major release:
+  - Official Kotlin client.
+  - Record-based subscription filters (same as record listing). Could - for example - be used to subscribe to changes only within a bound-box.
+  - Reworked WASM execution model - shared executor across components for better scalability and work stealing.
+  - More comprehensive access rule validation.
+
 ## v0.18.5
 
-- Small prepatory release to make sure that a v0.18.x version exists with V8 and all the latest fixes to ease transition.
+- Small preparatory release to make sure that a v0.18.x version exists with V8 and all the latest fixes to ease transition.
 - Pre-process subscription filter query to check it matches the API/Table schema before accepting the subscription. This reduces late failure-modes and parsing ambiguity.
 - Admin UI internally uses unique filenames to access images rather than indexes.
 - Push minimal Rust version to v1.88.
