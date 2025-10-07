@@ -24,7 +24,7 @@ jobs:
           generate_release_notes: true
           body_path: ./CHANGELOG-release.md
 
-  release-linux:
+  release-linux-glibc:
     needs: changelog
     runs-on: ubuntu-latest
     steps:
@@ -53,13 +53,13 @@ jobs:
           CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
             cargo build --target x86_64-unknown-linux-gnu --release --bin trail && \
           cd ../.. && \
-          zip -r -j trailbase_${{  github.ref_name }}_x86_64_linux.zip target/x86_64-unknown-linux-gnu/release/trail CHANGELOG.md LICENSE
+          zip -r -j trailbase_${{  github.ref_name }}_x86_64_linux_glibc.zip target/x86_64-unknown-linux-gnu/release/trail CHANGELOG.md LICENSE
 
       - name: Release binaries
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
-          files: trailbase_${{  github.ref_name }}_x86_64_linux.zip
+          files: trailbase_${{  github.ref_name }}_x86_64_linux_glibc.zip
 
   release-linux-static:
     needs: changelog
@@ -89,13 +89,13 @@ jobs:
           CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
             cargo build --target x86_64-unknown-linux-musl --features=vendor-ssl --release --bin trail && \
           cd ../.. && \
-          zip -r -j trailbase_${{  github.ref_name }}_x86_64_linux_static_musl.zip target/x86_64-unknown-linux-musl/release/trail CHANGELOG.md LICENSE
+          zip -r -j trailbase_${{  github.ref_name }}_x86_64_linux.zip target/x86_64-unknown-linux-musl/release/trail CHANGELOG.md LICENSE
 
       - name: Release binaries
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
-          files: trailbase_${{  github.ref_name }}_x86_64_linux_static_musl.zip
+          files: trailbase_${{  github.ref_name }}_x86_64_linux.zip
 
   release-linux-auth-ui:
     needs: changelog
