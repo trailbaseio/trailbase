@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
@@ -202,6 +203,15 @@ Future<Process> initTrailBase() async {
   await process.stdout.forEach(stdout.add);
 
   throw Exception('Cargo run failed: ${exitCode}.');
+}
+
+Future<List<Event>> take(Stream<Event> stream, int n) {
+  const timeout = Duration(seconds: 10);
+
+  return stream.take(n).timeout(timeout, onTimeout: (EventSink<Event> sink) {
+    sink.close();
+    throw Exception('Failed to take ${n} events from stream');
+  }).toList();
 }
 
 Future<void> main() async {
@@ -425,11 +435,7 @@ Future<void> main() async {
 
       expect(client.cache.length, equals(2));
 
-      final eventList =
-          await events.timeout(Duration(seconds: 10), onTimeout: (sink) {
-        print('Expected: stream timed-out');
-        sink.close();
-      }).toList();
+      final eventList = await take(events, 2);
 
       expect(eventList.length, equals(2));
       expect(eventList[0].runtimeType, equals(UpdateEvent));
@@ -453,12 +459,7 @@ Future<void> main() async {
             textNotNull: updatedMessage,
           ));
 
-      final tableEventList =
-          await tableEvents.timeout(Duration(seconds: 10), onTimeout: (sink) {
-        print('Expected: stream timed-out');
-        sink.close();
-      }).toList();
-
+      final tableEventList = await take(tableEvents, 3);
       expect(tableEventList.length, equals(3));
 
       expect(tableEventList[0].runtimeType, equals(InsertEvent));
@@ -482,8 +483,13 @@ Future<void> main() async {
       final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       final updatedMessage = 'dart client updated realtime test 42: ${now}';
 
-      final tableEvents = await api.subscribeAll(
+      final tableEvents0 = await api.subscribeAll(
           filters: [Filter(column: 'text_not_null', value: updatedMessage)]);
+
+      // Test that filter-values are parsed correctly to column type.
+      final tableEvents1 = await api.subscribeAll(filters: [
+        Filter(column: 'text_not_null', op: CompareOp.greaterThan, value: '0')
+      ]);
 
       final createMessage = 'dart client realtime test 42: =?&${now}';
       final id = await api.create({'text_not_null': createMessage});
@@ -491,31 +497,36 @@ Future<void> main() async {
       await api.update(id, {'text_not_null': updatedMessage});
       await api.delete(id);
 
-      final eventList =
-          await tableEvents.timeout(Duration(seconds: 10), onTimeout: (sink) {
-        print('Expected: stream timed-out');
-        sink.close();
-      }).toList();
+      {
+        final eventList = await take(tableEvents0, 2);
 
-      expect(eventList.length, equals(2));
-      expect(eventList[0].runtimeType, equals(UpdateEvent));
-      expect(
-          SimpleStrict.fromJson(eventList[0].value!),
-          SimpleStrict(
-            id: id.toString(),
-            textNotNull: updatedMessage,
-          ));
-
-      // Demonstrate pattern-mathching/destructuring.
-      if (eventList[1] case DeleteEvent(value: final v)) {
+        expect(eventList.length, equals(2));
+        expect(eventList[0].runtimeType, equals(UpdateEvent));
         expect(
-            SimpleStrict.fromJson(v),
+            SimpleStrict.fromJson(eventList[0].value!),
             SimpleStrict(
               id: id.toString(),
               textNotNull: updatedMessage,
             ));
-      } else {
-        throw ArgumentError.value('expected DeleteEvent, got ${eventList[1]}');
+
+        // Demonstrate pattern-mathching/destructuring.
+        if (eventList[1] case DeleteEvent(value: final v)) {
+          expect(
+              SimpleStrict.fromJson(v),
+              SimpleStrict(
+                id: id.toString(),
+                textNotNull: updatedMessage,
+              ));
+        } else {
+          throw ArgumentError.value(
+              'expected DeleteEvent, got ${eventList[1]}');
+        }
+      }
+
+      {
+        final eventList = await take(tableEvents1, 3);
+        expect(eventList.length, equals(3));
+        expect(eventList[0].runtimeType, equals(InsertEvent));
       }
     });
   });
