@@ -341,6 +341,14 @@ pub(crate) async fn load_routes_and_jobs_from_js_modules(
     }
   };
 
+  if !modules.is_empty() {
+    warn!(
+      "Found JS/TS scripts. The V8 runtime is deprecated and will likely be \
+      removed in the next major release. Please migrate to WASM. If you have \
+      concerns or encounter any issues, don't hesitate to reach out."
+    );
+  }
+
   let mut js_router = Router::new();
   for module in modules {
     let fname = module.filename().to_owned();
