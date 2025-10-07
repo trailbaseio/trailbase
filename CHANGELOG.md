@@ -1,26 +1,33 @@
+## v0.18.5
+
+- Small prepatory release to make sure that a v0.18.x version exists with V8 and all the latest fixes to ease transition.
+- Pre-process subscription filter query to check it matches the API/Table schema before accepting the subscription. This reduces late failure-modes and parsing ambiguity.
+- Admin UI internally uses unique filenames to access images rather than indexes.
+- Push minimal Rust version to v1.88.
+
 ## v0.18.4
 
-* Add an official Kotlin client.
-* Overhaul Dart client and allow for cheap, shared realtime subscriptions using broadcast streams.
-* Add access rules validations to discover misuse of magic `_REQ_`, `_ROW_`, ... in inappropriate methods.
-* Avoid `workspace:*` deps for all JS examples to ease copy & paste re-use.
-* Update Rust and JavaScript dependencies.
+- Add an official Kotlin client.
+- Overhaul Dart client and allow for cheap, shared realtime subscriptions using broadcast streams.
+- Add access rules validations to discover misuse of magic `_REQ_`, `_ROW_`, ... in inappropriate methods.
+- Avoid `workspace:*` deps for all JS examples to ease copy & paste re-use.
+- Update Rust and JavaScript dependencies.
 
 ## v0.18.3
 
-* Change WASM execution model to share a single executor across components and allow work-stealing.
-  * The prior model was simple with low overhead but would not scale well to many components.
-  * Remove `host-endpoint::thread-id`, which doesn't make sense with the new execution model.
-* Update Rust dependencies.
+- Change WASM execution model to share a single executor across components and allow work-stealing.
+  - The prior model was simple with low overhead but would not scale well to many components.
+  - Remove `host-endpoint::thread-id`, which doesn't make sense with the new execution model.
+- Update Rust dependencies.
 
 ## v0.18.2
 
-* Add support for record-filters for realtime subscriptions to Dart and .NET clients.
-* Fix parsing of implicit `$and` filter on expressions touching the same column, e.g. `?filter[col0][$gt]=0&filter[col0][$lt]=5`. Thanks @kokroo 🙏.
-  * Also further streamline the parsing and allow single element sequences in accordance with QS.
-* Restore ability to parse record inputs for `STRICT` tables with `ANY` columns.
-* Fix blog example after `FileUpload` changes in previous release (which should have arguably been a major release :hide:)
-* Update Rust dependencies.
+- Add support for record-filters for realtime subscriptions to Dart and .NET clients.
+- Fix parsing of implicit `$and` filter on expressions touching the same column, e.g. `?filter[col0][$gt]=0&filter[col0][$lt]=5`. Thanks @kokroo 🙏.
+  - Also further streamline the parsing and allow single element sequences in accordance with QS.
+- Restore ability to parse record inputs for `STRICT` tables with `ANY` columns.
+- Fix blog example after `FileUpload` changes in previous release (which should have arguably been a major release :hide:)
+- Update Rust dependencies.
 
 ## v0.18.1
 
