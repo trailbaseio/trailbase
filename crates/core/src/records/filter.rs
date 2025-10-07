@@ -1,5 +1,8 @@
 use regex::Regex;
 use trailbase_qs::{Combiner, CompareOp};
+use trailbase_schema::sqlite::{Column, ColumnDataType};
+
+use crate::records::RecordError;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ColumnOpValue {
@@ -38,23 +41,80 @@ pub(crate) fn qs_value_to_sql(value: trailbase_qs::Value) -> rusqlite::types::Va
   };
 }
 
+pub(crate) fn qs_value_to_sql_with_constraints(
+  column: &Column,
+  value: trailbase_qs::Value,
+) -> Result<rusqlite::types::Value, RecordError> {
+  use base64::prelude::*;
+  use rusqlite::types::Value;
+  use trailbase_qs::Value as QsValue;
+
+  return match column.data_type {
+    ColumnDataType::Null => Err(RecordError::BadRequest("Invalid query")),
+    ColumnDataType::Any => Ok(qs_value_to_sql(value)),
+    ColumnDataType::Blob => match value {
+      QsValue::String(s) => Ok(Value::Blob(
+        BASE64_URL_SAFE
+          .decode(&s)
+          .map_err(|_err| RecordError::BadRequest("Invalid query"))?,
+      )),
+      _ => Err(RecordError::BadRequest("Invalid query")),
+    },
+    ColumnDataType::Text => match value {
+      QsValue::String(s) => Ok(Value::Text(s)),
+      QsValue::Integer(i) => Ok(Value::Text(i.to_string())),
+      QsValue::Double(d) => Ok(Value::Text(d.to_string())),
+      // TODO: This is broken because we don't preserve the user's original input. We parse and
+      // best-effort unparse.
+      QsValue::Bool(b) => Ok(Value::Text(if b {
+        "true".to_string()
+      } else {
+        "false".to_string()
+      })),
+    },
+    ColumnDataType::Integer | ColumnDataType::Int => match value {
+      QsValue::Integer(i) => Ok(Value::Integer(i)),
+      _ => Err(RecordError::BadRequest("Invalid query")),
+    },
+    ColumnDataType::Real => match value {
+      QsValue::Integer(i) => Ok(Value::Real(i as f64)),
+      QsValue::Double(d) => Ok(Value::Real(d)),
+      _ => Err(RecordError::BadRequest("Invalid query")),
+    },
+    ColumnDataType::Numeric => match value {
+      QsValue::Integer(i) => Ok(Value::Integer(i)),
+      QsValue::Double(d) => Ok(Value::Real(d)),
+      _ => Err(RecordError::BadRequest("Invalid query")),
+    }, // not allowed in strict mode.
+    _ => Err(RecordError::BadRequest("Invalid query")),
+  };
+}
+
 pub(crate) fn qs_filter_to_record_filter(
+  columns: &[Column],
   filter: trailbase_qs::ValueOrComposite,
-) -> ValueOrComposite {
+) -> Result<ValueOrComposite, RecordError> {
   return match filter {
-    trailbase_qs::ValueOrComposite::Value(col_op_value) => ValueOrComposite::Value(ColumnOpValue {
-      column: col_op_value.column,
-      op: col_op_value.op,
-      value: qs_value_to_sql(col_op_value.value),
-    }),
+    trailbase_qs::ValueOrComposite::Value(col_op_value) => {
+      let column = columns
+        .iter()
+        .find(|c| c.name == col_op_value.column)
+        .ok_or_else(|| RecordError::BadRequest("Invalid query"))?;
+
+      Ok(ValueOrComposite::Value(ColumnOpValue {
+        column: col_op_value.column,
+        op: col_op_value.op,
+        value: qs_value_to_sql_with_constraints(column, col_op_value.value)?,
+      }))
+    }
     trailbase_qs::ValueOrComposite::Composite(combiner, expressions) => {
-      ValueOrComposite::Composite(
+      Ok(ValueOrComposite::Composite(
         combiner,
         expressions
           .into_iter()
-          .map(qs_filter_to_record_filter)
-          .collect(),
-      )
+          .map(|value_or_composite| qs_filter_to_record_filter(columns, value_or_composite))
+          .collect::<Result<Vec<_>, _>>()?,
+      ))
     }
   };
 }
@@ -126,7 +186,7 @@ fn compare_values(
   };
 }
 
-pub(crate) fn apply_filter_to_record(
+pub(crate) fn apply_filter_recursively_to_record(
   filter: &ValueOrComposite,
   record: &indexmap::IndexMap<&str, rusqlite::types::Value>,
 ) -> bool {
@@ -145,7 +205,7 @@ pub(crate) fn apply_filter_to_record(
     ValueOrComposite::Composite(combiner, expressions) => match combiner {
       Combiner::And => {
         for expr in expressions {
-          if !(apply_filter_to_record(expr, record)) {
+          if !(apply_filter_recursively_to_record(expr, record)) {
             return false;
           }
         }
@@ -153,7 +213,7 @@ pub(crate) fn apply_filter_to_record(
       }
       Combiner::Or => {
         for expr in expressions {
-          if apply_filter_to_record(expr, record) {
+          if apply_filter_recursively_to_record(expr, record) {
             return true;
           }
         }
@@ -220,7 +280,7 @@ mod tests {
   fn test_basic_value_filter() {
     let record: IndexMap<&str, Value> = IndexMap::from([("a", Value::Text("a value".to_string()))]);
 
-    assert!(apply_filter_to_record(
+    assert!(apply_filter_recursively_to_record(
       &ValueOrComposite::Value(ColumnOpValue {
         column: "a".to_string(),
         op: CompareOp::Equal,
@@ -229,7 +289,7 @@ mod tests {
       &record
     ));
 
-    assert!(!apply_filter_to_record(
+    assert!(!apply_filter_recursively_to_record(
       &ValueOrComposite::Value(ColumnOpValue {
         column: "a".to_string(),
         op: CompareOp::NotEqual,
@@ -238,7 +298,7 @@ mod tests {
       &record
     ));
 
-    assert!(apply_filter_to_record(
+    assert!(apply_filter_recursively_to_record(
       &ValueOrComposite::Value(ColumnOpValue {
         column: "a".to_string(),
         op: CompareOp::LessThanEqual,
@@ -247,7 +307,7 @@ mod tests {
       &record
     ));
 
-    assert!(!apply_filter_to_record(
+    assert!(!apply_filter_recursively_to_record(
       &ValueOrComposite::Value(ColumnOpValue {
         column: "a".to_string(),
         op: CompareOp::LessThan,
@@ -262,7 +322,7 @@ mod tests {
     let record: IndexMap<&str, Value> =
       IndexMap::from([("a", Value::Integer(5)), ("b", Value::Integer(-5))]);
 
-    assert!(apply_filter_to_record(
+    assert!(apply_filter_recursively_to_record(
       &ValueOrComposite::Composite(
         Combiner::And,
         vec![
@@ -281,7 +341,7 @@ mod tests {
       &record
     ));
 
-    assert!(!apply_filter_to_record(
+    assert!(!apply_filter_recursively_to_record(
       &ValueOrComposite::Composite(
         Combiner::And,
         vec![

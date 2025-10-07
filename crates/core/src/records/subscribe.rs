@@ -25,7 +25,9 @@ use trailbase_sqlite::connection::{extract_record_values, extract_row_id};
 use crate::AppState;
 use crate::auth::user::User;
 use crate::records::RecordApi;
-use crate::records::filter::{Filter, apply_filter_to_record, qs_filter_to_record_filter};
+use crate::records::filter::{
+  Filter, apply_filter_recursively_to_record, qs_filter_to_record_filter,
+};
 use crate::records::record_api::SubscriptionAclParams;
 use crate::records::{Permission, RecordError};
 use crate::schema_metadata::{SchemaMetadataCache, TableMetadata};
@@ -295,7 +297,7 @@ impl SubscriptionManager {
       }
 
       if let Filter::Record(ref filter) = sub.filter {
-        if !apply_filter_to_record(filter, record) {
+        if !apply_filter_recursively_to_record(filter, record) {
           continue;
         }
       }
@@ -555,7 +557,7 @@ impl SubscriptionManager {
     let (sender, receiver) = async_channel::bounded::<Event>(16);
 
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let empty = {
+    let install_hook: bool = {
       let mut lock = self.state.record_subscriptions.write();
       let empty = lock.is_empty();
 
@@ -574,7 +576,7 @@ impl SubscriptionManager {
       empty
     };
 
-    if empty {
+    if install_hook {
       self.add_hook();
     }
 
@@ -606,9 +608,15 @@ impl SubscriptionManager {
   ) -> Result<AutoCleanupEventStream, RecordError> {
     let state = &self.state;
 
+    let filter = if let Some(filter) = filter {
+      Filter::Record(qs_filter_to_record_filter(api.columns(), filter)?)
+    } else {
+      Filter::Passthrough
+    };
+
     let (sender, receiver) = async_channel::bounded::<Event>(16);
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let empty = {
+    let install_hook: bool = {
       let mut lock = state.table_subscriptions.write();
       let empty = lock.is_empty() && state.record_subscriptions.read().is_empty();
       let m: &mut Vec<Subscription> = lock.entry(api.qualified_name().clone()).or_default();
@@ -618,15 +626,13 @@ impl SubscriptionManager {
         record_api_name: api.api_name().to_string(),
         user,
         sender: sender.clone(),
-        filter: filter.map_or(Filter::Passthrough, |f| {
-          Filter::Record(qs_filter_to_record_filter(f))
-        }),
+        filter,
       });
 
       empty
     };
 
-    if empty {
+    if install_hook {
       self.add_hook();
     }
 
