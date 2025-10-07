@@ -1,3 +1,6 @@
+run:
+	cargo run -- --data-dir=./traildepot run --public-dir web/dist
+
 outputs = \
 	  web/types/article.ts \
 	  web/types/profile.ts \
@@ -42,4 +45,4 @@ clean_types:
 
 clean: clean_data clean_types
 
-.PHONY: clean clean_data clean_types
+.PHONY: run clean clean_data clean_types

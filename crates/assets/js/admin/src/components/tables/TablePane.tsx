@@ -66,11 +66,12 @@ import {
 import type { Column } from "@bindings/Column";
 import type { ListRowsResponse } from "@bindings/ListRowsResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
+import type { QualifiedName } from "@bindings/QualifiedName";
+import type { ReadFilesQuery } from "@bindings/ReadFilesQuery";
 import type { Table } from "@bindings/Table";
 import type { TableIndex } from "@bindings/TableIndex";
 import type { TableTrigger } from "@bindings/TableTrigger";
 import type { View } from "@bindings/View";
-import { QualifiedName } from "@bindings/QualifiedName";
 
 export type SimpleSignal<T> = [get: () => T, set: (state: T) => void];
 
@@ -126,9 +127,12 @@ function renderCell(
         const pkVal = context.row.original[pkIndex] as string;
         const url = imageUrl({
           tableName,
-          pkCol,
-          pkVal,
-          fileColName: cell.col.name,
+          query: {
+            pk_column: pkCol,
+            pk_value: pkVal,
+            file_column_name: cell.col.name,
+            file_name: null,
+          },
         });
 
         return <Image url={url} mime={fileUpload.mime_type} />;
@@ -156,10 +160,12 @@ function renderCell(
                 const fileUpload = fileUploads[index];
                 const url = imageUrl({
                   tableName,
-                  pkCol,
-                  pkVal,
-                  fileColName: cell.col.name,
-                  index,
+                  query: {
+                    pk_column: pkCol,
+                    pk_value: pkVal,
+                    file_column_name: cell.col.name,
+                    file_name: fileUpload.filename ?? null,
+                  },
                 });
 
                 return <Image url={url} mime={fileUpload.mime_type} />;
@@ -198,18 +204,28 @@ function Image(props: { url: string; mime: string }) {
 
 function imageUrl(opts: {
   tableName: QualifiedName;
-  pkCol: string;
-  pkVal: string;
-  fileColName: string;
-  index?: number;
+  query: ReadFilesQuery;
 }): string {
   const tableName: string = prettyFormatQualifiedName(opts.tableName);
-  const uri = `/table/${tableName}/files?pk_column=${opts.pkCol}&pk_value=${opts.pkVal}&file_column_name=${opts.fileColName}`;
-  const index = opts.index;
-  if (index) {
-    return `${uri}&file_index=${index}`;
+  const query = opts.query;
+
+  if (query.file_name) {
+    const params = new URLSearchParams({
+      pk_column: query.pk_column,
+      pk_value: `${query.pk_value}`,
+      file_column_name: query.file_column_name,
+      file_name: query.file_name,
+    });
+
+    return `/table/${tableName}/files?${params}`;
   }
-  return uri;
+
+  const params = new URLSearchParams({
+    pk_column: query.pk_column,
+    pk_value: `${query.pk_value}`,
+    file_column_name: query.file_column_name,
+  });
+  return `/table/${tableName}/files?${params}`;
 }
 
 function tableOrViewSatisfiesRecordApiRequirements(
