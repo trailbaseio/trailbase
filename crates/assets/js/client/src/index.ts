@@ -869,9 +869,9 @@ export function filesPath(
   apiName: string,
   recordId: RecordId,
   columnName: string,
-  index: number,
+  fileName: string,
 ): string {
-  return `${recordApiBasePath}/${apiName}/${recordId}/files/${columnName}/${index}`;
+  return `${recordApiBasePath}/${apiName}/${recordId}/files/${columnName}/${fileName}`;
 }
 
 function _isDev(): boolean {

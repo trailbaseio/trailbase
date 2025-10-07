@@ -548,26 +548,30 @@ test("file upload base64 tests", async () => {
   const singleFileResponse = await fetch(
     `http://${ADDRESS}${filePath("file_upload_table", recordId, "single_file")}`,
   );
-  const singleFileBytes = new Uint8Array(
-    await singleFileResponse.arrayBuffer(),
+  expect(new Uint8Array(await singleFileResponse.arrayBuffer())).toEqual(
+    testBytes1,
   );
-  expect(Array.from(singleFileBytes)).toEqual(Array.from(testBytes1));
+
+  const singleFilesResponse = await fetch(
+    `http://${ADDRESS}${filesPath("file_upload_table", recordId, "single_file", singleFile.filename)}`,
+  );
+  expect(new Uint8Array(await singleFilesResponse.arrayBuffer())).toEqual(
+    testBytes1,
+  );
 
   const multiFile1Response = await fetch(
-    `http://${ADDRESS}${filesPath("file_upload_table", recordId, "multiple_files", 0)}`,
+    `http://${ADDRESS}${filesPath("file_upload_table", recordId, "multiple_files", multipleFiles[0].filename)}`,
   );
-  const multiFile1Bytes = new Uint8Array(
-    await multiFile1Response.arrayBuffer(),
+  expect(new Uint8Array(await multiFile1Response.arrayBuffer())).toEqual(
+    testBytes2,
   );
-  expect(Array.from(multiFile1Bytes)).toEqual(Array.from(testBytes2));
 
   const multiFile2Response = await fetch(
-    `http://${ADDRESS}${filesPath("file_upload_table", recordId, "multiple_files", 1)}`,
+    `http://${ADDRESS}${filesPath("file_upload_table", recordId, "multiple_files", multipleFiles[1].filename)}`,
   );
-  const multiFile2Bytes = new Uint8Array(
-    await multiFile2Response.arrayBuffer(),
+  expect(new Uint8Array(await multiFile2Response.arrayBuffer())).toEqual(
+    testBytes3,
   );
-  expect(Array.from(multiFile2Bytes)).toEqual(Array.from(testBytes3));
 
   // Clean up
   await api.delete(recordId);
