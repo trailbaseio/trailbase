@@ -22,7 +22,7 @@ pub enum Filter {
   Record(ValueOrComposite),
 }
 
-pub(crate) fn qs_value_to_sql(value: trailbase_qs::Value) -> rusqlite::types::Value {
+fn any_qs_value_to_sql(value: trailbase_qs::Value) -> rusqlite::types::Value {
   use base64::prelude::*;
   use rusqlite::types::Value;
   use trailbase_qs::Value as QsValue;
@@ -50,7 +50,7 @@ pub(crate) fn qs_value_to_sql_with_constraints(
 
   return match column.data_type {
     ColumnDataType::Null => Err(RecordError::BadRequest("Invalid query")),
-    ColumnDataType::Any => Ok(qs_value_to_sql(value)),
+    ColumnDataType::Any => Ok(any_qs_value_to_sql(value)),
     ColumnDataType::Blob => match value {
       QsValue::String(s) => Ok(Value::Blob(
         BASE64_URL_SAFE

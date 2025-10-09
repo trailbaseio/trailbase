@@ -7,6 +7,7 @@
 /// filters[column][eq]=value
 /// filters[and][0][column0][eq]=value0&filters[and][1][column1][eq]=value1
 /// filters[and][0][or][0][column0]=value0&[and][0][or][1][column1]=value1
+use rusqlite::types::Value as SqlValue;
 use std::collections::BTreeMap;
 
 use crate::column_rel_value::{ColumnOpValue, serde_value_to_single_column_rel_value};
@@ -28,33 +29,31 @@ impl ValueOrComposite {
   pub fn into_sql<E>(
     self,
     column_prefix: Option<&str>,
-    validator: &dyn Fn(&str) -> Result<(), E>,
-  ) -> Result<(String, Vec<(String, Value)>), E> {
+    convert: &dyn Fn(&str, Value) -> Result<SqlValue, E>,
+  ) -> Result<(String, Vec<(String, SqlValue)>), E> {
     let mut index: usize = 0;
-    return self.into_sql_impl(column_prefix, validator, &mut index);
+    return self.into_sql_impl(column_prefix, convert, &mut index);
   }
 
   fn into_sql_impl<E>(
     self,
     column_prefix: Option<&str>,
-    validator: &dyn Fn(&str) -> Result<(), E>,
+    convert: &dyn Fn(&str, Value) -> Result<SqlValue, E>,
     index: &mut usize,
-  ) -> Result<(String, Vec<(String, Value)>), E> {
+  ) -> Result<(String, Vec<(String, SqlValue)>), E> {
     match self {
       Self::Value(v) => {
-        validator(&v.column)?;
-
-        return Ok(match v.into_sql(column_prefix, index) {
+        return Ok(match v.into_sql(column_prefix, convert, index)? {
           (sql, Some(param)) => (sql, vec![param]),
           (sql, None) => (sql, vec![]),
         });
       }
       Self::Composite(combiner, vec) => {
         let mut fragments = Vec::<String>::with_capacity(vec.len());
-        let mut params = Vec::<(String, Value)>::with_capacity(vec.len());
+        let mut params = Vec::<(String, SqlValue)>::with_capacity(vec.len());
 
         for value_or_composite in vec {
-          let (f, p) = value_or_composite.into_sql_impl::<E>(column_prefix, validator, index)?;
+          let (f, p) = value_or_composite.into_sql_impl::<E>(column_prefix, convert, index)?;
           fragments.push(f);
           params.extend(p);
         }
@@ -280,16 +279,20 @@ mod tests {
       value: Value::String("val0".to_string()),
     });
 
-    let validator = |_: &str| -> Result<(), String> {
-      return Ok(());
+    let convert = |_: &str, value: Value| -> Result<SqlValue, String> {
+      return Ok(match value {
+        Value::String(s) => SqlValue::Text(s),
+        Value::Integer(i) => SqlValue::Integer(i),
+        Value::Double(d) => SqlValue::Real(d),
+      });
     };
     let sql0 = v0
       .clone()
-      .into_sql(/* column_prefix= */ None, &validator)
+      .into_sql(/* column_prefix= */ None, &convert)
       .unwrap();
     assert_eq!(sql0.0, r#""col0" = :__p0"#);
     let sql0 = v0
-      .into_sql(/* column_prefix= */ Some("p"), &validator)
+      .into_sql(/* column_prefix= */ Some("p"), &convert)
       .unwrap();
     assert_eq!(sql0.0, r#"p."col0" = :__p0"#);
 
@@ -298,7 +301,7 @@ mod tests {
       op: CompareOp::Is,
       value: Value::String("NULL".to_string()),
     });
-    let sql1 = v1.into_sql(None, &validator).unwrap();
+    let sql1 = v1.into_sql(None, &convert).unwrap();
     assert_eq!(sql1.0, r#""col0" IS NULL"#, "{sql1:?}",);
   }
 }

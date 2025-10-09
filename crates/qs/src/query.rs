@@ -203,6 +203,7 @@ impl FilterQuery {
 mod tests {
   use super::*;
 
+  use rusqlite::types::Value as SqlValue;
   use serde_qs::Config;
 
   use crate::column_rel_value::{ColumnOpValue, CompareOp};
@@ -395,8 +396,12 @@ mod tests {
       )
     );
 
-    let filter = |_: &str| -> Result<(), String> {
-      return Ok(());
+    let filter = |_: &str, value: Value| -> Result<SqlValue, String> {
+      return Ok(match value {
+        Value::String(s) => SqlValue::Text(s),
+        Value::Integer(i) => SqlValue::Integer(i),
+        Value::Double(d) => SqlValue::Real(d),
+      });
     };
     let (sql, params) = q1.filter.clone().unwrap().into_sql(None, &filter).unwrap();
     assert_eq!(
@@ -406,9 +411,9 @@ mod tests {
     assert_eq!(
       params,
       vec![
-        (":__p0".to_string(), Value::String("val2".to_string())),
-        (":__p1".to_string(), Value::String("val0".to_string())),
-        (":__p2".to_string(), Value::Integer(1)),
+        (":__p0".to_string(), SqlValue::Text("val2".to_string())),
+        (":__p1".to_string(), SqlValue::Text("val0".to_string())),
+        (":__p2".to_string(), SqlValue::Integer(1)),
       ]
     );
     let (sql, _) = q1.filter.unwrap().into_sql(Some("p"), &filter).unwrap();

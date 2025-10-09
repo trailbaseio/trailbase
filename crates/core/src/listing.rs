@@ -41,41 +41,34 @@ pub(crate) fn build_filter_where_clause(
     });
   };
 
-  let validator = |column_name: &str| -> Result<(), WhereClauseError> {
+  let convert = |column_name: &str,
+                 value: trailbase_qs::Value|
+   -> Result<trailbase_sqlite::Value, WhereClauseError> {
     if column_name.starts_with("_") {
       return Err(WhereClauseError::UnrecognizedParam(format!(
         "Invalid parameter: {column_name}"
       )));
     }
 
-    // IMPORTANT: We only include parameters with known columns to avoid building an invalid
-    // query early and prevent injections.
-    if !columns.iter().any(|c| c.name == column_name) {
+    let Some(column) = columns.iter().find(|c| c.name == column_name) else {
       return Err(WhereClauseError::UnrecognizedParam(format!(
         "Unrecognized parameter: {column_name}"
       )));
     };
 
-    return Ok(());
+    // TODO: Improve hacky error handling.
+    return crate::records::filter::qs_value_to_sql_with_constraints(column, value)
+      .map_err(|err| WhereClauseError::UnrecognizedParam(err.to_string()));
   };
 
-  let (sql, params) = filter_params.into_sql(Some(table_name), &validator)?;
-
-  use trailbase_sqlite::Value;
-  type Param = (Cow<'static, str>, Value);
-  let sql_params: Vec<Param> = params
-    .into_iter()
-    .map(|(name, value)| {
-      return (
-        Cow::Owned(name),
-        crate::records::filter::qs_value_to_sql(value),
-      );
-    })
-    .collect();
+  let (sql, params) = filter_params.into_sql(Some(table_name), &convert)?;
 
   return Ok(WhereClause {
     clause: sql,
-    params: sql_params,
+    params: params
+      .into_iter()
+      .map(|(name, v)| (Cow::Owned(name), v))
+      .collect(),
   });
 }
 

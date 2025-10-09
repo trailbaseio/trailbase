@@ -8061,6 +8061,7 @@ name = "trailbase-qs"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "rusqlite",
  "serde",
  "serde-value",
  "serde_qs",

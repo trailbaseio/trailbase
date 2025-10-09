@@ -1,4 +1,5 @@
 use base64::prelude::*;
+use rusqlite::types::Value as SqlValue;
 use serde::de::{Deserializer, Error};
 
 use crate::value::Value;
@@ -57,48 +58,38 @@ pub struct ColumnOpValue {
 }
 
 impl ColumnOpValue {
-  pub fn into_sql(
+  pub fn into_sql<E>(
     self,
     column_prefix: Option<&str>,
+    convert: &dyn Fn(&str, Value) -> Result<SqlValue, E>,
     index: &mut usize,
-  ) -> (String, Option<(String, Value)>) {
+  ) -> Result<(String, Option<(String, SqlValue)>), E> {
+    let v = self.value;
+    let c = self.column;
+
     return match self.op {
       CompareOp::Is => {
-        assert!(matches!(self.value, Value::String(_)), "{:?}", self.value);
+        assert!(matches!(v, Value::String(_)), "{v:?}");
 
-        match column_prefix {
-          Some(p) => (
-            format!(r#"{p}."{c}" IS {v}"#, c = self.column, v = self.value),
-            None,
-          ),
-          None => (
-            format!(r#""{c}" IS {v}"#, c = self.column, v = self.value),
-            None,
-          ),
-        }
+        Ok(match column_prefix {
+          Some(p) => (format!(r#"{p}."{c}" IS {v}"#), None),
+          None => (format!(r#""{c}" IS {v}"#), None),
+        })
       }
       _ => {
         let param = param_name(*index);
         *index += 1;
 
-        match column_prefix {
+        Ok(match column_prefix {
           Some(p) => (
-            format!(
-              r#"{p}."{c}" {o} {param}"#,
-              c = self.column,
-              o = self.op.as_sql()
-            ),
-            Some((param, self.value)),
+            format!(r#"{p}."{c}" {o} {param}"#, o = self.op.as_sql()),
+            Some((param, convert(&c, v)?)),
           ),
           None => (
-            format!(
-              r#""{c}" {o} {param}"#,
-              c = self.column,
-              o = self.op.as_sql()
-            ),
-            Some((param, self.value)),
+            format!(r#""{c}" {o} {param}"#, o = self.op.as_sql()),
+            Some((param, convert(&c, v)?)),
           ),
-        }
+        })
       }
     };
   }
