@@ -10,6 +10,9 @@ exclude = [
   "**/dist/",
 ]
 
+[lib]
+doctest = false
+
 [dependencies]
 bytes = "1.10.1"
 futures-util = "0.3.31"

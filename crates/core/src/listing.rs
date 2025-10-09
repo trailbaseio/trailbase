@@ -49,7 +49,7 @@ pub(crate) fn build_filter_where_clause(
     }
 
     // IMPORTANT: We only include parameters with known columns to avoid building an invalid
-    // query early and forbid injections.
+    // query early and prevent injections.
     if !columns.iter().any(|c| c.name == column_name) {
       return Err(WhereClauseError::UnrecognizedParam(format!(
         "Unrecognized parameter: {column_name}"
