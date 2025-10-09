@@ -1,3 +1,10 @@
+## v0.19.1
+
+- Use first-class column information when interpreting filter queries when listing records.
+- Remove ambiguous parse for booleans from filter query strings.
+- Fix handling of i64 range in TS/JS client and Admin UI.
+- Update Rust dependencies.
+
 ## v0.19.0
 
 - First WASM-only relese dropping support for the V8 runtime (technically, custom binary builds can still enable it as a stop-gap but complete removal will follow)
