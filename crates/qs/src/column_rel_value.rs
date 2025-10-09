@@ -129,7 +129,7 @@ where
       serde_value::Value::U32(i) => Ok(Value::Integer(i as i64)),
       serde_value::Value::U16(i) => Ok(Value::Integer(i as i64)),
       serde_value::Value::U8(i) => Ok(Value::Integer(i as i64)),
-      serde_value::Value::Bool(b) => Ok(Value::Bool(b)),
+      serde_value::Value::Bool(b) => Ok(Value::Integer(if b { 1 } else { 0 })),
       _ => Err(Error::invalid_type(
         unexpected(&value),
         &"trailbase_qs::Value, i.e. string, integer, double or bool",

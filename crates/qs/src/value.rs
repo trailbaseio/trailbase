@@ -7,22 +7,10 @@ pub enum Value {
   String(String),
   Integer(i64),
   Double(f64),
-  Bool(bool),
 }
 
 impl Value {
   pub(crate) fn unparse(value: String) -> Self {
-    // NOTE: We don't parse '1' and '0'. since we would prefer to parse those as integers.
-    match value.as_str() {
-      "TRUE" | "true" => {
-        return Value::Bool(true);
-      }
-      "FALSE" | "false" => {
-        return Value::Bool(false);
-      }
-      _ => {}
-    };
-
     return if let Ok(i) = i64::from_str(&value) {
       Value::Integer(i)
     } else if let Ok(d) = f64::from_str(&value) {
@@ -39,7 +27,6 @@ impl std::fmt::Display for Value {
       Self::String(s) => s.fmt(f),
       Self::Integer(i) => i.fmt(f),
       Self::Double(d) => d.fmt(f),
-      Self::Bool(b) => b.fmt(f),
     };
   }
 }
@@ -83,7 +70,7 @@ mod tests {
       ValueOrComposite::Value(ColumnOpValue {
         column: "col0".to_string(),
         op: CompareOp::NotEqual,
-        value: Value::Bool(true),
+        value: Value::String("TRUE".to_string()),
       })
     );
 

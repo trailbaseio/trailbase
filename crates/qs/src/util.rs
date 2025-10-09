@@ -19,7 +19,6 @@ where
   let value = Value::deserialize(deserializer)?;
   match value {
     Value::String(ref str) => {
-      // NOTE: Unlike for Value, we also parse '1' and '0'.
       match str.as_str() {
         "TRUE" | "true" | "1" => {
           return Ok(Some(true));

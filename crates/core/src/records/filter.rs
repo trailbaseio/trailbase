@@ -37,7 +37,6 @@ pub(crate) fn qs_value_to_sql(value: trailbase_qs::Value) -> rusqlite::types::Va
     }
     QsValue::Integer(i) => Value::Integer(i),
     QsValue::Double(d) => Value::Real(d),
-    QsValue::Bool(b) => Value::Integer(if b { 1 } else { 0 }),
   };
 }
 
@@ -64,13 +63,6 @@ pub(crate) fn qs_value_to_sql_with_constraints(
       QsValue::String(s) => Ok(Value::Text(s)),
       QsValue::Integer(i) => Ok(Value::Text(i.to_string())),
       QsValue::Double(d) => Ok(Value::Text(d.to_string())),
-      // TODO: This is broken because we don't preserve the user's original input. We parse and
-      // best-effort unparse.
-      QsValue::Bool(b) => Ok(Value::Text(if b {
-        "true".to_string()
-      } else {
-        "false".to_string()
-      })),
     },
     ColumnDataType::Integer | ColumnDataType::Int => match value {
       QsValue::Integer(i) => Ok(Value::Integer(i)),
