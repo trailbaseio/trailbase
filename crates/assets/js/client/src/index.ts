@@ -1,4 +1,5 @@
 import { jwtDecode } from "jwt-decode";
+import * as JSON from "@ungap/raw-json";
 
 import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
 import type { LoginRequest } from "@bindings/LoginRequest";
@@ -111,11 +112,9 @@ export class FetchError extends Error {
       body = await response.text();
     } catch {}
 
-    console.debug(response);
-
     return new FetchError(
       response.status,
-      body ? `${response.statusText}: ${body}` : response.statusText,
+      `FetchError(status: ${response.status} - ${response.statusText}, ${body})`,
     );
   }
 
@@ -125,10 +124,6 @@ export class FetchError extends Error {
 
   public isServer(): boolean {
     return this.status >= 500;
-  }
-
-  public toString(): string {
-    return `[${this.status}] ${this.message}`;
   }
 }
 
@@ -238,7 +233,7 @@ export class CreateOperation<T = Record<string, unknown>>
       },
     );
 
-    return (await response.json()).ids[0];
+    return parseJSON(await response.text()).ids[0];
   }
 
   protected toJSON(): CreateOp {
@@ -323,7 +318,7 @@ export class ReadOperation<T = Record<string, unknown>>
         ? `${recordApiBasePath}/${this.apiName}/${this.id}?expand=${expand.join(",")}`
         : `${recordApiBasePath}/${this.apiName}/${this.id}`,
     );
-    return (await response.json()) as T;
+    return parseJSON(await response.text()) as T;
   }
 }
 
@@ -375,7 +370,7 @@ export class ListOperation<T = Record<string, unknown>>
     const response = await this.client.fetch(
       `${recordApiBasePath}/${this.apiName}?${params}`,
     );
-    return (await response.json()) as ListResponse<T>;
+    return parseJSON(await response.text()) as ListResponse<T>;
   }
 }
 
@@ -452,7 +447,7 @@ export class RecordApiImpl<T = Record<string, unknown>>
       },
     );
 
-    return (await response.json()).ids;
+    return parseJSON(await response.text()).ids;
   }
 
   public async update(id: RecordId, record: Partial<T>): Promise<void> {
@@ -656,7 +651,7 @@ class ClientImpl implements Client {
       headers: jsonContentTypeHeader,
     });
 
-    return (await response.json()).ids;
+    return parseJSON(await response.text()).ids;
   }
 
   public avatarUrl(userId?: string): string | undefined {
@@ -975,3 +970,31 @@ export const exportedForTesting = isDev
       base64Encode,
     }
   : undefined;
+
+// BigInt JSON stringify/parse shenanigans.
+declare global {
+  interface BigInt {
+    toJSON(): unknown;
+  }
+}
+
+BigInt.prototype.toJSON = function () {
+  return JSON.rawJSON(this.toString());
+};
+
+function parseJSON(text: string) {
+  function reviver(_key: string, value: unknown, context: { source: string }) {
+    if (
+      typeof value === "number" &&
+      Number.isInteger(value) &&
+      !Number.isSafeInteger(value)
+    ) {
+      // Ignore the value because it has already lost precision
+      return BigInt(context.source);
+    }
+    return value;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return JSON.parse(text, reviver as any);
+}

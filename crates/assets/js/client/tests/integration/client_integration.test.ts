@@ -17,8 +17,12 @@ type SimpleStrict = {
   id: string;
 
   text_null?: string;
-  text_default?: string;
+  text_default: string;
   text_not_null: string;
+
+  int_null?: bigint;
+  int_default: bigint;
+  int_not_null: bigint;
 
   // Add or generate missing fields.
 };
@@ -205,6 +209,21 @@ test("Record integration tests", async () => {
       status: status.FORBIDDEN,
     }),
   );
+});
+
+test("large numbers", async () => {
+  const client = await connect();
+  const apiName = "simple_strict_table";
+  const api = client.records<NewSimpleStrict>(apiName);
+
+  const huge = BigInt("9223372036854775807");
+  expect(huge).toBeGreaterThan(Number.MIN_SAFE_INTEGER);
+
+  const id = await api.create({
+    int_not_null: huge,
+  });
+
+  expect((await api.read(id)).int_not_null).toEqual(huge);
 });
 
 type Comment = {

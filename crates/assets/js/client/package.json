@@ -50,6 +50,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@ungap/raw-json": "0.4.4",
     "jwt-decode": "^4.0.0",
     "uuid": "^13.0.0"
   }
