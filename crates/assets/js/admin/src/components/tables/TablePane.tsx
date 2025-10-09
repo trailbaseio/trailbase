@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/tooltip";
 
 import { createConfigQuery, invalidateConfig } from "@/lib/config";
-import { type FormRow, RowData } from "@/lib/convert";
+import type { FormRow, RowData } from "@/lib/convert";
 import { adminFetch } from "@/lib/fetch";
 import { urlSafeBase64ToUuid } from "@/lib/utils";
 import { dropTable, dropIndex } from "@/lib/table";
@@ -110,69 +110,73 @@ function renderCell(
     return "NULL";
   }
 
-  if (typeof value === "string") {
-    if (cell.isUUID) {
-      return urlSafeBase64ToUuid(value);
-    }
-
-    const imageMime = (f: FileUpload) => {
-      const mime = f.mime_type;
-      return mime === "image/jpeg" || mime === "image/png";
-    };
-
-    if (cell.isFile) {
-      const fileUpload = JSON.parse(value) as FileUpload;
-      if (imageMime(fileUpload)) {
-        const pkCol = columns[pkIndex].name;
-        const pkVal = context.row.original[pkIndex] as string;
-        const url = imageUrl({
-          tableName,
-          query: {
-            pk_column: pkCol,
-            pk_value: pkVal,
-            file_column_name: cell.col.name,
-            file_name: null,
-          },
-        });
-
-        return <Image url={url} mime={fileUpload.mime_type} />;
+  switch (typeof value) {
+    case "bigint":
+      return value.toString();
+    case "string": {
+      if (cell.isUUID) {
+        return urlSafeBase64ToUuid(value);
       }
-    } else if (cell.isFiles) {
-      const fileUploads = JSON.parse(value) as FileUploads;
 
-      const indexes: number[] = [];
-      for (let i = 0; i < fileUploads.length; ++i) {
-        const file = fileUploads[i];
-        if (imageMime(file)) {
-          indexes.push(i);
+      const imageMime = (f: FileUpload) => {
+        const mime = f.mime_type;
+        return mime === "image/jpeg" || mime === "image/png";
+      };
+
+      if (cell.isFile) {
+        const fileUpload = JSON.parse(value) as FileUpload;
+        if (imageMime(fileUpload)) {
+          const pkCol = columns[pkIndex].name;
+          const pkVal = context.row.original[pkIndex] as string;
+          const url = imageUrl({
+            tableName,
+            query: {
+              pk_column: pkCol,
+              pk_value: pkVal,
+              file_column_name: cell.col.name,
+              file_name: null,
+            },
+          });
+
+          return <Image url={url} mime={fileUpload.mime_type} />;
+        }
+      } else if (cell.isFiles) {
+        const fileUploads = JSON.parse(value) as FileUploads;
+
+        const indexes: number[] = [];
+        for (let i = 0; i < fileUploads.length; ++i) {
+          const file = fileUploads[i];
+          if (imageMime(file)) {
+            indexes.push(i);
+          }
+
+          if (indexes.length >= 3) break;
         }
 
-        if (indexes.length >= 3) break;
-      }
+        if (indexes.length > 0) {
+          const pkCol = columns[pkIndex].name;
+          const pkVal = context.row.original[pkIndex] as string;
+          return (
+            <div class="flex gap-2">
+              <For each={indexes}>
+                {(index: number) => {
+                  const fileUpload = fileUploads[index];
+                  const url = imageUrl({
+                    tableName,
+                    query: {
+                      pk_column: pkCol,
+                      pk_value: pkVal,
+                      file_column_name: cell.col.name,
+                      file_name: fileUpload.filename ?? null,
+                    },
+                  });
 
-      if (indexes.length > 0) {
-        const pkCol = columns[pkIndex].name;
-        const pkVal = context.row.original[pkIndex] as string;
-        return (
-          <div class="flex gap-2">
-            <For each={indexes}>
-              {(index: number) => {
-                const fileUpload = fileUploads[index];
-                const url = imageUrl({
-                  tableName,
-                  query: {
-                    pk_column: pkCol,
-                    pk_value: pkVal,
-                    file_column_name: cell.col.name,
-                    file_name: fileUpload.filename ?? null,
-                  },
-                });
-
-                return <Image url={url} mime={fileUpload.mime_type} />;
-              }}
-            </For>
-          </div>
-        );
+                  return <Image url={url} mime={fileUpload.mime_type} />;
+                }}
+              </For>
+            </div>
+          );
+        }
       }
     }
   }

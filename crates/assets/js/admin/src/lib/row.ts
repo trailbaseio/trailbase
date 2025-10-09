@@ -72,6 +72,24 @@ export async function deleteRows(
   return await response.text();
 }
 
+/// Flavor that parses `i64` correctly.
+function parseJSON(text: string) {
+  function reviver(_key: string, value: unknown, context: { source: string }) {
+    if (
+      typeof value === "number" &&
+      Number.isInteger(value) &&
+      !Number.isSafeInteger(value)
+    ) {
+      // Ignore the value because it has already lost precision
+      return BigInt(context.source);
+    }
+    return value;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return JSON.parse(text, reviver as any);
+}
+
 export async function fetchRows(
   tableName: QualifiedName,
   filter: string | null,
@@ -89,5 +107,5 @@ export async function fetchRows(
   const path = `/table/${prettyFormatQualifiedName(tableName)}/rows?${params}`;
 
   const response = await adminFetch(path);
-  return (await response.json()) as ListRowsResponse;
+  return parseJSON(await response.text()) as ListRowsResponse;
 }
