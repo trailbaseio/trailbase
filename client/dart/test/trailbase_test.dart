@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:trailbase/trailbase.dart';
 import 'package:test/test.dart';
@@ -274,10 +275,16 @@ Future<void> main() async {
       final api = client.records('simple_strict_table');
 
       final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final messages = [
+      final sortedMessages = [
         'dart client test 0: =?&${now}',
         'dart client test 1: =?&${now}',
+        'dart client test 2: =?&${now}',
       ];
+      // NOTE: we're randomizing the lexicographical order of the messages to
+      // make sure we're not just sorting by insertion order later on in the
+      // test.
+      final messages = [...sortedMessages]..shuffle(Random());
+
       final ids = [];
       for (final msg in messages) {
         ids.add(await api.create({'text_not_null': msg}));
@@ -312,7 +319,7 @@ Future<void> main() async {
         ))
             .records;
         expect(recordsAsc.map((el) => el['text_not_null']),
-            orderedEquals(messages));
+            orderedEquals(sortedMessages));
 
         final recordsDesc = (await api.list(
           order: ['-text_not_null'],
@@ -323,7 +330,7 @@ Future<void> main() async {
         ))
             .records;
         expect(recordsDesc.map((el) => el['text_not_null']).toList().reversed,
-            orderedEquals(messages));
+            orderedEquals(sortedMessages));
       }
 
       {
@@ -337,7 +344,8 @@ Future<void> main() async {
           count: true,
         ));
 
-        expect(response.totalCount ?? -1, 2);
+        expect(response.totalCount ?? -1, 3);
+        expect(response.records[0]['text_not_null'], sortedMessages.last);
         // Ensure there's no extra field, i.e the count doesn't get serialized.
         expect(response.records[0].keys.length, 13);
       }
