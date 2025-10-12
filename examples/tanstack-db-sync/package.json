@@ -12,24 +12,24 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tanstack/db": "^0.4.4",
+    "@tanstack/db": "^0.4.8",
     "@tanstack/query-core": "^5.90.2",
-    "@tanstack/query-db-collection": "^0.2.25",
-    "@tanstack/react-db": "^0.1.26",
-    "@tanstack/trailbase-db-collection": "^0.1.26",
+    "@tanstack/query-db-collection": "^0.2.29",
+    "@tanstack/react-db": "^0.1.30",
+    "@tanstack/trailbase-db-collection": "^0.1.30",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tailwindcss": "^4.1.14",
-    "trailbase": "^0.7.4"
+    "trailbase": "=0.7.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.37.0",
     "@tailwindcss/vite": "^4.1.14",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.1",
     "@vitejs/plugin-react": "^5.0.4",
     "eslint": "^9.37.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-hooks": "^7.0.0",
     "eslint-plugin-react-refresh": "^0.4.23",
     "globals": "^16.4.0",
     "prettier": "^3.6.2",

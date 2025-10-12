@@ -18,7 +18,7 @@
     "@astrojs/starlight-tailwind": "^4.0.1",
     "@iconify-json/tabler": "^1.2.23",
     "@tailwindcss/vite": "^4.1.14",
-    "astro": "^5.14.1",
+    "astro": "^5.14.4",
     "astro-icon": "^1.1.5",
     "chart.js": "^4.5.0",
     "chartjs-chart-error-bars": "^4.4.5",

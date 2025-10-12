@@ -79,7 +79,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@bytecodealliance/jco": "^1.15.0",
+    "@bytecodealliance/jco": "^1.15.1",
     "@eslint/js": "^9.37.0",
     "eslint": "^9.37.0",
     "prettier": "^3.6.2",

@@ -16,7 +16,7 @@
     "@astrojs/solid-js": "^5.1.1",
     "@kobalte/core": "^0.13.11",
     "@nanostores/solid": "^1.1.1",
-    "astro": "^5.14.1",
+    "astro": "^5.14.4",
     "astro-icon": "^1.1.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
