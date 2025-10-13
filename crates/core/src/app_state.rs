@@ -167,6 +167,7 @@ impl AppState {
           shared_kv_store.clone(),
           wasm_dir.clone(),
           args.runtime_root_fs.clone(),
+          args.dev,
         );
       }
     };

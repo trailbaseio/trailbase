@@ -25,6 +25,7 @@ pub(crate) fn build_wasm_runtimes_for_components(
   shared_kv_store: KvStore,
   components_path: PathBuf,
   fs_root_path: Option<PathBuf>,
+  dev: bool,
 ) -> Result<Vec<Runtime>, AnyError> {
   let executor = SharedExecutor::new(n_threads);
 
@@ -56,6 +57,7 @@ pub(crate) fn build_wasm_runtimes_for_components(
               shared_kv_store.clone(),
               RuntimeOptions {
                 fs_root_path: fs_root_path.clone(),
+                use_winch: dev,
               },
             ));
           }

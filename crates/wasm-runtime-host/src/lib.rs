@@ -421,7 +421,7 @@ pub struct Runtime {
   executor: Arc<SharedExecutor>,
 }
 
-fn build_config(cache: Option<wasmtime::Cache>) -> Config {
+fn build_config(cache: Option<wasmtime::Cache>, use_winch: bool) -> Config {
   let mut config = Config::new();
 
   // Execution settings.
@@ -432,8 +432,14 @@ fn build_config(cache: Option<wasmtime::Cache>) -> Config {
 
   // Compilation settings.
   config.cache(cache);
-  config.cranelift_opt_level(wasmtime::OptLevel::Speed);
-  config.parallel_compilation(true);
+
+  if use_winch {
+    config.strategy(wasmtime::Strategy::Winch);
+  } else {
+    config.strategy(wasmtime::Strategy::Cranelift);
+    config.cranelift_opt_level(wasmtime::OptLevel::Speed);
+    config.parallel_compilation(true);
+  }
 
   return config;
 }
@@ -442,6 +448,9 @@ fn build_config(cache: Option<wasmtime::Cache>) -> Config {
 pub struct RuntimeOptions {
   /// Optional file-system sandbox root for r/o file access.
   pub fs_root_path: Option<std::path::PathBuf>,
+
+  /// Whether to use the non-optimizing baseline compiler.
+  pub use_winch: bool,
 }
 
 impl Runtime {
@@ -452,9 +461,12 @@ impl Runtime {
     kv_store: KvStore,
     opts: RuntimeOptions,
   ) -> Result<Self, Error> {
-    let engine = Engine::new(&build_config(Some(wasmtime::Cache::new(
-      wasmtime::CacheConfig::default(),
-    )?)))?;
+    let engine = {
+      let cache = wasmtime::Cache::new(wasmtime::CacheConfig::default())?;
+      let config = build_config(Some(cache), opts.use_winch);
+
+      Engine::new(&config)?
+    };
 
     // Load the component - a very expensive operation generating code. Compilation happens in
     // parallel and will saturate the entire machine.
@@ -466,7 +478,7 @@ impl Runtime {
         .wasm_binary_or_text_file(&wasm_source_file)?
         .compile_component()?;
 
-      // NOTE: According to docs, this shouldn't do anything.
+      // NOTE: According to docs, this should not do anything.
       component.initialize_copy_on_write_image()?;
 
       if let Ok(elapsed) = SystemTime::now().duration_since(start) {
