@@ -86,7 +86,7 @@ data as much as possible.
 When applicable, you should consider checking:
 
 - `_REQ_.<user_id_column> = _USER_.id` on record creation and update,
-- `_ROW_.<user_id_column> = _USER_.id` on record update and deletion
+- `_ROW_.<user_id_column> = _USER_.id` on record retrieval, update, and deletion
 
 to avoid users impersonating other users to access or alter their records.
 
