@@ -2,11 +2,13 @@
   "name": "example-wasm-guest-ts",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
   "scripts": {
-    "build:wasm": "jco componentize dist/index.mjs -w node_modules/trailbase-wasm/wit -o dist/component.wasm",
-    "build:wasm:aot": "jco componentize dist/index.mjs -w node_modules/trailbase-wasm/wit --aot -o dist/component.wasm",
+    "build:wasm": "jco componentize dist/index.js -w node_modules/trailbase-wasm/wit -o dist/component.wasm",
+    "build:wasm:aot": "jco componentize dist/index.js -w node_modules/trailbase-wasm/wit --aot -o dist/component.wasm",
     "build": "vite build && npm run build:wasm",
     "check": "tsc --noEmit --skipLibCheck && eslint",
+    "dev": "node --experimental-strip-types hot-reload.ts",
     "format": "prettier -w src"
   },
   "dependencies": {
@@ -16,7 +18,9 @@
     "@bytecodealliance/jco": "^1.15.1",
     "@eslint/js": "^9.37.0",
     "@types/node": "^24.7.2",
+    "commander": "^14.0.1",
     "eslint": "^9.37.0",
+    "nano-spawn": "^2.0.0",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.0",
