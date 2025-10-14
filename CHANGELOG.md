@@ -1,3 +1,10 @@
+## v0.19.2
+
+- Use the `winch` non-optimizing baseline WASM compiler in `--dev` mode to speed-up cold start and reload.
+- Add "hot"-reload setups to `examples/wasm-guest-(ts|js)`. Simply run `npm run dev`. This will start a TrailBase server and a file-watcher. The latter will rebuild the WASM component, deploy it and send a `SIGHUP` to the server to trigger a reload.
+  - Note that JS/TS WASM components are generally large, i.e. slow to build and slow to load, because a SpiderMonkey JS interpreter is bundled. Using `winch` (see above), reloads take just under 5s on my notebook. Your mileage may vary :hide:.
+- Update Rust and JavaScript dependencies.
+
 ## v0.19.1
 
 - Use first-class column information when interpreting filter queries when listing records.
