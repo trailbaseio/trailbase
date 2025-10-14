@@ -1,4 +1,5 @@
 use base64::prelude::*;
+use rusqlite::Error;
 use rusqlite::functions::Context;
 
 /// Format blob as string-encoded URL-safe base64 string.
@@ -21,9 +22,11 @@ pub(super) fn b64_parse(context: &Context) -> Result<Vec<u8>, Error> {
 
   let str = context.get_raw(0).as_str()?;
 
-  return Ok(BASE64_URL_SAFE
-    .decode(str)
-    .map_err(|err| Error::UserFunctionError(err.into()))?);
+  return Ok(
+    BASE64_URL_SAFE
+      .decode(str)
+      .map_err(|err| Error::UserFunctionError(err.into()))?,
+  );
 }
 
 #[cfg(test)]
