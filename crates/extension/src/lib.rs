@@ -8,6 +8,7 @@ pub mod geoip;
 pub mod jsonschema;
 pub mod password;
 
+mod b64;
 mod regex;
 mod uuid;
 mod validators;
@@ -73,8 +74,8 @@ pub fn connect_sqlite(path: Option<PathBuf>) -> Result<rusqlite::Connection, Err
 pub fn sqlite3_extension_init(
   db: rusqlite::Connection,
 ) -> Result<rusqlite::Connection, rusqlite::Error> {
-  // WARN: Be careful with declaring INNOCUOUS. This allows these "app-defined functions" to run
-  // even when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
+  // WARN: Be careful with declaring INNOCUOUS. It allows "user-defined functions" to run
+  // when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
   // GENERATED cols, ... as opposed to just top-level SELECTs.
 
   db.create_scalar_function(
@@ -100,7 +101,9 @@ pub fn sqlite3_extension_init(
   db.create_scalar_function(
     "uuid_text",
     1,
-    FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_INNOCUOUS,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
     uuid::uuid_text,
   )?;
 
@@ -117,7 +120,9 @@ pub fn sqlite3_extension_init(
   db.create_scalar_function(
     "hash_password",
     1,
-    FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_INNOCUOUS,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
     password::hash_password_sqlite,
   )?;
 
@@ -200,6 +205,23 @@ pub fn sqlite3_extension_init(
       | FunctionFlags::SQLITE_DETERMINISTIC
       | FunctionFlags::SQLITE_INNOCUOUS,
     geoip::geoip_city_json,
+  )?;
+
+  db.create_scalar_function(
+    "base64",
+    1,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    b64::base64,
+  )?;
+  db.create_scalar_function(
+    "base64_url_safe",
+    1,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    b64::base64_url_safe,
   )?;
 
   return Ok(db);
