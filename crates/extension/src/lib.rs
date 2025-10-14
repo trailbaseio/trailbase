@@ -8,6 +8,7 @@ pub mod geoip;
 pub mod jsonschema;
 pub mod password;
 
+mod b64;
 mod regex;
 mod uuid;
 mod validators;
@@ -200,6 +201,22 @@ pub fn sqlite3_extension_init(
       | FunctionFlags::SQLITE_DETERMINISTIC
       | FunctionFlags::SQLITE_INNOCUOUS,
     geoip::geoip_city_json,
+  )?;
+
+  db.create_scalar_function(
+    "b64_text",
+    1,
+    FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_INNOCUOUS,
+    b64::b64_text,
+  )?;
+
+  db.create_scalar_function(
+    "b64_parse",
+    1,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    b64::b64_parse,
   )?;
 
   return Ok(db);
