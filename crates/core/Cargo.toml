@@ -35,7 +35,7 @@ askama = { workspace = true }
 async-channel = "2.3.1"
 async-trait = "0.1.80"
 axum = { workspace = true }
-base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+base64 = { workspace = true }
 bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
 client-ip = "0.1.1"
@@ -69,8 +69,8 @@ regex = "1.11.0"
 reqwest = { workspace = true }
 rusqlite = { workspace = true }
 rust-embed = { workspace = true }
-serde = { version = "^1.0.203", features = ["derive"] }
-serde_json = "^1.0.117"
+serde = { workspace = true }
+serde_json = { workspace = true }
 serde_path_to_error = "0.1.16"
 serde_urlencoded = "0.7.1"
 sha2 = "0.10.8"
@@ -87,6 +87,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 trailbase-assets = { workspace = true }
 trailbase-build = { workspace = true }
+trailbase-common = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-js = { workspace = true, optional = true }
 trailbase-qs = { workspace = true }

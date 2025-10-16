@@ -1018,7 +1018,7 @@ fn extract_column_mapping(
 
           mapping.push(ViewColumn {
             column: column_with_alias(
-              &column,
+              column,
               to_alias(alias).unwrap_or_else(|| column.name.clone()),
             ),
             parent_name: get_parent_name(referred_table),

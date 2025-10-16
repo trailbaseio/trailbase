@@ -2,4 +2,7 @@
 import type { HttpContextKind } from "./HttpContextKind";
 import type { HttpContextUser } from "./HttpContextUser";
 
+/**
+ * Used to pass extra information from host to guest via an HTTP request header "__context".
+ */
 export type HttpContext = { kind: HttpContextKind, registered_path: string, path_params: Array<[string, string]>, user: HttpContextUser | null, };

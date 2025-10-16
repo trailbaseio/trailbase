@@ -7,7 +7,7 @@ import {
   StatusCode,
   buildJsonResponse,
 } from "trailbase-wasm/http";
-import { execute, query } from "trailbase-wasm/db";
+import { execute, query, Transaction } from "trailbase-wasm/db";
 
 export default defineConfig({
   httpHandlers: [
@@ -52,6 +52,24 @@ export default defineConfig({
       ]);
 
       console.assert(numInsertions === numDeletions);
+
+      return "Ok";
+    }),
+    HttpHandler.get("/transaction", async () => {
+      const tx = new Transaction();
+
+      tx.execute("CREATE TABLE IF NOT EXISTS tx (id INTEGER PRIMARY KEY)", []);
+
+      const rows = tx.query("SELECT COUNT(*) FROM tx", []);
+      const count = rows[0][0] as bigint;
+      console.assert(count >= 0);
+
+      const rowsAffected = tx.execute("INSERT INTO tx (id) VALUES (?1)", [
+        Number(count) + 1,
+      ]);
+      console.assert(rowsAffected == 1);
+
+      tx.commit();
 
       return "Ok";
     }),

@@ -55,13 +55,15 @@ import {
 import { showToast } from "@/components/ui/toast";
 import { DataTable } from "@/components/Table";
 
-import { createTableSchemaQuery } from "@/lib/table";
 import type { QueryResponse } from "@bindings/QueryResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
+import type { SqlValue } from "@bindings/SqlValue";
+
+import { createTableSchemaQuery } from "@/lib/table";
 import { executeSql, type ExecutionResult } from "@/lib/fetch";
 import { isNotNull } from "@/lib/schema";
-
-type RowData = Array<object>;
+import { sqlValueToString } from "@/lib/value";
+import type { RowData } from "@/lib/convert";
 
 function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   const schema: {
@@ -132,13 +134,13 @@ function ResultView(props: {
 }) {
   const response = () => props.response ?? props.script.result;
 
-  function columnDefs(data: QueryResponse): ColumnDef<RowData>[] {
+  function columnDefs(data: QueryResponse): ColumnDef<RowData, SqlValue>[] {
     return (data.columns ?? []).map((col, idx) => {
       const notNull = isNotNull(col.options);
 
       const header = `${col.name} [${col.data_type}${notNull ? "" : "?"}]`;
       return {
-        accessorFn: (row) => row[idx],
+        accessorFn: (row: RowData) => sqlValueToString(row[idx]),
         header,
       };
     });

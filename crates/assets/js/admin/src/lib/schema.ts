@@ -354,6 +354,13 @@ export function isNullableColumn(opts: {
     return true;
   }
 
+  // Anything goes.
+  //
+  // NOTE: Technically, any non-strict column is nullable. But that's not an input we allow to construct.
+  if (opts.type === "Any") {
+    return true;
+  }
+
   return false;
 }
 

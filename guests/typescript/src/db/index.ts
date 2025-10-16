@@ -1,3 +1,5 @@
+import * as JSON from "../json";
+
 import {
   txBegin,
   txCommit,
@@ -9,23 +11,15 @@ import {
 import type { SqliteRequest } from "@common/SqliteRequest";
 import type { Value } from "./value";
 
-import { JsonValue } from "@common/serde_json/JsonValue";
-import { fromJsonValue, toJsonValue, toWitValue, fromWitValue } from "./value";
+import { SqlValue } from "@common/SqlValue";
+import {
+  fromJsonSqlValue,
+  toJsonSqlValue,
+  toWitValue,
+  fromWitValue,
+} from "./value";
 
 export type { Value } from "trailbase:runtime/host-endpoint";
-
-// export class DbError extends Error {
-//   readonly error: TxError;
-//
-//   constructor(error: TxError) {
-//     super(`${error}`);
-//     this.error = error;
-//   }
-//
-//   public override toString(): string {
-//     return `DbError(${this.error})`;
-//   }
-// }
 
 export class Transaction {
   constructor() {
@@ -56,7 +50,7 @@ export async function query(
 ): Promise<Value[][]> {
   const body: SqliteRequest = {
     query,
-    params: params.map(toJsonValue),
+    params: params.map(toJsonSqlValue),
   };
   const reply = await fetch("http://__sqlite/query", {
     method: "POST",
@@ -64,15 +58,15 @@ export async function query(
     body: JSON.stringify(body),
   });
 
-  const json = await reply.json();
+  const json = parseJSON(await reply.text());
   if ("Error" in json) {
     const response = json as { Error: string };
     throw new Error(response.Error);
   }
 
   try {
-    const response = json as { Query: { rows: Array<Array<JsonValue>> } };
-    return response.Query.rows.map((row) => row.map(fromJsonValue));
+    const response = json as { Query: { rows: Array<Array<SqlValue>> } };
+    return response.Query.rows.map((row) => row.map(fromJsonSqlValue));
   } catch (e) {
     throw new Error(`Unexpected response '${JSON.stringify(json)}': ${e}`);
   }
@@ -81,7 +75,7 @@ export async function query(
 export async function execute(query: string, params: Value[]): Promise<number> {
   const body: SqliteRequest = {
     query,
-    params: params.map(toJsonValue),
+    params: params.map(toJsonSqlValue),
   };
   const reply = await fetch("http://__sqlite/execute", {
     method: "POST",
@@ -89,7 +83,7 @@ export async function execute(query: string, params: Value[]): Promise<number> {
     body: JSON.stringify(body),
   });
 
-  const json = await reply.json();
+  const json = parseJSON(await reply.text());
   if ("Error" in json) {
     const response = json as { Error: string };
     throw new Error(response.Error);
@@ -101,4 +95,32 @@ export async function execute(query: string, params: Value[]): Promise<number> {
   } catch (e) {
     throw new Error(`Unexpected response '${JSON.stringify(json)}': ${e}`);
   }
+}
+
+// BigInt JSON stringify/parse shenanigans.
+declare global {
+  interface BigInt {
+    toJSON(): unknown;
+  }
+}
+
+BigInt.prototype.toJSON = function () {
+  return JSON.rawJSON(this.toString());
+};
+
+function parseJSON(text: string) {
+  function reviver(_key: string, value: unknown, context: { source: string }) {
+    if (
+      typeof value === "number" &&
+      Number.isInteger(value) &&
+      !Number.isSafeInteger(value)
+    ) {
+      // Ignore the value because it has already lost precision
+      return BigInt(context.source);
+    }
+    return value;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return JSON.parse(text, reviver as any);
 }

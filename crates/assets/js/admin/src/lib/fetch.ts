@@ -3,8 +3,6 @@ import { persistentAtom } from "@nanostores/persistent";
 import type { Client, Tokens, User } from "trailbase";
 import { initClient } from "trailbase";
 
-import { showToast } from "@/components/ui/toast";
-
 import type { QueryResponse } from "@bindings/QueryResponse";
 import type { QueryRequest } from "@bindings/QueryRequest";
 
@@ -46,22 +44,12 @@ export async function adminFetch(
     throw Error("Should start with '/'");
   }
 
-  try {
-    return await client.fetch(`/api/_admin${input}`, {
-      headers: {
-        "Content-Type": "application/json",
-      },
-      ...init,
-    });
-  } catch (err) {
-    showToast({
-      title: "Fetch Error",
-      description: `${err}`,
-      variant: "error",
-    });
-
-    throw err;
-  }
+  return await client.fetch(`/api/_admin${input}`, {
+    headers: {
+      "Content-Type": "application/json",
+    },
+    ...init,
+  });
 }
 
 export type ExecutionError = {

@@ -1,20 +1,20 @@
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
+use trailbase_common::SqlValue;
 use trailbase_schema::parse::parse_into_statements;
 use trailbase_schema::sqlite::Column;
 use ts_rs::TS;
 
+use crate::AppState;
 use crate::admin::AdminError as Error;
-use crate::admin::util::rows_to_flat_json_arrays;
-use crate::app_state::AppState;
+use crate::admin::util::{rows_to_columns, rows_to_sql_value_rows};
 
 #[derive(Debug, Default, Serialize, TS)]
 #[ts(export)]
 pub struct QueryResponse {
   columns: Option<Vec<Column>>,
 
-  #[ts(type = "Object[][]")]
-  rows: Vec<Vec<serde_json::Value>>,
+  rows: Vec<Vec<SqlValue>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, TS)]
@@ -79,12 +79,9 @@ pub async fn query_handler(
 
   let batched_rows = batched_rows_result.map_err(|err| Error::BadRequest(err.into()))?;
   if let Some(rows) = batched_rows {
-    let columns = crate::admin::util::rows_to_columns(&rows);
-    let rows = rows_to_flat_json_arrays(&rows)?;
-
     return Ok(Json(QueryResponse {
-      columns: Some(columns),
-      rows,
+      columns: Some(rows_to_columns(&rows)),
+      rows: rows_to_sql_value_rows(&rows)?,
     }));
   }
   return Ok(Json(QueryResponse::default()));

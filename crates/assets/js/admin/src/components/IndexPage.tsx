@@ -11,6 +11,7 @@ import {
 } from "solid-icons/tb";
 
 import { executeSql } from "@/lib/fetch";
+import { castToInteger } from "@/lib/convert";
 
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
@@ -100,10 +101,10 @@ const elements = [
 ] as Element[];
 
 type Data = {
-  dbSize: number;
-  numTables: number;
-  numViews: number;
-  numUsers: number;
+  dbSize: bigint;
+  numTables: bigint;
+  numViews: bigint;
+  numUsers: bigint;
 };
 
 function FactCard(props: { title: string; content: string; href?: string }) {
@@ -153,10 +154,10 @@ async function fetchDashboardData(): Promise<Data> {
   }
   const row = data.rows[0];
   return {
-    dbSize: row[0] as number,
-    numTables: row[1] as number,
-    numViews: row[2] as number,
-    numUsers: row[3] as number,
+    dbSize: castToInteger(row[0]),
+    numTables: castToInteger(row[1]),
+    numViews: castToInteger(row[2]),
+    numUsers: castToInteger(row[3]),
   } as Data;
 }
 
@@ -185,7 +186,7 @@ export function IndexPage() {
             />
             <FactCard
               title="Size"
-              content={`${(dashboardFetch.data!.dbSize / 1024 / 1024).toPrecision(2)} MB`}
+              content={`${(Number(dashboardFetch.data!.dbSize) / 1024 / 1024).toPrecision(2)} MB`}
             />
           </div>
         )}

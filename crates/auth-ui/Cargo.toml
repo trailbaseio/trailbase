@@ -15,8 +15,8 @@ crate-type = ["cdylib"]
 askama = { workspace = true }
 itertools = "0.14.0"
 rust-embed = { workspace = true }
-serde = { version = "^1.0.203", features = ["derive"] }
-serde_json = "^1.0.117"
+serde = { workspace = true }
+serde_json = { workspace = true }
 trailbase-wasm = { workspace = true }
 
 [build-dependencies]

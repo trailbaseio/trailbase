@@ -3,7 +3,7 @@ use http_body_util::{BodyExt, combinators::BoxBody};
 use rusqlite::Transaction;
 use self_cell::{MutBorrow, self_cell};
 use tokio::time::Duration;
-use trailbase_schema::json::{JsonError, rich_json_to_value, value_to_rich_json};
+use trailbase_common::sql_value::{DecodeError, SqlValue};
 use trailbase_sqlite::connection::ArcLockGuard;
 use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime_wasi_http::bindings::http::types::ErrorCode;
@@ -39,93 +39,13 @@ async fn handle_sqlite_request_impl(
   request: hyper::Request<wasmtime_wasi_http::body::HyperOutgoingBody>,
 ) -> Result<SqliteResponse, String> {
   return match request.uri().path() {
-    // "/tx_begin" => {
-    //   let new_tx = new_tx(conn).await.map_err(sqlite_err)?;
-    //
-    //   CURRENT_TX.with(|tx: &Mutex<_>| {
-    //     *tx.lock() = Some(new_tx);
-    //   });
-    //
-    //   Ok(SqliteResponse::TxBegin)
-    // }
-    // "/tx_commit" => {
-    //   let tx = CURRENT_TX.with(|tx: &Mutex<_>| {
-    //     return tx.lock().take();
-    //   });
-    //   if let Some(tx) = tx {
-    //     // NOTE: this is the same as `tx.commit()` just w/o consuming.
-    //     let lock = tx.borrow_dependent();
-    //     lock.execute_batch("COMMIT").map_err(sqlite_err)?;
-    //   }
-    //
-    //   Ok(SqliteResponse::TxCommit)
-    // }
-    // "/tx_execute" => {
-    //   let sqlite_request = to_request(request).await?;
-    //
-    //   let params = json_values_to_sqlite_params(sqlite_request.params).map_err(sqlite_err)?;
-    //
-    //   let rows_affected = CURRENT_TX.with(move |tx: &Mutex<_>| -> Result<usize, String> {
-    //     let Some(ref tx) = *tx.lock() else {
-    //       return Err("No open transaction".to_string());
-    //     };
-    //     let lock = tx.borrow_dependent();
-    //
-    //     let mut stmt = lock.prepare(&sqlite_request.query).map_err(sqlite_err)?;
-    //
-    //     params.bind(&mut stmt).map_err(sqlite_err)?;
-    //
-    //     return stmt.raw_execute().map_err(sqlite_err);
-    //   })?;
-    //
-    //   Ok(SqliteResponse::Execute { rows_affected })
-    // }
-    // "/tx_query " => {
-    //   let sqlite_request = to_request(request).await?;
-    //
-    //   let params = json_values_to_sqlite_params(sqlite_request.params).map_err(sqlite_err)?;
-    //
-    //   let rows = CURRENT_TX.with(move |tx: &Mutex<_>| -> Result<Rows, String> {
-    //     let Some(ref tx) = *tx.lock() else {
-    //       return Err("No open transaction".to_string());
-    //     };
-    //     let lock = tx.borrow_dependent();
-    //
-    //     let mut stmt = lock.prepare(&sqlite_request.query).map_err(sqlite_err)?;
-    //
-    //     params.bind(&mut stmt).map_err(sqlite_err)?;
-    //
-    //     return Rows::from_rows(stmt.raw_query()).map_err(sqlite_err);
-    //   })?;
-    //
-    //   let json_rows = rows
-    //     .iter()
-    //     .map(|row| -> Result<Vec<serde_json::Value>, String> {
-    //       return row_to_rich_json_array(row).map_err(sqlite_err);
-    //     })
-    //     .collect::<Result<Vec<_>, _>>()?;
-    //
-    //   Ok(SqliteResponse::Query { rows: json_rows })
-    // }
-    // "/tx_rollback " => {
-    //   let tx = CURRENT_TX.with(|tx: &Mutex<_>| {
-    //     return tx.lock().take();
-    //   });
-    //   if let Some(tx) = tx {
-    //     // NOTE: this is the same as `tx.rollback()` just w/o consuming.
-    //     let lock = tx.borrow_dependent();
-    //     lock.execute_batch("ROLLBACK").map_err(sqlite_err)?;
-    //   }
-    //
-    //   Ok(SqliteResponse::TxRollback)
-    // }
     "/execute" => {
       let sqlite_request = to_request(request).await?;
 
       let rows_affected = conn
         .execute(
           sqlite_request.query,
-          json_values_to_sqlite_params(sqlite_request.params).map_err(sqlite_err)?,
+          sql_values_to_sqlite_params(sqlite_request.params).map_err(sqlite_err)?,
         )
         .await
         .map_err(sqlite_err)?;
@@ -138,16 +58,14 @@ async fn handle_sqlite_request_impl(
       let rows = conn
         .write_query_rows(
           sqlite_request.query,
-          json_values_to_sqlite_params(sqlite_request.params).map_err(sqlite_err)?,
+          sql_values_to_sqlite_params(sqlite_request.params).map_err(sqlite_err)?,
         )
         .await
         .map_err(sqlite_err)?;
 
       let json_rows = rows
         .iter()
-        .map(|row| -> Result<Vec<serde_json::Value>, String> {
-          return row_to_rich_json_array(row).map_err(sqlite_err);
-        })
+        .map(convert_values)
         .collect::<Result<Vec<_>, _>>()?;
 
       Ok(SqliteResponse::Query { rows: json_rows })
@@ -192,19 +110,17 @@ fn to_response(
   });
 }
 
-pub(crate) fn json_values_to_sqlite_params(
-  values: Vec<serde_json::Value>,
-) -> Result<Vec<trailbase_sqlite::Value>, JsonError> {
-  return values.into_iter().map(rich_json_to_value).collect();
+pub(crate) fn sql_values_to_sqlite_params(
+  values: Vec<SqlValue>,
+) -> Result<Vec<trailbase_sqlite::Value>, DecodeError> {
+  return values.into_iter().map(|p| p.try_into()).collect();
 }
 
-pub fn row_to_rich_json_array(
-  row: &trailbase_sqlite::Row,
-) -> Result<Vec<serde_json::Value>, JsonError> {
+pub fn convert_values(row: &trailbase_sqlite::Row) -> Result<Vec<SqlValue>, String> {
   return (0..row.column_count())
-    .map(|i| -> Result<serde_json::Value, JsonError> {
-      let value = row.get_value(i).ok_or(JsonError::ValueNotFound)?;
-      return value_to_rich_json(value);
+    .map(|i| -> Result<SqlValue, String> {
+      let value = row.get_value(i).ok_or_else(|| "not found".to_string())?;
+      return Ok(value.into());
     })
     .collect();
 }

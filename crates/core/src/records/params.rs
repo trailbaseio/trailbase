@@ -1,6 +1,7 @@
 use log::*;
 use std::collections::HashSet;
 use std::sync::Arc;
+use trailbase_common::SqlValue;
 use trailbase_schema::json::{flat_json_to_value, json_array_to_bytes};
 use trailbase_schema::sqlite::{Column, ColumnDataType};
 use trailbase_schema::{FileUpload, FileUploadInput, FileUploads};
@@ -37,6 +38,8 @@ pub enum ParamsError {
   Schema(#[from] trailbase_schema::Error),
   #[error("ObjectStore error: {0}")]
   Storage(Arc<object_store::Error>),
+  #[error("SqlValueDecode: {0}")]
+  SqlValueDecode(#[from] trailbase_common::DecodeError),
 }
 
 impl From<serde_json::Error> for ParamsError {
@@ -149,7 +152,6 @@ impl Params {
     accessor: &S,
     json: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
-    fancy_parse_string: bool,
   ) -> Result<Self, ParamsError> {
     let mut named_params = NamedParams::with_capacity(json.len());
     let mut column_names = Vec::with_capacity(json.len());
@@ -165,8 +167,7 @@ impl Params {
         continue;
       };
 
-      let (param, json_files) =
-        extract_params_and_files_from_json(col, json_meta, value, fancy_parse_string)?;
+      let (param, json_files) = extract_params_and_files_from_json(col, json_meta, value)?;
 
       if let Some(json_files) = json_files {
         // Note: files provided as a multipart form upload are handled below. They need more
@@ -198,13 +199,41 @@ impl Params {
     });
   }
 
+  pub fn for_admin_insert<S: SchemaAccessor>(
+    accessor: &S,
+    row: indexmap::IndexMap<String, SqlValue>,
+  ) -> Result<Self, ParamsError> {
+    let mut named_params = NamedParams::with_capacity(row.len());
+    let mut column_names = Vec::with_capacity(row.len());
+    let mut column_indexes = Vec::with_capacity(row.len());
+
+    // Insert parameters case.
+    for (key, value) in row {
+      // We simply skip unknown columns, this could simply be malformed input or version skew. This
+      // is similar in spirit to protobuf's unknown fields behavior.
+      let Some((index, _col, _json_meta)) = accessor.column_by_name(&key) else {
+        continue;
+      };
+
+      named_params.push((prefix_colon(&key).into(), value.try_into()?));
+      column_names.push(key);
+      column_indexes.push(index);
+    }
+
+    return Ok(Params::Insert {
+      named_params,
+      files: vec![],
+      column_names,
+      column_indexes,
+    });
+  }
+
   pub fn for_update<S: SchemaAccessor>(
     accessor: &S,
     json: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
     pk_column_name: String,
     pk_column_value: Value,
-    fancy_parse_string: bool,
   ) -> Result<Self, ParamsError> {
     let mut named_params = NamedParams::with_capacity(json.len() + 1);
     let mut column_names = Vec::with_capacity(json.len() + 1);
@@ -220,8 +249,7 @@ impl Params {
         continue;
       };
 
-      let (param, json_files) =
-        extract_params_and_files_from_json(col, json_meta, value, fancy_parse_string)?;
+      let (param, json_files) = extract_params_and_files_from_json(col, json_meta, value)?;
       if let Some(json_files) = json_files {
         // Note: files provided as a multipart form upload are handled below. They need more
         // special handling to establish the field.name to column mapping.
@@ -262,6 +290,52 @@ impl Params {
       pk_column_name,
     });
   }
+
+  pub fn for_admin_update<S: SchemaAccessor>(
+    accessor: &S,
+    row: indexmap::IndexMap<String, SqlValue>,
+    pk_column_name: String,
+    pk_column_value: SqlValue,
+  ) -> Result<Self, ParamsError> {
+    let mut named_params = NamedParams::with_capacity(row.len() + 1);
+    let mut column_names = Vec::with_capacity(row.len() + 1);
+    let mut column_indexes = Vec::with_capacity(row.len() + 1);
+
+    let pk_column_param = pk_column_value.try_into()?;
+
+    // Update parameters case.
+    for (key, value) in row {
+      // We simply skip unknown columns, this could simply be malformed input or version skew. This
+      // is similar in spirit to protobuf's unknown fields behavior.
+      let Some((index, _col, _json_meta)) = accessor.column_by_name(&key) else {
+        continue;
+      };
+
+      let param: Value = value.try_into()?;
+
+      if key == pk_column_name && pk_column_param != param {
+        return Err(ParamsError::Column(
+          "Primary key mismatch in update request",
+        ));
+      }
+
+      named_params.push((prefix_colon(&key).into(), param));
+      column_names.push(key);
+      column_indexes.push(index);
+    }
+
+    // Inject the pk_value. It may already be present, if redundantly provided both in the API path
+    // *and* the request. In most cases it probably wont and duplication is not an issue.
+    named_params.push((":__pk_value".into(), pk_column_param));
+
+    return Ok(Params::Update {
+      named_params,
+      files: vec![],
+      column_names,
+      column_indexes,
+      pk_column_name,
+    });
+  }
 }
 
 /// A lazy representation of SQL query parameters derived from the request json to share between
@@ -282,7 +356,7 @@ impl<'a> LazyParams<'a> {
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Self {
     return LazyParams::LazyInsert(Some(Box::new(move || {
-      return Params::for_insert(accessor, json_row, multipart_files, false);
+      return Params::for_insert(accessor, json_row, multipart_files);
     })));
   }
 
@@ -300,7 +374,6 @@ impl<'a> LazyParams<'a> {
         multipart_files,
         primary_key_column,
         primary_key_value,
-        false,
       );
     })));
   }
@@ -402,7 +475,6 @@ fn extract_params_and_files_from_json(
   col: &Column,
   json_meta: Option<&JsonColumnMetadata>,
   value: serde_json::Value,
-  fancy_parse_string: bool,
 ) -> Result<(Value, Option<FileMetadataContents>), ParamsError> {
   return match value {
     serde_json::Value::Object(ref _map) => {
@@ -474,10 +546,7 @@ fn extract_params_and_files_from_json(
         "Received nested array for column: {col:?}",
       )))
     }
-    x => Ok((
-      flat_json_to_value(col.data_type, x, fancy_parse_string)?,
-      None,
-    )),
+    x => Ok((flat_json_to_value(col.data_type, x)?, None)),
   };
 }
 
@@ -604,7 +673,7 @@ mod tests {
       });
 
       assert_params(
-        &Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, false).unwrap(),
+        &Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None).unwrap(),
       );
     }
 
@@ -619,9 +688,10 @@ mod tests {
       });
 
       assert_params(
-        &Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, false).unwrap(),
+        &Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None).unwrap(),
       );
 
+      // Make sure we're strictly parsing, e.g. not converting strings to numbers.
       let value = json!({
         ID_COL: id,
         "blob": blob,
@@ -631,16 +701,7 @@ mod tests {
       });
 
       assert!(
-        Params::for_insert(
-          &metadata,
-          json_row_from_value(value.clone()).unwrap(),
-          None,
-          false
-        )
-        .is_err()
-      );
-      assert_params(
-        &Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, true).unwrap(),
+        Params::for_insert(&metadata, json_row_from_value(value.clone()).unwrap(), None).is_err()
       );
     }
 
@@ -655,9 +716,7 @@ mod tests {
         "real": 3,
       });
 
-      assert!(
-        Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, false).is_err()
-      );
+      assert!(Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None).is_err());
 
       // Test that nested JSON object can be passed.
       let value = json!({
@@ -672,7 +731,7 @@ mod tests {
       });
 
       let params =
-        Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, false).unwrap();
+        Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None).unwrap();
       assert_params(&params);
     }
 
@@ -685,9 +744,7 @@ mod tests {
         "real": 3,
       });
 
-      assert!(
-        Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, false).is_err()
-      );
+      assert!(Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None).is_err());
 
       // Test that nested JSON array can be passed.
       let nested_json_blob: Vec<u8> = vec![65, 66, 67, 68];
@@ -705,7 +762,7 @@ mod tests {
       });
 
       let params =
-        Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None, false).unwrap();
+        Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None).unwrap();
 
       assert_params(&params);
 

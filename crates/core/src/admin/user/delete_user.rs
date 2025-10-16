@@ -5,6 +5,7 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use serde::Deserialize;
+use trailbase_common::{Blob, SqlValue};
 use trailbase_schema::QualifiedName;
 use ts_rs::TS;
 
@@ -37,7 +38,7 @@ pub async fn delete_user_handler(
       database_schema: None,
     },
     "id",
-    serde_json::Value::String(uuid_to_b64(&request.id)),
+    SqlValue::Blob(Blob::Base64UrlSafe(uuid_to_b64(&request.id))),
   )
   .await?;
 

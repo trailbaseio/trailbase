@@ -1,5 +1,4 @@
 import { expect, test, describe } from "vitest";
-import { copyRow, type FormRow } from "@/lib/convert";
 
 import { parseFilter } from "@/lib/list";
 
@@ -32,25 +31,5 @@ describe("filterParser", () => {
       ["filter[$and][0][$or][1][x][$eq]", "4"],
       ["filter[$and][1][y][$ne]", "foo"],
     ]);
-  });
-});
-
-describe("utils", () => {
-  test("coypAndConvertRow", () => {
-    const x: FormRow = {
-      text: "test",
-      number: 5,
-      boolean: true,
-    };
-
-    const y = copyRow(x);
-    for (const key of Object.keys(x)) {
-      expect(x[key]).toBe(y[key]);
-    }
-
-    // Make sure it's an actual copy.
-    y["text"] = "update";
-
-    expect(x["text"]).toBe("test");
   });
 });

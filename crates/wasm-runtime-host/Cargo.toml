@@ -24,10 +24,10 @@ log = { version = "^0.4.21", default-features = false }
 parking_lot = { workspace = true }
 rusqlite = { workspace = true }
 self_cell = "1.2.0"
-serde = { version = "^1.0.203", features = ["derive"] }
-serde_json = "^1.0.117"
+serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = "2.0.14"
-trailbase-schema = { workspace = true }
+trailbase-common = { workspace = true, features = ["rusqlite"] }
 trailbase-sqlite = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 trailbase-wasi-keyvalue = { workspace = true }

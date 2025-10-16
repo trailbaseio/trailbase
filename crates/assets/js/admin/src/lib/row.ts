@@ -4,7 +4,7 @@ import {
   findPrimaryKeyColumnIndex,
   prettyFormatQualifiedName,
 } from "@/lib/schema";
-import { preProcessRow, type FormRow } from "@/lib/convert";
+import type { Record } from "@/lib/convert";
 
 import type { Table } from "@bindings/Table";
 import type { InsertRowRequest } from "@bindings/InsertRowRequest";
@@ -13,11 +13,9 @@ import type { DeleteRowsRequest } from "@bindings/DeleteRowsRequest";
 import type { ListRowsResponse } from "@bindings/ListRowsResponse";
 import type { QualifiedName } from "@bindings/QualifiedName";
 
-export async function insertRow(table: Table, row: FormRow) {
-  const processedRow = preProcessRow(table, row, false);
-
+export async function insertRow(table: Table, row: Record) {
   const request: InsertRowRequest = {
-    row: processedRow,
+    row: row,
   };
 
   const tableName: string = prettyFormatQualifiedName(table.name);
@@ -29,7 +27,7 @@ export async function insertRow(table: Table, row: FormRow) {
   return await response.text();
 }
 
-export async function updateRow(table: Table, row: FormRow) {
+export async function updateRow(table: Table, row: Record) {
   const tableName: string = prettyFormatQualifiedName(table.name);
   const primaryKeyColumIndex = findPrimaryKeyColumnIndex(table.columns);
   if (primaryKeyColumIndex < 0) {
@@ -43,14 +41,13 @@ export async function updateRow(table: Table, row: FormRow) {
   }
 
   // Update cannot change the PK value.
-  const processedRow = preProcessRow(table, row, true);
-  delete processedRow[pkColName];
+  // const processedRow = preProcessRow(table, row, true);
+  delete row[pkColName];
 
   const request: UpdateRowRequest = {
     primary_key_column: pkColName,
-    // eslint-disable-next-line @typescript-eslint/no-wrapper-object-types
-    primary_key_value: pkValue as Object,
-    row: processedRow,
+    primary_key_value: pkValue,
+    row: row,
   };
 
   const response = await adminFetch(`/table/${tableName}`, {

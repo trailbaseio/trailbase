@@ -7896,6 +7896,7 @@ dependencies = [
  "tracing-subscriber",
  "trailbase-assets",
  "trailbase-build",
+ "trailbase-common",
  "trailbase-extension",
  "trailbase-js",
  "trailbase-qs",
@@ -7979,6 +7980,18 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "trailbase-common"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "rusqlite",
+ "serde",
+ "serde_bytes",
+ "thiserror 2.0.17",
+ "ts-rs",
 ]
 
 [[package]]
@@ -8148,6 +8161,7 @@ dependencies = [
  "serde_urlencoded",
  "static_assertions",
  "thiserror 2.0.17",
+ "trailbase-common",
  "trailbase-wasm-common 0.1.0",
  "url",
  "wit-bindgen",
@@ -8184,7 +8198,7 @@ name = "trailbase-wasm-common"
 version = "0.1.0"
 dependencies = [
  "serde",
- "serde_json",
+ "trailbase-common",
  "ts-rs",
 ]
 
@@ -8218,7 +8232,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tracing",
- "trailbase-schema",
+ "trailbase-common",
  "trailbase-sqlite",
  "trailbase-wasi-keyvalue",
  "trailbase-wasm-common 0.1.0",
@@ -8250,6 +8264,7 @@ version = "11.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4994acea2522cd2b3b85c1d9529a55991e3ad5e25cdcd3de9d505972c4379424"
 dependencies = [
+ "indexmap 2.12.0",
  "serde_json",
  "thiserror 2.0.17",
  "ts-rs-macros",

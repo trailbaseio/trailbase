@@ -798,6 +798,8 @@ mod tests {
   use http_body_util::combinators::BoxBody;
   use trailbase_wasm_common::{HttpContext, HttpContextKind};
 
+  const WASM_COMPONENT_PATH: &str = "../../client/testfixture/wasm/wasm_guest_testfixture.wasm";
+
   #[tokio::test]
   async fn test_init() {
     let executor = SharedExecutor::new(Some(2));
@@ -805,7 +807,7 @@ mod tests {
     let kv_store = KvStore::new();
     let runtime = Runtime::new(
       executor,
-      "../../client/testfixture/wasm/wasm_rust_guest_testfixture.wasm".into(),
+      WASM_COMPONENT_PATH.into(),
       conn.clone(),
       kv_store,
       RuntimeOptions {
@@ -832,7 +834,7 @@ mod tests {
     .await
     .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::OK, "{response:?}");
 
     assert_eq!(
       1,
@@ -852,7 +854,7 @@ mod tests {
     let runtime = Arc::new(
       Runtime::new(
         executor,
-        "../../client/testfixture/wasm/wasm_rust_guest_testfixture.wasm".into(),
+        WASM_COMPONENT_PATH.into(),
         conn.clone(),
         kv_store,
         RuntimeOptions {

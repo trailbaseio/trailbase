@@ -1,7 +1,7 @@
 import { test, expect } from "vitest";
 import {
-  fromJsonValue,
-  toJsonValue,
+  fromJsonSqlValue,
+  toJsonSqlValue,
   fromWitValue,
   toWitValue,
 } from "../src/db/value";
@@ -20,25 +20,25 @@ test("base64", () => {
 });
 
 test("JSON value conversion", () => {
-  expect(fromJsonValue(toJsonValue(true))).toEqual(1);
-  expect(fromJsonValue(toJsonValue(false))).toEqual(0);
-  expect(fromJsonValue(toJsonValue(5))).toEqual(5);
-  expect(fromJsonValue(toJsonValue(-5))).toEqual(-5);
-  expect(fromJsonValue(toJsonValue(5.123))).toEqual(5.123);
-  expect(fromJsonValue(toJsonValue(-5.123))).toEqual(-5.123);
-  expect(fromJsonValue(toJsonValue(""))).toEqual("");
-  expect(fromJsonValue(toJsonValue(Uint8Array.from([])))).toEqual(
+  expect(fromJsonSqlValue(toJsonSqlValue(true))).toEqual(1n);
+  expect(fromJsonSqlValue(toJsonSqlValue(false))).toEqual(0n);
+  expect(fromJsonSqlValue(toJsonSqlValue(5))).toEqual(5);
+  expect(fromJsonSqlValue(toJsonSqlValue(-5))).toEqual(-5);
+  expect(fromJsonSqlValue(toJsonSqlValue(5.123))).toEqual(5.123);
+  expect(fromJsonSqlValue(toJsonSqlValue(-5.123))).toEqual(-5.123);
+  expect(fromJsonSqlValue(toJsonSqlValue(""))).toEqual("");
+  expect(fromJsonSqlValue(toJsonSqlValue(Uint8Array.from([])))).toEqual(
     Uint8Array.from([]),
   );
-  expect(fromJsonValue(toJsonValue(Uint8Array.from([0, 0])))).toEqual(
+  expect(fromJsonSqlValue(toJsonSqlValue(Uint8Array.from([0, 0])))).toEqual(
     Uint8Array.from([0, 0]),
   );
-  expect(fromJsonValue(toJsonValue(null))).toEqual(null);
+  expect(fromJsonSqlValue(toJsonSqlValue(null))).toEqual(null);
 });
 
 test("Wit value conversion", () => {
-  expect(fromWitValue(toWitValue(true))).toEqual(1);
-  expect(fromWitValue(toWitValue(false))).toEqual(0);
+  expect(fromWitValue(toWitValue(true))).toEqual(1n);
+  expect(fromWitValue(toWitValue(false))).toEqual(0n);
   expect(fromWitValue(toWitValue(5))).toEqual(5);
   expect(fromWitValue(toWitValue(-5))).toEqual(-5);
   expect(fromWitValue(toWitValue(5.123))).toEqual(5.123);

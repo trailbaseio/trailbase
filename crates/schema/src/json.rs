@@ -54,8 +54,6 @@ pub fn value_to_flat_json(value: &SqliteValue) -> Result<serde_json::Value, Json
 pub fn flat_json_to_value(
   col_type: ColumnDataType,
   value: serde_json::Value,
-  // TODO: Remove
-  fancy_parse_string: bool,
 ) -> Result<SqliteValue, JsonError> {
   return match value {
     serde_json::Value::Object(ref _map) => Err(JsonError::UnexpectedType("Object", col_type)),
@@ -76,15 +74,7 @@ pub fn flat_json_to_value(
         false => Err(JsonError::UnexpectedType("Bool", col_type)),
       }
     }
-    serde_json::Value::String(str) => {
-      // NOTE: The only difference is whether strings should be tried to convert to numeric types
-      // based on column's storage type or not.
-      if fancy_parse_string {
-        fancy_parse_string_to_sqlite_value(col_type, str)
-      } else {
-        parse_string_to_sqlite_value(col_type, str)
-      }
-    }
+    serde_json::Value::String(str) => strict_parse_string_to_sqlite_value(col_type, str),
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
         if col_type.is_integer_kind() || col_type == ColumnDataType::Any {
@@ -178,7 +168,9 @@ pub fn rich_json_to_value(value: serde_json::Value) -> Result<SqliteValue, JsonE
   };
 }
 
-fn parse_string_to_sqlite_value(
+/// Strictly parse string to SqliteValue, i.e. w/o trying to parse e.g. strings into INT or REAL.
+#[inline]
+fn strict_parse_string_to_sqlite_value(
   data_type: ColumnDataType,
   value: String,
 ) -> Result<SqliteValue, JsonError> {
@@ -197,7 +189,7 @@ fn parse_string_to_sqlite_value(
   };
 }
 
-pub fn fancy_parse_string_to_sqlite_value(
+pub fn parse_string_to_sqlite_value(
   data_type: ColumnDataType,
   value: String,
 ) -> Result<SqliteValue, JsonError> {
@@ -255,7 +247,8 @@ mod tests {
       .await
       .unwrap();
 
-    let value = parse_string_to_sqlite_value(ColumnDataType::Blob, id_string.to_string()).unwrap();
+    let value =
+      strict_parse_string_to_sqlite_value(ColumnDataType::Blob, id_string.to_string()).unwrap();
     let blob = match value {
       rusqlite::types::Value::Blob(ref blob) => blob.clone(),
       _ => panic!("Not a blob"),

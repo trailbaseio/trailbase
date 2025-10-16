@@ -1,5 +1,4 @@
-use base64::prelude::*;
-use serde::Serialize;
+use trailbase_common::sql_value::{Blob, DecodeError, SqlValue};
 use wstd::http::body::IntoBody;
 use wstd::http::{Client, Request};
 
@@ -54,7 +53,7 @@ pub enum Error {
   #[error("Not a Number")]
   NotANumber,
   #[error("Decoding")]
-  Decording(#[from] base64::DecodeError),
+  Decoding(#[from] DecodeError),
   #[error("Other: {0}")]
   Other(String),
 }
@@ -65,7 +64,7 @@ pub async fn query(
 ) -> Result<Vec<Vec<Value>>, Error> {
   let r = SqliteRequest {
     query: query.to_string(),
-    params: params.into().into_iter().map(to_json_value).collect(),
+    params: params.into().into_iter().map(to_sql_value).collect(),
   };
   let request = Request::builder()
     .uri("http://__sqlite/query")
@@ -96,7 +95,7 @@ pub async fn query(
         .map(|row| {
           row
             .into_iter()
-            .map(from_json_value)
+            .map(from_sql_value)
             .collect::<Result<Vec<_>, _>>()
         })
         .collect::<Result<Vec<_>, _>>()?,
@@ -112,7 +111,7 @@ pub async fn execute(
 ) -> Result<usize, Error> {
   let r = SqliteRequest {
     query: query.to_string(),
-    params: params.into().into_iter().map(to_json_value).collect(),
+    params: params.into().into_iter().map(to_sql_value).collect(),
   };
   let request = Request::builder()
     .uri("http://__sqlite/execute")
@@ -143,62 +142,82 @@ pub async fn execute(
   };
 }
 
-fn from_json_value(value: serde_json::Value) -> Result<Value, Error> {
+// fn from_json_value(value: serde_json::Value) -> Result<Value, Error> {
+//   return match value {
+//     serde_json::Value::Null => Ok(Value::Null),
+//     serde_json::Value::String(s) => Ok(Value::Text(s)),
+//     serde_json::Value::Object(mut map) => match map.remove("blob") {
+//       Some(serde_json::Value::String(str)) => Ok(Value::Blob(BASE64_URL_SAFE.decode(&str)?)),
+//       _ => Err(Error::UnexpectedType),
+//     },
+//     serde_json::Value::Number(n) => {
+//       if let Some(n) = n.as_i64() {
+//         Ok(Value::Integer(n))
+//       } else if let Some(n) = n.as_u64() {
+//         Ok(Value::Integer(n as i64))
+//       } else if let Some(n) = n.as_f64() {
+//         Ok(Value::Real(n))
+//       } else {
+//         Err(Error::NotANumber)
+//       }
+//     }
+//     _ => Err(Error::UnexpectedType),
+//   };
+// }
+
+fn from_sql_value(value: SqlValue) -> Result<Value, DecodeError> {
   return match value {
-    serde_json::Value::Null => Ok(Value::Null),
-    serde_json::Value::String(s) => Ok(Value::Text(s)),
-    serde_json::Value::Object(mut map) => match map.remove("blob") {
-      Some(serde_json::Value::String(str)) => Ok(Value::Blob(BASE64_URL_SAFE.decode(&str)?)),
-      _ => Err(Error::UnexpectedType),
-    },
-    serde_json::Value::Number(n) => {
-      if let Some(n) = n.as_i64() {
-        Ok(Value::Integer(n))
-      } else if let Some(n) = n.as_u64() {
-        Ok(Value::Integer(n as i64))
-      } else if let Some(n) = n.as_f64() {
-        Ok(Value::Real(n))
-      } else {
-        Err(Error::NotANumber)
-      }
-    }
-    _ => Err(Error::UnexpectedType),
+    SqlValue::Null => Ok(Value::Null),
+    SqlValue::Integer(v) => Ok(Value::Integer(v)),
+    SqlValue::Real(v) => Ok(Value::Real(v)),
+    SqlValue::Text(v) => Ok(Value::Text(v)),
+    SqlValue::Blob(v) => Ok(Value::Blob(v.into_bytes()?)),
   };
 }
 
-#[derive(Serialize)]
-struct Blob {
-  blob: String,
-}
+// #[derive(Serialize)]
+// struct Blob {
+//   blob: String,
+// }
+//
+// impl serde::ser::Serialize for Value {
+//   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//   where
+//     S: serde::ser::Serializer,
+//   {
+//     return match self {
+//       Value::Null => serializer.serialize_unit(),
+//       Value::Text(s) => serializer.serialize_str(s),
+//       Value::Integer(i) => serializer.serialize_i64(*i),
+//       Value::Real(f) => serializer.serialize_f64(*f),
+//       Value::Blob(blob) => serializer.serialize_some(&Blob {
+//         blob: BASE64_URL_SAFE.encode(blob),
+//       }),
+//     };
+//   }
+// }
 
-impl serde::ser::Serialize for Value {
-  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-  where
-    S: serde::ser::Serializer,
-  {
-    return match self {
-      Value::Null => serializer.serialize_unit(),
-      Value::Text(s) => serializer.serialize_str(s),
-      Value::Integer(i) => serializer.serialize_i64(*i),
-      Value::Real(f) => serializer.serialize_f64(*f),
-      Value::Blob(blob) => serializer.serialize_some(&Blob {
-        blob: BASE64_URL_SAFE.encode(blob),
-      }),
-    };
-  }
-}
-
-pub fn to_json_value(value: Value) -> serde_json::Value {
+pub fn to_sql_value(value: Value) -> SqlValue {
   return match value {
-    Value::Null => serde_json::Value::Null,
-    Value::Text(s) => serde_json::Value::String(s),
-    Value::Integer(i) => serde_json::Value::Number(serde_json::Number::from(i)),
-    Value::Real(f) => match serde_json::Number::from_f64(f) {
-      Some(n) => serde_json::Value::Number(n),
-      None => serde_json::Value::Null,
-    },
-    Value::Blob(blob) => serde_json::json!({
-        "blob": BASE64_URL_SAFE.encode(blob)
-    }),
+    Value::Null => SqlValue::Null,
+    Value::Text(s) => SqlValue::Text(s),
+    Value::Integer(i) => SqlValue::Integer(i),
+    Value::Real(f) => SqlValue::Real(f),
+    Value::Blob(b) => SqlValue::Blob(Blob::Array(b)),
   };
 }
+
+// pub fn to_json_value(value: Value) -> serde_json::Value {
+//   return match value {
+//     Value::Null => serde_json::Value::Null,
+//     Value::Text(s) => serde_json::Value::String(s),
+//     Value::Integer(i) => serde_json::Value::Number(serde_json::Number::from(i)),
+//     Value::Real(f) => match serde_json::Number::from_f64(f) {
+//       Some(n) => serde_json::Value::Number(n),
+//       None => serde_json::Value::Null,
+//     },
+//     Value::Blob(blob) => serde_json::json!({
+//         "blob": BASE64_URL_SAFE.encode(blob)
+//     }),
+//   };
+// }

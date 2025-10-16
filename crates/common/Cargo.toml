@@ -1,14 +1,21 @@
 [package]
-name = "trailbase-wasm-common"
+name = "trailbase-common"
 version = "0.1.0"
 edition = "2024"
 license = "OSL-3.0"
-description = "WASM runtime for the TrailBase framework"
+description = "Common data structures for TrailBase"
 homepage = "https://trailbase.io"
 repository = "https://github.com/trailbaseio/trailbase"
 readme = "../../README.md"
 
+[features]
+default = []
+rusqlite = ["dep:rusqlite"]
+
 [dependencies]
+base64 = { workspace = true }
 serde = { workspace = true }
-trailbase-common = { workspace = true }
+thiserror = "2.0.12"
 ts-rs = { workspace = true }
+rusqlite= { workspace = true, optional = true }
+serde_bytes = "0.11.19"

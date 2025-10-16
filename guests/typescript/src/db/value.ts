@@ -1,42 +1,57 @@
 import type { Value as WitValue } from "trailbase:runtime/host-endpoint";
-import { JsonValue } from "@common/serde_json/JsonValue";
+import { SqlValue } from "@common/SqlValue";
+import { Blob } from "@common/Blob";
 
 import { urlSafeBase64Encode, urlSafeBase64Decode } from "../util";
 
-export type Blob = { blob: string };
-export type Value = number | string | boolean | Uint8Array | Blob | null;
+/// Public JS types for DB params.
+///
+/// TODO: We should probably remove "boolean" since, it can be encoded but never decoded.
+export type Value = null | boolean | bigint | number | string | Uint8Array;
 
-export function toJsonValue(value: Value): JsonValue {
+// TODO: this only exists while piggy-backing on HTTP and sending params as JSON requests. Remove with WASIp3 and use WitValue only.
+export function toJsonSqlValue(value: Value): SqlValue {
   if (value === null) {
-    return null;
-  } else if (typeof value === "number") {
-    return value;
-  } else if (typeof value === "string") {
-    return value;
+    return "Null";
   } else if (typeof value === "boolean") {
-    return value ? 1 : 0;
+    return { Integer: BigInt(value ? 1 : 0) };
+  } else if (typeof value === "bigint") {
+    return { Integer: value };
+  } else if (typeof value === "number") {
+    return { Real: value };
+  } else if (typeof value === "string") {
+    return { Text: value };
   } else if (value instanceof Uint8Array) {
-    return { blob: urlSafeBase64Encode(value) };
-  } else if ("blob" in value) {
-    return value;
+    return {
+      Blob: {
+        Base64UrlSafe: urlSafeBase64Encode(value),
+      },
+    };
   }
 
   throw new Error(`Invalid value: ${value}`);
 }
 
-export function fromJsonValue(value: JsonValue): Value {
-  if (value === null) {
-    return value;
-  } else if (typeof value === "number") {
-    return value;
-  } else if (typeof value === "string") {
-    return value;
-  } else if (typeof value === "boolean") {
-    return value ? 1 : 0;
-  } else if ("blob" in value) {
-    return urlSafeBase64Decode((value as Blob).blob);
-  } else if (value == null) {
+// TODO: this only exists while piggy-backing on HTTP and sending params as JSON requests. Remove with WASIp3 and use WitValue only.
+export function fromJsonSqlValue(value: SqlValue): Value {
+  if (value === "Null") {
     return null;
+  } else if ("Integer" in value) {
+    return value.Integer;
+  } else if ("Real" in value) {
+    return value.Real;
+  } else if ("Text" in value) {
+    return value.Text;
+  } else if ("Blob" in value) {
+    const blob: Blob = value.Blob;
+    if ("Array" in blob) {
+      return Uint8Array.from(blob.Array);
+    } else if ("Base64UrlSafe" in blob) {
+      return urlSafeBase64Decode(blob.Base64UrlSafe);
+    } else if ("Hex" in blob) {
+      // NOTE: the Host always uses Base64UrlSafe for better compression ratio.
+      throw new Error(`Hex not supported: ${value}`);
+    }
   }
 
   throw new Error(`Invalid value: ${value}`);
@@ -45,19 +60,16 @@ export function fromJsonValue(value: JsonValue): Value {
 export function toWitValue(val: Value): WitValue {
   if (val === null) {
     return { tag: "null" };
+  } else if (typeof val === "boolean") {
+    return { tag: "integer", val: val ? BigInt(1) : BigInt(0) };
+  } else if (typeof val === "bigint") {
+    return { tag: "integer", val: BigInt(val) };
   } else if (typeof val === "number") {
-    if (Number.isInteger(val)) {
-      return { tag: "integer", val: BigInt(val) };
-    }
     return { tag: "real", val };
   } else if (typeof val === "string") {
     return { tag: "text", val };
-  } else if (typeof val === "boolean") {
-    return { tag: "integer", val: val ? BigInt(1) : BigInt(0) };
   } else if (val instanceof Uint8Array) {
     return { tag: "blob", val };
-  } else if ("blob" in val) {
-    return { tag: "blob", val: urlSafeBase64Decode(val.blob) };
   }
 
   throw new Error(`Invalid value: ${val}`);
@@ -68,7 +80,7 @@ export function fromWitValue(val: WitValue): Value {
     case "null":
       return null;
     case "integer":
-      return Number(val.val);
+      return BigInt(val.val);
     case "real":
       return val.val;
     case "text":

@@ -3,7 +3,7 @@ use axum::{
   response::Response,
 };
 use serde::Deserialize;
-use trailbase_schema::json::flat_json_to_value;
+use trailbase_common::SqlValue;
 use trailbase_schema::{FileUploads, QualifiedName};
 use ts_rs::TS;
 
@@ -19,8 +19,7 @@ pub struct ReadFilesQuery {
 
   /// The primary key (of any type since we're in row instead of RecordAPI land) of rows that
   /// shall be deleted.
-  #[ts(type = "Object")]
-  pk_value: serde_json::Value,
+  pk_value: SqlValue,
 
   file_column_name: String,
   file_name: Option<String>,
@@ -64,15 +63,13 @@ pub async fn read_files_handler(
     )));
   };
 
-  let pk_value = flat_json_to_value(pk_col.data_type, query.pk_value, true)?;
-
   let FileUploads(mut file_uploads) = run_get_files_query(
     &state,
     &table_name.into(),
     file_col_metadata,
     file_col_json_metadata,
     &query.pk_column,
-    pk_value,
+    query.pk_value.try_into()?,
   )
   .await?;
 

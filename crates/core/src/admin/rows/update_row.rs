@@ -1,27 +1,28 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
+use trailbase_common::SqlValue;
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::records::params::{JsonRow, Params};
+use crate::records::params::Params;
 use crate::records::write_queries::run_update_query;
 
-#[derive(Debug, Serialize, Deserialize, Default, TS)]
+#[derive(Debug, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct UpdateRowRequest {
   pub primary_key_column: String,
 
   #[ts(type = "Object")]
-  pub primary_key_value: serde_json::Value,
+  pub primary_key_value: SqlValue,
 
   /// Row data, which is expected to be a map from column name to value.
   ///
   /// Note that the row is represented as a map to allow selective cells as opposed to
-  /// Vec<serde_json::Value>. Absence is different from setting a column to NULL.
-  pub row: JsonRow,
+  /// Vec<SqlValue>. Absence is different from setting a column to NULL.
+  pub row: indexmap::IndexMap<String, SqlValue>,
 }
 
 pub async fn update_row_handler(
@@ -58,19 +59,11 @@ pub async fn update_row_handler(
   run_update_query(
     &state,
     &QualifiedNameEscaped::new(&schema_metadata.schema.name),
-    Params::for_update(
+    Params::for_admin_update(
       &*schema_metadata,
       request.row,
-      None,
       pk_col.clone(),
-      // NOTE: We "fancy" parse JSON string values, since the UI currently ships everything as a
-      // string. We could consider pushing some more type-awareness into the ui.
-      trailbase_schema::json::flat_json_to_value(
-        column.data_type,
-        request.primary_key_value,
-        true,
-      )?,
-      true,
+      request.primary_key_value,
     )?,
   )
   .await?;

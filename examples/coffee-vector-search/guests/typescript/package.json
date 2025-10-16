@@ -5,20 +5,24 @@
   "author": "",
   "main": "dist/index.js",
   "scripts": {
-    "build:tsc": "vite build",
     "build:wasm": "jco componentize dist/index.mjs -w ../../../../guests/typescript/wit -o dist/component.wasm",
     "build:wasm:aot": "jco componentize  dist/index.mjs -w ../../../../guests/typescript/wit --aot -o dist/component.wasm",
-    "build": "npm run build:tsc && npm run build:wasm",
+    "build": "vite build && npm run build:wasm",
+    "check": "tsc --noEmit --skipLibCheck && vite build && eslint",
+    "deploy": "npm run build && cp dist/component.wasm ../../traildepot/wasm/coffee_vector_search_guest.wasm",
     "format": "prettier -w src"
   },
   "dependencies": {
-    "trailbase-wasm": "^0.2.0"
+    "trailbase-wasm": "*"
   },
   "devDependencies": {
     "@bytecodealliance/jco": "^1.15.1",
+    "@eslint/js": "^9.37.0",
+    "eslint": "^9.37.0",
     "@types/node": "^24.7.2",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0",
     "vite": "^7.1.9",
     "vitest": "^3.2.4"
   }

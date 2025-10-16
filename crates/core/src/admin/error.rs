@@ -55,6 +55,8 @@ pub enum AdminError {
   Query(#[from] crate::records::read_queries::QueryError),
   #[error("File error: {0}")]
   File(#[from] crate::records::files::FileError),
+  #[error("SqlValueDecode: {0}")]
+  SqlValueDecode(#[from] trailbase_common::sql_value::DecodeError),
 }
 
 impl IntoResponse for AdminError {

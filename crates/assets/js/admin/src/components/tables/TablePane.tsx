@@ -1,4 +1,4 @@
-import { For, Match, Switch, createMemo, createSignal } from "solid-js";
+import { For, Match, Switch, createMemo, createSignal, JSX } from "solid-js";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { useSearchParams } from "@solidjs/router";
 import type {
@@ -42,7 +42,8 @@ import {
 } from "@/components/ui/tooltip";
 
 import { createConfigQuery, invalidateConfig } from "@/lib/config";
-import type { FormRow, RowData } from "@/lib/convert";
+import type { Record, RowData } from "@/lib/convert";
+import { hashSqlValue } from "@/lib/convert";
 import { adminFetch } from "@/lib/fetch";
 import { urlSafeBase64ToUuid } from "@/lib/utils";
 import { dropTable, dropIndex } from "@/lib/table";
@@ -63,11 +64,13 @@ import {
   type TableType,
 } from "@/lib/schema";
 
+import type { Blob } from "@bindings/Blob";
 import type { Column } from "@bindings/Column";
 import type { ListRowsResponse } from "@bindings/ListRowsResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { QualifiedName } from "@bindings/QualifiedName";
 import type { ReadFilesQuery } from "@bindings/ReadFilesQuery";
+import type { SqlValue } from "@bindings/SqlValue";
 import type { Table } from "@bindings/Table";
 import type { TableIndex } from "@bindings/TableIndex";
 import type { TableTrigger } from "@bindings/TableTrigger";
@@ -84,8 +87,8 @@ type FileUpload = {
 
 type FileUploads = FileUpload[];
 
-function rowDataToRow(columns: Column[], row: RowData): FormRow {
-  const result: FormRow = {};
+function rowDataToRow(columns: Column[], row: RowData): Record {
+  const result: Record = {};
   for (let i = 0; i < row.length; ++i) {
     result[columns[i].name] = row[i];
   }
@@ -93,7 +96,7 @@ function rowDataToRow(columns: Column[], row: RowData): FormRow {
 }
 
 function renderCell(
-  context: CellContext<RowData, unknown>,
+  context: CellContext<RowData, SqlValue>,
   tableName: QualifiedName,
   columns: Column[],
   pkIndex: number,
@@ -104,84 +107,98 @@ function renderCell(
     isFile: boolean;
     isFiles: boolean;
   },
-): unknown {
-  const value = context.getValue();
-  if (value === null) {
+): JSX.Element {
+  const value: SqlValue = context.getValue();
+  if (value === "Null") {
     return "NULL";
   }
 
-  switch (typeof value) {
-    case "bigint":
-      return value.toString();
-    case "string": {
-      if (cell.isUUID) {
-        return urlSafeBase64ToUuid(value);
-      }
-
-      const imageMime = (f: FileUpload) => {
-        const mime = f.mime_type;
-        return mime === "image/jpeg" || mime === "image/png";
-      };
-
-      if (cell.isFile) {
-        const fileUpload = JSON.parse(value) as FileUpload;
-        if (imageMime(fileUpload)) {
-          const pkCol = columns[pkIndex].name;
-          const pkVal = context.row.original[pkIndex] as string;
-          const url = imageUrl({
-            tableName,
-            query: {
-              pk_column: pkCol,
-              pk_value: pkVal,
-              file_column_name: cell.col.name,
-              file_name: null,
-            },
-          });
-
-          return <Image url={url} mime={fileUpload.mime_type} />;
-        }
-      } else if (cell.isFiles) {
-        const fileUploads = JSON.parse(value) as FileUploads;
-
-        const indexes: number[] = [];
-        for (let i = 0; i < fileUploads.length; ++i) {
-          const file = fileUploads[i];
-          if (imageMime(file)) {
-            indexes.push(i);
-          }
-
-          if (indexes.length >= 3) break;
-        }
-
-        if (indexes.length > 0) {
-          const pkCol = columns[pkIndex].name;
-          const pkVal = context.row.original[pkIndex] as string;
-          return (
-            <div class="flex gap-2">
-              <For each={indexes}>
-                {(index: number) => {
-                  const fileUpload = fileUploads[index];
-                  const url = imageUrl({
-                    tableName,
-                    query: {
-                      pk_column: pkCol,
-                      pk_value: pkVal,
-                      file_column_name: cell.col.name,
-                      file_name: fileUpload.filename ?? null,
-                    },
-                  });
-
-                  return <Image url={url} mime={fileUpload.mime_type} />;
-                }}
-              </For>
-            </div>
-          );
-        }
-      }
-    }
+  if ("Integer" in value) {
+    return value.Integer.toString();
   }
 
-  return value;
+  if ("Real" in value) {
+    return value.Real.toString();
+  }
+
+  if ("Blob" in value) {
+    const blob: Blob = value.Blob;
+    if ("Base64UrlSafe" in blob) {
+      // TODO: Do we want this? We also discussed showing hex for use in SQL editor as X'AABB'.
+      if (cell.isUUID) {
+        return urlSafeBase64ToUuid(blob.Base64UrlSafe);
+      }
+      return blob.Base64UrlSafe;
+    }
+    throw Error("Expected Base64UrlSafe");
+  }
+
+  if ("Text" in value) {
+    const imageMime = (f: FileUpload) => {
+      const mime = f.mime_type;
+      return mime === "image/jpeg" || mime === "image/png";
+    };
+
+    if (cell.isFile) {
+      const fileUpload = JSON.parse(value.Text) as FileUpload;
+      if (imageMime(fileUpload)) {
+        const pkCol = columns[pkIndex].name;
+        const pkVal = context.row.original[pkIndex];
+        const url = imageUrl({
+          tableName,
+          query: {
+            pk_column: pkCol,
+            pk_value: pkVal,
+            file_column_name: cell.col.name,
+            file_name: null,
+          },
+        });
+
+        return <Image url={url} mime={fileUpload.mime_type} />;
+      }
+    } else if (cell.isFiles) {
+      const fileUploads = JSON.parse(value.Text) as FileUploads;
+
+      const indexes: number[] = [];
+      for (let i = 0; i < fileUploads.length; ++i) {
+        const file = fileUploads[i];
+        if (imageMime(file)) {
+          indexes.push(i);
+        }
+
+        if (indexes.length >= 3) break;
+      }
+
+      if (indexes.length > 0) {
+        const pkCol = columns[pkIndex].name;
+        const pkVal = context.row.original[pkIndex];
+        return (
+          <div class="flex gap-2">
+            <For each={indexes}>
+              {(index: number) => {
+                const fileUpload = fileUploads[index];
+                const url = imageUrl({
+                  tableName,
+                  query: {
+                    pk_column: pkCol,
+                    pk_value: pkVal,
+                    file_column_name: cell.col.name,
+                    file_name: fileUpload.filename ?? null,
+                  },
+                });
+
+                return <Image url={url} mime={fileUpload.mime_type} />;
+              }}
+            </For>
+          </div>
+        );
+      }
+    }
+
+    return value.Text;
+  }
+
+  throw Error("Unhandled value type");
 }
 
 function Image(props: { url: string; mime: string }) {
@@ -454,7 +471,7 @@ type TableState = {
 
   // Derived
   pkColumnIndex: number;
-  columnDefs: ColumnDef<RowData>[];
+  columnDefs: ColumnDef<RowData, SqlValue>[];
 
   response: ListRowsResponse;
 };
@@ -495,7 +512,7 @@ function buildColumnDefs(
   tableType: TableType,
   pkColumn: number,
   columns: Column[],
-): ColumnDef<RowData>[] {
+): ColumnDef<RowData, SqlValue>[] {
   return columns.map((col, idx) => {
     const fk = getForeignKey(col.options);
     const notNull = isNotNull(col.options);
@@ -532,7 +549,7 @@ function buildColumnDefs(
           isFiles: isFiles && tableType !== "view",
         }),
       accessorFn: (row: RowData) => row[idx],
-    };
+    } as ColumnDef<RowData, SqlValue>;
   });
 }
 
@@ -542,8 +559,10 @@ function RowDataTable(props: {
   filter: SimpleSignal<string | undefined>;
   rowsRefetch: () => void;
 }) {
-  const [editRow, setEditRow] = createSignal<FormRow | undefined>();
-  const [selectedRows, setSelectedRows] = createSignal(new Set<string>());
+  const [editRow, setEditRow] = createSignal<Record | undefined>();
+  const [selectedRows, setSelectedRows] = createSignal(
+    new Map<string, SqlValue>(),
+  );
 
   const table = () => props.state.selected;
   const mutable = () => tableType(table()) === "table" && !hiddenTable(table());
@@ -590,6 +609,7 @@ function RowDataTable(props: {
 
               <div class="space-y-2 overflow-auto">
                 <DataTable
+                  // NOTE: The formatting is done via the columnsDefs.
                   columns={() => props.state.columnDefs}
                   data={() => props.state.response.rows}
                   rowCount={totalRowCount()}
@@ -616,15 +636,21 @@ function RowDataTable(props: {
                   onRowSelection={
                     mutable()
                       ? (rows: Row<RowData>[], value: boolean) => {
-                          const newSelection = new Set(selectedRows());
+                          const newSelection = new Map<string, SqlValue>(
+                            selectedRows(),
+                          );
+
                           for (const row of rows) {
-                            const rowId = row.original[
-                              pkColumnIndex()
-                            ] as string;
+                            const pkValue: SqlValue =
+                              row.original[pkColumnIndex()];
+                            const key = hashSqlValue(pkValue);
+
+                            console.log("kYE", key);
+
                             if (value) {
-                              newSelection.add(rowId);
+                              newSelection.set(key, pkValue);
                             } else {
-                              newSelection.delete(rowId);
+                              newSelection.delete(key);
                             }
                           }
                           setSelectedRows(newSelection);
@@ -670,12 +696,12 @@ function RowDataTable(props: {
             variant="destructive"
             disabled={selectedRows().size === 0}
             onClick={() => {
-              const ids = [...selectedRows()];
+              const ids = [...selectedRows().values()];
               if (ids.length === 0) {
                 return;
               }
 
-              setSelectedRows(new Set<string>());
+              setSelectedRows(new Map<string, SqlValue>());
               deleteRows(table().name.name, {
                 primary_key_column: columns()[pkColumnIndex()].name,
                 values: ids,
