@@ -204,19 +204,12 @@ pub fn sqlite3_extension_init(
   )?;
 
   db.create_scalar_function(
-    "b64_text",
-    1,
-    FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_INNOCUOUS,
-    b64::b64_text,
-  )?;
-
-  db.create_scalar_function(
-    "b64_parse",
+    "base64_url_safe",
     1,
     FunctionFlags::SQLITE_UTF8
       | FunctionFlags::SQLITE_DETERMINISTIC
       | FunctionFlags::SQLITE_INNOCUOUS,
-    b64::b64_parse,
+    b64::base64_url_safe,
   )?;
 
   return Ok(db);
