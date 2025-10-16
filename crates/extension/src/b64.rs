@@ -15,9 +15,7 @@ pub(super) fn base64_url_safe(context: &Context) -> rusqlite::Result<rusqlite::t
     ValueRef::Null => Ok(rusqlite::types::Value::Null),
 
     // BLOB → TEXT (encode URL-safe base64)
-    ValueRef::Blob(blob) => {
-      Ok(rusqlite::types::Value::Text(BASE64_URL_SAFE.encode(blob)))
-    }
+    ValueRef::Blob(blob) => Ok(rusqlite::types::Value::Text(BASE64_URL_SAFE.encode(blob))),
 
     // TEXT → BLOB (decode URL-safe base64)
     ValueRef::Text(text) => {
