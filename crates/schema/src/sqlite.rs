@@ -353,145 +353,114 @@ impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, TS, PartialEq)]
 pub enum ColumnDataType {
-  Null,
-
-  // Strict column/storage types.
+  // Per cell storage type.
   Any,
+  // Strict storage types.
   Blob,
   Text,
+  // Can either be specified as "INT" or "INTEGER".
   Integer,
   Real,
-  Numeric, // not allowed in strict mode.
-
-  // Other higher-level or affine types.
-  #[allow(clippy::upper_case_acronyms)]
-  JSON,
-  #[allow(clippy::upper_case_acronyms)]
-  JSONB,
-
-  // See 3.1.1. https://www.sqlite.org/datatype3.html.
-  //
-  // Types with INTEGER affinity.
-  Int,
-  TinyInt,
-  SmallInt,
-  MediumInt,
-  BigInt,
-  UnignedBigInt,
-  Int2,
-  Int4,
-  Int8,
-
-  // Types with TEXT affinity.
-  Character,
-  Varchar,
-  VaryingCharacter,
-  NChar,
-  NativeCharacter,
-  NVarChar,
-  Clob,
-
-  // Types with REAL affinity.
-  Double,
-  DoublePrecision,
-  Float,
-
-  // Types with NUMERIC affinity.
-  Boolean,
-  Decimal,
-  Date,
-  DateTime,
 }
 
 impl ColumnDataType {
   fn from_type_name(type_name: &str) -> Option<Self> {
     return Some(match type_name.to_uppercase().as_str() {
-      "UNSPECIFIED" => ColumnDataType::Null,
-      "ANY" => ColumnDataType::Any,
-      "BLOB" => ColumnDataType::Blob,
-      "TEXT" => ColumnDataType::Text,
-      "INTEGER" => ColumnDataType::Integer,
-      "REAL" => ColumnDataType::Real,
-      "NUMERIC" => ColumnDataType::Numeric,
-
-      // JSON types,
-      "JSON" => ColumnDataType::JSON,
-      "JSONB" => ColumnDataType::JSONB,
-
-      // See 3.1.1. https://www.sqlite.org/datatype3.html.
-      //
-      // Types with INTEGER affinity.
-      "INT" => ColumnDataType::Int,
-      "TINYINT" => ColumnDataType::TinyInt,
-      "SMALLINT" => ColumnDataType::SmallInt,
-      "MEDIUMINT" => ColumnDataType::MediumInt,
-      "BIGINT" => ColumnDataType::BigInt,
-      "UNSIGNED BIG INT" => ColumnDataType::UnignedBigInt,
-      "INT2" => ColumnDataType::Int2,
-      "INT4" => ColumnDataType::Int4,
-      "INT8" => ColumnDataType::Int8,
-
-      // Types with TEXT affinity.
-      "CHARACTER" => ColumnDataType::Character,
-      "VARCHAR" => ColumnDataType::Varchar,
-      "VARYING CHARACTER" => ColumnDataType::VaryingCharacter,
-      "NCHAR" => ColumnDataType::NChar,
-      "NATIVE CHARACTER" => ColumnDataType::NativeCharacter,
-      "NVARCHAR" => ColumnDataType::NVarChar,
-      "CLOB" => ColumnDataType::Clob,
-
-      // Types with REAL affinity.
-      "DOUBLE" => ColumnDataType::Double,
-      "DOUBLE PRECISION" => ColumnDataType::DoublePrecision,
-      "FLOAT" => ColumnDataType::Float,
-
-      // Types with NUMERIC affinity.
-      "BOOLEAN" => ColumnDataType::Boolean,
-      "DECIMAL" => ColumnDataType::Decimal,
-      "DATE" => ColumnDataType::Date,
-      "DATETIME" => ColumnDataType::DateTime,
-
-      _x => {
-        debug!("Unexpected data type: {_x:?}");
+      "ANY" => Self::Any,
+      "BLOB" => Self::Blob,
+      "TEXT" => Self::Text,
+      "INTEGER" => Self::Integer,
+      // INT is the only allowed alias: https://sqlite.org/stricttables.html.
+      "INT" => Self::Integer,
+      "REAL" => Self::Real,
+      _ => {
+        debug!("Unexpected data type: {type_name:?}");
         return None;
       }
     });
   }
 
   pub(crate) fn is_integer_kind(&self) -> bool {
-    return matches!(
-      self,
-      Self::Integer
-        | Self::Int
-        | Self::TinyInt
-        | Self::SmallInt
-        | Self::MediumInt
-        | Self::BigInt
-        | Self::UnignedBigInt
-        | Self::Int2
-        | Self::Int4
-        | Self::Int8
-    );
+    return matches!(self, Self::Integer);
   }
 
   pub(crate) fn is_float_kind(&self) -> bool {
-    return matches!(
-      self,
-      Self::Real | Self::Double | Self::DoublePrecision | Self::Float
-    );
+    return matches!(self, Self::Real);
   }
 }
 
-impl From<sqlite3_parser::ast::Type> for ColumnDataType {
-  fn from(data_type: sqlite3_parser::ast::Type) -> Self {
-    return ColumnDataType::from_type_name(&data_type.name).unwrap_or(ColumnDataType::Null);
+// impl From<sqlite3_parser::ast::Type> for ColumnDataType {
+//   fn from(data_type: sqlite3_parser::ast::Type) -> Self {
+//     // NOTE: In STRICT mode only explicit column data types are allowed (also INT is an alias for
+//     // INTEGER). Otherwise, any type-name goes, e.g. "FOO". There are rules to also derive
+//     // affinities, if certain substrings are contained, e.g. "FOOINTBAR" will have INTEGER
+// affinity     return
+// ColumnDataType::from_type_name(&data_type.name).unwrap_or(ColumnDataType::Any);   }
+// }
+
+/// Different affinity types in SQLite will lead to different preferences in interpreting input
+/// literals. For example, a column with REAL preference, will store any input but try to convert
+/// strings into REAL when possible.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, TS, PartialEq)]
+pub enum ColumnAffinityType {
+  Text,
+  Integer,
+  Real,
+  Blob,
+  // Will try to convert '5' to INTEGER and '5.6' to REAL storage, otherwise TEXT.
+  Numeric,
+}
+
+impl ColumnAffinityType {
+  pub fn from_data_type(data_type: ColumnDataType) -> Self {
+    match data_type {
+      ColumnDataType::Any => Self::Numeric,
+      ColumnDataType::Integer => Self::Integer,
+      ColumnDataType::Real => Self::Real,
+      ColumnDataType::Blob => Self::Blob,
+      ColumnDataType::Text => Self::Text,
+    }
+  }
+
+  pub fn from_type_name(type_name: &str) -> Self {
+    // Affinity types are derived from 5 rules described here: https://sqlite.org/datatype3.html.
+    let type_name = type_name.to_uppercase();
+
+    // 1. If the declared type contains the string "INT" then it is assigned INTEGER affinity.
+    if type_name.contains("INT") {
+      return Self::Integer;
+    }
+
+    // 2. If the declared type of the column contains any of the strings "CHAR", "CLOB", or "TEXT"
+    //    then that column has TEXT affinity. Notice that the type VARCHAR contains the string
+    //    "CHAR" and is thus assigned TEXT affinity.
+    if type_name.contains("CHAR") || type_name.contains("CLOB") || type_name.contains("TEXT") {
+      return Self::Text;
+    }
+
+    // 3. If the declared type for a column contains the string "BLOB" or if no type is specified
+    //    then the column has affinity BLOB.
+    if type_name.contains("BLOB") || type_name.is_empty() {
+      return Self::Blob;
+    }
+
+    // 4. If the declared type for a column contains any of the strings "REAL", "FLOA", or "DOUB"
+    //    then the column has REAL affinity.
+    if type_name.contains("REAL") || type_name.contains("FLOA") || type_name.contains("DOUB") {
+      return Self::Real;
+    }
+
+    // 5. Otherwise, the affinity is NUMERIC.
+    return Self::Numeric;
   }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
 pub struct Column {
   pub name: String,
+  pub type_name: String,
   pub data_type: ColumnDataType,
+  pub affinity_type: ColumnAffinityType,
   pub options: Vec<ColumnOption>,
 }
 
@@ -501,15 +470,15 @@ impl Column {
 
     return if options.is_empty() {
       format!(
-        "'{name}' {data_type}",
+        "'{name}' {type_name}",
         name = self.name,
-        data_type = format!("{:?}", self.data_type).to_uppercase(),
+        type_name = self.type_name,
       )
     } else {
       format!(
-        "'{name}' {data_type} {options}",
+        "'{name}' {type_name} {options}",
         name = self.name,
-        data_type = format!("{:?}", self.data_type).to_uppercase(),
+        type_name = self.type_name,
         options = options.join(" "),
       )
     };
@@ -733,9 +702,21 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
             let name = unquote_name(col_name);
             assert!(!name.is_empty());
 
-            let data_type: ColumnDataType = match col_type {
-              Some(x) => x.into(),
-              None => ColumnDataType::Null,
+            let (type_name, affinity_type, data_type): (
+              String,
+              ColumnAffinityType,
+              ColumnDataType,
+            ) = match col_type {
+              Some(x) => (
+                x.name.clone(),
+                ColumnAffinityType::from_type_name(&x.name),
+                ColumnDataType::from_type_name(&x.name).unwrap_or(ColumnDataType::Any),
+              ),
+              None => (
+                "".to_string(),
+                ColumnAffinityType::from_type_name(""),
+                ColumnDataType::Any,
+              ),
             };
 
             let options: Vec<ColumnOption> = constraints
@@ -745,7 +726,9 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
 
             return Column {
               name,
+              type_name,
               data_type,
+              affinity_type,
               options,
             };
           })
@@ -1043,11 +1026,10 @@ fn extract_column_mapping(
           let (referred_table, column) = find_column_by_unqualified_name(&unquote_id(id.clone()))?;
 
           mapping.push(ViewColumn {
-            column: Column {
-              name: to_alias(alias).unwrap_or_else(|| column.name.clone()),
-              data_type: column.data_type,
-              options: column.options.clone(),
-            },
+            column: column_with_alias(
+              &column,
+              to_alias(alias).unwrap_or_else(|| column.name.clone()),
+            ),
             parent_name: get_parent_name(referred_table),
           });
         }
@@ -1064,11 +1046,10 @@ fn extract_column_mapping(
             .ok_or_else(|| precondition(&format!("Column '{col_name}' not found")))?;
 
           mapping.push(ViewColumn {
-            column: Column {
-              name: to_alias(alias).unwrap_or_else(|| column.name.clone()),
-              data_type: column.data_type,
-              options: column.options.clone(),
-            },
+            column: column_with_alias(
+              column,
+              to_alias(alias).unwrap_or_else(|| column.name.clone()),
+            ),
             parent_name: get_parent_name(referred_table),
           });
         }
@@ -1088,7 +1069,9 @@ fn extract_column_mapping(
             column: Column {
               // NOTE: the sqlite3 CLI also simply uses the entire expr.
               name: to_alias(alias).unwrap_or_else(|| expr.to_string()),
+              type_name: type_name.name,
               data_type,
+              affinity_type: ColumnAffinityType::from_data_type(data_type),
               options: vec![],
             },
             parent_name: None,
@@ -1111,11 +1094,10 @@ fn extract_column_mapping(
                   .ok_or_else(|| precondition(&format!("Column '{name}' not found")))?;
 
                 mapping.push(ViewColumn {
-                  column: Column {
-                    name: to_alias(alias).unwrap_or_else(|| column.name.to_string()),
-                    data_type: column.data_type,
-                    options: column.options.clone(),
-                  },
+                  column: column_with_alias(
+                    column,
+                    to_alias(alias).unwrap_or_else(|| column.name.to_string()),
+                  ),
                   parent_name: get_parent_name(referred_table),
                 });
 
@@ -1125,11 +1107,10 @@ fn extract_column_mapping(
                 let (referred_table, column) = find_column_by_unqualified_name(&name)?;
 
                 mapping.push(ViewColumn {
-                  column: Column {
-                    name: to_alias(alias).unwrap_or_else(|| column.name.to_string()),
-                    data_type: column.data_type,
-                    options: column.options.clone(),
-                  },
+                  column: column_with_alias(
+                    column,
+                    to_alias(alias).unwrap_or_else(|| column.name.to_string()),
+                  ),
                   parent_name: get_parent_name(referred_table),
                 });
 
@@ -1564,6 +1545,16 @@ fn builtin_function_preserving_type(name: sqlite3_parser::ast::Id) -> bool {
   return matches!(name.as_str(), "MAX" | "MIN" | "SUM");
 }
 
+fn column_with_alias(column: &Column, alias: String) -> Column {
+  return Column {
+    name: alias,
+    type_name: column.type_name.clone(),
+    data_type: column.data_type,
+    affinity_type: column.affinity_type,
+    options: column.options.clone(),
+  };
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -1750,7 +1741,9 @@ mod tests {
       strict: true,
       columns: vec![Column {
         name: "column".to_string(),
+        type_name: "teXt".to_string(),
         data_type: ColumnDataType::Text,
+        affinity_type: ColumnAffinityType::Text,
         options: vec![],
       }],
       foreign_keys: vec![],

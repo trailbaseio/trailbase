@@ -46,7 +46,9 @@ function newDefaultColumn(index: number, existingNames?: string[]): Column {
   }
   return {
     name,
+    type_name: "TEXT",
     data_type: "Text",
+    affinity_type: "Text",
     options: [{ Default: "''" }],
   };
 }

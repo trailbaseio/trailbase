@@ -54,6 +54,7 @@ pub fn value_to_flat_json(value: &SqliteValue) -> Result<serde_json::Value, Json
 pub fn flat_json_to_value(
   col_type: ColumnDataType,
   value: serde_json::Value,
+  // TODO: Remove
   fancy_parse_string: bool,
 ) -> Result<SqliteValue, JsonError> {
   return match value {
@@ -75,10 +76,15 @@ pub fn flat_json_to_value(
         false => Err(JsonError::UnexpectedType("Bool", col_type)),
       }
     }
-    serde_json::Value::String(str) => match fancy_parse_string {
-      true => fancy_parse_string_to_sqlite_value(col_type, str),
-      false => parse_string_to_sqlite_value(col_type, str),
-    },
+    serde_json::Value::String(str) => {
+      // NOTE: The only difference is whether strings should be tried to convert to numeric types
+      // based on column's storage type or not.
+      if fancy_parse_string {
+        fancy_parse_string_to_sqlite_value(col_type, str)
+      } else {
+        parse_string_to_sqlite_value(col_type, str)
+      }
+    }
     serde_json::Value::Number(number) => {
       if let Some(n) = number.as_i64() {
         if col_type.is_integer_kind() || col_type == ColumnDataType::Any {
@@ -196,8 +202,6 @@ pub fn fancy_parse_string_to_sqlite_value(
   value: String,
 ) -> Result<SqliteValue, JsonError> {
   return Ok(match data_type {
-    // QUESTION: should we error or keep silently dropping value?
-    ColumnDataType::Null => SqliteValue::Null,
     // Strict/storage types
     ColumnDataType::Any => SqliteValue::Text(value),
     ColumnDataType::Text => SqliteValue::Text(value),
@@ -212,39 +216,6 @@ pub fn fancy_parse_string_to_sqlite_value(
     }),
     ColumnDataType::Integer => SqliteValue::Integer(value.parse::<i64>()?),
     ColumnDataType::Real => SqliteValue::Real(value.parse::<f64>()?),
-    ColumnDataType::Numeric => SqliteValue::Integer(value.parse::<i64>()?),
-    // JSON types.
-    ColumnDataType::JSONB => SqliteValue::Blob(value.into_bytes().to_vec()),
-    ColumnDataType::JSON => SqliteValue::Text(value),
-    // Affine types
-    //
-    // Integers:
-    ColumnDataType::Int
-    | ColumnDataType::TinyInt
-    | ColumnDataType::SmallInt
-    | ColumnDataType::MediumInt
-    | ColumnDataType::BigInt
-    | ColumnDataType::UnignedBigInt
-    | ColumnDataType::Int2
-    | ColumnDataType::Int4
-    | ColumnDataType::Int8 => SqliteValue::Integer(value.parse::<i64>()?),
-    // Text:
-    ColumnDataType::Character
-    | ColumnDataType::Varchar
-    | ColumnDataType::VaryingCharacter
-    | ColumnDataType::NChar
-    | ColumnDataType::NativeCharacter
-    | ColumnDataType::NVarChar
-    | ColumnDataType::Clob => SqliteValue::Text(value),
-    // Real:
-    ColumnDataType::Double | ColumnDataType::DoublePrecision | ColumnDataType::Float => {
-      SqliteValue::Real(value.parse::<f64>()?)
-    }
-    // Numeric
-    ColumnDataType::Boolean
-    | ColumnDataType::Decimal
-    | ColumnDataType::Date
-    | ColumnDataType::DateTime => SqliteValue::Integer(value.parse::<i64>()?),
   });
 }
 
@@ -284,8 +255,7 @@ mod tests {
       .await
       .unwrap();
 
-    let value =
-      fancy_parse_string_to_sqlite_value(ColumnDataType::Blob, id_string.to_string()).unwrap();
+    let value = parse_string_to_sqlite_value(ColumnDataType::Blob, id_string.to_string()).unwrap();
     let blob = match value {
       rusqlite::types::Value::Blob(ref blob) => blob.clone(),
       _ => panic!("Not a blob"),

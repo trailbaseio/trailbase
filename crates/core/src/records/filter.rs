@@ -49,7 +49,6 @@ pub(crate) fn qs_value_to_sql_with_constraints(
   use trailbase_qs::Value as QsValue;
 
   return match column.data_type {
-    ColumnDataType::Null => Err(RecordError::BadRequest("Invalid query")),
     ColumnDataType::Any => Ok(any_qs_value_to_sql(value)),
     ColumnDataType::Blob => match value {
       QsValue::String(s) => Ok(Value::Blob(
@@ -64,7 +63,7 @@ pub(crate) fn qs_value_to_sql_with_constraints(
       QsValue::Integer(i) => Ok(Value::Text(i.to_string())),
       QsValue::Double(d) => Ok(Value::Text(d.to_string())),
     },
-    ColumnDataType::Integer | ColumnDataType::Int => match value {
+    ColumnDataType::Integer => match value {
       QsValue::Integer(i) => Ok(Value::Integer(i)),
       _ => Err(RecordError::BadRequest("Invalid query")),
     },
@@ -73,12 +72,6 @@ pub(crate) fn qs_value_to_sql_with_constraints(
       QsValue::Double(d) => Ok(Value::Real(d)),
       _ => Err(RecordError::BadRequest("Invalid query")),
     },
-    ColumnDataType::Numeric => match value {
-      QsValue::Integer(i) => Ok(Value::Integer(i)),
-      QsValue::Double(d) => Ok(Value::Real(d)),
-      _ => Err(RecordError::BadRequest("Invalid query")),
-    }, // not allowed in strict mode.
-    _ => Err(RecordError::BadRequest("Invalid query")),
   };
 }
 

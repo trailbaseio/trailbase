@@ -1,5 +1,5 @@
 use trailbase_schema::json::{JsonError, value_to_flat_json};
-use trailbase_schema::sqlite::{Column, ColumnDataType};
+use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType};
 use trailbase_sqlite::{Row, Rows, ValueType};
 
 /// Best-effort conversion from row values to column definition.
@@ -8,17 +8,23 @@ use trailbase_sqlite::{Row, Rows, ValueType};
 /// the respective column.
 pub(crate) fn rows_to_columns(rows: &Rows) -> Vec<Column> {
   return (0..rows.column_count())
-    .map(|i| Column {
-      name: rows.column_name(i).unwrap_or("<missing>").to_string(),
-      data_type: match rows.column_type(i).unwrap_or(ValueType::Null) {
+    .map(|i| {
+      let data_type = match rows.column_type(i).unwrap_or(ValueType::Null) {
+        ValueType::Null => ColumnDataType::Any,
         ValueType::Real => ColumnDataType::Real,
         ValueType::Text => ColumnDataType::Text,
         ValueType::Integer => ColumnDataType::Integer,
-        ValueType::Null => ColumnDataType::Null,
         ValueType::Blob => ColumnDataType::Blob,
-      },
-      // We cannot derive the options from a row of data.
-      options: vec![],
+      };
+
+      return Column {
+        name: rows.column_name(i).unwrap_or("<missing>").to_string(),
+        type_name: "".to_string(),
+        data_type,
+        affinity_type: ColumnAffinityType::from_data_type(data_type),
+        // We cannot derive the options from a row of data.
+        options: vec![],
+      };
     })
     .collect();
 }

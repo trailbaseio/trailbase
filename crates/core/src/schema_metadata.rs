@@ -264,7 +264,7 @@ mod tests {
   use serde_json::json;
   use trailbase_schema::QualifiedName;
   use trailbase_schema::json_schema::{Expand, JsonSchemaMode, build_json_schema_expanded};
-  use trailbase_schema::sqlite::{Column, ColumnDataType, ColumnOption};
+  use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption};
 
   use crate::app_state::*;
   use crate::config::proto::{PermissionFlag, RecordApiConfig};
@@ -282,9 +282,9 @@ mod tests {
         "
             CREATE TABLE test (
                 id  INTEGER PRIMARY KEY,
-                a   INT NOT NULL,
+                a   int NOT NULL,
                 b   INT NULL,
-                c   INT
+                c   INTEGER
             ) STRICT;
 
             INSERT INTO test (a, b, c) VALUES (5, NULL, NULL), (6, 1, 2);
@@ -308,7 +308,9 @@ mod tests {
       test_table.schema.columns[1],
       Column {
         name: "a".to_string(),
-        data_type: ColumnDataType::Int,
+        type_name: "int".to_string(),
+        data_type: ColumnDataType::Integer,
+        affinity_type: ColumnAffinityType::Integer,
         options: vec![ColumnOption::NotNull,],
       }
     );
@@ -316,7 +318,9 @@ mod tests {
       test_table.schema.columns[2],
       Column {
         name: "b".to_string(),
-        data_type: ColumnDataType::Int,
+        type_name: "INT".to_string(),
+        data_type: ColumnDataType::Integer,
+        affinity_type: ColumnAffinityType::Integer,
         options: vec![ColumnOption::Null,],
       }
     );
@@ -324,7 +328,9 @@ mod tests {
       test_table.schema.columns[3],
       Column {
         name: "c".to_string(),
-        data_type: ColumnDataType::Int,
+        type_name: "INTEGER".to_string(),
+        data_type: ColumnDataType::Integer,
+        affinity_type: ColumnAffinityType::Integer,
         options: vec![],
       }
     );

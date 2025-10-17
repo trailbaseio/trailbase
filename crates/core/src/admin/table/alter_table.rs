@@ -332,7 +332,7 @@ fn check_column_removals_invalidating_config(
 #[cfg(test)]
 mod tests {
   use trailbase_schema::parse::parse_into_statement;
-  use trailbase_schema::sqlite::{Column, ColumnDataType, ColumnOption, Table};
+  use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption, Table};
 
   use super::*;
   use crate::admin::table::{CreateTableRequest, create_table_handler};
@@ -382,7 +382,9 @@ mod tests {
       // Add/drop column
       let add_column = Column {
         name: "c".to_string(),
+        type_name: "real".to_string(),
         data_type: ColumnDataType::Real,
+        affinity_type: ColumnAffinityType::Real,
         options: vec![],
       };
       let TargetSchema {
@@ -422,7 +424,9 @@ mod tests {
       // Alter column
       let renamed_column = Column {
         name: "renamed".to_string(),
+        type_name: "TEXT".to_string(),
         data_type: ColumnDataType::Text,
+        affinity_type: ColumnAffinityType::Text,
         options: vec![],
       };
       let TargetSchema {
@@ -459,7 +463,9 @@ mod tests {
           name: "a".to_string(),
           column: Column {
             name: "b".to_string(),
+            type_name: "text".to_string(),
             data_type: ColumnDataType::Text,
+            affinity_type: ColumnAffinityType::Text,
             options: vec![],
           },
         }],
@@ -476,7 +482,9 @@ mod tests {
             name: "a".to_string(),
             column: Column {
               name: "rename1".to_string(),
+              type_name: "text".to_string(),
               data_type: ColumnDataType::Text,
+              affinity_type: ColumnAffinityType::Text,
               options: vec![],
             },
           },
@@ -484,7 +492,9 @@ mod tests {
             name: "a".to_string(),
             column: Column {
               name: "rename2".to_string(),
+              type_name: "text".to_string(),
               data_type: ColumnDataType::Text,
+              affinity_type: ColumnAffinityType::Text,
               options: vec![],
             },
           }
@@ -506,7 +516,9 @@ mod tests {
         strict: true,
         columns: vec![Column {
           name: pk_col.clone(),
+          type_name: "blob".to_string(),
           data_type: ColumnDataType::Blob,
+          affinity_type: ColumnAffinityType::Blob,
           options: vec![ColumnOption::Unique {
             is_primary: true,
             conflict_clause: None,
@@ -556,7 +568,9 @@ mod tests {
         operations: vec![AlterTableOperation::AddColumn {
           column: Column {
             name: "new".to_string(),
+            type_name: "text".to_string(),
             data_type: ColumnDataType::Text,
+            affinity_type: ColumnAffinityType::Text,
             options: vec![
               ColumnOption::NotNull,
               ColumnOption::Default("'default'".to_string()),

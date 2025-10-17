@@ -287,8 +287,6 @@ export function buildDefaultRow(schema: Table): FormRow {
       obj[col.name] = 0;
     } else if (isReal(type)) {
       obj[col.name] = 0.0;
-    } else if (type === "Null") {
-      obj[col.name] = null;
     } else {
       console.warn(`No fallback for ${type} column: ${col.name}`);
     }

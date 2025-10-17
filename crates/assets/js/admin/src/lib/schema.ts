@@ -320,15 +320,6 @@ function hiddenName(name: QualifiedName): boolean {
 export function isInt(type: ColumnDataType): boolean {
   switch (type) {
     case "Integer":
-    case "Int":
-    case "Int2":
-    case "Int4":
-    case "Int8":
-    case "TinyInt":
-    case "SmallInt":
-    case "MediumInt":
-    case "BigInt":
-    case "UnignedBigInt":
       return true;
     default:
       return false;
@@ -338,11 +329,6 @@ export function isInt(type: ColumnDataType): boolean {
 export function isReal(type: ColumnDataType): boolean {
   switch (type) {
     case "Real":
-    case "Float":
-    case "Double":
-    case "DoublePrecision":
-    case "Decimal":
-    case "Numeric":
       return true;
     default:
       return false;

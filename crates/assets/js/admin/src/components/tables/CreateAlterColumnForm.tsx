@@ -50,6 +50,7 @@ import type { FormApiT, AnyFieldApi } from "@/components/FormFields";
 
 import type { Column } from "@bindings/Column";
 import type { ColumnDataType } from "@bindings/ColumnDataType";
+import type { ColumnAffinityType } from "@bindings/ColumnAffinityType";
 import type { ColumnOption } from "@bindings/ColumnOption";
 import type { Table } from "@bindings/Table";
 
@@ -65,7 +66,7 @@ function columnTypeField(
     "Text",
     "Integer",
     "Real",
-    "Null",
+    "Any",
   ] as const;
 
   return (field: () => AnyFieldApi) => {
@@ -714,7 +715,9 @@ function L(props: { children: JSX.Element }) {
 const transitionTimingFunc = "cubic-bezier(.87,0,.13,1)";
 
 type Preset = {
+  type_name: string;
   data_type: ColumnDataType;
+  affinity_type: ColumnAffinityType;
   options: ColumnOption[];
 };
 
@@ -723,7 +726,9 @@ export const primaryKeyPresets: [string, (colName: string) => Preset][] = [
     "INTEGER",
     (_colName: string) => {
       return {
+        type_name: "INTEGER",
         data_type: "Integer",
+        affinity_type: "Integer",
         options: [
           { Unique: { is_primary: true, conflict_clause: null } },
           "NotNull",
@@ -735,7 +740,9 @@ export const primaryKeyPresets: [string, (colName: string) => Preset][] = [
     "UUIDv4",
     (colName: string) => {
       return {
+        type_name: "BLOB",
         data_type: "Blob",
+        affinity_type: "Blob",
         options: [
           { Unique: { is_primary: true, conflict_clause: null } },
           { Check: `is_uuid(${colName})` },
@@ -749,7 +756,9 @@ export const primaryKeyPresets: [string, (colName: string) => Preset][] = [
     "UUIDv7",
     (colName: string) => {
       return {
+        type_name: "BLOB",
         data_type: "Blob",
+        affinity_type: "Blob",
         options: [
           { Unique: { is_primary: true, conflict_clause: null } },
           { Check: `is_uuid_v7(${colName})` },
@@ -766,7 +775,9 @@ const presets: [string, (colName: string) => Preset][] = [
     "Default",
     (_colName: string) => {
       return {
+        type_name: "TEXT",
         data_type: "Text",
+        affinity_type: "Text",
         options: [{ Default: "''" }, "NotNull"],
       };
     },
@@ -775,7 +786,9 @@ const presets: [string, (colName: string) => Preset][] = [
     "UUIDv4",
     (colName: string) => {
       return {
+        type_name: "BLOB",
         data_type: "Blob",
+        affinity_type: "Blob",
         options: [
           { Check: `is_uuid(${colName})` },
           { Default: "(uuid_v4())" },
@@ -788,7 +801,9 @@ const presets: [string, (colName: string) => Preset][] = [
     "UUIDv7",
     (colName: string) => {
       return {
+        type_name: "BLOB",
         data_type: "Blob",
+        affinity_type: "Blob",
         options: [
           { Check: `is_uuid_v7(${colName})` },
           { Default: "(uuid_v7())" },
@@ -801,7 +816,9 @@ const presets: [string, (colName: string) => Preset][] = [
     "JSON",
     (colName: string) => {
       return {
+        type_name: "TEXT",
         data_type: "Text",
+        affinity_type: "Text",
         options: [
           { Check: `is_json(${colName})` },
           { Default: "'{}'" },
@@ -814,7 +831,9 @@ const presets: [string, (colName: string) => Preset][] = [
     "File",
     (colName: string) => {
       return {
+        type_name: "TEXT",
         data_type: "Text",
+        affinity_type: "Text",
         options: [
           {
             Check: `jsonschema('std.FileUpload', ${colName})`,
@@ -827,7 +846,9 @@ const presets: [string, (colName: string) => Preset][] = [
     "Files",
     (colName: string) => {
       return {
+        type_name: "TEXT",
         data_type: "Text",
+        affinity_type: "Text",
         options: [
           {
             Check: `jsonschema('std.FileUploads', ${colName})`,

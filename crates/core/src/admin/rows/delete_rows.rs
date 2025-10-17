@@ -109,7 +109,7 @@ pub async fn delete_rows_handler(
 mod tests {
   use axum::extract::{Json, Path, RawQuery, State};
   use serde::Deserialize;
-  use trailbase_schema::sqlite::{Column, ColumnDataType, ColumnOption, Table};
+  use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption, Table};
   use uuid::Uuid;
 
   use super::*;
@@ -145,7 +145,9 @@ mod tests {
           columns: vec![
             Column {
               name: pk_col.clone(),
+              type_name: "BLOB".to_string(),
               data_type: ColumnDataType::Blob,
+              affinity_type: ColumnAffinityType::Blob,
               options: vec![
                 ColumnOption::Unique {
                   is_primary: true,
@@ -157,7 +159,9 @@ mod tests {
             },
             Column {
               name: "col0".to_string(),
+              type_name: "text".to_string(),
               data_type: ColumnDataType::Text,
+              affinity_type: ColumnAffinityType::Text,
               options: vec![],
             },
           ],

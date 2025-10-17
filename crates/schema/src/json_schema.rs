@@ -232,7 +232,6 @@ pub fn build_json_schema_expanded(
 
 fn column_data_type_to_json_type(data_type: ColumnDataType) -> Value {
   return match data_type {
-    ColumnDataType::Null => Value::String("null".into()),
     ColumnDataType::Any => Value::Array(vec![
       "number".into(),
       "string".into(),
@@ -246,39 +245,6 @@ fn column_data_type_to_json_type(data_type: ColumnDataType) -> Value {
     ColumnDataType::Blob => Value::String("string".into()),
     ColumnDataType::Integer => Value::String("integer".into()),
     ColumnDataType::Real => Value::String("number".into()),
-    ColumnDataType::Numeric => Value::String("number".into()),
-    // JSON types
-    ColumnDataType::JSON => Value::String("object".into()),
-    ColumnDataType::JSONB => Value::String("object".into()),
-    // Affine types
-    //
-    // Integers:
-    ColumnDataType::Int => Value::String("number".into()),
-    ColumnDataType::TinyInt => Value::String("number".into()),
-    ColumnDataType::SmallInt => Value::String("number".into()),
-    ColumnDataType::MediumInt => Value::String("number".into()),
-    ColumnDataType::BigInt => Value::String("number".into()),
-    ColumnDataType::UnignedBigInt => Value::String("number".into()),
-    ColumnDataType::Int2 => Value::String("number".into()),
-    ColumnDataType::Int4 => Value::String("number".into()),
-    ColumnDataType::Int8 => Value::String("number".into()),
-    // Text:
-    ColumnDataType::Character => Value::String("string".into()),
-    ColumnDataType::Varchar => Value::String("string".into()),
-    ColumnDataType::VaryingCharacter => Value::String("string".into()),
-    ColumnDataType::NChar => Value::String("string".into()),
-    ColumnDataType::NativeCharacter => Value::String("string".into()),
-    ColumnDataType::NVarChar => Value::String("string".into()),
-    ColumnDataType::Clob => Value::String("string".into()),
-    // Real:
-    ColumnDataType::Double => Value::String("number".into()),
-    ColumnDataType::DoublePrecision => Value::String("number".into()),
-    ColumnDataType::Float => Value::String("number".into()),
-    // Numeric:
-    ColumnDataType::Boolean => Value::String("boolean".into()),
-    ColumnDataType::Decimal => Value::String("number".into()),
-    ColumnDataType::Date => Value::String("number".into()),
-    ColumnDataType::DateTime => Value::String("number".into()),
   };
 }
 
