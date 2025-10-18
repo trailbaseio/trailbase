@@ -1,8 +1,8 @@
 use base64::prelude::*;
 use rusqlite::Error;
-use rusqlite::functions::Context;
-use rusqlite::types::{Type, Value, ValueRef};
 use rusqlite::Result;
+use rusqlite::functions::Context;
+use rusqlite::types::{Value, ValueRef};
 
 /// A URL-safe base64 similar to the SQLite built-in `base64()` extension.
 /// - BLOB → TEXT (encode)
@@ -52,7 +52,7 @@ pub(super) fn base64_url_safe(context: &Context) -> Result<Value> {
 #[cfg(test)]
 mod tests {
   use base64::prelude::*;
-  use rusqlite::{Connection, Error};
+  use rusqlite::Error;
   use uuid::Uuid;
 
   #[test]
