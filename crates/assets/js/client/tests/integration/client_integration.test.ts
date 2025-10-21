@@ -1,15 +1,18 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 import { expect, test } from "vitest";
 import {
-  initClient,
-  urlSafeBase64Encode,
+  exportedForTesting,
   filePath,
   filesPath,
+  initClient,
+  urlSafeBase64Encode,
 } from "../../src/index";
 import type { Client, Event } from "../../src/index";
 import { status } from "http-status";
 import { v7 as uuidv7, parse as uuidParse } from "uuid";
 import { ADDRESS } from "../constants";
+
+const { base64Encode } = exportedForTesting!;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -353,9 +356,7 @@ test("Expand foreign records", async () => {
 test("API Errors", async () => {
   const client = await connect();
 
-  const nonExistantId = urlSafeBase64Encode(
-    String.fromCharCode.apply(null, uuidParse(uuidv7())),
-  );
+  const nonExistantId = urlSafeBase64Encode(uuidParse(uuidv7()));
   const nonExistantApi = client.records("non-existant");
   await expect(
     async () => await nonExistantApi.read(nonExistantId),
@@ -561,20 +562,20 @@ test("File upload base64", async () => {
       name: "single_test",
       filename: "test1.bin",
       content_type: "application/octet-stream",
-      data: urlSafeBase64Encode(String.fromCharCode(...testBytes1)),
+      data: urlSafeBase64Encode(testBytes1),
     },
     multiple_files: [
       {
         name: "multi_test_1",
         filename: "test2.bin",
         content_type: "application/octet-stream",
-        data: urlSafeBase64Encode(String.fromCharCode(...testBytes2)),
+        data: urlSafeBase64Encode(testBytes2),
       },
       {
         name: "multi_test_2",
         filename: "test3.bin",
         content_type: "application/octet-stream",
-        data: btoa(String.fromCharCode(...testBytes3)), // Standard base64
+        data: base64Encode(testBytes3), // Standard base64
       },
     ],
   });
@@ -603,30 +604,22 @@ test("File upload base64", async () => {
   const singleFileResponse = await fetch(
     `http://${ADDRESS}${filePath("file_upload_table", recordId, "single_file")}`,
   );
-  expect(new Uint8Array(await singleFileResponse.arrayBuffer())).toEqual(
-    testBytes1,
-  );
+  expect(await singleFileResponse.bytes()).toEqual(testBytes1);
 
   const singleFilesResponse = await fetch(
     `http://${ADDRESS}${filesPath("file_upload_table", recordId, "single_file", singleFile.filename)}`,
   );
-  expect(new Uint8Array(await singleFilesResponse.arrayBuffer())).toEqual(
-    testBytes1,
-  );
+  expect(await singleFilesResponse.bytes()).toEqual(testBytes1);
 
   const multiFile1Response = await fetch(
     `http://${ADDRESS}${filesPath("file_upload_table", recordId, "multiple_files", multipleFiles[0].filename)}`,
   );
-  expect(new Uint8Array(await multiFile1Response.arrayBuffer())).toEqual(
-    testBytes2,
-  );
+  expect(await multiFile1Response.bytes()).toEqual(testBytes2);
 
   const multiFile2Response = await fetch(
     `http://${ADDRESS}${filesPath("file_upload_table", recordId, "multiple_files", multipleFiles[1].filename)}`,
   );
-  expect(new Uint8Array(await multiFile2Response.arrayBuffer())).toEqual(
-    testBytes3,
-  );
+  expect(await multiFile2Response.bytes()).toEqual(testBytes3);
 
   // Clean up
   await api.delete(recordId);

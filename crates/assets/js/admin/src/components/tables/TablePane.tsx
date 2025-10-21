@@ -10,7 +10,6 @@ import { createWritableMemo } from "@solid-primitives/memo";
 import { createColumnHelper } from "@tanstack/solid-table";
 import type { Row } from "@tanstack/solid-table";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
-import { asyncBase64Encode } from "trailbase";
 
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -64,7 +63,6 @@ import {
   type TableType,
 } from "@/lib/schema";
 
-import type { Blob } from "@bindings/Blob";
 import type { Column } from "@bindings/Column";
 import type { ListRowsResponse } from "@bindings/ListRowsResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
@@ -122,7 +120,7 @@ function renderCell(
   }
 
   if ("Blob" in value) {
-    const blob: Blob = value.Blob;
+    const blob = value.Blob;
     if ("Base64UrlSafe" in blob) {
       // TODO: Do we want this? We also discussed showing hex for use in SQL editor as X'AABB'.
       if (cell.isUUID) {
@@ -199,6 +197,14 @@ function renderCell(
   }
 
   throw Error("Unhandled value type");
+}
+
+function asyncBase64Encode(blob: Blob): Promise<string> {
+  return new Promise((resolve, _) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.readAsDataURL(blob);
+  });
 }
 
 function Image(props: { url: string; mime: string }) {

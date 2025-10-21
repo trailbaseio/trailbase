@@ -46,9 +46,7 @@ export function tryParseFloat(value: string): number | undefined {
 }
 
 export function urlSafeBase64ToUuid(id: string): string {
-  return uuidStringify(
-    Uint8Array.from(urlSafeBase64Decode(id), (c) => c.charCodeAt(0)),
-  );
+  return uuidStringify(urlSafeBase64Decode(id));
 }
 
 export async function showSaveFileDialog(opts: {

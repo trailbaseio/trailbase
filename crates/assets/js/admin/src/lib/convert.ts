@@ -60,7 +60,10 @@ export function literalDefault(
   if (type === "Blob") {
     // e.g. X'foo'.
     const blob = unescapeLiteralBlob(value);
-    return blob !== undefined ? urlSafeBase64Encode(blob) : undefined;
+    if (blob !== undefined) {
+      return urlSafeBase64Encode(Buffer.from(blob, "hex"));
+    }
+    return undefined;
   } else if (type === "Text") {
     // e.g. 'bar'.
     return unescapeLiteral(value);

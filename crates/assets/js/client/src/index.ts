@@ -904,40 +904,24 @@ const jsonContentTypeHeader = {
   "Content-Type": "application/json",
 };
 
-export function textEncode(s: string): Uint8Array {
-  return new TextEncoder().encode(s);
-}
-
-export function textDecode(ar: Uint8Array): string {
-  return new TextDecoder().decode(ar);
-}
-
 /// Decode a base64 string to bytes.
-export function base64Decode(base64: string): string {
-  return atob(base64);
+function base64Decode(base64: string): Uint8Array {
+  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
 
 /// Decode a "url-safe" base64 string to bytes.
-export function urlSafeBase64Decode(base64: string): string {
+export function urlSafeBase64Decode(base64: string): Uint8Array {
   return base64Decode(base64.replace(/_/g, "/").replace(/-/g, "+"));
 }
 
 /// Encode an arbitrary string input as base64 string.
-export function base64Encode(s: string): string {
-  return btoa(s);
+function base64Encode(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes));
 }
 
 /// Encode an arbitrary string input as a "url-safe" base64 string.
-export function urlSafeBase64Encode(s: string): string {
-  return base64Encode(s).replace(/\//g, "_").replace(/\+/g, "-");
-}
-
-export function asyncBase64Encode(blob: Blob): Promise<string> {
-  return new Promise((resolve, _) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.readAsDataURL(blob);
-  });
+export function urlSafeBase64Encode(bytes: Uint8Array): string {
+  return base64Encode(bytes).replace(/\//g, "_").replace(/\+/g, "-");
 }
 
 function addFiltersToParams(

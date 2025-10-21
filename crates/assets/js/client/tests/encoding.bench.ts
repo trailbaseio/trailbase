@@ -3,14 +3,15 @@ import { Bench } from "tinybench";
 import {
   urlSafeBase64Encode,
   urlSafeBase64Decode,
-  base64Encode,
-  base64Decode,
+  exportedForTesting,
 } from "../src/index";
+
+const { base64Encode, base64Decode } = exportedForTesting!;
 
 test("encoding benchmark", async () => {
   const bench = new Bench({ time: 500 });
 
-  const input = "!@#$%^&*(!@#$%^&*@".repeat(1000);
+  const input = Uint8Array.from("!@#$%^&*(!@#$%^&*@".repeat(1000));
   const standardInput = base64Encode(input);
   const urlSafeInput = urlSafeBase64Encode(input);
 
