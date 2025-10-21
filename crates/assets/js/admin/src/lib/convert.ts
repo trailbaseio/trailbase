@@ -1,5 +1,3 @@
-import { urlSafeBase64Encode } from "trailbase";
-
 import { tryParseFloat, tryParseBigInt } from "@/lib/utils";
 import {
   unescapeLiteral,
@@ -58,10 +56,10 @@ export function literalDefault(
   }
 
   if (type === "Blob") {
-    // e.g. X'foo'.
+    // e.g. X'abba'.
     const blob = unescapeLiteralBlob(value);
     if (blob !== undefined) {
-      return urlSafeBase64Encode(Buffer.from(blob, "hex"));
+      return blob;
     }
     return undefined;
   } else if (type === "Text") {

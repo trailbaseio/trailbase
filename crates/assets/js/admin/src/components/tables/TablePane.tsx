@@ -1,6 +1,8 @@
 import { For, Match, Switch, createMemo, createSignal, JSX } from "solid-js";
+import { TbRefresh, TbTable, TbTrash } from "solid-icons/tb";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { useSearchParams } from "@solidjs/router";
+import { urlSafeBase64Decode } from "trailbase";
 import type {
   ColumnDef,
   PaginationState,
@@ -14,8 +16,15 @@ import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { TbRefresh, TbTable, TbTrash } from "solid-icons/tb";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import {
   SchemaDialog,
@@ -44,7 +53,7 @@ import { createConfigQuery, invalidateConfig } from "@/lib/config";
 import type { Record, RowData } from "@/lib/convert";
 import { hashSqlValue } from "@/lib/convert";
 import { adminFetch } from "@/lib/fetch";
-import { urlSafeBase64ToUuid } from "@/lib/utils";
+import { urlSafeBase64ToUuid, toHex } from "@/lib/utils";
 import { dropTable, dropIndex } from "@/lib/table";
 import { deleteRows, fetchRows } from "@/lib/row";
 import { sqlValueToString } from "@/lib/value";
@@ -86,6 +95,9 @@ type FileUpload = {
 
 type FileUploads = FileUpload[];
 
+const blobEncodings = ["base64", "hex", "mixed"] as const;
+type BlobEncoding = (typeof blobEncodings)[number];
+
 function rowDataToRow(columns: Column[], row: RowData): Record {
   const result: Record = {};
   for (let i = 0; i < row.length; ++i) {
@@ -106,6 +118,7 @@ function renderCell(
     isFile: boolean;
     isFiles: boolean;
   },
+  blobEncoding: BlobEncoding,
 ): JSX.Element {
   const value: SqlValue = context.getValue();
   if (value === "Null") {
@@ -123,11 +136,43 @@ function renderCell(
   if ("Blob" in value) {
     const blob = value.Blob;
     if ("Base64UrlSafe" in blob) {
-      // TODO: Do we want this? We also discussed showing hex for use in SQL editor as X'AABB'.
+      const render = () => {
+        if (blobEncoding === "hex") {
+          return toHex(urlSafeBase64Decode(blob.Base64UrlSafe));
+        }
+        return blob.Base64UrlSafe;
+      };
+
       if (cell.isUUID) {
-        return urlSafeBase64ToUuid(blob.Base64UrlSafe);
+        return (
+          <Tooltip>
+            <TooltipTrigger as="div">
+              {blobEncoding === "mixed"
+                ? urlSafeBase64ToUuid(blob.Base64UrlSafe)
+                : render()}
+            </TooltipTrigger>
+
+            <TooltipContent>
+              <div>
+                <ul>
+                  <li>
+                    UUID:{" "}
+                    <span class="font-bold">
+                      {urlSafeBase64ToUuid(blob.Base64UrlSafe)}
+                    </span>
+                  </li>
+                  <li>
+                    Url-safe base64:{" "}
+                    <span class="font-bold">{blob.Base64UrlSafe}</span>
+                  </li>
+                </ul>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        );
       }
-      return blob.Base64UrlSafe;
+
+      return render();
     }
     throw Error("Expected Base64UrlSafe");
   }
@@ -475,11 +520,6 @@ function TableHeader(props: {
 
 type TableState = {
   selected: Table | View;
-
-  // Derived
-  pkColumnIndex: number;
-  columnDefs: ColumnDef<RowData, SqlValue>[];
-
   response: ListRowsResponse;
 };
 
@@ -498,18 +538,8 @@ async function buildTableState(
     cursor,
   );
 
-  const pkColumnIndex = findPrimaryKeyColumnIndex(response.columns);
-  const columnDefs = buildColumnDefs(
-    selected.name,
-    tableType(selected),
-    pkColumnIndex,
-    response.columns,
-  );
-
   return {
     selected,
-    pkColumnIndex,
-    columnDefs,
     response,
   };
 }
@@ -519,6 +549,7 @@ function buildColumnDefs(
   tableType: TableType,
   pkColumn: number,
   columns: Column[],
+  blobEncoding: BlobEncoding,
 ): ColumnDef<RowData, SqlValue>[] {
   return columns.map((col, idx) => {
     const fk = getForeignKey(col.options);
@@ -544,17 +575,24 @@ function buildColumnDefs(
     return {
       header,
       cell: (context) =>
-        renderCell(context, tableName, columns, pkColumn, {
-          col: col,
-          isUUID,
-          isJSON,
-          // FIXME: Whether or not an image can be rendered depends on whether
-          // Record API read-access is configured and not the tableType. We
-          // could also consider to decouple by providing a dedicated admin
-          // file-access endpoint.
-          isFile: isFile && tableType !== "view",
-          isFiles: isFiles && tableType !== "view",
-        }),
+        renderCell(
+          context,
+          tableName,
+          columns,
+          pkColumn,
+          {
+            col: col,
+            isUUID,
+            isJSON,
+            // FIXME: Whether or not an image can be rendered depends on whether
+            // Record API read-access is configured and not the tableType. We
+            // could also consider to decouple by providing a dedicated admin
+            // file-access endpoint.
+            isFile: isFile && tableType !== "view",
+            isFiles: isFiles && tableType !== "view",
+          },
+          blobEncoding,
+        ),
       accessorFn: (row: RowData) => row[idx],
     } as ColumnDef<RowData, SqlValue>;
   });
@@ -566,6 +604,7 @@ function RowDataTable(props: {
   filter: SimpleSignal<string | undefined>;
   rowsRefetch: () => void;
 }) {
+  const [blobEncoding, setBlobEncoding] = createSignal<BlobEncoding>("mixed");
   const [editRow, setEditRow] = createSignal<Record | undefined>();
   const [selectedRows, setSelectedRows] = createSignal(
     new Map<string, SqlValue>(),
@@ -576,11 +615,21 @@ function RowDataTable(props: {
 
   const rowsRefetch = () => props.rowsRefetch();
   const columns = (): Column[] => props.state.response.columns;
-  const totalRowCount = () => Number(props.state.response.total_row_count);
-  const pkColumnIndex = () => props.state.pkColumnIndex;
+  const totalRowCount = () => props.state.response.total_row_count;
+
+  const pkColumnIndex = createMemo(() => findPrimaryKeyColumnIndex(columns()));
+  const columnDefs = createMemo(() =>
+    buildColumnDefs(
+      table().name,
+      tableType(table()),
+      pkColumnIndex(),
+      props.state.response.columns,
+      blobEncoding(),
+    ),
+  );
 
   return (
-    <>
+    <div>
       <SafeSheet
         open={[
           () => editRow() !== undefined,
@@ -614,12 +663,12 @@ function RowDataTable(props: {
                 placeholder={`Filter Query, e.g. '(col0 > 5 && col0 < 20) || col1 = "val"'`}
               />
 
-              <div class="space-y-2 overflow-auto">
+              <div class="overflow-auto pt-4">
                 <DataTable
                   // NOTE: The formatting is done via the columnsDefs.
-                  columns={() => props.state.columnDefs}
+                  columns={columnDefs}
                   data={() => props.state.response.rows}
-                  rowCount={totalRowCount()}
+                  rowCount={Number(totalRowCount())}
                   pagination={props.pagination[0]()}
                   onPaginationChange={(
                     p:
@@ -669,57 +718,85 @@ function RowDataTable(props: {
         }}
       />
 
-      {mutable() && (
-        <div class="my-2 flex gap-2">
-          {/* Insert Rows */}
-          <SafeSheet
-            children={(sheet) => {
-              return (
-                <>
-                  <SheetContent class={sheetMaxWidth}>
-                    <InsertUpdateRowForm
-                      schema={table() as Table}
-                      rowsRefetch={rowsRefetch}
-                      {...sheet}
+      <div class="my-2 flex justify-between gap-2">
+        {mutable() && (
+          <div class="flex gap-2">
+            {/* Insert Rows */}
+            <SafeSheet
+              children={(sheet) => {
+                return (
+                  <>
+                    <SheetContent class={sheetMaxWidth}>
+                      <InsertUpdateRowForm
+                        schema={table() as Table}
+                        rowsRefetch={rowsRefetch}
+                        {...sheet}
+                      />
+                    </SheetContent>
+
+                    <SheetTrigger
+                      as={(props: DialogTriggerProps) => (
+                        <Button variant="default" {...props}>
+                          Insert Row
+                        </Button>
+                      )}
                     />
-                  </SheetContent>
+                  </>
+                );
+              }}
+            />
 
-                  <SheetTrigger
-                    as={(props: DialogTriggerProps) => (
-                      <Button variant="default" {...props}>
-                        Insert Row
-                      </Button>
-                    )}
-                  />
-                </>
-              );
-            }}
-          />
+            {/* Delete rows */}
+            <Button
+              variant="destructive"
+              disabled={selectedRows().size === 0}
+              onClick={() => {
+                const ids = [...selectedRows().values()];
+                if (ids.length === 0) {
+                  return;
+                }
 
-          {/* Delete rows */}
-          <Button
-            variant="destructive"
-            disabled={selectedRows().size === 0}
-            onClick={() => {
-              const ids = [...selectedRows().values()];
-              if (ids.length === 0) {
-                return;
+                setSelectedRows(new Map<string, SqlValue>());
+                deleteRows(table().name.name, {
+                  primary_key_column: columns()[pkColumnIndex()].name,
+                  values: ids,
+                })
+                  .finally(rowsRefetch)
+                  .catch(console.error);
+              }}
+            >
+              Delete rows
+            </Button>
+          </div>
+        )}
+
+        <div class="flex items-center gap-2">
+          <Label>Blobs:</Label>
+
+          <Select
+            multiple={false}
+            options={[...blobEncodings]}
+            value={blobEncoding()}
+            itemComponent={(props) => (
+              <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+            )}
+            onChange={(encoding: BlobEncoding | null) => {
+              if (encoding !== null) {
+                setBlobEncoding(encoding);
               }
-
-              setSelectedRows(new Map<string, SqlValue>());
-              deleteRows(table().name.name, {
-                primary_key_column: columns()[pkColumnIndex()].name,
-                values: ids,
-              })
-                .finally(rowsRefetch)
-                .catch(console.error);
             }}
           >
-            Delete rows
-          </Button>
+            <SelectTrigger>
+              <SelectValue<string>>
+                {(state) => state.selectedOption()}
+              </SelectValue>
+            </SelectTrigger>
+
+            <SelectContent />
+          </Select>
         </div>
-      )}
-    </>
+      </div>
+    </div>
   );
 }
 
@@ -785,10 +862,10 @@ export function TablePane(props: {
   const state = useQuery(() => ({
     queryKey: [
       "tableData",
+      prettyFormatQualifiedName(props.selectedTable.name),
       searchParams.filter,
       pagination().pageIndex,
       pagination().pageSize,
-      prettyFormatQualifiedName(props.selectedTable.name),
     ],
     queryFn: async ({ queryKey }) => {
       const p = pagination();
@@ -798,7 +875,7 @@ export function TablePane(props: {
       );
 
       try {
-        const response = await buildTableState(
+        const state = await buildTableState(
           props.selectedTable,
           searchParams.filter ?? null,
           p.pageSize,
@@ -806,12 +883,12 @@ export function TablePane(props: {
           c[p.pageIndex - 1],
         );
 
-        const cursor = response.response.cursor;
+        const cursor = state.response.cursor;
         if (cursor && p.pageIndex >= c.length) {
           setCursors([...c, cursor]);
         }
 
-        return response;
+        return state;
       } catch (err) {
         // Reset.
         setPageIndex(0);

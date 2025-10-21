@@ -8,7 +8,7 @@ import { TablePane } from "@/components/tables/TablePane";
 import { Button } from "@/components/ui/button";
 import { SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
-  Switch as SwitchUi,
+  Switch as SwitchToggle,
   SwitchControl,
   SwitchLabel,
   SwitchThumb,
@@ -79,7 +79,7 @@ function TablePickerPane(props: {
     <div
       class={`${horizontal() ? "flex h-dvh flex-col" : "flex"} hide-scrollbars gap-2 overflow-scroll p-4`}
     >
-      <SwitchUi
+      <SwitchToggle
         class="flex items-center justify-center gap-2"
         checked={showHidden()}
         onChange={(show: boolean) => {
@@ -96,7 +96,7 @@ function TablePickerPane(props: {
         </SwitchControl>
 
         <SwitchLabel>Show Hidden</SwitchLabel>
-      </SwitchUi>
+      </SwitchToggle>
 
       {horizontal() && <Separator />}
 

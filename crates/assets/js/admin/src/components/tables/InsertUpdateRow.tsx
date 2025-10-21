@@ -1,6 +1,6 @@
 import { children, createSignal, For, Show, JSX } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
-import { urlSafeBase64Decode } from "trailbase";
+import { urlSafeBase64Decode, urlSafeBase64Encode } from "trailbase";
 
 import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -50,7 +50,7 @@ import type {
   SqlTextValue,
   SqlValue,
 } from "@/lib/value";
-import { tryParseFloat, tryParseBigInt } from "@/lib/utils";
+import { tryParseFloat, tryParseBigInt, fromHex } from "@/lib/utils";
 import { isNullableColumn } from "@/lib/schema";
 
 export function InsertUpdateRowForm(props: {
@@ -543,7 +543,7 @@ function initialValuePlaceholder(initial: SqlValue | undefined) {
   if ("Blob" in initial) {
     const blob = initial.Blob;
     if ("Base64UrlSafe" in blob) {
-      return `(current: ${blob.Base64UrlSafe} (${urlSafeBase64Decode(blob.Base64UrlSafe)})`;
+      return `(current: ${blob.Base64UrlSafe})`;
     } else if ("Hex" in blob) {
       return `(current: ${blob.Hex})`;
     } else {
@@ -572,7 +572,7 @@ function defaultValuePlaceholder(
     }
 
     if (type === "Blob" && typeof literal === "string") {
-      return `(default: ${literal} (${urlSafeBase64Decode(literal)}))`;
+      return `(default: ${urlSafeBase64Encode(fromHex(literal))} (hex: ${literal}))`;
     }
 
     if (type === "Text") {
