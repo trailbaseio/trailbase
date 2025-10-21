@@ -1,3 +1,15 @@
+## v0.20.0
+
+- Model types more closely after SQLite's and derive an affinity type. We use it to parse `ANY` columns in the admin UI.
+  - As a consequence, `VIEW` column types are now stricter when parsing `CAST` expressions. If you were using non-`STRICT` types, you'll have to update your `VIEW` definition.
+- Stop encoding SQLite values as generic JSON for internal APIs, both in admin APIs and between WASM host and guests.
+  - This is mostly an internal quality change - improving internal type-safety and simplifying the implementation.
+  - Albeit internal, this change affects the serialization format between WASM guests and the host. Consequently, you'll need to rebuild your guest component against the latest guest runtime to avoid skew. The public APIs remained the same except for the JS/TS guest's SQL value definition, which got cleaned up.
+  - Changing the admin APIs also meant that the admin dash's insert/update row UI was more-or-less rewritten, with many small edge-cases getting fixed.
+- Add `base64` and `base64_url_safe` SQLite extension functions. Can be used, e.g. to `SELECT` on an encoded primary-key.
+- Add a switch to the admin UI's table explorer for selecting the `BLOB` encoding: url-safe base64, hex, or mixed (UUID text-format and url-safe base64 otherwise).
+- Update dependencies.
+
 ## v0.19.2
 
 - Use the `winch` non-optimizing baseline WASM compiler in `--dev` mode to speed-up cold start and reload.

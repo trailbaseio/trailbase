@@ -508,7 +508,7 @@ dependencies = [
  "serde",
  "serde_json",
  "trailbase-build",
- "trailbase-wasm 0.3.0",
+ "trailbase-wasm 0.4.0",
 ]
 
 [[package]]
@@ -1280,7 +1280,7 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "serde_json",
- "trailbase-wasm 0.3.0",
+ "trailbase-wasm 0.4.0",
 ]
 
 [[package]]
@@ -1290,7 +1290,7 @@ dependencies = [
  "rquickjs",
  "serde",
  "serde_json",
- "trailbase-wasm 0.3.0",
+ "trailbase-wasm 0.4.0",
 ]
 
 [[package]]
@@ -5934,7 +5934,7 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
- "trailbase-wasm 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trailbase-wasm 0.3.0",
 ]
 
 [[package]]
@@ -7898,7 +7898,7 @@ dependencies = [
  "trailbase-schema",
  "trailbase-sqlite",
  "trailbase-sqlvalue",
- "trailbase-wasm-common 0.1.0",
+ "trailbase-wasm-common 0.2.0",
  "trailbase-wasm-runtime-host",
  "ts-rs",
  "url",
@@ -8142,28 +8142,6 @@ dependencies = [
 [[package]]
 name = "trailbase-wasm"
 version = "0.3.0"
-dependencies = [
- "base64",
- "bytes",
- "futures-util",
- "http",
- "log",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "serde_urlencoded",
- "static_assertions",
- "thiserror 2.0.17",
- "trailbase-sqlvalue",
- "trailbase-wasm-common 0.1.0",
- "url",
- "wit-bindgen",
- "wstd",
-]
-
-[[package]]
-name = "trailbase-wasm"
-version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9458440307186fc8b5732690d9c874ab59d62564b21155492c4dafe3d42a66b1"
 dependencies = [
@@ -8180,19 +8158,32 @@ dependencies = [
  "serde_urlencoded",
  "static_assertions",
  "thiserror 2.0.17",
- "trailbase-wasm-common 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trailbase-wasm-common 0.1.0",
  "url",
  "wit-bindgen",
  "wstd",
 ]
 
 [[package]]
-name = "trailbase-wasm-common"
-version = "0.1.0"
+name = "trailbase-wasm"
+version = "0.4.0"
 dependencies = [
+ "base64",
+ "bytes",
+ "futures-util",
+ "http",
+ "log",
  "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_urlencoded",
+ "static_assertions",
+ "thiserror 2.0.17",
  "trailbase-sqlvalue",
- "ts-rs",
+ "trailbase-wasm-common 0.2.0",
+ "url",
+ "wit-bindgen",
+ "wstd",
 ]
 
 [[package]]
@@ -8203,6 +8194,15 @@ checksum = "bf8c2732de90edc81c2a408c83f082bbf62a1ecb7c61f9c396a6ce575f9c0f71"
 dependencies = [
  "serde",
  "serde_json",
+ "ts-rs",
+]
+
+[[package]]
+name = "trailbase-wasm-common"
+version = "0.2.0"
+dependencies = [
+ "serde",
+ "trailbase-sqlvalue",
  "ts-rs",
 ]
 
@@ -8228,7 +8228,7 @@ dependencies = [
  "trailbase-sqlite",
  "trailbase-sqlvalue",
  "trailbase-wasi-keyvalue",
- "trailbase-wasm-common 0.1.0",
+ "trailbase-wasm-common 0.2.0",
  "wasmtime",
  "wasmtime-wasi",
  "wasmtime-wasi-http",
@@ -8772,7 +8772,7 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "serde_json",
- "trailbase-wasm 0.3.0",
+ "trailbase-wasm 0.4.0",
 ]
 
 [[package]]

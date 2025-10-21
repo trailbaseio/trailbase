@@ -2,7 +2,7 @@
   "name": "trailbase-wasm",
   "description": "WASM Guest Runtime for custom JS/TS endpoints in TrailBase",
   "homepage": "https://trailbase.io",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "OSL-3.0",
   "type": "module",
   "exports": {

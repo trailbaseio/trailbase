@@ -104,8 +104,8 @@ trailbase-sqlean = { path = "crates/sqlean", version = "0.0.3" }
 trailbase-sqlite = { path = "crates/sqlite", version = "0.3.0" }
 trailbase-sqlvalue = { path = "crates/sqlvalue", version = "0.1.0" }
 trailbase-wasi-keyvalue = { path = "crates/wasi-keyvalue", version = "0.1.0" }
-trailbase-wasm = { path = "crates/wasm-runtime-guest", version = "0.3.0" }
-trailbase-wasm-common = { path = "crates/wasm-runtime-common", version = "0.1.0" }
+trailbase-wasm = { path = "crates/wasm-runtime-guest", version = "0.4.0" }
+trailbase-wasm-common = { path = "crates/wasm-runtime-common", version = "0.2.0" }
 trailbase-wasm-runtime-host = { path = "crates/wasm-runtime-host", version = "0.1.0" }
 ts-rs = { version = "11", features = ["uuid-impl", "serde-json-impl", "indexmap-impl"] }
 uuid = { version = "1", default-features = false, features = ["std", "v4", "v7", "serde"] }
