@@ -389,15 +389,6 @@ impl ColumnDataType {
   }
 }
 
-// impl From<sqlite3_parser::ast::Type> for ColumnDataType {
-//   fn from(data_type: sqlite3_parser::ast::Type) -> Self {
-//     // NOTE: In STRICT mode only explicit column data types are allowed (also INT is an alias for
-//     // INTEGER). Otherwise, any type-name goes, e.g. "FOO". There are rules to also derive
-//     // affinities, if certain substrings are contained, e.g. "FOOINTBAR" will have INTEGER
-// affinity     return
-// ColumnDataType::from_type_name(&data_type.name).unwrap_or(ColumnDataType::Any);   }
-// }
-
 /// Different affinity types in SQLite will lead to different preferences in interpreting input
 /// literals. For example, a column with REAL preference, will store any input but try to convert
 /// strings into REAL when possible.

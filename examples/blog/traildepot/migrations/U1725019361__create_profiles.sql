@@ -31,7 +31,7 @@ CREATE VIEW profiles_view AS
       ELSE NULL
     END AS TEXT) AS avatar_url,
     -- TrailBase requires top-level cast to determine result type and generate JSON schemas.
-    CAST(IIF(editors.user IS NULL, FALSE, TRUE) AS BOOLEAN) AS is_editor
+    CAST(IIF(editors.user IS NULL, FALSE, TRUE) AS INTEGER) AS is_editor
   FROM profiles AS p
     LEFT JOIN _user_avatar AS avatar ON p.user = avatar.user
     LEFT JOIN editors ON p.user = editors.user;
