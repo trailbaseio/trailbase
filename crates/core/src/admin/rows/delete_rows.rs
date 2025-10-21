@@ -17,9 +17,7 @@ use crate::records::write_queries::run_delete_query;
 #[ts(export)]
 pub struct DeleteRowRequest {
   primary_key_column: String,
-
-  /// The primary key (of any type since we're in row instead of RecordApi land) of rows that
-  /// shall be deleted.
+  /// The primary key value.
   value: SqlValue,
 }
 

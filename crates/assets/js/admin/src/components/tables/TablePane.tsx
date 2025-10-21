@@ -47,6 +47,7 @@ import { adminFetch } from "@/lib/fetch";
 import { urlSafeBase64ToUuid } from "@/lib/utils";
 import { dropTable, dropIndex } from "@/lib/table";
 import { deleteRows, fetchRows } from "@/lib/row";
+import { sqlValueToString } from "@/lib/value";
 import {
   findPrimaryKeyColumnIndex,
   getForeignKey,
@@ -146,7 +147,7 @@ function renderCell(
           tableName,
           query: {
             pk_column: pkCol,
-            pk_value: pkVal,
+            pk_value: sqlValueToString(pkVal),
             file_column_name: cell.col.name,
             file_name: null,
           },
@@ -179,7 +180,7 @@ function renderCell(
                   tableName,
                   query: {
                     pk_column: pkCol,
-                    pk_value: pkVal,
+                    pk_value: sqlValueToString(pkVal),
                     file_column_name: cell.col.name,
                     file_name: fileUpload.filename ?? null,
                   },
@@ -239,7 +240,7 @@ function imageUrl(opts: {
   if (query.file_name) {
     const params = new URLSearchParams({
       pk_column: query.pk_column,
-      pk_value: `${query.pk_value}`,
+      pk_value: query.pk_value,
       file_column_name: query.file_column_name,
       file_name: query.file_name,
     });
@@ -249,7 +250,7 @@ function imageUrl(opts: {
 
   const params = new URLSearchParams({
     pk_column: query.pk_column,
-    pk_value: `${query.pk_value}`,
+    pk_value: query.pk_value,
     file_column_name: query.file_column_name,
   });
   return `/table/${tableName}/files?${params}`;
@@ -650,8 +651,6 @@ function RowDataTable(props: {
                             const pkValue: SqlValue =
                               row.original[pkColumnIndex()];
                             const key = hashSqlValue(pkValue);
-
-                            console.log("kYE", key);
 
                             if (value) {
                               newSelection.set(key, pkValue);

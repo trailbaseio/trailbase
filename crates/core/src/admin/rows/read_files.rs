@@ -3,7 +3,6 @@ use axum::{
   response::Response,
 };
 use serde::Deserialize;
-use trailbase_common::SqlValue;
 use trailbase_schema::{FileUploads, QualifiedName};
 use ts_rs::TS;
 
@@ -16,10 +15,7 @@ use crate::records::read_queries::run_get_files_query;
 #[ts(export)]
 pub struct ReadFilesQuery {
   pk_column: String,
-
-  /// The primary key (of any type since we're in row instead of RecordAPI land) of rows that
-  /// shall be deleted.
-  pk_value: SqlValue,
+  pk_value: String,
 
   file_column_name: String,
   file_name: Option<String>,
@@ -69,7 +65,7 @@ pub async fn read_files_handler(
     file_col_metadata,
     file_col_json_metadata,
     &query.pk_column,
-    query.pk_value.try_into()?,
+    trailbase_schema::json::parse_string_to_sqlite_value(pk_col.data_type, query.pk_value)?,
   )
   .await?;
 

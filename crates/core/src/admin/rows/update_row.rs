@@ -14,8 +14,6 @@ use crate::records::write_queries::run_update_query;
 #[ts(export)]
 pub struct UpdateRowRequest {
   pub primary_key_column: String,
-
-  #[ts(type = "Object")]
   pub primary_key_value: SqlValue,
 
   /// Row data, which is expected to be a map from column name to value.

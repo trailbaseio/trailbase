@@ -3,7 +3,6 @@ import type { SqlValue } from "./SqlValue";
 
 export type DeleteRowRequest = { primary_key_column: string, 
 /**
- * The primary key (of any type since we're in row instead of RecordApi land) of rows that
- * shall be deleted.
+ * The primary key value.
  */
 value: SqlValue, };
