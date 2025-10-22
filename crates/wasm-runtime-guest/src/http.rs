@@ -400,7 +400,7 @@ where
     let mut r = self.0.into_response();
     r.headers_mut().insert(
       http::header::CONTENT_TYPE,
-      http::HeaderValue::from_static(mime::TEXT_HTML_UTF_8.as_ref()),
+      http::HeaderValue::from_static("text/html; charset=utf-8"),
     );
     return r;
   }

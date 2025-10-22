@@ -8143,13 +8143,11 @@ dependencies = [
 name = "trailbase-wasm"
 version = "0.3.0"
 dependencies = [
- "anyhow",
  "base64",
  "bytes",
  "futures-util",
  "http",
  "log",
- "mime",
  "serde",
  "serde_json",
  "serde_path_to_error",

@@ -18,7 +18,6 @@ pub struct Job {
 }
 
 impl Job {
-  // NOTE: We use anyhow here specifically to allow guests to attach context.
   pub fn new<F, R, B>(
     name: impl std::string::ToString,
     spec: impl std::string::ToString,
