@@ -1,8 +1,8 @@
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
-use trailbase_common::SqlValue;
 use trailbase_schema::parse::parse_into_statements;
 use trailbase_schema::sqlite::Column;
+use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
 use crate::AppState;

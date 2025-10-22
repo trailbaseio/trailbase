@@ -1,3 +1,7 @@
+#![forbid(unsafe_code, clippy::unwrap_used)]
+#![allow(clippy::needless_return)]
+#![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
+
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -5,7 +9,7 @@ use ts_rs::TS;
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum DecodeError {
   #[error("Base64: {0}")]
-  Base64(#[from] base64::DecodeError),
+  Base64(base64::DecodeError),
   #[error("Hex")]
   Hex,
 }
@@ -39,7 +43,7 @@ impl Blob {
   pub fn to_bytes(&self) -> Result<Vec<u8>, DecodeError> {
     return Ok(match self {
       Blob::Array(v) => v.clone(),
-      Blob::Base64UrlSafe(s) => BASE64_URL_SAFE.decode(s)?,
+      Blob::Base64UrlSafe(s) => BASE64_URL_SAFE.decode(s).map_err(DecodeError::Base64)?,
       Blob::Hex(s) => decode_hex(s)?,
     });
   }
@@ -47,7 +51,7 @@ impl Blob {
   pub fn into_bytes(self) -> Result<Vec<u8>, DecodeError> {
     return Ok(match self {
       Blob::Array(v) => v,
-      Blob::Base64UrlSafe(s) => BASE64_URL_SAFE.decode(&s)?,
+      Blob::Base64UrlSafe(s) => BASE64_URL_SAFE.decode(&s).map_err(DecodeError::Base64)?,
       Blob::Hex(s) => decode_hex(&s)?,
     });
   }
@@ -84,7 +88,9 @@ impl TryFrom<SqlValue> for rusqlite::types::Value {
       SqlValue::Text(v) => Value::Text(v),
       SqlValue::Blob(b) => match b {
         Blob::Array(v) => Value::Blob(v),
-        Blob::Base64UrlSafe(v) => Value::Blob(BASE64_URL_SAFE.decode(v)?),
+        Blob::Base64UrlSafe(v) => {
+          Value::Blob(BASE64_URL_SAFE.decode(v).map_err(DecodeError::Base64)?)
+        }
         Blob::Hex(v) => Value::Blob(decode_hex(&v)?),
       },
     });

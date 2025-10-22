@@ -20,7 +20,7 @@ serde_path_to_error = "0.1.19"
 serde_urlencoded = "0.7.1"
 static_assertions = "1.1.0"
 thiserror = "2.0.14"
-trailbase-common = { workspace = true }
+trailbase-sqlvalue = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 url = "2.5.7"
 wit-bindgen = "0.46.0"

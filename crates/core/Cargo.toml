@@ -87,7 +87,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 trailbase-assets = { workspace = true }
 trailbase-build = { workspace = true }
-trailbase-common = { workspace = true }
+trailbase-sqlvalue = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-js = { workspace = true, optional = true }
 trailbase-qs = { workspace = true }

@@ -3,7 +3,7 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use serde::{Deserialize, Serialize};
-use trailbase_common::sql_value::SqlValue;
+use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
 #[derive(Clone, Debug, Deserialize, Serialize, TS)]

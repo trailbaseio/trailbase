@@ -27,7 +27,7 @@ self_cell = "1.2.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "2.0.14"
-trailbase-common = { workspace = true, features = ["rusqlite"] }
+trailbase-sqlvalue = { workspace = true, features = ["rusqlite"] }
 trailbase-sqlite = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 trailbase-wasi-keyvalue = { workspace = true }

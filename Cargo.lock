@@ -7891,13 +7891,13 @@ dependencies = [
  "tracing-subscriber",
  "trailbase-assets",
  "trailbase-build",
- "trailbase-common",
  "trailbase-extension",
  "trailbase-js",
  "trailbase-qs",
  "trailbase-refinery",
  "trailbase-schema",
  "trailbase-sqlite",
+ "trailbase-sqlvalue",
  "trailbase-wasm-common 0.1.0",
  "trailbase-wasm-runtime-host",
  "ts-rs",
@@ -7975,18 +7975,6 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
-]
-
-[[package]]
-name = "trailbase-common"
-version = "0.1.0"
-dependencies = [
- "base64",
- "rusqlite",
- "serde",
- "serde_bytes",
- "thiserror 2.0.17",
- "ts-rs",
 ]
 
 [[package]]
@@ -8129,6 +8117,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "trailbase-sqlvalue"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "rusqlite",
+ "serde",
+ "serde_bytes",
+ "thiserror 2.0.17",
+ "ts-rs",
+]
+
+[[package]]
 name = "trailbase-wasi-keyvalue"
 version = "0.1.0"
 dependencies = [
@@ -8154,7 +8154,7 @@ dependencies = [
  "serde_urlencoded",
  "static_assertions",
  "thiserror 2.0.17",
- "trailbase-common",
+ "trailbase-sqlvalue",
  "trailbase-wasm-common 0.1.0",
  "url",
  "wit-bindgen",
@@ -8191,7 +8191,7 @@ name = "trailbase-wasm-common"
 version = "0.1.0"
 dependencies = [
  "serde",
- "trailbase-common",
+ "trailbase-sqlvalue",
  "ts-rs",
 ]
 
@@ -8225,8 +8225,8 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tracing",
- "trailbase-common",
  "trailbase-sqlite",
+ "trailbase-sqlvalue",
  "trailbase-wasi-keyvalue",
  "trailbase-wasm-common 0.1.0",
  "wasmtime",

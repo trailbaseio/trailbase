@@ -1,8 +1,8 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
-use trailbase_common::SqlValue;
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
+use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;

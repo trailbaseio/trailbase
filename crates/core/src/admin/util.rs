@@ -1,7 +1,7 @@
-use trailbase_common::SqlValue;
 use trailbase_schema::json::JsonError;
 use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType};
 use trailbase_sqlite::{Row, Rows, ValueType};
+use trailbase_sqlvalue::SqlValue;
 
 /// Best-effort conversion from row values to column definition.
 ///

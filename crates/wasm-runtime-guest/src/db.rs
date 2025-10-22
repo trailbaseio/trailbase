@@ -1,4 +1,4 @@
-use trailbase_common::sql_value::{Blob, DecodeError, SqlValue};
+use trailbase_sqlvalue::{Blob, DecodeError, SqlValue};
 use wstd::http::body::IntoBody;
 use wstd::http::{Client, Request};
 

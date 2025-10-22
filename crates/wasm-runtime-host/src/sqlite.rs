@@ -3,8 +3,8 @@ use http_body_util::{BodyExt, combinators::BoxBody};
 use rusqlite::Transaction;
 use self_cell::{MutBorrow, self_cell};
 use tokio::time::Duration;
-use trailbase_common::sql_value::{DecodeError, SqlValue};
 use trailbase_sqlite::connection::ArcLockGuard;
+use trailbase_sqlvalue::{DecodeError, SqlValue};
 use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 

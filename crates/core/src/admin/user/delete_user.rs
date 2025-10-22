@@ -5,8 +5,8 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use serde::Deserialize;
-use trailbase_common::{Blob, SqlValue};
 use trailbase_schema::QualifiedName;
+use trailbase_sqlvalue::{Blob, SqlValue};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;

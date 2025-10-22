@@ -10,5 +10,5 @@ readme = "../../README.md"
 
 [dependencies]
 serde = { workspace = true }
-trailbase-common = { workspace = true }
+trailbase-sqlvalue = { workspace = true }
 ts-rs = { workspace = true }

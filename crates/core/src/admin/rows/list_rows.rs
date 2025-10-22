@@ -3,10 +3,10 @@ use log::*;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::sync::Arc;
-use trailbase_common::SqlValue;
 use trailbase_qs::{Cursor, CursorType, Order, OrderPrecedent, Query};
 use trailbase_schema::QualifiedName;
 use trailbase_schema::sqlite::{Column, ColumnDataType};
+use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -254,7 +254,7 @@ fn parse_cursor(cursor: &str, pk_col: &Column) -> Result<Cursor, Error> {
 #[cfg(test)]
 mod tests {
   use base64::prelude::*;
-  use trailbase_common::Blob;
+  use trailbase_sqlvalue::Blob;
 
   use super::*;
   use crate::{admin::rows::list_rows::Pagination, app_state::*, listing::WhereClause};

@@ -7,7 +7,6 @@ members = [
   "crates/build",
   "crates/cli",
   "crates/client",
-  "crates/common",
   "crates/core",
   "crates/extension",
   "crates/js-runtime",
@@ -16,6 +15,7 @@ members = [
   "crates/schema",
   "crates/sqlean",
   "crates/sqlite",
+  "crates/sqlvalue",
   "crates/wasi-keyvalue",
   "crates/wasm-runtime-host",
   "crates/wasm-runtime-common",
@@ -32,7 +32,6 @@ default-members = [
   "crates/build",
   "crates/cli",
   "crates/client",
-  "crates/common",
   "crates/core",
   "crates/extension",
   "crates/js-runtime",
@@ -41,6 +40,7 @@ default-members = [
   "crates/schema",
   "crates/sqlean",
   "crates/sqlite",
+  "crates/sqlvalue",
   "crates/wasi-keyvalue",
   "crates/wasm-runtime-host",
   "crates/wasm-runtime-common",
@@ -95,7 +95,6 @@ trailbase = { path = "crates/core", version = "0.2.0", default-features = false,
 trailbase-assets = { path = "crates/assets", version = "0.2.0" }
 trailbase-build = { path = "crates/build", version = "0.1.1" }
 trailbase-client = { path = "crates/client", version = "0.5.0" }
-trailbase-common = { path = "crates/common", version = "0.1.0" }
 trailbase-extension = { path = "crates/extension", version = "0.3.0" }
 trailbase-js = { path = "crates/js-runtime", version = "0.2.0" }
 trailbase-qs = { path = "crates/qs", version = "0.1.0" }
@@ -103,6 +102,7 @@ trailbase-refinery = { path = "crates/refinery", version = "0.1.0" }
 trailbase-schema = { path = "crates/schema", version = "0.1.0" }
 trailbase-sqlean = { path = "crates/sqlean", version = "0.0.3" }
 trailbase-sqlite = { path = "crates/sqlite", version = "0.3.0" }
+trailbase-sqlvalue = { path = "crates/sqlvalue", version = "0.1.0" }
 trailbase-wasi-keyvalue = { path = "crates/wasi-keyvalue", version = "0.1.0" }
 trailbase-wasm = { path = "crates/wasm-runtime-guest", version = "0.3.0" }
 trailbase-wasm-common = { path = "crates/wasm-runtime-common", version = "0.1.0" }
