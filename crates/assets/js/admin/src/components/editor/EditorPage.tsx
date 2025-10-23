@@ -1,4 +1,5 @@
 import {
+  ErrorBoundary,
   For,
   Match,
   Show,
@@ -132,6 +133,7 @@ function ResultView(props: {
   script: Script;
   response: ExecutionResult | undefined;
 }) {
+  const isCached = () => props.response === undefined;
   const response = () => props.response ?? props.script.result;
 
   function columnDefs(data: QueryResponse): ColumnDef<RowData, SqlValue>[] {
@@ -140,7 +142,10 @@ function ResultView(props: {
 
       const header = `${col.name} [${col.data_type}${notNull ? "" : "?"}]`;
       return {
-        accessorFn: (row: RowData) => sqlValueToString(row[idx]),
+        accessorFn: (row: RowData) => {
+          console.log(row);
+          return sqlValueToString(row[idx]);
+        },
         header,
       };
     });
@@ -154,22 +159,39 @@ function ResultView(props: {
         </Match>
 
         <Match when={(response()?.data?.columns?.length ?? 0) > 0}>
-          <div class="flex flex-col gap-2">
-            <div class="flex justify-end text-sm">
-              Last executed:{" "}
-              {new Date(response()?.timestamp ?? 0).toLocaleTimeString()}
-            </div>
+          <ErrorBoundary
+            fallback={(err, _reset) => {
+              return (
+                <div class="m-4 flex flex-col gap-4">
+                  <p>Failed to render query result: {`${err}`}</p>
 
-            {/* TODO: Enable pagination */}
-            <DataTable
-              columns={() => columnDefs(response()!.data!)}
-              data={() => response()!.data!.rows as RowData[]}
-              pagination={{
-                pageIndex: 0,
-                pageSize: 50,
-              }}
-            />
-          </div>
+                  {isCached() && (
+                    <p>
+                      The view is trying to show cached data. Maybe the schema
+                      has changed. Try to re-execute the query.
+                    </p>
+                  )}
+                </div>
+              );
+            }}
+          >
+            <div class="flex flex-col gap-2">
+              <div class="flex justify-end text-sm">
+                Last executed:{" "}
+                {new Date(response()?.timestamp ?? 0).toLocaleTimeString()}
+              </div>
+
+              {/* TODO: Enable pagination */}
+              <DataTable
+                columns={() => columnDefs(response()!.data!)}
+                data={() => response()!.data!.rows as RowData[]}
+                pagination={{
+                  pageIndex: 0,
+                  pageSize: 50,
+                }}
+              />
+            </div>
+          </ErrorBoundary>
         </Match>
 
         <Match when={(response()?.data?.columns?.length ?? 0) == 0}>
@@ -516,6 +538,7 @@ function EditorPanel(props: {
                     Execute (Ctrl+Enter)
                   </Button>
                 </TooltipTrigger>
+
                 <TooltipContent>
                   Execute script on the server. No turning back.
                 </TooltipContent>
