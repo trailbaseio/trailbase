@@ -86,10 +86,10 @@ impl<E: RustEmbed> Future for ServeFuture<E> {
       ));
     }
 
-    let path: &str = match self.request.uri().path().trim_start_matches("/") {
+    let (index, path): (bool, &str) = match self.request.uri().path().trim_start_matches("/") {
       // If path is only "/" get index file.
-      x if x.is_empty() => self.state.index_file.as_deref().unwrap_or(x),
-      x => x,
+      x if x.is_empty() => (true, self.state.index_file.as_deref().unwrap_or(x)),
+      x => (false, x),
     };
 
     let Some(file) = E::get(path).or_else(|| {
@@ -102,11 +102,15 @@ impl<E: RustEmbed> Future for ServeFuture<E> {
       return Poll::Ready(Ok(Self::not_found()));
     };
 
-    let response_builder = Response::builder()
-      .header(http::header::CACHE_CONTROL, "public")
-      .header(http::header::CACHE_CONTROL, "max-age=604800")
-      .header(http::header::CACHE_CONTROL, "immutable")
-      .header(http::header::CONTENT_TYPE, file.metadata.mimetype());
+    let response_builder = if index {
+      Response::builder().header(http::header::CONTENT_TYPE, file.metadata.mimetype())
+    } else {
+      Response::builder()
+        .header(http::header::CACHE_CONTROL, "public")
+        .header(http::header::CACHE_CONTROL, "max-age=604800")
+        .header(http::header::CACHE_CONTROL, "immutable")
+        .header(http::header::CONTENT_TYPE, file.metadata.mimetype())
+    };
 
     return Poll::Ready(Ok(
       response_builder
