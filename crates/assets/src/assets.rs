@@ -10,32 +10,26 @@ use std::sync::Arc;
 use std::task::Poll;
 use tower_service::Service;
 
-type FallbackFn = Box<dyn Fn(&str) -> Option<String> + Send + Sync>;
-
-struct State {
-  fallback: Option<FallbackFn>,
-  index_file: Option<String>,
-}
+type FallbackFn = dyn Fn(&str) -> Option<Response<Body>> + Send + Sync;
 
 #[derive(Clone)]
-pub struct AssetService<E: RustEmbed + Clone> {
+pub struct AssetService<E: RustEmbed> {
   _phantom: std::marker::PhantomData<E>,
-  state: Arc<State>,
+  fallback: Arc<FallbackFn>,
 }
 
-impl<E: RustEmbed + Clone> AssetService<E> {
-  pub fn with_parameters(fallback: Option<FallbackFn>, index_file: Option<String>) -> Self {
+impl<E: RustEmbed> AssetService<E> {
+  pub fn with_parameters(
+    fallback: impl Fn(&str) -> Option<Response<Body>> + Send + Sync + 'static,
+  ) -> Self {
     Self {
       _phantom: std::marker::PhantomData,
-      state: Arc::new(State {
-        fallback,
-        index_file,
-      }),
+      fallback: Arc::new(fallback),
     }
   }
 }
 
-impl<E: RustEmbed + Clone> Service<Request<Body>> for AssetService<E> {
+impl<E: RustEmbed> Service<Request<Body>> for AssetService<E> {
   type Response = Response<Body>;
   type Error = Infallible;
   type Future = ServeFuture<E>;
@@ -50,7 +44,7 @@ impl<E: RustEmbed + Clone> Service<Request<Body>> for AssetService<E> {
   fn call(&mut self, req: Request<Body>) -> Self::Future {
     ServeFuture {
       _phantom: std::marker::PhantomData,
-      state: self.state.clone(),
+      fallback: self.fallback.clone(),
       request: req,
     }
   }
@@ -58,7 +52,7 @@ impl<E: RustEmbed + Clone> Service<Request<Body>> for AssetService<E> {
 
 pub struct ServeFuture<E: RustEmbed> {
   _phantom: std::marker::PhantomData<E>,
-  state: Arc<State>,
+  fallback: Arc<FallbackFn>,
   request: Request<Body>,
 }
 
@@ -70,6 +64,14 @@ impl<E: RustEmbed> ServeFuture<E> {
       .body(Body::from(NOT_FOUND))
       .unwrap_or_default();
   }
+
+  fn not_allowed() -> Response<Body> {
+    return Response::builder()
+      .status(StatusCode::METHOD_NOT_ALLOWED)
+      .header(http::header::CONTENT_TYPE, "text/plain")
+      .body(Body::from("Method not allowed"))
+      .unwrap_or_default();
+  }
 }
 
 impl<E: RustEmbed> Future for ServeFuture<E> {
@@ -77,40 +79,26 @@ impl<E: RustEmbed> Future for ServeFuture<E> {
 
   fn poll(self: Pin<&mut Self>, _cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
     if self.request.method() != http::Method::GET {
-      return Poll::Ready(Ok(
-        Response::builder()
-          .status(StatusCode::METHOD_NOT_ALLOWED)
-          .header(http::header::CONTENT_TYPE, "text/plain")
-          .body(Body::from("Method not allowed"))
-          .unwrap_or_default(),
-      ));
+      return Poll::Ready(Ok(Self::not_allowed()));
     }
 
-    let (index, path): (bool, &str) = match self.request.uri().path().trim_start_matches("/") {
-      // If path is only "/" get index file.
-      x if x.is_empty() => (true, self.state.index_file.as_deref().unwrap_or(x)),
-      x => (false, x),
-    };
+    let path: &str = self.request.uri().path().trim_start_matches("/");
 
-    let Some(file) = E::get(path).or_else(|| {
-      self
-        .state
-        .fallback
-        .as_ref()
-        .and_then(|fb| fb(path).and_then(|f| E::get(&f)))
-    }) else {
+    let Some(file) = E::get(path) else {
+      if let Some(fb_response) = (self.fallback)(path) {
+        return Poll::Ready(Ok(fb_response));
+      }
       return Poll::Ready(Ok(Self::not_found()));
     };
 
-    let response_builder = if index {
-      Response::builder().header(http::header::CONTENT_TYPE, file.metadata.mimetype())
-    } else {
-      Response::builder()
-        .header(http::header::CACHE_CONTROL, "public")
-        .header(http::header::CACHE_CONTROL, "max-age=604800")
-        .header(http::header::CACHE_CONTROL, "immutable")
-        .header(http::header::CONTENT_TYPE, file.metadata.mimetype())
-    };
+    // NOTE: We're not selective on the caching here. We rely on vite creating unique names for the
+    // assets except for `index.html`, which is handled by the fallback. This is not a generic
+    // solution.
+    let response_builder = Response::builder()
+      .header(http::header::CACHE_CONTROL, "public")
+      .header(http::header::CACHE_CONTROL, "max-age=604800")
+      .header(http::header::CACHE_CONTROL, "immutable")
+      .header(http::header::CONTENT_TYPE, file.metadata.mimetype());
 
     return Poll::Ready(Ok(
       response_builder

@@ -1,6 +1,7 @@
 mod init;
 mod serve;
 
+use axum::body::Body;
 use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::handler::HandlerWithoutStateExt;
 use axum::http::{HeaderValue, StatusCode};
@@ -8,7 +9,9 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{RequestExt, Router};
+use bytes::Bytes;
 use log::*;
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::signal;
@@ -331,9 +334,17 @@ impl Server {
       .nest_service(
         "/_/admin",
         AssetService::<trailbase_assets::AdminAssets>::with_parameters(
-          // SPA-style fallback.
-          Some(Box::new(|_| Some("index.html".to_string()))),
-          Some("index.html".to_string()),
+          |_path: &str| -> Option<Response<Body>> {
+            // SPA fallback.
+            let file = trailbase_assets::AdminAssets::get("index.html")?;
+
+            return Some(
+              Response::builder()
+                .header(axum::http::header::CONTENT_TYPE, file.metadata.mimetype())
+                .body(Body::from(cow_to_bytes(file.data)))
+                .unwrap_or_default(),
+            );
+          },
         ),
       );
   }
@@ -652,4 +663,11 @@ fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
     return Err(InitError::CustomInit(format!("Path not found: {path:?}")));
   }
   return Ok(());
+}
+
+fn cow_to_bytes(cow: Cow<'static, [u8]>) -> Bytes {
+  match cow {
+    Cow::Borrowed(x) => Bytes::from(x),
+    Cow::Owned(x) => Bytes::from(x),
+  }
 }
