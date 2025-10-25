@@ -1,3 +1,8 @@
+## v0.20.2
+
+- Disable caching for all SPA admin UI paths and streamline the implementation. The previous "fix" only covered the root path: `/_/admin`.
+- Update Rust and JavaScript dependencies.
+
 ## v0.20.1
 
 - Fix issue with stale, cached query results in admin SQL editor. The internal representation of SQL values changed with v0.20.0, which means the UI can no longer render the old format. Consequently, the editor could get into an error state that could only be recovered from by deleting the Browser's respective local storage. This update introduces an error boundary that lets users recover by re-executing the query to fetch data in the new format.
