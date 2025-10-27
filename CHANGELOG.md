@@ -1,3 +1,8 @@
+## v0.20.3
+
+- Add **untested** "Sign-in with Apple" OAuth provider. I didn't find a way to test it locally (e.g. Apple doesn't let you have dev services with localhost callbacks). Sadly, committing this code upstream and iterating upstream, is the only way I could think of :/. If you know how, please let me know 🙏.
+- Update Rust dependencies.
+
 ## v0.20.2
 
 - Disable caching for all SPA admin UI paths and streamline the implementation. The previous "fix" only covered the root path: `/_/admin`.
