@@ -17,7 +17,6 @@ mod data_dir;
 mod email;
 mod encryption;
 mod extract;
-mod js;
 mod listing;
 mod migrations;
 mod scheduler;

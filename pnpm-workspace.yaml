@@ -3,7 +3,6 @@ packages:
   - 'crates/assets/js/admin'
   - 'crates/assets/js/client'
   - 'crates/auth-ui/ui'
-  - 'crates/js-runtime/assets/runtime'
   - 'docs'
   - 'docs/examples/record_api_ts'
   - 'examples/blog/web'
