@@ -48,9 +48,6 @@ struct InternalState {
   subscription_manager: SubscriptionManager,
   object_store: Arc<dyn ObjectStore + Send + Sync>,
 
-  #[cfg(feature = "v8")]
-  runtime: crate::js::RuntimeHandle,
-
   /// Actual WASM runtimes.
   wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
   /// WASM runtime builders needed to rebuild above runtimes, e.g. when hot-reloading.
@@ -204,8 +201,6 @@ impl AppState {
         ),
         connection_metadata,
         object_store,
-        #[cfg(feature = "v8")]
-        runtime: build_js_runtime(args.conn.clone(), args.runtime_threads),
         wasm_runtimes: build_wasm_runtime()
           .expect("startup")
           .into_iter()
@@ -398,11 +393,6 @@ impl AppState {
       &new_config,
     )
     .await;
-  }
-
-  #[cfg(feature = "v8")]
-  pub(crate) fn script_runtime(&self) -> crate::js::RuntimeHandle {
-    return self.state.runtime.clone();
   }
 
   pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<Runtime>>] {
@@ -641,8 +631,6 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       ),
       connection_metadata,
       object_store,
-      #[cfg(feature = "v8")]
-      runtime: build_js_runtime(conn, None),
       wasm_runtimes: vec![],
       build_wasm_runtimes: Box::new(|| Ok(vec![])),
       test_cleanup: vec![Box::new(temp_dir)],
@@ -666,33 +654,6 @@ where
   });
 
   return derived;
-}
-
-#[cfg(feature = "v8")]
-fn build_js_runtime(
-  conn: trailbase_sqlite::Connection,
-  threads: Option<usize>,
-) -> crate::js::RuntimeHandle {
-  use crate::js::{RuntimeHandle, register_database_functions};
-
-  let runtime = if let Some(threads) = threads {
-    RuntimeHandle::singleton_or_init_with_threads(threads)
-  } else {
-    RuntimeHandle::singleton()
-  };
-
-  if cfg!(test) {
-    lazy_static::lazy_static! {
-      static ref START: std::sync::Once = std::sync::Once::new();
-    }
-    START.call_once(|| {
-      register_database_functions(&runtime, conn);
-    });
-  } else {
-    register_database_functions(&runtime, conn);
-  }
-
-  return runtime;
 }
 
 fn build_record_api(

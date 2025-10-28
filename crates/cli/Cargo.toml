@@ -13,8 +13,6 @@ name = "trail"
 
 [features]
 default = []
-# Conditionally enable "v8" feature of dep:trailbase.
-v8 = ["trailbase/v8"]
 swagger = ["dep:utoipa-swagger-ui"]
 vendor-ssl = ["dep:openssl"]
 

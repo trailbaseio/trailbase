@@ -143,10 +143,6 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
 
   let object_store = build_objectstore(&args.data_dir, config.server.s3_storage_config.as_ref())?;
 
-  // Write out the latest .js/.d.ts runtime files.
-  #[cfg(feature = "v8")]
-  trailbase_js::runtime::write_js_runtime_files(args.data_dir.root()).await;
-
   let app_state = AppState::new(AppStateArgs {
     data_dir: args.data_dir.clone(),
     public_url: args.public_url,

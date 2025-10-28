@@ -151,17 +151,6 @@ impl Server {
 
     let mut custom_routers: Vec<Router<AppState>> = vec![];
 
-    #[cfg(feature = "v8")]
-    if let Some(js_router) = crate::js::runtime::load_routes_and_jobs_from_js_modules(
-      &state,
-      state.data_dir().root().join("scripts"),
-    )
-    .await
-    .map_err(|err| InitError::ScriptError(err.to_string()))?
-    {
-      custom_routers.push(js_router);
-    }
-
     for rt in state.wasm_runtimes() {
       if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt.clone())
         .await
@@ -642,11 +631,6 @@ async fn start_listen(
           std::process::exit(1);
         }
       };
-
-      #[cfg(not(feature = "v8"))]
-      tokio_rustls::rustls::crypto::ring::default_provider()
-        .install_default()
-        .expect("Failed to install TLS provider");
 
       let server_config = ServerConfig::builder()
         .with_no_client_auth()

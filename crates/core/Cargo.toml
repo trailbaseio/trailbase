@@ -25,7 +25,6 @@ harness = false
 
 [features]
 default = ["wasm"]
-v8 = ["dep:trailbase-js"]
 wasm = ["dep:trailbase-wasm-runtime-host"]
 otel = ["dep:axum-tracing-opentelemetry", "dep:init-tracing-opentelemetry"]
 
@@ -93,7 +92,6 @@ tracing-subscriber = { workspace = true }
 trailbase-assets = { workspace = true }
 trailbase-build = { workspace = true }
 trailbase-extension = { workspace = true }
-trailbase-js = { workspace = true, optional = true }
 trailbase-qs = { workspace = true }
 trailbase-refinery = { workspace = true }
 trailbase-schema = { workspace = true }
