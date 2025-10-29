@@ -79,7 +79,7 @@ pub(crate) async fn install_routes_and_jobs(
   runtime: Arc<RwLock<Runtime>>,
 ) -> Result<Option<Router<AppState>>, AnyError> {
   use trailbase_wasm_runtime_host::Error as WasmError;
-  use trailbase_wasm_runtime_host::exports::trailbase::runtime::init_endpoint::MethodType;
+  use trailbase_wasm_runtime_host::HttpMethodType;
 
   let version = state.version().git_version_tag.clone();
 
@@ -87,7 +87,7 @@ pub(crate) async fn install_routes_and_jobs(
     .read()
     .await
     .call(async move |instance| {
-      return instance.call_init(InitArgs { version }).await;
+      return instance.initialize(InitArgs { version }).await;
     })
     .await??;
 
@@ -221,15 +221,15 @@ pub(crate) async fn install_routes_and_jobs(
     router = router.route(
       path,
       match method {
-        MethodType::Delete => axum::routing::delete(handler),
-        MethodType::Get => axum::routing::get(handler),
-        MethodType::Head => axum::routing::head(handler),
-        MethodType::Options => axum::routing::options(handler),
-        MethodType::Patch => axum::routing::patch(handler),
-        MethodType::Post => axum::routing::post(handler),
-        MethodType::Put => axum::routing::put(handler),
-        MethodType::Trace => axum::routing::trace(handler),
-        MethodType::Connect => axum::routing::connect(handler),
+        HttpMethodType::Delete => axum::routing::delete(handler),
+        HttpMethodType::Get => axum::routing::get(handler),
+        HttpMethodType::Head => axum::routing::head(handler),
+        HttpMethodType::Options => axum::routing::options(handler),
+        HttpMethodType::Patch => axum::routing::patch(handler),
+        HttpMethodType::Post => axum::routing::post(handler),
+        HttpMethodType::Put => axum::routing::put(handler),
+        HttpMethodType::Trace => axum::routing::trace(handler),
+        HttpMethodType::Connect => axum::routing::connect(handler),
       },
     );
   }
