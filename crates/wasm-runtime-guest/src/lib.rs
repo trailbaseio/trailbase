@@ -4,7 +4,7 @@
 
 pub mod wit {
   wit_bindgen::generate!({
-      world: "trailbase:runtime/trailbase",
+      world: "trailbase:component/interfaces",
       path: [
           // Order-sensitive: will import *.wit from the folder.
           "wit/deps-0.2.6/random",
@@ -16,7 +16,8 @@ pub mod wit {
           "wit/deps-0.2.6/http",
           "wit/keyvalue-0.2.0-draft",
           // Ours:
-          "wit/trailbase",
+          "wit/trailbase/database",
+          "wit/trailbase/component",
       ],
       pub_export_macro: true,
       default_bindings_module: "trailbase_wasm::wit",
@@ -41,7 +42,7 @@ use wstd::http::server::{Finished, Responder};
 use crate::http::{HttpRoute, Method, StatusCode, empty_error_response};
 use crate::job::Job;
 
-pub use crate::wit::exports::trailbase::runtime::init_endpoint::{InitArguments, InitResult};
+pub use crate::wit::exports::trailbase::component::init::Arguments;
 
 // Needed for export macro
 pub use static_assertions::assert_impl_all;
@@ -77,18 +78,28 @@ pub trait Guest {
   }
 }
 
-impl<T: Guest> crate::wit::exports::trailbase::runtime::init_endpoint::Guest for T {
-  fn init(args: InitArguments) -> InitResult {
+impl<T: Guest> crate::wit::exports::trailbase::component::init::Guest for T {
+  fn init_http_handlers(args: Arguments) -> wit::exports::trailbase::component::init::HttpHandlers {
+    // QUESTION: Should we ensure that init is called only once?
     T::init(Args {
       version: args.version,
     });
 
-    return InitResult {
-      http_handlers: T::http_handlers()
+    return wit::exports::trailbase::component::init::HttpHandlers {
+      handlers: T::http_handlers()
         .into_iter()
         .map(|route| (to_method_type(route.method), route.path))
         .collect(),
-      job_handlers: T::job_handlers()
+    };
+  }
+
+  fn init_job_handlers(args: Arguments) -> wit::exports::trailbase::component::init::JobHandlers {
+    T::init(Args {
+      version: args.version,
+    });
+
+    return wit::exports::trailbase::component::init::JobHandlers {
+      handlers: T::job_handlers()
         .into_iter()
         .map(|config| (config.name, config.spec))
         .collect(),
@@ -156,19 +167,19 @@ impl<T: Guest> ::wstd::wasip2::exports::http::incoming_handler::Guest for HttpIn
   }
 }
 
-fn to_method_type(m: Method) -> crate::wit::exports::trailbase::runtime::init_endpoint::MethodType {
-  use crate::wit::exports::trailbase::runtime::init_endpoint::MethodType;
+fn to_method_type(m: Method) -> crate::wit::exports::trailbase::component::init::HttpMethodType {
+  use crate::wit::exports::trailbase::component::init::HttpMethodType;
 
   return match m {
-    Method::GET => MethodType::Get,
-    Method::POST => MethodType::Post,
-    Method::HEAD => MethodType::Head,
-    Method::OPTIONS => MethodType::Options,
-    Method::PATCH => MethodType::Patch,
-    Method::DELETE => MethodType::Delete,
-    Method::PUT => MethodType::Put,
-    Method::TRACE => MethodType::Trace,
-    Method::CONNECT => MethodType::Connect,
+    Method::GET => HttpMethodType::Get,
+    Method::POST => HttpMethodType::Post,
+    Method::HEAD => HttpMethodType::Head,
+    Method::OPTIONS => HttpMethodType::Options,
+    Method::PATCH => HttpMethodType::Patch,
+    Method::DELETE => HttpMethodType::Delete,
+    Method::PUT => HttpMethodType::Put,
+    Method::TRACE => HttpMethodType::Trace,
+    Method::CONNECT => HttpMethodType::Connect,
     _ => panic!("extension"),
   };
 }
