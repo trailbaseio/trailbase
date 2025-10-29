@@ -1,8 +1,7 @@
 import { Fields, OutgoingBody, OutgoingResponse } from "wasi:http/types@0.2.3";
-import type { MethodType } from "trailbase:runtime/init-endpoint";
 
 import { StatusCode } from "./status";
-import { Request } from "./request";
+import { Request, type Method } from "./request";
 import { encodeBytes } from "./incoming";
 
 // Override setInterval/setTimeout.
@@ -10,7 +9,7 @@ import "../timer";
 
 export { OutgoingResponse } from "wasi:http/types@0.2.3";
 export { StatusCode } from "./status";
-export type { Request, Scheme, User } from "./request";
+export type { Method, Request, Scheme, User } from "./request";
 
 export type ResponseType = string | Uint8Array | OutgoingResponse | void;
 export type HttpHandlerCallback = (
@@ -19,14 +18,14 @@ export type HttpHandlerCallback = (
 
 export interface HttpHandlerInterface {
   path: string;
-  method: MethodType;
+  method: Method;
   handler: HttpHandlerCallback;
 }
 
 export class HttpHandler implements HttpHandlerInterface {
   constructor(
     public readonly path: string,
-    public readonly method: MethodType,
+    public readonly method: Method,
     public readonly handler: HttpHandlerCallback,
   ) {}
 

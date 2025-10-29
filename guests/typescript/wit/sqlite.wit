@@ -1,0 +1,26 @@
+package trailbase:component@0.1.0;
+
+@since(version = 0.1.0)
+interface sqlite-function-endpoint {
+  // WARNING: Evolving a variant currently breaks the ABI:
+  //   https://github.com/WebAssembly/component-model/issues/454
+  variant error {
+    other(string),
+  }
+
+  variant value {
+    null,
+    text(string),
+    blob(list<u8>),
+    integer(s64),
+    real(f64),
+  }
+
+  record arguments {
+    function-name: string,
+    arguments: list<value>,
+  }
+
+  @since(version = 0.1.0)
+  dispatch-scalar-function: func(args: arguments) -> result<value, error>;
+}

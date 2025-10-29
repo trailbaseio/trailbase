@@ -1,3 +1,3 @@
 import e from "./index";
 
-export const { initEndpoint, incomingHandler } = e;
+export const { initEndpoint, incomingHandler, sqliteFunctionEndpoint } = e;

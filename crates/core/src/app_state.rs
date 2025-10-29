@@ -51,7 +51,9 @@ struct InternalState {
   #[cfg(feature = "v8")]
   runtime: crate::js::RuntimeHandle,
 
+  /// Actual WASM runtimes.
   wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
+  /// WASM runtime builders needed to rebuild above runtimes, e.g. when hot-reloading.
   build_wasm_runtimes: Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>,
 
   #[cfg(test)]
@@ -137,44 +139,33 @@ impl AppState {
       object_store.clone(),
     );
 
-    let shared_kv_store = {
-      let shared_kv_store = crate::wasm::KvStore::new();
+    let crate::wasm::WasmRuntimeResult {
+      shared_kv_store,
+      build_wasm_runtime,
+    } = crate::wasm::build_wasm_runtime(
+      args.data_dir.clone(),
+      args.conn.clone(),
+      args.runtime_root_fs.clone(),
+      args.runtime_threads,
+      args.dev,
+    )
+    .expect("startup");
 
-      // Assign right away.
-      config.with_value(|c| {
-        shared_kv_store.set(
-          AUTH_CONFIG_KEY.to_string(),
-          serde_json::to_vec(&build_auth_config(c)).expect("startup"),
-        );
-      });
+    // Assign right away.
+    config.with_value(|c| {
+      shared_kv_store.set(
+        AUTH_CONFIG_KEY.to_string(),
+        serde_json::to_vec(&build_auth_config(c)).expect("startup"),
+      );
+    });
 
-      // Register an observer for continuous updates.
-      {
-        let shared_kv_store = shared_kv_store.clone();
-        config.add_observer(move |c| {
-          if let Ok(v) = serde_json::to_vec(&build_auth_config(c)) {
-            shared_kv_store.set(AUTH_CONFIG_KEY.to_string(), v);
-          }
-        });
+    // Register an observer for continuous updates.
+    let shared_kv_store = shared_kv_store.clone();
+    config.add_observer(move |c| {
+      if let Ok(v) = serde_json::to_vec(&build_auth_config(c)) {
+        shared_kv_store.set(AUTH_CONFIG_KEY.to_string(), v);
       }
-
-      shared_kv_store
-    };
-
-    let build_wasm_runtimes = {
-      let conn = args.conn.clone();
-      let wasm_dir = args.data_dir.root().join("wasm");
-      move || {
-        return crate::wasm::build_wasm_runtimes_for_components(
-          args.runtime_threads,
-          conn.clone(),
-          shared_kv_store.clone(),
-          wasm_dir.clone(),
-          args.runtime_root_fs.clone(),
-          args.dev,
-        );
-      }
-    };
+    });
 
     AppState {
       state: Arc::new(InternalState {
@@ -215,12 +206,12 @@ impl AppState {
         object_store,
         #[cfg(feature = "v8")]
         runtime: build_js_runtime(args.conn.clone(), args.runtime_threads),
-        wasm_runtimes: build_wasm_runtimes()
+        wasm_runtimes: build_wasm_runtime()
           .expect("startup")
           .into_iter()
           .map(|rt| Arc::new(RwLock::new(rt)))
           .collect(),
-        build_wasm_runtimes: Box::new(build_wasm_runtimes),
+        build_wasm_runtimes: build_wasm_runtime,
         #[cfg(test)]
         test_cleanup: vec![],
       }),
@@ -559,7 +550,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       .unwrap_or_else(|| trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap()),
   ));
   let (conn, new) =
-    crate::connection::init_main_db(None, Some(json_schema_registry.clone()), None)?;
+    crate::connection::init_main_db(None, Some(json_schema_registry.clone()), None, vec![])?;
   assert!(new);
 
   let logs_conn = crate::connection::init_logs_db(None)?;

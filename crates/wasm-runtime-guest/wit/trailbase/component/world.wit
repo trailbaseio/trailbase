@@ -1,0 +1,48 @@
+package trailbase:component@0.1.0;
+
+// Note, everything is from the guest's perspective, i.e.:
+//  * imports are provided by the host
+//  * exports are provided by the guest
+//
+//  Includes are used to include a world into another world.
+@since(version = 0.1.0)
+world interfaces {
+  // Pull in WASIp2 http interface for outbound requests.
+  @since(version = 0.1.0)
+  import wasi:http/outgoing-handler@0.2.6;
+
+  // Pull in WASIp2 filesystem interfaces.
+  @since(version = 0.1.0)
+  include wasi:filesystem/imports@0.2.6;
+
+  // Pull in WASI random interfaces.
+  @since(version = 0.1.0)
+  include wasi:random/imports@0.2.6;
+
+  // Pull in WSAI Key-Value interfaces.
+  @since(version = 0.1.0)
+  include wasi:keyvalue/imports@0.2.0-draft;
+
+  // TrailBase's interfaces:
+  @since(version = 0.1.0)
+  include trailbase:database/interfaces@0.1.0;
+
+  @since(version = 0.1.0)
+  export init-endpoint;
+
+  @since(version = 0.1.0)
+  export sqlite-function-endpoint;
+}
+
+@since(version = 0.1.0)
+world init {
+  // TrailBase's interfaces:
+  @since(version = 0.1.0)
+  include trailbase:database/interfaces@0.1.0;
+
+  @since(version = 0.1.0)
+  export init-endpoint;
+
+  @since(version = 0.1.0)
+  export sqlite-function-endpoint;
+}

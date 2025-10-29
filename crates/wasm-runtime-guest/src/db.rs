@@ -2,11 +2,11 @@ use trailbase_sqlvalue::{Blob, DecodeError, SqlValue};
 use wstd::http::body::IntoBody;
 use wstd::http::{Client, Request};
 
-use crate::wit::trailbase::runtime::host_endpoint::{
+use crate::wit::trailbase::database::sqlite::{
   tx_begin, tx_commit, tx_execute, tx_query, tx_rollback,
 };
 
-pub use crate::wit::trailbase::runtime::host_endpoint::{TxError, Value};
+pub use crate::wit::trailbase::database::sqlite::{TxError, Value};
 pub use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 
 pub struct Transaction {

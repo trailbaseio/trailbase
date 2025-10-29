@@ -9,15 +9,59 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
+use trailbase_wasm_runtime_host::functions::SqliteFunctionRuntime;
 use trailbase_wasm_runtime_host::{InitArgs, RuntimeOptions, SharedExecutor};
 
-use crate::AppState;
 use crate::User;
 use crate::util::urlencode;
+use crate::{AppState, DataDir};
 
 pub(crate) type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
 pub(crate) use trailbase_wasm_runtime_host::{KvStore, Runtime};
+
+pub(crate) fn build_sync_wasm_runtimes_for_components(
+  components_path: PathBuf,
+  fs_root_path: Option<PathBuf>,
+  dev: bool,
+) -> Result<Vec<SqliteFunctionRuntime>, AnyError> {
+  let sync_runtimes: Vec<SqliteFunctionRuntime> = std::fs::read_dir(&components_path).map_or_else(
+    |_err| Ok(vec![]),
+    |entries| {
+      entries
+        .into_iter()
+        .flat_map(|entry| {
+          let Ok(entry) = entry else {
+            return None;
+          };
+
+          let Ok(metadata) = entry.metadata() else {
+            return None;
+          };
+
+          if !metadata.is_file() {
+            return None;
+          }
+          let path = entry.path();
+          // let extension = path.extension().and_then(|e| e.to_str())?;
+
+          if path.extension()? == "wasm" {
+            return Some(SqliteFunctionRuntime::new(
+              path,
+              RuntimeOptions {
+                fs_root_path: fs_root_path.clone(),
+                use_winch: dev,
+              },
+            ));
+          }
+          return None;
+        })
+        .collect::<Result<Vec<SqliteFunctionRuntime>, _>>()
+    },
+  )?;
+
+  return Ok(sync_runtimes);
+}
 
 pub(crate) fn build_wasm_runtimes_for_components(
   n_threads: Option<usize>,
@@ -74,20 +118,51 @@ pub(crate) fn build_wasm_runtimes_for_components(
   return Ok(runtimes);
 }
 
+pub struct WasmRuntimeResult {
+  pub shared_kv_store: KvStore,
+  pub build_wasm_runtime:
+    Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>,
+}
+
+pub fn build_wasm_runtime(
+  data_dir: DataDir,
+  conn: trailbase_sqlite::Connection,
+  runtime_root_fs: Option<std::path::PathBuf>,
+  runtime_threads: Option<usize>,
+  dev: bool,
+) -> Result<WasmRuntimeResult, AnyError> {
+  let wasm_dir = data_dir.root().join("wasm");
+  let shared_kv_store = KvStore::new();
+
+  return Ok(WasmRuntimeResult {
+    shared_kv_store: shared_kv_store.clone(),
+    build_wasm_runtime: Box::new(move || {
+      return crate::wasm::build_wasm_runtimes_for_components(
+        runtime_threads,
+        conn.clone(),
+        shared_kv_store.clone(),
+        wasm_dir.clone(),
+        runtime_root_fs.clone(),
+        dev,
+      );
+    }),
+  });
+}
+
 pub(crate) async fn install_routes_and_jobs(
   state: &AppState,
   runtime: Arc<RwLock<Runtime>>,
 ) -> Result<Option<Router<AppState>>, AnyError> {
   use trailbase_wasm_runtime_host::Error as WasmError;
-  use trailbase_wasm_runtime_host::exports::trailbase::runtime::init_endpoint::MethodType;
+  use trailbase_wasm_runtime_host::HttpMethodType;
 
   let version = state.version().git_version_tag.clone();
 
   let init_result = runtime
     .read()
     .await
-    .call(async move |instance| {
-      return instance.call_init(InitArgs { version }).await;
+    .call(async move |runner| {
+      return runner.initialize(InitArgs { version }).await;
     })
     .await??;
 
@@ -108,7 +183,7 @@ pub(crate) async fn install_routes_and_jobs(
           runtime
             .read()
             .await
-            .call(async move |instance| -> Result<(), WasmError> {
+            .call(async move |runner| -> Result<(), WasmError> {
               let uri =
                 hyper::http::Uri::from_str(&format!("http://__job/?name={}", urlencode(&name)))
                   .map_err(|err| WasmError::Other(format!("Job URI: {err}")))?;
@@ -129,7 +204,7 @@ pub(crate) async fn install_routes_and_jobs(
                 .body(empty())
                 .map_err(|err| WasmError::Other(err.to_string()))?;
 
-              instance.call_incoming_http_handler(request).await?;
+              runner.call_incoming_http_handler(request).await?;
 
               return Ok(());
             })
@@ -166,7 +241,7 @@ pub(crate) async fn install_routes_and_jobs(
           .read()
           .await
           .call(
-            async move |instance| -> Result<axum::response::Response, WasmError> {
+            async move |runner| -> Result<axum::response::Response, WasmError> {
               let (mut parts, body) = req.into_parts();
               let bytes = body
                 .collect()
@@ -196,7 +271,7 @@ pub(crate) async fn install_routes_and_jobs(
                 BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!())),
               );
 
-              let response = instance.call_incoming_http_handler(request).await?;
+              let response = runner.call_incoming_http_handler(request).await?;
 
               let (parts, body) = response.into_parts();
               let bytes = body
@@ -221,15 +296,15 @@ pub(crate) async fn install_routes_and_jobs(
     router = router.route(
       path,
       match method {
-        MethodType::Delete => axum::routing::delete(handler),
-        MethodType::Get => axum::routing::get(handler),
-        MethodType::Head => axum::routing::head(handler),
-        MethodType::Options => axum::routing::options(handler),
-        MethodType::Patch => axum::routing::patch(handler),
-        MethodType::Post => axum::routing::post(handler),
-        MethodType::Put => axum::routing::put(handler),
-        MethodType::Trace => axum::routing::trace(handler),
-        MethodType::Connect => axum::routing::connect(handler),
+        HttpMethodType::Delete => axum::routing::delete(handler),
+        HttpMethodType::Get => axum::routing::get(handler),
+        HttpMethodType::Head => axum::routing::head(handler),
+        HttpMethodType::Options => axum::routing::options(handler),
+        HttpMethodType::Patch => axum::routing::patch(handler),
+        HttpMethodType::Post => axum::routing::post(handler),
+        HttpMethodType::Put => axum::routing::put(handler),
+        HttpMethodType::Trace => axum::routing::trace(handler),
+        HttpMethodType::Connect => axum::routing::connect(handler),
       },
     );
   }

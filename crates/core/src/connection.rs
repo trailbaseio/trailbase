@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
+use trailbase_wasm_runtime_host::functions::SqliteFunctionRuntime;
 
 use crate::data_dir::DataDir;
 use crate::migrations::{apply_logs_migrations, apply_main_migrations};
@@ -12,14 +13,16 @@ pub use trailbase_sqlite::Connection;
 
 #[derive(Debug, Error)]
 pub enum ConnectionError {
-  #[error("SQLite ext error: {0}")]
+  #[error("SQLite ext: {0}")]
   SqliteExtension(#[from] trailbase_extension::Error),
-  #[error("Rusqlite error: {0}")]
+  #[error("Rusqlite: {0}")]
   Rusqlite(#[from] rusqlite::Error),
-  #[error("TB SQLite error: {0}")]
+  #[error("TB SQLite: {0}")]
   TbSqlite(#[from] trailbase_sqlite::Error),
-  #[error("Migration error: {0}")]
+  #[error("Migration: {0}")]
   Migration(#[from] trailbase_refinery::Error),
+  #[error("Other: {0}")]
+  Other(String),
 }
 
 pub struct AttachExtraDatabases {
@@ -35,29 +38,50 @@ pub fn init_main_db(
   data_dir: Option<&DataDir>,
   json_registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
   attach: Option<Vec<AttachExtraDatabases>>,
+  runtimes: Vec<SqliteFunctionRuntime>,
 ) -> Result<(Connection, bool), ConnectionError> {
-  let new_db = Mutex::new(false);
+  let new_db = Arc::new(Mutex::new(false));
 
   let main_path = data_dir.map(|d| d.main_db_path());
   let migrations_path = data_dir.map(|d| d.migrations_path());
 
-  let conn = trailbase_sqlite::Connection::new(
-    || -> Result<_, ConnectionError> {
-      let mut conn = trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())?;
+  let sqlite_functions: Vec<_> = runtimes
+    .into_iter()
+    .map(|rt| -> Result<_, trailbase_wasm_runtime_host::Error> {
+      let functions =
+        rt.initialize_sqlite_functions(trailbase_wasm_runtime_host::InitArgs { version: None })?;
+      return Ok((rt, functions));
+    })
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(|err| return ConnectionError::Other(err.to_string()))?;
 
-      *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
+  let conn = {
+    let new_db = new_db.clone();
 
-      return Ok(conn);
-    },
-    Some(trailbase_sqlite::connection::Options {
-      n_read_threads: match (data_dir, std::thread::available_parallelism()) {
-        (None, _) => 0,
-        (Some(_), Ok(n)) => n.get().clamp(2, 4),
-        (Some(_), Err(_)) => 4,
+    trailbase_sqlite::Connection::new(
+      move || -> Result<_, ConnectionError> {
+        let mut conn =
+          trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())?;
+
+        *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
+
+        for (rt, functions) in &sqlite_functions {
+          trailbase_wasm_runtime_host::functions::setup_connection(&conn, rt, functions)
+            .expect("startup");
+        }
+
+        return Ok(conn);
       },
-      ..Default::default()
-    }),
-  )?;
+      Some(trailbase_sqlite::connection::Options {
+        n_read_threads: match (data_dir, std::thread::available_parallelism()) {
+          (None, _) => 0,
+          (Some(_), Ok(n)) => n.get().clamp(2, 4),
+          (Some(_), Err(_)) => 4,
+        },
+        ..Default::default()
+      }),
+    )?
+  };
 
   if let Some(attach) = attach {
     for AttachExtraDatabases { schema_name, path } in attach {

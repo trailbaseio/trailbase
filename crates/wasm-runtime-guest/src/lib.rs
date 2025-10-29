@@ -4,7 +4,7 @@
 
 pub mod wit {
   wit_bindgen::generate!({
-      world: "trailbase:runtime/trailbase",
+      world: "trailbase:component/interfaces",
       path: [
           // Order-sensitive: will import *.wit from the folder.
           "wit/deps-0.2.6/random",
@@ -16,7 +16,8 @@ pub mod wit {
           "wit/deps-0.2.6/http",
           "wit/keyvalue-0.2.0-draft",
           // Ours:
-          "wit/trailbase.wit",
+          "wit/trailbase/database",
+          "wit/trailbase/component",
       ],
       pub_export_macro: true,
       default_bindings_module: "trailbase_wasm::wit",
@@ -41,11 +42,15 @@ use wstd::http::server::{Finished, Responder};
 use crate::http::{HttpRoute, Method, StatusCode, empty_error_response};
 use crate::job::Job;
 
-pub use crate::wit::exports::trailbase::runtime::init_endpoint::{InitArguments, InitResult};
-
 // Needed for export macro
 pub use static_assertions::assert_impl_all;
 pub use wstd::wasip2 as __wasi;
+
+pub use crate::wit::exports::trailbase::component::init_endpoint::Arguments;
+pub mod sqlite {
+  pub use crate::wit::exports::trailbase::component::init_endpoint::SqliteFunctionFlags;
+  pub use crate::wit::exports::trailbase::component::sqlite_function_endpoint::{Error, Value};
+}
 
 #[macro_export]
 macro_rules! export {
@@ -65,6 +70,33 @@ pub struct Args {
   pub version: Option<String>,
 }
 
+type SqliteFunctionHandler =
+  Box<dyn FnOnce(Vec<sqlite::Value>) -> Result<sqlite::Value, sqlite::Error>>;
+
+pub struct SqliteFunction {
+  name: String,
+  num_args: u32,
+  flags: Vec<sqlite::SqliteFunctionFlags>,
+  handler: SqliteFunctionHandler,
+}
+
+impl SqliteFunction {
+  pub fn new<const N: usize>(
+    name: impl std::string::ToString,
+    f: impl Fn([sqlite::Value; N]) -> Result<sqlite::Value, sqlite::Error> + 'static,
+    flags: &[sqlite::SqliteFunctionFlags],
+  ) -> Self {
+    return Self {
+      name: name.to_string(),
+      num_args: N as u32,
+      flags: flags.into(),
+      handler: Box::new(move |args| {
+        return f(args.try_into().expect("wrong number of arguments"));
+      }),
+    };
+  }
+}
+
 pub trait Guest {
   fn init(_: Args) {}
 
@@ -75,24 +107,85 @@ pub trait Guest {
   fn job_handlers() -> Vec<Job> {
     return vec![];
   }
+
+  fn sqlite_scalar_functions() -> Vec<SqliteFunction> {
+    return vec![];
+  }
 }
 
-impl<T: Guest> crate::wit::exports::trailbase::runtime::init_endpoint::Guest for T {
-  fn init(args: InitArguments) -> InitResult {
+impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest for T {
+  fn init_http_handlers(
+    args: Arguments,
+  ) -> wit::exports::trailbase::component::init_endpoint::HttpHandlers {
+    // QUESTION: Should we ensure that init is called only once?
     T::init(Args {
       version: args.version,
     });
 
-    return InitResult {
-      http_handlers: T::http_handlers()
+    return wit::exports::trailbase::component::init_endpoint::HttpHandlers {
+      handlers: T::http_handlers()
         .into_iter()
         .map(|route| (to_method_type(route.method), route.path))
         .collect(),
-      job_handlers: T::job_handlers()
+    };
+  }
+
+  fn init_job_handlers(
+    args: Arguments,
+  ) -> wit::exports::trailbase::component::init_endpoint::JobHandlers {
+    T::init(Args {
+      version: args.version,
+    });
+
+    return wit::exports::trailbase::component::init_endpoint::JobHandlers {
+      handlers: T::job_handlers()
         .into_iter()
         .map(|config| (config.name, config.spec))
         .collect(),
     };
+  }
+
+  fn init_sqlite_functions(
+    args: Arguments,
+  ) -> wit::exports::trailbase::component::init_endpoint::SqliteFunctions {
+    use wit::exports::trailbase::component::init_endpoint::{
+      SqliteFunctions, SqliteScalarFunction,
+    };
+
+    // QUESTION: Should we ensure that init is called only once?
+    T::init(Args {
+      version: args.version,
+    });
+
+    return SqliteFunctions {
+      scalar_functions: T::sqlite_scalar_functions()
+        .into_iter()
+        .map(|f| SqliteScalarFunction {
+          name: f.name,
+          num_args: f.num_args,
+          function_flags: f.flags,
+        })
+        .collect(),
+    };
+  }
+}
+
+impl<T: Guest> crate::wit::exports::trailbase::component::sqlite_function_endpoint::Guest for T {
+  fn dispatch_scalar_function(
+    args: crate::wit::exports::trailbase::component::sqlite_function_endpoint::Arguments,
+  ) -> Result<
+    crate::wit::exports::trailbase::component::sqlite_function_endpoint::Value,
+    crate::wit::exports::trailbase::component::sqlite_function_endpoint::Error,
+  > {
+    use crate::wit::exports::trailbase::component::sqlite_function_endpoint::Error;
+
+    let functions = T::sqlite_scalar_functions();
+    let f = functions
+      .into_iter()
+      .find(|f| f.name == args.function_name)
+      .ok_or_else(|| Error::Other("Missing function".to_string()))?;
+
+    return (f.handler)(args.arguments);
   }
 }
 
@@ -156,19 +249,21 @@ impl<T: Guest> ::wstd::wasip2::exports::http::incoming_handler::Guest for HttpIn
   }
 }
 
-fn to_method_type(m: Method) -> crate::wit::exports::trailbase::runtime::init_endpoint::MethodType {
-  use crate::wit::exports::trailbase::runtime::init_endpoint::MethodType;
+fn to_method_type(
+  m: Method,
+) -> crate::wit::exports::trailbase::component::init_endpoint::HttpMethodType {
+  use crate::wit::exports::trailbase::component::init_endpoint::HttpMethodType;
 
   return match m {
-    Method::GET => MethodType::Get,
-    Method::POST => MethodType::Post,
-    Method::HEAD => MethodType::Head,
-    Method::OPTIONS => MethodType::Options,
-    Method::PATCH => MethodType::Patch,
-    Method::DELETE => MethodType::Delete,
-    Method::PUT => MethodType::Put,
-    Method::TRACE => MethodType::Trace,
-    Method::CONNECT => MethodType::Connect,
+    Method::GET => HttpMethodType::Get,
+    Method::POST => HttpMethodType::Post,
+    Method::HEAD => HttpMethodType::Head,
+    Method::OPTIONS => HttpMethodType::Options,
+    Method::PATCH => HttpMethodType::Patch,
+    Method::DELETE => HttpMethodType::Delete,
+    Method::PUT => HttpMethodType::Put,
+    Method::TRACE => HttpMethodType::Trace,
+    Method::CONNECT => HttpMethodType::Connect,
     _ => panic!("extension"),
   };
 }

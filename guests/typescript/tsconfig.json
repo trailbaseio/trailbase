@@ -28,11 +28,14 @@
       "wasi:keyvalue/store@0.2.0-draft": [
         "./generated/types/interfaces/wasi-keyvalue-store.d.ts",
       ],
-      "trailbase:runtime/init-endpoint": [
-        "./generated/types/interfaces/trailbase-runtime-init-endpoint.d.ts"
+      "trailbase:database/sqlite": [
+        "./generated/types/interfaces/trailbase-database-sqlite.d.ts"
       ],
-      "trailbase:runtime/host-endpoint": [
-        "./generated/types/interfaces/trailbase-runtime-host-endpoint.d.ts"
+      "trailbase:component/init-endpoint": [
+        "./generated/types/interfaces/trailbase-component-init-endpoint.d.ts"
+      ],
+      "trailbase:component/sqlite-function-endpoint": [
+        "./generated/types/interfaces/trailbase-component-sqlite-function-endpoint.d.ts"
       ]
     }
   },

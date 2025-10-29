@@ -8,7 +8,7 @@ use trailbase_wasm::fs::read_file;
 use trailbase_wasm::http::{HttpError, HttpRoute, Json, StatusCode, routing};
 use trailbase_wasm::job::Job;
 use trailbase_wasm::time::{Duration, SystemTime, Timer};
-use trailbase_wasm::{Guest, export};
+use trailbase_wasm::{Guest, SqliteFunction, export};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
@@ -60,7 +60,7 @@ impl Guest for Endpoints {
       // Test Database interactions
       routing::get("/addDeletePost", async |_req| {
         let user_id = &query(
-          "SELECT id FROM _user WHERE email = 'admin@localhost'".to_string(),
+          "SELECT id FROM _user WHERE email = 'admin@localhost'",
           vec![],
         )
         .await
@@ -70,14 +70,14 @@ impl Guest for Endpoints {
 
         let now = SystemTime::now();
         let num_insertions = execute(
-          "INSERT INTO post (author, title, body) VALUES (?1, 'title' , ?2)".to_string(),
+          "INSERT INTO post (author, title, body) VALUES (?1, 'title' , ?2)",
           vec![user_id.clone(), Value::Text(format!("{now:?}"))],
         )
         .await
         .unwrap();
 
         let num_deletions = execute(
-          "DELETE FROM post WHERE body = ?1".to_string(),
+          "DELETE FROM post WHERE body = ?1",
           vec![Value::Text(format!("{now:?}"))],
         )
         .await
@@ -120,6 +120,17 @@ impl Guest for Endpoints {
         let n: usize = req.query_param("n").map_or(40, |p| p.parse().unwrap());
         return format!("{}\n", fibonacci(n));
       }),
+      routing::get("/custom_fun", async |_req| {
+        let Value::Integer(i) = &query("SELECT custom_fun(?1)", vec![Value::Integer(5)])
+          .await
+          .map_err(internal)?[0][0]
+        else {
+          panic!("Expected echo");
+        };
+        assert_eq!(5, *i);
+
+        return Ok(format!("{i}\n"));
+      }),
     ];
   }
 
@@ -127,6 +138,16 @@ impl Guest for Endpoints {
     return vec![Job::hourly("WASM-registered Job", async || {
       println!("JS-registered cron job reporting for duty 🚀");
     })];
+  }
+
+  fn sqlite_scalar_functions() -> Vec<SqliteFunction> {
+    return vec![SqliteFunction::new::<1>(
+      "custom_fun".to_string(),
+      |args: [trailbase_wasm::sqlite::Value; _]| {
+        return Ok(args[0].clone());
+      },
+      &[],
+    )];
   }
 }
 

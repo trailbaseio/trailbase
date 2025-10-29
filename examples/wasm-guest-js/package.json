@@ -12,7 +12,7 @@
     "format": "prettier -w src"
   },
   "dependencies": {
-    "trailbase-wasm": "^0.3.0"
+    "trailbase-wasm": "workspace:*"
   },
   "devDependencies": {
     "@bytecodealliance/jco": "^1.15.3",

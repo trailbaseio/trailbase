@@ -94,10 +94,20 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   let json_schema_registry = Arc::new(parking_lot::RwLock::new(
     trailbase_schema::registry::build_json_schema_registry(vec![])?,
   ));
+
+  let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
+    args.data_dir.root().join("wasm"),
+    args.runtime_root_fs.clone(),
+    args.dev,
+  )
+  .map_err(|err| InitError::CustomInit(err.to_string()))?;
+
+  // TODO: We'd have to inject WASM runtimes here to make it available to connection..
   let (conn, new_db) = crate::connection::init_main_db(
     Some(&args.data_dir),
     Some(json_schema_registry.clone()),
     Some(extra_databases),
+    sync_wasm_runtimes,
   )?;
 
   let tables = lookup_and_parse_all_table_schemas(&conn).await?;
