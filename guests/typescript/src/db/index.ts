@@ -104,7 +104,7 @@ declare global {
   }
 }
 
-BigInt.prototype.toJSON = function() {
+BigInt.prototype.toJSON = function () {
   return JSON.rawJSON(this.toString());
 };
 

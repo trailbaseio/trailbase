@@ -24,9 +24,9 @@ use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 use wasmtime_wasi_io::IoView;
 
 use self::trailbase::database::sqlite::{TxError, Value};
-use crate::exports::trailbase::component::init::Arguments;
+use crate::exports::trailbase::component::init_endpoint::Arguments;
 
-pub use crate::exports::trailbase::component::init::HttpMethodType;
+pub use crate::exports::trailbase::component::init_endpoint::HttpMethodType;
 pub use trailbase_wasi_keyvalue::Store as KvStore;
 
 static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
@@ -692,7 +692,7 @@ impl RuntimeInstance {
         return err;
       })?;
 
-    let api = bindings.trailbase_component_init();
+    let api = bindings.trailbase_component_init_endpoint();
 
     let args = Arguments {
       version: args.version,
