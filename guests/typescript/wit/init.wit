@@ -1,0 +1,53 @@
+package trailbase:component@0.1.0;
+
+@since(version = 0.1.0)
+interface init {
+  record arguments {
+    version: option<string>,
+  }
+
+  enum http-method-type {
+    get,
+    post,
+    head,
+    options,
+    patch,
+    delete,
+    put,
+    trace,
+    connect,
+  }
+
+  record http-handlers {
+    /// Registered http handlers (method, path)[].
+    handlers: list<tuple<http-method-type, string>>,
+  }
+
+  @since(version = 0.1.0)
+  init-http-handlers: func(args: arguments) -> http-handlers;
+
+  record job-handlers {
+    /// Registered jobs (name, spec)[].
+    handlers: list<tuple<string, string>>,
+  }
+
+  @since(version = 0.1.0)
+  init-job-handlers: func(args: arguments) -> job-handlers;
+
+  // record sqlite-function-handlers {
+  //   /// Registered jobs (sqlite_function_name)[].
+  //   ///
+  //   /// TODO: Could add function input schema to do early host-side validation.
+  //   handlers: list<string>,
+  // }
+
+  // @since(version = 0.1.0)
+  // init-sqlite-function-handlers: func(args: arguments) -> sqlite-function-handlers;
+}
+
+// NOTE: Multiple worlds doesn't play nice with jco componentize.
+// @since(version = 0.1.0)
+// world init-interfaces {
+//   @since(version = 0.1.0)
+//   export init;
+// }
