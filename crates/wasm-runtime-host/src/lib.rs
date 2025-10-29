@@ -25,9 +25,7 @@ use wasmtime_wasi_io::IoView;
 
 // use crate::exports::trailbase::database::sqlite::{TxError, Value};
 use self::trailbase::database::sqlite::{TxError, Value};
-use crate::exports::trailbase::init::init_endpoint::{
-  HttpHandlersResult, InitArguments, JobHandlersResult, MethodType,
-};
+use crate::exports::trailbase::component::init::{Arguments, HttpMethodType};
 
 pub use crate::exports::trailbase::init::init_endpoint::MethodType as HttpMethodType;
 pub use trailbase_wasi_keyvalue::Store as KvStore;
@@ -48,7 +46,6 @@ wasmtime::component::bindgen!({
         "wit/deps-0.2.6/http",
         "wit/keyvalue-0.2.0-draft",
         // Ours:
-        "wit/trailbase/init",
         "wit/trailbase/database",
         "wit/trailbase/component",
     ],
@@ -643,7 +640,7 @@ pub struct InitArgs {
 
 pub struct InitResult {
   /// Registered http handlers (method, path)[].
-  pub http_handlers: Vec<(MethodType, String)>,
+  pub http_handlers: Vec<(HttpMethodType, String)>,
 
   /// Registered jobs (name, spec)[].
   pub job_handlers: Vec<(String, String)>,
@@ -696,23 +693,21 @@ impl RuntimeInstance {
         return err;
       })?;
 
-    let args = InitArguments {
+    let api = bindings.trailbase_component_init();
+
+    let args = Arguments {
       version: args.version,
     };
 
-    let http_handlers: HttpHandlersResult = bindings
-      .trailbase_init_init_endpoint()
-      .call_init_http_handlers(&mut store, &args)
-      .await?;
-
-    let job_handlers: JobHandlersResult = bindings
-      .trailbase_init_init_endpoint()
-      .call_init_job_handlers(&mut store, &args)
-      .await?;
-
     return Ok(InitResult {
-      http_handlers: http_handlers.handlers,
-      job_handlers: job_handlers.handlers,
+      http_handlers: api
+        .call_init_http_handlers(&mut store, &args)
+        .await?
+        .handlers,
+      job_handlers: api
+        .call_init_job_handlers(&mut store, &args)
+        .await?
+        .handlers,
     });
   }
 
