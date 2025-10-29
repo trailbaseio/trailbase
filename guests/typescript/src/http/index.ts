@@ -27,7 +27,7 @@ export class HttpHandler implements HttpHandlerInterface {
     public readonly path: string,
     public readonly method: Method,
     public readonly handler: HttpHandlerCallback,
-  ) { }
+  ) {}
 
   static get(path: string, handler: HttpHandlerCallback): HttpHandler {
     return new HttpHandler(path, "get", handler);

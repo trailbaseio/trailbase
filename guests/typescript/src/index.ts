@@ -3,7 +3,7 @@ import type {
   Arguments,
   HttpHandlers,
   JobHandlers,
-} from "trailbase:component/init@0.1.0";
+} from "trailbase:component/init-endpoint@0.1.0";
 import type { HttpHandlerInterface } from "./http";
 import type { JobHandlerInterface } from "./job";
 import { buildIncomingHttpHandler } from "./http/incoming";
@@ -39,19 +39,16 @@ export function defineConfig(opts: {
       handle: buildIncomingHttpHandler(opts),
     },
     init: {
-      initHttpHandlers: function(args: Arguments): HttpHandlers {
+      initHttpHandlers: function (args: Arguments): HttpHandlers {
         opts.init?.({
           version: args.version,
         });
 
         return {
-          handlers: (opts.httpHandlers ?? []).map((h) => [
-            h.method,
-            h.path,
-          ]),
+          handlers: (opts.httpHandlers ?? []).map((h) => [h.method, h.path]),
         };
       },
-      initJobHandlers: function(args: Arguments): JobHandlers {
+      initJobHandlers: function (args: Arguments): JobHandlers {
         opts.init?.({
           version: args.version,
         });

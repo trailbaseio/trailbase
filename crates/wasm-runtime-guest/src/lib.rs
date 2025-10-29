@@ -42,7 +42,7 @@ use wstd::http::server::{Finished, Responder};
 use crate::http::{HttpRoute, Method, StatusCode, empty_error_response};
 use crate::job::Job;
 
-pub use crate::wit::exports::trailbase::component::init::Arguments;
+pub use crate::wit::exports::trailbase::component::init_endpoint::Arguments;
 
 // Needed for export macro
 pub use static_assertions::assert_impl_all;
@@ -78,14 +78,16 @@ pub trait Guest {
   }
 }
 
-impl<T: Guest> crate::wit::exports::trailbase::component::init::Guest for T {
-  fn init_http_handlers(args: Arguments) -> wit::exports::trailbase::component::init::HttpHandlers {
+impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest for T {
+  fn init_http_handlers(
+    args: Arguments,
+  ) -> wit::exports::trailbase::component::init_endpoint::HttpHandlers {
     // QUESTION: Should we ensure that init is called only once?
     T::init(Args {
       version: args.version,
     });
 
-    return wit::exports::trailbase::component::init::HttpHandlers {
+    return wit::exports::trailbase::component::init_endpoint::HttpHandlers {
       handlers: T::http_handlers()
         .into_iter()
         .map(|route| (to_method_type(route.method), route.path))
@@ -93,12 +95,14 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init::Guest for T {
     };
   }
 
-  fn init_job_handlers(args: Arguments) -> wit::exports::trailbase::component::init::JobHandlers {
+  fn init_job_handlers(
+    args: Arguments,
+  ) -> wit::exports::trailbase::component::init_endpoint::JobHandlers {
     T::init(Args {
       version: args.version,
     });
 
-    return wit::exports::trailbase::component::init::JobHandlers {
+    return wit::exports::trailbase::component::init_endpoint::JobHandlers {
       handlers: T::job_handlers()
         .into_iter()
         .map(|config| (config.name, config.spec))
@@ -167,8 +171,10 @@ impl<T: Guest> ::wstd::wasip2::exports::http::incoming_handler::Guest for HttpIn
   }
 }
 
-fn to_method_type(m: Method) -> crate::wit::exports::trailbase::component::init::HttpMethodType {
-  use crate::wit::exports::trailbase::component::init::HttpMethodType;
+fn to_method_type(
+  m: Method,
+) -> crate::wit::exports::trailbase::component::init_endpoint::HttpMethodType {
+  use crate::wit::exports::trailbase::component::init_endpoint::HttpMethodType;
 
   return match m {
     Method::GET => HttpMethodType::Get,
