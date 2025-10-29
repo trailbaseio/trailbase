@@ -16,7 +16,7 @@ pub mod wit {
           "wit/deps-0.2.6/http",
           "wit/keyvalue-0.2.0-draft",
           // Ours:
-          "wit/trailbase.wit",
+          "wit/trailbase",
       ],
       pub_export_macro: true,
       default_bindings_module: "trailbase_wasm::wit",

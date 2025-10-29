@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
-use trailbase::runtime::host_endpoint::{TxError, Value};
+use trailbase::component::host_endpoint::{TxError, Value};
 use trailbase_sqlite::{Params, Rows};
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
@@ -24,15 +24,18 @@ use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 use wasmtime_wasi_io::IoView;
 
-use crate::exports::trailbase::runtime::init_endpoint::{InitArguments, InitResult};
+use crate::exports::trailbase::init::init_endpoint::{
+  HttpHandlersResult, InitArguments, JobHandlersResult, MethodType,
+};
 
+pub use crate::exports::trailbase::init::init_endpoint::MethodType as HttpMethodType;
 pub use trailbase_wasi_keyvalue::Store as KvStore;
 
 static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 
 // Documentation: https://docs.wasmtime.dev/api/wasmtime/component/macro.bindgen.html
 wasmtime::component::bindgen!({
-    world: "trailbase:runtime/trailbase",
+    world: "trailbase:component/interfaces",
     path: [
         // Order-sensitive: will import *.wit from the folder.
         "wit/deps-0.2.6/random",
@@ -44,7 +47,8 @@ wasmtime::component::bindgen!({
         "wit/deps-0.2.6/http",
         "wit/keyvalue-0.2.0-draft",
         // Ours:
-        "wit/trailbase.wit",
+        "wit/trailbase/init",
+        "wit/trailbase/component",
     ],
     // NOTE: This doesn't seem to work even though it should be fixed:
     //   https://github.com/bytecodealliance/wasmtime/issues/10677
@@ -58,10 +62,10 @@ wasmtime::component::bindgen!({
     // Interactions with `ResourceTable` can possibly trap so enable the ability
     // to return traps from generated functions.
     imports: {
-        "trailbase:runtime/host-endpoint/tx-commit": trappable,
-        "trailbase:runtime/host-endpoint/tx-rollback": trappable,
-        "trailbase:runtime/host-endpoint/tx-execute": trappable,
-        "trailbase:runtime/host-endpoint/tx-query": trappable,
+        "trailbase:component/host-endpoint/tx-commit": trappable,
+        "trailbase:component/host-endpoint/tx-rollback": trappable,
+        "trailbase:component/host-endpoint/tx-execute": trappable,
+        "trailbase:component/host-endpoint/tx-query": trappable,
         default: async | trappable,
     },
     exports: {
@@ -172,7 +176,7 @@ impl WasiHttpView for State {
   }
 }
 
-impl trailbase::runtime::host_endpoint::Host for State {
+impl trailbase::component::host_endpoint::Host for State {
   fn execute(
     &mut self,
     query: String,
@@ -501,7 +505,7 @@ impl Runtime {
       })?;
 
       // Host interfaces.
-      trailbase::runtime::host_endpoint::add_to_linker::<_, HasSelf<State>>(&mut linker, |s| s)?;
+      trailbase::component::host_endpoint::add_to_linker::<_, HasSelf<State>>(&mut linker, |s| s)?;
 
       linker
     };
@@ -635,6 +639,14 @@ pub struct InitArgs {
   pub version: Option<String>,
 }
 
+pub struct InitResult {
+  /// Registered http handlers (method, path)[].
+  pub http_handlers: Vec<(MethodType, String)>,
+
+  /// Registered jobs (name, spec)[].
+  pub job_handlers: Vec<(String, String)>,
+}
+
 impl RuntimeInstance {
   fn new_store(&self) -> Result<Store<State>, Error> {
     let mut wasi_ctx = WasiCtxBuilder::new();
@@ -667,10 +679,10 @@ impl RuntimeInstance {
     ));
   }
 
-  pub async fn call_init(&self, args: InitArgs) -> Result<InitResult, Error> {
+  pub async fn initialize(&self, args: InitArgs) -> Result<InitResult, Error> {
     let mut store = self.new_store()?;
 
-    let bindings = Trailbase::instantiate_async(&mut store, &self.component, &self.linker)
+    let bindings = Interfaces::instantiate_async(&mut store, &self.component, &self.linker)
       .await
       .map_err(|err| {
         log::error!(
@@ -682,17 +694,24 @@ impl RuntimeInstance {
         return err;
       })?;
 
-    return Ok(
-      bindings
-        .trailbase_runtime_init_endpoint()
-        .call_init(
-          &mut store,
-          &InitArguments {
-            version: args.version,
-          },
-        )
-        .await?,
-    );
+    let args = InitArguments {
+      version: args.version,
+    };
+
+    let http_handlers: HttpHandlersResult = bindings
+      .trailbase_init_init_endpoint()
+      .call_init_http_handlers(&mut store, &args)
+      .await?;
+
+    let job_handlers: JobHandlersResult = bindings
+      .trailbase_init_init_endpoint()
+      .call_init_job_handlers(&mut store, &args)
+      .await?;
+
+    return Ok(InitResult {
+      http_handlers: http_handlers.handlers,
+      job_handlers: job_handlers.handlers,
+    });
   }
 
   pub async fn call_incoming_http_handler(
@@ -829,7 +848,7 @@ mod tests {
     runtime
       .call(async |instance| {
         instance
-          .call_init(InitArgs { version: None })
+          .initialize(InitArgs { version: None })
           .await
           .unwrap();
       })

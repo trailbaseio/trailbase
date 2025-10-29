@@ -1,0 +1,53 @@
+package trailbase:init@0.1.0;
+
+@since(version = 0.1.0)
+interface init-endpoint  {
+  record init-arguments {
+    version: option<string>,
+  }
+
+  enum method-type {
+    get,
+    post,
+    head,
+    options,
+    patch,
+    delete,
+    put,
+    trace,
+    connect,
+  }
+
+  // record init-result {
+  //   /// Registered http handlers (method, path)[].
+  //   http-handlers: list<tuple<method-type, string>>,
+
+  //   /// Registered jobs (name, spec)[].
+  //   job-handlers: list<tuple<string, string>>,
+
+  //   // @since(version = 0.2.0)
+  //   // sqlite-handlers: list<string>,
+  // }
+
+  record http-handlers-result {
+    /// Registered http handlers (method, path)[].
+    handlers: list<tuple<method-type, string>>,
+  }
+
+  @since(version = 0.1.0)
+  init-http-handlers: func(args: init-arguments) -> http-handlers-result;
+
+  record job-handlers-result {
+    /// Registered jobs (name, spec)[].
+    handlers: list<tuple<string, string>>,
+  }
+
+  @since(version = 0.1.0)
+  init-job-handlers: func(args: init-arguments) -> job-handlers-result;
+}
+
+@since(version = 0.1.0)
+world interfaces {
+  @since(version = 0.1.0)
+  export init-endpoint;
+}
