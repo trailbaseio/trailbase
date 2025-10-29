@@ -23,11 +23,10 @@ use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 use wasmtime_wasi_io::IoView;
 
-// use crate::exports::trailbase::database::sqlite::{TxError, Value};
 use self::trailbase::database::sqlite::{TxError, Value};
-use crate::exports::trailbase::component::init::{Arguments, HttpMethodType};
+use crate::exports::trailbase::component::init::Arguments;
 
-pub use crate::exports::trailbase::init::init_endpoint::MethodType as HttpMethodType;
+pub use crate::exports::trailbase::component::init::HttpMethodType;
 pub use trailbase_wasi_keyvalue::Store as KvStore;
 
 static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);

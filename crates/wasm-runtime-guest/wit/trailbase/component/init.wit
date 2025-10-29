@@ -33,6 +33,16 @@ interface init {
 
   @since(version = 0.1.0)
   init-job-handlers: func(args: arguments) -> job-handlers;
+
+  // record sqlite-function-handlers {
+  //   /// Registered jobs (sqlite_function_name)[].
+  //   ///
+  //   /// TODO: Could add function input schema to do early host-side validation.
+  //   handlers: list<string>,
+  // }
+
+  // @since(version = 0.1.0)
+  // init-sqlite-function-handlers: func(args: arguments) -> sqlite-function-handlers;
 }
 
 @since(version = 0.1.0)

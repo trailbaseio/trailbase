@@ -24,9 +24,6 @@ world interfaces {
   include wasi:keyvalue/imports@0.2.0-draft;
 
   // TrailBase's interfaces:
-  //@since(version = 0.1.0)
-  //export trailbase:database/sqlite@0.1.0;
-
   @since(version = 0.1.0)
   include trailbase:database/interfaces@0.1.0;
 
