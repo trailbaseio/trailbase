@@ -1,8 +1,9 @@
 import { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.3";
 import type {
-  InitResult,
-  InitArguments,
-} from "trailbase:runtime/init-endpoint";
+  Arguments,
+  HttpHandlers,
+  JobHandlers,
+} from "trailbase:component/init@0.1.0";
 import type { HttpHandlerInterface } from "./http";
 import type { JobHandlerInterface } from "./job";
 import { buildIncomingHttpHandler } from "./http/incoming";
@@ -10,7 +11,6 @@ import { buildIncomingHttpHandler } from "./http/incoming";
 export { addPeriodicCallback } from "./timer";
 
 export * from "./util";
-export type { InitResult } from "trailbase:runtime/init-endpoint";
 
 export interface Config {
   incomingHandler: {
@@ -19,8 +19,9 @@ export interface Config {
       respOutparam: ResponseOutparam,
     ) => Promise<void>;
   };
-  initEndpoint: {
-    init: (args: InitArguments) => InitResult;
+  init: {
+    initHttpHandlers: (args: Arguments) => HttpHandlers;
+    initJobHandlers: (args: Arguments) => JobHandlers;
   };
 }
 
@@ -37,18 +38,26 @@ export function defineConfig(opts: {
     incomingHandler: {
       handle: buildIncomingHttpHandler(opts),
     },
-    initEndpoint: {
-      init: function (args: InitArguments): InitResult {
+    init: {
+      initHttpHandlers: function(args: Arguments): HttpHandlers {
         opts.init?.({
           version: args.version,
         });
 
         return {
-          httpHandlers: (opts.httpHandlers ?? []).map((h) => [
+          handlers: (opts.httpHandlers ?? []).map((h) => [
             h.method,
             h.path,
           ]),
-          jobHandlers: (opts.jobHandlers ?? []).map((h) => [h.name, h.spec]),
+        };
+      },
+      initJobHandlers: function(args: Arguments): JobHandlers {
+        opts.init?.({
+          version: args.version,
+        });
+
+        return {
+          handlers: (opts.jobHandlers ?? []).map((h) => [h.name, h.spec]),
         };
       },
     },

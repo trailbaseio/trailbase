@@ -3,11 +3,11 @@ import {
   IncomingBody,
   Scheme as WasiScheme,
 } from "wasi:http/types@0.2.3";
-import type { MethodType } from "trailbase:runtime/init-endpoint";
+import type { HttpMethodType } from "trailbase:component/init@0.1.0";
 import type { HttpContextUser } from "@common/HttpContextUser";
 
 export type Scheme = "HTTP" | "HTTPS" | "other";
-export type Method = MethodType;
+export type Method = HttpMethodType;
 
 export type User = {
   id: string;
@@ -46,7 +46,7 @@ export class RequestImpl implements Request {
     private readonly _headers: Headers,
     private readonly _user: HttpContextUser | null,
     private readonly _body: IncomingBody,
-  ) {}
+  ) { }
 
   path(): string {
     return this._path;
@@ -73,10 +73,10 @@ export class RequestImpl implements Request {
     return u === null
       ? null
       : {
-          id: u.id,
-          email: u.email,
-          csrf: u.csrf_token,
-        };
+        id: u.id,
+        email: u.email,
+        csrf: u.csrf_token,
+      };
   }
 
   url(): URL {
