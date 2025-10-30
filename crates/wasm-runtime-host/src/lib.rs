@@ -67,6 +67,16 @@ wasmtime::component::bindgen!({
         default: async | trappable,
     },
     exports: {
+        // WARN: We would really like synchronous functions to be wrapped synchronously, e.g. to
+        // call a sqlite extension function synchronously. However, right now if you runtime-enable
+        // async `config.async_support(true)`, then all guest-exported functions must be called
+        // asynchronously. Right now, one would need to generate two sets of bindings (sync & async)
+        // and initialize to separate engines to call functions differently :/. It's unclear if
+        // WASIp3 will fix that, i.e. generate bindings based on async in the WIT...
+        // "trailbase:component/init-endpoint/init-http-handlers": trappable,
+        //
+        // NOTE: This compile-time setting *must* be set, if runtime option
+        // `config.async_support(true)` will be set :/.
         default: async,
     },
 });
@@ -425,10 +435,13 @@ pub struct Runtime {
 fn build_config(cache: Option<wasmtime::Cache>, use_winch: bool) -> Config {
   let mut config = Config::new();
 
-  // Execution settings.
-  config.async_support(true);
+  // Execution settings:
   config.epoch_interruption(false);
   config.memory_reservation(64 * 1024 * 1024 /* bytes */);
+  // NOTE: This is where we enable async execution. Ironically, this runtime setting requires
+  // compile-time setting to make all guest-exported bindings async... *all*. With this enabled
+  // calling syncronous bindings will panic.
+  config.async_support(true);
   // config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
 
   // Compilation settings.
@@ -479,12 +492,15 @@ impl Runtime {
         .wasm_binary_or_text_file(&wasm_source_file)?
         .compile_component()?;
 
-      // NOTE: According to docs, this should not do anything.
+      // NOTE: According to docs, this should not do anything (it seems like a reasonable thing to
+      // call explicitly).
       component.initialize_copy_on_write_image()?;
 
-      if let Ok(elapsed) = SystemTime::now().duration_since(start) {
-        log::info!("Loaded component {wasm_source_file:?} in: {elapsed:?}.");
-      }
+      log::info!(
+        "Loaded component {wasm_source_file:?} in: {elapsed:?}.",
+        elapsed = SystemTime::now().duration_since(start).unwrap_or_default()
+      );
+
       component
     };
 
