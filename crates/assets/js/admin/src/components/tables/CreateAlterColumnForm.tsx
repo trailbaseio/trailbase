@@ -494,10 +494,13 @@ export function ColumnSubForm(props: {
           <CardContent>
             <div class="flex flex-col gap-2 py-1">
               {/* Column presets */}
-              <div class="flex justify-between gap-1">
-                <Label>Presets</Label>
+              <div
+                class={cn("grid items-center", gapStyle)}
+                style={{ "grid-template-columns": "auto 1fr" }}
+              >
+                <L>Presets</L>
 
-                <div class="flex gap-1">
+                <div class="flex flex-wrap gap-1">
                   <For each={presets}>
                     {([name, preset]) => (
                       <ButtonBadge
@@ -624,10 +627,13 @@ export function PrimaryKeyColumnSubForm(props: {
             <div class="flex flex-col gap-2 py-1">
               {/* Column presets */}
               {!disabled() && (
-                <div class="flex justify-between gap-1">
-                  <Label>Presets</Label>
+                <div
+                  class={cn("grid items-center", gapStyle)}
+                  style={{ "grid-template-columns": "auto 1fr" }}
+                >
+                  <L>Presets</L>
 
-                  <div class="flex gap-1">
+                  <div class="flex flex-wrap gap-1">
                     <For each={primaryKeyPresets}>
                       {([name, preset]) => (
                         <ButtonBadge
