@@ -18,7 +18,6 @@ use trailbase_sqlite::{Params, Rows};
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Result, Store};
-use wasmtime_wasi::p2::add_to_linker_async;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtxView};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
 use wasmtime_wasi_http::bindings::http::types::ErrorCode;
@@ -491,7 +490,7 @@ impl Runtime {
       let mut linker = Linker::<State>::new(&engine);
 
       // Adds all the default WASI implementations: clocks, random, fs, ...
-      add_to_linker_async(&mut linker)?;
+      wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
 
       // Adds default HTTP interfaces - incoming and outgoing.
       wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
@@ -670,7 +669,18 @@ impl RuntimeInstance {
 
   pub async fn call_init(&self, args: InitArgs) -> Result<InitResult, Error> {
     let mut store = self.new_store()?;
-    let bindings = Trailbase::instantiate_async(&mut store, &self.component, &self.linker).await?;
+
+    let bindings = Trailbase::instantiate_async(&mut store, &self.component, &self.linker)
+      .await
+      .map_err(|err| {
+        log::error!(
+          "Failed to instantiate WIT component: '{err}'.\n This may happen if the server and \
+           component are ABI incompatible. Make sure to run compatible versions, e.g. update your \
+           server to run more recent components or rebuild your component against a more recent, \
+           matching runtime."
+        );
+        return err;
+      })?;
 
     return Ok(
       bindings
