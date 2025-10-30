@@ -63,39 +63,39 @@ pub fn build_json_schema_expanded(
       match opt {
         ColumnOption::NotNull => not_null = true,
         ColumnOption::Default(_) => default = true,
-        ColumnOption::Check(check) => {
-          if let Some(json_metadata) = extract_json_metadata(&ColumnOption::Check(check.clone()))? {
-            let new_def_name = &col.name;
-            match json_metadata {
-              JsonColumnMetadata::SchemaName(name) => {
-                let Some(crate::registry::Schema { schema, .. }) =
-                  crate::registry::get_schema(&name)
-                else {
-                  return Err(JsonSchemaError::NotFound(name.to_string()));
-                };
+        ColumnOption::Check(_) => {
+          let Some(json_metadata) = extract_json_metadata(&opt)? else {
+            continue;
+          };
 
-                let Some(schema_obj) = schema.as_object() else {
-                  return Err(JsonSchemaError::Other("expected object".to_string()));
-                };
+          match json_metadata {
+            JsonColumnMetadata::SchemaName(name) => {
+              let Some(crate::registry::Schema { schema, .. }) = crate::registry::get_schema(&name)
+              else {
+                return Err(JsonSchemaError::NotFound(name.to_string()));
+              };
 
-                // Re-parent nested references to the schema root, to continue to be reference-able
-                // via: `{"$ref": "#/$defs/<name>"}`, otherwise they won't be found.
-                //
-                // QUESTION: is there a better API for us to merge JSON schemas, w/o that manual
-                // work
-                if let Some(nested_defs) = schema_obj.get("$defs").and_then(|d| d.as_object()) {
-                  for (k, v) in nested_defs {
-                    defs.insert(k.clone(), v.clone());
-                  }
+              let Some(schema_obj) = schema.as_object() else {
+                return Err(JsonSchemaError::Other("expected object".to_string()));
+              };
+
+              // Re-parent nested references to the schema root, to continue to be reference-able
+              // via: `{"$ref": "#/$defs/<name>"}`, otherwise they won't be found.
+              //
+              // QUESTION: is there a better API for us to merge JSON schemas, w/o that manual
+              // work
+              if let Some(nested_defs) = schema_obj.get("$defs").and_then(|d| d.as_object()) {
+                for (k, v) in nested_defs {
+                  defs.insert(k.clone(), v.clone());
                 }
+              }
 
-                defs.insert(new_def_name.clone(), schema);
-                def_name = Some(new_def_name.clone());
-              }
-              JsonColumnMetadata::Pattern(pattern) => {
-                defs.insert(new_def_name.clone(), pattern.clone());
-                def_name = Some(new_def_name.clone());
-              }
+              defs.insert(col.name.clone(), schema);
+              def_name = Some(col.name.clone());
+            }
+            JsonColumnMetadata::Pattern(pattern) => {
+              defs.insert(col.name.clone(), pattern.clone());
+              def_name = Some(col.name.clone());
             }
           }
         }
