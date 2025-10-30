@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { navBarIconSize, navBarIconStyle } from "@/components/NavBar";
+import { navBarIconStyle } from "@/components/NavBar";
 
 function avatarUrl(user: User): string {
   return import.meta.env.DEV
@@ -63,14 +63,14 @@ function Profile(props: { user: User }) {
   );
 }
 
-export function AuthButton() {
+export function AuthButton(props: { iconSize: number }) {
   const [open, setOpen] = createSignal(false);
   const user = useStore($user);
 
   return (
     <Dialog open={open()} onOpenChange={setOpen}>
       <button class={navBarIconStyle} onClick={() => setOpen(true)}>
-        <Avatar user={user()} size={navBarIconSize} />
+        <Avatar user={user()} size={props.iconSize} />
       </button>
 
       <DialogContent class="sm:max-w-[425px]">

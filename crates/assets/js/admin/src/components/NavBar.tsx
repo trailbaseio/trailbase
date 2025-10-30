@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import { Location } from "@solidjs/router";
 import {
   TbDatabase,
@@ -8,7 +8,6 @@ import {
   TbTimeline,
   TbSettings,
 } from "solid-icons/tb";
-import { IconTypes } from "solid-icons";
 
 import { AuthButton } from "@/components/auth/AuthButton";
 import {
@@ -32,52 +31,84 @@ const options = [
   [`${BASE}/settings/`, TbSettings, "Settings"],
 ] as const;
 
-export const navBarIconSize = 22;
+const iconSize = 22;
 export const navBarIconStyle =
-  "rounded-full transition-all p-[10px] hover:bg-accent-200 hover:bg-opacity-50 active:scale-90";
+  "rounded-full transition-all p-2 hover:bg-accent-200 hover:bg-opacity-50 active:scale-90";
 export const navBarIconActiveStyle =
-  "rounded-full transition-all p-[10px] bg-accent-600 text-white hover:bg-opacity-70 active:scale-90";
+  "rounded-full transition-all p-2 bg-accent-600 text-white hover:bg-opacity-70 active:scale-90";
 
-export function NavBar(props: { location: Location }) {
+function NavBarItems(props: { location: Location; horizontal: boolean }) {
+  return (
+    <>
+      <a href={`${BASE}/`}>
+        <img src={logo} width={props.horizontal ? "38" : "42"} alt="Logo" />
+      </a>
+
+      <For each={options}>
+        {([pathname, Icon, tooltip]) => {
+          const active = () => props.location.pathname === pathname;
+          const style = () =>
+            active() ? navBarIconActiveStyle : navBarIconStyle;
+
+          return (
+            <Tooltip>
+              <TooltipTrigger as="div">
+                <a href={pathname as string}>
+                  <div class={style()}>
+                    <Icon size={iconSize} />
+                  </div>
+                </a>
+              </TooltipTrigger>
+
+              <TooltipContent>{tooltip}</TooltipContent>
+            </Tooltip>
+          );
+        }}
+      </For>
+    </>
+  );
+}
+
+function NavFooter(props: { horizontal: boolean }) {
   const versionInfo = createVersionInfoQuery();
 
   return (
-    <div class="flex grow flex-col items-center justify-between gap-4 bg-gray-100 py-2">
-      <nav class="flex flex-col items-center gap-4">
-        <a href={`${BASE}/`}>
-          <img src={logo} width="42" height="42" alt="TrailBase Logo" />
-        </a>
+    <div class="flex flex-col items-center">
+      <AuthButton iconSize={iconSize} />
 
-        <For each={options}>
-          {([pathname, icon, tooltip]) => {
-            const active = () => props.location.pathname === pathname;
-
-            return (
-              <Tooltip>
-                <TooltipTrigger as="div">
-                  <a href={pathname as string}>
-                    <div
-                      class={active() ? navBarIconActiveStyle : navBarIconStyle}
-                    >
-                      {(icon as IconTypes)({ size: navBarIconSize })}
-                    </div>
-                  </a>
-                </TooltipTrigger>
-
-                <TooltipContent>{tooltip}</TooltipContent>
-              </Tooltip>
-            );
-          }}
-        </For>
-      </nav>
-
-      <div class="flex flex-col items-center">
-        <AuthButton />
-
+      <Show when={!props.horizontal}>
         <div class="text-[9px]">
           <Version info={versionInfo.data} />
         </div>
-      </div>
+      </Show>
+    </div>
+  );
+}
+
+export function HorizontalNavBar(props: { location: Location }) {
+  return (
+    <div class="flex h-full items-center justify-between gap-4 bg-gray-100 px-2">
+      <nav class="flex h-[36px] items-center gap-4">
+        <NavBarItems location={props.location} horizontal={true} />
+      </nav>
+
+      <NavFooter horizontal={true} />
+    </div>
+  );
+}
+
+export function VerticalNavBar(props: { location: Location }) {
+  return (
+    <div
+      class={
+        "flex h-dvh grow flex-col items-center justify-between gap-4 bg-gray-100 py-2"
+      }
+    >
+      <nav class="flex flex-col items-center gap-4">
+        <NavBarItems location={props.location} horizontal={false} />
+      </nav>
+
+      <NavFooter horizontal={false} />
     </div>
   );
 }

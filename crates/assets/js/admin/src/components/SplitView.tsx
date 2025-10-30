@@ -1,24 +1,13 @@
-import { createSignal, onMount, onCleanup } from "solid-js";
-import type { JSXElement, Accessor } from "solid-js";
+import type { JSXElement } from "solid-js";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
 
+import { createWindowWidth } from "@/lib/signals";
 import {
   Resizable,
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
-
-export function createWindowWidth(): Accessor<number> {
-  const [width, setWidth] = createSignal(window.innerWidth);
-
-  const handler = (_event: Event) => setWidth(window.innerWidth);
-
-  onMount(() => window.addEventListener("resize", handler));
-  onCleanup(() => window.removeEventListener("resize", handler));
-
-  return width;
-}
 
 function setSizes(next: number[]) {
   const prev = $sizes.get();

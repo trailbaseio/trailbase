@@ -39,7 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { createWindowWidth } from "@/components/SplitView";
+import { createWindowWidth } from "@/lib/signals";
 
 export function safeParseInt(v: string | undefined): number | undefined {
   if (v !== undefined) {
