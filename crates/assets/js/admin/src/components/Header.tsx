@@ -6,19 +6,28 @@ export function Header(props: {
   titleSelect?: string;
   left?: JSX.Element;
   right?: JSX.Element;
+  leading?: JSX.Element;
 }) {
   return (
     <div>
-      <header class="mx-4 my-3 flex flex-wrap items-center">
-        {/* left */}
-        <div class="flex h-[40px] flex-nowrap items-center gap-2">
-          <h1 class="text-accent-600 m-0">
-            <Show when={props.titleSelect} fallback={props.title}>
-              {`${props.title} ‣ `}
+      <header
+        class={`${props.leading ? "mr-4" : "mx-4"} my-3 flex flex-wrap items-center gap-2`}
+      >
+        <Show when={props.leading !== undefined}>
+          <div class="bg-sidebar-accent flex h-10 w-9 items-center justify-center rounded-r-lg">
+            {props.leading}
+          </div>
+        </Show>
 
-              <span class="text-black">{props.titleSelect}</span>
+        {/* left */}
+        <div class="flex min-h-[40px] flex-nowrap items-center gap-2">
+          <h2 class="text-accent-600 m-0">
+            <Show when={props.titleSelect} fallback={props.title}>
+              {props.title}
+              <span class="text-border mx-2 text-xs">‣</span>
+              <span class="font-normal text-black">{props.titleSelect}</span>
             </Show>
-          </h1>
+          </h2>
 
           {props.left}
         </div>

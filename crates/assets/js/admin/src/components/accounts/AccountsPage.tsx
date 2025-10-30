@@ -79,7 +79,7 @@ function buildColumns(
       header: "admin",
       cell: (ctx) => (
         <div class="ml-[10px]">
-          {ctx.row.original.admin ? <TbCrown size={20} /> : null}
+          {ctx.row.original.admin ? <TbCrown size={18} /> : null}
         </div>
       ),
     }) as ColumnDef<UserJson>,
@@ -93,7 +93,7 @@ function buildColumns(
                 tooltip="Edit user"
                 onClick={() => setEditUser(ctx.row.original)}
               >
-                <TbEdit size={20} />
+                <TbEdit />
               </IconButton>
 
               <DeleteUserButton
@@ -158,7 +158,7 @@ function DeleteUserButton(props: {
         tooltip="Delete user"
         onClick={() => setDialogOpen(true)}
       >
-        <TbTrash size={20} />
+        <TbTrash />
       </IconButton>
     </Dialog>
   );
@@ -331,7 +331,7 @@ export function AccountsPage() {
         title="Accounts"
         left={
           <IconButton onClick={refetch}>
-            <TbRefresh size={18} />
+            <TbRefresh />
           </IconButton>
         }
       />

@@ -18,8 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { iconButtonStyle } from "@/components/IconButton";
+import { IconButton } from "@/components/IconButton";
 import {
   Select,
   SelectContent,
@@ -27,11 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 const modes = ["Insert", "Select", "Update"] as const;
 type Mode = (typeof modes)[number];
@@ -42,8 +36,7 @@ function SchemaDownloadButton(props: {
   schema: object;
 }) {
   return (
-    <Button
-      variant="default"
+    <IconButton
       onClick={() => {
         showSaveFileDialog({
           contents: async () =>
@@ -52,8 +45,8 @@ function SchemaDownloadButton(props: {
         });
       }}
     >
-      <TbDownload size={20} />
-    </Button>
+      <TbDownload />
+    </IconButton>
   );
 }
 
@@ -78,14 +71,10 @@ export function SchemaDialog(props: {
 
   return (
     <Dialog id="schema">
-      <DialogTrigger class={iconButtonStyle}>
-        <Tooltip>
-          <TooltipTrigger as="div">
-            <TbColumns size={20} />
-          </TooltipTrigger>
-
-          <TooltipContent>JSON Schemas of "{props.tableName}"</TooltipContent>
-        </Tooltip>
+      <DialogTrigger>
+        <IconButton tooltip={`JSON Schemas of "${props.tableName}"`}>
+          <TbColumns />
+        </IconButton>
       </DialogTrigger>
 
       <DialogContent class="min-w-[80dvw]">
@@ -103,7 +92,7 @@ export function SchemaDialog(props: {
               </Show>
 
               {/* NOTE: This is for tables with multiple APIs */}
-              {apiNames().length > 1 && (
+              <Show when={apiNames().length > 1}>
                 <Select
                   value={apiName()}
                   onChange={setApiName}
@@ -122,7 +111,7 @@ export function SchemaDialog(props: {
                   </SelectTrigger>
                   <SelectContent />
                 </Select>
-              )}
+              </Show>
 
               <Select
                 value={mode()}
@@ -174,13 +163,15 @@ export function DebugSchemaDialogButton(props: {
 
   return (
     <Dialog id="schema">
-      <DialogTrigger class={iconButtonStyle}>
-        <TbColumnsOff size={20} />
+      <DialogTrigger>
+        <IconButton>
+          <TbColumnsOff />
+        </IconButton>
       </DialogTrigger>
 
       <DialogContent class="min-w-[80dvw]">
         <DialogHeader>
-          <DialogTitle>Schema</DialogTitle>
+          <DialogTitle>[Debug] Schema</DialogTitle>
         </DialogHeader>
 
         <div class="max-h-[80dvh] overflow-auto">

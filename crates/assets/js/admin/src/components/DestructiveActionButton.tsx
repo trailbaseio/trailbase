@@ -15,6 +15,7 @@ export function DestructiveActionButton(props: {
   children: JSX.Element;
   action: () => Promise<void>;
   msg?: string;
+  size?: "default" | "lg" | "sm" | "icon";
 }) {
   const [open, setOpen] = createSignal<boolean>(false);
   const resolved = children(() => props.children);
@@ -23,8 +24,10 @@ export function DestructiveActionButton(props: {
     <Dialog open={open()} onOpenChange={setOpen}>
       <DialogContent>
         <DialogTitle>Confirmation</DialogTitle>
+
         {props.msg ?? "Are you sure?"}
-        <DialogFooter>
+
+        <DialogFooter class="gap-2">
           <Button variant="outline" onClick={() => setOpen(false)}>
             Back
           </Button>
@@ -45,8 +48,8 @@ export function DestructiveActionButton(props: {
       </DialogContent>
 
       <DialogTrigger
-        as={(props: DialogTriggerProps) => (
-          <Button variant="destructive" {...props}>
+        as={(p: DialogTriggerProps) => (
+          <Button size={props.size} variant="destructive" {...p}>
             {resolved()}
           </Button>
         )}

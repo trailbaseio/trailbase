@@ -33,9 +33,9 @@ const options = [
 
 const iconSize = (horizontal: boolean) => (horizontal ? 18 : 22);
 export const navBarIconStyle =
-  "rounded-full transition-all p-2 hover:bg-accent-200 hover:bg-opacity-50 active:scale-90";
+  "rounded-full transition-all p-2 hover:bg-gray-200 active:scale-90";
 export const navBarIconActiveStyle =
-  "rounded-full transition-all p-2 bg-accent-600 text-white hover:bg-opacity-70 active:scale-90";
+  "rounded-full transition-all p-2 bg-accent-600 text-white active:scale-90";
 
 function NavBarItems(props: { location: Location; horizontal: boolean }) {
   return (

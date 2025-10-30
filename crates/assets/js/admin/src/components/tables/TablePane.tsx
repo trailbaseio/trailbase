@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 import {
   SchemaDialog,
@@ -255,6 +256,7 @@ function TableHeaderRightHandButtons(props: {
       {/* Delete table button */}
       {!hidden() && (
         <DestructiveActionButton
+          size="sm"
           action={() =>
             (async () => {
               await dropTable({
@@ -290,6 +292,7 @@ function TableHeaderRightHandButtons(props: {
                       <TooltipTrigger as="div">
                         <Button
                           variant="outline"
+                          size="sm"
                           class="flex items-center"
                           disabled={!satisfiesRecordApi()}
                           {...props}
@@ -341,7 +344,7 @@ function TableHeaderRightHandButtons(props: {
 
                 <SheetTrigger
                   as={(props: DialogTriggerProps) => (
-                    <Button variant="default" {...props}>
+                    <Button variant="default" size="sm" {...props}>
                       <div class="flex items-center gap-2">
                         Alter <TbTable />
                       </div>
@@ -374,7 +377,7 @@ function TableHeaderLeftButtons(props: {
   return (
     <>
       <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
-        <TbRefresh size={18} />
+        <TbRefresh />
       </IconButton>
 
       {apis().length > 0 && (
@@ -413,6 +416,7 @@ function TableHeader(props: {
 
   return (
     <Header
+      leading={<SidebarTrigger />}
       title={headerTitle()}
       titleSelect={props.table.name.name}
       left={

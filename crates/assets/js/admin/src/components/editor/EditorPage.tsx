@@ -2,6 +2,7 @@ import {
   ErrorBoundary,
   For,
   Match,
+  Show,
   Switch,
   createEffect,
   createSignal,
@@ -14,13 +15,7 @@ import { createWritableMemo } from "@solid-primitives/memo";
 import type { ColumnDef } from "@tanstack/solid-table";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
-import {
-  TbTrash,
-  TbEdit,
-  TbDeviceFloppy,
-  TbHelp,
-  TbPencilPlus,
-} from "solid-icons/tb";
+import { TbTrash, TbEdit, TbHelp, TbPencilPlus } from "solid-icons/tb";
 
 import { autocompletion } from "@codemirror/autocomplete";
 import { EditorView, lineNumbers, keymap } from "@codemirror/view";
@@ -28,9 +23,8 @@ import { EditorState } from "@codemirror/state";
 import { minimalSetup } from "codemirror";
 import { sql, SQLConfig, SQLNamespace, SQLite } from "@codemirror/lang-sql";
 
-import { iconButtonStyle, IconButton } from "@/components/IconButton";
+import { IconButton } from "@/components/IconButton";
 import { Header } from "@/components/Header";
-import { SplitView } from "@/components/SplitView";
 import { Separator } from "@/components/ui/separator";
 import { Callout } from "@/components/ui/callout";
 import { Button } from "@/components/ui/button";
@@ -42,6 +36,19 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
 import {
   Tooltip,
@@ -59,6 +66,7 @@ import { createTableSchemaQuery } from "@/lib/api/table";
 import { executeSql, type ExecutionResult } from "@/lib/api/execute";
 import { isNotNull } from "@/lib/schema";
 import { sqlValueToString } from "@/lib/value";
+import { createIsMobile } from "@/lib/signals";
 import type { ArrayRecord } from "@/lib/record";
 
 function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
@@ -175,8 +183,7 @@ function ResultView(props: {
         >
           <div class="flex flex-col gap-2 p-4">
             <div class="flex justify-end text-sm">
-              Last executed:{" "}
-              {new Date(response()?.timestamp ?? 0).toLocaleTimeString()}
+              <ExecutionTime timestamp={response()?.timestamp} />
             </div>
 
             {/* TODO: Enable pagination */}
@@ -195,7 +202,15 @@ function ResultView(props: {
   );
 }
 
-function SideBar(props: {
+function ExecutionTime(props: { timestamp: number | undefined }) {
+  const time = () => new Date(props.timestamp ?? 0);
+
+  return (
+    <div class="text-sm">{`Executed: ${time().toLocaleTimeString()}`}</div>
+  );
+}
+
+function EditorSidebar(props: {
   selected: number;
   setSelected: (idx: number) => void;
   dirty: boolean;
@@ -205,38 +220,63 @@ function SideBar(props: {
 
   const addNewScript = () => props.setSelected(createNewScript());
 
-  const flexStyle = () => (props.horizontal ? "flex flex-col h-dvh" : "flex");
-
   return (
-    <div class={`${flexStyle()} m-4 gap-2`}>
-      <Button class="flex gap-2" variant="secondary" onClick={addNewScript}>
-        <TbPencilPlus size={20} /> New
-      </Button>
+    <SidebarGroupContent>
+      <div class={`hide-scrollbars flex flex-col gap-2 overflow-scroll p-2`}>
+        <SidebarMenu>
+          <Button class="flex gap-2" variant="secondary" onClick={addNewScript}>
+            <TbPencilPlus /> New
+          </Button>
 
-      <For each={scripts()}>
-        {(_script: Script, i: Accessor<number>) => {
-          const scriptName = () => scripts()[i()].name;
-          return (
-            <Button
-              variant={props.selected === i() ? "default" : "outline"}
-              onClick={() => props.setSelected(i())}
-            >
-              {props.selected === i() && props.dirty
-                ? `${scriptName()}*`
-                : scriptName()}
-            </Button>
-          );
-        }}
-      </For>
-    </div>
+          <For each={scripts()}>
+            {(_script: Script, i: Accessor<number>) => {
+              const scriptName = () => scripts()[i()].name;
+              const showStar = () => props.selected === i() && props.dirty;
+
+              return (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={props.selected === i()}
+                    tooltip={scriptName()}
+                    variant="default"
+                    size="md"
+                    onClick={() => props.setSelected(i())}
+                  >
+                    <div class="flex w-full items-center justify-between">
+                      <span class="truncate">
+                        {`${scriptName()}${showStar() ? "*" : ""}`}
+                      </span>
+
+                      {/*
+                      <div class="flex">
+                        <Button class="hover:bg-border" size="icon" variant="ghost" onClick={() => { }}>
+                          <TbEdit />
+                        </Button>
+
+                        <IconButton class="hover:bg-border" tooltip="Delete this script">
+                          <TbTrash />
+                        </IconButton>
+                      </div>
+                      */}
+                    </div>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+            }}
+          </For>
+        </SidebarMenu>
+      </div>
+    </SidebarGroupContent>
   );
 }
 
 function HelpDialog() {
   return (
     <Dialog id="edit-help">
-      <DialogTrigger class={iconButtonStyle}>
-        <TbHelp size={20} />
+      <DialogTrigger>
+        <IconButton>
+          <TbHelp />
+        </IconButton>
       </DialogTrigger>
 
       <DialogContent>
@@ -273,13 +313,10 @@ function RenameDialog(props: { selected: number; script: Script }) {
 
   return (
     <Dialog id="rename" open={open()} onOpenChange={setOpen}>
-      <DialogTrigger class={iconButtonStyle}>
-        <Tooltip>
-          <TooltipTrigger as="div">
-            <TbEdit size={20} />
-          </TooltipTrigger>
-          <TooltipContent>Rename script</TooltipContent>
-        </Tooltip>
+      <DialogTrigger>
+        <IconButton tooltip="Rename script">
+          <TbEdit />
+        </IconButton>
       </DialogTrigger>
 
       <DialogContent>
@@ -340,6 +377,7 @@ function EditorPanel(props: {
   const [selected, setSelected] = props.selected;
 
   const [showCallout, setShowCallout] = createSignal(true);
+  const isMobile = createIsMobile();
 
   // Will only be set when the user explicitly triggers "execute";
   const [queryString, setQueryString] = createWritableMemo<string | null>(
@@ -416,6 +454,15 @@ function EditorPanel(props: {
       },
       preventDefault: true,
     },
+    {
+      key: "Ctrl-s",
+      run: () => {
+        saveScript();
+        showToast({ title: "saved" });
+        return true;
+      },
+      preventDefault: true,
+    },
   ]);
 
   const newEditorState = (contents: string) => {
@@ -462,12 +509,8 @@ function EditorPanel(props: {
     <>
       <RenameDialog selected={selected()} script={props.script} />
 
-      <IconButton tooltip="Save script" onClick={saveScript}>
-        <TbDeviceFloppy size={20} />
-      </IconButton>
-
       <IconButton tooltip="Delete this script" onClick={props.deleteScript}>
-        <TbTrash size={20} />
+        <TbTrash />
       </IconButton>
     </>
   );
@@ -499,6 +542,7 @@ function EditorPanel(props: {
 
       <Header
         title="Editor"
+        leading={<SidebarTrigger />}
         titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
         left={<LeftButtons />}
         right={<HelpDialog />}
@@ -510,9 +554,9 @@ function EditorPanel(props: {
             class="text-sm hover:opacity-[80%]"
             onClick={() => setShowCallout(false)}
           >
-            When changing schemas, consider using migrations to consistently
-            apply changes across environments. One-off alterations can otherwise
-            lead to skew. Alterations using the table browser will produce
+            When changing schemas, consider using migrations for
+            cross-deployment consistency (dev, test, prod, etc.) One-off changes
+            may lead to skew. Alterations using the table browser will yield
             migrations.
           </Callout>
         )}
@@ -523,11 +567,27 @@ function EditorPanel(props: {
           ref={ref}
         />
 
-        <div class="flex justify-end">
+        <div class="flex items-center justify-between">
+          <Tooltip>
+            <TooltipTrigger as="div">
+              <Button variant="secondary" onClick={() => {}}>
+                <Show when={!isMobile()} fallback="Save">
+                  Save (Ctrl+S)
+                </Show>
+              </Button>
+            </TooltipTrigger>
+
+            <TooltipContent>
+              Save script to browser local storage.
+            </TooltipContent>
+          </Tooltip>
+
           <Tooltip>
             <TooltipTrigger as="div">
               <Button variant="destructive" onClick={execute}>
-                Execute (Ctrl+Enter)
+                <Show when={!isMobile()} fallback="Execute">
+                  Execute (Ctrl+Enter)
+                </Show>
               </Button>
             </TooltipTrigger>
 
@@ -540,7 +600,7 @@ function EditorPanel(props: {
 
       <Separator />
 
-      <div class="flex shrink flex-col">
+      <div class="flex flex-col">
         <ResultView
           script={props.script}
           response={executionResult.data ?? undefined}
@@ -551,9 +611,12 @@ function EditorPanel(props: {
 }
 
 export function EditorPage() {
+  // FIXME: Note that the state isn't persistent enough. E.g. resizing to
+  // mobile rebuild EditorPage and reset the dirty state.
   const scripts = useStore($scripts);
   const [selected, setSelected] = createSignal<number>(0);
   const [dirty, setDirty] = createSignal<boolean>(false);
+  const isMobile = createIsMobile();
 
   const schemaFetch = createTableSchemaQuery();
 
@@ -585,27 +648,48 @@ export function EditorPage() {
   };
 
   return (
-    <SplitView
-      first={(props: { horizontal: boolean }) => {
-        return (
-          <SideBar
-            selected={selected()}
-            setSelected={switchToScript}
-            dirty={dirty()}
-            horizontal={props.horizontal}
-          />
-        );
-      }}
-      second={() => {
-        return (
-          <Switch fallback={"Loading..."}>
-            <Match when={schemaFetch.isError}>
-              <span>
-                Schema fetch error: {JSON.stringify(schemaFetch.error)}
-              </span>
-            </Match>
+    <SidebarProvider>
+      <Sidebar
+        class="absolute"
+        variant="sidebar"
+        side="left"
+        collapsible="offcanvas"
+      >
+        <SidebarContent>
+          <SidebarGroup>
+            <EditorSidebar
+              selected={selected()}
+              setSelected={switchToScript}
+              dirty={dirty()}
+              horizontal={true}
+            />
+          </SidebarGroup>
 
-            <Match when={schemaFetch.data}>
+          {/* <SidebarFooter /> */}
+        </SidebarContent>
+
+        <SidebarRail />
+      </Sidebar>
+
+      <SidebarInset class="min-w-0">
+        <Switch fallback={"Loading..."}>
+          <Match when={schemaFetch.isError}>
+            <span>Schema fetch error: {JSON.stringify(schemaFetch.error)}</span>
+          </Match>
+
+          <Match when={schemaFetch.data && isMobile()}>
+            <EditorPanel
+              schemas={schemaFetch.data!}
+              selected={[selected, setSelected]}
+              script={script()}
+              dirty={[dirty, setDirty]}
+              dirtyDialog={[dialog, setDialog]}
+              deleteScript={deleteCurrentScript}
+            />
+          </Match>
+
+          <Match when={schemaFetch.data && !isMobile()}>
+            <div class="h-dvh overflow-y-auto">
               <EditorPanel
                 schemas={schemaFetch.data!}
                 selected={[selected, setSelected]}
@@ -614,11 +698,11 @@ export function EditorPage() {
                 dirtyDialog={[dialog, setDialog]}
                 deleteScript={deleteCurrentScript}
               />
-            </Match>
-          </Switch>
-        );
-      }}
-    />
+            </div>
+          </Match>
+        </Switch>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 

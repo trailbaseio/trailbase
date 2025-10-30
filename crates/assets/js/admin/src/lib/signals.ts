@@ -1,6 +1,8 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import type { Accessor } from "solid-js";
 
+import { MOBILE_BREAKPOINT } from "@/components/ui/sidebar";
+
 export function createWindowWidth(): Accessor<number> {
   const [width, setWidth] = createSignal(window.innerWidth);
 
@@ -12,11 +14,9 @@ export function createWindowWidth(): Accessor<number> {
   return width;
 }
 
-const mobileBreakpoint = 768;
-
 export function createIsMobile(): Accessor<boolean> {
   const width = createWindowWidth();
-  return () => width() < mobileBreakpoint;
+  return () => width() < MOBILE_BREAKPOINT;
 }
 
 export function createSetOnce<T>(initial: T): [

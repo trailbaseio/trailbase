@@ -214,7 +214,7 @@ export function LogsPage() {
         title="Logs"
         left={
           <IconButton onClick={refetch} tooltip="Refresh Logs">
-            <TbRefresh size={18} />
+            <TbRefresh />
           </IconButton>
         }
         right={
@@ -251,7 +251,7 @@ export function LogsPage() {
                 }}
                 tooltip="Toggle World Map"
               >
-                <TbWorld size={20} />
+                <TbWorld />
               </IconButton>
             </Dialog>
           )

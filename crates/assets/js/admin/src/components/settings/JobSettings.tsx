@@ -340,7 +340,7 @@ function JobSettingsImpl(props: {
                                   }
                                 }}
                               >
-                                <TbPlayerPlay size={20} />
+                                <TbPlayerPlay />
                               </IconButton>
                             </div>
                           </TableCell>

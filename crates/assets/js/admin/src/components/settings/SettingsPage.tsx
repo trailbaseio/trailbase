@@ -1,15 +1,37 @@
 import { createSignal, For, Show, Switch, Match } from "solid-js";
-import type { Component, Signal } from "solid-js";
+import type { Component, JSX, Signal } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
 import { createForm } from "@tanstack/solid-form";
-import { TbRefresh } from "solid-icons/tb";
+import {
+  TbRefresh,
+  TbMail,
+  TbServer,
+  TbUser,
+  TbBriefcase,
+  TbTable,
+  TbDatabaseExport,
+} from "solid-icons/tb";
+import { IconProps } from "solid-icons";
 import { useQueryClient } from "@tanstack/solid-query";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
-import { TextField, TextFieldLabel } from "@/components/ui/text-field";
 import { showToast } from "@/components/ui/toast";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import { TextField, TextFieldLabel } from "@/components/ui/text-field";
 
 import { Config, ServerConfig } from "@proto/config";
 import {
@@ -26,7 +48,6 @@ import { AuthSettings } from "@/components/settings/AuthSettings";
 import { SchemaSettings } from "@/components/settings/SchemaSettings";
 import { EmailSettings } from "@/components/settings/EmailSettings";
 import { JobSettings } from "@/components/settings/JobSettings";
-import { SplitView } from "@/components/SplitView";
 import { IconButton } from "@/components/IconButton";
 import { Version } from "@/components/Version";
 
@@ -36,6 +57,7 @@ import {
   invalidateAllAdminQueries,
 } from "@/lib/api/config";
 import { createVersionInfoQuery } from "@/lib/api/info";
+import { createIsMobile } from "@/lib/signals";
 
 function ServerSettings(props: CommonProps) {
   const queryClient = useQueryClient();
@@ -359,9 +381,8 @@ function ImportSettings(props: CommonProps) {
   );
 }
 
-function Sidebar(props: {
+function SettingsSidebar(props: {
   activeRoute: string | undefined;
-  horizontal: boolean;
   dirty: Signal<boolean>;
 }) {
   const navigate = useNavigate();
@@ -369,49 +390,58 @@ function Sidebar(props: {
   const [dirty, setDirty] = props.dirty;
 
   return (
-    <div class={`${props.horizontal ? "flex flex-col" : "flex"} gap-2 p-4`}>
-      <For each={sites}>
-        {(s: Site) => {
-          const [dialogOpen, setDialogOpen] = createSignal(false);
-          const match = () => props.activeRoute === s.route;
+    <SidebarGroupContent>
+      <div class={`hide-scrollbars flex flex-col gap-2 overflow-scroll p-2`}>
+        <SidebarMenu>
+          <For each={sites}>
+            {(s: Site) => {
+              const [dialogOpen, setDialogOpen] = createSignal(false);
+              const match = () => props.activeRoute === s.route;
 
-          return (
-            <Dialog
-              id="confirm"
-              modal={true}
-              open={dialogOpen()}
-              onOpenChange={setDialogOpen}
-            >
-              <ConfirmCloseDialog
-                back={() => setDialogOpen(false)}
-                confirm={() => {
-                  setDialogOpen(false);
-                  setDirty(false);
-                  navigate("/settings/" + s.route);
-                }}
-              />
-
-              <Button
-                class="text-nowrap"
-                variant={match() ? "default" : "outline"}
-                onClick={() => {
-                  if (!match()) {
-                    if (!dirty()) {
+              return (
+                <Dialog
+                  id="confirm"
+                  modal={true}
+                  open={dialogOpen()}
+                  onOpenChange={setDialogOpen}
+                >
+                  <ConfirmCloseDialog
+                    back={() => setDialogOpen(false)}
+                    confirm={() => {
+                      setDialogOpen(false);
+                      setDirty(false);
                       navigate("/settings/" + s.route);
-                      return;
-                    }
+                    }}
+                  />
 
-                    setDialogOpen(true);
-                  }
-                }}
-              >
-                {s.label}
-              </Button>
-            </Dialog>
-          );
-        }}
-      </For>
-    </div>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={match()}
+                      size="md"
+                      variant="default"
+                      onClick={() => {
+                        if (!match()) {
+                          if (!dirty()) {
+                            navigate("/settings/" + s.route);
+                            return;
+                          }
+
+                          setDialogOpen(true);
+                        }
+                      }}
+                    >
+                      {<s.icon />}
+
+                      {s.label}
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </Dialog>
+              );
+            }}
+          </For>
+        </SidebarMenu>
+      </div>
+    </SidebarGroupContent>
   );
 }
 
@@ -424,6 +454,7 @@ interface Site {
   route: string;
   label: string;
   child: Component<CommonProps>;
+  icon: (props: IconProps) => JSX.Element;
 }
 
 const sites = [
@@ -431,31 +462,37 @@ const sites = [
     route: "host",
     label: "Host",
     child: ServerSettings,
+    icon: TbServer,
   },
   {
     route: "email",
     label: "Email",
     child: EmailSettings,
+    icon: TbMail,
   },
   {
     route: "auth",
     label: "Auth",
     child: AuthSettings,
+    icon: TbUser,
   },
   {
     route: "jobs",
     label: "Jobs",
     child: JobSettings,
+    icon: TbBriefcase,
   },
   {
     route: "schema",
     label: "Schemas",
     child: SchemaSettings,
+    icon: TbTable,
   },
   {
     route: "data",
     label: "Data",
     child: ImportSettings,
+    icon: TbDatabaseExport,
   },
 ] as const;
 
@@ -463,6 +500,7 @@ export function SettingsPage() {
   const queryClient = useQueryClient();
   const params = useParams<{ group: string }>();
   const [dirty, setDirty] = createSignal(false);
+  const isMobile = createIsMobile();
 
   const activeSite = () => {
     const g = params?.group;
@@ -472,45 +510,72 @@ export function SettingsPage() {
     return sites[0];
   };
 
-  const First = (props: { horizontal: boolean }) => (
-    <Sidebar
-      horizontal={props.horizontal}
-      activeRoute={activeSite().route}
-      dirty={[dirty, setDirty]}
-    />
+  const p = () =>
+    ({
+      markDirty: () => setDirty(true),
+      postSubmit: () => {
+        setDirty(false);
+        showToast({
+          title: "submitted",
+          variant: "success",
+        });
+      },
+    }) as CommonProps;
+
+  const Body = () => (
+    <>
+      <Header
+        title="Settings"
+        titleSelect={activeSite().label}
+        leading={<SidebarTrigger />}
+        left={
+          <IconButton onClick={() => invalidateAllAdminQueries(queryClient)}>
+            <TbRefresh />
+          </IconButton>
+        }
+      />
+
+      <div class="m-4">{activeSite().child(p())}</div>
+    </>
   );
 
-  function Second() {
-    const p = () =>
-      ({
-        markDirty: () => setDirty(true),
-        postSubmit: () => {
-          setDirty(false);
-          showToast({
-            title: "submitted",
-            variant: "success",
-          });
-        },
-      }) as CommonProps;
+  return (
+    <SidebarProvider>
+      <Sidebar
+        class="absolute"
+        variant="sidebar"
+        side="left"
+        collapsible="offcanvas"
+      >
+        <SidebarContent>
+          <SidebarGroup>
+            <SettingsSidebar
+              activeRoute={activeSite().route}
+              dirty={[dirty, setDirty]}
+            />
+          </SidebarGroup>
 
-    return (
-      <>
-        <Header
-          title="Settings"
-          titleSelect={activeSite().label}
-          left={
-            <IconButton onClick={() => invalidateAllAdminQueries(queryClient)}>
-              <TbRefresh size={18} />
-            </IconButton>
-          }
-        />
+          {/* <SidebarFooter /> */}
+        </SidebarContent>
 
-        <div class="m-4">{activeSite().child(p())}</div>
-      </>
-    );
-  }
+        <SidebarRail />
+      </Sidebar>
 
-  return <SplitView first={First} second={Second} />;
+      <SidebarInset class="min-w-0">
+        <Switch>
+          <Match when={isMobile()}>
+            <Body />
+          </Match>
+
+          <Match when={!isMobile()}>
+            <div class="h-dvh overflow-y-auto">
+              <Body />
+            </div>
+          </Match>
+        </Switch>
+      </SidebarInset>
+    </SidebarProvider>
+  );
 }
 
 const labelWidth = "w-40";

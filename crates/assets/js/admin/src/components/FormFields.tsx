@@ -6,7 +6,7 @@ import { TbEye } from "solid-icons/tb";
 
 import { cn, tryParseInt, tryParseFloat, tryParseBigInt } from "@/lib/utils";
 
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/IconButton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
@@ -149,15 +149,14 @@ export function buildSecretFormField(
               }}
             />
 
-            <Button
+            <IconButton
               disabled={opts.disabled}
-              variant={type() === "text" ? "default" : "outline"}
               onClick={() => {
                 setType(type() === "password" ? "text" : "password");
               }}
             >
               <TbEye size={18} />
-            </Button>
+            </IconButton>
           </div>
 
           <GridFieldInfo field={field()} />

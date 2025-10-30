@@ -6,6 +6,7 @@ import { createWritableMemo } from "@solid-primitives/memo";
 
 import { Badge, ButtonBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/IconButton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -486,18 +487,16 @@ export function ColumnSubForm(props: {
 
   const Header = () => (
     <div class="flex items-center justify-between">
-      <h2>{name()}</h2>
+      <h3>{name()}</h3>
 
       <div class="flex items-center gap-2">
         {
           // Delete column button.
           !disabled() && (
             <div class="flex justify-end">
-              <button class="my-2" type="button" onClick={props.onDelete}>
-                <div class="rounded p-1 hover:bg-gray-200">
-                  <TbTrash size={20} />
-                </div>
-              </button>
+              <IconButton onClick={props.onDelete}>
+                <TbTrash />
+              </IconButton>
             </div>
           )
         }
@@ -627,7 +626,7 @@ export function PrimaryKeyColumnSubForm(props: {
 
   const Header = () => (
     <div class="flex items-center justify-between">
-      <h2>{name()}</h2>
+      <h3>{name()}</h3>
 
       <div class="flex items-center gap-2">
         <Badge class="p-1">Primary Key</Badge>

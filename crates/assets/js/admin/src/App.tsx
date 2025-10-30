@@ -10,8 +10,8 @@ import { LoginPage } from "@/components/auth/LoginPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { IndexPage } from "@/components/IndexPage";
 import { VerticalNavBar, HorizontalNavBar } from "@/components/NavBar";
-
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+
 import { $user } from "@/lib/client";
 import { createIsMobile } from "@/lib/signals";
 

@@ -4,12 +4,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import * as ButtonPrimitive from "@kobalte/core/button";
 import { type PolymorphicProps } from "@kobalte/core/polymorphic";
-import { cn } from "@/lib/utils";
-
-export const iconButtonStyle =
-  "grid items-center justify-center size-[32px] p-1 rounded hover:bg-gray-200 active:scale-90";
 
 type ButtonProps<T extends ValidComponent = "button"> =
   ButtonPrimitive.ButtonRootProps<T> & {
@@ -20,23 +17,15 @@ type ButtonProps<T extends ValidComponent = "button"> =
 export function IconButton<T extends ValidComponent = "button">(
   props: PolymorphicProps<T, ButtonProps<T>>,
 ) {
-  const [local, others] = splitProps(props as ButtonProps, [
-    "tooltip",
-    "class",
-  ]);
+  const [local, others] = splitProps(props as ButtonProps, ["tooltip"]);
 
-  const Button = () => (
-    <ButtonPrimitive.Root
-      class={cn(iconButtonStyle, local.class)}
-      {...others}
-    />
-  );
+  const B = () => <Button variant="ghost" size="icon" {...others} />;
 
   return (
-    <Show when={local.tooltip} fallback={<Button />}>
+    <Show when={local.tooltip} fallback={<B />}>
       <Tooltip>
         <TooltipTrigger as="div">
-          <Button />
+          <B />
         </TooltipTrigger>
 
         <TooltipContent>{props.tooltip}</TooltipContent>

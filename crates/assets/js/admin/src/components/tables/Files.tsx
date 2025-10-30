@@ -80,7 +80,7 @@ export function UploadedFile(props: {
     >
       <div class="m-1 flex justify-between gap-2 rounded p-1">
         <Tooltip>
-          <TooltipTrigger as="div" class="flex flex-col items-start">
+          <TooltipTrigger as="div" class="flex flex-col text-left">
             <p>{props.file.original_filename ?? props.file.filename}</p>
             <p>mime: {contentType(props.file)}</p>
           </TooltipTrigger>
