@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 import {
   SchemaDialog,
@@ -456,6 +457,8 @@ function TableHeaderLeftButtons(props: {
 
   return (
     <>
+      <SidebarTrigger />
+
       <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
         <TbRefresh size={18} />
       </IconButton>

@@ -16,9 +16,17 @@ import {
 import { TbTablePlus, TbLock, TbEye, TbWand } from "solid-icons/tb";
 
 import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
-import { SplitView } from "@/components/SplitView";
+// import { SplitView } from "@/components/SplitView";
 import { SafeSheet } from "@/components/SafeSheet";
 import { Separator } from "@/components/ui/separator";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  // SidebarFooter,
+  // SidebarHeader,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
 
 import { createTableSchemaQuery } from "@/lib/table";
 import {
@@ -186,6 +194,50 @@ function navigateToTable(navigate: Navigator, table: Table | View | undefined) {
   navigate(path);
 }
 
+// function TableSplitView(props: {
+//   schemas: ListSchemasResponse;
+//   schemaRefetch: () => Promise<void>;
+// }) {
+//   const showHidden = useStore($showHiddenTables);
+//   const filteredTablesAndViews = createMemo(() => {
+//     const all = [...props.schemas.tables, ...props.schemas.views];
+//
+//     const show = showHidden();
+//     if (show) {
+//       return all.sort(tableCompare);
+//     }
+//     return all.filter((t) => !hiddenTable(t)).sort(tableCompare);
+//   });
+//
+//   const params = useParams<{ table: string }>();
+//   const selectedTable = () =>
+//     pickInitiallySelectedTable(filteredTablesAndViews(), params.table);
+//
+//   const First = (p: { horizontal: boolean }) => (
+//     <TablePickerPane
+//       horizontal={p.horizontal}
+//       tablesAndViews={filteredTablesAndViews()}
+//       allTables={props.schemas.tables}
+//       selectedTable={selectedTable()}
+//       schemaRefetch={props.schemaRefetch}
+//     />
+//   );
+//   const Second = () => (
+//     <Show
+//       when={selectedTable() !== undefined}
+//       fallback={<div class="m-4">No table selected</div>}
+//     >
+//       <TablePane
+//         selectedTable={selectedTable()!}
+//         schemas={props.schemas}
+//         schemaRefetch={props.schemaRefetch}
+//       />
+//     </Show>
+//   );
+//
+//   return <SplitView first={First} second={Second} />;
+// }
+
 function TableSplitView(props: {
   schemas: ListSchemasResponse;
   schemaRefetch: () => Promise<void>;
@@ -227,7 +279,31 @@ function TableSplitView(props: {
     </Show>
   );
 
-  return <SplitView first={First} second={Second} />;
+  // return <SplitView first={First} second={Second} />;
+  return (
+    <SidebarProvider>
+      <Sidebar
+        class="ml-[58px]"
+        variant="sidebar"
+        side="left"
+        collapsible="offcanvas"
+      >
+        <SidebarContent>
+          {/* <SidebarHeader /> */}
+
+          <SidebarGroup>
+            <First horizontal={true} />
+          </SidebarGroup>
+
+          {/* <SidebarFooter /> */}
+        </SidebarContent>
+      </Sidebar>
+
+      <div>
+        <Second />
+      </div>
+    </SidebarProvider>
+  );
 }
 
 export function TablePage() {
