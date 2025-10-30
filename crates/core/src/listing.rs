@@ -1,7 +1,7 @@
 use log::*;
 use std::borrow::Cow;
 use thiserror::Error;
-use trailbase_qs::{Cursor as QsCursor, ValueOrComposite};
+use trailbase_qs::ValueOrComposite;
 use trailbase_schema::sqlite::Column;
 
 #[derive(Debug, Error)]
@@ -14,13 +14,6 @@ pub enum WhereClauseError {
   NotImplemented(String),
   #[error("Unrecognized param error: {0}")]
   UnrecognizedParam(String),
-}
-
-pub(crate) fn cursor_to_value(cursor: QsCursor) -> trailbase_sqlite::Value {
-  return match cursor {
-    QsCursor::Integer(i) => trailbase_sqlite::Value::Integer(i),
-    QsCursor::Blob(b) => trailbase_sqlite::Value::Blob(b),
-  };
 }
 
 #[derive(Debug, Clone)]

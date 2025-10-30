@@ -14,7 +14,7 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::auth::user::DbUser;
 use crate::constants::USER_TABLE;
-use crate::listing::{WhereClause, build_filter_where_clause, cursor_to_value, limit_or_default};
+use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::util::id_to_b64;
 
 #[derive(Debug, Serialize, TS)]
@@ -143,7 +143,10 @@ async fn fetch_users(
   ));
 
   if let Some(cursor) = cursor {
-    params.push((Cow::Borrowed(":cursor"), cursor_to_value(cursor)));
+    params.push((
+      Cow::Borrowed(":cursor"),
+      crate::admin::util::cursor_to_value(cursor),
+    ));
     where_clause = format!("{where_clause} AND _ROW_.id < :cursor",);
   }
 

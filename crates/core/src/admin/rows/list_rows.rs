@@ -12,7 +12,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::admin::util::rows_to_sql_value_rows;
 use crate::app_state::AppState;
-use crate::listing::{WhereClause, build_filter_where_clause, cursor_to_value, limit_or_default};
+use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::schema_metadata::{TableMetadata, TableOrViewMetadata};
 
 #[derive(Debug, Serialize, TS)]
@@ -185,7 +185,10 @@ async fn fetch_rows(
   ]);
 
   if let (Some(cursor), Some(pk_column)) = (pagination.cursor, pagination.cursor_column) {
-    params.push((Cow::Borrowed(":cursor"), cursor_to_value(cursor)));
+    params.push((
+      Cow::Borrowed(":cursor"),
+      crate::admin::util::cursor_to_value(cursor),
+    ));
     clause = format!(r#"{clause} AND _ROW_."{}" < :cursor"#, pk_column.name);
   }
 

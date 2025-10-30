@@ -29,7 +29,7 @@ v8 = ["dep:trailbase-js"]
 wasm = ["dep:trailbase-wasm-runtime-host"]
 
 [dependencies]
-aes-gcm = { version = "0.10.3", default-features = false, features = ["aes", "alloc", "getrandom", "rand_core"] }
+aes-gcm-siv = "0.11.1"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
 askama = { workspace = true }
 async-channel = "2.3.1"
@@ -47,6 +47,7 @@ futures-util = { version = "0.3", default-features = false, features = ["alloc"]
 http-body-util = "0.1.3"
 hyper = "1.6.0"
 hyper-util = "0.1.7"
+indexmap = "2.11.4"
 indoc = "2.0.5"
 itertools = "0.14.0"
 jsonschema = { version = "0.33.0", default-features = false }
@@ -87,21 +88,20 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 trailbase-assets = { workspace = true }
 trailbase-build = { workspace = true }
-trailbase-sqlvalue = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-js = { workspace = true, optional = true }
 trailbase-qs = { workspace = true }
 trailbase-refinery = { workspace = true }
 trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true }
-trailbase-wasm-runtime-host = { workspace = true, optional = true }
+trailbase-sqlvalue = { workspace = true }
 trailbase-wasm-common = { workspace = true }
+trailbase-wasm-runtime-host = { workspace = true, optional = true }
 ts-rs = { workspace = true }
 url = { version = "^2.4.1", default-features = false }
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 uuid = { workspace = true }
 validator = { version = "0.20.0", default-features = false }
-indexmap = "2.11.4"
 
 [build-dependencies]
 trailbase-build = { workspace = true }

@@ -44,3 +44,12 @@ fn row_to_sql_value_row(row: &Row) -> Result<Vec<SqlValue>, JsonError> {
 pub(crate) fn rows_to_sql_value_rows(rows: &Rows) -> Result<Vec<Vec<SqlValue>>, JsonError> {
   return rows.iter().map(row_to_sql_value_row).collect();
 }
+
+pub(crate) fn cursor_to_value(cursor: trailbase_qs::Cursor) -> trailbase_sqlite::Value {
+  use trailbase_qs::Cursor as QsCursor;
+
+  return match cursor {
+    QsCursor::Integer(i) => trailbase_sqlite::Value::Integer(i),
+    QsCursor::Blob(b) => trailbase_sqlite::Value::Blob(b),
+  };
+}

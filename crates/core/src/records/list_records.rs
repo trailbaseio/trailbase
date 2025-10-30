@@ -1,5 +1,3 @@
-use aes_gcm::aead::{Aead, AeadInPlace, KeyInit, OsRng, Payload, generic_array::GenericArray};
-use aes_gcm::{Aes256Gcm, Key};
 use askama::Template;
 use axum::{
   Json,
@@ -8,17 +6,17 @@ use axum::{
 use base64::prelude::*;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use rand::RngCore;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::convert::TryInto;
-use trailbase_qs::{Cursor, CursorType, OrderPrecedent, Query};
+use trailbase_qs::{OrderPrecedent, Query};
 use trailbase_schema::QualifiedNameEscaped;
 use trailbase_schema::sqlite::ColumnDataType;
 use trailbase_sqlite::Value;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
+use crate::encryption::{KeyType, decrypt, encrypt, generate_random_key};
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::records::expand::{ExpandedTable, JsonError, expand_tables, row_to_json_expand};
 use crate::records::{Permission, RecordError};
@@ -26,7 +24,7 @@ use crate::records::{Permission, RecordError};
 /// JSON response containing the listed records.
 #[derive(Debug, Serialize)]
 pub struct ListResponse {
-  /// Pagination cursor. Round-trip to get the next batch.
+  /// Encrypted cursor for pagination - Round-trip to get the next page.
   #[serde(skip_serializing_if = "Option::is_none")]
   pub cursor: Option<String>,
   /// The total number of records matching the query.
@@ -135,20 +133,19 @@ pub async fn list_records_handler(
       // TODO: When we moved to _rowid_ for cursoring, we lost the ability to cursor VIEWs. They
       // currently only support OFFSET. We could restore cursoring for cases where a cursorable
       // PK column is included. We also need a test-case to cover this.
-      return Err(RecordError::BadRequest("Only tables support cursors"));
+      return Err(RecordError::BadRequest(
+        "Only TABLEs support cursors. Use offset for VIEWs.",
+      ));
     }
 
-    let decrypted_cursor =
-      decrypt_cursor(&KEY, api_name.as_bytes(), &encrypted_cursor).map_err(|_err| {
-        return RecordError::BadRequest("Bad cursor");
-      })?;
-
-    // We always use INTEGER _rowid_.
-    let Cursor::Integer(cursor) = Cursor::parse(&decrypted_cursor, CursorType::Integer)
-      .map_err(|_| RecordError::BadRequest("Invalid integer cursor"))?
-    else {
-      return Err(RecordError::BadRequest("Invalid integer cursor"));
-    };
+    params.push((
+      Cow::Borrowed(":cursor"),
+      Value::Integer(decrypt_cursor(
+        &EPHEMERAL_CURSOR_KEY,
+        &api_name,
+        &encrypted_cursor,
+      )?),
+    ));
 
     let mut pk_order = OrderPrecedent::Descending;
     if let Some(ref order) = order
@@ -166,7 +163,6 @@ pub async fn list_records_handler(
       pk_order = OrderPrecedent::Ascending;
     }
 
-    params.push((Cow::Borrowed(":cursor"), Value::Integer(cursor)));
     match pk_order {
       OrderPrecedent::Descending => Some("_ROW_._rowid_ < :cursor".to_string()),
       OrderPrecedent::Ascending => Some("_ROW_._rowid_ > :cursor".to_string()),
@@ -253,14 +249,12 @@ pub async fn list_records_handler(
   };
 
   let cursor: Option<String> = if is_table {
+    // The SQL query template returns thw row id as the last column.
     let rowid_index = last_row.len() - 1;
     if let Value::Integer(i) = last_row[rowid_index] {
-      Some(
-        encrypt_cursor(&KEY, api_name.as_bytes(), &i.to_string())
-          .map_err(|err| RecordError::Internal(err.into()))?,
-      )
+      Some(encrypt_cursor(&EPHEMERAL_CURSOR_KEY, &api_name, i)?)
     } else {
-      None
+      unreachable!("This should have been an integer");
     }
   } else {
     None
@@ -357,78 +351,37 @@ fn column_filter(col_name: &str) -> bool {
   return !col_name.starts_with("_");
 }
 
-const NONCE_LEN: usize = 12;
-const TAG_LEN: usize = 16;
-// const KEY_LEN: usize = 32;
-
 /// Encrypts the cookie's value with authenticated encryption providing
 /// confidentiality, integrity, and authenticity.
-fn encrypt_cursor(
-  key: &Key<Aes256Gcm>,
-  associated_data: &[u8],
-  cursor: &str,
-) -> Result<String, &'static str> {
-  // Create a vec to hold the [nonce | cookie value | tag].
-  let cursor_bytes = cursor.as_bytes();
-  let mut data = vec![0; NONCE_LEN + cursor_bytes.len() + TAG_LEN];
+fn encrypt_cursor(key: &KeyType, api_name: &str, cursor: i64) -> Result<String, RecordError> {
+  let input = cursor.to_string();
 
-  // Split data into three: nonce, input/output, tag. Copy input.
-  let (nonce, in_out) = data.split_at_mut(NONCE_LEN);
-  let (in_out, tag) = in_out.split_at_mut(cursor_bytes.len());
-  in_out.copy_from_slice(cursor_bytes);
+  let encrypted = encrypt(key, api_name.as_bytes(), input.as_bytes())
+    .map_err(|_| RecordError::Internal("Failed to encode cursor".into()))?;
 
-  // Fill nonce piece with random data.
-  let mut rng = rand::rng();
-  rng.fill_bytes(nonce);
-  let nonce = GenericArray::clone_from_slice(nonce);
-
-  // Perform the actual sealing operation, using the cookie's name as
-  // associated data to prevent value swapping.
-  let aead = Aes256Gcm::new(key);
-  let aad_tag = aead
-    .encrypt_in_place_detached(&nonce, associated_data, in_out)
-    .map_err(|_| "encryption failure!")?;
-
-  // Copy the tag into the tag piece.
-  tag.copy_from_slice(&aad_tag);
-
-  // Base64 encode [nonce | encrypted value | tag].
-  return Ok(BASE64_URL_SAFE.encode(&data));
+  return Ok(BASE64_URL_SAFE.encode(&encrypted));
 }
 
-fn decrypt_cursor(
-  key: &Key<Aes256Gcm>,
-  associated_data: &[u8],
-  value: &str,
-) -> Result<String, &'static str> {
-  let data = BASE64_URL_SAFE
-    .decode(value)
-    .map_err(|_| "bad base64 value")?;
-  if data.len() <= NONCE_LEN {
-    return Err("length of decoded data is <= NONCE_LEN");
-  }
+fn decrypt_cursor(key: &KeyType, api_name: &str, encoded: &str) -> Result<i64, RecordError> {
+  let cipher_text = BASE64_URL_SAFE
+    .decode(encoded)
+    .map_err(|_| RecordError::BadRequest("Bad cursor: b64"))?;
 
-  let (nonce, cipher) = data.split_at(NONCE_LEN);
-  let payload = Payload {
-    msg: cipher,
-    aad: associated_data,
-  };
+  let value = decrypt(key, api_name.as_bytes(), &cipher_text)
+    .map_err(|_| RecordError::BadRequest("Bad cursor"))?;
 
-  let aead = Aes256Gcm::new(GenericArray::from_slice(key));
-  aead
-    .decrypt(GenericArray::from_slice(nonce), payload)
-    .map_err(|_| "invalid key/nonce/value: bad seal")
-    .and_then(|s| String::from_utf8(s).map_err(|_| "bad unsealed utf8"))
+  // For record ids we use the row_id, i.e. we expect this ot be an i64.
+  return String::from_utf8_lossy(&value)
+    .parse()
+    .map_err(|_| RecordError::BadRequest("Bad cursor"));
 }
 
 lazy_static! {
-  static ref KEY: Key<Aes256Gcm> = Aes256Gcm::generate_key(OsRng);
+  static ref EPHEMERAL_CURSOR_KEY: KeyType = generate_random_key();
 }
 
 #[cfg(test)]
 mod tests {
-  use aes_gcm::aead::{KeyInit, OsRng};
-  use aes_gcm::{Aes256Gcm, Key};
   use serde::Deserialize;
   use std::borrow::Cow;
   use trailbase_schema::parse::parse_into_statement;
@@ -495,13 +448,13 @@ mod tests {
 
   #[test]
   fn test_cursor_encryption() {
-    let api_name = "test".to_string();
+    let api_name = "test_api";
 
-    let key: Key<Aes256Gcm> = Aes256Gcm::generate_key(OsRng).into();
+    let key = generate_random_key();
 
-    let value = "secret cursor";
-    let encrypted = encrypt_cursor(&key, api_name.as_bytes(), &value).unwrap();
-    let decrypted = decrypt_cursor(&key, api_name.as_bytes(), &encrypted).unwrap();
+    let value: i64 = 3298473294;
+    let encrypted = encrypt_cursor(&key, api_name, value).unwrap();
+    let decrypted = decrypt_cursor(&key, api_name, &encrypted).unwrap();
 
     assert_eq!(value, decrypted);
   }
