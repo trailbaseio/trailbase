@@ -34,7 +34,6 @@ default-members = [
   "crates/client",
   "crates/core",
   "crates/extension",
-  "crates/js-runtime",
   "crates/qs",
   "crates/refinery",
   "crates/schema",

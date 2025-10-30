@@ -3,7 +3,7 @@ use axum::{
   response::Redirect,
 };
 use lazy_static::lazy_static;
-use oauth2::{AuthorizationCode, PkceCodeVerifier, StandardTokenResponse, TokenResponse as _};
+use oauth2::{AuthorizationCode, PkceCodeVerifier};
 use serde::Deserialize;
 use tower_cookies::Cookies;
 use trailbase_sqlite::{named_params, params};

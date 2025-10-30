@@ -13,7 +13,6 @@ use crate::config::proto::{Config, RecordApiConfig, S3StorageConfig, hash_config
 use crate::config::{validate_config, write_config_and_vault_textproto};
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
-use crate::js::{RuntimeHandle, register_database_functions};
 use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
@@ -44,7 +43,8 @@ struct InternalState {
   subscription_manager: SubscriptionManager,
   object_store: Arc<dyn ObjectStore + Send + Sync>,
 
-  runtime: RuntimeHandle,
+  #[cfg(feature = "v8")]
+  runtime: crate::js::RuntimeHandle,
 
   wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
   build_wasm_runtimes: Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>,
@@ -131,8 +131,6 @@ impl AppState {
       object_store.clone(),
     );
 
-    let runtime = build_js_runtime(args.conn.clone(), args.runtime_threads);
-
     let shared_kv_store = {
       let shared_kv_store = crate::wasm::KvStore::new();
 
@@ -202,13 +200,14 @@ impl AppState {
         logs_conn: args.logs_conn,
         jwt: args.jwt,
         subscription_manager: SubscriptionManager::new(
-          args.conn,
+          args.conn.clone(),
           schema_metadata.clone(),
           record_apis,
         ),
         schema_metadata,
         object_store,
-        runtime,
+        #[cfg(feature = "v8")]
+        runtime: build_js_runtime(args.conn.clone(), args.runtime_threads),
         wasm_runtimes: build_wasm_runtimes()
           .expect("startup")
           .into_iter()
@@ -360,7 +359,7 @@ impl AppState {
   }
 
   #[cfg(feature = "v8")]
-  pub(crate) fn script_runtime(&self) -> RuntimeHandle {
+  pub(crate) fn script_runtime(&self) -> crate::js::RuntimeHandle {
     return self.state.runtime.clone();
   }
 
@@ -548,6 +547,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       ),
       schema_metadata,
       object_store,
+      #[cfg(feature = "v8")]
       runtime: build_js_runtime(conn, None),
       wasm_runtimes: vec![],
       build_wasm_runtimes: Box::new(|| Ok(vec![])),
@@ -574,7 +574,13 @@ where
   return derived;
 }
 
-fn build_js_runtime(conn: trailbase_sqlite::Connection, threads: Option<usize>) -> RuntimeHandle {
+#[cfg(feature = "v8")]
+fn build_js_runtime(
+  conn: trailbase_sqlite::Connection,
+  threads: Option<usize>,
+) -> crate::js::RuntimeHandle {
+  use crate::js::{RuntimeHandle, register_database_functions};
+
   let runtime = if let Some(threads) = threads {
     RuntimeHandle::singleton_or_init_with_threads(threads)
   } else {
