@@ -1,3 +1,12 @@
+## v0.20.4
+
+- Improve admin UI on small screens - still a long way to go:
+  - Make admin UI's main navbar responsive, i.e. stick to the top on small screens.
+  - Fix preset button overflow in create/alter table forms.
+- Move Docker images to MUSL builds instead of pseudo-static glibc. We know that the latter are broken and would crash when looking up a hostname on Alpine, e.g. try to specify the `--address` not as an IP address.
+- Clean up cursor encryption code and switch to a more maintained crated, e.g. `aes-gcm-siv` vs `aes-gcm`.
+- Update depenencies.
+
 ## v0.20.3
 
 - Add **untested** "Sign-in with Apple" OAuth provider. I didn't find a way to test it locally (e.g. Apple doesn't let you have dev services with localhost callbacks). Sadly, committing this code upstream and iterating upstream, is the only way I could think of :/. If you know how, please let me know 🙏.
