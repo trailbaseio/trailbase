@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use trailbase_qs::{Cursor, CursorType, Order, OrderPrecedent, Query};
 use trailbase_schema::QualifiedName;
-use trailbase_schema::metadata::{TableMetadata, TableOrViewMetadata};
+use trailbase_schema::metadata::{TableMetadata, TableOrView};
 use trailbase_schema::sqlite::{Column, ColumnDataType};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
@@ -50,14 +50,15 @@ pub async fn list_rows_handler(
     })?;
 
   let table_name = QualifiedName::parse(&table_name)?;
-  let (schema_metadata, table_or_view_metadata): (
-    Option<Arc<TableMetadata>>,
-    Arc<dyn TableOrViewMetadata + Sync + Send>,
-  ) = {
-    if let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) {
-      (Some(schema_metadata.clone()), schema_metadata)
+  let metadata = state.schema_metadata();
+  let (table_metadata, table_or_view_metadata): (Option<&Arc<TableMetadata>>, TableOrView) = {
+    if let Some(table_metadata) = metadata.get_table(&table_name) {
+      (
+        Some(table_metadata),
+        TableOrView::Table(table_metadata.clone()),
+      )
     } else if let Some(view_metadata) = state.schema_metadata().get_view(&table_name) {
-      (None, view_metadata)
+      (None, TableOrView::View(view_metadata.clone()))
     } else {
       return Err(Error::Precondition(format!(
         "Table or view '{table_name:?}' not found"
@@ -131,12 +132,12 @@ pub async fn list_rows_handler(
     cursor: next_cursor,
     // NOTE: in the view case we don't have a good way of extracting the columns from the "CREATE
     // VIEW" query so we fall back to columns constructed from the returned data.
-    columns: match schema_metadata {
-      Some(ref metadata) if metadata.schema.virtual_table => {
+    columns: match table_metadata {
+      Some(metadata) if metadata.schema.virtual_table => {
         // Virtual TABLE case.
         columns
       }
-      Some(ref metadata) => {
+      Some(metadata) => {
         // Non-virtual TABLE case.
         metadata.schema.columns.clone()
       }

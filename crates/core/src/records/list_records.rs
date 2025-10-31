@@ -396,7 +396,6 @@ mod tests {
   use crate::config::proto::PermissionFlag;
   use crate::records::RecordError;
   use crate::records::test_utils::*;
-  use crate::schema_metadata::SchemaMetadataCache;
   use crate::util::id_to_b64;
   use crate::util::urlencode;
 
@@ -486,15 +485,13 @@ mod tests {
       .await
       .unwrap();
 
-    let schema_metadata = SchemaMetadataCache::new(
-      conn,
-      &trailbase_extension::jsonschema::JsonSchemaRegistry::default(),
-    )
-    .await
-    .unwrap();
+    state.rebuild_schema_cache().await.unwrap();
+
+    let schema_metadata = state.schema_metadata();
     let table_metadata = schema_metadata
       .get_table(&QualifiedName::parse("table").unwrap())
       .unwrap();
+
     let expanded_tables = expand_tables(
       &schema_metadata,
       &None,

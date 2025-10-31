@@ -15,7 +15,7 @@ use crate::DESCRIPTOR_POOL;
 use crate::auth::oauth::providers::oauth_provider_registry;
 use crate::data_dir::DataDir;
 use crate::records::validate_record_api_config;
-use crate::schema_metadata::SchemaMetadataCache;
+use crate::schema_metadata::ConnectionMetadata;
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -396,16 +396,16 @@ async fn load_vault_textproto_or_default(data_dir: &DataDir) -> Result<proto::Va
 }
 
 // TODO: Initialization order is currently borked and worked-around by rebuilding
-// SchemaMetadataCache. Specifically, building SchemaMatadataCache, which contains JSON metadata,
+// ConnectionMetadata. Specifically, building SchemaMatadataCache, which contains JSON metadata,
 // requires custom JSON schemas to be built from the config and globally registered. However,
-// validation currently depends on SchemaMetadataCache. Instead we should probably validate
+// validation currently depends on ConnectionMetadata. Instead we should probably validate
 // against a schema representation that does not contain JSON metadata.
 //
 // Right now this leads to a warning log on first load when SchemaMatadataCache is first built
 // but custom schemas are not yet registered :/.
 pub async fn load_or_init_config_textproto(
   data_dir: &DataDir,
-  schema_metadata: &SchemaMetadataCache,
+  schema_metadata: &ConnectionMetadata,
 ) -> Result<proto::Config, ConfigError> {
   let merged_config = {
     let config = match fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)).await {
@@ -444,7 +444,7 @@ fn split_config(config: &proto::Config) -> Result<(proto::Config, proto::Vault),
 
 pub async fn write_config_and_vault_textproto(
   data_dir: &DataDir,
-  schema_metadata: &SchemaMetadataCache,
+  schema_metadata: &ConnectionMetadata,
   config: &proto::Config,
 ) -> Result<(), ConfigError> {
   validate_config(schema_metadata, config)?;
@@ -484,7 +484,7 @@ fn validate_application_name(name: &str) -> Result<(), ConfigError> {
 }
 
 pub(crate) fn validate_config(
-  tables: &SchemaMetadataCache,
+  tables: &ConnectionMetadata,
   config: &proto::Config,
 ) -> Result<(), ConfigError> {
   // Check server settings.

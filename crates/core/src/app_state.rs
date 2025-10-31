@@ -16,7 +16,7 @@ use crate::email::Mailer;
 use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
-use crate::schema_metadata::SchemaMetadataCache;
+use crate::schema_metadata::{ConnectionMetadata, build_connection_metadata};
 use crate::wasm::Runtime;
 
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
@@ -39,7 +39,7 @@ struct InternalState {
 
   jwt: JwtHelper,
 
-  schema_metadata: Reactive<Arc<SchemaMetadataCache>>,
+  schema_metadata: Reactive<Arc<ConnectionMetadata>>,
   subscription_manager: SubscriptionManager,
   object_store: Arc<dyn ObjectStore + Send + Sync>,
 
@@ -61,7 +61,7 @@ pub(crate) struct AppStateArgs {
   pub runtime_root_fs: Option<PathBuf>,
   pub dev: bool,
   pub demo: bool,
-  pub schema_metadata: SchemaMetadataCache,
+  pub schema_metadata: ConnectionMetadata,
   pub config: Config,
   pub conn: trailbase_sqlite::Connection,
   pub logs_conn: trailbase_sqlite::Connection,
@@ -254,7 +254,7 @@ impl AppState {
     return trailbase_build::get_version_info!();
   }
 
-  pub(crate) fn schema_metadata(&self) -> Arc<SchemaMetadataCache> {
+  pub(crate) fn schema_metadata(&self) -> Arc<ConnectionMetadata> {
     return self.state.schema_metadata.value();
   }
 
@@ -267,7 +267,7 @@ impl AppState {
   ) -> Result<(), crate::schema_metadata::SchemaLookupError> {
     let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
     self.state.schema_metadata.set(Arc::new(
-      SchemaMetadataCache::new(&self.state.conn, &registry).await?,
+      build_connection_metadata(&self.state.conn, &registry).await?,
     ));
 
     return Ok(());
@@ -463,7 +463,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let logs_conn = crate::connection::init_logs_db(None)?;
 
   let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-  let mut schema_metadata = SchemaMetadataCache::new(&conn, &registry).await?;
+  let mut schema_metadata = build_connection_metadata(&conn, &registry).await?;
 
   let TestStateOptions { config, mailer } = options.unwrap_or_default();
   let config = {
@@ -485,7 +485,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       );
     }
 
-    schema_metadata = SchemaMetadataCache::new(&conn, &registry).await?;
+    schema_metadata = build_connection_metadata(&conn, &registry).await?;
 
     Reactive::new(config)
   };
@@ -612,7 +612,7 @@ fn build_js_runtime(
 
 fn build_record_api(
   conn: trailbase_sqlite::Connection,
-  schema_metadata_cache: &SchemaMetadataCache,
+  schema_metadata_cache: &ConnectionMetadata,
   config: RecordApiConfig,
 ) -> Result<RecordApi, String> {
   let Some(ref table_name) = config.table_name else {
@@ -623,9 +623,9 @@ fn build_record_api(
   let table_name = QualifiedName::parse(table_name).map_err(|err| err.to_string())?;
 
   if let Some(schema_metadata) = schema_metadata_cache.get_table(&table_name) {
-    return RecordApi::from_table(conn, &schema_metadata, config);
+    return RecordApi::from_table(conn, schema_metadata, config);
   } else if let Some(view) = schema_metadata_cache.get_view(&table_name) {
-    return RecordApi::from_view(conn, &view, config);
+    return RecordApi::from_view(conn, view, config);
   }
 
   return Err(format!("RecordApi references missing table: {config:?}"));

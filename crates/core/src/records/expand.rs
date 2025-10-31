@@ -9,7 +9,7 @@ use trailbase_schema::json::value_to_flat_json;
 use trailbase_schema::sqlite::{Column, ColumnOption};
 
 use crate::records::RecordError;
-use crate::schema_metadata::{JsonColumnMetadata, SchemaMetadataCache, TableMetadata};
+use crate::schema_metadata::{ConnectionMetadata, JsonColumnMetadata, TableMetadata};
 
 #[derive(Debug, Error)]
 pub enum JsonError {
@@ -144,7 +144,7 @@ pub(crate) struct ExpandedTable {
 }
 
 pub(crate) fn expand_tables<'a, 'b, T: AsRef<str>>(
-  schema_metadata: &SchemaMetadataCache,
+  schema_metadata: &ConnectionMetadata,
   database_schema: &Option<String>,
   root_column_by_name: impl Fn(&'a str) -> Option<&'b Column>,
   expand: &'a [T],
@@ -194,7 +194,7 @@ pub(crate) fn expand_tables<'a, 'b, T: AsRef<str>>(
     let foreign_column_name = foreign_pk_column.to_string();
 
     expanded_tables.push(ExpandedTable {
-      metadata: foreign_table,
+      metadata: foreign_table.clone(),
       local_column_name: col_name.to_string(),
       num_columns,
       foreign_table_name,

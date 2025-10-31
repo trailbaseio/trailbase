@@ -30,7 +30,7 @@ use crate::records::filter::{
 };
 use crate::records::record_api::SubscriptionAclParams;
 use crate::records::{Permission, RecordError};
-use crate::schema_metadata::{SchemaMetadataCache, TableMetadata};
+use crate::schema_metadata::{ConnectionMetadata, TableMetadata};
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
 
@@ -143,7 +143,7 @@ struct ManagerState {
   conn: trailbase_sqlite::Connection,
   /// Table metadata for mapping column indexes to column names needed for building JSON encoded
   /// records.
-  schema_metadata: Reactive<Arc<SchemaMetadataCache>>,
+  schema_metadata: Reactive<Arc<ConnectionMetadata>>,
   /// Record API configurations.
   record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
 
@@ -225,7 +225,7 @@ struct ContinuationState {
 impl SubscriptionManager {
   pub fn new(
     conn: trailbase_sqlite::Connection,
-    schema_metadata: Reactive<Arc<SchemaMetadataCache>>,
+    schema_metadata: Reactive<Arc<ConnectionMetadata>>,
     record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
   ) -> Self {
     return Self {
@@ -514,7 +514,8 @@ impl SubscriptionManager {
           schema_metadata: state
             .schema_metadata
             .value()
-            .get_table(&qualified_table_name),
+            .get_table(&qualified_table_name)
+            .cloned(),
           action,
           table_name: qualified_table_name,
           rowid,

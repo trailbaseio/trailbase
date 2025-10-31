@@ -79,7 +79,7 @@ pub fn set_schemas(schemas: Vec<(String, Schema)>, override_non_empty: bool) {
 
 pub fn set_schema_for_test(name: &str, entry: Option<Schema>) {
   let mut lock = SCHEMA_REGISTRY.write();
-  let mut schemas: HashMap<_, _> = (*lock).schemas.clone();
+  let mut schemas: HashMap<_, _> = lock.schemas.clone();
 
   if let Some(entry) = entry {
     schemas.insert(name.to_string(), entry);
@@ -87,7 +87,7 @@ pub fn set_schema_for_test(name: &str, entry: Option<Schema>) {
     schemas.remove(name);
   }
 
-  *lock = Arc::new(JsonSchemaRegistry { schemas: schemas });
+  *lock = Arc::new(JsonSchemaRegistry { schemas });
 }
 
 pub fn json_schema_registry_snapshot() -> Arc<JsonSchemaRegistry> {

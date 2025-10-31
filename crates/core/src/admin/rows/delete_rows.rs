@@ -42,7 +42,8 @@ pub(crate) async fn delete_row(
   pk_col: &str,
   pk_value: SqlValue,
 ) -> Result<(), Error> {
-  let Some(schema_metadata) = state.schema_metadata().get_table(table_name) else {
+  let metadata = state.schema_metadata();
+  let Some(schema_metadata) = metadata.get_table(table_name) else {
     return Err(Error::Precondition(format!(
       "Table {table_name:?} not found"
     )));

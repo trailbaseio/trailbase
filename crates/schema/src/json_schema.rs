@@ -40,7 +40,7 @@ pub fn build_json_schema(
 
 #[derive(Debug)]
 pub struct Expand<'a> {
-  pub tables: &'a [TableMetadata],
+  pub tables: &'a [&'a TableMetadata],
   pub foreign_key_columns: Vec<&'a str>,
 }
 

@@ -3,9 +3,7 @@ use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;
 use sqlite3_parser::ast::JoinType;
-use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
@@ -159,40 +157,6 @@ impl TableMetadata {
   }
 }
 
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl PartialEq for TableMetadata {
-  fn eq(&self, other: &Self) -> bool {
-    return self.schema.name == other.schema.name;
-  }
-}
-
-impl Eq for TableMetadata {}
-
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl Hash for TableMetadata {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    self.schema.name.hash(state);
-  }
-}
-
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl Borrow<QualifiedName> for TableMetadata {
-  fn borrow(&self) -> &QualifiedName {
-    return &self.schema.name;
-  }
-}
-
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl Borrow<QualifiedName> for Arc<TableMetadata> {
-  fn borrow(&self) -> &QualifiedName {
-    return &self.schema.name;
-  }
-}
-
 /// A data class describing a sqlite View and future, additional meta data useful for TrailBase.
 #[derive(Debug, Clone)]
 pub struct ViewMetadata {
@@ -273,40 +237,6 @@ impl ViewMetadata {
   }
 }
 
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl PartialEq for ViewMetadata {
-  fn eq(&self, other: &Self) -> bool {
-    return self.schema.name == other.schema.name;
-  }
-}
-
-impl Eq for ViewMetadata {}
-
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl Hash for ViewMetadata {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    self.schema.name.hash(state);
-  }
-}
-
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl Borrow<QualifiedName> for ViewMetadata {
-  fn borrow(&self) -> &QualifiedName {
-    return &self.schema.name;
-  }
-}
-
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl Borrow<QualifiedName> for Arc<ViewMetadata> {
-  fn borrow(&self) -> &QualifiedName {
-    return &self.schema.name;
-  }
-}
-
 pub enum TableOrView {
   Table(Arc<TableMetadata>),
   View(Arc<ViewMetadata>),
@@ -322,7 +252,7 @@ impl TableOrView {
 
   pub fn columns(&self) -> Option<&[Column]> {
     return match self {
-      Self::Table(t) => t.columns(),
+      Self::Table(t) => Some(&t.schema.columns),
       Self::View(v) => v.columns(),
     };
   }
@@ -339,9 +269,10 @@ impl TableOrView {
 ///
 /// NOTE: may references schemas belonging to different databases, we therefore look up by
 /// qualified name.
+#[derive(Default)]
 pub struct ConnectionMetadata {
-  tables: HashMap<QualifiedName, Arc<TableMetadata>>,
-  views: HashMap<QualifiedName, Arc<ViewMetadata>>,
+  pub tables: HashMap<QualifiedName, Arc<TableMetadata>>,
+  pub views: HashMap<QualifiedName, Arc<ViewMetadata>>,
 }
 
 impl ConnectionMetadata {
@@ -358,15 +289,15 @@ impl ConnectionMetadata {
     };
   }
 
-  pub fn find_table(&self, name: &QualifiedName) -> Option<&Arc<TableMetadata>> {
+  pub fn get_table(&self, name: &QualifiedName) -> Option<&Arc<TableMetadata>> {
     return self.tables.get(name);
   }
 
-  pub fn find_view(&self, name: &QualifiedName) -> Option<&Arc<ViewMetadata>> {
+  pub fn get_view(&self, name: &QualifiedName) -> Option<&Arc<ViewMetadata>> {
     return self.views.get(name);
   }
 
-  pub fn find_table_or_view(&self, name: &QualifiedName) -> Option<TableOrView> {
+  pub fn get_table_or_view(&self, name: &QualifiedName) -> Option<TableOrView> {
     if let Some(table) = self.tables.get(name) {
       return Some(TableOrView::Table(table.clone()));
     }
@@ -374,41 +305,6 @@ impl ConnectionMetadata {
       return Some(TableOrView::View(view.clone()));
     }
     return None;
-  }
-}
-
-// QUESTION: Can we get rid of this after denormalizing all the information in RecordApi?
-pub trait TableOrViewMetadata {
-  fn qualified_name(&self) -> &QualifiedName;
-  fn columns(&self) -> Option<&[Column]>;
-  fn record_pk_column(&self) -> Option<(usize, &Column)>;
-}
-
-impl TableOrViewMetadata for TableMetadata {
-  fn qualified_name(&self) -> &QualifiedName {
-    return self.name();
-  }
-
-  fn columns(&self) -> Option<&[Column]> {
-    return Some(&self.schema.columns);
-  }
-
-  fn record_pk_column(&self) -> Option<(usize, &Column)> {
-    return Self::record_pk_column(self);
-  }
-}
-
-impl TableOrViewMetadata for ViewMetadata {
-  fn qualified_name(&self) -> &QualifiedName {
-    return self.name();
-  }
-
-  fn columns(&self) -> Option<&[Column]> {
-    return self.columns.as_deref();
-  }
-
-  fn record_pk_column(&self) -> Option<(usize, &Column)> {
-    return Self::record_pk_column(self);
   }
 }
 
@@ -630,8 +526,6 @@ fn find_record_pk_column_index_for_view(
 
 #[cfg(test)]
 mod tests {
-  use std::collections::HashSet;
-
   use super::*;
   use crate::parse::parse_into_statement;
   use crate::sqlite::{SchemaError, Table};
@@ -703,7 +597,7 @@ mod tests {
     let metadata = TableMetadata::new(&registry, table, &tables);
 
     assert_eq!("table0", metadata.name().name);
-    assert_eq!("col1", metadata.columns().unwrap()[2].name);
+    assert_eq!("col1", metadata.schema.columns[2].name);
     assert_eq!(1, *metadata.name_to_index.get("col0").unwrap());
 
     {
@@ -994,56 +888,5 @@ mod tests {
       let metadata = ViewMetadata::new(&registry, view, &tables);
       assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.0));
     }
-  }
-
-  #[test]
-  fn test_metadata_hash_set_by_name() {
-    let registry = JsonSchemaRegistry::default();
-
-    let table_name = QualifiedName {
-      name: "table_name".to_string(),
-      database_schema: Some("main".to_string()),
-    };
-    let table = parse_create_table(&format!(
-      "CREATE TABLE {table_name} (id INTEGER PRIMARY KEY) STRICT",
-      table_name = table_name.escaped_string()
-    ));
-    let tables = [table.clone()];
-
-    let table_metadata = TableMetadata::new(&registry, table.clone(), &tables);
-
-    let mut table_set = HashSet::<TableMetadata>::new();
-
-    assert!(table_set.insert(table_metadata.clone()));
-    assert!(table_set.get(&table_name).is_some());
-    assert_eq!(
-      table_set.get(&QualifiedName::parse("table_name").unwrap()),
-      Some(&table_metadata)
-    );
-
-    // Test Arc<views>:
-    let view_name = QualifiedName {
-      name: "view_name".to_string(),
-      database_schema: Some("main".to_string()),
-    };
-    let view = parse_create_view(
-      &format!(
-        "CREATE VIEW {view_name} AS SELECT id FROM {table_name}",
-        view_name = view_name.escaped_string(),
-        table_name = table_name.escaped_string()
-      ),
-      &tables,
-    )
-    .unwrap();
-    let view_metadata = Arc::new(ViewMetadata::new(&registry, view, &[table.clone()]));
-
-    let mut view_set = HashSet::<Arc<ViewMetadata>>::new();
-
-    assert!(view_set.insert(view_metadata.clone()));
-    assert_eq!(view_set.get(&view_name), Some(&view_metadata));
-    assert_eq!(
-      view_set.get(&QualifiedName::parse("view_name").unwrap()),
-      Some(&view_metadata)
-    );
   }
 }
