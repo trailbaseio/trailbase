@@ -42,13 +42,13 @@ pub(crate) fn validate_record_api_config(
         return Err(invalid("Record APIs must not reference TEMPORARY tables"));
       }
 
-      TableOrView::Table(table_metadata.clone())
+      TableOrView::Table(table_metadata)
     } else if let Some(view_metadata) = schemas.get_view(&table_name) {
       if view_metadata.schema.temporary {
         return Err(invalid("Record APIs must not reference TEMPORARY views"));
       }
 
-      TableOrView::View(view_metadata.clone())
+      TableOrView::View(view_metadata)
     } else {
       return Err(invalid(format!(
         "Missing table or view for API: {api_name}"

@@ -43,7 +43,7 @@ pub async fn insert_row_handler(
     "_rowid_",
     // NOTE: We "fancy" parse JSON string values, since the UI currently ships everything as a
     // string. We could consider pushing some more type-awareness into the ui.
-    Params::for_admin_insert(&**table_metadata, request.row)?,
+    Params::for_admin_insert(table_metadata, request.row)?,
   )
   .await?;
 

@@ -2,13 +2,13 @@ use itertools::Itertools;
 use log::*;
 use rusqlite::types;
 use std::collections::HashMap;
-use std::sync::Arc;
 use thiserror::Error;
 use trailbase_schema::QualifiedName;
 use trailbase_schema::json::value_to_flat_json;
 use trailbase_schema::sqlite::{Column, ColumnOption};
 
 use crate::records::RecordError;
+use crate::records::record_api::RecordApi;
 use crate::schema_metadata::{ConnectionMetadata, JsonColumnMetadata, TableMetadata};
 
 #[derive(Debug, Error)]
@@ -134,8 +134,8 @@ pub(crate) fn row_to_json_expand(
   ));
 }
 
-pub(crate) struct ExpandedTable {
-  pub metadata: Arc<TableMetadata>,
+pub(crate) struct ExpandedTable<'a> {
+  pub metadata: &'a TableMetadata,
   pub local_column_name: String,
   pub num_columns: usize,
 
@@ -143,12 +143,11 @@ pub(crate) struct ExpandedTable {
   pub foreign_column_name: String,
 }
 
-pub(crate) fn expand_tables<'a, 'b, T: AsRef<str>>(
-  connection_metadata: &ConnectionMetadata,
-  database_schema: &Option<String>,
-  root_column_by_name: impl Fn(&'a str) -> Option<&'b Column>,
-  expand: &'a [T],
-) -> Result<Vec<ExpandedTable>, RecordError> {
+pub(crate) fn expand_tables<'s, T: AsRef<str>>(
+  record_api: &'s RecordApi,
+  connection_metadata: &'s ConnectionMetadata,
+  expand: &[T],
+) -> Result<Vec<ExpandedTable<'s>>, RecordError> {
   let mut expanded_tables = Vec::<ExpandedTable>::with_capacity(expand.len());
 
   for col_name in expand {
@@ -156,7 +155,11 @@ pub(crate) fn expand_tables<'a, 'b, T: AsRef<str>>(
     if col_name.is_empty() {
       continue;
     }
-    let Some(column) = root_column_by_name(col_name) else {
+
+    let Some(column) = record_api
+      .column_index_by_name(col_name)
+      .map(|idx| &record_api.columns()[idx])
+    else {
       return Err(RecordError::Internal("Missing column".into()));
     };
 
@@ -175,7 +178,7 @@ pub(crate) fn expand_tables<'a, 'b, T: AsRef<str>>(
 
     let Some(foreign_table) = connection_metadata.get_table(&QualifiedName {
       name: foreign_table_name.clone(),
-      database_schema: database_schema.clone(),
+      database_schema: record_api.qualified_name().database_schema.clone(),
     }) else {
       return Err(RecordError::ApiRequiresTable);
     };
@@ -194,7 +197,7 @@ pub(crate) fn expand_tables<'a, 'b, T: AsRef<str>>(
     let foreign_column_name = foreign_pk_column.to_string();
 
     expanded_tables.push(ExpandedTable {
-      metadata: foreign_table.clone(),
+      metadata: foreign_table,
       local_column_name: col_name.to_string(),
       num_columns,
       foreign_table_name,

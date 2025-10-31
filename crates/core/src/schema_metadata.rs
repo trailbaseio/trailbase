@@ -353,7 +353,7 @@ mod tests {
       &table_metadata.schema.columns,
       JsonSchemaMode::Select,
       Some(Expand {
-        tables: &metadata.tables.values().map(|t| &**t).collect::<Vec<_>>(),
+        tables: &metadata.tables.values().collect::<Vec<_>>(),
         foreign_key_columns: vec!["foreign_table"],
       }),
     )

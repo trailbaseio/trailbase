@@ -59,7 +59,7 @@ pub async fn update_row_handler(
     &state,
     &QualifiedNameEscaped::new(&table_metadata.schema.name),
     Params::for_admin_update(
-      &**table_metadata,
+      table_metadata,
       request.row,
       pk_col.clone(),
       request.primary_key_value,

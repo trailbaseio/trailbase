@@ -30,7 +30,7 @@ use crate::records::filter::{
 };
 use crate::records::record_api::SubscriptionAclParams;
 use crate::records::{Permission, RecordError};
-use crate::schema_metadata::{ConnectionMetadata, TableMetadata};
+use crate::schema_metadata::ConnectionMetadata;
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
 
@@ -215,7 +215,6 @@ pub struct SubscriptionManager {
 
 struct ContinuationState {
   state: Arc<ManagerState>,
-  table_metadata: Option<Arc<TableMetadata>>,
   action: RecordAction,
   table_name: QualifiedName,
   rowid: i64,
@@ -322,7 +321,6 @@ impl SubscriptionManager {
   fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
     let ContinuationState {
       state,
-      table_metadata,
       table_name,
       action,
       rowid,
@@ -331,7 +329,8 @@ impl SubscriptionManager {
 
     // If table_metadata is missing, the config/schema must have changed, thus removing the
     // subscriptions.
-    let Some(table_metadata) = table_metadata else {
+    let connection_metadata = state.connection_metadata.value();
+    let Some(table_metadata) = connection_metadata.get_table(&table_name) else {
       warn!("Table not found: {table_name:?}. Removing subscriptions");
 
       let mut record_subs = state.record_subscriptions.write();
@@ -511,11 +510,6 @@ impl SubscriptionManager {
 
         let s = ContinuationState {
           state: state.clone(),
-          table_metadata: state
-            .connection_metadata
-            .value()
-            .get_table(&qualified_table_name)
-            .cloned(),
           action,
           table_name: qualified_table_name,
           rowid,

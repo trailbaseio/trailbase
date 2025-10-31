@@ -28,15 +28,15 @@ pub async fn get_avatar_handler(
     return Err(AuthError::BadRequest("Invalid user id"));
   };
   let metadata = state.connection_metadata();
-  let Some(table) = metadata.get_table(&table_name) else {
+  let Some(table_metadata) = metadata.get_table(&table_name) else {
     return Err(AuthError::Internal("missing table".into()));
   };
 
-  let Some((index, file_column)) = table.column_by_name("file") else {
+  let Some((index, file_column)) = table_metadata.column_by_name("file") else {
     return Err(AuthError::Internal("missing column".into()));
   };
 
-  let Some(ref column_json_metadata) = table.json_metadata.columns[index] else {
+  let Some(ref column_json_metadata) = table_metadata.json_metadata.columns[index] else {
     return Err(AuthError::Internal("missing metadata".into()));
   };
 
@@ -71,7 +71,7 @@ pub async fn create_avatar_handler(
   either_request: Either<serde_json::Value>,
 ) -> Result<(), AuthError> {
   let metadata = state.connection_metadata();
-  let Some(table) = metadata.get_table(&table_name) else {
+  let Some(table_metadata) = metadata.get_table(&table_name) else {
     return Err(AuthError::Internal("missing table".into()));
   };
 
@@ -91,7 +91,7 @@ pub async fn create_avatar_handler(
     serde_json::Value::String(uuid_to_b64(&user.uuid)),
   )]);
 
-  let lazy_params = LazyParams::for_insert(&**table, record, Some(files));
+  let lazy_params = LazyParams::for_insert(table_metadata, record, Some(files));
   let params = lazy_params
     .consume()
     .map_err(|_| AuthError::BadRequest("parameter conversion"))?;

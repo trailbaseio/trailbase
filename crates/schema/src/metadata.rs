@@ -237,20 +237,20 @@ impl ViewMetadata {
   }
 }
 
-pub enum TableOrView {
-  Table(Arc<TableMetadata>),
-  View(Arc<ViewMetadata>),
+pub enum TableOrView<'a> {
+  Table(&'a TableMetadata),
+  View(&'a ViewMetadata),
 }
 
-impl TableOrView {
-  pub fn qualified_name(&self) -> &QualifiedName {
+impl<'a> TableOrView<'a> {
+  pub fn qualified_name(&self) -> &'a QualifiedName {
     return match self {
       Self::Table(t) => &t.schema.name,
       Self::View(v) => &v.schema.name,
     };
   }
 
-  pub fn columns(&self) -> Option<&[Column]> {
+  pub fn columns(&self) -> Option<&'a [Column]> {
     return match self {
       Self::Table(t) => Some(&t.schema.columns),
       Self::View(v) => v.columns(),
@@ -271,8 +271,8 @@ impl TableOrView {
 /// qualified name.
 #[derive(Default)]
 pub struct ConnectionMetadata {
-  pub tables: HashMap<QualifiedName, Arc<TableMetadata>>,
-  pub views: HashMap<QualifiedName, Arc<ViewMetadata>>,
+  pub tables: HashMap<QualifiedName, TableMetadata>,
+  pub views: HashMap<QualifiedName, ViewMetadata>,
 }
 
 impl ConnectionMetadata {
@@ -280,29 +280,29 @@ impl ConnectionMetadata {
     return Self {
       tables: tables
         .iter()
-        .map(|t| (t.name().clone(), Arc::new(t.clone())))
+        .map(|t| (t.name().clone(), t.clone()))
         .collect(),
       views: views
         .iter()
-        .map(|v| (v.name().clone(), Arc::new(v.clone())))
+        .map(|v| (v.name().clone(), v.clone()))
         .collect(),
     };
   }
 
-  pub fn get_table(&self, name: &QualifiedName) -> Option<&Arc<TableMetadata>> {
+  pub fn get_table(&self, name: &QualifiedName) -> Option<&TableMetadata> {
     return self.tables.get(name);
   }
 
-  pub fn get_view(&self, name: &QualifiedName) -> Option<&Arc<ViewMetadata>> {
+  pub fn get_view(&self, name: &QualifiedName) -> Option<&ViewMetadata> {
     return self.views.get(name);
   }
 
-  pub fn get_table_or_view(&self, name: &QualifiedName) -> Option<TableOrView> {
+  pub fn get_table_or_view(&self, name: &QualifiedName) -> Option<TableOrView<'_>> {
     if let Some(table) = self.tables.get(name) {
-      return Some(TableOrView::Table(table.clone()));
+      return Some(TableOrView::Table(table));
     }
     if let Some(view) = self.views.get(name) {
-      return Some(TableOrView::View(view.clone()));
+      return Some(TableOrView::View(view));
     }
     return None;
   }
