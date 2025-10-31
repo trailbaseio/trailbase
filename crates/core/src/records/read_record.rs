@@ -273,6 +273,7 @@ mod test {
 
   use axum::Json;
   use axum::extract::{Path, Query, State};
+  use serde::Serialize;
   use serde_json::json;
   use trailbase_schema::{FileUpload, FileUploadInput};
 
@@ -281,7 +282,7 @@ mod test {
   use crate::app_state::*;
   use crate::auth::user::User;
   use crate::auth::util::login_with_password;
-  use crate::config::proto::{PermissionFlag, RecordApiConfig};
+  use crate::config::proto::{JsonSchemaConfig, PermissionFlag, RecordApiConfig};
   use crate::constants::USER_TABLE;
   use crate::extract::Either;
   use crate::records::create_record::{
@@ -1197,5 +1198,95 @@ mod test {
     .unwrap();
 
     assert_eq!(value, expected);
+  }
+
+  #[tokio::test]
+  async fn test_custom_schema() {
+    #[derive(Serialize, schemars::JsonSchema)]
+    struct StringArray(Vec<String>);
+
+    let config = {
+      let mut config = test_config();
+
+      config.schemas.push(JsonSchemaConfig {
+        name: Some("StringArray".to_string()),
+        schema: Some(serde_json::to_string_pretty(&schemars::schema_for!(StringArray)).unwrap()),
+      });
+
+      config
+    };
+
+    let state = test_state(Some(TestStateOptions {
+      config: Some(config),
+      ..Default::default()
+    }))
+    .await
+    .unwrap();
+
+    let name = "with_schema".to_string();
+
+    state
+      .conn()
+      .execute(
+        format!(
+          r#"CREATE TABLE '{name}' (
+            id           INTEGER PRIMARY KEY,
+            list         TEXT NOT NULL CHECK(jsonschema('StringArray', list)) DEFAULT '[]'
+          ) STRICT"#
+        ),
+        (),
+      )
+      .await
+      .unwrap();
+
+    state.rebuild_schema_cache().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some(name.clone()),
+        table_name: Some(name.clone()),
+        acl_world: [
+          PermissionFlag::Create as i32,
+          PermissionFlag::Read as i32,
+          PermissionFlag::Delete as i32,
+          PermissionFlag::Update as i32,
+        ]
+        .into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    let record = json!({
+      "id": 1,
+      "list": StringArray(vec!["item0".to_string(), "item1".to_string()]),
+    });
+
+    let create_response: CreateRecordResponse = unpack_json_response(
+      create_record_handler(
+        State(state.clone()),
+        Path(name.clone()),
+        Query(CreateRecordQuery::default()),
+        None,
+        Either::Json(record.clone()),
+      )
+      .await
+      .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    let Json(read_response) = read_record_handler(
+      State(state),
+      Path((name.clone(), create_response.ids[0].clone())),
+      Query(ReadRecordQuery::default()),
+      None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(read_response, record);
   }
 }

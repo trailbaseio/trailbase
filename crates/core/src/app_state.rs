@@ -265,10 +265,12 @@ impl AppState {
   pub async fn rebuild_schema_cache(
     &self,
   ) -> Result<(), crate::schema_metadata::SchemaLookupError> {
-    let metadata = SchemaMetadataCache::new(&self.state.conn).await?;
-    self.state.schema_metadata.set(Arc::new(metadata));
+    self
+      .state
+      .schema_metadata
+      .set(Arc::new(SchemaMetadataCache::new(&self.state.conn).await?));
+
     return Ok(());
-    // self.schema_metadata().invalidate_all().await
   }
 
   pub(crate) fn objectstore(&self) -> &(dyn ObjectStore + Send + Sync) {
@@ -403,6 +405,39 @@ impl AppState {
   }
 }
 
+/// Construct a fabricated config for tests and make sure it's valid.
+#[cfg(test)]
+pub fn test_config() -> Config {
+  use crate::auth::oauth::providers::test::TestOAuthProvider;
+  use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+
+  let mut config = Config::new_with_custom_defaults();
+
+  config.server.site_url = Some("https://test.org".to_string());
+  config.email.smtp_host = Some("smtp.test.org".to_string());
+  config.email.smtp_port = Some(587);
+  config.email.smtp_username = Some("user".to_string());
+  config.email.smtp_password = Some("pass".to_string());
+  config.email.sender_address = Some("sender@test.org".to_string());
+  config.email.sender_name = Some("Mia Sender".to_string());
+
+  config.auth.oauth_providers.insert(
+    TestOAuthProvider::NAME.to_string(),
+    OAuthProviderConfig {
+      client_id: Some("test_client_id".to_string()),
+      client_secret: Some("test_client_secret".to_string()),
+      provider_id: Some(OAuthProviderId::Test as i32),
+      ..Default::default()
+    },
+  );
+  config
+    .auth
+    .custom_uri_schemes
+    .push("test-scheme".to_string());
+
+  return config;
+}
+
 #[cfg(test)]
 #[derive(Default)]
 pub struct TestStateOptions {
@@ -413,11 +448,6 @@ pub struct TestStateOptions {
 #[cfg(test)]
 pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<AppState> {
   use reactivate::Merge;
-
-  use crate::auth::jwt;
-  use crate::auth::oauth::providers::test::TestOAuthProvider;
-  use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
-  use crate::config::validate_config;
 
   let _ = env_logger::try_init_from_env(
     env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn,log::span=warn"),
@@ -430,55 +460,28 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   assert!(new);
   let logs_conn = crate::connection::init_logs_db(None)?;
 
-  let build_default_config = || {
-    // Construct a fabricated config for tests and make sure it's valid.
-    let mut config = Config::new_with_custom_defaults();
+  let schema_metadata = Arc::new(SchemaMetadataCache::new(&conn).await?);
 
-    config.server.site_url = Some("https://test.org".to_string());
-    config.email.smtp_host = Some("smtp.test.org".to_string());
-    config.email.smtp_port = Some(587);
-    config.email.smtp_username = Some("user".to_string());
-    config.email.smtp_password = Some("pass".to_string());
-    config.email.sender_address = Some("sender@test.org".to_string());
-    config.email.sender_name = Some("Mia Sender".to_string());
+  let TestStateOptions { config, mailer } = options.unwrap_or_default();
+  let config = {
+    let config = config.unwrap_or_else(test_config);
 
-    config.auth.oauth_providers.insert(
-      TestOAuthProvider::NAME.to_string(),
-      OAuthProviderConfig {
-        client_id: Some("test_client_id".to_string()),
-        client_secret: Some("test_client_secret".to_string()),
-        provider_id: Some(OAuthProviderId::Test as i32),
-        ..Default::default()
-      },
-    );
-    config
-      .auth
-      .custom_uri_schemes
-      .push("test-scheme".to_string());
+    validate_config(&schema_metadata, &config).unwrap();
 
     // NOTE: The below "append" semantics are different from prod's override behavior, to avoid
     // races between concurrent tests. The registry needs to be global for the sqlite extensions
     // to access (unless we find a better way to bind the two).
-    for schema in &config.schemas {
-      trailbase_schema::registry::set_user_schema(
-        schema.name.as_ref().unwrap(),
-        Some(serde_json::to_value(schema.schema.as_ref().unwrap()).unwrap()),
-      )
-      .unwrap();
+    for schema_config in &config.schemas {
+      let crate::config::proto::JsonSchemaConfig { name, schema } = schema_config;
+
+      let schema_json: serde_json::Value = serde_json::from_str(schema.as_ref().unwrap()).unwrap();
+
+      trailbase_schema::registry::set_user_schema(name.as_ref().unwrap(), Some(schema_json))
+        .expect("Invalid JSON schema");
     }
 
-    config
+    Reactive::new(config)
   };
-
-  let schema_metadata = Arc::new(SchemaMetadataCache::new(&conn).await?);
-  let config = options
-    .as_ref()
-    .and_then(|o| o.config.clone())
-    .unwrap_or_else(build_default_config);
-  validate_config(&schema_metadata, &config).unwrap();
-  let config = Reactive::new(config);
-
-  let main_conn_clone = conn.clone();
 
   let data_dir = DataDir(temp_dir.path().to_path_buf());
 
@@ -502,17 +505,17 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   };
 
   let schema_metadata = Reactive::new(schema_metadata);
-  let record_apis = {
-    // let schema_metadata = schema_metadata.clone();
+  let record_apis: Reactive<Arc<Vec<(String, RecordApi)>>> = {
+    let conn = conn.clone();
     let m = (&config, &schema_metadata).merge();
+
     derive_unchecked(&m, move |(c, metadata)| {
       return Arc::new(
         c.record_apis
           .iter()
-          .filter_map(|config| {
-            let api = build_record_api(main_conn_clone.clone(), &metadata, config.clone()).unwrap();
-
-            return Some((api.api_name().to_string(), api));
+          .map(|config| {
+            let api = build_record_api(conn.clone(), &metadata, config.clone()).unwrap();
+            return (api.api_name().to_string(), api);
           })
           .collect::<Vec<_>>(),
       );
@@ -530,16 +533,15 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
         Arc::new(AuthOptions::from_config(c.auth.clone()))
       }),
       jobs: derive_unchecked(&config, |_c| Arc::new(JobRegistry::new())),
-      mailer: if let Some(mailer) = options.and_then(|o| o.mailer) {
-        Reactive::new(mailer)
-      } else {
-        derive_unchecked(&config, Mailer::new_from_config)
-      },
+      mailer: mailer.map_or_else(
+        || derive_unchecked(&config, Mailer::new_from_config),
+        |m| Reactive::new(m),
+      ),
       record_apis: record_apis.clone(),
       config,
       conn: conn.clone(),
       logs_conn,
-      jwt: jwt::test_jwt_helper(),
+      jwt: crate::auth::jwt::test_jwt_helper(),
       subscription_manager: SubscriptionManager::new(
         conn.clone(),
         schema_metadata.clone(),

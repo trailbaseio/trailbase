@@ -583,7 +583,7 @@ mod tests {
     }
 
     const SCHEMA_NAME: &str = "test.TestSchema";
-    let schema = schema_for!(TestSchema);
+    let schema: schemars::Schema = schema_for!(TestSchema);
     const ID_COL: &str = "myid";
     const ID_COL_PLACEHOLDER: &str = ":myid";
 

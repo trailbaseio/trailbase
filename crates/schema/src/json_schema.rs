@@ -64,7 +64,7 @@ pub fn build_json_schema_expanded(
         ColumnOption::NotNull => not_null = true,
         ColumnOption::Default(_) => default = true,
         ColumnOption::Check(_) => {
-          let Some(json_metadata) = extract_json_metadata(&opt)? else {
+          let Some(json_metadata) = extract_json_metadata(opt)? else {
             continue;
           };
 
