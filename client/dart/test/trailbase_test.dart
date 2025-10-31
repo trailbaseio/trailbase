@@ -220,15 +220,18 @@ Future<void> main() async {
     throw Exception('Unexpected working directory');
   }
 
-  final process = await initTrailBase();
+  // If port is set to 4000, we consider this an externally brought up instance.
+  if (port != 4000) {
+    final process = await initTrailBase();
 
-  tearDownAll(() async {
-    process.kill(ProcessSignal.sigkill);
-    final _ = await process.exitCode;
+    tearDownAll(() async {
+      process.kill(ProcessSignal.sigkill);
+      final _ = await process.exitCode;
 
-    // await process.stderr.forEach(stdout.add);
-    // await process.stdout.forEach(stdout.add);
-  });
+      // await process.stderr.forEach(stdout.add);
+      // await process.stdout.forEach(stdout.add);
+    });
+  }
 
   test('filter', () {
     final params = <String, String>{};
@@ -536,6 +539,24 @@ Future<void> main() async {
         expect(eventList.length, equals(3));
         expect(eventList[0].runtimeType, equals(InsertEvent));
       }
+    });
+
+    test('custom schema', () async {
+      final client = await connect();
+      final api = client.records('simple_schema_table');
+
+      await api.create({
+        'data': '{ "name": "Eve" }',
+      });
+
+      await api.create({
+        'data': {'name': 'Eve'},
+      });
+
+      // TODO: Make sure invalid input doesn't throw a 500.
+      // await api.create({
+      //   'data': "{ 4: 'Eve' }",
+      // });
     });
   });
 }

@@ -11,7 +11,7 @@ class HttpException implements Exception {
   const HttpException(this.status, this.message);
 
   @override
-  String toString() => 'HttpException(${status}, msg=${message})';
+  String toString() => 'HttpException(${status}, "${message}")';
 }
 
 sealed class Event {

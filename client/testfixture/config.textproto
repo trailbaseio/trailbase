@@ -55,6 +55,12 @@ record_apis: [{
   table_name: "file_upload_table"
   acl_world: [CREATE, READ, DELETE]
   acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+}, {
+  name: "simple_schema_table"
+  table_name: "simple_schema_table"
+  acl_world: []
+  acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+  create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE email = 'admin@localhost' AND id = _USER_.id)",
 }]
 schemas: [{
   name: "simple_schema"

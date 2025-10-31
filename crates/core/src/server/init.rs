@@ -86,41 +86,47 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   let (conn, new_db) =
     crate::connection::init_main_db(Some(&args.data_dir), Some(extra_databases))?;
 
-  let schema_metadata = SchemaMetadataCache::new(&conn).await?;
+  let mut schema_metadata = SchemaMetadataCache::new(&conn).await?;
 
   // Read config or write default one.
   let config = load_or_init_config_textproto(&args.data_dir, &schema_metadata).await?;
 
-  let _metadata = load_or_init_metadata_textproto(&args.data_dir).await?;
-
-  debug!("Initializing JSON schemas from config");
-  trailbase_schema::registry::set_user_schemas(
-    config
-      .schemas
+  let json_schemas = &config.schemas;
+  if !json_schemas.is_empty() {
+    let schemas: Vec<_> = json_schemas
       .iter()
-      .filter_map(|s| {
-        let Some(ref name) = s.name else {
-          warn!("Schema config entry missing name: {s:?}");
-          return None;
+      .map(|s| {
+        // Any panics here should be captured by config validation during load above.
+        let (Some(name), Some(schema)) = (&s.name, &s.schema) else {
+          panic!("Schema config invalid entry: {s:?}");
         };
 
-        let Some(ref schema) = s.schema else {
-          warn!("Schema config entry missing schema: {s:?}");
-          return None;
-        };
-
-        let json = match serde_json::from_str(schema) {
-          Ok(json) => json,
-          Err(err) => {
-            error!("Invalid schema config entry for '{name}': {err}");
-            return None;
-          }
-        };
-
-        return Some((name.clone(), json));
+        return (
+          name.clone(),
+          serde_json::from_str(schema).unwrap_or_else(|err| {
+            panic!("Invalid schema definition for '{name}': {err}");
+          }),
+        );
       })
-      .collect(),
-  )?;
+      .collect();
+
+    debug!(
+      "Initializing JSON schemas from config: {schemas:?}",
+      schemas = schemas.iter().map(|(name, _)| name.as_str())
+    );
+
+    trailbase_schema::registry::set_user_schemas(schemas)?;
+
+    // NOTE: We must reload the table schema metadata after registering new schemas. This is a
+    // work-around because config validation currently depends on SchemaMetadataCache and thus the
+    // JSON schema registry. It would be cleaner to build SchemaMatadataCache only after
+    // registering custom schemas and validating the config only against plain TABLE/VIEW
+    // metadata.
+    schema_metadata = SchemaMetadataCache::new(&conn).await?;
+  }
+
+  // Load the `<depot>/metadata.textproto`.
+  let _metadata = load_or_init_metadata_textproto(&args.data_dir).await?;
 
   let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
 
