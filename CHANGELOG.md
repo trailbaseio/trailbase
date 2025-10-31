@@ -1,3 +1,10 @@
+## v0.20.5
+
+- Fix initialization order issue with custom schemas. DB schema metadata, which also contains JSON metadata, has to be (re-)loaded after registering custom schemas (#170).
+  - The re-loading is a workaround to deal with the fact that config validation currently depends on the same schema metadata. Ideally, we disentangle those and validate against schema metadata that doesn't contain hitherto incomplete JSON metadata.
+- More consistently "early" validate all JSON inputs. Previously, serialized JSON was accepted but validated only later by SQLite unlike structured JSON input. We may want to consider disallowing serialized JSON in the future, given it contradicts the JSON schema and we could be more strict.
+- Fix error code - return 400 when input is rejected by SQLite column `CHECK` constraint.
+
 ## v0.20.4
 
 - Improve admin UI on small screens - still a long way to go:
@@ -5,7 +12,7 @@
   - Fix preset button overflow in create/alter table forms.
 - Move Docker images to MUSL builds instead of pseudo-static glibc. We know that the latter are broken and would crash when looking up a hostname on Alpine, e.g. try to specify the `--address` not as an IP address.
 - Clean up cursor encryption code and switch to a more maintained crated, e.g. `aes-gcm-siv` vs `aes-gcm`.
-- Update depenencies.
+- Update dependencies.
 
 ## v0.20.3
 
