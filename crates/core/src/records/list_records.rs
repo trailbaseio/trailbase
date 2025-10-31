@@ -43,7 +43,7 @@ struct ListRecordQueryTemplate<'a> {
   filter_clause: &'a str,
   cursor_clause: Option<&'a str>,
   order_clause: &'a str,
-  expanded_tables: &'a [ExpandedTable],
+  expanded_tables: &'a [ExpandedTable<'a>],
   count: bool,
   offset: bool,
   is_table: bool,
@@ -192,6 +192,7 @@ pub async fn list_records_handler(
     },
   );
 
+  let metadata = state.connection_metadata();
   let expanded_tables = match query_expand {
     Some(ref expand) => {
       let Some(config_expand) = api.expand() else {
@@ -205,16 +206,7 @@ pub async fn list_records_handler(
         }
       }
 
-      expand_tables(
-        &state.schema_metadata(),
-        &api.qualified_name().database_schema,
-        |column_name| {
-          api
-            .column_index_by_name(column_name)
-            .map(|idx| &api.columns()[idx])
-        },
-        &expand.columns,
-      )?
+      expand_tables(&api, &metadata, &expand.columns)?
     }
     None => vec![],
   };
@@ -383,7 +375,6 @@ lazy_static! {
 #[cfg(test)]
 mod tests {
   use serde::Deserialize;
-  use std::borrow::Cow;
   use trailbase_schema::parse::parse_into_statement;
   use trailbase_schema::sqlite::QualifiedName;
   use trailbase_sqlite::Value;
@@ -396,7 +387,6 @@ mod tests {
   use crate::config::proto::PermissionFlag;
   use crate::records::RecordError;
   use crate::records::test_utils::*;
-  use crate::schema_metadata::SchemaMetadataCache;
   use crate::util::id_to_b64;
   use crate::util::urlencode;
 
@@ -486,17 +476,24 @@ mod tests {
       .await
       .unwrap();
 
-    let schema_metadata = SchemaMetadataCache::new(conn).await.unwrap();
-    let table_metadata = schema_metadata
-      .get_table(&QualifiedName::parse("table").unwrap())
-      .unwrap();
-    let expanded_tables = expand_tables(
-      &schema_metadata,
-      &None,
-      |column_name| table_metadata.column_by_name(column_name).map(|(_, c)| c),
-      &["index"],
+    state.rebuild_schema_cache().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some("api".to_string()),
+        table_name: Some("table".to_string()),
+        acl_world: [PermissionFlag::Read as i32].into(),
+        ..Default::default()
+      },
     )
+    .await
     .unwrap();
+
+    let connection_metadata = state.connection_metadata();
+    let api = state.lookup_record_api("api").unwrap();
+
+    let expanded_tables = expand_tables(&api, &connection_metadata, &["index"]).unwrap();
 
     assert_eq!(expanded_tables.len(), 1);
     assert_eq!(expanded_tables[0].local_column_name, "index");

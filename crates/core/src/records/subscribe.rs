@@ -30,7 +30,7 @@ use crate::records::filter::{
 };
 use crate::records::record_api::SubscriptionAclParams;
 use crate::records::{Permission, RecordError};
-use crate::schema_metadata::{SchemaMetadataCache, TableMetadata};
+use crate::schema_metadata::ConnectionMetadata;
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
 
@@ -143,7 +143,7 @@ struct ManagerState {
   conn: trailbase_sqlite::Connection,
   /// Table metadata for mapping column indexes to column names needed for building JSON encoded
   /// records.
-  schema_metadata: Reactive<Arc<SchemaMetadataCache>>,
+  connection_metadata: Reactive<Arc<ConnectionMetadata>>,
   /// Record API configurations.
   record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
 
@@ -215,7 +215,6 @@ pub struct SubscriptionManager {
 
 struct ContinuationState {
   state: Arc<ManagerState>,
-  schema_metadata: Option<Arc<TableMetadata>>,
   action: RecordAction,
   table_name: QualifiedName,
   rowid: i64,
@@ -225,13 +224,13 @@ struct ContinuationState {
 impl SubscriptionManager {
   pub fn new(
     conn: trailbase_sqlite::Connection,
-    schema_metadata: Reactive<Arc<SchemaMetadataCache>>,
+    connection_metadata: Reactive<Arc<ConnectionMetadata>>,
     record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
   ) -> Self {
     return Self {
       state: Arc::new(ManagerState {
         conn,
-        schema_metadata,
+        connection_metadata,
         record_apis,
 
         record_subscriptions: RwLock::new(HashMap::new()),
@@ -322,16 +321,16 @@ impl SubscriptionManager {
   fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
     let ContinuationState {
       state,
-      schema_metadata,
       table_name,
       action,
       rowid,
       record_values,
     } = s;
 
-    // If schema_metadata is missing, the config/schema must have changed, thus removing the
+    // If table_metadata is missing, the config/schema must have changed, thus removing the
     // subscriptions.
-    let Some(schema_metadata) = schema_metadata else {
+    let connection_metadata = state.connection_metadata.value();
+    let Some(table_metadata) = connection_metadata.get_table(&table_name) else {
       warn!("Table not found: {table_name:?}. Removing subscriptions");
 
       let mut record_subs = state.record_subscriptions.write();
@@ -351,7 +350,7 @@ impl SubscriptionManager {
     let record: indexmap::IndexMap<&str, rusqlite::types::Value> = record_values
       .into_iter()
       .enumerate()
-      .map(|(idx, v)| (schema_metadata.schema.columns[idx].name.as_str(), v))
+      .map(|(idx, v)| (table_metadata.schema.columns[idx].name.as_str(), v))
       .collect();
 
     // Build a JSON-encoded SQLite event (insert, update, delete).
@@ -511,10 +510,6 @@ impl SubscriptionManager {
 
         let s = ContinuationState {
           state: state.clone(),
-          schema_metadata: state
-            .schema_metadata
-            .value()
-            .get_table(&qualified_table_name),
           action,
           table_name: qualified_table_name,
           rowid,

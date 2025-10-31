@@ -27,12 +27,13 @@ pub async fn read_files_handler(
   Query(query): Query<ReadFilesQuery>,
 ) -> Result<Response, Error> {
   let table_name = QualifiedName::parse(&table_name)?;
-  let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {
+  let metadata = state.connection_metadata();
+  let Some(table_metadata) = metadata.get_table(&table_name) else {
     return Err(Error::Precondition(format!(
       "Table {table_name:?} not found"
     )));
   };
-  let Some((_index, pk_col)) = schema_metadata.column_by_name(&query.pk_column) else {
+  let Some((_index, pk_col)) = table_metadata.column_by_name(&query.pk_column) else {
     return Err(Error::Precondition(format!(
       "Missing PK column: {}",
       query.pk_column
@@ -45,14 +46,14 @@ pub async fn read_files_handler(
     )));
   }
 
-  let Some((index, file_col_metadata)) = schema_metadata.column_by_name(&query.file_column_name)
+  let Some((index, file_col_metadata)) = table_metadata.column_by_name(&query.file_column_name)
   else {
     return Err(Error::Precondition(format!(
       "Missing file column: {}",
       query.file_column_name
     )));
   };
-  let Some(file_col_json_metadata) = schema_metadata.json_metadata.columns[index].as_ref() else {
+  let Some(file_col_json_metadata) = table_metadata.json_metadata.columns[index].as_ref() else {
     return Err(Error::Precondition(format!(
       "Not a JSON column: {}",
       query.file_column_name

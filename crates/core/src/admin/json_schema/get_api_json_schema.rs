@@ -24,8 +24,9 @@ pub async fn get_api_json_schema_handler(
     )));
   };
 
-  let json =
-    build_api_json_schema(&state, &api, query.mode).map_err(|err| Error::Internal(err.into()))?;
+  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+  let json = build_api_json_schema(&state, &registry, &api, query.mode)
+    .map_err(|err| Error::Internal(err.into()))?;
 
   let mut response = serde_json::to_string_pretty(&json)?.into_response();
   response.headers_mut().insert(

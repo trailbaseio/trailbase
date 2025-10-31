@@ -16,7 +16,7 @@ use crate::email::Mailer;
 use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
-use crate::schema_metadata::SchemaMetadataCache;
+use crate::schema_metadata::{ConnectionMetadata, build_connection_metadata};
 use crate::wasm::Runtime;
 
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
@@ -39,7 +39,7 @@ struct InternalState {
 
   jwt: JwtHelper,
 
-  schema_metadata: Reactive<Arc<SchemaMetadataCache>>,
+  connection_metadata: Reactive<Arc<ConnectionMetadata>>,
   subscription_manager: SubscriptionManager,
   object_store: Arc<dyn ObjectStore + Send + Sync>,
 
@@ -61,7 +61,7 @@ pub(crate) struct AppStateArgs {
   pub runtime_root_fs: Option<PathBuf>,
   pub dev: bool,
   pub demo: bool,
-  pub schema_metadata: SchemaMetadataCache,
+  pub connection_metadata: ConnectionMetadata,
   pub config: Config,
   pub conn: trailbase_sqlite::Connection,
   pub logs_conn: trailbase_sqlite::Connection,
@@ -97,10 +97,10 @@ impl AppState {
       );
     });
 
-    let schema_metadata = Reactive::new(Arc::new(args.schema_metadata));
+    let connection_metadata = Reactive::new(Arc::new(args.connection_metadata));
     let record_apis = {
       let conn = args.conn.clone();
-      let m = (&config, &schema_metadata).merge();
+      let m = (&config, &connection_metadata).merge();
 
       derive_unchecked(&m, move |(config, metadata)| {
         debug!("(re-)building Record APIs");
@@ -201,10 +201,10 @@ impl AppState {
         jwt: args.jwt,
         subscription_manager: SubscriptionManager::new(
           args.conn.clone(),
-          schema_metadata.clone(),
+          connection_metadata.clone(),
           record_apis,
         ),
-        schema_metadata,
+        connection_metadata,
         object_store,
         #[cfg(feature = "v8")]
         runtime: build_js_runtime(args.conn.clone(), args.runtime_threads),
@@ -254,8 +254,8 @@ impl AppState {
     return trailbase_build::get_version_info!();
   }
 
-  pub(crate) fn schema_metadata(&self) -> Arc<SchemaMetadataCache> {
-    return self.state.schema_metadata.value();
+  pub(crate) fn connection_metadata(&self) -> Arc<ConnectionMetadata> {
+    return self.state.connection_metadata.value();
   }
 
   pub(crate) fn subscription_manager(&self) -> &SubscriptionManager {
@@ -265,10 +265,10 @@ impl AppState {
   pub async fn rebuild_schema_cache(
     &self,
   ) -> Result<(), crate::schema_metadata::SchemaLookupError> {
-    self
-      .state
-      .schema_metadata
-      .set(Arc::new(SchemaMetadataCache::new(&self.state.conn).await?));
+    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+    self.state.connection_metadata.set(Arc::new(
+      build_connection_metadata(&self.state.conn, &registry).await?,
+    ));
 
     return Ok(());
   }
@@ -327,7 +327,9 @@ impl AppState {
     config: Config,
     hash: Option<String>,
   ) -> Result<(), crate::config::ConfigError> {
-    validate_config(&self.schema_metadata(), &config)?;
+    // FIXME: right now we're not updating the schema registry.
+
+    validate_config(&self.connection_metadata(), &config)?;
 
     match hash {
       Some(hash) => {
@@ -354,7 +356,7 @@ impl AppState {
     // Write new config to the file system.
     return write_config_and_vault_textproto(
       self.data_dir(),
-      &self.schema_metadata(),
+      &self.connection_metadata(),
       &self.get_config(),
     )
     .await;
@@ -460,13 +462,14 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   assert!(new);
   let logs_conn = crate::connection::init_logs_db(None)?;
 
-  let schema_metadata = Arc::new(SchemaMetadataCache::new(&conn).await?);
+  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+  let mut connection_metadata = build_connection_metadata(&conn, &registry).await?;
 
   let TestStateOptions { config, mailer } = options.unwrap_or_default();
   let config = {
     let config = config.unwrap_or_else(test_config);
 
-    validate_config(&schema_metadata, &config).unwrap();
+    validate_config(&connection_metadata, &config).unwrap();
 
     // NOTE: The below "append" semantics are different from prod's override behavior, to avoid
     // races between concurrent tests. The registry needs to be global for the sqlite extensions
@@ -476,9 +479,13 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 
       let schema_json: serde_json::Value = serde_json::from_str(schema.as_ref().unwrap()).unwrap();
 
-      trailbase_schema::registry::set_user_schema(name.as_ref().unwrap(), Some(schema_json))
-        .expect("Invalid JSON schema");
+      trailbase_extension::jsonschema::set_schema_for_test(
+        name.as_ref().unwrap(),
+        Some(trailbase_extension::jsonschema::Schema::from(schema_json, None, false).unwrap()),
+      );
     }
+
+    connection_metadata = build_connection_metadata(&conn, &registry).await?;
 
     Reactive::new(config)
   };
@@ -504,10 +511,10 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     build_objectstore(&data_dir, None).unwrap().into()
   };
 
-  let schema_metadata = Reactive::new(schema_metadata);
+  let connection_metadata = Reactive::new(Arc::new(connection_metadata));
   let record_apis: Reactive<Arc<Vec<(String, RecordApi)>>> = {
     let conn = conn.clone();
-    let m = (&config, &schema_metadata).merge();
+    let m = (&config, &connection_metadata).merge();
 
     derive_unchecked(&m, move |(c, metadata)| {
       return Arc::new(
@@ -544,10 +551,10 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       jwt: crate::auth::jwt::test_jwt_helper(),
       subscription_manager: SubscriptionManager::new(
         conn.clone(),
-        schema_metadata.clone(),
+        connection_metadata.clone(),
         record_apis,
       ),
-      schema_metadata,
+      connection_metadata,
       object_store,
       #[cfg(feature = "v8")]
       runtime: build_js_runtime(conn, None),
@@ -605,7 +612,7 @@ fn build_js_runtime(
 
 fn build_record_api(
   conn: trailbase_sqlite::Connection,
-  schema_metadata_cache: &SchemaMetadataCache,
+  connection_metadata: &ConnectionMetadata,
   config: RecordApiConfig,
 ) -> Result<RecordApi, String> {
   let Some(ref table_name) = config.table_name else {
@@ -615,10 +622,10 @@ fn build_record_api(
   };
   let table_name = QualifiedName::parse(table_name).map_err(|err| err.to_string())?;
 
-  if let Some(schema_metadata) = schema_metadata_cache.get_table(&table_name) {
-    return RecordApi::from_table(conn, &schema_metadata, config);
-  } else if let Some(view) = schema_metadata_cache.get_view(&table_name) {
-    return RecordApi::from_view(conn, &view, config);
+  if let Some(table_metadata) = connection_metadata.get_table(&table_name) {
+    return RecordApi::from_table(conn, table_metadata, config);
+  } else if let Some(view_metadata) = connection_metadata.get_view(&table_name) {
+    return RecordApi::from_view(conn, view_metadata, config);
   }
 
   return Err(format!("RecordApi references missing table: {config:?}"));

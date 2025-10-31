@@ -15,7 +15,7 @@ use crate::DESCRIPTOR_POOL;
 use crate::auth::oauth::providers::oauth_provider_registry;
 use crate::data_dir::DataDir;
 use crate::records::validate_record_api_config;
-use crate::schema_metadata::SchemaMetadataCache;
+use crate::schema_metadata::ConnectionMetadata;
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -396,16 +396,16 @@ async fn load_vault_textproto_or_default(data_dir: &DataDir) -> Result<proto::Va
 }
 
 // TODO: Initialization order is currently borked and worked-around by rebuilding
-// SchemaMetadataCache. Specifically, building SchemaMatadataCache, which contains JSON metadata,
+// ConnectionMetadata. Specifically, building SchemaMatadataCache, which contains JSON metadata,
 // requires custom JSON schemas to be built from the config and globally registered. However,
-// validation currently depends on SchemaMetadataCache. Instead we should probably validate
+// validation currently depends on ConnectionMetadata. Instead we should probably validate
 // against a schema representation that does not contain JSON metadata.
 //
 // Right now this leads to a warning log on first load when SchemaMatadataCache is first built
 // but custom schemas are not yet registered :/.
 pub async fn load_or_init_config_textproto(
   data_dir: &DataDir,
-  schema_metadata: &SchemaMetadataCache,
+  connection_metadata: &ConnectionMetadata,
 ) -> Result<proto::Config, ConfigError> {
   let merged_config = {
     let config = match fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)).await {
@@ -414,7 +414,7 @@ pub async fn load_or_init_config_textproto(
         warn!("`config.textproto` not found, initializing new default.");
 
         let config = proto::Config::new_with_custom_defaults();
-        write_config_and_vault_textproto(data_dir, schema_metadata, &config).await?;
+        write_config_and_vault_textproto(data_dir, connection_metadata, &config).await?;
         config
       }
       Err(err) => {
@@ -426,7 +426,7 @@ pub async fn load_or_init_config_textproto(
     merge_vault_and_env(config, vault)?
   };
 
-  validate_config(schema_metadata, &merged_config)?;
+  validate_config(connection_metadata, &merged_config)?;
 
   return Ok(merged_config);
 }
@@ -444,10 +444,10 @@ fn split_config(config: &proto::Config) -> Result<(proto::Config, proto::Vault),
 
 pub async fn write_config_and_vault_textproto(
   data_dir: &DataDir,
-  schema_metadata: &SchemaMetadataCache,
+  connection_metadata: &ConnectionMetadata,
   config: &proto::Config,
 ) -> Result<(), ConfigError> {
-  validate_config(schema_metadata, config)?;
+  validate_config(connection_metadata, config)?;
 
   let (stripped_config, vault) = split_config(config)?;
 
@@ -484,7 +484,7 @@ fn validate_application_name(name: &str) -> Result<(), ConfigError> {
 }
 
 pub(crate) fn validate_config(
-  tables: &SchemaMetadataCache,
+  tables: &ConnectionMetadata,
   config: &proto::Config,
 ) -> Result<(), ConfigError> {
   // Check server settings.
@@ -754,10 +754,10 @@ mod test {
 
   async fn test_default_config_is_valid() {
     let state = test_state(None).await.unwrap();
-    let schema_metadata = SchemaMetadataCache::new(state.conn()).await.unwrap();
+    let connection_metadata = state.connection_metadata();
 
     let config = Config::new_with_custom_defaults();
-    validate_config(&schema_metadata, &config).unwrap();
+    validate_config(&connection_metadata, &config).unwrap();
   }
 
   fn test_config_merging() {

@@ -1,7 +1,7 @@
 use log::*;
 use std::collections::HashSet;
 use std::sync::Arc;
-use trailbase_schema::json::{flat_json_to_value, json_array_to_bytes};
+use trailbase_schema::json::flat_json_to_value;
 use trailbase_schema::sqlite::{Column, ColumnDataType};
 use trailbase_schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{NamedParams, Value};
@@ -528,6 +528,7 @@ fn extract_params_and_files_from_json(
   // NOTE: We're doing early validation here for JSON inputs. This leads to redudant double
   // validation down the line. We could also *not* do it and leave it to the SQLite `jsonschema`
   // extension function, however this may help to reduce SQLite congestion for invalid inputs.
+  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
   return match value {
     serde_json::Value::String(s) => {
       // WARN: It's completely unclear if we should allow passing JSON objects as string in a
@@ -537,11 +538,11 @@ fn extract_params_and_files_from_json(
       let json_value: serde_json::Value = serde_json::from_str(&s)
         .map_err(|err| ParamsError::NestedObject(format!("invalid json: {err}")))?;
 
-      json_metadata.validate(&json_value)?;
+      json_metadata.validate(&registry, &json_value)?;
       Ok((Value::Text(s), None))
     }
     value => {
-      json_metadata.validate(&value)?;
+      json_metadata.validate(&registry, &value)?;
       Ok((Value::Text(value.to_string()), None))
     }
   };
@@ -564,7 +565,6 @@ mod tests {
   use trailbase_schema::sqlite::Table;
 
   use super::*;
-  use crate::constants::USER_TABLE;
   use crate::records::test_utils::json_row_from_value;
   use crate::schema_metadata::TableMetadata;
   use crate::util::id_to_b64;
@@ -581,13 +581,18 @@ mod tests {
 
     const SCHEMA_NAME: &str = "test.TestSchema";
 
-    trailbase_schema::registry::set_user_schema(
+    trailbase_extension::jsonschema::set_schema_for_test(
       SCHEMA_NAME,
-      Some(serde_json::to_value(&schema_for!(TestSchema)).unwrap()),
-    )
-    .unwrap();
-    // Make sure registration worked.
-    trailbase_extension::jsonschema::get_schema(SCHEMA_NAME).unwrap();
+      Some(
+        trailbase_extension::jsonschema::Schema::from(
+          serde_json::to_value(&schema_for!(TestSchema)).unwrap(),
+          None,
+          false,
+        )
+        .unwrap(),
+      ),
+    );
+    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
 
     const ID_COL: &str = "myid";
     const ID_COL_PLACEHOLDER: &str = ":myid";
@@ -611,7 +616,7 @@ mod tests {
       .try_into()
       .unwrap();
 
-    let metadata = TableMetadata::new(table.clone(), &[table], USER_TABLE);
+    let metadata = TableMetadata::new(&registry, table.clone(), &[table]);
 
     let id: [u8; 16] = uuid::Uuid::now_v7().as_bytes().clone();
     let blob: Vec<u8> = [0; 128].to_vec();

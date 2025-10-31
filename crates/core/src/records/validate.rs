@@ -1,10 +1,11 @@
 use itertools::Itertools;
 use trailbase_schema::QualifiedName;
+use trailbase_schema::metadata::TableOrView;
 use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::ColumnOption;
 
 use crate::config::{ConfigError, proto};
-use crate::schema_metadata::{SchemaMetadataCache, TableOrViewMetadata};
+use crate::schema_metadata::ConnectionMetadata;
 
 fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
   if name.is_empty() {
@@ -21,7 +22,7 @@ fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
 }
 
 pub(crate) fn validate_record_api_config(
-  schemas: &SchemaMetadataCache,
+  schemas: &ConnectionMetadata,
   api_config: &proto::RecordApiConfig,
 ) -> Result<String, ConfigError> {
   let Some(ref api_name) = api_config.name else {
@@ -33,20 +34,21 @@ pub(crate) fn validate_record_api_config(
     return Err(invalid("RecordApi config misses table name."));
   };
 
-  let metadata: std::sync::Arc<dyn TableOrViewMetadata> = {
+  let metadata: TableOrView = {
     let table_name = QualifiedName::parse(table_name)?;
-    if let Some(metadata) = schemas.get_table(&table_name) {
-      if metadata.schema.temporary {
+
+    if let Some(table_metadata) = schemas.get_table(&table_name) {
+      if table_metadata.schema.temporary {
         return Err(invalid("Record APIs must not reference TEMPORARY tables"));
       }
 
-      metadata
-    } else if let Some(metadata) = schemas.get_view(&table_name) {
-      if metadata.schema.temporary {
+      TableOrView::Table(table_metadata)
+    } else if let Some(view_metadata) = schemas.get_view(&table_name) {
+      if view_metadata.schema.temporary {
         return Err(invalid("Record APIs must not reference TEMPORARY views"));
       }
 
-      metadata
+      TableOrView::View(view_metadata)
     } else {
       return Err(invalid(format!(
         "Missing table or view for API: {api_name}"

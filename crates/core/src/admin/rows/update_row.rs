@@ -33,18 +33,19 @@ pub async fn update_row_handler(
   }
 
   let table_name = QualifiedName::parse(&table_name)?;
-  let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {
+  let metadata = state.connection_metadata();
+  let Some(table_metadata) = metadata.get_table(&table_name) else {
     return Err(Error::Precondition(format!(
       "Table {table_name:?} not found"
     )));
   };
 
   let pk_col = &request.primary_key_column;
-  let Some((index, column)) = schema_metadata.column_by_name(pk_col) else {
+  let Some((index, column)) = table_metadata.column_by_name(pk_col) else {
     return Err(Error::Precondition(format!("Missing column: {pk_col}")));
   };
 
-  if let Some(pk_index) = schema_metadata.record_pk_column
+  if let Some(pk_index) = table_metadata.record_pk_column
     && index != pk_index
   {
     return Err(Error::Precondition(format!("Pk column mismatch: {pk_col}")));
@@ -56,9 +57,9 @@ pub async fn update_row_handler(
 
   run_update_query(
     &state,
-    &QualifiedNameEscaped::new(&schema_metadata.schema.name),
+    &QualifiedNameEscaped::new(&table_metadata.schema.name),
     Params::for_admin_update(
-      &*schema_metadata,
+      table_metadata,
       request.row,
       pk_col.clone(),
       request.primary_key_value,

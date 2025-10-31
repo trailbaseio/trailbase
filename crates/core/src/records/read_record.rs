@@ -67,16 +67,8 @@ pub async fn read_record_handler(
         }
       }
 
-      let expanded_tables = expand_tables(
-        &state.schema_metadata(),
-        &api.qualified_name().database_schema,
-        |column_name| {
-          api
-            .column_index_by_name(column_name)
-            .map(|idx| &api.columns()[idx])
-        },
-        &query_expand,
-      )?;
+      let metadata = state.connection_metadata();
+      let expanded_tables = expand_tables(&api, &metadata, &query_expand)?;
 
       let Some(ExpandedSelectQueryResult { root, foreign_rows }) = run_expanded_select_query(
         state.conn(),

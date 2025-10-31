@@ -3,11 +3,10 @@ use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;
 use sqlite3_parser::ast::JoinType;
-use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use thiserror::Error;
+use trailbase_extension::jsonschema::JsonSchemaRegistry;
 
 use crate::sqlite::{
   Column, ColumnDataType, ColumnMapping, ColumnOption, QualifiedName, Table, View,
@@ -35,27 +34,33 @@ pub enum JsonColumnMetadata {
 }
 
 impl JsonColumnMetadata {
-  pub fn validate(&self, value: &serde_json::Value) -> Result<(), JsonSchemaError> {
+  pub fn validate(
+    &self,
+    registry: &JsonSchemaRegistry,
+    value: &serde_json::Value,
+  ) -> Result<(), JsonSchemaError> {
     match self {
       Self::SchemaName(name) => {
-        let Some(schema) = crate::registry::get_compiled_schema(name) else {
+        let Some(entry) = registry.get_schema(name) else {
           return Err(JsonSchemaError::NotFound(name.to_string()));
         };
-        schema
+
+        entry
+          .validator
           .validate(value)
           .map_err(|_err| JsonSchemaError::Validation)?;
-        return Ok(());
       }
       Self::Pattern(pattern) => {
         let schema =
           Validator::new(pattern).map_err(|err| JsonSchemaError::SchemaCompile(err.to_string()))?;
+
         if !schema.is_valid(value) {
-          Err(JsonSchemaError::Validation)
-        } else {
-          Ok(())
+          return Err(JsonSchemaError::Validation);
         }
       }
     }
+
+    return Ok(());
   }
 }
 
@@ -68,8 +73,11 @@ pub struct JsonMetadata {
 }
 
 impl JsonMetadata {
-  fn from_columns(columns: &[Column]) -> Self {
-    let columns: Vec<_> = columns.iter().map(build_json_metadata).collect();
+  fn from_columns(registry: &JsonSchemaRegistry, columns: &[Column]) -> Self {
+    let columns: Vec<_> = columns
+      .iter()
+      .map(|c| build_json_metadata(registry, c))
+      .collect();
 
     return Self {
       file_column_indexes: find_file_column_indexes(&columns),
@@ -96,9 +104,7 @@ pub struct TableMetadata {
 
   /// If and which column on this table qualifies as a record PK column, i.e. integer or UUIDv7.
   pub record_pk_column: Option<usize>,
-  /// If and which columns on this table reference _user(id).
-  pub user_id_columns: Vec<usize>,
-  /// Metadata for CHECK(json_schema()) columns.
+  /// Metadata for CHECK(jsonschema()) columns.
   pub json_metadata: JsonMetadata,
 
   name_to_index: HashMap<String, usize>,
@@ -110,25 +116,18 @@ impl TableMetadata {
   ///
   /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
   /// key relationships.
-  pub fn new(table: Table, tables: &[Table], user_table_name: &str) -> Self {
-    let name_to_index = HashMap::<String, usize>::from_iter(
-      table
-        .columns
-        .iter()
-        .enumerate()
-        .map(|(index, col)| (col.name.clone(), index)),
-    );
-
-    let record_pk_column = find_record_pk_column_index_for_table(&table, tables);
-    let user_id_columns = find_user_id_foreign_key_columns(&table.columns, user_table_name);
-    let json_metadata = JsonMetadata::from_columns(&table.columns);
-
+  pub fn new(registry: &JsonSchemaRegistry, table: Table, tables: &[Table]) -> Self {
     return TableMetadata {
+      record_pk_column: find_record_pk_column_index_for_table(&table, tables),
+      json_metadata: JsonMetadata::from_columns(registry, &table.columns),
+      name_to_index: HashMap::<String, usize>::from_iter(
+        table
+          .columns
+          .iter()
+          .enumerate()
+          .map(|(index, col)| (col.name.clone(), index)),
+      ),
       schema: table,
-      name_to_index,
-      record_pk_column,
-      user_id_columns,
-      json_metadata,
     };
   }
 
@@ -142,44 +141,14 @@ impl TableMetadata {
     return self.name_to_index.get(key).copied();
   }
 
-  #[inline]
   pub fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
     let index = self.column_index_by_name(key)?;
     return Some((index, &self.schema.columns[index]));
   }
-}
 
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl PartialEq for TableMetadata {
-  fn eq(&self, other: &Self) -> bool {
-    return self.schema.name == other.schema.name;
-  }
-}
-
-impl Eq for TableMetadata {}
-
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl Hash for TableMetadata {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    self.schema.name.hash(state);
-  }
-}
-
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl Borrow<QualifiedName> for TableMetadata {
-  fn borrow(&self) -> &QualifiedName {
-    return &self.schema.name;
-  }
-}
-
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl Borrow<QualifiedName> for Arc<TableMetadata> {
-  fn borrow(&self) -> &QualifiedName {
-    return &self.schema.name;
+  pub fn record_pk_column(&self) -> Option<(usize, &Column)> {
+    let index = self.record_pk_column?;
+    return self.schema.columns.get(index).map(|c| (index, c));
   }
 }
 
@@ -194,7 +163,7 @@ pub struct ViewMetadata {
 
   name_to_index: HashMap<String, usize>,
   record_pk_column: Option<usize>,
-  json_metadata: Option<JsonMetadata>,
+  pub json_metadata: Option<JsonMetadata>,
 }
 
 impl ViewMetadata {
@@ -202,7 +171,7 @@ impl ViewMetadata {
   ///
   /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
   /// key relationships.
-  pub fn new(view: View, tables: &[Table]) -> Self {
+  pub fn new(registry: &JsonSchemaRegistry, view: View, tables: &[Table]) -> Self {
     return match view.column_mapping {
       Some(ref column_mapping) => {
         let columns: Vec<Column> = column_mapping
@@ -220,7 +189,7 @@ impl ViewMetadata {
 
         ViewMetadata {
           name_to_index,
-          json_metadata: Some(JsonMetadata::from_columns(&columns)),
+          json_metadata: Some(JsonMetadata::from_columns(registry, &columns)),
           columns: Some(columns),
           record_pk_column: find_record_pk_column_index_for_view(column_mapping, tables),
           schema: view,
@@ -251,104 +220,100 @@ impl ViewMetadata {
     self.name_to_index.get(key).copied()
   }
 
-  #[inline]
   pub fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
     let index = self.column_index_by_name(key)?;
     let mapping = self.schema.column_mapping.as_ref()?;
     return Some((index, &mapping.columns[index].column));
   }
-}
 
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl PartialEq for ViewMetadata {
-  fn eq(&self, other: &Self) -> bool {
-    return self.schema.name == other.schema.name;
-  }
-}
-
-impl Eq for ViewMetadata {}
-
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl Hash for ViewMetadata {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    self.schema.name.hash(state);
-  }
-}
-
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl Borrow<QualifiedName> for ViewMetadata {
-  fn borrow(&self) -> &QualifiedName {
-    return &self.schema.name;
-  }
-}
-
-// Implement `PartialEq`, `Hash`, and `Borrow` for TableMetadata based on fully qualified name for
-// use in HashSet.
-impl Borrow<QualifiedName> for Arc<ViewMetadata> {
-  fn borrow(&self) -> &QualifiedName {
-    return &self.schema.name;
-  }
-}
-
-pub trait TableOrViewMetadata {
-  fn qualified_name(&self) -> &QualifiedName;
-  fn record_pk_column(&self) -> Option<(usize, &Column)>;
-  fn json_metadata(&self) -> Option<&JsonMetadata>;
-  fn columns(&self) -> Option<&[Column]>;
-}
-
-impl TableOrViewMetadata for TableMetadata {
-  fn qualified_name(&self) -> &QualifiedName {
-    return self.name();
-  }
-
-  fn columns(&self) -> Option<&[Column]> {
-    return Some(&self.schema.columns);
-  }
-
-  fn json_metadata(&self) -> Option<&JsonMetadata> {
-    return Some(&self.json_metadata);
-  }
-
-  fn record_pk_column(&self) -> Option<(usize, &Column)> {
+  pub fn record_pk_column(&self) -> Option<(usize, &Column)> {
     let index = self.record_pk_column?;
-    return self.schema.columns.get(index).map(|c| (index, c));
+    return self.columns.as_ref()?.get(index).map(|c| (index, c));
   }
 }
 
-impl TableOrViewMetadata for ViewMetadata {
-  fn qualified_name(&self) -> &QualifiedName {
-    return self.name();
-  }
+pub enum TableOrView<'a> {
+  Table(&'a TableMetadata),
+  View(&'a ViewMetadata),
+}
 
-  fn columns(&self) -> Option<&[Column]> {
-    return self.columns.as_deref();
-  }
-
-  fn json_metadata(&self) -> Option<&JsonMetadata> {
-    return self.json_metadata.as_ref();
-  }
-
-  fn record_pk_column(&self) -> Option<(usize, &Column)> {
-    let Some(columns) = &self.columns else {
-      return None;
+impl<'a> TableOrView<'a> {
+  pub fn qualified_name(&self) -> &'a QualifiedName {
+    return match self {
+      Self::Table(t) => &t.schema.name,
+      Self::View(v) => &v.schema.name,
     };
-    let index = self.record_pk_column?;
-    return columns.get(index).map(|c| (index, c));
+  }
+
+  pub fn columns(&self) -> Option<&'a [Column]> {
+    return match self {
+      Self::Table(t) => Some(&t.schema.columns),
+      Self::View(v) => v.columns(),
+    };
+  }
+
+  pub fn record_pk_column(&self) -> Option<(usize, &Column)> {
+    return match self {
+      Self::Table(t) => t.record_pk_column(),
+      Self::View(v) => v.record_pk_column(),
+    };
   }
 }
 
-fn build_json_metadata(col: &Column) -> Option<JsonColumnMetadata> {
+// TODO: Add a JSON less flavor.
+
+/// Contains schema metadata for all TABLEs/VIEWs attached to a connection.
+///
+/// NOTE: may references schemas belonging to different databases, we therefore look up by
+/// qualified name.
+#[derive(Default)]
+pub struct ConnectionMetadata {
+  pub tables: HashMap<QualifiedName, TableMetadata>,
+  pub views: HashMap<QualifiedName, ViewMetadata>,
+}
+
+impl ConnectionMetadata {
+  pub fn from(tables: &[TableMetadata], views: &[ViewMetadata]) -> Self {
+    return Self {
+      tables: tables
+        .iter()
+        .map(|t| (t.name().clone(), t.clone()))
+        .collect(),
+      views: views
+        .iter()
+        .map(|v| (v.name().clone(), v.clone()))
+        .collect(),
+    };
+  }
+
+  pub fn get_table(&self, name: &QualifiedName) -> Option<&TableMetadata> {
+    return self.tables.get(name);
+  }
+
+  pub fn get_view(&self, name: &QualifiedName) -> Option<&ViewMetadata> {
+    return self.views.get(name);
+  }
+
+  pub fn get_table_or_view(&self, name: &QualifiedName) -> Option<TableOrView<'_>> {
+    if let Some(table) = self.tables.get(name) {
+      return Some(TableOrView::Table(table));
+    }
+    if let Some(view) = self.views.get(name) {
+      return Some(TableOrView::View(view));
+    }
+    return None;
+  }
+}
+
+fn build_json_metadata(registry: &JsonSchemaRegistry, col: &Column) -> Option<JsonColumnMetadata> {
   for opt in &col.options {
-    match extract_json_metadata(opt) {
+    match extract_json_metadata(registry, opt) {
       Ok(Some(metadata)) => {
         return Some(metadata);
       }
       Ok(None) => {}
       Err(err) => {
+        // TODO: We should propagate the error.
         warn!("Failed to get JSON schema: {err}");
       }
     }
@@ -356,7 +321,8 @@ fn build_json_metadata(col: &Column) -> Option<JsonColumnMetadata> {
   None
 }
 
-pub fn extract_json_metadata(
+pub(crate) fn extract_json_metadata(
+  registry: &JsonSchemaRegistry,
   opt: &ColumnOption,
 ) -> Result<Option<JsonColumnMetadata>, JsonSchemaError> {
   let ColumnOption::Check(check) = opt else {
@@ -372,14 +338,9 @@ pub fn extract_json_metadata(
   if let Some(cap) = SCHEMA_RE.captures(check) {
     let name = &cap["name"];
 
-    let Some(_schema) = crate::registry::get_schema(name) else {
-      let schemas: Vec<String> = crate::registry::get_schemas()
-        .iter()
-        .map(|s| s.name.clone())
-        .collect();
-
+    let Some(_schema) = registry.get_schema(name) else {
       return Err(JsonSchemaError::NotFound(format!(
-        "Json schema {name} not found in: {schemas:?}"
+        "Json schema {name} not found"
       )));
     };
 
@@ -562,8 +523,6 @@ fn find_record_pk_column_index_for_view(
 
 #[cfg(test)]
 mod tests {
-  use std::collections::HashSet;
-
   use super::*;
   use crate::parse::parse_into_statement;
   use crate::sqlite::{SchemaError, Table};
@@ -631,10 +590,11 @@ mod tests {
     );
 
     let tables = [table.clone()];
-    let metadata = TableMetadata::new(table, &tables, "_user");
+    let registry = JsonSchemaRegistry::default();
+    let metadata = TableMetadata::new(&registry, table, &tables);
 
     assert_eq!("table0", metadata.name().name);
-    assert_eq!("col1", metadata.columns().unwrap()[2].name);
+    assert_eq!("col1", metadata.schema.columns[2].name);
     assert_eq!(1, *metadata.name_to_index.get("col0").unwrap());
 
     {
@@ -656,7 +616,7 @@ mod tests {
       assert_eq!(view_columns[1].column.name, "col1");
       assert_eq!(view_columns[1].column.data_type, ColumnDataType::Blob);
 
-      let view_metadata = ViewMetadata::new(table_view, &tables);
+      let view_metadata = ViewMetadata::new(&registry, table_view, &tables);
 
       assert!(view_metadata.record_pk_column().is_none());
       assert_eq!(view_metadata.columns().as_ref().unwrap().len(), 2);
@@ -671,7 +631,7 @@ mod tests {
       assert_eq!(table_view.query, query);
       assert_eq!(table_view.temporary, false);
 
-      let view_metadata = ViewMetadata::new(table_view, &tables);
+      let view_metadata = ViewMetadata::new(&registry, table_view, &tables);
 
       let uuidv7_col = view_metadata.record_pk_column().unwrap();
       let columns = view_metadata.columns().unwrap();
@@ -682,6 +642,8 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_with_subquery() {
+    let registry = JsonSchemaRegistry::default();
+
     let table_a = parse_create_table(
       "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
     );
@@ -703,7 +665,7 @@ mod tests {
       assert_eq!(view_columns[1].column.name, "data");
       assert_eq!(view_columns[1].column.data_type, ColumnDataType::Text);
 
-      let metadata = ViewMetadata::new(view, &tables);
+      let metadata = ViewMetadata::new(&registry, view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
       assert_eq!(pk_index, 0);
       assert_eq!(pk_col.name, "id");
@@ -720,7 +682,7 @@ mod tests {
       assert_eq!(view_columns[0].column.name, "id");
       assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
 
-      let metadata = ViewMetadata::new(view, &tables);
+      let metadata = ViewMetadata::new(&registry, view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
       assert_eq!(pk_index, 0);
       assert_eq!(pk_col.name, "id");
@@ -737,7 +699,7 @@ mod tests {
       assert_eq!(view_columns[0].column.name, "id");
       assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
 
-      let metadata = ViewMetadata::new(view, &tables);
+      let metadata = ViewMetadata::new(&registry, view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
       assert_eq!(pk_index, 0);
       assert_eq!(pk_col.name, "id");
@@ -755,6 +717,8 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_with_joins() {
+    let registry = JsonSchemaRegistry::default();
+
     let table_a = parse_create_table(
       "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
     );
@@ -786,7 +750,7 @@ mod tests {
       assert_eq!(view_columns[1].column.name, "fk");
       assert_eq!(view_columns[1].column.data_type, ColumnDataType::Integer);
 
-      let metadata = ViewMetadata::new(view, &tables);
+      let metadata = ViewMetadata::new(&registry, view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
       assert_eq!(pk_index, 2);
       assert_eq!(pk_col.name, "id");
@@ -808,7 +772,7 @@ mod tests {
         )
         .unwrap();
 
-        let metadata = ViewMetadata::new(view, &tables);
+        let metadata = ViewMetadata::new(&registry, view, &tables);
         assert_eq!(
           expected,
           metadata.record_pk_column().map(|c| c.0),
@@ -820,6 +784,8 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_with_group_by() {
+    let registry = JsonSchemaRegistry::default();
+
     let table_a = parse_create_table(
       "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
     );
@@ -844,7 +810,7 @@ mod tests {
           let view = parse_create_view(sql, &tables).unwrap();
           assert!(view.column_mapping.is_some(), "{i}: {sql}");
 
-          let metadata = ViewMetadata::new(view, &tables);
+          let metadata = ViewMetadata::new(&registry, view, &tables);
           assert_eq!(Some(1), metadata.record_pk_column().map(|c| c.0));
         }
       }
@@ -856,7 +822,7 @@ mod tests {
         )
         .unwrap();
 
-        let metadata = ViewMetadata::new(view, &tables);
+        let metadata = ViewMetadata::new(&registry, view, &tables);
         assert_eq!(Some(1), metadata.record_pk_column().map(|c| c.0));
       }
     }
@@ -864,6 +830,8 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_from_issue_99() {
+    let registry = JsonSchemaRegistry::default();
+
     let authors_table = parse_create_table(
       "
         CREATE TABLE authors (
@@ -897,7 +865,7 @@ mod tests {
       )
       .unwrap();
 
-      let metadata = ViewMetadata::new(view, &tables);
+      let metadata = ViewMetadata::new(&registry, view, &tables);
       assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.0));
     }
 
@@ -914,57 +882,8 @@ mod tests {
       )
       .unwrap();
 
-      let metadata = ViewMetadata::new(view, &tables);
+      let metadata = ViewMetadata::new(&registry, view, &tables);
       assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.0));
     }
-  }
-
-  #[test]
-  fn test_metadata_hash_set_by_name() {
-    let table_name = QualifiedName {
-      name: "table_name".to_string(),
-      database_schema: Some("main".to_string()),
-    };
-    let table = parse_create_table(&format!(
-      "CREATE TABLE {table_name} (id INTEGER PRIMARY KEY) STRICT",
-      table_name = table_name.escaped_string()
-    ));
-    let tables = [table.clone()];
-
-    let table_metadata = TableMetadata::new(table.clone(), &tables, "_user");
-
-    let mut table_set = HashSet::<TableMetadata>::new();
-
-    assert!(table_set.insert(table_metadata.clone()));
-    assert!(table_set.get(&table_name).is_some());
-    assert_eq!(
-      table_set.get(&QualifiedName::parse("table_name").unwrap()),
-      Some(&table_metadata)
-    );
-
-    // Test Arc<views>:
-    let view_name = QualifiedName {
-      name: "view_name".to_string(),
-      database_schema: Some("main".to_string()),
-    };
-    let view = parse_create_view(
-      &format!(
-        "CREATE VIEW {view_name} AS SELECT id FROM {table_name}",
-        view_name = view_name.escaped_string(),
-        table_name = table_name.escaped_string()
-      ),
-      &tables,
-    )
-    .unwrap();
-    let view_metadata = Arc::new(ViewMetadata::new(view, &[table.clone()]));
-
-    let mut view_set = HashSet::<Arc<ViewMetadata>>::new();
-
-    assert!(view_set.insert(view_metadata.clone()));
-    assert_eq!(view_set.get(&view_name), Some(&view_metadata));
-    assert_eq!(
-      view_set.get(&QualifiedName::parse("view_name").unwrap()),
-      Some(&view_metadata)
-    );
   }
 }

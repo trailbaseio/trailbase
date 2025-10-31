@@ -135,7 +135,9 @@ async fn async_main() -> Result<(), BoxError> {
       };
 
       let mode: Option<JsonSchemaMode> = cmd.mode.map(|m| m.into());
-      let json_schema = trailbase::api::build_api_json_schema(&state, &api, mode)?;
+
+      let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+      let json_schema = trailbase::api::build_api_json_schema(&state, &registry, &api, mode)?;
 
       println!("{}", serde_json::to_string_pretty(&json_schema)?);
     }

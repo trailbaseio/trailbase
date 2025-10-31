@@ -1,135 +1,41 @@
 use fallible_iterator::FallibleIterator;
 use log::*;
-use std::collections::HashSet;
-use std::sync::Arc;
 use thiserror::Error;
+use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::parse::parse_into_statement;
-use trailbase_schema::sqlite::{QualifiedName, SchemaError, Table, View};
-use trailbase_sqlite::params;
+use trailbase_schema::sqlite::{SchemaError, Table, View};
+use trailbase_sqlite::{Connection, params};
 
 pub use trailbase_schema::metadata::{
-  JsonColumnMetadata, JsonSchemaError, TableMetadata, TableOrViewMetadata, ViewMetadata,
+  ConnectionMetadata, JsonColumnMetadata, JsonSchemaError, TableMetadata, ViewMetadata,
 };
 
-use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
+use crate::constants::SQLITE_SCHEMA_TABLE;
 
-#[derive(Default)]
-pub struct SchemaMetadataCache {
-  tables: HashSet<Arc<TableMetadata>>,
-  views: HashSet<Arc<ViewMetadata>>,
-}
+pub(crate) async fn build_connection_metadata(
+  conn: &Connection,
+  registry: &JsonSchemaRegistry,
+) -> Result<ConnectionMetadata, SchemaLookupError> {
+  let tables = lookup_and_parse_all_table_schemas(conn).await?;
+  let views = lookup_and_parse_all_view_schemas(conn, &tables).await?;
 
-impl SchemaMetadataCache {
-  pub async fn new(conn: &trailbase_sqlite::Connection) -> Result<Self, SchemaLookupError> {
-    let tables = lookup_and_parse_all_table_schemas(conn).await?;
-    let table_map = Self::build_tables(conn, &tables).await?;
-    let views = Self::build_views(conn, &tables).await?;
+  let table_metadata: Vec<TableMetadata> = tables
+    .iter()
+    .map(|t: &Table| TableMetadata::new(registry, t.clone(), &tables))
+    .collect();
 
-    return Ok(SchemaMetadataCache {
-      tables: table_map,
-      views,
-    });
-  }
+  let view_metadata: Vec<ViewMetadata> = views
+    .into_iter()
+    .map(|view: View| ViewMetadata::new(registry, view, &tables))
+    .collect();
 
-  async fn build_tables(
-    conn: &trailbase_sqlite::Connection,
-    tables: &[Table],
-  ) -> Result<HashSet<Arc<TableMetadata>>, SchemaLookupError> {
-    let schema_metadata_map: HashSet<Arc<TableMetadata>> = tables
-      .iter()
-      .cloned()
-      .map(|t: Table| {
-        return Arc::new(TableMetadata::new(t, tables, USER_TABLE));
-      })
-      .collect();
+  let metadata = ConnectionMetadata::from(&table_metadata, &view_metadata);
 
-    // Install file column triggers. This ain't pretty, this might be better on construction and
-    // schema changes.
-    for metadata in &schema_metadata_map {
-      for idx in metadata.json_metadata.file_column_indexes() {
-        let table_name = &metadata.schema.name;
-        let unqualified_name = &metadata.schema.name.name;
-        let db = metadata
-          .schema
-          .name
-          .database_schema
-          .as_deref()
-          .unwrap_or("main");
+  // TODO: Putting this side-effect heavy setup code here is very hacky. We should probably
+  // find a better place.
+  setup_file_deletion_triggers(conn, &metadata).await?;
 
-        if db != "main" {
-          // FIXME: TRIGGERS are always database-local. Thus every database with tables
-          // with file columns would need its own _file_deletions table.
-          return Err(SchemaLookupError::Other(
-            "File columns not suppored on attached databases".into(),
-          ));
-        }
-
-        let col = &metadata.schema.columns[*idx];
-        let column_name = &col.name;
-
-        conn.execute_batch(indoc::formatdoc!(
-          r#"
-          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger";
-          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger" AFTER UPDATE ON {table_name}
-            WHEN OLD."{column_name}" IS NOT NULL AND OLD."{column_name}" != NEW."{column_name}"
-            BEGIN
-              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
-                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
-            END;
-
-          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger";
-          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger" AFTER DELETE ON {table_name}
-            WHEN OLD."{column_name}" IS NOT NULL
-            BEGIN
-              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
-                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
-            END;
-          "#,
-          table_name = table_name.escaped_string(),
-        )).await?;
-      }
-    }
-
-    return Ok(schema_metadata_map);
-  }
-
-  async fn build_views(
-    conn: &trailbase_sqlite::Connection,
-    tables: &[Table],
-  ) -> Result<HashSet<Arc<ViewMetadata>>, SchemaLookupError> {
-    let views = lookup_and_parse_all_view_schemas(conn, tables).await?;
-    let build = |view: View| {
-      // NOTE: we check during record API config validation that no temporary views are referenced.
-      // if view.temporary {
-      //   debug!("Temporary view: {}", view.name);
-      // }
-
-      return Some(Arc::new(ViewMetadata::new(view, tables)));
-    };
-
-    return Ok(views.into_iter().filter_map(build).collect());
-  }
-
-  pub fn get_table(&self, name: &QualifiedName) -> Option<Arc<TableMetadata>> {
-    return self.tables.get(name).cloned();
-  }
-
-  pub fn get_view(&self, name: &QualifiedName) -> Option<Arc<ViewMetadata>> {
-    self.views.get(name).cloned()
-  }
-
-  pub(crate) fn tables(&self) -> Vec<TableMetadata> {
-    return self.tables.iter().map(|t| (**t).clone()).collect();
-  }
-}
-
-impl std::fmt::Debug for SchemaMetadataCache {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.debug_struct("SchemaMetadataCache")
-      .field("tables", &self.tables.iter().map(|t| &t.schema.name))
-      .field("views", &self.views.iter().map(|v| &v.schema.name))
-      .finish()
-  }
+  return Ok(metadata);
 }
 
 #[derive(Debug, Error)]
@@ -258,10 +164,65 @@ pub async fn lookup_and_parse_all_view_schemas(
   return Ok(views);
 }
 
+// Install file column triggers. This ain't pretty, this might be better on construction and
+// schema changes.
+async fn setup_file_deletion_triggers(
+  conn: &trailbase_sqlite::Connection,
+  metadata: &ConnectionMetadata,
+) -> Result<(), SchemaLookupError> {
+  for metadata in metadata.tables.values() {
+    for idx in metadata.json_metadata.file_column_indexes() {
+      let table_name = &metadata.schema.name;
+      let unqualified_name = &metadata.schema.name.name;
+      let db = metadata
+        .schema
+        .name
+        .database_schema
+        .as_deref()
+        .unwrap_or("main");
+
+      if db != "main" {
+        // FIXME: TRIGGERS are always database-local. Thus every database with tables
+        // with file columns would need its own _file_deletions table.
+        return Err(SchemaLookupError::Other(
+          "File columns not supported on attached databases".into(),
+        ));
+      }
+
+      let col = &metadata.schema.columns[*idx];
+      let column_name = &col.name;
+
+      conn.execute_batch(indoc::formatdoc!(
+          r#"
+          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger";
+          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger" AFTER UPDATE ON {table_name}
+            WHEN OLD."{column_name}" IS NOT NULL AND OLD."{column_name}" != NEW."{column_name}"
+            BEGIN
+              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+            END;
+
+          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger";
+          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger" AFTER DELETE ON {table_name}
+            WHEN OLD."{column_name}" IS NOT NULL
+            BEGIN
+              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+            END;
+          "#,
+          table_name = table_name.escaped_string(),
+        )).await?;
+    }
+  }
+
+  return Ok(());
+}
+
 #[cfg(test)]
 mod tests {
   use axum::extract::{Json, Path, Query, RawQuery, State};
   use serde_json::json;
+  use trailbase_extension::jsonschema::JsonSchemaRegistry;
   use trailbase_schema::QualifiedName;
   use trailbase_schema::json_schema::{Expand, JsonSchemaMode, build_json_schema_expanded};
   use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption};
@@ -295,8 +256,8 @@ mod tests {
 
     state.rebuild_schema_cache().await.unwrap();
 
-    let test_table = state
-      .schema_metadata()
+    let metadata = state.connection_metadata();
+    let test_table = metadata
       .get_table(&QualifiedName {
         name: "test".to_string(),
         database_schema: None,
@@ -383,14 +344,16 @@ mod tests {
     .await
     .unwrap();
 
-    let test_schema_metadata = state.schema_metadata().get_table(&table_name).unwrap();
+    let metadata = state.connection_metadata();
+    let table_metadata = metadata.get_table(&table_name).unwrap();
 
     let (validator, schema) = build_json_schema_expanded(
+      &JsonSchemaRegistry::default(),
       &table_name.name,
-      &test_schema_metadata.schema.columns,
+      &table_metadata.schema.columns,
       JsonSchemaMode::Select,
       Some(Expand {
-        tables: &state.schema_metadata().tables(),
+        tables: &metadata.tables.values().collect::<Vec<_>>(),
         foreign_key_columns: vec!["foreign_table"],
       }),
     )

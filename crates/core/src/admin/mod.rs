@@ -54,7 +54,6 @@ pub fn router() -> Router<AppState> {
     .route("/user", delete(user::delete_user_handler))
     // Schema actions
     .route("/schema", get(json_schema::list_schemas_handler))
-    .route("/schema", post(json_schema::update_schema_handler))
     .route(
       "/schema/{record_api_name}/schema.json",
       get(json_schema::get_api_json_schema_handler),

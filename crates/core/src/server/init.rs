@@ -8,7 +8,7 @@ use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;
 use crate::metadata::load_or_init_metadata_textproto;
 use crate::rand::generate_random_string;
-use crate::schema_metadata::SchemaMetadataCache;
+use crate::schema_metadata::build_connection_metadata;
 use crate::server::DataDir;
 
 #[derive(Debug, Error)]
@@ -86,14 +86,15 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   let (conn, new_db) =
     crate::connection::init_main_db(Some(&args.data_dir), Some(extra_databases))?;
 
-  let mut schema_metadata = SchemaMetadataCache::new(&conn).await?;
+  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+  let mut connection_metadata = build_connection_metadata(&conn, &registry).await?;
 
   // Read config or write default one.
-  let config = load_or_init_config_textproto(&args.data_dir, &schema_metadata).await?;
+  let config = load_or_init_config_textproto(&args.data_dir, &connection_metadata).await?;
 
-  let json_schemas = &config.schemas;
-  if !json_schemas.is_empty() {
-    let schemas: Vec<_> = json_schemas
+  if !config.schemas.is_empty() {
+    let schemas: Vec<_> = config
+      .schemas
       .iter()
       .map(|s| {
         // Any panics here should be captured by config validation during load above.
@@ -115,14 +116,15 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
       schemas = schemas.iter().map(|(name, _)| name.as_str())
     );
 
-    trailbase_schema::registry::set_user_schemas(schemas)?;
+    trailbase_schema::registry::override_json_schema_registry(schemas)?;
 
     // NOTE: We must reload the table schema metadata after registering new schemas. This is a
-    // work-around because config validation currently depends on SchemaMetadataCache and thus the
+    // work-around because config validation currently depends on ConnectionMetadata and thus the
     // JSON schema registry. It would be cleaner to build SchemaMatadataCache only after
     // registering custom schemas and validating the config only against plain TABLE/VIEW
     // metadata.
-    schema_metadata = SchemaMetadataCache::new(&conn).await?;
+    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+    connection_metadata = build_connection_metadata(&conn, &registry).await?;
   }
 
   // Load the `<depot>/metadata.textproto`.
@@ -151,7 +153,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     runtime_root_fs: args.runtime_root_fs,
     dev: args.dev,
     demo: args.demo,
-    schema_metadata,
+    connection_metadata,
     config,
     conn,
     logs_conn,

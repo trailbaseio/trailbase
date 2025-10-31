@@ -42,13 +42,14 @@ pub(crate) async fn delete_row(
   pk_col: &str,
   pk_value: SqlValue,
 ) -> Result<(), Error> {
-  let Some(schema_metadata) = state.schema_metadata().get_table(table_name) else {
+  let metadata = state.connection_metadata();
+  let Some(table_metadata) = metadata.get_table(table_name) else {
     return Err(Error::Precondition(format!(
       "Table {table_name:?} not found"
     )));
   };
 
-  let Some((_index, column)) = schema_metadata.column_by_name(pk_col) else {
+  let Some((_index, column)) = table_metadata.column_by_name(pk_col) else {
     return Err(Error::Precondition(format!("Missing column: {pk_col}")));
   };
 
@@ -58,10 +59,10 @@ pub(crate) async fn delete_row(
 
   run_delete_query(
     state,
-    &QualifiedNameEscaped::from(&schema_metadata.schema.name),
+    &QualifiedNameEscaped::from(&table_metadata.schema.name),
     pk_col,
     pk_value.try_into()?,
-    schema_metadata.json_metadata.has_file_columns(),
+    table_metadata.json_metadata.has_file_columns(),
   )
   .await?;
 

@@ -51,7 +51,7 @@ pub async fn alter_table_handler(
   let source_table_name = source_schema.name.clone();
   let filename = source_table_name.migration_filename("alter_table");
 
-  let Some(_metadata) = state.schema_metadata().get_table(&source_table_name) else {
+  let Some(_metadata) = state.connection_metadata().get_table(&source_table_name) else {
     return Err(Error::Precondition(format!(
       "Cannot alter '{source_table_name:?}'. Only tables are supported.",
     )));

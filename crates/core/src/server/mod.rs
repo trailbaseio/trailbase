@@ -266,7 +266,7 @@ impl Server {
           // Reload config:
           match crate::config::load_or_init_config_textproto(
             state.data_dir(),
-            &state.schema_metadata(),
+            &state.connection_metadata(),
           )
           .await
           {

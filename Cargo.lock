@@ -7979,6 +7979,7 @@ dependencies = [
  "tokio",
  "trailbase",
  "trailbase-build",
+ "trailbase-extension",
  "url",
  "utoipa",
  "utoipa-swagger-ui",

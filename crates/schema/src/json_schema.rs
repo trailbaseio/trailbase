@@ -2,6 +2,7 @@ use jsonschema::Validator;
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use trailbase_extension::jsonschema::JsonSchemaRegistry;
 
 use crate::metadata::{
   JsonColumnMetadata, JsonSchemaError, TableMetadata, extract_json_metadata, is_pk_column,
@@ -29,22 +30,24 @@ pub enum JsonSchemaMode {
 /// setting. Not sure we should since this is more a feature for no-JS, HTTP-only apps, which
 /// don't benefit from type-safety anyway.
 pub fn build_json_schema(
+  registry: &JsonSchemaRegistry,
   title: &str,
   columns: &[Column],
   mode: JsonSchemaMode,
 ) -> Result<(Validator, serde_json::Value), JsonSchemaError> {
-  return build_json_schema_expanded(title, columns, mode, None);
+  return build_json_schema_expanded(registry, title, columns, mode, None);
 }
 
 #[derive(Debug)]
 pub struct Expand<'a> {
-  pub tables: &'a [TableMetadata],
+  pub tables: &'a [&'a TableMetadata],
   pub foreign_key_columns: Vec<&'a str>,
 }
 
 /// NOTE: Foreign keys can only reference tables not view, so the inline schemas don't need to be
 /// able to reference views.
 pub fn build_json_schema_expanded(
+  registry: &JsonSchemaRegistry,
   title: &str,
   columns: &[Column],
   mode: JsonSchemaMode,
@@ -64,18 +67,17 @@ pub fn build_json_schema_expanded(
         ColumnOption::NotNull => not_null = true,
         ColumnOption::Default(_) => default = true,
         ColumnOption::Check(_) => {
-          let Some(json_metadata) = extract_json_metadata(opt)? else {
+          let Some(json_metadata) = extract_json_metadata(registry, opt)? else {
             continue;
           };
 
           match json_metadata {
             JsonColumnMetadata::SchemaName(name) => {
-              let Some(crate::registry::Schema { schema, .. }) = crate::registry::get_schema(&name)
-              else {
+              let Some(entry) = registry.get_schema(&name) else {
                 return Err(JsonSchemaError::NotFound(name.to_string()));
               };
 
-              let Some(schema_obj) = schema.as_object() else {
+              let Some(schema_obj) = entry.schema.as_object() else {
                 return Err(JsonSchemaError::Other("expected object".to_string()));
               };
 
@@ -90,7 +92,7 @@ pub fn build_json_schema_expanded(
                 }
               }
 
-              defs.insert(col.name.clone(), schema);
+              defs.insert(col.name.clone(), entry.schema.clone());
               def_name = Some(col.name.clone());
             }
             JsonColumnMetadata::Pattern(pattern) => {
@@ -156,7 +158,7 @@ pub fn build_json_schema_expanded(
             };
 
             let (_validator, schema) =
-              build_json_schema(foreign_table, &table.schema.columns, mode)?;
+              build_json_schema(registry, foreign_table, &table.schema.columns, mode)?;
 
             let new_def_name = foreign_table.clone();
             defs.insert(
@@ -259,7 +261,7 @@ mod tests {
 
   #[test]
   fn test_parse_table_schema() {
-    crate::registry::try_init_schemas();
+    crate::registry::try_init_builtin_schemas();
 
     let conn = trailbase_extension::connect_sqlite(None).unwrap();
 
@@ -397,7 +399,7 @@ mod tests {
 
   #[test]
   fn test_file_uploads_schema() {
-    crate::registry::try_init_schemas();
+    crate::registry::try_init_builtin_schemas();
 
     let conn = trailbase_extension::connect_sqlite(None).unwrap();
 
@@ -423,8 +425,10 @@ mod tests {
   ) -> (Table, Validator) {
     let table = lookup_and_parse_table_schema(conn, table_name).unwrap();
 
-    let table_metadata = TableMetadata::new(table.clone(), &[table.clone()], "_user");
+    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+    let table_metadata = TableMetadata::new(&registry, table.clone(), &[table.clone()]);
     let (schema, _) = build_json_schema(
+      &registry,
       &table_metadata.name().name,
       &table_metadata.schema.columns,
       JsonSchemaMode::Insert,

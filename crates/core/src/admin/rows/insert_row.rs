@@ -29,7 +29,8 @@ pub async fn insert_row_handler(
 ) -> Result<Json<InsertRowResponse>, Error> {
   let table_name = QualifiedName::parse(&table_name)?;
 
-  let Some(schema_metadata) = state.schema_metadata().get_table(&table_name) else {
+  let metadata = state.connection_metadata();
+  let Some(table_metadata) = metadata.get_table(&table_name) else {
     return Err(Error::Precondition(format!(
       "Table {table_name:?} not found"
     )));
@@ -37,12 +38,12 @@ pub async fn insert_row_handler(
 
   let rowid_value = run_insert_query(
     &state,
-    &QualifiedNameEscaped::new(&schema_metadata.schema.name),
+    &QualifiedNameEscaped::new(&table_metadata.schema.name),
     None,
     "_rowid_",
     // NOTE: We "fancy" parse JSON string values, since the UI currently ships everything as a
     // string. We could consider pushing some more type-awareness into the ui.
-    Params::for_admin_insert(&*schema_metadata, request.row)?,
+    Params::for_admin_insert(table_metadata, request.row)?,
   )
   .await?;
 
