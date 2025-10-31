@@ -42,21 +42,21 @@ struct RecordApiSchema {
 type DeferredAclCheck = dyn (FnOnce(&rusqlite::Connection) -> Result<(), RecordError>) + Send;
 
 impl RecordApiSchema {
-  fn from_table(schema_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
+  fn from_table(table_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
     assert_eq!(
       config.table_name.as_ref(),
-      Some(&schema_metadata.name().name)
+      Some(&table_metadata.name().name)
     );
 
-    let Some((pk_index, pk_column)) = schema_metadata.record_pk_column() else {
+    let Some((pk_index, pk_column)) = table_metadata.record_pk_column() else {
       return Err("RecordApi requires integer/UUIDv7 primary key column".into());
     };
     let record_pk_column = (pk_index, pk_column.clone());
 
     let (columns, json_column_metadata) = filter_columns(
       config,
-      &schema_metadata.schema.columns,
-      &schema_metadata.json_metadata.columns,
+      &table_metadata.schema.columns,
+      &table_metadata.json_metadata.columns,
     );
 
     let has_file_columns = !find_file_column_indexes(&json_column_metadata).is_empty();
@@ -80,8 +80,8 @@ impl RecordApiSchema {
       .collect();
 
     return Ok(Self {
-      qualified_name: schema_metadata.schema.name.clone(),
-      table_name: QualifiedNameEscaped::new(&schema_metadata.schema.name),
+      qualified_name: table_metadata.schema.name.clone(),
+      table_name: QualifiedNameEscaped::new(&table_metadata.schema.name),
       is_table: true,
       record_pk_column,
       columns,
@@ -186,17 +186,17 @@ impl RecordApiState {
 impl RecordApi {
   pub fn from_table(
     conn: trailbase_sqlite::Connection,
-    schema_metadata: &TableMetadata,
+    table_metadata: &TableMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
     assert_eq!(
       config.table_name.as_ref(),
-      Some(&schema_metadata.name().name)
+      Some(&table_metadata.name().name)
     );
 
     return Self::from_impl(
       conn,
-      RecordApiSchema::from_table(schema_metadata, &config)?,
+      RecordApiSchema::from_table(table_metadata, &config)?,
       config,
     );
   }

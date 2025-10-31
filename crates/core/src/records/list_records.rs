@@ -206,7 +206,7 @@ pub async fn list_records_handler(
       }
 
       expand_tables(
-        &state.schema_metadata(),
+        &state.connection_metadata(),
         &api.qualified_name().database_schema,
         |column_name| {
           api
@@ -487,13 +487,13 @@ mod tests {
 
     state.rebuild_schema_cache().await.unwrap();
 
-    let schema_metadata = state.schema_metadata();
-    let table_metadata = schema_metadata
+    let connection_metadata = state.connection_metadata();
+    let table_metadata = connection_metadata
       .get_table(&QualifiedName::parse("table").unwrap())
       .unwrap();
 
     let expanded_tables = expand_tables(
-      &schema_metadata,
+      &connection_metadata,
       &None,
       |column_name| table_metadata.column_by_name(column_name).map(|(_, c)| c),
       &["index"],

@@ -87,10 +87,10 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     crate::connection::init_main_db(Some(&args.data_dir), Some(extra_databases))?;
 
   let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-  let mut schema_metadata = build_connection_metadata(&conn, &registry).await?;
+  let mut connection_metadata = build_connection_metadata(&conn, &registry).await?;
 
   // Read config or write default one.
-  let config = load_or_init_config_textproto(&args.data_dir, &schema_metadata).await?;
+  let config = load_or_init_config_textproto(&args.data_dir, &connection_metadata).await?;
 
   if !config.schemas.is_empty() {
     let schemas: Vec<_> = config
@@ -124,7 +124,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     // registering custom schemas and validating the config only against plain TABLE/VIEW
     // metadata.
     let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-    schema_metadata = build_connection_metadata(&conn, &registry).await?;
+    connection_metadata = build_connection_metadata(&conn, &registry).await?;
   }
 
   // Load the `<depot>/metadata.textproto`.
@@ -153,7 +153,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     runtime_root_fs: args.runtime_root_fs,
     dev: args.dev,
     demo: args.demo,
-    schema_metadata,
+    connection_metadata,
     config,
     conn,
     logs_conn,

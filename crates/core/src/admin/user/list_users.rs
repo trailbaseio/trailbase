@@ -73,7 +73,7 @@ pub async fn list_users_handler(
       return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
     })?;
 
-  let metadata = state.schema_metadata();
+  let metadata = state.connection_metadata();
   let Some(table_metadata) = metadata.get_table(&QualifiedName::parse(USER_TABLE)?) else {
     return Err(Error::Precondition(format!("Table {USER_TABLE} not found")));
   };

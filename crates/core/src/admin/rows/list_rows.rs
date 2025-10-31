@@ -50,14 +50,14 @@ pub async fn list_rows_handler(
     })?;
 
   let table_name = QualifiedName::parse(&table_name)?;
-  let metadata = state.schema_metadata();
+  let metadata = state.connection_metadata();
   let (table_metadata, table_or_view_metadata): (Option<&Arc<TableMetadata>>, TableOrView) = {
     if let Some(table_metadata) = metadata.get_table(&table_name) {
       (
         Some(table_metadata),
         TableOrView::Table(table_metadata.clone()),
       )
-    } else if let Some(view_metadata) = state.schema_metadata().get_view(&table_name) {
+    } else if let Some(view_metadata) = state.connection_metadata().get_view(&table_name) {
       (None, TableOrView::View(view_metadata.clone()))
     } else {
       return Err(Error::Precondition(format!(

@@ -27,7 +27,7 @@ pub async fn read_files_handler(
   Query(query): Query<ReadFilesQuery>,
 ) -> Result<Response, Error> {
   let table_name = QualifiedName::parse(&table_name)?;
-  let metadata = state.schema_metadata();
+  let metadata = state.connection_metadata();
   let Some(table_metadata) = metadata.get_table(&table_name) else {
     return Err(Error::Precondition(format!(
       "Table {table_name:?} not found"

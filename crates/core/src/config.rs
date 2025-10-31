@@ -405,7 +405,7 @@ async fn load_vault_textproto_or_default(data_dir: &DataDir) -> Result<proto::Va
 // but custom schemas are not yet registered :/.
 pub async fn load_or_init_config_textproto(
   data_dir: &DataDir,
-  schema_metadata: &ConnectionMetadata,
+  connection_metadata: &ConnectionMetadata,
 ) -> Result<proto::Config, ConfigError> {
   let merged_config = {
     let config = match fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)).await {
@@ -414,7 +414,7 @@ pub async fn load_or_init_config_textproto(
         warn!("`config.textproto` not found, initializing new default.");
 
         let config = proto::Config::new_with_custom_defaults();
-        write_config_and_vault_textproto(data_dir, schema_metadata, &config).await?;
+        write_config_and_vault_textproto(data_dir, connection_metadata, &config).await?;
         config
       }
       Err(err) => {
@@ -426,7 +426,7 @@ pub async fn load_or_init_config_textproto(
     merge_vault_and_env(config, vault)?
   };
 
-  validate_config(schema_metadata, &merged_config)?;
+  validate_config(connection_metadata, &merged_config)?;
 
   return Ok(merged_config);
 }
@@ -444,10 +444,10 @@ fn split_config(config: &proto::Config) -> Result<(proto::Config, proto::Vault),
 
 pub async fn write_config_and_vault_textproto(
   data_dir: &DataDir,
-  schema_metadata: &ConnectionMetadata,
+  connection_metadata: &ConnectionMetadata,
   config: &proto::Config,
 ) -> Result<(), ConfigError> {
-  validate_config(schema_metadata, config)?;
+  validate_config(connection_metadata, config)?;
 
   let (stripped_config, vault) = split_config(config)?;
 
@@ -754,10 +754,10 @@ mod test {
 
   async fn test_default_config_is_valid() {
     let state = test_state(None).await.unwrap();
-    let schema_metadata = state.schema_metadata();
+    let connection_metadata = state.connection_metadata();
 
     let config = Config::new_with_custom_defaults();
-    validate_config(&schema_metadata, &config).unwrap();
+    validate_config(&connection_metadata, &config).unwrap();
   }
 
   fn test_config_merging() {

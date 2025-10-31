@@ -27,7 +27,7 @@ pub async fn get_avatar_handler(
   let Ok(user_id) = crate::util::b64_to_uuid(&b64_user_id) else {
     return Err(AuthError::BadRequest("Invalid user id"));
   };
-  let metadata = state.schema_metadata();
+  let metadata = state.connection_metadata();
   let Some(table) = metadata.get_table(&table_name) else {
     return Err(AuthError::Internal("missing table".into()));
   };
@@ -70,7 +70,7 @@ pub async fn create_avatar_handler(
   user: User,
   either_request: Either<serde_json::Value>,
 ) -> Result<(), AuthError> {
-  let metadata = state.schema_metadata();
+  let metadata = state.connection_metadata();
   let Some(table) = metadata.get_table(&table_name) else {
     return Err(AuthError::Internal("missing table".into()));
   };

@@ -68,7 +68,7 @@ pub async fn read_record_handler(
       }
 
       let expanded_tables = expand_tables(
-        &state.schema_metadata(),
+        &state.connection_metadata(),
         &api.qualified_name().database_schema,
         |column_name| {
           api

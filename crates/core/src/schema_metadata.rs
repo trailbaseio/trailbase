@@ -256,7 +256,7 @@ mod tests {
 
     state.rebuild_schema_cache().await.unwrap();
 
-    let metadata = state.schema_metadata();
+    let metadata = state.connection_metadata();
     let test_table = metadata
       .get_table(&QualifiedName {
         name: "test".to_string(),
@@ -344,13 +344,13 @@ mod tests {
     .await
     .unwrap();
 
-    let metadata = state.schema_metadata();
-    let test_schema_metadata = metadata.get_table(&table_name).unwrap();
+    let metadata = state.connection_metadata();
+    let table_metadata = metadata.get_table(&table_name).unwrap();
 
     let (validator, schema) = build_json_schema_expanded(
       &JsonSchemaRegistry::default(),
       &table_name.name,
-      &test_schema_metadata.schema.columns,
+      &table_metadata.schema.columns,
       JsonSchemaMode::Select,
       Some(Expand {
         tables: &metadata.tables.values().map(|t| &**t).collect::<Vec<_>>(),

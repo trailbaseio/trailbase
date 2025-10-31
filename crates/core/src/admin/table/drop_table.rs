@@ -36,9 +36,9 @@ pub async fn drop_table_handler(
   let table_name = QualifiedName::parse(&request.name)?;
 
   let entity_type: &str;
-  if state.schema_metadata().get_table(&table_name).is_some() {
+  if state.connection_metadata().get_table(&table_name).is_some() {
     entity_type = "TABLE";
-  } else if state.schema_metadata().get_view(&table_name).is_some() {
+  } else if state.connection_metadata().get_view(&table_name).is_some() {
     entity_type = "VIEW";
   } else {
     return Err(Error::Precondition(format!(
