@@ -51,8 +51,8 @@ pub enum AdminError {
   JSONSchema(#[from] crate::schema_metadata::JsonSchemaError),
   #[error("Email error: {0}")]
   Email(#[from] crate::email::EmailError),
-  #[error("Query error: {0}")]
-  Query(#[from] crate::records::read_queries::QueryError),
+  #[error("Record error: {0}")]
+  Record(#[from] crate::records::RecordError),
   #[error("File error: {0}")]
   File(#[from] crate::records::files::FileError),
   #[error("SqlValueDecode: {0}")]
@@ -62,9 +62,10 @@ pub enum AdminError {
 impl IntoResponse for AdminError {
   fn into_response(self) -> Response {
     let (status, msg) = match self {
-      // FIXME: For error types that already implement "into_response" we should just unpack them.
+      // NOTE: For error types that already implement "into_response" we should just unpack them.
       // We should be able to use a generic for that.
       Self::Auth(err) => return err.into_response(),
+      Self::Record(err) => return err.into_response(),
       Self::Deserialization(err) => (StatusCode::BAD_REQUEST, err.to_string()),
       Self::Precondition(_) => (StatusCode::PRECONDITION_FAILED, self.to_string()),
       Self::BadRequest(err) => (StatusCode::BAD_REQUEST, err.to_string()),
@@ -72,7 +73,7 @@ impl IntoResponse for AdminError {
       Self::AlreadyExists(_) => (StatusCode::CONFLICT, self.to_string()),
       // NOTE: We can almost always leak the internal error (except for permission errors) since
       // these are errors for the admin apis.
-      ref _err => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
+      err => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
     };
 
     return Response::builder()

@@ -553,10 +553,17 @@ Future<void> main() async {
         'data': {'name': 'Eve'},
       });
 
-      // TODO: Make sure invalid input doesn't throw a 500.
-      // await api.create({
-      //   'data': "{ 4: 'Eve' }",
-      // });
+      // Test that invalid input produces a client-error, i.e. 400.
+      expect(() async {
+        await api.create({
+          'data': "{ 4: 'Eve' }",
+        });
+      }, throwsA(predicate((e) {
+        if (e is HttpException) {
+          return e.status == 400;
+        }
+        return false;
+      })));
     });
   });
 }

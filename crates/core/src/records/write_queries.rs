@@ -6,9 +6,9 @@ use trailbase_sqlite::{NamedParams, Params as _, Value};
 
 use crate::AppState;
 use crate::config::proto::ConflictResolutionStrategy;
+use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{FileMetadataContents, Params};
-use crate::records::read_queries::QueryError;
 
 pub enum WriteQuery {
   Insert {
@@ -36,7 +36,7 @@ impl WriteQuery {
     return_column_name: &str,
     conflict_resolution: Option<ConflictResolutionStrategy>,
     params: Params,
-  ) -> Result<(Self, FileMetadataContents), QueryError> {
+  ) -> Result<(Self, FileMetadataContents), RecordError> {
     let Params::Insert {
       named_params,
       files,
@@ -44,7 +44,7 @@ impl WriteQuery {
       column_indexes: _,
     } = params
     else {
-      return Err(QueryError::Internal("not an insert".into()));
+      return Err(RecordError::Internal("not an insert".into()));
     };
 
     let conflict_clause = match conflict_resolution {
@@ -65,7 +65,7 @@ impl WriteQuery {
       returning,
     }
     .render()
-    .map_err(|err| QueryError::Internal(err.into()))?;
+    .map_err(|err| RecordError::Internal(err.into()))?;
 
     return Ok((
       Self::Insert {
@@ -79,7 +79,7 @@ impl WriteQuery {
   pub fn new_update(
     table_name: &QualifiedNameEscaped,
     params: Params,
-  ) -> Result<(Self, FileMetadataContents), QueryError> {
+  ) -> Result<(Self, FileMetadataContents), RecordError> {
     let Params::Update {
       named_params,
       files,
@@ -88,7 +88,7 @@ impl WriteQuery {
       pk_column_name,
     } = params
     else {
-      return Err(QueryError::Internal("not an update".into()));
+      return Err(RecordError::Internal("not an update".into()));
     };
 
     let query = UpdateRecordQueryTemplate {
@@ -98,7 +98,7 @@ impl WriteQuery {
       returning: Some("_rowid_"),
     }
     .render()
-    .map_err(|err| QueryError::Internal(err.into()))?;
+    .map_err(|err| RecordError::Internal(err.into()))?;
 
     return Ok((
       Self::Update {
@@ -113,7 +113,7 @@ impl WriteQuery {
     table_name: &QualifiedNameEscaped,
     pk_column_name: &str,
     pk_value: Value,
-  ) -> Result<Self, QueryError> {
+  ) -> Result<Self, RecordError> {
     return Ok(Self::Delete {
       query: format!(r#"DELETE FROM {table_name} WHERE "{pk_column_name}" = $1 RETURNING _rowid_"#),
       pk_value,
@@ -166,7 +166,7 @@ pub(crate) async fn run_queries(
     WriteQuery,
     Option<(QualifiedNameEscaped, FileMetadataContents)>,
   )>,
-) -> Result<Vec<rusqlite::types::Value>, QueryError> {
+) -> Result<Vec<rusqlite::types::Value>, RecordError> {
   let (queries, all_files): (Vec<_>, Vec<_>) = queries.into_iter().unzip();
 
   let mut queries_with_files = HashMap::<QualifiedNameEscaped, Vec<usize>>::new();
@@ -234,7 +234,7 @@ pub(crate) async fn run_insert_query(
   conflict_resolution: Option<ConflictResolutionStrategy>,
   return_column_name: &str,
   params: Params,
-) -> Result<rusqlite::types::Value, QueryError> {
+) -> Result<rusqlite::types::Value, RecordError> {
   let (query, files) =
     WriteQuery::new_insert(table_name, return_column_name, conflict_resolution, params)?;
 
@@ -259,7 +259,9 @@ pub(crate) async fn run_insert_query(
     file_manager.release();
 
     if Some(ConflictResolutionStrategy::Replace) == conflict_resolution {
-      delete_files_marked_for_deletion(state, table_name, &[rowid]).await?;
+      delete_files_marked_for_deletion(state, table_name, &[rowid])
+        .await
+        .map_err(|err| RecordError::Internal(err.into()))?;
     }
   }
 
@@ -270,7 +272,7 @@ pub(crate) async fn run_update_query(
   state: &AppState,
   table_name: &QualifiedNameEscaped,
   params: Params,
-) -> Result<(), QueryError> {
+) -> Result<(), RecordError> {
   let (query, files) = WriteQuery::new_update(table_name, params)?;
 
   // We're storing any files to the object store first to make sure the DB entry is valid right
@@ -291,7 +293,9 @@ pub(crate) async fn run_update_query(
   // Successful write, do not cleanup written files.
   if let Some(mut file_manager) = file_manager {
     file_manager.release();
-    delete_files_marked_for_deletion(state, table_name, &[rowid]).await?;
+    delete_files_marked_for_deletion(state, table_name, &[rowid])
+      .await
+      .map_err(|err| RecordError::Internal(err.into()))?;
   }
 
   return Ok(());
@@ -303,7 +307,7 @@ pub(crate) async fn run_delete_query(
   pk_column: &str,
   pk_value: Value,
   has_file_columns: bool,
-) -> Result<i64, QueryError> {
+) -> Result<i64, RecordError> {
   let query = WriteQuery::new_delete(table_name, pk_column, pk_value)?;
 
   let rowid: i64 = state
@@ -314,7 +318,9 @@ pub(crate) async fn run_delete_query(
     .await?;
 
   if has_file_columns {
-    delete_files_marked_for_deletion(state, table_name, &[rowid]).await?;
+    delete_files_marked_for_deletion(state, table_name, &[rowid])
+      .await
+      .map_err(|err| RecordError::Internal(err.into()))?;
   }
 
   return Ok(rowid);

@@ -8,8 +8,8 @@ use crate::migrations;
 pub enum TransactionError {
   #[error("Rusqlite error: {0}")]
   Rusqlite(#[from] rusqlite::Error),
-  #[error("Tokio Rusqlite error: {0}")]
-  TokioRusqlite(#[from] trailbase_sqlite::Error),
+  #[error("SQLite error: {0}")]
+  Sqlite(#[from] trailbase_sqlite::Error),
   #[error("IO error: {0}")]
   IO(#[from] std::io::Error),
   #[error("Migration error: {0}")]

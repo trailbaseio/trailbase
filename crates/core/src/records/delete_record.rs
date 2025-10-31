@@ -45,8 +45,7 @@ pub async fn delete_record_handler(
     record_id,
     api.has_file_columns(),
   )
-  .await
-  .map_err(|err| RecordError::Internal(err.into()))?;
+  .await?;
 
   return Ok((StatusCode::OK, "deleted").into_response());
 }

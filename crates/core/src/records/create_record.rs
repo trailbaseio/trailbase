@@ -148,8 +148,7 @@ pub async fn create_record_handler(
         &pk_column.name,
         params_list.swap_remove(0),
       )
-      .await
-      .map_err(|err| RecordError::Internal(err.into()))?;
+      .await?;
 
       vec![extract_record_id(record_id)?]
     }
