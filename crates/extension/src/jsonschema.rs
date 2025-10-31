@@ -1,6 +1,6 @@
 use jsonschema::Validator;
 use mini_moka::sync::Cache;
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 use rusqlite::Error;
 use rusqlite::functions::Context;
 use std::collections::HashMap;
@@ -11,6 +11,7 @@ pub type ValidationError = Box<jsonschema::ValidationError<'static>>;
 
 type CustomValidatorFn = Arc<dyn Fn(&serde_json::Value, Option<&str>) -> bool + Send + Sync>;
 
+#[derive(Clone)]
 pub struct Schema {
   /// The original JSON schema.
   pub schema: serde_json::Value,
@@ -40,41 +41,57 @@ impl Schema {
   }
 }
 
-static SCHEMA_REGISTRY: LazyLock<Mutex<HashMap<String, Arc<Schema>>>> =
-  LazyLock::new(|| Mutex::new(HashMap::<String, Arc<Schema>>::new()));
+#[derive(Default)]
+pub struct JsonSchemaRegistry {
+  schemas: HashMap<String, Schema>,
+}
 
-pub fn set_schemas(schema_entries: Vec<(String, Schema)>, override_non_empty: bool) {
-  let mut lock = SCHEMA_REGISTRY.lock();
+impl JsonSchemaRegistry {
+  fn from_schemas(schemas: Vec<(String, Schema)>) -> Self {
+    return Self {
+      schemas: schemas.into_iter().collect(),
+    };
+  }
 
-  if lock.is_empty() || override_non_empty {
-    lock.clear();
+  pub fn names(&self) -> Vec<String> {
+    return self.schemas.keys().cloned().collect();
+  }
 
-    for (name, entry) in schema_entries {
-      lock.insert(name, Arc::new(entry));
-    }
+  pub fn get_schema(&self, name: &str) -> Option<&Schema> {
+    return self.schemas.get(name);
+  }
+
+  pub fn entries(&self) -> Vec<(&String, &Schema)> {
+    return self.schemas.iter().collect();
+  }
+}
+
+static SCHEMA_REGISTRY: LazyLock<RwLock<Arc<JsonSchemaRegistry>>> =
+  LazyLock::new(|| RwLock::new(Arc::new(JsonSchemaRegistry::default())));
+
+pub fn set_schemas(schemas: Vec<(String, Schema)>, override_non_empty: bool) {
+  let mut lock = SCHEMA_REGISTRY.write();
+
+  if lock.schemas.is_empty() || override_non_empty {
+    *lock = Arc::new(JsonSchemaRegistry::from_schemas(schemas));
   }
 }
 
 pub fn set_schema_for_test(name: &str, entry: Option<Schema>) {
+  let mut lock = SCHEMA_REGISTRY.write();
+  let mut schemas: HashMap<_, _> = (*lock).schemas.clone();
+
   if let Some(entry) = entry {
-    SCHEMA_REGISTRY
-      .lock()
-      .insert(name.to_string(), Arc::new(entry));
+    schemas.insert(name.to_string(), entry);
   } else {
-    SCHEMA_REGISTRY.lock().remove(name);
+    schemas.remove(name);
   }
+
+  *lock = Arc::new(JsonSchemaRegistry { schemas: schemas });
 }
 
-pub fn get_schema(name: &str) -> Option<Arc<Schema>> {
-  return SCHEMA_REGISTRY.lock().get(name).cloned();
-}
-
-pub fn get_schemas() -> Vec<(String, Arc<Schema>)> {
-  SCHEMA_REGISTRY
-    .lock()
-    .iter()
-    .map(|(name, schema)| (name.clone(), schema.clone()))
-    .collect()
+pub fn json_schema_registry_snapshot() -> Arc<JsonSchemaRegistry> {
+  return (*SCHEMA_REGISTRY.read()).clone();
 }
 
 pub(super) fn jsonschema_by_name(context: &Context) -> Result<bool, Error> {
@@ -90,7 +107,8 @@ pub(super) fn jsonschema_by_name(context: &Context) -> Result<bool, Error> {
     .map_err(|err| Error::UserFunctionError(format!("Invalid JSON: {contents} => {err}").into()))?;
 
   // Then get/build the schema validator for the given pattern.
-  let Some(entry) = SCHEMA_REGISTRY.lock().get(schema_name).cloned() else {
+  let lock = SCHEMA_REGISTRY.read();
+  let Some(entry) = lock.schemas.get(schema_name) else {
     return Err(Error::UserFunctionError(
       format!("Schema {schema_name} not found").into(),
     ));
@@ -122,7 +140,8 @@ pub(super) fn jsonschema_by_name_with_extra_args(context: &Context) -> Result<bo
     .map_err(|err| Error::UserFunctionError(format!("Invalid JSON: {contents} => {err}").into()))?;
 
   // Then get/build the schema validator for the given pattern.
-  let Some(entry) = SCHEMA_REGISTRY.lock().get(schema_name).cloned() else {
+  let lock = SCHEMA_REGISTRY.read();
+  let Some(entry) = lock.schemas.get(schema_name) else {
     return Err(Error::UserFunctionError(
       format!("Schema {schema_name} not found").into(),
     ));

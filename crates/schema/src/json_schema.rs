@@ -70,7 +70,8 @@ pub fn build_json_schema_expanded(
 
           match json_metadata {
             JsonColumnMetadata::SchemaName(name) => {
-              let Some(entry) = trailbase_extension::jsonschema::get_schema(&name) else {
+              let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+              let Some(entry) = registry.get_schema(&name) else {
                 return Err(JsonSchemaError::NotFound(name.to_string()));
               };
 

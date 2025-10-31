@@ -38,7 +38,8 @@ impl JsonColumnMetadata {
   pub fn validate(&self, value: &serde_json::Value) -> Result<(), JsonSchemaError> {
     match self {
       Self::SchemaName(name) => {
-        let Some(entry) = trailbase_extension::jsonschema::get_schema(name) else {
+        let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+        let Some(entry) = registry.get_schema(name) else {
           return Err(JsonSchemaError::NotFound(name.to_string()));
         };
 
@@ -436,14 +437,10 @@ pub(crate) fn extract_json_metadata(
   if let Some(cap) = SCHEMA_RE.captures(check) {
     let name = &cap["name"];
 
-    let Some(_schema) = trailbase_extension::jsonschema::get_schema(name) else {
-      let schemas: Vec<String> = trailbase_extension::jsonschema::get_schemas()
-        .iter()
-        .map(|(name, _)| name.clone())
-        .collect();
-
+    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+    let Some(_schema) = registry.get_schema(name) else {
       return Err(JsonSchemaError::NotFound(format!(
-        "Json schema {name} not found in: {schemas:?}"
+        "Json schema {name} not found"
       )));
     };
 

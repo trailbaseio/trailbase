@@ -4,7 +4,6 @@ pub(super) use get_api_json_schema::get_api_json_schema_handler;
 
 use axum::extract::{Json, State};
 use serde::Serialize;
-use trailbase_extension::jsonschema::get_schemas;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -28,11 +27,14 @@ pub struct ListJsonSchemasResponse {
 pub async fn list_schemas_handler(
   State(_state): State<AppState>,
 ) -> Result<Json<ListJsonSchemasResponse>, Error> {
-  let schemas = get_schemas()
+  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+
+  let schemas = registry
+    .entries()
     .iter()
     .map(|(name, schema)| {
       return JsonSchema {
-        name: name.clone(),
+        name: (*name).clone(),
         schema: schema.schema.to_string(),
         builtin: schema.builtin,
       };

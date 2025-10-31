@@ -592,9 +592,6 @@ mod tests {
       ),
     );
 
-    // Make sure registration worked.
-    trailbase_extension::jsonschema::get_schema(SCHEMA_NAME).unwrap();
-
     const ID_COL: &str = "myid";
     const ID_COL_PLACEHOLDER: &str = ":myid";
 

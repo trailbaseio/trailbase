@@ -81,8 +81,9 @@ mod tests {
 
     try_init_builtin_schemas();
 
+    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
     {
-      let schema = trailbase_extension::jsonschema::get_schema("std.FileUpload").unwrap();
+      let schema = registry.get_schema("std.FileUpload").unwrap();
       let input = json!({
         "id": uuid::Uuid::new_v4().to_string(),
         "filename": "foo_8435o3.png",
@@ -94,7 +95,7 @@ mod tests {
     }
 
     {
-      let schema = trailbase_extension::jsonschema::get_schema("std.FileUploads").unwrap();
+      let schema = registry.get_schema("std.FileUploads").unwrap();
       assert!(
         schema
           .validator
