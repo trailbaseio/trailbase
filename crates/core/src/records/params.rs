@@ -580,11 +580,18 @@ mod tests {
 
     const SCHEMA_NAME: &str = "test.TestSchema";
 
-    trailbase_schema::registry::set_user_schema(
+    trailbase_extension::jsonschema::set_schema_for_test(
       SCHEMA_NAME,
-      Some(serde_json::to_value(&schema_for!(TestSchema)).unwrap()),
-    )
-    .unwrap();
+      Some(
+        trailbase_extension::jsonschema::Schema::from(
+          serde_json::to_value(&schema_for!(TestSchema)).unwrap(),
+          None,
+          false,
+        )
+        .unwrap(),
+      ),
+    );
+
     // Make sure registration worked.
     trailbase_extension::jsonschema::get_schema(SCHEMA_NAME).unwrap();
 

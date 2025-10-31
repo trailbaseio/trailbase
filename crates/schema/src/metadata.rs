@@ -38,10 +38,12 @@ impl JsonColumnMetadata {
   pub fn validate(&self, value: &serde_json::Value) -> Result<(), JsonSchemaError> {
     match self {
       Self::SchemaName(name) => {
-        let Some(schema) = crate::registry::get_compiled_schema(name) else {
+        let Some(entry) = trailbase_extension::jsonschema::get_schema(name) else {
           return Err(JsonSchemaError::NotFound(name.to_string()));
         };
-        schema
+
+        entry
+          .validator
           .validate(value)
           .map_err(|_err| JsonSchemaError::Validation)?;
       }
@@ -434,10 +436,10 @@ pub(crate) fn extract_json_metadata(
   if let Some(cap) = SCHEMA_RE.captures(check) {
     let name = &cap["name"];
 
-    let Some(_schema) = crate::registry::get_schema(name) else {
-      let schemas: Vec<String> = crate::registry::get_schemas()
+    let Some(_schema) = trailbase_extension::jsonschema::get_schema(name) else {
+      let schemas: Vec<String> = trailbase_extension::jsonschema::get_schemas()
         .iter()
-        .map(|s| s.name.clone())
+        .map(|(name, _)| name.clone())
         .collect();
 
       return Err(JsonSchemaError::NotFound(format!(

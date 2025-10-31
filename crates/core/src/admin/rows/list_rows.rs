@@ -279,7 +279,10 @@ mod tests {
     )
     .unwrap();
 
-    trailbase_schema::registry::set_user_schema("foo", Some(pattern)).unwrap();
+    trailbase_extension::jsonschema::set_schema_for_test(
+      "foo",
+      Some(trailbase_extension::jsonschema::Schema::from(pattern, None, false).unwrap()),
+    );
 
     conn
       .execute_batch(

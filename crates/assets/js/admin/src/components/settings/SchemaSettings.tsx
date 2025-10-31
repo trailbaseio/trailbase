@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 import { adminFetch } from "@/lib/fetch";
 
-import type { UpdateJsonSchemaRequest } from "@bindings/UpdateJsonSchemaRequest";
 import type { ListJsonSchemasResponse } from "@bindings/ListJsonSchemasResponse";
 import type { JsonSchema } from "@bindings/JsonSchema";
 
@@ -20,13 +19,6 @@ async function listSchemas(): Promise<ListJsonSchemasResponse> {
     method: "GET",
   });
   return await response.json();
-}
-
-async function _updateSchema(request: UpdateJsonSchemaRequest): Promise<void> {
-  await adminFetch("/schema", {
-    method: "POST",
-    body: JSON.stringify(request),
-  });
 }
 
 function SchemaSettingsForm(props: {

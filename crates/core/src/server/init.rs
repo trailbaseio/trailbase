@@ -115,7 +115,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
       schemas = schemas.iter().map(|(name, _)| name.as_str())
     );
 
-    trailbase_schema::registry::set_user_schemas(schemas)?;
+    trailbase_schema::registry::override_json_schema_registry(schemas)?;
 
     // NOTE: We must reload the table schema metadata after registering new schemas. This is a
     // work-around because config validation currently depends on SchemaMetadataCache and thus the

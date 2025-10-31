@@ -70,12 +70,11 @@ pub fn build_json_schema_expanded(
 
           match json_metadata {
             JsonColumnMetadata::SchemaName(name) => {
-              let Some(crate::registry::Schema { schema, .. }) = crate::registry::get_schema(&name)
-              else {
+              let Some(entry) = trailbase_extension::jsonschema::get_schema(&name) else {
                 return Err(JsonSchemaError::NotFound(name.to_string()));
               };
 
-              let Some(schema_obj) = schema.as_object() else {
+              let Some(schema_obj) = entry.schema.as_object() else {
                 return Err(JsonSchemaError::Other("expected object".to_string()));
               };
 
@@ -90,7 +89,7 @@ pub fn build_json_schema_expanded(
                 }
               }
 
-              defs.insert(col.name.clone(), schema);
+              defs.insert(col.name.clone(), entry.schema.clone());
               def_name = Some(col.name.clone());
             }
             JsonColumnMetadata::Pattern(pattern) => {
@@ -259,7 +258,7 @@ mod tests {
 
   #[test]
   fn test_parse_table_schema() {
-    crate::registry::try_init_schemas();
+    crate::registry::try_init_builtin_schemas();
 
     let conn = trailbase_extension::connect_sqlite(None).unwrap();
 
@@ -397,7 +396,7 @@ mod tests {
 
   #[test]
   fn test_file_uploads_schema() {
-    crate::registry::try_init_schemas();
+    crate::registry::try_init_builtin_schemas();
 
     let conn = trailbase_extension::connect_sqlite(None).unwrap();
 

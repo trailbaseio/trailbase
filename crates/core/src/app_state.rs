@@ -327,6 +327,8 @@ impl AppState {
     config: Config,
     hash: Option<String>,
   ) -> Result<(), crate::config::ConfigError> {
+    // FIXME: right now we're not updating the schema registry.
+
     validate_config(&self.schema_metadata(), &config)?;
 
     match hash {
@@ -476,8 +478,10 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 
       let schema_json: serde_json::Value = serde_json::from_str(schema.as_ref().unwrap()).unwrap();
 
-      trailbase_schema::registry::set_user_schema(name.as_ref().unwrap(), Some(schema_json))
-        .expect("Invalid JSON schema");
+      trailbase_extension::jsonschema::set_schema_for_test(
+        name.as_ref().unwrap(),
+        Some(trailbase_extension::jsonschema::Schema::from(schema_json, None, false).unwrap()),
+      );
     }
 
     Reactive::new(config)

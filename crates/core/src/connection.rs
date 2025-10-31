@@ -35,7 +35,7 @@ pub fn init_main_db(
 
   let conn = trailbase_sqlite::Connection::new(
     || -> Result<_, ConnectionError> {
-      trailbase_schema::registry::try_init_schemas();
+      trailbase_schema::registry::try_init_builtin_schemas();
 
       let mut conn = trailbase_extension::connect_sqlite(main_path.clone())?;
 
