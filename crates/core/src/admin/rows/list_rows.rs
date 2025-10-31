@@ -2,10 +2,8 @@ use axum::extract::{Json, Path, RawQuery, State};
 use log::*;
 use serde::Serialize;
 use std::borrow::Cow;
-use std::sync::Arc;
 use trailbase_qs::{Cursor, CursorType, Order, OrderPrecedent, Query};
 use trailbase_schema::QualifiedName;
-use trailbase_schema::metadata::{TableMetadata, TableOrView};
 use trailbase_schema::sqlite::{Column, ColumnDataType};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
@@ -51,25 +49,16 @@ pub async fn list_rows_handler(
 
   let table_name = QualifiedName::parse(&table_name)?;
   let metadata = state.connection_metadata();
-  let (table_metadata, table_or_view_metadata): (Option<&Arc<TableMetadata>>, TableOrView) = {
-    if let Some(table_metadata) = metadata.get_table(&table_name) {
-      (
-        Some(table_metadata),
-        TableOrView::Table(table_metadata.clone()),
-      )
-    } else if let Some(view_metadata) = state.connection_metadata().get_view(&table_name) {
-      (None, TableOrView::View(view_metadata.clone()))
-    } else {
-      return Err(Error::Precondition(format!(
-        "Table or view '{table_name:?}' not found"
-      )));
-    }
+  let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
+    return Err(Error::Precondition(format!(
+      "Table or view '{table_name:?}' not found"
+    )));
   };
-  let qualified_name = table_or_view_metadata.qualified_name();
+  let qualified_name = table_or_view.qualified_name();
 
   // Where clause contains column filters and cursor depending on what's present in the url query
   // string.
-  let filter_where_clause = if let Some(columns) = table_or_view_metadata.columns() {
+  let filter_where_clause = if let Some(columns) = table_or_view.columns() {
     build_filter_where_clause("_ROW_", columns, filter_params)?
   } else {
     debug!("Filter clauses currently not supported for complex views");
@@ -95,7 +84,7 @@ pub async fn list_rows_handler(
       .unwrap_or(-1)
   };
 
-  let cursor_column = table_or_view_metadata.record_pk_column();
+  let cursor_column = table_or_view.record_pk_column();
   let cursor = match (cursor, cursor_column) {
     (Some(cursor), Some((_idx, c))) => Some(parse_cursor(&cursor, c)?),
     _ => None,
@@ -132,23 +121,12 @@ pub async fn list_rows_handler(
     cursor: next_cursor,
     // NOTE: in the view case we don't have a good way of extracting the columns from the "CREATE
     // VIEW" query so we fall back to columns constructed from the returned data.
-    columns: match table_metadata {
-      Some(metadata) if metadata.schema.virtual_table => {
-        // Virtual TABLE case.
-        columns
-      }
-      Some(metadata) => {
-        // Non-virtual TABLE case.
-        metadata.schema.columns.clone()
-      }
+    columns: match table_or_view.columns() {
+      Some(schema_columns) if !schema_columns.is_empty() => schema_columns.to_vec(),
       _ => {
-        // VIEW-case
-        if let Some(columns) = table_or_view_metadata.columns() {
-          columns.to_vec()
-        } else {
-          debug!("Falling back to inferred cols for view: {table_name:?}");
-          columns
-        }
+        // VIRTUAL TABLE or VIEW case.
+        debug!("Falling back to inferred cols for view: {table_name:?}");
+        columns
       }
     },
     rows,
