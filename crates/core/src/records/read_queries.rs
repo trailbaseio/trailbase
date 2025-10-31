@@ -1,7 +1,5 @@
 use askama::Template;
-use log::*;
 use std::sync::Arc;
-use thiserror::Error;
 use trailbase_schema::sqlite::Column;
 use trailbase_schema::{FileUpload, FileUploads, QualifiedNameEscaped};
 use trailbase_sqlite::Value;
@@ -9,28 +7,7 @@ use trailbase_sqlite::Value;
 use crate::AppState;
 use crate::records::error::RecordError;
 use crate::records::expand::ExpandedTable;
-use crate::records::files::FileError;
 use crate::schema_metadata::{JsonColumnMetadata, TableMetadata};
-
-#[derive(Debug, Error)]
-pub enum QueryError {
-  #[error("Precondition error: {0}")]
-  Precondition(&'static str),
-  #[error("FromSql error: {0}")]
-  FromSql(#[from] rusqlite::types::FromSqlError),
-  #[error("Tokio Rusqlite error: {0}")]
-  TokioRusqlite(#[from] trailbase_sqlite::Error),
-  #[error("Json serialization error: {0}")]
-  JsonSerialization(#[from] serde_json::Error),
-  #[error("ObjectStore error: {0}")]
-  Storage(#[from] object_store::Error),
-  #[error("File error: {0}")]
-  File(#[from] FileError),
-  #[error("Not found")]
-  NotFound,
-  #[error("Internal: {0}")]
-  Internal(Box<dyn std::error::Error + Send + Sync>),
-}
 
 pub(crate) async fn run_select_query(
   conn: &trailbase_sqlite::Connection,
@@ -99,7 +76,7 @@ pub(crate) async fn run_get_file_query(
   json_metadata: &JsonColumnMetadata,
   pk_column: &str,
   pk_value: Value,
-) -> Result<FileUpload, QueryError> {
+) -> Result<FileUpload, RecordError> {
   return match &json_metadata {
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
       let column_name = &file_column.name;
@@ -110,16 +87,20 @@ pub(crate) async fn run_get_file_query(
           format!(r#"SELECT "{column_name}" FROM {table_name} WHERE "{pk_column}" = $1"#),
           [pk_value],
         )
-        .await?
+        .await
+        .map_err(|err| RecordError::Internal(err.into()))?
       else {
-        return Err(QueryError::NotFound);
+        return Err(RecordError::RecordNotFound);
       };
 
-      let json: String = row.get(0)?;
-      let file_upload: FileUpload = serde_json::from_str(&json)?;
+      let json: String = row
+        .get(0)
+        .map_err(|err| RecordError::Internal(err.into()))?;
+      let file_upload: FileUpload =
+        serde_json::from_str(&json).map_err(|err| RecordError::Internal(err.into()))?;
       Ok(file_upload)
     }
-    _ => Err(QueryError::Precondition("Not a file")),
+    _ => Err(RecordError::BadRequest("Not a file")),
   };
 }
 
@@ -130,7 +111,7 @@ pub(crate) async fn run_get_files_query(
   json_metadata: &JsonColumnMetadata,
   pk_column: &str,
   pk_value: Value,
-) -> Result<FileUploads, QueryError> {
+) -> Result<FileUploads, RecordError> {
   return match &json_metadata {
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
       let column_name = &file_column.name;
@@ -141,13 +122,17 @@ pub(crate) async fn run_get_files_query(
           format!(r#"SELECT "{column_name}" FROM {table_name} WHERE "{pk_column}" = $1"#),
           [pk_value],
         )
-        .await?
+        .await
+        .map_err(|err| RecordError::Internal(err.into()))?
       else {
-        return Err(QueryError::NotFound);
+        return Err(RecordError::RecordNotFound);
       };
 
-      let contents: String = row.get(0)?;
-      let file_uploads: FileUploads = serde_json::from_str(&contents)?;
+      let contents: String = row
+        .get(0)
+        .map_err(|err| RecordError::Internal(err.into()))?;
+      let file_uploads: FileUploads =
+        serde_json::from_str(&contents).map_err(|err| RecordError::Internal(err.into()))?;
       Ok(file_uploads)
     }
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
@@ -163,7 +148,7 @@ pub(crate) async fn run_get_files_query(
         .await?,
       ]));
     }
-    _ => Err(QueryError::Precondition("Not a files list")),
+    _ => Err(RecordError::BadRequest("Not a files list")),
   };
 }
 

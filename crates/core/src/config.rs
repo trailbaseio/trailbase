@@ -395,29 +395,37 @@ async fn load_vault_textproto_or_default(data_dir: &DataDir) -> Result<proto::Va
   return Ok(vault);
 }
 
+// TODO: Initialization order is currently borked and worked-around by rebuilding
+// SchemaMetadataCache. Specifically, building SchemaMatadataCache, which contains JSON metadata,
+// requires custom JSON schemas to be built from the config and globally registered. However,
+// validation currently depends on SchemaMetadataCache. Instead we should probably validate
+// against a schema representation that does not contain JSON metadata.
+//
+// Right now this leads to a warning log on first load when SchemaMatadataCache is first built
+// but custom schemas are not yet registered :/.
 pub async fn load_or_init_config_textproto(
   data_dir: &DataDir,
   schema_metadata: &SchemaMetadataCache,
 ) -> Result<proto::Config, ConfigError> {
-  let vault = load_vault_textproto_or_default(data_dir).await?;
-
-  let config: proto::Config =
-    match fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)).await {
+  let merged_config = {
+    let config = match fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)).await {
       Ok(contents) => proto::Config::from_text(&contents)?,
-      Err(err) => match err.kind() {
-        std::io::ErrorKind::NotFound => {
-          warn!("Falling back to default config: {err}");
-          let config = proto::Config::new_with_custom_defaults();
-          write_config_and_vault_textproto(data_dir, schema_metadata, &config).await?;
-          config
-        }
-        _ => {
-          return Err(err.into());
-        }
-      },
+      Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+        warn!("`config.textproto` not found, initializing new default.");
+
+        let config = proto::Config::new_with_custom_defaults();
+        write_config_and_vault_textproto(data_dir, schema_metadata, &config).await?;
+        config
+      }
+      Err(err) => {
+        return Err(err.into());
+      }
     };
 
-  let merged_config = merge_vault_and_env(config, vault)?;
+    let vault = load_vault_textproto_or_default(data_dir).await?;
+    merge_vault_and_env(config, vault)?
+  };
+
   validate_config(schema_metadata, &merged_config)?;
 
   return Ok(merged_config);

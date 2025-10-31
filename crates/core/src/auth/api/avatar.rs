@@ -8,8 +8,9 @@ use crate::auth::{AuthError, User};
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::constants::AVATAR_TABLE;
 use crate::extract::Either;
+use crate::records::RecordError;
 use crate::records::params::{JsonRow, LazyParams};
-use crate::records::read_queries::{QueryError, run_get_file_query};
+use crate::records::read_queries::run_get_file_query;
 use crate::records::write_queries::run_insert_query;
 use crate::util::uuid_to_b64;
 
@@ -48,7 +49,7 @@ pub async fn get_avatar_handler(
   )
   .await
   .map_err(|err| match err {
-    QueryError::NotFound => AuthError::NotFound,
+    RecordError::RecordNotFound => AuthError::NotFound,
     _ => AuthError::Internal(err.into()),
   })?;
 

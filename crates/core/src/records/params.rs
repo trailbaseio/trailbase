@@ -167,7 +167,21 @@ impl Params {
         continue;
       };
 
-      let (param, json_files) = extract_params_and_files_from_json(col, json_meta, value)?;
+      let (param, json_files) =
+        extract_params_and_files_from_json(col, json_meta, value).map_err(|err| {
+          #[cfg(debug_assertions)]
+          {
+            let known: Vec<String> = trailbase_schema::registry::get_schemas()
+              .into_iter()
+              .map(|schema| schema.name)
+              .collect();
+
+            log::debug!(
+              "Parameter conversion failed: {err},\n idx={index}, col={col:?}, json={json_meta:?}, known_schemas={known:?}"
+            );
+          }
+          return err;
+        })?;
 
       if let Some(json_files) = json_files {
         // Note: files provided as a multipart form upload are handled below. They need more
@@ -583,7 +597,15 @@ mod tests {
     }
 
     const SCHEMA_NAME: &str = "test.TestSchema";
-    let schema = schema_for!(TestSchema);
+
+    trailbase_schema::registry::set_user_schema(
+      SCHEMA_NAME,
+      Some(serde_json::to_value(&schema_for!(TestSchema)).unwrap()),
+    )
+    .unwrap();
+    // Make sure registration worked.
+    trailbase_extension::jsonschema::get_schema(SCHEMA_NAME).unwrap();
+
     const ID_COL: &str = "myid";
     const ID_COL_PLACEHOLDER: &str = ":myid";
 
@@ -605,13 +627,6 @@ mod tests {
       .unwrap()
       .try_into()
       .unwrap();
-
-    trailbase_schema::registry::set_user_schema(
-      SCHEMA_NAME,
-      Some(serde_json::to_value(schema).unwrap()),
-    )
-    .unwrap();
-    trailbase_extension::jsonschema::get_schema(SCHEMA_NAME).unwrap();
 
     let metadata = TableMetadata::new(table.clone(), &[table], USER_TABLE);
 

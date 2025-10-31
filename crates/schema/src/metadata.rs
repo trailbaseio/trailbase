@@ -68,19 +68,6 @@ pub struct JsonMetadata {
 }
 
 impl JsonMetadata {
-  pub fn has_file_columns(&self) -> bool {
-    return !self.file_column_indexes.is_empty();
-  }
-
-  /// Contains both, 'std.FileUpload' and 'std.FileUpload'.
-  pub fn file_column_indexes(&self) -> &[usize] {
-    return &self.file_column_indexes;
-  }
-
-  fn from_table(table: &Table) -> Self {
-    return Self::from_columns(&table.columns);
-  }
-
   fn from_columns(columns: &[Column]) -> Self {
     let columns: Vec<_> = columns.iter().map(build_json_metadata).collect();
 
@@ -88,6 +75,15 @@ impl JsonMetadata {
       file_column_indexes: find_file_column_indexes(&columns),
       columns,
     };
+  }
+
+  pub fn has_file_columns(&self) -> bool {
+    return !self.file_column_indexes.is_empty();
+  }
+
+  /// Contains both, 'std.FileUpload' and 'std.FileUpload'.
+  pub fn file_column_indexes(&self) -> &[usize] {
+    return &self.file_column_indexes;
   }
 }
 
@@ -125,7 +121,7 @@ impl TableMetadata {
 
     let record_pk_column = find_record_pk_column_index_for_table(&table, tables);
     let user_id_columns = find_user_id_foreign_key_columns(&table.columns, user_table_name);
-    let json_metadata = JsonMetadata::from_table(&table);
+    let json_metadata = JsonMetadata::from_columns(&table.columns);
 
     return TableMetadata {
       schema: table,
@@ -348,13 +344,12 @@ impl TableOrViewMetadata for ViewMetadata {
 fn build_json_metadata(col: &Column) -> Option<JsonColumnMetadata> {
   for opt in &col.options {
     match extract_json_metadata(opt) {
-      Ok(maybe) => {
-        if let Some(jm) = maybe {
-          return Some(jm);
-        }
+      Ok(Some(metadata)) => {
+        return Some(metadata);
       }
+      Ok(None) => {}
       Err(err) => {
-        error!("Failed to get JSON schema: {err}");
+        warn!("Failed to get JSON schema: {err}");
       }
     }
   }
@@ -372,23 +367,28 @@ pub fn extract_json_metadata(
     static ref SCHEMA_RE: Regex =
       Regex::new(r#"(?smR)jsonschema\s*\(\s*[\['"](?<name>.*)[\]'"]\s*,.+?\)"#)
         .expect("infallible");
-    static ref MATCHES_RE: Regex =
-      Regex::new(r"(?smR)jsonschema_matches\s*\(.+?(?<pattern>\{.*\}).+?\)").expect("infallible");
   }
 
   if let Some(cap) = SCHEMA_RE.captures(check) {
     let name = &cap["name"];
+
     let Some(_schema) = crate::registry::get_schema(name) else {
       let schemas: Vec<String> = crate::registry::get_schemas()
         .iter()
         .map(|s| s.name.clone())
         .collect();
+
       return Err(JsonSchemaError::NotFound(format!(
         "Json schema {name} not found in: {schemas:?}"
       )));
     };
 
     return Ok(Some(JsonColumnMetadata::SchemaName(name.to_string())));
+  }
+
+  lazy_static! {
+    static ref MATCHES_RE: Regex =
+      Regex::new(r"(?smR)jsonschema_matches\s*\(.+?(?<pattern>\{.*\}).+?\)").expect("infallible");
   }
 
   if let Some(cap) = MATCHES_RE.captures(check) {

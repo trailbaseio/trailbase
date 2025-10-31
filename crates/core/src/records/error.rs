@@ -39,18 +39,26 @@ impl From<trailbase_sqlite::Error> for RecordError {
         rusqlite::Error::SqliteFailure(err, _msg) => {
           match err.extended_code {
             // List of error codes: https://www.sqlite.org/rescode.html
-            275 => Self::BadRequest("sqlite constraint: check"),
-            531 => Self::BadRequest("sqlite constraint: commit hook"),
-            3091 => Self::BadRequest("sqlite constraint: data type"),
-            787 => Self::BadRequest("sqlite constraint: fk"),
-            1043 => Self::BadRequest("sqlite constraint: function"),
-            1299 => Self::BadRequest("sqlite constraint: not null"),
-            2835 => Self::BadRequest("sqlite constraint: pinned"),
-            1555 => Self::BadRequest("sqlite constraint: pk"),
-            2579 => Self::BadRequest("sqlite constraint: row id"),
-            1811 => Self::BadRequest("sqlite constraint: trigger"),
-            2067 => Self::BadRequest("sqlite constraint: unique"),
-            2323 => Self::BadRequest("sqlite constraint: vtab"),
+            1 => {
+              // This error is returned if a CHECK constraint, e.g. jsonschema, rejects an input on
+              // insert. Surprisingly that's not a 275 :shrug:. Error on the side of a client-error.
+              #[cfg(debug_assertions)]
+              log::debug!("generic SQLite error code=1: {err}");
+
+              Self::BadRequest("rejected")
+            }
+            275 => Self::BadRequest("db constraint: check"),
+            531 => Self::BadRequest("db constraint: commit hook"),
+            3091 => Self::BadRequest("db constraint: data type"),
+            787 => Self::BadRequest("db constraint: fk"),
+            1043 => Self::BadRequest("db constraint: function"),
+            1299 => Self::BadRequest("db constraint: not null"),
+            2835 => Self::BadRequest("db constraint: pinned"),
+            1555 => Self::BadRequest("db constraint: pk"),
+            2579 => Self::BadRequest("db constraint: row id"),
+            1811 => Self::BadRequest("db constraint: trigger"),
+            2067 => Self::BadRequest("db constraint: unique"),
+            2323 => Self::BadRequest("db constraint: vtab"),
             _ => Self::Internal(err.into()),
           }
         }
@@ -58,6 +66,12 @@ impl From<trailbase_sqlite::Error> for RecordError {
       },
       err => Self::Internal(err.into()),
     };
+  }
+}
+
+impl From<object_store::Error> for RecordError {
+  fn from(err: object_store::Error) -> Self {
+    return RecordError::Internal(err.into());
   }
 }
 
