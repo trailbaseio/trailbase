@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use trailbase_schema::metadata::{
-  JsonColumnMetadata, TableMetadata, TableOrViewMetadata, ViewMetadata, find_file_column_indexes,
+  JsonColumnMetadata, TableMetadata, ViewMetadata, find_file_column_indexes,
   find_user_id_foreign_key_columns,
 };
 use trailbase_schema::sqlite::Column;
@@ -106,7 +106,7 @@ impl RecordApiSchema {
     let Some(columns) = view_metadata.columns() else {
       return Err("RecordApi requires schema".to_string());
     };
-    let Some(json_metadata) = view_metadata.json_metadata() else {
+    let Some(ref json_metadata) = view_metadata.json_metadata else {
       return Err("RecordApi requires json metadata".to_string());
     };
 
@@ -194,9 +194,11 @@ impl RecordApi {
       Some(&schema_metadata.name().name)
     );
 
-    let schema = RecordApiSchema::from_table(schema_metadata, &config)?;
-
-    return Self::from_impl(conn, schema, config);
+    return Self::from_impl(
+      conn,
+      RecordApiSchema::from_table(schema_metadata, &config)?,
+      config,
+    );
   }
 
   pub fn from_view(
@@ -206,9 +208,11 @@ impl RecordApi {
   ) -> Result<Self, String> {
     assert_eq!(config.table_name.as_ref(), Some(&view_metadata.name().name));
 
-    let schema = RecordApiSchema::from_view(view_metadata, &config)?;
-
-    return Self::from_impl(conn, schema, config);
+    return Self::from_impl(
+      conn,
+      RecordApiSchema::from_view(view_metadata, &config)?,
+      config,
+    );
   }
 
   fn from_impl(

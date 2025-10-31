@@ -149,10 +149,10 @@ pub async fn list_logs_handler(
       return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
     })?;
 
-  // NOTE: We cannot use state.schema_metadata() here, since we're working on the logs database.
-  // We could cache, however this is just the admin logs handler.
+  // NOTE: We cannot use state.schema_metadata() here, which is managed via a different database
+  // *and* connection.
   let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME, None).await?;
-  let schema_metadata = TableMetadata::new(table.clone(), &[table], crate::constants::USER_TABLE);
+  let schema_metadata = TableMetadata::new(table.clone(), &[table]);
   let filter_where_clause =
     build_filter_where_clause("log", &schema_metadata.schema.columns, filter_params)?;
 

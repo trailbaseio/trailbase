@@ -1,10 +1,11 @@
 use itertools::Itertools;
 use trailbase_schema::QualifiedName;
+use trailbase_schema::metadata::TableOrViewMetadata;
 use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::ColumnOption;
 
 use crate::config::{ConfigError, proto};
-use crate::schema_metadata::{SchemaMetadataCache, TableOrViewMetadata};
+use crate::schema_metadata::SchemaMetadataCache;
 
 fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
   if name.is_empty() {

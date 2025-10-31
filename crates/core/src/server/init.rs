@@ -91,9 +91,9 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   // Read config or write default one.
   let config = load_or_init_config_textproto(&args.data_dir, &schema_metadata).await?;
 
-  let json_schemas = &config.schemas;
-  if !json_schemas.is_empty() {
-    let schemas: Vec<_> = json_schemas
+  if !config.schemas.is_empty() {
+    let schemas: Vec<_> = config
+      .schemas
       .iter()
       .map(|s| {
         // Any panics here should be captured by config validation during load above.

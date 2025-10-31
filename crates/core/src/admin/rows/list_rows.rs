@@ -5,6 +5,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use trailbase_qs::{Cursor, CursorType, Order, OrderPrecedent, Query};
 use trailbase_schema::QualifiedName;
+use trailbase_schema::metadata::{TableMetadata, TableOrViewMetadata};
 use trailbase_schema::sqlite::{Column, ColumnDataType};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
@@ -13,7 +14,6 @@ use crate::admin::AdminError as Error;
 use crate::admin::util::rows_to_sql_value_rows;
 use crate::app_state::AppState;
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
-use crate::schema_metadata::{TableMetadata, TableOrViewMetadata};
 
 #[derive(Debug, Serialize, TS)]
 #[ts(export)]

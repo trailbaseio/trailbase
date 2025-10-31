@@ -8,10 +8,10 @@ use trailbase_schema::sqlite::{QualifiedName, SchemaError, Table, View};
 use trailbase_sqlite::params;
 
 pub use trailbase_schema::metadata::{
-  JsonColumnMetadata, JsonSchemaError, TableMetadata, TableOrViewMetadata, ViewMetadata,
+  JsonColumnMetadata, JsonSchemaError, TableMetadata, ViewMetadata,
 };
 
-use crate::constants::{SQLITE_SCHEMA_TABLE, USER_TABLE};
+use crate::constants::SQLITE_SCHEMA_TABLE;
 
 #[derive(Default)]
 pub struct SchemaMetadataCache {
@@ -22,30 +22,38 @@ pub struct SchemaMetadataCache {
 impl SchemaMetadataCache {
   pub async fn new(conn: &trailbase_sqlite::Connection) -> Result<Self, SchemaLookupError> {
     let tables = lookup_and_parse_all_table_schemas(conn).await?;
-    let table_map = Self::build_tables(conn, &tables).await?;
-    let views = Self::build_views(conn, &tables).await?;
+    let views = lookup_and_parse_all_view_schemas(conn, &tables).await?;
 
     return Ok(SchemaMetadataCache {
-      tables: table_map,
-      views,
+      tables: {
+        let table_metadata: HashSet<Arc<TableMetadata>> = tables
+          .iter()
+          .cloned()
+          .map(|t: Table| {
+            return Arc::new(TableMetadata::new(t, &tables));
+          })
+          .collect();
+
+        // NOTE: Putting this side-effect heavy setup code here is very hacky. We should probably
+        // find a better place.
+        Self::setup_file_deletion_triggers(conn, &table_metadata).await?;
+
+        table_metadata
+      },
+      views: views
+        .into_iter()
+        .map(|view: View| Arc::new(ViewMetadata::new(view, &tables)))
+        .collect(),
     });
   }
 
-  async fn build_tables(
+  // Install file column triggers. This ain't pretty, this might be better on construction and
+  // schema changes.
+  async fn setup_file_deletion_triggers(
     conn: &trailbase_sqlite::Connection,
-    tables: &[Table],
-  ) -> Result<HashSet<Arc<TableMetadata>>, SchemaLookupError> {
-    let schema_metadata_map: HashSet<Arc<TableMetadata>> = tables
-      .iter()
-      .cloned()
-      .map(|t: Table| {
-        return Arc::new(TableMetadata::new(t, tables, USER_TABLE));
-      })
-      .collect();
-
-    // Install file column triggers. This ain't pretty, this might be better on construction and
-    // schema changes.
-    for metadata in &schema_metadata_map {
+    tables: &HashSet<Arc<TableMetadata>>,
+  ) -> Result<(), SchemaLookupError> {
+    for metadata in tables {
       for idx in metadata.json_metadata.file_column_indexes() {
         let table_name = &metadata.schema.name;
         let unqualified_name = &metadata.schema.name.name;
@@ -60,7 +68,7 @@ impl SchemaMetadataCache {
           // FIXME: TRIGGERS are always database-local. Thus every database with tables
           // with file columns would need its own _file_deletions table.
           return Err(SchemaLookupError::Other(
-            "File columns not suppored on attached databases".into(),
+            "File columns not supported on attached databases".into(),
           ));
         }
 
@@ -90,24 +98,7 @@ impl SchemaMetadataCache {
       }
     }
 
-    return Ok(schema_metadata_map);
-  }
-
-  async fn build_views(
-    conn: &trailbase_sqlite::Connection,
-    tables: &[Table],
-  ) -> Result<HashSet<Arc<ViewMetadata>>, SchemaLookupError> {
-    let views = lookup_and_parse_all_view_schemas(conn, tables).await?;
-    let build = |view: View| {
-      // NOTE: we check during record API config validation that no temporary views are referenced.
-      // if view.temporary {
-      //   debug!("Temporary view: {}", view.name);
-      // }
-
-      return Some(Arc::new(ViewMetadata::new(view, tables)));
-    };
-
-    return Ok(views.into_iter().filter_map(build).collect());
+    return Ok(());
   }
 
   pub fn get_table(&self, name: &QualifiedName) -> Option<Arc<TableMetadata>> {

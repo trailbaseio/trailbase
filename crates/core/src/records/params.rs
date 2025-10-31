@@ -1,7 +1,7 @@
 use log::*;
 use std::collections::HashSet;
 use std::sync::Arc;
-use trailbase_schema::json::{flat_json_to_value, json_array_to_bytes};
+use trailbase_schema::json::flat_json_to_value;
 use trailbase_schema::sqlite::{Column, ColumnDataType};
 use trailbase_schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{NamedParams, Value};
@@ -564,7 +564,6 @@ mod tests {
   use trailbase_schema::sqlite::Table;
 
   use super::*;
-  use crate::constants::USER_TABLE;
   use crate::records::test_utils::json_row_from_value;
   use crate::schema_metadata::TableMetadata;
   use crate::util::id_to_b64;
@@ -611,7 +610,7 @@ mod tests {
       .try_into()
       .unwrap();
 
-    let metadata = TableMetadata::new(table.clone(), &[table], USER_TABLE);
+    let metadata = TableMetadata::new(table.clone(), &[table]);
 
     let id: [u8; 16] = uuid::Uuid::now_v7().as_bytes().clone();
     let blob: Vec<u8> = [0; 128].to_vec();

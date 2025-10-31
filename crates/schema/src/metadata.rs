@@ -44,18 +44,18 @@ impl JsonColumnMetadata {
         schema
           .validate(value)
           .map_err(|_err| JsonSchemaError::Validation)?;
-        return Ok(());
       }
       Self::Pattern(pattern) => {
         let schema =
           Validator::new(pattern).map_err(|err| JsonSchemaError::SchemaCompile(err.to_string()))?;
+
         if !schema.is_valid(value) {
-          Err(JsonSchemaError::Validation)
-        } else {
-          Ok(())
+          return Err(JsonSchemaError::Validation);
         }
       }
     }
+
+    return Ok(());
   }
 }
 
@@ -96,9 +96,7 @@ pub struct TableMetadata {
 
   /// If and which column on this table qualifies as a record PK column, i.e. integer or UUIDv7.
   pub record_pk_column: Option<usize>,
-  /// If and which columns on this table reference _user(id).
-  pub user_id_columns: Vec<usize>,
-  /// Metadata for CHECK(json_schema()) columns.
+  /// Metadata for CHECK(jsonschema()) columns.
   pub json_metadata: JsonMetadata,
 
   name_to_index: HashMap<String, usize>,
@@ -110,7 +108,7 @@ impl TableMetadata {
   ///
   /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
   /// key relationships.
-  pub fn new(table: Table, tables: &[Table], user_table_name: &str) -> Self {
+  pub fn new(table: Table, tables: &[Table]) -> Self {
     let name_to_index = HashMap::<String, usize>::from_iter(
       table
         .columns
@@ -120,14 +118,12 @@ impl TableMetadata {
     );
 
     let record_pk_column = find_record_pk_column_index_for_table(&table, tables);
-    let user_id_columns = find_user_id_foreign_key_columns(&table.columns, user_table_name);
     let json_metadata = JsonMetadata::from_columns(&table.columns);
 
     return TableMetadata {
       schema: table,
       name_to_index,
       record_pk_column,
-      user_id_columns,
       json_metadata,
     };
   }
@@ -142,10 +138,14 @@ impl TableMetadata {
     return self.name_to_index.get(key).copied();
   }
 
-  #[inline]
   pub fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
     let index = self.column_index_by_name(key)?;
     return Some((index, &self.schema.columns[index]));
+  }
+
+  pub fn record_pk_column(&self) -> Option<(usize, &Column)> {
+    let index = self.record_pk_column?;
+    return self.schema.columns.get(index).map(|c| (index, c));
   }
 }
 
@@ -194,7 +194,7 @@ pub struct ViewMetadata {
 
   name_to_index: HashMap<String, usize>,
   record_pk_column: Option<usize>,
-  json_metadata: Option<JsonMetadata>,
+  pub json_metadata: Option<JsonMetadata>,
 }
 
 impl ViewMetadata {
@@ -251,11 +251,15 @@ impl ViewMetadata {
     self.name_to_index.get(key).copied()
   }
 
-  #[inline]
   pub fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
     let index = self.column_index_by_name(key)?;
     let mapping = self.schema.column_mapping.as_ref()?;
     return Some((index, &mapping.columns[index].column));
+  }
+
+  pub fn record_pk_column(&self) -> Option<(usize, &Column)> {
+    let index = self.record_pk_column?;
+    return self.columns.as_ref()?.get(index).map(|c| (index, c));
   }
 }
 
@@ -293,11 +297,81 @@ impl Borrow<QualifiedName> for Arc<ViewMetadata> {
   }
 }
 
+pub enum TableOrView {
+  Table(Arc<TableMetadata>),
+  View(Arc<ViewMetadata>),
+}
+
+impl TableOrView {
+  pub fn qualified_name(&self) -> &QualifiedName {
+    return match self {
+      Self::Table(t) => &t.schema.name,
+      Self::View(v) => &v.schema.name,
+    };
+  }
+
+  pub fn columns(&self) -> Option<&[Column]> {
+    return match self {
+      Self::Table(t) => t.columns(),
+      Self::View(v) => v.columns(),
+    };
+  }
+
+  pub fn record_pk_column(&self) -> Option<(usize, &Column)> {
+    return match self {
+      Self::Table(t) => t.record_pk_column(),
+      Self::View(v) => v.record_pk_column(),
+    };
+  }
+}
+
+/// Contains schema metadata for all TABLEs/VIEWs attached to a connection.
+///
+/// NOTE: may references schemas belonging to different databases, we therefore look up by
+/// qualified name.
+pub struct ConnectionMetadata {
+  tables: HashMap<QualifiedName, Arc<TableMetadata>>,
+  views: HashMap<QualifiedName, Arc<ViewMetadata>>,
+}
+
+impl ConnectionMetadata {
+  pub fn from(tables: &[TableMetadata], views: &[ViewMetadata]) -> Self {
+    return Self {
+      tables: tables
+        .iter()
+        .map(|t| (t.name().clone(), Arc::new(t.clone())))
+        .collect(),
+      views: views
+        .iter()
+        .map(|v| (v.name().clone(), Arc::new(v.clone())))
+        .collect(),
+    };
+  }
+
+  pub fn find_table(&self, name: &QualifiedName) -> Option<&Arc<TableMetadata>> {
+    return self.tables.get(name);
+  }
+
+  pub fn find_view(&self, name: &QualifiedName) -> Option<&Arc<ViewMetadata>> {
+    return self.views.get(name);
+  }
+
+  pub fn find_table_or_view(&self, name: &QualifiedName) -> Option<TableOrView> {
+    if let Some(table) = self.tables.get(name) {
+      return Some(TableOrView::Table(table.clone()));
+    }
+    if let Some(view) = self.views.get(name) {
+      return Some(TableOrView::View(view.clone()));
+    }
+    return None;
+  }
+}
+
+// QUESTION: Can we get rid of this after denormalizing all the information in RecordApi?
 pub trait TableOrViewMetadata {
   fn qualified_name(&self) -> &QualifiedName;
-  fn record_pk_column(&self) -> Option<(usize, &Column)>;
-  fn json_metadata(&self) -> Option<&JsonMetadata>;
   fn columns(&self) -> Option<&[Column]>;
+  fn record_pk_column(&self) -> Option<(usize, &Column)>;
 }
 
 impl TableOrViewMetadata for TableMetadata {
@@ -309,13 +383,8 @@ impl TableOrViewMetadata for TableMetadata {
     return Some(&self.schema.columns);
   }
 
-  fn json_metadata(&self) -> Option<&JsonMetadata> {
-    return Some(&self.json_metadata);
-  }
-
   fn record_pk_column(&self) -> Option<(usize, &Column)> {
-    let index = self.record_pk_column?;
-    return self.schema.columns.get(index).map(|c| (index, c));
+    return Self::record_pk_column(self);
   }
 }
 
@@ -328,16 +397,8 @@ impl TableOrViewMetadata for ViewMetadata {
     return self.columns.as_deref();
   }
 
-  fn json_metadata(&self) -> Option<&JsonMetadata> {
-    return self.json_metadata.as_ref();
-  }
-
   fn record_pk_column(&self) -> Option<(usize, &Column)> {
-    let Some(columns) = &self.columns else {
-      return None;
-    };
-    let index = self.record_pk_column?;
-    return columns.get(index).map(|c| (index, c));
+    return Self::record_pk_column(self);
   }
 }
 
@@ -349,6 +410,7 @@ fn build_json_metadata(col: &Column) -> Option<JsonColumnMetadata> {
       }
       Ok(None) => {}
       Err(err) => {
+        // TODO: We should propagate the error.
         warn!("Failed to get JSON schema: {err}");
       }
     }
@@ -356,7 +418,7 @@ fn build_json_metadata(col: &Column) -> Option<JsonColumnMetadata> {
   None
 }
 
-pub fn extract_json_metadata(
+pub(crate) fn extract_json_metadata(
   opt: &ColumnOption,
 ) -> Result<Option<JsonColumnMetadata>, JsonSchemaError> {
   let ColumnOption::Check(check) = opt else {
@@ -631,7 +693,7 @@ mod tests {
     );
 
     let tables = [table.clone()];
-    let metadata = TableMetadata::new(table, &tables, "_user");
+    let metadata = TableMetadata::new(table, &tables);
 
     assert_eq!("table0", metadata.name().name);
     assert_eq!("col1", metadata.columns().unwrap()[2].name);
@@ -931,7 +993,7 @@ mod tests {
     ));
     let tables = [table.clone()];
 
-    let table_metadata = TableMetadata::new(table.clone(), &tables, "_user");
+    let table_metadata = TableMetadata::new(table.clone(), &tables);
 
     let mut table_set = HashSet::<TableMetadata>::new();
 

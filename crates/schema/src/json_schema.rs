@@ -423,7 +423,7 @@ mod tests {
   ) -> (Table, Validator) {
     let table = lookup_and_parse_table_schema(conn, table_name).unwrap();
 
-    let table_metadata = TableMetadata::new(table.clone(), &[table.clone()], "_user");
+    let table_metadata = TableMetadata::new(table.clone(), &[table.clone()]);
     let (schema, _) = build_json_schema(
       &table_metadata.name().name,
       &table_metadata.schema.columns,
