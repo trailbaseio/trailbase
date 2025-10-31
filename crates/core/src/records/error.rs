@@ -40,8 +40,12 @@ impl From<trailbase_sqlite::Error> for RecordError {
           match err.extended_code {
             // List of error codes: https://www.sqlite.org/rescode.html
             1 => {
-              // This error is returned if a CHECK constraint, e.g. jsonschema, rejects an input on
-              // insert. Surprisingly that's not a 275 :shrug:. Error on the side of a client-error.
+              // This generic error is returned, e.g. when a CHECK constraint like `is_json` is
+              // violated on insert/update. Surprisingly that's not a 275 :shrug:.
+              // Note that we currently validate input with a `json_schema` constraint twice. First
+              // when constructing the SqlValue::Text input parameter and then in the actual SQLite
+              // extension function, i.e. a CHECK violation should be caught early. For everything
+              // else error on the side of a client-error.
               #[cfg(debug_assertions)]
               log::debug!("generic SQLite error code=1: {err}");
 

@@ -150,39 +150,24 @@ impl Params {
   /// files.
   pub fn for_insert<S: SchemaAccessor>(
     accessor: &S,
-    json: JsonRow,
+    row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Result<Self, ParamsError> {
-    let mut named_params = NamedParams::with_capacity(json.len());
-    let mut column_names = Vec::with_capacity(json.len());
-    let mut column_indexes = Vec::with_capacity(json.len());
+    let mut named_params = NamedParams::with_capacity(row.len());
+    let mut column_names = Vec::with_capacity(row.len());
+    let mut column_indexes = Vec::with_capacity(row.len());
 
     let mut files: FileMetadataContents = vec![];
 
     // Insert parameters case.
-    for (key, value) in json {
+    for (key, value) in row {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
       let Some((index, col, json_meta)) = accessor.column_by_name(&key) else {
         continue;
       };
 
-      let (param, json_files) =
-        extract_params_and_files_from_json(col, json_meta, value).map_err(|err| {
-          #[cfg(debug_assertions)]
-          {
-            let known: Vec<String> = trailbase_schema::registry::get_schemas()
-              .into_iter()
-              .map(|schema| schema.name)
-              .collect();
-
-            log::debug!(
-              "Parameter conversion failed: {err},\n idx={index}, col={col:?}, json={json_meta:?}, known_schemas={known:?}"
-            );
-          }
-          return err;
-        })?;
-
+      let (param, json_files) = extract_params_and_files_from_json(col, json_meta, value)?;
       if let Some(json_files) = json_files {
         // Note: files provided as a multipart form upload are handled below. They need more
         // special handling to establish the field.name to column mapping.
@@ -244,19 +229,19 @@ impl Params {
 
   pub fn for_update<S: SchemaAccessor>(
     accessor: &S,
-    json: JsonRow,
+    row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
     pk_column_name: String,
     pk_column_value: Value,
   ) -> Result<Self, ParamsError> {
-    let mut named_params = NamedParams::with_capacity(json.len() + 1);
-    let mut column_names = Vec::with_capacity(json.len() + 1);
-    let mut column_indexes = Vec::with_capacity(json.len() + 1);
+    let mut named_params = NamedParams::with_capacity(row.len() + 1);
+    let mut column_names = Vec::with_capacity(row.len() + 1);
+    let mut column_indexes = Vec::with_capacity(row.len() + 1);
 
     let mut files: FileMetadataContents = vec![];
 
     // Update parameters case.
-    for (key, value) in json {
+    for (key, value) in row {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
       let Some((index, col, json_meta)) = accessor.column_by_name(&key) else {
@@ -450,10 +435,9 @@ fn extract_files_from_multipart<S: SchemaAccessor>(
     };
 
     let Some(JsonColumnMetadata::SchemaName(schema_name)) = &json_meta else {
-      return Err(ParamsError::Column("Expected json column"));
+      return Err(ParamsError::Column("Expected json file column"));
     };
 
-    let value = Value::Text(serde_json::to_string(&file_metadata)?);
     match schema_name.as_str() {
       "std.FileUpload" => {
         if !uploaded_files.insert(&col.name) {
@@ -462,12 +446,18 @@ fn extract_files_from_multipart<S: SchemaAccessor>(
           ));
         }
 
-        named_params.push((prefix_colon(&col.name).into(), value));
+        named_params.push((
+          prefix_colon(&col.name).into(),
+          Value::Text(serde_json::to_string(&file_metadata)?),
+        ));
         column_names.push(col.name.to_string());
         column_indexes.push(index);
       }
       "std.FileUploads" => {
-        named_params.push((prefix_colon(&col.name).into(), value));
+        named_params.push((
+          prefix_colon(&col.name).into(),
+          Value::Text(serde_json::to_string(&file_metadata)?),
+        ));
         column_names.push(col.name.to_string());
         column_indexes.push(index);
       }
@@ -487,80 +477,73 @@ fn extract_files_from_multipart<S: SchemaAccessor>(
 
 fn extract_params_and_files_from_json(
   col: &Column,
-  json_meta: Option<&JsonColumnMetadata>,
+  json_metadata: Option<&JsonColumnMetadata>,
   value: serde_json::Value,
 ) -> Result<(Value, Option<FileMetadataContents>), ParamsError> {
+  // If this is *not* a JSON column convert the value trivially.
+  let Some(json_metadata) = json_metadata else {
+    return Ok((flat_json_to_value(col.data_type, value)?, None));
+  };
+
+  // So this *is* a JSON column => we need to be smarter.
+  if col.data_type != ColumnDataType::Text {
+    return Err(ParamsError::NestedObject(format!(
+      "Column data mismatch for: {col:?}",
+    )));
+  }
+
+  // Handle file columns specially, i.e. convert the JSON.
+  match json_metadata {
+    JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
+      let file_upload: FileUploadInput = serde_json::from_value(value)?;
+
+      let (_col_name, metadata, content) = file_upload.consume()?;
+      let param = Value::Text(serde_json::to_string(&metadata)?);
+
+      return Ok((param, Some(vec![(metadata, content)])));
+    }
+    JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
+      let file_upload_vec: Vec<FileUploadInput> = serde_json::from_value(value)?;
+
+      let uploads: FileMetadataContents = file_upload_vec
+        .into_iter()
+        .map(|file| {
+          let (_col_name, metadata, content) = file.consume()?;
+          return Ok((metadata, content));
+        })
+        .collect::<Result<Vec<_>, ParamsError>>()?;
+
+      let param = Value::Text(serde_json::to_string(&FileUploads(
+        uploads
+          .iter()
+          .map(|(metadata, _content)| metadata.clone())
+          .collect(),
+      ))?);
+
+      return Ok((param, Some(uploads)));
+    }
+    _ => {}
+  }
+
+  // NOTE: We're doing early validation here for JSON inputs. This leads to redudant double
+  // validation down the line. We could also *not* do it and leave it to the SQLite `jsonschema`
+  // extension function, however this may help to reduce SQLite congestion for invalid inputs.
   return match value {
-    serde_json::Value::Object(ref _map) => {
-      // Only text columns are allowed to store nested JSON as text.
-      if col.data_type != ColumnDataType::Text {
-        return Err(ParamsError::NestedObject(format!(
-          "Column data mismatch for: {col:?}",
-        )));
-      }
+    serde_json::Value::String(s) => {
+      // WARN: It's completely unclear if we should allow passing JSON objects as string in a
+      // request. We just used to accept it. In theory, accepting a string when the JSON
+      // schema expects an object is a loop-hole. We may want to remove this in the future
+      // :shrug:.
+      let json_value: serde_json::Value = serde_json::from_str(&s)
+        .map_err(|err| ParamsError::NestedObject(format!("invalid json: {err}")))?;
 
-      let Some(ref json) = json_meta else {
-        return Err(ParamsError::NestedObject(format!(
-          "Missing JSON metadata for: {col:?}",
-        )));
-      };
-
-      // By default, nested json will be serialized to text since that's what sqlite expected.
-      // For FileUpload columns we have special handling to extract the actual payload and
-      // convert the FileUploadInput into an actual FileUpload schema json.
-      match json {
-        JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
-          let file_upload: FileUploadInput = serde_json::from_value(value)?;
-
-          let (_col_name, metadata, content) = file_upload.consume()?;
-          let param = Value::Text(serde_json::to_string(&metadata)?);
-
-          Ok((param, Some(vec![(metadata, content)])))
-        }
-        _ => {
-          json.validate(&value)?;
-          Ok((Value::Text(value.to_string()), None))
-        }
-      }
+      json_metadata.validate(&json_value)?;
+      Ok((Value::Text(s), None))
     }
-    serde_json::Value::Array(ref arr) => {
-      // If the we're building a Param for a schema column, unpack the json (and potentially files)
-      // and validate it.
-      match col.data_type {
-        ColumnDataType::Blob => return Ok((Value::Blob(json_array_to_bytes(arr)?), None)),
-        ColumnDataType::Text => {
-          match json_meta {
-            Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUploads" => {
-              let file_upload_vec: Vec<FileUploadInput> = serde_json::from_value(value)?;
-
-              // TODO: Optimize the copying here. Not very critical.
-              let mut temp: Vec<FileUpload> = vec![];
-              let mut uploads: FileMetadataContents = vec![];
-              for file in file_upload_vec {
-                let (_col_name, metadata, content) = file.consume()?;
-                temp.push(metadata.clone());
-                uploads.push((metadata, content));
-              }
-
-              let param = Value::Text(serde_json::to_string(&FileUploads(temp))?);
-
-              return Ok((param, Some(uploads)));
-            }
-            Some(schema) => {
-              schema.validate(&value)?;
-              return Ok((Value::Text(value.to_string()), None));
-            }
-            _ => {}
-          }
-        }
-        _ => {}
-      }
-
-      Err(ParamsError::NestedArray(format!(
-        "Received nested array for column: {col:?}",
-      )))
+    value => {
+      json_metadata.validate(&value)?;
+      Ok((Value::Text(value.to_string()), None))
     }
-    x => Ok((flat_json_to_value(col.data_type, x)?, None)),
   };
 }
 
