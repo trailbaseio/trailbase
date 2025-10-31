@@ -240,6 +240,7 @@ mod tests {
       "foo",
       Some(trailbase_extension::jsonschema::Schema::from(pattern, None, false).unwrap()),
     );
+    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
 
     conn
       .execute(
@@ -256,7 +257,7 @@ mod tests {
     let table = lookup_and_parse_table_schema(conn, "test_table", Some("main"))
       .await
       .unwrap();
-    let metadata = TableMetadata::new(table.clone(), &[table]);
+    let metadata = TableMetadata::new(&registry, table.clone(), &[table]);
 
     let insert = |json: serde_json::Value| async move {
       conn

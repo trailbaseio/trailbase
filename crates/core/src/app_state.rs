@@ -265,10 +265,10 @@ impl AppState {
   pub async fn rebuild_schema_cache(
     &self,
   ) -> Result<(), crate::schema_metadata::SchemaLookupError> {
-    self
-      .state
-      .schema_metadata
-      .set(Arc::new(SchemaMetadataCache::new(&self.state.conn).await?));
+    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+    self.state.schema_metadata.set(Arc::new(
+      SchemaMetadataCache::new(&self.state.conn, &registry).await?,
+    ));
 
     return Ok(());
   }
@@ -462,7 +462,8 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   assert!(new);
   let logs_conn = crate::connection::init_logs_db(None)?;
 
-  let schema_metadata = Arc::new(SchemaMetadataCache::new(&conn).await?);
+  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+  let mut schema_metadata = SchemaMetadataCache::new(&conn, &registry).await?;
 
   let TestStateOptions { config, mailer } = options.unwrap_or_default();
   let config = {
@@ -483,6 +484,8 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
         Some(trailbase_extension::jsonschema::Schema::from(schema_json, None, false).unwrap()),
       );
     }
+
+    schema_metadata = SchemaMetadataCache::new(&conn, &registry).await?;
 
     Reactive::new(config)
   };
@@ -508,7 +511,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     build_objectstore(&data_dir, None).unwrap().into()
   };
 
-  let schema_metadata = Reactive::new(schema_metadata);
+  let schema_metadata = Reactive::new(Arc::new(schema_metadata));
   let record_apis: Reactive<Arc<Vec<(String, RecordApi)>>> = {
     let conn = conn.clone();
     let m = (&config, &schema_metadata).merge();

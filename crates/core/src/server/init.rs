@@ -86,7 +86,8 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   let (conn, new_db) =
     crate::connection::init_main_db(Some(&args.data_dir), Some(extra_databases))?;
 
-  let mut schema_metadata = SchemaMetadataCache::new(&conn).await?;
+  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+  let mut schema_metadata = SchemaMetadataCache::new(&conn, &registry).await?;
 
   // Read config or write default one.
   let config = load_or_init_config_textproto(&args.data_dir, &schema_metadata).await?;
@@ -122,7 +123,8 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     // JSON schema registry. It would be cleaner to build SchemaMatadataCache only after
     // registering custom schemas and validating the config only against plain TABLE/VIEW
     // metadata.
-    schema_metadata = SchemaMetadataCache::new(&conn).await?;
+    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+    schema_metadata = SchemaMetadataCache::new(&conn, &registry).await?;
   }
 
   // Load the `<depot>/metadata.textproto`.

@@ -486,7 +486,12 @@ mod tests {
       .await
       .unwrap();
 
-    let schema_metadata = SchemaMetadataCache::new(conn).await.unwrap();
+    let schema_metadata = SchemaMetadataCache::new(
+      conn,
+      &trailbase_extension::jsonschema::JsonSchemaRegistry::default(),
+    )
+    .await
+    .unwrap();
     let table_metadata = schema_metadata
       .get_table(&QualifiedName::parse("table").unwrap())
       .unwrap();

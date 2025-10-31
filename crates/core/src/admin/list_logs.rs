@@ -152,7 +152,12 @@ pub async fn list_logs_handler(
   // NOTE: We cannot use state.schema_metadata() here, which is managed via a different database
   // *and* connection.
   let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME, None).await?;
-  let schema_metadata = TableMetadata::new(table.clone(), &[table]);
+
+  let schema_metadata = TableMetadata::new(
+    &trailbase_extension::jsonschema::JsonSchemaRegistry::default(),
+    table.clone(),
+    &[table],
+  );
   let filter_where_clause =
     build_filter_where_clause("log", &schema_metadata.schema.columns, filter_params)?;
 

@@ -3,6 +3,7 @@ use log::*;
 use std::collections::HashSet;
 use std::sync::Arc;
 use thiserror::Error;
+use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::{QualifiedName, SchemaError, Table, View};
 use trailbase_sqlite::params;
@@ -20,7 +21,10 @@ pub struct SchemaMetadataCache {
 }
 
 impl SchemaMetadataCache {
-  pub async fn new(conn: &trailbase_sqlite::Connection) -> Result<Self, SchemaLookupError> {
+  pub async fn new(
+    conn: &trailbase_sqlite::Connection,
+    registry: &JsonSchemaRegistry,
+  ) -> Result<Self, SchemaLookupError> {
     let tables = lookup_and_parse_all_table_schemas(conn).await?;
     let views = lookup_and_parse_all_view_schemas(conn, &tables).await?;
 
@@ -30,7 +34,7 @@ impl SchemaMetadataCache {
           .iter()
           .cloned()
           .map(|t: Table| {
-            return Arc::new(TableMetadata::new(t, &tables));
+            return Arc::new(TableMetadata::new(registry, t, &tables));
           })
           .collect();
 
@@ -42,7 +46,7 @@ impl SchemaMetadataCache {
       },
       views: views
         .into_iter()
-        .map(|view: View| Arc::new(ViewMetadata::new(view, &tables)))
+        .map(|view: View| Arc::new(ViewMetadata::new(registry, view, &tables)))
         .collect(),
     });
   }
@@ -253,6 +257,7 @@ pub async fn lookup_and_parse_all_view_schemas(
 mod tests {
   use axum::extract::{Json, Path, Query, RawQuery, State};
   use serde_json::json;
+  use trailbase_extension::jsonschema::JsonSchemaRegistry;
   use trailbase_schema::QualifiedName;
   use trailbase_schema::json_schema::{Expand, JsonSchemaMode, build_json_schema_expanded};
   use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption};
@@ -377,6 +382,7 @@ mod tests {
     let test_schema_metadata = state.schema_metadata().get_table(&table_name).unwrap();
 
     let (validator, schema) = build_json_schema_expanded(
+      &JsonSchemaRegistry::default(),
       &table_name.name,
       &test_schema_metadata.schema.columns,
       JsonSchemaMode::Select,

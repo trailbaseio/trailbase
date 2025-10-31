@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use thiserror::Error;
+use trailbase_extension::jsonschema::JsonSchemaRegistry;
 
 use crate::sqlite::{
   Column, ColumnDataType, ColumnMapping, ColumnOption, QualifiedName, Table, View,
@@ -35,10 +36,13 @@ pub enum JsonColumnMetadata {
 }
 
 impl JsonColumnMetadata {
-  pub fn validate(&self, value: &serde_json::Value) -> Result<(), JsonSchemaError> {
+  pub fn validate(
+    &self,
+    registry: &JsonSchemaRegistry,
+    value: &serde_json::Value,
+  ) -> Result<(), JsonSchemaError> {
     match self {
       Self::SchemaName(name) => {
-        let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
         let Some(entry) = registry.get_schema(name) else {
           return Err(JsonSchemaError::NotFound(name.to_string()));
         };
@@ -71,8 +75,11 @@ pub struct JsonMetadata {
 }
 
 impl JsonMetadata {
-  fn from_columns(columns: &[Column]) -> Self {
-    let columns: Vec<_> = columns.iter().map(build_json_metadata).collect();
+  fn from_columns(registry: &JsonSchemaRegistry, columns: &[Column]) -> Self {
+    let columns: Vec<_> = columns
+      .iter()
+      .map(|c| build_json_metadata(registry, c))
+      .collect();
 
     return Self {
       file_column_indexes: find_file_column_indexes(&columns),
@@ -111,7 +118,7 @@ impl TableMetadata {
   ///
   /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
   /// key relationships.
-  pub fn new(table: Table, tables: &[Table]) -> Self {
+  pub fn new(registry: &JsonSchemaRegistry, table: Table, tables: &[Table]) -> Self {
     let name_to_index = HashMap::<String, usize>::from_iter(
       table
         .columns
@@ -121,7 +128,7 @@ impl TableMetadata {
     );
 
     let record_pk_column = find_record_pk_column_index_for_table(&table, tables);
-    let json_metadata = JsonMetadata::from_columns(&table.columns);
+    let json_metadata = JsonMetadata::from_columns(registry, &table.columns);
 
     return TableMetadata {
       schema: table,
@@ -205,7 +212,7 @@ impl ViewMetadata {
   ///
   /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
   /// key relationships.
-  pub fn new(view: View, tables: &[Table]) -> Self {
+  pub fn new(registry: &JsonSchemaRegistry, view: View, tables: &[Table]) -> Self {
     return match view.column_mapping {
       Some(ref column_mapping) => {
         let columns: Vec<Column> = column_mapping
@@ -223,7 +230,7 @@ impl ViewMetadata {
 
         ViewMetadata {
           name_to_index,
-          json_metadata: Some(JsonMetadata::from_columns(&columns)),
+          json_metadata: Some(JsonMetadata::from_columns(registry, &columns)),
           columns: Some(columns),
           record_pk_column: find_record_pk_column_index_for_view(column_mapping, tables),
           schema: view,
@@ -405,9 +412,9 @@ impl TableOrViewMetadata for ViewMetadata {
   }
 }
 
-fn build_json_metadata(col: &Column) -> Option<JsonColumnMetadata> {
+fn build_json_metadata(registry: &JsonSchemaRegistry, col: &Column) -> Option<JsonColumnMetadata> {
   for opt in &col.options {
-    match extract_json_metadata(opt) {
+    match extract_json_metadata(registry, opt) {
       Ok(Some(metadata)) => {
         return Some(metadata);
       }
@@ -422,6 +429,7 @@ fn build_json_metadata(col: &Column) -> Option<JsonColumnMetadata> {
 }
 
 pub(crate) fn extract_json_metadata(
+  registry: &JsonSchemaRegistry,
   opt: &ColumnOption,
 ) -> Result<Option<JsonColumnMetadata>, JsonSchemaError> {
   let ColumnOption::Check(check) = opt else {
@@ -437,7 +445,6 @@ pub(crate) fn extract_json_metadata(
   if let Some(cap) = SCHEMA_RE.captures(check) {
     let name = &cap["name"];
 
-    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
     let Some(_schema) = registry.get_schema(name) else {
       return Err(JsonSchemaError::NotFound(format!(
         "Json schema {name} not found"
@@ -692,7 +699,8 @@ mod tests {
     );
 
     let tables = [table.clone()];
-    let metadata = TableMetadata::new(table, &tables);
+    let registry = JsonSchemaRegistry::default();
+    let metadata = TableMetadata::new(&registry, table, &tables);
 
     assert_eq!("table0", metadata.name().name);
     assert_eq!("col1", metadata.columns().unwrap()[2].name);
@@ -717,7 +725,7 @@ mod tests {
       assert_eq!(view_columns[1].column.name, "col1");
       assert_eq!(view_columns[1].column.data_type, ColumnDataType::Blob);
 
-      let view_metadata = ViewMetadata::new(table_view, &tables);
+      let view_metadata = ViewMetadata::new(&registry, table_view, &tables);
 
       assert!(view_metadata.record_pk_column().is_none());
       assert_eq!(view_metadata.columns().as_ref().unwrap().len(), 2);
@@ -732,7 +740,7 @@ mod tests {
       assert_eq!(table_view.query, query);
       assert_eq!(table_view.temporary, false);
 
-      let view_metadata = ViewMetadata::new(table_view, &tables);
+      let view_metadata = ViewMetadata::new(&registry, table_view, &tables);
 
       let uuidv7_col = view_metadata.record_pk_column().unwrap();
       let columns = view_metadata.columns().unwrap();
@@ -743,6 +751,8 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_with_subquery() {
+    let registry = JsonSchemaRegistry::default();
+
     let table_a = parse_create_table(
       "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
     );
@@ -764,7 +774,7 @@ mod tests {
       assert_eq!(view_columns[1].column.name, "data");
       assert_eq!(view_columns[1].column.data_type, ColumnDataType::Text);
 
-      let metadata = ViewMetadata::new(view, &tables);
+      let metadata = ViewMetadata::new(&registry, view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
       assert_eq!(pk_index, 0);
       assert_eq!(pk_col.name, "id");
@@ -781,7 +791,7 @@ mod tests {
       assert_eq!(view_columns[0].column.name, "id");
       assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
 
-      let metadata = ViewMetadata::new(view, &tables);
+      let metadata = ViewMetadata::new(&registry, view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
       assert_eq!(pk_index, 0);
       assert_eq!(pk_col.name, "id");
@@ -798,7 +808,7 @@ mod tests {
       assert_eq!(view_columns[0].column.name, "id");
       assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
 
-      let metadata = ViewMetadata::new(view, &tables);
+      let metadata = ViewMetadata::new(&registry, view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
       assert_eq!(pk_index, 0);
       assert_eq!(pk_col.name, "id");
@@ -816,6 +826,8 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_with_joins() {
+    let registry = JsonSchemaRegistry::default();
+
     let table_a = parse_create_table(
       "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
     );
@@ -847,7 +859,7 @@ mod tests {
       assert_eq!(view_columns[1].column.name, "fk");
       assert_eq!(view_columns[1].column.data_type, ColumnDataType::Integer);
 
-      let metadata = ViewMetadata::new(view, &tables);
+      let metadata = ViewMetadata::new(&registry, view, &tables);
       let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
       assert_eq!(pk_index, 2);
       assert_eq!(pk_col.name, "id");
@@ -869,7 +881,7 @@ mod tests {
         )
         .unwrap();
 
-        let metadata = ViewMetadata::new(view, &tables);
+        let metadata = ViewMetadata::new(&registry, view, &tables);
         assert_eq!(
           expected,
           metadata.record_pk_column().map(|c| c.0),
@@ -881,6 +893,8 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_with_group_by() {
+    let registry = JsonSchemaRegistry::default();
+
     let table_a = parse_create_table(
       "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
     );
@@ -905,7 +919,7 @@ mod tests {
           let view = parse_create_view(sql, &tables).unwrap();
           assert!(view.column_mapping.is_some(), "{i}: {sql}");
 
-          let metadata = ViewMetadata::new(view, &tables);
+          let metadata = ViewMetadata::new(&registry, view, &tables);
           assert_eq!(Some(1), metadata.record_pk_column().map(|c| c.0));
         }
       }
@@ -917,7 +931,7 @@ mod tests {
         )
         .unwrap();
 
-        let metadata = ViewMetadata::new(view, &tables);
+        let metadata = ViewMetadata::new(&registry, view, &tables);
         assert_eq!(Some(1), metadata.record_pk_column().map(|c| c.0));
       }
     }
@@ -925,6 +939,8 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_from_issue_99() {
+    let registry = JsonSchemaRegistry::default();
+
     let authors_table = parse_create_table(
       "
         CREATE TABLE authors (
@@ -958,7 +974,7 @@ mod tests {
       )
       .unwrap();
 
-      let metadata = ViewMetadata::new(view, &tables);
+      let metadata = ViewMetadata::new(&registry, view, &tables);
       assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.0));
     }
 
@@ -975,13 +991,15 @@ mod tests {
       )
       .unwrap();
 
-      let metadata = ViewMetadata::new(view, &tables);
+      let metadata = ViewMetadata::new(&registry, view, &tables);
       assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.0));
     }
   }
 
   #[test]
   fn test_metadata_hash_set_by_name() {
+    let registry = JsonSchemaRegistry::default();
+
     let table_name = QualifiedName {
       name: "table_name".to_string(),
       database_schema: Some("main".to_string()),
@@ -992,7 +1010,7 @@ mod tests {
     ));
     let tables = [table.clone()];
 
-    let table_metadata = TableMetadata::new(table.clone(), &tables);
+    let table_metadata = TableMetadata::new(&registry, table.clone(), &tables);
 
     let mut table_set = HashSet::<TableMetadata>::new();
 
@@ -1017,7 +1035,7 @@ mod tests {
       &tables,
     )
     .unwrap();
-    let view_metadata = Arc::new(ViewMetadata::new(view, &[table.clone()]));
+    let view_metadata = Arc::new(ViewMetadata::new(&registry, view, &[table.clone()]));
 
     let mut view_set = HashSet::<Arc<ViewMetadata>>::new();
 

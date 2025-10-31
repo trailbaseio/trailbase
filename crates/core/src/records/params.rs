@@ -528,6 +528,7 @@ fn extract_params_and_files_from_json(
   // NOTE: We're doing early validation here for JSON inputs. This leads to redudant double
   // validation down the line. We could also *not* do it and leave it to the SQLite `jsonschema`
   // extension function, however this may help to reduce SQLite congestion for invalid inputs.
+  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
   return match value {
     serde_json::Value::String(s) => {
       // WARN: It's completely unclear if we should allow passing JSON objects as string in a
@@ -537,11 +538,11 @@ fn extract_params_and_files_from_json(
       let json_value: serde_json::Value = serde_json::from_str(&s)
         .map_err(|err| ParamsError::NestedObject(format!("invalid json: {err}")))?;
 
-      json_metadata.validate(&json_value)?;
+      json_metadata.validate(&registry, &json_value)?;
       Ok((Value::Text(s), None))
     }
     value => {
-      json_metadata.validate(&value)?;
+      json_metadata.validate(&registry, &value)?;
       Ok((Value::Text(value.to_string()), None))
     }
   };
@@ -591,6 +592,7 @@ mod tests {
         .unwrap(),
       ),
     );
+    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
 
     const ID_COL: &str = "myid";
     const ID_COL_PLACEHOLDER: &str = ":myid";
@@ -614,7 +616,7 @@ mod tests {
       .try_into()
       .unwrap();
 
-    let metadata = TableMetadata::new(table.clone(), &[table]);
+    let metadata = TableMetadata::new(&registry, table.clone(), &[table]);
 
     let id: [u8; 16] = uuid::Uuid::now_v7().as_bytes().clone();
     let blob: Vec<u8> = [0; 128].to_vec();
