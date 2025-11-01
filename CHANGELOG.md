@@ -1,3 +1,12 @@
+## v0.20.6
+
+- Overhaul internal DB & JSON schema abstractions:
+  - Introduce an explicit JsonSchemaRegistry abstractions and injected it where needed, making our initialization order challenges more explicit.
+  - Remove unused and redundant JSON schema registry abstractions.
+  - Remove TableOrViewMetadata trait in favor of sealed tagged union.
+  - Simplify expanded FK column abstractions.
+- Fix form input validation issue when inserting/updating records in the admin UI.
+
 ## v0.20.5
 
 - Fix initialization order issue with custom schemas. DB schema metadata, which also contains JSON metadata, has to be (re-)loaded after registering custom schemas (#170).
