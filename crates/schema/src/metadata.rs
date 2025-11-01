@@ -117,22 +117,17 @@ impl TableMetadata {
   /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
   /// key relationships.
   pub fn new(registry: &JsonSchemaRegistry, table: Table, tables: &[Table]) -> Self {
-    let name_to_index = HashMap::<String, usize>::from_iter(
-      table
-        .columns
-        .iter()
-        .enumerate()
-        .map(|(index, col)| (col.name.clone(), index)),
-    );
-
-    let record_pk_column = find_record_pk_column_index_for_table(&table, tables);
-    let json_metadata = JsonMetadata::from_columns(registry, &table.columns);
-
     return TableMetadata {
+      record_pk_column: find_record_pk_column_index_for_table(&table, tables),
+      json_metadata: JsonMetadata::from_columns(registry, &table.columns),
+      name_to_index: HashMap::<String, usize>::from_iter(
+        table
+          .columns
+          .iter()
+          .enumerate()
+          .map(|(index, col)| (col.name.clone(), index)),
+      ),
       schema: table,
-      name_to_index,
-      record_pk_column,
-      json_metadata,
     };
   }
 
@@ -264,6 +259,8 @@ impl<'a> TableOrView<'a> {
     };
   }
 }
+
+// TODO: Add a JSON less flavor.
 
 /// Contains schema metadata for all TABLEs/VIEWs attached to a connection.
 ///
