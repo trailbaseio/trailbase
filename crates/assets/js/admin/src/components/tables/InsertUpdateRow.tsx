@@ -251,7 +251,7 @@ function buildSqlIntegerFormField(opts: SqlFormFieldOptions) {
             disabled={disabled()}
             type={disabled() ? "number" : "text"}
             step={1}
-            pattern={"[ ]*[0-9]+[ ]*"}
+            pattern={"[-+]?[0-9]+"}
             value={getInteger(field().state.value) ?? ""}
             placeholder={opts.placeholder(initialValue, disabled())}
             onBlur={field().handleBlur}
@@ -298,7 +298,7 @@ function buildSqlRealFormField(opts: SqlFormFieldOptions) {
           <TextFieldInput
             disabled={disabled()}
             type={"text"}
-            pattern="[ ]*[0-9]+[.,]?[0-9]*[ ]*"
+            pattern="[-+]?[0-9]*\.?[0-9]+"
             value={getReal(field().state.value) ?? ""}
             placeholder={opts.placeholder(initialValue, disabled())}
             autocomplete={false}
