@@ -68,6 +68,16 @@ async fn async_main() -> Result<(), BoxError> {
 
     println!("trail {tag} ({date})");
 
+    if let Ok(conn) = trailbase_sqlite::Connection::open_in_memory() {
+      let sqlite_version: String = conn
+        .read_query_value("SELECT sqlite_version();", ())
+        .await
+        .unwrap_or_default()
+        .unwrap_or_default();
+
+      println!("sqlite: {sqlite_version}");
+    }
+
     return Ok(());
   }
 

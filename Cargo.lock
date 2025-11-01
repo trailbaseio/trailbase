@@ -7980,6 +7980,7 @@ dependencies = [
  "trailbase",
  "trailbase-build",
  "trailbase-extension",
+ "trailbase-sqlite",
  "url",
  "utoipa",
  "utoipa-swagger-ui",
