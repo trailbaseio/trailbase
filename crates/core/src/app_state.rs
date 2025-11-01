@@ -10,13 +10,15 @@ use trailbase_schema::QualifiedName;
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
 use crate::config::proto::{Config, RecordApiConfig, S3StorageConfig, hash_config};
-use crate::config::{validate_config, write_config_and_vault_textproto};
+use crate::config::{ConfigError, validate_config, write_config_and_vault_textproto};
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
-use crate::schema_metadata::{ConnectionMetadata, build_connection_metadata};
+use crate::schema_metadata::{
+  ConnectionMetadata, build_connection_metadata_and_install_file_deletion_triggers,
+};
 use crate::wasm::Runtime;
 
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
@@ -266,9 +268,26 @@ impl AppState {
     &self,
   ) -> Result<(), crate::schema_metadata::SchemaLookupError> {
     let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-    self.state.connection_metadata.set(Arc::new(
-      build_connection_metadata(&self.state.conn, &registry).await?,
-    ));
+
+    let connection_metadata =
+      build_connection_metadata_and_install_file_deletion_triggers(&self.state.conn, &registry)
+        .await?;
+
+    // We typically rebuild the schema representations when the DB schemas change, which in turn
+    // can invalidate the config, e.g. an API may reference a deleted table. Let's make sure to
+    // check. Note however that this is tricky to deal with, since the schema changes have already
+    // happened rendering the current config invalid. Unlike a config update, it's too late to
+    // reject anything.
+    let config = self.get_config();
+    validate_config(&connection_metadata, &config).map_err(|err| {
+      log::error!("Schema change invalidated config: {err}");
+      return crate::schema_metadata::SchemaLookupError::Other(err.into());
+    })?;
+
+    self
+      .state
+      .connection_metadata
+      .set(Arc::new(connection_metadata));
 
     return Ok(());
   }
@@ -326,20 +345,19 @@ impl AppState {
     &self,
     config: Config,
     hash: Option<String>,
-  ) -> Result<(), crate::config::ConfigError> {
-    // FIXME: right now we're not updating the schema registry.
-
+  ) -> Result<(), ConfigError> {
     validate_config(&self.connection_metadata(), &config)?;
 
     match hash {
       Some(hash) => {
-        let mut error: Option<crate::config::ConfigError> = None;
+        let mut error: Option<ConfigError> = None;
         let err = &mut error;
         self.state.config.update(move |old| {
           if hash_config(old) != hash {
-            let _ = err.insert(crate::config::ConfigError::Update(
+            let _ = err.insert(ConfigError::Update(
               "Config update failed: mismatching or stale hash".to_string(),
             ));
+
             return old.clone();
           }
 
@@ -350,14 +368,24 @@ impl AppState {
           return Err(err);
         }
       }
-      None => self.state.config.set(config),
+      None => {
+        self.state.config.set(config);
+      }
     };
+
+    let new_config = self.get_config();
+
+    if update_json_schema_registry(&new_config).unwrap_or(true)
+      && let Err(err) = self.rebuild_schema_cache().await
+    {
+      log::warn!("reloading JSON schema cache failed: {err}");
+    }
 
     // Write new config to the file system.
     return write_config_and_vault_textproto(
       self.data_dir(),
       &self.connection_metadata(),
-      &self.get_config(),
+      &new_config,
     )
     .await;
   }
@@ -405,6 +433,43 @@ impl AppState {
 
     return Ok(());
   }
+}
+
+/// Returns true if schemas were registered.
+pub(crate) fn update_json_schema_registry(config: &Config) -> Result<bool, ConfigError> {
+  if !config.schemas.is_empty() {
+    let schemas: Vec<_> = config
+      .schemas
+      .iter()
+      .map(|s| {
+        // Any panics here should be captured by config validation during load above.
+        let (Some(name), Some(schema)) = (&s.name, &s.schema) else {
+          return Err(ConfigError::Invalid(format!(
+            "Schema config invalid entry: {s:?}"
+          )));
+        };
+
+        let schema_json = serde_json::from_str(schema).map_err(|err| {
+          return ConfigError::Invalid(format!("Invalid schema definition for '{name}': {err}"));
+        })?;
+
+        return Ok((name.clone(), schema_json));
+      })
+      .collect::<Result<Vec<_>, _>>()?;
+
+    debug!(
+      "Initializing JSON schemas from config: {schemas:?}",
+      schemas = schemas.iter().map(|(name, _)| name.as_str())
+    );
+
+    trailbase_schema::registry::override_json_schema_registry(schemas).map_err(|err| {
+      return ConfigError::Update(format!("Update of JSON schema registry failed: {err}"));
+    })?;
+
+    return Ok(true);
+  }
+
+  return Ok(false);
 }
 
 /// Construct a fabricated config for tests and make sure it's valid.
@@ -463,7 +528,8 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let logs_conn = crate::connection::init_logs_db(None)?;
 
   let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-  let mut connection_metadata = build_connection_metadata(&conn, &registry).await?;
+  let mut connection_metadata =
+    build_connection_metadata_and_install_file_deletion_triggers(&conn, &registry).await?;
 
   let TestStateOptions { config, mailer } = options.unwrap_or_default();
   let config = {
@@ -474,18 +540,22 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     // NOTE: The below "append" semantics are different from prod's override behavior, to avoid
     // races between concurrent tests. The registry needs to be global for the sqlite extensions
     // to access (unless we find a better way to bind the two).
-    for schema_config in &config.schemas {
-      let crate::config::proto::JsonSchemaConfig { name, schema } = schema_config;
+    if !config.schemas.is_empty() {
+      for schema_config in &config.schemas {
+        let crate::config::proto::JsonSchemaConfig { name, schema } = schema_config;
 
-      let schema_json: serde_json::Value = serde_json::from_str(schema.as_ref().unwrap()).unwrap();
+        let schema_json: serde_json::Value =
+          serde_json::from_str(schema.as_ref().unwrap()).unwrap();
 
-      trailbase_extension::jsonschema::set_schema_for_test(
-        name.as_ref().unwrap(),
-        Some(trailbase_extension::jsonschema::Schema::from(schema_json, None, false).unwrap()),
-      );
+        trailbase_extension::jsonschema::set_schema_for_test(
+          name.as_ref().unwrap(),
+          Some(trailbase_extension::jsonschema::Schema::from(schema_json, None, false).unwrap()),
+        );
+      }
+
+      connection_metadata =
+        build_connection_metadata_and_install_file_deletion_triggers(&conn, &registry).await?;
     }
-
-    connection_metadata = build_connection_metadata(&conn, &registry).await?;
 
     Reactive::new(config)
   };

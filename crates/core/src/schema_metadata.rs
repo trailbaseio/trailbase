@@ -7,32 +7,35 @@ use trailbase_schema::sqlite::{SchemaError, Table, View};
 use trailbase_sqlite::{Connection, params};
 
 pub use trailbase_schema::metadata::{
-  ConnectionMetadata, JsonColumnMetadata, JsonSchemaError, TableMetadata, ViewMetadata,
+  ConnectionMetadata, ConnectionSchemas, JsonColumnMetadata, JsonSchemaError, TableMetadata,
 };
 
 use crate::constants::SQLITE_SCHEMA_TABLE;
 
-pub(crate) async fn build_connection_metadata(
+pub(crate) async fn build_connection_schemas(
+  conn: &Connection,
+) -> Result<ConnectionSchemas, SchemaLookupError> {
+  let tables = lookup_and_parse_all_table_schemas(conn).await?;
+
+  return Ok(ConnectionSchemas {
+    views: lookup_and_parse_all_view_schemas(conn, &tables).await?,
+    tables,
+  });
+}
+
+/// (Re-)build the connections schema representation *with* the side-effect of (re-)installing file
+/// deletion triggers.
+///
+/// Tying the construction of schema metadata and the (re-)installing of file deletion triggers so
+/// closely together is a necessary evil. For example, whenever a schema changes, e.g. a new file
+/// column is added, we need to rebuild the metadata and update or install missing triggers.
+pub(crate) async fn build_connection_metadata_and_install_file_deletion_triggers(
   conn: &Connection,
   registry: &JsonSchemaRegistry,
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
-  let tables = lookup_and_parse_all_table_schemas(conn).await?;
-  let views = lookup_and_parse_all_view_schemas(conn, &tables).await?;
+  let schemas = build_connection_schemas(conn).await?;
+  let metadata = ConnectionMetadata::from_schemas(schemas, registry);
 
-  let table_metadata: Vec<TableMetadata> = tables
-    .iter()
-    .map(|t: &Table| TableMetadata::new(registry, t.clone(), &tables))
-    .collect();
-
-  let view_metadata: Vec<ViewMetadata> = views
-    .into_iter()
-    .map(|view: View| ViewMetadata::new(registry, view, &tables))
-    .collect();
-
-  let metadata = ConnectionMetadata::from(&table_metadata, &view_metadata);
-
-  // TODO: Putting this side-effect heavy setup code here is very hacky. We should probably
-  // find a better place.
   setup_file_deletion_triggers(conn, &metadata).await?;
 
   return Ok(metadata);
@@ -183,9 +186,10 @@ async fn setup_file_deletion_triggers(
 
       if db != "main" {
         // FIXME: TRIGGERS are always database-local. Thus every database with tables
-        // with file columns would need its own _file_deletions table.
+        // with file columns would need its own _file_deletions table to track pending
+        // deletions.
         return Err(SchemaLookupError::Other(
-          "File columns not supported on attached databases".into(),
+          "File columns not (yet) supported on attached databases".into(),
         ));
       }
 

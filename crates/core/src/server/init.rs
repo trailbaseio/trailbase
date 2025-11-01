@@ -2,13 +2,13 @@ use log::*;
 use std::path::PathBuf;
 use thiserror::Error;
 
-use crate::app_state::{AppState, AppStateArgs, build_objectstore};
+use crate::app_state::{AppState, AppStateArgs, build_objectstore, update_json_schema_registry};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;
 use crate::metadata::load_or_init_metadata_textproto;
 use crate::rand::generate_random_string;
-use crate::schema_metadata::build_connection_metadata;
+use crate::schema_metadata::build_connection_metadata_and_install_file_deletion_triggers;
 use crate::server::DataDir;
 
 #[derive(Debug, Error)]
@@ -87,44 +87,21 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     crate::connection::init_main_db(Some(&args.data_dir), Some(extra_databases))?;
 
   let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-  let mut connection_metadata = build_connection_metadata(&conn, &registry).await?;
+  let mut connection_metadata =
+    build_connection_metadata_and_install_file_deletion_triggers(&conn, &registry).await?;
 
-  // Read config or write default one.
+  // Read config or write default one. Ensures config is validated.
   let config = load_or_init_config_textproto(&args.data_dir, &connection_metadata).await?;
 
-  if !config.schemas.is_empty() {
-    let schemas: Vec<_> = config
-      .schemas
-      .iter()
-      .map(|s| {
-        // Any panics here should be captured by config validation during load above.
-        let (Some(name), Some(schema)) = (&s.name, &s.schema) else {
-          panic!("Schema config invalid entry: {s:?}");
-        };
-
-        return (
-          name.clone(),
-          serde_json::from_str(schema).unwrap_or_else(|err| {
-            panic!("Invalid schema definition for '{name}': {err}");
-          }),
-        );
-      })
-      .collect();
-
-    debug!(
-      "Initializing JSON schemas from config: {schemas:?}",
-      schemas = schemas.iter().map(|(name, _)| name.as_str())
-    );
-
-    trailbase_schema::registry::override_json_schema_registry(schemas)?;
-
+  if update_json_schema_registry(&config)? {
     // NOTE: We must reload the table schema metadata after registering new schemas. This is a
     // work-around because config validation currently depends on ConnectionMetadata and thus the
     // JSON schema registry. It would be cleaner to build SchemaMatadataCache only after
     // registering custom schemas and validating the config only against plain TABLE/VIEW
     // metadata.
     let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-    connection_metadata = build_connection_metadata(&conn, &registry).await?;
+    connection_metadata =
+      build_connection_metadata_and_install_file_deletion_triggers(&conn, &registry).await?;
   }
 
   // Load the `<depot>/metadata.textproto`.

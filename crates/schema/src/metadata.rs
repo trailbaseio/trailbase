@@ -260,12 +260,20 @@ impl<'a> TableOrView<'a> {
   }
 }
 
-// TODO: Add a JSON less flavor.
-
-/// Contains schema metadata for all TABLEs/VIEWs attached to a connection.
+/// A bunch of TABLEs and VIEWs as parsed from their SQLite definitions (i.e. CREATE TABLE/VIEW).
 ///
-/// NOTE: may references schemas belonging to different databases, we therefore look up by
-/// qualified name.
+/// Unlike "Metadata" below, this is raw SQLite information doesn't contain any additional
+/// contextual information such as associated JSON schemas, file columns or optimize certain
+/// look-up patterns..
+#[derive(Default)]
+pub struct ConnectionSchemas {
+  pub tables: Vec<Table>,
+  pub views: Vec<View>,
+}
+
+/// Contains schema metadata for a bunch of TABLEs and VIEWs, which may belong to different
+/// databases, e.g. all the TABLEs and VIEWs attached to a connection. Each can be uniquely
+/// identified by their fully qualified name.
 #[derive(Default)]
 pub struct ConnectionMetadata {
   pub tables: HashMap<QualifiedName, TableMetadata>,
@@ -273,17 +281,27 @@ pub struct ConnectionMetadata {
 }
 
 impl ConnectionMetadata {
-  pub fn from(tables: &[TableMetadata], views: &[ViewMetadata]) -> Self {
+  pub fn from(tables: Vec<TableMetadata>, views: Vec<ViewMetadata>) -> Self {
     return Self {
-      tables: tables
-        .iter()
-        .map(|t| (t.name().clone(), t.clone()))
-        .collect(),
-      views: views
-        .iter()
-        .map(|v| (v.name().clone(), v.clone()))
-        .collect(),
+      tables: tables.into_iter().map(|t| (t.name().clone(), t)).collect(),
+      views: views.into_iter().map(|v| (v.name().clone(), v)).collect(),
     };
+  }
+
+  pub fn from_schemas(schemas: ConnectionSchemas, registry: &JsonSchemaRegistry) -> Self {
+    let table_metadata: Vec<TableMetadata> = schemas
+      .tables
+      .iter()
+      .map(|t: &Table| TableMetadata::new(registry, t.clone(), &schemas.tables))
+      .collect();
+
+    let view_metadata: Vec<ViewMetadata> = schemas
+      .views
+      .into_iter()
+      .map(|view: View| ViewMetadata::new(registry, view, &schemas.tables))
+      .collect();
+
+    return ConnectionMetadata::from(table_metadata, view_metadata);
   }
 
   pub fn get_table(&self, name: &QualifiedName) -> Option<&TableMetadata> {
