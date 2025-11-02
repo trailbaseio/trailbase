@@ -3,6 +3,7 @@ import { QueryClient, useQuery } from "@tanstack/solid-query";
 import { Config } from "@proto/config";
 import { GetConfigResponse, UpdateConfigRequest } from "@proto/config_api";
 import { adminFetch } from "@/lib/fetch";
+import { showToast } from "@/components/ui/toast";
 
 export async function setConfig(
   queryClient: QueryClient,
@@ -58,13 +59,24 @@ async function getConfig(): Promise<GetConfigResponse> {
 }
 
 async function updateConfig(request: UpdateConfigRequest): Promise<void> {
-  await adminFetch("/config", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/octet-stream",
-    },
-    body: new Uint8Array(UpdateConfigRequest.encode(request).finish()),
-  });
+  try {
+    await adminFetch("/config", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/octet-stream",
+      },
+      body: new Uint8Array(UpdateConfigRequest.encode(request).finish()),
+      throwOnError: true,
+    });
+  } catch (err) {
+    showToast({
+      title: "Config Error",
+      description: `${err}`,
+      variant: "error",
+    });
+
+    throw err;
+  }
 }
 
 const key = ["admin", "proto_config"];

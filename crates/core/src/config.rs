@@ -552,16 +552,29 @@ pub(crate) fn validate_config(
     }
 
     if provider_id == OAuthProviderId::Oidc0 {
-      if !provider.auth_url.validate_url() {
+      if provider
+        .auth_url
+        .as_ref()
+        .as_ref()
+        .is_none_or(|url| !url.validate_url())
+      {
         return ierr(format!("Invalid auth url for: {name}"));
       }
 
-      if !provider.token_url.validate_url() {
+      if provider
+        .token_url
+        .as_ref()
+        .is_none_or(|url| !url.validate_url())
+      {
         return ierr(format!("Invalid token url for: {name}"));
       }
 
-      if !provider.user_api_url.validate_url() {
-        return ierr(format!("Invalid user api url for: {name}"));
+      if provider
+        .user_api_url
+        .as_ref()
+        .is_none_or(|url| !url.validate_url())
+      {
+        return ierr(format!("Invalid user api url for '{name}"));
       }
     }
   }
