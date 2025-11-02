@@ -4,7 +4,7 @@ import type { JSX } from "solid-js";
 import { type FieldApi, createForm } from "@tanstack/solid-form";
 import { TbEye } from "solid-icons/tb";
 
-import { cn, tryParseInt, tryParseFloat } from "@/lib/utils";
+import { cn, tryParseInt, tryParseFloat, tryParseBigInt } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -88,7 +88,7 @@ export function buildTextFormField(opts: TextFieldOptions) {
   };
 }
 
-/// Used for Settings. Empty field is the same as absent.
+/// Used for proto Settings. Empty field is the same as absent.
 export function buildOptionalTextFormField(opts: TextFieldOptions) {
   return function builder(field: () => FieldApiT<string | undefined>) {
     return (
@@ -115,69 +115,6 @@ export function buildOptionalTextFormField(opts: TextFieldOptions) {
           />
 
           <GridFieldInfo field={field()} />
-          <InfoColumn info={opts.info} />
-        </div>
-      </TextField>
-    );
-  };
-}
-
-/// Used for record forms. Has a checkbox to distinguish absent from empty string.
-export function buildNullableTextFormField(opts: TextFieldOptions) {
-  const externDisable = opts.disabled ?? false;
-
-  return function builder(field: () => FieldApiT<string | null | undefined>) {
-    const initialValue: string | null | undefined = field().state.value;
-    const [enabled, setEnabled] = createSignal<boolean>(
-      !externDisable && initialValue !== null && initialValue !== undefined,
-    );
-
-    const value = () => (enabled() ? field().state.value : null);
-    const placeholder = () => {
-      if (!enabled()) return "NULL";
-
-      return field().state.value || opts.placeholder;
-    };
-
-    return (
-      <TextField class="w-full">
-        <div
-          class={cn("grid items-center", gapStyle)}
-          style={{ "grid-template-columns": "auto 1fr" }}
-        >
-          <TextFieldLabel>{opts.label()}</TextFieldLabel>
-
-          <div class="flex items-center">
-            <TextFieldInput
-              disabled={!enabled()}
-              type={opts.type ?? "text"}
-              value={value() ?? ""}
-              placeholder={placeholder() ?? ""}
-              onBlur={field().handleBlur}
-              autocomplete={opts.autocomplete}
-              autocorrect={opts.type === "password" ? "off" : undefined}
-              onInput={(e: Event) => {
-                const value = (e.target as HTMLInputElement).value;
-                field().handleChange(value ?? null);
-              }}
-              data-testid="input"
-            />
-
-            <Checkbox
-              disabled={externDisable}
-              checked={enabled()}
-              onChange={(enabled: boolean) => {
-                setEnabled(enabled);
-                // NOTE: null is critical here to actively unset a cell, undefined
-                // would merely take it out of the patch set.
-                field().handleChange(value());
-              }}
-              data-testid="toggle"
-            />
-          </div>
-
-          <GridFieldInfo field={field()} />
-
           <InfoColumn info={opts.info} />
         </div>
       </TextField>
@@ -272,13 +209,15 @@ type NumberFieldOptions = {
   label: () => JSX.Element;
 
   info?: JSX.Element;
-  integer?: boolean;
-  required?: boolean;
   placeholder?: string;
 };
 
-/// Used for Settings. Empty field is the same as absent.
-export function buildOptionalNumberFormField(opts: NumberFieldOptions) {
+/// Used for proto Settings. Empty field is the same as absent.
+///
+/// Prefer `buildOptionalIntegerFormField` and `buildOptionalFloatFormField`. We
+export function buildOptionalNumberFormField(
+  opts: NumberFieldOptions & { integer?: boolean },
+) {
   return function builder(field: () => FieldApiT<number | undefined>) {
     const isInt = opts.integer ?? false;
 
@@ -294,7 +233,7 @@ export function buildOptionalNumberFormField(opts: NumberFieldOptions) {
             disabled={opts.disabled ?? false}
             type={isInt ? "number" : "text"}
             step={isInt ? "1" : undefined}
-            pattern={isInt ? "d*" : "[0-9]*[.,]?[0-9]*"}
+            pattern={isInt ? intPattern : floatPattern}
             value={field().state.value?.toString() ?? ""}
             placeholder={opts.placeholder}
             onBlur={field().handleBlur}
@@ -302,6 +241,74 @@ export function buildOptionalNumberFormField(opts: NumberFieldOptions) {
               const value = (e.target as HTMLInputElement).value;
               const parsed = isInt ? tryParseInt(value) : tryParseFloat(value);
               field().handleChange(parsed);
+            }}
+            data-testid="input"
+          />
+
+          <GridFieldInfo field={field()} />
+
+          <InfoColumn info={opts.info} />
+        </div>
+      </TextField>
+    );
+  };
+}
+
+/// Used for proto Settings. Empty field is the same as absent.
+export function buildOptionalIntegerFormField(opts: NumberFieldOptions) {
+  return function builder(field: () => FieldApiT<bigint | undefined>) {
+    return (
+      <TextField class="w-full">
+        <div
+          class={cn("grid items-center", gapStyle)}
+          style={{ "grid-template-columns": "auto 1fr" }}
+        >
+          <TextFieldLabel>{opts.label()}</TextFieldLabel>
+
+          <TextFieldInput
+            disabled={opts.disabled ?? false}
+            type={"number"}
+            step={"1"}
+            value={field().state.value?.toString() ?? ""}
+            placeholder={opts.placeholder}
+            onBlur={field().handleBlur}
+            onInput={(e: Event) => {
+              const value = (e.target as HTMLInputElement).value;
+              field().handleChange(tryParseBigInt(value));
+            }}
+            data-testid="input"
+          />
+
+          <GridFieldInfo field={field()} />
+
+          <InfoColumn info={opts.info} />
+        </div>
+      </TextField>
+    );
+  };
+}
+
+/// Used for proto Settings. Empty field is the same as absent.
+export function buildOptionalFloatFormField(opts: NumberFieldOptions) {
+  return function builder(field: () => FieldApiT<number | undefined>) {
+    return (
+      <TextField class="w-full">
+        <div
+          class={cn("grid items-center", gapStyle)}
+          style={{ "grid-template-columns": "auto 1fr" }}
+        >
+          <TextFieldLabel>{opts.label()}</TextFieldLabel>
+
+          <TextFieldInput
+            disabled={opts.disabled ?? false}
+            type={"text"}
+            pattern={floatPattern}
+            value={field().state.value?.toString() ?? ""}
+            placeholder={opts.placeholder}
+            onBlur={field().handleBlur}
+            onInput={(e: Event) => {
+              const value = (e.target as HTMLInputElement).value;
+              field().handleChange(tryParseFloat(value));
             }}
             data-testid="input"
           />
@@ -521,3 +528,6 @@ export function unsetOrLargerThanZero() {
 }
 
 export const gapStyle = "gap-x-2 gap-y-1";
+export const floatPattern = "[-+]?[0-9]*[.]?[0-9]+";
+export const intPattern = "[-+]?[0-9]+";
+export const uintPattern = "[+]?[0-9]+";

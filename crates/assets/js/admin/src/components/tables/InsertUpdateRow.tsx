@@ -2,18 +2,17 @@ import { children, createSignal, For, Show, JSX } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { urlSafeBase64Decode, urlSafeBase64Encode } from "trailbase";
 
-import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-
 import type { Column } from "@bindings/Column";
 import type { Table } from "@bindings/Table";
 import type { ColumnAffinityType } from "@bindings/ColumnAffinityType";
 import type { ColumnDataType } from "@bindings/ColumnDataType";
 
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { gapStyle, GridFieldInfo } from "@/components/FormFields";
 import type { FieldApiT } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
+import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { showToast } from "@/components/ui/toast";
 import {
   TextField,
@@ -52,6 +51,7 @@ import type {
 } from "@/lib/value";
 import { tryParseFloat, tryParseBigInt, fromHex } from "@/lib/utils";
 import { isNullableColumn } from "@/lib/schema";
+import { floatPattern } from "@/components/FormFields";
 
 export function InsertUpdateRowForm(props: {
   close: () => void;
@@ -247,11 +247,12 @@ function buildSqlIntegerFormField(opts: SqlFormFieldOptions) {
         <FormRow field={field}>
           <TextFieldLabel>{opts.label}</TextFieldLabel>
 
+          {/* pattern={"[-+]?[0-9]+"} */}
+
           <TextFieldInput
             disabled={disabled()}
-            type={disabled() ? "number" : "text"}
+            type={"number"}
             step={1}
-            pattern={"[-+]?[0-9]+"}
             value={getInteger(field().state.value) ?? ""}
             placeholder={opts.placeholder(initialValue, disabled())}
             onBlur={field().handleBlur}
@@ -298,7 +299,7 @@ function buildSqlRealFormField(opts: SqlFormFieldOptions) {
           <TextFieldInput
             disabled={disabled()}
             type={"text"}
-            pattern="[-+]?[0-9]*\.?[0-9]+"
+            pattern={floatPattern}
             value={getReal(field().state.value) ?? ""}
             placeholder={opts.placeholder(initialValue, disabled())}
             autocomplete={false}

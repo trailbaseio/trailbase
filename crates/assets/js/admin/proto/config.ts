@@ -367,11 +367,11 @@ export interface OAuthProviderConfig {
 export interface AuthConfig {
   /** / Time-to-live in seconds for auth tokens. Default: 1h. */
   authTokenTtlSec?:
-    | number
+    | bigint
     | undefined;
   /** / Time-to-live in seconds for refresh tokens. Default: 30 days. */
   refreshTokenTtlSec?:
-    | number
+    | bigint
     | undefined;
   /** / Disables password-based sign-up. Does not affect already registered users. */
   disablePasswordAuth?:
@@ -444,7 +444,7 @@ export interface ServerConfig {
    * /  reruns. Default: 7 days.
    */
   logsRetentionSec?:
-    | number
+    | bigint
     | undefined;
   /** / If present will use S3 setup over local file-system based storage. */
   s3StorageConfig?:
@@ -557,7 +557,7 @@ export interface RecordApiConfig {
    */
   expand: string[];
   /** / Hard limit for listing records (default: 1024). */
-  listingHardLimit?: number | undefined;
+  listingHardLimit?: bigint | undefined;
 }
 
 export interface JsonSchemaConfig {
@@ -1035,10 +1035,16 @@ function createBaseAuthConfig(): AuthConfig {
 
 export const AuthConfig: MessageFns<AuthConfig> = {
   encode(message: AuthConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
-    if (message.authTokenTtlSec !== undefined && message.authTokenTtlSec !== 0) {
+    if (message.authTokenTtlSec !== undefined && message.authTokenTtlSec !== 0n) {
+      if (BigInt.asIntN(64, message.authTokenTtlSec) !== message.authTokenTtlSec) {
+        throw new globalThis.Error("value provided for field message.authTokenTtlSec of type int64 too large");
+      }
       writer.uint32(8).int64(message.authTokenTtlSec);
     }
-    if (message.refreshTokenTtlSec !== undefined && message.refreshTokenTtlSec !== 0) {
+    if (message.refreshTokenTtlSec !== undefined && message.refreshTokenTtlSec !== 0n) {
+      if (BigInt.asIntN(64, message.refreshTokenTtlSec) !== message.refreshTokenTtlSec) {
+        throw new globalThis.Error("value provided for field message.refreshTokenTtlSec of type int64 too large");
+      }
       writer.uint32(16).int64(message.refreshTokenTtlSec);
     }
     if (message.disablePasswordAuth !== undefined && message.disablePasswordAuth !== false) {
@@ -1083,7 +1089,7 @@ export const AuthConfig: MessageFns<AuthConfig> = {
             break;
           }
 
-          message.authTokenTtlSec = longToNumber(reader.int64());
+          message.authTokenTtlSec = reader.int64() as bigint;
           continue;
         }
         case 2: {
@@ -1091,7 +1097,7 @@ export const AuthConfig: MessageFns<AuthConfig> = {
             break;
           }
 
-          message.refreshTokenTtlSec = longToNumber(reader.int64());
+          message.refreshTokenTtlSec = reader.int64() as bigint;
           continue;
         }
         case 3: {
@@ -1164,8 +1170,8 @@ export const AuthConfig: MessageFns<AuthConfig> = {
 
   fromJSON(object: any): AuthConfig {
     return {
-      authTokenTtlSec: isSet(object.authTokenTtlSec) ? globalThis.Number(object.authTokenTtlSec) : undefined,
-      refreshTokenTtlSec: isSet(object.refreshTokenTtlSec) ? globalThis.Number(object.refreshTokenTtlSec) : undefined,
+      authTokenTtlSec: isSet(object.authTokenTtlSec) ? BigInt(object.authTokenTtlSec) : undefined,
+      refreshTokenTtlSec: isSet(object.refreshTokenTtlSec) ? BigInt(object.refreshTokenTtlSec) : undefined,
       disablePasswordAuth: isSet(object.disablePasswordAuth)
         ? globalThis.Boolean(object.disablePasswordAuth)
         : undefined,
@@ -1195,11 +1201,11 @@ export const AuthConfig: MessageFns<AuthConfig> = {
 
   toJSON(message: AuthConfig): unknown {
     const obj: any = {};
-    if (message.authTokenTtlSec !== undefined && message.authTokenTtlSec !== 0) {
-      obj.authTokenTtlSec = Math.round(message.authTokenTtlSec);
+    if (message.authTokenTtlSec !== undefined && message.authTokenTtlSec !== 0n) {
+      obj.authTokenTtlSec = message.authTokenTtlSec.toString();
     }
-    if (message.refreshTokenTtlSec !== undefined && message.refreshTokenTtlSec !== 0) {
-      obj.refreshTokenTtlSec = Math.round(message.refreshTokenTtlSec);
+    if (message.refreshTokenTtlSec !== undefined && message.refreshTokenTtlSec !== 0n) {
+      obj.refreshTokenTtlSec = message.refreshTokenTtlSec.toString();
     }
     if (message.disablePasswordAuth !== undefined && message.disablePasswordAuth !== false) {
       obj.disablePasswordAuth = message.disablePasswordAuth;
@@ -1242,8 +1248,8 @@ export const AuthConfig: MessageFns<AuthConfig> = {
   },
   fromPartial<I extends Exact<DeepPartial<AuthConfig>, I>>(object: I): AuthConfig {
     const message = createBaseAuthConfig();
-    message.authTokenTtlSec = object.authTokenTtlSec ?? 0;
-    message.refreshTokenTtlSec = object.refreshTokenTtlSec ?? 0;
+    message.authTokenTtlSec = object.authTokenTtlSec ?? 0n;
+    message.refreshTokenTtlSec = object.refreshTokenTtlSec ?? 0n;
     message.disablePasswordAuth = object.disablePasswordAuth ?? false;
     message.passwordMinimalLength = object.passwordMinimalLength ?? 0;
     message.passwordMustContainUpperAndLowerCase = object.passwordMustContainUpperAndLowerCase ?? false;
@@ -1479,7 +1485,10 @@ export const ServerConfig: MessageFns<ServerConfig> = {
     if (message.siteUrl !== undefined && message.siteUrl !== "") {
       writer.uint32(18).string(message.siteUrl);
     }
-    if (message.logsRetentionSec !== undefined && message.logsRetentionSec !== 0) {
+    if (message.logsRetentionSec !== undefined && message.logsRetentionSec !== 0n) {
+      if (BigInt.asIntN(64, message.logsRetentionSec) !== message.logsRetentionSec) {
+        throw new globalThis.Error("value provided for field message.logsRetentionSec of type int64 too large");
+      }
       writer.uint32(88).int64(message.logsRetentionSec);
     }
     if (message.s3StorageConfig !== undefined) {
@@ -1519,7 +1528,7 @@ export const ServerConfig: MessageFns<ServerConfig> = {
             break;
           }
 
-          message.logsRetentionSec = longToNumber(reader.int64());
+          message.logsRetentionSec = reader.int64() as bigint;
           continue;
         }
         case 13: {
@@ -1551,7 +1560,7 @@ export const ServerConfig: MessageFns<ServerConfig> = {
     return {
       applicationName: isSet(object.applicationName) ? globalThis.String(object.applicationName) : undefined,
       siteUrl: isSet(object.siteUrl) ? globalThis.String(object.siteUrl) : undefined,
-      logsRetentionSec: isSet(object.logsRetentionSec) ? globalThis.Number(object.logsRetentionSec) : undefined,
+      logsRetentionSec: isSet(object.logsRetentionSec) ? BigInt(object.logsRetentionSec) : undefined,
       s3StorageConfig: isSet(object.s3StorageConfig) ? S3StorageConfig.fromJSON(object.s3StorageConfig) : undefined,
       enableRecordTransactions: isSet(object.enableRecordTransactions)
         ? globalThis.Boolean(object.enableRecordTransactions)
@@ -1567,8 +1576,8 @@ export const ServerConfig: MessageFns<ServerConfig> = {
     if (message.siteUrl !== undefined && message.siteUrl !== "") {
       obj.siteUrl = message.siteUrl;
     }
-    if (message.logsRetentionSec !== undefined && message.logsRetentionSec !== 0) {
-      obj.logsRetentionSec = Math.round(message.logsRetentionSec);
+    if (message.logsRetentionSec !== undefined && message.logsRetentionSec !== 0n) {
+      obj.logsRetentionSec = message.logsRetentionSec.toString();
     }
     if (message.s3StorageConfig !== undefined) {
       obj.s3StorageConfig = S3StorageConfig.toJSON(message.s3StorageConfig);
@@ -1586,7 +1595,7 @@ export const ServerConfig: MessageFns<ServerConfig> = {
     const message = createBaseServerConfig();
     message.applicationName = object.applicationName ?? "";
     message.siteUrl = object.siteUrl ?? "";
-    message.logsRetentionSec = object.logsRetentionSec ?? 0;
+    message.logsRetentionSec = object.logsRetentionSec ?? 0n;
     message.s3StorageConfig = (object.s3StorageConfig !== undefined && object.s3StorageConfig !== null)
       ? S3StorageConfig.fromPartial(object.s3StorageConfig)
       : undefined;
@@ -1797,7 +1806,10 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     for (const v of message.expand) {
       writer.uint32(170).string(v!);
     }
-    if (message.listingHardLimit !== undefined && message.listingHardLimit !== 0) {
+    if (message.listingHardLimit !== undefined && message.listingHardLimit !== 0n) {
+      if (BigInt.asUintN(64, message.listingHardLimit) !== message.listingHardLimit) {
+        throw new globalThis.Error("value provided for field message.listingHardLimit of type uint64 too large");
+      }
       writer.uint32(176).uint64(message.listingHardLimit);
     }
     return writer;
@@ -1947,7 +1959,7 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
             break;
           }
 
-          message.listingHardLimit = longToNumber(reader.uint64());
+          message.listingHardLimit = reader.uint64() as bigint;
           continue;
         }
       }
@@ -1987,7 +1999,7 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
       deleteAccessRule: isSet(object.deleteAccessRule) ? globalThis.String(object.deleteAccessRule) : undefined,
       schemaAccessRule: isSet(object.schemaAccessRule) ? globalThis.String(object.schemaAccessRule) : undefined,
       expand: globalThis.Array.isArray(object?.expand) ? object.expand.map((e: any) => globalThis.String(e)) : [],
-      listingHardLimit: isSet(object.listingHardLimit) ? globalThis.Number(object.listingHardLimit) : undefined,
+      listingHardLimit: isSet(object.listingHardLimit) ? BigInt(object.listingHardLimit) : undefined,
     };
   },
 
@@ -2035,8 +2047,8 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     if (message.expand?.length) {
       obj.expand = message.expand;
     }
-    if (message.listingHardLimit !== undefined && message.listingHardLimit !== 0) {
-      obj.listingHardLimit = Math.round(message.listingHardLimit);
+    if (message.listingHardLimit !== undefined && message.listingHardLimit !== 0n) {
+      obj.listingHardLimit = message.listingHardLimit.toString();
     }
     return obj;
   },
@@ -2060,7 +2072,7 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     message.deleteAccessRule = object.deleteAccessRule ?? "";
     message.schemaAccessRule = object.schemaAccessRule ?? "";
     message.expand = object.expand?.map((e) => e) || [];
-    message.listingHardLimit = object.listingHardLimit ?? 0;
+    message.listingHardLimit = object.listingHardLimit ?? 0n;
     return message;
   },
 };
@@ -2293,7 +2305,7 @@ export const Config: MessageFns<Config> = {
   },
 };
 
-type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
+type Builtin = Date | Function | Uint8Array | string | number | boolean | bigint | undefined;
 
 export type DeepPartial<T> = T extends Builtin ? T
   : T extends globalThis.Array<infer U> ? globalThis.Array<DeepPartial<U>>
@@ -2304,17 +2316,6 @@ export type DeepPartial<T> = T extends Builtin ? T
 type KeysOfUnion<T> = T extends T ? keyof T : never;
 export type Exact<P, I extends P> = P extends Builtin ? P
   : P & { [K in keyof P]: Exact<P[K], I[K]> } & { [K in Exclude<keyof I, KeysOfUnion<P>>]: never };
-
-function longToNumber(int64: { toString(): string }): number {
-  const num = globalThis.Number(int64.toString());
-  if (num > globalThis.Number.MAX_SAFE_INTEGER) {
-    throw new globalThis.Error("Value is larger than Number.MAX_SAFE_INTEGER");
-  }
-  if (num < globalThis.Number.MIN_SAFE_INTEGER) {
-    throw new globalThis.Error("Value is smaller than Number.MIN_SAFE_INTEGER");
-  }
-  return num;
-}
 
 function isObject(value: any): boolean {
   return typeof value === "object" && value !== null;

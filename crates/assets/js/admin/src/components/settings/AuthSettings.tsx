@@ -12,6 +12,7 @@ import { createForm } from "@tanstack/solid-form";
 import { TbInfoCircle } from "solid-icons/tb";
 
 import {
+  buildOptionalIntegerFormField,
   buildOptionalNumberFormField,
   buildOptionalBoolFormField,
   buildSecretFormField,
@@ -363,8 +364,7 @@ function AuthSettingsForm(props: {
           <CardContent>
             <div class="flex flex-col gap-4">
               <form.Field name="authTokenTtlSec">
-                {buildOptionalNumberFormField({
-                  integer: true,
+                {buildOptionalIntegerFormField({
                   placeholder: `${60 * 60}`,
                   label: () => (
                     <InfoTooltip label="Auth TTL [sec]" class={labelStyle}>
@@ -376,8 +376,7 @@ function AuthSettingsForm(props: {
               </form.Field>
 
               <form.Field name="refreshTokenTtlSec">
-                {buildOptionalNumberFormField({
-                  integer: true,
+                {buildOptionalIntegerFormField({
                   placeholder: `${30 * 24 * 60 * 60}`,
                   label: () => (
                     <InfoTooltip label="Refresh TTL [sec]" class={labelStyle}>
@@ -415,6 +414,7 @@ function AuthSettingsForm(props: {
 
               <form.Field name="passwordMinimalLength">
                 {buildOptionalNumberFormField({
+                  integer: true,
                   placeholder: "8",
                   label: () => (
                     <InfoTooltip label="Min Length" class={labelStyle}>

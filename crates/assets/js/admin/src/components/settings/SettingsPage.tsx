@@ -15,7 +15,7 @@ import { Config, ServerConfig } from "@proto/config";
 import {
   notEmptyValidator,
   unsetOrValidUrl,
-  buildOptionalNumberFormField,
+  buildOptionalIntegerFormField,
   buildTextFormField,
   buildOptionalTextFormField,
   gapStyle,
@@ -115,8 +115,7 @@ function ServerSettings(props: CommonProps) {
 
               <div>
                 <form.Field name="logsRetentionSec">
-                  {buildOptionalNumberFormField({
-                    integer: true,
+                  {buildOptionalIntegerFormField({
                     label: () => (
                       <div class={labelWidth}>Log Retention (sec)</div>
                     ),

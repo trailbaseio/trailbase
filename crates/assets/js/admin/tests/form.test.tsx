@@ -9,15 +9,8 @@ import { createForm, type DeepKeys } from "@tanstack/solid-form";
 import {
   buildTextFormField,
   buildOptionalTextFormField,
-  buildNullableTextFormField,
   type FieldApiT,
 } from "@/components/FormFields";
-
-function getCheckbox(dom: any): HTMLInputElement {
-  // NOTE: The solid-ui Checkbox component wraps the input in a parent div.
-  const div = dom.getByTestId("toggle") as HTMLDivElement;
-  return div.children[0] as HTMLInputElement;
-}
 
 interface MyForm {
   required: string;
@@ -89,65 +82,6 @@ describe("required form fields", () => {
       await user.click(result.getByTestId("sub"));
       expect(form()!.required).toBe("");
     }
-  });
-});
-
-describe("nullable form fields", () => {
-  test("set", async () => {
-    const user = userEvent.setup();
-    const [form, setForm] = createSignal<MyForm | undefined>();
-
-    const dom = render(() => (
-      <Form
-        name="nullable"
-        setForm={setForm}
-        field={buildNullableTextFormField({ label: () => "nullable" })}
-      />
-    ));
-
-    const input: HTMLInputElement = dom.getByTestId("input");
-    expect(input.disabled).toBe(true);
-
-    // The input field is disabled to to it's initial value being null.
-    await user.click(getCheckbox(dom));
-
-    await user.type(input, "nullable");
-    expect(input.value).toBe("nullable");
-
-    await user.click(dom.getByTestId("sub"));
-
-    const value = form()!;
-    expect(value.nullable).toBe("nullable");
-  });
-
-  test("set and unset", async () => {
-    const user = userEvent.setup();
-    const [form, setForm] = createSignal<MyForm | undefined>();
-
-    const dom = render(() => (
-      <Form
-        name="nullable"
-        setForm={setForm}
-        field={buildNullableTextFormField({ label: () => "nullable" })}
-      />
-    ));
-
-    const input: HTMLInputElement = dom.getByTestId("input");
-    expect(input.disabled).toBe(true);
-
-    // The input field is disabled to to it's initial value being null.
-    await user.click(getCheckbox(dom));
-
-    await user.type(input, "nullable");
-    expect(input.value).toBe("nullable");
-
-    // Click again to unset the value.
-    await user.click(getCheckbox(dom));
-
-    await user.click(dom.getByTestId("sub"));
-
-    const value = form()!;
-    expect(value.nullable).toBe(null);
   });
 });
 
