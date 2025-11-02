@@ -1068,9 +1068,19 @@ fn extract_column_mapping(
             parent_name: None,
           });
         }
+        Expr::Literal(literal) => {
+          mapping.push(ViewColumn {
+            column: literal_to_column(literal, to_alias(alias)),
+            parent_name: None,
+          });
+        }
         expr => {
           // Handle type-inference of some built-in functions for convenience to reduce the need
           // for explicit CAST(expr AS type), e.g. `MAX(column)`.
+          //
+          // TODO: We could add support for `COALESCE(CAST(5 AS INT), 0)` because CAST always
+          // infers to a nullable T?, we could parse our coalesce with a terminal non-null literal
+          // to infer to non-nullable T :shrug:.
           if let Expr::FunctionCall { name, args, .. } = expr
             && builtin_function_preserving_type(name)
           {
@@ -1147,6 +1157,72 @@ fn extract_column_mapping(
         joins,
       })
     }
+  };
+}
+
+fn literal_to_column(literal: Literal, alias: Option<String>) -> Column {
+  return match literal {
+    Literal::Numeric(s) => {
+      if s.parse::<i64>().is_ok() {
+        Column {
+          name: alias.unwrap_or_else(|| s.to_string()),
+          type_name: "".to_string(),
+          data_type: ColumnDataType::Integer,
+          affinity_type: ColumnAffinityType::Integer,
+          options: vec![],
+        }
+      } else {
+        Column {
+          name: alias.unwrap_or_else(|| s.to_string()),
+          type_name: "".to_string(),
+          data_type: ColumnDataType::Real,
+          affinity_type: ColumnAffinityType::Real,
+          options: vec![],
+        }
+      }
+    }
+    Literal::String(s) | Literal::Keyword(s) => Column {
+      name: alias.unwrap_or_else(|| unquote_string(&s)),
+      type_name: "".to_string(),
+      data_type: ColumnDataType::Text,
+      affinity_type: ColumnAffinityType::Text,
+      options: vec![],
+    },
+    Literal::CurrentDate => Column {
+      name: alias.unwrap_or_else(|| "CURRENT_DATE".to_string()),
+      type_name: "".to_string(),
+      data_type: ColumnDataType::Text,
+      affinity_type: ColumnAffinityType::Text,
+      options: vec![],
+    },
+    Literal::CurrentTime => Column {
+      name: alias.unwrap_or_else(|| "CURRENT_TIME".to_string()),
+      type_name: "".to_string(),
+      data_type: ColumnDataType::Text,
+      affinity_type: ColumnAffinityType::Text,
+      options: vec![],
+    },
+    Literal::CurrentTimestamp => Column {
+      name: alias.unwrap_or_else(|| "CURRENT_TIMESTAMP".to_string()),
+      type_name: "".to_string(),
+      data_type: ColumnDataType::Text,
+      affinity_type: ColumnAffinityType::Text,
+      options: vec![],
+    },
+    Literal::Blob(s) => Column {
+      name: alias.unwrap_or_else(|| s.to_string()),
+      type_name: "".to_string(),
+      data_type: ColumnDataType::Blob,
+      affinity_type: ColumnAffinityType::Blob,
+      options: vec![],
+    },
+    Literal::Null => Column {
+      name: alias.unwrap_or_else(|| "NULL".to_string()),
+      type_name: "".to_string(),
+      data_type: ColumnDataType::Any,
+      affinity_type: ColumnAffinityType::Blob,
+      options: vec![],
+    },
   };
 }
 
@@ -1722,6 +1798,13 @@ mod tests {
     return *select;
   }
 
+  #[derive(Debug, PartialEq)]
+  struct C {
+    name: String,
+    data_type: ColumnDataType,
+    options: Vec<ColumnOption>,
+  }
+
   #[test]
   fn test_view_column_extraction() {
     let tables = vec![Table {
@@ -1765,19 +1848,53 @@ mod tests {
     {
       // JOIN on a SELECT.
       let select = parse_into_select(
-        "SELECT x.column, y.column AS foo FROM table_name AS x LEFT JOIN (SELECT * FROM table_name) AS y ON x.column = y.column",
+        "
+          SELECT x.column, y.column AS foo, 'literal', 'literal' AS lit, X'aabb'
+          FROM table_name AS x LEFT JOIN (SELECT * FROM table_name) AS y ON x.column = y.column
+        ",
       );
-      let column_mapping = extract_column_mapping(select, &tables).unwrap();
-      let columns = &column_mapping.columns;
-      assert_eq!(columns.len(), 2, "{columns:?}");
+      let mapping = extract_column_mapping(select, &tables).unwrap();
 
-      let first = &columns[0];
-      assert_eq!(first.column.data_type, ColumnDataType::Text);
-      assert_eq!(first.column.name, "column");
+      let got: Vec<C> = mapping
+        .columns
+        .iter()
+        .map(|m| C {
+          name: m.column.name.clone(),
+          data_type: m.column.data_type,
+          options: m.column.options.clone(),
+        })
+        .collect();
 
-      let second = &columns[1];
-      assert_eq!(second.column.data_type, ColumnDataType::Text);
-      assert_eq!(second.column.name, "foo");
+      assert_eq!(
+        got,
+        [
+          C {
+            name: "column".to_string(),
+            data_type: ColumnDataType::Text,
+            options: vec![],
+          },
+          C {
+            name: "foo".to_string(),
+            data_type: ColumnDataType::Text,
+            options: vec![],
+          },
+          C {
+            name: "literal".to_string(),
+            data_type: ColumnDataType::Text,
+            options: vec![],
+          },
+          C {
+            name: "lit".to_string(),
+            data_type: ColumnDataType::Text,
+            options: vec![],
+          },
+          C {
+            name: "aabb".to_string(),
+            data_type: ColumnDataType::Blob,
+            options: vec![],
+          },
+        ],
+      );
     }
 
     {
@@ -1792,6 +1909,11 @@ mod tests {
     }
   }
 
+  fn parse_create_table(create_table_sql: &str) -> Table {
+    let create_table_statement = parse_into_statement(create_table_sql).unwrap().unwrap();
+    return create_table_statement.try_into().unwrap();
+  }
+
   fn parse_create_view_select(sql: &str) -> sqlite3_parser::ast::Select {
     let sqlite3_parser::ast::Stmt::CreateView { select, .. } =
       parse_into_statement(sql).unwrap().unwrap()
@@ -1802,7 +1924,7 @@ mod tests {
   }
 
   #[test]
-  fn test_creare_view_colum_mapping() {
+  fn test_create_view_column_mapping() {
     let table_a = parse_create_table(
       "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
     );
@@ -1824,13 +1946,8 @@ mod tests {
     )
   }
 
-  fn parse_create_table(create_table_sql: &str) -> Table {
-    let create_table_statement = parse_into_statement(create_table_sql).unwrap().unwrap();
-    return create_table_statement.try_into().unwrap();
-  }
-
   #[test]
-  fn test_view_column_extraction_join() {
+  fn test_join_column_extraction() {
     let profiles_table = parse_create_table(
       r#"
         CREATE TABLE bar.profiles (
@@ -1853,19 +1970,142 @@ mod tests {
     let tables = [profiles_table, articles_table];
 
     let select = parse_into_select(
-      "SELECT user, *, a.*, p.user AS foo FROM foo.articles AS a LEFT JOIN bar.profiles AS p ON p.user = a.author",
+      "
+        SELECT user, *, a.*, p.user AS foo
+        FROM foo.articles AS a
+        LEFT JOIN bar.profiles AS p ON p.user = a.author
+      ",
     );
     let mapping = extract_column_mapping(select, &tables).unwrap();
 
+    let got: Vec<C> = mapping
+      .columns
+      .iter()
+      .map(|m| C {
+        name: m.column.name.clone(),
+        data_type: m.column.data_type,
+        options: m.column.options.clone(),
+      })
+      .collect();
+
     assert_eq!(
-      mapping
-        .columns
-        .iter()
-        .map(|m| m.column.name.as_str())
-        .collect::<Vec<_>>(),
+      got,
       [
-        "user", "id", "author", "body", "user", "username", "id", "author", "body", "foo"
-      ]
+        C {
+          name: "user".to_string(),
+          data_type: ColumnDataType::Blob,
+          options: vec![
+            ColumnOption::Unique {
+              is_primary: true,
+              conflict_clause: None
+            },
+            ColumnOption::NotNull,
+            ColumnOption::ForeignKey {
+              foreign_table: "_user".to_string(),
+              referred_columns: vec!["id".to_string()],
+              on_delete: None,
+              on_update: None
+            }
+          ],
+        },
+        C {
+          name: "id".to_string(),
+          data_type: ColumnDataType::Blob,
+          options: vec![
+            ColumnOption::Unique {
+              is_primary: true,
+              conflict_clause: None
+            },
+            ColumnOption::NotNull
+          ]
+        },
+        C {
+          name: "author".to_string(),
+          data_type: ColumnDataType::Blob,
+          options: vec![
+            ColumnOption::NotNull,
+            ColumnOption::ForeignKey {
+              foreign_table: "_user".to_string(),
+              referred_columns: vec!["id".to_string()],
+              on_delete: None,
+              on_update: None
+            }
+          ]
+        },
+        C {
+          name: "body".to_string(),
+          data_type: ColumnDataType::Text,
+          options: vec![]
+        },
+        C {
+          name: "user".to_string(),
+          data_type: ColumnDataType::Blob,
+          options: vec![
+            ColumnOption::Unique {
+              is_primary: true,
+              conflict_clause: None
+            },
+            ColumnOption::NotNull,
+            ColumnOption::ForeignKey {
+              foreign_table: "_user".to_string(),
+              referred_columns: vec!["id".to_string()],
+              on_delete: None,
+              on_update: None
+            }
+          ]
+        },
+        C {
+          name: "username".to_string(),
+          data_type: ColumnDataType::Text,
+          options: vec![ColumnOption::NotNull],
+        },
+        C {
+          name: "id".to_string(),
+          data_type: ColumnDataType::Blob,
+          options: vec![
+            ColumnOption::Unique {
+              is_primary: true,
+              conflict_clause: None
+            },
+            ColumnOption::NotNull,
+          ]
+        },
+        C {
+          name: "author".to_string(),
+          data_type: ColumnDataType::Blob,
+          options: vec![
+            ColumnOption::NotNull,
+            ColumnOption::ForeignKey {
+              foreign_table: "_user".to_string(),
+              referred_columns: vec!["id".to_string()],
+              on_delete: None,
+              on_update: None
+            }
+          ]
+        },
+        C {
+          name: "body".to_string(),
+          data_type: ColumnDataType::Text,
+          options: vec![]
+        },
+        C {
+          name: "foo".to_string(),
+          data_type: ColumnDataType::Blob,
+          options: vec![
+            ColumnOption::Unique {
+              is_primary: true,
+              conflict_clause: None
+            },
+            ColumnOption::NotNull,
+            ColumnOption::ForeignKey {
+              foreign_table: "_user".to_string(),
+              referred_columns: vec!["id".to_string()],
+              on_delete: None,
+              on_update: None
+            }
+          ]
+        }
+      ],
     );
   }
 }
