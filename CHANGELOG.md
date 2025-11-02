@@ -1,3 +1,13 @@
+## v0.20.7
+
+- Support literals in `VIEW`-based record APIs, e.g. `CREATE VIEW v AS SELECT id, "literal" AS data FROM 'table'`;
+- Disentangle config validation from JSON schema metadata. This allows us to initialize the JSON schema registry from the config before building the metadata, thus letting us remove our double-load work-around and introduce stricter error handling in case of JSON schemas that are referenced but missing.
+- Rebuild JSON schema registry when reloading config.
+- Make admin UI use bigints when dealing with longs in the config proto.
+- Fix OIDC OAuth provider config validation and admin UI's OIDC config handling.
+- Minor: have `trail --version` display the bundled SQLite version.
+- Update dependencies.
+
 ## v0.20.6
 
 - Overhaul internal DB & JSON schema abstractions:
