@@ -5,7 +5,7 @@ use url::Url;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::provider::TokenResponse;
-use crate::auth::oauth::providers::OAuthProviderFactory;
+use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
@@ -33,6 +33,17 @@ impl OidcProvider {
       factory_name,
       factory_display_name,
       factory: Box::new(|name: &str, config: &OAuthProviderConfig| {
+        // NOTE: Below errors should not trigger, since already checked by config validation.
+        let Some(auth_url) = config.auth_url.clone() else {
+          return Err(OAuthProviderError::Missing("Auth url missing".into()));
+        };
+        let Some(token_url) = config.token_url.clone() else {
+          return Err(OAuthProviderError::Missing("Token url missing".into()));
+        };
+        let Some(user_api_url) = config.user_api_url.clone() else {
+          return Err(OAuthProviderError::Missing("User-API url missing".into()));
+        };
+
         Ok(Box::new(OidcProvider {
           name: name.to_string(),
           display_name: config
@@ -43,22 +54,9 @@ impl OidcProvider {
           client_id: config.client_id.clone().expect("startup"),
           client_secret: config.client_secret.clone().expect("startup"),
 
-          // NOTE: the following unwraps/expects are checked for by config validation.
-          auth_url: config
-            .auth_url
-            .as_deref()
-            .expect("Auth url missing")
-            .to_string(),
-          token_url: config
-            .token_url
-            .as_deref()
-            .expect("Token url missing")
-            .to_string(),
-          user_api_url: config
-            .user_api_url
-            .as_deref()
-            .expect("User api url missing")
-            .to_string(),
+          auth_url,
+          token_url,
+          user_api_url,
         }))
       }),
     }

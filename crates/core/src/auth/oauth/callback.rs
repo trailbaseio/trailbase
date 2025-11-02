@@ -227,7 +227,7 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
       "{redirect}?code={authorization_code}"
     ))),
     _ => {
-      panic!("code challenge update affected multiple users: {rows_affected}");
+      unreachable!("code challenge update affected multiple users: {rows_affected}");
     }
   };
 }
