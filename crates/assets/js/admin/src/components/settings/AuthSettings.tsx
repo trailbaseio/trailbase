@@ -1,12 +1,4 @@
-import {
-  createSignal,
-  createMemo,
-  For,
-  Suspense,
-  Switch,
-  Show,
-  Match,
-} from "solid-js";
+import { createMemo, For, Suspense, Switch, Show, Match } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { createForm } from "@tanstack/solid-form";
 import { TbInfoCircle } from "solid-icons/tb";
@@ -49,6 +41,7 @@ import {
 } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/config";
 import { adminFetch } from "@/lib/fetch";
+import { createSetOnce } from "@/lib/signals";
 import { showSaveFileDialog, pathJoin, copyToClipboard } from "@/lib/utils";
 
 import type { OAuthProviderResponse } from "@bindings/OAuthProviderResponse";
@@ -103,19 +96,15 @@ function configToProxy(
 
   return {
     ...config,
-    namedOauthProviders: providers.map((p): NamedOAuthProvider => {
-      const config = idToConfig.get(p.id);
-      const clientId = config?.clientId;
+    namedOauthProviders: providers.map((provider): NamedOAuthProvider => {
+      const config = idToConfig.get(provider.id);
+      if (config === undefined) {
+        return { provider };
+      }
 
       return {
-        provider: p,
-        state: clientId
-          ? {
-              clientId: clientId,
-              // NOTE: This is basically undefined since the config doesn't contain the striped secret.
-              clientSecret: config?.clientSecret,
-            }
-          : undefined,
+        provider,
+        state: { ...config },
       };
     }),
   };
@@ -129,18 +118,19 @@ function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
 
   for (const entry of proxy.namedOauthProviders) {
     const p = entry.provider;
+
+    // Only add complete providers back to config, i.e. once that have both a provider id and client secret.
     const clientId = entry.state?.clientId;
     const clientSecret = entry.state?.clientSecret;
 
     if (clientId && clientSecret) {
       config.oauthProviders[p.name] = {
         providerId: p.id,
-        // displayName: p.display_name,
-        clientId,
-        clientSecret,
+
+        ...entry.state,
       };
     } else {
-      console.debug("Skipping: ", entry);
+      console.debug("Skipping incomplete: ", entry);
     }
   }
   return config;
@@ -155,26 +145,6 @@ export async function adminListOAuthProviders(): Promise<OAuthProviderResponse> 
     method: "GET",
   });
   return await response.json();
-}
-
-function createSetOnce<T>(initial: T): [
-  () => T,
-  (v: T) => void,
-  {
-    reset: (v: T) => void;
-  },
-] {
-  let called = false;
-  const [v, setV] = createSignal<T>(initial);
-
-  const setter = (v: T) => {
-    if (!called) {
-      called = true;
-      setV(() => v);
-    }
-  };
-
-  return [v, setter, { reset: setV }];
 }
 
 function ProviderSettingsSubForm(props: {
@@ -331,8 +301,15 @@ function AuthSettingsForm(props: {
   const form = createForm(() => ({
     defaultValues: values() as AuthConfigProxy,
     onSubmit: async ({ value }) => {
+      console.log("CONFIG", props.config);
+
       const newConfig = Config.decode(Config.encode(props.config).finish());
+
+      console.log("NEW CONFIG", JSON.stringify(newConfig));
+
       newConfig.auth = proxyToConfig(value);
+
+      console.log("NEW CONFIG2", newConfig);
 
       console.debug("Submitting provider config:", value);
       await setConfig(queryClient, newConfig);

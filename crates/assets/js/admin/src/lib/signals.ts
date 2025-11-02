@@ -11,3 +11,23 @@ export function createWindowWidth(): Accessor<number> {
 
   return width;
 }
+
+export function createSetOnce<T>(initial: T): [
+  () => T,
+  (v: T) => void,
+  {
+    reset: (v: T) => void;
+  },
+] {
+  let called = false;
+  const [v, setV] = createSignal<T>(initial);
+
+  const setter = (v: T) => {
+    if (!called) {
+      called = true;
+      setV(() => v);
+    }
+  };
+
+  return [v, setter, { reset: setV }];
+}
