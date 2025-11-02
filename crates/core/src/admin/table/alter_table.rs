@@ -141,7 +141,7 @@ pub async fn alter_table_handler(
       debug!("Migration report: {report:?}");
     }
 
-    state.rebuild_schema_cache().await?;
+    state.rebuild_connection_metadata().await?;
 
     // Fix configuration: update all table references by existing APIs.
     if let Some(rename) = ephemeral_table_rename

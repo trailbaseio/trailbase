@@ -107,7 +107,7 @@ mod tests {
       )
       .await?;
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     return Ok(());
   }
@@ -148,7 +148,7 @@ mod tests {
       )
       .await?;
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     return Ok(());
   }

@@ -426,7 +426,7 @@ mod tests {
     let table = lookup_and_parse_table_schema(conn, table_name).unwrap();
 
     let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-    let table_metadata = TableMetadata::new(&registry, table.clone(), &[table.clone()]);
+    let table_metadata = TableMetadata::new(&registry, table.clone(), &[table.clone()]).unwrap();
     let (schema, _) = build_json_schema(
       &registry,
       &table_metadata.name().name,

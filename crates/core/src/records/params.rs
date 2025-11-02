@@ -616,7 +616,7 @@ mod tests {
       .try_into()
       .unwrap();
 
-    let metadata = TableMetadata::new(&registry, table.clone(), &[table]);
+    let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
 
     let id: [u8; 16] = uuid::Uuid::now_v7().as_bytes().clone();
     let blob: Vec<u8> = [0; 128].to_vec();

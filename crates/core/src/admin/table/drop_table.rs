@@ -74,7 +74,7 @@ pub async fn drop_table_handler(
         .await?;
     }
 
-    state.rebuild_schema_cache().await?;
+    state.rebuild_connection_metadata().await?;
 
     // Fix configuration: remove all APIs reference the no longer existing table.
     let mut config = state.get_config();

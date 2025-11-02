@@ -60,7 +60,7 @@ async fn test_record_apis() {
   let logs_conn = state.logs_conn();
 
   create_chat_message_app_tables(conn).await.unwrap();
-  state.rebuild_schema_cache().await.unwrap();
+  state.rebuild_connection_metadata().await.unwrap();
 
   let room = add_room(conn, "room0").await.unwrap();
   let password = "Secret!1!!";

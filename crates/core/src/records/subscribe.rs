@@ -772,7 +772,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     // Register message table as record api with moderator read access.
     add_record_api_config(
@@ -1029,7 +1029,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     // Register message table as record api with moderator read access.
     add_record_api_config(

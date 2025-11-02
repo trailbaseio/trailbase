@@ -18,6 +18,7 @@ use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
 use crate::schema_metadata::{
   ConnectionMetadata, build_connection_metadata_and_install_file_deletion_triggers,
+  lookup_and_parse_all_table_schemas, lookup_and_parse_all_view_schemas,
 };
 use crate::wasm::Runtime;
 
@@ -264,14 +265,11 @@ impl AppState {
     return &self.state.subscription_manager;
   }
 
-  pub async fn rebuild_schema_cache(
+  pub async fn rebuild_connection_metadata(
     &self,
   ) -> Result<(), crate::schema_metadata::SchemaLookupError> {
-    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-
-    let connection_metadata =
-      build_connection_metadata_and_install_file_deletion_triggers(&self.state.conn, &registry)
-        .await?;
+    let tables = lookup_and_parse_all_table_schemas(self.conn()).await?;
+    let views = lookup_and_parse_all_view_schemas(self.conn(), &tables).await?;
 
     // We typically rebuild the schema representations when the DB schemas change, which in turn
     // can invalidate the config, e.g. an API may reference a deleted table. Let's make sure to
@@ -279,10 +277,19 @@ impl AppState {
     // happened rendering the current config invalid. Unlike a config update, it's too late to
     // reject anything.
     let config = self.get_config();
-    validate_config(&connection_metadata, &config).map_err(|err| {
+    validate_config(&tables, &views, &config).map_err(|err| {
       log::error!("Schema change invalidated config: {err}");
       return crate::schema_metadata::SchemaLookupError::Other(err.into());
     })?;
+
+    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+    let connection_metadata = build_connection_metadata_and_install_file_deletion_triggers(
+      self.conn(),
+      tables,
+      views,
+      &registry,
+    )
+    .await?;
 
     self
       .state
@@ -346,7 +353,8 @@ impl AppState {
     config: Config,
     hash: Option<String>,
   ) -> Result<(), ConfigError> {
-    validate_config(&self.connection_metadata(), &config)?;
+    let metadata = self.connection_metadata();
+    validate_config(&metadata.tables(), &metadata.views(), &config)?;
 
     match hash {
       Some(hash) => {
@@ -376,15 +384,17 @@ impl AppState {
     let new_config = self.get_config();
 
     if update_json_schema_registry(&new_config).unwrap_or(true)
-      && let Err(err) = self.rebuild_schema_cache().await
+      && let Err(err) = self.rebuild_connection_metadata().await
     {
       log::warn!("reloading JSON schema cache failed: {err}");
     }
 
     // Write new config to the file system.
+    let metadata = self.connection_metadata();
     return write_config_and_vault_textproto(
       self.data_dir(),
-      &self.connection_metadata(),
+      &metadata.tables(),
+      &metadata.views(),
       &new_config,
     )
     .await;
@@ -527,15 +537,14 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   assert!(new);
   let logs_conn = crate::connection::init_logs_db(None)?;
 
-  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-  let mut connection_metadata =
-    build_connection_metadata_and_install_file_deletion_triggers(&conn, &registry).await?;
+  let tables = lookup_and_parse_all_table_schemas(&conn).await?;
+  let views = lookup_and_parse_all_view_schemas(&conn, &tables).await?;
 
   let TestStateOptions { config, mailer } = options.unwrap_or_default();
   let config = {
     let config = config.unwrap_or_else(test_config);
 
-    validate_config(&connection_metadata, &config).unwrap();
+    validate_config(&tables, &views, &config).unwrap();
 
     // NOTE: The below "append" semantics are different from prod's override behavior, to avoid
     // races between concurrent tests. The registry needs to be global for the sqlite extensions
@@ -552,13 +561,15 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
           Some(trailbase_extension::jsonschema::Schema::from(schema_json, None, false).unwrap()),
         );
       }
-
-      connection_metadata =
-        build_connection_metadata_and_install_file_deletion_triggers(&conn, &registry).await?;
     }
 
     Reactive::new(config)
   };
+
+  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+  let connection_metadata =
+    build_connection_metadata_and_install_file_deletion_triggers(&conn, tables, views, &registry)
+      .await?;
 
   let data_dir = DataDir(temp_dir.path().to_path_buf());
 

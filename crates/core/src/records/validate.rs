@@ -1,11 +1,12 @@
+use std::borrow::Borrow;
+
 use itertools::Itertools;
 use trailbase_schema::QualifiedName;
 use trailbase_schema::metadata::TableOrView;
 use trailbase_schema::parse::parse_into_statement;
-use trailbase_schema::sqlite::ColumnOption;
+use trailbase_schema::sqlite::{ColumnOption, Table, View};
 
 use crate::config::{ConfigError, proto};
-use crate::schema_metadata::ConnectionMetadata;
 
 fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
   if name.is_empty() {
@@ -21,8 +22,9 @@ fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
   Ok(())
 }
 
-pub(crate) fn validate_record_api_config(
-  schemas: &ConnectionMetadata,
+pub(crate) fn validate_record_api_config<T: Borrow<Table>, V: Borrow<View>>(
+  tables: &[T],
+  views: &[V],
   api_config: &proto::RecordApiConfig,
 ) -> Result<String, ConfigError> {
   let Some(ref api_name) = api_config.name else {
@@ -37,18 +39,18 @@ pub(crate) fn validate_record_api_config(
   let metadata: TableOrView = {
     let table_name = QualifiedName::parse(table_name)?;
 
-    if let Some(table_metadata) = schemas.get_table(&table_name) {
-      if table_metadata.schema.temporary {
+    if let Some(table) = tables.iter().find(|t| (*t).borrow().name == table_name) {
+      if table.borrow().temporary {
         return Err(invalid("Record APIs must not reference TEMPORARY tables"));
       }
 
-      TableOrView::Table(table_metadata)
-    } else if let Some(view_metadata) = schemas.get_view(&table_name) {
-      if view_metadata.schema.temporary {
+      TableOrView::Table(table.borrow())
+    } else if let Some(view) = views.iter().find(|v| (*v).borrow().name == table_name) {
+      if view.borrow().temporary {
         return Err(invalid("Record APIs must not reference TEMPORARY views"));
       }
 
-      TableOrView::View(view_metadata)
+      TableOrView::View(view.borrow())
     } else {
       return Err(invalid(format!(
         "Missing table or view for API: {api_name}"
@@ -56,7 +58,7 @@ pub(crate) fn validate_record_api_config(
     }
   };
 
-  let Some((pk_index, _)) = metadata.record_pk_column() else {
+  let Some((pk_index, _)) = metadata.record_pk_column(tables) else {
     return Err(invalid(format!(
       "Table for api '{api_name}' is missing valid integer/UUID primary key column."
     )));
@@ -125,13 +127,19 @@ pub(crate) fn validate_record_api_config(
       )));
     }
 
-    let Some(foreign_table) = schemas.get_table(&QualifiedName::parse(foreign_table_name)?) else {
+    let fq_foreign_table_name = QualifiedName::parse(foreign_table_name)?;
+    let Some(foreign_table) = tables
+      .iter()
+      .find(|t| (*t).borrow().name == fq_foreign_table_name)
+    else {
       return Err(invalid(format!(
         "{api_name} reference missing table: {foreign_table_name}"
       )));
     };
 
-    let Some((_idx, foreign_pk_column)) = foreign_table.record_pk_column() else {
+    let Some((_idx, foreign_pk_column)) =
+      TableOrView::Table(foreign_table.borrow()).record_pk_column(tables)
+    else {
       return Err(invalid(format!(
         "{api_name} references pk-less table: {foreign_table_name}"
       )));

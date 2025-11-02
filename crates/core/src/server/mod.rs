@@ -250,23 +250,23 @@ impl Server {
               error!("Failed to apply migrations: {err}");
             }
             Ok(_new_db) => {
-              info!(
-                "Migrations applied: {:?}",
-                state.data_dir().migrations_path()
-              );
-
-              // NOTE: we're always invalidating: simple & safe. We could also avoid invalidation
-              // when no new migrations were applied :shrug:.
-              if let Err(err) = state.rebuild_schema_cache().await {
-                error!("Failed to invalidate schema cache: {err}");
-              }
+              let user_migrations_path = state.data_dir().migrations_path();
+              info!("Migrations applied: {user_migrations_path:?}");
             }
           }
+
+          // NOTE: we're always invalidating: simple & safe. We could also avoid invalidation
+          // when no new migrations were applied :shrug:.
+          if let Err(err) = state.rebuild_connection_metadata().await {
+            error!("Failed to invalidate schema cache: {err}");
+          }
+          let metadata = state.connection_metadata();
 
           // Reload config:
           match crate::config::load_or_init_config_textproto(
             state.data_dir(),
-            &state.connection_metadata(),
+            &metadata.tables(),
+            &metadata.views(),
           )
           .await
           {

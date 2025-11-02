@@ -229,7 +229,7 @@ mod test {
       .await
       .unwrap();
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     add_record_api_config(
       &state,

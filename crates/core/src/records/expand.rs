@@ -260,7 +260,7 @@ mod tests {
     let table = lookup_and_parse_table_schema(conn, "test_table", Some("main"))
       .await
       .unwrap();
-    let metadata = TableMetadata::new(&registry, table.clone(), &[table]);
+    let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
 
     let insert = |json: serde_json::Value| async move {
       conn

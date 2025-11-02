@@ -157,7 +157,7 @@ pub async fn list_logs_handler(
     &trailbase_extension::jsonschema::JsonSchemaRegistry::default(),
     table.clone(),
     &[table],
-  );
+  )?;
   let filter_where_clause =
     build_filter_where_clause("log", &table_metadata.schema.columns, filter_params)?;
 

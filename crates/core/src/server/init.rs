@@ -8,7 +8,10 @@ use crate::config::load_or_init_config_textproto;
 use crate::constants::USER_TABLE;
 use crate::metadata::load_or_init_metadata_textproto;
 use crate::rand::generate_random_string;
-use crate::schema_metadata::build_connection_metadata_and_install_file_deletion_triggers;
+use crate::schema_metadata::{
+  build_connection_metadata_and_install_file_deletion_triggers, lookup_and_parse_all_table_schemas,
+  lookup_and_parse_all_view_schemas,
+};
 use crate::server::DataDir;
 
 #[derive(Debug, Error)]
@@ -86,26 +89,20 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   let (conn, new_db) =
     crate::connection::init_main_db(Some(&args.data_dir), Some(extra_databases))?;
 
-  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-  let mut connection_metadata =
-    build_connection_metadata_and_install_file_deletion_triggers(&conn, &registry).await?;
+  let tables = lookup_and_parse_all_table_schemas(&conn).await?;
+  let views = lookup_and_parse_all_view_schemas(&conn, &tables).await?;
 
   // Read config or write default one. Ensures config is validated.
-  let config = load_or_init_config_textproto(&args.data_dir, &connection_metadata).await?;
-
-  if update_json_schema_registry(&config)? {
-    // NOTE: We must reload the table schema metadata after registering new schemas. This is a
-    // work-around because config validation currently depends on ConnectionMetadata and thus the
-    // JSON schema registry. It would be cleaner to build SchemaMatadataCache only after
-    // registering custom schemas and validating the config only against plain TABLE/VIEW
-    // metadata.
-    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-    connection_metadata =
-      build_connection_metadata_and_install_file_deletion_triggers(&conn, &registry).await?;
-  }
+  let config = load_or_init_config_textproto(&args.data_dir, &tables, &views).await?;
+  update_json_schema_registry(&config)?;
 
   // Load the `<depot>/metadata.textproto`.
   let _metadata = load_or_init_metadata_textproto(&args.data_dir).await?;
+
+  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+  let connection_metadata =
+    build_connection_metadata_and_install_file_deletion_triggers(&conn, tables, views, &registry)
+      .await?;
 
   let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
 

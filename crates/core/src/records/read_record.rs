@@ -449,7 +449,7 @@ mod test {
       .await
       .unwrap();
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     add_record_api_config(
       &state,
@@ -877,7 +877,7 @@ mod test {
       .await
       .unwrap();
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     let room0 = add_room(conn, "room0").await.unwrap();
     let room1 = add_room(conn, "room1").await.unwrap();
@@ -945,7 +945,7 @@ mod test {
       .await
       .unwrap();
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     add_record_api_config(
       &state,
@@ -1042,7 +1042,7 @@ mod test {
       .await
       .unwrap();
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     add_record_api_config(
       &state,
@@ -1125,7 +1125,7 @@ mod test {
       .await
       .unwrap();
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     add_record_api_config(
       &state,
@@ -1231,7 +1231,7 @@ mod test {
       .await
       .unwrap();
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     add_record_api_config(
       &state,

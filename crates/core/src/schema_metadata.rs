@@ -7,21 +7,10 @@ use trailbase_schema::sqlite::{SchemaError, Table, View};
 use trailbase_sqlite::{Connection, params};
 
 pub use trailbase_schema::metadata::{
-  ConnectionMetadata, ConnectionSchemas, JsonColumnMetadata, JsonSchemaError, TableMetadata,
+  ConnectionMetadata, JsonColumnMetadata, JsonSchemaError, TableMetadata,
 };
 
 use crate::constants::SQLITE_SCHEMA_TABLE;
-
-pub(crate) async fn build_connection_schemas(
-  conn: &Connection,
-) -> Result<ConnectionSchemas, SchemaLookupError> {
-  let tables = lookup_and_parse_all_table_schemas(conn).await?;
-
-  return Ok(ConnectionSchemas {
-    views: lookup_and_parse_all_view_schemas(conn, &tables).await?,
-    tables,
-  });
-}
 
 /// (Re-)build the connections schema representation *with* the side-effect of (re-)installing file
 /// deletion triggers.
@@ -31,10 +20,11 @@ pub(crate) async fn build_connection_schemas(
 /// column is added, we need to rebuild the metadata and update or install missing triggers.
 pub(crate) async fn build_connection_metadata_and_install_file_deletion_triggers(
   conn: &Connection,
+  tables: Vec<Table>,
+  views: Vec<View>,
   registry: &JsonSchemaRegistry,
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
-  let schemas = build_connection_schemas(conn).await?;
-  let metadata = ConnectionMetadata::from_schemas(schemas, registry);
+  let metadata = ConnectionMetadata::from_schemas(tables, views, registry)?;
 
   setup_file_deletion_triggers(conn, &metadata).await?;
 
@@ -53,6 +43,8 @@ pub enum SchemaLookupError {
   Missing,
   #[error("Sql parse error: {0}")]
   SqlParse(#[from] sqlite3_parser::lexer::sql::Error),
+  #[error("Json Schema error: {0}")]
+  JsonSchema(#[from] trailbase_schema::metadata::JsonSchemaError),
   #[error("Other error: {0}")]
   Other(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -169,7 +161,7 @@ pub async fn lookup_and_parse_all_view_schemas(
 
 // Install file column triggers. This ain't pretty, this might be better on construction and
 // schema changes.
-async fn setup_file_deletion_triggers(
+pub(crate) async fn setup_file_deletion_triggers(
   conn: &trailbase_sqlite::Connection,
   metadata: &ConnectionMetadata,
 ) -> Result<(), SchemaLookupError> {
@@ -258,7 +250,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     let metadata = state.connection_metadata();
     let test_table = metadata
@@ -333,7 +325,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     add_record_api_config(
       &state,
@@ -552,7 +544,7 @@ mod tests {
       .await
       .unwrap();
 
-    state.rebuild_schema_cache().await.unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
     add_record_api_config(
       &state,
