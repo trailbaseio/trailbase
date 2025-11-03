@@ -23,7 +23,12 @@ lazy_static! {
   static ref SITE: String = format!("http://127.0.0.1:{PORT}");
 }
 
-fn start_server() -> Result<Server, std::io::Error> {
+fn start_server() -> Result<Option<Server>, std::io::Error> {
+  if PORT == 4000 {
+    // Use an externally bootstrapped server.
+    return Ok(None);
+  }
+
   let cwd = std::env::current_dir()?;
   assert!(cwd.ends_with("client"));
 
@@ -75,7 +80,7 @@ fn start_server() -> Result<Server, std::io::Error> {
     panic!("Server did not get healthy");
   });
 
-  return Ok(Server { child });
+  return Ok(Some(Server { child }));
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -332,6 +337,64 @@ async fn expand_foreign_records_test() {
     assert_eq!(1, offset_comments.records.len());
     assert_eq!(*second, offset_comments.records[0]);
   }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct SimpleSchemaDataColumn {
+  name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct SimpleSchema {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  id: Option<String>,
+  data: SimpleSchemaDataColumn,
+}
+
+async fn custom_json_column_test() {
+  let client = connect().await;
+  let api = client.records("simple_schema_table");
+
+  let id = api
+    .create(SimpleSchema {
+      id: None,
+      data: SimpleSchemaDataColumn {
+        name: "Eve".to_string(),
+      },
+    })
+    .await
+    .unwrap();
+
+  api
+    .update(
+      id,
+      SimpleSchema {
+        id: None,
+        data: SimpleSchemaDataColumn {
+          name: "Alice".to_string(),
+        },
+      },
+    )
+    .await
+    .unwrap();
+
+  api
+    .create_bulk(&[
+      SimpleSchema {
+        id: None,
+        data: SimpleSchemaDataColumn {
+          name: "Alice".to_string(),
+        },
+      },
+      SimpleSchema {
+        id: None,
+        data: SimpleSchemaDataColumn {
+          name: "Eve".to_string(),
+        },
+      },
+    ])
+    .await
+    .unwrap();
 }
 
 async fn subscription_test() {
@@ -608,6 +671,9 @@ fn integration_test() {
 
   runtime.block_on(expand_foreign_records_test());
   println!("Ran expand foreign records tests");
+
+  runtime.block_on(custom_json_column_test());
+  println!("Ran custom JSON column tests");
 
   runtime.block_on(subscription_test());
   println!("Ran subscription tests");
