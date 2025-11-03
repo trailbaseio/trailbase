@@ -134,15 +134,29 @@ function ServerSettings(props: CommonProps) {
 
           <div class="flex justify-end gap-4">
             {import.meta.env.DEV && (
-              <Button
-                variant={"destructive"}
-                type="button"
-                onClick={() => {
-                  throw new Date().toLocaleString();
-                }}
-              >
-                DEV: Throw
-              </Button>
+              <>
+                <Button
+                  variant={"destructive"}
+                  type="button"
+                  onClick={() => {
+                    throw new Error("test sync exception");
+                  }}
+                >
+                  DEV: Throw
+                </Button>
+
+                <Button
+                  variant={"destructive"}
+                  type="button"
+                  onClick={() => {
+                    (async () => {
+                      throw new Error("test async exception");
+                    })();
+                  }}
+                >
+                  DEV: Async Throw
+                </Button>
+              </>
             )}
 
             <form.Subscribe
