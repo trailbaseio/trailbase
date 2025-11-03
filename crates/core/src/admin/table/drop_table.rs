@@ -74,21 +74,23 @@ pub async fn drop_table_handler(
         .await?;
     }
 
-    state.rebuild_connection_metadata().await?;
-
     // Fix configuration: remove all APIs reference the no longer existing table.
-    let mut config = state.get_config();
-    let old_config_hash = hash_config(&config);
+    {
+      let mut config = state.get_config();
+      let old_config_hash = hash_config(&config);
 
-    config.record_apis.retain(|c| {
-      if let Some(ref name) = c.table_name {
-        return *name != unqualified_table_name;
-      }
-      return true;
-    });
-    state
-      .validate_and_update_config(config, Some(old_config_hash))
-      .await?;
+      config.record_apis.retain(|c| {
+        if let Some(ref name) = c.table_name {
+          return *name != unqualified_table_name;
+        }
+        return true;
+      });
+      state
+        .validate_and_update_config(config, Some(old_config_hash))
+        .await?;
+    }
+
+    state.rebuild_connection_metadata().await?;
   }
 
   return Ok(Json(DropTableResponse {
