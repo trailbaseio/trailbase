@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { OAuth2Server } from "oauth2-mock-server";
-import { ADDRESS } from "../constants";
+import { ADDRESS, PORT } from "../constants";
 
 type OpenIdConfig = {
   issuer: string;
@@ -11,6 +11,10 @@ type OpenIdConfig = {
 
 // NOTE: Having this server test live alongside the client is a bit odd.
 test("OIDC", async () => {
+  if (PORT === 4000) {
+    return;
+  }
+
   const server = new OAuth2Server();
 
   // Generate a new RSA key and add it to the keystore

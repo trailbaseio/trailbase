@@ -1,4 +1,4 @@
-import { For, Match, Switch, createMemo, createSignal, JSX } from "solid-js";
+import { Match, Switch, createMemo, createSignal, JSX } from "solid-js";
 import { TbRefresh, TbTable, TbTrash } from "solid-icons/tb";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { useSearchParams } from "@solidjs/router";
@@ -48,15 +48,19 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  type FileUpload,
+  type FileUploads,
+  UploadedFile,
+  UploadedFiles,
+} from "@/components/tables/Files";
 
 import { createConfigQuery, invalidateConfig } from "@/lib/config";
 import type { Record, RowData } from "@/lib/convert";
 import { hashSqlValue } from "@/lib/convert";
-import { adminFetch } from "@/lib/fetch";
 import { urlSafeBase64ToUuid, toHex } from "@/lib/utils";
 import { dropTable, dropIndex } from "@/lib/table";
 import { deleteRows, fetchRows } from "@/lib/row";
-import { sqlValueToString } from "@/lib/value";
 import {
   findPrimaryKeyColumnIndex,
   getForeignKey,
@@ -70,14 +74,13 @@ import {
   tableSatisfiesRecordApiRequirements,
   viewSatisfiesRecordApiRequirements,
   prettyFormatQualifiedName,
-  type TableType,
 } from "@/lib/schema";
 
 import type { Column } from "@bindings/Column";
+import type { ColumnDataType } from "@bindings/ColumnDataType";
 import type { ListRowsResponse } from "@bindings/ListRowsResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { QualifiedName } from "@bindings/QualifiedName";
-import type { ReadFilesQuery } from "@bindings/ReadFilesQuery";
 import type { SqlValue } from "@bindings/SqlValue";
 import type { Table } from "@bindings/Table";
 import type { TableIndex } from "@bindings/TableIndex";
@@ -85,15 +88,6 @@ import type { TableTrigger } from "@bindings/TableTrigger";
 import type { View } from "@bindings/View";
 
 export type SimpleSignal<T> = [get: () => T, set: (state: T) => void];
-
-type FileUpload = {
-  id: string;
-  filename: string | undefined;
-  content_type: string | undefined;
-  mime_type: string | string;
-};
-
-type FileUploads = FileUpload[];
 
 const blobEncodings = ["base64", "hex", "mixed"] as const;
 type BlobEncoding = (typeof blobEncodings)[number];
@@ -112,11 +106,8 @@ function renderCell(
   columns: Column[],
   pkIndex: number,
   cell: {
-    col: Column;
-    isUUID: boolean;
-    isJSON: boolean;
-    isFile: boolean;
-    isFiles: boolean;
+    column: Column;
+    type: CellType;
   },
   blobEncoding: BlobEncoding,
 ): JSX.Element {
@@ -136,107 +127,50 @@ function renderCell(
   if ("Blob" in value) {
     const blob = value.Blob;
     if ("Base64UrlSafe" in blob) {
-      const render = () => {
-        if (blobEncoding === "hex") {
-          return toHex(urlSafeBase64Decode(blob.Base64UrlSafe));
-        }
-        return blob.Base64UrlSafe;
-      };
-
-      if (cell.isUUID) {
+      if (cell.type === "UUID") {
         return (
-          <Tooltip>
-            <TooltipTrigger as="div">
-              {blobEncoding === "mixed"
-                ? urlSafeBase64ToUuid(blob.Base64UrlSafe)
-                : render()}
-            </TooltipTrigger>
-
-            <TooltipContent>
-              <div>
-                <ul>
-                  <li>
-                    UUID:{" "}
-                    <span class="font-bold">
-                      {urlSafeBase64ToUuid(blob.Base64UrlSafe)}
-                    </span>
-                  </li>
-                  <li>
-                    Url-safe base64:{" "}
-                    <span class="font-bold">{blob.Base64UrlSafe}</span>
-                  </li>
-                </ul>
-              </div>
-            </TooltipContent>
-          </Tooltip>
+          <Uuid
+            base64UrlSafeBlob={blob.Base64UrlSafe}
+            blobEncoding={blobEncoding}
+          />
         );
       }
 
-      return render();
+      if (blobEncoding === "hex") {
+        return toHex(urlSafeBase64Decode(blob.Base64UrlSafe));
+      }
+      return blob.Base64UrlSafe;
     }
     throw Error("Expected Base64UrlSafe");
   }
 
   if ("Text" in value) {
-    const imageMime = (f: FileUpload) => {
-      const mime = f.mime_type;
-      return mime === "image/jpeg" || mime === "image/png";
-    };
+    if (cell.type === "File") {
+      const file = JSON.parse(value.Text) as FileUpload;
+      const pkCol = columns[pkIndex].name;
+      const pkVal = context.row.original[pkIndex];
 
-    if (cell.isFile) {
-      const fileUpload = JSON.parse(value.Text) as FileUpload;
-      if (imageMime(fileUpload)) {
-        const pkCol = columns[pkIndex].name;
-        const pkVal = context.row.original[pkIndex];
-        const url = imageUrl({
-          tableName,
-          query: {
-            pk_column: pkCol,
-            pk_value: sqlValueToString(pkVal),
-            file_column_name: cell.col.name,
-            file_name: null,
-          },
-        });
+      return (
+        <UploadedFile
+          file={file}
+          tableName={tableName}
+          columnName={cell.column.name}
+          pk={{ columnName: pkCol, value: pkVal }}
+        />
+      );
+    } else if (cell.type === "File[]") {
+      const files = JSON.parse(value.Text) as FileUploads;
+      const pkCol = columns[pkIndex].name;
+      const pkVal = context.row.original[pkIndex];
 
-        return <Image url={url} mime={fileUpload.mime_type} />;
-      }
-    } else if (cell.isFiles) {
-      const fileUploads = JSON.parse(value.Text) as FileUploads;
-
-      const indexes: number[] = [];
-      for (let i = 0; i < fileUploads.length; ++i) {
-        const file = fileUploads[i];
-        if (imageMime(file)) {
-          indexes.push(i);
-        }
-
-        if (indexes.length >= 3) break;
-      }
-
-      if (indexes.length > 0) {
-        const pkCol = columns[pkIndex].name;
-        const pkVal = context.row.original[pkIndex];
-        return (
-          <div class="flex gap-2">
-            <For each={indexes}>
-              {(index: number) => {
-                const fileUpload = fileUploads[index];
-                const url = imageUrl({
-                  tableName,
-                  query: {
-                    pk_column: pkCol,
-                    pk_value: sqlValueToString(pkVal),
-                    file_column_name: cell.col.name,
-                    file_name: fileUpload.filename ?? null,
-                  },
-                });
-
-                return <Image url={url} mime={fileUpload.mime_type} />;
-              }}
-            </For>
-          </div>
-        );
-      }
+      return (
+        <UploadedFiles
+          files={files}
+          tableName={tableName}
+          columnName={cell.column.name}
+          pk={{ columnName: pkCol, value: pkVal }}
+        />
+      );
     }
 
     return value.Text;
@@ -245,60 +179,43 @@ function renderCell(
   throw Error("Unhandled value type");
 }
 
-function asyncBase64Encode(blob: Blob): Promise<string> {
-  return new Promise((resolve, _) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.readAsDataURL(blob);
-  });
-}
-
-function Image(props: { url: string; mime: string }) {
-  const imageData = useQuery(() => ({
-    queryKey: ["tableImage", props.url],
-    queryFn: async () => {
-      const response = await adminFetch(props.url);
-      return await asyncBase64Encode(await response.blob());
-    },
-  }));
+function Uuid(props: {
+  base64UrlSafeBlob: string;
+  blobEncoding: BlobEncoding;
+}) {
+  const render = () => {
+    if (props.blobEncoding === "hex") {
+      return toHex(urlSafeBase64Decode(props.base64UrlSafeBlob));
+    }
+    return props.base64UrlSafeBlob;
+  };
 
   return (
-    <Switch>
-      <Match when={imageData.isError}>{`${imageData.error}`}</Match>
+    <Tooltip>
+      <TooltipTrigger as="div">
+        {props.blobEncoding === "mixed"
+          ? urlSafeBase64ToUuid(props.base64UrlSafeBlob)
+          : render()}
+      </TooltipTrigger>
 
-      <Match when={imageData.isLoading}>Loading</Match>
-
-      <Match when={imageData.data}>
-        <img class="size-[50px]" src={imageData.data} />
-      </Match>
-    </Switch>
+      <TooltipContent>
+        <div>
+          <ul>
+            <li>
+              UUID:{" "}
+              <span class="font-bold">
+                {urlSafeBase64ToUuid(props.base64UrlSafeBlob)}
+              </span>
+            </li>
+            <li>
+              Url-safe base64:{" "}
+              <span class="font-bold">{props.base64UrlSafeBlob}</span>
+            </li>
+          </ul>
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
-}
-
-function imageUrl(opts: {
-  tableName: QualifiedName;
-  query: ReadFilesQuery;
-}): string {
-  const tableName: string = prettyFormatQualifiedName(opts.tableName);
-  const query = opts.query;
-
-  if (query.file_name) {
-    const params = new URLSearchParams({
-      pk_column: query.pk_column,
-      pk_value: query.pk_value,
-      file_column_name: query.file_column_name,
-      file_name: query.file_name,
-    });
-
-    return `/table/${tableName}/files?${params}`;
-  }
-
-  const params = new URLSearchParams({
-    pk_column: query.pk_column,
-    pk_value: query.pk_value,
-    file_column_name: query.file_column_name,
-  });
-  return `/table/${tableName}/files?${params}`;
 }
 
 function tableOrViewSatisfiesRecordApiRequirements(
@@ -544,29 +461,36 @@ async function buildTableState(
   };
 }
 
+type CellType = "UUID" | "JSON" | "File" | "File[]" | ColumnDataType;
+
+function deriveCellType(column: Column): CellType {
+  if (isUUIDColumn(column)) {
+    return "UUID";
+  }
+  if (isFileUploadColumn(column)) {
+    return "File";
+  }
+  if (isFileUploadsColumn(column)) {
+    return "File[]";
+  }
+
+  if (isJSONColumn(column)) {
+    return "JSON";
+  }
+
+  return column.data_type;
+}
+
 function buildColumnDefs(
   tableName: QualifiedName,
-  tableType: TableType,
-  pkColumn: number,
+  pkColumnIndex: number,
   columns: Column[],
   blobEncoding: BlobEncoding,
 ): ColumnDef<RowData, SqlValue>[] {
   return columns.map((col, idx) => {
     const fk = getForeignKey(col.options);
     const notNull = isNotNull(col.options);
-    const isJSON = isJSONColumn(col);
-    const isUUID = isUUIDColumn(col);
-    const isFile = isFileUploadColumn(col);
-    const isFiles = isFileUploadsColumn(col);
-
-    // TODO: Add support for custom json schemas or generally JSON types.
-    const type = ((): string => {
-      if (isUUID) return "UUID";
-      if (isJSON) return "JSON";
-      if (isFile) return "File";
-      if (isFiles) return "File[]";
-      return col.data_type;
-    })();
+    const type = deriveCellType(col);
 
     const typeName = notNull ? type : type + "?";
     const fkSuffix = fk ? ` ‣ ${fk.foreign_table}[${fk.referred_columns}]` : "";
@@ -579,17 +503,10 @@ function buildColumnDefs(
           context,
           tableName,
           columns,
-          pkColumn,
+          pkColumnIndex,
           {
-            col: col,
-            isUUID,
-            isJSON,
-            // FIXME: Whether or not an image can be rendered depends on whether
-            // Record API read-access is configured and not the tableType. We
-            // could also consider to decouple by providing a dedicated admin
-            // file-access endpoint.
-            isFile: isFile && tableType !== "view",
-            isFiles: isFiles && tableType !== "view",
+            column: col,
+            type,
           },
           blobEncoding,
         ),
@@ -621,7 +538,6 @@ function RowDataTable(props: {
   const columnDefs = createMemo(() =>
     buildColumnDefs(
       table().name,
-      tableType(table()),
       pkColumnIndex(),
       props.state.response.columns,
       blobEncoding(),

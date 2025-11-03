@@ -5,11 +5,16 @@ import { cwd } from "node:process";
 import { join } from "node:path";
 import { execa, type Subprocess } from "execa";
 
-import { ADDRESS } from "./constants";
+import { ADDRESS, PORT } from "./constants";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function initTrailBase(): Promise<{ subprocess: Subprocess }> {
+async function initTrailBase(): Promise<{ subprocess: Subprocess | null }> {
+  if (PORT === 4000) {
+    // Rely on externally bootstrapped instance.
+    return { subprocess: null };
+  }
+
   const pwd = cwd();
   if (!pwd.endsWith("client")) {
     throw Error(`Unexpected CWD: ${pwd}`);
@@ -91,13 +96,15 @@ const { subprocess } = await initTrailBase();
   await ctx.close();
 }
 
-if (subprocess.exitCode === null) {
-  // Still running
-  console.info("Shutting down TrailBase");
-  subprocess.kill();
-} else {
-  // Otherwise TrailBase terminated. Log output to provide a clue as to why.
-  const { stderr, stdout } = subprocess;
-  console.error(stdout);
-  console.error(stderr);
+if (subprocess !== null) {
+  if (subprocess.exitCode === null) {
+    // Still running
+    console.info("Shutting down TrailBase");
+    subprocess.kill();
+  } else {
+    // Otherwise TrailBase terminated. Log output to provide a clue as to why.
+    const { stderr, stdout } = subprocess;
+    console.error(stdout);
+    console.error(stderr);
+  }
 }
