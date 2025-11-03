@@ -12,30 +12,30 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tanstack/db": "^0.4.8",
-    "@tanstack/query-core": "^5.90.2",
-    "@tanstack/query-db-collection": "^0.2.29",
-    "@tanstack/react-db": "^0.1.30",
-    "@tanstack/trailbase-db-collection": "^0.1.30",
+    "@tanstack/db": "^0.4.16",
+    "@tanstack/query-core": "^5.90.6",
+    "@tanstack/query-db-collection": "^0.2.39",
+    "@tanstack/react-db": "^0.1.38",
+    "@tanstack/trailbase-db-collection": "^0.1.38",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "tailwindcss": "^4.1.14",
-    "trailbase": "=0.7.4"
+    "tailwindcss": "^4.1.16",
+    "trailbase": "*"
   },
   "devDependencies": {
-    "@eslint/js": "^9.37.0",
-    "@tailwindcss/vite": "^4.1.14",
+    "@eslint/js": "^9.39.0",
+    "@tailwindcss/vite": "^4.1.16",
     "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.1",
-    "@vitejs/plugin-react": "^5.0.4",
-    "eslint": "^9.37.0",
-    "eslint-plugin-react-hooks": "^7.0.0",
-    "eslint-plugin-react-refresh": "^0.4.23",
-    "globals": "^16.4.0",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
+    "eslint": "^9.39.0",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
     "prettier": "^3.6.2",
-    "prettier-plugin-tailwindcss": "^0.6.14",
+    "prettier-plugin-tailwindcss": "^0.7.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.46.0",
-    "vite": "^7.1.9"
+    "typescript-eslint": "^8.46.2",
+    "vite": "^7.1.12"
   }
 }

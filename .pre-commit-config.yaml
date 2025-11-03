@@ -8,7 +8,8 @@ repos:
     -   id: check-case-conflict
     -   id: check-merge-conflict
     -   id: check-symlinks
-    -   id: check-yaml
+    # TODO: Looks like check-yaml struggles with some valid `pnpm-lock.yaml`s
+    # -   id: check-yaml
     -   id: end-of-file-fixer
     -   id: mixed-line-ending
     -   id: trailing-whitespace

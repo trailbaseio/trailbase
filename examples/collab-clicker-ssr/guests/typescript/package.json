@@ -12,14 +12,14 @@
     "format": "prettier -w src"
   },
   "dependencies": {
-    "trailbase-wasm": "*"
+    "trailbase-wasm": "^0.3.0"
   },
   "devDependencies": {
-    "@bytecodealliance/jco": "^1.15.1",
-    "@types/node": "^24.7.2",
+    "@bytecodealliance/jco": "^1.15.2",
+    "@types/node": "^24.10.0",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
-    "vite": "^7.1.9",
+    "vite": "^7.1.12",
     "vitest": "^3.2.4"
   }
 }
