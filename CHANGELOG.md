@@ -1,3 +1,10 @@
+## v0.20.8
+
+- Fix admin UI drop/alter table regression in v0.20.7. The stricter schema reload validations require us to fix the API config first before reloading schemas.
+- Properly catch and display uncaught async rejections in admin UI. In the past we removed the built-in toast from `adminFetch`, which led to fetch errors going quiet, since browsers uncaught error handlers don't handle async rejections.
+- Minor: also improve error handler life-cycle to avoid duplicate toast in combination with hot-reload during development.
+- Update JS dependencies.
+
 ## v0.20.7
 
 - Support literals in `VIEW`-based record APIs, e.g. `CREATE VIEW v AS SELECT id, "literal" AS data FROM 'table'`;
