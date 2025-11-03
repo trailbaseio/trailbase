@@ -309,6 +309,13 @@ impl<'a> TableOrViewMetadata<'a> {
       Self::View(v) => v.record_pk_column(),
     };
   }
+
+  pub fn column_by_name(&self, name: &str) -> Option<(usize, &Column)> {
+    return match self {
+      Self::Table(t) => t.column_by_name(name),
+      Self::View(v) => v.column_by_name(name),
+    };
+  }
 }
 
 /// Contains schema metadata for a bunch of TABLEs and VIEWs, which may belong to different
