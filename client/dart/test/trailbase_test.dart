@@ -549,9 +549,22 @@ Future<void> main() async {
         'data': '{ "name": "Eve" }',
       });
 
-      await api.create({
+      final id = await api.create({
         'data': {'name': 'Eve'},
       });
+
+      await api.update(id, {
+        'data': {'name': 'Alice'},
+      });
+
+      await api.createBulk([
+        {
+          'data': {'name': 'Eve'},
+        },
+        {
+          'data': {'name': 'Alice'}
+        },
+      ]);
 
       // Test that invalid input produces a client-error, i.e. 400.
       expect(() async {
