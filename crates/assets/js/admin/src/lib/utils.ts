@@ -62,23 +62,82 @@ export function fromHex(hex: string): Uint8Array {
 }
 
 export async function showSaveFileDialog(opts: {
-  contents: string;
+  contents: () => Promise<ReadableStream<Uint8Array> | null>;
   filename: string;
-}) {
+  mimeType?: string;
+}): Promise<boolean> {
+  const stream = await opts.contents();
+  if (stream === null) {
+    return false;
+  }
+
   // Not supported by firefox: https://developer.mozilla.org/en-US/docs/Web/API/Window/showSaveFilePicker#browser_compatibility
   // possible fallback: https://stackoverflow.com/a/67806663
   if (window.showSaveFilePicker) {
-    const handle = await window.showSaveFilePicker({
-      suggestedName: opts.filename,
-    });
-    const writable = await handle.createWritable();
-    await writable.write(opts.contents);
-    writable.close();
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: opts.filename,
+      });
+
+      const writable = await handle.createWritable();
+      await stream.pipeTo(writable);
+    } catch (err) {
+      // Ignore user abortions.
+      if (err instanceof Error && err.name === "AbortError") {
+        return false;
+      }
+      throw err;
+    }
   } else {
+    const blob = await readableStreamToBlob(stream, opts.mimeType);
+
     const saveFile = document.createElement("a");
-    saveFile.href = URL.createObjectURL(new Blob([opts.contents]));
+    saveFile.href = URL.createObjectURL(blob);
     saveFile.download = opts.filename;
     saveFile.click();
-    setTimeout(() => URL.revokeObjectURL(saveFile.href), 60000);
+
+    // Cleanup.
+    setTimeout(() => {
+      saveFile.remove();
+      URL.revokeObjectURL(saveFile.href);
+    }, 60 * 1000);
   }
+
+  return true;
+}
+
+async function readableStreamToBlob(
+  stream: ReadableStream<Uint8Array>,
+  mimeType?: string,
+) {
+  const reader = stream.getReader();
+
+  const chunks: Uint8Array[] = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    chunks.push(value);
+  }
+
+  // Concatenate all chunks
+  const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+  const merged = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return new Blob([merged], { type: mimeType });
+}
+
+export function stringToReadableStream(s: string): ReadableStream {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(s));
+      controller.close();
+    },
+  });
 }

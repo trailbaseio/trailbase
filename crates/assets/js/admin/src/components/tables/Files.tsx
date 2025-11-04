@@ -1,9 +1,19 @@
-import { For, Match, Switch, createMemo } from "solid-js";
+import { For, Match, Switch, splitProps } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
+import { TbDownload } from "solid-icons/tb";
 
 import { sqlValueToString } from "@/lib/value";
 import { adminFetch } from "@/lib/fetch";
 import { prettyFormatQualifiedName } from "@/lib/schema";
+import { showSaveFileDialog } from "@/lib/utils";
+
+import { Button } from "@/components/ui/button";
+import { showToast } from "@/components/ui/toast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import type { QualifiedName } from "@bindings/QualifiedName";
 import type { ReadFilesQuery } from "@bindings/ReadFilesQuery";
@@ -42,13 +52,63 @@ export function UploadedFile(props: {
     });
 
   return (
-    <Switch>
-      <Match when={isImage()}>
-        <Image url={url()} mime={props.file.mime_type} />
-      </Match>
+    <button
+      onClick={(event) => {
+        // Prevent edit record form from opening.
+        event.stopPropagation();
 
-      <Match when={!isImage()}>{JSON.stringify(props.file)}</Match>
-    </Switch>
+        // Open download dialog.
+        (async () => {
+          const success = await showSaveFileDialog({
+            filename:
+              props.file.filename ?? props.file.original_filename ?? "download",
+            mimeType: props.file.mime_type ?? props.file.content_type,
+            contents: async () => {
+              const response = await adminFetch(url());
+              return response.body;
+            },
+          });
+
+          if (success) {
+            showToast({
+              title: `Downloaded: ${props.file.filename}`,
+              variant: "success",
+            });
+          }
+        })();
+      }}
+    >
+      <div class="m-1 flex justify-between gap-2 rounded p-1">
+        <Tooltip>
+          <TooltipTrigger as="div" class="flex flex-col items-start">
+            <p>{props.file.original_filename ?? props.file.filename}</p>
+            <p>mime: {contentType(props.file)}</p>
+          </TooltipTrigger>
+
+          <TooltipContent>
+            <p>id: {props.file.id}</p>
+            <p>filename: {props.file.filename}</p>
+            <p>original: {props.file.original_filename}</p>
+            <p>content: {props.file.content_type}</p>
+            <p>mime: {props.file.mime_type}</p>
+          </TooltipContent>
+        </Tooltip>
+
+        <div class="content-center">
+          <Switch>
+            <Match when={isImage()}>
+              <Image url={url()} mime={props.file.mime_type} />
+            </Match>
+
+            <Match when={!isImage()}>
+              <Button as="div" size="icon" variant="outline">
+                <TbDownload />
+              </Button>
+            </Match>
+          </Switch>
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -61,45 +121,16 @@ export function UploadedFiles(props: {
     value: SqlValue;
   };
 }) {
-  const indexes = createMemo(() => {
-    const indexes: number[] = [];
-    for (let i = 0; i < props.files.length; ++i) {
-      const file = props.files[i];
-      if (isImageMime(file.mime_type ?? file.content_type)) {
-        indexes.push(i);
-      }
-
-      if (indexes.length >= 3) break;
-    }
-
-    return indexes;
-  });
+  const [local, others] = splitProps(props, ["files"]);
 
   return (
-    <Switch>
-      <Match when={indexes().length > 0}>
-        <div class="flex gap-2">
-          <For each={indexes()}>
-            {(index: number) => {
-              const fileUpload = props.files[index];
-              const url = fileDownloadUrl({
-                tableName: props.tableName,
-                query: {
-                  pk_column: props.pk.columnName,
-                  pk_value: sqlValueToString(props.pk.value),
-                  file_column_name: props.columnName,
-                  file_name: fileUpload.filename ?? null,
-                },
-              });
-
-              return <Image url={url} mime={fileUpload.mime_type} />;
-            }}
-          </For>
-        </div>
-      </Match>
-
-      <Match when={indexes().length === 0}>{JSON.stringify(props.files)}</Match>
-    </Switch>
+    <div class="flex flex-col gap-2">
+      <For each={local.files}>
+        {(file: FileUpload) => {
+          return <UploadedFile file={file} {...others} />;
+        }}
+      </For>
+    </div>
   );
 }
 
@@ -143,16 +174,28 @@ function Image(props: { url: string; mime: string | undefined }) {
   }));
 
   return (
-    <Switch>
-      <Match when={imageData.isError}>{`${imageData.error}`}</Match>
+    <div class="size-[50px]">
+      <Switch>
+        <Match when={imageData.isError}>{`${imageData.error}`}</Match>
 
-      <Match when={imageData.isLoading}>Loading</Match>
+        <Match when={imageData.isLoading}>Loading</Match>
 
-      <Match when={imageData.data}>
-        <img class="size-[50px]" src={imageData.data} />
-      </Match>
-    </Switch>
+        <Match when={imageData.data}>
+          <img src={imageData.data} />
+        </Match>
+      </Switch>
+    </div>
   );
+}
+
+function contentType(file: FileUpload): string {
+  const mimeType = file.mime_type ?? file.content_type;
+  if (mimeType === undefined) {
+    return "?";
+  }
+
+  const components = mimeType.split("/");
+  return components.at(-1) ?? "?";
 }
 
 function isImageMime(mime: string | undefined): boolean {

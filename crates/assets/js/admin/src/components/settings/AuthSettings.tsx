@@ -503,20 +503,18 @@ function AuthSettingsForm(props: {
             </p>
 
             <div>
+              {/* NOTE: we cannot just have a <a download /> here since admin APIs require CSRF token. */}
               <Button
                 variant="default"
-                onClick={() =>
-                  (async () => {
-                    // NOTE: we cannot just have a <a download /> here since admin APIs require CSRF token.
-                    const response = await adminFetch(`/public_key`);
-                    const keyText = await response.text();
-
-                    await showSaveFileDialog({
-                      contents: keyText,
-                      filename: "pubkey.pep",
-                    });
-                  })().catch(console.error)
-                }
+                onClick={() => {
+                  showSaveFileDialog({
+                    contents: async () => {
+                      const response = await adminFetch(`/public_key`);
+                      return response.body;
+                    },
+                    filename: "public_key.pep",
+                  });
+                }}
               >
                 Download Public Key
               </Button>

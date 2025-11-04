@@ -4,7 +4,7 @@ import { createWritableMemo } from "@solid-primitives/memo";
 import { TbDownload, TbColumns, TbColumnsOff } from "solid-icons/tb";
 
 import { adminFetch } from "@/lib/fetch";
-import { showSaveFileDialog } from "@/lib/utils";
+import { showSaveFileDialog, stringToReadableStream } from "@/lib/utils";
 
 import { RecordApiConfig } from "@proto/config";
 import type { Table } from "@bindings/Table";
@@ -45,13 +45,11 @@ function SchemaDownloadButton(props: {
     <Button
       variant="default"
       onClick={() => {
-        // Not supported by firefox:
-        // https://developer.mozilla.org/en-US/docs/Web/API/Window/showSaveFilePicker#browser_compatibility
-        // possible fallback: https://stackoverflow.com/a/67806663
         showSaveFileDialog({
-          contents: JSON.stringify(props.schema, null, "  "),
+          contents: async () =>
+            stringToReadableStream(JSON.stringify(props.schema, null, "  ")),
           filename: `${props.apiName}_${props.mode.toLowerCase()}_schema.json`,
-        }).catch(console.error);
+        });
       }}
     >
       <TbDownload size={20} />
