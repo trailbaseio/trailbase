@@ -1,3 +1,10 @@
+## v0.20.9
+
+- Overhauled admin UI for rendering file(s) columns: less convoluted, image preview and easy download.
+- Support admin file reads from VIEWs.
+- Add auth-UI WASM component to default docker image.
+- Fix `ALTER TABLE` issue, when table is referenced by views. SQLite sporadically validates consistency, it does so during `ALTER TABLE` (but not `DROP TABLE`).
+
 ## v0.20.8
 
 - Fix admin UI drop/alter table regression in v0.20.7. The stricter schema reload validations require us to fix the API config first before reloading schemas.
