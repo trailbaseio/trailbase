@@ -116,10 +116,16 @@ pub async fn alter_table_handler(
         tx.execute(&format!("DROP TABLE {source_table_name}"), ())?;
 
         if let Some(target_name) = ephemeral_table_rename_escaped {
+          // NOTE: w/o the `legacy_alter_table = ON` the following `RENAME TO` would fail, since
+          // `ALTER TABLE` otherwise does a schema consistency-check and realize that any views
+          // referencing this table are no longer valid (even though may be again after the
+          // rename).
+          tx.execute("PRAGMA legacy_alter_table = ON", ())?;
           tx.execute(
             &format!("ALTER TABLE {ephemeral_table_name} RENAME TO {target_name}"),
             (),
           )?;
+          tx.execute("PRAGMA legacy_alter_table = OFF", ())?;
         }
 
         tx.execute("PRAGMA foreign_keys = ON", ())?;
