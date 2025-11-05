@@ -27,7 +27,7 @@ import {
   TextFieldInput,
 } from "@/components/ui/text-field";
 import {
-  SelectField,
+  SelectOneOf,
   buildTextFormField,
   floatPattern,
   gapStyle,
@@ -35,19 +35,19 @@ import {
 import type { FormApiT, AnyFieldApi } from "@/components/FormFields";
 
 import {
-  isNotNull,
-  setNotNull,
+  columnDataTypes,
   getCheckValue,
-  setCheckValue,
   getDefaultValue,
-  setDefaultValue,
-  getUnique,
-  setUnique,
   getForeignKey,
+  getUnique,
+  isNotNull,
+  setCheckValue,
+  setDefaultValue,
   setForeignKey,
+  setNotNull,
+  setUnique,
 } from "@/lib/schema";
 import { cn } from "@/lib/utils";
-import { assert, TypeEqualityGuard } from "@/lib/value";
 
 import type { Column } from "@bindings/Column";
 import type { ColumnDataType } from "@bindings/ColumnDataType";
@@ -76,6 +76,8 @@ export function newDefaultColumn(
 }
 
 function columnTypeField(
+  form: FormApiT<Table>,
+  colIndex: number,
   disabled: boolean,
   fk: Accessor<string | undefined>,
   allTables: Table[],
@@ -107,13 +109,52 @@ function columnTypeField(
     });
 
     return (
-      <SelectField<ColumnDataType>
+      <SelectOneOf<ColumnDataType>
         label={() => <L>Type</L>}
         disabled={disabled || fk() !== undefined}
         options={columnDataTypes}
         value={field().state.value}
-        onChange={(v: ColumnDataType | null) => {
+        onChange={(v: ColumnDataType) => {
           field().handleChange(v);
+
+          // Ultimately, it's `type_name` that matters, not `data_type`, when
+          // rendering the query from the schema structure. This is an
+          // artifact of us reusing the parsed structure. Fix up the relevant
+          // field (and affinity type just for consistency).
+          patchColumn(form, colIndex, (col: Column): Column => {
+            switch (v) {
+              case "Any":
+                return {
+                  ...col,
+                  type_name: "ANY",
+                  affinity_type: "Blob",
+                };
+              case "Blob":
+                return {
+                  ...col,
+                  type_name: "BLOB",
+                  affinity_type: "Blob",
+                };
+              case "Text":
+                return {
+                  ...col,
+                  type_name: "TEXT",
+                  affinity_type: "Text",
+                };
+              case "Integer":
+                return {
+                  ...col,
+                  type_name: "INTEGER",
+                  affinity_type: "Integer",
+                };
+              case "Real":
+                return {
+                  ...col,
+                  type_name: "REAL",
+                  affinity_type: "Real",
+                };
+            }
+          });
         }}
         handleBlur={field().handleBlur}
       />
@@ -505,12 +546,9 @@ export function ColumnSubForm(props: {
                         class="p-1 active:scale-90"
                         type="button"
                         onClick={() => {
-                          const columns = [...props.form.state.values.columns];
-
-                          const column = columns[props.colIndex];
-                          columns[props.colIndex] = preset(column.name);
-
-                          props.form.setFieldValue("columns", columns);
+                          patchColumn(props.form, props.colIndex, (col) =>
+                            preset(col.name),
+                          );
                         }}
                       >
                         {name}
@@ -539,7 +577,13 @@ export function ColumnSubForm(props: {
 
               {/* Column type field */}
               <props.form.Field name={`columns[${props.colIndex}].data_type`}>
-                {columnTypeField(disabled(), fk, props.allTables)}
+                {columnTypeField(
+                  props.form,
+                  props.colIndex,
+                  disabled(),
+                  fk,
+                  props.allTables,
+                )}
               </props.form.Field>
 
               {/* Column options: pk, not null, ... */}
@@ -634,14 +678,9 @@ export function PrimaryKeyColumnSubForm(props: {
                           class="p-1 active:scale-90"
                           type="button"
                           onClick={() => {
-                            const columns = [
-                              ...props.form.state.values.columns,
-                            ];
-
-                            const column = columns[props.colIndex];
-                            columns[props.colIndex] = preset(column.name);
-
-                            props.form.setFieldValue("columns", columns);
+                            patchColumn(props.form, props.colIndex, (col) =>
+                              preset(col.name),
+                            );
                           }}
                         >
                           {name}
@@ -673,6 +712,8 @@ export function PrimaryKeyColumnSubForm(props: {
               <props.form.Field
                 name={`columns[${props.colIndex}].data_type`}
                 children={columnTypeField(
+                  props.form,
+                  props.colIndex,
                   /*disabled=*/ true,
                   fk,
                   props.allTables,
@@ -709,7 +750,18 @@ function L(props: { children: JSX.Element }) {
   return <div class="w-[100px]">{props.children}</div>;
 }
 
-const transitionTimingFunc = "cubic-bezier(.87,0,.13,1)";
+function patchColumn(
+  form: FormApiT<Table>,
+  colIndex: number,
+  patch: (col: Column) => Column,
+) {
+  const columns = [...form.state.values.columns];
+
+  const column = columns[colIndex];
+  columns[colIndex] = patch(column);
+
+  form.setFieldValue("columns", columns);
+}
 
 export const primaryKeyPresets: [string, (colName: string) => Column][] = [
   [
@@ -860,17 +912,5 @@ const presets: [string, (colName: string) => Column][] = [
   ],
 ];
 
-// WARNING: these needs to be kept in sync with ColumnDataType. TS cannot go
-// from type union to array.
-const columnDataTypes: ColumnDataType[] = [
-  "Blob",
-  "Text",
-  "Integer",
-  "Real",
-  "Any",
-] as const;
-
-type CT = (typeof columnDataTypes)[number];
-assert<TypeEqualityGuard<ColumnDataType, CT>>(); // no error
-
 const customCheckBoxStyle = "flex items-center justify-end py-1 gap-2";
+const transitionTimingFunc = "cubic-bezier(.87,0,.13,1)";

@@ -19,7 +19,7 @@ import { alterIndex, createIndex } from "@/lib/table";
 import {
   buildTextFormField,
   buildBoolFormField,
-  buildSelectField,
+  SelectOneOf,
 } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
 
@@ -156,13 +156,18 @@ export function CreateAlterIndexForm(props: {
                         <CardContent>
                           <div class="mt-8 flex w-full flex-col gap-4">
                             <form.Field name={`columns[${i}].column_name`}>
-                              {buildSelectField(
-                                [...props.table.columns.map((c) => c.name)],
-                                {
-                                  label: () => (
+                              {(field) => (
+                                <SelectOneOf
+                                  options={[
+                                    ...props.table.columns.map((c) => c.name),
+                                  ]}
+                                  label={() => (
                                     <div class={labelWidth}>Column Name</div>
-                                  ),
-                                },
+                                  )}
+                                  value={field().state.value}
+                                  onChange={field().handleChange}
+                                  handleBlur={field().handleBlur}
+                                />
                               )}
                             </form.Field>
 

@@ -1,3 +1,5 @@
+import { assert, TypeEqualityGuard } from "@/lib/value";
+
 import type { Column } from "@bindings/Column";
 import type { ColumnDataType } from "@bindings/ColumnDataType";
 import type { ColumnOption } from "@bindings/ColumnOption";
@@ -407,3 +409,16 @@ export function compareQualifiedNames(
   }
   return cmp;
 }
+
+// WARNING: these needs to be kept in sync with ColumnDataType. TS cannot go
+// from type union to array.
+export const columnDataTypes: ColumnDataType[] = [
+  "Blob",
+  "Text",
+  "Integer",
+  "Real",
+  "Any",
+] as const;
+
+type CT = (typeof columnDataTypes)[number];
+assert<TypeEqualityGuard<ColumnDataType, CT>>(); // no error

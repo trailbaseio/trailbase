@@ -366,38 +366,14 @@ export function buildOptionalBoolFormField(opts: {
   };
 }
 
-interface SelectFieldOpts {
-  label: () => JSX.Element;
+export function SelectOneOf<T = string>(props: {
+  options: T[];
+  value: T;
+  onChange: (v: T) => void;
+  handleBlur: () => void;
   disabled?: boolean;
-}
-
-export function buildSelectField(options: string[], opts: SelectFieldOpts) {
-  return function builder(field: () => FieldApiT<string>) {
-    return (
-      <SelectField
-        label={opts.label}
-        disabled={opts.disabled}
-        options={options}
-        value={field().state.value}
-        onChange={(v: string | null) => {
-          if (v) {
-            field().handleChange(v);
-          }
-        }}
-        handleBlur={field().handleBlur}
-      />
-    );
-  };
-}
-
-export function SelectField<T = string>(
-  props: {
-    options: T[];
-    value: T;
-    onChange: (v: T | null) => void;
-    handleBlur: () => void;
-  } & SelectFieldOpts,
-) {
+  label: () => JSX.Element;
+}) {
   return (
     <div
       class={cn("grid w-full items-center", gapStyle)}
@@ -410,7 +386,14 @@ export function SelectField<T = string>(
         multiple={false}
         value={props.value}
         onBlur={props.handleBlur}
-        onChange={props.onChange}
+        onChange={(v: T | null) => {
+          // Note that kobalte's single select field allows unselecting (by
+          // clicking the selected option again). We don't want/need that. Not
+          // changing the state on 'null', effectively disables unselecting.
+          if (v !== null) {
+            props.onChange(v);
+          }
+        }}
         options={props.options}
         itemComponent={(props) => (
           <SelectItem item={props.item}>{`${props.item.rawValue}`}</SelectItem>
