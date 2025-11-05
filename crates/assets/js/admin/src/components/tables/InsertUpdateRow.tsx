@@ -9,7 +9,7 @@ import type { ColumnDataType } from "@bindings/ColumnDataType";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { gapStyle, GridFieldInfo } from "@/components/FormFields";
+import { floatPattern, gapStyle, GridFieldInfo } from "@/components/FormFields";
 import type { FieldApiT } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
 import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
@@ -25,12 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { getDefaultValue, isNotNull, isPrimaryKeyColumn } from "@/lib/schema";
-import {
-  buildDefaultRow,
-  literalDefault,
-  shallowCopySqlValue,
-} from "@/lib/convert";
+import { literalDefault, shallowCopySqlValue } from "@/lib/convert";
 import type { Record } from "@/lib/convert";
 import { updateRow, insertRow } from "@/lib/row";
 import {
@@ -50,8 +45,66 @@ import type {
   SqlValue,
 } from "@/lib/value";
 import { tryParseFloat, tryParseBigInt, fromHex } from "@/lib/utils";
-import { isNullableColumn } from "@/lib/schema";
-import { floatPattern } from "@/components/FormFields";
+import {
+  getDefaultValue,
+  isNotNull,
+  isPrimaryKeyColumn,
+  isNullableColumn,
+  getForeignKey,
+} from "@/lib/schema";
+
+function buildDefaultRecord(schema: Table): Record {
+  const obj: Record = {};
+
+  for (const col of schema.columns) {
+    const type = col.data_type;
+    const isPk = isPrimaryKeyColumn(col);
+    const foreignKey = getForeignKey(col.options);
+    const notNull = isNotNull(col.options);
+    const defaultValue = getDefaultValue(col.options);
+    const nullable = isNullableColumn({
+      type: col.data_type,
+      notNull,
+      isPk,
+    });
+
+    /// If there's no default and the column is nullable we default to null.
+    if (defaultValue !== undefined) {
+      // If there is a default, we leave the form field empty and show the default as a textinput placeholder.
+      obj[col.name] = undefined;
+      continue;
+    } else if (nullable) {
+      obj[col.name] = "Null";
+      continue;
+    }
+
+    // No default and non-nullable, i.e required...
+    //
+    // ...we fall back to generic defaults. We may be wrong based on CHECK constraints.
+    if (type === "Blob") {
+      if (foreignKey !== undefined) {
+        obj[col.name] = {
+          Blob: {
+            Base64UrlSafe: `<${foreignKey.foreign_table.toUpperCase()}_ID>`,
+          },
+        };
+      } else {
+        obj[col.name] = { Blob: { Base64UrlSafe: "" } };
+      }
+    } else if (type === "Text") {
+      obj[col.name] = { Text: "" };
+    } else if (type === "Integer") {
+      obj[col.name] = { Integer: BigInt(0) };
+    } else if (type === "Real") {
+      obj[col.name] = { Real: 0.0 };
+    } else {
+      console.warn(
+        `No fallback for column: ${col.name}, type: '${type}' - skipping default`,
+      );
+    }
+  }
+  return obj;
+}
 
 export function InsertUpdateRowForm(props: {
   close: () => void;
@@ -65,7 +118,7 @@ export function InsertUpdateRowForm(props: {
   const form = createForm(() => {
     const defaultValues: Record = props.row
       ? { ...props.row }
-      : buildDefaultRow(props.schema);
+      : buildDefaultRecord(props.schema);
 
     return {
       defaultValues,
@@ -567,8 +620,9 @@ function defaultValuePlaceholder(
   if (defaultValue.startsWith("(")) {
     return `(default: ${defaultValue})`;
   } else {
+    // We're only using the literal in the field placeholder and omit it during transmition.
     const literal = literalDefault(type, defaultValue);
-    if (literal === undefined || literal === null) {
+    if (literal === undefined) {
       return "";
     }
 

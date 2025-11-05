@@ -127,7 +127,7 @@ export function CreateAlterTableForm(props: {
           } else {
             // Newly added columns.
             if (!isDeleted(i)) {
-              operations.push({ AddColumn: { column } });
+              operations.push({ AddColumn: { column: fixColumn(column) } });
             }
           }
         });

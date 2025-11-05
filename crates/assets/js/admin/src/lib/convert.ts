@@ -1,19 +1,8 @@
 import { tryParseFloat, tryParseBigInt } from "@/lib/utils";
-import {
-  unescapeLiteral,
-  unescapeLiteralBlob,
-  getDefaultValue,
-  getForeignKey,
-  isPrimaryKeyColumn,
-  isNotNull,
-  isNullableColumn,
-  isInt,
-  isReal,
-} from "@/lib/schema";
+import { unescapeLiteral, unescapeLiteralBlob } from "@/lib/schema";
 import type { SqlValue } from "@/lib/value";
 
 import type { ColumnDataType } from "@bindings/ColumnDataType";
-import type { Table } from "@bindings/Table";
 
 /// A record, i.e. row of SQL values (including "Null") or undefined (i.e.
 /// don't submit), keyed by column name. We use a map-like structure to allow
@@ -48,7 +37,7 @@ export function shallowCopySqlValue(
 
 export function literalDefault(
   type: ColumnDataType,
-  value: string | undefined,
+  value: string,
 ): string | bigint | number | undefined {
   // Non literal if missing or function call, e.g. '(fun([col]))'.
   if (value === undefined || value.startsWith("(")) {
@@ -56,7 +45,7 @@ export function literalDefault(
   }
 
   if (type === "Blob") {
-    // e.g. X'abba'.
+    // e.g. for X'abba' return "abba".
     const blob = unescapeLiteralBlob(value);
     if (blob !== undefined) {
       return blob;
@@ -65,64 +54,11 @@ export function literalDefault(
   } else if (type === "Text") {
     // e.g. 'bar'.
     return unescapeLiteral(value);
-  } else if (isInt(type)) {
+  } else if (type === "Integer") {
     return tryParseBigInt(value);
-  } else if (isReal(type)) {
+  } else if (type === "Real") {
     return tryParseFloat(value);
   }
 
   return undefined;
-}
-
-export function buildDefaultRow(schema: Table): Record {
-  const obj: Record = {};
-
-  for (const col of schema.columns) {
-    const type = col.data_type;
-    const isPk = isPrimaryKeyColumn(col);
-    const foreignKey = getForeignKey(col.options);
-    const notNull = isNotNull(col.options);
-    const defaultValue = getDefaultValue(col.options);
-    const nullable = isNullableColumn({
-      type: col.data_type,
-      notNull,
-      isPk,
-    });
-
-    /// If there's no default and the column is nullable we default to null.
-    if (defaultValue !== undefined) {
-      // If there is a default, we leave the form field empty and show the default as a textinput placeholder.
-      obj[col.name] = undefined;
-      continue;
-    } else if (nullable) {
-      obj[col.name] = "Null";
-      continue;
-    }
-
-    // No default and non-nullable, i.e required...
-    //
-    // ...we fall back to generic defaults. We may be wrong based on CHECK constraints.
-    if (type === "Blob") {
-      if (foreignKey !== undefined) {
-        obj[col.name] = {
-          Blob: {
-            Base64UrlSafe: `<${foreignKey.foreign_table.toUpperCase()}_ID>`,
-          },
-        };
-      } else {
-        obj[col.name] = { Blob: { Base64UrlSafe: "" } };
-      }
-    } else if (type === "Text") {
-      obj[col.name] = { Text: "" };
-    } else if (isInt(type)) {
-      obj[col.name] = { Integer: BigInt(0) };
-    } else if (isReal(type)) {
-      obj[col.name] = { Real: 0.0 };
-    } else {
-      console.warn(
-        `No fallback for column: ${col.name}, type: '${type}' - skipping default`,
-      );
-    }
-  }
-  return obj;
 }

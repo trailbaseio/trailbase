@@ -9,6 +9,7 @@ import {
 import { createForm } from "@tanstack/solid-form";
 import { TbInfoCircle } from "solid-icons/tb";
 import { useQueryClient } from "@tanstack/solid-query";
+import { urlSafeBase64Encode } from "trailbase";
 
 import {
   Accordion,
@@ -49,6 +50,10 @@ import {
   TextFieldInput,
 } from "@/components/ui/text-field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  buildTextFormField,
+  buildOptionalTextFormField,
+} from "@/components/FormFields";
 
 import {
   Config,
@@ -56,15 +61,21 @@ import {
   PermissionFlag,
   RecordApiConfig,
 } from "@proto/config";
-import {
-  buildTextFormField,
-  buildOptionalTextFormField,
-} from "@/components/FormFields";
+
 import { createConfigQuery, setConfig } from "@/lib/config";
+import { literalDefault } from "@/lib/convert";
 import { parseSqlExpression } from "@/lib/parse";
-import { tableType, getForeignKey, getColumns } from "@/lib/schema";
-import { buildDefaultRow } from "@/lib/convert";
+import {
+  getColumns,
+  getDefaultValue,
+  getForeignKey,
+  isNotNull,
+  isNullableColumn,
+  isPrimaryKeyColumn,
+  tableType,
+} from "@/lib/schema";
 import { client } from "@/lib/fetch";
+import { fromHex } from "@/lib/utils";
 
 import type { ForeignKey } from "@bindings/ForeignKey";
 import type { Table } from "@bindings/Table";
@@ -338,6 +349,59 @@ function getForeignKeyColumns(schema: Table | View): [string, ForeignKey][] {
     .filter(filter) as [string, ForeignKey][];
 }
 
+function buildDefaultTemplateInput(schema: Table, isUpdate: boolean): string {
+  const obj: { [key: string]: bigint | number | string | null | undefined } =
+    Object.fromEntries(
+      schema.columns.map((col) => {
+        const type = col.data_type;
+        const isPk = isPrimaryKeyColumn(col);
+        if (isPk) {
+          if (isUpdate) {
+            return [col.name, "<ID>"];
+          }
+          return [col.name, undefined];
+        }
+
+        const notNull = isNotNull(col.options);
+        const defaultValue = getDefaultValue(col.options);
+        const nullable = isNullableColumn({
+          type: col.data_type,
+          notNull,
+          isPk,
+        });
+
+        if (defaultValue !== undefined) {
+          const literal = literalDefault(type, defaultValue);
+          if (literal !== undefined) {
+            if (typeof literal === "string") {
+              return [col.name, urlSafeBase64Encode(fromHex(literal))];
+            }
+            return [col.name, literal];
+          }
+        } else if (nullable) {
+          return [col.name, null];
+        }
+
+        // No default and non-nullable, i.e required...
+        //
+        // ...we fall back to generic defaults. We may be wrong based on CHECK constraints.
+        if (type === "Blob") {
+          return [col.name, urlSafeBase64Encode(new Uint8Array([]))];
+        } else if (type === "Text") {
+          return [col.name, ""];
+        } else if (type === "Integer") {
+          return [col.name, BigInt(0)];
+        } else if (type === "Real") {
+          return [col.name, 0.0];
+        }
+
+        return [col.name, undefined];
+      }),
+    );
+
+  return JSON.stringify(obj, null, 4);
+}
+
 function siteUrl(config: Config | undefined): string {
   return (
     config?.server?.siteUrl ??
@@ -378,7 +442,7 @@ function CreateExample(props: {
   --header "Content-Type: application/json" \\
   --header "Authorization: Bearer ${client.tokens()?.auth_token}" \\
   --request POST \\
-  --data '${JSON.stringify(buildDefaultRow(props.schema))}' \\
+  --data '${buildDefaultTemplateInput(props.schema, false)}' \\
   "${siteUrl(props.config)}/api/records/v1/${props.apiName}"`;
 
   return <CodeBlock text={text()} />;
@@ -393,7 +457,7 @@ function UpdateExample(props: {
   --header "Content-Type: application/json" \\
   --header "Authorization: Bearer ${client.tokens()?.auth_token}" \\
   --request PATCH \\
-  --data '${JSON.stringify(buildDefaultRow(props.schema))}' \\
+  --data '${buildDefaultTemplateInput(props.schema, true)}' \\
   "${siteUrl(props.config)}/api/records/v1/${props.apiName}/<RECORD_ID>"`;
 
   return <CodeBlock text={text()} />;

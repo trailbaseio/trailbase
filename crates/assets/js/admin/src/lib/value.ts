@@ -1,3 +1,6 @@
+import { fromHex } from "@/lib/utils";
+import { urlSafeBase64Encode } from "trailbase";
+
 import type { Blob } from "@bindings/Blob";
 import type { SqlValue } from "@bindings/SqlValue";
 
@@ -48,11 +51,7 @@ export function sqlValueToString(value: SqlValue): string {
   }
 
   if ("Blob" in value) {
-    const blob: Blob = value.Blob;
-    if ("Base64UrlSafe" in blob) {
-      return blob.Base64UrlSafe;
-    }
-    throw Error("Expected Base64UrlSafe");
+    return urlSafeBase64EncodedBlob(value.Blob);
   }
 
   return value.Text;
@@ -76,12 +75,19 @@ export function getText(value: SqlValue | undefined): string | undefined {
   }
 }
 
+/// Returns url-safe b64 encoded string
 export function getBlob(value: SqlValue | undefined): string | undefined {
   if (value !== undefined && value !== "Null" && "Blob" in value) {
-    const blob = value.Blob;
-    if ("Base64UrlSafe" in blob) {
-      return blob.Base64UrlSafe;
-    }
-    throw Error("Expected Base64UrlSafe");
+    return urlSafeBase64EncodedBlob(value.Blob);
   }
+}
+
+export function urlSafeBase64EncodedBlob(blob: Blob): string {
+  if ("Base64UrlSafe" in blob) {
+    return blob.Base64UrlSafe;
+  } else if ("Hex" in blob) {
+    return urlSafeBase64Encode(fromHex(blob.Hex));
+  }
+
+  return urlSafeBase64Encode(Uint8Array.from(blob.Array));
 }

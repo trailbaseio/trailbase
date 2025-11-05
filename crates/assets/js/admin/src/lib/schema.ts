@@ -317,26 +317,8 @@ function hiddenName(name: QualifiedName): boolean {
   return name.name.startsWith("_") || name.name.startsWith("sqlite_");
 }
 
-export function isInt(type: ColumnDataType): boolean {
-  switch (type) {
-    case "Integer":
-      return true;
-    default:
-      return false;
-  }
-}
-
-export function isReal(type: ColumnDataType): boolean {
-  switch (type) {
-    case "Real":
-      return true;
-    default:
-      return false;
-  }
-}
-
 export function isNumber(type: ColumnDataType): boolean {
-  return isInt(type) || isReal(type);
+  return type === "Integer" || type === "Real";
 }
 
 export function isNullableColumn(opts: {
@@ -350,7 +332,7 @@ export function isNullableColumn(opts: {
   }
 
   // Or if it's an integer primary key.
-  if (opts.isPk && isInt(opts.type)) {
+  if (opts.isPk && opts.type === "Integer") {
     return true;
   }
 
