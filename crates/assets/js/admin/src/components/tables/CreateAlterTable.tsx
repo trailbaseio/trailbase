@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 
-import { createTable, alterTable } from "@/lib/table";
+import { createTable, alterTable } from "@/lib/api/table";
 import { randomName } from "@/lib/name";
 import {
   buildBoolFormField,
@@ -28,7 +28,7 @@ import {
   newDefaultColumn,
   primaryKeyPresets,
 } from "@/components/tables/CreateAlterColumnForm";
-import { invalidateConfig } from "@/lib/config";
+import { invalidateConfig } from "@/lib/api/config";
 
 import type { Column } from "@bindings/Column";
 import type { Table } from "@bindings/Table";

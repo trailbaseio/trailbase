@@ -12,7 +12,7 @@ import { IndexPage } from "@/components/IndexPage";
 import { VerticalNavBar, HorizontalNavBar } from "@/components/NavBar";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { $user } from "@/lib/fetch";
+import { $user } from "@/lib/client";
 import { createWindowWidth } from "@/lib/signals";
 
 const queryClient = new QueryClient();

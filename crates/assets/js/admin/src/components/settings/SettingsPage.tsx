@@ -34,8 +34,8 @@ import {
   createConfigQuery,
   setConfig,
   invalidateAllAdminQueries,
-} from "@/lib/config";
-import { createVersionInfoQuery } from "@/lib/info";
+} from "@/lib/api/config";
+import { createVersionInfoQuery } from "@/lib/api/info";
 
 function ServerSettings(props: CommonProps) {
   const queryClient = useQueryClient();

@@ -1,5 +1,5 @@
 import { adminFetch } from "@/lib/fetch";
-import { buildListSearchParams2 } from "@/lib/list";
+import { buildListSearchParams } from "@/lib/list";
 
 import type { ListLogsResponse } from "@bindings/ListLogsResponse";
 
@@ -8,7 +8,7 @@ export async function getLogs(
   filter?: string,
   cursor?: string | null,
 ): Promise<ListLogsResponse> {
-  const params = buildListSearchParams2({
+  const params = buildListSearchParams({
     filter,
     pageSize,
     cursor,

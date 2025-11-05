@@ -4,7 +4,7 @@ import { TbUser } from "solid-icons/tb";
 import { type User } from "trailbase";
 
 import { urlSafeBase64ToUuid } from "@/lib/utils";
-import { client, $user } from "@/lib/fetch";
+import { client, $user } from "@/lib/client";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

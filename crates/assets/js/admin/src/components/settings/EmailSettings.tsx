@@ -44,8 +44,9 @@ import type { FormApiT } from "@/components/FormFields";
 import type { TestEmailRequest } from "@bindings/TestEmailRequest";
 
 import { Config, EmailConfig, SmtpEncryption } from "@proto/config";
-import { createConfigQuery, setConfig } from "@/lib/config";
-import { $user, adminFetch } from "@/lib/fetch";
+import { createConfigQuery, setConfig } from "@/lib/api/config";
+import { $user } from "@/lib/client";
+import { adminFetch } from "@/lib/fetch";
 
 import DEFAULT_EMAIL_VERIFICATION_SUBJECT from "@templates/default_email_verification_subject.txt?raw";
 import DEFAULT_EMAIL_VERIFICATION_BODY from "@templates/default_email_verification_body.html?raw";

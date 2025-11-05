@@ -60,11 +60,11 @@ import type { QueryResponse } from "@bindings/QueryResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { SqlValue } from "@bindings/SqlValue";
 
-import { createTableSchemaQuery } from "@/lib/table";
-import { executeSql, type ExecutionResult } from "@/lib/fetch";
+import { createTableSchemaQuery } from "@/lib/api/table";
+import { executeSql, type ExecutionResult } from "@/lib/api/execute";
 import { isNotNull } from "@/lib/schema";
 import { sqlValueToString } from "@/lib/value";
-import type { RowData } from "@/lib/convert";
+import type { ArrayRecord } from "@/lib/record";
 
 function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   const schema: {
@@ -136,13 +136,13 @@ function ResultView(props: {
   const isCached = () => props.response === undefined;
   const response = () => props.response ?? props.script.result;
 
-  function columnDefs(data: QueryResponse): ColumnDef<RowData, SqlValue>[] {
+  function columnDefs(data: QueryResponse): ColumnDef<ArrayRecord, SqlValue>[] {
     return (data.columns ?? []).map((col, idx) => {
       const notNull = isNotNull(col.options);
 
       const header = `${col.name} [${col.data_type}${notNull ? "" : "?"}]`;
       return {
-        accessorFn: (row: RowData) => {
+        accessorFn: (row: ArrayRecord) => {
           console.log(row);
           return sqlValueToString(row[idx]);
         },
@@ -184,7 +184,7 @@ function ResultView(props: {
               {/* TODO: Enable pagination */}
               <DataTable
                 columns={() => columnDefs(response()!.data!)}
-                data={() => response()!.data!.rows as RowData[]}
+                data={() => response()!.data!.rows as ArrayRecord[]}
                 pagination={{
                   pageIndex: 0,
                   pageSize: 50,

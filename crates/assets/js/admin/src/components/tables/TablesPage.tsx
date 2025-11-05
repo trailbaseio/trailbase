@@ -20,7 +20,7 @@ import { SplitView } from "@/components/SplitView";
 import { SafeSheet } from "@/components/SafeSheet";
 import { Separator } from "@/components/ui/separator";
 
-import { createTableSchemaQuery } from "@/lib/table";
+import { createTableSchemaQuery } from "@/lib/api/table";
 import {
   hiddenTable,
   tableType,

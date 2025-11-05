@@ -1,10 +1,10 @@
 import { adminFetch } from "@/lib/fetch";
-import { buildListSearchParams2 } from "@/lib/list";
+import { buildListSearchParams } from "@/lib/list";
 import {
   findPrimaryKeyColumnIndex,
   prettyFormatQualifiedName,
 } from "@/lib/schema";
-import type { Record } from "@/lib/convert";
+import type { Record } from "@/lib/record";
 
 import type { Table } from "@bindings/Table";
 import type { InsertRowRequest } from "@bindings/InsertRowRequest";
@@ -94,7 +94,7 @@ export async function fetchRows(
   pageIndex: number,
   cursor: string | null,
 ): Promise<ListRowsResponse> {
-  const params = buildListSearchParams2({
+  const params = buildListSearchParams({
     filter,
     pageSize,
     pageIndex,

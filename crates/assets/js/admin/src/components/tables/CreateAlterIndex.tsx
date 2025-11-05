@@ -15,7 +15,7 @@ import {
 import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { showToast } from "@/components/ui/toast";
 
-import { alterIndex, createIndex } from "@/lib/table";
+import { alterIndex, createIndex } from "@/lib/api/table";
 import {
   buildTextFormField,
   buildBoolFormField,

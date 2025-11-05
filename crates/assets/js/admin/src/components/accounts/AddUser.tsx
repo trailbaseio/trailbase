@@ -3,14 +3,14 @@ import { createForm } from "@tanstack/solid-form";
 
 import { Button } from "@/components/ui/button";
 import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
-
 import {
   buildBoolFormField,
   buildTextFormField,
   buildSecretFormField,
   notEmptyValidator,
 } from "@/components/FormFields";
-import { createUser } from "@/lib/user";
+
+import { createUser } from "@/lib/api/user";
 
 import type { CreateUserRequest } from "@bindings/CreateUserRequest";
 

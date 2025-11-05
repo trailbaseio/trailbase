@@ -91,3 +91,7 @@ export function urlSafeBase64EncodedBlob(blob: Blob): string {
 
   return urlSafeBase64Encode(Uint8Array.from(blob.Array));
 }
+
+export function hashSqlValue(value: SqlValue): string {
+  return `__${JSON.stringify(value)}`;
+}

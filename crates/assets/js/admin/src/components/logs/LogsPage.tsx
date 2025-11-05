@@ -42,7 +42,7 @@ import {
 import { DataTable, safeParseInt } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 
-import { getLogs } from "@/lib/logs";
+import { getLogs } from "@/lib/api/logs";
 import { copyToClipboard } from "@/lib/utils";
 
 import countriesGeoJSON from "@/assets/countries-110m.json";

@@ -1,5 +1,5 @@
 import { Switch, Match, createMemo } from "solid-js";
-import { createTableSchemaQuery } from "@/lib/table";
+import { createTableSchemaQuery } from "@/lib/api/table";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 
 import { Header } from "@/components/Header";
@@ -12,7 +12,7 @@ import {
   NODE_WIDTH,
   LINE_HEIGHT,
   EDGE_COLOR,
-} from "@/components/ErdGraph";
+} from "@/components/erd/ErdGraph";
 
 import {
   getForeignKey,

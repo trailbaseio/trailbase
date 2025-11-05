@@ -1,4 +1,4 @@
-import { client } from "@/lib/fetch";
+import { client } from "@/lib/client";
 
 import { showToast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";

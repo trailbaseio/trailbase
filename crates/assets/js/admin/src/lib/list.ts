@@ -1,19 +1,19 @@
 import { parse, ExprGroup, Expr, JoinOp, SignOp } from "@/lib/fexpr";
 import { showToast } from "@/components/ui/toast";
 
-export type ListArgs2 = {
+export type ListArgs = {
   filter: string | undefined | null;
   pageSize: number;
   pageIndex?: number;
   cursor: string | undefined | null;
 };
 
-export function buildListSearchParams2({
+export function buildListSearchParams({
   filter,
   pageSize,
   pageIndex,
   cursor,
-}: ListArgs2): URLSearchParams {
+}: ListArgs): URLSearchParams {
   const params = new URLSearchParams();
 
   if (filter) {

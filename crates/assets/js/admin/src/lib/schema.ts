@@ -1,4 +1,5 @@
 import { assert, TypeEqualityGuard } from "@/lib/value";
+import { tryParseBigInt, tryParseFloat } from "@/lib/utils";
 
 import type { Column } from "@bindings/Column";
 import type { ColumnDataType } from "@bindings/ColumnDataType";
@@ -48,6 +49,34 @@ export function setDefaultValue(
     newOpts.push({ Default: defaultValue });
   }
   return newOpts;
+}
+
+export function literalDefault(
+  type: ColumnDataType,
+  value: string,
+): string | bigint | number | undefined {
+  // Non literal if missing or function call, e.g. '(fun([col]))'.
+  if (value === undefined || value.startsWith("(")) {
+    return undefined;
+  }
+
+  if (type === "Blob") {
+    // e.g. for X'abba' return "abba".
+    const blob = unescapeLiteralBlob(value);
+    if (blob !== undefined) {
+      return blob;
+    }
+    return undefined;
+  } else if (type === "Text") {
+    // e.g. 'bar'.
+    return unescapeLiteral(value);
+  } else if (type === "Integer") {
+    return tryParseBigInt(value);
+  } else if (type === "Real") {
+    return tryParseFloat(value);
+  }
+
+  return undefined;
 }
 
 function unpackCheckValue(col: ColumnOption): string | undefined {

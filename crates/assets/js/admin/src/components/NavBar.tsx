@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Version } from "@/components/Version";
 
-import { createVersionInfoQuery } from "@/lib/info";
+import { createVersionInfoQuery } from "@/lib/api/info";
 
 import logo from "@/assets/logo_104.webp";
 

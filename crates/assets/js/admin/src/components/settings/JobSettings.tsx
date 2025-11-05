@@ -24,8 +24,8 @@ import {
 
 import { type FieldApiT, FieldInfo } from "@/components/FormFields";
 import { Config, JobsConfig, SystemJob } from "@proto/config";
-import { createConfigQuery, setConfig } from "@/lib/config";
-import { listJobs, runJob } from "@/lib/jobs";
+import { createConfigQuery, setConfig } from "@/lib/api/config";
+import { listJobs, runJob } from "@/lib/api/jobs";
 import type { Job } from "@bindings/Job";
 
 const cronRegex =

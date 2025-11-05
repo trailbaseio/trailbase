@@ -5,7 +5,7 @@ import {
 } from "solid-js";
 import type { JSX } from "solid-js";
 
-import { client } from "@/lib/fetch";
+import { client } from "@/lib/client";
 import { Toaster, showToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 

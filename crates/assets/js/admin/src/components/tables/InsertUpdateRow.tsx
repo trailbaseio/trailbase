@@ -25,9 +25,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { literalDefault, shallowCopySqlValue } from "@/lib/convert";
-import type { Record } from "@/lib/convert";
-import { updateRow, insertRow } from "@/lib/row";
+import type { Record } from "@/lib/record";
+import { updateRow, insertRow } from "@/lib/api/row";
 import {
   sqlValueToString,
   getInteger,
@@ -51,6 +50,7 @@ import {
   isPrimaryKeyColumn,
   isNullableColumn,
   getForeignKey,
+  literalDefault,
 } from "@/lib/schema";
 
 function buildDefaultRecord(schema: Table): Record {
@@ -886,4 +886,16 @@ function validateInsertSqlValueFormField({
 
   // Pass validation.
   return undefined;
+}
+
+function shallowCopySqlValue(
+  value: SqlValue | undefined,
+): SqlValue | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "Null") {
+    return "Null";
+  }
+  return { ...value };
 }

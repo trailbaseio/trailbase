@@ -62,9 +62,8 @@ import {
   RecordApiConfig,
 } from "@proto/config";
 
-import { createConfigQuery, setConfig } from "@/lib/config";
-import { literalDefault } from "@/lib/convert";
-import { parseSqlExpression } from "@/lib/parse";
+import { createConfigQuery, setConfig } from "@/lib/api/config";
+import { parseSqlExpression } from "@/lib/api/parse";
 import {
   getColumns,
   getDefaultValue,
@@ -72,9 +71,10 @@ import {
   isNotNull,
   isNullableColumn,
   isPrimaryKeyColumn,
+  literalDefault,
   tableType,
 } from "@/lib/schema";
-import { client } from "@/lib/fetch";
+import { client } from "@/lib/client";
 import { fromHex } from "@/lib/utils";
 
 import type { ForeignKey } from "@bindings/ForeignKey";

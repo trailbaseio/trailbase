@@ -1,5 +1,5 @@
 import { adminFetch } from "@/lib/fetch";
-import { buildListSearchParams2 } from "@/lib/list";
+import { buildListSearchParams } from "@/lib/list";
 
 import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
 import type { CreateUserRequest } from "@bindings/CreateUserRequest";
@@ -32,7 +32,7 @@ export async function fetchUsers(
   pageSize: number,
   cursor: string | null,
 ): Promise<ListUsersResponse> {
-  const params = buildListSearchParams2({
+  const params = buildListSearchParams({
     filter,
     pageSize,
     cursor,

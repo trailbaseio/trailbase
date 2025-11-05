@@ -10,8 +10,8 @@ import {
   TbSettings,
 } from "solid-icons/tb";
 
-import { executeSql } from "@/lib/fetch";
-import { castToInteger } from "@/lib/convert";
+import { executeSql } from "@/lib/api/execute";
+import type { SqlValue } from "@/lib/value";
 
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
@@ -239,4 +239,11 @@ export function IndexPage() {
       </div>
     </div>
   );
+}
+
+function castToInteger(value: SqlValue): bigint {
+  if (typeof value === "object" && "Integer" in value) {
+    return value.Integer;
+  }
+  throw Error(`Expected integer, got: ${value}`);
 }

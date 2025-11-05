@@ -38,8 +38,9 @@ import {
 } from "@/components/FormFields";
 import { SafeSheet, SheetContainer } from "@/components/SafeSheet";
 
-import { deleteUser, updateUser, fetchUsers } from "@/lib/user";
+import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
 import { copyToClipboard } from "@/lib/utils";
+
 import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
 import type { UserJson } from "@bindings/UserJson";
 

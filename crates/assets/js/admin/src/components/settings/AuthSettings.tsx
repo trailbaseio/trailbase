@@ -39,7 +39,7 @@ import {
   OAuthProviderConfig,
   OAuthProviderId,
 } from "@proto/config";
-import { createConfigQuery, setConfig } from "@/lib/config";
+import { createConfigQuery, setConfig } from "@/lib/api/config";
 import { adminFetch } from "@/lib/fetch";
 import { createSetOnce } from "@/lib/signals";
 import { showSaveFileDialog, pathJoin, copyToClipboard } from "@/lib/utils";

@@ -55,12 +55,12 @@ import {
   UploadedFiles,
 } from "@/components/tables/Files";
 
-import { createConfigQuery, invalidateConfig } from "@/lib/config";
-import type { Record, RowData } from "@/lib/convert";
-import { hashSqlValue } from "@/lib/convert";
+import { createConfigQuery, invalidateConfig } from "@/lib/api/config";
+import type { Record, ArrayRecord } from "@/lib/record";
+import { hashSqlValue } from "@/lib/value";
 import { urlSafeBase64ToUuid, toHex } from "@/lib/utils";
-import { dropTable, dropIndex } from "@/lib/table";
-import { deleteRows, fetchRows } from "@/lib/row";
+import { dropTable, dropIndex } from "@/lib/api/table";
+import { deleteRows, fetchRows } from "@/lib/api/row";
 import {
   findPrimaryKeyColumnIndex,
   getForeignKey,
@@ -92,7 +92,7 @@ export type SimpleSignal<T> = [get: () => T, set: (state: T) => void];
 const blobEncodings = ["base64", "hex", "mixed"] as const;
 type BlobEncoding = (typeof blobEncodings)[number];
 
-function rowDataToRow(columns: Column[], row: RowData): Record {
+function rowDataToRow(columns: Column[], row: ArrayRecord): Record {
   const result: Record = {};
   for (let i = 0; i < row.length; ++i) {
     result[columns[i].name] = row[i];
@@ -101,7 +101,7 @@ function rowDataToRow(columns: Column[], row: RowData): Record {
 }
 
 function renderCell(
-  context: CellContext<RowData, SqlValue>,
+  context: CellContext<ArrayRecord, SqlValue>,
   tableName: QualifiedName,
   columns: Column[],
   pkIndex: number,
@@ -486,7 +486,7 @@ function buildColumnDefs(
   pkColumnIndex: number,
   columns: Column[],
   blobEncoding: BlobEncoding,
-): ColumnDef<RowData, SqlValue>[] {
+): ColumnDef<ArrayRecord, SqlValue>[] {
   return columns.map((col, idx) => {
     const fk = getForeignKey(col.options);
     const notNull = isNotNull(col.options);
@@ -510,12 +510,12 @@ function buildColumnDefs(
           },
           blobEncoding,
         ),
-      accessorFn: (row: RowData) => row[idx],
-    } as ColumnDef<RowData, SqlValue>;
+      accessorFn: (row: ArrayRecord) => row[idx],
+    } as ColumnDef<ArrayRecord, SqlValue>;
   });
 }
 
-function RowDataTable(props: {
+function ArrayRecordTable(props: {
   state: TableState;
   pagination: SimpleSignal<PaginationState>;
   filter: SimpleSignal<string | undefined>;
@@ -600,14 +600,14 @@ function RowDataTable(props: {
                   }}
                   onRowClick={
                     mutable()
-                      ? (_idx: number, row: RowData) => {
+                      ? (_idx: number, row: ArrayRecord) => {
                           setEditRow(rowDataToRow(columns(), row));
                         }
                       : undefined
                   }
                   onRowSelection={
                     mutable()
-                      ? (rows: Row<RowData>[], value: boolean) => {
+                      ? (rows: Row<ArrayRecord>[], value: boolean) => {
                           const newSelection = new Map<string, SqlValue>(
                             selectedRows(),
                           );
@@ -874,7 +874,7 @@ export function TablePane(props: {
           </Match>
 
           <Match when={state.data}>
-            <RowDataTable
+            <ArrayRecordTable
               state={state.data!}
               pagination={[pagination, setPagination]}
               filter={[filter, setFilter]}
