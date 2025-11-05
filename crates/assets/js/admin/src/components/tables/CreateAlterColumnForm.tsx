@@ -27,9 +27,10 @@ import {
   TextFieldInput,
 } from "@/components/ui/text-field";
 import {
-  gapStyle,
   SelectField,
   buildTextFormField,
+  floatPattern,
+  gapStyle,
 } from "@/components/FormFields";
 import type { FormApiT, AnyFieldApi } from "@/components/FormFields";
 
@@ -50,9 +51,29 @@ import { assert, TypeEqualityGuard } from "@/lib/value";
 
 import type { Column } from "@bindings/Column";
 import type { ColumnDataType } from "@bindings/ColumnDataType";
-import type { ColumnAffinityType } from "@bindings/ColumnAffinityType";
 import type { ColumnOption } from "@bindings/ColumnOption";
 import type { Table } from "@bindings/Table";
+
+export function newDefaultColumn(
+  index: number,
+  existingNames?: string[],
+): Column {
+  let name = `new_${index}`;
+  if (existingNames !== undefined) {
+    for (let i = 0; i < 1000; ++i) {
+      if (existingNames.find((n) => n === name) === undefined) {
+        break;
+      }
+      name = `new_${index + i}`;
+    }
+  }
+
+  const [_, builder] = presets[0];
+  return {
+    ...builder(name),
+    name,
+  };
+}
 
 function columnTypeField(
   disabled: boolean,
@@ -106,9 +127,6 @@ function ColumnOptionCheckField(props: {
   onChange: (v: ColumnOption[]) => void;
   disabled: boolean;
 }) {
-  const disabled = () =>
-    props.disabled || getCheckValue(props.value) === undefined;
-
   const HCard = () => (
     <HoverCard>
       <HoverCardTrigger
@@ -149,7 +167,7 @@ function ColumnOptionCheckField(props: {
           <TextFieldLabel
             class={cn(
               "flex items-center text-right",
-              disabled() ? "text-muted-foreground" : null,
+              props.disabled ? "text-muted-foreground" : null,
             )}
           >
             <HCard />
@@ -157,31 +175,20 @@ function ColumnOptionCheckField(props: {
           </TextFieldLabel>
         </L>
 
-        <div class={customCheckBoxStyle}>
-          <TextFieldInput
-            disabled={disabled()}
-            type="text"
-            value={getCheckValue(props.value) ?? ""}
-            onChange={(e: Event) => {
-              const value: string | undefined = (
-                e.currentTarget as HTMLInputElement
-              ).value;
-              props.onChange(setCheckValue(props.value, value));
-            }}
-          />
+        <TextFieldInput
+          disabled={props.disabled}
+          type="text"
+          value={getCheckValue(props.value) ?? ""}
+          onChange={(e: Event) => {
+            const value: string | undefined = (
+              e.currentTarget as HTMLInputElement
+            ).value;
 
-          <Checkbox
-            disabled={props.disabled}
-            checked={getCheckValue(props.value) !== undefined}
-            onChange={(value) => {
-              const newOpts = setCheckValue(
-                props.value,
-                value ? "" : undefined,
-              );
-              props.onChange(newOpts);
-            }}
-          />
-        </div>
+            props.onChange(
+              setCheckValue(props.value, value === "" ? undefined : value),
+            );
+          }}
+        />
       </div>
     </TextField>
   );
@@ -193,9 +200,6 @@ function ColumnOptionDefaultField(props: {
   onChange: (v: ColumnOption[]) => void;
   disabled: boolean;
 }) {
-  const disabled = () =>
-    props.disabled || getDefaultValue(props.value) === undefined;
-
   const HCard = () => (
     <HoverCard>
       <HoverCardTrigger
@@ -213,19 +217,32 @@ function ColumnOptionDefaultField(props: {
 
             <p class="text-sm">
               Can either be a constant like{" "}
-              <span class="font-mono font-bold">'foo'</span>
-              and <span class="font-mono font-bold">42</span>, or a scalar
-              function like
-              <span class="font-mono font-bold">
-                (jsonschema('std.FileUpload', {props.column.name}))
-              </span>
-              .
+              <span class="font-mono font-bold">'foo'</span>,{" "}
+              <span class="font-mono font-bold">42</span>, and{" "}
+              <span class="font-mono font-bold">X'face'</span>, or a scalar
+              function like{" "}
+              <span class="font-mono font-bold">(unixepoch())</span>.
             </p>
           </div>
         </div>
       </HoverCardContent>
     </HoverCard>
   );
+
+  const validationPattern = () => {
+    switch (props.column.data_type) {
+      case "Any":
+        return undefined;
+      case "Blob":
+        return "^X'.*'$";
+      case "Text":
+        return "^'.*'$";
+      case "Integer":
+        return undefined;
+      case "Real":
+        return floatPattern;
+    }
+  };
 
   // TODO: Factor out inner component from buildTextFormField and use it here.
   return (
@@ -238,7 +255,7 @@ function ColumnOptionDefaultField(props: {
           <TextFieldLabel
             class={cn(
               "flex items-center text-right",
-              disabled() ? "text-muted-foreground" : null,
+              props.disabled ? "text-muted-foreground" : null,
             )}
           >
             <HCard />
@@ -246,32 +263,21 @@ function ColumnOptionDefaultField(props: {
           </TextFieldLabel>
         </L>
 
-        <div class={customCheckBoxStyle}>
-          <TextFieldInput
-            disabled={disabled()}
-            type="text"
-            value={getDefaultValue(props.value) ?? ""}
-            onChange={(e: Event) => {
-              const value: string | undefined = (
-                e.currentTarget as HTMLInputElement
-              ).value;
-              props.onChange(setDefaultValue(props.value, value));
-            }}
-          />
+        <TextFieldInput
+          disabled={props.disabled}
+          type={props.column.data_type === "Integer" ? "number" : "text"}
+          pattern={validationPattern()}
+          value={getDefaultValue(props.value) ?? ""}
+          onChange={(e: Event) => {
+            const value: string | undefined = (
+              e.currentTarget as HTMLInputElement
+            ).value;
 
-          <Checkbox
-            disabled={props.disabled}
-            checked={getDefaultValue(props.value) !== undefined}
-            onChange={(value) => {
-              // TODO: Make default dependent on column type.
-              const newOpts = setDefaultValue(
-                props.value,
-                value ? "''" : undefined,
-              );
-              props.onChange(newOpts);
-            }}
-          />
-        </div>
+            props.onChange(
+              setDefaultValue(props.value, value === "" ? undefined : value),
+            );
+          }}
+        />
       </div>
     </TextField>
   );
@@ -500,12 +506,9 @@ export function ColumnSubForm(props: {
                         type="button"
                         onClick={() => {
                           const columns = [...props.form.state.values.columns];
+
                           const column = columns[props.colIndex];
-
-                          const v = preset(column.name);
-
-                          column.data_type = v.data_type;
-                          column.options = v.options;
+                          columns[props.colIndex] = preset(column.name);
 
                           props.form.setFieldValue("columns", columns);
                         }}
@@ -634,12 +637,9 @@ export function PrimaryKeyColumnSubForm(props: {
                             const columns = [
                               ...props.form.state.values.columns,
                             ];
+
                             const column = columns[props.colIndex];
-
-                            const v = preset(column.name);
-
-                            column.data_type = v.data_type;
-                            column.options = v.options;
+                            columns[props.colIndex] = preset(column.name);
 
                             props.form.setFieldValue("columns", columns);
                           }}
@@ -711,18 +711,12 @@ function L(props: { children: JSX.Element }) {
 
 const transitionTimingFunc = "cubic-bezier(.87,0,.13,1)";
 
-type Preset = {
-  type_name: string;
-  data_type: ColumnDataType;
-  affinity_type: ColumnAffinityType;
-  options: ColumnOption[];
-};
-
-export const primaryKeyPresets: [string, (colName: string) => Preset][] = [
+export const primaryKeyPresets: [string, (colName: string) => Column][] = [
   [
     "INTEGER",
-    (_colName: string) => {
+    (colName: string) => {
       return {
+        name: colName,
         type_name: "INTEGER",
         data_type: "Integer",
         affinity_type: "Integer",
@@ -737,6 +731,7 @@ export const primaryKeyPresets: [string, (colName: string) => Preset][] = [
     "UUIDv4",
     (colName: string) => {
       return {
+        name: colName,
         type_name: "BLOB",
         data_type: "Blob",
         affinity_type: "Blob",
@@ -753,6 +748,7 @@ export const primaryKeyPresets: [string, (colName: string) => Preset][] = [
     "UUIDv7",
     (colName: string) => {
       return {
+        name: colName,
         type_name: "BLOB",
         data_type: "Blob",
         affinity_type: "Blob",
@@ -767,15 +763,16 @@ export const primaryKeyPresets: [string, (colName: string) => Preset][] = [
   ],
 ];
 
-const presets: [string, (colName: string) => Preset][] = [
+const presets: [string, (colName: string) => Column][] = [
   [
     "Default",
-    (_colName: string) => {
+    (colName: string) => {
       return {
+        name: colName,
         type_name: "TEXT",
         data_type: "Text",
         affinity_type: "Text",
-        options: [{ Default: "''" }, "NotNull"],
+        options: ["NotNull"],
       };
     },
   ],
@@ -783,6 +780,7 @@ const presets: [string, (colName: string) => Preset][] = [
     "UUIDv4",
     (colName: string) => {
       return {
+        name: colName,
         type_name: "BLOB",
         data_type: "Blob",
         affinity_type: "Blob",
@@ -798,6 +796,7 @@ const presets: [string, (colName: string) => Preset][] = [
     "UUIDv7",
     (colName: string) => {
       return {
+        name: colName,
         type_name: "BLOB",
         data_type: "Blob",
         affinity_type: "Blob",
@@ -813,6 +812,7 @@ const presets: [string, (colName: string) => Preset][] = [
     "JSON",
     (colName: string) => {
       return {
+        name: colName,
         type_name: "TEXT",
         data_type: "Text",
         affinity_type: "Text",
@@ -828,6 +828,7 @@ const presets: [string, (colName: string) => Preset][] = [
     "File",
     (colName: string) => {
       return {
+        name: colName,
         type_name: "TEXT",
         data_type: "Text",
         affinity_type: "Text",
@@ -843,6 +844,7 @@ const presets: [string, (colName: string) => Preset][] = [
     "Files",
     (colName: string) => {
       return {
+        name: colName,
         type_name: "TEXT",
         data_type: "Text",
         affinity_type: "Text",

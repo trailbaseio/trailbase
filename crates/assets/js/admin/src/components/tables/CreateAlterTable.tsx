@@ -25,6 +25,7 @@ import { SheetContainer } from "@/components/SafeSheet";
 import {
   PrimaryKeyColumnSubForm,
   ColumnSubForm,
+  newDefaultColumn,
   primaryKeyPresets,
 } from "@/components/tables/CreateAlterColumnForm";
 import { invalidateConfig } from "@/lib/config";
@@ -33,25 +34,6 @@ import type { Column } from "@bindings/Column";
 import type { Table } from "@bindings/Table";
 import type { AlterTableOperation } from "@bindings/AlterTableOperation";
 import type { QualifiedName } from "@bindings/QualifiedName";
-
-function newDefaultColumn(index: number, existingNames?: string[]): Column {
-  let name = `new_${index}`;
-  if (existingNames !== undefined) {
-    for (let i = 0; i < 1000; ++i) {
-      if (existingNames.find((n) => n === name) === undefined) {
-        break;
-      }
-      name = `new_${index + i}`;
-    }
-  }
-  return {
-    name,
-    type_name: "TEXT",
-    data_type: "Text",
-    affinity_type: "Text",
-    options: [{ Default: "''" }],
-  };
-}
 
 function columnsEqual(a: Column, b: Column): boolean {
   return (
@@ -208,7 +190,6 @@ export function CreateAlterTableForm(props: {
         indexes: [],
         columns: [
           {
-            name: "id",
             ...primaryKeyPresets[0][1]("id"),
           },
           newDefaultColumn(1),
