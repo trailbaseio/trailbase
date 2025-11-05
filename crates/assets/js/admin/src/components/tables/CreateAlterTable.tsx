@@ -16,7 +16,7 @@ import {
 import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 
 import { createTable, alterTable } from "@/lib/api/table";
-import { randomName } from "@/lib/name";
+import { generateRandomName } from "@/lib/name";
 import {
   buildBoolFormField,
   buildTextFormField,
@@ -161,7 +161,9 @@ export function CreateAlterTableForm(props: {
       copyOriginal() ??
       ({
         name: {
-          name: randomName(),
+          name: generateRandomName({
+            taken: props.allTables.map((t) => t.name.name),
+          }),
           database_schema: null,
         },
         strict: true,
