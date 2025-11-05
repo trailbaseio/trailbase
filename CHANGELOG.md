@@ -1,3 +1,10 @@
+## v0.20.10
+
+- Fix regression with column types in CREATE/ALTER table forms.
+- Improve & simplify the DEFAULT and CHECK column schema fields. They no longer need to be explicitly toggled and the inputs are validated.
+- Improve & fix the generated curl template queries: replace "Null" with null and pre-fill more fields for easier editing.
+- Update JavaScript and Rust dependencies.
+
 ## v0.20.9
 
 - Overhauled admin UI for rendering file(s) columns: less convoluted, image preview and easy download.
