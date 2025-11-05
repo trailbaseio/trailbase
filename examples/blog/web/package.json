@@ -24,13 +24,13 @@
   },
   "devDependencies": {
     "@astrojs/solid-js": "^5.1.2",
-    "@eslint/js": "^9.39.0",
+    "@eslint/js": "^9.39.1",
     "@iconify-json/tabler": "^1.2.23",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.16",
     "@types/dateformat": "^5.0.3",
-    "eslint": "^9.39.0",
-    "eslint-plugin-astro": "^1.4.0",
+    "eslint": "^9.39.1",
+    "eslint-plugin-astro": "^1.5.0",
     "eslint-plugin-better-tailwindcss": "^3.7.10",
     "eslint-plugin-solid": "^0.14.5",
     "globals": "^16.5.0",
@@ -39,6 +39,6 @@
     "quicktype": "^23.2.6",
     "sharp": "^0.34.4",
     "tailwindcss": "^4.1.16",
-    "typescript-eslint": "^8.46.2"
+    "typescript-eslint": "^8.46.3"
   }
 }

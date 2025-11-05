@@ -16,19 +16,19 @@
     "trailbase": "^0.8.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.0",
+    "@eslint/js": "^9.39.1",
     "@tailwindcss/vite": "^4.1.16",
     "@types/express": "^5.0.5",
     "@types/node": "^24.10.0",
     "compression": "^1.8.1",
-    "eslint": "^9.39.0",
+    "eslint": "^9.39.1",
     "express": "^5.1.0",
     "globals": "^16.5.0",
     "prettier": "^3.6.2",
     "sirv": "^3.0.2",
     "tailwindcss": "^4.1.16",
-    "typescript-eslint": "^8.46.2",
-    "vite": "^7.1.12",
+    "typescript-eslint": "^8.46.3",
+    "vite": "^7.2.0",
     "vite-plugin-solid": "^2.11.10"
   }
 }
