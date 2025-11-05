@@ -26,6 +26,12 @@ import {
   TextFieldLabel,
   TextFieldInput,
 } from "@/components/ui/text-field";
+import {
+  gapStyle,
+  SelectField,
+  buildTextFormField,
+} from "@/components/FormFields";
+import type { FormApiT, AnyFieldApi } from "@/components/FormFields";
 
 import {
   isNotNull,
@@ -40,13 +46,7 @@ import {
   setForeignKey,
 } from "@/lib/schema";
 import { cn } from "@/lib/utils";
-import {
-  gapStyle,
-  SelectField,
-  buildTextFormField,
-} from "@/components/FormFields";
-
-import type { FormApiT, AnyFieldApi } from "@/components/FormFields";
+import { assert, TypeEqualityGuard } from "@/lib/value";
 
 import type { Column } from "@bindings/Column";
 import type { ColumnDataType } from "@bindings/ColumnDataType";
@@ -59,16 +59,6 @@ function columnTypeField(
   fk: Accessor<string | undefined>,
   allTables: Table[],
 ) {
-  // WARNING: these needs to be kept in sync with ColumnDataType. TS cannot go
-  // from type union to array.
-  const columnDataTypes: ColumnDataType[] = [
-    "Blob",
-    "Text",
-    "Integer",
-    "Real",
-    "Any",
-  ] as const;
-
   return (field: () => AnyFieldApi) => {
     // Note: use createMemo to avoid rebuilds for any state change.
     const value = createMemo(() => field().state.value);
@@ -96,12 +86,14 @@ function columnTypeField(
     });
 
     return (
-      <SelectField
+      <SelectField<ColumnDataType>
         label={() => <L>Type</L>}
         disabled={disabled || fk() !== undefined}
         options={columnDataTypes}
         value={field().state.value}
-        onChange={field().handleChange}
+        onChange={(v: ColumnDataType | null) => {
+          field().handleChange(v);
+        }}
         handleBlur={field().handleBlur}
       />
     );
@@ -543,10 +535,9 @@ export function ColumnSubForm(props: {
               </props.form.Field>
 
               {/* Column type field */}
-              <props.form.Field
-                name={`columns[${props.colIndex}].data_type`}
-                children={columnTypeField(disabled(), fk, props.allTables)}
-              />
+              <props.form.Field name={`columns[${props.colIndex}].data_type`}>
+                {columnTypeField(disabled(), fk, props.allTables)}
+              </props.form.Field>
 
               {/* Column options: pk, not null, ... */}
               <props.form.Field
@@ -866,5 +857,18 @@ const presets: [string, (colName: string) => Preset][] = [
     },
   ],
 ];
+
+// WARNING: these needs to be kept in sync with ColumnDataType. TS cannot go
+// from type union to array.
+const columnDataTypes: ColumnDataType[] = [
+  "Blob",
+  "Text",
+  "Integer",
+  "Real",
+  "Any",
+] as const;
+
+type CT = (typeof columnDataTypes)[number];
+assert<TypeEqualityGuard<ColumnDataType, CT>>(); // no error
 
 const customCheckBoxStyle = "flex items-center justify-end py-1 gap-2";

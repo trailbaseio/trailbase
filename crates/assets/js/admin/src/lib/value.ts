@@ -18,7 +18,7 @@ export type SqlNotNullValue =
   | SqlBlobValue;
 
 export function assert<_T extends never>() {}
-type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
+export type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 
 // Make sure our partial types match the ts-rs generated type.
 assert<

@@ -390,11 +390,11 @@ export function buildSelectField(options: string[], opts: SelectFieldOpts) {
   };
 }
 
-export function SelectField(
+export function SelectField<T = string>(
   props: {
-    options: string[];
-    value: string;
-    onChange: (v: string | null) => void;
+    options: T[];
+    value: T;
+    onChange: (v: T | null) => void;
     handleBlur: () => void;
   } & SelectFieldOpts,
 ) {
@@ -405,7 +405,7 @@ export function SelectField(
     >
       <Label>{props.label()}</Label>
 
-      <Select
+      <Select<T>
         required={true}
         multiple={false}
         value={props.value}
@@ -413,7 +413,7 @@ export function SelectField(
         onChange={props.onChange}
         options={props.options}
         itemComponent={(props) => (
-          <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+          <SelectItem item={props.item}>{`${props.item.rawValue}`}</SelectItem>
         )}
         disabled={props?.disabled}
       >

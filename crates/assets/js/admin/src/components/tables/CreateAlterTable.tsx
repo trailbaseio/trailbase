@@ -88,6 +88,35 @@ export function CreateAlterTableForm(props: {
     /* eslint-disable solid/reactivity */
     console.debug("Table schema:", value);
 
+    // Fix up the column data types, i.e. make sure affinity type and type_name match data_type;
+    // This is a bit hacky and needed because we're re-using the parse-type. For generating the
+    // query only `type_name` matters and not the structured interpretation.
+    function fixColumn(column: Column): Column {
+      const c = { ...column };
+      switch (column.data_type) {
+        case "Integer":
+          c.type_name = "INTEGER";
+          c.affinity_type = "Integer";
+          return c;
+        case "Real":
+          c.type_name = "REAL";
+          c.affinity_type = "Real";
+          return c;
+        case "Text":
+          c.type_name = "TEXT";
+          c.affinity_type = "Text";
+          return c;
+        case "Blob":
+          c.type_name = "BLOB";
+          c.affinity_type = "Blob";
+          return c;
+        case "Any":
+          c.type_name = "ANY";
+          c.affinity_type = "Blob";
+          return c;
+      }
+    }
+
     try {
       const o = original();
       if (o !== undefined) {
@@ -108,7 +137,7 @@ export function CreateAlterTableForm(props: {
               operations.push({
                 AlterColumn: {
                   name: originalName,
-                  column,
+                  column: fixColumn(column),
                 },
               });
               return;
@@ -133,7 +162,10 @@ export function CreateAlterTableForm(props: {
         }
       } else {
         // Create table
-        value.columns = value.columns.filter((_, i) => !isDeleted(i));
+        value.columns = value.columns
+          .filter((_, i) => !isDeleted(i))
+          .map(fixColumn);
+
         const response = await createTable({ schema: value, dry_run: dryRun });
         console.debug(`CreateTableResponse [dry: ${dryRun}]:`, response);
 
