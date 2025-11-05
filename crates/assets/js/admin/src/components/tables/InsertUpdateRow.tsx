@@ -54,56 +54,57 @@ import {
 } from "@/lib/schema";
 
 function buildDefaultRecord(schema: Table): Record {
-  const obj: Record = {};
+  return Object.fromEntries(
+    schema.columns.map((col) => {
+      const type = col.data_type;
+      const isPk = isPrimaryKeyColumn(col);
+      const foreignKey = getForeignKey(col.options);
+      const notNull = isNotNull(col.options);
+      const defaultValue = getDefaultValue(col.options);
+      const nullable = isNullableColumn({
+        type: col.data_type,
+        notNull,
+        isPk,
+      });
 
-  for (const col of schema.columns) {
-    const type = col.data_type;
-    const isPk = isPrimaryKeyColumn(col);
-    const foreignKey = getForeignKey(col.options);
-    const notNull = isNotNull(col.options);
-    const defaultValue = getDefaultValue(col.options);
-    const nullable = isNullableColumn({
-      type: col.data_type,
-      notNull,
-      isPk,
-    });
-
-    /// If there's no default and the column is nullable we default to null.
-    if (defaultValue !== undefined) {
-      // If there is a default, we leave the form field empty and show the default as a textinput placeholder.
-      obj[col.name] = undefined;
-      continue;
-    } else if (nullable) {
-      obj[col.name] = "Null";
-      continue;
-    }
-
-    // No default and non-nullable, i.e required...
-    //
-    // ...we fall back to generic defaults. We may be wrong based on CHECK constraints.
-    if (type === "Blob") {
-      if (foreignKey !== undefined) {
-        obj[col.name] = {
-          Blob: {
-            Base64UrlSafe: `<${foreignKey.foreign_table.toUpperCase()}_ID>`,
-          },
-        };
-      } else {
-        obj[col.name] = { Blob: { Base64UrlSafe: "" } };
+      /// If there's no default and the column is nullable we default to null.
+      if (defaultValue !== undefined) {
+        // If there is a default, we leave the form field empty and show the default as a text-input placeholder.
+        return [col.name, undefined];
+      } else if (nullable) {
+        return [col.name, "Null"];
       }
-    } else if (type === "Text") {
-      obj[col.name] = { Text: "" };
-    } else if (type === "Integer") {
-      obj[col.name] = { Integer: BigInt(0) };
-    } else if (type === "Real") {
-      obj[col.name] = { Real: 0.0 };
-    } else {
+
+      // No default and non-nullable, i.e required...
+      //
+      // ...we fall back to generic defaults. We may be wrong based on CHECK constraints.
+      if (type === "Blob") {
+        if (foreignKey !== undefined) {
+          return [
+            col.name,
+            {
+              Blob: {
+                Base64UrlSafe: `<${foreignKey.foreign_table.toUpperCase()}_ID>`,
+              },
+            },
+          ];
+        } else {
+          return [col.name, { Blob: { Base64UrlSafe: "" } }];
+        }
+      } else if (type === "Text") {
+        return [col.name, { Text: "" }];
+      } else if (type === "Integer") {
+        return [col.name, { Integer: BigInt(0) }];
+      } else if (type === "Real") {
+        return [col.name, { Real: 0.0 }];
+      }
+
       console.warn(
         `No fallback for column: ${col.name}, type: '${type}' - skipping default`,
       );
-    }
-  }
-  return obj;
+      return [col.name, undefined];
+    }),
+  );
 }
 
 export function InsertUpdateRowForm(props: {
