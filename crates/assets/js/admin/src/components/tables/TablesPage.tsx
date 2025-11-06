@@ -36,20 +36,25 @@ import { QualifiedName } from "@bindings/QualifiedName";
 
 function pickInitiallySelectedTable(
   tables: (Table | View)[],
-  qualifiedTableName: string,
+  qualifiedTableName: string | undefined,
 ): Table | View | undefined {
   if (tables.length === 0) {
     return undefined;
   }
 
-  for (const table of tables) {
-    if (qualifiedTableName === prettyFormatQualifiedName(table.name)) {
-      return table;
+  if (qualifiedTableName) {
+    for (const table of tables) {
+      if (qualifiedTableName === prettyFormatQualifiedName(table.name)) {
+        return table;
+      }
     }
   }
 
-  console.debug("Table not found. Falling back to first");
-  return tables[0];
+  const first = tables[0];
+  console.debug(
+    `Table '${qualifiedTableName}' not found. Fallback: ${prettyFormatQualifiedName(first.name)}`,
+  );
+  return first;
 }
 
 function tableCompare(a: Table | View, b: Table | View): number {
@@ -202,8 +207,12 @@ function TableSplitView(props: {
   });
 
   const params = useParams<{ table: string }>();
-  const selectedTable = () =>
-    pickInitiallySelectedTable(filteredTablesAndViews(), params.table);
+  const selectedTable = createMemo(() => {
+    const allTables = filteredTablesAndViews();
+    // useParams returns undefined as a string.
+    const table = params.table === "undefined" ? undefined : params.table;
+    return pickInitiallySelectedTable(allTables, table);
+  });
 
   const First = (p: { horizontal: boolean }) => (
     <TablePickerPane

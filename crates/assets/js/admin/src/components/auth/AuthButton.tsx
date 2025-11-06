@@ -4,7 +4,7 @@ import { TbUser } from "solid-icons/tb";
 import { type User } from "trailbase";
 
 import { urlSafeBase64ToUuid } from "@/lib/utils";
-import { client, $user } from "@/lib/client";
+import { client, hostAddress, $user } from "@/lib/client";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,9 +16,8 @@ import {
 import { navBarIconStyle } from "@/components/NavBar";
 
 function avatarUrl(user: User): string {
-  return import.meta.env.DEV
-    ? `http://localhost:4000/api/auth/v1/avatar/${user.id}`
-    : `/api/auth/v1/avatar/${user.id}`;
+  const address = hostAddress();
+  return `${address ?? ""}/api/auth/v1/avatar/${user.id}`;
 }
 
 function Avatar(props: { user: User | undefined; size: number }) {

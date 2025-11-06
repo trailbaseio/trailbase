@@ -138,9 +138,6 @@ function fileDownloadUrl(opts: {
   tableName: QualifiedName;
   query: ReadFilesQuery;
 }): string {
-  // const origin = import.meta.env.DEV
-  //   ? "http://localhost:4000"
-  //   : window.location.origin;
   const tableName: string = prettyFormatQualifiedName(opts.tableName);
   const query = opts.query;
 

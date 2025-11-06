@@ -403,10 +403,11 @@ function buildDefaultTemplateInput(schema: Table, isUpdate: boolean): string {
 }
 
 function siteUrl(config: Config | undefined): string {
-  return (
-    config?.server?.siteUrl ??
-    (import.meta.env.DEV ? "http://localhost:4000" : window.location.origin)
-  );
+  if (import.meta.env.DEV) {
+    return `http://${window.location.hostname}:4000`;
+  }
+
+  return config?.server?.siteUrl ?? window.location.origin;
 }
 
 function CodeBlock(props: { text: string }) {

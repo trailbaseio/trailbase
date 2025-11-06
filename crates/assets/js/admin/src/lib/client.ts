@@ -9,13 +9,18 @@ const $tokens = persistentAtom<Tokens | null>("auth_tokens", null, {
 });
 export const $user = computed($tokens, (_tokens) => client.user());
 
+export function hostAddress(): string | undefined {
+  // For our dev server setup we assume that a TrailBase instance is running at ":4000",
+  // otherwise we query APIs relative to the origin's root path.
+  if (import.meta.env.DEV) {
+    return `http://${window.location.hostname}:4000`;
+  }
+  return undefined;
+}
+
 function buildClient(): Client {
-  // For our dev server setup we assume that a TrailBase instance is running at ":4000", otherwise
-  // we query APIs relative to the origin's root path.
-  const HOST = import.meta.env.DEV
-    ? new URL("http://localhost:4000")
-    : undefined;
-  const client = initClient(HOST, {
+  const address = hostAddress();
+  const client = initClient(address && new URL(address), {
     tokens: $tokens.get() ?? undefined,
     onAuthChange: (c: Client, _user: User | undefined) => {
       $tokens.set(c.tokens() ?? null);
@@ -27,4 +32,5 @@ function buildClient(): Client {
 
   return client;
 }
+
 export const client = buildClient();
