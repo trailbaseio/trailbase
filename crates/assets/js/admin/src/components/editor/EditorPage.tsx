@@ -215,6 +215,7 @@ function EditorSidebar(props: {
   setSelected: (idx: number) => void;
   dirty: boolean;
   horizontal: boolean;
+  deleteScriptByIdx: (idx: number) => void;
 }) {
   const scripts = useStore($scripts);
 
@@ -229,7 +230,7 @@ function EditorSidebar(props: {
           </Button>
 
           <For each={scripts()}>
-            {(_script: Script, i: Accessor<number>) => {
+            {(script: Script, i: Accessor<number>) => {
               const scriptName = () => scripts()[i()].name;
               const showStar = () => props.selected === i() && props.dirty;
 
@@ -238,6 +239,7 @@ function EditorSidebar(props: {
                   <SidebarMenuButton
                     isActive={props.selected === i()}
                     tooltip={scriptName()}
+                    class="pr-0"
                     variant="default"
                     size="md"
                     onClick={() => props.setSelected(i())}
@@ -247,17 +249,17 @@ function EditorSidebar(props: {
                         {`${scriptName()}${showStar() ? "*" : ""}`}
                       </span>
 
-                      {/*
                       <div class="flex">
-                        <Button class="hover:bg-border" size="icon" variant="ghost" onClick={() => { }}>
-                          <TbEdit />
-                        </Button>
+                        <RenameDialog selected={i()} script={script} />
 
-                        <IconButton class="hover:bg-border" tooltip="Delete this script">
+                        <IconButton
+                          class="hover:bg-border"
+                          tooltip="Delete this script"
+                          onClick={() => props.deleteScriptByIdx(i())}
+                        >
                           <TbTrash />
                         </IconButton>
                       </div>
-                      */}
                     </div>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -314,7 +316,7 @@ function RenameDialog(props: { selected: number; script: Script }) {
   return (
     <Dialog id="rename" open={open()} onOpenChange={setOpen}>
       <DialogTrigger>
-        <IconButton tooltip="Rename script">
+        <IconButton tooltip="Rename script" class="hover:bg-border">
           <TbEdit />
         </IconButton>
       </DialogTrigger>
@@ -505,16 +507,6 @@ function EditorPanel(props: {
     editor.focus();
   });
 
-  const LeftButtons = () => (
-    <>
-      <RenameDialog selected={selected()} script={props.script} />
-
-      <IconButton tooltip="Delete this script" onClick={props.deleteScript}>
-        <TbTrash />
-      </IconButton>
-    </>
-  );
-
   return (
     <Dialog
       id="switch-script-dialog"
@@ -544,7 +536,6 @@ function EditorPanel(props: {
         title="Editor"
         leading={<SidebarTrigger />}
         titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
-        left={<LeftButtons />}
         right={<HelpDialog />}
       />
 
@@ -641,10 +632,10 @@ export function EditorPage() {
     return s[s.length - 1];
   };
 
-  const deleteCurrentScript = () => {
-    const idx = selected();
-    deleteScript(idx);
-    setSelected(Math.max(0, idx - 1));
+  const deleteScriptByIdx = (idx?: number | undefined) => {
+    const i = idx ?? selected();
+    deleteScript(i);
+    setSelected(Math.max(0, i - 1));
   };
 
   return (
@@ -662,6 +653,7 @@ export function EditorPage() {
               setSelected={switchToScript}
               dirty={dirty()}
               horizontal={true}
+              deleteScriptByIdx={deleteScriptByIdx}
             />
           </SidebarGroup>
 
@@ -684,7 +676,7 @@ export function EditorPage() {
               script={script()}
               dirty={[dirty, setDirty]}
               dirtyDialog={[dialog, setDialog]}
-              deleteScript={deleteCurrentScript}
+              deleteScript={() => deleteScriptByIdx()}
             />
           </Match>
 
@@ -696,7 +688,7 @@ export function EditorPage() {
                 script={script()}
                 dirty={[dirty, setDirty]}
                 dirtyDialog={[dialog, setDialog]}
-                deleteScript={deleteCurrentScript}
+                deleteScript={() => deleteScriptByIdx()}
               />
             </div>
           </Match>
