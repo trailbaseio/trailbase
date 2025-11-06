@@ -1,3 +1,14 @@
+## v0.20.11
+
+- Admin UI layout improvements:
+  - Switch to solid-ui/shadcn collapsible sidebar, rather than horizontal split fallback on mobile.
+  - Make mobile/top-navbar always scroll with content.
+  - Avoid editor layout issues by making it not resizable.
+  - Move editor script rename/delete buttons into sidebar.
+  - Consistent icons everywhere.
+- Fix CSP/routing for non-local dev setup (e.g. via mobile).
+- Many internal admin UI cleanups: move code around, distribution of column_type responsibility, random name collisions, ... .
+
 ## v0.20.10
 
 - Fix regression with column types in CREATE/ALTER table forms.
