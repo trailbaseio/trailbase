@@ -326,7 +326,7 @@ export function AccountsPage() {
   const columns = () => buildColumns(setEditUser, refetch);
 
   return (
-    <div class="h-dvh overflow-y-auto">
+    <div class="h-full">
       <Header
         title="Accounts"
         left={

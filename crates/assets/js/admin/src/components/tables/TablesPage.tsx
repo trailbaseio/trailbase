@@ -82,7 +82,7 @@ function TablePickerPane(props: {
 
   return (
     <div
-      class={`${horizontal() ? "flex h-dvh flex-col" : "flex"} hide-scrollbars gap-2 overflow-scroll p-4`}
+      class={`${horizontal() ? "flex h-dvh flex-col" : "flex"} gap-2 overflow-scroll p-4`}
     >
       <SwitchToggle
         class="flex items-center justify-center gap-2"

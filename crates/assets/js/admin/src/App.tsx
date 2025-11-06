@@ -13,18 +13,18 @@ import { VerticalNavBar, HorizontalNavBar } from "@/components/NavBar";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { $user } from "@/lib/client";
-import { createWindowWidth } from "@/lib/signals";
+import { createIsMobile } from "@/lib/signals";
 
 const queryClient = new QueryClient();
 
 function LeftNav(props: RouteSectionProps) {
   return (
     <>
-      <div class="hide-scrollbars sticky h-dvh w-[58px] overflow-y-scroll">
+      <div class="hide-scrollbars sticky h-dvh w-[58px] overflow-hidden">
         <VerticalNavBar location={props.location} />
       </div>
 
-      <main class="absolute inset-0 left-[58px] h-dvh w-[calc(100vw-58px)] overflow-hidden">
+      <main class="absolute inset-0 left-[58px] h-dvh w-[calc(100vw-58px)] overflow-x-hidden overflow-y-auto">
         <ErrorBoundary>{props.children}</ErrorBoundary>
       </main>
     </>
@@ -34,11 +34,9 @@ function LeftNav(props: RouteSectionProps) {
 function TopNav(props: RouteSectionProps) {
   return (
     <>
-      <div class="hide-scrollbars sticky h-[48px] w-screen overflow-y-scroll">
-        <HorizontalNavBar location={props.location} />
-      </div>
+      <HorizontalNavBar height={48} location={props.location} />
 
-      <main class="absolute inset-0 top-[48px] h-[calc(100vh-48px)] w-screen overflow-hidden">
+      <main class="max-h-[calc(100vh-48px)] w-screen">
         <ErrorBoundary>{props.children}</ErrorBoundary>
       </main>
     </>
@@ -46,16 +44,15 @@ function TopNav(props: RouteSectionProps) {
 }
 
 function WrapWithNav(props: RouteSectionProps) {
-  const width = createWindowWidth();
-  const showTopNav = () => width() < 680;
+  const isMobile = createIsMobile();
 
   return (
     <Switch>
-      <Match when={showTopNav()}>
+      <Match when={isMobile()}>
         <TopNav {...props} />
       </Match>
 
-      <Match when={!showTopNav()}>
+      <Match when={!isMobile()}>
         <LeftNav {...props} />
       </Match>
     </Switch>

@@ -220,7 +220,7 @@ export function EmailSettings(props: {
               >
                 {buildOptionalTextFormField({
                   label: textLabel("Username"),
-                  autocomplete: "username",
+                  autocomplete: "off",
                 })}
               </form.Field>
 
@@ -232,7 +232,7 @@ export function EmailSettings(props: {
                   // NOTE: we're not using buildSecretFormField here because it doesn't support optional.
                   buildOptionalTextFormField({
                     type: "password",
-                    autocomplete: "current-password",
+                    autocomplete: "off",
                     label: textLabel("Password"),
                   })
                 }

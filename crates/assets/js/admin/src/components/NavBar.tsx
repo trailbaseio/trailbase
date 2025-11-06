@@ -31,7 +31,7 @@ const options = [
   [`${BASE}/settings/`, TbSettings, "Settings"],
 ] as const;
 
-const iconSize = 22;
+const iconSize = (horizontal: boolean) => (horizontal ? 18 : 22);
 export const navBarIconStyle =
   "rounded-full transition-all p-2 hover:bg-accent-200 hover:bg-opacity-50 active:scale-90";
 export const navBarIconActiveStyle =
@@ -41,7 +41,7 @@ function NavBarItems(props: { location: Location; horizontal: boolean }) {
   return (
     <>
       <a href={`${BASE}/`}>
-        <img src={logo} width={props.horizontal ? "38" : "42"} alt="Logo" />
+        <img src={logo} width={props.horizontal ? "34" : "42"} alt="Logo" />
       </a>
 
       <For each={options}>
@@ -55,7 +55,7 @@ function NavBarItems(props: { location: Location; horizontal: boolean }) {
               <TooltipTrigger as="div">
                 <a href={pathname as string}>
                   <div class={style()}>
-                    <Icon size={iconSize} />
+                    <Icon size={iconSize(props.horizontal)} />
                   </div>
                 </a>
               </TooltipTrigger>
@@ -74,7 +74,7 @@ function NavFooter(props: { horizontal: boolean }) {
 
   return (
     <div class="flex flex-col items-center">
-      <AuthButton iconSize={iconSize} />
+      <AuthButton iconSize={iconSize(props.horizontal)} />
 
       <Show when={!props.horizontal}>
         <div class="text-[9px]">
@@ -85,15 +85,19 @@ function NavFooter(props: { horizontal: boolean }) {
   );
 }
 
-export function HorizontalNavBar(props: { location: Location }) {
+export function HorizontalNavBar(props: {
+  height: number;
+  location: Location;
+}) {
   return (
-    <div class="flex h-full items-center justify-between gap-4 bg-gray-100 px-2">
-      <nav class="flex h-[36px] items-center gap-4">
-        <NavBarItems location={props.location} horizontal={true} />
-      </nav>
+    <nav
+      style={{ height: `${props.height}px` }}
+      class="flex w-screen items-center justify-between gap-4 bg-gray-100 p-2"
+    >
+      <NavBarItems location={props.location} horizontal={true} />
 
       <NavFooter horizontal={true} />
-    </div>
+    </nav>
   );
 }
 

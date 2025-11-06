@@ -209,7 +209,7 @@ export function LogsPage() {
   const [showGeoipDialog, setShowGeoipDialog] = createSignal(false);
 
   return (
-    <div class="h-dvh overflow-y-auto">
+    <div class="h-full">
       <Header
         title="Logs"
         left={
@@ -268,18 +268,18 @@ export function LogsPage() {
 
           <Match when={logsFetch.data}>
             {pagination().pageIndex === 0 && logsFetch.data!.stats && (
-              <div class="mb-4 flex h-[300px] w-full gap-4">
-                <div class={showMap() ? "w-1/2 grow" : "w-full"}>
-                  <LogsChart stats={logsFetch.data!.stats!} />
-                </div>
-
-                {showMap() && logsFetch.data!.stats!.country_codes && (
-                  <div class="flex w-1/2 max-w-[500px] items-center">
+              <div class="mb-4 flex w-full flex-col gap-4 md:h-[300px] md:flex-row">
+                <Show when={showMap() && logsFetch.data!.stats!.country_codes}>
+                  <div class="flex items-center md:w-1/2 md:max-w-[500px]">
                     <WorldMap
                       country_codes={logsFetch.data!.stats!.country_codes!}
                     />
                   </div>
-                )}
+                </Show>
+
+                <div class={showMap() ? "md:w-1/2" : "w-full"}>
+                  <LogsChart stats={logsFetch.data!.stats!} />
+                </div>
               </div>
             )}
 

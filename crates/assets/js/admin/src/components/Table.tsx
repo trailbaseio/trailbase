@@ -39,7 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { createWindowWidth } from "@/lib/signals";
+import { createIsMobile } from "@/lib/signals";
 
 export function safeParseInt(v: string | undefined): number | undefined {
   if (v !== undefined) {
@@ -224,7 +224,7 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
                 ) : (
                   <TableRow>
                     <TableCell colSpan={local.columns.length}>
-                      <span>No results.</span>
+                      <span>Empty</span>
                     </TableCell>
                   </TableRow>
                 )
@@ -311,7 +311,7 @@ function PaginationControl<TData>(props: {
   );
 
   const PaginationInfoText = () => {
-    const width = createWindowWidth();
+    const isMobile = createIsMobile();
 
     const pageIndex = () => table().getState().pagination.pageIndex;
     const pageCount = () => table().getPageCount();
@@ -319,7 +319,7 @@ function PaginationControl<TData>(props: {
 
     return (
       <>
-        {rowCount() && width() > 578
+        {rowCount() && !isMobile()
           ? `page ${pageIndex() + 1} of ${pageCount()} (${rowCount()} rows total)`
           : `page ${pageIndex() + 1} of ${pageCount()}`}
       </>

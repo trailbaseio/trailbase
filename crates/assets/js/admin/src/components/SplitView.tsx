@@ -1,8 +1,8 @@
-import type { JSXElement } from "solid-js";
+import { Match, Switch, JSX } from "solid-js";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
 
-import { createWindowWidth } from "@/lib/signals";
+import { createIsMobile } from "@/lib/signals";
 import {
   Resizable,
   ResizablePanel,
@@ -28,13 +28,13 @@ function setSizes(next: number[]) {
 }
 
 export function SplitView(props: {
-  first: (props: { horizontal: boolean }) => JSXElement;
-  second: (props: { horizontal: boolean }) => JSXElement;
+  first: (props: { horizontal: boolean }) => JSX.Element;
+  second: (props: { horizontal: boolean }) => JSX.Element;
 }) {
   function VerticalSplit() {
     return (
-      <div class="hide-scrollbars flex h-full flex-col overflow-x-hidden overflow-y-scroll">
-        <div>
+      <div class="w-screen">
+        <div class="overflow-x-auto">
           <props.first horizontal={false} />
         </div>
 
@@ -66,10 +66,17 @@ export function SplitView(props: {
     );
   }
 
-  const windowWidth = createWindowWidth();
-  const thresh = 5 * minSizePx;
+  const isMobile = createIsMobile();
   return (
-    <>{windowWidth() < thresh ? <VerticalSplit /> : <HorizontalSplit />}</>
+    <Switch>
+      <Match when={isMobile()}>
+        <VerticalSplit />
+      </Match>
+
+      <Match when={!isMobile()}>
+        <HorizontalSplit />
+      </Match>
+    </Switch>
   );
 }
 

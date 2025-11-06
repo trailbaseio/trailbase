@@ -3,6 +3,7 @@ import { Graph, Cell, Shape, Edge, Node } from "@antv/x6";
 import { PortManager } from "@antv/x6/lib/model/port";
 
 import { cn } from "@/lib/utils";
+import { createIsMobile } from "@/lib/signals";
 
 export const ER_NODE_NAME = "er-rect";
 export const LINE_HEIGHT = 24;
@@ -125,6 +126,7 @@ export function ErdGraph(props: {
   nodes: NodeMetadata[];
   edges: EdgeMetadata[];
 }) {
+  const isMobile = createIsMobile();
   let ref: HTMLDivElement | undefined;
 
   onMount(() => {
@@ -165,6 +167,7 @@ export function ErdGraph(props: {
     // v0.3.25 results in "layout is not a function": https://github.com/antvis/X6/issues/4441
     // v1.2 has completely in-compatible APIs. They'll probably need to overhaul x6 first.
     const aspect = window.innerWidth / window.innerHeight;
+
     const size = Math.ceil(Math.sqrt(props.nodes.length) * aspect);
     const maxHeight = props.nodes.reduce((acc, node) => {
       const ports = node.ports;
@@ -200,13 +203,17 @@ export function ErdGraph(props: {
     graph.zoomToFit({ padding: 100, maxScale: 1 });
   });
 
+  const style = () => {
+    if (isMobile()) {
+      return "h-[calc(100dvh-120px)] w-[calc(100dvw)] overflow-clip";
+    }
+    return "h-[calc(100dvh-65px)] w-[calc(100dvw-58px)] overflow-clip";
+  };
+
+  // NOTE: The double sytling is somehow needed otherwise it overflows on mobile. x6 may also apply some styles on top.
   return (
-    <div
-      ref={ref}
-      class={cn(
-        "h-[calc(100dvh-66px)] w-[calc(100dvw-58px)] overflow-clip",
-        props.class,
-      )}
-    />
+    <div class={style()}>
+      <div ref={ref} class={cn(style(), props.class)} />
+    </div>
   );
 }

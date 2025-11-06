@@ -109,7 +109,7 @@ type Data = {
 
 function FactCard(props: { title: string; content: string; href?: string }) {
   const FCard = () => (
-    <Card class="grow">
+    <Card class="h-full">
       <CardContent>
         <CardTitle>{props.title}</CardTitle>
 
@@ -168,12 +168,12 @@ export function IndexPage() {
   }));
 
   return (
-    <div class="h-dvh overflow-y-auto">
+    <div class="h-full">
       <Header title="TrailBase" />
 
       <div class="prose m-4 flex grow flex-col gap-4">
         {dashboardFetch.data && (
-          <div class="flex grow gap-4">
+          <div class="flex shrink gap-4">
             <FactCard
               title="Users"
               content={`${dashboardFetch.data!.numUsers}`}

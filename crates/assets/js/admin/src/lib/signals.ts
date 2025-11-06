@@ -12,6 +12,13 @@ export function createWindowWidth(): Accessor<number> {
   return width;
 }
 
+const mobileBreakpoint = 768;
+
+export function createIsMobile(): Accessor<boolean> {
+  const width = createWindowWidth();
+  return () => width() < mobileBreakpoint;
+}
+
 export function createSetOnce<T>(initial: T): [
   () => T,
   (v: T) => void,

@@ -172,6 +172,12 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
     return { nodes, edges };
   });
 
+  {
+    /*
+    <ErdGraph nodes={nodesAndEdges().nodes} edges={nodesAndEdges().edges} />
+    */
+  }
+
   return (
     <ErdGraph nodes={nodesAndEdges().nodes} edges={nodesAndEdges().edges} />
   );
@@ -181,7 +187,7 @@ export function ErdPage() {
   const schemaFetch = createTableSchemaQuery();
 
   return (
-    <div class="h-dvh">
+    <div class="flex h-full flex-col">
       <Header title="Schema" />
 
       <Switch>

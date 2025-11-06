@@ -2,7 +2,6 @@ import {
   ErrorBoundary,
   For,
   Match,
-  Show,
   Switch,
   createEffect,
   createSignal,
@@ -32,11 +31,7 @@ import { sql, SQLConfig, SQLNamespace, SQLite } from "@codemirror/lang-sql";
 import { iconButtonStyle, IconButton } from "@/components/IconButton";
 import { Header } from "@/components/Header";
 import { SplitView } from "@/components/SplitView";
-import {
-  Resizable,
-  ResizablePanel,
-  ResizableHandle,
-} from "@/components/ui/resizable";
+import { Separator } from "@/components/ui/separator";
 import { Callout } from "@/components/ui/callout";
 import { Button } from "@/components/ui/button";
 import {
@@ -152,53 +147,51 @@ function ResultView(props: {
   }
 
   return (
-    <Show when={response()} fallback={<>No Data</>}>
-      <Switch>
-        <Match when={response()?.error}>
-          Error: {response()?.error?.message}
-        </Match>
+    <Switch>
+      <Match when={response()?.error}>
+        <div class="p-4">Error: {response()?.error?.message}</div>
+      </Match>
 
-        <Match when={(response()?.data?.columns?.length ?? 0) > 0}>
-          <ErrorBoundary
-            fallback={(err, _reset) => {
-              return (
-                <div class="m-4 flex flex-col gap-4">
-                  <p>Failed to render query result: {`${err}`}</p>
+      <Match when={response()?.data === undefined}>
+        <div class="p-4">No Data</div>
+      </Match>
 
-                  {isCached() && (
-                    <p>
-                      The view is trying to show cached data. Maybe the schema
-                      has changed. Try to re-execute the query.
-                    </p>
-                  )}
-                </div>
-              );
-            }}
-          >
-            <div class="flex flex-col gap-2">
-              <div class="flex justify-end text-sm">
-                Last executed:{" "}
-                {new Date(response()?.timestamp ?? 0).toLocaleTimeString()}
+      <Match when={response()?.data !== undefined}>
+        <ErrorBoundary
+          fallback={(err, _reset) => {
+            return (
+              <div class="m-4 flex flex-col gap-4">
+                <p>Failed to render query result: {`${err}`}</p>
+
+                {isCached() && (
+                  <p>
+                    The view is trying to show cached data. Maybe the schema has
+                    changed. Try to re-execute the query.
+                  </p>
+                )}
               </div>
-
-              {/* TODO: Enable pagination */}
-              <DataTable
-                columns={() => columnDefs(response()!.data!)}
-                data={() => response()!.data!.rows as ArrayRecord[]}
-                pagination={{
-                  pageIndex: 0,
-                  pageSize: 50,
-                }}
-              />
+            );
+          }}
+        >
+          <div class="flex flex-col gap-2 p-4">
+            <div class="flex justify-end text-sm">
+              Last executed:{" "}
+              {new Date(response()?.timestamp ?? 0).toLocaleTimeString()}
             </div>
-          </ErrorBoundary>
-        </Match>
 
-        <Match when={(response()?.data?.columns?.length ?? 0) == 0}>
-          No data returned by query
-        </Match>
-      </Switch>
-    </Show>
+            {/* TODO: Enable pagination */}
+            <DataTable
+              columns={() => columnDefs(response()!.data!)}
+              data={() => response()!.data!.rows as ArrayRecord[]}
+              pagination={{
+                pageIndex: 0,
+                pageSize: 50,
+              }}
+            />
+          </div>
+        </ErrorBoundary>
+      </Match>
+    </Switch>
   );
 }
 
@@ -213,6 +206,7 @@ function SideBar(props: {
   const addNewScript = () => props.setSelected(createNewScript());
 
   const flexStyle = () => (props.horizontal ? "flex flex-col h-dvh" : "flex");
+
   return (
     <div class={`${flexStyle()} m-4 gap-2`}>
       <Button class="flex gap-2" variant="secondary" onClick={addNewScript}>
@@ -503,61 +497,55 @@ function EditorPanel(props: {
         message="Proceeding will discard any pending changes in the current buffer. Proceed with caution."
       />
 
-      <Resizable orientation="vertical" class="overflow-hidden">
-        <ResizablePanel class="flex flex-col">
-          <Header
-            title="Editor"
-            titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
-            left={<LeftButtons />}
-            right={<HelpDialog />}
-          />
+      <Header
+        title="Editor"
+        titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
+        left={<LeftButtons />}
+        right={<HelpDialog />}
+      />
 
-          <div class="mx-4 my-2 flex grow flex-col gap-2">
-            {showCallout() && (
-              <Callout
-                class="text-sm hover:opacity-[80%]"
-                onClick={() => setShowCallout(false)}
-              >
-                When changing schemas, consider using migrations to consistently
-                apply changes across environments. One-off alterations can
-                otherwise lead to skew. Alterations using the table browser will
-                produce migrations.
-              </Callout>
-            )}
+      <div class="mx-4 my-2 flex flex-col gap-2">
+        {showCallout() && (
+          <Callout
+            class="text-sm hover:opacity-[80%]"
+            onClick={() => setShowCallout(false)}
+          >
+            When changing schemas, consider using migrations to consistently
+            apply changes across environments. One-off alterations can otherwise
+            lead to skew. Alterations using the table browser will produce
+            migrations.
+          </Callout>
+        )}
 
-            {/* Editor */}
-            <div
-              class="max-h-[70dvh] grow overflow-y-scroll rounded outline"
-              ref={ref}
-            />
+        {/* Editor */}
+        <div
+          class="max-h-[40dvh] shrink overflow-scroll rounded outline"
+          ref={ref}
+        />
 
-            <div class="flex justify-end">
-              <Tooltip>
-                <TooltipTrigger as="div">
-                  <Button variant="destructive" onClick={execute}>
-                    Execute (Ctrl+Enter)
-                  </Button>
-                </TooltipTrigger>
+        <div class="flex justify-end">
+          <Tooltip>
+            <TooltipTrigger as="div">
+              <Button variant="destructive" onClick={execute}>
+                Execute (Ctrl+Enter)
+              </Button>
+            </TooltipTrigger>
 
-                <TooltipContent>
-                  Execute script on the server. No turning back.
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-        </ResizablePanel>
+            <TooltipContent>
+              Execute script on the server. No turning back.
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
 
-        <ResizableHandle withHandle={true} />
+      <Separator />
 
-        <ResizablePanel class="hide-scrollbars overflow-y-scroll">
-          <div class="grow p-4">
-            <ResultView
-              script={props.script}
-              response={executionResult.data ?? undefined}
-            />
-          </div>
-        </ResizablePanel>
-      </Resizable>
+      <div class="flex shrink flex-col">
+        <ResultView
+          script={props.script}
+          response={executionResult.data ?? undefined}
+        />
+      </div>
     </Dialog>
   );
 }
@@ -634,8 +622,6 @@ export function EditorPage() {
   );
 }
 
-export default EditorPage;
-
 const myTheme = EditorView.theme(
   {
     ".cm-gutters": {
@@ -693,3 +679,6 @@ const $scripts = persistentAtom<Script[]>("scripts", [defaultScript], {
   encode: JSON.stringify,
   decode: JSON.parse,
 });
+
+// Needed for lazy load.
+export default EditorPage;

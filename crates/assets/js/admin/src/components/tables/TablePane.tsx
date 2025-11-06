@@ -579,7 +579,7 @@ function ArrayRecordTable(props: {
                 placeholder={`Filter Query, e.g. '(col0 > 5 && col0 < 20) || col1 = "val"'`}
               />
 
-              <div class="overflow-auto pt-4">
+              <div class="overflow-x-auto pt-4">
                 <DataTable
                   // NOTE: The formatting is done via the columnsDefs.
                   columns={columnDefs}
@@ -908,7 +908,7 @@ export function TablePane(props: {
                       />
                     </SheetContent>
 
-                    <div class="space-y-2.5 overflow-auto">
+                    <div class="space-y-2.5 overflow-x-auto">
                       <DataTable
                         columns={() => indexColumns}
                         data={indexes}
