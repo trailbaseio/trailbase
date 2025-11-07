@@ -51,7 +51,7 @@ indexmap = "2.11.4"
 indoc = "2.0.5"
 itertools = "0.14.0"
 jsonschema = { version = "0.33.0", default-features = false }
-jsonwebtoken = { version = "^10.0.0", default-features = false, features = ["use_pem", "rust_crypto"] }
+jsonwebtoken = { version = "^10.2.0", default-features = false, features = ["use_pem", "rust_crypto"] }
 kanal = "0.1.1"
 lazy_static = "1.4.0"
 lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }

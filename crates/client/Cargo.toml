@@ -14,7 +14,7 @@ exclude = [
 [dependencies]
 eventsource-stream = { version = "0.2.3", features = [] }
 futures-lite = "2.6.1"
-jsonwebtoken = { version = "9.3.1", default-features = false }
+jsonwebtoken = { version = "10.2.0", default-features = false, features = ["rust_crypto"] }
 parking_lot = { workspace = true }
 reqwest = { version = "0.12.8", features = ["stream"] }
 serde = { workspace = true }

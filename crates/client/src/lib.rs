@@ -232,13 +232,7 @@ struct JwtTokenClaims {
 }
 
 fn decode_auth_token<T: DeserializeOwned + Clone>(token: &str) -> Result<T, Error> {
-  let decoding_key = jsonwebtoken::DecodingKey::from_ed_der(&[]);
-
-  // Don't validate the token, we don't have the secret key. Just deserialize the claims/contents.
-  let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::EdDSA);
-  validation.insecure_disable_signature_validation();
-
-  return jsonwebtoken::decode::<T>(token, &decoding_key, &validation)
+  return jsonwebtoken::dangerous::insecure_decode::<T>(token)
     .map(|data| data.claims)
     .map_err(Error::InvalidToken);
 }
