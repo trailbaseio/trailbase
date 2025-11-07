@@ -197,12 +197,14 @@ export function CreateAlterTableForm(props: {
         </SheetTitle>
       </SheetHeader>
 
+      {/* NOTE: we set the tabindex to 0 to avoid mobile phones bringing up the on-screen keyboard on table name. */}
       <form
         method="dialog"
         onSubmit={(e: SubmitEvent) => {
           e.preventDefault();
           form.handleSubmit();
         }}
+        tabindex={0}
       >
         <div class="mt-4 flex flex-col items-start gap-4 pr-4">
           <form.Field
@@ -228,59 +230,56 @@ export function CreateAlterTableForm(props: {
           </Show>
 
           {/* columns */}
-          <h2>Columns</h2>
-
           <form.Field name="columns">
             {(field) => (
-              <div class="w-full">
-                <div class="flex flex-col gap-2">
-                  <Index each={field().state.value}>
-                    {(c: Accessor<Column>, i: number) => (
-                      <Show when={!isDeleted(i)}>
-                        <Switch>
-                          <Match when={i === 0}>
-                            <PrimaryKeyColumnSubForm
-                              form={form}
-                              colIndex={i}
-                              column={c()}
-                              allTables={props.allTables}
-                              disabled={!isCreateTable()}
-                            />
-                          </Match>
+              <div class="flex w-full flex-col gap-2 pb-2">
+                <Index each={field().state.value}>
+                  {(c: Accessor<Column>, i: number) => (
+                    <Show when={!isDeleted(i)}>
+                      <Switch>
+                        <Match when={i === 0}>
+                          <PrimaryKeyColumnSubForm
+                            form={form}
+                            colIndex={i}
+                            column={c()}
+                            allTables={props.allTables}
+                            disabled={!isCreateTable()}
+                          />
+                        </Match>
 
-                          <Match when={i !== 0}>
-                            <ColumnSubForm
-                              form={form}
-                              colIndex={i}
-                              column={c()}
-                              allTables={props.allTables}
-                              disabled={false}
-                              onDelete={() =>
-                                setDeletedColumn([i, ...deletedColumns()])
-                              }
-                            />
-                          </Match>
-                        </Switch>
-                      </Show>
-                    )}
-                  </Index>
+                        <Match when={i !== 0}>
+                          <ColumnSubForm
+                            form={form}
+                            colIndex={i}
+                            column={c()}
+                            allTables={props.allTables}
+                            disabled={false}
+                            onDelete={() =>
+                              setDeletedColumn([i, ...deletedColumns()])
+                            }
+                          />
+                        </Match>
+                      </Switch>
+                    </Show>
+                  )}
+                </Index>
+
+                <div>
+                  <Button
+                    onClick={() => {
+                      const columns = field().state.value;
+                      field().pushValue(
+                        newDefaultColumn(
+                          columns.length,
+                          columns.map((c) => c.name),
+                        ),
+                      );
+                    }}
+                    variant="default"
+                  >
+                    Add Column
+                  </Button>
                 </div>
-
-                <Button
-                  class="m-2"
-                  onClick={() => {
-                    const columns = field().state.value;
-                    field().pushValue(
-                      newDefaultColumn(
-                        columns.length,
-                        columns.map((c) => c.name),
-                      ),
-                    );
-                  }}
-                  variant="default"
-                >
-                  Add Column
-                </Button>
               </div>
             )}
           </form.Field>
@@ -325,7 +324,7 @@ export function CreateAlterTableForm(props: {
                         <DialogTitle>SQL</DialogTitle>
                       </DialogHeader>
 
-                      <div class="overflow-auto">
+                      <div class="max-h-[70vh] w-full overflow-auto">
                         <pre>{sql() === "" ? "<EMPTY>" : sql()}</pre>
                       </div>
 

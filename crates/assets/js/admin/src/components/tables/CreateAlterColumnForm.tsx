@@ -428,44 +428,47 @@ function ColumnOptionsFields(props: {
       />
 
       {/* NOT NULL constraint */}
-      <div class={customCheckBoxStyle}>
+      <button
+        type="button"
+        class={customCheckBoxStyle}
+        onClick={() => {
+          const current = isNotNull(props.value);
+          props.onChange(setNotNull(props.value, !current));
+        }}
+      >
         <Label class="text-right text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
           NOT NULL
         </Label>
 
-        <div class="flex justify-end">
-          <Checkbox
-            disabled={props.disabled}
-            checked={isNotNull(props.value)}
-            onChange={(value) => props.onChange(setNotNull(props.value, value))}
-          />
-        </div>
-      </div>
+        <Checkbox disabled={props.disabled} checked={isNotNull(props.value)} />
+      </button>
 
       {/* UNIQUE (pk) constraint */}
       {!props.pk && (
-        <div class={customCheckBoxStyle}>
+        <button
+          class={customCheckBoxStyle}
+          type="button"
+          onClick={() => {
+            const current = getUnique(props.value) !== undefined;
+            props.onChange(
+              setUnique(
+                props.value,
+                !current
+                  ? { is_primary: false, conflict_clause: null }
+                  : undefined,
+              ),
+            );
+          }}
+        >
           <Label class="text-right text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
             UNIQUE {getUnique(props.value)?.is_primary && "(PRIMARY KEY)"}
           </Label>
 
-          <div class="flex justify-end">
-            <Checkbox
-              disabled={props.disabled}
-              checked={getUnique(props.value) !== undefined}
-              onChange={(value: boolean) => {
-                props.onChange(
-                  setUnique(
-                    props.value,
-                    value
-                      ? { is_primary: false, conflict_clause: null }
-                      : undefined,
-                  ),
-                );
-              }}
-            />
-          </div>
-        </div>
+          <Checkbox
+            disabled={props.disabled}
+            checked={getUnique(props.value) !== undefined}
+          />
+        </button>
       )}
     </>
   );
@@ -487,7 +490,7 @@ export function ColumnSubForm(props: {
 
   const Header = () => (
     <div class="flex items-center justify-between">
-      <h3>{name()}</h3>
+      <h3 class="truncate">{name()}</h3>
 
       <div class="flex items-center gap-2">
         {
@@ -626,7 +629,7 @@ export function PrimaryKeyColumnSubForm(props: {
 
   const Header = () => (
     <div class="flex items-center justify-between">
-      <h3>{name()}</h3>
+      <h3 class="truncate">{name()}</h3>
 
       <div class="flex items-center gap-2">
         <Badge class="p-1">Primary Key</Badge>

@@ -61,9 +61,9 @@ const sheetVariants = cva(
         top: "inset-x-0 top-0 border-b data-[closed=]:slide-out-to-top data-[expanded=]:slide-in-from-top",
         bottom:
           "inset-x-0 bottom-0 border-t data-[closed=]:slide-out-to-bottom data-[expanded=]:slide-in-from-bottom",
-        left: "inset-y-0 left-0 h-full w-3/4 border-r data-[closed=]:slide-out-to-left data-[expanded]:slide-in-from-left sm:max-w-sm",
+        left: "inset-y-0 left-0 h-full w-[90vw] sm:max-w-sm border-r data-[closed=]:slide-out-to-left data-[expanded]:slide-in-from-left",
         right:
-          "inset-y-0 right-0 h-full w-3/4 border-l data-[closed=]:slide-out-to-right data-[expanded=]:slide-in-from-right sm:max-w-sm"
+          "inset-y-0 right-0 h-full w-[90vw] sm:max-w-sm border-l data-[closed=]:slide-out-to-right data-[expanded=]:slide-in-from-right"
       }
     },
     defaultVariants: {
@@ -115,7 +115,7 @@ const SheetContent = <T extends ValidComponent = "div">(
 const SheetHeader: Component<ComponentProps<"div">> = (props) => {
   const [local, others] = splitProps(props, ["class"])
   return (
-    <div class={cn("flex flex-col space-y-2 text-center sm:text-left", local.class)} {...others} />
+    <div class={cn("flex flex-col space-y-2 text-left", local.class)} {...others} />
   )
 }
 

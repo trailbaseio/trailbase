@@ -554,7 +554,7 @@ function EditorPanel(props: {
 
         {/* Editor */}
         <div
-          class="max-h-[40dvh] shrink overflow-scroll rounded outline"
+          class="max-h-[40dvh] min-h-[6rem] shrink overflow-scroll rounded outline"
           ref={ref}
         />
 
