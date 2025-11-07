@@ -37,6 +37,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  useSidebar,
   Sidebar,
   SidebarContent,
   SidebarGroup,
@@ -217,13 +218,14 @@ function EditorSidebar(props: {
   horizontal: boolean;
   deleteScriptByIdx: (idx: number) => void;
 }) {
+  const { setOpenMobile } = useSidebar();
   const scripts = useStore($scripts);
 
   const addNewScript = () => props.setSelected(createNewScript());
 
   return (
-    <SidebarGroupContent>
-      <div class={`hide-scrollbars flex flex-col gap-2 overflow-scroll p-2`}>
+    <div class="p-2">
+      <SidebarGroupContent>
         <SidebarMenu>
           <Button class="flex gap-2" variant="secondary" onClick={addNewScript}>
             <TbPencilPlus /> New
@@ -242,7 +244,10 @@ function EditorSidebar(props: {
                     class="pr-0"
                     variant="default"
                     size="md"
-                    onClick={() => props.setSelected(i())}
+                    onClick={() => {
+                      setOpenMobile(false);
+                      props.setSelected(i());
+                    }}
                   >
                     <div class="flex w-full items-center justify-between">
                       <span class="truncate">
@@ -267,8 +272,8 @@ function EditorSidebar(props: {
             }}
           </For>
         </SidebarMenu>
-      </div>
-    </SidebarGroupContent>
+      </SidebarGroupContent>
+    </div>
   );
 }
 
@@ -374,7 +379,7 @@ function EditorPanel(props: {
   // eslint-disable-next-line solid/reactivity
   const [dirty, setDirty] = props.dirty;
   // eslint-disable-next-line solid/reactivity
-  const [dialog, setDialog] = props.dirtyDialog;
+  const [dirtyDialog, setDirtyDialog] = props.dirtyDialog;
   // eslint-disable-next-line solid/reactivity
   const [selected, setSelected] = props.selected;
 
@@ -510,21 +515,22 @@ function EditorPanel(props: {
   return (
     <Dialog
       id="switch-script-dialog"
-      open={dialog() !== undefined}
+      open={dirtyDialog() !== undefined}
       onOpenChange={(isOpen) => {
         if (!isOpen) {
-          setDialog();
+          setDirtyDialog();
         }
       }}
       modal={true}
     >
       <ConfirmSwitchDialog
-        back={() => setDialog()}
+        back={() => setDirtyDialog()}
         confirm={() => {
-          const state = dialog();
+          const state = dirtyDialog();
           if (state) {
+            setDirtyDialog();
+
             setSelected(state.nextSelected);
-            setDialog();
             setDirty(false);
           }
         }}
@@ -609,16 +615,18 @@ export function EditorPage() {
   const [dirty, setDirty] = createSignal<boolean>(false);
   const isMobile = createIsMobile();
 
-  const schemaFetch = createTableSchemaQuery();
-
-  const [dialog, setDialog] = createSignal<DirtyDialogState | undefined>();
+  const [dirtyDialog, setDirtyDialog] = createSignal<
+    DirtyDialogState | undefined
+  >();
   const switchToScript = (idx: number) => {
     if (dirty()) {
-      setDialog({ nextSelected: idx });
+      setDirtyDialog({ nextSelected: idx });
     } else {
       setSelected(idx);
     }
   };
+
+  const schemaFetch = createTableSchemaQuery();
 
   const script = (idx?: number): Script => {
     const s = scripts();
@@ -675,7 +683,7 @@ export function EditorPage() {
               selected={[selected, setSelected]}
               script={script()}
               dirty={[dirty, setDirty]}
-              dirtyDialog={[dialog, setDialog]}
+              dirtyDialog={[dirtyDialog, setDirtyDialog]}
               deleteScript={() => deleteScriptByIdx()}
             />
           </Match>
@@ -687,7 +695,7 @@ export function EditorPage() {
                 selected={[selected, setSelected]}
                 script={script()}
                 dirty={[dirty, setDirty]}
-                dirtyDialog={[dialog, setDialog]}
+                dirtyDialog={[dirtyDialog, setDirtyDialog]}
                 deleteScript={() => deleteScriptByIdx()}
               />
             </div>

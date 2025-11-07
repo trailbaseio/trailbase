@@ -116,14 +116,7 @@ export function SchemaSettings(props: {
                 columns of your database tables, e.g.:
               </p>
 
-              <pre class="my-4 text-sm">
-                CREATE TABLE table (<br />
-                &nbsp;&nbsp; json &nbsp;&nbsp;&nbsp;&nbsp; TEXT
-                CHECK(jsonschema('mySchema', json))
-                <br />
-                ) strict;
-                <br />
-              </pre>
+              <pre class="my-4 overflow-x-auto text-sm">{exampleTable}</pre>
 
               <p class="text-sm">
                 Note, registration via the admin UI is not yet available. You
@@ -145,3 +138,6 @@ export function SchemaSettings(props: {
     </Suspense>
   );
 }
+
+const exampleTable =
+  "CREATE TABLE 'table' (\n  json    TEXT CHECK(jsonschema('mySchema', json)) \n) STRICT;";

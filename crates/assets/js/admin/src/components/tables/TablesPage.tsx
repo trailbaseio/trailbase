@@ -19,6 +19,7 @@ import {
 import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
 import { SafeSheet } from "@/components/SafeSheet";
 import {
+  useSidebar,
   Sidebar,
   SidebarContent,
   SidebarGroup,
@@ -91,77 +92,81 @@ function TablePickerSidebar(props: {
   selectedTable: Table | View | undefined;
   schemaRefetch: () => Promise<void>;
 }) {
+  const { setOpenMobile } = useSidebar();
   const showHidden = useStore($showHiddenTables);
   const selectedTable = () => props.selectedTable;
   const navigate = useNavigate();
 
   return (
-    <div class={`hide-scrollbars flex flex-col gap-2 overflow-scroll p-2`}>
-      <div class="flex w-full justify-between gap-2">
-        <SafeSheet>
-          {(sheet) => {
-            return (
-              <>
-                <SheetContent class={sheetMaxWidth}>
-                  <CreateAlterTableForm
-                    schemaRefetch={props.schemaRefetch}
-                    allTables={props.allTables}
-                    setSelected={(tableName: QualifiedName) => {
-                      const table = props.tablesAndViews.find((t) =>
-                        equalQualifiedNames(t.name, tableName),
-                      );
-                      if (table) {
-                        navigateToTable(navigate, table);
-                      }
-                    }}
-                    {...sheet}
-                  />
-                </SheetContent>
-
-                <SheetTrigger
-                  as={(props: DialogTriggerProps) => (
-                    <Button
-                      class="min-w-[100px] grow gap-2"
-                      variant="secondary"
-                      {...props}
-                    >
-                      <TbTablePlus />
-                      Add Table
-                    </Button>
-                  )}
-                />
-              </>
-            );
-          }}
-        </SafeSheet>
-
-        <Tooltip>
-          <TooltipTrigger as="div">
-            <Button
-              size="icon"
-              variant="secondary"
-              onClick={() => {
-                const show = !showHidden();
-                const current = selectedTable();
-                if (!show && current && hiddenTable(current)) {
-                  navigateToTable(navigate, undefined);
-                }
-                console.debug("Show hidden tables:", show);
-                $showHiddenTables.set(show);
-              }}
-            >
-              <Show when={showHidden()} fallback={<TbLock />}>
-                <TbLockOpen />
-              </Show>
-            </Button>
-          </TooltipTrigger>
-
-          <TooltipContent>Toggle visibility of hidden tables.</TooltipContent>
-        </Tooltip>
-      </div>
-
+    <div class="p-2">
       <SidebarGroupContent>
         <SidebarMenu>
+          {/* Add table & show hidden tables buttons */}
+          <div class="flex w-full justify-between gap-2">
+            <SafeSheet>
+              {(sheet) => {
+                return (
+                  <>
+                    <SheetContent class={sheetMaxWidth}>
+                      <CreateAlterTableForm
+                        schemaRefetch={props.schemaRefetch}
+                        allTables={props.allTables}
+                        setSelected={(tableName: QualifiedName) => {
+                          const table = props.tablesAndViews.find((t) =>
+                            equalQualifiedNames(t.name, tableName),
+                          );
+                          if (table) {
+                            navigateToTable(navigate, table);
+                          }
+                        }}
+                        {...sheet}
+                      />
+                    </SheetContent>
+
+                    <SheetTrigger
+                      as={(props: DialogTriggerProps) => (
+                        <Button
+                          class="min-w-[100px] grow gap-2"
+                          variant="secondary"
+                          {...props}
+                        >
+                          <TbTablePlus />
+                          Add Table
+                        </Button>
+                      )}
+                    />
+                  </>
+                );
+              }}
+            </SafeSheet>
+
+            <Tooltip>
+              <TooltipTrigger as="div">
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  onClick={() => {
+                    const show = !showHidden();
+                    const current = selectedTable();
+                    if (!show && current && hiddenTable(current)) {
+                      navigateToTable(navigate, undefined);
+                    }
+                    console.debug("Show hidden tables:", show);
+                    $showHiddenTables.set(show);
+                  }}
+                >
+                  <Show when={showHidden()} fallback={<TbLock />}>
+                    <TbLockOpen />
+                  </Show>
+                </Button>
+              </TooltipTrigger>
+
+              <TooltipContent>
+                Toggle visibility of hidden tables.
+              </TooltipContent>
+            </Tooltip>
+          </div>
+
           <For each={props.tablesAndViews}>
             {(item: Table | View) => {
               const hidden = hiddenTable(item);
@@ -183,7 +188,10 @@ function TablePickerSidebar(props: {
                     tooltip={prettyFormatQualifiedName(item.name)}
                     variant="default"
                     size="md"
-                    onClick={() => navigateToTable(navigate, item)}
+                    onClick={() => {
+                      setOpenMobile(false);
+                      navigateToTable(navigate, item);
+                    }}
                   >
                     <Switch>
                       <Match when={type === "view"}>

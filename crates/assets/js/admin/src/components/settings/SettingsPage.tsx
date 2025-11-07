@@ -1,5 +1,5 @@
 import { createSignal, For, Show, Switch, Match } from "solid-js";
-import type { Component, JSX, Signal } from "solid-js";
+import type { Component, JSX } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
 import { createForm } from "@tanstack/solid-form";
 import {
@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { showToast } from "@/components/ui/toast";
 import {
+  useSidebar,
   Sidebar,
   SidebarContent,
   SidebarGroup,
@@ -381,67 +382,61 @@ function ImportSettings(props: CommonProps) {
   );
 }
 
+type DirtyDialogState = {
+  nextRoute: string;
+};
+
 function SettingsSidebar(props: {
   activeRoute: string | undefined;
-  dirty: Signal<boolean>;
+  dirty: boolean;
+  openDirtyDialog: (s: DirtyDialogState) => void;
 }) {
+  const { setOpenMobile } = useSidebar();
   const navigate = useNavigate();
-  // eslint-disable-next-line solid/reactivity
-  const [dirty, setDirty] = props.dirty;
 
   return (
-    <SidebarGroupContent>
-      <div class={`hide-scrollbars flex flex-col gap-2 overflow-scroll p-2`}>
+    <div class="p-2">
+      <SidebarGroupContent>
         <SidebarMenu>
           <For each={sites}>
             {(s: Site) => {
-              const [dialogOpen, setDialogOpen] = createSignal(false);
               const match = () => props.activeRoute === s.route;
 
               return (
-                <Dialog
-                  id="confirm"
-                  modal={true}
-                  open={dialogOpen()}
-                  onOpenChange={setDialogOpen}
-                >
-                  <ConfirmCloseDialog
-                    back={() => setDialogOpen(false)}
-                    confirm={() => {
-                      setDialogOpen(false);
-                      setDirty(false);
-                      navigate("/settings/" + s.route);
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={match()}
+                    size="md"
+                    variant="default"
+                    onClick={() => {
+                      setOpenMobile(false);
+                      if (match()) {
+                        // Nothing to do.
+                        return;
+                      }
+
+                      if (!props.dirty) {
+                        navigate("/settings/" + s.route);
+                        return;
+                      }
+
+                      // Open a dirty warning.
+                      props.openDirtyDialog({
+                        nextRoute: s.route,
+                      });
                     }}
-                  />
+                  >
+                    {<s.icon />}
 
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      isActive={match()}
-                      size="md"
-                      variant="default"
-                      onClick={() => {
-                        if (!match()) {
-                          if (!dirty()) {
-                            navigate("/settings/" + s.route);
-                            return;
-                          }
-
-                          setDialogOpen(true);
-                        }
-                      }}
-                    >
-                      {<s.icon />}
-
-                      {s.label}
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </Dialog>
+                    {s.label}
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               );
             }}
           </For>
         </SidebarMenu>
-      </div>
-    </SidebarGroupContent>
+      </SidebarGroupContent>
+    </div>
   );
 }
 
@@ -499,7 +494,12 @@ const sites = [
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const params = useParams<{ group: string }>();
+  const navigate = useNavigate();
+
   const [dirty, setDirty] = createSignal(false);
+  const [dirtyDialog, setDirtyDialog] = createSignal<
+    DirtyDialogState | undefined
+  >();
   const isMobile = createIsMobile();
 
   const activeSite = () => {
@@ -523,7 +523,28 @@ export function SettingsPage() {
     }) as CommonProps;
 
   const Body = () => (
-    <>
+    <Dialog
+      id="switch-settings-dialog"
+      open={dirtyDialog() !== undefined}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setDirtyDialog();
+        }
+      }}
+      modal={true}
+    >
+      <ConfirmCloseDialog
+        back={() => setDirtyDialog()}
+        confirm={() => {
+          const state = dirtyDialog();
+          if (state) {
+            setDirtyDialog();
+            setDirty(false);
+            navigate("/settings/" + state.nextRoute);
+          }
+        }}
+      />
+
       <Header
         title="Settings"
         titleSelect={activeSite().label}
@@ -536,7 +557,7 @@ export function SettingsPage() {
       />
 
       <div class="m-4">{activeSite().child(p())}</div>
-    </>
+    </Dialog>
   );
 
   return (
@@ -551,7 +572,8 @@ export function SettingsPage() {
           <SidebarGroup>
             <SettingsSidebar
               activeRoute={activeSite().route}
-              dirty={[dirty, setDirty]}
+              dirty={dirty()}
+              openDirtyDialog={setDirtyDialog}
             />
           </SidebarGroup>
 
