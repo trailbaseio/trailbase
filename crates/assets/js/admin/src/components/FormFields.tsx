@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { createSignal, Match, Switch, Show } from "solid-js";
 import type { JSX } from "solid-js";
-import { type FieldApi, createForm } from "@tanstack/solid-form";
+import { createForm } from "@tanstack/solid-form";
+import type { FieldApi } from "@tanstack/solid-form";
 import { TbEye } from "solid-icons/tb";
 
 import { cn, tryParseInt, tryParseFloat, tryParseBigInt } from "@/lib/utils";
@@ -37,8 +38,6 @@ function formApiTHelper<TFormData>() {
 }
 
 export type FormApiT<TFormData> = ReturnType<typeof formApiTHelper<TFormData>>;
-
-export type FormStateT<TFormData> = FormApiT<TFormData>["state"];
 
 type TextFieldOptions = {
   disabled?: boolean;
@@ -122,9 +121,7 @@ export function buildOptionalTextFormField(opts: TextFieldOptions) {
   };
 }
 
-export function buildSecretFormField(
-  opts: Omit<TextFieldOptions, "type" | "autocomplete">,
-) {
+export function buildSecretFormField(opts: Omit<TextFieldOptions, "type">) {
   const [type, setType] = createSignal<TextFieldType>("password");
 
   return function builder(field: () => FieldApiT<string>) {
@@ -142,7 +139,7 @@ export function buildSecretFormField(
               type={type()}
               value={field().state.value}
               onBlur={field().handleBlur}
-              autocomplete={"off"}
+              autocomplete={opts.autocomplete ?? "off"}
               autocorrect="off"
               onInput={(e: Event) => {
                 field().handleChange((e.target as HTMLInputElement).value);
@@ -155,7 +152,56 @@ export function buildSecretFormField(
                 setType(type() === "password" ? "text" : "password");
               }}
             >
-              <TbEye size={18} />
+              <TbEye />
+            </IconButton>
+          </div>
+
+          <GridFieldInfo field={field()} />
+
+          <InfoColumn info={opts.info} />
+        </div>
+      </TextField>
+    );
+  };
+}
+
+/// Used for proto Settings. Empty field is the same as absent.
+export function buildOptionalSecretFormField(
+  opts: Omit<TextFieldOptions, "type">,
+) {
+  const [type, setType] = createSignal<TextFieldType>("password");
+
+  return function builder(field: () => FieldApiT<string | undefined>) {
+    return (
+      <TextField class="w-full">
+        <div
+          class={cn("grid items-center", gapStyle)}
+          style={{ "grid-template-columns": "auto 1fr" }}
+        >
+          <TextFieldLabel>{opts.label()}</TextFieldLabel>
+
+          <div class="flex items-center gap-2">
+            <TextFieldInput
+              disabled={opts.disabled ?? false}
+              type={type()}
+              value={field().state.value}
+              onBlur={field().handleBlur}
+              autocomplete={opts.autocomplete ?? "off"}
+              autocorrect="off"
+              onInput={(e: Event) => {
+                field().handleChange(
+                  (e.target as HTMLInputElement).value || undefined,
+                );
+              }}
+            />
+
+            <IconButton
+              disabled={opts.disabled}
+              onClick={() => {
+                setType(type() === "password" ? "text" : "password");
+              }}
+            >
+              <TbEye />
             </IconButton>
           </div>
 
@@ -232,7 +278,7 @@ export function buildOptionalNumberFormField(
             disabled={opts.disabled ?? false}
             type={isInt ? "number" : "text"}
             step={isInt ? "1" : undefined}
-            pattern={isInt ? intPattern : floatPattern}
+            pattern={isInt ? undefined : floatPattern}
             value={field().state.value?.toString() ?? ""}
             placeholder={opts.placeholder}
             onBlur={field().handleBlur}

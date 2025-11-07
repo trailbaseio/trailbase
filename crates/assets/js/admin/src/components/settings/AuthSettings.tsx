@@ -7,11 +7,9 @@ import {
   buildOptionalIntegerFormField,
   buildOptionalNumberFormField,
   buildOptionalBoolFormField,
-  buildSecretFormField,
+  buildOptionalSecretFormField,
   buildOptionalTextFormField,
-  type FormStateT,
 } from "@/components/FormFields";
-import type { FormApiT } from "@/components/FormFields";
 import {
   TbCircleCheck,
   TbCircle,
@@ -42,7 +40,7 @@ import {
 import { createConfigQuery, setConfig } from "@/lib/api/config";
 import { adminFetch } from "@/lib/fetch";
 import { createSetOnce } from "@/lib/signals";
-import { showSaveFileDialog, pathJoin, copyToClipboard } from "@/lib/utils";
+import { showSaveFileDialog, copyToClipboard } from "@/lib/utils";
 
 import type { OAuthProviderResponse } from "@bindings/OAuthProviderResponse";
 import type { OAuthProviderEntry } from "@bindings/OAuthProviderEntry";
@@ -75,7 +73,7 @@ type NamedOAuthProvider = {
   state?: OAuthProviderConfig;
 };
 type AuthConfigProxy = Omit<AuthConfig, "oauthProviders"> & {
-  namedOauthProviders: NamedOAuthProvider[];
+  namedOAuthProviders: NamedOAuthProvider[];
 };
 
 function configToProxy(
@@ -96,7 +94,7 @@ function configToProxy(
 
   return {
     ...config,
-    namedOauthProviders: providers.map((provider): NamedOAuthProvider => {
+    namedOAuthProviders: providers.map((provider): NamedOAuthProvider => {
       const config = idToConfig.get(provider.id);
       if (config === undefined) {
         return { provider };
@@ -112,11 +110,11 @@ function configToProxy(
 
 function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
   const config = AuthConfig.fromPartial({
-    ...(proxy as Omit<AuthConfigProxy, "namedOauthProviders">),
+    ...(proxy as Omit<AuthConfigProxy, "namedOAuthProviders">),
   });
   config.oauthProviders = {};
 
-  for (const entry of proxy.namedOauthProviders) {
+  for (const entry of proxy.namedOAuthProviders) {
     const p = entry.provider;
 
     // Only add complete providers back to config, i.e. once that have both a provider id and client secret.
@@ -148,7 +146,7 @@ export async function adminListOAuthProviders(): Promise<OAuthProviderResponse> 
 }
 
 function ProviderSettingsSubForm(props: {
-  form: FormApiT<AuthConfigProxy>;
+  form: ReturnType<typeof createAuthSettingsForm>;
   index: number;
   provider: OAuthProviderEntry;
   siteUrl: string | undefined;
@@ -158,12 +156,12 @@ function ProviderSettingsSubForm(props: {
   >(undefined);
 
   const current = createMemo(() =>
-    props.form.useStore((state: FormStateT<AuthConfigProxy>) => {
+    props.form.useStore((state: (typeof props.form)["state"]) => {
       if (state.isSubmitted) {
-        reset(state.values.namedOauthProviders[props.index].state);
+        reset(state.values.namedOAuthProviders[props.index].state);
       }
 
-      const s = state.values.namedOauthProviders[props.index].state;
+      const s = state.values.namedOAuthProviders[props.index].state;
       setOnce({ ...s });
       return s;
     })(),
@@ -176,23 +174,24 @@ function ProviderSettingsSubForm(props: {
     return id || secret;
   };
 
-  const bullet = () => {
-    if (dirty()) {
-      return <TbCirclePlus color="orange" />;
-    }
+  const Bullet = () => (
+    <Switch fallback={<TbCircle color="grey" />}>
+      <Match when={dirty()}>
+        <TbCirclePlus color="orange" />
+      </Match>
 
-    if (current()?.clientId !== undefined) {
-      return <TbCircleCheck color="green" />;
-    }
-
-    return <TbCircle color="grey" />;
-  };
+      <Match when={current()?.clientId !== undefined}>
+        <TbCircleCheck color="green" />
+      </Match>
+    </Switch>
+  );
 
   return (
     <AccordionItem value={`item-${props.provider.id}`}>
       <AccordionTrigger>
         <div class="flex items-center gap-4">
-          {bullet()}
+          <Bullet />
+
           <div class="flex items-center gap-2">
             <img
               class="size-[24px]"
@@ -212,25 +211,18 @@ function ProviderSettingsSubForm(props: {
           />
 
           <props.form.Field
-            name={`namedOauthProviders[${props.index}].state.clientId`}
-            validators={{
-              onChange: ({ value }: { value: string | undefined }) => {
-                if (value === "") return "Must not be empty";
-              },
-            }}
+            name={`namedOAuthProviders[${props.index}].state.clientId`}
           >
             {buildOptionalTextFormField({ label: () => "Client Id" })}
           </props.form.Field>
 
           <props.form.Field
-            name={`namedOauthProviders[${props.index}].state.clientSecret`}
-            validators={{
-              onChange: ({ value }: { value: string | undefined }) => {
-                if (value === "") return "Must not be empty";
-              },
-            }}
+            name={`namedOAuthProviders[${props.index}].state.clientSecret`}
           >
-            {buildSecretFormField({ label: () => "Client Secret" })}
+            {buildOptionalSecretFormField({
+              label: () => "Client Secret",
+              autocomplete: "off",
+            })}
           </props.form.Field>
         </div>
 
@@ -240,7 +232,7 @@ function ProviderSettingsSubForm(props: {
             disabled={!dirty()}
             onClick={() => {
               props.form.setFieldValue(
-                `namedOauthProviders[${props.index}].state`,
+                `namedOAuthProviders[${props.index}].state`,
                 original(),
               );
             }}
@@ -253,7 +245,7 @@ function ProviderSettingsSubForm(props: {
             disabled={current()?.clientId === undefined}
             onClick={() => {
               props.form.setFieldValue(
-                `namedOauthProviders[${props.index}].state`,
+                `namedOAuthProviders[${props.index}].state`,
                 undefined,
               );
             }}
@@ -284,39 +276,77 @@ function InfoTooltip(props: {
   );
 }
 
+function createAuthSettingsForm(opts: {
+  config: () => Config;
+  values: () => AuthConfigProxy;
+  postSubmit: () => void;
+}) {
+  const queryClient = useQueryClient();
+
+  return createForm(() => {
+    return {
+      defaultValues: opts.values(),
+      onSubmit: async ({ value }) => {
+        const newConfig = Config.decode(Config.encode(opts.config()).finish());
+
+        newConfig.auth = proxyToConfig(value);
+
+        console.debug("Submitting provider config:", value);
+        await setConfig(queryClient, newConfig);
+
+        opts.postSubmit();
+      },
+      validators: {
+        onChange: ({ value }: { value: AuthConfigProxy }) => {
+          // We can return field-level errors from the form-level validation. (we're also not displaying form-level errors right now).
+          for (const i in value.namedOAuthProviders) {
+            const provider = value.namedOAuthProviders[i];
+            const state = provider.state;
+            if (state === undefined) {
+              continue;
+            }
+
+            if (
+              state.clientId !== undefined &&
+              state.clientSecret === undefined
+            ) {
+              return {
+                form: "invalid data",
+                fields: Object.fromEntries([
+                  [
+                    `namedOAuthProviders[${i}].state.clientSecret`,
+                    `Missing client secret for ${provider.provider.display_name}`,
+                  ],
+                ]),
+              };
+            }
+          }
+
+          return null;
+        },
+      },
+    };
+  });
+}
+
 function AuthSettingsForm(props: {
   config: Config;
   providers: OAuthProviderResponse;
   markDirty: () => void;
   postSubmit: () => void;
 }) {
-  const values = createMemo(() => {
-    return configToProxy(
+  const values = createMemo(() =>
+    configToProxy(
       props.providers.providers,
       props.config.auth ?? AuthConfig.create(),
-    );
+    ),
+  );
+
+  const form = createAuthSettingsForm({
+    config: () => props.config,
+    values,
+    postSubmit: () => props.postSubmit(),
   });
-
-  const queryClient = useQueryClient();
-  const form = createForm(() => ({
-    defaultValues: values() as AuthConfigProxy,
-    onSubmit: async ({ value }) => {
-      console.log("CONFIG", props.config);
-
-      const newConfig = Config.decode(Config.encode(props.config).finish());
-
-      console.log("NEW CONFIG", JSON.stringify(newConfig));
-
-      newConfig.auth = proxyToConfig(value);
-
-      console.log("NEW CONFIG2", newConfig);
-
-      console.debug("Submitting provider config:", value);
-      await setConfig(queryClient, newConfig);
-
-      props.postSubmit();
-    },
-  }));
 
   form.useStore((state) => {
     if (state.isDirty && !state.isSubmitted) {
@@ -448,11 +478,11 @@ function AuthSettingsForm(props: {
           </CardHeader>
 
           <CardContent>
-            <form.Field name="namedOauthProviders">
+            <form.Field name="namedOAuthProviders">
               {(_field) => {
                 return (
                   <Accordion multiple={false} collapsible class="w-full">
-                    <For each={values().namedOauthProviders}>
+                    <For each={values().namedOAuthProviders}>
                       {(provider, index) => {
                         // Skip OIDC provider for now until we expand the form to render the extra fields.
                         if (provider.provider.id === OAuthProviderId.OIDC0) {
@@ -556,11 +586,13 @@ function OAuthCallbackAddressInfo(props: {
   provider: OAuthProviderEntry;
   siteUrl: string | undefined;
 }) {
-  const address = () =>
-    pathJoin([
-      props.siteUrl ?? window.location.origin,
+  const address = () => {
+    const url = new URL(
       `/api/auth/v1/oauth/${props.provider.name}/callback`,
-    ]);
+      props.siteUrl ?? window.location.origin,
+    );
+    return url.toString();
+  };
 
   const ProviderName = () => {
     const name = props.provider.name;

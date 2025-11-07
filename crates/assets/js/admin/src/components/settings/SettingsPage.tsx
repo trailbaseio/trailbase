@@ -113,7 +113,7 @@ function ServerSettings(props: CommonProps) {
                     info: (
                       <p>
                         The name of your application, e.g. used in mails sent to
-                        users when singing up.
+                        users when signing up.
                       </p>
                     ),
                   })}
