@@ -166,9 +166,6 @@ export function ErdGraph(props: {
     //
     // v0.3.25 results in "layout is not a function": https://github.com/antvis/X6/issues/4441
     // v1.2 has completely in-compatible APIs. They'll probably need to overhaul x6 first.
-    const aspect = window.innerWidth / window.innerHeight;
-
-    const size = Math.ceil(Math.sqrt(props.nodes.length) * aspect);
     const maxHeight = props.nodes.reduce((acc, node) => {
       const ports = node.ports;
       let numPorts = 0;
@@ -180,17 +177,23 @@ export function ErdGraph(props: {
       return Math.max(acc, (numPorts + 1) * LINE_HEIGHT);
     }, 0);
 
+    const width = NODE_WIDTH + 20;
+    const nodeAspect = width / maxHeight;
+    const screenAspect = window.innerWidth / window.innerHeight;
+    const columns = Math.floor(
+      Math.sqrt(props.nodes.length) * (screenAspect / nodeAspect),
+    );
+
     const cells: Cell[] = [
       ...props.nodes.map((n, index) => {
-        // Scatter nodes if no explicit position is already set.
+        // Scatter nodes on a grid if no explicit position is already set.
         if (n.position === undefined) {
-          const MARGIN = 80;
-          const col = index % size;
-          const row = Math.floor(index / size);
+          const col = index % columns;
+          const row = Math.floor(index / columns);
 
           n.position = {
-            x: col * (NODE_WIDTH + MARGIN),
-            y: row * (maxHeight + MARGIN),
+            x: col * width,
+            y: row * maxHeight,
           };
         }
 
@@ -200,7 +203,7 @@ export function ErdGraph(props: {
     ];
 
     graph.resetCells(cells);
-    graph.zoomToFit({ padding: 100, maxScale: 1 });
+    graph.zoomToFit({ padding: 20, maxScale: 1, minScale: 0.1 });
   });
 
   const style = () => {
@@ -210,7 +213,8 @@ export function ErdGraph(props: {
     return "h-[calc(100dvh-65px)] w-[calc(100dvw-58px)] overflow-clip";
   };
 
-  // NOTE: The double sytling is somehow needed otherwise it overflows on mobile. x6 may also apply some styles on top.
+  // NOTE: The double styling seems somehow needed, otherwise it overflows on
+  // mobile. x6 may also apply some styles on top.
   return (
     <div class={style()}>
       <div ref={ref} class={cn(style(), props.class)} />
