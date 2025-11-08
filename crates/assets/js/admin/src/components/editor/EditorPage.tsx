@@ -389,7 +389,7 @@ function EditorPanel(props: {
   // Will only be set when the user explicitly triggers "execute";
   const [queryString, setQueryString] = createWritableMemo<string | null>(
     () => {
-      // Reset whenever we switch tabs.
+      // Rebuild whenever we switch selected scripts.
       const _unused = selected();
 
       return null;
@@ -435,6 +435,7 @@ function EditorPanel(props: {
         executionResult.refetch();
       } else {
         setQueryString(text);
+        executionResult.refetch();
       }
     }
   };
