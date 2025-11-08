@@ -1,3 +1,12 @@
+## v0.20.12
+
+- More admin UI tweaks:
+  - auto-close sidebar on item selection on mobile.
+  - Tweak layout of CREATE/ALTER column form: more efficient space use, overflow, alignment increased touch target size.
+  - Fix OAuth provider deletion.
+  - More efficient ERD graph screen use.
+- Update Rust dependencies.
+
 ## v0.20.11
 
 - Admin UI layout improvements:
