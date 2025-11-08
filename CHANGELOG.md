@@ -1,3 +1,12 @@
+## v0.20.13
+
+- Admin UI SQL editor improvements
+  - Fix delayed execution.
+  - Avoid "clipping" overflow in codemirror element. Technically we set overflow to scroll and not clip, however Firefox would still clipped.
+  - Allow to permanently disable migration warning.
+- Fix theme color for mobile chrome.
+- Update JavaScript dependencies.
+
 ## v0.20.12
 
 - More admin UI tweaks:
