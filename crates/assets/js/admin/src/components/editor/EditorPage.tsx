@@ -15,7 +15,7 @@ import { createWritableMemo } from "@solid-primitives/memo";
 import type { ColumnDef } from "@tanstack/solid-table";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
-import { TbTrash, TbEdit, TbHelp, TbPencilPlus } from "solid-icons/tb";
+import { TbTrash, TbEdit, TbHelp, TbPencilPlus, TbX } from "solid-icons/tb";
 
 import { autocompletion } from "@codemirror/autocomplete";
 import { EditorView, lineNumbers, keymap } from "@codemirror/view";
@@ -147,7 +147,6 @@ function ResultView(props: {
       const header = `${col.name} [${col.data_type}${notNull ? "" : "?"}]`;
       return {
         accessorFn: (row: ArrayRecord) => {
-          console.log(row);
           return sqlValueToString(row[idx]);
         },
         header,
@@ -292,22 +291,22 @@ function HelpDialog() {
         </DialogHeader>
 
         <p>
-          The editor lets you execute arbitrary SQL statements, so be careful
-          with what you wish for. If you just want to experiment, consider
-          working on a non-prod data set or a copy.
+          The editor lets you execute arbitrary SQL statements. Be careful when
+          experimenting, e.g. consider working on a non-prod data set or copy.
         </p>
 
+        <p>{migrationWarning}</p>
+
         <p>
-          Further note that there's no pagination, so whatever you query will be
-          returned. Working on large data sets, you might want to{" "}
+          Also note that there's no pagination. Selecting a large data set may
+          return a lot of data. You might want to{" "}
           <span class="font-mono">LIMIT</span> your result size.
         </p>
 
         <p>
-          Also note that scripts are currently stored in your browser's local
-          storage. This means, switching devices, browsers, or the origin of
-          your website, you won't have access to your scripts. This is something
-          we'd like to lower into the database layer in the future.
+          Lastly, scripts are saved in your browser's local storage. This means
+          switching devices, browsers or the origin of your website, you won't
+          be able to access your scripts.{" "}
         </p>
       </DialogContent>
     </Dialog>
@@ -383,7 +382,8 @@ function EditorPanel(props: {
   // eslint-disable-next-line solid/reactivity
   const [selected, setSelected] = props.selected;
 
-  const [showCallout, setShowCallout] = createSignal(true);
+  const uiState = useStore($uiState);
+
   const isMobile = createIsMobile();
 
   // Will only be set when the user explicitly triggers "execute";
@@ -546,23 +546,26 @@ function EditorPanel(props: {
       />
 
       <div class="mx-4 my-2 flex flex-col gap-2">
-        {showCallout() && (
+        {(uiState().showMigrationWarning ?? true) && (
           <Callout
-            class="text-sm hover:opacity-[80%]"
-            onClick={() => setShowCallout(false)}
+            class="flex items-center text-sm hover:opacity-[80%]"
+            onClick={() => {
+              $uiState.set({
+                ...uiState(),
+                showMigrationWarning: false,
+              });
+            }}
           >
-            When changing schemas, consider using migrations for
-            cross-deployment consistency (dev, test, prod, etc.) One-off changes
-            may lead to skew. Alterations using the table browser will yield
-            migrations.
+            <p>{migrationWarning}</p>
+
+            <div class="p-2">
+              <TbX size={20} />
+            </div>
           </Callout>
         )}
 
         {/* Editor */}
-        <div
-          class="max-h-[40dvh] min-h-[6rem] shrink overflow-scroll rounded outline"
-          ref={ref}
-        />
+        <div class="max-h-[40dvh] min-h-[6rem] shrink" ref={ref} />
 
         <div class="flex items-center justify-between">
           <Tooltip>
@@ -709,10 +712,19 @@ export function EditorPage() {
 const myTheme = EditorView.theme(
   {
     ".cm-gutters": {
-      backgroundColor: "#eeeeee",
+      backgroundColor: "#f3f7f9",
       color: "#000",
       border: "none",
+      borderRadius: "8px 0px 0px 8px",
     },
+    "&.cm-editor": {
+      outline: "1px solid #e4e4e7",
+      borderRadius: "8px",
+    },
+    // "&.cm-editor.cm-focused": {
+    //   outline: "1px solid gray",
+    //   borderRadius: "8px",
+    // },
   },
   { dark: false },
 );
@@ -763,6 +775,25 @@ const $scripts = persistentAtom<Script[]>("scripts", [defaultScript], {
   encode: JSON.stringify,
   decode: JSON.parse,
 });
+
+type UiState = {
+  showMigrationWarning?: boolean;
+};
+
+const $uiState = persistentAtom<UiState>(
+  "editor_ui_state",
+  {},
+  {
+    encode: JSON.stringify,
+    decode: JSON.parse,
+  },
+);
+
+const migrationWarning =
+  "\
+When changing schemas, consider using migrations for \
+cross-deployment consistency (dev, test, prod, etc.) One-off changes \
+may lead to skew. Alterations using the table browser will yield migrations.";
 
 // Needed for lazy load.
 export default EditorPage;
