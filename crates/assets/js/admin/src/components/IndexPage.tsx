@@ -168,10 +168,10 @@ export function IndexPage() {
   }));
 
   return (
-    <div class="h-full">
+    <div>
       <Header title="TrailBase" />
 
-      <div class="prose m-4 flex grow flex-col gap-4">
+      <div class="prose flex grow flex-col gap-4 p-4">
         {dashboardFetch.data && (
           <div class="flex shrink gap-4">
             <FactCard

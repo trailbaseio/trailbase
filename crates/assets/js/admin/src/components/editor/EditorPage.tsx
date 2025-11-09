@@ -226,7 +226,14 @@ function EditorSidebar(props: {
     <div class="p-2">
       <SidebarGroupContent>
         <SidebarMenu>
-          <Button class="flex gap-2" variant="secondary" onClick={addNewScript}>
+          <Button
+            class="flex gap-2"
+            variant="secondary"
+            onClick={() => {
+              setOpenMobile(false);
+              addNewScript();
+            }}
+          >
             <TbPencilPlus /> New
           </Button>
 
@@ -259,7 +266,10 @@ function EditorSidebar(props: {
                         <IconButton
                           class="hover:bg-border"
                           tooltip="Delete this script"
-                          onClick={() => props.deleteScriptByIdx(i())}
+                          onClick={(e) => {
+                            props.deleteScriptByIdx(i());
+                            e.stopPropagation();
+                          }}
                         >
                           <TbTrash />
                         </IconButton>
@@ -318,8 +328,12 @@ function RenameDialog(props: { selected: number; script: Script }) {
   const [name, setName] = createWritableMemo(() => props.script.name);
 
   return (
-    <Dialog id="rename" open={open()} onOpenChange={setOpen}>
-      <DialogTrigger>
+    <Dialog id="script-rename-dialog" open={open()} onOpenChange={setOpen}>
+      <DialogTrigger
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+      >
         <IconButton tooltip="Rename script" class="hover:bg-border">
           <TbEdit />
         </IconButton>
@@ -601,12 +615,10 @@ function EditorPanel(props: {
 
       <Separator />
 
-      <div class="flex flex-col">
-        <ResultView
-          script={props.script}
-          response={executionResult.data ?? undefined}
-        />
-      </div>
+      <ResultView
+        script={props.script}
+        response={executionResult.data ?? undefined}
+      />
     </Dialog>
   );
 }
@@ -651,7 +663,7 @@ export function EditorPage() {
   };
 
   return (
-    <SidebarProvider>
+    <SidebarProvider class="min-h-0">
       <Sidebar
         class="absolute"
         variant="sidebar"
@@ -675,7 +687,7 @@ export function EditorPage() {
         <SidebarRail />
       </Sidebar>
 
-      <SidebarInset class="min-w-0">
+      <SidebarInset class="min-h-0 min-w-0">
         <Switch fallback={"Loading..."}>
           <Match when={schemaFetch.isError}>
             <span>Schema fetch error: {JSON.stringify(schemaFetch.error)}</span>

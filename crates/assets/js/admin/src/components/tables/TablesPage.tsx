@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createMemo } from "solid-js";
+import { For, Match, Show, Switch, createMemo, splitProps } from "solid-js";
 import { useNavigate, useParams, type Navigator } from "@solidjs/router";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
@@ -103,7 +103,7 @@ function TablePickerSidebar(props: {
         <SidebarMenu>
           {/* Add table & show hidden tables buttons */}
           <div class="flex w-full justify-between gap-2">
-            <SafeSheet>
+            <SafeSheet id="add_table_dialog">
               {(sheet) => {
                 return (
                   <>
@@ -124,16 +124,24 @@ function TablePickerSidebar(props: {
                     </SheetContent>
 
                     <SheetTrigger
-                      as={(props: DialogTriggerProps) => (
-                        <Button
-                          class="min-w-[100px] grow gap-2"
-                          variant="secondary"
-                          {...props}
-                        >
-                          <TbTablePlus />
-                          Add Table
-                        </Button>
-                      )}
+                      as={(props: DialogTriggerProps) => {
+                        // TODO: ideally we should call `setOpenMobile(false)`,
+                        // as part of `onClick`, however the current Dialog
+                        // layering doesn't allow for it.
+                        const [local, others] = splitProps(props, ["onClick"]);
+
+                        return (
+                          <Button
+                            class="min-w-[100px] grow gap-2"
+                            variant="secondary"
+                            onClick={local.onClick}
+                            {...others}
+                          >
+                            <TbTablePlus />
+                            Add Table
+                          </Button>
+                        );
+                      }}
                     />
                   </>
                 );

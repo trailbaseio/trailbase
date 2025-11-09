@@ -178,7 +178,9 @@ export function ErdGraph(props: {
     }, 0);
 
     const width = NODE_WIDTH + 20;
-    const nodeAspect = width / maxHeight;
+    const height = maxHeight + 10;
+
+    const nodeAspect = width / height;
     const screenAspect = window.innerWidth / window.innerHeight;
     const columns = Math.floor(
       Math.sqrt(props.nodes.length) * (screenAspect / nodeAspect),
@@ -193,7 +195,7 @@ export function ErdGraph(props: {
 
           n.position = {
             x: col * width,
-            y: row * maxHeight,
+            y: row * height,
           };
         }
 

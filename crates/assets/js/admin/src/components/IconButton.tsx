@@ -1,4 +1,5 @@
-import { Show, splitProps, type ValidComponent } from "solid-js";
+import { splitProps, Show } from "solid-js";
+import type { ValidComponent } from "solid-js";
 import {
   Tooltip,
   TooltipContent,
