@@ -55,7 +55,7 @@ import google from "@shared/assets/oauth2/google.svg";
 import microsoft from "@shared/assets/oauth2/microsoft.svg";
 import { useQueryClient } from "@tanstack/solid-query";
 
-const assets = new Map<OAuthProviderId, string>([
+export const assets = new Map<OAuthProviderId, string>([
   [OAuthProviderId.OIDC0, openIdConnect],
   [OAuthProviderId.APPLE, apple],
   [OAuthProviderId.DISCORD, discord],

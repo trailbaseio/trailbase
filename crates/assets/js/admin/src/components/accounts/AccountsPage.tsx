@@ -37,6 +37,7 @@ import {
   buildSecretFormField,
 } from "@/components/FormFields";
 import { SafeSheet, SheetContainer } from "@/components/SafeSheet";
+import { assets } from "@/components/settings/AuthSettings";
 
 import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
 import { copyToClipboard } from "@/lib/utils";
@@ -75,10 +76,30 @@ function buildColumns(
       header: "verified",
       accessorKey: "verified",
     },
+    {
+      header: "OAuth",
+      cell: (ctx) => {
+        const providerId = ctx.row.original.provider_id;
+        const oauthAsset =
+          providerId > 0n ? assets.get(Number(providerId)) : undefined;
+
+        return (
+          <Switch>
+            <Match when={oauthAsset !== undefined}>
+              <div class="flex justify-center">
+                <img class="size-[20px]" src={oauthAsset!} />
+              </div>
+            </Match>
+
+            <Match when={providerId > 0n}>{`${providerId}`}</Match>
+          </Switch>
+        );
+      },
+    },
     columnHelper.accessor("id", {
       header: "admin",
       cell: (ctx) => (
-        <div class="ml-[10px]">
+        <div class="flex justify-center">
           {ctx.row.original.admin ? <TbCrown size={18} /> : null}
         </div>
       ),
