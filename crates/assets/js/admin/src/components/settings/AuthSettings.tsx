@@ -1,4 +1,4 @@
-import { createMemo, For, Suspense, Switch, Show, Match } from "solid-js";
+import { createMemo, For, Suspense, Switch, Show, Match, JSX } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { createForm } from "@tanstack/solid-form";
 import { TbInfoCircle } from "solid-icons/tb";
@@ -213,17 +213,37 @@ function ProviderSettingsSubForm(props: {
           <props.form.Field
             name={`namedOAuthProviders[${props.index}].state.clientId`}
           >
-            {buildOptionalTextFormField({ label: () => "Client Id" })}
+            {buildOptionalTextFormField({ label: () => <L>Client Id</L> })}
           </props.form.Field>
 
           <props.form.Field
             name={`namedOAuthProviders[${props.index}].state.clientSecret`}
           >
             {buildOptionalSecretFormField({
-              label: () => "Client Secret",
+              label: () => <L>Client Secret</L>,
               autocomplete: "off",
             })}
           </props.form.Field>
+
+          <Show when={props.provider.id === OAuthProviderId.OIDC0}>
+            <props.form.Field
+              name={`namedOAuthProviders[${props.index}].state.authUrl`}
+            >
+              {buildOptionalTextFormField({ label: () => <L>Auth URL</L> })}
+            </props.form.Field>
+
+            <props.form.Field
+              name={`namedOAuthProviders[${props.index}].state.tokenUrl`}
+            >
+              {buildOptionalTextFormField({ label: () => <L>Token URL</L> })}
+            </props.form.Field>
+
+            <props.form.Field
+              name={`namedOAuthProviders[${props.index}].state.userApiUrl`}
+            >
+              {buildOptionalTextFormField({ label: () => <L>User API URL</L> })}
+            </props.form.Field>
+          </Show>
         </div>
 
         <div class="mr-4 flex items-center justify-end gap-2">
@@ -484,11 +504,6 @@ function AuthSettingsForm(props: {
                   <Accordion multiple={false} collapsible class="w-full">
                     <For each={values().namedOAuthProviders}>
                       {(provider, index) => {
-                        // Skip OIDC provider for now until we expand the form to render the extra fields.
-                        if (provider.provider.id === OAuthProviderId.OIDC0) {
-                          return null;
-                        }
-
                         return (
                           <ProviderSettingsSubForm
                             form={form}
@@ -671,4 +686,8 @@ export function AuthSettings(props: {
   );
 }
 
-const labelStyle = "w-52 h-[44px] flex items-center";
+function L(props: { children: JSX.Element }) {
+  return <div class="w-32">{props.children}</div>;
+}
+
+const labelStyle = "w-32 h-[44px] flex items-center";
