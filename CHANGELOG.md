@@ -1,3 +1,10 @@
+## v0.20.14
+
+- Allow configuring OIDC provider using admin UI.
+- Show associated OAuth providers on accounts page.
+- Fix SQL editor's save button and simplify state.
+- A few more layout and behavior tweaks.
+
 ## v0.20.13
 
 - Admin UI SQL editor improvements
