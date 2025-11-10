@@ -76,6 +76,10 @@ pub trait Guest {
   fn job_handlers() -> Vec<Job> {
     return vec![];
   }
+
+  fn sqlite_functions() -> Vec<String> {
+    return vec![];
+  }
 }
 
 impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest for T {
@@ -107,6 +111,24 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest f
         .into_iter()
         .map(|config| (config.name, config.spec))
         .collect(),
+    };
+  }
+
+  fn init_sqlite_functions(
+    args: Arguments,
+  ) -> wit::exports::trailbase::component::init_endpoint::SqliteFunctions {
+    return wit::exports::trailbase::component::init_endpoint::SqliteFunctions {
+      functions: T::sqlite_functions(),
+    };
+  }
+}
+
+impl<T: Guest> crate::wit::exports::trailbase::component::sqlite_function_endpoint::Guest for T {
+  fn dispatch(
+    args: crate::wit::exports::trailbase::component::sqlite_function_endpoint::Arguments,
+  ) -> crate::wit::exports::trailbase::component::sqlite_function_endpoint::Response {
+    return crate::wit::exports::trailbase::component::sqlite_function_endpoint::Response {
+      response: "foo".to_string(),
     };
   }
 }

@@ -1,0 +1,15 @@
+package trailbase:component@0.1.0;
+
+@since(version = 0.1.0)
+interface sqlite-function-endpoint {
+  record arguments {
+	arguments: list<string>,
+  }
+
+  record response {
+	response: string,
+  }
+
+  @since(version = 0.1.0)
+  dispatch: func(args: arguments) -> response;
+}
