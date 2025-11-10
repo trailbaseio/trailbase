@@ -1,12 +1,11 @@
-import { For, Match, Show, Switch, createMemo, splitProps } from "solid-js";
+import { For, Match, Show, Switch, createMemo, createSignal } from "solid-js";
 import { useNavigate, useParams, type Navigator } from "@solidjs/router";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
-import type { DialogTriggerProps } from "@kobalte/core/dialog";
 
 import { TablePane } from "@/components/tables/TablePane";
 import { Button } from "@/components/ui/button";
-import { SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { SheetContent } from "@/components/ui/sheet";
 import {
   TbTablePlus,
   TbTable,
@@ -91,6 +90,7 @@ function TablePickerSidebar(props: {
   allTables: Table[];
   selectedTable: Table | View | undefined;
   schemaRefetch: () => Promise<void>;
+  openCreateTableDialog: () => void;
 }) {
   const { setOpenMobile } = useSidebar();
   const showHidden = useStore($showHiddenTables);
@@ -103,50 +103,17 @@ function TablePickerSidebar(props: {
         <SidebarMenu>
           {/* Add table & show hidden tables buttons */}
           <div class="flex w-full justify-between gap-2">
-            <SafeSheet id="add_table_dialog">
-              {(sheet) => {
-                return (
-                  <>
-                    <SheetContent class={sheetMaxWidth}>
-                      <CreateAlterTableForm
-                        schemaRefetch={props.schemaRefetch}
-                        allTables={props.allTables}
-                        setSelected={(tableName: QualifiedName) => {
-                          const table = props.tablesAndViews.find((t) =>
-                            equalQualifiedNames(t.name, tableName),
-                          );
-                          if (table) {
-                            navigateToTable(navigate, table);
-                          }
-                        }}
-                        {...sheet}
-                      />
-                    </SheetContent>
-
-                    <SheetTrigger
-                      as={(props: DialogTriggerProps) => {
-                        // TODO: ideally we should call `setOpenMobile(false)`,
-                        // as part of `onClick`, however the current Dialog
-                        // layering doesn't allow for it.
-                        const [local, others] = splitProps(props, ["onClick"]);
-
-                        return (
-                          <Button
-                            class="min-w-[100px] grow gap-2"
-                            variant="secondary"
-                            onClick={local.onClick}
-                            {...others}
-                          >
-                            <TbTablePlus />
-                            Add Table
-                          </Button>
-                        );
-                      }}
-                    />
-                  </>
-                );
+            <Button
+              class="min-w-[100px] grow gap-2"
+              variant="secondary"
+              onClick={() => {
+                setOpenMobile(false);
+                props.openCreateTableDialog();
               }}
-            </SafeSheet>
+            >
+              <TbTablePlus />
+              Add Table
+            </Button>
 
             <Tooltip>
               <TooltipTrigger as="div">
@@ -243,8 +210,10 @@ function TableSplitView(props: {
   schemas: ListSchemasResponse;
   schemaRefetch: () => Promise<void>;
 }) {
+  const navigate = useNavigate();
   const isMobile = createIsMobile();
   const showHidden = useStore($showHiddenTables);
+  const [createTableDialog, setCreateTableDialog] = createSignal(false);
   const filteredTablesAndViews = createMemo(() => {
     const all = [...props.schemas.tables, ...props.schemas.views];
 
@@ -264,58 +233,86 @@ function TableSplitView(props: {
   });
 
   return (
-    <SidebarProvider>
-      <Sidebar
-        class="absolute"
-        variant="sidebar"
-        side="left"
-        collapsible="offcanvas"
-      >
-        <SidebarContent>
-          {/* <SidebarHeader /> */}
-
-          <SidebarGroup>
-            <TablePickerSidebar
-              tablesAndViews={filteredTablesAndViews()}
-              allTables={props.schemas.tables}
-              selectedTable={selectedTable()}
-              schemaRefetch={props.schemaRefetch}
-            />
-          </SidebarGroup>
-
-          {/* <SidebarFooter /> */}
-        </SidebarContent>
-
-        <SidebarRail />
-      </Sidebar>
-
-      <SidebarInset class="min-w-0">
-        <Show
-          when={selectedTable() !== undefined}
-          fallback={<div class="p-4">No table selected</div>}
-        >
-          <Switch>
-            <Match when={isMobile()}>
-              <TablePane
-                selectedTable={selectedTable()!}
-                schemas={props.schemas}
+    <SafeSheet
+      id="add_table_dialog"
+      open={[createTableDialog, setCreateTableDialog]}
+    >
+      {(sheet) => {
+        return (
+          <>
+            <SheetContent class={sheetMaxWidth}>
+              <CreateAlterTableForm
                 schemaRefetch={props.schemaRefetch}
+                allTables={props.schemas.tables}
+                setSelected={(tableName: QualifiedName) => {
+                  const table = filteredTablesAndViews().find((t) =>
+                    equalQualifiedNames(t.name, tableName),
+                  );
+                  if (table) {
+                    navigateToTable(navigate, table);
+                  }
+                }}
+                {...sheet}
               />
-            </Match>
+            </SheetContent>
 
-            <Match when={!isMobile()}>
-              <div class="h-dvh overflow-y-auto">
-                <TablePane
-                  selectedTable={selectedTable()!}
-                  schemas={props.schemas}
-                  schemaRefetch={props.schemaRefetch}
-                />
-              </div>
-            </Match>
-          </Switch>
-        </Show>
-      </SidebarInset>
-    </SidebarProvider>
+            <SidebarProvider>
+              <Sidebar
+                class="absolute"
+                variant="sidebar"
+                side="left"
+                collapsible="offcanvas"
+              >
+                <SidebarContent>
+                  {/* <SidebarHeader /> */}
+
+                  <SidebarGroup>
+                    <TablePickerSidebar
+                      tablesAndViews={filteredTablesAndViews()}
+                      allTables={props.schemas.tables}
+                      selectedTable={selectedTable()}
+                      schemaRefetch={props.schemaRefetch}
+                      openCreateTableDialog={() => setCreateTableDialog(true)}
+                    />
+                  </SidebarGroup>
+
+                  {/* <SidebarFooter /> */}
+                </SidebarContent>
+
+                <SidebarRail />
+              </Sidebar>
+
+              <SidebarInset class="min-w-0">
+                <Show
+                  when={selectedTable() !== undefined}
+                  fallback={<div class="p-4">No table selected</div>}
+                >
+                  <Switch>
+                    <Match when={isMobile()}>
+                      <TablePane
+                        selectedTable={selectedTable()!}
+                        schemas={props.schemas}
+                        schemaRefetch={props.schemaRefetch}
+                      />
+                    </Match>
+
+                    <Match when={!isMobile()}>
+                      <div class="h-dvh overflow-y-auto">
+                        <TablePane
+                          selectedTable={selectedTable()!}
+                          schemas={props.schemas}
+                          schemaRefetch={props.schemaRefetch}
+                        />
+                      </div>
+                    </Match>
+                  </Switch>
+                </Show>
+              </SidebarInset>
+            </SidebarProvider>
+          </>
+        );
+      }}
+    </SafeSheet>
   );
 }
 
