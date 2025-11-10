@@ -1,21 +1,10 @@
-use bytes::Bytes;
-use core::future::Future;
-use futures_util::future::BoxFuture;
-use http_body_util::combinators::BoxBody;
-use parking_lot::Mutex;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
 use trailbase_wasi_keyvalue::Store as KvStore;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Result, Store};
-use wasmtime_wasi::{DirPerms, FilePerms, WasiCtxView};
-use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
-use wasmtime_wasi_http::bindings::http::types::ErrorCode;
+use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
-use wasmtime_wasi_io::IoView;
 
 use crate::Error;
 use crate::RuntimeOptions;
@@ -110,7 +99,7 @@ impl self::trailbase::database::sqlite::Host for State {
     query: String,
     params: Vec<Value>,
   ) -> wasmtime::Result<Result<u64, TxError>> {
-    return Err(wasmtime::Error::msg(""));
+    return Err(wasmtime::Error::msg("not implemented"));
   }
 
   fn query(
@@ -118,19 +107,19 @@ impl self::trailbase::database::sqlite::Host for State {
     query: String,
     params: Vec<Value>,
   ) -> wasmtime::Result<Result<Vec<Vec<Value>>, TxError>> {
-    return Err(wasmtime::Error::msg(""));
+    return Err(wasmtime::Error::msg("not implemented"));
   }
 
   fn tx_begin(&mut self) -> wasmtime::Result<Result<(), TxError>> {
-    return Err(wasmtime::Error::msg(""));
+    return Err(wasmtime::Error::msg("not implemented"));
   }
 
   fn tx_commit(&mut self) -> wasmtime::Result<Result<(), TxError>> {
-    return Err(wasmtime::Error::msg(""));
+    return Err(wasmtime::Error::msg("not implemented"));
   }
 
   fn tx_rollback(&mut self) -> wasmtime::Result<Result<(), TxError>> {
-    return Err(wasmtime::Error::msg(""));
+    return Err(wasmtime::Error::msg("not implemented"));
   }
 
   fn tx_execute(
@@ -138,7 +127,7 @@ impl self::trailbase::database::sqlite::Host for State {
     query: String,
     params: Vec<Value>,
   ) -> wasmtime::Result<Result<u64, TxError>> {
-    return Err(wasmtime::Error::msg(""));
+    return Err(wasmtime::Error::msg("not implemented"));
   }
 
   fn tx_query(
@@ -146,17 +135,17 @@ impl self::trailbase::database::sqlite::Host for State {
     query: String,
     params: Vec<Value>,
   ) -> wasmtime::Result<Result<Vec<Vec<Value>>, TxError>> {
-    return Err(wasmtime::Error::msg(""));
+    return Err(wasmtime::Error::msg("not implemented"));
   }
 }
 
-pub struct SyncRuntimeInstance {
+pub struct SyncRunner {
   engine: Engine,
   component: Component,
   linker: Linker<State>,
 }
 
-impl SyncRuntimeInstance {
+impl SyncRunner {
   pub fn new(wasm_source_file: std::path::PathBuf, opts: RuntimeOptions) -> Result<Self, Error> {
     let engine = {
       let cache = wasmtime::Cache::new(wasmtime::CacheConfig::default())?;
@@ -208,7 +197,7 @@ impl SyncRuntimeInstance {
     };
 
     // let (shared_sender, shared_receiver) = kanal::unbounded_async::<Message>();
-    let instance = SyncRuntimeInstance {
+    let instance = SyncRunner {
       engine: engine.clone(),
       component: component.clone(),
       linker: linker.clone(),
@@ -266,7 +255,7 @@ mod tests {
 
   #[tokio::test]
   async fn test_init() {
-    let runtime = SyncRuntimeInstance::new(
+    let runtime = SyncRunner::new(
       WASM_COMPONENT_PATH.into(),
       RuntimeOptions {
         ..Default::default()

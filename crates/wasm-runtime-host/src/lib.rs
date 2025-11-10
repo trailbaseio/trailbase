@@ -18,8 +18,7 @@ use trailbase_sqlite::{Params, Rows};
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Result, Store};
-use wasmtime_wasi::{DirPerms, FilePerms, WasiCtxView};
-use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
+use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 use wasmtime_wasi_io::IoView;
@@ -97,7 +96,7 @@ pub enum Error {
 }
 
 enum Message {
-  Run(Box<dyn (FnOnce(Arc<RuntimeInstance>) -> BoxFuture<'static, ()>) + Send>),
+  Run(Box<dyn (FnOnce(Arc<AsyncRunner>) -> BoxFuture<'static, ()>) + Send>),
 }
 
 pub enum ExecutorMessage {
@@ -528,7 +527,7 @@ impl Runtime {
     let (shared_sender, shared_receiver) = kanal::unbounded_async::<Message>();
 
     {
-      let instance = RuntimeInstance {
+      let runner = AsyncRunner {
         engine: engine.clone(),
         component: component.clone(),
         linker: linker.clone(),
@@ -539,7 +538,7 @@ impl Runtime {
         }),
       };
 
-      // let _sync_instance = SyncRuntimeInstance {
+      // let _sync_instance = SyncAsyncRunner {
       //   engine,
       //   component,
       //   linker,
@@ -551,7 +550,7 @@ impl Runtime {
         .as_sync()
         .send(ExecutorMessage::Run(Box::new(move || {
           return Box::pin(async move {
-            async_event_loop(wasm_source_file, instance, shared_receiver).await;
+            async_event_loop(wasm_source_file, runner, shared_receiver).await;
           });
         })))
         .expect("startup");
@@ -566,7 +565,7 @@ impl Runtime {
 
   pub async fn call<O, F, Fut>(&self, f: F) -> Result<O, Error>
   where
-    F: (FnOnce(Arc<RuntimeInstance>) -> Fut) + Send + 'static,
+    F: (FnOnce(Arc<AsyncRunner>) -> Fut) + Send + 'static,
     Fut: Future<Output = O> + Send,
     O: Send + 'static,
   {
@@ -574,14 +573,12 @@ impl Runtime {
 
     self
       .shared_sender
-      .send(Message::Run(Box::new(
-        move |runtime: Arc<RuntimeInstance>| {
-          let x = Box::pin(async move { f(runtime).await });
-          Box::pin(async move {
-            let _ = sender.send(x.await);
-          })
-        },
-      )))
+      .send(Message::Run(Box::new(move |runtime: Arc<AsyncRunner>| {
+        let x = Box::pin(async move { f(runtime).await });
+        Box::pin(async move {
+          let _ = sender.send(x.await);
+        })
+      })))
       .await
       .map_err(|_| Error::ChannelClosed)?;
 
@@ -591,10 +588,10 @@ impl Runtime {
 
 async fn async_event_loop(
   component_path: PathBuf,
-  instance: RuntimeInstance,
+  runner: AsyncRunner,
   shared_recv: kanal::AsyncReceiver<Message>,
 ) {
-  let instance = Arc::new(instance);
+  let runner = Arc::new(runner);
 
   let local_in_flight = Arc::new(AtomicUsize::new(0));
 
@@ -607,7 +604,7 @@ async fn async_event_loop(
 
     match shared_recv.recv().await {
       Ok(Message::Run(f)) => {
-        let instance = instance.clone();
+        let runner = runner.clone();
 
         let local_in_flight = local_in_flight.clone();
         local_in_flight.fetch_add(1, Ordering::Relaxed);
@@ -615,7 +612,7 @@ async fn async_event_loop(
         IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
 
         tokio::spawn(async move {
-          f(instance).await;
+          f(runner).await;
 
           IN_FLIGHT.fetch_sub(1, Ordering::Relaxed);
           local_in_flight.fetch_sub(1, Ordering::Relaxed);
@@ -640,7 +637,7 @@ pub struct SharedState {
 
 // Maybe rename to ~"runner". It's the "thing" to create new WASM "stores" and to call into APIs
 // (e.g. init, incoming http, ...).
-pub struct RuntimeInstance {
+pub struct AsyncRunner {
   engine: Engine,
   component: Component,
   linker: Linker<State>,
@@ -660,7 +657,7 @@ pub struct InitResult {
   pub job_handlers: Vec<(String, String)>,
 }
 
-impl RuntimeInstance {
+impl AsyncRunner {
   fn new_store(&self) -> Result<Store<State>, Error> {
     let mut wasi_ctx = WasiCtxBuilder::new();
     wasi_ctx.inherit_stdio();
@@ -859,11 +856,8 @@ mod tests {
     .unwrap();
 
     runtime
-      .call(async |instance| {
-        instance
-          .initialize(InitArgs { version: None })
-          .await
-          .unwrap();
+      .call(async |runner| {
+        runner.initialize(InitArgs { version: None }).await.unwrap();
       })
       .await
       .unwrap();
@@ -940,7 +934,7 @@ mod tests {
     let uri = uri.to_string();
     let registered_path = registered_path.to_string();
     return runtime
-      .call(async |instance| {
+      .call(async |runner| {
         let context = HttpContext {
           kind: HttpContextKind::Http,
           registered_path,
@@ -954,7 +948,7 @@ mod tests {
           .body(sqlite::bytes_to_body(Bytes::from_static(b"")))
           .unwrap();
 
-        return instance.call_incoming_http_handler(request).await;
+        return runner.call_incoming_http_handler(request).await;
       })
       .await
       .unwrap();

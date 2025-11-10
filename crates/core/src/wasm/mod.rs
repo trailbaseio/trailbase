@@ -86,8 +86,8 @@ pub(crate) async fn install_routes_and_jobs(
   let init_result = runtime
     .read()
     .await
-    .call(async move |instance| {
-      return instance.initialize(InitArgs { version }).await;
+    .call(async move |runner| {
+      return runner.initialize(InitArgs { version }).await;
     })
     .await??;
 
@@ -108,7 +108,7 @@ pub(crate) async fn install_routes_and_jobs(
           runtime
             .read()
             .await
-            .call(async move |instance| -> Result<(), WasmError> {
+            .call(async move |runner| -> Result<(), WasmError> {
               let uri =
                 hyper::http::Uri::from_str(&format!("http://__job/?name={}", urlencode(&name)))
                   .map_err(|err| WasmError::Other(format!("Job URI: {err}")))?;
@@ -129,7 +129,7 @@ pub(crate) async fn install_routes_and_jobs(
                 .body(empty())
                 .map_err(|err| WasmError::Other(err.to_string()))?;
 
-              instance.call_incoming_http_handler(request).await?;
+              runner.call_incoming_http_handler(request).await?;
 
               return Ok(());
             })
@@ -166,7 +166,7 @@ pub(crate) async fn install_routes_and_jobs(
           .read()
           .await
           .call(
-            async move |instance| -> Result<axum::response::Response, WasmError> {
+            async move |runner| -> Result<axum::response::Response, WasmError> {
               let (mut parts, body) = req.into_parts();
               let bytes = body
                 .collect()
@@ -196,7 +196,7 @@ pub(crate) async fn install_routes_and_jobs(
                 BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!())),
               );
 
-              let response = instance.call_incoming_http_handler(request).await?;
+              let response = runner.call_incoming_http_handler(request).await?;
 
               let (parts, body) = response.into_parts();
               let bytes = body
