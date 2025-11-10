@@ -7,9 +7,8 @@ import {
   createEffect,
   createSignal,
   onCleanup,
-  type Accessor,
-  type Signal,
 } from "solid-js";
+import type { Accessor, Signal } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { createWritableMemo } from "@solid-primitives/memo";
 import type { ColumnDef } from "@tanstack/solid-table";
@@ -325,7 +324,8 @@ function HelpDialog() {
 
 function RenameDialog(props: { selected: number; script: Script }) {
   const [open, setOpen] = createSignal(false);
-  const [name, setName] = createWritableMemo(() => props.script.name);
+
+  let ref: HTMLInputElement | undefined;
 
   return (
     <Dialog id="script-rename-dialog" open={open()} onOpenChange={setOpen}>
@@ -350,21 +350,23 @@ function RenameDialog(props: { selected: number; script: Script }) {
           onSubmit={(e: SubmitEvent) => {
             e.preventDefault();
 
-            updateExistingScript(props.selected, {
-              ...props.script,
-              name: name(),
-            });
-            setOpen(false);
+            const name = ref?.value;
+            if (name !== undefined) {
+              updateExistingScript(props.selected, {
+                ...props.script,
+                name,
+              });
+              setOpen(false);
+            }
           }}
         >
           <TextField>
             <TextFieldInput
-              required
-              value={name()}
+              ref={ref}
+              required={true}
+              pattern=".+"
+              value={props.script.name}
               type="text"
-              onChange={(e: Event) => {
-                setName((e.target as HTMLInputElement).value);
-              }}
             />
           </TextField>
 
@@ -400,22 +402,25 @@ function EditorPanel(props: {
 
   const isMobile = createIsMobile();
 
-  // Will only be set when the user explicitly triggers "execute";
   const [queryString, setQueryString] = createWritableMemo<string | null>(
     () => {
-      // Rebuild whenever we switch selected scripts.
-      const _unused = selected();
-
-      return null;
+      // Reset queryString to null whenever we switch scripts. If we read query
+      // string from the editor contents, useQuery would eagerly run the query.
+      // Instead we don't want to run new scripts right away, null short-circuits the fetch.
+      return selected() ? null : null;
     },
   );
 
   const executionResult = useQuery(() => {
-    const query = queryString();
-    const queryKey = query ?? props.script.contents;
     return {
-      queryKey: ["query", queryKey, selected()],
-      queryFn: async () => {
+      // Consider initial data fresh enough.
+      staleTime: 1000 * 7400,
+      initialData: props.script.result,
+      // Just keying on query isn't enough, since multiple tabs/scripts may
+      // have the same contents.
+      queryKey: [{ index: selected(), query: queryString() }],
+      queryFn: async ({ queryKey }) => {
+        const [{ query }] = queryKey;
         if (query === null) {
           return null;
         }
@@ -441,16 +446,72 @@ function EditorPanel(props: {
     };
   });
 
+  let ref: HTMLDivElement | undefined;
+  let editor: EditorView | undefined;
+
+  onCleanup(() => editor?.destroy());
+  createEffect(() => {
+    const newEditorState = (contents: string) => {
+      const customKeymap = keymap.of([
+        {
+          key: "Ctrl-Enter",
+          run: () => {
+            execute();
+            return true;
+          },
+          preventDefault: true,
+        },
+        {
+          key: "Ctrl-s",
+          run: () => {
+            saveScript();
+            return true;
+          },
+          preventDefault: true,
+        },
+      ]);
+
+      return EditorState.create({
+        doc: contents,
+        extensions: [
+          myTheme,
+          customKeymap,
+          lineNumbers(),
+          // Let's you define your own custom CSS style for the line number gutter.
+          // gutter({ class: "cm-mygutter" }),
+          sql({
+            dialect: SQLite,
+            upperCaseKeywords: true,
+            schema: buildSchema(props.schemas),
+          } as SQLConfig),
+          autocompletion(),
+          EditorView.updateListener.of((v) => {
+            if (!v.changes.empty) {
+              setDirty(true);
+            }
+          }),
+          // NOTE: minimal setup provides a bunch of default extensions such as
+          // keymaps, undo history, default syntax highlighting ... .
+          // NOTE: should be last.
+          minimalSetup,
+        ],
+      });
+    };
+
+    // Every time the script contents change, recreate the editor state.
+    editor?.destroy();
+    editor = new EditorView({
+      parent: ref!,
+      state: newEditorState(props.script.contents),
+    });
+    editor.focus();
+  });
+
   const execute = () => {
-    const text = editor?.state.doc.toString();
-    if (text) {
-      // We need to distinguish new query vs same query to make sure we're not caching.
-      if (queryString() === text) {
-        executionResult.refetch();
-      } else {
-        setQueryString(text);
-        executionResult.refetch();
-      }
+    const query = editor?.state.doc.toString();
+    if (query !== undefined) {
+      setQueryString(query);
+      executionResult.refetch();
     }
   };
 
@@ -462,70 +523,8 @@ function EditorPanel(props: {
       });
     }
     setDirty(false);
+    showToast({ title: "saved" });
   };
-
-  let ref: HTMLDivElement | undefined;
-  let editor: EditorView | undefined;
-
-  const customKeymap = keymap.of([
-    {
-      key: "Ctrl-Enter",
-      run: () => {
-        execute();
-        return true;
-      },
-      preventDefault: true,
-    },
-    {
-      key: "Ctrl-s",
-      run: () => {
-        saveScript();
-        showToast({ title: "saved" });
-        return true;
-      },
-      preventDefault: true,
-    },
-  ]);
-
-  const newEditorState = (contents: string) => {
-    return EditorState.create({
-      doc: contents,
-      extensions: [
-        myTheme,
-        customKeymap,
-        lineNumbers(),
-        // Let's you define your own custom CSS style for the line number gutter.
-        // gutter({ class: "cm-mygutter" }),
-        sql({
-          dialect: SQLite,
-          upperCaseKeywords: true,
-          schema: buildSchema(props.schemas),
-        } as SQLConfig),
-        autocompletion(),
-        EditorView.updateListener.of((v) => {
-          if (!v.changes.empty) {
-            setDirty(true);
-          }
-        }),
-        // NOTE: minimal setup provides a bunch of default extensions such as
-        // keymaps, undo history, default syntax highlighting ... .
-        // NOTE: should be last.
-        minimalSetup,
-      ],
-    });
-  };
-
-  onCleanup(() => editor?.destroy());
-
-  createEffect(() => {
-    // Every time the script contents change, recreate the editor state.
-    editor?.destroy();
-    editor = new EditorView({
-      state: newEditorState(props.script.contents),
-      parent: ref!,
-    });
-    editor.focus();
-  });
 
   return (
     <Dialog
@@ -585,7 +584,7 @@ function EditorPanel(props: {
         <div class="flex items-center justify-between">
           <Tooltip>
             <TooltipTrigger as="div">
-              <Button variant="secondary" onClick={() => {}}>
+              <Button variant="secondary" onClick={() => saveScript()}>
                 <Show when={!isMobile()} fallback="Save">
                   Save (Ctrl+S)
                 </Show>
