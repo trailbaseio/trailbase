@@ -3,6 +3,7 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 mod sqlite;
+mod sync;
 
 use bytes::Bytes;
 use core::future::Future;
@@ -95,7 +96,7 @@ pub enum Error {
   Other(String),
 }
 
-pub enum Message {
+enum Message {
   Run(Box<dyn (FnOnce(Arc<RuntimeInstance>) -> BoxFuture<'static, ()>) + Send>),
 }
 
@@ -527,26 +528,22 @@ impl Runtime {
     let (shared_sender, shared_receiver) = kanal::unbounded_async::<Message>();
 
     {
-      let engine = engine.clone();
-      let component = component.clone();
-      let linker = linker.clone();
-
-      let conn = conn.clone();
-      let kv_store = kv_store.clone();
-      let fs_root_path = opts.fs_root_path.clone();
-
-      let shared_state = Arc::new(SharedState {
-        conn,
-        kv_store,
-        fs_root_path,
-      });
-
       let instance = RuntimeInstance {
-        engine,
-        component,
-        linker,
-        shared: shared_state,
+        engine: engine.clone(),
+        component: component.clone(),
+        linker: linker.clone(),
+        shared: Arc::new(SharedState {
+          conn: conn.clone(),
+          kv_store: kv_store.clone(),
+          fs_root_path: opts.fs_root_path.clone(),
+        }),
       };
+
+      // let _sync_instance = SyncRuntimeInstance {
+      //   engine,
+      //   component,
+      //   linker,
+      // };
 
       let wasm_source_file = wasm_source_file.clone();
       executor
@@ -641,6 +638,8 @@ pub struct SharedState {
   pub fs_root_path: Option<std::path::PathBuf>,
 }
 
+// Maybe rename to ~"runner". It's the "thing" to create new WASM "stores" and to call into APIs
+// (e.g. init, incoming http, ...).
 pub struct RuntimeInstance {
   engine: Engine,
   component: Component,
@@ -693,6 +692,7 @@ impl RuntimeInstance {
     ));
   }
 
+  // Call WASM components `init` implementation.
   pub async fn initialize(&self, args: InitArgs) -> Result<InitResult, Error> {
     let mut store = self.new_store()?;
 
@@ -726,6 +726,7 @@ impl RuntimeInstance {
     });
   }
 
+  // Call http handlers exported by WASM component (incoming from the perspective of the component).
   pub async fn call_incoming_http_handler(
     &self,
     request: hyper::Request<BoxBody<Bytes, hyper::Error>>,

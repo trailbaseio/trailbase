@@ -30,3 +30,13 @@ world interfaces {
   @since(version = 0.1.0)
   export init-endpoint;
 }
+
+@since(version = 0.1.0)
+world init {
+  // TrailBase's interfaces:
+  @since(version = 0.1.0)
+  include trailbase:database/interfaces@0.1.0;
+
+  @since(version = 0.1.0)
+  export init-endpoint;
+}
