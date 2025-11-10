@@ -3,7 +3,7 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 mod sqlite;
-mod sync;
+pub mod sync;
 
 use bytes::Bytes;
 use core::future::Future;

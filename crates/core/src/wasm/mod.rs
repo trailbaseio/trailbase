@@ -9,6 +9,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
+use trailbase_wasm_runtime_host::sync::SyncRunner;
 use trailbase_wasm_runtime_host::{InitArgs, RuntimeOptions, SharedExecutor};
 
 use crate::AppState;
@@ -18,6 +19,50 @@ use crate::util::urlencode;
 pub(crate) type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
 pub(crate) use trailbase_wasm_runtime_host::{KvStore, Runtime};
+
+pub(crate) fn build_sync_wasm_runtimes_for_components(
+  n_threads: Option<usize>,
+  components_path: PathBuf,
+  fs_root_path: Option<PathBuf>,
+  dev: bool,
+) -> Result<Vec<SyncRunner>, AnyError> {
+  let sync_runtimes: Vec<SyncRunner> = std::fs::read_dir(&components_path).map_or_else(
+    |_err| Ok(vec![]),
+    |entries| {
+      entries
+        .into_iter()
+        .flat_map(|entry| {
+          let Ok(entry) = entry else {
+            return None;
+          };
+
+          let Ok(metadata) = entry.metadata() else {
+            return None;
+          };
+
+          if !metadata.is_file() {
+            return None;
+          }
+          let path = entry.path();
+          // let extension = path.extension().and_then(|e| e.to_str())?;
+
+          if path.extension()? == "wasm" {
+            return Some(SyncRunner::new(
+              path,
+              RuntimeOptions {
+                fs_root_path: fs_root_path.clone(),
+                use_winch: dev,
+              },
+            ));
+          }
+          return None;
+        })
+        .collect::<Result<Vec<SyncRunner>, _>>()
+    },
+  )?;
+
+  return Ok(sync_runtimes);
+}
 
 pub(crate) fn build_wasm_runtimes_for_components(
   n_threads: Option<usize>,

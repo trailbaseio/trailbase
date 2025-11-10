@@ -94,6 +94,8 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   let json_schema_registry = Arc::new(parking_lot::RwLock::new(
     trailbase_schema::registry::build_json_schema_registry(vec![])?,
   ));
+
+  // TODO: We'd have to inject WASM runtimes here to make it available to connection..
   let (conn, new_db) = crate::connection::init_main_db(
     Some(&args.data_dir),
     Some(json_schema_registry.clone()),

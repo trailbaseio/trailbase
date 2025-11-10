@@ -51,7 +51,9 @@ struct InternalState {
   #[cfg(feature = "v8")]
   runtime: crate::js::RuntimeHandle,
 
+  /// Actual WASM runtimes.
   wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
+  /// WASM runtime builders needed to rebuild above runtimes, e.g. when hot-reloading.
   build_wasm_runtimes: Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>,
 
   #[cfg(test)]
@@ -164,17 +166,52 @@ impl AppState {
     let build_wasm_runtimes = {
       let conn = args.conn.clone();
       let wasm_dir = args.data_dir.root().join("wasm");
+      let runtime_root_fs = args.runtime_root_fs.clone();
       move || {
         return crate::wasm::build_wasm_runtimes_for_components(
           args.runtime_threads,
           conn.clone(),
           shared_kv_store.clone(),
           wasm_dir.clone(),
-          args.runtime_root_fs.clone(),
+          runtime_root_fs.clone(),
           args.dev,
         );
       }
     };
+
+    let sync_wasm_runtimes = {
+      let wasm_dir = args.data_dir.root().join("wasm");
+      let runtime_root_fs = args.runtime_root_fs.clone();
+      crate::wasm::build_sync_wasm_runtimes_for_components(
+        args.runtime_threads,
+        wasm_dir.clone(),
+        runtime_root_fs.clone(),
+        args.dev,
+      )
+      .expect("startup")
+    };
+
+    let conn = args.conn.clone();
+    tokio::spawn(async move {
+      conn
+        .call(move |conn| {
+          conn
+            .create_scalar_function(
+              "foo",
+              0,
+              rusqlite::functions::FunctionFlags::SQLITE_INNOCUOUS,
+              move |context| -> Result<bool, rusqlite::Error> {
+                if let Some(rt) = sync_wasm_runtimes.last() {}
+                return Ok(true);
+              },
+            )
+            .expect("startup");
+
+          return Ok(());
+        })
+        .await
+        .expect("startup");
+    });
 
     AppState {
       state: Arc::new(InternalState {
