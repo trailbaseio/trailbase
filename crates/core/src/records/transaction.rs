@@ -85,7 +85,8 @@ pub async fn record_transactions_handler(
             }
           }
 
-          let mut lazy_params = LazyParams::for_insert(&api, record, None);
+          let mut lazy_params =
+            LazyParams::for_insert(&api, state.json_schema_registry().clone(), record, None);
           let acl_check = api.build_record_level_access_check(
             Permission::Create,
             None,
@@ -127,6 +128,7 @@ pub async fn record_transactions_handler(
 
           let mut lazy_params = LazyParams::for_update(
             &api,
+            state.json_schema_registry().clone(),
             record,
             None,
             pk_column.name.clone(),

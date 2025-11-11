@@ -77,7 +77,7 @@ mod tests {
 
   #[test]
   fn test_base64_wrong_number_of_arguments() {
-    let conn = crate::connect_sqlite(None).unwrap();
+    let conn = crate::connect_sqlite(None, None).unwrap();
     let val = conn.query_row(
       "SELECT base64_url_safe('a', 'b')",
       [],
@@ -88,7 +88,7 @@ mod tests {
 
   #[test]
   fn test_base64_url_safe_roundtrip() {
-    let conn = crate::connect_sqlite(None).unwrap();
+    let conn = crate::connect_sqlite(None, None).unwrap();
 
     let value = b"832!@#$%^&*()>./";
     for query in [
@@ -107,7 +107,7 @@ mod tests {
 
   #[test]
   fn test_base64_url_safe_null_handling() {
-    let conn = crate::connect_sqlite(None).unwrap();
+    let conn = crate::connect_sqlite(None, None).unwrap();
     for query in [
       format!("SELECT base64(NULL)"),
       format!("SELECT base64_url_safe(NULL)"),
@@ -119,7 +119,7 @@ mod tests {
 
   #[test]
   fn test_base64_url_safe_empty_string() {
-    let conn = crate::connect_sqlite(None).unwrap();
+    let conn = crate::connect_sqlite(None, None).unwrap();
     for query in [
       format!("SELECT base64('')"),
       format!("SELECT base64_url_safe('')"),
@@ -131,7 +131,7 @@ mod tests {
 
   #[test]
   fn test_base64_url_safe_trimmed_input() {
-    let conn = crate::connect_sqlite(None).unwrap();
+    let conn = crate::connect_sqlite(None, None).unwrap();
     let encoded = BASE64_URL_SAFE.encode(&[1, 2, 3, 4]);
 
     for query in [

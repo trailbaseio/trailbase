@@ -243,9 +243,6 @@ mod tests {
 
   #[tokio::test]
   async fn test_fetch_rows() {
-    let state = test_state(None).await.unwrap();
-    let conn = state.conn();
-
     let pattern = serde_json::from_str(
       r#"{
           "type": "object",
@@ -258,10 +255,18 @@ mod tests {
     )
     .unwrap();
 
-    trailbase_extension::jsonschema::set_schema_for_test(
-      "foo",
-      Some(trailbase_extension::jsonschema::Schema::from(pattern, None, false).unwrap()),
+    let json_schema_registry = Some(
+      trailbase_schema::registry::build_json_schema_registry(vec![("foo".to_string(), pattern)])
+        .unwrap(),
     );
+
+    let state = test_state(Some(TestStateOptions {
+      json_schema_registry,
+      ..Default::default()
+    }))
+    .await
+    .unwrap();
+    let conn = state.conn();
 
     conn
       .execute_batch(

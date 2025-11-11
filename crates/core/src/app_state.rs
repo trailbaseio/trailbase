@@ -5,6 +5,7 @@ use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::QualifiedName;
 
 use crate::auth::jwt::JwtHelper;
@@ -36,6 +37,7 @@ struct InternalState {
   mailer: Reactive<Mailer>,
   record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
   config: Reactive<Config>,
+  json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
 
   conn: trailbase_sqlite::Connection,
   logs_conn: trailbase_sqlite::Connection,
@@ -66,6 +68,7 @@ pub(crate) struct AppStateArgs {
   pub demo: bool,
   pub connection_metadata: ConnectionMetadata,
   pub config: Config,
+  pub json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
   pub conn: trailbase_sqlite::Connection,
   pub logs_conn: trailbase_sqlite::Connection,
   pub jwt: JwtHelper,
@@ -199,6 +202,7 @@ impl AppState {
         mailer: derive_unchecked(&config, Mailer::new_from_config),
         record_apis: record_apis.clone(),
         config,
+        json_schema_registry: args.json_schema_registry,
         conn: args.conn.clone(),
         logs_conn: args.logs_conn,
         jwt: args.jwt,
@@ -239,6 +243,10 @@ impl AppState {
 
   pub(crate) fn demo_mode(&self) -> bool {
     return self.state.demo;
+  }
+
+  pub fn json_schema_registry(&self) -> &Arc<parking_lot::RwLock<JsonSchemaRegistry>> {
+    return &self.state.json_schema_registry;
   }
 
   pub fn conn(&self) -> &trailbase_sqlite::Connection {
@@ -282,12 +290,11 @@ impl AppState {
       return crate::schema_metadata::SchemaLookupError::Other(err.into());
     })?;
 
-    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
     let connection_metadata = build_connection_metadata_and_install_file_deletion_triggers(
       self.conn(),
       tables,
       views,
-      &registry,
+      &self.state.json_schema_registry,
     )
     .await?;
 
@@ -383,10 +390,12 @@ impl AppState {
 
     let new_config = self.get_config();
 
-    if update_json_schema_registry(&new_config).unwrap_or(true)
-      && let Err(err) = self.rebuild_connection_metadata().await
     {
-      log::warn!("reloading JSON schema cache failed: {err}");
+      if update_json_schema_registry(&new_config, &self.state.json_schema_registry).unwrap_or(true)
+        && let Err(err) = self.rebuild_connection_metadata().await
+      {
+        log::warn!("reloading JSON schema cache failed: {err}");
+      }
     }
 
     // Write new config to the file system.
@@ -446,7 +455,10 @@ impl AppState {
 }
 
 /// Returns true if schemas were registered.
-pub(crate) fn update_json_schema_registry(config: &Config) -> Result<bool, ConfigError> {
+pub(crate) fn update_json_schema_registry(
+  config: &Config,
+  registry: &parking_lot::RwLock<JsonSchemaRegistry>,
+) -> Result<bool, ConfigError> {
   if !config.schemas.is_empty() {
     let schemas: Vec<_> = config
       .schemas
@@ -472,9 +484,11 @@ pub(crate) fn update_json_schema_registry(config: &Config) -> Result<bool, Confi
       schemas = schemas.iter().map(|(name, _)| name.as_str())
     );
 
-    trailbase_schema::registry::override_json_schema_registry(schemas).map_err(|err| {
-      return ConfigError::Update(format!("Update of JSON schema registry failed: {err}"));
-    })?;
+    registry.write().swap(
+      trailbase_schema::registry::build_json_schema_registry(schemas).map_err(|err| {
+        return ConfigError::Update(format!("Update of JSON schema registry failed: {err}"));
+      })?,
+    );
 
     return Ok(true);
   }
@@ -519,6 +533,7 @@ pub fn test_config() -> Config {
 #[derive(Default)]
 pub struct TestStateOptions {
   pub config: Option<Config>,
+  pub json_schema_registry: Option<JsonSchemaRegistry>,
   pub(crate) mailer: Option<Mailer>,
 }
 
@@ -533,43 +548,40 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let temp_dir = temp_dir::TempDir::new()?;
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
 
-  let (conn, new) = crate::connection::init_main_db(None, None)?;
+  let TestStateOptions {
+    config,
+    mailer,
+    json_schema_registry,
+  } = options.unwrap_or_default();
+
+  let json_schema_registry = Arc::new(parking_lot::RwLock::new(
+    json_schema_registry
+      .unwrap_or_else(|| trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap()),
+  ));
+  let (conn, new) =
+    crate::connection::init_main_db(None, Some(json_schema_registry.clone()), None)?;
   assert!(new);
+
   let logs_conn = crate::connection::init_logs_db(None)?;
 
   let tables = lookup_and_parse_all_table_schemas(&conn).await?;
   let views = lookup_and_parse_all_view_schemas(&conn, &tables).await?;
 
-  let TestStateOptions { config, mailer } = options.unwrap_or_default();
   let config = {
     let config = config.unwrap_or_else(test_config);
-
     validate_config(&tables, &views, &config).unwrap();
-
-    // NOTE: The below "append" semantics are different from prod's override behavior, to avoid
-    // races between concurrent tests. The registry needs to be global for the sqlite extensions
-    // to access (unless we find a better way to bind the two).
-    if !config.schemas.is_empty() {
-      for schema_config in &config.schemas {
-        let crate::config::proto::JsonSchemaConfig { name, schema } = schema_config;
-
-        let schema_json: serde_json::Value =
-          serde_json::from_str(schema.as_ref().unwrap()).unwrap();
-
-        trailbase_extension::jsonschema::set_schema_for_test(
-          name.as_ref().unwrap(),
-          Some(trailbase_extension::jsonschema::Schema::from(schema_json, None, false).unwrap()),
-        );
-      }
-    }
+    update_json_schema_registry(&config, &json_schema_registry).unwrap();
 
     Reactive::new(config)
   };
 
-  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-  let connection_metadata =
-    build_connection_metadata_and_install_file_deletion_triggers(&conn, tables, views, &registry)
-      .await?;
+  let connection_metadata = build_connection_metadata_and_install_file_deletion_triggers(
+    &conn,
+    tables,
+    views,
+    &json_schema_registry,
+  )
+  .await?;
 
   let data_dir = DataDir(temp_dir.path().to_path_buf());
 
@@ -627,6 +639,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       ),
       record_apis: record_apis.clone(),
       config,
+      json_schema_registry,
       conn: conn.clone(),
       logs_conn,
       jwt: crate::auth::jwt::test_jwt_helper(),

@@ -25,11 +25,11 @@ pub struct ListJsonSchemasResponse {
 }
 
 pub async fn list_schemas_handler(
-  State(_state): State<AppState>,
+  State(state): State<AppState>,
 ) -> Result<Json<ListJsonSchemasResponse>, Error> {
-  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-
-  let schemas = registry
+  let schemas = state
+    .json_schema_registry()
+    .read()
     .entries()
     .iter()
     .map(|(name, schema)| {

@@ -1,10 +1,12 @@
 use log::*;
 use std::path::PathBuf;
+use std::sync::Arc;
 use thiserror::Error;
 
 use crate::app_state::{AppState, AppStateArgs, build_objectstore, update_json_schema_registry};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
+use crate::connection::AttachExtraDatabases;
 use crate::constants::USER_TABLE;
 use crate::metadata::load_or_init_metadata_textproto;
 use crate::rand::generate_random_string;
@@ -68,7 +70,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   // Open or init the main db connection. Note that we derive whether a new DB was initialized
   // based on whether the V1 migration had to be applied. Should be fairly robust.
   let paths = std::fs::read_dir(args.data_dir.data_path())?;
-  let extra_databases: Vec<(String, PathBuf)> = paths
+  let extra_databases: Vec<AttachExtraDatabases> = paths
     .filter_map(|entry: Result<std::fs::DirEntry, _>| {
       if let Ok(entry) = entry {
         let path = entry.path();
@@ -78,7 +80,10 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
           }
 
           if stem != "main" && stem != "logs" {
-            return Some((stem.to_string_lossy().to_string(), path.to_path_buf()));
+            return Some(AttachExtraDatabases {
+              schema_name: stem.to_string_lossy().to_string(),
+              path: path.to_path_buf(),
+            });
           }
         }
       }
@@ -86,23 +91,35 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     })
     .collect();
 
-  let (conn, new_db) =
-    crate::connection::init_main_db(Some(&args.data_dir), Some(extra_databases))?;
+  let json_schema_registry = Arc::new(parking_lot::RwLock::new(
+    trailbase_schema::registry::build_json_schema_registry(vec![])?,
+  ));
+  let (conn, new_db) = crate::connection::init_main_db(
+    Some(&args.data_dir),
+    Some(json_schema_registry.clone()),
+    Some(extra_databases),
+  )?;
 
   let tables = lookup_and_parse_all_table_schemas(&conn).await?;
   let views = lookup_and_parse_all_view_schemas(&conn, &tables).await?;
 
   // Read config or write default one. Ensures config is validated.
-  let config = load_or_init_config_textproto(&args.data_dir, &tables, &views).await?;
-  update_json_schema_registry(&config)?;
+  let config = {
+    let config = load_or_init_config_textproto(&args.data_dir, &tables, &views).await?;
+    update_json_schema_registry(&config, &json_schema_registry)?;
+    config
+  };
 
   // Load the `<depot>/metadata.textproto`.
   let _metadata = load_or_init_metadata_textproto(&args.data_dir).await?;
 
-  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-  let connection_metadata =
-    build_connection_metadata_and_install_file_deletion_triggers(&conn, tables, views, &registry)
-      .await?;
+  let connection_metadata = build_connection_metadata_and_install_file_deletion_triggers(
+    &conn,
+    tables,
+    views,
+    &json_schema_registry,
+  )
+  .await?;
 
   let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
 
@@ -129,6 +146,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     demo: args.demo,
     connection_metadata,
     config,
+    json_schema_registry,
     conn,
     logs_conn,
     jwt,

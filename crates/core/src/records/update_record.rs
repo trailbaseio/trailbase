@@ -42,6 +42,7 @@ pub async fn update_record_handler(
 
   let mut lazy_params = LazyParams::for_update(
     &api,
+    state.json_schema_registry().clone(),
     request,
     multipart_files,
     pk_column.name.clone(),

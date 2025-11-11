@@ -154,7 +154,7 @@ pub async fn list_logs_handler(
   let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME, None).await?;
 
   let table_metadata = TableMetadata::new(
-    &trailbase_extension::jsonschema::JsonSchemaRegistry::default(),
+    &trailbase_extension::jsonschema::JsonSchemaRegistry::from_schemas(vec![]),
     table.clone(),
     &[table],
   )?;

@@ -1,5 +1,6 @@
 use fallible_iterator::FallibleIterator;
 use log::*;
+use parking_lot::RwLock;
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::parse::parse_into_statement;
@@ -22,9 +23,9 @@ pub(crate) async fn build_connection_metadata_and_install_file_deletion_triggers
   conn: &Connection,
   tables: Vec<Table>,
   views: Vec<View>,
-  registry: &JsonSchemaRegistry,
+  registry: &RwLock<JsonSchemaRegistry>,
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
-  let metadata = ConnectionMetadata::from_schemas(tables, views, registry)?;
+  let metadata = ConnectionMetadata::from_schemas(tables, views, &registry.read())?;
 
   setup_file_deletion_triggers(conn, &metadata).await?;
 
@@ -218,7 +219,6 @@ pub(crate) async fn setup_file_deletion_triggers(
 mod tests {
   use axum::extract::{Json, Path, Query, RawQuery, State};
   use serde_json::json;
-  use trailbase_extension::jsonschema::JsonSchemaRegistry;
   use trailbase_schema::QualifiedName;
   use trailbase_schema::json_schema::{Expand, JsonSchemaMode, build_json_schema_expanded};
   use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption};
@@ -344,7 +344,7 @@ mod tests {
     let table_metadata = metadata.get_table(&table_name).unwrap();
 
     let (validator, schema) = build_json_schema_expanded(
-      &JsonSchemaRegistry::default(),
+      &state.json_schema_registry().read(),
       &table_name.name,
       &table_metadata.schema.columns,
       JsonSchemaMode::Select,

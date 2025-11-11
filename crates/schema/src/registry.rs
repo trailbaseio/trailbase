@@ -1,14 +1,14 @@
 use schemars::schema_for;
 use std::sync::Arc;
 
-pub use trailbase_extension::jsonschema::Schema;
+pub use trailbase_extension::jsonschema::{JsonSchemaRegistry, Schema};
 
 use crate::error::Error;
 use crate::file::{FileUpload, FileUploads};
 
-pub fn override_json_schema_registry(
+pub fn build_json_schema_registry(
   schemas: Vec<(String, serde_json::Value)>,
-) -> Result<(), Error> {
+) -> Result<JsonSchemaRegistry, Error> {
   let mut entries: Vec<(String, Schema)> = vec![];
   for (name, entry) in builtin_schemas() {
     entries.push((name, entry));
@@ -21,14 +21,7 @@ pub fn override_json_schema_registry(
     ));
   }
 
-  trailbase_extension::jsonschema::set_schemas(entries, true);
-
-  return Ok(());
-}
-
-/// Will only initialize if custom schemas have not already been initialized.
-pub fn try_init_builtin_schemas() {
-  trailbase_extension::jsonschema::set_schemas(builtin_schemas(), false);
+  return Ok(JsonSchemaRegistry::from_schemas(entries));
 }
 
 fn builtin_schemas() -> Vec<(String, Schema)> {
@@ -79,9 +72,7 @@ mod tests {
   fn test_builtin_schemas() {
     assert!(builtin_schemas().len() > 0);
 
-    try_init_builtin_schemas();
-
-    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+    let registry = build_json_schema_registry(vec![]).unwrap();
     {
       let schema = registry.get_schema("std.FileUpload").unwrap();
       let input = json!({

@@ -115,7 +115,8 @@ pub async fn create_record_handler(
       }
     }
 
-    let mut lazy_params = LazyParams::for_insert(&api, record, files);
+    let mut lazy_params =
+      LazyParams::for_insert(&api, state.json_schema_registry().clone(), record, files);
 
     // NOTE: We're currently serializing the async checks, we could parallelize them however it's
     // unclear if this would be much faster.

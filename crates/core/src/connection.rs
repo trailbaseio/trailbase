@@ -1,7 +1,9 @@
 use log::*;
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use std::path::PathBuf;
+use std::sync::Arc;
 use thiserror::Error;
+use trailbase_extension::jsonschema::JsonSchemaRegistry;
 
 use crate::data_dir::DataDir;
 use crate::migrations::{apply_logs_migrations, apply_main_migrations};
@@ -20,13 +22,19 @@ pub enum ConnectionError {
   Migration(#[from] trailbase_refinery::Error),
 }
 
+pub struct AttachExtraDatabases {
+  pub schema_name: String,
+  pub path: PathBuf,
+}
+
 /// Initializes a new SQLite Connection with all the default extensions, migrations and settings
 /// applied.
 ///
 /// Returns a Connection and whether the DB was newly created..
 pub fn init_main_db(
   data_dir: Option<&DataDir>,
-  attach: Option<Vec<(String, PathBuf)>>,
+  json_registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
+  attach: Option<Vec<AttachExtraDatabases>>,
 ) -> Result<(Connection, bool), ConnectionError> {
   let new_db = Mutex::new(false);
 
@@ -35,9 +43,7 @@ pub fn init_main_db(
 
   let conn = trailbase_sqlite::Connection::new(
     || -> Result<_, ConnectionError> {
-      trailbase_schema::registry::try_init_builtin_schemas();
-
-      let mut conn = trailbase_extension::connect_sqlite(main_path.clone())?;
+      let mut conn = trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())?;
 
       *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
 
@@ -54,7 +60,7 @@ pub fn init_main_db(
   )?;
 
   if let Some(attach) = attach {
-    for (schema_name, path) in attach {
+    for AttachExtraDatabases { schema_name, path } in attach {
       debug!("Attaching '{schema_name}': {path:?}");
       // FIXME: migrations for non-main databases.
       conn.attach(&path.to_string_lossy(), &schema_name)?;
@@ -77,6 +83,7 @@ pub(crate) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, Con
       // NOTE: The logs db needs the trailbase extensions for the maxminddb geoip lookup.
       let mut conn = trailbase_extension::sqlite3_extension_init(
         connect_rusqlite_without_default_extensions_and_schemas(path.clone())?,
+        None,
       )?;
 
       // Turn off secure_deletions, i.e. don't wipe the memory with zeros.

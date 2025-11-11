@@ -146,8 +146,7 @@ async fn async_main() -> Result<(), BoxError> {
 
       let mode: Option<JsonSchemaMode> = cmd.mode.map(|m| m.into());
 
-      let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
-      let json_schema = trailbase::api::build_api_json_schema(&state, &registry, &api, mode)?;
+      let json_schema = trailbase::api::build_api_json_schema(&state, &api, mode)?;
 
       println!("{}", serde_json::to_string_pretty(&json_schema)?);
     }
@@ -167,7 +166,7 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Admin { cmd }) => {
       init_logger(false);
 
-      let (conn, _) = api::init_main_db(Some(&data_dir), None)?;
+      let (conn, _) = api::init_main_db(Some(&data_dir), None, None)?;
 
       match cmd {
         Some(AdminSubCommands::List) => {
@@ -206,7 +205,7 @@ async fn async_main() -> Result<(), BoxError> {
       init_logger(false);
 
       let data_dir = DataDir(args.data_dir);
-      let (conn, _) = api::init_main_db(Some(&data_dir), None)?;
+      let (conn, _) = api::init_main_db(Some(&data_dir), None, None)?;
 
       match cmd {
         Some(UserSubCommands::ChangePassword { user, password }) => {
