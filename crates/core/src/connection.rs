@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
+use trailbase_sqlvalue::SqlValue;
 
 use crate::data_dir::DataDir;
 use crate::migrations::{apply_logs_migrations, apply_main_migrations};
@@ -39,7 +40,7 @@ pub fn init_main_db(
   attach: Option<Vec<AttachExtraDatabases>>,
   runtimes: Vec<trailbase_wasm_runtime_host::sync::SyncRunner>,
 ) -> Result<(Connection, bool), ConnectionError> {
-  let new_db = Mutex::new(false);
+  let new_db = Arc::new(Mutex::new(false));
 
   let main_path = data_dir.map(|d| d.main_db_path());
   let migrations_path = data_dir.map(|d| d.migrations_path());
@@ -53,42 +54,72 @@ pub fn init_main_db(
     .collect::<Result<Vec<_>, _>>()
     .map_err(|err| return ConnectionError::Other(err.to_string()))?;
 
-  let conn = trailbase_sqlite::Connection::new(
-    || -> Result<_, ConnectionError> {
-      let mut conn = trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())?;
+  let conn = {
+    let new_db = new_db.clone();
 
-      *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
+    trailbase_sqlite::Connection::new(
+      move || -> Result<_, ConnectionError> {
+        let mut conn =
+          trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())?;
 
-      for (idx, rt_functions) in sqlite_functions.iter().enumerate() {
-        for function in &rt_functions.functions {
-          let rt = runtimes[idx].clone();
+        *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
 
-          conn
-            .create_scalar_function(
-              function.as_str(),
-              0,
-              rusqlite::functions::FunctionFlags::SQLITE_INNOCUOUS,
-              move |context| -> Result<bool, rusqlite::Error> {
-                // TODO: actually dispatch.
-                let _ = rt;
-                return Ok(true);
-              },
-            )
-            .expect("startup");
+        for (idx, rt_functions) in sqlite_functions.iter().enumerate() {
+          for function in &rt_functions.scalar_functions {
+            let rt = runtimes[idx].clone();
+            let function_name = function.name.clone();
+
+            conn
+              .create_scalar_function(
+                function.name.as_str(),
+                function.num_args as i32,
+                rusqlite::functions::FunctionFlags::SQLITE_INNOCUOUS,
+                move |context| -> Result<rusqlite::types::Value, rusqlite::Error> {
+                  let args = (0..context.len())
+                    .map(|idx| -> Result<SqlValue, rusqlite::Error> {
+                      return Ok(match context.get::<rusqlite::types::Value>(idx)? {
+                        rusqlite::types::Value::Null => SqlValue::Null,
+                        rusqlite::types::Value::Integer(i) => SqlValue::Integer(i),
+                        rusqlite::types::Value::Real(r) => SqlValue::Real(r),
+                        rusqlite::types::Value::Text(s) => SqlValue::Text(s),
+                        // FIXME:
+                        rusqlite::types::Value::Blob(_b) => SqlValue::Null,
+                      });
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                  let value = rt
+                    .dispatch_scalar_function(function_name.clone(), args)
+                    .map_err(|err| {
+                      return rusqlite::Error::UserFunctionError(err.into());
+                    })?;
+
+                  return Ok(match value {
+                    SqlValue::Null => rusqlite::types::Value::Null,
+                    SqlValue::Integer(i) => rusqlite::types::Value::Integer(i),
+                    SqlValue::Real(r) => rusqlite::types::Value::Real(r),
+                    SqlValue::Text(s) => rusqlite::types::Value::Text(s),
+                    // FIXME:
+                    SqlValue::Blob(_b) => rusqlite::types::Value::Null,
+                  });
+                },
+              )
+              .expect("startup");
+          }
         }
-      }
 
-      return Ok(conn);
-    },
-    Some(trailbase_sqlite::connection::Options {
-      n_read_threads: match (data_dir, std::thread::available_parallelism()) {
-        (None, _) => 0,
-        (Some(_), Ok(n)) => n.get().clamp(2, 4),
-        (Some(_), Err(_)) => 4,
+        return Ok(conn);
       },
-      ..Default::default()
-    }),
-  )?;
+      Some(trailbase_sqlite::connection::Options {
+        n_read_threads: match (data_dir, std::thread::available_parallelism()) {
+          (None, _) => 0,
+          (Some(_), Ok(n)) => n.get().clamp(2, 4),
+          (Some(_), Err(_)) => 4,
+        },
+        ..Default::default()
+      }),
+    )?
+  };
 
   if let Some(attach) = attach {
     for AttachExtraDatabases { schema_name, path } in attach {

@@ -34,11 +34,13 @@ interface init-endpoint {
   @since(version = 0.1.0)
   init-job-handlers: func(args: arguments) -> job-handlers;
 
+  record sqlite-scalar-function {
+    name: string,
+    num-args: u32,
+  }
+
   record sqlite-functions {
-    /// Registered jobs (sqlite_function_name)[].
-    ///
-    /// TODO: Could add function input schema to do early host-side validation.
-    functions: list<string>,
+    scalar-functions: list<sqlite-scalar-function>,
   }
 
   @since(version = 0.1.0)

@@ -48,6 +48,10 @@ pub use crate::wit::exports::trailbase::component::init_endpoint::Arguments;
 pub use static_assertions::assert_impl_all;
 pub use wstd::wasip2 as __wasi;
 
+pub mod sqlite {
+  pub use super::wit::exports::trailbase::component::sqlite_function_endpoint::{Error, Value};
+}
+
 #[macro_export]
 macro_rules! export {
     ($impl:ident) => {
@@ -66,6 +70,29 @@ pub struct Args {
   pub version: Option<String>,
 }
 
+type SqliteFunctionHandler =
+  Box<dyn FnOnce(Vec<sqlite::Value>) -> Result<sqlite::Value, sqlite::Error>>;
+
+pub struct SqliteFunction {
+  pub name: String,
+  pub num_args: u32,
+  pub handler: SqliteFunctionHandler,
+}
+
+impl SqliteFunction {
+  // TODO: Consider using a [Value; N] args type to infer num_args.
+  pub fn new<F>(name: impl std::string::ToString, num_args: u32, f: F) -> Self
+  where
+    F: Fn(Vec<sqlite::Value>) -> Result<sqlite::Value, sqlite::Error> + 'static,
+  {
+    return Self {
+      name: name.to_string(),
+      num_args,
+      handler: Box::new(f),
+    };
+  }
+}
+
 pub trait Guest {
   fn init(_: Args) {}
 
@@ -77,7 +104,7 @@ pub trait Guest {
     return vec![];
   }
 
-  fn sqlite_functions() -> Vec<String> {
+  fn sqlite_scalar_functions() -> Vec<SqliteFunction> {
     return vec![];
   }
 }
@@ -117,19 +144,38 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest f
   fn init_sqlite_functions(
     args: Arguments,
   ) -> wit::exports::trailbase::component::init_endpoint::SqliteFunctions {
-    return wit::exports::trailbase::component::init_endpoint::SqliteFunctions {
-      functions: T::sqlite_functions(),
+    use wit::exports::trailbase::component::init_endpoint::{
+      SqliteFunctions, SqliteScalarFunction,
+    };
+
+    return SqliteFunctions {
+      scalar_functions: T::sqlite_scalar_functions()
+        .into_iter()
+        .map(|f| SqliteScalarFunction {
+          name: f.name,
+          num_args: f.num_args,
+        })
+        .collect(),
     };
   }
 }
 
 impl<T: Guest> crate::wit::exports::trailbase::component::sqlite_function_endpoint::Guest for T {
-  fn dispatch(
+  fn dispatch_scalar_function(
     args: crate::wit::exports::trailbase::component::sqlite_function_endpoint::Arguments,
-  ) -> crate::wit::exports::trailbase::component::sqlite_function_endpoint::Response {
-    return crate::wit::exports::trailbase::component::sqlite_function_endpoint::Response {
-      response: "foo".to_string(),
-    };
+  ) -> Result<
+    crate::wit::exports::trailbase::component::sqlite_function_endpoint::Value,
+    crate::wit::exports::trailbase::component::sqlite_function_endpoint::Error,
+  > {
+    use crate::wit::exports::trailbase::component::sqlite_function_endpoint::Error;
+
+    let functions = T::sqlite_scalar_functions();
+    let f = functions
+      .into_iter()
+      .find(|f| f.name == args.function_name)
+      .ok_or_else(|| Error::Other("Missing function".to_string()))?;
+
+    return (f.handler)(args.arguments);
   }
 }
 

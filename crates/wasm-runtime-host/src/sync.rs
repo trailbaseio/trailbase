@@ -1,4 +1,5 @@
 use std::time::SystemTime;
+use trailbase_sqlvalue::SqlValue;
 use trailbase_wasi_keyvalue::Store as KvStore;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
@@ -146,8 +147,13 @@ pub struct SyncRunner {
   linker: Linker<State>,
 }
 
+pub struct SqliteScalarFunction {
+  pub name: String,
+  pub num_args: u32,
+}
+
 pub struct SqliteFunctions {
-  pub functions: Vec<String>,
+  pub scalar_functions: Vec<SqliteScalarFunction>,
 }
 
 impl SyncRunner {
@@ -271,8 +277,72 @@ impl SyncRunner {
     };
 
     return Ok(SqliteFunctions {
-      functions: api.call_init_sqlite_functions(&mut store, &args)?.functions,
+      scalar_functions: api
+        .call_init_sqlite_functions(&mut store, &args)?
+        .scalar_functions
+        .into_iter()
+        .map(|f| {
+          return SqliteScalarFunction {
+            name: f.name,
+            num_args: f.num_args,
+          };
+        })
+        .collect(),
     });
+  }
+
+  pub fn dispatch_scalar_function(
+    &self,
+    function_name: String,
+    args: Vec<SqlValue>,
+  ) -> Result<SqlValue, Error> {
+    use exports::trailbase::component::sqlite_function_endpoint::Value;
+
+    let mut store = self.new_store()?;
+
+    let bindings = Init::instantiate(&mut store, &self.component, &self.linker).map_err(|err| {
+      log::error!(
+        "Failed to instantiate WIT component: '{err}'.\n This may happen if the server and \
+           component are ABI incompatible. Make sure to run compatible versions, e.g. update your \
+           server to run more recent components or rebuild your component against a more recent, \
+           matching runtime."
+      );
+      return err;
+    })?;
+
+    let api = bindings.trailbase_component_sqlite_function_endpoint();
+
+    let args = exports::trailbase::component::sqlite_function_endpoint::Arguments {
+      function_name,
+      arguments: args
+        .into_iter()
+        .map(|a| {
+          return match a {
+            SqlValue::Null => Value::Null,
+            SqlValue::Integer(i) => Value::Integer(i),
+            SqlValue::Real(i) => Value::Real(i),
+            SqlValue::Text(s) => Value::Text(s),
+            // FIXME:
+            SqlValue::Blob(_b) => Value::Null,
+          };
+        })
+        .collect(),
+    };
+
+    let value = api
+      .call_dispatch_scalar_function(&mut store, &args)?
+      .map_err(|err| {
+        return Error::Other(err.to_string());
+      })?;
+
+    return match value {
+      Value::Null => Ok(SqlValue::Null),
+      Value::Integer(i) => Ok(SqlValue::Integer(i)),
+      Value::Real(s) => Ok(SqlValue::Real(s)),
+      Value::Text(s) => Ok(SqlValue::Text(s)),
+      // FIXME:
+      Value::Blob(_) => Ok(SqlValue::Null),
+    };
   }
 }
 
