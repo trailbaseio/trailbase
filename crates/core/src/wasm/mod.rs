@@ -12,16 +12,15 @@ use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
 use trailbase_wasm_runtime_host::sync::SyncRunner;
 use trailbase_wasm_runtime_host::{InitArgs, RuntimeOptions, SharedExecutor};
 
-use crate::AppState;
 use crate::User;
 use crate::util::urlencode;
+use crate::{AppState, DataDir};
 
 pub(crate) type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
 pub(crate) use trailbase_wasm_runtime_host::{KvStore, Runtime};
 
 pub(crate) fn build_sync_wasm_runtimes_for_components(
-  n_threads: Option<usize>,
   components_path: PathBuf,
   fs_root_path: Option<PathBuf>,
   dev: bool,
@@ -117,6 +116,37 @@ pub(crate) fn build_wasm_runtimes_for_components(
   }
 
   return Ok(runtimes);
+}
+
+pub struct WasmRuntimeResult {
+  pub shared_kv_store: KvStore,
+  pub build_wasm_runtime:
+    Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>,
+}
+
+pub fn build_wasm_runtime(
+  data_dir: DataDir,
+  conn: trailbase_sqlite::Connection,
+  runtime_root_fs: Option<std::path::PathBuf>,
+  runtime_threads: Option<usize>,
+  dev: bool,
+) -> Result<WasmRuntimeResult, AnyError> {
+  let wasm_dir = data_dir.root().join("wasm");
+  let shared_kv_store = KvStore::new();
+
+  return Ok(WasmRuntimeResult {
+    shared_kv_store: shared_kv_store.clone(),
+    build_wasm_runtime: Box::new(move || {
+      return crate::wasm::build_wasm_runtimes_for_components(
+        runtime_threads,
+        conn.clone(),
+        shared_kv_store.clone(),
+        wasm_dir.clone(),
+        runtime_root_fs.clone(),
+        dev,
+      );
+    }),
+  });
 }
 
 pub(crate) async fn install_routes_and_jobs(

@@ -139,10 +139,15 @@ impl self::trailbase::database::sqlite::Host for State {
   }
 }
 
+#[derive(Clone)]
 pub struct SyncRunner {
   engine: Engine,
   component: Component,
   linker: Linker<State>,
+}
+
+pub struct SqliteFunctions {
+  pub functions: Vec<String>,
 }
 
 impl SyncRunner {
@@ -238,11 +243,36 @@ impl SyncRunner {
         wasi_ctx: wasi_ctx.build(),
         http: WasiHttpCtx::new(),
         kv: WasiKeyValueCtx::new(kv_store.clone()),
-        // kv: WasiKeyValueCtx::new(self.shared.kv_store.clone()),
-        // shared: self.shared.clone(),
-        // tx: Arc::new(Mutex::new(None)),
       },
     ));
+  }
+
+  // Call WASM components `init` implementation.
+  pub fn initialize_sqlite_functions(
+    &self,
+    args: crate::InitArgs,
+  ) -> Result<SqliteFunctions, Error> {
+    let mut store = self.new_store()?;
+
+    let bindings = Init::instantiate(&mut store, &self.component, &self.linker).map_err(|err| {
+      log::error!(
+        "Failed to instantiate WIT component: '{err}'.\n This may happen if the server and \
+           component are ABI incompatible. Make sure to run compatible versions, e.g. update your \
+           server to run more recent components or rebuild your component against a more recent, \
+           matching runtime."
+      );
+      return err;
+    })?;
+
+    let api = bindings.trailbase_component_init_endpoint();
+
+    let args = exports::trailbase::component::init_endpoint::Arguments {
+      version: args.version,
+    };
+
+    return Ok(SqliteFunctions {
+      functions: api.call_init_sqlite_functions(&mut store, &args)?.functions,
+    });
   }
 }
 

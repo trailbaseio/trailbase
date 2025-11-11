@@ -12,14 +12,16 @@ pub use trailbase_sqlite::Connection;
 
 #[derive(Debug, Error)]
 pub enum ConnectionError {
-  #[error("SQLite ext error: {0}")]
+  #[error("SQLite ext: {0}")]
   SqliteExtension(#[from] trailbase_extension::Error),
-  #[error("Rusqlite error: {0}")]
+  #[error("Rusqlite: {0}")]
   Rusqlite(#[from] rusqlite::Error),
-  #[error("TB SQLite error: {0}")]
+  #[error("TB SQLite: {0}")]
   TbSqlite(#[from] trailbase_sqlite::Error),
-  #[error("Migration error: {0}")]
+  #[error("Migration: {0}")]
   Migration(#[from] trailbase_refinery::Error),
+  #[error("Other: {0}")]
+  Other(String),
 }
 
 pub struct AttachExtraDatabases {
@@ -35,17 +37,46 @@ pub fn init_main_db(
   data_dir: Option<&DataDir>,
   json_registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
   attach: Option<Vec<AttachExtraDatabases>>,
+  runtimes: Vec<trailbase_wasm_runtime_host::sync::SyncRunner>,
 ) -> Result<(Connection, bool), ConnectionError> {
   let new_db = Mutex::new(false);
 
   let main_path = data_dir.map(|d| d.main_db_path());
   let migrations_path = data_dir.map(|d| d.migrations_path());
 
+  let sqlite_functions: Vec<_> = runtimes
+    .iter()
+    .map(|rt| {
+      let args = trailbase_wasm_runtime_host::InitArgs { version: None };
+      return rt.initialize_sqlite_functions(args);
+    })
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(|err| return ConnectionError::Other(err.to_string()))?;
+
   let conn = trailbase_sqlite::Connection::new(
     || -> Result<_, ConnectionError> {
       let mut conn = trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())?;
 
       *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
+
+      for (idx, rt_functions) in sqlite_functions.iter().enumerate() {
+        for function in &rt_functions.functions {
+          let rt = runtimes[idx].clone();
+
+          conn
+            .create_scalar_function(
+              function.as_str(),
+              0,
+              rusqlite::functions::FunctionFlags::SQLITE_INNOCUOUS,
+              move |context| -> Result<bool, rusqlite::Error> {
+                // TODO: actually dispatch.
+                let _ = rt;
+                return Ok(true);
+              },
+            )
+            .expect("startup");
+        }
+      }
 
       return Ok(conn);
     },

@@ -139,78 +139,32 @@ impl AppState {
       object_store.clone(),
     );
 
-    let shared_kv_store = {
-      let shared_kv_store = crate::wasm::KvStore::new();
+    let crate::wasm::WasmRuntimeResult {
+      shared_kv_store,
+      build_wasm_runtime,
+    } = crate::wasm::build_wasm_runtime(
+      args.data_dir.clone(),
+      args.conn.clone(),
+      args.runtime_root_fs.clone(),
+      args.runtime_threads,
+      args.dev,
+    )
+    .expect("startup");
 
-      // Assign right away.
-      config.with_value(|c| {
-        shared_kv_store.set(
-          AUTH_CONFIG_KEY.to_string(),
-          serde_json::to_vec(&build_auth_config(c)).expect("startup"),
-        );
-      });
+    // Assign right away.
+    config.with_value(|c| {
+      shared_kv_store.set(
+        AUTH_CONFIG_KEY.to_string(),
+        serde_json::to_vec(&build_auth_config(c)).expect("startup"),
+      );
+    });
 
-      // Register an observer for continuous updates.
-      {
-        let shared_kv_store = shared_kv_store.clone();
-        config.add_observer(move |c| {
-          if let Ok(v) = serde_json::to_vec(&build_auth_config(c)) {
-            shared_kv_store.set(AUTH_CONFIG_KEY.to_string(), v);
-          }
-        });
+    // Register an observer for continuous updates.
+    let shared_kv_store = shared_kv_store.clone();
+    config.add_observer(move |c| {
+      if let Ok(v) = serde_json::to_vec(&build_auth_config(c)) {
+        shared_kv_store.set(AUTH_CONFIG_KEY.to_string(), v);
       }
-
-      shared_kv_store
-    };
-
-    let build_wasm_runtimes = {
-      let conn = args.conn.clone();
-      let wasm_dir = args.data_dir.root().join("wasm");
-      let runtime_root_fs = args.runtime_root_fs.clone();
-      move || {
-        return crate::wasm::build_wasm_runtimes_for_components(
-          args.runtime_threads,
-          conn.clone(),
-          shared_kv_store.clone(),
-          wasm_dir.clone(),
-          runtime_root_fs.clone(),
-          args.dev,
-        );
-      }
-    };
-
-    let sync_wasm_runtimes = {
-      let wasm_dir = args.data_dir.root().join("wasm");
-      let runtime_root_fs = args.runtime_root_fs.clone();
-      crate::wasm::build_sync_wasm_runtimes_for_components(
-        args.runtime_threads,
-        wasm_dir.clone(),
-        runtime_root_fs.clone(),
-        args.dev,
-      )
-      .expect("startup")
-    };
-
-    let conn = args.conn.clone();
-    tokio::spawn(async move {
-      conn
-        .call(move |conn| {
-          conn
-            .create_scalar_function(
-              "foo",
-              0,
-              rusqlite::functions::FunctionFlags::SQLITE_INNOCUOUS,
-              move |context| -> Result<bool, rusqlite::Error> {
-                if let Some(rt) = sync_wasm_runtimes.last() {}
-                return Ok(true);
-              },
-            )
-            .expect("startup");
-
-          return Ok(());
-        })
-        .await
-        .expect("startup");
     });
 
     AppState {
@@ -252,12 +206,12 @@ impl AppState {
         object_store,
         #[cfg(feature = "v8")]
         runtime: build_js_runtime(args.conn.clone(), args.runtime_threads),
-        wasm_runtimes: build_wasm_runtimes()
+        wasm_runtimes: build_wasm_runtime()
           .expect("startup")
           .into_iter()
           .map(|rt| Arc::new(RwLock::new(rt)))
           .collect(),
-        build_wasm_runtimes: Box::new(build_wasm_runtimes),
+        build_wasm_runtimes: build_wasm_runtime,
         #[cfg(test)]
         test_cleanup: vec![],
       }),
@@ -596,7 +550,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       .unwrap_or_else(|| trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap()),
   ));
   let (conn, new) =
-    crate::connection::init_main_db(None, Some(json_schema_registry.clone()), None)?;
+    crate::connection::init_main_db(None, Some(json_schema_registry.clone()), None, vec![])?;
   assert!(new);
 
   let logs_conn = crate::connection::init_logs_db(None)?;
