@@ -305,13 +305,11 @@ impl SqliteFunctionRuntime {
       arguments: args,
     };
 
-    return Ok(
-      api
-        .call_dispatch_scalar_function(&mut store, &args)?
-        .map_err(|err| {
-          return Error::Other(err.to_string());
-        })?,
-    );
+    return api
+      .call_dispatch_scalar_function(&mut store, &args)?
+      .map_err(|err| {
+        return Error::Other(err.to_string());
+      });
   }
 }
 

@@ -141,11 +141,10 @@ impl Guest for Endpoints {
   }
 
   fn sqlite_scalar_functions() -> Vec<SqliteFunction> {
-    return vec![SqliteFunction::new(
+    return vec![SqliteFunction::new::<1>(
       "custom_fun".to_string(),
-      1,
-      |mut args: Vec<trailbase_wasm::sqlite::Value>| {
-        return Ok(args.swap_remove(0));
+      |args: [trailbase_wasm::sqlite::Value; _]| {
+        return Ok(args[0].clone());
       },
     )];
   }

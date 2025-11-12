@@ -74,21 +74,22 @@ type SqliteFunctionHandler =
   Box<dyn FnOnce(Vec<sqlite::Value>) -> Result<sqlite::Value, sqlite::Error>>;
 
 pub struct SqliteFunction {
-  pub name: String,
-  pub num_args: u32,
-  pub handler: SqliteFunctionHandler,
+  name: String,
+  num_args: u32,
+  handler: SqliteFunctionHandler,
 }
 
 impl SqliteFunction {
-  // TODO: Consider using a [Value; N] args type to infer num_args.
-  pub fn new<F>(name: impl std::string::ToString, num_args: u32, f: F) -> Self
-  where
-    F: Fn(Vec<sqlite::Value>) -> Result<sqlite::Value, sqlite::Error> + 'static,
-  {
+  pub fn new<const N: usize>(
+    name: impl std::string::ToString,
+    f: impl Fn([sqlite::Value; N]) -> Result<sqlite::Value, sqlite::Error> + 'static,
+  ) -> Self {
     return Self {
       name: name.to_string(),
-      num_args,
-      handler: Box::new(f),
+      num_args: N as u32,
+      handler: Box::new(move |args| {
+        return f(args.try_into().expect("wrong number of arguments"));
+      }),
     };
   }
 }
