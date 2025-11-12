@@ -665,8 +665,8 @@ importers:
   examples/coffee-vector-search/guests/typescript:
     dependencies:
       trailbase-wasm:
-        specifier: ^0.3.0
-        version: 0.3.0
+        specifier: workspace:*
+        version: link:../../../../guests/typescript
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.15.3
@@ -751,8 +751,8 @@ importers:
   examples/collab-clicker-ssr/guests/typescript:
     dependencies:
       trailbase-wasm:
-        specifier: ^0.3.0
-        version: 0.3.0
+        specifier: workspace:*
+        version: link:../../../../guests/typescript
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.15.3
@@ -883,8 +883,8 @@ importers:
   examples/wasm-guest-js:
     dependencies:
       trailbase-wasm:
-        specifier: ^0.3.0
-        version: 0.3.0
+        specifier: workspace:*
+        version: link:../../guests/typescript
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.15.3
@@ -914,8 +914,8 @@ importers:
   examples/wasm-guest-ts:
     dependencies:
       trailbase-wasm:
-        specifier: ^0.3.0
-        version: 0.3.0
+        specifier: workspace:*
+        version: link:../../guests/typescript
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.15.3
@@ -5784,9 +5784,6 @@ packages:
   tr46@6.0.0:
     resolution: {integrity: sha512-bLVMLPtstlZ4iMQHpFHTR7GAGj2jxi8Dg0s2h2MafAE4uSWF98FC/3MomU51iQAMf8/qDUbKWf5GxuvvVcXEhw==}
     engines: {node: '>=20'}
-
-  trailbase-wasm@0.3.0:
-    resolution: {integrity: sha512-HyeBpIa9nZFSFWl/eXukUlDgfs0F3zyqjS777CAyJ04gQsvuJiy66AlGrsHmQBQFsFikVbNDMUlpRru7cuYIQg==}
 
   trailbase@0.8.0:
     resolution: {integrity: sha512-8lMmQJoQQtsjiy9GxEaJjR754kSAV+0iY7gnu4qhL52Ph7OnZWt1an0IB8A1IPuf3pmWUO/c+WpIF/Uwg7HehQ==}
@@ -12499,8 +12496,6 @@ snapshots:
   tr46@6.0.0:
     dependencies:
       punycode: 2.3.1
-
-  trailbase-wasm@0.3.0: {}
 
   trailbase@0.8.0:
     dependencies:

@@ -5,6 +5,11 @@ import type {
   JobHandlers,
   SqliteFunctions,
 } from "trailbase:component/init-endpoint@0.1.0";
+import type {
+  Arguments as SqliteArguments,
+  Error as SqliteError,
+  dispatchScalarFunction,
+} from "trailbase:component/sqlite-function-endpoint@0.1.0";
 import type { HttpHandlerInterface } from "./http";
 import type { JobHandlerInterface } from "./job";
 import { buildIncomingHttpHandler } from "./http/incoming";
@@ -25,6 +30,9 @@ export interface Config {
     initJobHandlers: (args: Arguments) => JobHandlers;
     initSqliteFunctions: (args: Arguments) => SqliteFunctions;
   };
+  sqliteFunctionEndpoint: {
+    dispatchScalarFunction: typeof dispatchScalarFunction;
+  };
 }
 
 export interface InitArgs {
@@ -41,7 +49,7 @@ export function defineConfig(opts: {
       handle: buildIncomingHttpHandler(opts),
     },
     initEndpoint: {
-      initHttpHandlers: function(args: Arguments): HttpHandlers {
+      initHttpHandlers: function (args: Arguments): HttpHandlers {
         opts.init?.({
           version: args.version,
         });
@@ -50,7 +58,7 @@ export function defineConfig(opts: {
           handlers: (opts.httpHandlers ?? []).map((h) => [h.method, h.path]),
         };
       },
-      initJobHandlers: function(args: Arguments): JobHandlers {
+      initJobHandlers: function (args: Arguments): JobHandlers {
         opts.init?.({
           version: args.version,
         });
@@ -59,7 +67,7 @@ export function defineConfig(opts: {
           handlers: (opts.jobHandlers ?? []).map((h) => [h.name, h.spec]),
         };
       },
-      initSqliteFunctions: function(args: Arguments): SqliteFunctions {
+      initSqliteFunctions: function (args: Arguments): SqliteFunctions {
         opts.init?.({
           version: args.version,
         });
@@ -67,6 +75,14 @@ export function defineConfig(opts: {
         return {
           scalarFunctions: [],
         };
+      },
+    },
+    sqliteFunctionEndpoint: {
+      dispatchScalarFunction: function (_args: SqliteArguments) {
+        throw {
+          tag: "other",
+          val: "missing sqlite function",
+        } as SqliteError;
       },
     },
   };

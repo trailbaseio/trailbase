@@ -33,4 +33,6 @@ world interfaces {
 
   @since(version = 0.1.0)
   export init-endpoint;
+  @since(version = 0.1.0)
+  export sqlite-function-endpoint;
 }

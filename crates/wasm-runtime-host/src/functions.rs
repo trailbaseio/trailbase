@@ -80,22 +80,6 @@ mod sync {
   }
 
   impl self::trailbase::database::sqlite::Host for State {
-    fn execute(
-      &mut self,
-      _query: String,
-      _params: Vec<Value>,
-    ) -> wasmtime::Result<Result<u64, TxError>> {
-      return Err(wasmtime::Error::msg("not implemented"));
-    }
-
-    fn query(
-      &mut self,
-      _query: String,
-      _params: Vec<Value>,
-    ) -> wasmtime::Result<Result<Vec<Vec<Value>>, TxError>> {
-      return Err(wasmtime::Error::msg("not implemented"));
-    }
-
     fn tx_begin(&mut self) -> wasmtime::Result<Result<(), TxError>> {
       return Err(wasmtime::Error::msg("not implemented"));
     }

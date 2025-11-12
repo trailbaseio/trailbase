@@ -16,4 +16,5 @@ export type * as WasiRandomInsecureSeed023 from 'wasi:random/insecure-seed@0.2.3
 export type * as WasiRandomInsecure023 from 'wasi:random/insecure@0.2.3'; // import wasi:random/insecure@0.2.3
 export type * as WasiRandomRandom023 from 'wasi:random/random@0.2.3'; // import wasi:random/random@0.2.3
 export * as incomingHandler from 'wasi:http/incoming-handler@0.2.3'; // export wasi:http/incoming-handler@0.2.3
-export * as init from 'trailbase:component/init-endpoint@0.1.0'; // export trailbase:component/init-endpiont@0.1.0
+export * as initEndpoint from 'trailbase:component/init-endpoint@0.1.0'; // export trailbase:component/init-endpiont@0.1.0
+export * as sqliteFunctionEndpoint from 'trailbase:component/sqlite-function-endpoint@0.1.0'; // export trailbase:component/sqlite-function-endpoint@0.1.0
