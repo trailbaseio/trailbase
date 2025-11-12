@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
-use trailbase_sqlvalue::SqlValue;
+use trailbase_wasm_runtime_host::functions::{SqliteFunctionRuntime, Value};
 
 use crate::data_dir::DataDir;
 use crate::migrations::{apply_logs_migrations, apply_main_migrations};
@@ -38,7 +38,7 @@ pub fn init_main_db(
   data_dir: Option<&DataDir>,
   json_registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
   attach: Option<Vec<AttachExtraDatabases>>,
-  runtimes: Vec<trailbase_wasm_runtime_host::sync::SyncRunner>,
+  runtimes: Vec<SqliteFunctionRuntime>,
 ) -> Result<(Connection, bool), ConnectionError> {
   let new_db = Arc::new(Mutex::new(false));
 
@@ -76,14 +76,13 @@ pub fn init_main_db(
                 rusqlite::functions::FunctionFlags::SQLITE_INNOCUOUS,
                 move |context| -> Result<rusqlite::types::Value, rusqlite::Error> {
                   let args = (0..context.len())
-                    .map(|idx| -> Result<SqlValue, rusqlite::Error> {
+                    .map(|idx| -> Result<Value, rusqlite::Error> {
                       return Ok(match context.get::<rusqlite::types::Value>(idx)? {
-                        rusqlite::types::Value::Null => SqlValue::Null,
-                        rusqlite::types::Value::Integer(i) => SqlValue::Integer(i),
-                        rusqlite::types::Value::Real(r) => SqlValue::Real(r),
-                        rusqlite::types::Value::Text(s) => SqlValue::Text(s),
-                        // FIXME:
-                        rusqlite::types::Value::Blob(_b) => SqlValue::Null,
+                        rusqlite::types::Value::Null => Value::Null,
+                        rusqlite::types::Value::Integer(i) => Value::Integer(i),
+                        rusqlite::types::Value::Real(r) => Value::Real(r),
+                        rusqlite::types::Value::Text(s) => Value::Text(s),
+                        rusqlite::types::Value::Blob(b) => Value::Blob(b),
                       });
                     })
                     .collect::<Result<Vec<_>, _>>()?;
@@ -95,12 +94,11 @@ pub fn init_main_db(
                     })?;
 
                   return Ok(match value {
-                    SqlValue::Null => rusqlite::types::Value::Null,
-                    SqlValue::Integer(i) => rusqlite::types::Value::Integer(i),
-                    SqlValue::Real(r) => rusqlite::types::Value::Real(r),
-                    SqlValue::Text(s) => rusqlite::types::Value::Text(s),
-                    // FIXME:
-                    SqlValue::Blob(_b) => rusqlite::types::Value::Null,
+                    Value::Null => rusqlite::types::Value::Null,
+                    Value::Integer(i) => rusqlite::types::Value::Integer(i),
+                    Value::Real(r) => rusqlite::types::Value::Real(r),
+                    Value::Text(s) => rusqlite::types::Value::Text(s),
+                    Value::Blob(b) => rusqlite::types::Value::Blob(b),
                   });
                 },
               )

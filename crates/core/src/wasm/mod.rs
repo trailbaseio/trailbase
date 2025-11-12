@@ -9,7 +9,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
-use trailbase_wasm_runtime_host::sync::SyncRunner;
+use trailbase_wasm_runtime_host::functions::SqliteFunctionRuntime;
 use trailbase_wasm_runtime_host::{InitArgs, RuntimeOptions, SharedExecutor};
 
 use crate::User;
@@ -24,8 +24,8 @@ pub(crate) fn build_sync_wasm_runtimes_for_components(
   components_path: PathBuf,
   fs_root_path: Option<PathBuf>,
   dev: bool,
-) -> Result<Vec<SyncRunner>, AnyError> {
-  let sync_runtimes: Vec<SyncRunner> = std::fs::read_dir(&components_path).map_or_else(
+) -> Result<Vec<SqliteFunctionRuntime>, AnyError> {
+  let sync_runtimes: Vec<SqliteFunctionRuntime> = std::fs::read_dir(&components_path).map_or_else(
     |_err| Ok(vec![]),
     |entries| {
       entries
@@ -46,7 +46,7 @@ pub(crate) fn build_sync_wasm_runtimes_for_components(
           // let extension = path.extension().and_then(|e| e.to_str())?;
 
           if path.extension()? == "wasm" {
-            return Some(SyncRunner::new(
+            return Some(SqliteFunctionRuntime::new(
               path,
               RuntimeOptions {
                 fs_root_path: fs_root_path.clone(),
@@ -56,7 +56,7 @@ pub(crate) fn build_sync_wasm_runtimes_for_components(
           }
           return None;
         })
-        .collect::<Result<Vec<SyncRunner>, _>>()
+        .collect::<Result<Vec<SqliteFunctionRuntime>, _>>()
     },
   )?;
 

@@ -2,8 +2,8 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
+pub mod functions;
 mod sqlite;
-pub mod sync;
 
 use bytes::Bytes;
 use core::future::Future;
