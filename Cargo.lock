@@ -532,7 +532,7 @@ dependencies = [
  "serde",
  "serde_json",
  "trailbase-build",
- "trailbase-wasm 0.4.0",
+ "trailbase-wasm 0.5.0",
 ]
 
 [[package]]
@@ -1304,7 +1304,7 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "serde_json",
- "trailbase-wasm 0.4.0",
+ "trailbase-wasm 0.5.0",
 ]
 
 [[package]]
@@ -1314,7 +1314,7 @@ dependencies = [
  "rquickjs",
  "serde",
  "serde_json",
- "trailbase-wasm 0.4.0",
+ "trailbase-wasm 0.5.0",
 ]
 
 [[package]]
@@ -5949,7 +5949,7 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
- "trailbase-wasm 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trailbase-wasm 0.4.0",
 ]
 
 [[package]]
@@ -8172,28 +8172,6 @@ dependencies = [
 [[package]]
 name = "trailbase-wasm"
 version = "0.4.0"
-dependencies = [
- "base64",
- "bytes",
- "futures-util",
- "http",
- "log",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "serde_urlencoded",
- "static_assertions",
- "thiserror 2.0.17",
- "trailbase-sqlvalue 0.1.0",
- "trailbase-wasm-common 0.2.0",
- "url",
- "wit-bindgen 0.47.0",
- "wstd",
-]
-
-[[package]]
-name = "trailbase-wasm"
-version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "007a5175b18875a69e9d4941ba2f53952997406802632c8cc6be052a98b3d421"
 dependencies = [
@@ -8212,6 +8190,28 @@ dependencies = [
  "trailbase-wasm-common 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "url",
  "wit-bindgen 0.46.0",
+ "wstd",
+]
+
+[[package]]
+name = "trailbase-wasm"
+version = "0.5.0"
+dependencies = [
+ "base64",
+ "bytes",
+ "futures-util",
+ "http",
+ "log",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_urlencoded",
+ "static_assertions",
+ "thiserror 2.0.17",
+ "trailbase-sqlvalue 0.1.0",
+ "trailbase-wasm-common 0.2.0",
+ "url",
+ "wit-bindgen 0.47.0",
  "wstd",
 ]
 
@@ -8799,7 +8799,7 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "serde_json",
- "trailbase-wasm 0.4.0",
+ "trailbase-wasm 0.5.0",
 ]
 
 [[package]]

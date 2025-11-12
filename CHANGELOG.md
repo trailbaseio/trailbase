@@ -1,3 +1,17 @@
+## v0.21.0
+
+- Extend WASM component/plugin system: enable custom SQLite extension functions from WASM components.
+  - This is unfortunately an ABI breaking change. Interface definitions weren't versioned before and going to versioned itself is breaking :/ - my bad 🙏.
+  - The APIs remained stable, so it should be enough to rebuild your components against the latest WASM runtimes and update the auth component if installed (`trail components add trailbase/auth_ui`).
+  - We would like to further extend the component model in the future, e.g. to support middleware, which we're in a much better place for now.
+- Just for visibility, a lot of admin UI work - especially mobile - went in since the last major release. Maybe worth checking out in case you're interested:
+  - A scrollable top nav and collapsible sidebar for better UX on mobile.
+  - Configurable OIDC provider.
+  - Fixed and simplified CREATE/ALTER table UI.
+  - And countless small tweaks. Thanks for all the feedback, especially to BlueBurst on Discord 🙏.
+- Updated dependencies.
+
+
 ## v0.20.14
 
 - Allow configuring OIDC provider using admin UI.
