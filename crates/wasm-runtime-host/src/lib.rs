@@ -834,17 +834,16 @@ mod tests {
   use super::*;
 
   use http::{Response, StatusCode};
-  use http_body_util::combinators::BoxBody;
+  use http_body_util::{BodyExt, combinators::BoxBody};
   use trailbase_wasm_common::{HttpContext, HttpContextKind};
 
   const WASM_COMPONENT_PATH: &str = "../../client/testfixture/wasm/wasm_guest_testfixture.wasm";
 
-  #[tokio::test]
-  async fn test_init() {
+  fn init_runtime(conn: trailbase_sqlite::Connection) -> Runtime {
     let executor = SharedExecutor::new(Some(2));
-    let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
     let kv_store = KvStore::new();
-    let runtime = Runtime::new(
+
+    return Runtime::new(
       executor,
       WASM_COMPONENT_PATH.into(),
       conn.clone(),
@@ -854,6 +853,30 @@ mod tests {
       },
     )
     .unwrap();
+  }
+
+  fn init_sqlite_function_runtime(conn: &rusqlite::Connection) -> functions::SqliteFunctionRuntime {
+    let runtime = functions::SqliteFunctionRuntime::new(
+      WASM_COMPONENT_PATH.into(),
+      RuntimeOptions {
+        ..Default::default()
+      },
+    )
+    .unwrap();
+
+    let functions = runtime
+      .initialize_sqlite_functions(InitArgs { version: None })
+      .unwrap();
+
+    functions::setup_connection(conn, &runtime, &functions).unwrap();
+
+    return runtime;
+  }
+
+  #[tokio::test]
+  async fn test_init() {
+    let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
+    let runtime = init_runtime(conn.clone());
 
     runtime
       .call(async |runner| {
@@ -884,21 +907,8 @@ mod tests {
 
   #[tokio::test]
   async fn test_transaction() {
-    let executor = SharedExecutor::new(Some(2));
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
-    let kv_store = KvStore::new();
-    let runtime = Arc::new(
-      Runtime::new(
-        executor,
-        WASM_COMPONENT_PATH.into(),
-        conn.clone(),
-        kv_store,
-        RuntimeOptions {
-          ..Default::default()
-        },
-      )
-      .unwrap(),
-    );
+    let runtime = Arc::new(init_runtime(conn.clone()));
 
     let futures: Vec<_> = (0..256)
       .map(|_| {
@@ -917,6 +927,24 @@ mod tests {
     for future in futures {
       future.await.unwrap().unwrap();
     }
+  }
+
+  #[tokio::test]
+  async fn test_custom_sqlite_function() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    let _sqlite_function_runtime = init_sqlite_function_runtime(&conn);
+
+    let conn = trailbase_sqlite::Connection::from_connection_test_only(conn);
+    let runtime = init_runtime(conn.clone());
+
+    let response = send_http_request(&runtime, "http://localhost:4000/custom_fun", "/custom_fun")
+      .await
+      .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK, "{response:?}");
+
+    let body: Bytes = response.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(body.to_vec(), b"5\n");
   }
 
   async fn send_http_request(

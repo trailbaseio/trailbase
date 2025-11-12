@@ -321,6 +321,64 @@ impl SqliteFunctionRuntime {
   }
 }
 
+pub fn setup_connection(
+  conn: &rusqlite::Connection,
+  runtime: &SqliteFunctionRuntime,
+  functions: &SqliteFunctions,
+) -> Result<(), rusqlite::Error> {
+  for function in &functions.scalar_functions {
+    let rt = runtime.clone();
+    let function_name = function.name.clone();
+
+    let flags = {
+      if function.flags.is_empty() {
+        rusqlite::functions::FunctionFlags::default()
+      } else {
+        let mut flags = rusqlite::functions::FunctionFlags::from_bits_truncate(0);
+        for flag in &function.flags {
+          flags |= *flag;
+        }
+        flags
+      }
+    };
+
+    conn.create_scalar_function(
+      function.name.as_str(),
+      function.num_args as i32,
+      flags,
+      move |context| -> Result<rusqlite::types::Value, rusqlite::Error> {
+        let args = (0..context.len())
+          .map(|idx| -> Result<Value, rusqlite::Error> {
+            return Ok(match context.get::<rusqlite::types::Value>(idx)? {
+              rusqlite::types::Value::Null => Value::Null,
+              rusqlite::types::Value::Integer(i) => Value::Integer(i),
+              rusqlite::types::Value::Real(r) => Value::Real(r),
+              rusqlite::types::Value::Text(s) => Value::Text(s),
+              rusqlite::types::Value::Blob(b) => Value::Blob(b),
+            });
+          })
+          .collect::<Result<Vec<_>, _>>()?;
+
+        let value = rt
+          .dispatch_scalar_function(function_name.clone(), args)
+          .map_err(|err| {
+            return rusqlite::Error::UserFunctionError(err.into());
+          })?;
+
+        return Ok(match value {
+          Value::Null => rusqlite::types::Value::Null,
+          Value::Integer(i) => rusqlite::types::Value::Integer(i),
+          Value::Real(r) => rusqlite::types::Value::Real(r),
+          Value::Text(s) => rusqlite::types::Value::Text(s),
+          Value::Blob(b) => rusqlite::types::Value::Blob(b),
+        });
+      },
+    )?;
+  }
+
+  return Ok(());
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

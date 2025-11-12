@@ -1,11 +1,10 @@
 use log::*;
 use parking_lot::{Mutex, RwLock};
-use std::ffi::c_int;
 use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
-use trailbase_wasm_runtime_host::functions::{SqliteFunctionRuntime, Value};
+use trailbase_wasm_runtime_host::functions::SqliteFunctionRuntime;
 
 use crate::data_dir::DataDir;
 use crate::migrations::{apply_logs_migrations, apply_main_migrations};
@@ -47,10 +46,11 @@ pub fn init_main_db(
   let migrations_path = data_dir.map(|d| d.migrations_path());
 
   let sqlite_functions: Vec<_> = runtimes
-    .iter()
-    .map(|rt| {
-      let args = trailbase_wasm_runtime_host::InitArgs { version: None };
-      return rt.initialize_sqlite_functions(args);
+    .into_iter()
+    .map(|rt| -> Result<_, trailbase_wasm_runtime_host::Error> {
+      let functions =
+        rt.initialize_sqlite_functions(trailbase_wasm_runtime_host::InitArgs { version: None })?;
+      return Ok((rt, functions));
     })
     .collect::<Result<Vec<_>, _>>()
     .map_err(|err| return ConnectionError::Other(err.to_string()))?;
@@ -65,58 +65,9 @@ pub fn init_main_db(
 
         *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
 
-        for (idx, rt_functions) in sqlite_functions.iter().enumerate() {
-          for function in &rt_functions.scalar_functions {
-            let rt = runtimes[idx].clone();
-            let function_name = function.name.clone();
-
-            let flags = {
-              if function.flags.is_empty() {
-                rusqlite::functions::FunctionFlags::default()
-              } else {
-                let mut flags = rusqlite::functions::FunctionFlags::from_bits_truncate(0);
-                for flag in &function.flags {
-                  flags |= *flag;
-                }
-                flags
-              }
-            };
-
-            conn
-              .create_scalar_function(
-                function.name.as_str(),
-                function.num_args as i32,
-                flags,
-                move |context| -> Result<rusqlite::types::Value, rusqlite::Error> {
-                  let args = (0..context.len())
-                    .map(|idx| -> Result<Value, rusqlite::Error> {
-                      return Ok(match context.get::<rusqlite::types::Value>(idx)? {
-                        rusqlite::types::Value::Null => Value::Null,
-                        rusqlite::types::Value::Integer(i) => Value::Integer(i),
-                        rusqlite::types::Value::Real(r) => Value::Real(r),
-                        rusqlite::types::Value::Text(s) => Value::Text(s),
-                        rusqlite::types::Value::Blob(b) => Value::Blob(b),
-                      });
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                  let value = rt
-                    .dispatch_scalar_function(function_name.clone(), args)
-                    .map_err(|err| {
-                      return rusqlite::Error::UserFunctionError(err.into());
-                    })?;
-
-                  return Ok(match value {
-                    Value::Null => rusqlite::types::Value::Null,
-                    Value::Integer(i) => rusqlite::types::Value::Integer(i),
-                    Value::Real(r) => rusqlite::types::Value::Real(r),
-                    Value::Text(s) => rusqlite::types::Value::Text(s),
-                    Value::Blob(b) => rusqlite::types::Value::Blob(b),
-                  });
-                },
-              )
-              .expect("startup");
-          }
+        for (rt, functions) in &sqlite_functions {
+          trailbase_wasm_runtime_host::functions::setup_connection(&conn, rt, functions)
+            .expect("startup");
         }
 
         return Ok(conn);
