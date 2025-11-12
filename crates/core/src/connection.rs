@@ -1,5 +1,6 @@
 use log::*;
 use parking_lot::{Mutex, RwLock};
+use std::ffi::c_int;
 use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
@@ -69,11 +70,23 @@ pub fn init_main_db(
             let rt = runtimes[idx].clone();
             let function_name = function.name.clone();
 
+            let flags = {
+              if function.flags.is_empty() {
+                rusqlite::functions::FunctionFlags::default()
+              } else {
+                let mut flags = rusqlite::functions::FunctionFlags::from_bits_truncate(0);
+                for flag in &function.flags {
+                  flags |= *flag;
+                }
+                flags
+              }
+            };
+
             conn
               .create_scalar_function(
                 function.name.as_str(),
                 function.num_args as i32,
-                rusqlite::functions::FunctionFlags::SQLITE_INNOCUOUS,
+                flags,
                 move |context| -> Result<rusqlite::types::Value, rusqlite::Error> {
                   let args = (0..context.len())
                     .map(|idx| -> Result<Value, rusqlite::Error> {

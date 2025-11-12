@@ -42,14 +42,14 @@ use wstd::http::server::{Finished, Responder};
 use crate::http::{HttpRoute, Method, StatusCode, empty_error_response};
 use crate::job::Job;
 
-pub use crate::wit::exports::trailbase::component::init_endpoint::Arguments;
-
 // Needed for export macro
 pub use static_assertions::assert_impl_all;
 pub use wstd::wasip2 as __wasi;
 
+pub use crate::wit::exports::trailbase::component::init_endpoint::Arguments;
 pub mod sqlite {
-  pub use super::wit::exports::trailbase::component::sqlite_function_endpoint::{Error, Value};
+  pub use crate::wit::exports::trailbase::component::init_endpoint::SqliteFunctionFlags;
+  pub use crate::wit::exports::trailbase::component::sqlite_function_endpoint::{Error, Value};
 }
 
 #[macro_export]
@@ -76,6 +76,7 @@ type SqliteFunctionHandler =
 pub struct SqliteFunction {
   name: String,
   num_args: u32,
+  flags: Vec<sqlite::SqliteFunctionFlags>,
   handler: SqliteFunctionHandler,
 }
 
@@ -83,10 +84,12 @@ impl SqliteFunction {
   pub fn new<const N: usize>(
     name: impl std::string::ToString,
     f: impl Fn([sqlite::Value; N]) -> Result<sqlite::Value, sqlite::Error> + 'static,
+    flags: &[sqlite::SqliteFunctionFlags],
   ) -> Self {
     return Self {
       name: name.to_string(),
       num_args: N as u32,
+      flags: flags.into(),
       handler: Box::new(move |args| {
         return f(args.try_into().expect("wrong number of arguments"));
       }),
@@ -149,12 +152,18 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest f
       SqliteFunctions, SqliteScalarFunction,
     };
 
+    // QUESTION: Should we ensure that init is called only once?
+    T::init(Args {
+      version: args.version,
+    });
+
     return SqliteFunctions {
       scalar_functions: T::sqlite_scalar_functions()
         .into_iter()
         .map(|f| SqliteScalarFunction {
           name: f.name,
           num_args: f.num_args,
+          function_flags: f.flags,
         })
         .collect(),
     };

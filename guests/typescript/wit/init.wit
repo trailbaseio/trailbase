@@ -34,20 +34,39 @@ interface init-endpoint {
   @since(version = 0.1.0)
   init-job-handlers: func(args: arguments) -> job-handlers;
 
-  // record sqlite-function-handlers {
-  //   /// Registered jobs (sqlite_function_name)[].
-  //   ///
-  //   /// TODO: Could add function input schema to do early host-side validation.
-  //   handlers: list<string>,
-  // }
+  enum sqlite-function-flags {
+    /// Specifies UTF-8 as the text encoding this SQL function prefers for its parameters.
+    utf8,
+    /// Specifies UTF-16 using little-endian byte order as the text encoding this SQL function prefers for its parameters.
+    utf16le,
+    /// Specifies UTF-16 using big-endian byte order as the text encoding this SQL function prefers for its parameters.
+    utf16be,
+    /// Specifies UTF-16 using native byte order as the text encoding this SQL function prefers for its parameters.
+    utf16,
+    /// Means that the function always gives the same output when the input parameters are the same.
+    deterministic,
+    /// Means that the function may only be invoked from top-level SQL.
+    direct-only,
+    /// Indicates to SQLite that a function may call `sqlite3_value_subtype()` to inspect the subtypes of its arguments.
+    subtype,
+    /// Means that the function is unlikely to cause problems even if misused.
+    innocuous,
+    /// Indicates to SQLite that a function might call `sqlite3_result_subtype()` to cause a subtype to be associated with its result.
+    result-subtype,
+    /// Indicates that the function is an aggregate that internally orders the values provided to the first argument.
+    selforder1,
+  }
 
-  // @since(version = 0.1.0)
-  // init-sqlite-function-handlers: func(args: arguments) -> sqlite-function-handlers;
+  record sqlite-scalar-function {
+    name: string,
+    num-args: u32,
+    function-flags: list<sqlite-function-flags>,
+  }
+
+  record sqlite-functions {
+    scalar-functions: list<sqlite-scalar-function>,
+  }
+
+  @since(version = 0.1.0)
+  init-sqlite-functions : func(args: arguments) -> sqlite-functions;
 }
-
-// NOTE: Multiple worlds doesn't play nice with jco componentize.
-// @since(version = 0.1.0)
-// world init-interfaces {
-//   @since(version = 0.1.0)
-//   export init;
-// }

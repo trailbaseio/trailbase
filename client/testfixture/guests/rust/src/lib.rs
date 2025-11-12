@@ -146,6 +146,7 @@ impl Guest for Endpoints {
       |args: [trailbase_wasm::sqlite::Value; _]| {
         return Ok(args[0].clone());
       },
+      &[],
     )];
   }
 }

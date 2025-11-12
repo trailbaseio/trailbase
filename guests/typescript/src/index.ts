@@ -3,6 +3,7 @@ import type {
   Arguments,
   HttpHandlers,
   JobHandlers,
+  SqliteFunctions,
 } from "trailbase:component/init-endpoint@0.1.0";
 import type { HttpHandlerInterface } from "./http";
 import type { JobHandlerInterface } from "./job";
@@ -19,9 +20,10 @@ export interface Config {
       respOutparam: ResponseOutparam,
     ) => Promise<void>;
   };
-  init: {
+  initEndpoint: {
     initHttpHandlers: (args: Arguments) => HttpHandlers;
     initJobHandlers: (args: Arguments) => JobHandlers;
+    initSqliteFunctions: (args: Arguments) => SqliteFunctions;
   };
 }
 
@@ -38,8 +40,8 @@ export function defineConfig(opts: {
     incomingHandler: {
       handle: buildIncomingHttpHandler(opts),
     },
-    init: {
-      initHttpHandlers: function (args: Arguments): HttpHandlers {
+    initEndpoint: {
+      initHttpHandlers: function(args: Arguments): HttpHandlers {
         opts.init?.({
           version: args.version,
         });
@@ -48,13 +50,22 @@ export function defineConfig(opts: {
           handlers: (opts.httpHandlers ?? []).map((h) => [h.method, h.path]),
         };
       },
-      initJobHandlers: function (args: Arguments): JobHandlers {
+      initJobHandlers: function(args: Arguments): JobHandlers {
         opts.init?.({
           version: args.version,
         });
 
         return {
           handlers: (opts.jobHandlers ?? []).map((h) => [h.name, h.spec]),
+        };
+      },
+      initSqliteFunctions: function(args: Arguments): SqliteFunctions {
+        opts.init?.({
+          version: args.version,
+        });
+
+        return {
+          scalarFunctions: [],
         };
       },
     },

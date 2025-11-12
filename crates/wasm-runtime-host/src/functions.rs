@@ -138,6 +138,7 @@ pub struct SqliteFunctionRuntime {
 pub struct SqliteScalarFunction {
   pub name: String,
   pub num_args: u32,
+  pub flags: Vec<rusqlite::functions::FunctionFlags>,
 }
 
 pub struct SqliteFunctions {
@@ -272,6 +273,13 @@ impl SqliteFunctionRuntime {
           return SqliteScalarFunction {
             name: f.name,
             num_args: f.num_args,
+            flags: f
+              .function_flags
+              .into_iter()
+              .map(|f| -> rusqlite::functions::FunctionFlags {
+                return rusqlite::functions::FunctionFlags::from_bits_truncate(f as i32);
+              })
+              .collect(),
           };
         })
         .collect(),
