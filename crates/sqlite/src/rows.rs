@@ -129,7 +129,15 @@ pub struct Row(pub Vec<types::Value>, pub Arc<Vec<Column>>);
 
 impl Row {
   pub(crate) fn from_row(row: &rusqlite::Row, cols: Arc<Vec<Column>>) -> rusqlite::Result<Self> {
-    assert_eq!(*cols, columns(row.as_ref()));
+    #[cfg(debug_assertions)]
+    if let Some(rc) = Some(columns(row.as_ref()))
+      && rc.len() != cols.len()
+    {
+      // Apparently this can happen during schema manipulations, e.g. when deleting a column
+      // :shrug:. We normalize everything to the same rows schema rather than dealing with
+      // jagged tables.
+      log::warn!("Rows/row column mismatch: {cols:?} vs {rc:?}");
+    }
 
     // We have to access by index here, since names can be duplicate.
     let values = (0..cols.len())
@@ -162,7 +170,6 @@ impl Row {
   }
 
   pub fn len(&self) -> usize {
-    assert_eq!(self.1.len(), self.0.len());
     return self.0.len();
   }
 
@@ -175,7 +182,6 @@ impl Row {
   }
 
   pub fn column_count(&self) -> usize {
-    assert_eq!(self.1.len(), self.0.len());
     return self.1.len();
   }
 
