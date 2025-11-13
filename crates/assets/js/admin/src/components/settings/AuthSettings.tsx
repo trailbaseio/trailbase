@@ -1,7 +1,14 @@
 import { createMemo, For, Suspense, Switch, Show, Match, JSX } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { createForm } from "@tanstack/solid-form";
-import { TbInfoCircle } from "solid-icons/tb";
+import {
+  TbArrowBackUp,
+  TbCircle,
+  TbCircleCheck,
+  TbCirclePlus,
+  TbTrash,
+  TbInfoCircle,
+} from "solid-icons/tb";
 
 import {
   buildOptionalIntegerFormField,
@@ -11,13 +18,6 @@ import {
   buildOptionalTextFormField,
 } from "@/components/FormFields";
 import {
-  TbCircleCheck,
-  TbCircle,
-  TbCirclePlus,
-  TbArrowBackUp,
-  TbTrash,
-} from "solid-icons/tb";
-import {
   Accordion,
   AccordionContent,
   AccordionItem,
@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import {
   Tooltip,
   TooltipContent,
@@ -278,24 +279,6 @@ function ProviderSettingsSubForm(props: {
   );
 }
 
-function InfoTooltip(props: {
-  label: string;
-  children: string;
-  class?: string;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger class={props.class}>
-        {props.label} <TbInfoCircle class="mx-1" />
-      </TooltipTrigger>
-
-      <TooltipContent class="shrink">
-        <div class="max-w-[50dvw] text-wrap">{props.children}</div>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 function createAuthSettingsForm(opts: {
   config: () => Config;
   values: () => AuthConfigProxy;
@@ -394,7 +377,7 @@ function AuthSettingsForm(props: {
                 {buildOptionalIntegerFormField({
                   placeholder: `${60 * 60}`,
                   label: () => (
-                    <InfoTooltip label="Auth TTL [sec]" class={labelStyle}>
+                    <InfoTooltip label="Auth TTL [sec]">
                       Tokens older than this TTL are considered invalid. A new
                       AuthToken can be minted given a valid refresh Token.
                     </InfoTooltip>
@@ -406,7 +389,7 @@ function AuthSettingsForm(props: {
                 {buildOptionalIntegerFormField({
                   placeholder: `${30 * 24 * 60 * 60}`,
                   label: () => (
-                    <InfoTooltip label="Refresh TTL [sec]" class={labelStyle}>
+                    <InfoTooltip label="Refresh TTL [sec]">
                       Refresh tokens older than this TTL are considered invalid.
                       A refresh token can be renewed by users logging in again.
                     </InfoTooltip>
@@ -427,10 +410,7 @@ function AuthSettingsForm(props: {
               <form.Field name="disablePasswordAuth">
                 {buildOptionalBoolFormField({
                   label: () => (
-                    <InfoTooltip
-                      label="Disable Registration"
-                      class={labelStyle}
-                    >
+                    <InfoTooltip label="Disable Registration">
                       When disabled new users will only be able to sign up using
                       OAuth. Existing users can continue to sign in using
                       password-based auth.
@@ -444,7 +424,7 @@ function AuthSettingsForm(props: {
                   integer: true,
                   placeholder: "8",
                   label: () => (
-                    <InfoTooltip label="Min Length" class={labelStyle}>
+                    <InfoTooltip label="Min Length">
                       Minimal length for new passwords. Does not affect existing
                       registrations unless users choose to change their
                       password.
@@ -456,7 +436,7 @@ function AuthSettingsForm(props: {
               <form.Field name="passwordMustContainUpperAndLowerCase">
                 {buildOptionalBoolFormField({
                   label: () => (
-                    <InfoTooltip label="Require Mixed Case" class={labelStyle}>
+                    <InfoTooltip label="Require Mixed Case">
                       Passwords must contain both, upper and lower case
                       characters. Does not affect existing registrations unless
                       users choose to change their password.
@@ -468,7 +448,7 @@ function AuthSettingsForm(props: {
               <form.Field name="passwordMustContainDigits">
                 {buildOptionalBoolFormField({
                   label: () => (
-                    <InfoTooltip label="Require Digits" class={labelStyle}>
+                    <InfoTooltip label="Require Digits">
                       Passwords must contain digits. Does not affect existing
                       registrations unless users choose to change their
                       password.
@@ -480,7 +460,7 @@ function AuthSettingsForm(props: {
               <form.Field name="passwordMustContainSpecialCharacters">
                 {buildOptionalBoolFormField({
                   label: () => (
-                    <InfoTooltip label="Require Special" class={labelStyle}>
+                    <InfoTooltip label="Require Special">
                       Passwords must contain special, i.e., non-alphanumeric
                       characters. Does not affect existing registrations unless
                       users choose to change their password.
@@ -686,8 +666,32 @@ export function AuthSettings(props: {
   );
 }
 
-function L(props: { children: JSX.Element }) {
-  return <div class="w-32">{props.children}</div>;
+function InfoTooltip(props: {
+  label: string;
+  children: string;
+  class?: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger class={props.class}>
+        <div class="flex h-[40px] w-full items-center text-left">
+          <L>{props.label}</L>
+
+          <TbInfoCircle class="mx-1" />
+        </div>
+      </TooltipTrigger>
+
+      <TooltipContent class="shrink">
+        <div class="max-w-[50dvw] text-wrap">{props.children}</div>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
-const labelStyle = "w-32 h-[44px] flex items-center";
+function L(props: { children: JSX.Element }) {
+  return (
+    <div class="w-40">
+      <Label>{props.children}</Label>
+    </div>
+  );
+}
