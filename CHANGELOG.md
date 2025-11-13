@@ -1,3 +1,10 @@
+## v0.21.2
+
+- Remove unnecessary and harmful assertions on "invariants", which may be temporarily violated while streaming in rows during schema alterations.
+- Make release builds less chatty about uncaught errors in custom user WASM endpoints.
+- Minor admin UI tweak: lower z-height of map to avoid rendering on top of dialogs and tooltips.
+- Update Rust dependencies.
+
 ## v0.21.1
 
 - Very minor release, mostly just improving the error message when encountering ABI incompatible WASM components.
