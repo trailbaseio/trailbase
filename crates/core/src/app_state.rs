@@ -420,11 +420,11 @@ impl AppState {
     info!("Reloading WASM components. New HTTP routes and Jobs require a server restart.");
 
     for old_rt in &self.state.wasm_runtimes {
-      let component_path = old_rt.read().await.component_path.clone();
+      let component_path = old_rt.read().await.component_path().clone();
 
       let Some(index) = new_runtimes
         .iter()
-        .position(|rt| rt.component_path == component_path)
+        .position(|rt| *rt.component_path() == component_path)
       else {
         warn!("WASM component: {component_path:?} was removed. Required server restart");
         continue;
@@ -437,7 +437,7 @@ impl AppState {
     for new_rt in new_runtimes {
       warn!(
         "New WASM component found {:?}. Requires server restart.",
-        new_rt.component_path
+        new_rt.component_path()
       );
     }
 

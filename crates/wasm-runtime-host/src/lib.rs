@@ -10,7 +10,6 @@ use core::future::Future;
 use futures_util::future::BoxFuture;
 use http_body_util::combinators::BoxBody;
 use parking_lot::Mutex;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
@@ -24,7 +23,8 @@ use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 use wasmtime_wasi_io::IoView;
 
 use self::trailbase::database::sqlite::{TxError, Value};
-use crate::exports::trailbase::component::init_endpoint::Arguments;
+use exports::trailbase::component::init_endpoint::Arguments;
+use functions::ABI_MISMATCH_WARNING;
 
 pub use crate::exports::trailbase::component::init_endpoint::HttpMethodType;
 pub use trailbase_wasi_keyvalue::Store as KvStore;
@@ -423,7 +423,7 @@ impl SharedExecutor {
 
 pub struct Runtime {
   /// Path to original .wasm component file.
-  pub component_path: std::path::PathBuf,
+  component_path: std::path::PathBuf,
 
   shared_sender: kanal::AsyncSender<Message>,
 
@@ -535,22 +535,16 @@ impl Runtime {
           conn: conn.clone(),
           kv_store: kv_store.clone(),
           fs_root_path: opts.fs_root_path.clone(),
+          component_path: wasm_source_file.clone(),
         }),
       };
 
-      // let _sync_instance = SyncAsyncRunner {
-      //   engine,
-      //   component,
-      //   linker,
-      // };
-
-      let wasm_source_file = wasm_source_file.clone();
       executor
         .shared_sender
         .as_sync()
         .send(ExecutorMessage::Run(Box::new(move || {
           return Box::pin(async move {
-            async_event_loop(wasm_source_file, runner, shared_receiver).await;
+            async_event_loop(runner, shared_receiver).await;
           });
         })))
         .expect("startup");
@@ -561,6 +555,10 @@ impl Runtime {
       shared_sender,
       executor,
     });
+  }
+
+  pub fn component_path(&self) -> &std::path::PathBuf {
+    return &self.component_path;
   }
 
   pub async fn call<O, F, Fut>(&self, f: F) -> Result<O, Error>
@@ -586,20 +584,18 @@ impl Runtime {
   }
 }
 
-async fn async_event_loop(
-  component_path: PathBuf,
-  runner: AsyncRunner,
-  shared_recv: kanal::AsyncReceiver<Message>,
-) {
+async fn async_event_loop(runner: AsyncRunner, shared_recv: kanal::AsyncReceiver<Message>) {
   let runner = Arc::new(runner);
 
   let local_in_flight = Arc::new(AtomicUsize::new(0));
 
   loop {
+    #[cfg(debug_assertions)]
     log::debug!(
-      "WASM runtime ({component_path:?}) waiting for new messages. In flight: {}, {}",
+      "WASM runtime ({path:?}) waiting for new messages. In flight: {}, {}",
       local_in_flight.load(Ordering::Relaxed),
-      IN_FLIGHT.load(Ordering::Relaxed)
+      IN_FLIGHT.load(Ordering::Relaxed),
+      path = runner.shared.component_path,
     );
 
     match shared_recv.recv().await {
@@ -633,6 +629,7 @@ pub struct SharedState {
   pub conn: trailbase_sqlite::Connection,
   pub kv_store: KvStore,
   pub fs_root_path: Option<std::path::PathBuf>,
+  pub component_path: std::path::PathBuf,
 }
 
 // Maybe rename to ~"runner". It's the "thing" to create new WASM "stores" and to call into APIs
@@ -689,22 +686,25 @@ impl AsyncRunner {
     ));
   }
 
-  // Call WASM components `init` implementation.
-  pub async fn initialize(&self, args: InitArgs) -> Result<InitResult, Error> {
+  async fn new_bindings(&self) -> Result<(Store<State>, Interfaces), Error> {
     let mut store = self.new_store()?;
 
     let bindings = Interfaces::instantiate_async(&mut store, &self.component, &self.linker)
       .await
       .map_err(|err| {
         log::error!(
-          "Failed to instantiate WIT component: '{err}'.\n This may happen if the server and \
-           component are ABI incompatible. Make sure to run compatible versions, e.g. update your \
-           server to run more recent components or rebuild your component against a more recent, \
-           matching runtime."
+          "Failed to instantiate WIT component {path:?}: '{err}'.\n{ABI_MISMATCH_WARNING}",
+          path = self.shared.component_path
         );
         return err;
       })?;
 
+    return Ok((store, bindings));
+  }
+
+  // Call WASM components `init` implementation.
+  pub async fn initialize(&self, args: InitArgs) -> Result<InitResult, Error> {
+    let (mut store, bindings) = self.new_bindings().await?;
     let api = bindings.trailbase_component_init_endpoint();
 
     let args = Arguments {

@@ -114,6 +114,9 @@ pub use sync::exports::trailbase::component::sqlite_function_endpoint::Value;
 
 #[derive(Clone)]
 pub struct SqliteFunctionRuntime {
+  /// Path to original .wasm component file.
+  component_path: std::path::PathBuf,
+
   engine: Engine,
   component: Component,
   linker: Linker<sync::State>,
@@ -183,11 +186,11 @@ impl SqliteFunctionRuntime {
       linker
     };
 
-    // let (shared_sender, shared_receiver) = kanal::unbounded_async::<Message>();
     let instance = SqliteFunctionRuntime {
-      engine: engine.clone(),
-      component: component.clone(),
-      linker: linker.clone(),
+      component_path: wasm_source_file,
+      engine,
+      component,
+      linker,
     };
 
     return Ok(instance);
@@ -205,23 +208,30 @@ impl SqliteFunctionRuntime {
     wasi_ctx.allow_udp(false);
     wasi_ctx.allow_ip_name_lookup(true);
 
-    // if let Some(ref path) = self.shared.fs_root_path {
-    //   wasi_ctx
-    //     .preopened_dir(path, "/", DirPerms::READ, FilePerms::READ)
-    //     .map_err(|err| Error::Other(err.to_string()))?;
-    // }
-
-    let kv_store = KvStore::new();
-
     return Ok(Store::new(
       &self.engine,
       sync::State {
         resource_table: ResourceTable::new(),
         wasi_ctx: wasi_ctx.build(),
         http: WasiHttpCtx::new(),
-        kv: WasiKeyValueCtx::new(kv_store.clone()),
+        kv: WasiKeyValueCtx::new(KvStore::new()),
       },
     ));
+  }
+
+  fn new_bindings(&self) -> Result<(Store<sync::State>, sync::Init), Error> {
+    let mut store = self.new_store()?;
+
+    let bindings =
+      sync::Init::instantiate(&mut store, &self.component, &self.linker).map_err(|err| {
+        log::error!(
+          "Failed to instantiate WIT component {path:?}: '{err}'.\n{ABI_MISMATCH_WARNING}",
+          path = self.component_path
+        );
+        return err;
+      })?;
+
+    return Ok((store, bindings));
   }
 
   // Call WASM components `init` implementation.
@@ -229,19 +239,7 @@ impl SqliteFunctionRuntime {
     &self,
     args: crate::InitArgs,
   ) -> Result<SqliteFunctions, Error> {
-    let mut store = self.new_store()?;
-
-    let bindings =
-      sync::Init::instantiate(&mut store, &self.component, &self.linker).map_err(|err| {
-        log::error!(
-          "Failed to instantiate WIT component: '{err}'.\n This may happen if the server and \
-           component are ABI incompatible. Make sure to run compatible versions, e.g. update your \
-           server to run more recent components or rebuild your component against a more recent, \
-           matching runtime."
-        );
-        return err;
-      })?;
-
+    let (mut store, bindings) = self.new_bindings()?;
     let api = bindings.trailbase_component_init_endpoint();
 
     let args = sync::exports::trailbase::component::init_endpoint::Arguments {
@@ -277,19 +275,7 @@ impl SqliteFunctionRuntime {
   ) -> Result<Value, Error> {
     use sync::exports::trailbase::component::sqlite_function_endpoint::Arguments;
 
-    let mut store = self.new_store()?;
-
-    let bindings =
-      sync::Init::instantiate(&mut store, &self.component, &self.linker).map_err(|err| {
-        log::error!(
-          "Failed to instantiate WIT component: '{err}'.\n This may happen if the server and \
-           component are ABI incompatible. Make sure to run compatible versions, e.g. update your \
-           server to run more recent components or rebuild your component against a more recent, \
-           matching runtime."
-        );
-        return err;
-      })?;
-
+    let (mut store, bindings) = self.new_bindings()?;
     let api = bindings.trailbase_component_sqlite_function_endpoint();
 
     let args = Arguments {
@@ -363,6 +349,13 @@ pub fn setup_connection(
   return Ok(());
 }
 
+pub(crate) const ABI_MISMATCH_WARNING: &str = "\
+    This may happen if the server and component are ABI incompatible. Make sure to run compatible \
+    versions, i.e. update/rebuild the component to match the server binary or update your server \
+    to run more up-to-date components.\n\
+    The auth-UI can be updated with `$ trail components add trailbase/auth_ui` or downloaded from: \
+    https://github.com/trailbaseio/trailbase/releases.";
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -380,20 +373,7 @@ mod tests {
     )
     .unwrap();
 
-    let mut store = runtime.new_store().unwrap();
-
-    let bindings = sync::Init::instantiate(&mut store, &runtime.component, &runtime.linker)
-      .map_err(|err| {
-        log::error!(
-          "Failed to instantiate WIT component: '{err}'.\n This may happen if the server and \
-           component are ABI incompatible. Make sure to run compatible versions, e.g. update your \
-           server to run more recent components or rebuild your component against a more recent, \
-           matching runtime."
-        );
-        return err;
-      })
-      .unwrap();
-
+    let (mut store, bindings) = runtime.new_bindings().unwrap();
     let api = bindings.trailbase_component_init_endpoint();
 
     let args = Arguments { version: None };

@@ -11,7 +11,6 @@
   - And countless small tweaks. Thanks for all the feedback, especially to BlueBurst on Discord 🙏.
 - Updated dependencies.
 
-
 ## v0.20.14
 
 - Allow configuring OIDC provider using admin UI.
@@ -148,7 +147,7 @@
 
 ## v0.19.0
 
-- First WASM-only relese dropping support for the V8 runtime (technically, custom binary builds can still enable it as a stop-gap but complete removal will follow)
+- First WASM-only release dropping support for the V8 runtime (technically, custom binary builds can still enable it as a stop-gap but complete removal will follow)
   - The default Linux release is now build with MUSL rather than GLibc and thus truly static and portable.
 - Drop support for index-based file reads via `api/records/v1/{api}/{record_id}/files/{column_name}/{uniq_file_name}` in favor of unique filenames following the convention: `{original_stem}_{rand#10}.{suffix}`. This is a breaking change.
   - Before, index-based access for read-after-write access patterns could lead to stale cache reads, which is avoided using unique identifiers.
