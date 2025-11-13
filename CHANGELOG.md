@@ -1,3 +1,12 @@
+## v0.21.1
+
+- Very minor release, mostly just improving the error message when encountering ABI incompatible WASM components.
+  - This is a bit of a sticky issue, especially if you're using Docker and externally mounting a traildepot path. The docker image packages the matching auth-UI component, however an external mount can shadow it with a stale version. In this case, you've a few options:
+    - either download the latest auth UI from https://github.com/trailbaseio/trailbase/releases and manually replace the file,
+    - or shell into your container `docker run -it --entrypoint /bin/sh <id>` and use the CLI: `cd /app && ./trail components add trailbase/auth_ui`.
+- Layout tweaks in admin UI's auth settings.
+- Update Rust and JavaScript dependencies.
+
 ## v0.21.0
 
 - Extend WASM component/plugin system: enable custom SQLite extension functions from WASM components.
