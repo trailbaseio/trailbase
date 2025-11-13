@@ -516,7 +516,7 @@ function WorldMap(props: { country_codes: { [key in string]?: number } }) {
 
   return (
     <div
-      class="h-[280px] w-full rounded"
+      class="z-[0] h-[280px] w-full rounded"
       style={{ "background-color": "transparent" }}
       ref={ref}
     />
