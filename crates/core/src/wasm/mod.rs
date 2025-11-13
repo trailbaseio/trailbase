@@ -228,69 +228,83 @@ pub(crate) async fn install_routes_and_jobs(
 
     debug!("Installing WASM route: {method:?}: {path}");
 
-    let handler = {
-      let path = path.clone();
+    let registered_path = path.clone();
+    let handler = |params: RawPathParams, user: Option<User>, req: Request| async move {
+      use axum::response::Response;
 
-      move |params: RawPathParams, user: Option<User>, req: Request| async move {
-        debug!(
-          "Host received WASM HTTP request: {params:?}, {user:?}, {}",
-          req.uri()
-        );
+      #[cfg(debug_assertions)]
+      debug!(
+        "Host received WASM HTTP request: {params:?}, {user:?}, {}",
+        req.uri()
+      );
 
-        let result = runtime
-          .read()
-          .await
-          .call(
-            async move |runner| -> Result<axum::response::Response, WasmError> {
-              let (mut parts, body) = req.into_parts();
-              let bytes = body
-                .collect()
-                .await
-                .map_err(|_err| WasmError::ChannelClosed)?
-                .to_bytes();
+      let result = runtime
+        .read()
+        .await
+        .call(async move |runner| -> Result<Response, WasmError> {
+          let (mut parts, body) = req.into_parts();
+          let bytes = body
+            .collect()
+            .await
+            .map_err(|_err| WasmError::ChannelClosed)?
+            .to_bytes();
 
-              parts.headers.insert(
-                "__context",
-                to_header_value(&HttpContext {
-                  kind: HttpContextKind::Http,
-                  registered_path: path.clone(),
-                  path_params: params
-                    .iter()
-                    .map(|(name, value)| (name.to_string(), value.to_string()))
-                    .collect(),
-                  user: user.map(|u| HttpContextUser {
-                    id: u.id,
-                    email: u.email,
-                    csrf_token: u.csrf_token,
-                  }),
-                })?,
-              );
+          parts.headers.insert(
+            "__context",
+            to_header_value(&HttpContext {
+              kind: HttpContextKind::Http,
+              registered_path: registered_path.clone(),
+              path_params: params
+                .iter()
+                .map(|(name, value)| (name.to_string(), value.to_string()))
+                .collect(),
+              user: user.map(|u| HttpContextUser {
+                id: u.id,
+                email: u.email,
+                csrf_token: u.csrf_token,
+              }),
+            })?,
+          );
 
-              let request = hyper::Request::from_parts(
-                parts,
-                BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!())),
-              );
+          let request = hyper::Request::from_parts(
+            parts,
+            BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!())),
+          );
 
-              let response = runner.call_incoming_http_handler(request).await?;
+          let response = runner.call_incoming_http_handler(request).await?;
 
-              let (parts, body) = response.into_parts();
-              let bytes = body
-                .collect()
-                .await
-                .map_err(|_err| WasmError::ChannelClosed)?
-                .to_bytes();
+          let (parts, body) = response.into_parts();
+          let bytes = body
+            .collect()
+            .await
+            .map_err(|_err| WasmError::ChannelClosed)?
+            .to_bytes();
 
-              return Ok(axum::response::Response::from_parts(parts, bytes.into()));
-            },
-          )
-          .await;
+          return Ok(Response::from_parts(parts, bytes.into()));
+        })
+        .await;
 
-        return match result {
-          Ok(Ok(r)) => r,
-          Ok(Err(err)) => internal_error_response(err),
-          Err(err) => internal_error_response(err),
-        };
+      #[cfg(debug_assertions)]
+      fn internal_error_response(err: WasmError) -> Response {
+        return Response::builder()
+          .status(StatusCode::INTERNAL_SERVER_ERROR)
+          .body(err.to_string().into())
+          .unwrap_or_default();
       }
+
+      #[cfg(not(debug_assertions))]
+      fn internal_error_response(err: WasmError) -> Response {
+        return Response::builder()
+          .status(StatusCode::INTERNAL_SERVER_ERROR)
+          .body("failure".into())
+          .unwrap_or_default();
+      }
+
+      return match result {
+        Ok(Ok(r)) => r,
+        Ok(Err(err)) => internal_error_response(err),
+        Err(err) => internal_error_response(err),
+      };
     };
 
     router = router.route(
@@ -321,11 +335,4 @@ fn to_header_value(
 ) -> Result<hyper::http::HeaderValue, trailbase_wasm_runtime_host::Error> {
   return hyper::http::HeaderValue::from_bytes(&serde_json::to_vec(&context).unwrap_or_default())
     .map_err(|_err| trailbase_wasm_runtime_host::Error::Encoding);
-}
-
-fn internal_error_response(err: impl std::string::ToString) -> axum::response::Response {
-  return axum::response::Response::builder()
-    .status(StatusCode::INTERNAL_SERVER_ERROR)
-    .body(err.to_string().into())
-    .unwrap_or_default();
 }

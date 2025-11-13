@@ -131,6 +131,12 @@ impl Guest for Endpoints {
 
         return Ok(format!("{i}\n"));
       }),
+      routing::get("/panic", async |_req| {
+        if true {
+          panic!("/panic called");
+        }
+        return Ok("/panic");
+      }),
     ];
   }
 
