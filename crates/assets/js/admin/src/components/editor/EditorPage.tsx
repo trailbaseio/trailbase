@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/tooltip";
 import { showToast } from "@/components/ui/toast";
 import { DataTable } from "@/components/Table";
+import { useNavbar, DirtyDialog } from "@/components/Navbar";
 
 import type { QueryResponse } from "@bindings/QueryResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
@@ -91,45 +92,6 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   }
 
   return schema;
-}
-
-function ConfirmSwitchDialog(props: {
-  back: () => void;
-  confirm: () => void;
-  saveScript: () => void;
-  message?: string;
-}) {
-  return (
-    <DialogContent>
-      <DialogTitle>Confirmation</DialogTitle>
-
-      <p>{props.message ?? "Are you sure?"}</p>
-
-      <DialogFooter>
-        <div class="flex w-full justify-between">
-          <Button variant="outline" onClick={props.back}>
-            Back
-          </Button>
-
-          <div class="flex gap-4">
-            <Button variant="destructive" onClick={props.confirm}>
-              Discard
-            </Button>
-
-            <Button
-              variant="default"
-              onClick={() => {
-                props.saveScript();
-                props.confirm();
-              }}
-            >
-              Save
-            </Button>
-          </div>
-        </div>
-      </DialogFooter>
-    </DialogContent>
-  );
 }
 
 function ResultView(props: {
@@ -537,9 +499,9 @@ function EditorPanel(props: {
       }}
       modal={true}
     >
-      <ConfirmSwitchDialog
+      <DirtyDialog
         back={() => setDirtyDialog()}
-        confirm={() => {
+        proceed={() => {
           const state = dirtyDialog();
           if (state) {
             setDirtyDialog();
@@ -548,8 +510,7 @@ function EditorPanel(props: {
             setDirty(false);
           }
         }}
-        saveScript={saveScript}
-        message="Proceeding will discard any pending changes in the current buffer. Proceed with caution."
+        save={saveScript}
       />
 
       <Header
@@ -626,9 +587,14 @@ export function EditorPage() {
   // FIXME: Note that the state isn't persistent enough. E.g. resizing to
   // mobile rebuild EditorPage and reset the dirty state.
   const scripts = useStore($scripts);
+  const isMobile = createIsMobile();
   const [selected, setSelected] = createSignal<number>(0);
   const [dirty, setDirty] = createSignal<boolean>(false);
-  const isMobile = createIsMobile();
+
+  const navbar = useNavbar();
+  createEffect(() => {
+    navbar.setDirty(dirty());
+  });
 
   const [dirtyDialog, setDirtyDialog] = createSignal<
     DirtyDialogState | undefined

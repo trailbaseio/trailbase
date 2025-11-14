@@ -1,4 +1,4 @@
-import { lazy, Match, Switch } from "solid-js";
+import { createSignal, lazy, Match, Show, Switch } from "solid-js";
 import type { Component } from "solid-js";
 import { Router, Route, type RouteSectionProps } from "@solidjs/router";
 import { useStore } from "@nanostores/solid";
@@ -9,7 +9,11 @@ import { AccountsPage } from "@/components/accounts/AccountsPage";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { IndexPage } from "@/components/IndexPage";
-import { VerticalNavBar, HorizontalNavBar } from "@/components/NavBar";
+import {
+  VerticalNavbar,
+  HorizontalNavbar,
+  NavbarContext,
+} from "@/components/Navbar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 import { $user } from "@/lib/client";
@@ -21,7 +25,7 @@ function LeftNav(props: RouteSectionProps) {
   return (
     <>
       <div class="hide-scrollbars sticky h-dvh w-[58px] overflow-hidden">
-        <VerticalNavBar location={props.location} />
+        <VerticalNavbar location={props.location} />
       </div>
 
       <main class="absolute inset-0 left-[58px] h-dvh w-[calc(100vw-58px)] overflow-x-hidden overflow-y-auto">
@@ -34,7 +38,7 @@ function LeftNav(props: RouteSectionProps) {
 function TopNav(props: RouteSectionProps) {
   return (
     <>
-      <HorizontalNavBar height={48} location={props.location} />
+      <HorizontalNavbar height={48} location={props.location} />
 
       <main class="max-h-[calc(100vh-48px)] w-screen">
         <ErrorBoundary>{props.children}</ErrorBoundary>
@@ -45,17 +49,25 @@ function TopNav(props: RouteSectionProps) {
 
 function WrapWithNav(props: RouteSectionProps) {
   const isMobile = createIsMobile();
+  const [dirty, setDirty] = createSignal(false);
+
+  const contextValue = {
+    dirty,
+    setDirty,
+  };
 
   return (
-    <Switch>
-      <Match when={isMobile()}>
-        <TopNav {...props} />
-      </Match>
+    <NavbarContext.Provider value={contextValue}>
+      <Switch>
+        <Match when={isMobile()}>
+          <TopNav {...props} />
+        </Match>
 
-      <Match when={!isMobile()}>
-        <LeftNav {...props} />
-      </Match>
-    </Switch>
+        <Match when={!isMobile()}>
+          <LeftNav {...props} />
+        </Match>
+      </Switch>
+    </NavbarContext.Provider>
   );
 }
 
@@ -70,9 +82,15 @@ const LazyErdPage = lazy(() => import("@/components/erd/ErdPage"));
 const App: Component = () => {
   const user = useStore($user);
 
+  const Login = () => (
+    <ErrorBoundary>
+      <LoginPage />
+    </ErrorBoundary>
+  );
+
   return (
     <QueryClientProvider client={queryClient}>
-      {user() ? (
+      <Show when={user() !== undefined} fallback={<Login />}>
         <Router base={"/_/admin"} root={WrapWithNav}>
           <Route path="/" component={IndexPage} />
           <Route path="/table/:table?" component={TablePage} />
@@ -85,11 +103,7 @@ const App: Component = () => {
           {/* fallback: */}
           <Route path="*" component={NotFoundPage} />
         </Router>
-      ) : (
-        <ErrorBoundary>
-          <LoginPage />
-        </ErrorBoundary>
-      )}
+      </Show>
     </QueryClientProvider>
   );
 };

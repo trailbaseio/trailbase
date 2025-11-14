@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { navBarIconStyle } from "@/components/NavBar";
+import { navbarIconStyle } from "@/components/Navbar";
 
 function avatarUrl(user: User): string {
   const address = hostAddress();
@@ -68,7 +68,7 @@ export function AuthButton(props: { iconSize: number }) {
 
   return (
     <Dialog open={open()} onOpenChange={setOpen}>
-      <button class={navBarIconStyle} onClick={() => setOpen(true)}>
+      <button class={navbarIconStyle} onClick={() => setOpen(true)}>
         <Avatar user={user()} size={props.iconSize} />
       </button>
 
