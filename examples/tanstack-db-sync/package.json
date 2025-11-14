@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@tanstack/db": "^0.5.0",
-    "@tanstack/query-core": "^5.90.8",
+    "@tanstack/query-core": "^5.90.9",
     "@tanstack/query-db-collection": "^1.0.0",
     "@tanstack/react-db": "^0.1.44",
     "@tanstack/trailbase-db-collection": "^0.1.44",
