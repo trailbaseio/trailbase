@@ -59,9 +59,10 @@ function pickInitiallySelectedTable(
     return undefined;
   }
 
-  if (qualifiedTableName) {
+  const candidate = qualifiedTableName ?? $explorerSettings.get().prevSelected;
+  if (candidate) {
     for (const table of tables) {
-      if (qualifiedTableName === prettyFormatQualifiedName(table.name)) {
+      if (candidate === prettyFormatQualifiedName(table.name)) {
         return table;
       }
     }
@@ -93,7 +94,8 @@ function TablePickerSidebar(props: {
   openCreateTableDialog: () => void;
 }) {
   const { setOpenMobile } = useSidebar();
-  const showHidden = useStore($showHiddenTables);
+  const settings = useStore($explorerSettings);
+  const showHidden = () => settings().showHidden ?? false;
   const selectedTable = () => props.selectedTable;
   const navigate = useNavigate();
 
@@ -121,13 +123,23 @@ function TablePickerSidebar(props: {
                   size="icon"
                   variant="secondary"
                   onClick={() => {
-                    const show = !showHidden();
-                    const current = selectedTable();
-                    if (!show && current && hiddenTable(current)) {
+                    const nextShowHidden = !(settings().showHidden ?? false);
+                    const currentHidden = () => {
+                      const current = selectedTable();
+                      if (current !== undefined) {
+                        return hiddenTable(current);
+                      }
+                      return false;
+                    };
+
+                    if (!nextShowHidden && currentHidden()) {
                       navigateToTable(navigate, undefined);
                     }
-                    console.debug("Show hidden tables:", show);
-                    $showHiddenTables.set(show);
+
+                    $explorerSettings.set({
+                      ...$explorerSettings.get(),
+                      showHidden: nextShowHidden,
+                    });
                   }}
                 >
                   <Show when={showHidden()} fallback={<TbLock />}>
@@ -196,12 +208,15 @@ function TablePickerSidebar(props: {
 }
 
 function navigateToTable(navigate: Navigator, table: Table | View | undefined) {
-  if (table === undefined) {
-    navigate("/table/");
-    return;
-  }
+  const name =
+    table !== undefined ? prettyFormatQualifiedName(table.name) : undefined;
 
-  const path = "/table/" + prettyFormatQualifiedName(table.name);
+  $explorerSettings.set({
+    ...$explorerSettings.get(),
+    prevSelected: name,
+  });
+
+  const path = `/table/${name ?? ""}`;
   console.debug(`navigating to: ${path}`);
   navigate(path);
 }
@@ -212,7 +227,8 @@ function TableSplitView(props: {
 }) {
   const navigate = useNavigate();
   const isMobile = createIsMobile();
-  const showHidden = useStore($showHiddenTables);
+  const settings = useStore($explorerSettings);
+  const showHidden = () => settings().showHidden ?? false;
   const [createTableDialog, setCreateTableDialog] = createSignal(false);
   const filteredTablesAndViews = createMemo(() => {
     const all = [...props.schemas.tables, ...props.schemas.views];
@@ -240,7 +256,7 @@ function TableSplitView(props: {
       {(sheet) => {
         return (
           <>
-            <SheetContent class={sheetMaxWidth}>
+            <SheetContent class="sm:max-w-[520px]">
               <CreateAlterTableForm
                 schemaRefetch={props.schemaRefetch}
                 allTables={props.schemas.tables}
@@ -339,8 +355,16 @@ export function TablePage() {
   );
 }
 
-const sheetMaxWidth = "sm:max-w-[520px]";
-const $showHiddenTables = persistentAtom<boolean>("show_hidden_tables", false, {
-  encode: JSON.stringify,
-  decode: JSON.parse,
-});
+type Settings = {
+  prevSelected?: String;
+  showHidden?: boolean;
+};
+
+const $explorerSettings = persistentAtom<Settings>(
+  "explorer_settings",
+  {},
+  {
+    encode: JSON.stringify,
+    decode: JSON.parse,
+  },
+);
