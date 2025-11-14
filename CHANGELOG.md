@@ -1,3 +1,12 @@
+## v0.21.3
+
+- Admin UI polish:
+  - Add dirty state to navbar for prompting a confirmation dialog to prevent accidental loss, e.g. when navigating away from a script editor with pending changes.
+  - Enable `col = NULL` and `col != NULL` filter queries from table explorer.
+  - Remember previsously selected TABLE/VIEW on table explorer page.
+- Minor: always log uncaught errors from user-provided WASM components.
+- Update dependencies.
+
 ## v0.21.2
 
 - Remove unnecessary and harmful assertions on "invariants", which may be temporarily violated while streaming in rows during schema alterations.
