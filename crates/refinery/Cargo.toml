@@ -18,8 +18,6 @@ rusqlite = { workspace = true }
 siphasher = "1.0"
 thiserror = "2"
 time = { version = "0.3.5", features = ["parsing", "formatting"] }
-tokio = { workspace = true }
-url = "2.0"
 walkdir = "2.3.1"
 
 [dev-dependencies]
