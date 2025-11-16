@@ -18,4 +18,3 @@ serde = { workspace = true }
 thiserror = "2.0.12"
 ts-rs = { workspace = true }
 rusqlite= { workspace = true, optional = true }
-serde_bytes = "0.11.19"

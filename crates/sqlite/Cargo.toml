@@ -15,14 +15,11 @@ path = "benches/benchmark.rs"
 harness = false
 
 [dependencies]
-crossbeam-channel = "0.5.13"
 kanal = "0.1.1"
 log = { version = "^0.4.21", default-features = false }
 parking_lot = { workspace = true }
 rusqlite = { workspace = true }
-self_cell = "1.2.0"
 serde = { workspace = true }
-serde_json = { workspace = true }
 serde_rusqlite = "0.40"
 thiserror = "2.0.12"
 tokio = { workspace = true }

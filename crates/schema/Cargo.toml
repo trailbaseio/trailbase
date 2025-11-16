@@ -25,7 +25,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sqlite3-parser = "0.15.0"
 thiserror = "2.0.12"
-tokio = { workspace = true }
 trailbase-extension = { workspace = true }
 ts-rs = { workspace = true }
 uuid = { workspace = true }
@@ -33,4 +32,5 @@ uuid = { workspace = true }
 [dev-dependencies]
 anyhow = "1.0.97"
 indoc = "2.0.6"
+tokio = { workspace = true }
 trailbase-sqlite = { workspace = true }
