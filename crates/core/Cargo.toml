@@ -24,7 +24,7 @@ name = "benchmark"
 harness = false
 
 [features]
-default = ["wasm"]
+default = []
 v8 = ["dep:trailbase-js"]
 wasm = ["dep:trailbase-wasm-runtime-host"]
 
@@ -37,6 +37,7 @@ async-trait = "0.1.80"
 axum = { workspace = true }
 base64 = { workspace = true }
 bytes = { version = "1.8.0", features = ["serde"] }
+cfg-if = "1.0.4"
 chrono = "^0.4.38"
 client-ip = "0.1.1"
 cron = "0.15.0"
@@ -94,7 +95,7 @@ trailbase-qs = { workspace = true }
 trailbase-refinery = { workspace = true }
 trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true }
-trailbase-sqlvalue = { workspace = true }
+trailbase-sqlvalue = { workspace = true, features = ["rusqlite"] }
 trailbase-wasm-common = { workspace = true }
 trailbase-wasm-runtime-host = { workspace = true, optional = true }
 ts-rs = { workspace = true }

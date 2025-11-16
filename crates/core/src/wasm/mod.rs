@@ -16,9 +16,9 @@ use crate::User;
 use crate::util::urlencode;
 use crate::{AppState, DataDir};
 
-pub(crate) use trailbase_wasm_runtime_host::{KvStore, Runtime};
-
 pub(crate) type AnyError = Box<dyn std::error::Error + Send + Sync>;
+
+pub(crate) use trailbase_wasm_runtime_host::{KvStore, Runtime};
 
 pub(crate) fn build_sync_wasm_runtimes_for_components(
   components_path: PathBuf,

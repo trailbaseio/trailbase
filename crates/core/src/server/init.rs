@@ -95,12 +95,18 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     trailbase_schema::registry::build_json_schema_registry(vec![])?,
   ));
 
-  let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
-    args.data_dir.root().join("wasm"),
-    args.runtime_root_fs.clone(),
-    args.dev,
-  )
-  .map_err(|err| InitError::CustomInit(err.to_string()))?;
+  cfg_if::cfg_if! {
+      if #[cfg(feature = "wasm")] {
+          let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
+              args.data_dir.root().join("wasm"),
+              args.runtime_root_fs.clone(),
+              args.dev,
+          )
+              .map_err(|err| InitError::CustomInit(err.to_string()))?;
+      } else {
+          let sync_wasm_runtimes = Vec::new();
+      }
+  }
 
   // TODO: We'd have to inject WASM runtimes here to make it available to connection..
   let (conn, new_db) = crate::connection::init_main_db(
@@ -151,6 +157,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     data_dir: args.data_dir.clone(),
     public_url: args.public_url,
     public_dir: args.public_dir,
+    #[cfg(feature = "wasm")]
     runtime_root_fs: args.runtime_root_fs,
     dev: args.dev,
     demo: args.demo,
@@ -161,6 +168,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     logs_conn,
     jwt,
     object_store,
+    #[cfg(feature = "wasm")]
     runtime_threads: args.runtime_threads,
   });
 
