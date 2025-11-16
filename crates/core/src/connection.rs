@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
+#[cfg(feature = "wasm")]
 use trailbase_wasm_runtime_host::functions::SqliteFunctionRuntime;
 
 use crate::data_dir::DataDir;
@@ -38,13 +39,15 @@ pub fn init_main_db(
   data_dir: Option<&DataDir>,
   json_registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
   attach: Option<Vec<AttachExtraDatabases>>,
-  runtimes: Vec<SqliteFunctionRuntime>,
+  #[cfg(feature = "wasm")] runtimes: Vec<SqliteFunctionRuntime>,
+  #[cfg(not(feature = "wasm"))] _runtimes: Vec<()>,
 ) -> Result<(Connection, bool), ConnectionError> {
   let new_db = Arc::new(Mutex::new(false));
 
   let main_path = data_dir.map(|d| d.main_db_path());
   let migrations_path = data_dir.map(|d| d.migrations_path());
 
+  #[cfg(feature = "wasm")]
   let sqlite_functions: Vec<_> = runtimes
     .into_iter()
     .map(|rt| -> Result<_, trailbase_wasm_runtime_host::Error> {
@@ -65,6 +68,7 @@ pub fn init_main_db(
 
         *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
 
+        #[cfg(feature = "wasm")]
         for (rt, functions) in &sqlite_functions {
           trailbase_wasm_runtime_host::functions::setup_connection(&conn, rt, functions)
             .expect("startup");

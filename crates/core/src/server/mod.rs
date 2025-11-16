@@ -179,26 +179,31 @@ impl Server {
         .map_err(|err| InitError::CustomInit(err.to_string()))?;
     }
 
-    let mut custom_routers: Vec<Router<AppState>> = vec![];
-
-    #[cfg(feature = "v8")]
-    if let Some(js_router) = crate::js::runtime::load_routes_and_jobs_from_js_modules(
-      &state,
-      state.data_dir().root().join("scripts"),
-    )
-    .await
-    .map_err(|err| InitError::ScriptError(err.to_string()))?
-    {
-      custom_routers.push(js_router);
-    }
-
-    for rt in state.wasm_runtimes() {
-      if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt.clone())
-        .await
-        .map_err(|err| InitError::ScriptError(err.to_string()))?
-      {
-        custom_routers.push(wasm_router);
-      }
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "v8")] {
+            let mut custom_routers: Vec<Router<AppState>> = vec![];
+            if let Some(js_router) = crate::js::runtime::load_routes_and_jobs_from_js_modules(
+                &state,
+                state.data_dir().root().join("scripts"),
+            )
+                .await
+                    .map_err(|err| InitError::ScriptError(err.to_string()))?
+            {
+                custom_routers.push(js_router);
+            }
+        } else if #[cfg(feature = "wasm")] {
+            let mut custom_routers: Vec<Router<AppState>> = vec![];
+            for rt in state.wasm_runtimes() {
+                if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt.clone())
+                    .await
+                        .map_err(|err| InitError::ScriptError(err.to_string()))?
+                {
+                    custom_routers.push(wasm_router);
+                }
+            }
+        } else {
+            let custom_routers: Vec<Router<AppState>> = vec![];
+        }
     }
 
     Ok(Self {
@@ -226,6 +231,7 @@ impl Server {
             "Received SIGHUP: reloading WASM components (dev), re-apply db migrations, and finally re-load config."
           );
 
+          #[cfg(feature = "wasm")]
           if state.dev_mode()
             && let Err(err) = state.reload_wasm_runtimes().await
           {

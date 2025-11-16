@@ -4,7 +4,6 @@ use reactivate::{Merge, Reactive};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::QualifiedName;
 
@@ -21,7 +20,6 @@ use crate::schema_metadata::{
   ConnectionMetadata, build_connection_metadata_and_install_file_deletion_triggers,
   lookup_and_parse_all_table_schemas, lookup_and_parse_all_view_schemas,
 };
-use crate::wasm::Runtime;
 
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.
@@ -52,9 +50,12 @@ struct InternalState {
   runtime: crate::js::RuntimeHandle,
 
   /// Actual WASM runtimes.
-  wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
+  #[cfg(feature = "wasm")]
+  wasm_runtimes: Vec<Arc<tokio::sync::RwLock<crate::wasm::Runtime>>>,
   /// WASM runtime builders needed to rebuild above runtimes, e.g. when hot-reloading.
-  build_wasm_runtimes: Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>,
+  #[cfg(feature = "wasm")]
+  build_wasm_runtimes:
+    Box<dyn Fn() -> Result<Vec<crate::wasm::Runtime>, crate::wasm::AnyError> + Send + Sync>,
 
   #[cfg(test)]
   #[allow(unused)]
@@ -65,6 +66,7 @@ pub(crate) struct AppStateArgs {
   pub data_dir: DataDir,
   pub public_url: Option<url::Url>,
   pub public_dir: Option<PathBuf>,
+  #[cfg(feature = "wasm")]
   pub runtime_root_fs: Option<PathBuf>,
   pub dev: bool,
   pub demo: bool,
@@ -75,6 +77,7 @@ pub(crate) struct AppStateArgs {
   pub logs_conn: trailbase_sqlite::Connection,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore + Send + Sync>,
+  #[cfg(feature = "wasm")]
   pub runtime_threads: Option<usize>,
 }
 
@@ -139,33 +142,39 @@ impl AppState {
       object_store.clone(),
     );
 
-    let crate::wasm::WasmRuntimeResult {
-      shared_kv_store,
-      build_wasm_runtime,
-    } = crate::wasm::build_wasm_runtime(
-      args.data_dir.clone(),
-      args.conn.clone(),
-      args.runtime_root_fs.clone(),
-      args.runtime_threads,
-      args.dev,
-    )
-    .expect("startup");
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "wasm")] {
+            let crate::wasm::WasmRuntimeResult {
+                shared_kv_store,
+                build_wasm_runtime,
+            } = crate::wasm::build_wasm_runtime(
+                args.data_dir.clone(),
+                args.conn.clone(),
+                args.runtime_root_fs.clone(),
+                args.runtime_threads,
+                args.dev,
+            )
+                .expect("startup");
 
-    // Assign right away.
-    config.with_value(|c| {
-      shared_kv_store.set(
-        AUTH_CONFIG_KEY.to_string(),
-        serde_json::to_vec(&build_auth_config(c)).expect("startup"),
-      );
-    });
+            // Assign right away.
+            config.with_value(|c| {
+                shared_kv_store.set(
+                    AUTH_CONFIG_KEY.to_string(),
+                    serde_json::to_vec(&build_auth_config(c)).expect("startup"),
+                );
+            });
 
-    // Register an observer for continuous updates.
-    let shared_kv_store = shared_kv_store.clone();
-    config.add_observer(move |c| {
-      if let Ok(v) = serde_json::to_vec(&build_auth_config(c)) {
-        shared_kv_store.set(AUTH_CONFIG_KEY.to_string(), v);
-      }
-    });
+            config.add_observer({
+                // Register an observer for continuous updates.
+                let shared_kv_store = shared_kv_store.clone();
+                move |c| {
+                    if let Ok(v) = serde_json::to_vec(&build_auth_config(c)) {
+                        shared_kv_store.set(AUTH_CONFIG_KEY.to_string(), v);
+                    }
+                }
+            });
+        }
+    };
 
     AppState {
       state: Arc::new(InternalState {
@@ -206,11 +215,13 @@ impl AppState {
         object_store,
         #[cfg(feature = "v8")]
         runtime: build_js_runtime(args.conn.clone(), args.runtime_threads),
+        #[cfg(feature = "wasm")]
         wasm_runtimes: build_wasm_runtime()
           .expect("startup")
           .into_iter()
           .map(|rt| Arc::new(RwLock::new(rt)))
           .collect(),
+        #[cfg(feature = "wasm")]
         build_wasm_runtimes: build_wasm_runtime,
         #[cfg(test)]
         test_cleanup: vec![],
@@ -405,10 +416,12 @@ impl AppState {
     return self.state.runtime.clone();
   }
 
-  pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<Runtime>>] {
+  #[cfg(feature = "wasm")]
+  pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<crate::wasm::Runtime>>] {
     return &self.state.wasm_runtimes;
   }
 
+  #[cfg(feature = "wasm")]
   pub(crate) async fn reload_wasm_runtimes(&self) -> Result<(), crate::wasm::AnyError> {
     let mut new_runtimes = (self.state.build_wasm_runtimes)()?;
     if new_runtimes.is_empty() {
@@ -772,12 +785,14 @@ pub struct OAuthProvider {
   pub img_name: String,
 }
 
+#[cfg(feature = "wasm")]
 #[derive(Serialize)]
 struct AuthConfig {
   disable_password_auth: bool,
   oauth_providers: Vec<OAuthProvider>,
 }
 
+#[cfg(feature = "wasm")]
 fn build_auth_config(config: &Config) -> AuthConfig {
   let oauth_providers: Vec<_> = config
     .auth
@@ -804,4 +819,5 @@ fn build_auth_config(config: &Config) -> AuthConfig {
   };
 }
 
+#[cfg(feature = "wasm")]
 const AUTH_CONFIG_KEY: &str = "config:auth";
