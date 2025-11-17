@@ -1,8 +1,9 @@
 import {
   For,
   JSXElement,
-  Switch,
   Match,
+  Show,
+  Switch,
   createMemo,
   createSignal,
 } from "solid-js";
@@ -254,7 +255,7 @@ function removeRecordApiConfig(
   return newConfig;
 }
 
-function ConflictResolutionSrategyToString(
+function ConflictResolutionStrategyToString(
   value: ConflictResolutionStrategy | null,
 ): string {
   switch (value) {
@@ -319,12 +320,16 @@ function StyledHoverCard(props: { children: JSXElement }) {
         <TbInfoCircle />
       </HoverCardTrigger>
 
-      <HoverCardContent class="w-80">{props.children}</HoverCardContent>
+      <HoverCardContent class="w-80 space-y-1 space-x-4 text-sm">
+        {props.children}
+      </HoverCardContent>
     </HoverCard>
   );
 }
 
-function getForeignKeyColumns(schema: Table | View): [string, ForeignKey][] {
+function getPublicForeignKeyColumns(
+  schema: Table | View,
+): [string, ForeignKey][] {
   function filter([colName, fk]: [string, ForeignKey | undefined]) {
     if (!fk) {
       return false;
@@ -347,6 +352,30 @@ function getForeignKeyColumns(schema: Table | View): [string, ForeignKey][] {
         [c.name, getForeignKey(c.options)] as [string, ForeignKey | undefined],
     )
     .filter(filter) as [string, ForeignKey][];
+}
+
+function getExcludableColumns(schema: Table | View): string[] {
+  const columns = getColumns(schema);
+  if (columns === undefined) {
+    return [];
+  }
+
+  return columns
+    .filter((c) => {
+      if (isPrimaryKeyColumn(c)) {
+        return false;
+      }
+
+      if (isNotNull(c.options)) {
+        const defaultValue = getDefaultValue(c.options);
+        if (defaultValue === undefined) {
+          return false;
+        }
+      }
+
+      return true;
+    })
+    .map((c) => c.name);
 }
 
 function buildDefaultTemplateInput(schema: Table, isUpdate: boolean): string {
@@ -669,7 +698,12 @@ function IndividualRecordApiSettingsForm(props: {
   const config = createConfigQuery();
 
   const type = () => tableType(props.schema);
-  const foreignKeys = () => getForeignKeyColumns(props.schema);
+  const excludableColumns = createMemo(() =>
+    getExcludableColumns(props.schema),
+  );
+  const publicForeignKeys = createMemo(() =>
+    getPublicForeignKeyColumns(props.schema),
+  );
 
   const form = createForm(() => {
     return {
@@ -715,71 +749,73 @@ function IndividualRecordApiSettingsForm(props: {
   const SubmitDisableButtons = () => {
     return (
       <SheetFooter class="pb-1">
-        <Button
-          variant="destructive"
-          onClick={() => {
-            const apiName = props.api.name;
-            if (props.mode === Mode.Create) {
-              // Abort case
-              showToast({
-                title: "Success",
-                description: `API "${apiName}" discarded`,
-                variant: "success",
-              });
-              props.reset();
-              return;
-            }
+        <div class="flex justify-between gap-2">
+          <Button
+            variant="destructive"
+            onClick={() => {
+              const apiName = props.api.name;
+              if (props.mode === Mode.Create) {
+                // Abort case
+                showToast({
+                  title: "Success",
+                  description: `API "${apiName}" discarded`,
+                  variant: "success",
+                });
+                props.reset();
+                return;
+              }
 
-            // Delete case
-            const tableName = props.schema.name;
-            console.debug("Remove record API config for:", tableName);
+              // Delete case
+              const tableName = props.schema.name;
+              console.debug("Remove record API config for:", tableName);
 
-            const c = config.data?.config;
-            if (!c) {
-              console.error("missing base configuration");
-              return;
-            }
+              const c = config.data?.config;
+              if (!c) {
+                console.error("missing base configuration");
+                return;
+              }
 
-            if (apiName !== undefined) {
-              const newConfig = removeRecordApiConfig(
-                c,
-                tableName.name,
-                apiName,
-              );
+              if (apiName !== undefined) {
+                const newConfig = removeRecordApiConfig(
+                  c,
+                  tableName.name,
+                  apiName,
+                );
 
-              setConfig(queryClient, newConfig)
-                // eslint-disable-next-line solid/reactivity
-                .then(() => {
-                  showToast({
-                    title: "Success",
-                    description: `API "${apiName}" deleted`,
-                    variant: "success",
-                  });
-                  props.reset();
-                })
-                .catch(console.error);
-            }
-          }}
-        >
-          {props.mode === Mode.Create ? "Discard" : "Delete"}
-        </Button>
+                setConfig(queryClient, newConfig)
+                  // eslint-disable-next-line solid/reactivity
+                  .then(() => {
+                    showToast({
+                      title: "Success",
+                      description: `API "${apiName}" deleted`,
+                      variant: "success",
+                    });
+                    props.reset();
+                  })
+                  .catch(console.error);
+              }
+            }}
+          >
+            {props.mode === Mode.Create ? "Discard" : "Delete"}
+          </Button>
 
-        <form.Subscribe
-          selector={(state) => ({
-            canSubmit: state.canSubmit,
-            isSubmitting: state.isSubmitting,
-          })}
-        >
-          {(state) => (
-            <Button
-              type="submit"
-              disabled={!state().canSubmit}
-              variant="default"
-            >
-              {props.mode === Mode.Update ? "Update" : "Create"}
-            </Button>
-          )}
-        </form.Subscribe>
+          <form.Subscribe
+            selector={(state) => ({
+              canSubmit: state.canSubmit,
+              isSubmitting: state.isSubmitting,
+            })}
+          >
+            {(state) => (
+              <Button
+                type="submit"
+                disabled={!state().canSubmit}
+                variant="default"
+              >
+                {props.mode === Mode.Update ? "Update" : "Create"}
+              </Button>
+            )}
+          </form.Subscribe>
+        </div>
       </SheetFooter>
     );
   };
@@ -815,18 +851,12 @@ function IndividualRecordApiSettingsForm(props: {
                   {buildTextFormField({
                     disabled: true,
                     label: () => (
-                      <div class={labelWidth}>
+                      <div class={hoverCardLabel}>
                         <Label>API Name</Label>
+
                         <StyledHoverCard>
-                          <div class="flex justify-between space-x-4">
-                            <div class="space-y-1 text-sm">
-                              Public name used to access the API via{" "}
-                              <span class="font-mono">
-                                /api/records/v1/name
-                              </span>
-                              .
-                            </div>
-                          </div>
+                          Public name used to access the API via{" "}
+                          <span class="font-mono">/api/records/v1/name</span>.
                         </StyledHoverCard>
                       </div>
                     ),
@@ -838,21 +868,18 @@ function IndividualRecordApiSettingsForm(props: {
                     <form.Field name="conflictResolution">
                       {(field) => (
                         <div class="flex items-center justify-between gap-2">
-                          <div>
+                          <div class={hoverCardLabel}>
                             <Label>Conflict Resolution</Label>
                             <StyledHoverCard>
-                              <div class="flex justify-between space-x-4">
-                                <div class="space-y-1 text-sm">
-                                  SQLite conflict resolution strategy to employ
-                                  on record collision.
-                                </div>
-                              </div>
+                              SQLite conflict resolution strategy to employ on
+                              record collision.
                             </StyledHoverCard>
                           </div>
 
                           <Select
+                            class="grow"
                             multiple={false}
-                            placeholder="Select group..."
+                            placeholder="Select..."
                             defaultValue={field().state.value}
                             options={[
                               ConflictResolutionStrategy.CONFLICT_RESOLUTION_STRATEGY_UNDEFINED,
@@ -877,19 +904,19 @@ function IndividualRecordApiSettingsForm(props: {
                             }}
                             itemComponent={(props) => (
                               <SelectItem item={props.item}>
-                                {ConflictResolutionSrategyToString(
+                                {ConflictResolutionStrategyToString(
                                   props.item.rawValue,
                                 )}
                               </SelectItem>
                             )}
                           >
-                            <SelectTrigger class="w-[180px]">
-                              <SelectValue<ConflictResolutionStrategy>>
-                                {(state) =>
-                                  ConflictResolutionSrategyToString(
+                            <SelectTrigger>
+                              <SelectValue<ConflictResolutionStrategy | null>>
+                                {(state) => {
+                                  return ConflictResolutionStrategyToString(
                                     state.selectedOption(),
-                                  )
-                                }
+                                  );
+                                }}
                               </SelectValue>
                             </SelectTrigger>
 
@@ -906,26 +933,23 @@ function IndividualRecordApiSettingsForm(props: {
                         const v = () => field().state.value;
                         return (
                           <div class="mt-2 flex items-center justify-between gap-2">
-                            <div>
+                            <div class={hoverCardLabel}>
                               <Label>Infer Missing User</Label>
-                              <StyledHoverCard>
-                                <div class="flex justify-between space-x-4">
-                                  <div class="space-y-1">
-                                    <p class="text-sm">
-                                      When enabled, user id values not provided
-                                      as part of a CREATE request will be
-                                      auto-filled using the calling user's
-                                      authentication context.
-                                    </p>
 
-                                    <p class="text-sm">
-                                      For most use-cases this setting should be
-                                      off with user ids being provided
-                                      explicitly by the client. This can be
-                                      useful for static HTML forms.
-                                    </p>
-                                  </div>
-                                </div>
+                              <StyledHoverCard>
+                                <p>
+                                  When enabled, user id values not provided as
+                                  part of a CREATE request will be auto-filled
+                                  using the calling user's authentication
+                                  context.
+                                </p>
+
+                                <p>
+                                  For most use-cases this setting should be off
+                                  with user ids being provided explicitly by the
+                                  client. This can be useful for static HTML
+                                  forms.
+                                </p>
                               </StyledHoverCard>
                             </div>
 
@@ -944,20 +968,14 @@ function IndividualRecordApiSettingsForm(props: {
                         const v = () => field().state.value;
                         return (
                           <div class="mt-2 flex items-center justify-between gap-2">
-                            <div>
+                            <div class={hoverCardLabel}>
                               <Label>Enable Subscriptions</Label>
+
                               <StyledHoverCard>
-                                <div class="flex justify-between space-x-4">
-                                  <div class="space-y-1">
-                                    <p class="text-sm">
-                                      When enabled, users can subscribe to data
-                                      changes in real time. Record access is
-                                      checked on a per-record level at
-                                      notification time ensuring up-to-date
-                                      enforcement as data evolves.
-                                    </p>
-                                  </div>
-                                </div>
+                                When enabled, users can subscribe to data
+                                changes in real time. Record access is checked
+                                on a per-record level at notification time
+                                ensuring up-to-date enforcement as data evolves.
                               </StyledHoverCard>
                             </div>
 
@@ -969,6 +987,54 @@ function IndividualRecordApiSettingsForm(props: {
                         );
                       }}
                     />
+
+                    <Show when={excludableColumns().length > 0}>
+                      <form.Field
+                        name="excludedColumns"
+                        children={(field) => {
+                          return (
+                            <div class="mt-2 flex items-center justify-between gap-2">
+                              <div class={hoverCardLabel}>
+                                <Label>Excluded Columns</Label>
+
+                                <StyledHoverCard>
+                                  Excluded columns are completely inaccessible
+                                  via this API. This is different from columns
+                                  prefixed by "_", which are only "hidden" and
+                                  can thus still be inserted and updated.
+                                </StyledHoverCard>
+                              </div>
+
+                              <Select<string>
+                                class="grow"
+                                multiple={true}
+                                placeholder="Select..."
+                                defaultValue={[]}
+                                options={excludableColumns()}
+                                onChange={(columns: string[]) => {
+                                  field().handleChange(columns);
+                                }}
+                                itemComponent={(props) => (
+                                  <SelectItem item={props.item}>
+                                    {props.item.rawValue}
+                                  </SelectItem>
+                                )}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue<string>>
+                                    {(state) =>
+                                      state.selectedOptions().join(", ")
+                                    }
+                                  </SelectValue>
+                                </SelectTrigger>
+
+                                <SelectContent />
+                              </Select>
+                            </div>
+                          );
+                        }}
+                      />
+                    </Show>
 
                     <form.Field name="expand">
                       {(field) => {
@@ -987,31 +1053,26 @@ function IndividualRecordApiSettingsForm(props: {
                         };
 
                         return (
-                          <For each={foreignKeys()}>
+                          <For each={publicForeignKeys()}>
                             {([colName, item]) => {
                               return (
                                 <div class="mt-2 flex items-center justify-between gap-2">
-                                  <div>
+                                  <div class={hoverCardLabel}>
                                     <Label>
-                                      Expand Column ({colName} {"=>"}{" "}
-                                      {item.foreign_table})
+                                      {`Expand ${colName} (=> ${item.foreign_table})`}
                                     </Label>
+
                                     <StyledHoverCard>
-                                      <div class="flex justify-between space-x-4">
-                                        <div class="space-y-1 text-sm">
-                                          Expanding a foreign key column,
-                                          changes the APIs field schema from
-                                          simply being the foreign key, to
-                                          <span class="font-mono">{`{ id: any, data?: object }`}</span>
-                                          . Then the respective foreign record
-                                          can be included during read/list by
-                                          specifying
-                                          <span class="font-mono">
-                                            ?expand={colName}
-                                          </span>
-                                          .
-                                        </div>
-                                      </div>
+                                      Expanding a foreign key column, changes
+                                      the APIs field schema from simply being
+                                      the foreign key, to
+                                      <span class="font-mono">{`{ id: any, data?: object }`}</span>
+                                      . Then the respective foreign record can
+                                      be included during read/list by specifying
+                                      <span class="font-mono">
+                                        ?expand={colName}
+                                      </span>
+                                      .
                                     </StyledHoverCard>
                                   </div>
 
@@ -1119,7 +1180,7 @@ function IndividualRecordApiSettingsForm(props: {
                       >
                         {buildOptionalTextFormField({
                           label: () => (
-                            <div class={labelWidth}>{item.label}</div>
+                            <div class="w-[112px]">{item.label}</div>
                           ),
                         })}
                       </form.Field>
@@ -1213,7 +1274,7 @@ function IndividualRecordApiSettingsForm(props: {
   );
 }
 
-const labelWidth = "w-[112px]";
+const hoverCardLabel = "flex justify-between items-center w-[220px]";
 const exampleRule = `EXISTS(
   SELECT 1
   FROM group AS g
