@@ -36,7 +36,7 @@ export function FilterBar(props: {
           />
         </TextField>
 
-        <Button type="button">Filter</Button>
+        <Button type="submit">Filter</Button>
       </form>
 
       {props.example && <span class="mt-1 ml-2 text-sm">{props.example}</span>}

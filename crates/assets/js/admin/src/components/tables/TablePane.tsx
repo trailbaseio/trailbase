@@ -580,7 +580,7 @@ function ArrayRecordTable(props: {
                     props.filter[1](value);
                   }
                 }}
-                placeholder={`Filter Query, e.g. '(col0 > 5 && col0 < 20) || col1 = "val"'`}
+                placeholder={`Filter Query, e.g. '(col0 > 5 || col0 = 0) || col1 ~ "%like"'`}
               />
 
               <div class="overflow-x-auto pt-4">
