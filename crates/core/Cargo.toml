@@ -94,7 +94,7 @@ trailbase-qs = { workspace = true }
 trailbase-refinery = { workspace = true }
 trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true }
-trailbase-sqlvalue = { workspace = true }
+trailbase-sqlvalue = { workspace = true, features = ["rusqlite"] }
 trailbase-wasm-common = { workspace = true }
 trailbase-wasm-runtime-host = { workspace = true, optional = true }
 ts-rs = { workspace = true }

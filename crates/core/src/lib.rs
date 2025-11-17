@@ -33,11 +33,13 @@ mod wasm {
   use axum::Router;
   use std::path::PathBuf;
   use std::sync::Arc;
+  use tokio::sync::RwLock;
 
-  use crate::AppState;
+  use crate::{AppState, DataDir};
 
-  type AnyError = Box<dyn std::error::Error + Send + Sync>;
+  pub(crate) type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
+  #[derive(Clone)]
   pub(crate) struct KvStore;
 
   impl KvStore {
@@ -48,19 +50,44 @@ mod wasm {
 
   pub(crate) struct Runtime;
 
-  pub(crate) fn build_wasm_runtimes_for_components(
-    _n_threads: Option<usize>,
+  impl Runtime {
+    pub fn component_path(&self) -> std::path::PathBuf {
+      return std::path::PathBuf::default();
+    }
+  }
+
+  pub struct SqliteFunctionRuntime;
+
+  pub struct WasmRuntimeResult {
+    pub shared_kv_store: KvStore,
+    pub build_wasm_runtime: Box<dyn Fn() -> Result<Vec<Runtime>, AnyError> + Send + Sync>,
+  }
+
+  pub fn build_wasm_runtime(
+    _data_dir: DataDir,
     _conn: trailbase_sqlite::Connection,
+    _runtime_root_fs: Option<std::path::PathBuf>,
+    _runtime_threads: Option<usize>,
+    _dev: bool,
+  ) -> Result<WasmRuntimeResult, AnyError> {
+    return Ok(WasmRuntimeResult {
+      shared_kv_store: KvStore,
+      build_wasm_runtime: Box::new(|| Ok(vec![])),
+    });
+  }
+
+  pub fn build_sync_wasm_runtimes_for_components(
     _components_path: PathBuf,
     _fs_root_path: Option<PathBuf>,
-  ) -> Result<Vec<Arc<Runtime>>, AnyError> {
+    _dev: bool,
+  ) -> Result<Vec<SqliteFunctionRuntime>, AnyError> {
     return Ok(vec![]);
   }
 
   #[cfg(not(feature = "wasm"))]
   pub(crate) async fn install_routes_and_jobs(
     _state: &AppState,
-    _runtime: Arc<Runtime>,
+    _runtime: Arc<RwLock<Runtime>>,
   ) -> Result<Option<Router<AppState>>, AnyError> {
     return Ok(None);
   }

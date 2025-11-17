@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
-use trailbase_wasm_runtime_host::functions::SqliteFunctionRuntime;
 
 use crate::data_dir::DataDir;
 use crate::migrations::{apply_logs_migrations, apply_main_migrations};
+use crate::wasm::SqliteFunctionRuntime;
 
 pub use trailbase_sqlite::Connection;
 
@@ -45,6 +45,7 @@ pub fn init_main_db(
   let main_path = data_dir.map(|d| d.main_db_path());
   let migrations_path = data_dir.map(|d| d.migrations_path());
 
+  #[cfg(feature = "wasm")]
   let sqlite_functions: Vec<_> = runtimes
     .into_iter()
     .map(|rt| -> Result<_, trailbase_wasm_runtime_host::Error> {
@@ -65,6 +66,7 @@ pub fn init_main_db(
 
         *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
 
+        #[cfg(feature = "wasm")]
         for (rt, functions) in &sqlite_functions {
           trailbase_wasm_runtime_host::functions::setup_connection(&conn, rt, functions)
             .expect("startup");
