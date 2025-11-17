@@ -1,3 +1,9 @@
+## v0.21.4
+
+- Fix filter button in admin UI.
+- Fix compilation of trailbase library with "wasm" feature disabled.
+- Update Rust & JavaScript dependencies.
+
 ## v0.21.3
 
 - Admin UI polish:
