@@ -15,7 +15,7 @@
   "dependencies": {
     "@nanostores/persistent": "^1.2.0",
     "@nanostores/solid": "^1.1.1",
-    "astro": "^5.15.7",
+    "astro": "^5.15.8",
     "astro-icon": "^1.1.5",
     "nanostores": "^1.0.1",
     "solid-icons": "^1.1.0",
