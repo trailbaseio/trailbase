@@ -8,16 +8,12 @@ use clap::{CommandFactory, Parser};
 use itertools::Itertools;
 use minijinja::{Environment, context};
 use serde::Deserialize;
-use std::{
-  collections::HashMap,
-  io::{Read, Seek},
-  rc::Rc,
-};
+use std::rc::Rc;
 use tokio::{fs, io::AsyncWriteExt};
-use trailbase::{
-  DataDir, Server, ServerOptions,
-  api::{self, Email, InitArgs, JsonSchemaMode, init_app_state},
-  constants::USER_TABLE,
+use trailbase::api::{self, Email, InitArgs, JsonSchemaMode, init_app_state};
+use trailbase::{DataDir, Server, ServerOptions, constants::USER_TABLE};
+use trailbase_cli::wasm::{
+  find_component, install_wasm_component, list_installed_wasm_components, repo,
 };
 use utoipa::OpenApi;
 
@@ -331,6 +327,26 @@ async fn async_main() -> Result<(), BoxError> {
         Some(ComponentSubCommands::List) => {
           println!("Components:\n\n{}", repo().keys().join("\n"));
         }
+        Some(ComponentSubCommands::Installed) => {
+          let components = list_installed_wasm_components(&data_dir)?;
+
+          for component in components {
+            let output = serde_json::to_string_pretty(
+              &component
+                .packages
+                .iter()
+                .filter(|p| {
+                  return !matches!(p.namespace.as_str(), "wasi" | "root");
+                })
+                .collect::<Vec<_>>(),
+            )?;
+
+            println!(
+              "{} - interfaces: {output}",
+              component.path.to_string_lossy()
+            );
+          }
+        }
         _ => {
           DefaultCommandLineArgs::command()
             .find_subcommand_mut("component")
@@ -351,81 +367,6 @@ fn to_user_reference(user: String) -> api::cli::UserReference {
     return api::cli::UserReference::Email(user);
   }
   return api::cli::UserReference::Id(user);
-}
-
-#[derive(Debug, Clone)]
-struct ComponentDefinition {
-  url_template: String,
-  wasm_filenames: Vec<String>,
-}
-
-fn repo() -> HashMap<String, ComponentDefinition> {
-  return HashMap::from([
-        ("trailbase/auth_ui".to_string(), ComponentDefinition {
-            url_template: "https://github.com/trailbaseio/trailbase/releases/download/{{ release }}/trailbase_{{ release }}_wasm_auth_ui.zip".to_string(),
-            wasm_filenames: vec!["auth_ui_component.wasm".to_string()],
-        })
-    ]);
-}
-
-fn find_component(name: &str) -> Result<ComponentDefinition, BoxError> {
-  return repo()
-    .get(name)
-    .cloned()
-    .ok_or_else(|| "component not found".into());
-}
-
-async fn install_wasm_component(
-  data_dir: &DataDir,
-  path: impl AsRef<std::path::Path>,
-  mut reader: impl Read + Seek,
-) -> Result<(), BoxError> {
-  let path = path.as_ref();
-  let wasm_dir = data_dir.root().join("wasm");
-
-  match path
-    .extension()
-    .map(|p| p.to_string_lossy().to_string())
-    .as_deref()
-  {
-    Some("zip") => {
-      let mut archive = zip::ZipArchive::new(reader)?;
-
-      for i in 0..archive.len() {
-        let mut file = archive.by_index(i)?;
-        if let Some(path) = file.enclosed_name() {
-          if path.extension().and_then(|e| e.to_str()) != Some("wasm") {
-            continue;
-          }
-
-          let Some(filename) = path.file_name().and_then(|e| e.to_str()) else {
-            return Err(format!("Invalid filename: {:?}", file.name()).into());
-          };
-          let component_file_path = wasm_dir.join(filename);
-          let mut component_file = std::fs::File::create(&component_file_path)?;
-          std::io::copy(&mut file, &mut component_file)?;
-
-          println!("Added: {component_file_path:?}");
-        }
-      }
-    }
-    Some("wasm") => {
-      let Some(filename) = path.file_name().and_then(|e| e.to_str()) else {
-        return Err(format!("Invalid filename: {path:?}").into());
-      };
-
-      let component_file_path = wasm_dir.join(filename);
-      let mut component_file = std::fs::File::create(&component_file_path)?;
-      std::io::copy(&mut reader, &mut component_file)?;
-
-      println!("Added: {component_file_path:?}");
-    }
-    _ => {
-      return Err("unexpected format".into());
-    }
-  }
-
-  return Ok(());
 }
 
 fn main() -> Result<(), BoxError> {

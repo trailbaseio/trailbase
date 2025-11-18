@@ -36,10 +36,12 @@ trailbase = { workspace = true }
 trailbase-build = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-sqlite = { workspace = true }
+trailbase-wasm-runtime-host = { workspace = true }
 url = "2.5.4"
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9.0.0", features = ["axum"], optional = true }
 uuid = { workspace = true }
+wit-component = "0.241.2"
 zip = { version = "6.0.0", default-features = false, features = ["deflate"] }
 
 [build-dependencies]

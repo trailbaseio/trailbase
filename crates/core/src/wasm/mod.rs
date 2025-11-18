@@ -9,7 +9,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
-use trailbase_wasm_runtime_host::{InitArgs, RuntimeOptions, SharedExecutor};
+use trailbase_wasm_runtime_host::{InitArgs, RuntimeOptions, SharedExecutor, load_wasm_components};
 
 use crate::User;
 use crate::util::urlencode;
@@ -25,39 +25,16 @@ pub(crate) fn build_sync_wasm_runtimes_for_components(
   fs_root_path: Option<PathBuf>,
   dev: bool,
 ) -> Result<Vec<SqliteFunctionRuntime>, AnyError> {
-  let sync_runtimes: Vec<SqliteFunctionRuntime> = std::fs::read_dir(&components_path).map_or_else(
-    |_err| Ok(vec![]),
-    |entries| {
-      entries
-        .into_iter()
-        .flat_map(|entry| {
-          let Ok(entry) = entry else {
-            return None;
-          };
-
-          let Ok(metadata) = entry.metadata() else {
-            return None;
-          };
-
-          if !metadata.is_file() {
-            return None;
-          }
-
-          let path = entry.path();
-          if path.extension()? == "wasm" {
-            return Some(SqliteFunctionRuntime::new(
-              path,
-              RuntimeOptions {
-                fs_root_path: fs_root_path.clone(),
-                use_winch: dev,
-              },
-            ));
-          }
-          return None;
-        })
-        .collect::<Result<Vec<SqliteFunctionRuntime>, _>>()
-    },
-  )?;
+  let sync_runtimes: Vec<SqliteFunctionRuntime> =
+    load_wasm_components(components_path, |path: std::path::PathBuf| {
+      return SqliteFunctionRuntime::new(
+        path,
+        RuntimeOptions {
+          fs_root_path: fs_root_path.clone(),
+          use_winch: dev,
+        },
+      );
+    })?;
 
   return Ok(sync_runtimes);
 }
@@ -72,43 +49,19 @@ pub(crate) fn build_wasm_runtimes_for_components(
 ) -> Result<Vec<Runtime>, AnyError> {
   let executor = SharedExecutor::new(n_threads);
 
-  let runtimes: Vec<Runtime> = std::fs::read_dir(&components_path).map_or_else(
-    |_err| Ok(vec![]),
-    |entries| {
-      entries
-        .into_iter()
-        .flat_map(|entry| {
-          let Ok(entry) = entry else {
-            return None;
-          };
-
-          let Ok(metadata) = entry.metadata() else {
-            return None;
-          };
-
-          if !metadata.is_file() {
-            return None;
-          }
-          let path = entry.path();
-          // let extension = path.extension().and_then(|e| e.to_str())?;
-
-          if path.extension()? == "wasm" {
-            return Some(Runtime::new(
-              executor.clone(),
-              path,
-              conn.clone(),
-              shared_kv_store.clone(),
-              RuntimeOptions {
-                fs_root_path: fs_root_path.clone(),
-                use_winch: dev,
-              },
-            ));
-          }
-          return None;
-        })
-        .collect::<Result<Vec<Runtime>, _>>()
-    },
-  )?;
+  let runtimes: Vec<Runtime> =
+    load_wasm_components(components_path.clone(), |path: std::path::PathBuf| {
+      return Runtime::new(
+        executor.clone(),
+        path,
+        conn.clone(),
+        shared_kv_store.clone(),
+        RuntimeOptions {
+          fs_root_path: fs_root_path.clone(),
+          use_winch: dev,
+        },
+      );
+    })?;
 
   if runtimes.is_empty() {
     debug!("No WASM component found in {components_path:?}");

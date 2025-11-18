@@ -271,6 +271,8 @@ pub enum ComponentSubCommands {
   },
   /// Remove/delete WASM component.
   Remove { reference: String },
-  /// List first-party components.
+  /// List available first-party components.
   List,
+  /// List installed components.
+  Installed,
 }

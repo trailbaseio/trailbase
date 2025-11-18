@@ -196,6 +196,10 @@ impl SqliteFunctionRuntime {
     return Ok(instance);
   }
 
+  pub fn component_path(&self) -> &std::path::PathBuf {
+    return &self.component_path;
+  }
+
   fn new_store(&self) -> Result<Store<sync::State>, Error> {
     let mut wasi_ctx = WasiCtxBuilder::new();
     wasi_ctx.inherit_stdio();

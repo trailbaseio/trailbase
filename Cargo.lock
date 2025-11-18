@@ -8215,10 +8215,12 @@ dependencies = [
  "trailbase-build",
  "trailbase-extension",
  "trailbase-sqlite",
+ "trailbase-wasm-runtime-host",
  "url",
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
+ "wit-component 0.241.2",
  "zip 6.0.0",
 ]
 

@@ -789,8 +789,40 @@ impl AsyncRunner {
   }
 }
 
+pub fn load_wasm_components<T, E: std::error::Error>(
+  components_path: std::path::PathBuf,
+  f: impl Fn(std::path::PathBuf) -> Result<T, E>,
+) -> Result<Vec<T>, E> {
+  let Ok(dir) = std::fs::read_dir(&components_path) else {
+    return Ok(vec![]);
+  };
+
+  return dir
+    .into_iter()
+    .flat_map(|entry| {
+      let Ok(entry) = entry else {
+        return None;
+      };
+
+      let Ok(metadata) = entry.metadata() else {
+        return None;
+      };
+
+      if !metadata.is_file() {
+        return None;
+      }
+
+      let path = entry.path();
+      if path.extension()? == "wasm" {
+        return Some(f(path));
+      }
+      return None;
+    })
+    .collect::<Result<Vec<T>, E>>();
+}
+
 #[allow(unused)]
-fn bytes_to_respone(
+fn bytes_to_response(
   bytes: Vec<u8>,
 ) -> Result<wasmtime_wasi_http::types::HostFutureIncomingResponse, ErrorCode> {
   let resp = http::Response::builder()
