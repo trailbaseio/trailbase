@@ -1,3 +1,9 @@
+## v0.21.5
+
+- Add "excluded columns" to Admin UI's record API form.
+- Add early CLI commands for listing installed components as well as updating them to match the binary release.
+- PoC: open-telemetry integration behind a compile-time feature flag. There's still a few integration challenges around how to make metrics available to WASM components.
+
 ## v0.21.4
 
 - Fix filter button in admin UI.
