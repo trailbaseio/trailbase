@@ -8199,6 +8199,7 @@ name = "trailbase-cli"
 version = "0.2.0"
 dependencies = [
  "axum 0.8.7",
+ "bytes",
  "chrono",
  "clap",
  "env_logger",

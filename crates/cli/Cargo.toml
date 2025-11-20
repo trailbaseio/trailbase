@@ -20,6 +20,7 @@ vendor-ssl = ["dep:openssl"]
 
 [dependencies]
 axum = { version = "^0.8.1", features=["multipart"] }
+bytes = "1.11.0"
 chrono = "^0.4.38"
 clap = { version = "^4.4.11", features=["derive", "env"] }
 env_logger = { workspace = true }

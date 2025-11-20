@@ -6,14 +6,14 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
 use itertools::Itertools;
-use minijinja::{Environment, context};
 use serde::Deserialize;
 use std::rc::Rc;
 use tokio::{fs, io::AsyncWriteExt};
 use trailbase::api::{self, Email, InitArgs, JsonSchemaMode, init_app_state};
 use trailbase::{DataDir, Server, ServerOptions, constants::USER_TABLE};
 use trailbase_cli::wasm::{
-  find_component, install_wasm_component, list_installed_wasm_components, repo,
+  download_component, find_component, find_component_by_filename, install_wasm_component,
+  list_installed_wasm_components, repo,
 };
 use utoipa::OpenApi;
 
@@ -264,38 +264,26 @@ async fn async_main() -> Result<(), BoxError> {
 
       match cmd {
         Some(ComponentSubCommands::Add { reference }) => {
-          match ComponentReference::try_from(reference.as_str())? {
+          let paths = match ComponentReference::try_from(reference.as_str())? {
             ComponentReference::Name(name) => {
-              let component_def = find_component(&name)?;
+              let component_def = find_component(&name).ok_or("component not found")?;
+              let (url, bytes) = download_component(&component_def).await?;
 
-              let version = trailbase_build::get_version_info!();
-              let Some(git_version) = version.git_version() else {
-                return Err("missing version".into());
-              };
-
-              let env = Environment::empty();
-              let url_str = env
-                .template_from_named_str("url", &component_def.url_template)?
-                .render(context! {
-                    release => git_version.tag(),
-                })?;
-              let url = url::Url::parse(&url_str)?;
-
-              log::info!("Downloading {url}");
-
-              let bytes = reqwest::get(url.clone()).await?.bytes().await?;
-              install_wasm_component(&data_dir, url.path(), std::io::Cursor::new(bytes)).await?;
+              let filename = url.path();
+              install_wasm_component(&data_dir, filename, std::io::Cursor::new(bytes)).await?
             }
             ComponentReference::Url(url) => {
               log::info!("Downloading {url}");
               let bytes = reqwest::get(url.clone()).await?.bytes().await?;
-              install_wasm_component(&data_dir, url.path(), std::io::Cursor::new(bytes)).await?;
+              install_wasm_component(&data_dir, url.path(), std::io::Cursor::new(bytes)).await?
             }
             ComponentReference::Path(path) => {
               let bytes = std::fs::read(&path)?;
-              install_wasm_component(&data_dir, &path, std::io::Cursor::new(bytes)).await?;
+              install_wasm_component(&data_dir, &path, std::io::Cursor::new(bytes)).await?
             }
-          }
+          };
+
+          println!("Added: {paths:?}");
         }
         Some(ComponentSubCommands::Remove { reference }) => {
           match ComponentReference::try_from(reference.as_str())? {
@@ -303,7 +291,7 @@ async fn async_main() -> Result<(), BoxError> {
               return Err("URLs not supported for component removal".into());
             }
             ComponentReference::Name(name) => {
-              let component_def = find_component(&name)?;
+              let component_def = find_component(&name).ok_or("component not found")?;
               let wasm_dir = data_dir.root().join("wasm");
 
               let filenames: Vec<_> = component_def
@@ -345,6 +333,31 @@ async fn async_main() -> Result<(), BoxError> {
               "{} - interfaces: {output}",
               component.path.to_string_lossy()
             );
+          }
+        }
+        Some(ComponentSubCommands::Update) => {
+          let installed_components = list_installed_wasm_components(&data_dir)?;
+
+          for installed_component in installed_components {
+            let Some(filename) = installed_component.path.file_name() else {
+              continue;
+            };
+
+            let Some(component_def) = find_component_by_filename(&filename.to_string_lossy())
+            else {
+              log::warn!(
+                "Skipping {:?}, not a first-party component",
+                installed_component.path
+              );
+              continue;
+            };
+
+            let (url, bytes) = download_component(&component_def).await?;
+            let filename = url.path();
+            let paths =
+              install_wasm_component(&data_dir, filename, std::io::Cursor::new(bytes)).await?;
+
+            println!("Updated : {paths:?}");
           }
         }
         _ => {

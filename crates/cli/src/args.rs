@@ -275,4 +275,6 @@ pub enum ComponentSubCommands {
   List,
   /// List installed components.
   Installed,
+  /// Update all installed first-party components.
+  Update,
 }
