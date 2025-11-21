@@ -357,7 +357,7 @@ pub(crate) const ABI_MISMATCH_WARNING: &str = "\
     This may happen if the server and component are ABI incompatible. Make sure to run compatible \
     versions, i.e. update/rebuild the component to match the server binary or update your server \
     to run more up-to-date components.\n\
-    The auth-UI can be updated with `$ trail components add trailbase/auth_ui` or downloaded from: \
+    First-party components can be updated easily by running `$ trail components update` or downloaded from: \
     https://github.com/trailbaseio/trailbase/releases.";
 
 #[cfg(test)]
