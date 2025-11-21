@@ -60,10 +60,10 @@ wasmtime::component::bindgen!({
     // Interactions with `ResourceTable` can possibly trap so enable the ability
     // to return traps from generated functions.
     imports: {
-        "trailbase:database/sqlite/tx-commit": trappable,
-        "trailbase:database/sqlite/tx-rollback": trappable,
-        "trailbase:database/sqlite/tx-execute": trappable,
-        "trailbase:database/sqlite/tx-query": trappable,
+        "trailbase:database/sqlite.tx-commit": trappable,
+        "trailbase:database/sqlite.tx-rollback": trappable,
+        "trailbase:database/sqlite.tx-execute": trappable,
+        "trailbase:database/sqlite.tx-query": trappable,
         default: async | trappable,
     },
     exports: {
