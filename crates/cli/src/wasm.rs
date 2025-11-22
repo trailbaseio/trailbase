@@ -1,7 +1,6 @@
-use std::{
-  collections::HashMap,
-  io::{Read, Seek},
-};
+use std::collections::HashMap;
+use std::fs;
+use std::io::{Read, Seek};
 use trailbase::DataDir;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -73,6 +72,10 @@ pub async fn install_wasm_component(
 ) -> Result<Vec<std::path::PathBuf>, BoxError> {
   let path = path.as_ref();
   let wasm_dir = data_dir.root().join("wasm");
+
+  if !fs::exists(&wasm_dir)? {
+    fs::create_dir_all(&wasm_dir)?;
+  }
 
   return match path
     .extension()
