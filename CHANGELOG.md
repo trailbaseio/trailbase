@@ -1,3 +1,10 @@
+## v0.21.6
+
+- Maintenance release to explicitly drop the deprecated V8 integration from the repo.
+  - It has been a little over 6 weeks since v0.19, which removed V8 from the trail binary.
+  - I wasn't sure how long to keep the code around as an optional feature. However, the latest wasmtime release pins serde to a version that is incompatible with the latest (somewhat stale) deno/V8/SWC dependencies. In other words, updating wasmtime would break the V8 build :/. The state of the dependency chain had been one of the driving factors to move away. While it feels validating, it's a little sad to finally send it into the sunset.
+- Update Rust dependencies.
+
 ## v0.21.5
 
 - Add "excluded columns" to Admin UI's record API form.
