@@ -30,7 +30,7 @@ line-length = 108
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
+pythonVersion = "3.12"
+pythonPlatform = "All"
 typeCheckingMode = "strict"
-useLibraryCodeForTypes = true
 verboseOutput = true
-reportMissingTypeStubs = "warning"
