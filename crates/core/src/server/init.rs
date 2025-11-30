@@ -102,7 +102,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   )
   .map_err(|err| InitError::CustomInit(err.to_string()))?;
 
-  // TODO: We'd have to inject WASM runtimes here to make it available to connection..
+  // NOTE: We're injecting a WASM runtime to make custom functions available.
   let (conn, new_db) = crate::connection::init_main_db(
     Some(&args.data_dir),
     Some(json_schema_registry.clone()),

@@ -112,7 +112,8 @@ Alternatively, run TrailBase using the Docker image:
 alias trail='
   mkdir -p traildepot && \
   docker run \
-      --network host \
+      -p 4000:4000 \
+      -e ADDRESS=0.0.0.0:4000 \
       --mount type=bind,source="$PWD"/traildepot,target=/app/traildepot \
       trailbase/trailbase /app/trail'
 ```
