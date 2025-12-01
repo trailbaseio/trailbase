@@ -1,18 +1,18 @@
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use log::*;
 use parking_lot::Mutex;
-use std::path::PathBuf;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use trailbase_refinery::Migration;
+use walkdir::{DirEntry, WalkDir};
 
 const MIGRATION_TABLE_NAME: &str = "_schema_history";
 
 pub fn new_unique_migration_filename(suffix: &str) -> String {
   let timestamp = {
     // We use the timestamp as a version. We need to debounce it to avoid collisions.
-    lazy_static! {
-      static ref PREV_TIMESTAMP: Mutex<i64> = Mutex::new(0);
-    }
+    static PREV_TIMESTAMP: LazyLock<Mutex<i64>> = LazyLock::new(|| Mutex::new(0));
 
     let now = chrono::Utc::now().timestamp();
     let mut prev = PREV_TIMESTAMP.lock();
@@ -39,18 +39,6 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refine
   return runner;
 }
 
-fn load_migrations<T: rust_embed::RustEmbed>() -> Vec<Migration> {
-  let mut migrations = vec![];
-  for filename in T::iter() {
-    if let Some(file) = T::get(&filename) {
-      migrations.push(
-        Migration::unapplied(&filename, &String::from_utf8_lossy(&file.data)).expect("startup"),
-      )
-    }
-  }
-  return migrations;
-}
-
 /// Apply migrations: embedded and from `user_mgiations_path`.
 ///
 /// Returns true, if V1 was applied, i.e. DB is initialized for the first time,
@@ -59,57 +47,49 @@ pub(crate) fn apply_main_migrations(
   conn: &mut rusqlite::Connection,
   user_migrations_path: Option<PathBuf>,
 ) -> Result<bool, trailbase_refinery::Error> {
-  let all_migrations = {
-    let mut migrations: Vec<Migration> = vec![];
+  let mut migrations = vec![load_embedded_migrations::<MainMigrations>()];
+  if let Some(path) = user_migrations_path {
+    // if let Ok(user_migrations) = load_sql_migrations(path.join("main"), false) {
+    //   migrations.push(user_migrations);
+    // }
 
-    let system_migrations_runner: Vec<Migration> = load_migrations::<MainMigrations>();
-    migrations.extend(system_migrations_runner);
-
-    if let Some(path) = user_migrations_path {
-      let user_migrations = trailbase_refinery::load_sql_migrations(path)?;
-      migrations.extend(user_migrations);
-    }
-
-    // Interleave the system and user migrations based on their version prefixes.
-    migrations.sort();
-
-    migrations
-  };
-
-  let runner = new_migration_runner(&all_migrations);
-  let report = match runner.run(conn) {
-    Ok(report) => report,
-    Err(err) => {
-      error!("Migration error for 'main' DB: {err}");
-      return Err(err);
-    }
-  };
-
-  let applied_migrations = report.applied_migrations();
-  log_migrations("main", applied_migrations);
-
-  // If we applied migration v1 we can be sure this is a fresh database.
-  let new_db = applied_migrations.iter().any(|m| m.version() == 1);
-
-  return Ok(new_db);
+    // Legacy: all *.sql files in migrations.
+    migrations.push(load_sql_migrations(path, true)?);
+  }
+  return apply_migrations("main", conn, migrations);
 }
 
 pub(crate) fn apply_logs_migrations(
   logs_conn: &mut rusqlite::Connection,
 ) -> Result<(), trailbase_refinery::Error> {
-  let migrations = load_migrations::<LogsMigrations>();
+  apply_migrations(
+    "logs",
+    logs_conn,
+    vec![load_embedded_migrations::<LogsMigrations>()],
+  )?;
+  return Ok(());
+}
 
-  let mut runner = new_migration_runner(&migrations);
-  runner.set_migration_table_name(MIGRATION_TABLE_NAME);
+pub fn apply_migrations(
+  name: &str,
+  conn: &mut rusqlite::Connection,
+  migrations: Vec<Vec<Migration>>,
+) -> Result<bool, trailbase_refinery::Error> {
+  let migrations: Vec<Migration> = migrations.into_iter().flatten().sorted().collect();
 
-  let report = runner.run(logs_conn).map_err(|err| {
-    error!("Migration error for 'logs' DB: {err}");
+  let runner = new_migration_runner(&migrations);
+  let report = runner.run(conn).map_err(|err| {
+    error!("Migration error for '{name}' DB: {err}");
     return err;
   })?;
 
-  log_migrations("logs", report.applied_migrations());
+  let applied_migrations = report.applied_migrations();
+  log_migrations(name, applied_migrations);
 
-  return Ok(());
+  // If we applied migration v1 we can be sure this is a fresh database.
+  let new_db = applied_migrations.iter().any(|m| m.version() == 1);
+
+  return Ok(new_db);
 }
 
 fn log_migrations(db_name: &str, migrations: &[Migration]) {
@@ -141,6 +121,96 @@ fn log_migrations(db_name: &str, migrations: &[Migration]) {
       );
     }
   }
+}
+
+/// Loads SQL migrations from a path. This enables dynamic migration discovery, as opposed to
+/// embedding. The resulting collection is ordered by version.
+fn load_sql_migrations(
+  location: impl AsRef<Path>,
+  recursive: bool,
+) -> Result<Vec<Migration>, trailbase_refinery::Error> {
+  use trailbase_refinery::{Error, error::Kind};
+
+  let mut migrations = find_migration_files(location, recursive)?
+    .map(|path| -> Result<Migration, Error> {
+      let sql = std::fs::read_to_string(path.as_path()).map_err(|e| {
+        let path = path.to_owned();
+        let kind = match e.kind() {
+          std::io::ErrorKind::NotFound => Kind::InvalidMigrationPath(path, e),
+          _ => Kind::InvalidMigrationFile(path, e),
+        };
+
+        Error::new(kind, None)
+      })?;
+
+      let filename = path
+        .file_stem()
+        .and_then(|file| file.to_os_string().into_string().ok())
+        .ok_or_else(|| trailbase_refinery::Error::new(Kind::InvalidName, None))?;
+
+      return Migration::unapplied(&filename, &sql);
+    })
+    .collect::<Result<Vec<Migration>, Error>>()?;
+
+  migrations.sort();
+
+  return Ok(migrations);
+}
+
+const STEM_RE: &str = r"^([U|V])(\d+(?:\.\d+)?)__(\w+)";
+static SQL_FILE_RE: LazyLock<regex::Regex> =
+  LazyLock::new(|| regex::Regex::new(&format!(r"{STEM_RE}\.sql$")).expect("const"));
+
+/// find migrations on file system recursively across directories given a location and
+/// [MigrationType]
+fn find_migration_files(
+  location: impl AsRef<Path>,
+  recursive: bool,
+) -> Result<impl Iterator<Item = PathBuf>, trailbase_refinery::Error> {
+  use trailbase_refinery::error::Kind;
+
+  let location: &Path = location.as_ref();
+  let location = location.canonicalize().map_err(|err| {
+    trailbase_refinery::Error::new(
+      Kind::InvalidMigrationPath(location.to_path_buf(), err),
+      None,
+    )
+  })?;
+
+  // NOTE: Don't load recursively.
+  let file_paths = WalkDir::new(location)
+    .max_depth(if recursive {usize::MAX} else {1})
+    .into_iter()
+    .filter_map(Result::ok)
+    .map(DirEntry::into_path)
+    // filter by migration file regex
+    .filter(|path|-> bool {
+    return match path.file_name().and_then(OsStr::to_str) {
+      Some(_) if path.is_dir() => false,
+      Some(file_name) if SQL_FILE_RE.is_match(file_name) => true,
+      Some(file_name) => {
+        log::warn!(
+          "File \"{file_name}\" does not adhere to the migration naming convention. Migrations must be named in the format [U|V]{{1}}__{{2}}.sql or [U|V]{{1}}__{{2}}.rs, where {{1}} represents the migration version and {{2}} the name."
+        );
+        false
+      }
+      None => false,
+    };
+  });
+
+  Ok(file_paths)
+}
+
+fn load_embedded_migrations<T: rust_embed::RustEmbed>() -> Vec<Migration> {
+  return T::iter()
+    .map(|filename| {
+      return Migration::unapplied(
+        &filename,
+        &String::from_utf8_lossy(&T::get(&filename).expect("startup").data),
+      )
+      .expect("startup");
+    })
+    .collect();
 }
 
 #[derive(Clone, rust_embed::RustEmbed)]

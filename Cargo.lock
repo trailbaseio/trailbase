@@ -5760,6 +5760,7 @@ dependencies = [
  "utoipa",
  "uuid",
  "validator",
+ "walkdir",
 ]
 
 [[package]]
