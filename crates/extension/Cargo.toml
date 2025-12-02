@@ -14,10 +14,10 @@ crate-type=["cdylib", "rlib"]
 [dependencies]
 arc-swap = "1.7.1"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash", "rand", "std"] }
-base64 = { version = "0.22.1", default-features = false }
+base64 = { workspace = true }
 jsonschema = { version = "0.37.1", default-features = false }
 log = "0.4.27"
-maxminddb = "0.26.0"
+maxminddb = "0.27.0"
 mini-moka = "0.10.3"
 parking_lot = { workspace = true }
 regex = "1.11.0"

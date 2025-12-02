@@ -25,7 +25,7 @@ thiserror = "2.0.12"
 tokio = { workspace = true }
 
 [dev-dependencies]
-criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }
+criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 env_logger = { workspace = true }
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 log = "0.4.27"

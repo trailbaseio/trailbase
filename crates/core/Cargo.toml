@@ -112,7 +112,7 @@ trailbase-build = { workspace = true }
 [dev-dependencies]
 anyhow = "^1.0.86"
 axum-test = "18.1.0"
-criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }
+criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 env_logger = { workspace = true }
 trailbase-extension = { workspace = true }
 quoted_printable = "0.5.1"

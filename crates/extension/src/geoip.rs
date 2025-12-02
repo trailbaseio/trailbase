@@ -23,10 +23,7 @@ impl City {
   fn from(city: &geoip2::City) -> Self {
     return Self {
       name: extract_city_name(city),
-      country_code: city
-        .country
-        .as_ref()
-        .and_then(|c| Some(c.iso_code?.to_string())),
+      country_code: city.country.iso_code.map(|c| c.to_string()),
       subdivisions: extract_subdivision_names(city),
     };
   }
@@ -66,8 +63,25 @@ pub fn database_type() -> Option<DatabaseType> {
 
 pub(crate) fn geoip_country(context: &Context) -> Result<Option<String>, Error> {
   return geoip_extract(context, |reader, client_ip| {
-    if let Ok(Some(country)) = reader.lookup::<geoip2::Country>(client_ip) {
-      return Some(country.country?.iso_code?.to_string());
+    if let Ok(Some(country)) = reader
+      .lookup(client_ip)
+      .and_then(|result| result.decode::<geoip2::Country>())
+    {
+      return country.country.iso_code.map(|c| c.to_string());
+    }
+
+    return None;
+  });
+}
+
+fn geoip_city(context: &Context) -> Result<Option<City>, Error> {
+  return geoip_extract(context, |reader, client_ip| {
+    if let Ok(result) = reader.lookup(client_ip) {
+      return result
+        .decode::<geoip2::City>()
+        .ok()
+        .flatten()
+        .map(|city| City::from(&city));
     }
 
     return None;
@@ -75,19 +89,17 @@ pub(crate) fn geoip_country(context: &Context) -> Result<Option<String>, Error> 
 }
 
 pub(crate) fn geoip_city_json(context: &Context) -> Result<Option<String>, Error> {
-  return geoip_extract(context, |reader, client_ip| {
-    if let Ok(Some(ref city)) = reader.lookup::<geoip2::City>(client_ip) {
-      return serde_json::to_string(&City::from(city)).ok();
-    }
-
-    return None;
-  });
+  return Ok(geoip_city(context)?.and_then(|city| serde_json::to_string(&city).ok()));
 }
 
 pub(crate) fn geoip_city_name(context: &Context) -> Result<Option<String>, Error> {
   return geoip_extract(context, |reader, client_ip| {
-    if let Ok(Some(ref city)) = reader.lookup::<geoip2::City>(client_ip) {
-      return extract_city_name(city);
+    if let Ok(result) = reader.lookup(client_ip) {
+      return result
+        .decode::<geoip2::City>()
+        .ok()
+        .flatten()
+        .and_then(|city| extract_city_name(&city));
     }
 
     return None;
@@ -95,10 +107,10 @@ pub(crate) fn geoip_city_name(context: &Context) -> Result<Option<String>, Error
 }
 
 #[inline]
-fn geoip_extract(
+fn geoip_extract<T>(
   context: &Context,
-  f: impl Fn(&MaxMindReader, IpAddr) -> Option<String>,
-) -> Result<Option<String>, Error> {
+  f: impl Fn(&MaxMindReader, IpAddr) -> Option<T>,
+) -> Result<Option<T>, Error> {
   #[cfg(debug_assertions)]
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
@@ -122,38 +134,22 @@ fn geoip_extract(
 }
 
 fn extract_city_name(city: &geoip2::City) -> Option<String> {
-  return city.city.as_ref().and_then(|c| {
-    if let Some(ref names) = c.names {
-      if let Some(city_name) = names.get("en") {
-        return Some(city_name.to_string());
-      }
-
-      if let Some((_locale, city_name)) = names.first_key_value() {
-        return Some(city_name.to_string());
-      }
-    }
-    return None;
-  });
+  if let Some(city_name) = city.city.names.english {
+    return Some(city_name.to_string());
+  }
+  return None;
 }
 
 fn extract_subdivision_names(city: &geoip2::City) -> Option<Vec<String>> {
-  return city.subdivisions.as_ref().map(|divisions| {
-    return divisions
+  return Some(
+    city
+      .subdivisions
       .iter()
-      .filter_map(|s| {
-        if let Some(ref names) = s.names {
-          if let Some(city_name) = names.get("en") {
-            return Some(city_name.to_string());
-          }
-
-          if let Some((_locale, city_name)) = names.first_key_value() {
-            return Some(city_name.to_string());
-          }
-        }
-        return None;
+      .filter_map(|division| {
+        return division.names.english.map(|en| en.to_string());
       })
-      .collect();
-  });
+      .collect(),
+  );
 }
 
 #[cfg(test)]
