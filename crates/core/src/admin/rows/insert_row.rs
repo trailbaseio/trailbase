@@ -7,6 +7,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
+use crate::connection::ConnectionEntry;
 use crate::records::params::Params;
 use crate::records::write_queries::run_insert_query;
 
@@ -28,8 +29,11 @@ pub async fn insert_row_handler(
   Json(request): Json<InsertRowRequest>,
 ) -> Result<Json<InsertRowResponse>, Error> {
   let table_name = QualifiedName::parse(&table_name)?;
+  let ConnectionEntry {
+    connection: conn,
+    metadata,
+  } = state.connection_manager().get_entry_for_qn(&table_name)?;
 
-  let metadata = state.connection_metadata();
   let Some(table_metadata) = metadata.get_table(&table_name) else {
     return Err(Error::Precondition(format!(
       "Table {table_name:?} not found"
@@ -37,7 +41,8 @@ pub async fn insert_row_handler(
   };
 
   let rowid_value = run_insert_query(
-    &state,
+    &conn,
+    state.objectstore(),
     &QualifiedNameEscaped::new(&table_metadata.schema.name),
     None,
     "_rowid_",

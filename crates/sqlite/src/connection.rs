@@ -54,8 +54,8 @@ unsafe impl Sync for ConnectionVec {}
 pub type Result<T> = std::result::Result<T, Error>;
 
 enum Message {
-  RunMut(Box<dyn FnOnce(&mut rusqlite::Connection) + Send + 'static>),
-  RunConst(Box<dyn FnOnce(&rusqlite::Connection) + Send + 'static>),
+  RunMut(Box<dyn FnOnce(&mut rusqlite::Connection) + Send>),
+  RunConst(Box<dyn FnOnce(&rusqlite::Connection) + Send>),
   Terminate,
 }
 
@@ -507,18 +507,7 @@ impl Connection {
   }
 
   pub async fn list_databases(&self) -> Result<Vec<Database>> {
-    return self
-      .call(|conn| {
-        let mut stmt = conn.prepare("SELECT seq, name FROM pragma_database_list")?;
-        let mut rows = stmt.raw_query();
-
-        let mut databases: Vec<Database> = vec![];
-        while let Some(row) = rows.next()? {
-          databases.push(serde_rusqlite::from_row(row)?)
-        }
-        return Ok(databases);
-      })
-      .await;
+    return self.call_reader(list_databases).await;
   }
 
   /// Close the database connection.
@@ -659,6 +648,17 @@ impl DerefMut for ArcLockGuard {
   fn deref_mut(&mut self) -> &mut rusqlite::Connection {
     return &mut self.guard.deref_mut().0[0];
   }
+}
+
+pub fn list_databases(conn: &rusqlite::Connection) -> Result<Vec<Database>> {
+  let mut stmt = conn.prepare("SELECT seq, name FROM pragma_database_list")?;
+  let mut rows = stmt.raw_query();
+
+  let mut databases: Vec<Database> = vec![];
+  while let Some(row) = rows.next()? {
+    databases.push(serde_rusqlite::from_row(row)?)
+  }
+  return Ok(databases);
 }
 
 #[cfg(test)]

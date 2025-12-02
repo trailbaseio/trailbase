@@ -1,5 +1,4 @@
 use log::*;
-use object_store::ObjectStore;
 use reactivate::{Merge, Reactive};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -10,18 +9,19 @@ use trailbase_schema::QualifiedName;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
-use crate::config::proto::{Config, RecordApiConfig, S3StorageConfig, hash_config};
+use crate::config::proto::{
+  Config, JsonSchemaConfig, RecordApiConfig, S3StorageConfig, hash_config,
+};
 use crate::config::{ConfigError, validate_config, write_config_and_vault_textproto};
+use crate::connection::{ConnectionEntry, ConnectionManager};
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
-use crate::schema_metadata::{
-  ConnectionMetadata, build_connection_metadata_and_install_file_deletion_triggers,
-  lookup_and_parse_all_table_schemas, lookup_and_parse_all_view_schemas,
-};
 use crate::wasm::Runtime;
+
+pub(crate) type ObjectStore = dyn object_store::ObjectStore + Send + Sync;
 
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.
@@ -41,14 +41,15 @@ struct InternalState {
   config: Reactive<Config>,
   json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
 
+  // TODO: Remove in favor of connection manager.
   conn: trailbase_sqlite::Connection,
   logs_conn: trailbase_sqlite::Connection,
+  connection_manager: ConnectionManager,
 
   jwt: JwtHelper,
 
-  connection_metadata: Reactive<Arc<ConnectionMetadata>>,
   subscription_manager: SubscriptionManager,
-  object_store: Arc<dyn ObjectStore + Send + Sync>,
+  object_store: Arc<ObjectStore>,
 
   /// Actual WASM runtimes.
   wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
@@ -67,13 +68,12 @@ pub(crate) struct AppStateArgs {
   pub runtime_root_fs: Option<PathBuf>,
   pub dev: bool,
   pub demo: bool,
-  pub connection_metadata: ConnectionMetadata,
   pub config: Config,
   pub json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
-  pub conn: trailbase_sqlite::Connection,
   pub logs_conn: trailbase_sqlite::Connection,
+  pub connection_manager: ConnectionManager,
   pub jwt: JwtHelper,
-  pub object_store: Box<dyn ObjectStore + Send + Sync>,
+  pub object_store: Box<ObjectStore>,
   pub runtime_threads: Option<usize>,
 }
 
@@ -104,12 +104,20 @@ impl AppState {
       );
     });
 
-    let connection_metadata = Reactive::new(Arc::new(args.connection_metadata));
-    let record_apis = {
-      let conn = args.conn.clone();
-      let m = (&config, &connection_metadata).merge();
+    let proxy = {
+      let proxy = Reactive::new(());
+      let proxy_clone = proxy.clone();
+      args
+        .connection_manager
+        .add_observer(move || proxy_clone.notify());
+      proxy
+    };
 
-      derive_unchecked(&m, move |(config, metadata)| {
+    let record_apis = {
+      let connection_manager = args.connection_manager.clone();
+      let m = (&config, &proxy).merge();
+
+      derive_unchecked(&m, move |(config, _proxy)| {
         debug!("(re-)building Record APIs");
 
         return Arc::new(
@@ -117,7 +125,7 @@ impl AppState {
             .record_apis
             .iter()
             .filter_map(
-              |config| match build_record_api(conn.clone(), metadata, config.clone()) {
+              |config| match build_record_api(&connection_manager, config.clone()) {
                 Ok(api) => Some((api.api_name().to_string(), api)),
                 Err(err) => {
                   error!("{err}");
@@ -130,10 +138,11 @@ impl AppState {
       })
     };
 
-    let object_store: Arc<dyn ObjectStore + Send + Sync> = args.object_store.into();
+    let main_conn = args.connection_manager.main_entry().connection;
+    let object_store: Arc<ObjectStore> = args.object_store.into();
     let jobs_input = (
       args.data_dir.clone(),
-      args.conn.clone(),
+      args.connection_manager.clone(),
       args.logs_conn.clone(),
       object_store.clone(),
     );
@@ -143,7 +152,7 @@ impl AppState {
       build_wasm_runtime,
     } = crate::wasm::build_wasm_runtime(
       args.data_dir.clone(),
-      args.conn.clone(),
+      (*main_conn).clone(),
       args.runtime_root_fs.clone(),
       args.runtime_threads,
       args.dev,
@@ -180,10 +189,10 @@ impl AppState {
         jobs: derive_unchecked(&config, move |c| {
           debug!("(re-)building jobs from config");
 
-          let (data_dir, conn, logs_conn, object_store) = &jobs_input;
+          let (data_dir, conn_mgr, logs_conn, object_store) = &jobs_input;
 
           return Arc::new(
-            build_job_registry_from_config(c, data_dir, conn, logs_conn, object_store.clone())
+            build_job_registry_from_config(c, data_dir, conn_mgr, logs_conn, object_store.clone())
               .unwrap_or_else(|err| {
                 error!("Failed to build JobRegistry for cron jobs: {err}");
                 return JobRegistry::new();
@@ -194,15 +203,11 @@ impl AppState {
         record_apis: record_apis.clone(),
         config,
         json_schema_registry: args.json_schema_registry,
-        conn: args.conn.clone(),
+        conn: (*main_conn).clone(),
         logs_conn: args.logs_conn,
+        connection_manager: args.connection_manager,
         jwt: args.jwt,
-        subscription_manager: SubscriptionManager::new(
-          args.conn.clone(),
-          connection_metadata.clone(),
-          record_apis,
-        ),
-        connection_metadata,
+        subscription_manager: SubscriptionManager::new(record_apis),
         object_store,
         wasm_runtimes: build_wasm_runtime()
           .expect("startup")
@@ -243,6 +248,7 @@ impl AppState {
     return &self.state.json_schema_registry;
   }
 
+  #[cfg(test)]
   pub fn conn(&self) -> &trailbase_sqlite::Connection {
     return &self.state.conn;
   }
@@ -255,12 +261,12 @@ impl AppState {
     return &self.state.logs_conn;
   }
 
-  pub fn version(&self) -> trailbase_build::version::VersionInfo {
-    return trailbase_build::get_version_info!();
+  pub fn connection_manager(&self) -> ConnectionManager {
+    return self.state.connection_manager.clone();
   }
 
-  pub(crate) fn connection_metadata(&self) -> Arc<ConnectionMetadata> {
-    return self.state.connection_metadata.value();
+  pub fn version(&self) -> trailbase_build::version::VersionInfo {
+    return trailbase_build::get_version_info!();
   }
 
   pub(crate) fn subscription_manager(&self) -> &SubscriptionManager {
@@ -269,9 +275,8 @@ impl AppState {
 
   pub async fn rebuild_connection_metadata(
     &self,
-  ) -> Result<(), crate::schema_metadata::SchemaLookupError> {
-    let tables = lookup_and_parse_all_table_schemas(self.conn()).await?;
-    let views = lookup_and_parse_all_view_schemas(self.conn(), &tables).await?;
+  ) -> Result<(), crate::connection::ConnectionError> {
+    self.state.connection_manager.rebuild_metadata()?;
 
     // We typically rebuild the schema representations when the DB schemas change, which in turn
     // can invalidate the config, e.g. an API may reference a deleted table. Let's make sure to
@@ -279,29 +284,16 @@ impl AppState {
     // happened rendering the current config invalid. Unlike a config update, it's too late to
     // reject anything.
     let config = self.get_config();
-    validate_config(&tables, &views, &config).map_err(|err| {
+    validate_config(&self.state.connection_manager, &config).map_err(|err| {
       log::error!("Schema change invalidated config: {err}");
       return crate::schema_metadata::SchemaLookupError::Other(err.into());
     })?;
 
-    let connection_metadata = build_connection_metadata_and_install_file_deletion_triggers(
-      self.conn(),
-      tables,
-      views,
-      &self.state.json_schema_registry,
-    )
-    .await?;
-
-    self
-      .state
-      .connection_metadata
-      .set(Arc::new(connection_metadata));
-
     return Ok(());
   }
 
-  pub(crate) fn objectstore(&self) -> &(dyn ObjectStore + Send + Sync) {
-    return &*self.state.object_store;
+  pub(crate) fn objectstore(&self) -> &Arc<ObjectStore> {
+    return &self.state.object_store;
   }
 
   pub(crate) fn jobs(&self) -> Arc<JobRegistry> {
@@ -354,8 +346,8 @@ impl AppState {
     config: Config,
     hash: Option<String>,
   ) -> Result<(), ConfigError> {
-    let metadata = self.connection_metadata();
-    validate_config(&metadata.tables(), &metadata.views(), &config)?;
+    let connection_manager = self.connection_manager();
+    validate_config(&connection_manager, &config)?;
 
     match hash {
       Some(hash) => {
@@ -385,7 +377,8 @@ impl AppState {
     let new_config = self.get_config();
 
     {
-      if update_json_schema_registry(&new_config, &self.state.json_schema_registry).unwrap_or(true)
+      if update_json_schema_registry(&new_config.schemas, &self.state.json_schema_registry)
+        .unwrap_or(true)
         && let Err(err) = self.rebuild_connection_metadata().await
       {
         log::warn!("reloading JSON schema cache failed: {err}");
@@ -393,14 +386,7 @@ impl AppState {
     }
 
     // Write new config to the file system.
-    let metadata = self.connection_metadata();
-    return write_config_and_vault_textproto(
-      self.data_dir(),
-      &metadata.tables(),
-      &metadata.views(),
-      &new_config,
-    )
-    .await;
+    return write_config_and_vault_textproto(self.data_dir(), &connection_manager, &new_config);
   }
 
   pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<Runtime>>] {
@@ -445,12 +431,11 @@ impl AppState {
 
 /// Returns true if schemas were registered.
 pub(crate) fn update_json_schema_registry(
-  config: &Config,
+  config: &[JsonSchemaConfig],
   registry: &parking_lot::RwLock<JsonSchemaRegistry>,
 ) -> Result<bool, ConfigError> {
-  if !config.schemas.is_empty() {
+  if !config.is_empty() {
     let schemas: Vec<_> = config
-      .schemas
       .iter()
       .map(|s| {
         // Any panics here should be captured by config validation during load above.
@@ -536,6 +521,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 
   let temp_dir = temp_dir::TempDir::new()?;
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
+  let data_dir = DataDir(temp_dir.path().to_path_buf());
 
   let TestStateOptions {
     config,
@@ -547,32 +533,14 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     json_schema_registry
       .unwrap_or_else(|| trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap()),
   ));
-  let (conn, new) =
-    crate::connection::init_main_db(None, Some(json_schema_registry.clone()), None, vec![])?;
-  assert!(new);
+
+  let config = config.unwrap_or_else(test_config);
+  update_json_schema_registry(&config.schemas, &json_schema_registry).unwrap();
 
   let logs_conn = crate::connection::init_logs_db(None)?;
 
-  let tables = lookup_and_parse_all_table_schemas(&conn).await?;
-  let views = lookup_and_parse_all_view_schemas(&conn, &tables).await?;
-
-  let config = {
-    let config = config.unwrap_or_else(test_config);
-    validate_config(&tables, &views, &config).unwrap();
-    update_json_schema_registry(&config, &json_schema_registry).unwrap();
-
-    Reactive::new(config)
-  };
-
-  let connection_metadata = build_connection_metadata_and_install_file_deletion_triggers(
-    &conn,
-    tables,
-    views,
-    &json_schema_registry,
-  )
-  .await?;
-
-  let data_dir = DataDir(temp_dir.path().to_path_buf());
+  let connection_manager =
+    ConnectionManager::new_for_test(data_dir.clone(), json_schema_registry.clone(), vec![]);
 
   let object_store = if std::env::var("TEST_S3_OBJECT_STORE").map_or(false, |v| v == "TRUE") {
     info!("Use S3 Storage for tests");
@@ -593,17 +561,24 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     build_objectstore(&data_dir, None).unwrap().into()
   };
 
-  let connection_metadata = Reactive::new(Arc::new(connection_metadata));
-  let record_apis: Reactive<Arc<Vec<(String, RecordApi)>>> = {
-    let conn = conn.clone();
-    let m = (&config, &connection_metadata).merge();
+  let config = Reactive::new(config);
+  let proxy = {
+    let proxy = Reactive::new(());
+    let proxy_clone = proxy.clone();
+    connection_manager.add_observer(move || proxy_clone.notify());
+    proxy
+  };
 
-    derive_unchecked(&m, move |(c, metadata)| {
+  let record_apis: Reactive<Arc<Vec<(String, RecordApi)>>> = {
+    let connection_manager = connection_manager.clone();
+    let m = (&config, &proxy).merge();
+
+    derive_unchecked(&m, move |(c, _proxy)| {
       return Arc::new(
         c.record_apis
           .iter()
           .map(|config| {
-            let api = build_record_api(conn.clone(), &metadata, config.clone()).unwrap();
+            let api = build_record_api(&connection_manager, config.clone()).unwrap();
             return (api.api_name().to_string(), api);
           })
           .collect::<Vec<_>>(),
@@ -630,15 +605,11 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       record_apis: record_apis.clone(),
       config,
       json_schema_registry,
-      conn: conn.clone(),
+      conn: (*connection_manager.main_entry().connection).clone(),
       logs_conn,
+      connection_manager,
       jwt: crate::auth::jwt::test_jwt_helper(),
-      subscription_manager: SubscriptionManager::new(
-        conn.clone(),
-        connection_metadata.clone(),
-        record_apis,
-      ),
-      connection_metadata,
+      subscription_manager: SubscriptionManager::new(record_apis),
       object_store,
       wasm_runtimes: vec![],
       build_wasm_runtimes: Box::new(|| Ok(vec![])),
@@ -648,7 +619,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 }
 
 // Unlike Reactive::derive, doesn't require PartialEq.
-fn derive_unchecked<T, U: Clone + Send + 'static>(
+pub(crate) fn derive_unchecked<T, U: Clone + Send + 'static>(
   reactive: &Reactive<T>,
   f: impl Fn(&T) -> U + Send + 'static,
 ) -> Reactive<U>
@@ -666,8 +637,7 @@ where
 }
 
 fn build_record_api(
-  conn: trailbase_sqlite::Connection,
-  connection_metadata: &ConnectionMetadata,
+  connection_manager: &ConnectionManager,
   config: RecordApiConfig,
 ) -> Result<RecordApi, String> {
   let Some(ref table_name) = config.table_name else {
@@ -677,10 +647,24 @@ fn build_record_api(
   };
   let table_name = QualifiedName::parse(table_name).map_err(|err| err.to_string())?;
 
-  if let Some(table_metadata) = connection_metadata.get_table(&table_name) {
-    return RecordApi::from_table(conn, table_metadata, config);
-  } else if let Some(view_metadata) = connection_metadata.get_view(&table_name) {
-    return RecordApi::from_view(conn, view_metadata, config);
+  let ConnectionEntry {
+    connection: conn,
+    metadata,
+  } = if config.attached_databases.is_empty() {
+    connection_manager.main_entry()
+  } else {
+    connection_manager
+      .get_entry(
+        true,
+        Some(config.attached_databases.iter().cloned().collect()),
+      )
+      .map_err(|err| err.to_string())?
+  };
+
+  if let Some(table_metadata) = metadata.get_table(&table_name) {
+    return RecordApi::from_table(conn, metadata.clone(), table_metadata, config);
+  } else if let Some(view_metadata) = metadata.get_view(&table_name) {
+    return RecordApi::from_view(conn, metadata.clone(), view_metadata, config);
   }
 
   return Err(format!("RecordApi references missing table: {config:?}"));
@@ -689,7 +673,7 @@ fn build_record_api(
 pub(crate) fn build_objectstore(
   data_dir: &DataDir,
   config: Option<&S3StorageConfig>,
-) -> Result<Box<dyn ObjectStore + Send + Sync>, object_store::Error> {
+) -> Result<Box<ObjectStore>, object_store::Error> {
   if let Some(config) = config {
     let mut builder = object_store::aws::AmazonS3Builder::from_env();
 

@@ -146,11 +146,18 @@ async fn async_main() -> Result<(), BoxError> {
 
       println!("{}", serde_json::to_string_pretty(&json_schema)?);
     }
-    Some(SubCommands::Migration { suffix }) => {
+    Some(SubCommands::Migration { suffix, db }) => {
       init_logger(false);
 
       let filename = api::new_unique_migration_filename(suffix.as_deref().unwrap_or("update"));
-      let path = data_dir.migrations_path().join(filename);
+      let dir = data_dir
+        .migrations_path()
+        .join(db.as_deref().unwrap_or("main"));
+      let path = dir.join(filename);
+
+      if !dir.exists() {
+        std::fs::create_dir_all(dir)?;
+      }
 
       let mut migration_file = fs::File::create_new(&path).await?;
       migration_file
@@ -162,7 +169,7 @@ async fn async_main() -> Result<(), BoxError> {
     Some(SubCommands::Admin { cmd }) => {
       init_logger(false);
 
-      let (conn, _) = api::init_main_db(Some(&data_dir), None, None, vec![])?;
+      let (conn, _) = api::init_main_db(Some(&data_dir), None, vec![], vec![])?;
 
       match cmd {
         Some(AdminSubCommands::List) => {
@@ -201,7 +208,7 @@ async fn async_main() -> Result<(), BoxError> {
       init_logger(false);
 
       let data_dir = DataDir(args.data_dir);
-      let (conn, _) = api::init_main_db(Some(&data_dir), None, None, vec![])?;
+      let (conn, _) = api::init_main_db(Some(&data_dir), None, vec![], vec![])?;
 
       match cmd {
         Some(UserSubCommands::ChangePassword { user, password }) => {

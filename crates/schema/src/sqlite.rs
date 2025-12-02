@@ -539,9 +539,13 @@ impl QualifiedName {
 
 impl PartialEq for QualifiedName {
   fn eq(&self, other: &Self) -> bool {
-    return self.name == other.name
-      && self.database_schema.as_deref().unwrap_or("main")
-        == other.database_schema.as_deref().unwrap_or("main");
+    if self.database_schema.as_deref().unwrap_or("main")
+      != other.database_schema.as_deref().unwrap_or("main")
+    {
+      return false;
+    }
+
+    return self.name == other.name;
   }
 }
 

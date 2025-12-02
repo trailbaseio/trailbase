@@ -176,10 +176,12 @@ pub(crate) fn expand_tables<'s, T: AsRef<str>>(
       return Err(RecordError::Internal("not a foreign key".into()));
     };
 
-    let Some(foreign_table) = connection_metadata.get_table(&QualifiedName {
+    let fq_foreign_table_name = QualifiedName {
       name: foreign_table_name.clone(),
       database_schema: record_api.qualified_name().database_schema.clone(),
-    }) else {
+    };
+
+    let Some(foreign_table) = connection_metadata.get_table(&fq_foreign_table_name) else {
       return Err(RecordError::ApiRequiresTable);
     };
 

@@ -25,40 +25,46 @@ pub async fn drop_index_handler(
   State(state): State<AppState>,
   Json(request): Json<DropIndexRequest>,
 ) -> Result<Json<DropIndexResponse>, Error> {
-  let index_name = QualifiedName::parse(&request.name)?;
   if state.demo_mode() {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
   let dry_run = request.dry_run.unwrap_or(false);
-  let filename = index_name.migration_filename("drop_index");
+  let QualifiedName {
+    name: unqualified_index_name,
+    database_schema,
+  } = QualifiedName::parse(&request.name)?;
 
-  let tx_log = state
-    .conn()
-    .call(move |conn| {
-      let mut tx = TransactionRecorder::new(conn)?;
+  let (conn, migration_path) = super::get_conn_and_migration_path(&state, database_schema)?;
 
-      let query = format!(
-        "DROP INDEX IF EXISTS {name}",
-        name = index_name.escaped_string()
-      );
-      debug!("dropping index: {query}");
-      tx.execute(&query, ())?;
+  let tx_log = {
+    let unqualified_index_name = unqualified_index_name.clone();
+    conn
+      .call(move |conn| {
+        let mut tx = TransactionRecorder::new(conn)?;
 
-      return tx
-        .rollback()
-        .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
-    })
-    .await?;
+        let query = format!("DROP INDEX IF EXISTS \"{unqualified_index_name}\"");
+        debug!("dropping index: {query}");
+        tx.execute(&query, ())?;
 
-  if !dry_run {
-    // Take transaction log, write a migration file and apply.
-    if let Some(ref log) = tx_log {
-      let migration_path = state.data_dir().migrations_path();
-      let _report = log
-        .apply_as_migration(state.conn(), migration_path, &filename)
-        .await?;
+        return tx
+          .rollback()
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+      })
+      .await?
+  };
+
+  // Take transaction log, write a migration file and apply.
+  if !dry_run && let Some(ref log) = tx_log {
+    let filename = QualifiedName {
+      name: unqualified_index_name,
+      database_schema: None,
     }
+    .migration_filename("drop_index");
+
+    let _report = log
+      .apply_as_migration(&conn, migration_path, &filename)
+      .await?;
   }
 
   return Ok(Json(DropIndexResponse {

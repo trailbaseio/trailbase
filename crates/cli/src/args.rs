@@ -64,6 +64,8 @@ pub enum SubCommands {
   Migration {
     /// Optional suffix used for the generated migration file: U<timetamp>__<suffix>.sql.
     suffix: Option<String>,
+    /// Optional database name
+    db: Option<String>,
   },
   /// Manage admin users (list, demote, promote).
   Admin {

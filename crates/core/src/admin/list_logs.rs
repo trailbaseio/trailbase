@@ -149,17 +149,18 @@ pub async fn list_logs_handler(
       return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
     })?;
 
-  // NOTE: We cannot use state.connection_metadata() here, which is managed via a different database
-  // *and* connection.
-  let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME, None).await?;
+  let filter_where_clause = {
+    // NOTE: We cannot get `ConnectionMetadata` via the connection_manager() here because logs are
+    // in a different DB.
+    let table = lookup_and_parse_table_schema(conn, LOGS_TABLE_NAME, None).await?;
+    let table_metadata = TableMetadata::new(
+      &trailbase_extension::jsonschema::JsonSchemaRegistry::from_schemas(vec![]),
+      table.clone(),
+      &[table],
+    )?;
 
-  let table_metadata = TableMetadata::new(
-    &trailbase_extension::jsonschema::JsonSchemaRegistry::from_schemas(vec![]),
-    table.clone(),
-    &[table],
-  )?;
-  let filter_where_clause =
-    build_filter_where_clause("log", &table_metadata.schema.columns, filter_params)?;
+    build_filter_where_clause("log", &table_metadata.schema.columns, filter_params)?
+  };
 
   let total_row_count: i64 = conn
     .read_query_row_f(

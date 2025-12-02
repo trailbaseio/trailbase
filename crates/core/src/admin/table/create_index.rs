@@ -1,6 +1,6 @@
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
-use trailbase_schema::sqlite::TableIndex;
+use trailbase_schema::sqlite::{QualifiedName, TableIndex};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -25,13 +25,18 @@ pub async fn create_index_handler(
   Json(request): Json<CreateIndexRequest>,
 ) -> Result<Json<CreateIndexResponse>, Error> {
   let dry_run = request.dry_run.unwrap_or(false);
-  let index_name = request.schema.name.clone();
-  let filename = index_name.migration_filename("create_index");
+  let (db, index_schema) = {
+    let mut schema = request.schema.clone();
+    schema.table_name = QualifiedName::parse(&schema.table_name)?.name;
+    (schema.name.database_schema.take(), schema)
+  };
 
-  let create_index_query = request.schema.create_index_statement();
+  let (conn, migration_path) = super::get_conn_and_migration_path(&state, db)?;
 
-  let tx_log = state
-    .conn()
+  // This builds the `CREATE INDEX` SQL statement.
+  let create_index_query = index_schema.create_index_statement();
+
+  let tx_log = conn
     .call(move |conn| {
       let mut tx = TransactionRecorder::new(conn)?;
 
@@ -43,14 +48,12 @@ pub async fn create_index_handler(
     })
     .await?;
 
-  if !dry_run {
-    // Take transaction log, write a migration file and apply.
-    if let Some(ref log) = tx_log {
-      let migration_path = state.data_dir().migrations_path();
-      log
-        .apply_as_migration(state.conn(), migration_path, &filename)
-        .await?;
-    }
+  // Take transaction log, write a migration file and apply.
+  if !dry_run && let Some(ref log) = tx_log {
+    let filename = index_schema.name.migration_filename("create_index");
+    log
+      .apply_as_migration(&conn, migration_path, &filename)
+      .await?;
   }
 
   return Ok(Json(CreateIndexResponse {

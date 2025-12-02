@@ -3,13 +3,13 @@ use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use itertools::Itertools;
 use log::*;
-use object_store::ObjectStore;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use thiserror::Error;
 use trailbase_schema::{FileUpload, FileUploads, QualifiedNameEscaped};
 use trailbase_sqlite::params;
 
-use crate::app_state::AppState;
+use crate::app_state::{AppState, ObjectStore};
 use crate::records::params::FileMetadataContents;
 
 #[derive(Debug, Error)]
@@ -77,37 +77,46 @@ pub(crate) struct FileDeletionsDb {
 /// blocking a response on unrelated delations.
 /// QUESTION: Should we delete eagerly at all? We could just do this periodically.
 pub(crate) async fn delete_files_marked_for_deletion(
-  state: &AppState,
+  conn: &trailbase_sqlite::Connection,
+  store: &Arc<ObjectStore>,
   table_name: &QualifiedNameEscaped,
   rowids: &[i64],
 ) -> Result<(), FileError> {
+  // TODO: Ideally we would not re-parse here and instead pass a QualifiedName all the way.
+  let qualified_table_name = table_name.parse();
+  let db = qualified_table_name
+    .database_schema
+    .as_deref()
+    .unwrap_or("main");
+
   let rows: Vec<FileDeletionsDb> = match rowids.len() {
     0 => {
       return Ok(());
     }
     1 => {
-      state
-        .conn()
+      conn
         .write_query_values(
-          "DELETE FROM main._file_deletions WHERE table_name = ?1 AND record_rowid = ?2 RETURNING *",
-          trailbase_sqlite::params!(table_name.to_string(), rowids[0]),
+          format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = ?1 AND record_rowid = ?2 RETURNING *"#),
+          trailbase_sqlite::params!(qualified_table_name.escaped_string(), rowids[0]),
         )
         .await?
     }
-    _ => state
-      .conn()
-      .read_query_values(
+    _ => {
+      conn
+      .write_query_values(
         format!(
-          "DELETE FROM main._file_deletions WHERE table_name = {table_name} AND record_rowid IN ({ids}) RETURNING *",
+          r#"DELETE FROM "{db}"._file_deletions WHERE table_name = ?1 AND record_rowid IN ({ids}) RETURNING *"#,
             ids = rowids.iter().join(", "),
         ),
-        (),
+          trailbase_sqlite::params!(qualified_table_name.escaped_string()),
       )
-      .await?,
+      .await?
+    }
   };
 
+  // Question: Should we do this opportunistically like during updates?
   if !rows.is_empty() {
-    delete_pending_files_impl(state.conn(), state.objectstore(), rows).await?;
+    delete_pending_files_impl(conn, store, rows, db).await?;
   }
 
   return Ok(());
@@ -115,8 +124,9 @@ pub(crate) async fn delete_files_marked_for_deletion(
 
 pub(crate) async fn delete_pending_files_impl(
   conn: &trailbase_sqlite::Connection,
-  store: &dyn ObjectStore,
+  store: &Arc<ObjectStore>,
   pending_deletions: Vec<FileDeletionsDb>,
+  database_schema: &str,
 ) -> Result<(), FileError> {
   const ATTEMPTS_LIMIT: i64 = 10;
   if pending_deletions.is_empty() {
@@ -165,12 +175,12 @@ pub(crate) async fn delete_pending_files_impl(
   for error in errors {
     if let Err(err) = conn
       .execute(
-        r#"
-      INSERT INTO _file_deletions
-        (deleted, attempts, errors, table_name, record_row_id, column_name, json)
-      VALUES
-        (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-      "#,
+        format!(
+          r#"INSERT INTO "{database_schema}"._file_deletions
+            (deleted, attempts, errors, table_name, record_row_id, column_name, json)
+          VALUES
+            (?1, ?2, ?3, ?4, ?5, ?6, ?7)"#
+        ),
         params!(
           error.deleted,
           error.attempts,
@@ -196,11 +206,9 @@ pub(crate) struct FileManager {
 
 impl FileManager {
   pub(crate) async fn write(
-    state: &AppState,
+    store: &Arc<ObjectStore>,
     files: FileMetadataContents,
   ) -> Result<Self, object_store::Error> {
-    let store = state.objectstore();
-
     let mut written_files = Vec::<FileUpload>::with_capacity(files.len());
     for (metadata, contents) in files {
       // TODO: We could write files in parallel.
@@ -216,10 +224,9 @@ impl FileManager {
     let cleanup: Option<Box<dyn FnOnce() + Send + Sync>> = if written_files.is_empty() {
       None
     } else {
-      let state = state.clone();
+      let store = store.clone();
       Some(Box::new(move || {
         tokio::spawn(async move {
-          let store = state.objectstore();
           for file in written_files {
             let path = object_store::path::Path::from(file.objectstore_id());
             if let Err(err) = store.delete(&path).await {

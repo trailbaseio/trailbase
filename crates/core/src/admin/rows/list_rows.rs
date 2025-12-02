@@ -11,6 +11,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::admin::util::rows_to_sql_value_rows;
 use crate::app_state::AppState;
+use crate::connection::ConnectionEntry;
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 
 #[derive(Debug, Serialize, TS)]
@@ -48,7 +49,11 @@ pub async fn list_rows_handler(
     })?;
 
   let table_name = QualifiedName::parse(&table_name)?;
-  let metadata = state.connection_metadata();
+  let ConnectionEntry {
+    connection: conn,
+    metadata,
+  } = state.connection_manager().get_entry_for_qn(&table_name)?;
+
   let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
     return Err(Error::Precondition(format!(
       "Table or view '{table_name:?}' not found"
@@ -75,8 +80,7 @@ pub async fn list_rows_handler(
       "SELECT COUNT(*) FROM {table} AS _ROW_ WHERE {where_clause}",
       table = qualified_name.escaped_string()
     );
-    state
-      .conn()
+    conn
       .read_query_row_f(count_query, filter_where_clause.params.clone(), |row| {
         row.get(0)
       })
@@ -90,7 +94,7 @@ pub async fn list_rows_handler(
     _ => None,
   };
   let (rows, columns) = fetch_rows(
-    state.conn(),
+    &conn,
     qualified_name,
     filter_where_clause,
     &order,

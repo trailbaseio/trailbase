@@ -547,9 +547,11 @@ type FileUploadTable = {
   multiple_files: FileUpload[] | undefined;
 };
 
-test("File upload base64", async () => {
-  const client = await connect();
-  const api = client.records<FileUploadTable>("file_upload_table");
+async function testBase64FileUploads(
+  client: Client,
+  apiName: string,
+): Promise<void> {
+  const api = client.records<FileUploadTable>(apiName);
 
   const testBytes1 = new Uint8Array([0, 1, 2, 3, 4, 5]);
   const testBytes2 = new Uint8Array([42, 5, 42, 5]);
@@ -602,25 +604,40 @@ test("File upload base64", async () => {
 
   // Test file download endpoints to verify actual file content
   const singleFileResponse = await fetch(
-    `http://${ADDRESS}${filePath("file_upload_table", recordId, "single_file")}`,
+    `http://${ADDRESS}${filePath(apiName, recordId, "single_file")}`,
   );
   expect(await singleFileResponse.bytes()).toEqual(testBytes1);
 
   const singleFilesResponse = await fetch(
-    `http://${ADDRESS}${filesPath("file_upload_table", recordId, "single_file", singleFile.filename)}`,
+    `http://${ADDRESS}${filesPath(apiName, recordId, "single_file", singleFile.filename)}`,
   );
   expect(await singleFilesResponse.bytes()).toEqual(testBytes1);
 
   const multiFile1Response = await fetch(
-    `http://${ADDRESS}${filesPath("file_upload_table", recordId, "multiple_files", multipleFiles[0].filename)}`,
+    `http://${ADDRESS}${filesPath(apiName, recordId, "multiple_files", multipleFiles[0].filename)}`,
   );
   expect(await multiFile1Response.bytes()).toEqual(testBytes2);
 
   const multiFile2Response = await fetch(
-    `http://${ADDRESS}${filesPath("file_upload_table", recordId, "multiple_files", multipleFiles[1].filename)}`,
+    `http://${ADDRESS}${filesPath(apiName, recordId, "multiple_files", multipleFiles[1].filename)}`,
   );
   expect(await multiFile2Response.bytes()).toEqual(testBytes3);
 
+  const notFoundResponse = await fetch(
+    `http://${ADDRESS}${filesPath(apiName, recordId, "multiple_files", "non-existent-filename")}`,
+  );
+  expect(notFoundResponse.status).toEqual(status.NOT_FOUND);
+
   // Clean up
   await api.delete(recordId);
+}
+
+test("File upload base64: main DB", async () => {
+  const client = await connect();
+  await testBase64FileUploads(client, "file_upload_table");
+});
+
+test("File upload base64: other DB", async () => {
+  const client = await connect();
+  await testBase64FileUploads(client, "other_file_upload_table");
 });

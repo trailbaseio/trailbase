@@ -66,7 +66,7 @@ impl Guest for Endpoints {
         .await
         .map_err(internal)?[0][0];
 
-        println!("user id: {user_id:?}");
+        println!("[print from WASM guest] user id: {user_id:?}");
 
         let now = SystemTime::now();
         let num_insertions = execute(

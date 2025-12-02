@@ -35,7 +35,6 @@ use crate::data_dir::DataDir;
 use crate::logging;
 use crate::records;
 
-pub(crate) use init::init_connection;
 pub use init::{InitArgs, InitError, init_app_state};
 
 /// A set of options to configure serving behaviors. Changing any of these options
@@ -250,9 +249,13 @@ impl Server {
           // Re-apply migrations. This needs to happen before reloading the config, which is
           // consistent with the startup order. Otherwise, we may validate a configuration
           // against a stale database schema.
+          //
+          // TODO: Right now we're only re-applying main migrations.
           let user_migrations_path = state.data_dir().migrations_path();
           match state
-            .conn()
+            .connection_manager()
+            .main_entry()
+            .connection
             .call(|conn: &mut rusqlite::Connection| {
               return crate::migrations::apply_main_migrations(conn, Some(user_migrations_path))
                 .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
@@ -275,13 +278,11 @@ impl Server {
           if let Err(err) = state.rebuild_connection_metadata().await {
             error!("Failed to invalidate schema cache: {err}");
           }
-          let metadata = state.connection_metadata();
 
           // Reload config:
           match crate::config::load_or_init_config_textproto(
             state.data_dir(),
-            &metadata.tables(),
-            &metadata.views(),
+            &state.connection_manager(),
           )
           .await
           {

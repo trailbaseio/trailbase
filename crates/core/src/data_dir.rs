@@ -59,22 +59,20 @@ impl DataDir {
     return self.secrets_path().join("keys/");
   }
 
-  fn directories(&self) -> Vec<PathBuf> {
-    return vec![
+  pub(crate) async fn ensure_directory_structure(&self) -> std::io::Result<()> {
+    let directories = [
       self.data_path(),
       self.config_path(),
       self.backup_path(),
-      self.migrations_path(),
+      self.migrations_path().join("main"),
       self.uploads_path(),
       self.key_path(),
       self.root().join("wasm/"),
     ];
-  }
 
-  pub(crate) async fn ensure_directory_structure(&self) -> std::io::Result<()> {
     // First create directory structure.
     let mut initialized = false;
-    for dir in self.directories() {
+    for dir in directories {
       if !fs::try_exists(&dir).await.unwrap_or(false) {
         initialized = true;
         fs::create_dir_all(dir).await?;

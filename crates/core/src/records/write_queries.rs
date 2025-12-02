@@ -1,10 +1,11 @@
 use askama::Template;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::sync::Arc;
 use trailbase_schema::QualifiedNameEscaped;
-use trailbase_sqlite::{NamedParams, Params as _, Value};
+use trailbase_sqlite::{Connection, NamedParams, Params as _, Value};
 
-use crate::AppState;
+use crate::app_state::ObjectStore;
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
@@ -161,7 +162,8 @@ impl WriteQuery {
 }
 
 pub(crate) async fn run_queries(
-  state: &AppState,
+  conn: &Connection,
+  objectstore: &Arc<ObjectStore>,
   queries: Vec<(
     WriteQuery,
     Option<(QualifiedNameEscaped, FileMetadataContents)>,
@@ -194,11 +196,10 @@ pub(crate) async fn run_queries(
   let file_manager = if all_files.is_empty() {
     None
   } else {
-    Some(FileManager::write(state, all_files).await?)
+    Some(FileManager::write(objectstore, all_files).await?)
   };
 
-  let result: Vec<WriteQueryResult> = state
-    .conn()
+  let result: Vec<WriteQueryResult> = conn
     .call(move |conn| {
       let tx = conn.transaction()?;
 
@@ -219,7 +220,9 @@ pub(crate) async fn run_queries(
 
     for (table_name, indexes) in queries_with_files {
       let rowids: Vec<_> = indexes.into_iter().map(|i| result[i].rowid).collect();
-      if let Err(err) = delete_files_marked_for_deletion(state, &table_name, &rowids).await {
+      if let Err(err) =
+        delete_files_marked_for_deletion(conn, objectstore, &table_name, &rowids).await
+      {
         log::debug!("Failed deleting files: {err}");
       }
     }
@@ -229,7 +232,8 @@ pub(crate) async fn run_queries(
 }
 
 pub(crate) async fn run_insert_query(
-  state: &AppState,
+  conn: &Connection,
+  objectstore: &Arc<ObjectStore>,
   table_name: &QualifiedNameEscaped,
   conflict_resolution: Option<ConflictResolutionStrategy>,
   return_column_name: &str,
@@ -243,11 +247,10 @@ pub(crate) async fn run_insert_query(
   let file_manager = if files.is_empty() {
     None
   } else {
-    Some(FileManager::write(state, files).await?)
+    Some(FileManager::write(objectstore, files).await?)
   };
 
-  let (rowid, return_value): (i64, rusqlite::types::Value) = state
-    .conn()
+  let (rowid, return_value): (i64, rusqlite::types::Value) = conn
     .call(move |conn| {
       let result = query.apply(conn)?;
       return Ok((result.rowid, result.pk_value.expect("insert")));
@@ -259,7 +262,7 @@ pub(crate) async fn run_insert_query(
     file_manager.release();
 
     if Some(ConflictResolutionStrategy::Replace) == conflict_resolution {
-      delete_files_marked_for_deletion(state, table_name, &[rowid])
+      delete_files_marked_for_deletion(conn, objectstore, table_name, &[rowid])
         .await
         .map_err(|err| RecordError::Internal(err.into()))?;
     }
@@ -269,7 +272,8 @@ pub(crate) async fn run_insert_query(
 }
 
 pub(crate) async fn run_update_query(
-  state: &AppState,
+  conn: &Connection,
+  objectstore: &Arc<ObjectStore>,
   table_name: &QualifiedNameEscaped,
   params: Params,
 ) -> Result<(), RecordError> {
@@ -280,11 +284,10 @@ pub(crate) async fn run_update_query(
   let file_manager = if files.is_empty() {
     None
   } else {
-    Some(FileManager::write(state, files).await?)
+    Some(FileManager::write(objectstore, files).await?)
   };
 
-  let rowid: i64 = state
-    .conn()
+  let rowid: i64 = conn
     .call(move |conn| {
       return Ok(query.apply(conn)?.rowid);
     })
@@ -293,7 +296,7 @@ pub(crate) async fn run_update_query(
   // Successful write, do not cleanup written files.
   if let Some(mut file_manager) = file_manager {
     file_manager.release();
-    delete_files_marked_for_deletion(state, table_name, &[rowid])
+    delete_files_marked_for_deletion(conn, objectstore, table_name, &[rowid])
       .await
       .map_err(|err| RecordError::Internal(err.into()))?;
   }
@@ -302,7 +305,8 @@ pub(crate) async fn run_update_query(
 }
 
 pub(crate) async fn run_delete_query(
-  state: &AppState,
+  conn: &Connection,
+  objectstore: &Arc<ObjectStore>,
   table_name: &QualifiedNameEscaped,
   pk_column: &str,
   pk_value: Value,
@@ -310,15 +314,14 @@ pub(crate) async fn run_delete_query(
 ) -> Result<i64, RecordError> {
   let query = WriteQuery::new_delete(table_name, pk_column, pk_value)?;
 
-  let rowid: i64 = state
-    .conn()
+  let rowid: i64 = conn
     .call(move |conn| {
       return Ok(query.apply(conn)?.rowid);
     })
     .await?;
 
   if has_file_columns {
-    delete_files_marked_for_deletion(state, table_name, &[rowid])
+    delete_files_marked_for_deletion(conn, objectstore, table_name, &[rowid])
       .await
       .map_err(|err| RecordError::Internal(err.into()))?;
   }

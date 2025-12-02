@@ -24,7 +24,6 @@ import { sql, SQLConfig, SQLNamespace, SQLite } from "@codemirror/lang-sql";
 
 import { IconButton } from "@/components/IconButton";
 import { Header } from "@/components/Header";
-import { Separator } from "@/components/ui/separator";
 import { Callout } from "@/components/ui/callout";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +34,14 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import {
   useSidebar,
   Sidebar,
@@ -63,6 +70,7 @@ import type { QueryResponse } from "@bindings/QueryResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { SqlValue } from "@bindings/SqlValue";
 
+import { createConfigQuery } from "@/lib/api/config";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { executeSql, type ExecutionResult } from "@/lib/api/execute";
 import { isNotNull } from "@/lib/schema";
@@ -362,9 +370,18 @@ function EditorPanel(props: {
   const [selected, setSelected] = props.selected;
 
   const uiState = useStore($uiState);
+  const config = createConfigQuery();
 
   const isMobile = createIsMobile();
 
+  const databases = () =>
+    config.data?.config?.databases
+      .map((db) => db.name)
+      .filter((n) => n !== undefined);
+
+  const [attachedDbs, setAttachedDbs] = createSignal<string[]>(
+    databases()?.slice(0, 124) ?? [],
+  );
   const [queryString, setQueryString] = createWritableMemo<string | null>(
     () => {
       // Reset queryString to null whenever we switch scripts. If we read query
@@ -381,14 +398,19 @@ function EditorPanel(props: {
       initialData: props.script.result,
       // Just keying on query isn't enough, since multiple tabs/scripts may
       // have the same contents.
-      queryKey: [{ index: selected(), query: queryString() }],
+      queryKey: [
+        { index: selected(), query: queryString(), attachedDbs: attachedDbs() },
+      ],
       queryFn: async ({ queryKey }) => {
-        const [{ query }] = queryKey;
+        const [{ query, attachedDbs }] = queryKey;
         if (query === null) {
           return null;
         }
 
-        const response = await executeSql(query);
+        const response = await executeSql(
+          query,
+          attachedDbs.length > 0 ? attachedDbs : null,
+        );
         const error = response.error;
         if (error) {
           showToast({
@@ -518,7 +540,39 @@ function EditorPanel(props: {
         title="Editor"
         leading={<SidebarTrigger />}
         titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
-        right={<HelpDialog />}
+        right={
+          <div class="flex items-center">
+            <Select<string>
+              multiple={true}
+              options={[...(databases() ?? [])]}
+              value={attachedDbs()}
+              itemComponent={(props) => (
+                <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+              )}
+              onChange={(value: string[]) => setAttachedDbs(value)}
+            >
+              <div class="flex items-center gap-2">
+                Attached
+                <SelectTrigger>
+                  <SelectValue class="max-w-[50%] min-w-[32px] text-ellipsis">
+                    {(state) => {
+                      const selected = state.selectedOptions();
+                      if (selected.length === 0) {
+                        // FIXME: state callback never gets called when empty.
+                        return "none";
+                      }
+                      return selected.join(", ");
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+              </div>
+
+              <SelectContent />
+            </Select>
+
+            <HelpDialog />
+          </div>
+        }
       />
 
       <div class="mx-4 my-2 flex flex-col gap-2">

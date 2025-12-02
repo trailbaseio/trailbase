@@ -35,8 +35,8 @@ askama = { workspace = true }
 async-channel = "2.3.1"
 async-trait = "0.1.80"
 axum = { workspace = true }
-base64 = { workspace = true }
 axum-tracing-opentelemetry = { version = "0.32.0", optional = true }
+base64 = { workspace = true }
 bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
 client-ip = "0.1.1"
@@ -66,6 +66,7 @@ parking_lot = { workspace = true }
 pin-project-lite = "0.2.16"
 prost = { version = "^0.14.1", default-features = false }
 prost-reflect = { version = "^0.16.0", default-features = false, features = ["derive", "text-format"] }
+quick_cache = "0.6.18"
 rand = { workspace = true }
 reactivate = { version = "0.4.2", features = ["threadsafe"] }
 regex = "1.11.0"

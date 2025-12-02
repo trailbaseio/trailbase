@@ -1,11 +1,9 @@
 use fallible_iterator::FallibleIterator;
 use log::*;
-use parking_lot::RwLock;
 use thiserror::Error;
-use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::parse::parse_into_statement;
-use trailbase_schema::sqlite::{SchemaError, Table, View};
-use trailbase_sqlite::{Connection, params};
+use trailbase_schema::sqlite::{Table, View};
+use trailbase_sqlite::params;
 
 pub use trailbase_schema::metadata::{
   ConnectionMetadata, JsonColumnMetadata, JsonSchemaError, TableMetadata,
@@ -13,39 +11,20 @@ pub use trailbase_schema::metadata::{
 
 use crate::constants::SQLITE_SCHEMA_TABLE;
 
-/// (Re-)build the connections schema representation *with* the side-effect of (re-)installing file
-/// deletion triggers.
-///
-/// Tying the construction of schema metadata and the (re-)installing of file deletion triggers so
-/// closely together is a necessary evil. For example, whenever a schema changes, e.g. a new file
-/// column is added, we need to rebuild the metadata and update or install missing triggers.
-pub(crate) async fn build_connection_metadata_and_install_file_deletion_triggers(
-  conn: &Connection,
-  tables: Vec<Table>,
-  views: Vec<View>,
-  registry: &RwLock<JsonSchemaRegistry>,
-) -> Result<ConnectionMetadata, SchemaLookupError> {
-  let metadata = ConnectionMetadata::from_schemas(tables, views, &registry.read())?;
-
-  setup_file_deletion_triggers(conn, &metadata).await?;
-
-  return Ok(metadata);
-}
-
 #[derive(Debug, Error)]
 pub enum SchemaLookupError {
   #[error("TB SQLite error: {0}")]
   Sql(#[from] trailbase_sqlite::Error),
   #[error("Rusqlite error: {0}")]
+  Rusqlite(#[from] rusqlite::Error),
+  #[error("Rusqlite error: {0}")]
   FromSql(#[from] rusqlite::types::FromSqlError),
   #[error("Schema error: {0}")]
-  Schema(#[from] SchemaError),
+  Schema(#[from] trailbase_schema::sqlite::SchemaError),
   #[error("Missing")]
   Missing,
   #[error("Sql parse error: {0}")]
   SqlParse(#[from] sqlite3_parser::lexer::sql::Error),
-  #[error("Json Schema error: {0}")]
-  JsonSchema(#[from] trailbase_schema::metadata::JsonSchemaError),
   #[error("Other error: {0}")]
   Other(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -79,25 +58,21 @@ pub async fn lookup_and_parse_table_schema(
   return Ok(table);
 }
 
-pub async fn lookup_and_parse_all_table_schemas(
-  conn: &trailbase_sqlite::Connection,
+pub fn lookup_and_parse_all_table_schemas_sync(
+  conn: &rusqlite::Connection,
 ) -> Result<Vec<Table>, SchemaLookupError> {
-  let databases = conn.list_databases().await?;
+  let databases = trailbase_sqlite::connection::list_databases(conn)?;
 
   let mut tables: Vec<Table> = vec![];
   for db in databases {
     // Then get the actual tables.
-    let rows = conn
-      .read_query_rows(
-        format!(
-          "SELECT sql FROM {db}.{SQLITE_SCHEMA_TABLE} WHERE type = 'table'",
-          db = db.name
-        ),
-        (),
-      )
-      .await?;
+    let mut stmt = conn.prepare(&format!(
+      "SELECT sql FROM {db}.{SQLITE_SCHEMA_TABLE} WHERE type = 'table'",
+      db = db.name
+    ))?;
+    let mut rows = stmt.raw_query();
 
-    for row in rows.iter() {
+    while let Some(row) = rows.next()? {
       let sql: String = row.get(0)?;
       let Some(stmt) = parse_into_statement(&sql)? else {
         return Err(SchemaLookupError::Missing);
@@ -127,23 +102,21 @@ fn sqlite3_parse_view(sql: &str, tables: &[Table]) -> Result<View, SchemaLookupE
   }
 }
 
-pub async fn lookup_and_parse_all_view_schemas(
-  conn: &trailbase_sqlite::Connection,
+pub fn lookup_and_parse_all_view_schemas_sync(
+  conn: &rusqlite::Connection,
   tables: &[Table],
 ) -> Result<Vec<View>, SchemaLookupError> {
-  let databases = conn.list_databases().await?;
+  let databases = trailbase_sqlite::connection::list_databases(conn)?;
 
   let mut views: Vec<View> = vec![];
   for db in databases {
     // Then get the actual views.
-    let rows = conn
-      .read_query_rows(
-        format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'view'"),
-        (),
-      )
-      .await?;
+    let mut stmt = conn.prepare(&format!(
+      "SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'view'"
+    ))?;
+    let mut rows = stmt.raw_query();
 
-    for row in rows.iter() {
+    while let Some(row) = rows.next()? {
       let sql: String = row.get(0)?;
       match sqlite3_parse_view(&sql, tables) {
         Ok(mut view) => {
@@ -160,61 +133,6 @@ pub async fn lookup_and_parse_all_view_schemas(
   return Ok(views);
 }
 
-// Install file column triggers. This ain't pretty, this might be better on construction and
-// schema changes.
-pub(crate) async fn setup_file_deletion_triggers(
-  conn: &trailbase_sqlite::Connection,
-  metadata: &ConnectionMetadata,
-) -> Result<(), SchemaLookupError> {
-  for metadata in metadata.tables.values() {
-    for idx in metadata.json_metadata.file_column_indexes() {
-      let table_name = &metadata.schema.name;
-      let unqualified_name = &metadata.schema.name.name;
-      let db = metadata
-        .schema
-        .name
-        .database_schema
-        .as_deref()
-        .unwrap_or("main");
-
-      if db != "main" {
-        // FIXME: TRIGGERS are always database-local. Thus every database with tables
-        // with file columns would need its own _file_deletions table to track pending
-        // deletions.
-        return Err(SchemaLookupError::Other(
-          "File columns not (yet) supported on attached databases".into(),
-        ));
-      }
-
-      let col = &metadata.schema.columns[*idx];
-      let column_name = &col.name;
-
-      conn.execute_batch(indoc::formatdoc!(
-          r#"
-          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger";
-          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger" AFTER UPDATE ON {table_name}
-            WHEN OLD."{column_name}" IS NOT NULL AND OLD."{column_name}" != NEW."{column_name}"
-            BEGIN
-              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
-                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
-            END;
-
-          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger";
-          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger" AFTER DELETE ON {table_name}
-            WHEN OLD."{column_name}" IS NOT NULL
-            BEGIN
-              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
-                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
-            END;
-          "#,
-          table_name = table_name.escaped_string(),
-        )).await?;
-    }
-  }
-
-  return Ok(());
-}
-
 #[cfg(test)]
 mod tests {
   use axum::extract::{Json, Path, Query, RawQuery, State};
@@ -225,6 +143,7 @@ mod tests {
 
   use crate::app_state::*;
   use crate::config::proto::{PermissionFlag, RecordApiConfig};
+  use crate::connection::ConnectionEntry;
   use crate::records::list_records::list_records_handler;
   use crate::records::read_record::{ReadRecordQuery, read_record_handler};
   use crate::records::test_utils::add_record_api_config;
@@ -252,7 +171,8 @@ mod tests {
 
     state.rebuild_connection_metadata().await.unwrap();
 
-    let metadata = state.connection_metadata();
+    let ConnectionEntry { metadata, .. } = state.connection_manager().main_entry();
+
     let test_table = metadata
       .get_table(&QualifiedName {
         name: "test".to_string(),
@@ -296,36 +216,41 @@ mod tests {
   #[tokio::test]
   async fn test_expanded_foreign_key() {
     let state = test_state(None).await.unwrap();
-    let conn = state.conn();
-
-    conn
-      .execute(
-        "CREATE TABLE foreign_table (id INTEGER PRIMARY KEY) STRICT",
-        (),
-      )
-      .await
-      .unwrap();
 
     let table_name = QualifiedName {
       name: "test_table".to_string(),
       database_schema: None,
     };
 
-    conn
-      .execute(
-        format!(
-          r#"CREATE TABLE {table_name} (
+    {
+      let ConnectionEntry {
+        connection: conn, ..
+      } = state.connection_manager().main_entry();
+
+      conn
+        .execute(
+          "CREATE TABLE foreign_table (id INTEGER PRIMARY KEY) STRICT",
+          (),
+        )
+        .await
+        .unwrap();
+
+      conn
+        .execute(
+          format!(
+            r#"CREATE TABLE {table_name} (
             id INTEGER PRIMARY KEY,
             fk INTEGER REFERENCES foreign_table(id)
           ) STRICT"#,
-          table_name = table_name.escaped_string(),
-        ),
-        (),
-      )
-      .await
-      .unwrap();
+            table_name = table_name.escaped_string(),
+          ),
+          (),
+        )
+        .await
+        .unwrap();
 
-    state.rebuild_connection_metadata().await.unwrap();
+      state.rebuild_connection_metadata().await.unwrap();
+    }
 
     add_record_api_config(
       &state,
@@ -340,7 +265,11 @@ mod tests {
     .await
     .unwrap();
 
-    let metadata = state.connection_metadata();
+    let ConnectionEntry {
+      connection: conn,
+      metadata,
+      ..
+    } = state.connection_manager().main_entry();
     let table_metadata = metadata.get_table(&table_name).unwrap();
 
     let (validator, schema) = build_json_schema_expanded(
@@ -521,8 +450,11 @@ mod tests {
     let state = test_state(None).await.unwrap();
 
     let table_name = "test_table";
+
     state
-      .conn()
+      .connection_manager()
+      .main_entry()
+      .connection
       .execute_batch(format!(
         r#"
         CREATE TABLE foreign_table0 (id INTEGER PRIMARY KEY) STRICT;

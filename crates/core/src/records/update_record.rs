@@ -59,7 +59,8 @@ pub async fn update_record_handler(
     .await?;
 
   run_update_query(
-    &state,
+    api.conn(),
+    state.objectstore(),
     api.table_name(),
     lazy_params
       .consume()

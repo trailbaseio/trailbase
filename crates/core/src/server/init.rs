@@ -1,20 +1,16 @@
 use log::*;
 use parking_lot::RwLock;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 
 use crate::app_state::{AppState, AppStateArgs, build_objectstore, update_json_schema_registry};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
-use crate::connection::AttachExtraDatabases;
+use crate::connection::ConnectionManager;
 use crate::constants::USER_TABLE;
 use crate::metadata::load_or_init_metadata_textproto;
 use crate::rand::generate_random_string;
-use crate::schema_metadata::{
-  build_connection_metadata_and_install_file_deletion_triggers, lookup_and_parse_all_table_schemas,
-  lookup_and_parse_all_view_schemas,
-};
 use crate::server::DataDir;
 
 #[derive(Debug, Error)]
@@ -70,33 +66,28 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     trailbase_schema::registry::build_json_schema_registry(vec![])?,
   ));
 
-  let (conn, new_db) = init_connection(
-    &args.data_dir,
+  if let Some(config) = crate::config::maybe_load_config_textproto_unverified(&args.data_dir)? {
+    update_json_schema_registry(&config.schemas, &json_schema_registry)?;
+  }
+
+  let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
+    args.data_dir.root().join("wasm"),
     args.runtime_root_fs.as_deref(),
-    json_schema_registry.clone(),
     args.dev,
+  )
+  .map_err(|err| InitError::ScriptError(err.to_string()))?;
+
+  let (connection_manager, new_db) = ConnectionManager::new(
+    args.data_dir.clone(),
+    json_schema_registry.clone(),
+    sync_wasm_runtimes,
   )?;
 
-  let tables = lookup_and_parse_all_table_schemas(&conn).await?;
-  let views = lookup_and_parse_all_view_schemas(&conn, &tables).await?;
-
   // Read config or write default one. Ensures config is validated.
-  let config = {
-    let config = load_or_init_config_textproto(&args.data_dir, &tables, &views).await?;
-    update_json_schema_registry(&config, &json_schema_registry)?;
-    config
-  };
+  let config = load_or_init_config_textproto(&args.data_dir, &connection_manager).await?;
 
   // Load the `<depot>/metadata.textproto`.
   let _metadata = load_or_init_metadata_textproto(&args.data_dir).await?;
-
-  let connection_metadata = build_connection_metadata_and_install_file_deletion_triggers(
-    &conn,
-    tables,
-    views,
-    &json_schema_registry,
-  )
-  .await?;
 
   let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
 
@@ -117,11 +108,10 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     runtime_root_fs: args.runtime_root_fs,
     dev: args.dev,
     demo: args.demo,
-    connection_metadata,
     config,
     json_schema_registry,
-    conn,
     logs_conn,
+    connection_manager,
     jwt,
     object_store,
     runtime_threads: args.runtime_threads,
@@ -177,58 +167,4 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   }
 
   return Ok((new_db, app_state));
-}
-
-pub(crate) fn init_connection(
-  data_dir: &DataDir,
-  runtime_root_fs: Option<&Path>,
-  json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-  dev: bool,
-) -> Result<(trailbase_sqlite::Connection, bool), InitError> {
-  // WIP: Allow multiple databases.
-  //
-  // Open or init the main db connection. Note that we derive whether a new DB was initialized
-  // based on whether the V1 migration had to be applied. Should be fairly robust.
-  let extra_databases: Vec<AttachExtraDatabases> = std::fs::read_dir(data_dir.data_path())?
-    .filter_map(|entry: Result<std::fs::DirEntry, _>| {
-      if let Ok(entry) = entry {
-        let path = entry.path();
-        if let (Some(stem), Some(ext)) = (path.file_stem(), path.extension()) {
-          if ext != "db" {
-            return None;
-          }
-
-          if stem != "main" && stem != "logs" {
-            return Some(AttachExtraDatabases {
-              schema_name: stem.to_string_lossy().to_string(),
-              path: path.to_path_buf(),
-            });
-          }
-        }
-      }
-      return None;
-    })
-    .collect();
-
-  // SQLite supports only up to 125 DBs per connection: https://sqlite.org/limits.html.
-  if extra_databases.len() > 124 {
-    return Err(InitError::CustomInit("Too many databases".into()));
-  }
-
-  let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
-    data_dir.root().join("wasm"),
-    runtime_root_fs,
-    dev,
-  )
-  .map_err(|err| InitError::CustomInit(err.to_string()))?;
-
-  // NOTE: We're injecting a WASM runtime to make custom functions available.
-  let (conn, new_db) = crate::connection::init_main_db(
-    Some(data_dir),
-    Some(json_schema_registry.clone()),
-    Some(extra_databases),
-    sync_wasm_runtimes,
-  )?;
-
-  return Ok((conn, new_db));
 }

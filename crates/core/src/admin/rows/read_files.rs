@@ -9,6 +9,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
+use crate::connection::ConnectionEntry;
 use crate::records::files::read_file_into_response;
 use crate::records::read_queries::run_get_files_query;
 
@@ -28,7 +29,11 @@ pub async fn read_files_handler(
   Query(query): Query<ReadFilesQuery>,
 ) -> Result<Response, Error> {
   let table_name = QualifiedName::parse(&table_name)?;
-  let metadata = state.connection_metadata();
+  let ConnectionEntry {
+    connection: conn,
+    metadata,
+  } = state.connection_manager().get_entry_for_qn(&table_name)?;
+
   let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
     return Err(Error::Precondition(format!(
       "Table {table_name:?} not found"
@@ -69,7 +74,7 @@ pub async fn read_files_handler(
   };
 
   let FileUploads(mut file_uploads) = run_get_files_query(
-    &state,
+    &conn,
     &table_name.into(),
     file_col_metadata,
     file_col_json_metadata,

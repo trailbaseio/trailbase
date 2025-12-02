@@ -46,19 +46,17 @@ pub async fn alter_table_handler(
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
-  let dry_run = request.dry_run.unwrap_or(false);
-  let source_schema = request.source_schema;
-  let source_table_name = source_schema.name.clone();
-  let filename = source_table_name.migration_filename("alter_table");
+  let AlterTableRequest {
+    source_schema: source_table_schema,
+    operations,
+    dry_run,
+  } = request;
 
-  let Some(_metadata) = state.connection_metadata().get_table(&source_table_name) else {
-    return Err(Error::Precondition(format!(
-      "Cannot alter '{source_table_name:?}'. Only tables are supported.",
-    )));
-  };
+  let dry_run = dry_run.unwrap_or(false);
+  let (conn, migration_path) =
+    super::get_conn_and_migration_path(&state, source_table_schema.name.database_schema.clone())?;
 
-  let operations = request.operations;
-  debug!("Alter table:\nsource: {source_schema:?}\nops: {operations:?}",);
+  debug!("Alter table:\nsource: {source_table_schema:?}\nops: {operations:?}",);
 
   if operations.is_empty() {
     return Ok(Json(AlterTableResponse {
@@ -68,108 +66,127 @@ pub async fn alter_table_handler(
 
   // Check that removing columns won't break record API configuration. Note that table renames
   // will be fixed up automatically later.
-  check_column_removals_invalidating_config(&state, &source_schema, &operations)?;
+  check_column_removals_invalidating_config(&state, &source_table_schema, &operations)?;
 
   let TargetSchema {
-    ephemeral_table_schema,
+    mut ephemeral_table_schema,
     ephemeral_table_rename,
     column_mapping,
-  } = build_ephemeral_target_schema(&source_schema, operations)?;
+  } = build_ephemeral_target_schema(&source_table_schema, operations)?;
 
-  let source_table_name = source_table_name.escaped_string();
-  let ephemeral_table_name = ephemeral_table_schema.name.escaped_string();
-  let ephemeral_table_rename_escaped = ephemeral_table_rename.as_ref().map(|n| n.escaped_string());
-  let (source_columns, target_columns): (Vec<String>, Vec<String>) =
-    column_mapping.into_iter().unzip();
+  let target_table_name = ephemeral_table_rename
+    .as_ref()
+    .unwrap_or(&ephemeral_table_schema.name)
+    .clone();
 
-  let tx_log = state
-    .conn()
-    .call(
-      move |conn| -> Result<Option<TransactionLog>, trailbase_sqlite::Error> {
-        let mut tx = TransactionRecorder::new(conn)
-          .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+  let tx_log = {
+    let unqualified_source_table_name = source_table_schema.name.name.clone();
+    let unqualified_ephemeral_table_rename =
+      ephemeral_table_rename.as_ref().map(|n| n.name.clone());
 
-        tx.execute("PRAGMA foreign_keys = OFF", ())?;
+    let (source_columns, target_columns): (Vec<String>, Vec<String>) =
+      column_mapping.into_iter().unzip();
 
-        // Create new table
-        let sql = ephemeral_table_schema.create_table_statement();
-        tx.execute(&sql, ()).map_err(|err| {
-          warn!("Failed creating ephemeral table, likely invalid operations: {sql}\n\t{err}");
-          return err;
-        })?;
+    // Strip qualification.
+    ephemeral_table_schema.name.database_schema = None;
 
-        // Copy
-        let insert_data_query = format!(
-          r#"
+    conn
+      .call(
+        move |conn| -> Result<Option<TransactionLog>, trailbase_sqlite::Error> {
+          let mut tx = TransactionRecorder::new(conn)
+            .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+
+          tx.execute("PRAGMA foreign_keys = OFF", ())?;
+
+          // Create new table
+          let sql = ephemeral_table_schema.create_table_statement();
+          tx.execute(&sql, ()).map_err(|err| {
+            warn!("Failed creating ephemeral table, likely invalid operations: {sql}\n\t{err}");
+            return err;
+          })?;
+
+          // Copy
+          let unqualified_ephemeral_table_name = ephemeral_table_schema.name.name;
+          let insert_data_query = format!(
+            r#"
             INSERT INTO
-              {ephemeral_table_name} ({target_columns})
+              "{unqualified_ephemeral_table_name}" ({target_columns})
             SELECT
               {source_columns}
             FROM
-              {source_table_name}
+              "{unqualified_source_table_name}"
           "#,
-          source_columns = source_columns.join(", "),
-          target_columns = target_columns.join(", "),
-        );
-        tx.execute(&insert_data_query, ())?;
+            source_columns = escape_and_join_column_names(&source_columns),
+            target_columns = escape_and_join_column_names(&target_columns),
+          );
+          tx.execute(&insert_data_query, ())?;
 
-        tx.execute(&format!("DROP TABLE {source_table_name}"), ())?;
-
-        if let Some(target_name) = ephemeral_table_rename_escaped {
-          // NOTE: w/o the `legacy_alter_table = ON` the following `RENAME TO` would fail, since
-          // `ALTER TABLE` otherwise does a schema consistency-check and realize that any views
-          // referencing this table are no longer valid (even though may be again after the
-          // rename).
-          tx.execute("PRAGMA legacy_alter_table = ON", ())?;
           tx.execute(
-            &format!("ALTER TABLE {ephemeral_table_name} RENAME TO {target_name}"),
+            &format!("DROP TABLE \"{unqualified_source_table_name}\""),
             (),
           )?;
-          tx.execute("PRAGMA legacy_alter_table = OFF", ())?;
-        }
 
-        tx.execute("PRAGMA foreign_keys = ON", ())?;
+          if let Some(unqualified_target_name) = unqualified_ephemeral_table_rename {
+            // NOTE: w/o the `legacy_alter_table = ON` the following `RENAME TO` would fail, since
+            // `ALTER TABLE` otherwise does a schema consistency-check and realize that any views
+            // referencing this table are no longer valid (even though may be again after the
+            // rename).
+            tx.execute("PRAGMA legacy_alter_table = ON", ())?;
+            tx.execute(
+              &format!(
+                "ALTER TABLE \"{unqualified_ephemeral_table_name}\" RENAME TO \"{unqualified_target_name}\""
+              ),
+              (),
+            )?;
+            tx.execute("PRAGMA legacy_alter_table = OFF", ())?;
+          }
 
-        return tx
-          .rollback()
-          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
-      },
-    )
-    .await?;
+          tx.execute("PRAGMA foreign_keys = ON", ())?;
 
-  if !dry_run {
-    // Take transaction log, write a migration file and apply.
-    if let Some(ref log) = tx_log {
-      let migration_path = state.data_dir().migrations_path();
-      let report = log
-        .apply_as_migration(state.conn(), migration_path, &filename)
-        .await?;
-      debug!("Migration report: {report:?}");
+          return tx
+            .rollback()
+            .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+        },
+      )
+      .await?
+  };
+
+  // Take transaction log, write a migration file and apply.
+  if !dry_run && let Some(ref log) = tx_log {
+    let filename = QualifiedName {
+      name: target_table_name.name.clone(),
+      database_schema: None,
     }
+    .migration_filename("alter_table");
+
+    let report = log
+      .apply_as_migration(&conn, migration_path, &filename)
+      .await?;
+    debug!("Migration report: {report:?}");
 
     // Fix configuration: update all table references by existing APIs.
-    {
-      if let Some(rename) = ephemeral_table_rename
-        && matches!(rename.database_schema.as_deref(), Some("main") | None)
-      {
-        let mut config = state.get_config();
-        let old_config_hash = hash_config(&config);
+    if source_table_schema.name != target_table_name {
+      let mut config = state.get_config();
+      let old_config_hash = hash_config(&config);
 
-        for api in &mut config.record_apis {
-          if let Some(name) = api.table_name.as_deref()
-            && name == source_schema.name.name
-          {
-            api.table_name = Some(rename.name.clone());
+      for api in &mut config.record_apis {
+        if let Some(ref name) = api.table_name
+          && QualifiedName::parse(name)? == source_table_schema.name
+        {
+          if let Some(ref db) = target_table_name.database_schema {
+            api.table_name = Some(format!("{}.{}", db, target_table_name.name));
+          } else {
+            api.table_name = Some(target_table_name.name.clone());
           }
         }
-
-        state
-          .validate_and_update_config(config, Some(old_config_hash))
-          .await?;
       }
 
-      state.rebuild_connection_metadata().await?;
+      state
+        .validate_and_update_config(config, Some(old_config_hash))
+        .await?;
     }
+
+    state.rebuild_connection_metadata().await?;
   }
 
   return Ok(Json(AlterTableResponse {
@@ -198,6 +215,7 @@ fn build_ephemeral_target_schema(
       .iter()
       .map(|c| (c.name.clone(), c.name.clone())),
   );
+
   let mut schema = {
     let mut schema = source_schema.clone();
     schema.name = QualifiedName {
@@ -281,8 +299,9 @@ fn check_column_removals_invalidating_config(
 
   let config = state.get_config();
   for api in &config.record_apis {
-    let api_name = api.table_name.as_deref().unwrap_or_default();
-    if api_name != source_schema.name.name {
+    let api_name = api.name();
+    let api_table = QualifiedName::parse(api.table_name.as_deref().unwrap_or_default())?;
+    if api_table != source_schema.name {
       continue;
     }
 
@@ -335,6 +354,11 @@ fn check_column_removals_invalidating_config(
   }
 
   return Ok(());
+}
+
+fn escape_and_join_column_names(names: &[String]) -> String {
+  use itertools::Itertools;
+  return names.iter().map(|n| format!("\"{n}\"")).join(", ");
 }
 
 #[cfg(test)]
