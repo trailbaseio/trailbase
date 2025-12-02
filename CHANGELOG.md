@@ -1,3 +1,10 @@
+## v0.21.7
+
+- Move more migration-file-loading from refinery into TB in preparation for multi-DB migrations. At the moment this is a noop.
+- Use SQLites's `STRICT` for new migration tables.
+- Fix docker alias for Mac.
+- Update Rust dependencies, major versions.
+
 ## v0.21.6
 
 - Maintenance release to explicitly drop the deprecated V8 integration from the repo.
