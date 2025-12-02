@@ -94,7 +94,7 @@ pub fn init_main_db(
       // when missing in a new environment. So should others.
       let mut secondary =
         connect_rusqlite_without_default_extensions_and_schemas(Some(path.clone()))?;
-      let migrations = vec![load_sql_migrations(path.clone(), true)?];
+      let migrations = vec![load_sql_migrations(path.clone(), false)?];
       apply_migrations(&schema_name, &mut secondary, migrations)?;
 
       conn.attach(&path.to_string_lossy(), &schema_name)?;
