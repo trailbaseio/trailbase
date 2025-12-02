@@ -1,5 +1,6 @@
 use log::*;
-use std::path::PathBuf;
+use parking_lot::RwLock;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -65,49 +66,15 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   // Then open or init new databases.
   let logs_conn = crate::connection::init_logs_db(Some(&args.data_dir))?;
 
-  // WIP: Allow multiple databases.
-  //
-  // Open or init the main db connection. Note that we derive whether a new DB was initialized
-  // based on whether the V1 migration had to be applied. Should be fairly robust.
-  let paths = std::fs::read_dir(args.data_dir.data_path())?;
-  let extra_databases: Vec<AttachExtraDatabases> = paths
-    .filter_map(|entry: Result<std::fs::DirEntry, _>| {
-      if let Ok(entry) = entry {
-        let path = entry.path();
-        if let (Some(stem), Some(ext)) = (path.file_stem(), path.extension()) {
-          if ext != "db" {
-            return None;
-          }
-
-          if stem != "main" && stem != "logs" {
-            return Some(AttachExtraDatabases {
-              schema_name: stem.to_string_lossy().to_string(),
-              path: path.to_path_buf(),
-            });
-          }
-        }
-      }
-      return None;
-    })
-    .collect();
-
-  let json_schema_registry = Arc::new(parking_lot::RwLock::new(
+  let json_schema_registry = Arc::new(RwLock::new(
     trailbase_schema::registry::build_json_schema_registry(vec![])?,
   ));
 
-  let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
-    args.data_dir.root().join("wasm"),
-    args.runtime_root_fs.clone(),
+  let (conn, new_db) = init_connection(
+    &args.data_dir,
+    args.runtime_root_fs.as_deref(),
+    json_schema_registry.clone(),
     args.dev,
-  )
-  .map_err(|err| InitError::CustomInit(err.to_string()))?;
-
-  // NOTE: We're injecting a WASM runtime to make custom functions available.
-  let (conn, new_db) = crate::connection::init_main_db(
-    Some(&args.data_dir),
-    Some(json_schema_registry.clone()),
-    Some(extra_databases),
-    sync_wasm_runtimes,
   )?;
 
   let tables = lookup_and_parse_all_table_schemas(&conn).await?;
@@ -210,4 +177,58 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   }
 
   return Ok((new_db, app_state));
+}
+
+pub(crate) fn init_connection(
+  data_dir: &DataDir,
+  runtime_root_fs: Option<&Path>,
+  json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+  dev: bool,
+) -> Result<(trailbase_sqlite::Connection, bool), InitError> {
+  // WIP: Allow multiple databases.
+  //
+  // Open or init the main db connection. Note that we derive whether a new DB was initialized
+  // based on whether the V1 migration had to be applied. Should be fairly robust.
+  let extra_databases: Vec<AttachExtraDatabases> = std::fs::read_dir(data_dir.data_path())?
+    .filter_map(|entry: Result<std::fs::DirEntry, _>| {
+      if let Ok(entry) = entry {
+        let path = entry.path();
+        if let (Some(stem), Some(ext)) = (path.file_stem(), path.extension()) {
+          if ext != "db" {
+            return None;
+          }
+
+          if stem != "main" && stem != "logs" {
+            return Some(AttachExtraDatabases {
+              schema_name: stem.to_string_lossy().to_string(),
+              path: path.to_path_buf(),
+            });
+          }
+        }
+      }
+      return None;
+    })
+    .collect();
+
+  // SQLite supports only up to 125 DBs per connection: https://sqlite.org/limits.html.
+  if extra_databases.len() > 124 {
+    return Err(InitError::CustomInit("Too many databases".into()));
+  }
+
+  let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
+    data_dir.root().join("wasm"),
+    runtime_root_fs,
+    dev,
+  )
+  .map_err(|err| InitError::CustomInit(err.to_string()))?;
+
+  // NOTE: We're injecting a WASM runtime to make custom functions available.
+  let (conn, new_db) = crate::connection::init_main_db(
+    Some(data_dir),
+    Some(json_schema_registry.clone()),
+    Some(extra_databases),
+    sync_wasm_runtimes,
+  )?;
+
+  return Ok((conn, new_db));
 }

@@ -2,7 +2,7 @@ use log::*;
 use object_store::ObjectStore;
 use reactivate::{Merge, Reactive};
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
@@ -28,6 +28,8 @@ use crate::wasm::Runtime;
 struct InternalState {
   data_dir: DataDir,
   public_dir: Option<PathBuf>,
+  runtime_root_fs: Option<PathBuf>,
+
   site_url: Reactive<Arc<Option<url::Url>>>,
   dev: bool,
   demo: bool,
@@ -168,6 +170,7 @@ impl AppState {
       state: Arc::new(InternalState {
         data_dir: args.data_dir,
         public_dir: args.public_dir,
+        runtime_root_fs: args.runtime_root_fs,
         site_url,
         dev: args.dev,
         demo: args.demo,
@@ -219,8 +222,13 @@ impl AppState {
   }
 
   /// Optional user-prvoided public directory from where static assets are served.
-  pub fn public_dir(&self) -> Option<&PathBuf> {
-    return self.state.public_dir.as_ref();
+  pub fn public_dir(&self) -> Option<&Path> {
+    return self.state.public_dir.as_deref();
+  }
+
+  /// Optional user-prvoided public directory from where static assets are served.
+  pub fn runtime_root_fs(&self) -> Option<&Path> {
+    return self.state.runtime_root_fs.as_deref();
   }
 
   pub(crate) fn dev_mode(&self) -> bool {
@@ -607,6 +615,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     state: Arc::new(InternalState {
       data_dir,
       public_dir: None,
+      runtime_root_fs: None,
       site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
       dev: true,
       demo: false,

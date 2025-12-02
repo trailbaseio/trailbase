@@ -4,7 +4,7 @@ use bytes::Bytes;
 use http_body_util::{BodyExt, combinators::BoxBody};
 use hyper::StatusCode;
 use log::*;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -22,7 +22,7 @@ pub(crate) type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
 pub(crate) fn build_sync_wasm_runtimes_for_components(
   components_path: PathBuf,
-  fs_root_path: Option<PathBuf>,
+  fs_root_path: Option<&Path>,
   dev: bool,
 ) -> Result<Vec<SqliteFunctionRuntime>, AnyError> {
   let sync_runtimes: Vec<SqliteFunctionRuntime> =
@@ -30,7 +30,7 @@ pub(crate) fn build_sync_wasm_runtimes_for_components(
       return SqliteFunctionRuntime::new(
         path,
         RuntimeOptions {
-          fs_root_path: fs_root_path.clone(),
+          fs_root_path: fs_root_path.map(|p| p.to_owned()),
           use_winch: dev,
         },
       );

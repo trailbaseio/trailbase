@@ -70,7 +70,16 @@ pub async fn query_handler(
     ));
   }
 
-  let batched_rows_result = state.conn().execute_batch(request.query).await;
+  // Initialize a new connection, to avoid any sort of tomfoolery like dropping attached databases.
+  let (conn, _new_db) = crate::server::init_connection(
+    state.data_dir(),
+    state.runtime_root_fs(),
+    state.json_schema_registry().clone(),
+    state.dev_mode(),
+  )
+  .map_err(|err| Error::Precondition(err.to_string()))?;
+
+  let batched_rows_result = conn.execute_batch(request.query).await;
 
   // In the fallback case we always need to invalidate the cache.
   if must_invalidate_schema_cache {
