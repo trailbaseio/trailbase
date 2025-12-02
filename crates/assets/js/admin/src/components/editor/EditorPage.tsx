@@ -540,7 +540,7 @@ function EditorPanel(props: {
         )}
 
         {/* Editor */}
-        <div class="max-h-[40dvh] min-h-[6rem] shrink" ref={ref} />
+        <div class="min-h-[6rem] shrink" ref={ref} />
 
         <div class="flex items-center justify-between">
           <Tooltip>

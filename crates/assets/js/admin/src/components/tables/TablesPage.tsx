@@ -356,7 +356,7 @@ export function TablePage() {
 }
 
 type Settings = {
-  prevSelected?: String;
+  prevSelected?: string;
   showHidden?: boolean;
 };
 
