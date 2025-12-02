@@ -49,12 +49,12 @@ pub(crate) fn apply_main_migrations(
 ) -> Result<bool, trailbase_refinery::Error> {
   let mut migrations = vec![load_embedded_migrations::<MainMigrations>()];
   if let Some(path) = user_migrations_path {
-    // if let Ok(user_migrations) = load_sql_migrations(path.join("main"), false) {
-    //   migrations.push(user_migrations);
-    // }
+    if let Ok(user_migrations) = load_sql_migrations(path.join("main"), false) {
+      migrations.push(user_migrations);
+    }
 
     // Legacy: all *.sql files in migrations.
-    migrations.push(load_sql_migrations(path, true)?);
+    migrations.push(load_sql_migrations(path, false)?);
   }
   return apply_migrations("main", conn, migrations);
 }
