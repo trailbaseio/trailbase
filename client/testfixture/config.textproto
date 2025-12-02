@@ -27,6 +27,9 @@ auth {
   }]
 }
 jobs {}
+databases: [{
+   name: "extra"
+}]
 record_apis: [{
   name: "simple_strict_table"
   table_name: "simple_strict_table"

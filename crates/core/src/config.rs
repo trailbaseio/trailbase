@@ -396,6 +396,16 @@ async fn load_vault_textproto_or_default(data_dir: &DataDir) -> Result<proto::Va
   return Ok(vault);
 }
 
+pub(crate) fn maybe_load_config_textproto_unverified(
+  data_dir: &DataDir,
+) -> Result<Option<proto::Config>, ConfigError> {
+  return match std::fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)) {
+    Ok(contents) => Ok(Some(proto::Config::from_text(&contents)?)),
+    Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+    Err(err) => Err(err.into()),
+  };
+}
+
 // TODO: Initialization order is currently borked and worked-around by rebuilding
 // ConnectionMetadata. Specifically, building SchemaMatadataCache, which contains JSON metadata,
 // requires custom JSON schemas to be built from the config and globally registered. However,

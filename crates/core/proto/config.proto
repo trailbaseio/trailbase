@@ -264,6 +264,11 @@ message JsonSchemaConfig {
   optional string schema = 2;
 }
 
+message DatabaseConfig {
+  /// Name will be used as <traildepot>/(data/<name>.db|migrations/<name>/).
+  optional string name = 1;
+}
+
 message Config {
   // NOTE: These top-level fields currently have to be `required` due to the
   // overly simple approach on how we do config merging (from env vars and
@@ -272,6 +277,8 @@ message Config {
   required ServerConfig server = 3;
   required AuthConfig auth = 4;
   required JobsConfig jobs = 5;
+
+  repeated DatabaseConfig databases = 8;
 
   repeated RecordApiConfig record_apis = 11;
 

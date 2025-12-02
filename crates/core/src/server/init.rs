@@ -70,8 +70,17 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     trailbase_schema::registry::build_json_schema_registry(vec![])?,
   ));
 
+  let additional_databases: Vec<_> =
+    crate::config::maybe_load_config_textproto_unverified(&args.data_dir)?
+      .unwrap_or_default()
+      .databases
+      .iter()
+      .flat_map(|d| d.name.clone())
+      .collect();
+
   let (conn, new_db) = init_connection(
     &args.data_dir,
+    additional_databases,
     args.runtime_root_fs.as_deref(),
     json_schema_registry.clone(),
     args.dev,
@@ -181,6 +190,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
 
 pub(crate) fn init_connection(
   data_dir: &DataDir,
+  additional_databases: Vec<String>,
   runtime_root_fs: Option<&Path>,
   json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
   dev: bool,
@@ -189,24 +199,36 @@ pub(crate) fn init_connection(
   //
   // Open or init the main db connection. Note that we derive whether a new DB was initialized
   // based on whether the V1 migration had to be applied. Should be fairly robust.
-  let extra_databases: Vec<AttachExtraDatabases> = std::fs::read_dir(data_dir.data_path())?
-    .filter_map(|entry: Result<std::fs::DirEntry, _>| {
-      if let Ok(entry) = entry {
-        let path = entry.path();
-        if let (Some(stem), Some(ext)) = (path.file_stem(), path.extension()) {
-          if ext != "db" {
-            return None;
-          }
+  //
+  // NOTE: this approach doesn't apply any migrations.
+  // let extra_databases: Vec<AttachExtraDatabases> = std::fs::read_dir(data_dir.data_path())?
+  //   .filter_map(|entry: Result<std::fs::DirEntry, _>| {
+  //     if let Ok(entry) = entry {
+  //       let path = entry.path();
+  //       if let (Some(stem), Some(ext)) = (path.file_stem(), path.extension()) {
+  //         if ext != "db" {
+  //           return None;
+  //         }
+  //
+  //         if stem != "main" && stem != "logs" {
+  //           return Some(AttachExtraDatabases {
+  //             schema_name: stem.to_string_lossy().to_string(),
+  //             path: path.to_path_buf(),
+  //           });
+  //         }
+  //       }
+  //     }
+  //     return None;
+  //   })
+  //   .collect();
 
-          if stem != "main" && stem != "logs" {
-            return Some(AttachExtraDatabases {
-              schema_name: stem.to_string_lossy().to_string(),
-              path: path.to_path_buf(),
-            });
-          }
-        }
-      }
-      return None;
+  let extra_databases: Vec<AttachExtraDatabases> = additional_databases
+    .into_iter()
+    .map(|name| {
+      return AttachExtraDatabases {
+        path: data_dir.data_path().join(&name),
+        schema_name: name,
+      };
     })
     .collect();
 
