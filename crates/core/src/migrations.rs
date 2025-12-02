@@ -70,7 +70,7 @@ pub(crate) fn apply_logs_migrations(
   return Ok(());
 }
 
-pub fn apply_migrations(
+pub(crate) fn apply_migrations(
   name: &str,
   conn: &mut rusqlite::Connection,
   migrations: Vec<Vec<Migration>>,
@@ -125,7 +125,7 @@ fn log_migrations(db_name: &str, migrations: &[Migration]) {
 
 /// Loads SQL migrations from a path. This enables dynamic migration discovery, as opposed to
 /// embedding. The resulting collection is ordered by version.
-fn load_sql_migrations(
+pub(crate) fn load_sql_migrations(
   location: impl AsRef<Path>,
   recursive: bool,
 ) -> Result<Vec<Migration>, trailbase_refinery::Error> {

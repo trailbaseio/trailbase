@@ -6,7 +6,9 @@ use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 
 use crate::data_dir::DataDir;
-use crate::migrations::{apply_logs_migrations, apply_main_migrations};
+use crate::migrations::{
+  apply_logs_migrations, apply_main_migrations, apply_migrations, load_sql_migrations,
+};
 use crate::wasm::SqliteFunctionRuntime;
 
 pub use trailbase_sqlite::Connection;
@@ -40,8 +42,6 @@ pub fn init_main_db(
   attach: Option<Vec<AttachExtraDatabases>>,
   runtimes: Vec<SqliteFunctionRuntime>,
 ) -> Result<(Connection, bool), ConnectionError> {
-  let new_db = Arc::new(Mutex::new(false));
-
   let main_path = data_dir.map(|d| d.main_db_path());
   let migrations_path = data_dir.map(|d| d.migrations_path());
 
@@ -56,6 +56,7 @@ pub fn init_main_db(
     .collect::<Result<Vec<_>, _>>()
     .map_err(|err| return ConnectionError::Other(err.to_string()))?;
 
+  let new_db = Arc::new(Mutex::new(false));
   let conn = {
     let new_db = new_db.clone();
 
@@ -88,7 +89,14 @@ pub fn init_main_db(
   if let Some(attach) = attach {
     for AttachExtraDatabases { schema_name, path } in attach {
       debug!("Attaching '{schema_name}': {path:?}");
-      // FIXME: migrations for non-main databases.
+
+      // FIXME: Extra DBs should probably be config driven, rather than discovered. main is created
+      // when missing in a new environment. So should others.
+      let mut secondary =
+        connect_rusqlite_without_default_extensions_and_schemas(Some(path.clone()))?;
+      let migrations = vec![load_sql_migrations(path.clone(), true)?];
+      apply_migrations(&schema_name, &mut secondary, migrations)?;
+
       conn.attach(&path.to_string_lossy(), &schema_name)?;
     }
   }

@@ -215,6 +215,8 @@ pub(crate) fn init_connection(
     return Err(InitError::CustomInit("Too many databases".into()));
   }
 
+  // NOTE: If repeat connection initialization ever becomes a thing, way may want to cache/clone the
+  // SqliteFunctionRuntimes.
   let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
     data_dir.root().join("wasm"),
     runtime_root_fs,
