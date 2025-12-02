@@ -73,6 +73,12 @@ pub async fn query_handler(
   // Initialize a new connection, to avoid any sort of tomfoolery like dropping attached databases.
   let (conn, _new_db) = crate::server::init_connection(
     state.data_dir(),
+    state
+      .get_config()
+      .databases
+      .iter()
+      .flat_map(|d| d.name.clone())
+      .collect(),
     state.runtime_root_fs(),
     state.json_schema_registry().clone(),
     state.dev_mode(),
