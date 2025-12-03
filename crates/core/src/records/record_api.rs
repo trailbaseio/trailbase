@@ -43,10 +43,7 @@ type DeferredAclCheck = dyn (FnOnce(&rusqlite::Connection) -> Result<(), RecordE
 
 impl RecordApiSchema {
   fn from_table(table_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
-    assert_eq!(
-      config.table_name.as_ref(),
-      Some(&table_metadata.name().name)
-    );
+    assert_name(config, table_metadata.name());
 
     let Some((pk_index, pk_column)) = table_metadata.record_pk_column() else {
       return Err("RecordApi requires integer/UUIDv7 primary key column".into());
@@ -94,7 +91,7 @@ impl RecordApiSchema {
   }
 
   pub fn from_view(view_metadata: &ViewMetadata, config: &RecordApiConfig) -> Result<Self, String> {
-    assert_eq!(config.table_name.as_ref(), Some(&view_metadata.name().name));
+    assert_name(config, view_metadata.name());
 
     let Some((pk_index, pk_column)) = view_metadata.record_pk_column() else {
       return Err(format!(
@@ -189,10 +186,7 @@ impl RecordApi {
     table_metadata: &TableMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
-    assert_eq!(
-      config.table_name.as_ref(),
-      Some(&table_metadata.name().name)
-    );
+    assert_name(&config, table_metadata.name());
 
     return Self::from_impl(
       conn,
@@ -206,7 +200,7 @@ impl RecordApi {
     view_metadata: &ViewMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
-    assert_eq!(config.table_name.as_ref(), Some(&view_metadata.name().name));
+    assert_name(&config, view_metadata.name());
 
     return Self::from_impl(
       conn,
@@ -837,6 +831,21 @@ fn filter_columns(
   }
 
   return (columns_vec, json_column_metadata_vec);
+}
+
+#[inline]
+fn assert_name(config: &RecordApiConfig, name: &QualifiedName) {
+  // TODO: Should this be disabled in prod?
+  if let Some(ref db) = name.database_schema
+    && db != "main"
+  {
+    assert_eq!(
+      config.table_name.as_deref().unwrap_or_default(),
+      format!("{db}.{}", name.name)
+    );
+  } else {
+    assert_eq!(config.table_name.as_deref().unwrap_or_default(), &name.name);
+  }
 }
 
 #[cfg(test)]

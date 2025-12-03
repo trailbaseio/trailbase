@@ -59,6 +59,7 @@ pub fn init_main_db(
   let new_db = Arc::new(Mutex::new(false));
   let conn = {
     let new_db = new_db.clone();
+    let migrations_path = migrations_path.clone();
 
     trailbase_sqlite::Connection::new(
       move || -> Result<_, ConnectionError> {
@@ -90,12 +91,16 @@ pub fn init_main_db(
     for AttachExtraDatabases { schema_name, path } in attach {
       debug!("Attaching '{schema_name}': {path:?}");
 
-      // FIXME: Extra DBs should probably be config driven, rather than discovered. main is created
-      // when missing in a new environment. So should others.
-      let mut secondary =
-        connect_rusqlite_without_default_extensions_and_schemas(Some(path.clone()))?;
-      let migrations = vec![load_sql_migrations(path.clone(), false)?];
-      apply_migrations(&schema_name, &mut secondary, migrations)?;
+      if let Some(ref migrations_path) = migrations_path {
+        let mut secondary =
+          connect_rusqlite_without_default_extensions_and_schemas(Some(path.clone()))?;
+
+        let migrations = vec![load_sql_migrations(
+          migrations_path.join(&schema_name),
+          false,
+        )?];
+        apply_migrations(&schema_name, &mut secondary, migrations)?;
+      }
 
       conn.attach(&path.to_string_lossy(), &schema_name)?;
     }
