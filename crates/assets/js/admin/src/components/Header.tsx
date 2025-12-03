@@ -7,9 +7,10 @@ export function Header(props: {
   left?: JSX.Element;
   right?: JSX.Element;
   leading?: JSX.Element;
+  class?: string;
 }) {
   return (
-    <div>
+    <div class={props.class}>
       <header
         class={`${props.leading ? "mr-4" : "mx-4"} my-3 flex flex-wrap items-center gap-2`}
       >

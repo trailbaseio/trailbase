@@ -2,7 +2,6 @@ import { onMount } from "solid-js";
 import { Graph, Cell, Shape, Edge, NodeMetadata, EdgeMetadata } from "@antv/x6";
 
 import { cn } from "@/lib/utils";
-import { createIsMobile } from "@/lib/signals";
 
 export const ER_NODE_NAME = "er-rect";
 export const LINE_HEIGHT = 24;
@@ -120,8 +119,8 @@ export function ErdGraph(props: {
   class?: string;
   nodes: NodeMetadata[];
   edges: EdgeMetadata[];
+  onMount?: (graph: Graph) => void;
 }) {
-  const isMobile = createIsMobile();
   let ref: HTMLDivElement | undefined;
 
   onMount(() => {
@@ -201,20 +200,9 @@ export function ErdGraph(props: {
 
     graph.resetCells(cells);
     graph.zoomToFit({ padding: 20, maxScale: 1, minScale: 0.1 });
+
+    props.onMount?.(graph);
   });
 
-  const style = () => {
-    if (isMobile()) {
-      return "h-[calc(100dvh-120px)] w-[calc(100dvw)] overflow-clip";
-    }
-    return "h-[calc(100dvh-65px)] w-[calc(100dvw-58px)] overflow-clip";
-  };
-
-  // NOTE: The double styling seems somehow needed, otherwise it overflows on
-  // mobile. x6 may also apply some styles on top.
-  return (
-    <div class={style()}>
-      <div ref={ref} class={cn(style(), props.class)} />
-    </div>
-  );
+  return <div ref={ref} class={cn(props.class, "overflow-clip")} />;
 }
