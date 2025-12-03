@@ -199,7 +199,7 @@ pub(crate) fn init_connection(
     .into_iter()
     .map(|name| {
       return AttachExtraDatabases {
-        path: data_dir.data_path().join(&format!("{name}.db")),
+        path: data_dir.data_path().join(format!("{name}.db")),
         schema_name: name,
       };
     })

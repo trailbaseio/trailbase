@@ -514,6 +514,30 @@ pub fn validate_config<T: Borrow<Table>, V: Borrow<View>>(
     None => None,
   };
 
+  if config.databases.len() > 124 {
+    return ierr("Too many databases. Currently limited to 124");
+  }
+
+  for db in &config.databases {
+    let Some(ref name) = db.name else {
+      return ierr("Missing database name");
+    };
+
+    match name.as_str() {
+      "main" | "logs" | "" => {
+        return ierr(format!("Invalid database name: {name}"));
+      }
+      name
+        if !name
+          .chars()
+          .all(|x| x.is_ascii_alphanumeric() || x == '_' || x == '-') =>
+      {
+        return ierr(format!("Invalid database name: {name}"));
+      }
+      _ => {}
+    }
+  }
+
   // Check RecordApis.
   //
   // Note: it is valid to declare multiple api (e.g. with different acls) over the same
