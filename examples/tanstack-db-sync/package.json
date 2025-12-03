@@ -17,8 +17,8 @@
     "@tanstack/query-db-collection": "^1.0.5",
     "@tanstack/react-db": "^0.1.54",
     "@tanstack/trailbase-db-collection": "^0.1.54",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
     "tailwindcss": "^4.1.17",
     "trailbase": "^0.8.0"
   },
