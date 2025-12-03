@@ -31,6 +31,7 @@ import {
   SelectOneOf,
   buildTextFormField,
   floatPattern,
+  intPattern,
   gapStyle,
 } from "@/components/FormFields";
 import type { FormApiT, AnyFieldApi } from "@/components/FormFields";
@@ -271,18 +272,22 @@ function ColumnOptionDefaultField(props: {
     </HoverCard>
   );
 
-  const validationPattern = () => {
+  const defaultFieldValidationPattern = () => {
+    const functionPattern = "[(].*[)]";
+    const blobPattern = "X'.*'";
+    const textPattern = "'.*'";
+
     switch (props.column.data_type) {
       case "Any":
-        return undefined;
+        return `^\\s*(${functionPattern}|${blobPattern}|${textPattern}|${intPattern}|${floatPattern}})\\s*$`;
       case "Blob":
-        return "^X'.*'$";
+        return `^\\s*(${functionPattern}|${blobPattern})\\s*$`;
       case "Text":
-        return "^'.*'$";
+        return `^\\s*(${functionPattern}|${textPattern})\\s*$`;
       case "Integer":
-        return undefined;
+        return `^\\s*(${functionPattern}|${intPattern})\\s*$`;
       case "Real":
-        return floatPattern;
+        return `^\\s*(${functionPattern}|${floatPattern})\\s*$`;
     }
   };
 
@@ -305,10 +310,11 @@ function ColumnOptionDefaultField(props: {
           </TextFieldLabel>
         </L>
 
+        {/* `type` needs to be "text" to allow for functions, e.g.: (unixepoch()) */}
         <TextFieldInput
           disabled={props.disabled}
-          type={props.column.data_type === "Integer" ? "number" : "text"}
-          pattern={validationPattern()}
+          type="text"
+          pattern={defaultFieldValidationPattern()}
           value={getDefaultValue(props.value) ?? ""}
           onChange={(e: Event) => {
             const value: string | undefined = (
@@ -316,7 +322,10 @@ function ColumnOptionDefaultField(props: {
             ).value;
 
             props.onChange(
-              setDefaultValue(props.value, value === "" ? undefined : value),
+              setDefaultValue(
+                props.value,
+                value === "" ? undefined : value.trim(),
+              ),
             );
           }}
         />
