@@ -88,23 +88,26 @@ function columnTypeField(
     // Note: use createMemo to avoid rebuilds for any state change.
     const value = createMemo(() => field().state.value);
 
+    // Effect that updates the data type when a foreign key is being selected.
     createEffect(() => {
       const foreignKey = fk();
 
       if (foreignKey) {
-        const v = value();
-
         for (const table of allTables) {
           const tableName = table.name.name;
           if (tableName === foreignKey) {
-            const type = table.columns[0].data_type;
-            console.debug(foreignKey, tableName, type, v);
-            if (v === type) {
-              break;
-            }
+            const targetType = table.columns[0].data_type;
+            if (value() !== targetType) {
+              field().setValue(targetType);
 
-            field().setValue(type);
-            break;
+              patchColumn(form, colIndex, (col: Column): Column => {
+                return {
+                  ...col,
+                  ...typeNameAndAffinityType(targetType),
+                };
+              });
+            }
+            return;
           }
         }
       }
@@ -124,38 +127,10 @@ function columnTypeField(
           // artifact of us reusing the parsed structure. Fix up the relevant
           // field (and affinity type just for consistency).
           patchColumn(form, colIndex, (col: Column): Column => {
-            switch (v) {
-              case "Any":
-                return {
-                  ...col,
-                  type_name: "ANY",
-                  affinity_type: "Blob",
-                };
-              case "Blob":
-                return {
-                  ...col,
-                  type_name: "BLOB",
-                  affinity_type: "Blob",
-                };
-              case "Text":
-                return {
-                  ...col,
-                  type_name: "TEXT",
-                  affinity_type: "Text",
-                };
-              case "Integer":
-                return {
-                  ...col,
-                  type_name: "INTEGER",
-                  affinity_type: "Integer",
-                };
-              case "Real":
-                return {
-                  ...col,
-                  type_name: "REAL",
-                  affinity_type: "Real",
-                };
-            }
+            return {
+              ...col,
+              ...typeNameAndAffinityType(v),
+            };
           });
         }}
         handleBlur={field().handleBlur}
@@ -365,29 +340,30 @@ function ColumnOptionFkSelect(props: {
           if (!table || table === "None") {
             props.setFk(undefined);
             props.onChange(setForeignKey(props.value, undefined));
-          } else {
-            const schema = props.allTables.find(
-              (schema) => schema.name.name == table,
-            )!;
-            const column =
-              schema.columns.find(
-                (col) => getUnique(col.options)?.is_primary ?? false,
-              ) ?? schema.columns[0];
-
-            props.setFk(table);
-
-            let newColumnOptions = [...props.value];
-            newColumnOptions = setForeignKey(props.value, {
-              foreign_table: table,
-              referred_columns: [column.name],
-              on_delete: null,
-              on_update: null,
-            });
-            newColumnOptions = setCheckValue(newColumnOptions, undefined);
-            newColumnOptions = setDefaultValue(newColumnOptions, undefined);
-
-            props.onChange(newColumnOptions);
+            return;
           }
+
+          const schema = props.allTables.find(
+            (schema) => schema.name.name == table,
+          )!;
+          const referredColumn =
+            schema.columns.find(
+              (col) => getUnique(col.options)?.is_primary ?? false,
+            ) ?? schema.columns[0];
+
+          props.setFk(table);
+
+          let newColumnOptions = [...props.value];
+          newColumnOptions = setForeignKey(props.value, {
+            foreign_table: table,
+            referred_columns: [referredColumn.name],
+            on_delete: null,
+            on_update: null,
+          });
+          newColumnOptions = setCheckValue(newColumnOptions, undefined);
+          newColumnOptions = setDefaultValue(newColumnOptions, undefined);
+
+          props.onChange(newColumnOptions);
         }}
         itemComponent={(props) => (
           <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
@@ -772,6 +748,38 @@ function patchColumn(
   columns[colIndex] = patch(column);
 
   form.setFieldValue("columns", columns);
+}
+
+function typeNameAndAffinityType(
+  dataType: ColumnDataType,
+): Pick<Column, "affinity_type" | "type_name"> {
+  switch (dataType) {
+    case "Any":
+      return {
+        type_name: "ANY",
+        affinity_type: "Blob",
+      };
+    case "Blob":
+      return {
+        type_name: "BLOB",
+        affinity_type: "Blob",
+      };
+    case "Text":
+      return {
+        type_name: "TEXT",
+        affinity_type: "Text",
+      };
+    case "Integer":
+      return {
+        type_name: "INTEGER",
+        affinity_type: "Integer",
+      };
+    case "Real":
+      return {
+        type_name: "REAL",
+        affinity_type: "Real",
+      };
+  }
 }
 
 export const primaryKeyPresets: [string, (colName: string) => Column][] = [
