@@ -1,3 +1,9 @@
+## v0.21.9
+
+- Use fully-qualified TABLE/VIEW/INDEX/TRIGGER names throughout admin UI in preparation for multi-DB.
+- Fix column type update when setting a foreign key constraint. We forgot to additionally set affinity type and type name after re-modelling the type representation. #183 @tingletech 🙏
+- Update Rust and JavaScript dependencies.
+
 ## v0.21.8
 
 - Make visual ERD schema browser in admin UI usable on mobile. The @antv/x6 latest update fixed panning. By adding zoom buttons (in the absence of pinch), you can now navigate on mobile.
