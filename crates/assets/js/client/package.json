@@ -37,16 +37,16 @@
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "eslint": "^9.39.1",
-    "execa": "^9.6.0",
+    "execa": "^9.6.1",
     "globals": "^16.5.0",
     "http-status": "^2.1.0",
     "jsdom": "^27.2.0",
     "oauth2-mock-server": "^8.2.0",
-    "prettier": "^3.6.2",
-    "tinybench": "^5.1.0",
+    "prettier": "^3.7.4",
+    "tinybench": "^6.0.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.46.4",
-    "vite-node": "^3.2.4",
+    "typescript-eslint": "^8.48.1",
+    "vite-node": "^5.2.0",
     "vitest": "^3.2.4"
   },
   "dependencies": {
