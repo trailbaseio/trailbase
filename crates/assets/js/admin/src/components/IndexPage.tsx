@@ -18,7 +18,7 @@ import { Card, CardContent, CardTitle } from "@/components/ui/card";
 
 function ColorPalette() {
   return (
-    <div class="my-4 grid w-[400px] grid-cols-2 text-sm">
+    <div class="my-4 grid max-w-[400px] grid-cols-2 text-sm">
       <div class="bg-background">Background</div>
       <div class="bg-foreground text-white">Foreground</div>
 

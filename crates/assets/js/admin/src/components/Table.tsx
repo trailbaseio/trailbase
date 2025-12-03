@@ -327,7 +327,7 @@ function PaginationControl<TData>(props: {
   };
 
   return (
-    <div class="flex justify-between">
+    <div class="flex flex-wrap justify-between">
       <div class="flex flex-row items-center gap-4">
         <div class="flex items-center space-x-2">
           <Button
@@ -401,34 +401,6 @@ function PaginationControl<TData>(props: {
               />
             </svg>
           </Button>
-
-          {/*
-            // Doesn't work for cursors.
-          <Button
-            aria-label="Go to last page"
-            variant="outline"
-            size="icon"
-            class="flex size-8"
-            onClick={() => table().setPageIndex(table().getPageCount() - 1)}
-            disabled={!table().getCanNextPage()}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="size-4"
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-            >
-              <path
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="m7 7l5 5l-5 5m6-10l5 5l-5 5"
-              />
-            </svg>
-          </Button>
-          */}
         </div>
 
         <div class="flex items-center justify-center text-sm font-medium whitespace-nowrap">

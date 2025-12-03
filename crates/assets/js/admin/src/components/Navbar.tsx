@@ -146,7 +146,7 @@ export function HorizontalNavbar(props: {
   return (
     <nav
       style={{ height: `${props.height}px` }}
-      class="flex w-screen items-center justify-between gap-4 bg-gray-100 p-2"
+      class="flex w-screen items-center justify-between gap-2 bg-gray-100 p-2"
     >
       <NavbarItems location={props.location} horizontal={true} />
 

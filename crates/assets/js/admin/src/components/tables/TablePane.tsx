@@ -640,7 +640,7 @@ function ArrayRecordTable(props: {
         }}
       />
 
-      <div class="my-2 flex justify-between gap-2">
+      <div class="my-2 flex flex-wrap justify-between gap-2">
         {mutable() && (
           <div class="flex gap-2">
             {/* Insert Rows */}
