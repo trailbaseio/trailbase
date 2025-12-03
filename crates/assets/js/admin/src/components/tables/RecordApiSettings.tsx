@@ -77,8 +77,10 @@ import {
 } from "@/lib/schema";
 import { client } from "@/lib/client";
 import { fromHex } from "@/lib/utils";
+import { prettyFormatQualifiedName } from "@/lib/schema";
 
 import type { ForeignKey } from "@bindings/ForeignKey";
+import type { QualifiedName } from "@bindings/QualifiedName";
 import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
 
@@ -276,37 +278,36 @@ function ConflictResolutionStrategyToString(
 
 export function getRecordApis(
   config: Config | undefined,
-  tableName: string,
+  tableName: QualifiedName,
 ): RecordApiConfig[] {
   return (config?.recordApis ?? []).filter(
-    (api) => api.tableName === tableName,
+    (api) => api.tableName === prettyFormatQualifiedName(tableName),
+  );
+}
+
+export function hasRecordApis(
+  config: Config | undefined,
+  tableName: QualifiedName,
+): boolean {
+  return (
+    (config?.recordApis ?? []).findIndex(
+      (api) => api.tableName === prettyFormatQualifiedName(tableName),
+    ) !== -1
   );
 }
 
 function newRecordApiDefault(opts: {
-  tableName: string;
+  tableName: QualifiedName;
   apiName: string;
 }): RecordApiConfig {
   return {
     name: opts.apiName,
-    tableName: opts.tableName,
+    tableName: prettyFormatQualifiedName(opts.tableName),
     aclWorld: [],
     aclAuthenticated: [],
     excludedColumns: [],
     expand: [],
   };
-}
-
-export function hasRecordApis(
-  config: Config | undefined,
-  tableName: string,
-): boolean {
-  for (const api of config?.recordApis ?? []) {
-    if (api.tableName === tableName) {
-      return true;
-    }
-  }
-  return false;
 }
 
 function StyledHoverCard(props: { children: JSXElement }) {
@@ -504,7 +505,7 @@ function DeleteExample(props: { apiName: string; config: Config | undefined }) {
 }
 
 function AddApiDialog(props: {
-  tableName: string;
+  tableName: QualifiedName;
   defaultApiName: string;
   setApi: (api: RecordApiConfig) => void;
 }) {
@@ -574,9 +575,9 @@ export function RecordApiSettingsForm(props: {
   schema: Table | View;
 }) {
   const config = createConfigQuery();
-  const existingApis = createMemo(() =>
-    getRecordApis(config.data!.config, props.schema.name.name),
-  );
+  const existingApis = createMemo(() => {
+    return getRecordApis(config.data!.config, props.schema.name);
+  });
 
   type State = {
     api: RecordApiConfig;
@@ -599,7 +600,7 @@ export function RecordApiSettingsForm(props: {
     <div>
       <div class="flex gap-2">
         <AddApiDialog
-          tableName={props.schema.name.name ?? "<missing>"}
+          tableName={props.schema.name ?? { name: "<missing>" }}
           defaultApiName={(() => {
             const unqualifiedTableName = props.schema.name.name;
             for (const api of existingApis()) {

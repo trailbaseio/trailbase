@@ -2,7 +2,7 @@ use axum::{Json, extract::State};
 use log::*;
 use serde::{Deserialize, Serialize};
 use trailbase_schema::parse::parse_into_statement;
-use trailbase_schema::sqlite::{Table, TableIndex, View};
+use trailbase_schema::sqlite::{QualifiedName, Table, TableIndex, View};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -13,7 +13,7 @@ use crate::constants::SQLITE_SCHEMA_TABLE;
 // parsing sqlite triggers. Now we're using sqlite3_parser and should return structured data
 #[derive(Clone, Default, Debug, Serialize, TS)]
 pub struct TableTrigger {
-  pub name: String,
+  pub name: QualifiedName,
   pub table_name: String,
   pub sql: String,
 }
@@ -133,7 +133,13 @@ pub async fn list_tables_handler(
 
         // TODO: Turn this into structured data now that we use sqlite3_parser.
         response.triggers.push(TableTrigger {
-          name: schema.name,
+          name: QualifiedName {
+            name: schema.name,
+            database_schema: match schema.db_schema.as_str() {
+              "" | "main" => None,
+              _ => Some(schema.db_schema),
+            },
+          },
           table_name: schema.tbl_name,
           sql,
         });

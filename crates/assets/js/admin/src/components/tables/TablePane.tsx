@@ -60,6 +60,7 @@ import { createConfigQuery, invalidateConfig } from "@/lib/api/config";
 import type { Record, ArrayRecord } from "@/lib/record";
 import { hashSqlValue } from "@/lib/value";
 import { urlSafeBase64ToUuid, toHex } from "@/lib/utils";
+import { equalQualifiedNames } from "@/lib/schema";
 import { dropTable, dropIndex } from "@/lib/api/table";
 import { deleteRows, fetchRows } from "@/lib/api/row";
 import {
@@ -248,8 +249,7 @@ function TableHeaderRightHandButtons(props: {
 
   const queryClient = useQueryClient();
   const config = createConfigQuery();
-  const hasRecordApi = () =>
-    hasRecordApis(config?.data?.config, table().name.name);
+  const hasRecordApi = () => hasRecordApis(config?.data?.config, table().name);
 
   return (
     <div class="flex items-center justify-end gap-2">
@@ -260,7 +260,7 @@ function TableHeaderRightHandButtons(props: {
           action={() =>
             (async () => {
               await dropTable({
-                name: table().name.name,
+                name: prettyFormatQualifiedName(table().name),
                 dry_run: null,
               });
 
@@ -369,9 +369,8 @@ function TableHeaderLeftButtons(props: {
 }) {
   const type = () => tableType(props.table);
   const config = createConfigQuery();
-  const tableName = () => props.table.name.name;
   const apis = createMemo(() =>
-    getRecordApis(config?.data?.config, tableName()),
+    getRecordApis(config?.data?.config, props.table.name),
   );
 
   return (
@@ -381,7 +380,10 @@ function TableHeaderLeftButtons(props: {
       </IconButton>
 
       {apis().length > 0 && (
-        <SchemaDialog tableName={tableName()} apis={apis()} />
+        <SchemaDialog
+          tableName={prettyFormatQualifiedName(props.table.name)}
+          apis={apis()}
+        />
       )}
 
       {import.meta.env.DEV && type() === "table" && (
@@ -418,7 +420,7 @@ function TableHeader(props: {
     <Header
       leading={<SidebarTrigger />}
       title={headerTitle()}
-      titleSelect={props.table.name.name}
+      titleSelect={prettyFormatQualifiedName(props.table.name)}
       left={
         <TableHeaderLeftButtons
           table={props.table}
@@ -677,7 +679,7 @@ function ArrayRecordTable(props: {
                 }
 
                 setSelectedRows(new Map<string, SqlValue>());
-                deleteRows(table().name.name, {
+                deleteRows(prettyFormatQualifiedName(table().name), {
                   primary_key_column: columns()[pkColumnIndex()].name,
                   values: ids,
                 })
@@ -729,19 +731,28 @@ export function TablePane(props: {
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<string>());
 
   const table = () => props.selectedTable;
-  const indexes = () =>
-    props.schemas.indexes.filter((idx) => {
-      const tbl = table();
-      return (
-        (idx.name.database_schema ?? "main") ==
-          (tbl.name.database_schema ?? "main") &&
-        idx.table_name === tbl.name.name
-      );
-    });
-  const triggers = () =>
-    props.schemas.triggers.filter(
-      (trig) => trig.table_name === table().name.name,
+  const indexes = createMemo(() => {
+    return props.schemas.indexes.filter((idx) =>
+      equalQualifiedNames(
+        {
+          name: idx.table_name,
+          database_schema: idx.name.database_schema,
+        },
+        table().name,
+      ),
     );
+  });
+  const triggers = createMemo(() => {
+    return props.schemas.triggers.filter((trig) =>
+      equalQualifiedNames(
+        {
+          name: trig.table_name,
+          database_schema: trig.name.database_schema,
+        },
+        table().name,
+      ),
+    );
+  });
 
   // Derived table() props.
   const type = () => tableType(table());
@@ -1052,7 +1063,10 @@ const indexColumns = [
 
 const triggerColumnHelper = createColumnHelper<TableTrigger>();
 const triggerColumns = [
-  triggerColumnHelper.accessor("name", {}),
+  triggerColumnHelper.accessor("name", {
+    header: "name",
+    cell: (props) => <p class="max-w-[20dvw]">{props.getValue().name}</p>,
+  }),
   triggerColumnHelper.accessor("sql", {
     header: "statement",
     cell: (props) => <pre class="text-xs">{props.getValue()}</pre>,
