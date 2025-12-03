@@ -1,3 +1,11 @@
+## v0.21.8
+
+- Make visual ERD schema browser in admin UI usable on mobile. The @antv/x6 latest update fixed panning. By adding zoom buttons (in the absence of pinch), you can now navigate on mobile.
+- Use a separate/fresh SQLite connection for script executions from the admin UI. This prevents any modification of the main connection that's used internally, e.g. dropping attached databases in a multi-DB world.
+- Fix default-value form field validation in Create/Alter table form. Previously, it would prevent SQLite functions for some column types. #182 thanks @tingletech.
+- Fix visual overflow in SQL script editor for longer scripts.
+- Update Rust and JavaScript dependencies.
+
 ## v0.21.7
 
 - Move more migration-file-loading from refinery into TB in preparation for multi-DB migrations. At the moment this is a noop.
