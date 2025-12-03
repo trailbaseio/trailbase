@@ -67,6 +67,7 @@ import { createTableSchemaQuery } from "@/lib/api/table";
 import { executeSql, type ExecutionResult } from "@/lib/api/execute";
 import { isNotNull } from "@/lib/schema";
 import { sqlValueToString } from "@/lib/value";
+import { prettyFormatQualifiedName } from "@/lib/schema";
 import { createIsMobile } from "@/lib/signals";
 import type { ArrayRecord } from "@/lib/record";
 
@@ -76,7 +77,7 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   } = {};
 
   for (const table of schemas.tables) {
-    const tableName = table.name.name;
+    const tableName = prettyFormatQualifiedName(table.name);
     schema[tableName] = {
       self: { label: tableName, type: "keyword" },
       children: table.columns.map((c) => c.name),
@@ -84,7 +85,7 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   }
 
   for (const view of schemas.views) {
-    const viewName = view.name.name;
+    const viewName = prettyFormatQualifiedName(view.name);
     schema[viewName] = {
       self: { label: viewName, type: "keyword" },
       children: view.column_mapping?.columns.map((c) => c.column.name) ?? [],

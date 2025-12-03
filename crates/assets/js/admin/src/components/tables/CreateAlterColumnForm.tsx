@@ -38,6 +38,7 @@ import type { FormApiT, AnyFieldApi } from "@/components/FormFields";
 
 import {
   columnDataTypes,
+  equalQualifiedNames,
   getCheckValue,
   getDefaultValue,
   getForeignKey,
@@ -83,6 +84,7 @@ function columnTypeField(
   disabled: boolean,
   fk: Accessor<string | undefined>,
   allTables: Table[],
+  databaseSchema: string | null,
 ) {
   return (field: () => AnyFieldApi) => {
     // Note: use createMemo to avoid rebuilds for any state change.
@@ -93,9 +95,13 @@ function columnTypeField(
       const foreignKey = fk();
 
       if (foreignKey) {
+        const targetTable = {
+          name: foreignKey,
+          database_schema: databaseSchema,
+        };
+
         for (const table of allTables) {
-          const tableName = table.name.name;
-          if (tableName === foreignKey) {
+          if (equalQualifiedNames(table.name, targetTable)) {
             const targetType = table.columns[0].data_type;
             if (value() !== targetType) {
               field().setValue(targetType);
@@ -315,10 +321,23 @@ function ColumnOptionFkSelect(props: {
   allTables: Table[];
   disabled: boolean;
   setFk: Setter<undefined | string>;
+  databaseSchema: string | null;
 }) {
   const fkTableOptions = createMemo((): string[] => [
     "None",
-    ...props.allTables.map((schema) => schema.name.name),
+    ...props.allTables
+      .filter((schema) => {
+        if (schema.temporary || schema.virtual_table) {
+          return false;
+        }
+
+        const db = schema.name.database_schema;
+        if (props.databaseSchema === null) {
+          return !db || db === "main";
+        }
+        return db === props.databaseSchema;
+      })
+      .map((schema) => schema.name.name),
   ]);
   const fkValue = (): string =>
     getForeignKey(props.value)?.foreign_table ?? "None";
@@ -389,6 +408,7 @@ function ColumnOptionsFields(props: {
   pk: boolean;
   fk: string | undefined;
   setFk: Setter<string | undefined>;
+  databaseSchema: string | null;
 }) {
   // Column options: (not|null), (default), (unique), (fk), (check), (comment), (onupdate).
   return (
@@ -472,6 +492,9 @@ export function ColumnSubForm(props: {
   const [expanded, setExpanded] = createSignal(true);
 
   const [fk, setFk] = createSignal<string | undefined>();
+
+  // TODO: Allow setting non-null databaseSchema for other DBs.
+  const databaseSchema = null;
 
   const Header = () => (
     <div class="flex items-center justify-between">
@@ -570,6 +593,7 @@ export function ColumnSubForm(props: {
                   disabled(),
                   fk,
                   props.allTables,
+                  databaseSchema,
                 )}
               </props.form.Field>
 
@@ -587,6 +611,7 @@ export function ColumnSubForm(props: {
                       pk={false}
                       fk={fk()}
                       setFk={setFk}
+                      databaseSchema={databaseSchema}
                     />
                   );
                 }}
@@ -611,6 +636,9 @@ export function PrimaryKeyColumnSubForm(props: {
   const [expanded, setExpanded] = createSignal(false);
 
   const [fk, setFk] = createSignal<string | undefined>();
+
+  // TODO: Allow setting non-null databaseSchema for other DBs.
+  const databaseSchema = null;
 
   const Header = () => (
     <div class="flex items-center justify-between">
@@ -704,6 +732,7 @@ export function PrimaryKeyColumnSubForm(props: {
                   /*disabled=*/ true,
                   fk,
                   props.allTables,
+                  databaseSchema,
                 )}
               />
 
@@ -721,6 +750,7 @@ export function PrimaryKeyColumnSubForm(props: {
                       pk={true}
                       fk={fk()}
                       setFk={setFk}
+                      databaseSchema={databaseSchema}
                     />
                   );
                 }}

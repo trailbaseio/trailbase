@@ -939,12 +939,16 @@ export function TablePane(props: {
                             ? undefined
                             : (rows: Row<TableIndex>[], value: boolean) => {
                                 const newSelection = new Set(selectedIndexes());
+
                                 for (const row of rows) {
-                                  const name = row.original.name.name;
+                                  const qualifiedName =
+                                    prettyFormatQualifiedName(
+                                      row.original.name,
+                                    );
                                   if (value) {
-                                    newSelection.add(name);
+                                    newSelection.add(qualifiedName);
                                   } else {
-                                    newSelection.delete(name);
+                                    newSelection.delete(qualifiedName);
                                   }
                                 }
                                 setSelectedIndexes(newSelection);

@@ -164,6 +164,7 @@ export function CreateAlterTableForm(props: {
           name: generateRandomName({
             taken: props.allTables.map((t) => t.name.name),
           }),
+          // TODO: Set for tables in non-main DB.
           database_schema: null,
         },
         strict: true,
