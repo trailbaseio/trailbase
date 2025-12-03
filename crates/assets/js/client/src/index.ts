@@ -211,12 +211,13 @@ export interface DeferredOperation<ResponseType> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface DeferredMutation<ResponseType>
-  extends DeferredOperation<ResponseType> {}
+export interface DeferredMutation<
+  ResponseType,
+> extends DeferredOperation<ResponseType> {}
 
-export class CreateOperation<T = Record<string, unknown>>
-  implements DeferredMutation<RecordId>
-{
+export class CreateOperation<
+  T = Record<string, unknown>,
+> implements DeferredMutation<RecordId> {
   constructor(
     private readonly client: Client,
     private readonly apiName: string,
@@ -246,9 +247,9 @@ export class CreateOperation<T = Record<string, unknown>>
   }
 }
 
-export class UpdateOperation<T = Record<string, unknown>>
-  implements DeferredMutation<void>
-{
+export class UpdateOperation<
+  T = Record<string, unknown>,
+> implements DeferredMutation<void> {
   constructor(
     private readonly client: Client,
     private readonly apiName: string,
@@ -301,9 +302,9 @@ export interface ReadOpts {
   expand?: string[];
 }
 
-export class ReadOperation<T = Record<string, unknown>>
-  implements DeferredOperation<T>
-{
+export class ReadOperation<
+  T = Record<string, unknown>,
+> implements DeferredOperation<T> {
   constructor(
     private readonly client: Client,
     private readonly apiName: string,
@@ -330,9 +331,9 @@ export interface ListOpts {
   expand?: string[];
 }
 
-export class ListOperation<T = Record<string, unknown>>
-  implements DeferredOperation<ListResponse<T>>
-{
+export class ListOperation<
+  T = Record<string, unknown>,
+> implements DeferredOperation<ListResponse<T>> {
   constructor(
     private readonly client: Client,
     private readonly apiName: string,
@@ -401,9 +402,9 @@ export interface RecordApi<T = Record<string, unknown>> {
 }
 
 /// Provides CRUD access to records through TrailBase's record API.
-export class RecordApiImpl<T = Record<string, unknown>>
-  implements RecordApi<T>
-{
+export class RecordApiImpl<
+  T = Record<string, unknown>,
+> implements RecordApi<T> {
   constructor(
     private readonly client: Client,
     private readonly name: string,

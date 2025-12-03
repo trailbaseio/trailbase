@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@antv/x6": "^2.19.2",
+    "@antv/x6": "^3.1.0",
     "@bufbuild/protobuf": "^2.10.1",
     "@codemirror/autocomplete": "^6.20.0",
     "@codemirror/lang-sql": "^6.10.0",

@@ -1,6 +1,5 @@
 import { onMount } from "solid-js";
-import { Graph, Cell, Shape, Edge, Node } from "@antv/x6";
-import { PortManager } from "@antv/x6/lib/model/port";
+import { Graph, Cell, Shape, Edge, NodeMetadata, EdgeMetadata } from "@antv/x6";
 
 import { cn } from "@/lib/utils";
 import { createIsMobile } from "@/lib/signals";
@@ -12,10 +11,6 @@ export const NODE_WIDTH = 250;
 const ACCENT_600 = "#0073aa";
 const GRAY_100 = "#f3f7f9";
 export const EDGE_COLOR = "#A2B1C3";
-
-export type NodeMetadata = Node.Metadata;
-export type EdgeMetadata = Edge.Metadata;
-export type PortMetadata = PortManager.PortMetadata;
 
 (function setupGraph() {
   const ER_PORT_POSITION_NAME = "erPortPosition";

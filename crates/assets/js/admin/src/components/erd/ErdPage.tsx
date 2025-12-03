@@ -1,13 +1,12 @@
 import { Switch, Match, createMemo } from "solid-js";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { prettyFormatQualifiedName } from "@/lib/schema";
+import { NodeMetadata, EdgeMetadata } from "@antv/x6";
+import { PortMetadata } from "@antv/x6/lib/model/port";
 
 import { Header } from "@/components/Header";
 import {
   ErdGraph,
-  NodeMetadata,
-  EdgeMetadata,
-  PortMetadata,
   ER_NODE_NAME,
   NODE_WIDTH,
   LINE_HEIGHT,
