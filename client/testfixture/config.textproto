@@ -64,6 +64,11 @@ record_apis: [{
   acl_world: []
   acl_authenticated: [CREATE, READ, UPDATE, DELETE]
   create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE email = 'admin@localhost' AND id = _USER_.id)",
+}, {
+  name: "intrepid_badger"
+  table_name: "extra.intrepid_badger"
+  acl_world: [READ]
+  acl_authenticated: [CREATE, READ, UPDATE, DELETE]
 }]
 schemas: [{
   name: "simple_schema"

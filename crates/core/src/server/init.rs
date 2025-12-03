@@ -195,38 +195,11 @@ pub(crate) fn init_connection(
   json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
   dev: bool,
 ) -> Result<(trailbase_sqlite::Connection, bool), InitError> {
-  // WIP: Allow multiple databases.
-  //
-  // Open or init the main db connection. Note that we derive whether a new DB was initialized
-  // based on whether the V1 migration had to be applied. Should be fairly robust.
-  //
-  // NOTE: this approach doesn't apply any migrations.
-  // let extra_databases: Vec<AttachExtraDatabases> = std::fs::read_dir(data_dir.data_path())?
-  //   .filter_map(|entry: Result<std::fs::DirEntry, _>| {
-  //     if let Ok(entry) = entry {
-  //       let path = entry.path();
-  //       if let (Some(stem), Some(ext)) = (path.file_stem(), path.extension()) {
-  //         if ext != "db" {
-  //           return None;
-  //         }
-  //
-  //         if stem != "main" && stem != "logs" {
-  //           return Some(AttachExtraDatabases {
-  //             schema_name: stem.to_string_lossy().to_string(),
-  //             path: path.to_path_buf(),
-  //           });
-  //         }
-  //       }
-  //     }
-  //     return None;
-  //   })
-  //   .collect();
-
   let extra_databases: Vec<AttachExtraDatabases> = additional_databases
     .into_iter()
     .map(|name| {
       return AttachExtraDatabases {
-        path: data_dir.data_path().join(&name),
+        path: data_dir.data_path().join(&format!("{name}.db")),
         schema_name: name,
       };
     })
