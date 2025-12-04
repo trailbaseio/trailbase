@@ -86,7 +86,7 @@ export function CreateAlterIndexForm(props: {
       }
     } catch (err) {
       showToast({
-        title: "Uncaught Error",
+        title: `${isCreateIndex() ? "Creation" : "Alteration"} Error`,
         description: `${err}`,
         variant: "error",
       });
@@ -229,11 +229,7 @@ export function CreateAlterIndexForm(props: {
                         <Button
                           disabled={!state().canSubmit}
                           variant="outline"
-                          onClick={() => {
-                            onSubmit(form.state.values, true).catch(
-                              console.error,
-                            );
-                          }}
+                          onClick={() => onSubmit(form.state.values, true)}
                           {...props}
                         >
                           {state().isSubmitting ? "..." : "Dry Run"}

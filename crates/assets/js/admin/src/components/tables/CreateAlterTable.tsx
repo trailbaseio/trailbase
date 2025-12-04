@@ -115,7 +115,7 @@ export function CreateAlterTableForm(props: {
       }
     } catch (err) {
       showToast({
-        title: "Uncaught Error",
+        title: `${isCreateTable() ? "Creation" : "Alteration"} Error`,
         description: `${err}`,
         variant: "error",
       });
@@ -252,11 +252,9 @@ export function CreateAlterTableForm(props: {
                         class="w-[92px]"
                         disabled={!state().canSubmit}
                         variant="outline"
-                        onClick={() => {
-                          onSubmit(form.state.values, /*dryRun=*/ true).catch(
-                            console.error,
-                          );
-                        }}
+                        onClick={() =>
+                          onSubmit(form.state.values, /*dryRun=*/ true)
+                        }
                         {...props}
                       >
                         {state().isSubmitting ? "..." : "Dry Run"}

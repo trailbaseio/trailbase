@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { showToast } from "@/components/ui/toast";
 
 export function DestructiveActionButton(props: {
   children: JSX.Element;
@@ -35,10 +36,21 @@ export function DestructiveActionButton(props: {
           <Button
             variant="destructive"
             onClick={() => {
-              props
-                .action()
-                .then(() => setOpen(false))
-                .catch(console.error);
+              // Start action.
+              (async () => {
+                try {
+                  await props.action();
+                } catch (err) {
+                  showToast({
+                    title: "Uncaught Error",
+                    description: `${err}`,
+                    variant: "error",
+                  });
+                }
+              })();
+
+              // And close dialog right away.
+              setOpen(false);
             }}
             {...props}
           >

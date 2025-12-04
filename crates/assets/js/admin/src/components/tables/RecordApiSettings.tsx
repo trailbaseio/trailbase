@@ -718,21 +718,21 @@ function IndividualRecordApiSettingsForm(props: {
           return;
         }
 
-        const newConfig = updateRecordApiConfig(c, value);
+        const isCreate = props.mode === Mode.Create;
         try {
+          const newConfig = updateRecordApiConfig(c, value);
           await setConfig(queryClient, newConfig);
 
           showToast({
             title: "Success",
-            description:
-              props.mode === Mode.Create ? "API Added" : "API Updated",
+            description: isCreate ? "API Added" : "API Updated",
             variant: "success",
           });
           props.reset(value);
           props.markDirty(false);
         } catch (err) {
           showToast({
-            title: "Uncaught Error",
+            title: `${isCreate ? "Creation" : "Update"} Error`,
             description: `${err}`,
             variant: "error",
           });
@@ -777,23 +777,29 @@ function IndividualRecordApiSettingsForm(props: {
               }
 
               if (apiName !== undefined) {
-                const newConfig = removeRecordApiConfig(
-                  c,
-                  tableName.name,
-                  apiName,
-                );
+                (async () => {
+                  try {
+                    const newConfig = removeRecordApiConfig(
+                      c,
+                      tableName.name,
+                      apiName,
+                    );
 
-                setConfig(queryClient, newConfig)
-                  // eslint-disable-next-line solid/reactivity
-                  .then(() => {
+                    await setConfig(queryClient, newConfig);
                     showToast({
                       title: "Success",
                       description: `API "${apiName}" deleted`,
                       variant: "success",
                     });
                     props.reset();
-                  })
-                  .catch(console.error);
+                  } catch (err) {
+                    showToast({
+                      title: "Deletion Error",
+                      description: `${err}`,
+                      variant: "error",
+                    });
+                  }
+                })();
               }
             }}
           >

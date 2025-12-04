@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { showToast } from "@/components/ui/toast";
 
 import {
   SchemaDialog,
@@ -257,17 +258,19 @@ function TableHeaderRightHandButtons(props: {
       {!hidden() && (
         <DestructiveActionButton
           size="sm"
-          action={() =>
-            (async () => {
-              await dropTable({
-                name: prettyFormatQualifiedName(table().name),
-                dry_run: null,
-              });
-
-              invalidateConfig(queryClient);
-              await props.schemaRefetch();
-            })().catch(console.error)
-          }
+          action={() => {
+            return (async () => {
+              try {
+                await dropTable({
+                  name: prettyFormatQualifiedName(table().name),
+                  dry_run: null,
+                });
+              } finally {
+                invalidateConfig(queryClient);
+                await props.schemaRefetch();
+              }
+            })();
+          }}
           msg="Deleting a table will irreversibly delete all the data contained. Are you sure you'd like to continue?"
         >
           <div class="flex items-center gap-2">
@@ -678,13 +681,24 @@ function ArrayRecordTable(props: {
                   return;
                 }
 
-                setSelectedRows(new Map<string, SqlValue>());
-                deleteRows(prettyFormatQualifiedName(table().name), {
-                  primary_key_column: columns()[pkColumnIndex()].name,
-                  values: ids,
-                })
-                  .finally(rowsRefetch)
-                  .catch(console.error);
+                (async () => {
+                  try {
+                    await deleteRows(prettyFormatQualifiedName(table().name), {
+                      primary_key_column: columns()[pkColumnIndex()].name,
+                      values: ids,
+                    });
+
+                    setSelectedRows(new Map<string, SqlValue>());
+                  } catch (err) {
+                    showToast({
+                      title: "Deletion Error",
+                      description: `${err}`,
+                      variant: "error",
+                    });
+                  } finally {
+                    rowsRefetch();
+                  }
+                })();
               }}
             >
               Delete rows
@@ -996,16 +1010,23 @@ export function TablePane(props: {
                       return;
                     }
 
-                    const deleteIndexes = async () => {
-                      for (const name of names) {
-                        await dropIndex({ name, dry_run: null });
+                    (async () => {
+                      try {
+                        for (const name of names) {
+                          await dropIndex({ name, dry_run: null });
+                        }
+
+                        setSelectedIndexes(new Set<string>());
+                      } catch (err) {
+                        showToast({
+                          title: "Deletion Error",
+                          description: `${err}`,
+                          variant: "error",
+                        });
+                      } finally {
+                        props.schemaRefetch();
                       }
-
-                      setSelectedIndexes(new Set<string>());
-                      props.schemaRefetch();
-                    };
-
-                    deleteIndexes().catch(console.error);
+                    })();
                   }}
                 >
                   Delete indexes

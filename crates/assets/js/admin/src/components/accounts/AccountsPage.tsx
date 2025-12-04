@@ -161,11 +161,15 @@ function DeleteUserButton(props: {
             <Button
               variant="destructive"
               onClick={() => {
-                setDialogOpen(false);
+                (async () => {
+                  try {
+                    await deleteUser({ id: props.userId });
+                  } finally {
+                    props.userRefetch();
+                  }
+                })();
 
-                deleteUser({ id: props.userId })
-                  .then(props.userRefetch)
-                  .catch(console.error);
+                setDialogOpen(false);
               }}
             >
               Delete
@@ -199,12 +203,12 @@ function EditSheetContent(props: {
       verified: props.user.verified,
     } as UpdateUserRequest,
     onSubmit: async ({ value }) => {
-      updateUser(value)
-        // eslint-disable-next-line solid/reactivity
-        .then(() => props.close())
-        .catch(console.error);
-
-      props.refetch();
+      try {
+        await updateUser(value);
+        props.close();
+      } finally {
+        props.refetch();
+      }
     },
   }));
 
