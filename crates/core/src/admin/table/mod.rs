@@ -21,3 +21,34 @@ pub(crate) use drop_table::drop_table_handler;
 mod list_tables;
 
 pub(crate) use list_tables::list_tables_handler;
+
+fn get_conn_and_migration_path(
+  state: &crate::AppState,
+  db: Option<String>,
+) -> Result<(trailbase_sqlite::Connection, std::path::PathBuf), crate::admin::AdminError> {
+  return match db {
+    Some(db) if db != "main" => {
+      let db_path = state.data_dir().data_path().join(format!("{db}.db"));
+      let migration_path = state.data_dir().migrations_path().join(&db);
+      let json_registry = state.json_schema_registry().clone();
+
+      Ok((
+        trailbase_sqlite::Connection::new(
+          move || {
+            return trailbase_extension::connect_sqlite(
+              Some(db_path.clone()),
+              Some(json_registry.clone()),
+            );
+          },
+          None,
+        )
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?,
+        migration_path,
+      ))
+    }
+    _ => Ok((
+      state.conn().clone(),
+      (state.data_dir().migrations_path().join("main")),
+    )),
+  };
+}

@@ -27,7 +27,6 @@ pub async fn drop_table_handler(
   State(state): State<AppState>,
   Json(request): Json<DropTableRequest>,
 ) -> Result<Json<DropTableResponse>, Error> {
-  let unqualified_table_name = request.name.to_string();
   if state.demo_mode() {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
@@ -35,6 +34,7 @@ pub async fn drop_table_handler(
   let dry_run = request.dry_run.unwrap_or(false);
   let table_name = QualifiedName::parse(&request.name)?;
 
+  // QUESTION: Should we have a separate drop_view?
   let entity_type: &str;
   if state.connection_metadata().get_table(&table_name).is_some() {
     entity_type = "TABLE";
@@ -45,32 +45,38 @@ pub async fn drop_table_handler(
       "Table or view '{table_name:?}' not found"
     )));
   }
-  let filename = table_name.migration_filename(&format!("drop_{}", entity_type.to_lowercase()));
 
-  let tx_log = state
-    .conn()
-    .call(move |conn| {
-      let mut tx = TransactionRecorder::new(conn)?;
+  let (conn, migration_path) =
+    super::get_conn_and_migration_path(&state, table_name.database_schema.clone())?;
 
-      let query = format!(
-        "DROP {entity_type} IF EXISTS {table_name}",
-        table_name = table_name.escaped_string()
-      );
-      debug!("dropping table: {query}");
-      tx.execute(&query, ())?;
+  let tx_log = {
+    let unqualified_table_name = table_name.name.clone();
+    conn
+      .call(move |conn| {
+        let mut tx = TransactionRecorder::new(conn)?;
 
-      return tx
-        .rollback()
-        .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
-    })
-    .await?;
+        let query = format!("DROP {entity_type} IF EXISTS {unqualified_table_name}");
+        debug!("dropping table: {query}");
+        tx.execute(&query, ())?;
+
+        return tx
+          .rollback()
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+      })
+      .await?
+  };
 
   if !dry_run {
     // Write migration file and apply it right away.
     if let Some(ref log) = tx_log {
-      let migration_path = state.data_dir().migrations_path();
+      let filename = QualifiedName {
+        name: table_name.name.clone(),
+        database_schema: None,
+      }
+      .migration_filename(&format!("drop_{}", entity_type.to_lowercase()));
+
       let _report = log
-        .apply_as_migration(state.conn(), migration_path, &filename)
+        .apply_as_migration(&conn, migration_path, &filename)
         .await?;
     }
 
@@ -80,8 +86,10 @@ pub async fn drop_table_handler(
       let old_config_hash = hash_config(&config);
 
       config.record_apis.retain(|c| {
-        if let Some(ref name) = c.table_name {
-          return *name != unqualified_table_name;
+        if let Some(ref name) = c.table_name
+          && let Ok(name) = QualifiedName::parse(name)
+        {
+          return name != table_name;
         }
         return true;
       });

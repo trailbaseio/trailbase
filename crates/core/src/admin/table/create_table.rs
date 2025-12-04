@@ -35,35 +35,10 @@ pub async fn create_table_handler(
     (schema.name.database_schema.take(), schema)
   };
 
-  let filename = table_schema.name.migration_filename("create_table");
-
   // This builds the `CREATE TABLE` SQL statement.
   let create_table_query = table_schema.create_table_statement();
 
-  let (conn, migration_path) = if let Some(db) = db {
-    let db_path = state.data_dir().data_path().join(format!("{db}.db"));
-
-    (
-      trailbase_sqlite::Connection::new(
-        move || {
-          use rusqlite::OpenFlags;
-          let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
-            | OpenFlags::SQLITE_OPEN_CREATE
-            | OpenFlags::SQLITE_OPEN_NO_MUTEX;
-
-          return rusqlite::Connection::open_with_flags(&db_path, flags);
-        },
-        None,
-      )
-      .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?,
-      (state.data_dir().migrations_path().join(&db)),
-    )
-  } else {
-    (
-      state.conn().clone(),
-      (state.data_dir().migrations_path().join("main")),
-    )
-  };
+  let (conn, migration_path) = super::get_conn_and_migration_path(&state, db)?;
 
   let tx_log = conn
     .call(move |conn| {
@@ -79,6 +54,7 @@ pub async fn create_table_handler(
 
   // Take transaction log, write a migration file and apply.
   if !dry_run && let Some(ref log) = tx_log {
+    let filename = table_schema.name.migration_filename("create_table");
     let _report = log
       .apply_as_migration(&conn, migration_path, &filename)
       .await?;
