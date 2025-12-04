@@ -34,6 +34,7 @@ import type { Column } from "@bindings/Column";
 import type { Table } from "@bindings/Table";
 import type { AlterTableOperation } from "@bindings/AlterTableOperation";
 import type { QualifiedName } from "@bindings/QualifiedName";
+import { equalQualifiedNames, prettyFormatQualifiedName } from "@/lib/schema";
 
 export function CreateAlterTableForm(props: {
   close: () => void;
@@ -341,6 +342,14 @@ function buildAlterTableOperations(
     deletedColumns.findIndex((idx) => idx === i) !== -1;
 
   const operations: AlterTableOperation[] = [];
+  if (!equalQualifiedNames(original.name, target.name)) {
+    operations.push({
+      RenameTableTo: {
+        name: prettyFormatQualifiedName(target.name),
+      },
+    });
+  }
+
   target.columns.forEach((column, i) => {
     if (i < original.columns.length) {
       // Pre-existing column.
