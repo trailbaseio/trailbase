@@ -35,22 +35,24 @@ pub async fn drop_table_handler(
   let table_name = QualifiedName::parse(&request.name)?;
 
   // QUESTION: Should we have a separate drop_view?
-  let entity_type: &str;
-  if state.connection_metadata().get_table(&table_name).is_some() {
-    entity_type = "TABLE";
+  let entity_type: &str = if state.connection_metadata().get_table(&table_name).is_some() {
+    "TABLE"
   } else if state.connection_metadata().get_view(&table_name).is_some() {
-    entity_type = "VIEW";
+    "VIEW"
   } else {
     return Err(Error::Precondition(format!(
       "Table or view '{table_name:?}' not found"
     )));
-  }
+  };
 
-  let (conn, migration_path) =
-    super::get_conn_and_migration_path(&state, table_name.database_schema.clone())?;
+  let QualifiedName {
+    name: unqualified_table_name,
+    database_schema,
+  } = table_name.clone();
+
+  let (conn, migration_path) = super::get_conn_and_migration_path(&state, database_schema)?;
 
   let tx_log = {
-    let unqualified_table_name = table_name.name.clone();
     conn
       .call(move |conn| {
         let mut tx = TransactionRecorder::new(conn)?;

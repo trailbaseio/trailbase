@@ -30,13 +30,15 @@ pub async fn drop_index_handler(
   }
 
   let dry_run = request.dry_run.unwrap_or(false);
-  let index_name = QualifiedName::parse(&request.name)?;
+  let QualifiedName {
+    name: unqualified_index_name,
+    database_schema,
+  } = QualifiedName::parse(&request.name)?;
 
-  let (conn, migration_path) =
-    super::get_conn_and_migration_path(&state, index_name.database_schema.clone())?;
+  let (conn, migration_path) = super::get_conn_and_migration_path(&state, database_schema)?;
 
   let tx_log = {
-    let unqualified_index_name = index_name.name.clone();
+    let unqualified_index_name = unqualified_index_name.clone();
     conn
       .call(move |conn| {
         let mut tx = TransactionRecorder::new(conn)?;
@@ -55,7 +57,7 @@ pub async fn drop_index_handler(
   // Take transaction log, write a migration file and apply.
   if !dry_run && let Some(ref log) = tx_log {
     let filename = QualifiedName {
-      name: index_name.name,
+      name: unqualified_index_name,
       database_schema: None,
     }
     .migration_filename("drop_index");
