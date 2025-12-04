@@ -59,7 +59,10 @@ pub async fn alter_index_handler(
         let mut tx = TransactionRecorder::new(conn)?;
 
         // Drop old index
-        tx.execute(&format!("DROP INDEX {unqualified_source_index_name}"), ())?;
+        tx.execute(
+          &format!("DROP INDEX \"{unqualified_source_index_name}\""),
+          (),
+        )?;
 
         // Create new index
         tx.execute(&create_index_query, ())?;
