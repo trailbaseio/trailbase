@@ -110,27 +110,32 @@ pub async fn alter_table_handler(
           let insert_data_query = format!(
             r#"
             INSERT INTO
-              {unqualified_ephemeral_table_name} ({target_columns})
+              "{unqualified_ephemeral_table_name}" ({target_columns})
             SELECT
               {source_columns}
             FROM
-              {unqualified_source_table_name}
+              "{unqualified_source_table_name}"
           "#,
-            source_columns = source_columns.join(", "),
-            target_columns = target_columns.join(", "),
+            source_columns = escape_and_join_column_names(&source_columns),
+            target_columns = escape_and_join_column_names(&target_columns),
           );
           tx.execute(&insert_data_query, ())?;
 
-          tx.execute(&format!("DROP TABLE {unqualified_source_table_name}"), ())?;
+          tx.execute(
+            &format!("DROP TABLE \"{unqualified_source_table_name}\""),
+            (),
+          )?;
 
-          if let Some(target_name) = unqualified_ephemeral_table_rename {
+          if let Some(unqualified_target_name) = unqualified_ephemeral_table_rename {
             // NOTE: w/o the `legacy_alter_table = ON` the following `RENAME TO` would fail, since
             // `ALTER TABLE` otherwise does a schema consistency-check and realize that any views
             // referencing this table are no longer valid (even though may be again after the
             // rename).
             tx.execute("PRAGMA legacy_alter_table = ON", ())?;
             tx.execute(
-              &format!("ALTER TABLE {unqualified_ephemeral_table_name} RENAME TO {target_name}"),
+              &format!(
+                "ALTER TABLE \"{unqualified_ephemeral_table_name}\" RENAME TO \"{unqualified_target_name}\""
+              ),
               (),
             )?;
             tx.execute("PRAGMA legacy_alter_table = OFF", ())?;
@@ -349,6 +354,11 @@ fn check_column_removals_invalidating_config(
   }
 
   return Ok(());
+}
+
+fn escape_and_join_column_names(names: &[String]) -> String {
+  use itertools::Itertools;
+  return names.iter().map(|n| format!("\"{n}\"")).join(", ");
 }
 
 #[cfg(test)]

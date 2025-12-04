@@ -55,7 +55,7 @@ pub async fn drop_table_handler(
       .call(move |conn| {
         let mut tx = TransactionRecorder::new(conn)?;
 
-        let query = format!("DROP {entity_type} IF EXISTS {unqualified_table_name}");
+        let query = format!("DROP {entity_type} IF EXISTS \"{unqualified_table_name}\"");
         debug!("dropping table: {query}");
         tx.execute(&query, ())?;
 
