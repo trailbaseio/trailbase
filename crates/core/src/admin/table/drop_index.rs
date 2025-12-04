@@ -26,7 +26,7 @@ pub async fn drop_index_handler(
   Json(request): Json<DropIndexRequest>,
 ) -> Result<Json<DropIndexResponse>, Error> {
   let index_name = QualifiedName::parse(&request.name)?;
-  if state.demo_mode() && index_name.name.starts_with("_") {
+  if state.demo_mode() {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 

@@ -42,7 +42,7 @@ pub async fn alter_table_handler(
   State(state): State<AppState>,
   Json(request): Json<AlterTableRequest>,
 ) -> Result<Json<AlterTableResponse>, Error> {
-  if state.demo_mode() && request.source_schema.name.name.starts_with("_") {
+  if state.demo_mode() {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 

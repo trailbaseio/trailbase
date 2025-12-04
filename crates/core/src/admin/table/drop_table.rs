@@ -28,7 +28,7 @@ pub async fn drop_table_handler(
   Json(request): Json<DropTableRequest>,
 ) -> Result<Json<DropTableResponse>, Error> {
   let unqualified_table_name = request.name.to_string();
-  if state.demo_mode() && unqualified_table_name.starts_with("_") {
+  if state.demo_mode() {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
