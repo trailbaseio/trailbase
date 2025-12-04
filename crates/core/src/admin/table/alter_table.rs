@@ -69,18 +69,26 @@ pub async fn alter_table_handler(
   check_column_removals_invalidating_config(&state, &source_table_schema, &operations)?;
 
   let TargetSchema {
-    ephemeral_table_schema,
+    mut ephemeral_table_schema,
     ephemeral_table_rename,
     column_mapping,
   } = build_ephemeral_target_schema(&source_table_schema, operations)?;
 
+  let target_table_name = ephemeral_table_rename
+    .as_ref()
+    .unwrap_or(&ephemeral_table_schema.name)
+    .clone();
+
   let tx_log = {
     let unqualified_source_table_name = source_table_schema.name.name.clone();
-    let unqualified_ephemeral_table_rename_escaped =
+    let unqualified_ephemeral_table_rename =
       ephemeral_table_rename.as_ref().map(|n| n.name.clone());
 
     let (source_columns, target_columns): (Vec<String>, Vec<String>) =
       column_mapping.into_iter().unzip();
+
+    // Strip qualification.
+    ephemeral_table_schema.name.database_schema = None;
 
     conn
       .call(
@@ -115,7 +123,7 @@ pub async fn alter_table_handler(
 
           tx.execute(&format!("DROP TABLE {unqualified_source_table_name}"), ())?;
 
-          if let Some(target_name) = unqualified_ephemeral_table_rename_escaped {
+          if let Some(target_name) = unqualified_ephemeral_table_rename {
             // NOTE: w/o the `legacy_alter_table = ON` the following `RENAME TO` would fail, since
             // `ALTER TABLE` otherwise does a schema consistency-check and realize that any views
             // referencing this table are no longer valid (even though may be again after the
@@ -138,23 +146,21 @@ pub async fn alter_table_handler(
       .await?
   };
 
-  if !dry_run {
-    // Take transaction log, write a migration file and apply.
-    if let Some(ref log) = tx_log {
-      let filename = QualifiedName {
-        name: source_table_schema.name.name.clone(),
-        database_schema: None,
-      }
-      .migration_filename("alter_table");
-
-      let report = log
-        .apply_as_migration(&conn, migration_path, &filename)
-        .await?;
-      debug!("Migration report: {report:?}");
+  // Take transaction log, write a migration file and apply.
+  if !dry_run && let Some(ref log) = tx_log {
+    let filename = QualifiedName {
+      name: target_table_name.name.clone(),
+      database_schema: None,
     }
+    .migration_filename("alter_table");
+
+    let report = log
+      .apply_as_migration(&conn, migration_path, &filename)
+      .await?;
+    debug!("Migration report: {report:?}");
 
     // Fix configuration: update all table references by existing APIs.
-    if let Some(rename) = ephemeral_table_rename {
+    if source_table_schema.name != target_table_name {
       let mut config = state.get_config();
       let old_config_hash = hash_config(&config);
 
@@ -162,7 +168,11 @@ pub async fn alter_table_handler(
         if let Some(ref name) = api.table_name
           && QualifiedName::parse(name)? == source_table_schema.name
         {
-          api.table_name = Some(rename.escaped_string());
+          if let Some(ref db) = target_table_name.database_schema {
+            api.table_name = Some(format!("{}.{}", db, target_table_name.name));
+          } else {
+            api.table_name = Some(target_table_name.name.clone());
+          }
         }
       }
 
@@ -200,6 +210,7 @@ fn build_ephemeral_target_schema(
       .iter()
       .map(|c| (c.name.clone(), c.name.clone())),
   );
+
   let mut schema = {
     let mut schema = source_schema.clone();
     schema.name = QualifiedName {

@@ -52,19 +52,17 @@ pub async fn drop_index_handler(
       .await?
   };
 
-  if !dry_run {
-    // Take transaction log, write a migration file and apply.
-    if let Some(ref log) = tx_log {
-      let filename = QualifiedName {
-        name: index_name.name,
-        database_schema: None,
-      }
-      .migration_filename("drop_index");
-
-      let _report = log
-        .apply_as_migration(&conn, migration_path, &filename)
-        .await?;
+  // Take transaction log, write a migration file and apply.
+  if !dry_run && let Some(ref log) = tx_log {
+    let filename = QualifiedName {
+      name: index_name.name,
+      database_schema: None,
     }
+    .migration_filename("drop_index");
+
+    let _report = log
+      .apply_as_migration(&conn, migration_path, &filename)
+      .await?;
   }
 
   return Ok(Json(DropIndexResponse {
