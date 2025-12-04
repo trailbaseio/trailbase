@@ -427,19 +427,6 @@ export function equalQualifiedNames(
   );
 }
 
-export function compareQualifiedNames(
-  a: QualifiedName,
-  b: QualifiedName,
-): number {
-  const cmp = a.name.localeCompare(b.name);
-  if (cmp === 0) {
-    return (a.database_schema ?? "main").localeCompare(
-      b.database_schema ?? "main",
-    );
-  }
-  return cmp;
-}
-
 // WARNING: these needs to be kept in sync with ColumnDataType. TS cannot go
 // from type union to array.
 export const columnDataTypes: ColumnDataType[] = [

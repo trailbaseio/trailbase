@@ -40,7 +40,6 @@ import { createTableSchemaQuery } from "@/lib/api/table";
 import {
   hiddenTable,
   tableType,
-  compareQualifiedNames,
   prettyFormatQualifiedName,
   equalQualifiedNames,
 } from "@/lib/schema";
@@ -80,7 +79,9 @@ function tableCompare(a: Table | View, b: Table | View): number {
   const bHidden = hiddenTable(b);
 
   if (aHidden == bHidden) {
-    return compareQualifiedNames(a.name, b.name);
+    return prettyFormatQualifiedName(a.name).localeCompare(
+      prettyFormatQualifiedName(b.name),
+    );
   }
   // Sort hidden tables to the back.
   return aHidden ? 1 : -1;
