@@ -1,3 +1,11 @@
+## v0.21.10
+
+- Fix table renames in admin UI.
+- Include database schema name when sorting tables in admin UI explorer.
+- Minor layout tweaks for very narrow screens.
+- Entirely disallow schema alterations/drops in demo mode.
+- Update Rust dependencies.
+
 ## v0.21.9
 
 - Use fully-qualified TABLE/VIEW/INDEX/TRIGGER names throughout admin UI in preparation for multi-DB.
