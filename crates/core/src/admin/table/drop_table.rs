@@ -66,19 +66,17 @@ pub async fn drop_table_handler(
       .await?
   };
 
-  if !dry_run {
-    // Write migration file and apply it right away.
-    if let Some(ref log) = tx_log {
-      let filename = QualifiedName {
-        name: table_name.name.clone(),
-        database_schema: None,
-      }
-      .migration_filename(&format!("drop_{}", entity_type.to_lowercase()));
-
-      let _report = log
-        .apply_as_migration(&conn, migration_path, &filename)
-        .await?;
+  // Write migration file and apply it right away.
+  if !dry_run && let Some(ref log) = tx_log {
+    let filename = QualifiedName {
+      name: table_name.name.clone(),
+      database_schema: None,
     }
+    .migration_filename(&format!("drop_{}", entity_type.to_lowercase()));
+
+    let _report = log
+      .apply_as_migration(&conn, migration_path, &filename)
+      .await?;
 
     // Fix configuration: remove all APIs reference the no longer existing table.
     {
