@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Index, Match, Show, Switch } from "solid-js";
+import { createSignal, Index, Match, Show, Switch } from "solid-js";
 import type { Accessor } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient } from "@tanstack/solid-query";
@@ -35,14 +35,6 @@ import type { Table } from "@bindings/Table";
 import type { AlterTableOperation } from "@bindings/AlterTableOperation";
 import type { QualifiedName } from "@bindings/QualifiedName";
 
-function columnsEqual(a: Column, b: Column): boolean {
-  return (
-    a.name === b.name &&
-    a.data_type === b.data_type &&
-    JSON.stringify(a.options) === JSON.stringify(b.options)
-  );
-}
-
 export function CreateAlterTableForm(props: {
   close: () => void;
   markDirty: () => void;
@@ -54,17 +46,13 @@ export function CreateAlterTableForm(props: {
   const queryClient = useQueryClient();
   const [sql, setSql] = createSignal<string | undefined>();
 
-  const copyOriginal = (): Table | undefined =>
-    props.schema ? JSON.parse(JSON.stringify(props.schema)) : undefined;
-
-  const original = createMemo<Table | undefined>(() => copyOriginal());
-  const isCreateTable = () => original() === undefined;
+  const isCreateTable = () => props.schema === undefined;
 
   // Columns are treated as append only. Instead of removing it and inducing animation junk and other stuff when
   // shifting offset, we simply don't render columns that were marked as deleted.
   const [deletedColumns, setDeletedColumn] = createSignal<number[]>([]);
   const isDeleted = (i: number): boolean =>
-    deletedColumns().find((idx) => idx === i) !== undefined;
+    deletedColumns().findIndex((idx) => idx === i) !== -1;
 
   const onSubmit = async (value: Table, dryRun: boolean) => {
     /* eslint-disable solid/reactivity */
@@ -80,41 +68,17 @@ export function CreateAlterTableForm(props: {
     }
 
     try {
-      const o = original();
-      if (o !== undefined) {
+      const original = props.schema;
+      if (original !== undefined) {
         // Alter table
 
-        // Build operations. Remember columns are append-only.
-        const operations: AlterTableOperation[] = [];
-        value.columns.forEach((column, i) => {
-          if (i < o.columns.length) {
-            // Pre-existing column.
-            const originalName = o.columns[i].name;
-            if (isDeleted(i)) {
-              operations.push({ DropColumn: { name: originalName } });
-              return;
-            }
-
-            if (!columnsEqual(o.columns[i], column)) {
-              operations.push({
-                AlterColumn: {
-                  name: originalName,
-                  column: column,
-                },
-              });
-              return;
-            }
-          } else {
-            // Newly added columns.
-            if (!isDeleted(i)) {
-              operations.push({ AddColumn: { column: column } });
-            }
-          }
-        });
-
         const response = await alterTable({
-          source_schema: o,
-          operations,
+          source_schema: original,
+          operations: buildAlterTableOperations(
+            original,
+            value,
+            deletedColumns(),
+          ),
           dry_run: dryRun,
         });
         console.debug(`AlterTableResponse [dry: ${dryRun}]:`, response);
@@ -124,6 +88,8 @@ export function CreateAlterTableForm(props: {
         }
       } else {
         // Create table
+
+        // Remove ephemeral/deleted columns, i.e. columns that were briefly added and then removed again.
         value.columns = value.columns.filter((_, i) => !isDeleted(i));
 
         const response = await createTable({ schema: value, dry_run: dryRun });
@@ -157,31 +123,7 @@ export function CreateAlterTableForm(props: {
 
   const form = createForm(() => ({
     onSubmit: async ({ value }) => await onSubmit(value, /*dryRun=*/ false),
-    defaultValues:
-      copyOriginal() ??
-      ({
-        name: {
-          name: generateRandomName({
-            taken: props.allTables.map((t) => t.name.name),
-          }),
-          // TODO: Set for tables in non-main DB.
-          database_schema: null,
-        },
-        strict: true,
-        indexes: [],
-        columns: [
-          {
-            ...primaryKeyPresets[0][1]("id"),
-          },
-          newDefaultColumn(1),
-        ] satisfies Column[],
-        // Table constraints: https://www.sqlite.org/syntax/table-constraint.html
-        unique: [],
-        foreign_keys: [],
-        checks: [],
-        virtual_table: false,
-        temporary: false,
-      } as Table),
+    defaultValues: copySchema(props.schema) ?? defaultSchema(props.allTables),
   }));
 
   form.useStore((state) => {
@@ -350,6 +292,87 @@ export function CreateAlterTableForm(props: {
       </form>
     </SheetContainer>
   );
+}
+
+function defaultSchema(allTables: Table[]): Table {
+  return {
+    name: {
+      name: generateRandomName({
+        taken: allTables.map((t) => t.name.name),
+      }),
+      // Use "main" db by default.
+      database_schema: null,
+    },
+    strict: true,
+    columns: [
+      {
+        ...primaryKeyPresets[0][1]("id"),
+      },
+      newDefaultColumn(1),
+    ] satisfies Column[],
+    // Table constraints: https://www.sqlite.org/syntax/table-constraint.html
+    unique: [],
+    foreign_keys: [],
+    checks: [],
+    virtual_table: false,
+    temporary: false,
+  };
+}
+
+function copySchema(schema: Table | undefined): Table | undefined {
+  return schema ? JSON.parse(JSON.stringify(schema)) : undefined;
+}
+
+function columnsEqual(a: Column, b: Column): boolean {
+  return (
+    a.name === b.name &&
+    a.data_type === b.data_type &&
+    JSON.stringify(a.options) === JSON.stringify(b.options)
+  );
+}
+
+/// Builds alter table operations. Remember columns are append-only, i.e. there's a 1:1 mapping by index for pre-existing columns.
+function buildAlterTableOperations(
+  original: Table,
+  target: Table,
+  deletedColumns: number[],
+): AlterTableOperation[] {
+  const isDeleted = (i: number): boolean =>
+    deletedColumns.findIndex((idx) => idx === i) !== -1;
+
+  const operations: AlterTableOperation[] = [];
+  target.columns.forEach((column, i) => {
+    if (i < original.columns.length) {
+      // Pre-existing column.
+      const originalName = original.columns[i].name;
+      if (isDeleted(i)) {
+        operations.push({ DropColumn: { name: originalName } });
+        return;
+      }
+
+      if (!columnsEqual(original.columns[i], column)) {
+        operations.push({
+          AlterColumn: {
+            name: originalName,
+            column: column,
+          },
+        });
+        return;
+      }
+
+      // Otherwise they're equal and there's nothing to do.
+    } else {
+      // Newly added columns.
+      if (isDeleted(i)) {
+        // New column has already been deleted, e.g. a user added and removed it.
+        return;
+      }
+
+      operations.push({ AddColumn: { column: column } });
+    }
+  });
+
+  return operations;
 }
 
 function TextLabel(props: { text: string }) {
