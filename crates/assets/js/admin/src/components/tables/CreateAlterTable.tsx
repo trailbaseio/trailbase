@@ -15,11 +15,10 @@ import {
 } from "@/components/ui/dialog";
 import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 
-import { createTable, alterTable } from "@/lib/api/table";
-import { generateRandomName } from "@/lib/name";
 import {
   buildBoolFormField,
   buildTextFormField,
+  SelectOneOf,
 } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
 import {
@@ -28,6 +27,10 @@ import {
   newDefaultColumn,
   primaryKeyPresets,
 } from "@/components/tables/CreateAlterColumnForm";
+
+import { createTable, alterTable } from "@/lib/api/table";
+import { generateRandomName } from "@/lib/name";
+import { createConfigQuery } from "@/lib/api/config";
 import { invalidateConfig } from "@/lib/api/config";
 
 import type { Column } from "@bindings/Column";
@@ -45,26 +48,30 @@ export function CreateAlterTableForm(props: {
   schema?: Table;
 }) {
   const queryClient = useQueryClient();
-  const [sql, setSql] = createSignal<string | undefined>();
+  const [dryRunDialog, setDryRunDialog] = createSignal<string | undefined>();
 
   const isCreateTable = () => props.schema === undefined;
 
-  // Columns are treated as append only. Instead of removing it and inducing animation junk and other stuff when
-  // shifting offset, we simply don't render columns that were marked as deleted.
+  const config = createConfigQuery();
+  const dbSchemas = (): string[] => [
+    "main",
+    ...(config.data?.config?.databases
+      .map((db) => db.name)
+      .filter((n) => n !== undefined) ?? []),
+  ];
+
+  // Columns are treated as append only. Instead of removing actually removing a
+  // column and inducing animation junk and other complications we simply don't
+  // render columns that were marked as deleted.
   const [deletedColumns, setDeletedColumn] = createSignal<number[]>([]);
   const isDeleted = (i: number): boolean =>
     deletedColumns().findIndex((idx) => idx === i) !== -1;
 
   const onSubmit = async (value: Table, dryRun: boolean) => {
-    /* eslint-disable solid/reactivity */
-    console.debug("Table schema:", value);
-
     // Assert that the type representations match up.
-    for (const column of value.columns) {
-      if (column.data_type.toUpperCase() != column.type_name) {
-        throw new Error(
-          `Got ${column.type_name}, expected, ${column.data_type}`,
-        );
+    for (const c of value.columns) {
+      if (c.data_type.toUpperCase() != c.type_name) {
+        throw new Error(`Got ${c.type_name}, expected, ${c.data_type}`);
       }
     }
 
@@ -85,34 +92,39 @@ export function CreateAlterTableForm(props: {
         console.debug(`AlterTableResponse [dry: ${dryRun}]:`, response);
 
         if (dryRun) {
-          setSql(response.sql);
+          // Opens dialog.
+          setDryRunDialog(response.sql);
+          return;
         }
       } else {
         // Create table
 
-        // Remove ephemeral/deleted columns, i.e. columns that were briefly added and then removed again.
+        // Remove ephemeral/deleted columns, i.e. columns that were briefly added but then removed again.
         value.columns = value.columns.filter((_, i) => !isDeleted(i));
 
         const response = await createTable({ schema: value, dry_run: dryRun });
         console.debug(`CreateTableResponse [dry: ${dryRun}]:`, response);
 
         if (dryRun) {
-          setSql(response.sql);
+          // Opens dialog.
+          setDryRunDialog(response.sql);
+          return;
         }
       }
 
-      if (!dryRun) {
-        // Trigger config reload
-        invalidateConfig(queryClient);
+      console.assert(!dryRun, "unexpected dry run");
 
-        // Reload schemas.
-        props.schemaRefetch().then(() => {
-          props.setSelected(value.name);
-        });
+      // Trigger config reload
+      invalidateConfig(queryClient);
 
-        // Close dialog/sheet.
-        props.close();
-      }
+      // Reload schemas and switch to new/altered table.
+      // eslint-disable-next-line solid/reactivity
+      props.schemaRefetch().then(() => {
+        props.setSelected(value.name);
+      });
+
+      // Close dialog/sheet.
+      props.close();
     } catch (err) {
       showToast({
         title: `${isCreateTable() ? "Creation" : "Alteration"} Error`,
@@ -151,6 +163,26 @@ export function CreateAlterTableForm(props: {
         tabindex={0}
       >
         <div class="mt-4 flex flex-col items-start gap-4 pr-4">
+          <Show when={isCreateTable() && dbSchemas().length > 1}>
+            <form.Field name="name.database_schema">
+              {(field) => (
+                <SelectOneOf<string>
+                  value={field().state.value ?? "main"}
+                  label={() => <TextLabel text="Database" />}
+                  options={dbSchemas()}
+                  onChange={(schema: string) => {
+                    if (schema === "main") {
+                      field().handleChange(null);
+                    } else {
+                      field().handleChange(schema);
+                    }
+                  }}
+                  handleBlur={() => field().handleBlur()}
+                />
+              )}
+            </form.Field>
+          </Show>
+
           <form.Field
             name="name.name"
             validators={{
@@ -240,10 +272,10 @@ export function CreateAlterTableForm(props: {
               return (
                 <div class="flex items-center gap-4">
                   <Dialog
-                    open={sql() !== undefined}
+                    open={dryRunDialog() !== undefined}
                     onOpenChange={(open: boolean) => {
                       if (!open) {
-                        setSql(undefined);
+                        setDryRunDialog(undefined);
                       }
                     }}
                   >
@@ -267,7 +299,9 @@ export function CreateAlterTableForm(props: {
                       </DialogHeader>
 
                       <div class="max-h-[70vh] w-full overflow-auto">
-                        <pre>{sql() === "" ? "<EMPTY>" : sql()}</pre>
+                        <pre>
+                          {dryRunDialog() === "" ? "<EMPTY>" : dryRunDialog()}
+                        </pre>
                       </div>
 
                       <DialogFooter />
@@ -308,7 +342,7 @@ function defaultSchema(allTables: Table[]): Table {
         ...primaryKeyPresets[0][1]("id"),
       },
       newDefaultColumn(1),
-    ] satisfies Column[],
+    ],
     // Table constraints: https://www.sqlite.org/syntax/table-constraint.html
     unique: [],
     foreign_keys: [],

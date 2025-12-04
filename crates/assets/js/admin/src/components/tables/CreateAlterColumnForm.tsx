@@ -84,7 +84,6 @@ function columnTypeField(
   disabled: boolean,
   fk: Accessor<string | undefined>,
   allTables: Table[],
-  databaseSchema: string | null,
 ) {
   return (field: () => AnyFieldApi) => {
     // Note: use createMemo to avoid rebuilds for any state change.
@@ -97,7 +96,7 @@ function columnTypeField(
       if (foreignKey) {
         const targetTable = {
           name: foreignKey,
-          database_schema: databaseSchema,
+          database_schema: form.state.values.name.database_schema,
         };
 
         for (const table of allTables) {
@@ -490,11 +489,11 @@ export function ColumnSubForm(props: {
   const disabled = () => props.disabled;
   const [name, setName] = createWritableMemo(() => props.column.name);
   const [expanded, setExpanded] = createSignal(true);
+  const databaseSchema = createMemo(() =>
+    props.form.useStore((state) => state.values.name.database_schema)(),
+  );
 
   const [fk, setFk] = createSignal<string | undefined>();
-
-  // TODO: Allow setting non-null databaseSchema for other DBs.
-  const databaseSchema = null;
 
   const Header = () => (
     <div class="flex items-center justify-between">
@@ -593,7 +592,6 @@ export function ColumnSubForm(props: {
                   disabled(),
                   fk,
                   props.allTables,
-                  databaseSchema,
                 )}
               </props.form.Field>
 
@@ -611,7 +609,7 @@ export function ColumnSubForm(props: {
                       pk={false}
                       fk={fk()}
                       setFk={setFk}
-                      databaseSchema={databaseSchema}
+                      databaseSchema={databaseSchema()}
                     />
                   );
                 }}
@@ -634,11 +632,11 @@ export function PrimaryKeyColumnSubForm(props: {
   const disabled = () => props.disabled;
   const [name, setName] = createWritableMemo(() => props.column.name);
   const [expanded, setExpanded] = createSignal(false);
+  const databaseSchema = createMemo(() =>
+    props.form.useStore((state) => state.values.name.database_schema)(),
+  );
 
   const [fk, setFk] = createSignal<string | undefined>();
-
-  // TODO: Allow setting non-null databaseSchema for other DBs.
-  const databaseSchema = null;
 
   const Header = () => (
     <div class="flex items-center justify-between">
@@ -732,7 +730,6 @@ export function PrimaryKeyColumnSubForm(props: {
                   /*disabled=*/ true,
                   fk,
                   props.allTables,
-                  databaseSchema,
                 )}
               />
 
@@ -750,7 +747,7 @@ export function PrimaryKeyColumnSubForm(props: {
                       pk={true}
                       fk={fk()}
                       setFk={setFk}
-                      databaseSchema={databaseSchema}
+                      databaseSchema={databaseSchema()}
                     />
                   );
                 }}
