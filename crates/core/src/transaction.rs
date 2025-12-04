@@ -1,5 +1,8 @@
 use log::*;
-use std::path::{Path, PathBuf};
+use std::{
+  io::Write,
+  path::{Path, PathBuf},
+};
 use thiserror::Error;
 
 use crate::migrations;
@@ -87,10 +90,38 @@ impl TransactionLog {
         err
       })?;
 
-    write_migration_file(path, &sql).await?;
+    write_migration_file(path, &sql)?;
 
     return Ok(report);
   }
+
+  // pub(crate) fn apply_as_migration_rusqlite(
+  //   &self,
+  //   conn: &mut rusqlite::Connection,
+  //   migration_path: impl AsRef<Path>,
+  //   filename_suffix: &str,
+  // ) -> Result<trailbase_refinery::Report, TransactionError> {
+  //   let filename = migrations::new_unique_migration_filename(filename_suffix);
+  //   let stem = Path::new(&filename)
+  //     .file_stem()
+  //     .ok_or_else(|| TransactionError::File(format!("Failed to get stem from: {filename}")))?
+  //     .to_string_lossy()
+  //     .to_string();
+  //   let path = migration_path.as_ref().join(filename);
+  //
+  //   let sql = self.build_sql();
+  //   let migrations = vec![trailbase_refinery::Migration::unapplied(&stem, &sql)?];
+  //   let runner = migrations::new_migration_runner(&migrations).set_abort_missing(false);
+  //
+  //   let report = runner.run(conn).map_err(|err| {
+  //     error!("Migration aborted with: {err} for {sql}");
+  //     trailbase_sqlite::Error::Other(err.into())
+  //   })?;
+  //
+  //   write_migration_file(path, &sql)?;
+  //
+  //   return Ok(report);
+  // }
 
   #[allow(unused)]
   pub(crate) async fn commit(
@@ -189,15 +220,19 @@ impl<'a> TransactionRecorder<'a> {
   }
 }
 
-async fn write_migration_file(path: PathBuf, sql: &str) -> std::io::Result<()> {
+fn write_migration_file(path: PathBuf, sql: &str) -> std::io::Result<()> {
   if cfg!(test) {
     return Ok(());
   }
 
-  use tokio::io::AsyncWriteExt;
-
-  let mut migration_file = tokio::fs::File::create_new(path).await?;
-  migration_file.write_all(sql.as_bytes()).await?;
+  if let Some(parent) = path.parent() {
+    // Returns error if path already exists.
+    if !parent.exists() {
+      std::fs::create_dir(parent)?;
+    }
+  }
+  let mut migration_file = std::fs::File::create_new(path)?;
+  migration_file.write_all(sql.as_bytes())?;
   return Ok(());
 }
 

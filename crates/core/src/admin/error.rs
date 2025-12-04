@@ -7,8 +7,8 @@ use thiserror::Error;
 // FIXME: Admin APIs also deserve more explicit error handling eventually.
 #[derive(Debug, Error)]
 pub enum AdminError {
-  #[error("TokioRusqlite error: {0}")]
-  TokioRusqlite(#[from] trailbase_sqlite::Error),
+  #[error("TrailbaseSqlite error: {0}")]
+  TrailbaseSqlite(#[from] trailbase_sqlite::Error),
   #[error("Rusqlite error: {0}")]
   Rusqlite(#[from] rusqlite::Error),
   #[error("Rusqlite FromSql error: {0}")]
