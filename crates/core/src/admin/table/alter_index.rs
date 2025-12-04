@@ -50,29 +50,27 @@ pub async fn alter_index_handler(
 
   let (conn, migration_path) = super::get_conn_and_migration_path(&state, db)?;
 
-  let tx_log = {
-    let unqualified_source_index_name = request.source_schema.name.name.clone();
-    let create_index_query = target_index_schema.create_index_statement();
+  let create_index_query = target_index_schema.create_index_statement();
+  let unqualified_source_index_name = request.source_schema.name.name.clone();
 
-    conn
-      .call(move |conn| {
-        let mut tx = TransactionRecorder::new(conn)?;
+  let tx_log = conn
+    .call(move |conn| {
+      let mut tx = TransactionRecorder::new(conn)?;
 
-        // Drop old index
-        tx.execute(
-          &format!("DROP INDEX \"{unqualified_source_index_name}\""),
-          (),
-        )?;
+      // Drop old index
+      tx.execute(
+        &format!("DROP INDEX \"{unqualified_source_index_name}\""),
+        (),
+      )?;
 
-        // Create new index
-        tx.execute(&create_index_query, ())?;
+      // Create new index
+      tx.execute(&create_index_query, ())?;
 
-        return tx
-          .rollback()
-          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
-      })
-      .await?
-  };
+      return tx
+        .rollback()
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+    })
+    .await?;
 
   // Take transaction log, write a migration file and apply.
   if !dry_run && let Some(ref log) = tx_log {

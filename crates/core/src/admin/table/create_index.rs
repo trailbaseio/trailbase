@@ -1,6 +1,6 @@
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
-use trailbase_schema::sqlite::TableIndex;
+use trailbase_schema::sqlite::{QualifiedName, TableIndex};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -27,13 +27,14 @@ pub async fn create_index_handler(
   let dry_run = request.dry_run.unwrap_or(false);
   let (db, index_schema) = {
     let mut schema = request.schema.clone();
+    schema.table_name = QualifiedName::parse(&schema.table_name)?.name;
     (schema.name.database_schema.take(), schema)
   };
 
-  // This builds the `CREATE INDEX` SQL statement.
-  let create_index_query = request.schema.create_index_statement();
-
   let (conn, migration_path) = super::get_conn_and_migration_path(&state, db)?;
+
+  // This builds the `CREATE INDEX` SQL statement.
+  let create_index_query = index_schema.create_index_statement();
 
   let tx_log = conn
     .call(move |conn| {

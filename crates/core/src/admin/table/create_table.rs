@@ -35,10 +35,10 @@ pub async fn create_table_handler(
     (schema.name.database_schema.take(), schema)
   };
 
+  let (conn, migration_path) = super::get_conn_and_migration_path(&state, db)?;
+
   // This builds the `CREATE TABLE` SQL statement.
   let create_table_query = table_schema.create_table_statement();
-
-  let (conn, migration_path) = super::get_conn_and_migration_path(&state, db)?;
 
   let tx_log = conn
     .call(move |conn| {

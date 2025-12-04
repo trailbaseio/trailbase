@@ -64,6 +64,13 @@ pub async fn list_tables_handler(
   for schema in schemas {
     let name = &schema.name;
 
+    let db_schema = || -> Option<String> {
+      match schema.db_schema.as_str() {
+        "" | "main" => None,
+        db => Some(db.to_string()),
+      }
+    };
+
     match schema.r#type.as_str() {
       "table" => {
         let table_name = &schema.name;
@@ -77,9 +84,7 @@ pub async fn list_tables_handler(
         {
           response.tables.push({
             let mut table: Table = create_table_statement.try_into()?;
-            if schema.db_schema != "main" {
-              table.name.database_schema = Some(schema.db_schema.clone());
-            }
+            table.name.database_schema = db_schema();
             table
           });
         }
@@ -97,7 +102,9 @@ pub async fn list_tables_handler(
         if let Some(create_index_statement) =
           parse_into_statement(&sql).map_err(|err| Error::Internal(err.into()))?
         {
-          response.indexes.push(create_index_statement.try_into()?);
+          let mut index: TableIndex = create_index_statement.try_into()?;
+          index.name.database_schema = db_schema();
+          response.indexes.push(index);
         }
       }
       "view" => {
@@ -120,9 +127,10 @@ pub async fn list_tables_handler(
               return None;
             })
             .collect();
-          response
-            .views
-            .push(View::from(create_view_statement, &tables)?);
+
+          let mut view = View::from(create_view_statement, &tables)?;
+          view.name.database_schema = db_schema();
+          response.views.push(view);
         }
       }
       "trigger" => {
@@ -135,10 +143,7 @@ pub async fn list_tables_handler(
         response.triggers.push(TableTrigger {
           name: QualifiedName {
             name: schema.name,
-            database_schema: match schema.db_schema.as_str() {
-              "" | "main" => None,
-              _ => Some(schema.db_schema),
-            },
+            database_schema: db_schema(),
           },
           table_name: schema.tbl_name,
           sql,
