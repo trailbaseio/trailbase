@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@antv/x6": "^3.1.0",
+    "@antv/x6": "^3.1.2",
     "@bufbuild/protobuf": "^2.10.1",
     "@codemirror/autocomplete": "^6.20.0",
     "@codemirror/lang-sql": "^6.10.0",
@@ -28,8 +28,8 @@
     "@panzoom/panzoom": "^4.6.1",
     "@solid-primitives/memo": "^1.4.3",
     "@solidjs/router": "^0.15.4",
-    "@tanstack/solid-form": "^1.27.0",
-    "@tanstack/solid-query": "^5.90.14",
+    "@tanstack/solid-form": "^1.27.1",
+    "@tanstack/solid-query": "^5.90.15",
     "@tanstack/solid-table": "^8.21.3",
     "@tanstack/table-core": "^8.21.3",
     "chart.js": "^4.5.1",

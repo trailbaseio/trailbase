@@ -12,11 +12,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tanstack/db": "^0.5.10",
-    "@tanstack/query-core": "^5.90.11",
-    "@tanstack/query-db-collection": "^1.0.5",
-    "@tanstack/react-db": "^0.1.54",
-    "@tanstack/trailbase-db-collection": "^0.1.54",
+    "@tanstack/db": "^0.5.11",
+    "@tanstack/query-core": "^5.90.12",
+    "@tanstack/query-db-collection": "^1.0.6",
+    "@tanstack/react-db": "^0.1.55",
+    "@tanstack/trailbase-db-collection": "^0.1.55",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "tailwindcss": "^4.1.17",
