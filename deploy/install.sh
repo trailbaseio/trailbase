@@ -293,7 +293,7 @@ verbose "Host architecture: $arch"
 # Set aliases for architectures
 amd64=("amd64" "x86_64" "x86-64" "x64")
 amd32=("386" "i386" "i686" "x86")
-arm=("arm" "armv7" "armv6" "armv8" "armv8l" "armv7l" "armv6l" "armv8l" "armv7l" "armv6l")
+arm=("arm" "armv7" "armv6" "armv8" "armv8l" "armv7l" "armv6l" "armv8l" "armv7l" "armv6l" "aarch64")
 
 currentArchAliases=()
 # Set the right aliases for current host system
