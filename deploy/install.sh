@@ -294,6 +294,7 @@ verbose "Host architecture: $arch"
 amd64=("amd64" "x86_64" "x86-64" "x64")
 amd32=("386" "i386" "i686" "x86")
 arm=("arm" "armv7" "armv6" "armv8" "armv8l" "armv7l" "armv6l" "armv8l" "armv7l" "armv6l")
+aarch64=("aarch64" "arm64")
 
 currentArchAliases=()
 # Set the right aliases for current host system
@@ -301,6 +302,8 @@ if [ "$arch" == "x86_64" ]; then
 	currentArchAliases=("${amd64[@]}")
 elif [ "$arch" == "i386" ] || [ "$arch" == "i686" ]; then
 	currentArchAliases=("${amd32[@]}")
+elif [[ "$arch" = "aarch64" ]]; then
+	currentArchAliases=("${aarch64[@]}")
 # Else if starts with "arm"
 elif [[ "$arch" =~ ^arm ]]; then
 	currentArchAliases=("${arm[@]}")
