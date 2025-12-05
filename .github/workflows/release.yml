@@ -133,7 +133,7 @@ jobs:
           fail_on_unmatched_files: true
           files: trailbase_${{  github.ref_name }}_arm64_linux.zip
 
-  release-linux-auth-ui:
+  release-wasm-auth-ui:
     needs: changelog
     runs-on: ubuntu-latest
     steps:
@@ -236,7 +236,7 @@ jobs:
           fail_on_unmatched_files: true
           files: trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip
 
-  release-windows:
+  release-x86_64-windows:
     needs: changelog
     runs-on: windows-latest
     steps:
