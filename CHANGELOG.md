@@ -1,3 +1,12 @@
+## v0.21.11
+
+- Pre-built binary releases:
+  - Release aarch64 (arm64) static binaries for Linux (#184) and update install script.
+  - Stop releasing Linux glibc binaries. Using them is a gamble depending on your system: best-case it won't work at all, worst-case you end up with hard to debug issues. Even "static" glibc builds aren't static, e.g. when looking up hostnames.
+  - There are valid, e.g. performance, reasons to use glibc builds, however it's safer to build from source or for a controlled container environment.
+- Remove left-over pseudo error handling to stop swallowing errors in a few places in the admin UI, e.g. when deleting tables.
+- Update Rust and JavaScript dependencies.
+
 ## v0.21.10
 
 - Fix table renames in admin UI.

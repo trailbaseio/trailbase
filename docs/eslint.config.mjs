@@ -75,6 +75,8 @@ export default [
       ],
       // Collides with astro, we'd have to configure the solid plugin to ignore astro files.
       "solid/no-unknown-namespaces": "off",
+      // Needed for astro.config.ts @ts-ignore in because @ts-expect-error doesn't work reliably across envs.
+      "@typescript-eslint/ban-ts-comment": "warn",
     },
     languageOptions: { globals: globals.browser },
   },
