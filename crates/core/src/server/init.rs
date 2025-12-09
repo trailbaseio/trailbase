@@ -74,16 +74,28 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
       .unwrap_or_default()
       .databases
       .iter()
-      .flat_map(|d| d.name.clone())
+      .flat_map(|d| {
+        d.name
+          .as_ref()
+          .map(|n| crate::connection::AttachedDatabase::from_data_dir(&args.data_dir, n))
+      })
       .collect();
 
-  let (conn, new_db) = crate::connection::init_connections_and_sync_wasm(
-    &args.data_dir,
-    additional_databases,
-    args.runtime_root_fs.as_deref(),
-    json_schema_registry.clone(),
-    args.dev,
-  )?;
+  let (conn, new_db) = {
+    let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
+      args.data_dir.root().join("wasm"),
+      args.runtime_root_fs.as_deref(),
+      args.dev,
+    )
+    .map_err(|err| InitError::ScriptError(err.to_string()))?;
+
+    crate::connection::init_main_db(
+      Some(&args.data_dir),
+      Some(json_schema_registry.clone()),
+      additional_databases,
+      sync_wasm_runtimes,
+    )?
+  };
 
   let tables = lookup_and_parse_all_table_schemas(&conn).await?;
   let views = lookup_and_parse_all_view_schemas(&conn, &tables).await?;

@@ -1,5 +1,6 @@
 use log::*;
 use parking_lot::{Mutex, RwLock};
+use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
@@ -27,9 +28,108 @@ pub enum ConnectionError {
   Other(String),
 }
 
-pub struct AttachExtraDatabases {
+pub struct AttachedDatabase {
   pub schema_name: String,
   pub path: PathBuf,
+}
+
+impl AttachedDatabase {
+  pub fn from_data_dir(data_dir: &DataDir, name: impl std::string::ToString) -> Self {
+    let name = name.to_string();
+    return AttachedDatabase {
+      path: data_dir.data_path().join(format!("{name}.db")),
+      schema_name: name,
+    };
+  }
+}
+
+#[derive(Hash, PartialEq, Eq)]
+struct ConnectionKey {
+  main: bool,
+  attached_databases: BTreeSet<String>,
+}
+
+// A manager for multi-DB SQLite connections.
+//
+// NOTE: Performance-wise it's beneficial to share Connections to benefit from its internal locking
+// instead of relying on SQLite's own file locking.
+#[derive(Clone)]
+pub(crate) struct ConnectionManager {
+  data_dir: DataDir,
+  json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+  sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
+  // Cache,
+  connections: Arc<RwLock<HashMap<ConnectionKey, std::sync::Weak<Connection>>>>,
+}
+
+impl ConnectionManager {
+  pub(crate) fn new(
+    data_dir: DataDir,
+    runtime_root_fs: Option<&std::path::Path>,
+    json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+    use_winch: bool,
+  ) -> Result<Self, ConnectionError> {
+    let sqlite_function_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
+      data_dir.root().join("wasm"),
+      runtime_root_fs,
+      use_winch,
+    )
+    .map_err(|err| ConnectionError::Other(err.to_string()))?;
+
+    return Ok(Self {
+      data_dir,
+      json_schema_registry,
+      sqlite_function_runtimes,
+      connections: Arc::new(RwLock::new(HashMap::new())),
+    });
+  }
+
+  pub(crate) fn get(
+    &self,
+    main: bool,
+    attached_databases: Option<BTreeSet<String>>,
+  ) -> Result<Arc<Connection>, ConnectionError> {
+    let key = ConnectionKey {
+      main,
+      attached_databases: attached_databases.unwrap_or_default(),
+    };
+
+    let mut lock = self.connections.upgradable_read();
+    if let Some(weak) = lock.get(&key) {
+      if let Some(conn) = weak.upgrade() {
+        return Ok(conn);
+      } else {
+        lock.with_upgraded(|lock| lock.remove(&key));
+      }
+    }
+
+    let attached_databases: Vec<AttachedDatabase> = key
+      .attached_databases
+      .iter()
+      .map(|name| AttachedDatabase::from_data_dir(&self.data_dir, name))
+      .collect();
+
+    // SQLite supports only up to 125 DBs per connection: https://sqlite.org/limits.html.
+    if attached_databases.len() > 124 {
+      return Err(ConnectionError::Other("Too many databases".into()));
+    }
+
+    let (conn, _new_db) = crate::connection::init_main_db_impl(
+      if main { Some(&self.data_dir) } else { None },
+      Some(self.json_schema_registry.clone()),
+      attached_databases,
+      self.sqlite_function_runtimes.clone(),
+      main,
+    )?;
+
+    let conn = Arc::new(conn);
+
+    lock.with_upgraded(|lock| {
+      lock.insert(key, Arc::downgrade(&conn));
+    });
+
+    return Ok(conn);
+  }
 }
 
 /// Initializes a new SQLite Connection with all the default extensions, migrations and settings
@@ -39,8 +139,23 @@ pub struct AttachExtraDatabases {
 pub fn init_main_db(
   data_dir: Option<&DataDir>,
   json_registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
-  attach: Option<Vec<AttachExtraDatabases>>,
+  attached_databases: Vec<AttachedDatabase>,
   runtimes: Vec<SqliteFunctionRuntime>,
+) -> Result<(Connection, bool), ConnectionError> {
+  // SQLite supports only up to 125 DBs per connection: https://sqlite.org/limits.html.
+  if attached_databases.len() > 124 {
+    return Err(ConnectionError::Other("Too many databases".into()));
+  }
+
+  return init_main_db_impl(data_dir, json_registry, attached_databases, runtimes, true);
+}
+
+fn init_main_db_impl(
+  data_dir: Option<&DataDir>,
+  json_registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
+  attach: Vec<AttachedDatabase>,
+  runtimes: Vec<SqliteFunctionRuntime>,
+  main_migrations: bool,
 ) -> Result<(Connection, bool), ConnectionError> {
   let main_path = data_dir.map(|d| d.main_db_path());
   let migrations_path = data_dir.map(|d| d.migrations_path());
@@ -66,7 +181,9 @@ pub fn init_main_db(
         let mut conn =
           trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())?;
 
-        *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
+        if main_migrations {
+          *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
+        }
 
         #[cfg(feature = "wasm")]
         for (rt, functions) in &sqlite_functions {
@@ -87,23 +204,21 @@ pub fn init_main_db(
     )?
   };
 
-  if let Some(attach) = attach {
-    for AttachExtraDatabases { schema_name, path } in attach {
-      debug!("Attaching '{schema_name}': {path:?}");
+  for AttachedDatabase { schema_name, path } in attach {
+    debug!("Attaching '{schema_name}': {path:?}");
 
-      if let Some(ref migrations_path) = migrations_path {
-        let mut secondary =
-          connect_rusqlite_without_default_extensions_and_schemas(Some(path.clone()))?;
+    if let Some(ref migrations_path) = migrations_path {
+      let mut secondary =
+        connect_rusqlite_without_default_extensions_and_schemas(Some(path.clone()))?;
 
-        let migrations = vec![load_sql_migrations(
-          migrations_path.join(&schema_name),
-          false,
-        )?];
-        apply_migrations(&schema_name, &mut secondary, migrations)?;
-      }
-
-      conn.attach(&path.to_string_lossy(), &schema_name)?;
+      let migrations = vec![load_sql_migrations(
+        migrations_path.join(&schema_name),
+        false,
+      )?];
+      apply_migrations(&schema_name, &mut secondary, migrations)?;
     }
+
+    conn.attach(&path.to_string_lossy(), &schema_name)?;
   }
 
   // NOTE: We could consider larger memory maps and caches for the main database.
@@ -114,49 +229,7 @@ pub fn init_main_db(
   return Ok((conn, *new_db.lock()));
 }
 
-pub(crate) fn init_connections_and_sync_wasm(
-  data_dir: &DataDir,
-  additional_databases: Vec<String>,
-  runtime_root_fs: Option<&std::path::Path>,
-  json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-  dev: bool,
-) -> Result<(trailbase_sqlite::Connection, bool), ConnectionError> {
-  let extra_databases: Vec<AttachExtraDatabases> = additional_databases
-    .into_iter()
-    .map(|name| {
-      return AttachExtraDatabases {
-        path: data_dir.data_path().join(format!("{name}.db")),
-        schema_name: name,
-      };
-    })
-    .collect();
-
-  // SQLite supports only up to 125 DBs per connection: https://sqlite.org/limits.html.
-  if extra_databases.len() > 124 {
-    return Err(ConnectionError::Other("Too many databases".into()));
-  }
-
-  // NOTE: If repeat connection initialization ever becomes a thing, way may want to cache/clone the
-  // SqliteFunctionRuntimes.
-  let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
-    data_dir.root().join("wasm"),
-    runtime_root_fs,
-    dev,
-  )
-  .map_err(|err| ConnectionError::Other(err.to_string()))?;
-
-  // NOTE: We're injecting a WASM runtime to make custom functions available.
-  let (conn, new_db) = crate::connection::init_main_db(
-    Some(data_dir),
-    Some(json_schema_registry.clone()),
-    Some(extra_databases),
-    sync_wasm_runtimes,
-  )?;
-
-  return Ok((conn, new_db));
-}
-
-pub(crate) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {
+pub(super) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {
   let path = data_dir.map(|d| d.logs_db_path());
 
   return trailbase_sqlite::Connection::new(

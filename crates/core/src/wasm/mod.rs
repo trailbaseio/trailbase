@@ -23,7 +23,7 @@ pub(crate) type AnyError = Box<dyn std::error::Error + Send + Sync>;
 pub(crate) fn build_sync_wasm_runtimes_for_components(
   components_path: PathBuf,
   fs_root_path: Option<&Path>,
-  dev: bool,
+  use_winch: bool,
 ) -> Result<Vec<SqliteFunctionRuntime>, AnyError> {
   let sync_runtimes: Vec<SqliteFunctionRuntime> =
     load_wasm_components(components_path, |path: std::path::PathBuf| {
@@ -31,7 +31,7 @@ pub(crate) fn build_sync_wasm_runtimes_for_components(
         path,
         RuntimeOptions {
           fs_root_path: fs_root_path.map(|p| p.to_owned()),
-          use_winch: dev,
+          use_winch,
         },
       );
     })?;
@@ -45,7 +45,7 @@ pub(crate) fn build_wasm_runtimes_for_components(
   shared_kv_store: KvStore,
   components_path: PathBuf,
   fs_root_path: Option<PathBuf>,
-  dev: bool,
+  use_winch: bool,
 ) -> Result<Vec<Runtime>, AnyError> {
   let executor = SharedExecutor::new(n_threads);
 
@@ -58,7 +58,7 @@ pub(crate) fn build_wasm_runtimes_for_components(
         shared_kv_store.clone(),
         RuntimeOptions {
           fs_root_path: fs_root_path.clone(),
-          use_winch: dev,
+          use_winch,
         },
       );
     })?;

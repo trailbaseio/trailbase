@@ -548,7 +548,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       .unwrap_or_else(|| trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap()),
   ));
   let (conn, new) =
-    crate::connection::init_main_db(None, Some(json_schema_registry.clone()), None, vec![])?;
+    crate::connection::init_main_db(None, Some(json_schema_registry.clone()), vec![], vec![])?;
   assert!(new);
 
   let logs_conn = crate::connection::init_logs_db(None)?;

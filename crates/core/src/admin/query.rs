@@ -60,19 +60,31 @@ pub async fn query_handler(
   }
 
   // Initialize a new connection, to avoid any sort of tomfoolery like dropping attached databases.
-  let (conn, _new_db) = crate::connection::init_connections_and_sync_wasm(
-    state.data_dir(),
-    state
-      .get_config()
-      .databases
-      .iter()
-      .flat_map(|d| d.name.clone())
-      .collect(),
-    state.runtime_root_fs(),
-    state.json_schema_registry().clone(),
-    state.dev_mode(),
-  )
-  .map_err(|err| Error::Precondition(err.to_string()))?;
+  let (conn, _new_db) = {
+    let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
+      state.data_dir().root().join("wasm"),
+      state.runtime_root_fs(),
+      state.dev_mode(),
+    )
+    .map_err(|err| Error::Precondition(err.to_string()))?;
+
+    crate::connection::init_main_db(
+      Some(state.data_dir()),
+      Some(state.json_schema_registry().clone()),
+      state
+        .get_config()
+        .databases
+        .iter()
+        .flat_map(|d| {
+          d.name
+            .as_ref()
+            .map(|n| crate::connection::AttachedDatabase::from_data_dir(state.data_dir(), n))
+        })
+        .collect(),
+      sync_wasm_runtimes,
+    )
+    .map_err(|err| Error::Precondition(err.to_string()))?
+  };
 
   let batched_rows_result = conn.execute_batch(request.query).await;
 
