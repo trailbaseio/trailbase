@@ -1,13 +1,12 @@
 use log::*;
 use parking_lot::RwLock;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 
 use crate::app_state::{AppState, AppStateArgs, build_objectstore, update_json_schema_registry};
 use crate::auth::jwt::{JwtHelper, JwtHelperError};
 use crate::config::load_or_init_config_textproto;
-use crate::connection::AttachExtraDatabases;
 use crate::constants::USER_TABLE;
 use crate::metadata::load_or_init_metadata_textproto;
 use crate::rand::generate_random_string;
@@ -78,7 +77,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
       .flat_map(|d| d.name.clone())
       .collect();
 
-  let (conn, new_db) = init_connection(
+  let (conn, new_db) = crate::connection::init_connections_and_sync_wasm(
     &args.data_dir,
     additional_databases,
     args.runtime_root_fs.as_deref(),
@@ -186,46 +185,4 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   }
 
   return Ok((new_db, app_state));
-}
-
-pub(crate) fn init_connection(
-  data_dir: &DataDir,
-  additional_databases: Vec<String>,
-  runtime_root_fs: Option<&Path>,
-  json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-  dev: bool,
-) -> Result<(trailbase_sqlite::Connection, bool), InitError> {
-  let extra_databases: Vec<AttachExtraDatabases> = additional_databases
-    .into_iter()
-    .map(|name| {
-      return AttachExtraDatabases {
-        path: data_dir.data_path().join(format!("{name}.db")),
-        schema_name: name,
-      };
-    })
-    .collect();
-
-  // SQLite supports only up to 125 DBs per connection: https://sqlite.org/limits.html.
-  if extra_databases.len() > 124 {
-    return Err(InitError::CustomInit("Too many databases".into()));
-  }
-
-  // NOTE: If repeat connection initialization ever becomes a thing, way may want to cache/clone the
-  // SqliteFunctionRuntimes.
-  let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
-    data_dir.root().join("wasm"),
-    runtime_root_fs,
-    dev,
-  )
-  .map_err(|err| InitError::CustomInit(err.to_string()))?;
-
-  // NOTE: We're injecting a WASM runtime to make custom functions available.
-  let (conn, new_db) = crate::connection::init_main_db(
-    Some(data_dir),
-    Some(json_schema_registry.clone()),
-    Some(extra_databases),
-    sync_wasm_runtimes,
-  )?;
-
-  return Ok((conn, new_db));
 }

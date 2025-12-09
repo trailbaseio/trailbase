@@ -27,17 +27,6 @@ pub async fn query_handler(
   State(state): State<AppState>,
   Json(request): Json<QueryRequest>,
 ) -> Result<Json<QueryResponse>, Error> {
-  // NOTE: conn.query() only executes the first query and quietly drops the rest :/.
-  //
-  // In an ideal world we'd use sqlparser to validate the entire query before doing anything *and*
-  // also to break up the statements and execute them one-by-one. However, sqlparser is far from
-  // having 100% coverage, for example, it doesn't parse trigger statements (maybe
-  // https://crates.io/crates/sqlite3-parser would have been the better choice).
-  //
-  // In the end we really want to allow executing all constructs as valid to sqlite. As such we
-  // best effort parse the statements to see if need to invalidate the table cache and otherwise
-  // fall back to execute batch which materializes all rows and invalidate anyway.
-
   // Check the statements are correct before executing anything, just to be sure.
   let statements =
     parse_into_statements(&request.query).map_err(|err| Error::BadRequest(err.into()))?;
@@ -71,7 +60,7 @@ pub async fn query_handler(
   }
 
   // Initialize a new connection, to avoid any sort of tomfoolery like dropping attached databases.
-  let (conn, _new_db) = crate::server::init_connection(
+  let (conn, _new_db) = crate::connection::init_connections_and_sync_wasm(
     state.data_dir(),
     state
       .get_config()

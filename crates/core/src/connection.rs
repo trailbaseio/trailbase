@@ -114,6 +114,48 @@ pub fn init_main_db(
   return Ok((conn, *new_db.lock()));
 }
 
+pub(crate) fn init_connections_and_sync_wasm(
+  data_dir: &DataDir,
+  additional_databases: Vec<String>,
+  runtime_root_fs: Option<&std::path::Path>,
+  json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+  dev: bool,
+) -> Result<(trailbase_sqlite::Connection, bool), ConnectionError> {
+  let extra_databases: Vec<AttachExtraDatabases> = additional_databases
+    .into_iter()
+    .map(|name| {
+      return AttachExtraDatabases {
+        path: data_dir.data_path().join(format!("{name}.db")),
+        schema_name: name,
+      };
+    })
+    .collect();
+
+  // SQLite supports only up to 125 DBs per connection: https://sqlite.org/limits.html.
+  if extra_databases.len() > 124 {
+    return Err(ConnectionError::Other("Too many databases".into()));
+  }
+
+  // NOTE: If repeat connection initialization ever becomes a thing, way may want to cache/clone the
+  // SqliteFunctionRuntimes.
+  let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
+    data_dir.root().join("wasm"),
+    runtime_root_fs,
+    dev,
+  )
+  .map_err(|err| ConnectionError::Other(err.to_string()))?;
+
+  // NOTE: We're injecting a WASM runtime to make custom functions available.
+  let (conn, new_db) = crate::connection::init_main_db(
+    Some(data_dir),
+    Some(json_schema_registry.clone()),
+    Some(extra_databases),
+    sync_wasm_runtimes,
+  )?;
+
+  return Ok((conn, new_db));
+}
+
 pub(crate) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {
   let path = data_dir.map(|d| d.logs_db_path());
 

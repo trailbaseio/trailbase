@@ -35,7 +35,6 @@ use crate::data_dir::DataDir;
 use crate::logging;
 use crate::records;
 
-pub(crate) use init::init_connection;
 pub use init::{InitArgs, InitError, init_app_state};
 
 /// A set of options to configure serving behaviors. Changing any of these options
