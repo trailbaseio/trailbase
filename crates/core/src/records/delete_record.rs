@@ -39,7 +39,8 @@ pub async fn delete_record_handler(
   let (_index, pk_column) = api.record_pk_column();
 
   run_delete_query(
-    &state,
+    api.conn(),
+    state.objectstore(),
     api.table_name(),
     &pk_column.name,
     record_id,

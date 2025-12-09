@@ -162,7 +162,7 @@ pub async fn lookup_and_parse_all_view_schemas(
 
 // Install file column triggers. This ain't pretty, this might be better on construction and
 // schema changes.
-pub(crate) async fn setup_file_deletion_triggers(
+async fn setup_file_deletion_triggers(
   conn: &trailbase_sqlite::Connection,
   metadata: &ConnectionMetadata,
 ) -> Result<(), SchemaLookupError> {

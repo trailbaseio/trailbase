@@ -358,6 +358,10 @@ impl RecordApi {
     return &self.state.schema.table_name;
   }
 
+  pub fn conn(&self) -> &trailbase_sqlite::Connection {
+    return &self.state.conn;
+  }
+
   #[inline]
   pub fn has_file_columns(&self) -> bool {
     return self.state.schema.has_file_columns;

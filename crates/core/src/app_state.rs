@@ -1,5 +1,4 @@
 use log::*;
-use object_store::ObjectStore;
 use reactivate::{Merge, Reactive};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -23,6 +22,8 @@ use crate::schema_metadata::{
   lookup_and_parse_all_table_schemas, lookup_and_parse_all_view_schemas,
 };
 use crate::wasm::Runtime;
+
+pub(crate) type ObjectStore = dyn object_store::ObjectStore + Send + Sync;
 
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.
@@ -50,7 +51,7 @@ struct InternalState {
 
   connection_metadata: Reactive<Arc<ConnectionMetadata>>,
   subscription_manager: SubscriptionManager,
-  object_store: Arc<dyn ObjectStore + Send + Sync>,
+  object_store: Arc<ObjectStore>,
 
   /// Actual WASM runtimes.
   wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
@@ -76,7 +77,7 @@ pub(crate) struct AppStateArgs {
   pub logs_conn: trailbase_sqlite::Connection,
   pub connection_manager: ConnectionManager,
   pub jwt: JwtHelper,
-  pub object_store: Box<dyn ObjectStore + Send + Sync>,
+  pub object_store: Box<ObjectStore>,
   pub runtime_threads: Option<usize>,
 }
 
@@ -133,7 +134,7 @@ impl AppState {
       })
     };
 
-    let object_store: Arc<dyn ObjectStore + Send + Sync> = args.object_store.into();
+    let object_store: Arc<ObjectStore> = args.object_store.into();
     let jobs_input = (
       args.data_dir.clone(),
       args.conn.clone(),
@@ -308,7 +309,7 @@ impl AppState {
     return Ok(());
   }
 
-  pub(crate) fn objectstore(&self) -> &(dyn ObjectStore + Send + Sync) {
+  pub(crate) fn objectstore(&self) -> &ObjectStore {
     return &*self.state.object_store;
   }
 
@@ -704,7 +705,7 @@ fn build_record_api(
 pub(crate) fn build_objectstore(
   data_dir: &DataDir,
   config: Option<&S3StorageConfig>,
-) -> Result<Box<dyn ObjectStore + Send + Sync>, object_store::Error> {
+) -> Result<Box<ObjectStore>, object_store::Error> {
   if let Some(config) = config {
     let mut builder = object_store::aws::AmazonS3Builder::from_env();
 

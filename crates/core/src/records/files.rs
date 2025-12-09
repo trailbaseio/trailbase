@@ -77,7 +77,8 @@ pub(crate) struct FileDeletionsDb {
 /// blocking a response on unrelated delations.
 /// QUESTION: Should we delete eagerly at all? We could just do this periodically.
 pub(crate) async fn delete_files_marked_for_deletion(
-  state: &AppState,
+  conn: &trailbase_sqlite::Connection,
+  store: &dyn ObjectStore,
   table_name: &QualifiedNameEscaped,
   rowids: &[i64],
 ) -> Result<(), FileError> {
@@ -86,16 +87,14 @@ pub(crate) async fn delete_files_marked_for_deletion(
       return Ok(());
     }
     1 => {
-      state
-        .conn()
+        conn
         .write_query_values(
           "DELETE FROM main._file_deletions WHERE table_name = ?1 AND record_rowid = ?2 RETURNING *",
           trailbase_sqlite::params!(table_name.to_string(), rowids[0]),
         )
         .await?
     }
-    _ => state
-      .conn()
+    _ => conn
       .read_query_values(
         format!(
           "DELETE FROM main._file_deletions WHERE table_name = {table_name} AND record_rowid IN ({ids}) RETURNING *",
@@ -107,7 +106,7 @@ pub(crate) async fn delete_files_marked_for_deletion(
   };
 
   if !rows.is_empty() {
-    delete_pending_files_impl(state.conn(), state.objectstore(), rows).await?;
+    delete_pending_files_impl(conn, store, rows).await?;
   }
 
   return Ok(());

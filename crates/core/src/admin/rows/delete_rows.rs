@@ -58,7 +58,8 @@ pub(crate) async fn delete_row(
   }
 
   run_delete_query(
-    state,
+    state.conn(),
+    state.objectstore(),
     &QualifiedNameEscaped::from(&table_metadata.schema.name),
     pk_col,
     pk_value.try_into()?,

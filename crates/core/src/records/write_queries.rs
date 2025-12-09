@@ -2,9 +2,10 @@ use askama::Template;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use trailbase_schema::QualifiedNameEscaped;
-use trailbase_sqlite::{NamedParams, Params as _, Value};
+use trailbase_sqlite::{Connection, NamedParams, Params as _, Value};
 
 use crate::AppState;
+use crate::app_state::ObjectStore;
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
@@ -219,7 +220,10 @@ pub(crate) async fn run_queries(
 
     for (table_name, indexes) in queries_with_files {
       let rowids: Vec<_> = indexes.into_iter().map(|i| result[i].rowid).collect();
-      if let Err(err) = delete_files_marked_for_deletion(state, &table_name, &rowids).await {
+      if let Err(err) =
+        delete_files_marked_for_deletion(state.conn(), state.objectstore(), &table_name, &rowids)
+          .await
+      {
         log::debug!("Failed deleting files: {err}");
       }
     }
@@ -259,7 +263,7 @@ pub(crate) async fn run_insert_query(
     file_manager.release();
 
     if Some(ConflictResolutionStrategy::Replace) == conflict_resolution {
-      delete_files_marked_for_deletion(state, table_name, &[rowid])
+      delete_files_marked_for_deletion(state.conn(), state.objectstore(), table_name, &[rowid])
         .await
         .map_err(|err| RecordError::Internal(err.into()))?;
     }
@@ -293,7 +297,7 @@ pub(crate) async fn run_update_query(
   // Successful write, do not cleanup written files.
   if let Some(mut file_manager) = file_manager {
     file_manager.release();
-    delete_files_marked_for_deletion(state, table_name, &[rowid])
+    delete_files_marked_for_deletion(state.conn(), state.objectstore(), table_name, &[rowid])
       .await
       .map_err(|err| RecordError::Internal(err.into()))?;
   }
@@ -302,7 +306,8 @@ pub(crate) async fn run_update_query(
 }
 
 pub(crate) async fn run_delete_query(
-  state: &AppState,
+  conn: &Connection,
+  object_store: &ObjectStore,
   table_name: &QualifiedNameEscaped,
   pk_column: &str,
   pk_value: Value,
@@ -310,15 +315,14 @@ pub(crate) async fn run_delete_query(
 ) -> Result<i64, RecordError> {
   let query = WriteQuery::new_delete(table_name, pk_column, pk_value)?;
 
-  let rowid: i64 = state
-    .conn()
+  let rowid: i64 = conn
     .call(move |conn| {
       return Ok(query.apply(conn)?.rowid);
     })
     .await?;
 
   if has_file_columns {
-    delete_files_marked_for_deletion(state, table_name, &[rowid])
+    delete_files_marked_for_deletion(conn, object_store, table_name, &[rowid])
       .await
       .map_err(|err| RecordError::Internal(err.into()))?;
   }
