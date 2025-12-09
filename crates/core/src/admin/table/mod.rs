@@ -22,6 +22,11 @@ mod list_tables;
 
 pub(crate) use list_tables::list_tables_handler;
 
+/// Builds dedicated connection for database with given name.
+///
+/// NOTE: We cannot use the ConnectionManager's facilities since migrations require DBs to be
+/// attached as "main". Otherwise, the migrations themselves would need fully-qualified statements,
+/// which would be problematic for renames and multi-tenancy.
 fn get_conn_and_migration_path(
   state: &crate::AppState,
   db: Option<String>,
