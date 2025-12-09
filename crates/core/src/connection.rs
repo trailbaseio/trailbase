@@ -120,7 +120,7 @@ impl ConnectionManager {
 
   pub(crate) fn build(
     &self,
-    main: bool,
+    mut main: bool,
     attached_databases: Option<&BTreeSet<String>>,
   ) -> Result<Arc<Connection>, ConnectionError> {
     let attach = if let Some(attached_databases) = attached_databases {
@@ -131,7 +131,14 @@ impl ConnectionManager {
 
       attached_databases
         .iter()
-        .map(|name| AttachedDatabase::from_data_dir(&self.data_dir, name))
+        .flat_map(|name| {
+          if name != "main" {
+            Some(AttachedDatabase::from_data_dir(&self.data_dir, name))
+          } else {
+            main = true;
+            None
+          }
+        })
         .collect()
     } else {
       vec![]
@@ -225,14 +232,13 @@ fn init_main_db_impl(
     debug!("Attaching '{schema_name}': {path:?}");
 
     if let Some(ref migrations_path) = migrations_path {
-      let mut secondary =
-        connect_rusqlite_without_default_extensions_and_schemas(Some(path.clone()))?;
+      let migrations = load_sql_migrations(migrations_path.join(&schema_name), false)?;
 
-      let migrations = vec![load_sql_migrations(
-        migrations_path.join(&schema_name),
-        false,
-      )?];
-      apply_migrations(&schema_name, &mut secondary, migrations)?;
+      if !migrations.is_empty() {
+        let mut secondary =
+          connect_rusqlite_without_default_extensions_and_schemas(Some(path.clone()))?;
+        apply_migrations(&schema_name, &mut secondary, vec![migrations])?;
+      }
     }
 
     conn.attach(&path.to_string_lossy(), &schema_name)?;

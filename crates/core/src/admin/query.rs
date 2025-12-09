@@ -21,6 +21,7 @@ pub struct QueryResponse {
 #[ts(export)]
 pub struct QueryRequest {
   query: String,
+  attached_databases: Option<Vec<String>>,
 }
 
 pub async fn query_handler(
@@ -70,14 +71,10 @@ pub async fn query_handler(
   // Initialize a new connection, to avoid any sort of tomfoolery like dropping attached databases.
   let conn = state.connection_manager().build(
     true,
-    Some(
-      &state
-        .get_config()
-        .databases
-        .iter()
-        .flat_map(|d| d.name.clone())
-        .collect(),
-    ),
+    request
+      .attached_databases
+      .map(|v| v.into_iter().collect())
+      .as_ref(),
   )?;
 
   let batched_rows_result = conn.execute_batch(request.query).await;
