@@ -39,14 +39,25 @@ pub async fn list_tables_handler(
     pub db_schema: String,
   }
 
-  let databases = state.conn().list_databases().await?;
+  let conn = state.connection_manager().build(
+    true,
+    Some(
+      &state
+        .get_config()
+        .databases
+        .iter()
+        .flat_map(|d| d.name.clone())
+        .take(124)
+        .collect(),
+    ),
+  )?;
+  let databases = conn.list_databases().await?;
 
   let mut schemas: Vec<SqliteSchema> = vec![];
   for db in databases {
     // NOTE: the "ORDER BY" is a bit sneaky, it ensures that we parse all "table"s before we parse
     // "view"s.
-    let rows = state
-      .conn()
+    let rows = conn
       .read_query_values::<SqliteSchema>(
         format!(
           "SELECT type, name, tbl_name, sql, ?1 AS db_schema FROM {}.{SQLITE_SCHEMA_TABLE} ORDER BY type",

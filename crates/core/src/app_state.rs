@@ -109,7 +109,7 @@ impl AppState {
 
     let connection_metadata = Reactive::new(Arc::new(args.connection_metadata));
     let record_apis = {
-      let conn = args.conn.clone();
+      let connection_manager = args.connection_manager.clone();
       let m = (&config, &connection_metadata).merge();
 
       derive_unchecked(&m, move |(config, metadata)| {
@@ -119,15 +119,15 @@ impl AppState {
           config
             .record_apis
             .iter()
-            .filter_map(
-              |config| match build_record_api(conn.clone(), metadata, config.clone()) {
+            .filter_map(|config| {
+              match build_record_api(&connection_manager, metadata, config.clone()) {
                 Ok(api) => Some((api.api_name().to_string(), api)),
                 Err(err) => {
                   error!("{err}");
                   None
                 }
-              },
-            )
+              }
+            })
             .collect::<Vec<_>>(),
         );
       })
@@ -609,7 +609,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 
   let connection_metadata = Reactive::new(Arc::new(connection_metadata));
   let record_apis: Reactive<Arc<Vec<(String, RecordApi)>>> = {
-    let conn = conn.clone();
+    let connection_manager = connection_manager.clone();
     let m = (&config, &connection_metadata).merge();
 
     derive_unchecked(&m, move |(c, metadata)| {
@@ -617,7 +617,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
         c.record_apis
           .iter()
           .map(|config| {
-            let api = build_record_api(conn.clone(), &metadata, config.clone()).unwrap();
+            let api = build_record_api(&connection_manager, &metadata, config.clone()).unwrap();
             return (api.api_name().to_string(), api);
           })
           .collect::<Vec<_>>(),
@@ -681,7 +681,7 @@ where
 }
 
 fn build_record_api(
-  conn: trailbase_sqlite::Connection,
+  connection_manager: &ConnectionManager,
   connection_metadata: &ConnectionMetadata,
   config: RecordApiConfig,
 ) -> Result<RecordApi, String> {
@@ -693,9 +693,9 @@ fn build_record_api(
   let table_name = QualifiedName::parse(table_name).map_err(|err| err.to_string())?;
 
   if let Some(table_metadata) = connection_metadata.get_table(&table_name) {
-    return RecordApi::from_table(conn, table_metadata, config);
+    return RecordApi::from_table(connection_manager, table_metadata, config);
   } else if let Some(view_metadata) = connection_metadata.get_view(&table_name) {
-    return RecordApi::from_view(conn, view_metadata, config);
+    return RecordApi::from_view(connection_manager, view_metadata, config);
   }
 
   return Err(format!("RecordApi references missing table: {config:?}"));

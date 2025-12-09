@@ -26,6 +26,7 @@ pub(crate) fn validate_record_api_config<T: Borrow<Table>, V: Borrow<View>>(
   tables: &[T],
   views: &[V],
   api_config: &proto::RecordApiConfig,
+  databases: &[proto::DatabaseConfig],
 ) -> Result<String, ConfigError> {
   let Some(ref api_name) = api_config.name else {
     return Err(invalid("RecordApi config misses name."));
@@ -35,6 +36,26 @@ pub(crate) fn validate_record_api_config<T: Borrow<Table>, V: Borrow<View>>(
   let Some(ref table_name) = api_config.table_name else {
     return Err(invalid("RecordApi config misses table name."));
   };
+
+  for db in &api_config.attached_databases {
+    if !databases.iter().any(|d| db == d.name()) {
+      return Err(invalid(format!(
+        "RecordApi {api_name} references unknown db: {db}"
+      )));
+    }
+  }
+
+  for (kind, rule) in [
+    (AccessKind::Create, api_config.create_access_rule.as_ref()),
+    (AccessKind::Read, api_config.read_access_rule.as_ref()),
+    (AccessKind::Update, api_config.update_access_rule.as_ref()),
+    (AccessKind::Delete, api_config.delete_access_rule.as_ref()),
+    (AccessKind::Schema, api_config.schema_access_rule.as_ref()),
+  ] {
+    if let Some(rule) = rule {
+      validate_rule(kind, rule).map_err(invalid)?;
+    }
+  }
 
   let metadata: TableOrView = {
     let table_name = QualifiedName::parse(table_name)?;
@@ -51,10 +72,13 @@ pub(crate) fn validate_record_api_config<T: Borrow<Table>, V: Borrow<View>>(
       }
 
       TableOrView::View(view.borrow())
-    } else {
+    } else if table_name.database_schema.is_none() {
       return Err(invalid(format!(
         "Missing table or view for API: {api_name}"
       )));
+    } else {
+      // FIXME: We're not validating against non-main databases.
+      return Ok(api_name.to_owned());
     }
   };
 
@@ -160,19 +184,6 @@ pub(crate) fn validate_record_api_config<T: Borrow<Table>, V: Borrow<View>>(
         )));
       }
     };
-  }
-
-  let rules = [
-    (AccessKind::Create, api_config.create_access_rule.as_ref()),
-    (AccessKind::Read, api_config.read_access_rule.as_ref()),
-    (AccessKind::Update, api_config.update_access_rule.as_ref()),
-    (AccessKind::Delete, api_config.delete_access_rule.as_ref()),
-    (AccessKind::Schema, api_config.schema_access_rule.as_ref()),
-  ];
-  for (kind, rule) in rules {
-    if let Some(rule) = rule {
-      validate_rule(kind, rule).map_err(invalid)?;
-    }
   }
 
   return Ok(api_name.to_owned());

@@ -396,15 +396,15 @@ async fn load_vault_textproto_or_default(data_dir: &DataDir) -> Result<proto::Va
   return Ok(vault);
 }
 
-pub(crate) fn maybe_load_config_textproto_unverified(
-  data_dir: &DataDir,
-) -> Result<Option<proto::Config>, ConfigError> {
-  return match std::fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)) {
-    Ok(contents) => Ok(Some(proto::Config::from_text(&contents)?)),
-    Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-    Err(err) => Err(err.into()),
-  };
-}
+// pub(crate) fn maybe_load_config_textproto_unverified(
+//   data_dir: &DataDir,
+// ) -> Result<Option<proto::Config>, ConfigError> {
+//   return match std::fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)) {
+//     Ok(contents) => Ok(Some(proto::Config::from_text(&contents)?)),
+//     Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+//     Err(err) => Err(err.into()),
+//   };
+// }
 
 // TODO: Initialization order is currently borked and worked-around by rebuilding
 // ConnectionMetadata. Specifically, building SchemaMatadataCache, which contains JSON metadata,
@@ -544,7 +544,7 @@ pub fn validate_config<T: Borrow<Table>, V: Borrow<View>>(
   // table, however it's not valid to have conflicting api names.
   let mut api_names = HashSet::<String>::new();
   for api in &config.record_apis {
-    let api_name = validate_record_api_config(tables, views, api)?;
+    let api_name = validate_record_api_config(tables, views, api, &config.databases)?;
 
     if !api_names.insert(api_name.clone()) {
       return ierr(format!(

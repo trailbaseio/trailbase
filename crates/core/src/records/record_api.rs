@@ -13,6 +13,7 @@ use trailbase_sqlite::{NamedParams, Params as _, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
+use crate::connection::ConnectionManager;
 use crate::constants::USER_TABLE;
 use crate::records::params::{LazyParams, Params, prefix_colon};
 use crate::records::{Permission, RecordError};
@@ -90,7 +91,7 @@ impl RecordApiSchema {
     });
   }
 
-  pub fn from_view(view_metadata: &ViewMetadata, config: &RecordApiConfig) -> Result<Self, String> {
+  fn from_view(view_metadata: &ViewMetadata, config: &RecordApiConfig) -> Result<Self, String> {
     assert_name(config, view_metadata.name());
 
     let Some((pk_index, pk_column)) = view_metadata.record_pk_column() else {
@@ -136,7 +137,7 @@ impl RecordApiSchema {
 
 struct RecordApiState {
   /// Database connection for access checks.
-  conn: trailbase_sqlite::Connection,
+  conn: Arc<trailbase_sqlite::Connection>,
 
   /// Schema metadata
   schema: RecordApiSchema,
@@ -181,36 +182,36 @@ impl RecordApiState {
 }
 
 impl RecordApi {
-  pub fn from_table(
-    conn: trailbase_sqlite::Connection,
+  pub(crate) fn from_table(
+    connection_manager: &ConnectionManager,
     table_metadata: &TableMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
     assert_name(&config, table_metadata.name());
 
     return Self::from_impl(
-      conn,
+      connection_manager,
       RecordApiSchema::from_table(table_metadata, &config)?,
       config,
     );
   }
 
-  pub fn from_view(
-    conn: trailbase_sqlite::Connection,
+  pub(crate) fn from_view(
+    connection_manager: &ConnectionManager,
     view_metadata: &ViewMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
     assert_name(&config, view_metadata.name());
 
     return Self::from_impl(
-      conn,
+      connection_manager,
       RecordApiSchema::from_view(view_metadata, &config)?,
       config,
     );
   }
 
   fn from_impl(
-    conn: trailbase_sqlite::Connection,
+    connection_manager: &ConnectionManager,
     schema: RecordApiSchema,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
@@ -218,6 +219,17 @@ impl RecordApi {
 
     let Some(api_name) = config.name.clone() else {
       return Err(format!("RecordApi misses name: {config:?}"));
+    };
+
+    let conn = if config.attached_databases.is_empty() {
+      connection_manager.main().clone()
+    } else {
+      connection_manager
+        .get(
+          true,
+          Some(config.attached_databases.iter().cloned().collect()),
+        )
+        .map_err(|err| err.to_string())?
     };
 
     let (read_access_query, subscription_read_access_query) = match &config.read_access_rule {

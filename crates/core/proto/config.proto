@@ -198,6 +198,9 @@ message RecordApiConfig {
   optional string name = 1;
   /// Referenced table to be exposed.
   optional string table_name = 2;
+  /// Attached databases - will `ATTACH <traildepot>/data/<name>.db AS <name>`.
+  /// Can only reference configured databases.
+  repeated string attached_databases = 3;
 
   /// Strategy to be used on insert if a table constraint is violated.
   optional ConflictResolutionStrategy conflict_resolution = 5;

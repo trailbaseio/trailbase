@@ -69,18 +69,6 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     trailbase_schema::registry::build_json_schema_registry(vec![])?,
   ));
 
-  let additional_databases: Vec<_> =
-    crate::config::maybe_load_config_textproto_unverified(&args.data_dir)?
-      .unwrap_or_default()
-      .databases
-      .iter()
-      .flat_map(|d| {
-        d.name
-          .as_ref()
-          .map(|n| crate::connection::AttachedDatabase::from_data_dir(&args.data_dir, n))
-      })
-      .collect();
-
   let (conn, connection_manager, new_db) = {
     let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
       args.data_dir.root().join("wasm"),
@@ -92,7 +80,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     let (conn, new_db) = crate::connection::init_main_db(
       Some(&args.data_dir),
       Some(json_schema_registry.clone()),
-      additional_databases,
+      /* attached_databases= */ vec![],
       sync_wasm_runtimes.clone(),
     )?;
 

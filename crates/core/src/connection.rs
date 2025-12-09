@@ -61,8 +61,8 @@ pub(crate) struct ConnectionManager {
 
   // Cache of existing Sqlite connections:
   main: Arc<Connection>,
-  // NOTE: we should probably be smarter and keep connections alive for longer, e.g. TTL or LRU,
-  // rather than fading them out so quickly.
+  // NOTE: we could be smarter and keep connections alive for longer, e.g. TTL or LRU. However,
+  // RecordApi reatains its own Conn, so performance-wise this shouldn't be too much of an issue.
   connections: Arc<RwLock<HashMap<ConnectionKey, std::sync::Weak<Connection>>>>,
 }
 
@@ -285,6 +285,9 @@ pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
 
   // Initial optimize.
   conn.pragma_update(None, "optimize", "0x10002")?;
+
+  // Rusqlite's default is 5s.
+  conn.busy_timeout(std::time::Duration::from_millis(5000))?;
 
   return Ok(conn);
 }

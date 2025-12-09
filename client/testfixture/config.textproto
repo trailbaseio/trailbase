@@ -67,6 +67,7 @@ record_apis: [{
 }, {
   name: "intrepid_badger"
   table_name: "extra.intrepid_badger"
+  attached_databases: ["extra"]
   acl_world: [READ]
   acl_authenticated: [CREATE, READ, UPDATE, DELETE]
 }]
