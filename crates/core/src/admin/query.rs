@@ -46,6 +46,14 @@ pub async fn query_handler(
       | Stmt::CreateView { .. } => {
         must_invalidate_schema_cache = true;
       }
+      Stmt::Attach { .. } => {
+        // Could allow access to local file-system, e.g. attach random SQLite databases or
+        // files unrelated to TB via the admin UI.
+        return Err(Error::Precondition("Attach not allowed".into()));
+      }
+      Stmt::Detach { .. } => {
+        return Err(Error::Precondition("Detach not allowed".into()));
+      }
       Stmt::Select { .. } => {
         mutation = false;
       }
@@ -60,31 +68,17 @@ pub async fn query_handler(
   }
 
   // Initialize a new connection, to avoid any sort of tomfoolery like dropping attached databases.
-  let (conn, _new_db) = {
-    let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
-      state.data_dir().root().join("wasm"),
-      state.runtime_root_fs(),
-      state.dev_mode(),
-    )
-    .map_err(|err| Error::Precondition(err.to_string()))?;
-
-    crate::connection::init_main_db(
-      Some(state.data_dir()),
-      Some(state.json_schema_registry().clone()),
-      state
+  let conn = state.connection_manager().build(
+    true,
+    Some(
+      &state
         .get_config()
         .databases
         .iter()
-        .flat_map(|d| {
-          d.name
-            .as_ref()
-            .map(|n| crate::connection::AttachedDatabase::from_data_dir(state.data_dir(), n))
-        })
+        .flat_map(|d| d.name.clone())
         .collect(),
-      sync_wasm_runtimes,
-    )
-    .map_err(|err| Error::Precondition(err.to_string()))?
-  };
+    ),
+  )?;
 
   let batched_rows_result = conn.execute_batch(request.query).await;
 

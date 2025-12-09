@@ -12,6 +12,7 @@ use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
 use crate::config::proto::{Config, RecordApiConfig, S3StorageConfig, hash_config};
 use crate::config::{ConfigError, validate_config, write_config_and_vault_textproto};
+use crate::connection::ConnectionManager;
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::records::RecordApi;
@@ -43,6 +44,7 @@ struct InternalState {
 
   conn: trailbase_sqlite::Connection,
   logs_conn: trailbase_sqlite::Connection,
+  connection_manager: ConnectionManager,
 
   jwt: JwtHelper,
 
@@ -72,6 +74,7 @@ pub(crate) struct AppStateArgs {
   pub json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
   pub conn: trailbase_sqlite::Connection,
   pub logs_conn: trailbase_sqlite::Connection,
+  pub connection_manager: ConnectionManager,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore + Send + Sync>,
   pub runtime_threads: Option<usize>,
@@ -196,6 +199,7 @@ impl AppState {
         json_schema_registry: args.json_schema_registry,
         conn: args.conn.clone(),
         logs_conn: args.logs_conn,
+        connection_manager: args.connection_manager,
         jwt: args.jwt,
         subscription_manager: SubscriptionManager::new(
           args.conn.clone(),
@@ -253,6 +257,10 @@ impl AppState {
 
   pub fn logs_conn(&self) -> &trailbase_sqlite::Connection {
     return &self.state.logs_conn;
+  }
+
+  pub(crate) fn connection_manager(&self) -> &ConnectionManager {
+    return &self.state.connection_manager;
   }
 
   pub fn version(&self) -> trailbase_build::version::VersionInfo {
@@ -536,6 +544,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 
   let temp_dir = temp_dir::TempDir::new()?;
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
+  let data_dir = DataDir(temp_dir.path().to_path_buf());
 
   let TestStateOptions {
     config,
@@ -550,6 +559,13 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let (conn, new) =
     crate::connection::init_main_db(None, Some(json_schema_registry.clone()), vec![], vec![])?;
   assert!(new);
+
+  let connection_manager = ConnectionManager::new(
+    conn.clone(),
+    data_dir.clone(),
+    json_schema_registry.clone(),
+    vec![],
+  );
 
   let logs_conn = crate::connection::init_logs_db(None)?;
 
@@ -571,8 +587,6 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     &json_schema_registry,
   )
   .await?;
-
-  let data_dir = DataDir(temp_dir.path().to_path_buf());
 
   let object_store = if std::env::var("TEST_S3_OBJECT_STORE").map_or(false, |v| v == "TRUE") {
     info!("Use S3 Storage for tests");
@@ -632,6 +646,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       json_schema_registry,
       conn: conn.clone(),
       logs_conn,
+      connection_manager,
       jwt: crate::auth::jwt::test_jwt_helper(),
       subscription_manager: SubscriptionManager::new(
         conn.clone(),

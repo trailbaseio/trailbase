@@ -58,30 +58,32 @@ pub(crate) struct ConnectionManager {
   data_dir: DataDir,
   json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
   sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
-  // Cache,
+
+  // Cache of existing Sqlite connections:
+  main: Arc<Connection>,
+  // NOTE: we should probably be smarter and keep connections alive for longer, e.g. TTL or LRU,
+  // rather than fading them out so quickly.
   connections: Arc<RwLock<HashMap<ConnectionKey, std::sync::Weak<Connection>>>>,
 }
 
 impl ConnectionManager {
   pub(crate) fn new(
+    main_connection: Connection,
     data_dir: DataDir,
-    runtime_root_fs: Option<&std::path::Path>,
     json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-    use_winch: bool,
-  ) -> Result<Self, ConnectionError> {
-    let sqlite_function_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
-      data_dir.root().join("wasm"),
-      runtime_root_fs,
-      use_winch,
-    )
-    .map_err(|err| ConnectionError::Other(err.to_string()))?;
-
-    return Ok(Self {
+    sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
+  ) -> Self {
+    return Self {
       data_dir,
       json_schema_registry,
       sqlite_function_runtimes,
+      main: Arc::new(main_connection),
       connections: Arc::new(RwLock::new(HashMap::new())),
-    });
+    };
+  }
+
+  pub(crate) fn main(&self) -> &Arc<Connection> {
+    return &self.main;
   }
 
   pub(crate) fn get(
@@ -89,6 +91,10 @@ impl ConnectionManager {
     main: bool,
     attached_databases: Option<BTreeSet<String>>,
   ) -> Result<Arc<Connection>, ConnectionError> {
+    if main && attached_databases.is_none() {
+      return Ok(self.main.clone());
+    }
+
     let key = ConnectionKey {
       main,
       attached_databases: attached_databases.unwrap_or_default(),
@@ -103,32 +109,43 @@ impl ConnectionManager {
       }
     }
 
-    let attached_databases: Vec<AttachedDatabase> = key
-      .attached_databases
-      .iter()
-      .map(|name| AttachedDatabase::from_data_dir(&self.data_dir, name))
-      .collect();
-
-    // SQLite supports only up to 125 DBs per connection: https://sqlite.org/limits.html.
-    if attached_databases.len() > 124 {
-      return Err(ConnectionError::Other("Too many databases".into()));
-    }
-
-    let (conn, _new_db) = crate::connection::init_main_db_impl(
-      if main { Some(&self.data_dir) } else { None },
-      Some(self.json_schema_registry.clone()),
-      attached_databases,
-      self.sqlite_function_runtimes.clone(),
-      main,
-    )?;
-
-    let conn = Arc::new(conn);
+    let conn = self.build(main, Some(&key.attached_databases))?;
 
     lock.with_upgraded(|lock| {
       lock.insert(key, Arc::downgrade(&conn));
     });
 
     return Ok(conn);
+  }
+
+  pub(crate) fn build(
+    &self,
+    main: bool,
+    attached_databases: Option<&BTreeSet<String>>,
+  ) -> Result<Arc<Connection>, ConnectionError> {
+    let attach = if let Some(attached_databases) = attached_databases {
+      // SQLite supports only up to 125 DBs per connection: https://sqlite.org/limits.html.
+      if attached_databases.len() > 124 {
+        return Err(ConnectionError::Other("Too many databases".into()));
+      }
+
+      attached_databases
+        .iter()
+        .map(|name| AttachedDatabase::from_data_dir(&self.data_dir, name))
+        .collect()
+    } else {
+      vec![]
+    };
+
+    let (conn, _new_db) = crate::connection::init_main_db_impl(
+      if main { Some(&self.data_dir) } else { None },
+      Some(self.json_schema_registry.clone()),
+      attach,
+      self.sqlite_function_runtimes.clone(),
+      main,
+    )?;
+
+    return Ok(Arc::new(conn));
   }
 }
 

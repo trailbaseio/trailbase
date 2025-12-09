@@ -11,6 +11,8 @@ pub enum AdminError {
   TrailbaseSqlite(#[from] trailbase_sqlite::Error),
   #[error("Rusqlite error: {0}")]
   Rusqlite(#[from] rusqlite::Error),
+  #[error("Connection error: {0}")]
+  Connection(#[from] crate::connection::ConnectionError),
   #[error("Rusqlite FromSql error: {0}")]
   FromSql(#[from] rusqlite::types::FromSqlError),
   #[error("Deserialization error: {0}")]
