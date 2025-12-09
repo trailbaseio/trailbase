@@ -18,13 +18,18 @@ For your data to be exposed via _Record APIs_:
 - `TABLE`s and `VIEW`s need to be `STRICT`ly[^1] typed to guarantee type-safety
   all the way from your DB records, over JSON schemas, to your client-side
   language bindings[^2].
-- To allow for stable sorting and thus efficient cursor-based pagination,
-  `TABLE`s are required to have either `INTEGER`, UUIDv4 or UUIDv7 primary key
-  columns.
+- `TABLE`s and `VIEW`s are further required to have either a `INTEGER`, UUIDv4
+  or UUIDv7
+  ([example](https://github.com/trailbaseio/trailbase/blob/f84f6f42e6a740ffad14f4d1787ebb77cca9ab8e/examples/blog/traildepot/migrations/U1725019362__create_articles.sql#L2))
+  primary key column. Choose based on your requirements. UUIDv4 is completely
+  random, thus hard to guess. UUIDv7 is mostly random but also including a
+  timestamp. `INTEGER` and UUIDv7 both allow for stable sorting and efficient
+  cursor-based pagination.
+
 
 ## Configuration
 
-Record APIs can be configured via the admin dashboard or direclty in
+Record APIs can be configured via the admin dashboard or directly in
 TrailBase's configuration file.
 
 An example API setup for managing user profiles:
