@@ -32,6 +32,19 @@ pub(crate) async fn build_connection_metadata_and_install_file_deletion_triggers
   return Ok(metadata);
 }
 
+pub(crate) fn build_connection_metadata_and_install_file_deletion_triggers_sync(
+  conn: &rusqlite::Connection,
+  tables: Vec<Table>,
+  views: Vec<View>,
+  registry: &RwLock<JsonSchemaRegistry>,
+) -> Result<ConnectionMetadata, SchemaLookupError> {
+  let metadata = ConnectionMetadata::from_schemas(tables, views, &registry.read())?;
+
+  setup_file_deletion_triggers_sync(conn, &metadata)?;
+
+  return Ok(metadata);
+}
+
 #[derive(Debug, Error)]
 pub enum SchemaLookupError {
   #[error("TB SQLite error: {0}")]
@@ -192,7 +205,7 @@ pub async fn lookup_and_parse_all_view_schemas(
   return Ok(views);
 }
 
-pub async fn lookup_and_parse_all_view_schemas_sync(
+pub fn lookup_and_parse_all_view_schemas_sync(
   conn: &rusqlite::Connection,
   tables: &[Table],
 ) -> Result<Vec<View>, SchemaLookupError> {
@@ -272,6 +285,59 @@ async fn setup_file_deletion_triggers(
           "#,
           table_name = table_name.escaped_string(),
         )).await?;
+    }
+  }
+
+  return Ok(());
+}
+
+fn setup_file_deletion_triggers_sync(
+  conn: &rusqlite::Connection,
+  metadata: &ConnectionMetadata,
+) -> Result<(), trailbase_sqlite::Error> {
+  for metadata in metadata.tables.values() {
+    for idx in metadata.json_metadata.file_column_indexes() {
+      let table_name = &metadata.schema.name;
+      let unqualified_name = &metadata.schema.name.name;
+      let db = metadata
+        .schema
+        .name
+        .database_schema
+        .as_deref()
+        .unwrap_or("main");
+
+      if db != "main" {
+        // FIXME: TRIGGERS are always database-local. Thus every database with tables
+        // with file columns would need its own _file_deletions table to track pending
+        // deletions.
+        return Err(trailbase_sqlite::Error::Other(
+          "File columns not (yet) supported on attached databases".into(),
+        ));
+      }
+
+      let col = &metadata.schema.columns[*idx];
+      let column_name = &col.name;
+
+      conn.execute_batch(&indoc::formatdoc!(
+          r#"
+          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger";
+          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger" AFTER UPDATE ON {table_name}
+            WHEN OLD."{column_name}" IS NOT NULL AND OLD."{column_name}" != NEW."{column_name}"
+            BEGIN
+              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+            END;
+
+          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger";
+          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger" AFTER DELETE ON {table_name}
+            WHEN OLD."{column_name}" IS NOT NULL
+            BEGIN
+              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+            END;
+          "#,
+          table_name = table_name.escaped_string(),
+        ))?;
     }
   }
 

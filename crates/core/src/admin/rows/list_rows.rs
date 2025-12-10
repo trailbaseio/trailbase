@@ -11,6 +11,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::admin::util::rows_to_sql_value_rows;
 use crate::app_state::AppState;
+use crate::connection::ConnectionEntry;
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 
 #[derive(Debug, Serialize, TS)]
@@ -48,8 +49,10 @@ pub async fn list_rows_handler(
     })?;
 
   let table_name = QualifiedName::parse(&table_name)?;
-  let conn = super::build_connection(&state, &table_name)?;
-  let metadata = super::build_connection_metadata(&state, &conn, &table_name).await?;
+  let ConnectionEntry {
+    connection: conn,
+    metadata,
+  } = state.connection_manager().get_entry_for_qn(&table_name)?;
 
   let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
     return Err(Error::Precondition(format!(

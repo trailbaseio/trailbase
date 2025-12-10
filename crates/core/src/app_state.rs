@@ -45,7 +45,7 @@ struct InternalState {
 
   conn: trailbase_sqlite::Connection,
   logs_conn: trailbase_sqlite::Connection,
-  connection_manager: Arc<ConnectionManager>,
+  connection_manager: Arc<parking_lot::RwLock<ConnectionManager>>,
 
   jwt: JwtHelper,
 
@@ -70,7 +70,7 @@ pub(crate) struct AppStateArgs {
   pub runtime_root_fs: Option<PathBuf>,
   pub dev: bool,
   pub demo: bool,
-  pub connection_metadata: ConnectionMetadata,
+  pub connection_metadata: Arc<ConnectionMetadata>,
   pub config: Config,
   pub json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
   pub conn: trailbase_sqlite::Connection,
@@ -108,10 +108,9 @@ impl AppState {
       );
     });
 
-    let connection_manager = Arc::new(args.connection_manager);
-    let connection_metadata = Reactive::new(Arc::new(args.connection_metadata));
+    let connection_metadata = Reactive::new(args.connection_metadata);
     let record_apis = {
-      let connection_manager = connection_manager.clone();
+      let connection_manager = args.connection_manager.clone();
       let m = (&config, &connection_metadata).merge();
 
       derive_unchecked(&m, move |(config, metadata)| {
@@ -201,7 +200,7 @@ impl AppState {
         json_schema_registry: args.json_schema_registry,
         conn: args.conn.clone(),
         logs_conn: args.logs_conn,
-        connection_manager,
+        connection_manager: Arc::new(parking_lot::RwLock::new(args.connection_manager)),
         jwt: args.jwt,
         subscription_manager: SubscriptionManager::new(
           args.conn.clone(),
@@ -261,8 +260,8 @@ impl AppState {
     return &self.state.logs_conn;
   }
 
-  pub(crate) fn connection_manager(&self) -> &ConnectionManager {
-    return &self.state.connection_manager;
+  pub(crate) fn connection_manager(&self) -> ConnectionManager {
+    return self.state.connection_manager.read().clone();
   }
 
   pub fn version(&self) -> trailbase_build::version::VersionInfo {
@@ -289,6 +288,7 @@ impl AppState {
     // happened rendering the current config invalid. Unlike a config update, it's too late to
     // reject anything.
     let config = self.get_config();
+    // TODO: validate_config should receive ConnectionManager to validate all APIs.
     validate_config(&tables, &views, &config).map_err(|err| {
       log::error!("Schema change invalidated config: {err}");
       return crate::schema_metadata::SchemaLookupError::Other(err.into());
@@ -306,6 +306,8 @@ impl AppState {
       .state
       .connection_metadata
       .set(Arc::new(connection_metadata));
+
+    self.state.connection_manager.write().rebuild_metadata()?;
 
     return Ok(());
   }
@@ -562,13 +564,6 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     crate::connection::init_main_db(None, Some(json_schema_registry.clone()), vec![], vec![])?;
   assert!(new);
 
-  let connection_manager = Arc::new(ConnectionManager::new(
-    conn.clone(),
-    data_dir.clone(),
-    json_schema_registry.clone(),
-    vec![],
-  ));
-
   let logs_conn = crate::connection::init_logs_db(None)?;
 
   let tables = lookup_and_parse_all_table_schemas(&conn).await?;
@@ -582,13 +577,23 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     Reactive::new(config)
   };
 
-  let connection_metadata = build_connection_metadata_and_install_file_deletion_triggers(
-    &conn,
-    tables,
-    views,
-    &json_schema_registry,
-  )
-  .await?;
+  let connection_metadata = Arc::new(
+    build_connection_metadata_and_install_file_deletion_triggers(
+      &conn,
+      tables,
+      views,
+      &json_schema_registry,
+    )
+    .await?,
+  );
+
+  let connection_manager = ConnectionManager::new(
+    conn.clone(),
+    connection_metadata.clone(),
+    data_dir.clone(),
+    json_schema_registry.clone(),
+    vec![],
+  );
 
   let object_store = if std::env::var("TEST_S3_OBJECT_STORE").map_or(false, |v| v == "TRUE") {
     info!("Use S3 Storage for tests");
@@ -609,7 +614,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     build_objectstore(&data_dir, None).unwrap().into()
   };
 
-  let connection_metadata = Reactive::new(Arc::new(connection_metadata));
+  let connection_metadata = Reactive::new(connection_metadata);
   let record_apis: Reactive<Arc<Vec<(String, RecordApi)>>> = {
     let connection_manager = connection_manager.clone();
     let m = (&config, &connection_metadata).merge();
@@ -648,7 +653,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       json_schema_registry,
       conn: conn.clone(),
       logs_conn,
-      connection_manager,
+      connection_manager: Arc::new(parking_lot::RwLock::new(connection_manager)),
       jwt: crate::auth::jwt::test_jwt_helper(),
       subscription_manager: SubscriptionManager::new(
         conn.clone(),

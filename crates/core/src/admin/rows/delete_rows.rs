@@ -11,6 +11,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
+use crate::connection::ConnectionEntry;
 use crate::records::write_queries::run_delete_query;
 
 #[derive(Debug, Serialize, Deserialize, TS)]
@@ -42,8 +43,11 @@ pub(crate) async fn delete_row(
   pk_col: &str,
   pk_value: SqlValue,
 ) -> Result<(), Error> {
-  let conn = super::build_connection(state, table_name)?;
-  let metadata = super::build_connection_metadata(state, &conn, table_name).await?;
+  let ConnectionEntry {
+    connection: conn,
+    metadata,
+  } = state.connection_manager().get_entry_for_qn(table_name)?;
+
   let Some(table_metadata) = metadata.get_table(table_name) else {
     return Err(Error::Precondition(format!(
       "Table {table_name:?} not found"

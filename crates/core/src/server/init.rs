@@ -69,30 +69,19 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     trailbase_schema::registry::build_json_schema_registry(vec![])?,
   ));
 
-  let (conn, connection_manager, new_db) = {
-    let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
-      args.data_dir.root().join("wasm"),
-      args.runtime_root_fs.as_deref(),
-      args.dev,
-    )
-    .map_err(|err| InitError::ScriptError(err.to_string()))?;
+  let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
+    args.data_dir.root().join("wasm"),
+    args.runtime_root_fs.as_deref(),
+    args.dev,
+  )
+  .map_err(|err| InitError::ScriptError(err.to_string()))?;
 
-    let (conn, new_db) = crate::connection::init_main_db(
-      Some(&args.data_dir),
-      Some(json_schema_registry.clone()),
-      /* attached_databases= */ vec![],
-      sync_wasm_runtimes.clone(),
-    )?;
-
-    let connection_manager = crate::connection::ConnectionManager::new(
-      conn.clone(),
-      args.data_dir.clone(),
-      json_schema_registry.clone(),
-      sync_wasm_runtimes,
-    );
-
-    (conn, connection_manager, new_db)
-  };
+  let (conn, new_db) = crate::connection::init_main_db(
+    Some(&args.data_dir),
+    Some(json_schema_registry.clone()),
+    /* attached_databases= */ vec![],
+    sync_wasm_runtimes.clone(),
+  )?;
 
   let tables = lookup_and_parse_all_table_schemas(&conn).await?;
   let views = lookup_and_parse_all_view_schemas(&conn, &tables).await?;
@@ -107,13 +96,23 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   // Load the `<depot>/metadata.textproto`.
   let _metadata = load_or_init_metadata_textproto(&args.data_dir).await?;
 
-  let connection_metadata = build_connection_metadata_and_install_file_deletion_triggers(
-    &conn,
-    tables,
-    views,
-    &json_schema_registry,
-  )
-  .await?;
+  let connection_metadata = Arc::new(
+    build_connection_metadata_and_install_file_deletion_triggers(
+      &conn,
+      tables,
+      views,
+      &json_schema_registry,
+    )
+    .await?,
+  );
+
+  let connection_manager = crate::connection::ConnectionManager::new(
+    conn.clone(),
+    connection_metadata.clone(),
+    args.data_dir.clone(),
+    json_schema_registry.clone(),
+    sync_wasm_runtimes,
+  );
 
   let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
 

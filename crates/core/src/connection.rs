@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
+use trailbase_schema::metadata::ConnectionMetadata;
 
 use crate::data_dir::DataDir;
 use crate::migrations::{
@@ -19,6 +20,8 @@ pub use trailbase_sqlite::Connection;
 pub enum ConnectionError {
   #[error("SQLite ext: {0}")]
   SqliteExtension(#[from] trailbase_extension::Error),
+  #[error("Schema: {0}")]
+  Schema(#[from] crate::schema_metadata::SchemaLookupError),
   #[error("Rusqlite: {0}")]
   Rusqlite(#[from] rusqlite::Error),
   #[error("TB SQLite: {0}")]
@@ -51,42 +54,54 @@ struct ConnectionKey {
 }
 
 #[derive(Clone)]
-struct ConnectionEntry {
-  connection: Arc<Connection>,
+pub(crate) struct ConnectionEntry {
+  pub connection: Arc<Connection>,
+  pub metadata: Arc<ConnectionMetadata>,
+}
+
+struct ConnectionManagerState {
+  data_dir: DataDir,
+  json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+  sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
+
+  // Cache of existing Sqlite connections:
+  main: RwLock<ConnectionEntry>,
+  connections: quick_cache::sync::Cache<ConnectionKey, ConnectionEntry>,
 }
 
 // A manager for multi-DB SQLite connections.
 //
 // NOTE: Performance-wise it's beneficial to share Connections to benefit from its internal locking
 // instead of relying on SQLite's own file locking.
+#[derive(Clone)]
 pub(crate) struct ConnectionManager {
-  data_dir: DataDir,
-  json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-  sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
-
-  // Cache of existing Sqlite connections:
-  main: Arc<Connection>,
-  connections: quick_cache::sync::Cache<ConnectionKey, ConnectionEntry>,
+  state: Arc<ConnectionManagerState>,
 }
 
 impl ConnectionManager {
   pub(crate) fn new(
     main_connection: Connection,
+    main_metadata: Arc<ConnectionMetadata>,
     data_dir: DataDir,
     json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
     sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
   ) -> Self {
     return Self {
-      data_dir,
-      json_schema_registry,
-      sqlite_function_runtimes,
-      main: Arc::new(main_connection),
-      connections: quick_cache::sync::Cache::new(256),
+      state: Arc::new(ConnectionManagerState {
+        data_dir,
+        json_schema_registry,
+        sqlite_function_runtimes,
+        main: RwLock::new(ConnectionEntry {
+          connection: Arc::new(main_connection),
+          metadata: main_metadata,
+        }),
+        connections: quick_cache::sync::Cache::new(256),
+      }),
     };
   }
 
-  pub(crate) fn main(&self) -> &Arc<Connection> {
-    return &self.main;
+  pub(crate) fn main(&self) -> Arc<Connection> {
+    return self.state.main.read().connection.clone();
   }
 
   pub(crate) fn get(
@@ -94,8 +109,16 @@ impl ConnectionManager {
     main: bool,
     attached_databases: Option<BTreeSet<String>>,
   ) -> Result<Arc<Connection>, ConnectionError> {
+    return Ok(self.get_entry(main, attached_databases)?.connection);
+  }
+
+  pub(crate) fn get_entry(
+    &self,
+    main: bool,
+    attached_databases: Option<BTreeSet<String>>,
+  ) -> Result<ConnectionEntry, ConnectionError> {
     if main && attached_databases.is_none() {
-      return Ok(self.main.clone());
+      return Ok(self.state.main.read().clone());
     }
 
     let key = ConnectionKey {
@@ -103,15 +126,22 @@ impl ConnectionManager {
       attached_databases: attached_databases.unwrap_or_default(),
     };
 
-    return match self.connections.get_value_or_guard(&key, None) {
-      GuardResult::Value(entry) => Ok(entry.connection.clone()),
+    return match self.state.connections.get_value_or_guard(&key, None) {
+      GuardResult::Value(entry) => Ok(entry.clone()),
       GuardResult::Guard(placeholder) => {
         let conn = self.build(main, Some(&key.attached_databases))?;
-        // TODO: build metadata
-        let _ = placeholder.insert(ConnectionEntry {
+
+        let entry = ConnectionEntry {
           connection: conn.clone(),
-        });
-        Ok(conn)
+          metadata: Arc::new(build_metadata(
+            &conn.write_lock(),
+            &self.state.json_schema_registry,
+          )?),
+        };
+
+        let _ = placeholder.insert(entry.clone());
+
+        Ok(entry)
       }
       GuardResult::Timeout => {
         return Err(ConnectionError::Other("Timeout".into()));
@@ -119,11 +149,29 @@ impl ConnectionManager {
     };
   }
 
+  pub(crate) fn get_entry_for_qn(
+    &self,
+    name: &trailbase_schema::QualifiedName,
+  ) -> Result<ConnectionEntry, ConnectionError> {
+    if let Some(ref db) = name.database_schema
+      && db != "main"
+    {
+      return self.get_entry(false, Some([db.to_string()].into()));
+    }
+
+    return Ok(self.state.main.read().clone());
+  }
+
   pub(crate) fn build(
     &self,
     mut main: bool,
     attached_databases: Option<&BTreeSet<String>>,
   ) -> Result<Arc<Connection>, ConnectionError> {
+    #[cfg(test)]
+    if main && attached_databases.is_none() {
+      return Ok(self.state.main.read().connection.clone());
+    }
+
     let attach = if let Some(attached_databases) = attached_databases {
       // SQLite supports only up to 125 DBs per connection: https://sqlite.org/limits.html.
       if attached_databases.len() > 124 {
@@ -134,7 +182,7 @@ impl ConnectionManager {
         .iter()
         .flat_map(|name| {
           if name != "main" {
-            Some(AttachedDatabase::from_data_dir(&self.data_dir, name))
+            Some(AttachedDatabase::from_data_dir(&self.state.data_dir, name))
           } else {
             main = true;
             None
@@ -146,15 +194,64 @@ impl ConnectionManager {
     };
 
     let (conn, _new_db) = crate::connection::init_main_db_impl(
-      if main { Some(&self.data_dir) } else { None },
-      Some(self.json_schema_registry.clone()),
+      if main {
+        Some(&self.state.data_dir)
+      } else {
+        None
+      },
+      Some(self.state.json_schema_registry.clone()),
       attach,
-      self.sqlite_function_runtimes.clone(),
+      self.state.sqlite_function_runtimes.clone(),
       main,
     )?;
 
     return Ok(Arc::new(conn));
   }
+
+  pub(crate) fn rebuild_metadata(
+    &mut self,
+  ) -> Result<(), crate::schema_metadata::SchemaLookupError> {
+    let new_metadata = Arc::new(build_metadata(
+      &self.state.main.read().connection.write_lock(),
+      &self.state.json_schema_registry,
+    )?);
+
+    self.state.main.write().metadata = new_metadata;
+
+    for (key, entry) in self.state.connections.iter() {
+      let metadata = Arc::new(build_metadata(
+        &entry.connection.write_lock(),
+        &self.state.json_schema_registry,
+      )?);
+
+      let _ = self.state.connections.replace(
+        key,
+        ConnectionEntry {
+          connection: entry.connection.clone(),
+          metadata,
+        },
+        true,
+      );
+    }
+
+    return Ok(());
+  }
+}
+
+fn build_metadata(
+  conn: &rusqlite::Connection,
+  json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+) -> Result<ConnectionMetadata, crate::schema_metadata::SchemaLookupError> {
+  use crate::schema_metadata::*;
+  let tables = lookup_and_parse_all_table_schemas_sync(conn)?;
+  let views = lookup_and_parse_all_view_schemas_sync(conn, &tables)?;
+
+  return build_connection_metadata_and_install_file_deletion_triggers_sync(
+    conn,
+    tables,
+    views,
+    json_schema_registry,
+  );
 }
 
 /// Initializes a new SQLite Connection with all the default extensions, migrations and settings
