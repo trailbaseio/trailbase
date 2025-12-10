@@ -45,7 +45,7 @@ struct InternalState {
 
   conn: trailbase_sqlite::Connection,
   logs_conn: trailbase_sqlite::Connection,
-  connection_manager: ConnectionManager,
+  connection_manager: Arc<ConnectionManager>,
 
   jwt: JwtHelper,
 
@@ -108,9 +108,10 @@ impl AppState {
       );
     });
 
+    let connection_manager = Arc::new(args.connection_manager);
     let connection_metadata = Reactive::new(Arc::new(args.connection_metadata));
     let record_apis = {
-      let connection_manager = args.connection_manager.clone();
+      let connection_manager = connection_manager.clone();
       let m = (&config, &connection_metadata).merge();
 
       derive_unchecked(&m, move |(config, metadata)| {
@@ -200,7 +201,7 @@ impl AppState {
         json_schema_registry: args.json_schema_registry,
         conn: args.conn.clone(),
         logs_conn: args.logs_conn,
-        connection_manager: args.connection_manager,
+        connection_manager,
         jwt: args.jwt,
         subscription_manager: SubscriptionManager::new(
           args.conn.clone(),
@@ -561,12 +562,12 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     crate::connection::init_main_db(None, Some(json_schema_registry.clone()), vec![], vec![])?;
   assert!(new);
 
-  let connection_manager = ConnectionManager::new(
+  let connection_manager = Arc::new(ConnectionManager::new(
     conn.clone(),
     data_dir.clone(),
     json_schema_registry.clone(),
     vec![],
-  );
+  ));
 
   let logs_conn = crate::connection::init_logs_db(None)?;
 

@@ -37,6 +37,8 @@ pub enum SchemaLookupError {
   #[error("TB SQLite error: {0}")]
   Sql(#[from] trailbase_sqlite::Error),
   #[error("Rusqlite error: {0}")]
+  Rusqlite(#[from] rusqlite::Error),
+  #[error("Rusqlite error: {0}")]
   FromSql(#[from] rusqlite::types::FromSqlError),
   #[error("Schema error: {0}")]
   Schema(#[from] SchemaError),
@@ -113,6 +115,36 @@ pub async fn lookup_and_parse_all_table_schemas(
   return Ok(tables);
 }
 
+pub fn lookup_and_parse_all_table_schemas_sync(
+  conn: &rusqlite::Connection,
+) -> Result<Vec<Table>, SchemaLookupError> {
+  let databases = trailbase_sqlite::connection::list_databases(conn)?;
+
+  let mut tables: Vec<Table> = vec![];
+  for db in databases {
+    // Then get the actual tables.
+    let mut stmt = conn.prepare(&format!(
+      "SELECT sql FROM {db}.{SQLITE_SCHEMA_TABLE} WHERE type = 'table'",
+      db = db.name
+    ))?;
+    let mut rows = stmt.raw_query();
+
+    while let Some(row) = rows.next()? {
+      let sql: String = row.get(0)?;
+      let Some(stmt) = parse_into_statement(&sql)? else {
+        return Err(SchemaLookupError::Missing);
+      };
+      tables.push({
+        let mut table: Table = stmt.try_into()?;
+        table.name.database_schema = Some(db.name.clone());
+        table
+      });
+    }
+  }
+
+  return Ok(tables);
+}
+
 fn sqlite3_parse_view(sql: &str, tables: &[Table]) -> Result<View, SchemaLookupError> {
   let mut parser = sqlite3_parser::lexer::sql::Parser::new(sql.as_bytes());
   match parser.next()? {
@@ -144,6 +176,37 @@ pub async fn lookup_and_parse_all_view_schemas(
       .await?;
 
     for row in rows.iter() {
+      let sql: String = row.get(0)?;
+      match sqlite3_parse_view(&sql, tables) {
+        Ok(mut view) => {
+          view.name.database_schema = Some(db.name.clone());
+          views.push(view);
+        }
+        Err(err) => {
+          error!("Failed to parse VIEW definition '{sql}': {err}");
+        }
+      }
+    }
+  }
+
+  return Ok(views);
+}
+
+pub async fn lookup_and_parse_all_view_schemas_sync(
+  conn: &rusqlite::Connection,
+  tables: &[Table],
+) -> Result<Vec<View>, SchemaLookupError> {
+  let databases = trailbase_sqlite::connection::list_databases(conn)?;
+
+  let mut views: Vec<View> = vec![];
+  for db in databases {
+    // Then get the actual views.
+    let mut stmt = conn.prepare(&format!(
+      "SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'view'"
+    ))?;
+    let mut rows = stmt.raw_query();
+
+    while let Some(row) = rows.next()? {
       let sql: String = row.get(0)?;
       match sqlite3_parse_view(&sql, tables) {
         Ok(mut view) => {

@@ -1,6 +1,7 @@
 use log::*;
 use parking_lot::{Mutex, RwLock};
-use std::collections::{BTreeSet, HashMap};
+use quick_cache::sync::GuardResult;
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
@@ -43,17 +44,21 @@ impl AttachedDatabase {
   }
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 struct ConnectionKey {
   main: bool,
   attached_databases: BTreeSet<String>,
+}
+
+#[derive(Clone)]
+struct ConnectionEntry {
+  connection: Arc<Connection>,
 }
 
 // A manager for multi-DB SQLite connections.
 //
 // NOTE: Performance-wise it's beneficial to share Connections to benefit from its internal locking
 // instead of relying on SQLite's own file locking.
-#[derive(Clone)]
 pub(crate) struct ConnectionManager {
   data_dir: DataDir,
   json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
@@ -61,9 +66,7 @@ pub(crate) struct ConnectionManager {
 
   // Cache of existing Sqlite connections:
   main: Arc<Connection>,
-  // NOTE: we could be smarter and keep connections alive for longer, e.g. TTL or LRU. However,
-  // RecordApi reatains its own Conn, so performance-wise this shouldn't be too much of an issue.
-  connections: Arc<RwLock<HashMap<ConnectionKey, std::sync::Weak<Connection>>>>,
+  connections: quick_cache::sync::Cache<ConnectionKey, ConnectionEntry>,
 }
 
 impl ConnectionManager {
@@ -78,7 +81,7 @@ impl ConnectionManager {
       json_schema_registry,
       sqlite_function_runtimes,
       main: Arc::new(main_connection),
-      connections: Arc::new(RwLock::new(HashMap::new())),
+      connections: quick_cache::sync::Cache::new(256),
     };
   }
 
@@ -100,22 +103,20 @@ impl ConnectionManager {
       attached_databases: attached_databases.unwrap_or_default(),
     };
 
-    let mut lock = self.connections.upgradable_read();
-    if let Some(weak) = lock.get(&key) {
-      if let Some(conn) = weak.upgrade() {
-        return Ok(conn);
-      } else {
-        lock.with_upgraded(|lock| lock.remove(&key));
+    return match self.connections.get_value_or_guard(&key, None) {
+      GuardResult::Value(entry) => Ok(entry.connection.clone()),
+      GuardResult::Guard(placeholder) => {
+        let conn = self.build(main, Some(&key.attached_databases))?;
+        // TODO: build metadata
+        let _ = placeholder.insert(ConnectionEntry {
+          connection: conn.clone(),
+        });
+        Ok(conn)
       }
-    }
-
-    let conn = self.build(main, Some(&key.attached_databases))?;
-
-    lock.with_upgraded(|lock| {
-      lock.insert(key, Arc::downgrade(&conn));
-    });
-
-    return Ok(conn);
+      GuardResult::Timeout => {
+        return Err(ConnectionError::Other("Timeout".into()));
+      }
+    };
   }
 
   pub(crate) fn build(
