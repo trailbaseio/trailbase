@@ -28,7 +28,8 @@ pub async fn read_files_handler(
   Query(query): Query<ReadFilesQuery>,
 ) -> Result<Response, Error> {
   let table_name = QualifiedName::parse(&table_name)?;
-  let metadata = state.connection_metadata();
+  let conn = super::build_connection(&state, &table_name)?;
+  let metadata = super::build_connection_metadata(&state, &conn, &table_name).await?;
   let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
     return Err(Error::Precondition(format!(
       "Table {table_name:?} not found"
@@ -67,8 +68,6 @@ pub async fn read_files_handler(
       query.file_column_name
     )));
   };
-
-  let conn = super::build_connection(&state, &table_name)?;
 
   let FileUploads(mut file_uploads) = run_get_files_query(
     &conn,

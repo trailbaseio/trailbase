@@ -33,8 +33,8 @@ pub async fn update_row_handler(
   }
 
   let table_name = QualifiedName::parse(&table_name)?;
-  // FIXME: metadata only for main db.
-  let metadata = state.connection_metadata();
+  let conn = super::build_connection(&state, &table_name)?;
+  let metadata = super::build_connection_metadata(&state, &conn, &table_name).await?;
   let Some(table_metadata) = metadata.get_table(&table_name) else {
     return Err(Error::Precondition(format!(
       "Table {table_name:?} not found"
@@ -55,8 +55,6 @@ pub async fn update_row_handler(
   if !column.is_primary() {
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
   }
-
-  let conn = super::build_connection(&state, &table_name)?;
 
   run_update_query(
     &conn,

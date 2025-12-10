@@ -48,7 +48,9 @@ pub async fn list_rows_handler(
     })?;
 
   let table_name = QualifiedName::parse(&table_name)?;
-  let metadata = state.connection_metadata();
+  let conn = super::build_connection(&state, &table_name)?;
+  let metadata = super::build_connection_metadata(&state, &conn, &table_name).await?;
+
   let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
     return Err(Error::Precondition(format!(
       "Table or view '{table_name:?}' not found"
@@ -68,8 +70,6 @@ pub async fn list_rows_handler(
       params: vec![],
     }
   };
-
-  let conn = super::build_connection(&state, &table_name)?;
 
   let total_row_count: i64 = {
     let where_clause = &filter_where_clause.clause;

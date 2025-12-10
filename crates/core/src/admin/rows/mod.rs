@@ -24,3 +24,31 @@ fn build_connection(
 
   return state.connection_manager().get(true, None);
 }
+
+async fn build_connection_metadata(
+  state: &crate::AppState,
+  conn: &trailbase_sqlite::Connection,
+  name: &trailbase_schema::QualifiedName,
+) -> Result<
+  std::sync::Arc<crate::schema_metadata::ConnectionMetadata>,
+  crate::schema_metadata::SchemaLookupError,
+> {
+  if let Some(ref db) = name.database_schema
+    && db != "main"
+  {
+    let tables = crate::schema_metadata::lookup_and_parse_all_table_schemas(conn).await?;
+    let views = crate::schema_metadata::lookup_and_parse_all_view_schemas(conn, &tables).await?;
+
+    let metadata =
+      crate::schema_metadata::build_connection_metadata_and_install_file_deletion_triggers(
+        conn,
+        tables,
+        views,
+        state.json_schema_registry(),
+      )
+      .await?;
+
+    return Ok(std::sync::Arc::new(metadata));
+  }
+  return Ok(state.connection_metadata());
+}
