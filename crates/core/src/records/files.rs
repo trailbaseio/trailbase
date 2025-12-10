@@ -3,13 +3,13 @@ use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use itertools::Itertools;
 use log::*;
-use object_store::ObjectStore;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use thiserror::Error;
 use trailbase_schema::{FileUpload, FileUploads, QualifiedNameEscaped};
 use trailbase_sqlite::params;
 
-use crate::app_state::AppState;
+use crate::app_state::{AppState, ObjectStore};
 use crate::records::params::FileMetadataContents;
 
 #[derive(Debug, Error)]
@@ -78,7 +78,7 @@ pub(crate) struct FileDeletionsDb {
 /// QUESTION: Should we delete eagerly at all? We could just do this periodically.
 pub(crate) async fn delete_files_marked_for_deletion(
   conn: &trailbase_sqlite::Connection,
-  store: &dyn ObjectStore,
+  store: &Arc<ObjectStore>,
   table_name: &QualifiedNameEscaped,
   rowids: &[i64],
 ) -> Result<(), FileError> {
@@ -105,6 +105,7 @@ pub(crate) async fn delete_files_marked_for_deletion(
       .await?,
   };
 
+  // Question: Should we do this opportunistically like during updates?
   if !rows.is_empty() {
     delete_pending_files_impl(conn, store, rows).await?;
   }
@@ -114,7 +115,7 @@ pub(crate) async fn delete_files_marked_for_deletion(
 
 pub(crate) async fn delete_pending_files_impl(
   conn: &trailbase_sqlite::Connection,
-  store: &dyn ObjectStore,
+  store: &Arc<ObjectStore>,
   pending_deletions: Vec<FileDeletionsDb>,
 ) -> Result<(), FileError> {
   const ATTEMPTS_LIMIT: i64 = 10;
@@ -195,11 +196,9 @@ pub(crate) struct FileManager {
 
 impl FileManager {
   pub(crate) async fn write(
-    state: &AppState,
+    store: &Arc<ObjectStore>,
     files: FileMetadataContents,
   ) -> Result<Self, object_store::Error> {
-    let store = state.objectstore();
-
     let mut written_files = Vec::<FileUpload>::with_capacity(files.len());
     for (metadata, contents) in files {
       // TODO: We could write files in parallel.
@@ -215,10 +214,9 @@ impl FileManager {
     let cleanup: Option<Box<dyn FnOnce() + Send + Sync>> = if written_files.is_empty() {
       None
     } else {
-      let state = state.clone();
+      let store = store.clone();
       Some(Box::new(move || {
         tokio::spawn(async move {
-          let store = state.objectstore();
           for file in written_files {
             let path = object_store::path::Path::from(file.objectstore_id());
             if let Err(err) = store.delete(&path).await {

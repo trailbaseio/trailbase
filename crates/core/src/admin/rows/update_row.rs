@@ -33,6 +33,7 @@ pub async fn update_row_handler(
   }
 
   let table_name = QualifiedName::parse(&table_name)?;
+  // FIXME: metadata only for main db.
   let metadata = state.connection_metadata();
   let Some(table_metadata) = metadata.get_table(&table_name) else {
     return Err(Error::Precondition(format!(
@@ -55,8 +56,11 @@ pub async fn update_row_handler(
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
   }
 
+  let conn = super::build_connection(&state, &table_name)?;
+
   run_update_query(
-    &state,
+    &conn,
+    state.objectstore(),
     &QualifiedNameEscaped::new(&table_metadata.schema.name),
     Params::for_admin_update(
       table_metadata,

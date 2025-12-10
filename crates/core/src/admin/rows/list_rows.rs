@@ -69,14 +69,15 @@ pub async fn list_rows_handler(
     }
   };
 
+  let conn = super::build_connection(&state, &table_name)?;
+
   let total_row_count: i64 = {
     let where_clause = &filter_where_clause.clause;
     let count_query = format!(
       "SELECT COUNT(*) FROM {table} AS _ROW_ WHERE {where_clause}",
       table = qualified_name.escaped_string()
     );
-    state
-      .conn()
+    conn
       .read_query_row_f(count_query, filter_where_clause.params.clone(), |row| {
         row.get(0)
       })
@@ -90,7 +91,7 @@ pub async fn list_rows_handler(
     _ => None,
   };
   let (rows, columns) = fetch_rows(
-    state.conn(),
+    &conn,
     qualified_name,
     filter_where_clause,
     &order,

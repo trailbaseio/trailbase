@@ -29,6 +29,7 @@ pub async fn insert_row_handler(
 ) -> Result<Json<InsertRowResponse>, Error> {
   let table_name = QualifiedName::parse(&table_name)?;
 
+  // FIXME: metadata only for main db.
   let metadata = state.connection_metadata();
   let Some(table_metadata) = metadata.get_table(&table_name) else {
     return Err(Error::Precondition(format!(
@@ -36,8 +37,11 @@ pub async fn insert_row_handler(
     )));
   };
 
+  let conn = super::build_connection(&state, &table_name)?;
+
   let rowid_value = run_insert_query(
-    &state,
+    &conn,
+    state.objectstore(),
     &QualifiedNameEscaped::new(&table_metadata.schema.name),
     None,
     "_rowid_",

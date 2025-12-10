@@ -140,6 +140,7 @@ pub struct Subscription {
 /// Internal, shareable state of the cloneable SubscriptionManager.
 struct ManagerState {
   /// SQLite connection to monitor.
+  /// FIXME: Tied to "main" DB.
   conn: trailbase_sqlite::Connection,
   /// Table metadata for mapping column indexes to column names needed for building JSON encoded
   /// records.

@@ -42,6 +42,7 @@ pub(crate) async fn delete_row(
   pk_col: &str,
   pk_value: SqlValue,
 ) -> Result<(), Error> {
+  // FIXME: metadata only for main db.
   let metadata = state.connection_metadata();
   let Some(table_metadata) = metadata.get_table(table_name) else {
     return Err(Error::Precondition(format!(
@@ -57,8 +58,10 @@ pub(crate) async fn delete_row(
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
   }
 
+  let conn = super::build_connection(state, table_name)?;
+
   run_delete_query(
-    state.conn(),
+    &conn,
     state.objectstore(),
     &QualifiedNameEscaped::from(&table_metadata.schema.name),
     pk_col,

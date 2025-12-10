@@ -68,8 +68,10 @@ pub async fn read_files_handler(
     )));
   };
 
+  let conn = super::build_connection(&state, &table_name)?;
+
   let FileUploads(mut file_uploads) = run_get_files_query(
-    &state,
+    &conn,
     &table_name.into(),
     file_col_metadata,
     file_col_json_metadata,

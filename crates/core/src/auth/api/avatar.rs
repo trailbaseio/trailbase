@@ -28,7 +28,7 @@ pub async fn get_avatar_handler(
     return Err(AuthError::BadRequest("Invalid user id"));
   };
   let metadata = state.connection_metadata();
-  let Some(table_metadata) = metadata.get_table(&table_name) else {
+  let Some(table_metadata) = metadata.get_table(&AVATAR_TABLE_NAME) else {
     return Err(AuthError::Internal("missing table".into()));
   };
 
@@ -41,8 +41,8 @@ pub async fn get_avatar_handler(
   };
 
   let file_upload = run_get_file_query(
-    &state,
-    &trailbase_schema::QualifiedNameEscaped::new(&table_name),
+    state.conn(),
+    &trailbase_schema::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
     file_column,
     column_json_metadata,
     "user",
@@ -71,7 +71,7 @@ pub async fn create_avatar_handler(
   either_request: Either<serde_json::Value>,
 ) -> Result<(), AuthError> {
   let metadata = state.connection_metadata();
-  let Some(table_metadata) = metadata.get_table(&table_name) else {
+  let Some(table_metadata) = metadata.get_table(&AVATAR_TABLE_NAME) else {
     return Err(AuthError::Internal("missing table".into()));
   };
 
@@ -102,8 +102,9 @@ pub async fn create_avatar_handler(
     .map_err(|_| AuthError::BadRequest("parameter conversion"))?;
 
   let _user_id_value = run_insert_query(
-    &state,
-    &trailbase_schema::QualifiedNameEscaped::new(&table_name),
+    state.conn(),
+    state.objectstore(),
+    &trailbase_schema::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
     Some(ConflictResolutionStrategy::Replace),
     "user",
     params,
@@ -137,7 +138,7 @@ pub async fn delete_avatar_handler(
 }
 
 lazy_static! {
-  static ref table_name: QualifiedName = QualifiedName {
+  static ref AVATAR_TABLE_NAME: QualifiedName = QualifiedName {
     name: AVATAR_TABLE.to_string(),
     database_schema: None,
   };

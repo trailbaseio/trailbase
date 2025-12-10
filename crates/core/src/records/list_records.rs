@@ -192,6 +192,7 @@ pub async fn list_records_handler(
     },
   );
 
+  // FIXME: Only getting "main" metadata.
   let metadata = state.connection_metadata();
   let expanded_tables = match query_expand {
     Some(ref expand) => {
@@ -230,7 +231,7 @@ pub async fn list_records_handler(
   .map_err(|err| RecordError::Internal(err.into()))?;
 
   // Execute the query.
-  let rows = state.conn().read_query_rows(query, params).await?;
+  let rows = api.conn().read_query_rows(query, params).await?;
   let Some(last_row) = rows.last() else {
     // Query result is empty:
     return Ok(Json(ListResponse {

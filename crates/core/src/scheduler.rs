@@ -13,6 +13,7 @@ use std::sync::{
 use trailbase_sqlite::{Connection, params};
 
 use crate::DataDir;
+use crate::app_state::ObjectStore;
 use crate::config::proto::{Config, SystemJob, SystemJobId};
 use crate::constants::{DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT, SESSION_TABLE};
 use crate::records::files::{FileDeletionsDb, FileError, delete_pending_files_impl};
@@ -242,7 +243,7 @@ fn build_job(
   config: &Config,
   conn: &Connection,
   logs_conn: &Connection,
-  object_store: Arc<dyn object_store::ObjectStore + Send + Sync>,
+  object_store: Arc<ObjectStore>,
 ) -> DefaultSystemJob {
   return match id {
     SystemJobId::Undefined => DefaultSystemJob {
@@ -404,7 +405,7 @@ fn build_job(
           let object_store = object_store.clone();
           return async move {
             let _ = tokio::spawn(async move {
-              if let Err(err) = delete_pending_files_job(&conn, &*object_store).await {
+              if let Err(err) = delete_pending_files_job(&conn, &object_store).await {
                 warn!("Failed to delete files: {err}");
               }
             })
@@ -419,7 +420,7 @@ fn build_job(
 
 async fn delete_pending_files_job(
   conn: &trailbase_sqlite::Connection,
-  object_store: &(dyn object_store::ObjectStore + Send + Sync),
+  object_store: &Arc<ObjectStore>,
 ) -> Result<(), FileError> {
   let rows: Vec<FileDeletionsDb> = match conn
     .write_query_values(
@@ -445,7 +446,7 @@ pub fn build_job_registry_from_config(
   data_dir: &DataDir,
   conn: &Connection,
   logs_conn: &Connection,
-  object_store: Arc<dyn object_store::ObjectStore + Send + Sync>,
+  object_store: Arc<ObjectStore>,
 ) -> Result<JobRegistry, CallbackError> {
   let job_ids = [
     SystemJobId::Backup,

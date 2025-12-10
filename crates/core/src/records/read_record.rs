@@ -6,16 +6,17 @@ use axum::{
 use serde::Deserialize;
 use trailbase_schema::FileUploads;
 
+use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::records::expand::expand_tables;
 use crate::records::expand::row_to_json_expand;
 use crate::records::files::read_file_into_response;
+use crate::records::params::SchemaAccessor;
 use crate::records::read_queries::{
   ExpandedSelectQueryResult, run_expanded_select_query, run_get_file_query, run_get_files_query,
   run_select_query,
 };
 use crate::records::{Permission, RecordError};
-use crate::{app_state::AppState, records::params::SchemaAccessor};
 
 #[derive(Debug, Default, Deserialize)]
 pub struct ReadRecordQuery {
@@ -67,11 +68,12 @@ pub async fn read_record_handler(
         }
       }
 
+      // FIXME: Only getting "main" metadata.
       let metadata = state.connection_metadata();
       let expanded_tables = expand_tables(&api, &metadata, &query_expand)?;
 
       let Some(ExpandedSelectQueryResult { root, foreign_rows }) = run_expanded_select_query(
-        state.conn(),
+        api.conn(),
         api.table_name(),
         &column_names,
         &pk_column.name,
@@ -112,7 +114,7 @@ pub async fn read_record_handler(
     }
     Some(_) | None => {
       let Some(row) = run_select_query(
-        state.conn(),
+        api.conn(),
         api.table_name(),
         &column_names,
         &pk_column.name,
@@ -182,7 +184,7 @@ pub async fn get_uploaded_file_from_record_handler(
   };
 
   let file_upload = run_get_file_query(
-    &state,
+    api.conn(),
     api.table_name(),
     column,
     column_json_metadata,
@@ -234,7 +236,7 @@ pub async fn get_uploaded_files_from_record_handler(
   };
 
   let FileUploads(file_uploads) = run_get_files_query(
-    &state,
+    api.conn(),
     api.table_name(),
     column,
     column_json_metadata,
@@ -262,6 +264,7 @@ fn prefix_filter(col_name: &str) -> bool {
 #[cfg(test)]
 mod test {
   use std::io::Read;
+  use std::sync::Arc;
 
   use axum::Json;
   use axum::extract::{Path, Query, State};
@@ -647,7 +650,7 @@ mod test {
   }
 
   async fn read_objectstore_file(
-    store: &dyn object_store::ObjectStore,
+    store: &Arc<ObjectStore>,
     path: &object_store::path::Path,
   ) -> Vec<u8> {
     let contents = store.get(&path).await.unwrap();

@@ -309,8 +309,8 @@ impl AppState {
     return Ok(());
   }
 
-  pub(crate) fn objectstore(&self) -> &ObjectStore {
-    return &*self.state.object_store;
+  pub(crate) fn objectstore(&self) -> &Arc<ObjectStore> {
+    return &self.state.object_store;
   }
 
   pub(crate) fn jobs(&self) -> Arc<JobRegistry> {
