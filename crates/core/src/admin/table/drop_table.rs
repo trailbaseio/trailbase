@@ -7,6 +7,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::config::proto::hash_config;
+use crate::constants::SQLITE_SCHEMA_TABLE;
 use crate::transaction::TransactionRecorder;
 
 #[derive(Clone, Debug, Deserialize, TS)]
@@ -44,27 +45,29 @@ pub async fn drop_table_handler(
   };
 
   let (conn, migration_path) = super::get_conn_and_migration_path(&state, database_schema)?;
-  let connection_metadata = super::build_connection_metadata(&state, &conn).await?;
 
-  // QUESTION: Should we have a separate drop_view?
-  let entity_type: &str = if connection_metadata
-    .get_table(&unqualified_table_name)
-    .is_some()
-  {
-    "TABLE"
-  } else if connection_metadata
-    .get_view(&unqualified_table_name)
-    .is_some()
-  {
-    "VIEW"
-  } else {
-    return Err(Error::Precondition(format!(
-      "Table or view '{table_name:?}' not found"
-    )));
-  };
+  // QUESTION: Should we just have a separate drop_view API rather than multiplexing here?
+  let entity_type: String = conn
+    .read_query_value(
+      format!(
+        "SELECT type FROM main.{SQLITE_SCHEMA_TABLE} WHERE name = {}",
+        unqualified_table_name.escaped_string()
+      ),
+      (),
+    )
+    .await?
+    .ok_or_else(|| Error::Precondition(format!("Table or view '{table_name:?}' not found")))?;
+
+  match entity_type.to_uppercase().as_str() {
+    "TABLE" | "VIEW" => {}
+    _ => {
+      return Err(Error::Precondition(format!("Invalid type: {entity_type}")));
+    }
+  }
 
   let tx_log = {
     let unqualified_table_name = unqualified_table_name.clone();
+    let entity_type = entity_type.clone();
     conn
       .call(move |conn| {
         let mut tx = TransactionRecorder::new(conn)?;
