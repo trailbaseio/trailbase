@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::auth::user::DbUser;
+use crate::connection::ConnectionEntry;
 use crate::constants::USER_TABLE;
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::util::id_to_b64;
@@ -58,7 +59,10 @@ pub async fn list_users_handler(
   State(state): State<AppState>,
   RawQuery(raw_url_query): RawQuery,
 ) -> Result<Json<ListUsersResponse>, Error> {
-  let conn = state.user_conn();
+  let ConnectionEntry {
+    connection: conn,
+    metadata,
+  } = state.connection_manager().main_entry();
 
   let Query {
     limit,
@@ -73,7 +77,6 @@ pub async fn list_users_handler(
       return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
     })?;
 
-  let metadata = state.connection_metadata();
   let Some(table_metadata) = metadata.get_table(&QualifiedName::parse(USER_TABLE)?) else {
     return Err(Error::Precondition(format!("Table {USER_TABLE} not found")));
   };
@@ -100,7 +103,7 @@ pub async fn list_users_handler(
     };
   }
   let users = fetch_users(
-    conn,
+    &conn,
     filter_where_clause.clone(),
     if let Some(cursor) = cursor {
       Some(

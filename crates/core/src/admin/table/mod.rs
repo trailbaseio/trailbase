@@ -57,3 +57,19 @@ fn get_conn_and_migration_path(
     )),
   };
 }
+
+async fn build_connection_metadata(
+  state: &crate::AppState,
+  conn: &trailbase_sqlite::Connection,
+) -> Result<trailbase_schema::metadata::ConnectionMetadata, crate::schema_metadata::SchemaLookupError>
+{
+  use crate::schema_metadata::*;
+  let tables = lookup_and_parse_all_table_schemas(conn).await?;
+  let views = lookup_and_parse_all_view_schemas(conn, &tables).await?;
+
+  return Ok(ConnectionMetadata::from_schemas(
+    tables,
+    views,
+    &state.json_schema_registry().read(),
+  )?);
+}

@@ -354,6 +354,7 @@ mod tests {
 
   use crate::app_state::*;
   use crate::config::proto::{PermissionFlag, RecordApiConfig};
+  use crate::connection::ConnectionEntry;
   use crate::records::list_records::list_records_handler;
   use crate::records::read_record::{ReadRecordQuery, read_record_handler};
   use crate::records::test_utils::add_record_api_config;
@@ -381,7 +382,8 @@ mod tests {
 
     state.rebuild_connection_metadata().await.unwrap();
 
-    let metadata = state.connection_metadata();
+    let ConnectionEntry { metadata, .. } = state.connection_manager().main_entry();
+
     let test_table = metadata
       .get_table(&QualifiedName {
         name: "test".to_string(),
@@ -425,36 +427,41 @@ mod tests {
   #[tokio::test]
   async fn test_expanded_foreign_key() {
     let state = test_state(None).await.unwrap();
-    let conn = state.conn();
-
-    conn
-      .execute(
-        "CREATE TABLE foreign_table (id INTEGER PRIMARY KEY) STRICT",
-        (),
-      )
-      .await
-      .unwrap();
 
     let table_name = QualifiedName {
       name: "test_table".to_string(),
       database_schema: None,
     };
 
-    conn
-      .execute(
-        format!(
-          r#"CREATE TABLE {table_name} (
+    {
+      let ConnectionEntry {
+        connection: conn, ..
+      } = state.connection_manager().main_entry();
+
+      conn
+        .execute(
+          "CREATE TABLE foreign_table (id INTEGER PRIMARY KEY) STRICT",
+          (),
+        )
+        .await
+        .unwrap();
+
+      conn
+        .execute(
+          format!(
+            r#"CREATE TABLE {table_name} (
             id INTEGER PRIMARY KEY,
             fk INTEGER REFERENCES foreign_table(id)
           ) STRICT"#,
-          table_name = table_name.escaped_string(),
-        ),
-        (),
-      )
-      .await
-      .unwrap();
+            table_name = table_name.escaped_string(),
+          ),
+          (),
+        )
+        .await
+        .unwrap();
 
-    state.rebuild_connection_metadata().await.unwrap();
+      state.rebuild_connection_metadata().await.unwrap();
+    }
 
     add_record_api_config(
       &state,
@@ -469,7 +476,11 @@ mod tests {
     .await
     .unwrap();
 
-    let metadata = state.connection_metadata();
+    let ConnectionEntry {
+      connection: conn,
+      metadata,
+      ..
+    } = state.connection_manager().main_entry();
     let table_metadata = metadata.get_table(&table_name).unwrap();
 
     let (validator, schema) = build_json_schema_expanded(
@@ -650,8 +661,11 @@ mod tests {
     let state = test_state(None).await.unwrap();
 
     let table_name = "test_table";
+
     state
-      .conn()
+      .connection_manager()
+      .main_entry()
+      .connection
       .execute_batch(format!(
         r#"
         CREATE TABLE foreign_table0 (id INTEGER PRIMARY KEY) STRICT;

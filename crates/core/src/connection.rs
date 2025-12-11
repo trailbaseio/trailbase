@@ -67,6 +67,9 @@ struct ConnectionManagerState {
   // Cache of existing Sqlite connections:
   main: RwLock<ConnectionEntry>,
   connections: quick_cache::sync::Cache<ConnectionKey, ConnectionEntry>,
+
+  // Reactive observers who need to be notified when metadata is rebuilt.
+  observers: Mutex<Vec<Box<dyn Fn() + Send + Sync>>>,
 }
 
 // A manager for multi-DB SQLite connections.
@@ -97,6 +100,7 @@ impl ConnectionManager {
           metadata: main_metadata,
         }),
         connections: quick_cache::sync::Cache::new(256),
+        observers: Mutex::new(vec![]),
       }),
     };
   }
@@ -127,23 +131,32 @@ impl ConnectionManager {
             metadata: Arc::new(main_metadata),
           }),
           connections: quick_cache::sync::Cache::new(256),
+          observers: Mutex::new(vec![]),
         }),
       },
       new_db,
     ));
   }
 
-  pub(crate) fn main(&self) -> Arc<Connection> {
-    return self.state.main.read().connection.clone();
+  pub(crate) fn add_observer(&self, o: impl Fn() + Send + Sync + 'static) {
+    self.state.observers.lock().push(Box::new(o));
   }
 
-  pub(crate) fn get(
-    &self,
-    main: bool,
-    attached_databases: Option<BTreeSet<String>>,
-  ) -> Result<Arc<Connection>, ConnectionError> {
-    return Ok(self.get_entry(main, attached_databases)?.connection);
+  // pub(crate) fn main(&self) -> Arc<Connection> {
+  //   return self.state.main.read().connection.clone();
+  // }
+
+  pub(crate) fn main_entry(&self) -> ConnectionEntry {
+    return self.state.main.read().clone();
   }
+
+  // pub(crate) fn get(
+  //   &self,
+  //   main: bool,
+  //   attached_databases: Option<BTreeSet<String>>,
+  // ) -> Result<Arc<Connection>, ConnectionError> {
+  //   return Ok(self.get_entry(main, attached_databases)?.connection);
+  // }
 
   pub(crate) fn get_entry(
     &self,
@@ -192,7 +205,7 @@ impl ConnectionManager {
       return self.get_entry(false, Some([db.to_string()].into()));
     }
 
-    return Ok(self.state.main.read().clone());
+    return Ok(self.main_entry());
   }
 
   pub(crate) fn build(
@@ -241,9 +254,7 @@ impl ConnectionManager {
     return Ok(Arc::new(conn));
   }
 
-  pub(crate) fn rebuild_metadata(
-    &mut self,
-  ) -> Result<(), crate::schema_metadata::SchemaLookupError> {
+  pub(crate) fn rebuild_metadata(&self) -> Result<(), crate::schema_metadata::SchemaLookupError> {
     let new_metadata = Arc::new(build_metadata(
       &self.state.main.read().connection.write_lock(),
       &self.state.json_schema_registry,
@@ -265,6 +276,12 @@ impl ConnectionManager {
         },
         true,
       );
+    }
+
+    // Notify observers.
+    let observers = self.state.observers.lock();
+    for observer in observers.iter() {
+      observer();
     }
 
     return Ok(());

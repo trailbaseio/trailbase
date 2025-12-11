@@ -33,11 +33,29 @@ pub async fn drop_table_handler(
 
   let dry_run = request.dry_run.unwrap_or(false);
   let table_name = QualifiedName::parse(&request.name)?;
+  let (unqualified_table_name, database_schema) = {
+    (
+      QualifiedName {
+        name: table_name.name.clone(),
+        database_schema: None,
+      },
+      table_name.database_schema.clone(),
+    )
+  };
+
+  let (conn, migration_path) = super::get_conn_and_migration_path(&state, database_schema)?;
+  let connection_metadata = super::build_connection_metadata(&state, &conn).await?;
 
   // QUESTION: Should we have a separate drop_view?
-  let entity_type: &str = if state.connection_metadata().get_table(&table_name).is_some() {
+  let entity_type: &str = if connection_metadata
+    .get_table(&unqualified_table_name)
+    .is_some()
+  {
     "TABLE"
-  } else if state.connection_metadata().get_view(&table_name).is_some() {
+  } else if connection_metadata
+    .get_view(&unqualified_table_name)
+    .is_some()
+  {
     "VIEW"
   } else {
     return Err(Error::Precondition(format!(
@@ -45,19 +63,16 @@ pub async fn drop_table_handler(
     )));
   };
 
-  let QualifiedName {
-    name: unqualified_table_name,
-    database_schema,
-  } = table_name.clone();
-
-  let (conn, migration_path) = super::get_conn_and_migration_path(&state, database_schema)?;
-
   let tx_log = {
+    let unqualified_table_name = unqualified_table_name.clone();
     conn
       .call(move |conn| {
         let mut tx = TransactionRecorder::new(conn)?;
 
-        let query = format!("DROP {entity_type} IF EXISTS \"{unqualified_table_name}\"");
+        let query = format!(
+          "DROP {entity_type} IF EXISTS {}",
+          unqualified_table_name.escaped_string()
+        );
         debug!("dropping table: {query}");
         tx.execute(&query, ())?;
 
@@ -70,11 +85,8 @@ pub async fn drop_table_handler(
 
   // Write migration file and apply it right away.
   if !dry_run && let Some(ref log) = tx_log {
-    let filename = QualifiedName {
-      name: table_name.name.clone(),
-      database_schema: None,
-    }
-    .migration_filename(&format!("drop_{}", entity_type.to_lowercase()));
+    let filename =
+      unqualified_table_name.migration_filename(&format!("drop_{}", entity_type.to_lowercase()));
 
     let _report = log
       .apply_as_migration(&conn, migration_path, &filename)

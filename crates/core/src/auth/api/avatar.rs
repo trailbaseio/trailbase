@@ -6,6 +6,7 @@ use trailbase_schema::{FileUploadInput, QualifiedName};
 use crate::app_state::AppState;
 use crate::auth::{AuthError, User};
 use crate::config::proto::ConflictResolutionStrategy;
+use crate::connection::ConnectionEntry;
 use crate::constants::AVATAR_TABLE;
 use crate::extract::Either;
 use crate::records::RecordError;
@@ -27,7 +28,12 @@ pub async fn get_avatar_handler(
   let Ok(user_id) = crate::util::b64_to_uuid(&b64_user_id) else {
     return Err(AuthError::BadRequest("Invalid user id"));
   };
-  let metadata = state.connection_metadata();
+
+  let ConnectionEntry {
+    connection: conn,
+    metadata,
+  } = state.connection_manager().main_entry();
+
   let Some(table_metadata) = metadata.get_table(&AVATAR_TABLE_NAME) else {
     return Err(AuthError::Internal("missing table".into()));
   };
@@ -41,7 +47,7 @@ pub async fn get_avatar_handler(
   };
 
   let file_upload = run_get_file_query(
-    state.conn(),
+    &conn,
     &trailbase_schema::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
     file_column,
     column_json_metadata,
@@ -70,7 +76,11 @@ pub async fn create_avatar_handler(
   user: User,
   either_request: Either<serde_json::Value>,
 ) -> Result<(), AuthError> {
-  let metadata = state.connection_metadata();
+  let ConnectionEntry {
+    connection: conn,
+    metadata,
+  } = state.connection_manager().main_entry();
+
   let Some(table_metadata) = metadata.get_table(&AVATAR_TABLE_NAME) else {
     return Err(AuthError::Internal("missing table".into()));
   };
@@ -102,7 +112,7 @@ pub async fn create_avatar_handler(
     .map_err(|_| AuthError::BadRequest("parameter conversion"))?;
 
   let _user_id_value = run_insert_query(
-    state.conn(),
+    &conn,
     state.objectstore(),
     &trailbase_schema::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
     Some(ConflictResolutionStrategy::Replace),

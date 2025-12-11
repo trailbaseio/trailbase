@@ -4,16 +4,15 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use trailbase_schema::metadata::{
-  JsonColumnMetadata, TableMetadata, ViewMetadata, find_file_column_indexes,
+  ConnectionMetadata, JsonColumnMetadata, TableMetadata, ViewMetadata, find_file_column_indexes,
   find_user_id_foreign_key_columns,
 };
 use trailbase_schema::sqlite::Column;
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
-use trailbase_sqlite::{NamedParams, Params as _, Value};
+use trailbase_sqlite::{Connection, NamedParams, Params as _, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
-use crate::connection::ConnectionManager;
 use crate::constants::USER_TABLE;
 use crate::records::params::{LazyParams, Params, prefix_colon};
 use crate::records::{Permission, RecordError};
@@ -138,6 +137,7 @@ impl RecordApiSchema {
 struct RecordApiState {
   /// Database connection for access checks.
   conn: Arc<trailbase_sqlite::Connection>,
+  metadata: Arc<ConnectionMetadata>,
 
   /// Schema metadata
   schema: RecordApiSchema,
@@ -183,35 +183,40 @@ impl RecordApiState {
 
 impl RecordApi {
   pub(crate) fn from_table(
-    connection_manager: &ConnectionManager,
+    conn: Arc<Connection>,
+    metadata: Arc<ConnectionMetadata>,
     table_metadata: &TableMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
     assert_name(&config, table_metadata.name());
 
     return Self::from_impl(
-      connection_manager,
+      conn,
+      metadata,
       RecordApiSchema::from_table(table_metadata, &config)?,
       config,
     );
   }
 
   pub(crate) fn from_view(
-    connection_manager: &ConnectionManager,
+    conn: Arc<Connection>,
+    metadata: Arc<ConnectionMetadata>,
     view_metadata: &ViewMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
     assert_name(&config, view_metadata.name());
 
     return Self::from_impl(
-      connection_manager,
+      conn,
+      metadata,
       RecordApiSchema::from_view(view_metadata, &config)?,
       config,
     );
   }
 
   fn from_impl(
-    connection_manager: &ConnectionManager,
+    conn: Arc<Connection>,
+    metadata: Arc<ConnectionMetadata>,
     schema: RecordApiSchema,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
@@ -219,17 +224,6 @@ impl RecordApi {
 
     let Some(api_name) = config.name.clone() else {
       return Err(format!("RecordApi misses name: {config:?}"));
-    };
-
-    let conn = if config.attached_databases.is_empty() {
-      connection_manager.main().clone()
-    } else {
-      connection_manager
-        .get(
-          true,
-          Some(config.attached_databases.iter().cloned().collect()),
-        )
-        .map_err(|err| err.to_string())?
     };
 
     let (read_access_query, subscription_read_access_query) = match &config.read_access_rule {
@@ -293,6 +287,8 @@ impl RecordApi {
     return Ok(RecordApi {
       state: Arc::new(RecordApiState {
         conn,
+        metadata,
+
         schema,
 
         // proto::RecordApiConfig properties below:
@@ -360,6 +356,10 @@ impl RecordApi {
 
   pub fn conn(&self) -> &trailbase_sqlite::Connection {
     return &self.state.conn;
+  }
+
+  pub fn connection_metadata(&self) -> &ConnectionMetadata {
+    return &self.state.metadata;
   }
 
   #[inline]
