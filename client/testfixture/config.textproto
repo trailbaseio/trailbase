@@ -28,7 +28,7 @@ auth {
 }
 jobs {}
 databases: [{
-  name: "extra"
+  name: "other"
 }]
 record_apis: [{
   name: "simple_strict_table"
@@ -56,6 +56,12 @@ record_apis: [{
 }, {
   name: "file_upload_table"
   table_name: "file_upload_table"
+  acl_world: [CREATE, READ, DELETE]
+  acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+}, {
+  name: "other_file_upload_table"
+  table_name: "other.file_upload_table"
+  attached_databases: ["other"]
   acl_world: [CREATE, READ, DELETE]
   acl_authenticated: [CREATE, READ, UPDATE, DELETE]
 }, {

@@ -71,6 +71,8 @@ pub(crate) fn apply_base_migrations(
   if let Some(path) = base_migrations_path
     && let Ok(user_migrations) = load_sql_migrations(path.as_ref().join(db), true)
   {
+    println!("USER MIGRATIONS: {user_migrations:?}");
+
     migrations.push(user_migrations);
   }
   return apply_migrations(db, conn, migrations);

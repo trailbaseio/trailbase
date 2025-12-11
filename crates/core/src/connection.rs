@@ -251,11 +251,7 @@ impl ConnectionManager {
     };
 
     let (conn, _new_db) = init_main_db_impl(
-      if main {
-        Some(&self.state.data_dir)
-      } else {
-        None
-      },
+      Some(&self.state.data_dir),
       Some(self.state.json_schema_registry.clone()),
       attach,
       self.state.sqlite_function_runtimes.clone(),
@@ -358,6 +354,7 @@ fn init_main_db_impl(
   let conn = {
     let new_db = new_db.clone();
     let migrations_path = migrations_path.clone();
+    let json_registry = json_registry.clone();
 
     trailbase_sqlite::Connection::new(
       move || -> Result<_, ConnectionError> {
@@ -388,11 +385,13 @@ fn init_main_db_impl(
   };
 
   for AttachedDatabase { schema_name, path } in attach {
-    debug!("Attaching '{schema_name}': {path:?}");
+    debug!("Attaching '{schema_name}': {path:?}, {migrations_path:?}");
 
     if let Some(ref migrations_path) = migrations_path {
+      // NOTE: that migrations may also depend on extension functions.
+      // FIXME: Right now this will fail if user migrations depend on custom WASM SQLite functions.
       let mut secondary =
-        connect_rusqlite_without_default_extensions_and_schemas(Some(path.clone()))?;
+        trailbase_extension::connect_sqlite(Some(path.clone()), json_registry.clone())?;
 
       apply_base_migrations(&mut secondary, Some(migrations_path), &schema_name)?;
     }
