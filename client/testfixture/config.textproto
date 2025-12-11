@@ -28,7 +28,7 @@ auth {
 }
 jobs {}
 databases: [{
-   name: "extra"
+  name: "extra"
 }]
 record_apis: [{
   name: "simple_strict_table"
@@ -61,15 +61,8 @@ record_apis: [{
 }, {
   name: "simple_schema_table"
   table_name: "simple_schema_table"
-  acl_world: []
   acl_authenticated: [CREATE, READ, UPDATE, DELETE]
-  create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE email = 'admin@localhost' AND id = _USER_.id)",
-}, {
-  name: "intrepid_badger"
-  table_name: "extra.intrepid_badger"
-  attached_databases: ["extra"]
-  acl_world: [READ]
-  acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+  create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE email = \'admin@localhost\' AND id = _USER_.id)"
 }]
 schemas: [{
   name: "simple_schema"

@@ -41,7 +41,7 @@ struct InternalState {
   config: Reactive<Config>,
   json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
 
-  // FIXME: Remove in favor of connection manager.
+  // TODO: Remove in favor of connection manager.
   conn: trailbase_sqlite::Connection,
   logs_conn: trailbase_sqlite::Connection,
   connection_manager: ConnectionManager,
@@ -283,7 +283,6 @@ impl AppState {
     // happened rendering the current config invalid. Unlike a config update, it's too late to
     // reject anything.
     let config = self.get_config();
-    // TODO: validate_config should receive ConnectionManager to validate all APIs.
     validate_config(&self.state.connection_manager, &config).map_err(|err| {
       log::error!("Schema change invalidated config: {err}");
       return crate::schema_metadata::SchemaLookupError::Other(err.into());

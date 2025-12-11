@@ -39,18 +39,23 @@ pub async fn list_tables_handler(
     pub db_schema: String,
   }
 
-  let conn = state.connection_manager().build(
-    true,
-    Some(
-      &state
-        .get_config()
-        .databases
-        .iter()
-        .flat_map(|d| d.name.clone())
-        .take(124)
-        .collect(),
-    ),
-  )?;
+  // FIXME: This is a hack. If there's a large number of databases, we'll miss schemas. At the same
+  // time fixing this properly would probably also require overhauling our UI, e.g. display thing
+  // hierarchically. What's the point of showing the same 100 schemas for thousands of tenants.
+  let db_names: Vec<_> = state
+    .get_config()
+    .databases
+    .iter()
+    .flat_map(|d| d.name.clone())
+    .collect();
+
+  if db_names.len() > 124 {
+    log::warn!("Not showing all DBs.")
+  }
+
+  let conn = state
+    .connection_manager()
+    .build(true, Some(&db_names.into_iter().take(124).collect()))?;
   let databases = conn.list_databases().await?;
 
   let mut schemas: Vec<SqliteSchema> = vec![];
