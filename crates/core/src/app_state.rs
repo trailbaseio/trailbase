@@ -274,7 +274,7 @@ impl AppState {
 
   pub async fn rebuild_connection_metadata(
     &self,
-  ) -> Result<(), crate::schema_metadata::SchemaLookupError> {
+  ) -> Result<(), crate::connection::ConnectionError> {
     self.state.connection_manager.rebuild_metadata()?;
 
     // We typically rebuild the schema representations when the DB schemas change, which in turn

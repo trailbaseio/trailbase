@@ -7,6 +7,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::metadata::ConnectionMetadata;
+use trailbase_schema::sqlite::{Table, View};
 
 use crate::data_dir::DataDir;
 use crate::migrations::{
@@ -28,6 +29,8 @@ pub enum ConnectionError {
   TbSqlite(#[from] trailbase_sqlite::Error),
   #[error("Migration: {0}")]
   Migration(#[from] trailbase_refinery::Error),
+  #[error("Json Schema: {0}")]
+  JsonSchema(#[from] trailbase_schema::metadata::JsonSchemaError),
   #[error("Other: {0}")]
   Other(String),
 }
@@ -264,7 +267,7 @@ impl ConnectionManager {
     return Ok(Arc::new(conn));
   }
 
-  pub(crate) fn rebuild_metadata(&self) -> Result<(), crate::schema_metadata::SchemaLookupError> {
+  pub(crate) fn rebuild_metadata(&self) -> Result<(), ConnectionError> {
     let new_metadata = Arc::new(build_metadata(
       &self.state.main.read().connection.write_lock(),
       &self.state.json_schema_registry,
@@ -301,7 +304,7 @@ impl ConnectionManager {
 fn build_metadata(
   conn: &rusqlite::Connection,
   json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-) -> Result<ConnectionMetadata, crate::schema_metadata::SchemaLookupError> {
+) -> Result<ConnectionMetadata, ConnectionError> {
   use crate::schema_metadata::*;
   let tables = lookup_and_parse_all_table_schemas_sync(conn)?;
   let views = lookup_and_parse_all_view_schemas_sync(conn, &tables)?;
@@ -390,6 +393,7 @@ fn init_main_db_impl(
     debug!("Attaching '{schema_name}': {path:?}");
 
     if let Some(ref migrations_path) = migrations_path {
+      // TODO: add file_deletions table migrations.
       let migrations = load_sql_migrations(migrations_path.join(&schema_name), false)?;
 
       if !migrations.is_empty() {
@@ -454,4 +458,78 @@ pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
   conn.busy_timeout(std::time::Duration::from_millis(5000))?;
 
   return Ok(conn);
+}
+
+/// (Re-)build the connections schema representation *with* the side-effect of (re-)installing file
+/// deletion triggers.
+///
+/// Tying the construction of schema metadata and the (re-)installing of file deletion triggers so
+/// closely together is a necessary evil. For example, whenever a schema changes, e.g. a new file
+/// column is added, we need to rebuild the metadata and update or install missing triggers.
+fn build_connection_metadata_and_install_file_deletion_triggers_sync(
+  conn: &rusqlite::Connection,
+  tables: Vec<Table>,
+  views: Vec<View>,
+  registry: &RwLock<JsonSchemaRegistry>,
+) -> Result<ConnectionMetadata, ConnectionError> {
+  let metadata = ConnectionMetadata::from_schemas(tables, views, &registry.read())?;
+
+  setup_file_deletion_triggers_sync(conn, &metadata)?;
+
+  return Ok(metadata);
+}
+
+// Install file column triggers. This ain't pretty, this might be better on construction and
+// schema changes.
+fn setup_file_deletion_triggers_sync(
+  conn: &rusqlite::Connection,
+  metadata: &ConnectionMetadata,
+) -> Result<(), trailbase_sqlite::Error> {
+  for metadata in metadata.tables.values() {
+    for idx in metadata.json_metadata.file_column_indexes() {
+      let table_name = &metadata.schema.name;
+      let unqualified_name = &metadata.schema.name.name;
+      let db = metadata
+        .schema
+        .name
+        .database_schema
+        .as_deref()
+        .unwrap_or("main");
+
+      if db != "main" {
+        // FIXME: TRIGGERS are always database-local. Thus every database with tables
+        // with file columns would need its own _file_deletions table to track pending
+        // deletions.
+        return Err(trailbase_sqlite::Error::Other(
+          "File columns not (yet) supported on attached databases".into(),
+        ));
+      }
+
+      let col = &metadata.schema.columns[*idx];
+      let column_name = &col.name;
+
+      conn.execute_batch(&indoc::formatdoc!(
+          r#"
+          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger";
+          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger" AFTER UPDATE ON {table_name}
+            WHEN OLD."{column_name}" IS NOT NULL AND OLD."{column_name}" != NEW."{column_name}"
+            BEGIN
+              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+            END;
+
+          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger";
+          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger" AFTER DELETE ON {table_name}
+            WHEN OLD."{column_name}" IS NOT NULL
+            BEGIN
+              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+            END;
+          "#,
+          table_name = table_name.escaped_string(),
+        ))?;
+    }
+  }
+
+  return Ok(());
 }

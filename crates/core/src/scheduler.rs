@@ -422,6 +422,7 @@ async fn delete_pending_files_job(
   conn: &trailbase_sqlite::Connection,
   object_store: &Arc<ObjectStore>,
 ) -> Result<(), FileError> {
+  // TODO: Update job to delete files for all DBs.
   let rows: Vec<FileDeletionsDb> = match conn
     .write_query_values(
       "DELETE FROM _file_deletions WHERE deleted < (UNIXEPOCH() - 900) RETURNING *",
