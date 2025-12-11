@@ -22,6 +22,10 @@ impl QualifiedNameEscaped {
   pub fn new(name: &QualifiedName) -> Self {
     return Self(name.escaped_string());
   }
+
+  pub fn parse(&self) -> QualifiedName {
+    return QualifiedName::parse(&self.0).expect("valid");
+  }
 }
 
 impl From<QualifiedName> for QualifiedNameEscaped {

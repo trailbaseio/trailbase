@@ -10,9 +10,7 @@ use trailbase_schema::metadata::ConnectionMetadata;
 use trailbase_schema::sqlite::{Table, View};
 
 use crate::data_dir::DataDir;
-use crate::migrations::{
-  apply_logs_migrations, apply_main_migrations, apply_migrations, load_sql_migrations,
-};
+use crate::migrations::{apply_base_migrations, apply_logs_migrations, apply_main_migrations};
 use crate::wasm::SqliteFunctionRuntime;
 
 pub use trailbase_sqlite::Connection;
@@ -367,7 +365,7 @@ fn init_main_db_impl(
           trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())?;
 
         if main_migrations {
-          *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.clone())?;
+          *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.as_ref())?;
         }
 
         #[cfg(feature = "wasm")]
@@ -393,14 +391,10 @@ fn init_main_db_impl(
     debug!("Attaching '{schema_name}': {path:?}");
 
     if let Some(ref migrations_path) = migrations_path {
-      // TODO: add file_deletions table migrations.
-      let migrations = load_sql_migrations(migrations_path.join(&schema_name), false)?;
+      let mut secondary =
+        connect_rusqlite_without_default_extensions_and_schemas(Some(path.clone()))?;
 
-      if !migrations.is_empty() {
-        let mut secondary =
-          connect_rusqlite_without_default_extensions_and_schemas(Some(path.clone()))?;
-        apply_migrations(&schema_name, &mut secondary, vec![migrations])?;
-      }
+      apply_base_migrations(&mut secondary, Some(migrations_path), &schema_name)?;
     }
 
     conn.attach(&path.to_string_lossy(), &schema_name)?;
@@ -495,15 +489,6 @@ fn setup_file_deletion_triggers_sync(
         .database_schema
         .as_deref()
         .unwrap_or("main");
-
-      if db != "main" {
-        // FIXME: TRIGGERS are always database-local. Thus every database with tables
-        // with file columns would need its own _file_deletions table to track pending
-        // deletions.
-        return Err(trailbase_sqlite::Error::Other(
-          "File columns not (yet) supported on attached databases".into(),
-        ));
-      }
 
       let col = &metadata.schema.columns[*idx];
       let column_name = &col.name;

@@ -45,11 +45,14 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refine
 /// otherwise false.
 pub(crate) fn apply_main_migrations(
   conn: &mut rusqlite::Connection,
-  user_migrations_path: Option<PathBuf>,
+  base_migrations_path: Option<impl AsRef<Path>>,
 ) -> Result<bool, trailbase_refinery::Error> {
-  let mut migrations = vec![load_embedded_migrations::<MainMigrations>()];
-  if let Some(path) = user_migrations_path {
-    if let Ok(user_migrations) = load_sql_migrations(path.join("main"), false) {
+  let mut migrations = vec![
+    load_embedded_migrations::<BaseMigrations>(),
+    load_embedded_migrations::<MainMigrations>(),
+  ];
+  if let Some(path) = base_migrations_path {
+    if let Ok(user_migrations) = load_sql_migrations(path.as_ref().join("main"), true) {
       migrations.push(user_migrations);
     }
 
@@ -57,6 +60,20 @@ pub(crate) fn apply_main_migrations(
     migrations.push(load_sql_migrations(path, false)?);
   }
   return apply_migrations("main", conn, migrations);
+}
+
+pub(crate) fn apply_base_migrations(
+  conn: &mut rusqlite::Connection,
+  base_migrations_path: Option<impl AsRef<Path>>,
+  db: &str,
+) -> Result<bool, trailbase_refinery::Error> {
+  let mut migrations = vec![load_embedded_migrations::<BaseMigrations>()];
+  if let Some(path) = base_migrations_path
+    && let Ok(user_migrations) = load_sql_migrations(path.as_ref().join(db), true)
+  {
+    migrations.push(user_migrations);
+  }
+  return apply_migrations(db, conn, migrations);
 }
 
 pub(crate) fn apply_logs_migrations(
@@ -212,6 +229,10 @@ fn load_embedded_migrations<T: rust_embed::RustEmbed>() -> Vec<Migration> {
     })
     .collect();
 }
+
+#[derive(Clone, rust_embed::RustEmbed)]
+#[folder = "migrations/base"]
+struct BaseMigrations;
 
 #[derive(Clone, rust_embed::RustEmbed)]
 #[folder = "migrations/main"]

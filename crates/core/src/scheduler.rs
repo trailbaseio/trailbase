@@ -15,6 +15,7 @@ use trailbase_sqlite::{Connection, params};
 use crate::DataDir;
 use crate::app_state::ObjectStore;
 use crate::config::proto::{Config, SystemJob, SystemJobId};
+use crate::connection::ConnectionManager;
 use crate::constants::{DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT, SESSION_TABLE};
 use crate::records::files::{FileDeletionsDb, FileError, delete_pending_files_impl};
 
@@ -241,7 +242,7 @@ fn build_job(
   id: SystemJobId,
   data_dir: &DataDir,
   config: &Config,
-  conn: &Connection,
+  connection_manager: &ConnectionManager,
   logs_conn: &Connection,
   object_store: Arc<ObjectStore>,
 ) -> DefaultSystemJob {
@@ -257,7 +258,7 @@ fn build_job(
     },
     SystemJobId::Backup => {
       let backup_file = data_dir.backup_path().join("backup.db");
-      let conn = conn.clone();
+      let main_conn = connection_manager.main_entry().connection.clone();
 
       DefaultSystemJob {
         name: "Backup",
@@ -267,7 +268,7 @@ fn build_job(
           disabled: Some(true),
         },
         callback: build_callback(move || {
-          let conn = conn.clone();
+          let conn = main_conn.clone();
           let backup_file = backup_file.clone();
 
           return async move {
@@ -331,7 +332,7 @@ fn build_job(
       }
     }
     SystemJobId::AuthCleaner => {
-      let user_conn = conn.clone();
+      let main_conn = connection_manager.main_entry().connection.clone();
       let refresh_token_ttl = config
         .auth
         .refresh_token_ttl_sec
@@ -345,7 +346,7 @@ fn build_job(
           disabled: Some(false),
         },
         callback: build_callback(move || {
-          let user_conn = user_conn.clone();
+          let user_conn = main_conn.clone();
 
           return async move {
             let timestamp = (Utc::now() - refresh_token_ttl).timestamp();
@@ -367,7 +368,7 @@ fn build_job(
       }
     }
     SystemJobId::QueryOptimizer => {
-      let conn = conn.clone();
+      let main_conn = connection_manager.main_entry().connection.clone();
 
       DefaultSystemJob {
         name: "Query Optimizer",
@@ -377,7 +378,7 @@ fn build_job(
           disabled: Some(false),
         },
         callback: build_callback(move || {
-          let conn = conn.clone();
+          let conn = main_conn.clone();
 
           return async move {
             conn.execute("PRAGMA optimize", ()).await.map_err(|err| {
@@ -391,7 +392,8 @@ fn build_job(
       }
     }
     SystemJobId::FileDeletions => {
-      let conn = conn.clone();
+      let connection_manager = connection_manager.clone();
+      let databases = config.databases.clone();
 
       DefaultSystemJob {
         name: "File Deletions",
@@ -401,12 +403,31 @@ fn build_job(
           disabled: Some(false),
         },
         callback: build_callback(move || {
-          let conn = conn.clone();
+          let connection_manager = connection_manager.clone();
           let object_store = object_store.clone();
+          let databases = databases.clone();
+
           return async move {
             let _ = tokio::spawn(async move {
-              if let Err(err) = delete_pending_files_job(&conn, &object_store).await {
-                warn!("Failed to delete files: {err}");
+              let mut db_names = vec!["main".to_string()];
+              db_names.extend(databases.iter().flat_map(|d| d.name.clone()));
+
+              for db_name in db_names {
+                let conn = match db_name.as_str() {
+                  "main" => connection_manager.main_entry().connection,
+                  name => {
+                    let Ok(entry) =
+                      connection_manager.get_entry(false, Some([name.to_string()].into()))
+                    else {
+                      continue;
+                    };
+                    entry.connection
+                  }
+                };
+
+                if let Err(err) = delete_pending_files_job(&conn, &object_store, &db_name).await {
+                  warn!("Failed to delete files: {err}");
+                }
               }
             })
             .await;
@@ -419,13 +440,14 @@ fn build_job(
 }
 
 async fn delete_pending_files_job(
-  conn: &trailbase_sqlite::Connection,
+  conn: &Connection,
   object_store: &Arc<ObjectStore>,
+  database_schema: &str,
 ) -> Result<(), FileError> {
   // TODO: Update job to delete files for all DBs.
   let rows: Vec<FileDeletionsDb> = match conn
     .write_query_values(
-      "DELETE FROM _file_deletions WHERE deleted < (UNIXEPOCH() - 900) RETURNING *",
+      format!(r#"DELETE FROM "{database_schema}"._file_deletions WHERE deleted < (UNIXEPOCH() - 900) RETURNING *"#),
       (),
     )
     .await
@@ -437,7 +459,7 @@ async fn delete_pending_files_job(
     }
   };
 
-  delete_pending_files_impl(conn, object_store, rows).await?;
+  delete_pending_files_impl(conn, object_store, rows, database_schema).await?;
 
   return Ok(());
 }
@@ -445,7 +467,7 @@ async fn delete_pending_files_job(
 pub fn build_job_registry_from_config(
   config: &Config,
   data_dir: &DataDir,
-  conn: &Connection,
+  connection_manager: &ConnectionManager,
   logs_conn: &Connection,
   object_store: Arc<ObjectStore>,
 ) -> Result<JobRegistry, CallbackError> {
@@ -468,7 +490,7 @@ pub fn build_job_registry_from_config(
       job_id,
       data_dir,
       config,
-      conn,
+      connection_manager,
       logs_conn,
       object_store.clone(),
     );
@@ -578,7 +600,7 @@ mod tests {
   async fn test_delete_pending_files_job() {
     let state = crate::app_state::test_state(None).await.unwrap();
 
-    delete_pending_files_job(state.conn(), state.objectstore())
+    delete_pending_files_job(state.conn(), state.objectstore(), "main")
       .await
       .unwrap();
   }

@@ -142,7 +142,7 @@ impl AppState {
     let object_store: Arc<ObjectStore> = args.object_store.into();
     let jobs_input = (
       args.data_dir.clone(),
-      main_conn.clone(),
+      args.connection_manager.clone(),
       args.logs_conn.clone(),
       object_store.clone(),
     );
@@ -189,10 +189,10 @@ impl AppState {
         jobs: derive_unchecked(&config, move |c| {
           debug!("(re-)building jobs from config");
 
-          let (data_dir, conn, logs_conn, object_store) = &jobs_input;
+          let (data_dir, conn_mgr, logs_conn, object_store) = &jobs_input;
 
           return Arc::new(
-            build_job_registry_from_config(c, data_dir, conn, logs_conn, object_store.clone())
+            build_job_registry_from_config(c, data_dir, conn_mgr, logs_conn, object_store.clone())
               .unwrap_or_else(|err| {
                 error!("Failed to build JobRegistry for cron jobs: {err}");
                 return JobRegistry::new();
