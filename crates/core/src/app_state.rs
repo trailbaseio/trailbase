@@ -536,32 +536,10 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let config = config.unwrap_or_else(test_config);
   update_json_schema_registry(&config.schemas, &json_schema_registry).unwrap();
 
-  let (conn, new) =
-    crate::connection::init_main_db(None, Some(json_schema_registry.clone()), vec![], vec![])?;
-  assert!(new);
-
   let logs_conn = crate::connection::init_logs_db(None)?;
 
-  let tables = crate::schema_metadata::lookup_and_parse_all_table_schemas(&conn).await?;
-  let views = crate::schema_metadata::lookup_and_parse_all_view_schemas(&conn, &tables).await?;
-
-  let connection_metadata = Arc::new(
-    crate::schema_metadata::build_connection_metadata_and_install_file_deletion_triggers(
-      &conn,
-      tables,
-      views,
-      &json_schema_registry,
-    )
-    .await?,
-  );
-
-  let connection_manager = ConnectionManager::new(
-    conn.clone(),
-    connection_metadata.clone(),
-    data_dir.clone(),
-    json_schema_registry.clone(),
-    vec![],
-  );
+  let connection_manager =
+    ConnectionManager::new_for_test(data_dir.clone(), json_schema_registry.clone(), vec![]);
 
   let object_store = if std::env::var("TEST_S3_OBJECT_STORE").map_or(false, |v| v == "TRUE") {
     info!("Use S3 Storage for tests");
@@ -626,7 +604,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       record_apis: record_apis.clone(),
       config,
       json_schema_registry,
-      conn: conn.clone(),
+      conn: (*connection_manager.main_entry().connection).clone(),
       logs_conn,
       connection_manager,
       jwt: crate::auth::jwt::test_jwt_helper(),

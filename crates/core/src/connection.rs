@@ -82,30 +82,7 @@ pub struct ConnectionManager {
 }
 
 impl ConnectionManager {
-  // TODO: We should ultimately only use this in tests - probably.
   pub(crate) fn new(
-    main_connection: Connection,
-    main_metadata: Arc<ConnectionMetadata>,
-    data_dir: DataDir,
-    json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-    sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
-  ) -> Self {
-    return Self {
-      state: Arc::new(ConnectionManagerState {
-        data_dir,
-        json_schema_registry,
-        sqlite_function_runtimes,
-        main: RwLock::new(ConnectionEntry {
-          connection: Arc::new(main_connection),
-          metadata: main_metadata,
-        }),
-        connections: quick_cache::sync::Cache::new(256),
-        observers: Mutex::new(vec![]),
-      }),
-    };
-  }
-
-  pub(crate) fn new_wo_main(
     data_dir: DataDir,
     json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
     sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
@@ -136,6 +113,39 @@ impl ConnectionManager {
       },
       new_db,
     ));
+  }
+
+  #[cfg(test)]
+  pub(crate) fn new_for_test(
+    data_dir: DataDir,
+    json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+    sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
+  ) -> Self {
+    let (main_conn, new_db) = init_main_db_impl(
+      None,
+      Some(json_schema_registry.clone()),
+      vec![],
+      sqlite_function_runtimes.clone(),
+      true,
+    )
+    .unwrap();
+    assert!(new_db);
+
+    let main_metadata = build_metadata(&main_conn.write_lock(), &json_schema_registry).unwrap();
+
+    return Self {
+      state: Arc::new(ConnectionManagerState {
+        data_dir,
+        json_schema_registry,
+        sqlite_function_runtimes,
+        main: RwLock::new(ConnectionEntry {
+          connection: Arc::new(main_conn),
+          metadata: Arc::new(main_metadata),
+        }),
+        connections: quick_cache::sync::Cache::new(256),
+        observers: Mutex::new(vec![]),
+      }),
+    };
   }
 
   pub(crate) fn add_observer(&self, o: impl Fn() + Send + Sync + 'static) {

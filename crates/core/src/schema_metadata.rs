@@ -5,7 +5,7 @@ use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::{SchemaError, Table, View};
-use trailbase_sqlite::{Connection, params};
+use trailbase_sqlite::params;
 
 pub use trailbase_schema::metadata::{
   ConnectionMetadata, JsonColumnMetadata, JsonSchemaError, TableMetadata,
@@ -13,25 +13,25 @@ pub use trailbase_schema::metadata::{
 
 use crate::constants::SQLITE_SCHEMA_TABLE;
 
+// pub(crate) async fn build_connection_metadata_and_install_file_deletion_triggers(
+//   conn: &Connection,
+//   tables: Vec<Table>,
+//   views: Vec<View>,
+//   registry: &RwLock<JsonSchemaRegistry>,
+// ) -> Result<ConnectionMetadata, SchemaLookupError> {
+//   let metadata = ConnectionMetadata::from_schemas(tables, views, &registry.read())?;
+//
+//   setup_file_deletion_triggers(conn, &metadata).await?;
+//
+//   return Ok(metadata);
+// }
+
 /// (Re-)build the connections schema representation *with* the side-effect of (re-)installing file
 /// deletion triggers.
 ///
 /// Tying the construction of schema metadata and the (re-)installing of file deletion triggers so
 /// closely together is a necessary evil. For example, whenever a schema changes, e.g. a new file
 /// column is added, we need to rebuild the metadata and update or install missing triggers.
-pub(crate) async fn build_connection_metadata_and_install_file_deletion_triggers(
-  conn: &Connection,
-  tables: Vec<Table>,
-  views: Vec<View>,
-  registry: &RwLock<JsonSchemaRegistry>,
-) -> Result<ConnectionMetadata, SchemaLookupError> {
-  let metadata = ConnectionMetadata::from_schemas(tables, views, &registry.read())?;
-
-  setup_file_deletion_triggers(conn, &metadata).await?;
-
-  return Ok(metadata);
-}
-
 pub(crate) fn build_connection_metadata_and_install_file_deletion_triggers_sync(
   conn: &rusqlite::Connection,
   tables: Vec<Table>,
@@ -94,39 +94,39 @@ pub async fn lookup_and_parse_table_schema(
   return Ok(table);
 }
 
-pub async fn lookup_and_parse_all_table_schemas(
-  conn: &trailbase_sqlite::Connection,
-) -> Result<Vec<Table>, SchemaLookupError> {
-  let databases = conn.list_databases().await?;
-
-  let mut tables: Vec<Table> = vec![];
-  for db in databases {
-    // Then get the actual tables.
-    let rows = conn
-      .read_query_rows(
-        format!(
-          "SELECT sql FROM {db}.{SQLITE_SCHEMA_TABLE} WHERE type = 'table'",
-          db = db.name
-        ),
-        (),
-      )
-      .await?;
-
-    for row in rows.iter() {
-      let sql: String = row.get(0)?;
-      let Some(stmt) = parse_into_statement(&sql)? else {
-        return Err(SchemaLookupError::Missing);
-      };
-      tables.push({
-        let mut table: Table = stmt.try_into()?;
-        table.name.database_schema = Some(db.name.clone());
-        table
-      });
-    }
-  }
-
-  return Ok(tables);
-}
+// pub async fn lookup_and_parse_all_table_schemas(
+//   conn: &trailbase_sqlite::Connection,
+// ) -> Result<Vec<Table>, SchemaLookupError> {
+//   let databases = conn.list_databases().await?;
+//
+//   let mut tables: Vec<Table> = vec![];
+//   for db in databases {
+//     // Then get the actual tables.
+//     let rows = conn
+//       .read_query_rows(
+//         format!(
+//           "SELECT sql FROM {db}.{SQLITE_SCHEMA_TABLE} WHERE type = 'table'",
+//           db = db.name
+//         ),
+//         (),
+//       )
+//       .await?;
+//
+//     for row in rows.iter() {
+//       let sql: String = row.get(0)?;
+//       let Some(stmt) = parse_into_statement(&sql)? else {
+//         return Err(SchemaLookupError::Missing);
+//       };
+//       tables.push({
+//         let mut table: Table = stmt.try_into()?;
+//         table.name.database_schema = Some(db.name.clone());
+//         table
+//       });
+//     }
+//   }
+//
+//   return Ok(tables);
+// }
 
 pub fn lookup_and_parse_all_table_schemas_sync(
   conn: &rusqlite::Connection,
@@ -172,38 +172,38 @@ fn sqlite3_parse_view(sql: &str, tables: &[Table]) -> Result<View, SchemaLookupE
   }
 }
 
-pub async fn lookup_and_parse_all_view_schemas(
-  conn: &trailbase_sqlite::Connection,
-  tables: &[Table],
-) -> Result<Vec<View>, SchemaLookupError> {
-  let databases = conn.list_databases().await?;
-
-  let mut views: Vec<View> = vec![];
-  for db in databases {
-    // Then get the actual views.
-    let rows = conn
-      .read_query_rows(
-        format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'view'"),
-        (),
-      )
-      .await?;
-
-    for row in rows.iter() {
-      let sql: String = row.get(0)?;
-      match sqlite3_parse_view(&sql, tables) {
-        Ok(mut view) => {
-          view.name.database_schema = Some(db.name.clone());
-          views.push(view);
-        }
-        Err(err) => {
-          error!("Failed to parse VIEW definition '{sql}': {err}");
-        }
-      }
-    }
-  }
-
-  return Ok(views);
-}
+// pub async fn lookup_and_parse_all_view_schemas(
+//   conn: &trailbase_sqlite::Connection,
+//   tables: &[Table],
+// ) -> Result<Vec<View>, SchemaLookupError> {
+//   let databases = conn.list_databases().await?;
+//
+//   let mut views: Vec<View> = vec![];
+//   for db in databases {
+//     // Then get the actual views.
+//     let rows = conn
+//       .read_query_rows(
+//         format!("SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'view'"),
+//         (),
+//       )
+//       .await?;
+//
+//     for row in rows.iter() {
+//       let sql: String = row.get(0)?;
+//       match sqlite3_parse_view(&sql, tables) {
+//         Ok(mut view) => {
+//           view.name.database_schema = Some(db.name.clone());
+//           views.push(view);
+//         }
+//         Err(err) => {
+//           error!("Failed to parse VIEW definition '{sql}': {err}");
+//         }
+//       }
+//     }
+//   }
+//
+//   return Ok(views);
+// }
 
 pub fn lookup_and_parse_all_view_schemas_sync(
   conn: &rusqlite::Connection,
@@ -238,59 +238,63 @@ pub fn lookup_and_parse_all_view_schemas_sync(
 
 // Install file column triggers. This ain't pretty, this might be better on construction and
 // schema changes.
-async fn setup_file_deletion_triggers(
-  conn: &trailbase_sqlite::Connection,
-  metadata: &ConnectionMetadata,
-) -> Result<(), SchemaLookupError> {
-  for metadata in metadata.tables.values() {
-    for idx in metadata.json_metadata.file_column_indexes() {
-      let table_name = &metadata.schema.name;
-      let unqualified_name = &metadata.schema.name.name;
-      let db = metadata
-        .schema
-        .name
-        .database_schema
-        .as_deref()
-        .unwrap_or("main");
+// async fn setup_file_deletion_triggers(
+//   conn: &trailbase_sqlite::Connection,
+//   metadata: &ConnectionMetadata,
+// ) -> Result<(), SchemaLookupError> {
+//   for metadata in metadata.tables.values() {
+//     for idx in metadata.json_metadata.file_column_indexes() {
+//       let table_name = &metadata.schema.name;
+//       let unqualified_name = &metadata.schema.name.name;
+//       let db = metadata
+//         .schema
+//         .name
+//         .database_schema
+//         .as_deref()
+//         .unwrap_or("main");
+//
+//       if db != "main" {
+//         // FIXME: TRIGGERS are always database-local. Thus every database with tables
+//         // with file columns would need its own _file_deletions table to track pending
+//         // deletions.
+//         return Err(SchemaLookupError::Other(
+//           "File columns not (yet) supported on attached databases".into(),
+//         ));
+//       }
+//
+//       let col = &metadata.schema.columns[*idx];
+//       let column_name = &col.name;
+//
+//       conn.execute_batch(indoc::formatdoc!(
+//           r#"
+//           DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger";
+//           CREATE TRIGGER IF NOT EXISTS
+// "{db}"."__{unqualified_name}__{column_name}__update_trigger" AFTER UPDATE ON {table_name}
+//             WHEN OLD."{column_name}" IS NOT NULL AND OLD."{column_name}" != NEW."{column_name}"
+//             BEGIN
+//               INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
+//                 ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+//             END;
+//
+//           DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger";
+//           CREATE TRIGGER IF NOT EXISTS
+// "{db}"."__{unqualified_name}__{column_name}__delete_trigger" AFTER DELETE ON {table_name}
+//             WHEN OLD."{column_name}" IS NOT NULL
+//             BEGIN
+//               INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
+//                 ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
+//             END;
+//           "#,
+//           table_name = table_name.escaped_string(),
+//         )).await?;
+//     }
+//   }
+//
+//   return Ok(());
+// }
 
-      if db != "main" {
-        // FIXME: TRIGGERS are always database-local. Thus every database with tables
-        // with file columns would need its own _file_deletions table to track pending
-        // deletions.
-        return Err(SchemaLookupError::Other(
-          "File columns not (yet) supported on attached databases".into(),
-        ));
-      }
-
-      let col = &metadata.schema.columns[*idx];
-      let column_name = &col.name;
-
-      conn.execute_batch(indoc::formatdoc!(
-          r#"
-          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger";
-          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger" AFTER UPDATE ON {table_name}
-            WHEN OLD."{column_name}" IS NOT NULL AND OLD."{column_name}" != NEW."{column_name}"
-            BEGIN
-              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
-                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
-            END;
-
-          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger";
-          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger" AFTER DELETE ON {table_name}
-            WHEN OLD."{column_name}" IS NOT NULL
-            BEGIN
-              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
-                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
-            END;
-          "#,
-          table_name = table_name.escaped_string(),
-        )).await?;
-    }
-  }
-
-  return Ok(());
-}
-
+// Install file column triggers. This ain't pretty, this might be better on construction and
+// schema changes.
 fn setup_file_deletion_triggers_sync(
   conn: &rusqlite::Connection,
   metadata: &ConnectionMetadata,
