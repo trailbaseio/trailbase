@@ -11,6 +11,7 @@ use reactivate::Reactive;
 use rusqlite::hooks::{Action, PreUpdateCase};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::pin::Pin;
 use std::sync::{
   Arc,
@@ -22,7 +23,7 @@ use trailbase_schema::QualifiedName;
 use trailbase_schema::json::value_to_flat_json;
 use trailbase_sqlite::connection::{extract_record_values, extract_row_id};
 
-use crate::AppState;
+use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::records::RecordApi;
 use crate::records::filter::{
@@ -50,7 +51,7 @@ struct SubscriptionId {
 /// e.g. client disconnects.
 struct CleanupSubscription {
   receiver: WeakReceiver<Event>,
-  state: AppState,
+  state: Arc<PerConnectionState>,
   id: SubscriptionId,
 }
 
@@ -61,11 +62,11 @@ impl Drop for CleanupSubscription {
       return;
     }
 
-    let mgr_state = self.state.subscription_manager().state.clone();
     let id = std::mem::take(&mut self.id);
 
-    self.state.conn().call_and_forget(move |conn| {
-      mgr_state.remove_subscription(conn, id);
+    let state = self.state.clone();
+    self.state.conn.call_and_forget(move |conn| {
+      state.remove_subscription(conn, id);
     });
   }
 }
@@ -127,42 +128,32 @@ pub struct Subscription {
   /// Name of the API this subscription is subscribed to. We need to lookup the Record API on the
   /// hot path to make sure we're getting the latest configuration.
   record_api_name: String,
-
   /// User associated with subscriber.
   user: Option<User>,
   /// Channel for sending events to the SSE handler.
   sender: async_channel::Sender<Event>,
-
   /// Filter
   filter: Filter,
 }
 
-/// Internal, shareable state of the cloneable SubscriptionManager.
-struct ManagerState {
-  /// SQLite connection to monitor.
-  /// FIXME: Tied to "main" DB.
-  conn: trailbase_sqlite::Connection,
-  /// Table metadata for mapping column indexes to column names needed for building JSON encoded
-  /// records.
-  connection_metadata: Reactive<Arc<ConnectionMetadata>>,
-  /// Record API configurations.
-  record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
+struct PerConnectionState {
+  conn: Arc<trailbase_sqlite::Connection>,
 
+  connection_metadata: RwLock<Arc<ConnectionMetadata>>,
+  record_apis: RwLock<HashMap<String, RecordApi>>,
+
+  // QUESTION: Could intrusive maps really streamline the livecycle management of subscriptions?
   /// Map from table name to row id to list of subscriptions.
-  record_subscriptions: RwLock<HashMap<QualifiedName, HashMap<i64, Vec<Subscription>>>>,
+  record_subscriptions:
+    RwLock<HashMap</* table_name= */ QualifiedName, HashMap<i64, Vec<Subscription>>>>,
 
   /// Map from table name to table subscriptions.
-  table_subscriptions: RwLock<HashMap<QualifiedName, Vec<Subscription>>>,
+  table_subscriptions: RwLock<HashMap</* table_name= */ QualifiedName, Vec<Subscription>>>,
 }
 
-impl ManagerState {
+impl PerConnectionState {
   fn lookup_record_api(&self, name: &str) -> Option<RecordApi> {
-    for (record_api_name, record_api) in self.record_apis.value().iter() {
-      if record_api_name == name {
-        return Some(record_api.clone());
-      }
-    }
-    return None;
+    return self.record_apis.read().get(name).cloned();
   }
 
   fn remove_subscription(&self, conn: &rusqlite::Connection, id: SubscriptionId) {
@@ -207,268 +198,12 @@ impl ManagerState {
       }
     }
   }
-}
 
-#[derive(Clone)]
-pub struct SubscriptionManager {
-  state: Arc<ManagerState>,
-}
+  fn add_hook(self: &Arc<Self>, api: RecordApi) {
+    let conn = api.conn().clone();
+    let state = self.clone();
 
-struct ContinuationState {
-  state: Arc<ManagerState>,
-  action: RecordAction,
-  table_name: QualifiedName,
-  rowid: i64,
-  record_values: Vec<rusqlite::types::Value>,
-}
-
-impl SubscriptionManager {
-  pub fn new(
-    conn: trailbase_sqlite::Connection,
-    connection_metadata: Reactive<Arc<ConnectionMetadata>>,
-    record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
-  ) -> Self {
-    return Self {
-      state: Arc::new(ManagerState {
-        conn,
-        connection_metadata,
-        record_apis,
-
-        record_subscriptions: RwLock::new(HashMap::new()),
-        table_subscriptions: RwLock::new(HashMap::new()),
-      }),
-    };
-  }
-
-  #[cfg(test)]
-  pub fn num_record_subscriptions(&self) -> usize {
-    let mut count: usize = 0;
-    for table in self.state.record_subscriptions.read().values() {
-      for record in table.values() {
-        count += record.len();
-      }
-    }
-    return count;
-  }
-
-  #[cfg(test)]
-  pub fn num_table_subscriptions(&self) -> usize {
-    let mut count: usize = 0;
-    for table in self.state.table_subscriptions.read().values() {
-      count += table.len();
-    }
-    return count;
-  }
-
-  fn broker_subscriptions(
-    s: &ManagerState,
-    conn: &rusqlite::Connection,
-    subs: &[Subscription],
-    record_subscriptions: bool,
-    record: &indexmap::IndexMap<&str, rusqlite::types::Value>,
-    event: &Event,
-  ) -> Vec<usize> {
-    let mut dead_subscriptions: Vec<usize> = vec![];
-    for (idx, sub) in subs.iter().enumerate() {
-      let Some(api) = s.lookup_record_api(&sub.record_api_name) else {
-        dead_subscriptions.push(idx);
-        sub.sender.close();
-        continue;
-      };
-
-      if let Err(_err) = api.check_record_level_read_access_for_subscriptions(
-        conn,
-        SubscriptionAclParams {
-          params: record,
-          user: sub.user.as_ref(),
-        },
-      ) {
-        if record_subscriptions {
-          // This can happen if the record api configuration has changed since originally
-          // subscribed. In this case we just send and error and cancel the subscription.
-          if let Ok(ev) = Event::default().json_data(DbEvent::Error("Access denied".into())) {
-            let _ = sub.sender.try_send(ev);
-          }
-
-          dead_subscriptions.push(idx);
-          sub.sender.close();
-        }
-        continue;
-      }
-
-      if let Filter::Record(ref filter) = sub.filter
-        && !apply_filter_recursively_to_record(filter, record)
-      {
-        continue;
-      }
-
-      if let Err(err) = sub.sender.try_send(event.clone()) {
-        match err {
-          async_channel::TrySendError::Full(ev) => {
-            warn!("Channel full, dropping event: {ev:?}");
-          }
-          async_channel::TrySendError::Closed(_ev) => {
-            dead_subscriptions.push(idx);
-            sub.sender.close();
-          }
-        }
-      }
-    }
-
-    return dead_subscriptions;
-  }
-
-  /// Continuation of the preupdate hook being scheduled on the executor.
-  fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
-    let ContinuationState {
-      state,
-      table_name,
-      action,
-      rowid,
-      record_values,
-    } = s;
-
-    // If table_metadata is missing, the config/schema must have changed, thus removing the
-    // subscriptions.
-    let connection_metadata = state.connection_metadata.value();
-    let Some(table_metadata) = connection_metadata.get_table(&table_name) else {
-      warn!("Table not found: {table_name:?}. Removing subscriptions");
-
-      let mut record_subs = state.record_subscriptions.write();
-      record_subs.remove(&table_name);
-
-      let mut table_subs = state.table_subscriptions.write();
-      table_subs.remove(&table_name);
-
-      if record_subs.is_empty() && table_subs.is_empty() {
-        conn.preupdate_hook(NO_HOOK);
-      }
-
-      return;
-    };
-
-    // Join values with column names.
-    let record: indexmap::IndexMap<&str, rusqlite::types::Value> = record_values
-      .into_iter()
-      .enumerate()
-      .map(|(idx, v)| (table_metadata.schema.columns[idx].name.as_str(), v))
-      .collect();
-
-    // Build a JSON-encoded SQLite event (insert, update, delete).
-    let event = {
-      let json_value = serde_json::Value::Object(
-        record
-          .iter()
-          .filter_map(|(name, value)| {
-            if let Ok(v) = value_to_flat_json(value) {
-              return Some(((*name).to_string(), v));
-            };
-            return None;
-          })
-          .collect(),
-      );
-
-      let db_event = match action {
-        RecordAction::Delete => DbEvent::Delete(Some(json_value)),
-        RecordAction::Insert => DbEvent::Insert(Some(json_value)),
-        RecordAction::Update => DbEvent::Update(Some(json_value)),
-      };
-
-      let Ok(event) = Event::default().json_data(db_event) else {
-        return;
-      };
-
-      event
-    };
-
-    'record_subs: {
-      let mut read_lock = state.record_subscriptions.upgradable_read();
-      let Some(subs) = read_lock.get(&table_name).and_then(|m| m.get(&rowid)) else {
-        break 'record_subs;
-      };
-
-      let dead_subscriptions =
-        Self::broker_subscriptions(&state, conn, subs, true, &record, &event);
-      if dead_subscriptions.is_empty() && action != RecordAction::Delete {
-        // No cleanup needed.
-        break 'record_subs;
-      }
-
-      read_lock.with_upgraded(|subscriptions| {
-        let Some(table_subscriptions) = subscriptions.get_mut(&table_name) else {
-          return;
-        };
-
-        if action == RecordAction::Delete {
-          // Also drops the channel and thus automatically closes the SSE connection.
-          table_subscriptions.remove(&rowid);
-
-          if table_subscriptions.is_empty() {
-            subscriptions.remove(&table_name);
-            if subscriptions.is_empty() && state.table_subscriptions.read().is_empty() {
-              conn.preupdate_hook(NO_HOOK);
-            }
-          }
-
-          return;
-        }
-
-        if let Some(m) = table_subscriptions.get_mut(&rowid) {
-          for idx in dead_subscriptions.iter().rev() {
-            m.swap_remove(*idx);
-          }
-
-          if m.is_empty() {
-            table_subscriptions.remove(&rowid);
-
-            if table_subscriptions.is_empty() {
-              subscriptions.remove(&table_name);
-              if subscriptions.is_empty() && state.table_subscriptions.read().is_empty() {
-                conn.preupdate_hook(NO_HOOK);
-              }
-            }
-          }
-        }
-      });
-    }
-
-    'table_subs: {
-      let mut read_lock = state.table_subscriptions.upgradable_read();
-      let Some(subs) = read_lock.get(&table_name) else {
-        break 'table_subs;
-      };
-
-      let dead_subscriptions =
-        Self::broker_subscriptions(&state, conn, subs, false, &record, &event);
-      if dead_subscriptions.is_empty() && action != RecordAction::Delete {
-        // No cleanup needed.
-        break 'table_subs;
-      }
-
-      read_lock.with_upgraded(|subscriptions| {
-        let Some(table_subscriptions) = subscriptions.get_mut(&table_name) else {
-          return;
-        };
-
-        for idx in dead_subscriptions.iter().rev() {
-          table_subscriptions.swap_remove(*idx);
-        }
-
-        if table_subscriptions.is_empty() {
-          subscriptions.remove(&table_name);
-
-          if subscriptions.is_empty() && state.record_subscriptions.read().is_empty() {
-            conn.preupdate_hook(NO_HOOK);
-          }
-        }
-      });
-    }
-  }
-
-  fn add_hook(&self) {
-    let state = self.state.clone();
-
-    self.state.conn.write_lock().preupdate_hook(Some(
+    api.conn().write_lock().preupdate_hook(Some(
       move |action: Action, db: &str, table_name: &str, case: &PreUpdateCase| {
         let action: RecordAction = match action {
           Action::SQLITE_UPDATE | Action::SQLITE_INSERT | Action::SQLITE_DELETE => action.into(),
@@ -511,8 +246,8 @@ impl SubscriptionManager {
 
         let s = ContinuationState {
           state: state.clone(),
-          action,
           table_name: qualified_table_name,
+          action,
           rowid,
           record_values,
         };
@@ -520,26 +255,26 @@ impl SubscriptionManager {
         // TODO: Optimization: in cases where there's only table-level access restrictions, we
         // could avoid the continuation and even dispatch the subscription handling to a
         // different thread entirely to take more work off the SQLite thread.
-        state.conn.call_and_forget(move |conn| {
-          Self::hook_continuation(conn, s);
+        conn.call_and_forget(move |conn| {
+          hook_continuation(conn, s);
         });
       },
     ));
   }
 
   async fn add_record_subscription(
-    &self,
-    app_state: AppState,
+    self: Arc<Self>,
     api: RecordApi,
     record: trailbase_sqlite::Value,
     user: Option<User>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
     let table_name = api.table_name();
+    let qualified_table_name = api.qualified_name().clone();
+
     let pk_column = &api.record_pk_column().1.name;
 
-    let Some(row_id): Option<i64> = self
-      .state
-      .conn
+    let Some(row_id): Option<i64> = api
+      .conn()
       .read_query_row_f(
         format!(r#"SELECT _rowid_ FROM {table_name} WHERE "{pk_column}" = $1"#),
         [record],
@@ -554,7 +289,7 @@ impl SubscriptionManager {
 
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let install_hook: bool = {
-      let mut lock = self.state.record_subscriptions.write();
+      let mut lock = self.record_subscriptions.write();
       let empty = lock.is_empty();
 
       let m: &mut HashMap<i64, Vec<Subscription>> =
@@ -573,7 +308,7 @@ impl SubscriptionManager {
     };
 
     if install_hook {
-      self.add_hook();
+      self.add_hook(api);
     }
 
     // Send an immediate comment to flush SSE headers and establish the connection
@@ -584,9 +319,9 @@ impl SubscriptionManager {
     return Ok(AutoCleanupEventStream {
       cleanup: CleanupSubscription {
         receiver: receiver.downgrade(),
-        state: app_state,
+        state: self,
         id: SubscriptionId {
-          table_name: api.qualified_name().clone(),
+          table_name: qualified_table_name,
           row_id: Some(row_id),
           sub_id: subscription_id,
         },
@@ -596,13 +331,12 @@ impl SubscriptionManager {
   }
 
   async fn add_table_subscription(
-    &self,
-    app_state: AppState,
+    self: Arc<Self>,
     api: RecordApi,
     user: Option<User>,
     filter: Option<trailbase_qs::ValueOrComposite>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
-    let state = &self.state;
+    let table_name = api.qualified_name().clone();
 
     let filter = if let Some(filter) = filter {
       Filter::Record(qs_filter_to_record_filter(api.columns(), filter)?)
@@ -613,8 +347,8 @@ impl SubscriptionManager {
     let (sender, receiver) = async_channel::bounded::<Event>(16);
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let install_hook: bool = {
-      let mut lock = state.table_subscriptions.write();
-      let empty = lock.is_empty() && state.record_subscriptions.read().is_empty();
+      let mut lock = self.table_subscriptions.write();
+      let empty = lock.is_empty() && self.record_subscriptions.read().is_empty();
       let m: &mut Vec<Subscription> = lock.entry(api.qualified_name().clone()).or_default();
 
       m.push(Subscription {
@@ -629,7 +363,7 @@ impl SubscriptionManager {
     };
 
     if install_hook {
-      self.add_hook();
+      self.add_hook(api);
     }
 
     // Send an immediate comment to flush SSE headers and establish the connection
@@ -640,14 +374,388 @@ impl SubscriptionManager {
     return Ok(AutoCleanupEventStream {
       cleanup: CleanupSubscription {
         receiver: receiver.downgrade(),
-        state: app_state,
+        state: self,
         id: SubscriptionId {
-          table_name: api.qualified_name().clone(),
+          table_name,
           row_id: None,
           sub_id: subscription_id,
         },
       },
       receiver,
+    });
+  }
+}
+
+impl Drop for PerConnectionState {
+  fn drop(&mut self) {
+    self
+      .conn
+      .call_and_forget(|conn| conn.preupdate_hook(NO_HOOK));
+  }
+}
+
+/// Internal, shareable state of the cloneable SubscriptionManager.
+struct ManagerState {
+  /// Record API configurations.
+  record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
+
+  /// Manages subscriptions for differents databases and connections respectively.
+  connections: RwLock<HashMap</* db_name= */ String, Arc<PerConnectionState>>>,
+}
+
+impl ManagerState {
+  // NOTE: we're currently looking up APIs on the hot-path because we don't have life-cycle to
+  // update subscriptions when API config or schema changes :/.
+  // fn lookup_record_api(&self, name: &str) -> Option<RecordApi> {
+  //   let mut r: Option<RecordApi> = None;
+  //   self
+  //     .record_apis
+  //     .with_value(|apis| r = apis.get(name).cloned());
+  //   return r;
+  // }
+}
+
+#[derive(Clone)]
+pub struct SubscriptionManager {
+  state: Arc<ManagerState>,
+}
+
+struct ContinuationState {
+  state: Arc<PerConnectionState>,
+  table_name: QualifiedName,
+  action: RecordAction,
+  rowid: i64,
+  record_values: Vec<rusqlite::types::Value>,
+}
+
+fn filter_record_apis(db: &str, record_apis: &[(String, RecordApi)]) -> HashMap<String, RecordApi> {
+  return record_apis
+    .iter()
+    .flat_map(|(name, api)| {
+      if !api.enable_subscriptions() {
+        return None;
+      }
+
+      if api
+        .qualified_name()
+        .database_schema
+        .as_deref()
+        .unwrap_or("main")
+        == db
+      {
+        return Some((name.to_string(), api.clone()));
+      }
+
+      return None;
+    })
+    .collect();
+}
+
+impl SubscriptionManager {
+  pub fn new(record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>) -> Self {
+    let state = Arc::new(ManagerState {
+      record_apis: record_apis.clone(),
+      connections: RwLock::new(HashMap::new()),
+    });
+
+    {
+      let state = state.clone();
+      record_apis.add_observer(move |record_apis| {
+        // FIXME:: We need to do some more bookkeeping, e.g. remove pre-update hooks for no
+        // longer existing APIs or APIs which are no-longer subscribable.
+
+        let connections = state.connections.read();
+        for (db_name, state) in connections.iter() {
+          let apis = filter_record_apis(db_name, record_apis);
+
+          if let Some(first) = apis.values().nth(0) {
+            *state.connection_metadata.write() = first.connection_metadata().clone();
+          }
+          *state.record_apis.write() = apis;
+        }
+      });
+    }
+
+    return Self { state };
+  }
+
+  async fn add_table_subscription(
+    &self,
+    api: RecordApi,
+    user: Option<User>,
+    filter: Option<trailbase_qs::ValueOrComposite>,
+  ) -> Result<AutoCleanupEventStream, RecordError> {
+    let table_name = api.qualified_name();
+    let db = table_name.database_schema.as_deref().unwrap_or("main");
+
+    return self
+      .get_per_connection_state(db, &api)
+      .add_table_subscription(api, user, filter)
+      .await;
+  }
+
+  async fn add_record_subscription(
+    &self,
+    api: RecordApi,
+    record: trailbase_sqlite::Value,
+    user: Option<User>,
+  ) -> Result<AutoCleanupEventStream, RecordError> {
+    let table_name = api.qualified_name();
+    let db = table_name.database_schema.as_deref().unwrap_or("main");
+
+    return self
+      .get_per_connection_state(db, &api)
+      .add_record_subscription(api, record, user)
+      .await;
+  }
+
+  fn get_per_connection_state(&self, db: &str, api: &RecordApi) -> Arc<PerConnectionState> {
+    let mut lock = self.state.connections.upgradable_read();
+    if let Some(state) = lock.get(db) {
+      return state.clone();
+    }
+
+    return lock.with_upgraded(|m| {
+      return match m.entry(db.to_string()) {
+        Entry::Occupied(v) => v.get().clone(),
+        Entry::Vacant(v) => {
+          let state = Arc::new(PerConnectionState {
+            conn: api.conn().clone(),
+            connection_metadata: RwLock::new(api.connection_metadata().clone()),
+            record_apis: RwLock::new(filter_record_apis(db, &self.state.record_apis.value())),
+            table_subscriptions: RwLock::new(HashMap::new()),
+            record_subscriptions: RwLock::new(HashMap::new()),
+          });
+          v.insert(state).clone()
+        }
+      };
+    });
+  }
+
+  #[cfg(test)]
+  pub fn num_record_subscriptions(&self) -> usize {
+    let mut count: usize = 0;
+    for state in self.state.connections.read().values() {
+      for table in state.record_subscriptions.read().values() {
+        for record in table.values() {
+          count += record.len();
+        }
+      }
+    }
+    return count;
+  }
+
+  #[cfg(test)]
+  pub fn num_table_subscriptions(&self) -> usize {
+    let mut count: usize = 0;
+    for state in self.state.connections.read().values() {
+      for table in state.table_subscriptions.read().values() {
+        count += table.len();
+      }
+    }
+    return count;
+  }
+}
+
+fn broker_subscriptions(
+  s: &PerConnectionState,
+  conn: &rusqlite::Connection,
+  subs: &[Subscription],
+  record_subscriptions: bool,
+  record: &indexmap::IndexMap<&str, rusqlite::types::Value>,
+  event: &Event,
+) -> Vec<usize> {
+  let mut dead_subscriptions: Vec<usize> = vec![];
+  for (idx, sub) in subs.iter().enumerate() {
+    let Some(api) = s.lookup_record_api(&sub.record_api_name) else {
+      dead_subscriptions.push(idx);
+      sub.sender.close();
+      continue;
+    };
+
+    if let Err(_err) = api.check_record_level_read_access_for_subscriptions(
+      conn,
+      SubscriptionAclParams {
+        params: record,
+        user: sub.user.as_ref(),
+      },
+    ) {
+      if record_subscriptions {
+        // This can happen if the record api configuration has changed since originally
+        // subscribed. In this case we just send and error and cancel the subscription.
+        if let Ok(ev) = Event::default().json_data(DbEvent::Error("Access denied".into())) {
+          let _ = sub.sender.try_send(ev);
+        }
+
+        dead_subscriptions.push(idx);
+        sub.sender.close();
+      }
+      continue;
+    }
+
+    if let Filter::Record(ref filter) = sub.filter
+      && !apply_filter_recursively_to_record(filter, record)
+    {
+      continue;
+    }
+
+    if let Err(err) = sub.sender.try_send(event.clone()) {
+      match err {
+        async_channel::TrySendError::Full(ev) => {
+          warn!("Channel full, dropping event: {ev:?}");
+        }
+        async_channel::TrySendError::Closed(_ev) => {
+          dead_subscriptions.push(idx);
+          sub.sender.close();
+        }
+      }
+    }
+  }
+
+  return dead_subscriptions;
+}
+
+/// Continuation of the pre-update hook being scheduled on the executor.
+fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
+  let ContinuationState {
+    state,
+    table_name,
+    action,
+    rowid,
+    record_values,
+  } = s;
+
+  // If table_metadata is missing, the config/schema must have changed, thus removing the
+  // subscriptions.
+  let lock = state.connection_metadata.read();
+  let Some(table_metadata) = lock.get_table(&table_name) else {
+    warn!("Table not found: {table_name:?}. Removing subscriptions");
+
+    let mut record_subs = state.record_subscriptions.write();
+    record_subs.remove(&table_name);
+
+    let mut table_subs = state.table_subscriptions.write();
+    table_subs.remove(&table_name);
+
+    if record_subs.is_empty() && table_subs.is_empty() {
+      conn.preupdate_hook(NO_HOOK);
+    }
+
+    return;
+  };
+
+  // Join values with column names.
+  let record: indexmap::IndexMap<&str, rusqlite::types::Value> = record_values
+    .into_iter()
+    .enumerate()
+    .map(|(idx, v)| (table_metadata.schema.columns[idx].name.as_str(), v))
+    .collect();
+
+  // Build a JSON-encoded SQLite event (insert, update, delete).
+  let event = {
+    let json_value = serde_json::Value::Object(
+      record
+        .iter()
+        .filter_map(|(name, value)| {
+          if let Ok(v) = value_to_flat_json(value) {
+            return Some(((*name).to_string(), v));
+          };
+          return None;
+        })
+        .collect(),
+    );
+
+    let db_event = match action {
+      RecordAction::Delete => DbEvent::Delete(Some(json_value)),
+      RecordAction::Insert => DbEvent::Insert(Some(json_value)),
+      RecordAction::Update => DbEvent::Update(Some(json_value)),
+    };
+
+    let Ok(event) = Event::default().json_data(db_event) else {
+      return;
+    };
+
+    event
+  };
+
+  'record_subs: {
+    let mut read_lock = state.record_subscriptions.upgradable_read();
+    let Some(subs) = read_lock.get(&table_name).and_then(|m| m.get(&rowid)) else {
+      break 'record_subs;
+    };
+
+    let dead_subscriptions = broker_subscriptions(&state, conn, subs, true, &record, &event);
+    if dead_subscriptions.is_empty() && action != RecordAction::Delete {
+      // No cleanup needed.
+      break 'record_subs;
+    }
+
+    read_lock.with_upgraded(|subscriptions| {
+      let Some(table_subscriptions) = subscriptions.get_mut(&table_name) else {
+        return;
+      };
+
+      if action == RecordAction::Delete {
+        // Also drops the channel and thus automatically closes the SSE connection.
+        table_subscriptions.remove(&rowid);
+
+        if table_subscriptions.is_empty() {
+          subscriptions.remove(&table_name);
+          if subscriptions.is_empty() && state.table_subscriptions.read().is_empty() {
+            conn.preupdate_hook(NO_HOOK);
+          }
+        }
+
+        return;
+      }
+
+      if let Some(m) = table_subscriptions.get_mut(&rowid) {
+        for idx in dead_subscriptions.iter().rev() {
+          m.swap_remove(*idx);
+        }
+
+        if m.is_empty() {
+          table_subscriptions.remove(&rowid);
+
+          if table_subscriptions.is_empty() {
+            subscriptions.remove(&table_name);
+            if subscriptions.is_empty() && state.table_subscriptions.read().is_empty() {
+              conn.preupdate_hook(NO_HOOK);
+            }
+          }
+        }
+      }
+    });
+  }
+
+  'table_subs: {
+    let mut read_lock = state.table_subscriptions.upgradable_read();
+    let Some(subs) = read_lock.get(&table_name) else {
+      break 'table_subs;
+    };
+
+    let dead_subscriptions = broker_subscriptions(&state, conn, subs, false, &record, &event);
+    if dead_subscriptions.is_empty() && action != RecordAction::Delete {
+      // No cleanup needed.
+      break 'table_subs;
+    }
+
+    read_lock.with_upgraded(|subscriptions| {
+      let Some(table_subscriptions) = subscriptions.get_mut(&table_name) else {
+        return;
+      };
+
+      for idx in dead_subscriptions.iter().rev() {
+        table_subscriptions.swap_remove(*idx);
+      }
+
+      if table_subscriptions.is_empty() {
+        subscriptions.remove(&table_name);
+
+        if subscriptions.is_empty() && state.record_subscriptions.read().is_empty() {
+          conn.preupdate_hook(NO_HOOK);
+        }
+      }
     });
   }
 }
@@ -690,7 +798,7 @@ pub async fn add_subscription_sse_handler(
 
     let receiver = state
       .subscription_manager()
-      .add_table_subscription(state.clone(), api, user, filter)
+      .add_table_subscription(api, user, filter)
       .await?;
 
     return Ok(Sse::new(receiver).keep_alive(KeepAlive::default()));
@@ -702,7 +810,7 @@ pub async fn add_subscription_sse_handler(
 
     let receiver = state
       .subscription_manager()
-      .add_record_subscription(state.clone(), api, record_id, user)
+      .add_record_subscription(api, record_id, user)
       .await?;
 
     return Ok(Sse::new(receiver).keep_alive(KeepAlive::default()));
@@ -814,12 +922,7 @@ mod tests {
     let manager = state.subscription_manager();
     let api = state.lookup_record_api("api_name").unwrap();
     let stream = manager
-      .add_record_subscription(
-        state.clone(),
-        api,
-        trailbase_sqlite::Value::Integer(0),
-        None,
-      )
+      .add_record_subscription(api, trailbase_sqlite::Value::Integer(0), None)
       .await
       .unwrap();
 
@@ -894,7 +997,7 @@ mod tests {
 
     {
       let stream = manager
-        .add_table_subscription(state.clone(), api, None, None)
+        .add_table_subscription(api, None, None)
         .await
         .unwrap();
 
@@ -1170,7 +1273,6 @@ mod tests {
     {
       let user_x_subscription = manager
         .add_table_subscription(
-          state.clone(),
           api.clone(),
           User::from_auth_token(&state, &user_x_token.auth_token),
           None,
@@ -1187,7 +1289,6 @@ mod tests {
 
       let user_y_subscription = manager
         .add_table_subscription(
-          state.clone(),
           api.clone(),
           User::from_auth_token(&state, &user_y_token.auth_token),
           None,
@@ -1280,12 +1381,7 @@ mod tests {
     let manager = state.subscription_manager();
     let api = state.lookup_record_api("api_name").unwrap();
     let stream = manager
-      .add_record_subscription(
-        state.clone(),
-        api,
-        trailbase_sqlite::Value::Integer(record_id),
-        user_x,
-      )
+      .add_record_subscription(api, trailbase_sqlite::Value::Integer(record_id), user_x)
       .await
       .unwrap();
 
@@ -1358,7 +1454,7 @@ mod tests {
         FilterQuery::parse("filter[$and][0][id][$gt]=5&filter[$and][1][id][$lt]=100").unwrap();
 
       let stream = manager
-        .add_table_subscription(state.clone(), api, None, Some(filter.filter.unwrap()))
+        .add_table_subscription(api, None, Some(filter.filter.unwrap()))
         .await
         .unwrap();
 

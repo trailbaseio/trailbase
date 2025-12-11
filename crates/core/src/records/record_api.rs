@@ -354,11 +354,11 @@ impl RecordApi {
     return &self.state.schema.table_name;
   }
 
-  pub fn conn(&self) -> &trailbase_sqlite::Connection {
+  pub fn conn(&self) -> &Arc<trailbase_sqlite::Connection> {
     return &self.state.conn;
   }
 
-  pub fn connection_metadata(&self) -> &ConnectionMetadata {
+  pub fn connection_metadata(&self) -> &Arc<ConnectionMetadata> {
     return &self.state.metadata;
   }
 

@@ -113,14 +113,6 @@ impl AppState {
       proxy
     };
 
-    let subscription_manager_connection_metadata = {
-      let connection_manager = args.connection_manager.clone();
-
-      derive_unchecked(&proxy, move |_proxy| {
-        return connection_manager.main_entry().metadata.clone();
-      })
-    };
-
     let record_apis = {
       let connection_manager = args.connection_manager.clone();
       let m = (&config, &proxy).merge();
@@ -215,12 +207,7 @@ impl AppState {
         logs_conn: args.logs_conn,
         connection_manager: args.connection_manager,
         jwt: args.jwt,
-        // FIXME: Subscription manager multi-DB wiring.
-        subscription_manager: SubscriptionManager::new(
-          (*main_conn).clone(),
-          subscription_manager_connection_metadata,
-          record_apis,
-        ),
+        subscription_manager: SubscriptionManager::new(record_apis),
         object_store,
         wasm_runtimes: build_wasm_runtime()
           .expect("startup")
@@ -604,14 +591,6 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     proxy
   };
 
-  let subscription_manager_connection_metadata = {
-    let connection_manager = connection_manager.clone();
-
-    derive_unchecked(&proxy, move |_proxy| {
-      return connection_manager.main_entry().metadata.clone();
-    })
-  };
-
   let record_apis: Reactive<Arc<Vec<(String, RecordApi)>>> = {
     let connection_manager = connection_manager.clone();
     let m = (&config, &proxy).merge();
@@ -652,11 +631,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       logs_conn,
       connection_manager,
       jwt: crate::auth::jwt::test_jwt_helper(),
-      subscription_manager: SubscriptionManager::new(
-        conn.clone(),
-        subscription_manager_connection_metadata,
-        record_apis,
-      ),
+      subscription_manager: SubscriptionManager::new(record_apis),
       object_store,
       wasm_runtimes: vec![],
       build_wasm_runtimes: Box::new(|| Ok(vec![])),
@@ -666,7 +641,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 }
 
 // Unlike Reactive::derive, doesn't require PartialEq.
-fn derive_unchecked<T, U: Clone + Send + 'static>(
+pub(crate) fn derive_unchecked<T, U: Clone + Send + 'static>(
   reactive: &Reactive<T>,
   f: impl Fn(&T) -> U + Send + 'static,
 ) -> Reactive<U>
