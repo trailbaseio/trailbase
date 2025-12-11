@@ -1,12 +1,11 @@
-use std::borrow::Borrow;
-
 use itertools::Itertools;
 use trailbase_schema::QualifiedName;
-use trailbase_schema::metadata::TableOrView;
+use trailbase_schema::metadata::TableOrViewMetadata;
 use trailbase_schema::parse::parse_into_statement;
-use trailbase_schema::sqlite::{ColumnOption, Table, View};
+use trailbase_schema::sqlite::ColumnOption;
 
 use crate::config::{ConfigError, proto};
+use crate::connection::{ConnectionEntry, ConnectionManager};
 
 fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
   if name.is_empty() {
@@ -22,9 +21,8 @@ fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
   Ok(())
 }
 
-pub(crate) fn validate_record_api_config<T: Borrow<Table>, V: Borrow<View>>(
-  tables: &[T],
-  views: &[V],
+pub(crate) fn validate_record_api_config(
+  connection_manager: &ConnectionManager,
   api_config: &proto::RecordApiConfig,
   databases: &[proto::DatabaseConfig],
 ) -> Result<String, ConfigError> {
@@ -57,38 +55,41 @@ pub(crate) fn validate_record_api_config<T: Borrow<Table>, V: Borrow<View>>(
     }
   }
 
-  let metadata: TableOrView = {
-    let table_name = QualifiedName::parse(table_name)?;
+  // FIXME: should respect databases.
+  let table_name = QualifiedName::parse(table_name)?;
+  let ConnectionEntry { metadata, .. } =
+    connection_manager
+      .get_entry_for_qn(&table_name)
+      .map_err(|err| {
+        return invalid(format!("Missing table or view for API: {err}"));
+      })?;
 
-    if let Some(table) = tables.iter().find(|t| (*t).borrow().name == table_name) {
-      if table.borrow().temporary {
-        return Err(invalid("Record APIs must not reference TEMPORARY tables"));
-      }
-
-      TableOrView::Table(table.borrow())
-    } else if let Some(view) = views.iter().find(|v| (*v).borrow().name == table_name) {
-      if view.borrow().temporary {
-        return Err(invalid("Record APIs must not reference TEMPORARY views"));
-      }
-
-      TableOrView::View(view.borrow())
-    } else if table_name.database_schema.is_none() {
-      return Err(invalid(format!(
-        "Missing table or view for API: {api_name}"
-      )));
-    } else {
-      // FIXME: We're not validating against non-main databases.
-      return Ok(api_name.to_owned());
-    }
+  let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
+    return Err(invalid(format!(
+      "Missing table or view for API: {api_name}"
+    )));
   };
 
-  let Some((pk_index, _)) = metadata.record_pk_column(tables) else {
+  match table_or_view {
+    TableOrViewMetadata::Table(table) => {
+      if table.schema.temporary {
+        return Err(invalid("Record APIs must not reference TEMPORARY tables"));
+      }
+    }
+    TableOrViewMetadata::View(view) => {
+      if view.schema.temporary {
+        return Err(invalid("Record APIs must not reference TEMPORARY views"));
+      }
+    }
+  }
+
+  let Some((pk_index, _)) = table_or_view.record_pk_column() else {
     return Err(invalid(format!(
       "Table for api '{api_name}' is missing valid integer/UUID primary key column."
     )));
   };
 
-  let Some(columns) = metadata.columns() else {
+  let Some(columns) = table_or_view.columns() else {
     return Err(invalid(format!(
       "View for api '{api_name}' is not a \"simple\" view, i.e unable to infer types for strong type-safety"
     )));
@@ -152,18 +153,13 @@ pub(crate) fn validate_record_api_config<T: Borrow<Table>, V: Borrow<View>>(
     }
 
     let fq_foreign_table_name = QualifiedName::parse(foreign_table_name)?;
-    let Some(foreign_table) = tables
-      .iter()
-      .find(|t| (*t).borrow().name == fq_foreign_table_name)
-    else {
+    let Some(foreign_table) = metadata.get_table(&fq_foreign_table_name) else {
       return Err(invalid(format!(
         "{api_name} reference missing table: {foreign_table_name}"
       )));
     };
 
-    let Some((_idx, foreign_pk_column)) =
-      TableOrView::Table(foreign_table.borrow()).record_pk_column(tables)
-    else {
+    let Some((_idx, foreign_pk_column)) = foreign_table.record_pk_column() else {
       return Err(invalid(format!(
         "{api_name} references pk-less table: {foreign_table_name}"
       )));

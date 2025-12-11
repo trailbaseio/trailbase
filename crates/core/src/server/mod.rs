@@ -274,13 +274,11 @@ impl Server {
           if let Err(err) = state.rebuild_connection_metadata().await {
             error!("Failed to invalidate schema cache: {err}");
           }
-          let metadata = state.connection_metadata();
 
           // Reload config:
           match crate::config::load_or_init_config_textproto(
             state.data_dir(),
-            &metadata.tables(),
-            &metadata.views(),
+            &state.connection_manager(),
           )
           .await
           {

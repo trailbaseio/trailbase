@@ -69,6 +69,10 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     trailbase_schema::registry::build_json_schema_registry(vec![])?,
   ));
 
+  if let Some(config) = crate::config::maybe_load_config_textproto_unverified(&args.data_dir)? {
+    update_json_schema_registry(&config.schemas, &json_schema_registry)?;
+  }
+
   let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
     args.data_dir.root().join("wasm"),
     args.runtime_root_fs.as_deref(),
@@ -85,16 +89,6 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
 
   let tables = lookup_and_parse_all_table_schemas(&conn).await?;
   let views = lookup_and_parse_all_view_schemas(&conn, &tables).await?;
-
-  // Read config or write default one. Ensures config is validated.
-  let config = {
-    let config = load_or_init_config_textproto(&args.data_dir, &tables, &views).await?;
-    update_json_schema_registry(&config, &json_schema_registry)?;
-    config
-  };
-
-  // Load the `<depot>/metadata.textproto`.
-  let _metadata = load_or_init_metadata_textproto(&args.data_dir).await?;
 
   let connection_metadata = Arc::new(
     build_connection_metadata_and_install_file_deletion_triggers(
@@ -113,6 +107,12 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     json_schema_registry.clone(),
     sync_wasm_runtimes,
   );
+
+  // Read config or write default one. Ensures config is validated.
+  let config = load_or_init_config_textproto(&args.data_dir, &connection_manager).await?;
+
+  // Load the `<depot>/metadata.textproto`.
+  let _metadata = load_or_init_metadata_textproto(&args.data_dir).await?;
 
   let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
 

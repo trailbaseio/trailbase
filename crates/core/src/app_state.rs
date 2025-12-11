@@ -9,7 +9,9 @@ use trailbase_schema::QualifiedName;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
-use crate::config::proto::{Config, RecordApiConfig, S3StorageConfig, hash_config};
+use crate::config::proto::{
+  Config, JsonSchemaConfig, RecordApiConfig, S3StorageConfig, hash_config,
+};
 use crate::config::{ConfigError, validate_config, write_config_and_vault_textproto};
 use crate::connection::ConnectionManager;
 use crate::data_dir::DataDir;
@@ -279,6 +281,8 @@ impl AppState {
   pub async fn rebuild_connection_metadata(
     &self,
   ) -> Result<(), crate::schema_metadata::SchemaLookupError> {
+    self.state.connection_manager.write().rebuild_metadata()?;
+
     let tables = lookup_and_parse_all_table_schemas(self.conn()).await?;
     let views = lookup_and_parse_all_view_schemas(self.conn(), &tables).await?;
 
@@ -289,7 +293,7 @@ impl AppState {
     // reject anything.
     let config = self.get_config();
     // TODO: validate_config should receive ConnectionManager to validate all APIs.
-    validate_config(&tables, &views, &config).map_err(|err| {
+    validate_config(&self.state.connection_manager.read(), &config).map_err(|err| {
       log::error!("Schema change invalidated config: {err}");
       return crate::schema_metadata::SchemaLookupError::Other(err.into());
     })?;
@@ -306,8 +310,6 @@ impl AppState {
       .state
       .connection_metadata
       .set(Arc::new(connection_metadata));
-
-    self.state.connection_manager.write().rebuild_metadata()?;
 
     return Ok(());
   }
@@ -366,8 +368,8 @@ impl AppState {
     config: Config,
     hash: Option<String>,
   ) -> Result<(), ConfigError> {
-    let metadata = self.connection_metadata();
-    validate_config(&metadata.tables(), &metadata.views(), &config)?;
+    let connection_manager = self.connection_manager();
+    validate_config(&connection_manager, &config)?;
 
     match hash {
       Some(hash) => {
@@ -397,7 +399,8 @@ impl AppState {
     let new_config = self.get_config();
 
     {
-      if update_json_schema_registry(&new_config, &self.state.json_schema_registry).unwrap_or(true)
+      if update_json_schema_registry(&new_config.schemas, &self.state.json_schema_registry)
+        .unwrap_or(true)
         && let Err(err) = self.rebuild_connection_metadata().await
       {
         log::warn!("reloading JSON schema cache failed: {err}");
@@ -405,14 +408,7 @@ impl AppState {
     }
 
     // Write new config to the file system.
-    let metadata = self.connection_metadata();
-    return write_config_and_vault_textproto(
-      self.data_dir(),
-      &metadata.tables(),
-      &metadata.views(),
-      &new_config,
-    )
-    .await;
+    return write_config_and_vault_textproto(self.data_dir(), &connection_manager, &new_config);
   }
 
   pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<Runtime>>] {
@@ -457,12 +453,11 @@ impl AppState {
 
 /// Returns true if schemas were registered.
 pub(crate) fn update_json_schema_registry(
-  config: &Config,
+  config: &[JsonSchemaConfig],
   registry: &parking_lot::RwLock<JsonSchemaRegistry>,
 ) -> Result<bool, ConfigError> {
-  if !config.schemas.is_empty() {
+  if !config.is_empty() {
     let schemas: Vec<_> = config
-      .schemas
       .iter()
       .map(|s| {
         // Any panics here should be captured by config validation during load above.
@@ -560,6 +555,10 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     json_schema_registry
       .unwrap_or_else(|| trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap()),
   ));
+
+  let config = config.unwrap_or_else(test_config);
+  update_json_schema_registry(&config.schemas, &json_schema_registry).unwrap();
+
   let (conn, new) =
     crate::connection::init_main_db(None, Some(json_schema_registry.clone()), vec![], vec![])?;
   assert!(new);
@@ -568,14 +567,6 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 
   let tables = lookup_and_parse_all_table_schemas(&conn).await?;
   let views = lookup_and_parse_all_view_schemas(&conn, &tables).await?;
-
-  let config = {
-    let config = config.unwrap_or_else(test_config);
-    validate_config(&tables, &views, &config).unwrap();
-    update_json_schema_registry(&config, &json_schema_registry).unwrap();
-
-    Reactive::new(config)
-  };
 
   let connection_metadata = Arc::new(
     build_connection_metadata_and_install_file_deletion_triggers(
@@ -614,6 +605,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     build_objectstore(&data_dir, None).unwrap().into()
   };
 
+  let config = Reactive::new(config);
   let connection_metadata = Reactive::new(connection_metadata);
   let record_apis: Reactive<Arc<Vec<(String, RecordApi)>>> = {
     let connection_manager = connection_manager.clone();

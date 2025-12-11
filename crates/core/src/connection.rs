@@ -74,11 +74,12 @@ struct ConnectionManagerState {
 // NOTE: Performance-wise it's beneficial to share Connections to benefit from its internal locking
 // instead of relying on SQLite's own file locking.
 #[derive(Clone)]
-pub(crate) struct ConnectionManager {
+pub struct ConnectionManager {
   state: Arc<ConnectionManagerState>,
 }
 
 impl ConnectionManager {
+  // TODO: We should ultimately only use this in tests - probably.
   pub(crate) fn new(
     main_connection: Connection,
     main_metadata: Arc<ConnectionMetadata>,
@@ -98,6 +99,38 @@ impl ConnectionManager {
         connections: quick_cache::sync::Cache::new(256),
       }),
     };
+  }
+
+  pub(crate) fn new_wo_main(
+    data_dir: DataDir,
+    json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+    sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
+  ) -> Result<(Self, bool), ConnectionError> {
+    let (main_conn, new_db) = init_main_db_impl(
+      Some(&data_dir),
+      Some(json_schema_registry.clone()),
+      vec![],
+      sqlite_function_runtimes.clone(),
+      true,
+    )?;
+
+    let main_metadata = build_metadata(&main_conn.write_lock(), &json_schema_registry)?;
+
+    return Ok((
+      Self {
+        state: Arc::new(ConnectionManagerState {
+          data_dir,
+          json_schema_registry,
+          sqlite_function_runtimes,
+          main: RwLock::new(ConnectionEntry {
+            connection: Arc::new(main_conn),
+            metadata: Arc::new(main_metadata),
+          }),
+          connections: quick_cache::sync::Cache::new(256),
+        }),
+      },
+      new_db,
+    ));
   }
 
   pub(crate) fn main(&self) -> Arc<Connection> {
@@ -193,7 +226,7 @@ impl ConnectionManager {
       vec![]
     };
 
-    let (conn, _new_db) = crate::connection::init_main_db_impl(
+    let (conn, _new_db) = init_main_db_impl(
       if main {
         Some(&self.state.data_dir)
       } else {
