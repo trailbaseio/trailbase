@@ -4,7 +4,7 @@ use parking_lot::Mutex;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
-use trailbase_refinery::Migration;
+use trailbase_refinery::{Error as RefineryError, Migration};
 use walkdir::{DirEntry, WalkDir};
 
 const MIGRATION_TABLE_NAME: &str = "_schema_history";
@@ -46,15 +46,14 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refine
 pub(crate) fn apply_main_migrations(
   conn: &mut rusqlite::Connection,
   base_migrations_path: Option<impl AsRef<Path>>,
-) -> Result<bool, trailbase_refinery::Error> {
+) -> Result<bool, RefineryError> {
   let mut migrations = vec![
     load_embedded_migrations::<BaseMigrations>(),
     load_embedded_migrations::<MainMigrations>(),
   ];
   if let Some(path) = base_migrations_path {
-    if let Ok(user_migrations) = load_sql_migrations(path.as_ref().join("main"), true) {
-      migrations.push(user_migrations);
-    }
+    // Ignore when `<traildepot>/migrations/main/` is missing.
+    migrations.push(maybe_load_sql_migrations(path.as_ref().join("main"), true)?);
 
     // Legacy: all *.sql files in migrations.
     migrations.push(load_sql_migrations(path, false)?);
@@ -66,21 +65,19 @@ pub(crate) fn apply_base_migrations(
   conn: &mut rusqlite::Connection,
   base_migrations_path: Option<impl AsRef<Path>>,
   db: &str,
-) -> Result<bool, trailbase_refinery::Error> {
+) -> Result<bool, RefineryError> {
   let mut migrations = vec![load_embedded_migrations::<BaseMigrations>()];
-  if let Some(path) = base_migrations_path
-    && let Ok(user_migrations) = load_sql_migrations(path.as_ref().join(db), true)
-  {
-    println!("USER MIGRATIONS: {user_migrations:?}");
-
-    migrations.push(user_migrations);
+  // TODO: Should we handle load_sql_migrations error?
+  if let Some(path) = base_migrations_path {
+    // Ignore when `<traildepot>/migrations/main/` is missing.
+    migrations.push(maybe_load_sql_migrations(path.as_ref().join(db), true)?);
   }
   return apply_migrations(db, conn, migrations);
 }
 
 pub(crate) fn apply_logs_migrations(
   logs_conn: &mut rusqlite::Connection,
-) -> Result<(), trailbase_refinery::Error> {
+) -> Result<(), RefineryError> {
   apply_migrations(
     "logs",
     logs_conn,
@@ -93,7 +90,7 @@ pub(crate) fn apply_migrations(
   name: &str,
   conn: &mut rusqlite::Connection,
   migrations: Vec<Vec<Migration>>,
-) -> Result<bool, trailbase_refinery::Error> {
+) -> Result<bool, RefineryError> {
   let migrations: Vec<Migration> = migrations.into_iter().flatten().sorted().collect();
 
   let runner = new_migration_runner(&migrations);
@@ -142,12 +139,30 @@ fn log_migrations(db_name: &str, migrations: &[Migration]) {
   }
 }
 
-/// Loads SQL migrations from a path. This enables dynamic migration discovery, as opposed to
-/// embedding. The resulting collection is ordered by version.
-pub(crate) fn load_sql_migrations(
+// Just like `load_sql_migrations` but ignores missing paths.
+fn maybe_load_sql_migrations(
   location: impl AsRef<Path>,
   recursive: bool,
-) -> Result<Vec<Migration>, trailbase_refinery::Error> {
+) -> Result<Vec<Migration>, RefineryError> {
+  return match load_sql_migrations(location, recursive) {
+    Err(err)
+      if matches!(
+        err.kind(),
+        trailbase_refinery::error::Kind::InvalidMigrationPath(_, _)
+      ) =>
+    {
+      return Ok(vec![]);
+    }
+    resp => resp,
+  };
+}
+
+/// Loads SQL migrations from a path. This enables dynamic migration discovery, as opposed to
+/// embedding. The resulting collection is ordered by version.
+fn load_sql_migrations(
+  location: impl AsRef<Path>,
+  recursive: bool,
+) -> Result<Vec<Migration>, RefineryError> {
   use trailbase_refinery::{Error, error::Kind};
 
   let mut migrations = find_migration_files(location, recursive)?
@@ -165,7 +180,7 @@ pub(crate) fn load_sql_migrations(
       let filename = path
         .file_stem()
         .and_then(|file| file.to_os_string().into_string().ok())
-        .ok_or_else(|| trailbase_refinery::Error::new(Kind::InvalidName, None))?;
+        .ok_or_else(|| RefineryError::new(Kind::InvalidName, None))?;
 
       return Migration::unapplied(&filename, &sql);
     })
@@ -185,20 +200,26 @@ static SQL_FILE_RE: LazyLock<regex::Regex> =
 fn find_migration_files(
   location: impl AsRef<Path>,
   recursive: bool,
-) -> Result<impl Iterator<Item = PathBuf>, trailbase_refinery::Error> {
+) -> Result<impl Iterator<Item = PathBuf>, RefineryError> {
   use trailbase_refinery::error::Kind;
 
   let location: &Path = location.as_ref();
   let location = location.canonicalize().map_err(|err| {
-    trailbase_refinery::Error::new(
+    RefineryError::new(
       Kind::InvalidMigrationPath(location.to_path_buf(), err),
       None,
     )
   })?;
 
-  // NOTE: Don't load recursively.
+  let max_depth = if recursive {
+    usize::MAX
+  } else {
+    // Don't load recursively.
+    1
+  };
+
   let file_paths = WalkDir::new(location)
-    .max_depth(if recursive {usize::MAX} else {1})
+    .max_depth(max_depth)
     .into_iter()
     .filter_map(Result::ok)
     .map(DirEntry::into_path)
@@ -243,3 +264,18 @@ struct MainMigrations;
 #[derive(Clone, rust_embed::RustEmbed)]
 #[folder = "migrations/logs"]
 struct LogsMigrations;
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_load_sql_migrations() {
+    assert!(load_sql_migrations("__non-existent-path__", true).is_err());
+    assert!(
+      maybe_load_sql_migrations("__non-existent-path__", true)
+        .unwrap()
+        .is_empty()
+    );
+  }
+}

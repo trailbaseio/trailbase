@@ -39,7 +39,7 @@ export default defineConfig({
         await query("SELECT id FROM _user WHERE email = 'admin@localhost'", [])
       )[0][0];
 
-      console.info("user id:", userId);
+      console.info("[print from WASM guest] user id:", userId);
 
       const now = Date.now().toString();
       const numInsertions = await execute(

@@ -190,8 +190,7 @@ pub async fn get_uploaded_file_from_record_handler(
     &pk_column.name,
     record_id,
   )
-  .await
-  .map_err(|err| RecordError::Internal(err.into()))?;
+  .await?;
 
   return read_file_into_response(&state, file_upload)
     .await
@@ -242,8 +241,7 @@ pub async fn get_uploaded_files_from_record_handler(
     &api.record_pk_column().1.name,
     record_id,
   )
-  .await
-  .map_err(|err| RecordError::Internal(err.into()))?;
+  .await?;
 
   let file_upload = file_uploads
     .into_iter()
