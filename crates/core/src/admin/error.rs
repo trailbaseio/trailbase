@@ -1,7 +1,6 @@
 use axum::body::Body;
 use axum::http::{StatusCode, header::CONTENT_TYPE};
 use axum::response::{IntoResponse, Response};
-use log::*;
 use thiserror::Error;
 
 // FIXME: Admin APIs also deserve more explicit error handling eventually.

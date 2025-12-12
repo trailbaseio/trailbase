@@ -10,7 +10,6 @@ mod oidc;
 pub(crate) mod test;
 
 use lazy_static::lazy_static;
-use log::*;
 use std::collections::hash_map::HashMap;
 use thiserror::Error;
 

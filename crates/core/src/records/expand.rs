@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use log::*;
 use rusqlite::types;
 use std::collections::HashMap;
 use thiserror::Error;
