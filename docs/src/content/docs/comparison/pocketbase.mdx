@@ -95,6 +95,7 @@ just what you're after 😅.
 Despite being the new kid on the block, TrailBase has a few nifty tricks up its
 sleeve:
 
+- Support for multiple independent SQLite DBs [^6].
 - Language independent bindings via JSON-schema with strict type-safety
   being enforced from the client all the way to the database[^4].
 - A WASM runtime, supporting multiple guest languages for custom endpoints and
@@ -160,3 +161,6 @@ flexibility and performance matter.
     Depends a lot on the guest language and the specific taks in question. 140x
     is what we measured in heavy computational tasks comparing Goja with
     Rust->WASM. It's apples to oranges, yet practically applicable.
+
+[^6]:
+    This can aid with physical separation and offer a path to overcoming potential locking bottlenecks.
