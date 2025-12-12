@@ -1,3 +1,23 @@
+## v0.22.0
+
+- Multi-DB support 🎉: record APIs can be backed by `TABLE`/`VIEW`s in independent DBs. This can help with physical isolation and offer a path when encountering locking bottlenecks.
+  - This change includes:
+    - Config-driven DB life-cycle management, i.e. creation, migrations, ... .
+    - Generalized connection management.
+    - Per-DB file-upload/life-cycle management.
+    - Multi-DB subscription "realtime" management.
+    - End-to-end tests.
+  - Limitations:
+    - SQLite does not allow for `FOREIGN KEY`s and `TRIGGER`s to cross DB boundaries. However `JOIN`s, etc. are perfectly capable of crossing DB boundaries.
+    - The implemented management of independent connections allows for an arbitrary number of DBs despite SQLite's limit of 125 DBs per connection. However, `VIEW`s executed within the context of a connection are still subject to this limit.
+  - Documentation is TBD :hide:, see `<repo>/client/testfixture/config.textproto` for an example.
+    - DBs are mapped to `<traildepot>/data/<name>.db` and `<traildepot>/migrations/<name>/`.
+  - This change doesn't introduce a notion of multi-tenancy, e.g.: create and route per-tenant DBs based on schema templates.
+  - This was a big change, please reach out for any issues or feedback. 🙏
+- Changed Record API's default behavior to run batches w/o transactions unless requested.
+- Improved errors for file-handling record APIs.
+- Update Rust (latest stable: 1.92) and dependencies.
+
 ## v0.21.11
 
 - Pre-built binary releases:
