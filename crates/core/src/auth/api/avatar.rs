@@ -139,8 +139,8 @@ pub async fn delete_avatar_handler(
     static ref SQL: String = format!("DELETE FROM {AVATAR_TABLE} WHERE user = ?1");
   }
 
-  state
-    .conn()
+  let main_conn = state.connection_manager().main_entry().connection;
+  main_conn
     .execute(&*SQL, [rusqlite::types::Value::Blob(user.uuid.into())])
     .await?;
 

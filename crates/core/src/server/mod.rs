@@ -249,9 +249,13 @@ impl Server {
           // Re-apply migrations. This needs to happen before reloading the config, which is
           // consistent with the startup order. Otherwise, we may validate a configuration
           // against a stale database schema.
+          //
+          // TODO: Right now we're only re-applying main migrations.
           let user_migrations_path = state.data_dir().migrations_path();
           match state
-            .conn()
+            .connection_manager()
+            .main_entry()
+            .connection
             .call(|conn: &mut rusqlite::Connection| {
               return crate::migrations::apply_main_migrations(conn, Some(user_migrations_path))
                 .map_err(|err| trailbase_sqlite::Error::Other(err.into()));

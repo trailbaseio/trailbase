@@ -40,6 +40,7 @@ fn get_conn_and_migration_path(
       Ok((
         trailbase_sqlite::Connection::new(
           move || {
+            // TODO: We should load WASM SQLite functions, since migrations may depend on them.
             return trailbase_extension::connect_sqlite(
               Some(db_path.clone()),
               Some(json_registry.clone()),
@@ -52,7 +53,7 @@ fn get_conn_and_migration_path(
       ))
     }
     _ => Ok((
-      state.conn().clone(),
+      (*state.connection_manager().main_entry().connection).clone(),
       (state.data_dir().migrations_path().join("main")),
     )),
   };

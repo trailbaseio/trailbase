@@ -2,6 +2,7 @@ use axum::extract::{Json, State};
 use axum::http::StatusCode;
 use axum_test::TestServer;
 use axum_test::multipart::MultipartForm;
+use std::sync::Arc;
 use tower_cookies::Cookie;
 use trailbase_sqlite::params;
 
@@ -12,7 +13,7 @@ use trailbase::constants::{COOKIE_AUTH_TOKEN, RECORD_API_PATH};
 use trailbase::util::id_to_b64;
 use trailbase::{DataDir, Server, ServerOptions};
 
-pub(crate) async fn add_record_api_config(
+async fn add_record_api_config(
   state: &AppState,
   api: RecordApiConfig,
 ) -> Result<(), anyhow::Error> {
@@ -54,13 +55,13 @@ async fn test_record_apis() {
   assert!(admin_router.is_none());
   assert!(tls.is_none());
 
-  let conn = state.conn();
+  let conn = state.connection_manager().main_entry().connection;
   let logs_conn = state.logs_conn();
 
-  create_chat_message_app_tables(conn).await.unwrap();
+  create_chat_message_app_tables(&conn).await.unwrap();
   state.rebuild_connection_metadata().await.unwrap();
 
-  let room = add_room(conn, "room0").await.unwrap();
+  let room = add_room(&conn, "room0").await.unwrap();
   let password = "Secret!1!!";
   let client_ip = "22.11.22.11";
 
@@ -89,7 +90,7 @@ async fn test_record_apis() {
     .await
     .unwrap();
 
-  add_user_to_room(conn, user_x, room).await.unwrap();
+  add_user_to_room(&conn, user_x, room).await.unwrap();
 
   #[allow(unused_mut)]
   let (_address, mut router) = main_router;
@@ -261,8 +262,8 @@ async fn test_record_apis() {
   assert_eq!(status, 200);
 }
 
-pub async fn create_chat_message_app_tables(
-  conn: &trailbase_sqlite::Connection,
+async fn create_chat_message_app_tables(
+  conn: &Arc<trailbase_sqlite::Connection>,
 ) -> Result<(), anyhow::Error> {
   // Create a messages, chat room and members tables.
   conn
@@ -299,8 +300,8 @@ pub async fn create_chat_message_app_tables(
   return Ok(());
 }
 
-pub async fn add_room(
-  conn: &trailbase_sqlite::Connection,
+async fn add_room(
+  conn: &Arc<trailbase_sqlite::Connection>,
   name: &str,
 ) -> Result<[u8; 16], anyhow::Error> {
   let room: [u8; 16] = conn
@@ -315,8 +316,8 @@ pub async fn add_room(
   return Ok(room);
 }
 
-pub async fn add_user_to_room(
-  conn: &trailbase_sqlite::Connection,
+async fn add_user_to_room(
+  conn: &Arc<trailbase_sqlite::Connection>,
   user: [u8; 16],
   room: [u8; 16],
 ) -> Result<(), anyhow::Error> {
@@ -329,7 +330,7 @@ pub async fn add_user_to_room(
   return Ok(());
 }
 
-pub(crate) async fn create_user_for_test(
+async fn create_user_for_test(
   state: &AppState,
   email: &str,
   password: &str,

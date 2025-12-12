@@ -248,6 +248,7 @@ impl AppState {
     return &self.state.json_schema_registry;
   }
 
+  #[cfg(test)]
   pub fn conn(&self) -> &trailbase_sqlite::Connection {
     return &self.state.conn;
   }
@@ -260,7 +261,7 @@ impl AppState {
     return &self.state.logs_conn;
   }
 
-  pub(crate) fn connection_manager(&self) -> ConnectionManager {
+  pub fn connection_manager(&self) -> ConnectionManager {
     return self.state.connection_manager.clone();
   }
 

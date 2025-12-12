@@ -55,7 +55,7 @@ struct ConnectionKey {
 }
 
 #[derive(Clone)]
-pub(crate) struct ConnectionEntry {
+pub struct ConnectionEntry {
   pub connection: Arc<Connection>,
   pub metadata: Arc<ConnectionMetadata>,
 }
@@ -157,7 +157,7 @@ impl ConnectionManager {
   //   return self.state.main.read().connection.clone();
   // }
 
-  pub(crate) fn main_entry(&self) -> ConnectionEntry {
+  pub fn main_entry(&self) -> ConnectionEntry {
     return self.state.main.read().clone();
   }
 
@@ -169,7 +169,7 @@ impl ConnectionManager {
   //   return Ok(self.get_entry(main, attached_databases)?.connection);
   // }
 
-  pub(crate) fn get_entry(
+  pub fn get_entry(
     &self,
     main: bool,
     attached_databases: Option<BTreeSet<String>>,
@@ -206,7 +206,7 @@ impl ConnectionManager {
     };
   }
 
-  pub(crate) fn get_entry_for_qn(
+  pub fn get_entry_for_qn(
     &self,
     name: &trailbase_schema::QualifiedName,
   ) -> Result<ConnectionEntry, ConnectionError> {
