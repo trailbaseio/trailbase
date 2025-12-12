@@ -18,8 +18,8 @@ base64 = { workspace = true }
 jsonschema = { version = "0.37.1", default-features = false }
 log = "0.4.27"
 maxminddb = "0.27.0"
-mini-moka = "0.10.3"
 parking_lot = { workspace = true }
+quick_cache = "0.6.18"
 regex = "1.11.0"
 rusqlite = { workspace = true }
 serde = { workspace = true }
