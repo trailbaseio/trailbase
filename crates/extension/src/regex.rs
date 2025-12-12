@@ -1,4 +1,4 @@
-use mini_moka::sync::Cache;
+use quick_cache::sync::Cache;
 use regex::Regex;
 use rusqlite::Error;
 use rusqlite::functions::Context;

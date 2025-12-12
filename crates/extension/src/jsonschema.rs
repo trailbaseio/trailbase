@@ -1,5 +1,5 @@
 use jsonschema::Validator;
-use mini_moka::sync::Cache;
+use quick_cache::sync::Cache;
 use rusqlite::Error;
 use rusqlite::functions::Context;
 use std::collections::HashMap;
