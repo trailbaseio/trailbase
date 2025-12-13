@@ -149,6 +149,7 @@ impl ConnectionManager {
     };
   }
 
+  // Gets called when the metadata was updated.
   pub(crate) fn add_observer(&self, o: impl Fn() + Send + Sync + 'static) {
     self.state.observers.lock().push(Box::new(o));
   }
@@ -261,16 +262,21 @@ impl ConnectionManager {
     return Ok(Arc::new(conn));
   }
 
+  // Updates connection metadata for cached connections.
   pub(crate) fn rebuild_metadata(&self) -> Result<(), ConnectionError> {
-    let new_metadata = Arc::new(build_metadata(
-      &self.state.main.read().connection.write_lock(),
-      &self.state.json_schema_registry,
-    )?);
+    // Main
+    {
+      let new_metadata = Arc::new(build_metadata(
+        &self.state.main.read().connection.write_lock(),
+        &self.state.json_schema_registry,
+      )?);
 
-    self.state.main.write().metadata = new_metadata;
+      self.state.main.write().metadata = new_metadata;
+    }
 
+    // Others:
     for (key, entry) in self.state.connections.iter() {
-      let metadata = Arc::new(build_metadata(
+      let new_metadata = Arc::new(build_metadata(
         &entry.connection.write_lock(),
         &self.state.json_schema_registry,
       )?);
@@ -279,7 +285,7 @@ impl ConnectionManager {
         key,
         ConnectionEntry {
           connection: entry.connection.clone(),
-          metadata,
+          metadata: new_metadata,
         },
         true,
       );

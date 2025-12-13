@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::borrow::Cow;
 
 use crate::connection::{Connection, Database, Error, Options, extract_row_id};
-use crate::{Value, ValueType, named_params, params};
+use crate::{Value, ValueType};
 use rusqlite::ErrorCode;
 
 #[tokio::test]
@@ -347,6 +347,15 @@ async fn test_execute_batch_error() {
     .await;
 
   assert!(result.is_err(), "{result:?}");
+}
+
+#[tokio::test]
+async fn test_identity() {
+  let conn0 = Connection::open_in_memory().unwrap();
+  let conn1 = Connection::open_in_memory().unwrap();
+
+  assert_ne!(conn0, conn1);
+  assert_eq!(conn0, conn0.clone());
 }
 
 #[test]

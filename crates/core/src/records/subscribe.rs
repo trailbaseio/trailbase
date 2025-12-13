@@ -10,8 +10,7 @@ use pin_project_lite::pin_project;
 use reactivate::Reactive;
 use rusqlite::hooks::{Action, PreUpdateCase};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
+use std::collections::{HashMap, hash_map::Entry};
 use std::pin::Pin;
 use std::sync::{
   Arc,
@@ -63,9 +62,12 @@ impl Drop for AutoCleanupEventStreamState {
     if self.receiver.upgrade().is_some() {
       let id = std::mem::take(&mut self.id);
       let state = self.state.clone();
-      self.state.conn.call_and_forget(move |conn| {
-        state.remove_subscription(conn, id);
-      });
+
+      if let Some(first) = self.state.record_apis.read().values().nth(0) {
+        first.conn().call_and_forget(move |conn| {
+          state.remove_subscription(conn, id);
+        });
+      }
     } else {
       debug!("Subscription cleaned up already by the sender side.");
     }
@@ -147,12 +149,11 @@ struct Subscriptions {
 }
 
 struct PerConnectionState {
-  // TODO: Should this be a weak ref?
-  conn: Arc<trailbase_sqlite::Connection>,
-
-  // Metadata: always updated together when config -> record APIs change.
-  connection_metadata: RwLock<Arc<ConnectionMetadata>>,
+  /// Metadata: always updated together when config -> record APIs change.
   record_apis: RwLock<HashMap<String, RecordApi>>,
+  /// Denormalized metadata. We could also grab this from:
+  ///   `record_apis.read().nth(0).unwrap().connection_metadata()`.
+  connection_metadata: RwLock<Arc<ConnectionMetadata>>,
 
   /// Map from table name to row id to list of subscriptions.
   ///
@@ -383,9 +384,11 @@ impl PerConnectionState {
 
 impl Drop for PerConnectionState {
   fn drop(&mut self) {
-    self
-      .conn
-      .call_and_forget(|conn| conn.preupdate_hook(NO_HOOK));
+    if let Some(first) = self.record_apis.read().values().nth(0) {
+      first
+        .conn()
+        .call_and_forget(|conn| conn.preupdate_hook(NO_HOOK));
+    }
   }
 }
 
@@ -394,14 +397,8 @@ struct ManagerState {
   /// Record API configurations.
   record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
 
-  /// Manages subscriptions for differents databases and connections respectively.
-  ///
-  /// TODO: There's a disconnect. Connections can have many db names.
-  /// We should probably:
-  ///  * establish a connection identity so we can establish a RecordAPI to connection mapping
-  ///  * keep only a weak ref to connections (for them to die)
-  ///  * And turn this into a list here.
-  connections: RwLock<HashMap</* db_name= */ String, Arc<PerConnectionState>>>,
+  /// Manages subscriptions for different connections based on `conn.id()`.
+  connections: RwLock<HashMap</* conn id= */ usize, Arc<PerConnectionState>>>,
 }
 
 #[derive(Clone)]
@@ -417,21 +414,17 @@ struct ContinuationState {
   record_values: Vec<rusqlite::types::Value>,
 }
 
-fn filter_record_apis(db: &str, record_apis: &[(String, RecordApi)]) -> HashMap<String, RecordApi> {
+fn filter_record_apis(
+  conn_id: usize,
+  record_apis: &[(String, RecordApi)],
+) -> HashMap<String, RecordApi> {
   return record_apis
     .iter()
     .flat_map(|(name, api)| {
       if !api.enable_subscriptions() {
         return None;
       }
-
-      if api
-        .qualified_name()
-        .database_schema
-        .as_deref()
-        .unwrap_or("main")
-        == db
-      {
+      if api.conn().id() == conn_id {
         return Some((name.to_string(), api.clone()));
       }
 
@@ -450,17 +443,31 @@ impl SubscriptionManager {
     {
       let state = state.clone();
       record_apis.add_observer(move |record_apis| {
-        // FIXME:: We need to do some more bookkeeping, e.g. remove pre-update hooks for no
-        // longer existing APIs or APIs which are no-longer subscribable.
+        // FIXME: Reload currently depends on ConnectionManager's cache to retain **all**
+        // connections. Currently, subscriptions would currently get cancelled when old Connections
+        // get evicted and new ones established. This is when RecordApis get rebuild even if
+        // nothing changed.
+        let mut lock = state.connections.write();
 
-        let connections = state.connections.read();
-        for (db_name, state) in connections.iter() {
-          let apis = filter_record_apis(db_name, record_apis);
+        let mut old: HashMap<usize, Arc<PerConnectionState>> = std::mem::take(&mut lock);
 
-          if let Some(first) = apis.values().nth(0) {
-            *state.connection_metadata.write() = first.connection_metadata().clone();
+        for (_name, api) in record_apis.iter() {
+          if !api.enable_subscriptions() {
+            continue;
           }
-          *state.record_apis.write() = apis;
+
+          let id = api.conn().id();
+          if let Some(existing) = old.remove(&id) {
+            let apis = filter_record_apis(id, record_apis);
+            let Some(first) = apis.values().nth(0) else {
+              continue;
+            };
+
+            // Update metadata and add back.
+            *existing.connection_metadata.write() = first.connection_metadata().clone();
+            *existing.record_apis.write() = apis;
+            lock.insert(id, existing);
+          }
         }
       });
     }
@@ -474,11 +481,8 @@ impl SubscriptionManager {
     user: Option<User>,
     filter: Option<trailbase_qs::ValueOrComposite>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
-    let table_name = api.qualified_name();
-    let db = table_name.database_schema.as_deref().unwrap_or("main");
-
     return self
-      .get_per_connection_state(db, &api)
+      .get_per_connection_state(&api)
       .add_table_subscription(api, user, filter)
       .await;
   }
@@ -489,29 +493,26 @@ impl SubscriptionManager {
     record: trailbase_sqlite::Value,
     user: Option<User>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
-    let table_name = api.qualified_name();
-    let db = table_name.database_schema.as_deref().unwrap_or("main");
-
     return self
-      .get_per_connection_state(db, &api)
+      .get_per_connection_state(&api)
       .add_record_subscription(api, record, user)
       .await;
   }
 
-  fn get_per_connection_state(&self, db: &str, api: &RecordApi) -> Arc<PerConnectionState> {
+  fn get_per_connection_state(&self, api: &RecordApi) -> Arc<PerConnectionState> {
+    let id: usize = api.conn().id();
     let mut lock = self.state.connections.upgradable_read();
-    if let Some(state) = lock.get(db) {
+    if let Some(state) = lock.get(&id) {
       return state.clone();
     }
 
     return lock.with_upgraded(|m| {
-      return match m.entry(db.to_string()) {
+      return match m.entry(id) {
         Entry::Occupied(v) => v.get().clone(),
         Entry::Vacant(v) => {
           let state = Arc::new(PerConnectionState {
-            conn: api.conn().clone(),
             connection_metadata: RwLock::new(api.connection_metadata().clone()),
-            record_apis: RwLock::new(filter_record_apis(db, &self.state.record_apis.value())),
+            record_apis: RwLock::new(filter_record_apis(id, &self.state.record_apis.value())),
             subscriptions: Default::default(),
           });
           v.insert(state).clone()
@@ -898,6 +899,18 @@ mod tests {
       .unwrap();
 
     assert_eq!(1, manager.num_record_subscriptions());
+
+    // Make sure rebuilding connection metadata doesn't drop subscriptions.
+    state.rebuild_connection_metadata().await.unwrap();
+
+    assert_eq!(1, manager.num_record_subscriptions());
+
+    // Make sure updating config doesn't drop subscriptions.
+    state
+      .validate_and_update_config(state.get_config(), None)
+      .await
+      .unwrap();
+
     // First event is "connection established".
     assert!(
       decode_db_event(stream.receiver.recv().await.unwrap())

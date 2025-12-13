@@ -4,11 +4,11 @@ use parking_lot::RwLock;
 use rusqlite::fallible_iterator::FallibleIterator;
 use rusqlite::hooks::PreUpdateCase;
 use rusqlite::types::Value;
+use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
-use std::{
-  fmt::{self, Debug},
-  sync::Arc,
-};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::oneshot;
 
 use crate::error::Error;
@@ -77,6 +77,7 @@ impl Default for Options {
 /// A handle to call functions in background thread.
 #[derive(Clone)]
 pub struct Connection {
+  id: usize,
   reader: Sender<Message>,
   writer: Sender<Message>,
   conns: Arc<RwLock<ConnectionVec>>,
@@ -96,10 +97,9 @@ impl Connection {
     };
 
     let write_conn = new_conn()?;
-    let in_memory = write_conn.path().is_none_or(|s| {
-      // Returns empty string for in-memory databases.
-      return !s.is_empty();
-    });
+    let path = write_conn.path().map(|p| p.to_string());
+    // Returns empty string for in-memory databases.
+    let in_memory = path.as_ref().is_none_or(|s| !s.is_empty());
 
     let n_read_threads: i64 = match (in_memory, opt.as_ref().map_or(0, |o| o.n_read_threads)) {
       (true, _) => {
@@ -165,10 +165,11 @@ impl Connection {
 
     debug!(
       "Opened SQLite DB '{}' with {n_read_threads} reader threads",
-      conns.read().0[0].path().unwrap_or("<in-memory>")
+      path.as_deref().unwrap_or("<in-memory>")
     );
 
     return Ok(Self {
+      id: UNIQUE_CONN_ID.fetch_add(1, Ordering::SeqCst),
       reader: shared_read_sender,
       writer: shared_write_sender,
       conns,
@@ -184,6 +185,7 @@ impl Connection {
     std::thread::spawn(move || event_loop(0, conns_clone, shared_write_receiver));
 
     return Self {
+      id: UNIQUE_CONN_ID.fetch_add(1, Ordering::SeqCst),
       reader: shared_write_sender.clone(),
       writer: shared_write_sender,
       conns,
@@ -199,6 +201,10 @@ impl Connection {
     return Self::new(|| Ok(rusqlite::Connection::open_in_memory()?), None);
   }
 
+  pub fn id(&self) -> usize {
+    return self.id;
+  }
+
   #[inline]
   pub fn write_lock(&self) -> LockGuard<'_> {
     return LockGuard {
@@ -206,20 +212,20 @@ impl Connection {
     };
   }
 
-  #[inline]
-  pub fn try_write_lock_for(&self, duration: tokio::time::Duration) -> Option<LockGuard<'_>> {
-    return self
-      .conns
-      .try_write_for(duration)
-      .map(|guard| LockGuard { guard });
-  }
+  // #[inline]
+  // pub fn try_write_lock_for(&self, duration: tokio::time::Duration) -> Option<LockGuard<'_>> {
+  //   return self
+  //     .conns
+  //     .try_write_for(duration)
+  //     .map(|guard| LockGuard { guard });
+  // }
 
-  #[inline]
-  pub fn write_arc_lock(&self) -> ArcLockGuard {
-    return ArcLockGuard {
-      guard: self.conns.write_arc(),
-    };
-  }
+  // #[inline]
+  // pub fn write_arc_lock(&self) -> ArcLockGuard {
+  //   return ArcLockGuard {
+  //     guard: self.conns.write_arc(),
+  //   };
+  // }
 
   #[inline]
   pub fn try_write_arc_lock_for(&self, duration: tokio::time::Duration) -> Option<ArcLockGuard> {
@@ -545,10 +551,24 @@ impl Connection {
 }
 
 impl Debug for Connection {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_struct("Connection").finish()
   }
 }
+
+impl Hash for Connection {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.id.hash(state);
+  }
+}
+
+impl PartialEq for Connection {
+  fn eq(&self, other: &Self) -> bool {
+    return self.id == other.id;
+  }
+}
+
+impl Eq for Connection {}
 
 fn event_loop(id: usize, conns: Arc<RwLock<ConnectionVec>>, receiver: Receiver<Message>) {
   while let Ok(message) = receiver.recv() {
@@ -660,6 +680,8 @@ pub fn list_databases(conn: &rusqlite::Connection) -> Result<Vec<Database>> {
   }
   return Ok(databases);
 }
+
+static UNIQUE_CONN_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(test)]
 #[path = "tests.rs"]

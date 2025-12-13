@@ -370,7 +370,7 @@ impl AppState {
         }
       }
       None => {
-        self.state.config.set(config);
+        self.state.config.update(|_old| config);
       }
     };
 
