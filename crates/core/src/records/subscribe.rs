@@ -49,25 +49,26 @@ struct SubscriptionId {
 
 /// RAII type for automatically cleaning up subscriptions when the receiving side gets dropped,
 /// e.g. client disconnects.
-struct CleanupSubscription {
+struct AutoCleanupEventStreamState {
   receiver: WeakReceiver<Event>,
   state: Arc<PerConnectionState>,
   id: SubscriptionId,
 }
 
-impl Drop for CleanupSubscription {
+impl Drop for AutoCleanupEventStreamState {
   fn drop(&mut self) {
-    if self.receiver.upgrade().is_none() {
+    // Subscriptions can be cleaned up either by the sender, i.e. when trying to broker events and
+    // tables or records get deleted, or by the client-receiver, e.g. by disconnecting. In the
+    // latter case, we need to clean up the subscription.
+    if self.receiver.upgrade().is_some() {
+      let id = std::mem::take(&mut self.id);
+      let state = self.state.clone();
+      self.state.conn.call_and_forget(move |conn| {
+        state.remove_subscription(conn, id);
+      });
+    } else {
       debug!("Subscription cleaned up already by the sender side.");
-      return;
     }
-
-    let id = std::mem::take(&mut self.id);
-
-    let state = self.state.clone();
-    self.state.conn.call_and_forget(move |conn| {
-      state.remove_subscription(conn, id);
-    });
   }
 }
 
@@ -75,7 +76,7 @@ pin_project! {
   /// Receiver wrapper that knows how to cleanup the corresponding subscription.
   #[must_use = "streams do nothing unless polled"]
   struct AutoCleanupEventStream {
-    cleanup: CleanupSubscription,
+    state: AutoCleanupEventStreamState,
 
     #[pin]
     receiver: async_channel::Receiver<Event>,
@@ -136,19 +137,28 @@ pub struct Subscription {
   filter: Filter,
 }
 
+#[derive(Default)]
+struct Subscriptions {
+  /// A list of table subscriptions for this table.
+  table: Vec<Subscription>,
+
+  /// A map of record subscriptions for this.
+  record: HashMap<i64, Vec<Subscription>>,
+}
+
 struct PerConnectionState {
+  // TODO: Should this be a weak ref?
   conn: Arc<trailbase_sqlite::Connection>,
 
+  // Metadata: always updated together when config -> record APIs change.
   connection_metadata: RwLock<Arc<ConnectionMetadata>>,
   record_apis: RwLock<HashMap<String, RecordApi>>,
 
-  // QUESTION: Could intrusive maps really streamline the livecycle management of subscriptions?
   /// Map from table name to row id to list of subscriptions.
-  record_subscriptions:
-    RwLock<HashMap</* table_name= */ QualifiedName, HashMap<i64, Vec<Subscription>>>>,
-
-  /// Map from table name to table subscriptions.
-  table_subscriptions: RwLock<HashMap</* table_name= */ QualifiedName, Vec<Subscription>>>,
+  ///
+  /// QUESTION: Could intrusive maps help to streamline the subscription life-cycle?
+  /// Tentatively: no. Existing rust implementations don't support auto-unlink.
+  subscriptions: RwLock<HashMap</* table_name= */ QualifiedName, Subscriptions>>,
 }
 
 impl PerConnectionState {
@@ -156,46 +166,34 @@ impl PerConnectionState {
     return self.record_apis.read().get(name).cloned();
   }
 
+  // Gets called by the Stream destructor, e.g. when a client disconnects.
   fn remove_subscription(&self, conn: &rusqlite::Connection, id: SubscriptionId) {
-    if let Some(row_id) = id.row_id {
-      let mut lock = self.record_subscriptions.write();
-      if let Some(subs) = lock
-        .get_mut(&id.table_name)
-        .and_then(|x| x.get_mut(&row_id))
-      {
-        subs.retain(|sub| {
-          return sub.subscription_id != id.sub_id;
-        });
+    let mut lock = self.subscriptions.write();
 
-        if subs.is_empty() {
-          let Some(table) = lock.get_mut(&id.table_name) else {
-            return;
-          };
-          table.remove(&row_id);
+    if let Some(subscriptions) = lock.get_mut(&id.table_name) {
+      if let Some(row_id) = id.row_id {
+        if let Some(record_subscriptions) = subscriptions.record.get_mut(&row_id) {
+          record_subscriptions.retain(|sub| {
+            return sub.subscription_id != id.sub_id;
+          });
 
-          if table.is_empty() {
-            lock.remove(&id.table_name);
-
-            if lock.is_empty() && self.table_subscriptions.read().is_empty() {
-              conn.preupdate_hook(NO_HOOK);
-            }
+          if record_subscriptions.is_empty() {
+            subscriptions.record.remove(&row_id);
           }
         }
-      }
-    } else {
-      let mut lock = self.table_subscriptions.write();
-      if let Some(subs) = lock.get_mut(&id.table_name) {
-        subs.retain(|sub| {
+      } else {
+        subscriptions.table.retain(|sub| {
           return sub.subscription_id != id.sub_id;
         });
-
-        if subs.is_empty() {
-          lock.remove(&id.table_name);
-          if lock.is_empty() && self.record_subscriptions.read().is_empty() {
-            conn.preupdate_hook(NO_HOOK);
-          }
-        }
       }
+
+      if subscriptions.table.is_empty() && subscriptions.record.is_empty() {
+        lock.remove(&id.table_name);
+      }
+    }
+
+    if lock.is_empty() {
+      conn.preupdate_hook(NO_HOOK);
     }
   }
 
@@ -223,20 +221,16 @@ impl PerConnectionState {
           database_schema: Some(db.to_string()),
         };
 
-        // If there are no subscriptions, do nothing.
-        let record_subs_candidate = state
-          .record_subscriptions
-          .read()
-          .get(&qualified_table_name)
-          .and_then(|m| m.get(&rowid))
-          .is_some();
-        let table_subs_candidate = state
-          .table_subscriptions
-          .read()
-          .get(&qualified_table_name)
-          .is_some();
-        if !record_subs_candidate && !table_subs_candidate {
-          return;
+        // If there are no matching subscriptions, skip.
+        {
+          let lock = state.subscriptions.read();
+          let Some(subscriptions) = lock.get(&qualified_table_name) else {
+            return;
+          };
+
+          if subscriptions.table.is_empty() && !subscriptions.record.contains_key(&rowid) {
+            return;
+          }
         }
 
         let Some(record_values) = extract_record_values(case) else {
@@ -289,20 +283,21 @@ impl PerConnectionState {
 
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let install_hook: bool = {
-      let mut lock = self.record_subscriptions.write();
+      let mut lock = self.subscriptions.write();
       let empty = lock.is_empty();
 
-      let m: &mut HashMap<i64, Vec<Subscription>> =
-        lock.entry(api.qualified_name().clone()).or_default();
-
-      m.entry(row_id).or_default().push(Subscription {
-        subscription_id,
-        record_api_name: api.api_name().to_string(),
-        // record_id: Some(record),
-        user,
-        sender: sender.clone(),
-        filter: Filter::Passthrough,
-      });
+      let subscriptions = lock.entry(api.qualified_name().clone()).or_default();
+      subscriptions
+        .record
+        .entry(row_id)
+        .or_default()
+        .push(Subscription {
+          subscription_id,
+          record_api_name: api.api_name().to_string(),
+          user,
+          sender: sender.clone(),
+          filter: Filter::Passthrough,
+        });
 
       empty
     };
@@ -317,7 +312,7 @@ impl PerConnectionState {
       .await;
 
     return Ok(AutoCleanupEventStream {
-      cleanup: CleanupSubscription {
+      state: AutoCleanupEventStreamState {
         receiver: receiver.downgrade(),
         state: self,
         id: SubscriptionId {
@@ -347,11 +342,11 @@ impl PerConnectionState {
     let (sender, receiver) = async_channel::bounded::<Event>(16);
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let install_hook: bool = {
-      let mut lock = self.table_subscriptions.write();
-      let empty = lock.is_empty() && self.record_subscriptions.read().is_empty();
-      let m: &mut Vec<Subscription> = lock.entry(api.qualified_name().clone()).or_default();
+      let mut lock = self.subscriptions.write();
+      let empty = lock.is_empty();
 
-      m.push(Subscription {
+      let subscriptions = lock.entry(api.qualified_name().clone()).or_default();
+      subscriptions.table.push(Subscription {
         subscription_id,
         record_api_name: api.api_name().to_string(),
         user,
@@ -372,7 +367,7 @@ impl PerConnectionState {
       .await;
 
     return Ok(AutoCleanupEventStream {
-      cleanup: CleanupSubscription {
+      state: AutoCleanupEventStreamState {
         receiver: receiver.downgrade(),
         state: self,
         id: SubscriptionId {
@@ -400,19 +395,13 @@ struct ManagerState {
   record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
 
   /// Manages subscriptions for differents databases and connections respectively.
+  ///
+  /// TODO: There's a disconnect. Connections can have many db names.
+  /// We should probably:
+  ///  * establish a connection identity so we can establish a RecordAPI to connection mapping
+  ///  * keep only a weak ref to connections (for them to die)
+  ///  * And turn this into a list here.
   connections: RwLock<HashMap</* db_name= */ String, Arc<PerConnectionState>>>,
-}
-
-impl ManagerState {
-  // NOTE: we're currently looking up APIs on the hot-path because we don't have life-cycle to
-  // update subscriptions when API config or schema changes :/.
-  // fn lookup_record_api(&self, name: &str) -> Option<RecordApi> {
-  //   let mut r: Option<RecordApi> = None;
-  //   self
-  //     .record_apis
-  //     .with_value(|apis| r = apis.get(name).cloned());
-  //   return r;
-  // }
 }
 
 #[derive(Clone)]
@@ -523,8 +512,7 @@ impl SubscriptionManager {
             conn: api.conn().clone(),
             connection_metadata: RwLock::new(api.connection_metadata().clone()),
             record_apis: RwLock::new(filter_record_apis(db, &self.state.record_apis.value())),
-            table_subscriptions: RwLock::new(HashMap::new()),
-            record_subscriptions: RwLock::new(HashMap::new()),
+            subscriptions: Default::default(),
           });
           v.insert(state).clone()
         }
@@ -536,8 +524,8 @@ impl SubscriptionManager {
   pub fn num_record_subscriptions(&self) -> usize {
     let mut count: usize = 0;
     for state in self.state.connections.read().values() {
-      for table in state.record_subscriptions.read().values() {
-        for record in table.values() {
+      for (_table_name, subs) in state.subscriptions.read().iter() {
+        for record in subs.record.values() {
           count += record.len();
         }
       }
@@ -549,8 +537,8 @@ impl SubscriptionManager {
   pub fn num_table_subscriptions(&self) -> usize {
     let mut count: usize = 0;
     for state in self.state.connections.read().values() {
-      for table in state.table_subscriptions.read().values() {
-        count += table.len();
+      for (_table_name, subs) in state.subscriptions.read().iter() {
+        count += subs.table.len();
       }
     }
     return count;
@@ -629,15 +617,11 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
   // subscriptions.
   let lock = state.connection_metadata.read();
   let Some(table_metadata) = lock.get_table(&table_name) else {
-    warn!("Table not found: {table_name:?}. Removing subscriptions");
+    warn!("Table {table_name:?} not found. Removing subscriptions");
 
-    let mut record_subs = state.record_subscriptions.write();
-    record_subs.remove(&table_name);
-
-    let mut table_subs = state.table_subscriptions.write();
-    table_subs.remove(&table_name);
-
-    if record_subs.is_empty() && table_subs.is_empty() {
+    let mut subscriptions = state.subscriptions.write();
+    subscriptions.remove(&table_name);
+    if subscriptions.is_empty() {
       conn.preupdate_hook(NO_HOOK);
     }
 
@@ -678,81 +662,68 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
     event
   };
 
-  'record_subs: {
-    let mut read_lock = state.record_subscriptions.upgradable_read();
-    let Some(subs) = read_lock.get(&table_name).and_then(|m| m.get(&rowid)) else {
-      break 'record_subs;
+  let mut read_lock = state.subscriptions.upgradable_read();
+
+  let (dead_record_subscriptions, dead_table_subscriptions) = {
+    let Some(subscriptions) = read_lock.get(&table_name) else {
+      return;
     };
 
-    let dead_subscriptions = broker_subscriptions(&state, conn, subs, true, &record, &event);
-    if dead_subscriptions.is_empty() && action != RecordAction::Delete {
-      // No cleanup needed.
-      break 'record_subs;
-    }
+    // First broker record subscriptions.
+    let dead_record_subscriptions = subscriptions
+      .record
+      .get(&rowid)
+      .map(|record_subscriptions| {
+        broker_subscriptions(&state, conn, record_subscriptions, true, &record, &event)
+      });
 
-    read_lock.with_upgraded(|subscriptions| {
-      let Some(table_subscriptions) = subscriptions.get_mut(&table_name) else {
+    // Then broker table subscriptions.
+    let dead_table_subscriptions =
+      broker_subscriptions(&state, conn, &subscriptions.table, false, &record, &event);
+
+    (dead_record_subscriptions, dead_table_subscriptions)
+  };
+
+  let cleanup_record_subscriptions = dead_record_subscriptions
+    .as_ref()
+    .is_some_and(|dead| !dead.is_empty() || action == RecordAction::Delete);
+
+  // Finally clean up.
+  if !dead_table_subscriptions.is_empty() || cleanup_record_subscriptions {
+    // NOTE: we're locking for all tables. If this is a bottlneck we can always lock more
+    // granularly.
+    read_lock.with_upgraded(|lock| {
+      let Some(subscriptions) = lock.get_mut(&table_name) else {
         return;
       };
 
-      if action == RecordAction::Delete {
-        // Also drops the channel and thus automatically closes the SSE connection.
-        table_subscriptions.remove(&rowid);
-
-        if table_subscriptions.is_empty() {
-          subscriptions.remove(&table_name);
-          if subscriptions.is_empty() && state.table_subscriptions.read().is_empty() {
-            conn.preupdate_hook(NO_HOOK);
+      // Record subscription cleanup.
+      if let Some(dead_record_subscriptions) = dead_record_subscriptions {
+        if action == RecordAction::Delete {
+          // This is unique for record subscriptions: if the record is deleted, cancel all
+          // subscriptions.
+          subscriptions.record.remove(&rowid);
+        } else if let Some(m) = subscriptions.record.get_mut(&rowid) {
+          for idx in dead_record_subscriptions.iter().rev() {
+            m.swap_remove(*idx);
           }
-        }
 
-        return;
-      }
-
-      if let Some(m) = table_subscriptions.get_mut(&rowid) {
-        for idx in dead_subscriptions.iter().rev() {
-          m.swap_remove(*idx);
-        }
-
-        if m.is_empty() {
-          table_subscriptions.remove(&rowid);
-
-          if table_subscriptions.is_empty() {
-            subscriptions.remove(&table_name);
-            if subscriptions.is_empty() && state.table_subscriptions.read().is_empty() {
-              conn.preupdate_hook(NO_HOOK);
-            }
+          if m.is_empty() {
+            subscriptions.record.remove(&rowid);
           }
         }
       }
-    });
-  }
 
-  'table_subs: {
-    let mut read_lock = state.table_subscriptions.upgradable_read();
-    let Some(subs) = read_lock.get(&table_name) else {
-      break 'table_subs;
-    };
-
-    let dead_subscriptions = broker_subscriptions(&state, conn, subs, false, &record, &event);
-    if dead_subscriptions.is_empty() && action != RecordAction::Delete {
-      // No cleanup needed.
-      break 'table_subs;
-    }
-
-    read_lock.with_upgraded(|subscriptions| {
-      let Some(table_subscriptions) = subscriptions.get_mut(&table_name) else {
-        return;
-      };
-
-      for idx in dead_subscriptions.iter().rev() {
-        table_subscriptions.swap_remove(*idx);
+      // Table subscription cleanup.
+      {
+        for idx in dead_table_subscriptions.iter().rev() {
+          subscriptions.table.swap_remove(*idx);
+        }
       }
 
-      if table_subscriptions.is_empty() {
-        subscriptions.remove(&table_name);
-
-        if subscriptions.is_empty() && state.record_subscriptions.read().is_empty() {
+      if subscriptions.table.is_empty() && subscriptions.table.is_empty() {
+        lock.remove(&table_name);
+        if lock.is_empty() {
           conn.preupdate_hook(NO_HOOK);
         }
       }
