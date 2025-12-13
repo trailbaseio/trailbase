@@ -1,5 +1,5 @@
 use log::*;
-use reactivate::{Merge, Reactive};
+use reactivate::Reactive;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -13,7 +13,7 @@ use crate::config::proto::{
   Config, JsonSchemaConfig, RecordApiConfig, S3StorageConfig, hash_config,
 };
 use crate::config::{ConfigError, validate_config, write_config_and_vault_textproto};
-use crate::connection::{ConnectionEntry, ConnectionManager};
+use crate::connection::{ConnectionEntry, ConnectionError, ConnectionManager};
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::records::RecordApi;
@@ -104,38 +104,11 @@ impl AppState {
       );
     });
 
-    let proxy = {
-      let proxy = Reactive::new(());
-      let proxy_clone = proxy.clone();
-      args
-        .connection_manager
-        .add_observer(move || proxy_clone.notify());
-      proxy
-    };
-
     let record_apis = {
-      let connection_manager = args.connection_manager.clone();
-      let m = (&config, &proxy).merge();
-
-      derive_unchecked(&m, move |(config, _proxy)| {
-        debug!("(re-)building Record APIs");
-
-        return Arc::new(
-          config
-            .record_apis
-            .iter()
-            .filter_map(
-              |config| match build_record_api(&connection_manager, config.clone()) {
-                Ok(api) => Some((api.api_name().to_string(), api)),
-                Err(err) => {
-                  error!("{err}");
-                  None
-                }
-              },
-            )
-            .collect::<Vec<_>>(),
-        );
-      })
+      build_record_apis(
+        args.connection_manager.clone(),
+        config.derive(|c| c.record_apis.clone()),
+      )
     };
 
     let main_conn = args.connection_manager.main_entry().connection;
@@ -277,6 +250,13 @@ impl AppState {
     &self,
   ) -> Result<(), crate::connection::ConnectionError> {
     self.state.connection_manager.rebuild_metadata()?;
+
+    // Rebuild connection metadata in RecordApis.
+    self.state.record_apis.with_value(|apis| {
+      for (_name, api) in apis.iter() {
+        api.rebuild_connection_metadata(&self.state.json_schema_registry);
+      }
+    });
 
     // We typically rebuild the schema representations when the DB schemas change, which in turn
     // can invalidate the config, e.g. an API may reference a deleted table. Let's make sure to
@@ -513,8 +493,6 @@ pub struct TestStateOptions {
 
 #[cfg(test)]
 pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<AppState> {
-  use reactivate::Merge;
-
   let _ = env_logger::try_init_from_env(
     env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn,log::span=warn"),
   );
@@ -562,28 +540,12 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   };
 
   let config = Reactive::new(config);
-  let proxy = {
-    let proxy = Reactive::new(());
-    let proxy_clone = proxy.clone();
-    connection_manager.add_observer(move || proxy_clone.notify());
-    proxy
-  };
 
   let record_apis: Reactive<Arc<Vec<(String, RecordApi)>>> = {
-    let connection_manager = connection_manager.clone();
-    let m = (&config, &proxy).merge();
-
-    derive_unchecked(&m, move |(c, _proxy)| {
-      return Arc::new(
-        c.record_apis
-          .iter()
-          .map(|config| {
-            let api = build_record_api(&connection_manager, config.clone()).unwrap();
-            return (api.api_name().to_string(), api);
-          })
-          .collect::<Vec<_>>(),
-      );
-    })
+    build_record_apis(
+      connection_manager.clone(),
+      config.derive(|c| c.record_apis.clone()),
+    )
   };
 
   return Ok(AppState {
@@ -636,30 +598,105 @@ where
   return derived;
 }
 
+fn build_record_apis(
+  connection_manager: ConnectionManager,
+  record_api_configs: Reactive<Vec<RecordApiConfig>>,
+) -> Reactive<Arc<Vec<(String, RecordApi)>>> {
+  let record_apis: Reactive<Arc<Vec<(String, RecordApi)>>> = Reactive::new(Arc::new(
+    record_api_configs
+      .value()
+      .into_iter()
+      .map(|config| {
+        let ConnectionEntry {
+          connection: conn,
+          metadata,
+        } = if config.attached_databases.is_empty() {
+          connection_manager.main_entry()
+        } else {
+          connection_manager
+            .get_entry(
+              true,
+              Some(config.attached_databases.iter().cloned().collect()),
+            )
+            .map_err(|err| err.to_string())
+            .expect("startup")
+        };
+
+        let api = build_record_api(conn, metadata, config).expect("startup");
+        return (api.api_name().to_string(), api);
+      })
+      .collect::<Vec<_>>(),
+  ));
+
+  // Rebuild RecordApi instances when config changes.
+  //
+  // WARN: We need to be very careful to how we rebuild RecordAPIs, since long-lived
+  // subscriptions may be tied to specific connections. So we need to keep connection alive
+  // whenever possible, e.g. an ACL changing for one API isn't a good reason to drop
+  // subscriptions on all APIs.
+  {
+    let record_apis = record_apis.clone();
+    record_api_configs.add_observer(move |record_api_configs| {
+      record_apis.update_unchecked(|old| {
+        // Re-use existing connection when possible to keep subscriptions alive.
+        let get_conn =
+          |api_name: &str, attached_databases: &[String]| -> Result<_, ConnectionError> {
+            if let Some((_, candidate)) = old.iter().find(|(_name, api)| api.api_name() == api_name)
+              && candidate.attached_databases() == attached_databases
+            {
+              return Ok((
+                candidate.conn().clone(),
+                candidate.connection_metadata().clone(),
+              ));
+            };
+
+            let ConnectionEntry {
+              connection: conn,
+              metadata,
+            } = if attached_databases.is_empty() {
+              connection_manager.main_entry()
+            } else {
+              connection_manager
+                .get_entry(true, Some(attached_databases.iter().cloned().collect()))?
+            };
+
+            return Ok((conn, metadata));
+          };
+
+        return Arc::new(
+          record_api_configs
+            .iter()
+            .filter_map(|config| {
+              let (conn, metadata) = get_conn(config.name(), &config.attached_databases)
+                .map_err(|err| {
+                  log::error!("Failed to get conn for record API {}: {err}", config.name());
+                  return err;
+                })
+                .ok()?;
+
+              return match build_record_api(conn, metadata, config.clone()) {
+                Ok(api) => Some((api.api_name().to_string(), api)),
+                Err(err) => {
+                  log::error!("Failed to build record API {}: {err}", config.name());
+                  None
+                }
+              };
+            })
+            .collect(),
+        );
+      });
+    });
+  }
+
+  return record_apis;
+}
+
 fn build_record_api(
-  connection_manager: &ConnectionManager,
+  conn: Arc<trailbase_sqlite::Connection>,
+  metadata: Arc<trailbase_schema::metadata::ConnectionMetadata>,
   config: RecordApiConfig,
 ) -> Result<RecordApi, String> {
-  let Some(ref table_name) = config.table_name else {
-    return Err(format!(
-      "RecordApi misses table_name configuration: {config:?}"
-    ));
-  };
-  let table_name = QualifiedName::parse(table_name).map_err(|err| err.to_string())?;
-
-  let ConnectionEntry {
-    connection: conn,
-    metadata,
-  } = if config.attached_databases.is_empty() {
-    connection_manager.main_entry()
-  } else {
-    connection_manager
-      .get_entry(
-        true,
-        Some(config.attached_databases.iter().cloned().collect()),
-      )
-      .map_err(|err| err.to_string())?
-  };
+  let table_name = QualifiedName::parse(config.table_name()).map_err(|err| err.to_string())?;
 
   if let Some(table_metadata) = metadata.get_table(&table_name) {
     return RecordApi::from_table(conn, metadata.clone(), table_metadata, config);
@@ -667,7 +704,9 @@ fn build_record_api(
     return RecordApi::from_view(conn, metadata.clone(), view_metadata, config);
   }
 
-  return Err(format!("RecordApi references missing table: {config:?}"));
+  return Err(format!(
+    "RecordApi references missing table/view: {config:?}"
+  ));
 }
 
 pub(crate) fn build_objectstore(

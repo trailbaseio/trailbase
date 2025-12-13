@@ -69,7 +69,7 @@ pub async fn read_record_handler(
       }
 
       let metadata = api.connection_metadata();
-      let expanded_tables = expand_tables(&api, metadata, &query_expand)?;
+      let expanded_tables = expand_tables(&api, &metadata, &query_expand)?;
 
       let Some(ExpandedSelectQueryResult { root, foreign_rows }) = run_expanded_select_query(
         api.conn(),

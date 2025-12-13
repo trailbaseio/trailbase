@@ -509,15 +509,31 @@ impl QualifiedName {
     }
 
     if let Some((db, name)) = name.split_once('.') {
+      let name = unquote_string(name);
+      if name.is_empty() {
+        return Err(SchemaError::Precondition("Invalid empty name".into()));
+      }
+
+      let database_schema = unquote_string(db);
+      if database_schema.is_empty() {
+        return Err(SchemaError::Precondition("Invalid empty db".into()));
+      }
+
       return Ok(Self {
-        name: unquote_string(name),
-        database_schema: Some(unquote_string(db)),
+        name,
+        database_schema: Some(database_schema),
+      });
+    } else {
+      let name = unquote_string(name);
+      if name.is_empty() {
+        return Err(SchemaError::Precondition("Invalid empty name".into()));
+      }
+
+      return Ok(Self {
+        name,
+        database_schema: None,
       });
     }
-    return Ok(Self {
-      name: unquote_string(name),
-      database_schema: None,
-    });
   }
 
   pub fn escaped_string(&self) -> String {

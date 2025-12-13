@@ -68,9 +68,6 @@ struct ConnectionManagerState {
   // Cache of existing Sqlite connections:
   main: RwLock<ConnectionEntry>,
   connections: quick_cache::sync::Cache<ConnectionKey, ConnectionEntry>,
-
-  // Reactive observers who need to be notified when metadata is rebuilt.
-  observers: Mutex<Vec<Box<dyn Fn() + Send + Sync>>>,
 }
 
 // A manager for multi-DB SQLite connections.
@@ -109,7 +106,6 @@ impl ConnectionManager {
             metadata: Arc::new(main_metadata),
           }),
           connections: quick_cache::sync::Cache::new(256),
-          observers: Mutex::new(vec![]),
         }),
       },
       new_db,
@@ -144,14 +140,8 @@ impl ConnectionManager {
           metadata: Arc::new(main_metadata),
         }),
         connections: quick_cache::sync::Cache::new(256),
-        observers: Mutex::new(vec![]),
       }),
     };
-  }
-
-  // Gets called when the metadata was updated.
-  pub(crate) fn add_observer(&self, o: impl Fn() + Send + Sync + 'static) {
-    self.state.observers.lock().push(Box::new(o));
   }
 
   // pub(crate) fn main(&self) -> Arc<Connection> {
@@ -291,17 +281,11 @@ impl ConnectionManager {
       );
     }
 
-    // Notify observers.
-    let observers = self.state.observers.lock();
-    for observer in observers.iter() {
-      observer();
-    }
-
     return Ok(());
   }
 }
 
-fn build_metadata(
+pub(crate) fn build_metadata(
   conn: &rusqlite::Connection,
   json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
 ) -> Result<ConnectionMetadata, ConnectionError> {

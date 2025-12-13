@@ -1,5 +1,6 @@
 use askama::Template;
 use log::*;
+use parking_lot::RwLock;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,6 +27,7 @@ struct RecordApiSchema {
   /// Schema metadata
   qualified_name: QualifiedName,
   table_name: QualifiedNameEscaped,
+  attached_databases: Vec<String>,
 
   is_table: bool,
   record_pk_column: (usize, Column),
@@ -79,6 +81,7 @@ impl RecordApiSchema {
     return Ok(Self {
       qualified_name: table_metadata.schema.name.clone(),
       table_name: QualifiedNameEscaped::new(&table_metadata.schema.name),
+      attached_databases: config.attached_databases.clone(),
       is_table: true,
       record_pk_column,
       columns,
@@ -122,6 +125,7 @@ impl RecordApiSchema {
     return Ok(Self {
       qualified_name: view_metadata.schema.name.clone(),
       table_name: QualifiedNameEscaped::new(&view_metadata.schema.name),
+      attached_databases: config.attached_databases.clone(),
       is_table: false,
       record_pk_column,
       columns,
@@ -137,7 +141,7 @@ impl RecordApiSchema {
 struct RecordApiState {
   /// Database connection for access checks.
   conn: Arc<trailbase_sqlite::Connection>,
-  metadata: Arc<ConnectionMetadata>,
+  metadata: RwLock<Arc<ConnectionMetadata>>,
 
   /// Schema metadata
   schema: RecordApiSchema,
@@ -287,7 +291,7 @@ impl RecordApi {
     return Ok(RecordApi {
       state: Arc::new(RecordApiState {
         conn,
-        metadata,
+        metadata: RwLock::new(metadata),
 
         schema,
 
@@ -354,12 +358,27 @@ impl RecordApi {
     return &self.state.schema.table_name;
   }
 
+  pub fn attached_databases(&self) -> &[String] {
+    return &self.state.schema.attached_databases;
+  }
+
   pub fn conn(&self) -> &Arc<trailbase_sqlite::Connection> {
     return &self.state.conn;
   }
 
-  pub fn connection_metadata(&self) -> &Arc<ConnectionMetadata> {
-    return &self.state.metadata;
+  pub fn connection_metadata(&self) -> Arc<ConnectionMetadata> {
+    return self.state.metadata.read().clone();
+  }
+
+  pub(crate) fn rebuild_connection_metadata(
+    &self,
+    json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+  ) {
+    if let Ok(metadata) =
+      crate::connection::build_metadata(&self.state.conn.write_lock(), json_schema_registry)
+    {
+      *self.state.metadata.write() = Arc::new(metadata);
+    }
   }
 
   #[inline]

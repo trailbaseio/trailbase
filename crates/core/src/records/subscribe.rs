@@ -443,10 +443,6 @@ impl SubscriptionManager {
     {
       let state = state.clone();
       record_apis.add_observer(move |record_apis| {
-        // FIXME: Reload currently depends on ConnectionManager's cache to retain **all**
-        // connections. Currently, subscriptions would currently get cancelled when old Connections
-        // get evicted and new ones established. This is when RecordApis get rebuild even if
-        // nothing changed.
         let mut lock = state.connections.write();
 
         let mut old: HashMap<usize, Arc<PerConnectionState>> = std::mem::take(&mut lock);
