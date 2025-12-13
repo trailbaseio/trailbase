@@ -41,7 +41,8 @@ struct InternalState {
   config: Reactive<Config>,
   json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
 
-  // TODO: Remove in favor of connection manager.
+  // TODO: Maybe remove in favor of connection manager. Note that this is currently also used for
+  // the state.user_conn().
   conn: trailbase_sqlite::Connection,
   logs_conn: trailbase_sqlite::Connection,
   connection_manager: ConnectionManager,
