@@ -148,6 +148,12 @@ struct Subscriptions {
   record: HashMap<i64, Vec<Subscription>>,
 }
 
+impl Subscriptions {
+  fn is_empty(&self) -> bool {
+    return self.table.is_empty() && self.record.is_empty();
+  }
+}
+
 struct PerConnectionState {
   /// Metadata: always updated together when config -> record APIs change.
   record_apis: RwLock<HashMap<String, RecordApi>>,
@@ -198,9 +204,17 @@ impl PerConnectionState {
     if remove_subscription_entry_for_table {
       // NOTE: Only write lock across all tables when necessary.
       read_lock.with_upgraded(|lock| {
-        lock.remove(&id.table_name);
-        if lock.is_empty() {
-          conn.preupdate_hook(NO_HOOK);
+        // Check again to avoid races:
+        if lock
+          .get(&id.table_name)
+          .is_some_and(|e| e.read().is_empty())
+        {
+          // Check again.
+          lock.remove(&id.table_name);
+
+          if lock.is_empty() {
+            conn.preupdate_hook(NO_HOOK);
+          }
         }
       });
     }
@@ -735,9 +749,12 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
   if remove_subscription_entry_for_table {
     // NOTE: Only write lock across all tables when necessary.
     read_lock.with_upgraded(|lock| {
-      lock.remove(&table_name);
-      if lock.is_empty() {
-        conn.preupdate_hook(NO_HOOK);
+      // Check again to avoid races:
+      if lock.get(&table_name).is_some_and(|e| e.read().is_empty()) {
+        lock.remove(&table_name);
+        if lock.is_empty() {
+          conn.preupdate_hook(NO_HOOK);
+        }
       }
     });
   }
