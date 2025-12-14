@@ -1,6 +1,7 @@
 use log::*;
 use reactivate::Reactive;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -37,7 +38,6 @@ struct InternalState {
   auth: Reactive<Arc<AuthOptions>>,
   jobs: Reactive<Arc<JobRegistry>>,
   mailer: Reactive<Mailer>,
-  record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
   config: Reactive<Config>,
   json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
 
@@ -49,6 +49,7 @@ struct InternalState {
 
   jwt: JwtHelper,
 
+  record_apis: Reactive<HashMap<String, RecordApi>>,
   subscription_manager: SubscriptionManager,
   object_store: Arc<ObjectStore>,
 
@@ -105,12 +106,10 @@ impl AppState {
       );
     });
 
-    let record_apis = {
-      build_record_apis(
-        args.connection_manager.clone(),
-        config.derive(|c| c.record_apis.clone()),
-      )
-    };
+    let record_apis = build_record_apis(
+      args.connection_manager.clone(),
+      config.derive(|c| c.record_apis.clone()),
+    );
 
     let main_conn = args.connection_manager.main_entry().connection;
     let object_store: Arc<ObjectStore> = args.object_store.into();
@@ -174,13 +173,13 @@ impl AppState {
           );
         }),
         mailer: derive_unchecked(&config, Mailer::new_from_config),
-        record_apis: record_apis.clone(),
         config,
         json_schema_registry: args.json_schema_registry,
         conn: (*main_conn).clone(),
         logs_conn: args.logs_conn,
         connection_manager: args.connection_manager,
         jwt: args.jwt,
+        record_apis: record_apis.clone(),
         subscription_manager: SubscriptionManager::new(record_apis),
         object_store,
         wasm_runtimes: build_wasm_runtime()
@@ -298,12 +297,11 @@ impl AppState {
   }
 
   pub fn lookup_record_api(&self, name: &str) -> Option<RecordApi> {
-    for (record_api_name, record_api) in &*self.state.record_apis.value() {
-      if record_api_name == name {
-        return Some(record_api.clone());
-      }
-    }
-    return None;
+    let mut r: Option<RecordApi> = None;
+    self.state.record_apis.with_value(|apis| {
+      r = apis.get(name).cloned();
+    });
+    return r;
   }
 
   pub fn get_config(&self) -> Config {
@@ -542,12 +540,10 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 
   let config = Reactive::new(config);
 
-  let record_apis: Reactive<Arc<Vec<(String, RecordApi)>>> = {
-    build_record_apis(
-      connection_manager.clone(),
-      config.derive(|c| c.record_apis.clone()),
-    )
-  };
+  let record_apis = build_record_apis(
+    connection_manager.clone(),
+    config.derive(|c| c.record_apis.clone()),
+  );
 
   return Ok(AppState {
     state: Arc::new(InternalState {
@@ -565,13 +561,13 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
         || derive_unchecked(&config, Mailer::new_from_config),
         |m| Reactive::new(m),
       ),
-      record_apis: record_apis.clone(),
       config,
       json_schema_registry,
       conn: (*connection_manager.main_entry().connection).clone(),
       logs_conn,
       connection_manager,
       jwt: crate::auth::jwt::test_jwt_helper(),
+      record_apis: record_apis.clone(),
       subscription_manager: SubscriptionManager::new(record_apis),
       object_store,
       wasm_runtimes: vec![],
@@ -602,8 +598,8 @@ where
 fn build_record_apis(
   connection_manager: ConnectionManager,
   record_api_configs: Reactive<Vec<RecordApiConfig>>,
-) -> Reactive<Arc<Vec<(String, RecordApi)>>> {
-  let record_apis: Reactive<Arc<Vec<(String, RecordApi)>>> = Reactive::new(Arc::new(
+) -> Reactive<HashMap<String, RecordApi>> {
+  let record_apis: Reactive<HashMap<String, RecordApi>> = Reactive::new(
     record_api_configs
       .value()
       .into_iter()
@@ -626,8 +622,8 @@ fn build_record_apis(
         let api = build_record_api(conn, metadata, config).expect("startup");
         return (api.api_name().to_string(), api);
       })
-      .collect::<Vec<_>>(),
-  ));
+      .collect(),
+  );
 
   // Rebuild RecordApi instances when config changes.
   //
@@ -664,27 +660,25 @@ fn build_record_apis(
             return Ok((conn, metadata));
           };
 
-        return Arc::new(
-          record_api_configs
-            .iter()
-            .filter_map(|config| {
-              let (conn, metadata) = get_conn(config.name(), &config.attached_databases)
-                .map_err(|err| {
-                  log::error!("Failed to get conn for record API {}: {err}", config.name());
-                  return err;
-                })
-                .ok()?;
+        return record_api_configs
+          .iter()
+          .filter_map(|config| {
+            let (conn, metadata) = get_conn(config.name(), &config.attached_databases)
+              .map_err(|err| {
+                log::error!("Failed to get conn for record API {}: {err}", config.name());
+                return err;
+              })
+              .ok()?;
 
-              return match build_record_api(conn, metadata, config.clone()) {
-                Ok(api) => Some((api.api_name().to_string(), api)),
-                Err(err) => {
-                  log::error!("Failed to build record API {}: {err}", config.name());
-                  None
-                }
-              };
-            })
-            .collect(),
-        );
+            return match build_record_api(conn, metadata, config.clone()) {
+              Ok(api) => Some((api.api_name().to_string(), api)),
+              Err(err) => {
+                log::error!("Failed to build record API {}: {err}", config.name());
+                None
+              }
+            };
+          })
+          .collect();
       });
     });
   }

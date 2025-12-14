@@ -22,7 +22,7 @@ use trailbase_schema::QualifiedName;
 use trailbase_schema::json::value_to_flat_json;
 use trailbase_sqlite::connection::{extract_record_values, extract_row_id};
 
-use crate::app_state::AppState;
+use crate::app_state::{AppState, derive_unchecked};
 use crate::auth::user::User;
 use crate::records::RecordApi;
 use crate::records::filter::{
@@ -404,7 +404,7 @@ impl Drop for PerConnectionState {
 /// Internal, shareable state of the cloneable SubscriptionManager.
 struct ManagerState {
   /// Record API configurations.
-  record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>,
+  record_apis: Reactive<Vec<RecordApi>>,
 
   /// Manages subscriptions for different connections based on `conn.id()`.
   connections: RwLock<HashMap</* conn id= */ usize, Arc<PerConnectionState>>>,
@@ -423,18 +423,15 @@ struct ContinuationState {
   record_values: Vec<rusqlite::types::Value>,
 }
 
-fn filter_record_apis(
-  conn_id: usize,
-  record_apis: &[(String, RecordApi)],
-) -> HashMap<String, RecordApi> {
+fn filter_record_apis(conn_id: usize, record_apis: &[RecordApi]) -> HashMap<String, RecordApi> {
   return record_apis
     .iter()
-    .flat_map(|(name, api)| {
+    .flat_map(|api| {
       if !api.enable_subscriptions() {
         return None;
       }
       if api.conn().id() == conn_id {
-        return Some((name.to_string(), api.clone()));
+        return Some((api.api_name().to_string(), api.clone()));
       }
 
       return None;
@@ -443,7 +440,8 @@ fn filter_record_apis(
 }
 
 impl SubscriptionManager {
-  pub fn new(record_apis: Reactive<Arc<Vec<(String, RecordApi)>>>) -> Self {
+  pub fn new(record_apis: Reactive<HashMap<String, RecordApi>>) -> Self {
+    let record_apis = derive_unchecked(&record_apis, |apis| apis.values().cloned().collect());
     let state = Arc::new(ManagerState {
       record_apis: record_apis.clone(),
       connections: RwLock::new(HashMap::new()),
@@ -456,12 +454,15 @@ impl SubscriptionManager {
 
         let mut old: HashMap<usize, Arc<PerConnectionState>> = std::mem::take(&mut lock);
 
-        for (_name, api) in record_apis.iter() {
+        for api in record_apis.iter() {
           if !api.enable_subscriptions() {
             continue;
           }
 
           let id = api.conn().id();
+
+          // TODO: Clean subscriptions from existing entries for tables that not longer have a
+          // corresponding API.
           if let Some(existing) = old.remove(&id) {
             let apis = filter_record_apis(id, record_apis);
             let Some(first) = apis.values().nth(0) else {
