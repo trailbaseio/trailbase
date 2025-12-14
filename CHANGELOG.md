@@ -1,3 +1,12 @@
+## v0.22.1
+
+- Improve "realtime" change subscriptions:
+  - Introduce a unique connection identity for more robust subscription management.
+  - Use layered locks to reduce congestion and thus improve performance.
+  - Explicitly recycle connections whenever config changes trigger RecordApi rebuilds. Otherwise, cycling connections can lead to dropped subscriptions with more than 256 DBs.
+- No longer do a linear seek to look up APIs optimizing for large N, especially now with multi-DB.
+- Update dependencies.
+
 ## v0.22.0
 
 - Multi-DB support 🎉: record APIs can be backed by `TABLE`/`VIEW`s in independent DBs. This can help with physical isolation and offer a path when encountering locking bottlenecks.
