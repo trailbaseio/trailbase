@@ -46,6 +46,7 @@ import {
 import { Header } from "@/components/Header";
 import { ConfirmCloseDialog } from "@/components/SafeSheet";
 import { AuthSettings } from "@/components/settings/AuthSettings";
+import { DatabaseSettings } from "@/components/settings/DatabaseSettings";
 import { SchemaSettings } from "@/components/settings/SchemaSettings";
 import { EmailSettings } from "@/components/settings/EmailSettings";
 import { JobSettings } from "@/components/settings/JobSettings";
@@ -284,104 +285,6 @@ function ServerSettings(props: CommonProps) {
   );
 }
 
-function ImportSettings(props: CommonProps) {
-  const queryClient = useQueryClient();
-  const config = createConfigQuery();
-
-  const Form = (p: { config: ServerConfig }) => {
-    const form = createForm(() => ({
-      defaultValues: p.config satisfies ServerConfig,
-      onSubmit: async ({ value }: { value: ServerConfig }) => {
-        const c = config.data?.config;
-        if (!c) {
-          console.warn("Missing base config:");
-          return;
-        }
-
-        const newConfig = Config.fromPartial(c);
-        newConfig.server = value;
-        await setConfig(queryClient, newConfig);
-
-        props.postSubmit();
-      },
-    }));
-
-    form.useStore((state) => {
-      if (state.isDirty) {
-        props.markDirty();
-      }
-    });
-
-    return (
-      <form
-        method="dialog"
-        onSubmit={(e: SubmitEvent) => {
-          e.preventDefault();
-          form.handleSubmit();
-        }}
-      >
-        <div class="flex flex-col gap-4">
-          <Card class="text-sm">
-            <CardHeader>
-              <h2>Import {"&"} Export</h2>
-            </CardHeader>
-
-            <CardContent>
-              <p class="mt-2">
-                Importing and exporting data via the UI is not yet supported.
-                Instead, you can use the <span class="font-mono">sqlite3</span>{" "}
-                command line interface. TrailBase does not require any special
-                metadata. Any <span class="font-mono">STRICT</span>ly typed{" "}
-                <span class="font-mono">TABLE</span> with an
-                <span class="font-mono">INTEGER</span> or UUID primary key can
-                be exposed via TrailBase's Record APIs.
-              </p>
-
-              <p class="my-2">Import, e.g.:</p>
-              <pre class="ml-4 whitespace-pre-wrap">
-                $ cat import_data.sql | sqlite3 traildepot/data/main.db
-              </pre>
-
-              <p class="my-2">Export, e.g.:</p>
-
-              <pre class="ml-4 whitespace-pre-wrap">
-                $ sqlite3 traildepot/data/main.db
-                <br />
-                sqlite&gt; .output dump.db
-                <br />
-                sqlite&gt; .dump
-                <br />
-              </pre>
-            </CardContent>
-          </Card>
-        </div>
-      </form>
-    );
-  };
-
-  const serverConfig = () => {
-    const c = config.data?.config?.server;
-    if (c) {
-      // "deep-copy"
-      return ServerConfig.decode(ServerConfig.encode(c).finish());
-    }
-    // Fallback
-    return ServerConfig.fromJSON({});
-  };
-
-  return (
-    <>
-      <Show when={config.isError}>Failed to fetch config</Show>
-
-      <Show when={config.isLoading}>Loading</Show>
-
-      <Show when={config.isSuccess}>
-        <Form config={serverConfig()} />
-      </Show>
-    </>
-  );
-}
-
 type DirtyDialogState = {
   nextRoute: string;
 };
@@ -478,16 +381,16 @@ const sites = [
     icon: TbBriefcase,
   },
   {
+    route: "data",
+    label: "Databases",
+    child: DatabaseSettings,
+    icon: TbDatabaseExport,
+  },
+  {
     route: "schema",
     label: "Schemas",
     child: SchemaSettings,
     icon: TbTable,
-  },
-  {
-    route: "data",
-    label: "Data",
-    child: ImportSettings,
-    icon: TbDatabaseExport,
   },
 ] as const;
 

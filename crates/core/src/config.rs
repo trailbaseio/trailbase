@@ -510,10 +510,15 @@ pub fn validate_config(
     None => None,
   };
 
+  let mut db_names = HashSet::<String>::new();
   for db in &config.databases {
     let Some(ref name) = db.name else {
       return ierr("Missing database name");
     };
+
+    if !db_names.insert(name.clone()) {
+      return ierr(format!("Database '{name}' linked more than once"));
+    }
 
     match name.as_str() {
       "main" | "logs" | "" => {

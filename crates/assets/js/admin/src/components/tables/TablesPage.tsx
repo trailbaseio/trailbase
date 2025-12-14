@@ -7,11 +7,11 @@ import { TablePane } from "@/components/tables/TablePane";
 import { Button } from "@/components/ui/button";
 import { SheetContent } from "@/components/ui/sheet";
 import {
-  TbTablePlus,
-  TbTable,
+  TbEye,
   TbLock,
   TbLockOpen,
-  TbEye,
+  TbTable,
+  TbTablePlus,
   TbWand,
 } from "solid-icons/tb";
 
