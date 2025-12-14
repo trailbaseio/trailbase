@@ -489,6 +489,11 @@ export interface RecordApiConfig {
   tableName?:
     | string
     | undefined;
+  /**
+   * / Attached databases - will `ATTACH <traildepot>/data/<name>.db AS <name>`.
+   * / Can only reference configured databases.
+   */
+  attachedDatabases: string[];
   /** / Strategy to be used on insert if a table constraint is violated. */
   conflictResolution?:
     | ConflictResolutionStrategy
@@ -1765,7 +1770,7 @@ export const JobsConfig: MessageFns<JobsConfig> = {
 };
 
 function createBaseRecordApiConfig(): RecordApiConfig {
-  return { aclWorld: [], aclAuthenticated: [], excludedColumns: [], expand: [] };
+  return { attachedDatabases: [], aclWorld: [], aclAuthenticated: [], excludedColumns: [], expand: [] };
 }
 
 export const RecordApiConfig: MessageFns<RecordApiConfig> = {
@@ -1775,6 +1780,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     }
     if (message.tableName !== undefined && message.tableName !== "") {
       writer.uint32(18).string(message.tableName);
+    }
+    for (const v of message.attachedDatabases) {
+      writer.uint32(26).string(v!);
     }
     if (message.conflictResolution !== undefined && message.conflictResolution !== 0) {
       writer.uint32(40).int32(message.conflictResolution);
@@ -1842,6 +1850,14 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
           }
 
           message.tableName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.attachedDatabases.push(reader.string());
           continue;
         }
         case 5: {
@@ -1981,6 +1997,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     return {
       name: isSet(object.name) ? globalThis.String(object.name) : undefined,
       tableName: isSet(object.tableName) ? globalThis.String(object.tableName) : undefined,
+      attachedDatabases: globalThis.Array.isArray(object?.attachedDatabases)
+        ? object.attachedDatabases.map((e: any) => globalThis.String(e))
+        : [],
       conflictResolution: isSet(object.conflictResolution)
         ? conflictResolutionStrategyFromJSON(object.conflictResolution)
         : undefined,
@@ -2004,7 +2023,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
       updateAccessRule: isSet(object.updateAccessRule) ? globalThis.String(object.updateAccessRule) : undefined,
       deleteAccessRule: isSet(object.deleteAccessRule) ? globalThis.String(object.deleteAccessRule) : undefined,
       schemaAccessRule: isSet(object.schemaAccessRule) ? globalThis.String(object.schemaAccessRule) : undefined,
-      expand: globalThis.Array.isArray(object?.expand) ? object.expand.map((e: any) => globalThis.String(e)) : [],
+      expand: globalThis.Array.isArray(object?.expand)
+        ? object.expand.map((e: any) => globalThis.String(e))
+        : [],
       listingHardLimit: isSet(object.listingHardLimit) ? BigInt(object.listingHardLimit) : undefined,
     };
   },
@@ -2016,6 +2037,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     }
     if (message.tableName !== undefined && message.tableName !== "") {
       obj.tableName = message.tableName;
+    }
+    if (message.attachedDatabases?.length) {
+      obj.attachedDatabases = message.attachedDatabases;
     }
     if (message.conflictResolution !== undefined && message.conflictResolution !== 0) {
       obj.conflictResolution = conflictResolutionStrategyToJSON(message.conflictResolution);
@@ -2066,6 +2090,7 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     const message = createBaseRecordApiConfig();
     message.name = object.name ?? "";
     message.tableName = object.tableName ?? "";
+    message.attachedDatabases = object.attachedDatabases?.map((e) => e) || [];
     message.conflictResolution = object.conflictResolution ?? 0;
     message.autofillMissingUserIdColumns = object.autofillMissingUserIdColumns ?? false;
     message.enableSubscriptions = object.enableSubscriptions ?? false;

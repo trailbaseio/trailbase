@@ -300,9 +300,12 @@ function newRecordApiDefault(opts: {
   tableName: QualifiedName;
   apiName: string;
 }): RecordApiConfig {
+  const db = opts.tableName.database_schema ?? "main";
+
   return {
     name: opts.apiName,
     tableName: prettyFormatQualifiedName(opts.tableName),
+    attachedDatabases: db === "main" ? [] : [db],
     aclWorld: [],
     aclAuthenticated: [],
     excludedColumns: [],
