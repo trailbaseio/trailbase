@@ -1,3 +1,8 @@
+## v0.22.3
+
+- Downgrade vite-tsconfig-paths to fix Windows release builds (missing in v0.22.2).
+- Simplify table explorer's pagination state management.
+
 ## v0.22.2
 
 - Add a simple UI (in admin settings) to link/unlink additional databases.
