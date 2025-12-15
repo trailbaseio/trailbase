@@ -595,17 +595,8 @@ function ArrayRecordTable(props: {
                   data={() => props.state.response.rows}
                   rowCount={Number(totalRowCount())}
                   pagination={props.pagination[0]()}
-                  onPaginationChange={(
-                    p:
-                      | PaginationState
-                      | ((old: PaginationState) => PaginationState),
-                  ) => {
-                    if (typeof p === "function") {
-                      const state = p(props.pagination[0]());
-                      props.pagination[1](state);
-                    } else {
-                      props.pagination[1](p);
-                    }
+                  onPaginationChange={(s: PaginationState) => {
+                    props.pagination[1](s);
                   }}
                   onRowClick={
                     mutable()

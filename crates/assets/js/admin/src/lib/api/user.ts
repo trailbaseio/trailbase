@@ -30,12 +30,14 @@ export async function updateUser(request: UpdateUserRequest) {
 export async function fetchUsers(
   filter: string | undefined,
   pageSize: number,
-  cursor: string | null,
+  pageIndex: number,
 ): Promise<ListUsersResponse> {
   const params = buildListSearchParams({
     filter,
     pageSize,
-    cursor,
+    pageIndex,
+    // Users use UUIDv4 and cannot be cursored on `id`.
+    cursor: undefined,
   });
 
   const response = await adminFetch(`/user?${params}`);

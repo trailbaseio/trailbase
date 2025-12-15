@@ -5,7 +5,7 @@ use axum::{
 use lazy_static::lazy_static;
 use serde::Serialize;
 use std::borrow::Cow;
-use trailbase_qs::{Cursor, Order, OrderPrecedent, Query};
+use trailbase_qs::{Order, OrderPrecedent, Query};
 use trailbase_schema::QualifiedName;
 use ts_rs::TS;
 use uuid::Uuid;
@@ -16,7 +16,6 @@ use crate::auth::user::DbUser;
 use crate::connection::ConnectionEntry;
 use crate::constants::USER_TABLE;
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
-use crate::util::id_to_b64;
 
 #[derive(Debug, Serialize, TS)]
 pub struct UserJson {
@@ -50,7 +49,6 @@ impl From<DbUser> for UserJson {
 #[ts(export)]
 pub struct ListUsersResponse {
   total_row_count: i64,
-  cursor: Option<String>,
 
   users: Vec<UserJson>,
 }
@@ -66,7 +64,7 @@ pub async fn list_users_handler(
 
   let Query {
     limit,
-    cursor,
+    offset,
     order,
     filter: filter_params,
     ..
@@ -80,7 +78,7 @@ pub async fn list_users_handler(
   let Some(table_metadata) = metadata.get_table(&QualifiedName::parse(USER_TABLE)?) else {
     return Err(Error::Precondition(format!("Table {USER_TABLE} not found")));
   };
-  // Where clause contains column filters and cursor depending on what's present in the url query
+  // Where clause contains column filters and offset depending on what's present in the url query
   // string.
   let filter_where_clause =
     build_filter_where_clause("_ROW_", &table_metadata.schema.columns, filter_params)?;
@@ -105,14 +103,7 @@ pub async fn list_users_handler(
   let users = fetch_users(
     &conn,
     filter_where_clause.clone(),
-    if let Some(cursor) = cursor {
-      Some(
-        Cursor::parse(&cursor, trailbase_qs::CursorType::Blob)
-          .map_err(|err| Error::BadRequest(err.into()))?,
-      )
-    } else {
-      None
-    },
+    offset,
     order.as_ref().unwrap_or_else(|| &DEFAULT_ORDERING),
     limit_or_default(limit, None).map_err(|err| Error::BadRequest(err.into()))?,
   )
@@ -120,7 +111,6 @@ pub async fn list_users_handler(
 
   return Ok(Json(ListUsersResponse {
     total_row_count,
-    cursor: users.last().map(|user| id_to_b64(&user.id)),
     users: users
       .into_iter()
       .map(|user| user.into())
@@ -131,25 +121,23 @@ pub async fn list_users_handler(
 async fn fetch_users(
   conn: &trailbase_sqlite::Connection,
   filter_where_clause: WhereClause,
-  cursor: Option<Cursor>,
+  offset: Option<usize>,
   order: &Order,
   limit: usize,
 ) -> Result<Vec<DbUser>, Error> {
-  let mut params = filter_where_clause.params;
-  let mut where_clause = filter_where_clause.clause;
+  let WhereClause {
+    mut params,
+    clause: where_clause,
+  } = filter_where_clause;
 
   params.push((
     Cow::Borrowed(":limit"),
     trailbase_sqlite::Value::Integer(limit as i64),
   ));
-
-  if let Some(cursor) = cursor {
-    params.push((
-      Cow::Borrowed(":cursor"),
-      crate::admin::util::cursor_to_value(cursor),
-    ));
-    where_clause = format!("{where_clause} AND _ROW_.id < :cursor",);
-  }
+  params.push((
+    Cow::Borrowed(":offset"),
+    trailbase_sqlite::Value::Integer(offset.unwrap_or(0) as i64),
+  ));
 
   let order_clause = order
     .columns
@@ -175,6 +163,7 @@ async fn fetch_users(
       ORDER BY
         {order_clause}
       LIMIT :limit
+      OFFSET :offset;
     "#,
   );
 

@@ -1,5 +1,4 @@
 import { createSignal, Match, Show, Switch, Suspense } from "solid-js";
-import { createWritableMemo } from "@solid-primitives/memo";
 import type { Setter } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import { TbRefresh, TbCrown, TbEdit, TbTrash } from "solid-icons/tb";
@@ -283,32 +282,21 @@ export function AccountsPage() {
   const [searchParams, setSearchParams] = useSearchParams<{
     filter?: string;
     pageSize?: string;
+    pageIndex?: string;
   }>();
-  // Reset when search params change
-  const reset = () => {
-    return [searchParams.pageSize, searchParams.filter];
-  };
-  const [pageIndex, setPageIndex] = createWritableMemo<number>(() => {
-    reset();
-    return 0;
-  });
-  const [cursors, setCursors] = createWritableMemo<string[]>(() => {
-    reset();
-    return [];
-  });
-
   const pagination = (): PaginationState => {
     return {
       pageSize: safeParseInt(searchParams.pageSize) ?? 20,
-      pageIndex: pageIndex(),
+      pageIndex: safeParseInt(searchParams.pageIndex) ?? 0,
     };
   };
 
   const setFilter = (filter: string | undefined) => {
-    setPageIndex(0);
     setSearchParams({
       ...searchParams,
       filter,
+      // Reset
+      pageIndex: "0",
     });
   };
 
@@ -323,18 +311,12 @@ export function AccountsPage() {
     ],
     queryFn: async () => {
       const p = pagination();
-      const c = cursors();
 
       const response = await fetchUsers(
         searchParams.filter,
-        pagination().pageSize,
-        c[p.pageIndex - 1],
+        p.pageSize,
+        p.pageIndex,
       );
-
-      const cursor = response.cursor;
-      if (cursor && p.pageIndex >= c.length) {
-        setCursors([...c, cursor]);
-      }
 
       return response;
     },
@@ -391,34 +373,12 @@ export function AccountsPage() {
                   data={() => users.data!.users}
                   rowCount={Number(users.data!.total_row_count ?? -1)}
                   pagination={pagination()}
-                  onPaginationChange={(
-                    p:
-                      | PaginationState
-                      | ((old: PaginationState) => PaginationState),
-                  ) => {
-                    function setPagination({
-                      pageSize,
-                      pageIndex,
-                    }: PaginationState) {
-                      const current = pagination();
-                      if (current.pageSize !== pageSize) {
-                        setSearchParams({
-                          ...searchParams,
-                          pageSize,
-                        });
-                        return;
-                      }
-
-                      if (current.pageIndex != pageIndex) {
-                        setPageIndex(pageIndex);
-                      }
-                    }
-
-                    if (typeof p === "function") {
-                      setPagination(p(pagination()));
-                    } else {
-                      setPagination(p);
-                    }
+                  onPaginationChange={(s: PaginationState) => {
+                    setSearchParams({
+                      ...searchParams,
+                      pageIndex: s.pageIndex,
+                      pageSize: s.pageSize,
+                    });
                   }}
                 />
               </div>

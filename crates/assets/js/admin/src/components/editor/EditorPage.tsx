@@ -159,11 +159,7 @@ function ResultView(props: {
             {/* TODO: Enable pagination */}
             <DataTable
               columns={() => columnDefs(response()!.data!)}
-              data={() => response()!.data!.rows as ArrayRecord[]}
-              pagination={{
-                pageIndex: 0,
-                pageSize: 50,
-              }}
+              data={() => response()!.data!.rows}
             />
           </div>
         </ErrorBoundary>

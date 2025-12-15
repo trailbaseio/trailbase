@@ -1,13 +1,13 @@
 import {
   For,
-  Show,
+  Match,
+  Switch,
   createEffect,
   createMemo,
   createSignal,
   splitProps,
   type Accessor,
 } from "solid-js";
-import { createWritableMemo } from "@solid-primitives/memo";
 import {
   flexRender,
   createSolidTable,
@@ -15,7 +15,6 @@ import {
 } from "@tanstack/solid-table";
 import type {
   ColumnDef,
-  OnChangeFn,
   PaginationState,
   Row,
   RowSelectionState,
@@ -61,34 +60,23 @@ type Props<TData, TValue> = {
 
   rowCount?: number;
   pagination?: PaginationState;
-  onPaginationChange?: OnChangeFn<PaginationState>;
+  onPaginationChange?: (state: PaginationState) => void;
 
   onRowSelection?: (rows: Row<TData>[], value: boolean) => void;
   onRowClick?: (idx: number, row: TData) => void;
 };
 
+// TODO: This entire implementation is incredibly messy. We should probably just
+// receive a `createSolidTable` result, i.e. use TableImpl below. This would allow
+// users direct access to the table state.
 export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
   const [local] = splitProps(props, ["columns", "data"]);
   const [rowSelection, setRowSelection] = createSignal<RowSelectionState>({});
   createEffect(() => {
     // NOTE: because we use our own state for row selection, reset it when data changes.
-    local.data();
+    const _ = local.data();
     setRowSelection({});
   });
-
-  const paginationEnabled = () => props.onPaginationChange !== undefined;
-  const [paginationState, setPaginationState] =
-    createWritableMemo<PaginationState>(() => {
-      // Whenever column definitions change, reset pagination state.
-      //
-      // FIXME: We should probably just not use a memo and and receive columns/data by value to rebuild instead.
-      const _c = props.columns();
-
-      return {
-        pageIndex: props.pagination?.pageIndex ?? 0,
-        pageSize: props.pagination?.pageSize ?? 20,
-      };
-    });
 
   const columns = () => {
     const onRowSelection = props.onRowSelection;
@@ -141,10 +129,16 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
   const table = createMemo(() => {
     console.debug("table data rebuild");
 
-    return createSolidTable({
+    const t = createSolidTable({
       data: local.data() || [],
       state: {
-        pagination: paginationState(),
+        pagination:
+          props.pagination !== undefined
+            ? {
+                pageIndex: props.pagination.pageIndex ?? 0,
+                pageSize: props.pagination.pageSize ?? 20,
+              }
+            : undefined,
         rowSelection: rowSelection(),
       },
       columns: columns(),
@@ -155,41 +149,68 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
       // columnResizeMode: 'onChange',
 
       // pagination:
-      manualPagination: paginationEnabled(),
-      onPaginationChange: (state) => {
-        setPaginationState(state);
-        const handler = props.onPaginationChange;
-        if (handler) {
-          handler(state);
-        }
-      },
-      rowCount: props.rowCount,
+      manualPagination: true,
+      onPaginationChange:
+        props.onPaginationChange !== undefined
+          ? (updater) => {
+              const newState =
+                typeof updater === "function"
+                  ? updater(t.getState().pagination)
+                  : updater;
 
-      // Just means, the input data is already filtered.
-      manualFiltering: true,
-
+              props.onPaginationChange!(newState);
+            }
+          : undefined,
       // If set to true, pagination will be reset to the first page when page-altering state changes
       // eg. data is updated, filters change, grouping changes, etc.
       //
       // NOTE: In our current setup this causes infinite reload cycles when paginating.
       autoResetPageIndex: false,
+      rowCount: props.rowCount,
+
+      // Just means, the input data is already filtered.
+      manualFiltering: true,
 
       enableRowSelection: true,
       enableMultiRowSelection: props.onRowSelection ? true : false,
       onRowSelectionChange: setRowSelection,
     });
+
+    return t;
   });
+
+  return (
+    <TableImpl
+      table={table()}
+      onRowClick={props.onRowClick}
+      paginationEnabled={props.pagination !== undefined}
+    />
+  );
+}
+
+function TableImpl<TData>(props: {
+  table: TableType<TData>;
+  onRowClick?: (idx: number, row: TData) => void;
+  paginationEnabled: boolean;
+}) {
+  const paginationEnabled = () => props.paginationEnabled;
+  const paginationState = () => props.table.getState().pagination;
+  const columns = () => props.table.options.columns;
+  const numRows = () => props.table.getRowModel().rows?.length ?? 0;
 
   return (
     <>
       {paginationEnabled() && (
-        <PaginationControl table={table()} rowCount={props.rowCount} />
+        <PaginationControl
+          table={props.table}
+          rowCount={props.table.options.rowCount}
+        />
       )}
 
       <div class="rounded-md border">
         <Table>
           <TableHeader>
-            <For each={table().getHeaderGroups()}>
+            <For each={props.table.getHeaderGroups()}>
               {(headerGroup) => (
                 <TableRow>
                   <For each={headerGroup.headers}>
@@ -212,62 +233,63 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
           </TableHeader>
 
           <TableBody>
-            <Show
-              when={table().getRowModel().rows?.length > 0}
-              fallback={
-                paginationState().pageIndex > 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={local.columns.length}>
-                      <span>Loading...</span>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={local.columns.length}>
-                      <span>Empty</span>
-                    </TableCell>
-                  </TableRow>
-                )
-              }
-            >
-              <For each={table().getRowModel().rows}>
-                {(row) => {
-                  const onClick = () => {
-                    // Don't trigger on text selection.
-                    const selection = window.getSelection();
-                    if (selection?.toString()) {
-                      return;
-                    }
+            <Switch>
+              <Match when={numRows() > 0}>
+                <For each={props.table.getRowModel().rows}>
+                  {(row) => {
+                    const onClick = () => {
+                      // Don't trigger on text selection.
+                      const selection = window.getSelection();
+                      if (selection?.toString()) {
+                        return;
+                      }
 
-                    const handler = props.onRowClick;
-                    if (!handler) {
-                      return;
-                    }
-                    handler(row.index, row.original);
-                  };
+                      const handler = props.onRowClick;
+                      if (!handler) {
+                        return;
+                      }
+                      handler(row.index, row.original);
+                    };
 
-                  return (
-                    <TableRow
-                      data-state={row.getIsSelected() && "selected"}
-                      onClick={onClick}
-                    >
-                      <For each={row.getVisibleCells()}>
-                        {(cell) => (
-                          <TableCell>
-                            <div class="max-h-[80px] overflow-x-hidden overflow-y-auto break-words">
-                              {flexRender(
-                                cell.column.columnDef.cell,
-                                cell.getContext(),
-                              )}
-                            </div>
-                          </TableCell>
-                        )}
-                      </For>
-                    </TableRow>
-                  );
-                }}
-              </For>
-            </Show>
+                    return (
+                      <TableRow
+                        data-state={row.getIsSelected() && "selected"}
+                        onClick={onClick}
+                      >
+                        <For each={row.getVisibleCells()}>
+                          {(cell) => (
+                            <TableCell>
+                              <div class="max-h-[80px] overflow-x-hidden overflow-y-auto break-words">
+                                {flexRender(
+                                  cell.column.columnDef.cell,
+                                  cell.getContext(),
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
+                        </For>
+                      </TableRow>
+                    );
+                  }}
+                </For>
+              </Match>
+
+              <Match when={paginationState().pageIndex > 0}>
+                <TableRow>
+                  <TableCell colSpan={columns().length}>
+                    <span>Loading...</span>
+                  </TableCell>
+                </TableRow>
+              </Match>
+
+              <Match when={paginationState().pageIndex === 0}>
+                <TableRow>
+                  <TableCell colSpan={columns().length}>
+                    <span>Empty</span>
+                  </TableCell>
+                </TableRow>
+              </Match>
+            </Switch>
           </TableBody>
         </Table>
       </div>
@@ -290,13 +312,12 @@ function PaginationControl<TData>(props: {
   const PerPage = () => (
     <div class="flex items-center space-x-2 py-1">
       <Select
+        multiple={false}
         value={table().getState().pagination.pageSize}
         onChange={(value) => {
-          if (value) {
-            table().setPageSize(value);
-          }
+          table().setPageSize(value ?? 20);
         }}
-        options={[10, 20, 30, 40, 50]}
+        options={[10, 20, 50, 100]}
         itemComponent={(props) => (
           <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
         )}
