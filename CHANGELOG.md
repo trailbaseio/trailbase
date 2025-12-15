@@ -1,3 +1,12 @@
+## v0.22.2
+
+- Add a simple UI (in admin settings) to link/unlink additional databases.
+- Fix user account pagination.
+- Fix `RecordApiConfig` construction from admin UI for non-main DBs.
+- More conservative pre-update hook cleanup.
+- Disallow config changes in demo mode.
+- Update Rust and JavaScript dependencies.
+
 ## v0.22.1
 
 - Improve "realtime" change subscriptions:
