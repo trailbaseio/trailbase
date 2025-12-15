@@ -766,18 +766,13 @@ export function TablePane(props: {
   const [searchParams, setSearchParams] = useSearchParams<{
     filter?: string;
     pageSize?: string;
+    pageIndex?: string;
   }>();
 
-  // Reset when table or search params change
-  const reset = () => {
-    return [props.selectedTable, searchParams.pageSize, searchParams.filter];
-  };
-  const [pageIndex, setPageIndex] = createWritableMemo<number>(() => {
-    reset();
-    return 0;
-  });
   const [cursors, setCursors] = createWritableMemo<string[]>(() => {
-    reset();
+    // Reset cursor whenever table or search params change.
+    const _ = [props.selectedTable, searchParams.pageSize, searchParams.filter];
+    console.debug("resetting cursor");
     return [];
   });
 
@@ -791,7 +786,7 @@ export function TablePane(props: {
   const pagination = (): PaginationState => {
     return {
       pageSize: safeParseInt(searchParams.pageSize) ?? 20,
-      pageIndex: pageIndex(),
+      pageIndex: safeParseInt(searchParams.pageIndex) ?? 0,
     };
   };
 
@@ -827,10 +822,10 @@ export function TablePane(props: {
         return state;
       } catch (err) {
         // Reset.
-        setPageIndex(0);
         setSearchParams({
           filter: undefined,
           pageSize: undefined,
+          pageIndex: undefined,
         });
 
         throw err;
@@ -852,18 +847,11 @@ export function TablePane(props: {
   };
 
   const setPagination = (s: PaginationState) => {
-    const current = pagination();
-    if (current.pageSize !== s.pageSize) {
-      setSearchParams({
-        ...searchParams,
-        pageSize: s.pageSize,
-      });
-      return;
-    }
-
-    if (current.pageIndex != s.pageIndex) {
-      setPageIndex(s.pageIndex);
-    }
+    setSearchParams({
+      ...searchParams,
+      pageSize: s.pageSize,
+      pageIndex: s.pageIndex,
+    });
   };
 
   const Fallback = () => {
