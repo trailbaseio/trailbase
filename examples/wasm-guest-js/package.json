@@ -16,12 +16,12 @@
   },
   "devDependencies": {
     "@bytecodealliance/jco": "^1.15.4",
-    "@eslint/js": "^9.39.1",
+    "@eslint/js": "^9.39.2",
     "commander": "^14.0.2",
-    "eslint": "^9.39.1",
+    "eslint": "^9.39.2",
     "globals": "^16.5.0",
     "nano-spawn": "^2.0.0",
     "prettier": "^3.7.4",
-    "vite": "^7.2.6"
+    "vite": "^7.3.0"
   }
 }
