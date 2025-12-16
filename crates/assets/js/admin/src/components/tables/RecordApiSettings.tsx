@@ -670,12 +670,14 @@ export function RecordApiSettingsForm(props: {
             mode={api()!.mode}
             reset={(api?: RecordApiConfig) => {
               if (api) {
+                // New API created (template -> exists)
                 setApi({
                   api,
                   mode: Mode.Update,
                 });
               } else {
-                setApi(defaultApi());
+                // API removed, either working copy discarded or existing deleted.
+                setApi(undefined);
               }
             }}
             {...props}
@@ -754,61 +756,6 @@ function IndividualRecordApiSettingsForm(props: {
     return (
       <SheetFooter class="pb-1">
         <div class="flex justify-between gap-2">
-          <Button
-            variant="destructive"
-            onClick={() => {
-              const apiName = props.api.name;
-              if (props.mode === Mode.Create) {
-                // Abort case
-                showToast({
-                  title: "Success",
-                  description: `API "${apiName}" discarded`,
-                  variant: "success",
-                });
-                props.reset();
-                return;
-              }
-
-              // Delete case
-              const tableName = props.schema.name;
-              console.debug("Remove record API config for:", tableName);
-
-              const c = config.data?.config;
-              if (!c) {
-                console.error("missing base configuration");
-                return;
-              }
-
-              if (apiName !== undefined) {
-                (async () => {
-                  try {
-                    const newConfig = removeRecordApiConfig(
-                      c,
-                      tableName.name,
-                      apiName,
-                    );
-
-                    await setConfig(queryClient, newConfig);
-                    showToast({
-                      title: "Success",
-                      description: `API "${apiName}" deleted`,
-                      variant: "success",
-                    });
-                    props.reset();
-                  } catch (err) {
-                    showToast({
-                      title: "Deletion Error",
-                      description: `${err}`,
-                      variant: "error",
-                    });
-                  }
-                })();
-              }
-            }}
-          >
-            {props.mode === Mode.Create ? "Discard" : "Delete"}
-          </Button>
-
           <form.Subscribe
             selector={(state) => ({
               canSubmit: state.canSubmit,
@@ -816,13 +763,25 @@ function IndividualRecordApiSettingsForm(props: {
             })}
           >
             {(state) => (
-              <Button
-                type="submit"
-                disabled={!state().canSubmit}
-                variant="default"
-              >
-                {props.mode === Mode.Update ? "Update" : "Create"}
-              </Button>
+              <Switch>
+                <Match when={props.mode === Mode.Create}>
+                  <DiscardCreateButtons
+                    canSubmit={state().canSubmit}
+                    api={props.api}
+                    reset={props.reset}
+                  />
+                </Match>
+
+                <Match when={props.mode === Mode.Update}>
+                  <DeleteUpdateButtons
+                    canSubmit={state().canSubmit}
+                    submit={form.handleSubmit}
+                    api={props.api}
+                    schema={props.schema}
+                    reset={props.reset}
+                  />
+                </Match>
+              </Switch>
             )}
           </form.Subscribe>
         </div>
@@ -1281,6 +1240,156 @@ function IndividualRecordApiSettingsForm(props: {
         </Tabs>
       </form>
     </SheetContainer>
+  );
+}
+
+function DiscardCreateButtons(props: {
+  canSubmit: boolean;
+  api: RecordApiConfig;
+  reset: (api?: RecordApiConfig) => void;
+}) {
+  return (
+    <>
+      <Button variant="destructive" onClick={() => props.reset(undefined)}>
+        Discard
+      </Button>
+
+      <Button type="submit" disabled={!props.canSubmit} variant="default">
+        Crate
+      </Button>
+    </>
+  );
+}
+
+function DeleteUpdateButtons(props: {
+  canSubmit: boolean;
+  submit: () => Promise<void>;
+  api: RecordApiConfig;
+  schema: Table | View;
+  reset: (api?: RecordApiConfig) => void;
+}) {
+  const queryClient = useQueryClient();
+  const config = createConfigQuery();
+  const [updateDialogOpen, setUpdateDialogOpen] = createSignal(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
+
+  const deleteExisting = async () => {
+    const apiName = props.api.name;
+    const tableName = props.schema.name;
+    console.debug("Remove record API config for:", tableName);
+
+    const c = config.data?.config;
+    if (!c) {
+      console.error("missing base configuration");
+      return;
+    }
+
+    if (apiName !== undefined) {
+      try {
+        const newConfig = removeRecordApiConfig(c, tableName.name, apiName);
+
+        await setConfig(queryClient, newConfig);
+        showToast({
+          title: "Success",
+          description: `API "${apiName}" deleted`,
+          variant: "success",
+        });
+        props.reset();
+      } catch (err) {
+        showToast({
+          title: "Deletion Error",
+          description: `${err}`,
+          variant: "error",
+        });
+      }
+    }
+  };
+
+  return (
+    <>
+      <Dialog
+        id="delete-api-dialog"
+        open={deleteDialogOpen()}
+        onOpenChange={(isOpen: boolean) => setDeleteDialogOpen(isOpen)}
+      >
+        <DialogTrigger class={buttonVariants({ variant: "destructive" })}>
+          Delete
+        </DialogTrigger>
+
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete API: {props.api.name}</DialogTitle>
+          </DialogHeader>
+          Deleting an existing API means it will no longer be available to
+          clients. Are you sure you want to proceed?
+          <DialogFooter>
+            <div class="flex w-full justify-between gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDeleteDialogOpen(false);
+                }}
+              >
+                Abort
+              </Button>
+
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => {
+                  deleteExisting();
+                  setDeleteDialogOpen(false);
+                }}
+              >
+                Delete
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        id="update-api-dialog"
+        open={updateDialogOpen()}
+        onOpenChange={(isOpen: boolean) => setUpdateDialogOpen(isOpen)}
+      >
+        <DialogTrigger class={buttonVariants({ variant: "default" })}>
+          Update
+        </DialogTrigger>
+
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update API: {props.api.name}</DialogTitle>
+          </DialogHeader>
+          Updating existing APIs can change the public contract and may require
+          coordination with clients. Are you sure you want to proceed?
+          <DialogFooter>
+            <div class="flex w-full justify-between gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setUpdateDialogOpen(false);
+                }}
+              >
+                Abort
+              </Button>
+
+              <Button
+                type="button"
+                disabled={!props.canSubmit}
+                variant="default"
+                onClick={() => {
+                  props.submit();
+                  setUpdateDialogOpen(false);
+                }}
+              >
+                Update
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
