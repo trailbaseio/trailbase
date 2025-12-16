@@ -1,6 +1,7 @@
 import {
   For,
   Match,
+  Show,
   Switch,
   createEffect,
   createMemo,
@@ -12,6 +13,7 @@ import {
   flexRender,
   createSolidTable,
   getCoreRowModel,
+  createColumnHelper,
 } from "@tanstack/solid-table";
 import type {
   ColumnDef,
@@ -20,6 +22,7 @@ import type {
   RowSelectionState,
   Table as TableType,
 } from "@tanstack/solid-table";
+import { TbPin, TbPinFilled } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -84,9 +87,13 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
       return local.columns();
     }
 
+    const helper = createColumnHelper<TData>();
+
     return [
-      {
-        id: "select",
+      helper.display({
+        id: "__select__",
+        enablePinning: true,
+        enableHiding: false,
         header: (ctx) => (
           <Checkbox
             checked={ctx.table.getIsAllPageRowsSelected()}
@@ -119,9 +126,8 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
             }}
           />
         ),
-        enableSorting: false,
-        enableHiding: false,
-      } as ColumnDef<TData, TValue>,
+      }),
+      // Custom/Domain-provided columns
       ...local.columns(),
     ];
   };
@@ -174,6 +180,16 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
       enableRowSelection: true,
       enableMultiRowSelection: props.onRowSelection ? true : false,
       onRowSelectionChange: setRowSelection,
+
+      enableColumnPinning: true,
+    });
+
+    t.setState((state) => {
+      state.columnPinning.left = [
+        "__select__",
+        ...(state.columnPinning.left ?? []),
+      ];
+      return state;
     });
 
     return t;
@@ -223,6 +239,33 @@ function TableImpl<TData>(props: {
                                 header.column.columnDef.header,
                                 header.getContext(),
                               )}
+
+                          {/* Pin Button */}
+                          <Show
+                            when={
+                              false
+                              // header.column.columnDef.id !== "__select__"
+                            }
+                          >
+                            <Button
+                              class="size-8"
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => {
+                                if (header.column.getIsPinned()) {
+                                  header.column.pin(false);
+                                } else {
+                                  header.column.pin("left");
+                                }
+                              }}
+                            >
+                              {header.column.getIsPinned() ? (
+                                <TbPinFilled />
+                              ) : (
+                                <TbPin />
+                              )}
+                            </Button>
+                          </Show>
                         </TableHead>
                       );
                     }}

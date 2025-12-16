@@ -1,7 +1,9 @@
 import { Match, Switch, createMemo, createSignal, JSX } from "solid-js";
+import { createWritableMemo } from "@solid-primitives/memo";
 import { TbRefresh, TbTable, TbTrash } from "solid-icons/tb";
-import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { useSearchParams } from "@solidjs/router";
+import { useQuery, useQueryClient } from "@tanstack/solid-query";
+import type { QueryObserverResult } from "@tanstack/solid-query";
 import { urlSafeBase64Decode } from "trailbase";
 import type {
   CellContext,
@@ -9,7 +11,6 @@ import type {
   PaginationState,
   Row,
 } from "@tanstack/solid-table";
-import { createWritableMemo } from "@solid-primitives/memo";
 import { createColumnHelper } from "@tanstack/solid-table";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 
@@ -506,6 +507,7 @@ function buildColumnDefs(
     const header = `${col.name} [${typeName}] ${fkSuffix}`;
 
     return {
+      id: col.name,
       header,
       cell: (context) =>
         renderCell(
@@ -783,14 +785,22 @@ export function TablePane(props: {
       filter,
     });
   };
+
   const pagination = (): PaginationState => {
     return {
       pageSize: safeParseInt(searchParams.pageSize) ?? 20,
       pageIndex: safeParseInt(searchParams.pageIndex) ?? 0,
     };
   };
+  const setPagination = (s: PaginationState) => {
+    setSearchParams({
+      ...searchParams,
+      pageSize: s.pageSize,
+      pageIndex: s.pageIndex,
+    });
+  };
 
-  const state = useQuery(() => ({
+  const state: QueryObserverResult<TableState> = useQuery(() => ({
     queryKey: [
       "tableData",
       prettyFormatQualifiedName(props.selectedTable.name),
@@ -846,19 +856,6 @@ export function TablePane(props: {
     rowsRefetch();
   };
 
-  const setPagination = (s: PaginationState) => {
-    setSearchParams({
-      ...searchParams,
-      pageSize: s.pageSize,
-      pageIndex: s.pageIndex,
-    });
-  };
-
-  const Fallback = () => {
-    // TODO: Return a shimmery table to reduce visual jank.
-    return <>Loading...</>;
-  };
-
   return (
     <>
       <TableHeader
@@ -871,7 +868,7 @@ export function TablePane(props: {
       />
 
       <div class="flex flex-col gap-8 p-4">
-        <Switch fallback={Fallback()}>
+        <Switch>
           <Match when={state.isError}>
             <div class="my-2 flex flex-col gap-4">
               Failed to fetch rows: {`${state.error}`}
@@ -880,6 +877,8 @@ export function TablePane(props: {
               </div>
             </div>
           </Match>
+
+          <Match when={state.isLoading}>Loading...</Match>
 
           <Match when={state.data}>
             <ArrayRecordTable
