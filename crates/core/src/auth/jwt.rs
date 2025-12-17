@@ -42,6 +42,11 @@ pub struct TokenClaims {
   /// CSRF random token. Requiring that the client echos this random token back on a non-cookie,
   /// non-auto-attach channel can be used to protect from CSRF.
   pub csrf_token: String,
+
+  /// Is admin user.
+  #[serde(default)]
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub admin: bool,
 }
 
 impl TokenClaims {
@@ -49,6 +54,7 @@ impl TokenClaims {
     verified: bool,
     user_id: uuid::Uuid,
     email: String,
+    admin: bool,
     expires_in: chrono::Duration,
   ) -> Self {
     assert!(verified);
@@ -60,6 +66,7 @@ impl TokenClaims {
       iat: now.timestamp(),
       email,
       csrf_token: generate_random_string(20),
+      admin,
     };
   }
 }
@@ -191,6 +198,7 @@ mod tests {
       true,
       uuid::Uuid::now_v7(),
       "foo@bar.com".to_string(),
+      false,
       crate::constants::DEFAULT_AUTH_TOKEN_TTL,
     );
     let token = jwt.encode(&claims).unwrap();

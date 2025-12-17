@@ -88,9 +88,14 @@ const App: Component = () => {
     </ErrorBoundary>
   );
 
+  function isAdmin() {
+    const u = user();
+    return u !== undefined && u.admin === true;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
-      <Show when={user() !== undefined} fallback={<Login />}>
+      <Show when={isAdmin()} fallback={<Login />}>
         <Router base={"/_/admin"} root={WrapWithNav}>
           <Route path="/" component={IndexPage} />
           <Route path="/table/:table?" component={TablePage} />

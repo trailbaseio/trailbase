@@ -12,6 +12,7 @@ import type { RefreshResponse } from "@bindings/RefreshResponse";
 export type User = {
   id: string;
   email: string;
+  admin?: boolean;
 };
 
 export type Pagination = {
@@ -38,6 +39,7 @@ type TokenClaims = {
   exp: number;
   email: string;
   csrf_token: string;
+  admin?: boolean;
 };
 
 type TokenState = {
@@ -70,6 +72,7 @@ function buildUser(state: TokenState): User | undefined {
     return {
       id: claims.sub,
       email: claims.email,
+      admin: claims.admin,
     };
   }
 }
@@ -114,7 +117,9 @@ export class FetchError extends Error {
 
     return new FetchError(
       response.status,
-      `FetchError(status: ${response.status} - ${response.statusText}, ${body})`,
+      body
+        ? `FetchError(${response.status}, ${response.statusText},  ${body})`
+        : `FetchError(${response.status}, ${response.statusText})`,
     );
   }
 

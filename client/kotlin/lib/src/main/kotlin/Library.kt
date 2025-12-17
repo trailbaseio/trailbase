@@ -374,7 +374,11 @@ private fun decodeJwtTokenClaims(jwt: String): JwtTokenClaims {
             .decode(parts[1])
             .decodeToString()
 
-    return Json.decodeFromString(decoded)
+    return Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+        }
+        .decodeFromString(decoded)
 }
 
 fun addFiltersToParams(params: MutableMap<String, String>, path: String, filter: FilterBase) {
