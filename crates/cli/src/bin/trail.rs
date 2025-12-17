@@ -219,6 +219,10 @@ async fn async_main() -> Result<(), BoxError> {
           let id = api::cli::change_email(&conn, to_user_reference(user), &new_email).await?;
           println!("Updated email for '{id}'");
         }
+        Some(UserSubCommands::Add { email, password }) => {
+          api::cli::add_user(&conn, &email, &password).await?;
+          println!("Added user '{email}'");
+        }
         Some(UserSubCommands::Delete { user }) => {
           api::cli::delete_user(&conn, to_user_reference(user.clone())).await?;
           println!("Deleted user '{user}'");

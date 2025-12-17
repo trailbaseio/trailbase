@@ -347,6 +347,7 @@ impl Server {
           assert_admin_api_access,
         )),
       )
+      // NOTE: We cannot ACL-lock the UI assets. We need to be able to sign into the SPA.
       .nest_service(
         "/_/admin",
         AssetService::<trailbase_assets::AdminAssets>::with_parameters(

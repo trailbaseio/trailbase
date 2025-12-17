@@ -199,6 +199,13 @@ pub enum UserSubCommands {
     /// New email address to set for user.
     new_email: String,
   },
+  /// Adds a new and verified user.
+  Add {
+    /// Email address of the new user.
+    email: String,
+    /// Password - not checked against policies.
+    password: String,
+  },
   /// Delete a user.
   Delete {
     /// User in question, either email or UUID.
