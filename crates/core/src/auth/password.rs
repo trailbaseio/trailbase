@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 use crate::auth::AuthError;
 use crate::auth::user::DbUser;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PasswordOptions {
   pub min_length: usize,
   pub max_length: usize,

@@ -162,6 +162,9 @@ pub(crate) async fn install_routes_and_jobs(
   for (method, path) in init_result.http_handlers {
     debug!("Installing WASM route: {method:?}: {path}");
 
+    // TODO: Check for presence of login/register/profile auth UIs.
+    scan_for_auth_ui(state, method, &path);
+
     let runtime = runtime.clone();
     let registered_path = path.clone();
 
@@ -237,6 +240,43 @@ pub(crate) async fn install_routes_and_jobs(
   }
 
   return Ok(Some(router));
+}
+
+fn scan_for_auth_ui(
+  state: &AppState,
+  method: trailbase_wasm_runtime_host::HttpMethodType,
+  path: &str,
+) {
+  use trailbase_wasm_runtime_host::HttpMethodType;
+
+  if method != HttpMethodType::Get {
+    return;
+  }
+
+  match path {
+    crate::auth::REGISTER_USER_UI => {
+      state.update_auth_options(|old| {
+        let mut new = old.clone();
+        new.has_register_ui = true;
+        return new;
+      });
+    }
+    crate::auth::LOGIN_UI => {
+      state.update_auth_options(|old| {
+        let mut new = old.clone();
+        new.has_login_ui = true;
+        return new;
+      });
+    }
+    crate::auth::PROFILE_UI => {
+      state.update_auth_options(|old| {
+        let mut new = old.clone();
+        new.has_profile_ui = true;
+        return new;
+      });
+    }
+    _ => {}
+  };
 }
 
 #[inline]

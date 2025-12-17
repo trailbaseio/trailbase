@@ -284,6 +284,10 @@ impl AppState {
     return self.state.auth.value();
   }
 
+  pub(crate) fn update_auth_options(&self, f: impl FnOnce(&AuthOptions) -> AuthOptions) {
+    return self.state.auth.update(move |o| Arc::new(f(o)));
+  }
+
   pub fn site_url(&self) -> Arc<Option<url::Url>> {
     return self.state.site_url.value();
   }

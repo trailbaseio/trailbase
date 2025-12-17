@@ -1,14 +1,32 @@
 use log::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use crate::auth::oauth::providers::{OAuthProviderType, build_oauth_providers_from_config};
 use crate::auth::password::PasswordOptions;
 use crate::config::proto::AuthConfig;
 
-#[derive(Default)]
-pub struct AuthOptions {
+#[derive(Clone, Default)]
+pub(crate) struct AuthOptions {
   password_options: PasswordOptions,
-  oauth_providers: HashMap<String, OAuthProviderType>,
+  oauth_providers: HashMap<String, Arc<OAuthProviderType>>,
+
+  pub has_login_ui: bool,
+  pub has_register_ui: bool,
+  pub has_profile_ui: bool,
+}
+
+impl PartialEq for AuthOptions {
+  fn eq(&self, other: &Self) -> bool {
+    let p0: HashSet<&String> = self.oauth_providers.keys().collect();
+    let p1: HashSet<&String> = other.oauth_providers.keys().collect();
+
+    return p0 == p1
+      && self.password_options == other.password_options
+      && self.has_login_ui == other.has_login_ui
+      && self.has_register_ui == other.has_register_ui
+      && self.has_profile_ui == other.has_profile_ui;
+  }
 }
 
 #[derive(Default)]
@@ -35,6 +53,9 @@ impl AuthOptions {
         error!("Failed to derive configured OAuth providers from config: {err}");
         return Default::default();
       }),
+      has_login_ui: false,
+      has_register_ui: false,
+      has_profile_ui: false,
     };
   }
 
@@ -42,7 +63,7 @@ impl AuthOptions {
     return &self.password_options;
   }
 
-  pub fn lookup_oauth_provider(&self, name: &str) -> Option<&OAuthProviderType> {
+  pub fn lookup_oauth_provider(&self, name: &str) -> Option<&Arc<OAuthProviderType>> {
     if let Some(entry) = self.oauth_providers.get(name) {
       return Some(entry);
     }

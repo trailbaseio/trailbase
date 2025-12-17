@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::{
   extract::{Path, Query, State},
   response::Redirect,
@@ -117,7 +119,7 @@ pub(crate) async fn callback_from_external_auth_provider(
 async fn callback_from_oauth_provider_setting_token_cookies(
   state: &AppState,
   cookies: &Cookies,
-  provider: &OAuthProviderType,
+  provider: &Arc<OAuthProviderType>,
   redirect: Option<String>,
   auth_code: String,
   server_pkce_code_verifier: String,
@@ -174,7 +176,7 @@ async fn callback_from_oauth_provider_setting_token_cookies(
 async fn callback_from_oauth_provider_using_auth_code_flow(
   state: &AppState,
   cookies: &Cookies,
-  provider: &OAuthProviderType,
+  provider: &Arc<OAuthProviderType>,
   redirect: Option<String>,
   auth_code: String,
   server_pkce_code_verifier: String,
@@ -234,7 +236,7 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
 
 async fn get_or_create_user(
   state: &AppState,
-  provider: &OAuthProviderType,
+  provider: &Arc<OAuthProviderType>,
   auth_code: String,
   server_pkce_code_verifier: String,
 ) -> Result<DbUser, AuthError> {

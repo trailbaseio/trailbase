@@ -10,7 +10,7 @@ mod oidc;
 pub(crate) mod test;
 
 use std::collections::hash_map::HashMap;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use thiserror::Error;
 
 use crate::auth::oauth::OAuthProvider;
@@ -22,9 +22,10 @@ pub enum OAuthProviderError {
   Missing(String),
 }
 
-pub type OAuthProviderType = Box<dyn OAuthProvider + Send + Sync>;
-type OAuthFactoryType =
-  dyn Fn(&str, &OAuthProviderConfig) -> Result<OAuthProviderType, OAuthProviderError> + Send + Sync;
+pub type OAuthProviderType = dyn OAuthProvider + Send + Sync;
+type OAuthFactoryType = dyn Fn(&str, &OAuthProviderConfig) -> Result<Box<OAuthProviderType>, OAuthProviderError>
+  + Send
+  + Sync;
 
 pub(crate) struct OAuthProviderFactory {
   pub id: OAuthProviderId,
@@ -56,7 +57,7 @@ pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderFactor
 
 pub(crate) fn build_oauth_providers_from_config(
   config: AuthConfig,
-) -> Result<HashMap<String, OAuthProviderType>, OAuthProviderError> {
+) -> Result<HashMap<String, Arc<OAuthProviderType>>, OAuthProviderError> {
   return config
     .oauth_providers
     .iter()
@@ -72,7 +73,7 @@ pub(crate) fn build_oauth_providers_from_config(
       };
 
       let provider = (entry.factory)(key, config)?;
-      return Ok((provider.name().to_string(), provider));
+      return Ok((provider.name().to_string(), provider.into()));
     })
     .collect();
 }
