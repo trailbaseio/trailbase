@@ -1,4 +1,4 @@
-use axum::extract::{Form, Json, Path, Query, State};
+use axum::extract::{Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::Response;
 use base64::prelude::*;
@@ -69,7 +69,7 @@ async fn register_test_user(
     ..Default::default()
   };
 
-  register_user_handler(State(state.clone()), Form(request))
+  register_user_handler(State(state.clone()), Either::Form(request))
     .await
     .unwrap();
 

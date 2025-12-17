@@ -1,7 +1,5 @@
-use axum::{
-  extract::{Form, State},
-  response::{IntoResponse, Redirect, Response},
-};
+use axum::extract::State;
+use axum::response::{IntoResponse, Redirect, Response};
 use lazy_static::lazy_static;
 use serde::Deserialize;
 use trailbase_sqlite::named_params;
@@ -15,6 +13,7 @@ use crate::auth::util::{user_exists, validate_and_normalize_email_address};
 use crate::auth::{LOGIN_UI, REGISTER_USER_UI};
 use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;
+use crate::extract::Either;
 use crate::rand::generate_random_string;
 
 #[derive(Debug, Default, Deserialize, ToSchema)]
@@ -36,12 +35,18 @@ pub struct RegisterUserRequest {
 )]
 pub async fn register_user_handler(
   State(state): State<AppState>,
-  Form(request): Form<RegisterUserRequest>,
+  either_request: Either<RegisterUserRequest>,
 ) -> Result<Response, AuthError> {
   let disabled = state.access_config(|c| c.auth.disable_password_auth.unwrap_or(false));
   if disabled {
     return Err(AuthError::Forbidden);
   }
+
+  let request = match either_request {
+    Either::Json(req) => req,
+    Either::Multipart(req, _) => req,
+    Either::Form(req) => req,
+  };
 
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
