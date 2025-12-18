@@ -8,6 +8,7 @@ import { urlSafeBase64Decode } from "trailbase";
 import type {
   CellContext,
   ColumnDef,
+  ColumnPinningState,
   PaginationState,
   Row,
 } from "@tanstack/solid-table";
@@ -530,6 +531,7 @@ function ArrayRecordTable(props: {
   state: TableState;
   pagination: SimpleSignal<PaginationState>;
   filter: SimpleSignal<string | undefined>;
+  columnPinningState: SimpleSignal<ColumnPinningState>;
   rowsRefetch: () => void;
 }) {
   const [blobEncoding, setBlobEncoding] = createSignal<BlobEncoding>("mixed");
@@ -595,6 +597,8 @@ function ArrayRecordTable(props: {
                   // NOTE: The formatting is done via the columnsDefs.
                   columns={columnDefs}
                   data={() => props.state.response.rows}
+                  columnPinning={props.columnPinningState[0]}
+                  onColumnPinningChange={props.columnPinningState[1]}
                   rowCount={Number(totalRowCount())}
                   pagination={props.pagination[0]()}
                   onPaginationChange={(s: PaginationState) => {
@@ -856,6 +860,8 @@ export function TablePane(props: {
     rowsRefetch();
   };
 
+  const [columnPinningState, setColumnPinningState] = createSignal({});
+
   return (
     <>
       <TableHeader
@@ -885,6 +891,7 @@ export function TablePane(props: {
               state={state.data!}
               pagination={[pagination, setPagination]}
               filter={[filter, setFilter]}
+              columnPinningState={[columnPinningState, setColumnPinningState]}
               rowsRefetch={rowsRefetch}
             />
           </Match>

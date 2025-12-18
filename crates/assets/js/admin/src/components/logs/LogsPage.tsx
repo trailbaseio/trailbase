@@ -204,6 +204,8 @@ export function LogsPage() {
   const [showMap, setShowMap] = createSignal(true);
   const [showGeoipDialog, setShowGeoipDialog] = createSignal(false);
 
+  const [columnPinningState, setColumnPinningState] = createSignal({});
+
   return (
     <div class="h-full">
       <Header
@@ -294,6 +296,8 @@ export function LogsPage() {
             <DataTable
               columns={() => columns}
               data={() => logsFetch.data!.entries}
+              columnPinning={columnPinningState}
+              onColumnPinningChange={setColumnPinningState}
               rowCount={Number(logsFetch.data!.total_row_count ?? -1)}
               pagination={pagination()}
               onPaginationChange={(s: PaginationState) => {

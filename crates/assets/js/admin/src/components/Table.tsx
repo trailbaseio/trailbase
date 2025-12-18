@@ -1,14 +1,13 @@
 import {
   For,
   Match,
-  Show,
   Switch,
   createEffect,
   createMemo,
   createSignal,
   splitProps,
-  type Accessor,
 } from "solid-js";
+import type { Accessor } from "solid-js";
 import {
   flexRender,
   createSolidTable,
@@ -17,6 +16,7 @@ import {
 } from "@tanstack/solid-table";
 import type {
   ColumnDef,
+  ColumnPinningState,
   PaginationState,
   Row,
   RowSelectionState,
@@ -67,6 +67,9 @@ type Props<TData, TValue> = {
 
   onRowSelection?: (rows: Row<TData>[], value: boolean) => void;
   onRowClick?: (idx: number, row: TData) => void;
+
+  columnPinning?: Accessor<ColumnPinningState>;
+  onColumnPinningChange?: (state: ColumnPinningState) => void;
 };
 
 // TODO: This entire implementation is incredibly messy. We should probably just
@@ -81,7 +84,7 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
     setRowSelection({});
   });
 
-  const columns = () => {
+  const buildColumns = () => {
     const onRowSelection = props.onRowSelection;
     if (!onRowSelection) {
       return local.columns();
@@ -135,6 +138,20 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
   const table = createMemo(() => {
     console.debug("table data rebuild");
 
+    const columns = buildColumns();
+    const enableColumnPinning =
+      props.columnPinning !== undefined && columns.length > 2;
+
+    const buildColumnPinningState = (): ColumnPinningState => {
+      const state = {
+        ...props.columnPinning?.(),
+      };
+      if (state.left?.[0] !== "__select__") {
+        state.left = ["__select__", ...(state.left ?? [])];
+      }
+      return state;
+    };
+
     const t = createSolidTable({
       data: local.data() || [],
       state: {
@@ -146,8 +163,9 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
               }
             : undefined,
         rowSelection: rowSelection(),
+        columnPinning: buildColumnPinningState(),
       },
-      columns: columns(),
+      columns,
       getCoreRowModel: getCoreRowModel(),
 
       // NOTE: requires setting up the header cells with resize handles.
@@ -181,15 +199,18 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
       enableMultiRowSelection: props.onRowSelection ? true : false,
       onRowSelectionChange: setRowSelection,
 
-      enableColumnPinning: true,
-    });
+      enableColumnPinning,
+      onColumnPinningChange:
+        props.onColumnPinningChange !== undefined
+          ? (updater) => {
+              const newState =
+                typeof updater === "function"
+                  ? updater(t.getState().columnPinning)
+                  : updater;
 
-    t.setState((state) => {
-      state.columnPinning.left = [
-        "__select__",
-        ...(state.columnPinning.left ?? []),
-      ];
-      return state;
+              props.onColumnPinningChange!(newState);
+            }
+          : undefined,
     });
 
     return t;
@@ -213,6 +234,7 @@ function TableImpl<TData>(props: {
   const paginationState = () => props.table.getState().pagination;
   const columns = () => props.table.options.columns;
   const numRows = () => props.table.getRowModel().rows?.length ?? 0;
+  const showPin = () => props.table.options.enableColumnPinning;
 
   return (
     <>
@@ -231,33 +253,49 @@ function TableImpl<TData>(props: {
                 <TableRow>
                   <For each={headerGroup.headers}>
                     {(header) => {
+                      const togglePin = () => {
+                        if (header.column.getIsPinned()) {
+                          header.column.pin(false);
+                        } else {
+                          header.column.pin("left");
+                        }
+                      };
+
+                      const HeadContents = () =>
+                        header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext(),
+                            );
+
+                      if (header.column.columnDef.id === "__select__") {
+                        return (
+                          <TableHead class={selectStyle}>
+                            <HeadContents />
+                          </TableHead>
+                        );
+                      }
+
+                      if (!showPin()) {
+                        return (
+                          <TableHead class="relative pr-5 pl-4">
+                            <HeadContents />
+                          </TableHead>
+                        );
+                      }
+
                       return (
-                        <TableHead>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext(),
-                              )}
+                        <TableHead class="relative pr-5 pl-4">
+                          <HeadContents />
 
                           {/* Pin Button */}
-                          <Show
-                            when={
-                              false
-                              // header.column.columnDef.id !== "__select__"
-                            }
-                          >
+                          <div class="absolute top-1 right-1 z-[10]">
                             <Button
-                              class="size-8"
+                              class="size-4 bg-transparent"
                               size="icon"
                               variant="ghost"
-                              onClick={() => {
-                                if (header.column.getIsPinned()) {
-                                  header.column.pin(false);
-                                } else {
-                                  header.column.pin("left");
-                                }
-                              }}
+                              onClick={togglePin}
                             >
                               {header.column.getIsPinned() ? (
                                 <TbPinFilled />
@@ -265,7 +303,7 @@ function TableImpl<TData>(props: {
                                 <TbPin />
                               )}
                             </Button>
-                          </Show>
+                          </div>
                         </TableHead>
                       );
                     }}
@@ -300,16 +338,27 @@ function TableImpl<TData>(props: {
                         onClick={onClick}
                       >
                         <For each={row.getVisibleCells()}>
-                          {(cell) => (
-                            <TableCell>
-                              <div class="max-h-[80px] overflow-x-hidden overflow-y-auto break-words">
-                                {flexRender(
-                                  cell.column.columnDef.cell,
-                                  cell.getContext(),
-                                )}
-                              </div>
-                            </TableCell>
-                          )}
+                          {(cell) => {
+                            const CellContents = () =>
+                              flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext(),
+                              );
+
+                            if (cell.column.id == "__select__") {
+                              return (
+                                <TableCell class={selectStyle}>
+                                  <CellContents />
+                                </TableCell>
+                              );
+                            }
+
+                            return (
+                              <TableCell class="max-h-[80px] overflow-x-hidden overflow-y-auto break-words">
+                                <CellContents />
+                              </TableCell>
+                            );
+                          }}
                         </For>
                       </TableRow>
                     );
@@ -417,6 +466,7 @@ function PaginationControl<TData>(props: {
               />
             </svg>
           </Button>
+
           <Button
             aria-label="Go to previous page"
             variant="outline"
@@ -441,6 +491,7 @@ function PaginationControl<TData>(props: {
               />
             </svg>
           </Button>
+
           <Button
             aria-label="Go to next page"
             variant="outline"
@@ -476,3 +527,5 @@ function PaginationControl<TData>(props: {
     </div>
   );
 }
+
+const selectStyle = "w-[40px] pl-4 pr-2";

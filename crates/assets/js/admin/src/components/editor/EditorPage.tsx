@@ -110,6 +110,8 @@ function ResultView(props: {
   const isCached = () => props.response === undefined;
   const response = () => props.response ?? props.script.result;
 
+  const [columnPinningState, setColumnPinningState] = createSignal({});
+
   function columnDefs(data: QueryResponse): ColumnDef<ArrayRecord, SqlValue>[] {
     return (data.columns ?? []).map((col, idx) => {
       const notNull = isNotNull(col.options);
@@ -160,6 +162,8 @@ function ResultView(props: {
             <DataTable
               columns={() => columnDefs(response()!.data!)}
               data={() => response()!.data!.rows}
+              columnPinning={columnPinningState}
+              onColumnPinningChange={setColumnPinningState}
             />
           </div>
         </ErrorBoundary>
