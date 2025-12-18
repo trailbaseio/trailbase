@@ -10,11 +10,12 @@
 use eventsource_stream::Eventsource;
 use futures_lite::StreamExt;
 use parking_lot::RwLock;
-use reqwest::header::{self, HeaderMap, HeaderValue};
+use reqwest::header::{self, CONTENT_TYPE, HeaderMap, HeaderValue};
 use reqwest::{Method, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::*;
@@ -763,6 +764,50 @@ impl Client {
     return Ok(tokens);
   }
 
+
+  pub async fn register(&self, email: &str, password: &str, password_repeat: &str) -> Result<String, Error> {
+    #[derive(Serialize)]
+    struct Credentials<'a> {
+      email: &'a str,
+      password: &'a str,
+      password_repeat: &'a str,
+    }
+
+    let client = reqwest::Client::new();
+
+    // Only include headers you actually need (like Auth or User-Agent).
+    // Do NOT manually set Content-Type or Content-Encoding for forms.
+    let mut headers = build_headers(None); 
+    headers.remove(CONTENT_TYPE);
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/x-www-form-urlencoded"));
+
+    let mut params = HashMap::new();
+    params.insert("email", email);
+    params.insert("password", password);
+    params.insert("password_repeat", password_repeat);
+
+    // let url = url::Url::parse(&self.site()).map_err(Error::InvalidUrl)?;
+
+    let url = format!("{}/{}/register", self.site().trim_end_matches('/'), AUTH_API);
+    println!("Register URL: {}", url);
+
+    let response = client
+        .post(url)
+        .headers(headers) // Ensure build_headers doesn't conflict
+        .form(&params)    // <--- This automatically sets Content-Type to application/x-www-form-urlencoded
+        .send()
+        .await
+        .map_err(Error::OtherReqwest)?;
+
+    let status = response.status();
+    let body = response.text().await.map_err(Error::OtherReqwest)?;
+
+    println!("Status: {}", status);
+    println!("Response Body: {}", body); // Check if TrailBase is returning a 'success' message that actually contains an error detail
+
+    return Ok(body);
+  }
+
   pub async fn logout(&self) -> Result<(), Error> {
     #[derive(Serialize)]
     struct LogoutRequest {
@@ -818,10 +863,15 @@ impl Client {
 
 fn build_headers(tokens: Option<&Tokens>) -> HeaderMap {
   let mut base = HeaderMap::with_capacity(5);
+
+  let mut value = HeaderValue::from_static("application/json");
+  value.set_sensitive(false);
   base.insert(
     header::CONTENT_TYPE,
-    HeaderValue::from_static("application/json"),
+    value,
   );
+
+  // base.insert(header::ACCEPT, HeaderValue::from_static("application/json"));
 
   if let Some(tokens) = tokens {
     if let Ok(value) = HeaderValue::from_str(&format!("Bearer {}", tokens.auth_token)) {
