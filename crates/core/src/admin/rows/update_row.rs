@@ -7,6 +7,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
+use crate::connection::ConnectionEntry;
 use crate::records::params::Params;
 use crate::records::write_queries::run_update_query;
 
@@ -33,7 +34,11 @@ pub async fn update_row_handler(
   }
 
   let table_name = QualifiedName::parse(&table_name)?;
-  let metadata = state.connection_metadata();
+  let ConnectionEntry {
+    connection: conn,
+    metadata,
+  } = state.connection_manager().get_entry_for_qn(&table_name)?;
+
   let Some(table_metadata) = metadata.get_table(&table_name) else {
     return Err(Error::Precondition(format!(
       "Table {table_name:?} not found"
@@ -56,7 +61,8 @@ pub async fn update_row_handler(
   }
 
   run_update_query(
-    &state,
+    &conn,
+    state.objectstore(),
     &QualifiedNameEscaped::new(&table_metadata.schema.name),
     Params::for_admin_update(
       table_metadata,

@@ -1,6 +1,8 @@
 use axum::extract::{Json, State};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use trailbase_schema::QualifiedName;
 use utoipa::ToSchema;
 
 use crate::app_state::AppState;
@@ -56,19 +58,47 @@ pub async fn record_transactions_handler(
   user: Option<User>,
   Json(request): Json<TransactionRequest>,
 ) -> Result<Json<TransactionResponse>, RecordError> {
+  // NOTE: We may want to make this user-configurable. The cost also heavily depends on whether
+  // `request.transaction == true`.
   if request.operations.len() > 128 {
     return Err(RecordError::BadRequest("Transactions exceed limit: 128"));
   }
 
+  if request.operations.is_empty() {
+    return Ok(Json(TransactionResponse { ids: vec![] }));
+  }
+
   type Op = dyn (FnOnce(&rusqlite::Connection) -> Result<Option<String>, RecordError>) + Send;
+
+  let mut db: (String, Option<Arc<trailbase_sqlite::Connection>>) = Default::default();
+  let mut get_api =
+    |state: &AppState, api_name: &str, idx: usize| -> Result<RecordApi, RecordError> {
+      let api = state
+        .lookup_record_api(api_name)
+        .ok_or_else(|| RecordError::ApiNotFound)?;
+      if !api.is_table() {
+        return Err(RecordError::ApiRequiresTable);
+      }
+
+      // Check that all ops reference same DB.
+      let db_name = get_db_name(api.qualified_name());
+      if idx == 0 {
+        db = (db_name.to_string(), Some(api.conn().clone()));
+      } else if db_name != db.0 {
+        return Err(RecordError::BadRequest("ops can only touch same db"));
+      }
+
+      return Ok(api);
+    };
 
   let operations: Vec<Box<Op>> = request
     .operations
     .into_iter()
-    .map(|op| -> Result<Box<Op>, RecordError> {
+    .enumerate()
+    .map(|(idx, op)| -> Result<Box<Op>, RecordError> {
       return match op {
         Operation::Create { api_name, value } => {
-          let api = get_api(&state, &api_name)?;
+          let api = get_api(&state, &api_name, idx)?;
           let mut record = extract_record(value)?;
 
           if api.insert_autofill_missing_user_id_columns()
@@ -85,7 +115,8 @@ pub async fn record_transactions_handler(
             }
           }
 
-          let mut lazy_params = LazyParams::for_insert(&api, record, None);
+          let mut lazy_params =
+            LazyParams::for_insert(&api, state.json_schema_registry().clone(), record, None);
           let acl_check = api.build_record_level_access_check(
             Permission::Create,
             None,
@@ -120,13 +151,14 @@ pub async fn record_transactions_handler(
           record_id,
           value,
         } => {
-          let api = get_api(&state, &api_name)?;
+          let api = get_api(&state, &api_name, idx)?;
           let record = extract_record(value)?;
           let record_id = api.primary_key_to_value(record_id)?;
           let (_index, pk_column) = api.record_pk_column();
 
           let mut lazy_params = LazyParams::for_update(
             &api,
+            state.json_schema_registry().clone(),
             record,
             None,
             pk_column.name.clone(),
@@ -161,7 +193,7 @@ pub async fn record_transactions_handler(
           api_name,
           record_id,
         } => {
-          let api = get_api(&state, &api_name)?;
+          let api = get_api(&state, &api_name, idx)?;
           let record_id = api.primary_key_to_value(record_id)?;
 
           let acl_check = api.build_record_level_access_check(
@@ -188,9 +220,12 @@ pub async fn record_transactions_handler(
     })
     .collect::<Result<Vec<_>, _>>()?;
 
-  let ids = if request.transaction.unwrap_or(true) {
-    state
-      .conn()
+  let conn = db
+    .1
+    .ok_or_else(|| RecordError::Internal("missing db".into()))?;
+
+  let ids = if request.transaction.unwrap_or(false) {
+    conn
       .call(
         move |conn: &mut rusqlite::Connection| -> Result<Vec<String>, trailbase_sqlite::Error> {
           let tx = conn.transaction()?;
@@ -209,8 +244,7 @@ pub async fn record_transactions_handler(
       )
       .await?
   } else {
-    state
-      .conn()
+    conn
       .call(
         move |conn: &mut rusqlite::Connection| -> Result<Vec<String>, trailbase_sqlite::Error> {
           let mut ids: Vec<String> = vec![];
@@ -241,14 +275,8 @@ fn extract_record_id(value: rusqlite::types::Value) -> Result<String, trailbase_
 }
 
 #[inline]
-fn get_api(state: &AppState, api_name: &str) -> Result<RecordApi, RecordError> {
-  let Some(api) = state.lookup_record_api(api_name) else {
-    return Err(RecordError::ApiNotFound);
-  };
-  if !api.is_table() {
-    return Err(RecordError::ApiRequiresTable);
-  }
-  return Ok(api);
+fn get_db_name(name: &QualifiedName) -> &str {
+  return name.database_schema.as_deref().unwrap_or("main");
 }
 
 #[inline]

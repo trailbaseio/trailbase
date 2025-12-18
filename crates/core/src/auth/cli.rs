@@ -8,7 +8,7 @@ use crate::auth::AuthError;
 use crate::auth::password::hash_password;
 use crate::auth::tokens::mint_new_tokens;
 use crate::auth::user::DbUser;
-use crate::auth::util::{get_user_by_email, get_user_by_id};
+use crate::auth::util::{get_user_by_email, get_user_by_id, validate_and_normalize_email_address};
 use crate::constants::USER_TABLE;
 
 pub enum UserReference {
@@ -63,6 +63,7 @@ pub async fn change_email(
   user: UserReference,
   new_email: &str,
 ) -> Result<Uuid, AuthError> {
+  let normalized_email = validate_and_normalize_email_address(new_email)?;
   let db_user = user.lookup_user(user_conn).await?;
 
   lazy_static! {
@@ -71,12 +72,37 @@ pub async fn change_email(
   }
 
   return user_conn
-    .write_query_value(
-      &*UPDATE_EMAIL_QUERY,
-      params!(new_email.to_string(), db_user.id),
-    )
+    .write_query_value(&*UPDATE_EMAIL_QUERY, params!(normalized_email, db_user.id))
     .await?
     .ok_or(AuthError::NotFound);
+}
+
+pub async fn add_user(
+  user_conn: &trailbase_sqlite::Connection,
+  email: &str,
+  password: &str,
+) -> Result<Uuid, AuthError> {
+  lazy_static! {
+    static ref ADD_USER_QUERY: String = format!(
+      r#"INSERT INTO "{USER_TABLE}" (email, password_hash, verified) VALUES (?1, ?2, ?3) RETURNING *"#
+    );
+  }
+
+  let normalized_email = validate_and_normalize_email_address(email)?;
+  if password.is_empty() {
+    return Err(AuthError::BadRequest("Password must not be empty"));
+  }
+  let hashed_password = hash_password(password)?;
+
+  let user: DbUser = user_conn
+    .write_query_value(
+      &*ADD_USER_QUERY,
+      params!(normalized_email, hashed_password, true),
+    )
+    .await?
+    .ok_or(AuthError::NotFound)?;
+
+  return Ok(user.uuid());
 }
 
 pub async fn delete_user(

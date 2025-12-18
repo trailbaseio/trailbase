@@ -2,8 +2,8 @@ use axum::extract::{Json, State};
 use axum::http::StatusCode;
 use axum_test::TestServer;
 use axum_test::multipart::MultipartForm;
+use std::sync::Arc;
 use tower_cookies::Cookie;
-use tracing_subscriber::prelude::*;
 use trailbase_sqlite::params;
 
 use trailbase::AppState;
@@ -13,7 +13,7 @@ use trailbase::constants::{COOKIE_AUTH_TOKEN, RECORD_API_PATH};
 use trailbase::util::id_to_b64;
 use trailbase::{DataDir, Server, ServerOptions};
 
-pub(crate) async fn add_record_api_config(
+async fn add_record_api_config(
   state: &AppState,
   api: RecordApiConfig,
 ) -> Result<(), anyhow::Error> {
@@ -34,13 +34,7 @@ fn integration_tests() {
 
 async fn test_record_apis() {
   let data_dir = temp_dir::TempDir::new().unwrap();
-
-  let Server {
-    state,
-    main_router,
-    admin_router,
-    tls,
-  } = Server::init(ServerOptions {
+  let options = ServerOptions {
     data_dir: DataDir(data_dir.path().to_path_buf()),
     address: "localhost:4041".to_string(),
     admin_address: None,
@@ -49,20 +43,25 @@ async fn test_record_apis() {
     cors_allowed_origins: vec![],
     runtime_threads: None,
     ..Default::default()
-  })
-  .await
-  .unwrap();
+  };
+
+  let Server {
+    state,
+    main_router,
+    admin_router,
+    tls,
+  } = Server::init(options.clone()).await.unwrap();
 
   assert!(admin_router.is_none());
   assert!(tls.is_none());
 
-  let conn = state.conn();
+  let conn = state.connection_manager().main_entry().connection;
   let logs_conn = state.logs_conn();
 
-  create_chat_message_app_tables(conn).await.unwrap();
+  create_chat_message_app_tables(&conn).await.unwrap();
   state.rebuild_connection_metadata().await.unwrap();
 
-  let room = add_room(conn, "room0").await.unwrap();
+  let room = add_room(&conn, "room0").await.unwrap();
   let password = "Secret!1!!";
   let client_ip = "22.11.22.11";
 
@@ -91,15 +90,56 @@ async fn test_record_apis() {
     .await
     .unwrap();
 
-  add_user_to_room(conn, user_x, room).await.unwrap();
+  add_user_to_room(&conn, user_x, room).await.unwrap();
 
-  // Set up logging: declares **where** tracing is being logged to, e.g. stderr, file, sqlite.
-  tracing_subscriber::Registry::default()
-    .with(trailbase::logging::SqliteLogLayer::new(&state, false))
-    .set_default();
+  #[allow(unused_mut)]
+  let (_address, mut router) = main_router;
+
+  #[cfg(feature = "otel")]
+  {
+    #[tracing::instrument]
+    async fn trace_id() -> impl axum::response::IntoResponse {
+      // Publish OTEL metrics:
+      // https://docs.rs/tracing-opentelemetry/latest/tracing_opentelemetry/struct.MetricsLayer.html
+      //
+      // To publish a new metric, add a key-value pair to your tracing::Event that contains
+      // following prefixes:
+      //
+      //   monotonic_counter. (non-negative numbers): Used when the counter should only ever
+      // increase   counter.: Used when the counter can go up or down
+      //   histogram.: Used to report arbitrary values that are likely to be statistically
+      // meaningful   gauge.: Used to report instantaneous values that can go up or down
+      tracing::info!(monotonic_counter.index = 1);
+
+      return axum::Json(serde_json::json!({
+        "id": tracing_opentelemetry_instrumentation_sdk::find_current_trace_id().unwrap(),
+      }));
+    }
+
+    // NOTE: the wrapping is needed to have the OTEL layers touch the route.
+    router = router.merge(Server::wrap_with_default_layers(
+      &state,
+      &options,
+      axum::Router::new().route("/trace", axum::routing::get(trace_id)),
+    ));
+  }
 
   {
-    let server = TestServer::new(main_router.1).unwrap();
+    let server = TestServer::new(router).unwrap();
+
+    #[cfg(feature = "otel")]
+    {
+      let trace_response = server.get("/trace").await;
+      assert_eq!(trace_response.status_code(), StatusCode::OK);
+
+      #[derive(serde::Deserialize)]
+      struct TraceResponse {
+        id: String,
+      }
+
+      let TraceResponse { id } = trace_response.json();
+      assert_ne!(id, "");
+    }
 
     {
       // User X can post to a JSON message.
@@ -222,8 +262,8 @@ async fn test_record_apis() {
   assert_eq!(status, 200);
 }
 
-pub async fn create_chat_message_app_tables(
-  conn: &trailbase_sqlite::Connection,
+async fn create_chat_message_app_tables(
+  conn: &Arc<trailbase_sqlite::Connection>,
 ) -> Result<(), anyhow::Error> {
   // Create a messages, chat room and members tables.
   conn
@@ -260,8 +300,8 @@ pub async fn create_chat_message_app_tables(
   return Ok(());
 }
 
-pub async fn add_room(
-  conn: &trailbase_sqlite::Connection,
+async fn add_room(
+  conn: &Arc<trailbase_sqlite::Connection>,
   name: &str,
 ) -> Result<[u8; 16], anyhow::Error> {
   let room: [u8; 16] = conn
@@ -276,8 +316,8 @@ pub async fn add_room(
   return Ok(room);
 }
 
-pub async fn add_user_to_room(
-  conn: &trailbase_sqlite::Connection,
+async fn add_user_to_room(
+  conn: &Arc<trailbase_sqlite::Connection>,
   user: [u8; 16],
   room: [u8; 16],
 ) -> Result<(), anyhow::Error> {
@@ -290,7 +330,7 @@ pub async fn add_user_to_room(
   return Ok(());
 }
 
-pub(crate) async fn create_user_for_test(
+async fn create_user_for_test(
   state: &AppState,
   email: &str,
   password: &str,

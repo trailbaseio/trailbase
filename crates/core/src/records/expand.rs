@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use log::*;
 use rusqlite::types;
 use std::collections::HashMap;
 use thiserror::Error;
@@ -176,10 +175,12 @@ pub(crate) fn expand_tables<'s, T: AsRef<str>>(
       return Err(RecordError::Internal("not a foreign key".into()));
     };
 
-    let Some(foreign_table) = connection_metadata.get_table(&QualifiedName {
+    let fq_foreign_table_name = QualifiedName {
       name: foreign_table_name.clone(),
       database_schema: record_api.qualified_name().database_schema.clone(),
-    }) else {
+    };
+
+    let Some(foreign_table) = connection_metadata.get_table(&fq_foreign_table_name) else {
       return Err(RecordError::ApiRequiresTable);
     };
 
@@ -219,9 +220,6 @@ mod tests {
 
   #[tokio::test]
   async fn test_read_rows() {
-    let state = test_state(None).await.unwrap();
-    let conn = state.conn();
-
     let pattern = serde_json::from_str(
       r#"{
           "type": "object",
@@ -239,11 +237,16 @@ mod tests {
     )
     .unwrap();
 
-    trailbase_extension::jsonschema::set_schema_for_test(
-      "foo",
-      Some(trailbase_extension::jsonschema::Schema::from(pattern, None, false).unwrap()),
-    );
-    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+    let state = test_state(Some(TestStateOptions {
+      json_schema_registry: Some(
+        trailbase_schema::registry::build_json_schema_registry(vec![("foo".to_string(), pattern)])
+          .unwrap(),
+      ),
+      ..Default::default()
+    }))
+    .await
+    .unwrap();
+    let conn = state.conn();
 
     conn
       .execute(
@@ -260,7 +263,12 @@ mod tests {
     let table = lookup_and_parse_table_schema(conn, "test_table", Some("main"))
       .await
       .unwrap();
-    let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
+    let metadata = TableMetadata::new(
+      &state.json_schema_registry().read(),
+      table.clone(),
+      &[table],
+    )
+    .unwrap();
 
     let insert = |json: serde_json::Value| async move {
       conn

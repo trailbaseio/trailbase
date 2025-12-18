@@ -142,32 +142,28 @@ export function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams<{
     filter?: string;
     pageSize?: string;
+    pageIndex?: string;
   }>();
-  // Reset when search params change
-  const reset = () => {
-    return [searchParams.pageSize, searchParams.filter];
-  };
-  const [pageIndex, setPageIndex] = createWritableMemo<number>(() => {
-    reset();
-    return 0;
-  });
   const [cursors, setCursors] = createWritableMemo<string[]>(() => {
-    reset();
+    // Reset when search params change
+    const _ = [searchParams.pageSize, searchParams.filter];
+    console.debug("cursor reset");
     return [];
   });
 
   const pagination = (): PaginationState => {
     return {
       pageSize: safeParseInt(searchParams.pageSize) ?? 20,
-      pageIndex: pageIndex(),
+      pageIndex: safeParseInt(searchParams.pageIndex) ?? 0,
     };
   };
 
   const setFilter = (filter: string | undefined) => {
-    setPageIndex(0);
     setSearchParams({
       ...searchParams,
       filter,
+      // Reset
+      pageIndex: "0",
     });
   };
 
@@ -207,6 +203,8 @@ export function LogsPage() {
 
   const [showMap, setShowMap] = createSignal(true);
   const [showGeoipDialog, setShowGeoipDialog] = createSignal(false);
+
+  const [columnPinningState, setColumnPinningState] = createSignal({});
 
   return (
     <div class="h-full">
@@ -298,36 +296,16 @@ export function LogsPage() {
             <DataTable
               columns={() => columns}
               data={() => logsFetch.data!.entries}
+              columnPinning={columnPinningState}
+              onColumnPinningChange={setColumnPinningState}
               rowCount={Number(logsFetch.data!.total_row_count ?? -1)}
               pagination={pagination()}
-              onPaginationChange={(
-                p:
-                  | PaginationState
-                  | ((old: PaginationState) => PaginationState),
-              ) => {
-                function setPagination({
-                  pageSize,
-                  pageIndex,
-                }: PaginationState) {
-                  const current = pagination();
-                  if (current.pageSize !== pageSize) {
-                    setSearchParams({
-                      ...searchParams,
-                      pageSize,
-                    });
-                    return;
-                  }
-
-                  if (current.pageIndex != pageIndex) {
-                    setPageIndex(pageIndex);
-                  }
-                }
-
-                if (typeof p === "function") {
-                  setPagination(p(pagination()));
-                } else {
-                  setPagination(p);
-                }
+              onPaginationChange={(s: PaginationState) => {
+                setSearchParams({
+                  ...searchParams,
+                  pageIndex: s.pageIndex,
+                  pageSize: s.pageSize,
+                });
               }}
             />
           </Match>
@@ -516,7 +494,7 @@ function WorldMap(props: { country_codes: { [key in string]?: number } }) {
 
   return (
     <div
-      class="h-[280px] w-full rounded"
+      class="z-[0] h-[280px] w-full rounded"
       style={{ "background-color": "transparent" }}
       ref={ref}
     />

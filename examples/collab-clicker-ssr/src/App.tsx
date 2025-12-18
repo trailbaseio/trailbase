@@ -58,9 +58,9 @@ export function App({ initialCount }: { initialCount?: number }) {
   });
 
   return (
-    <div class="flex flex-col gap-4 text-neutral-800">
+    <div class="flex flex-col gap-4 my-8 text-neutral-800">
       <h1 class="bg-gradient-to-r from-accent-600 via-purple-500 to-pink-500 inline-block text-transparent bg-clip-text">
-        TrailBase
+        TrailBase Demo
       </h1>
 
       <a href="https://github.com/trailbaseio/trailbase">
@@ -77,25 +77,26 @@ export function App({ initialCount }: { initialCount?: number }) {
       </div>
 
       <div>
-        <button class={`${buttonStyle}, w-[200px] rounded bg-neutral-100`} onClick={onClick}>
-          Clicked {count()}x globally
+        <button class={`${buttonStyle} w-[200px] rounded bg-neutral-100`} onClick={onClick}>
+          {count()}x clicked globally
         </button>
       </div>
 
-      <p>Click the acorn across different tabs, browsers or computers.</p>
+      <p>Click the acorn across different tabs, browsers or computers to make everyone's count go 🚀</p>
 
-      <div class="m-4 p-4 outline outline-1 outline-natural-200 rounded text-sm max-w-[680px]">
+      <div class={cardStyle}>
         <p class="font-bold py-1">Context</p>
         <p>
           This page showcases TrailBase's "realtime" APIs and server-side rendering (SSR) capabilities.
           The initial page-load contains pre-rendered HTML, which is then hydrated on the client.
           This reduces latency by saving the client a round-trip to fetch the initial counter value.
-          The client also subscribes to counter changes and is updates the page whenever someone else
-          presses the acorn.
+          The client also subscribes to counter changes and updates whenever
+          someone else presses the acorn.
         </p>
       </div>
     </div>
   )
 }
 
+const cardStyle = "m-4 p-4 outline outline-1 outline-natural-200 rounded text-sm max-w-[680px]";
 const buttonStyle = "p-2 scale-95 hover:scale-100 hover:bg-accent-200 active:scale-90 animate-all font-bold";

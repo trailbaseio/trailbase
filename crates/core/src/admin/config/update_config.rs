@@ -12,6 +12,9 @@ pub async fn update_config_handler(
   State(state): State<AppState>,
   Protobuf(request): Protobuf<UpdateConfigRequest>,
 ) -> Result<impl IntoResponse, Error> {
+  if state.demo_mode() {
+    return Err(Error::Precondition("Disallowed in demo".into()));
+  }
   let Some(hash) = request.hash else {
     return Err(Error::Precondition("Missing hash".to_string()));
   };

@@ -1,9 +1,7 @@
 import { onMount } from "solid-js";
-import { Graph, Cell, Shape, Edge, Node } from "@antv/x6";
-import { PortManager } from "@antv/x6/lib/model/port";
+import { Graph, Cell, Shape, Edge, NodeMetadata, EdgeMetadata } from "@antv/x6";
 
 import { cn } from "@/lib/utils";
-import { createIsMobile } from "@/lib/signals";
 
 export const ER_NODE_NAME = "er-rect";
 export const LINE_HEIGHT = 24;
@@ -12,10 +10,6 @@ export const NODE_WIDTH = 250;
 const ACCENT_600 = "#0073aa";
 const GRAY_100 = "#f3f7f9";
 export const EDGE_COLOR = "#A2B1C3";
-
-export type NodeMetadata = Node.Metadata;
-export type EdgeMetadata = Edge.Metadata;
-export type PortMetadata = PortManager.PortMetadata;
 
 (function setupGraph() {
   const ER_PORT_POSITION_NAME = "erPortPosition";
@@ -125,8 +119,8 @@ export function ErdGraph(props: {
   class?: string;
   nodes: NodeMetadata[];
   edges: EdgeMetadata[];
+  onMount?: (graph: Graph) => void;
 }) {
-  const isMobile = createIsMobile();
   let ref: HTMLDivElement | undefined;
 
   onMount(() => {
@@ -178,7 +172,9 @@ export function ErdGraph(props: {
     }, 0);
 
     const width = NODE_WIDTH + 20;
-    const nodeAspect = width / maxHeight;
+    const height = maxHeight + 10;
+
+    const nodeAspect = width / height;
     const screenAspect = window.innerWidth / window.innerHeight;
     const columns = Math.floor(
       Math.sqrt(props.nodes.length) * (screenAspect / nodeAspect),
@@ -193,7 +189,7 @@ export function ErdGraph(props: {
 
           n.position = {
             x: col * width,
-            y: row * maxHeight,
+            y: row * height,
           };
         }
 
@@ -204,20 +200,9 @@ export function ErdGraph(props: {
 
     graph.resetCells(cells);
     graph.zoomToFit({ padding: 20, maxScale: 1, minScale: 0.1 });
+
+    props.onMount?.(graph);
   });
 
-  const style = () => {
-    if (isMobile()) {
-      return "h-[calc(100dvh-120px)] w-[calc(100dvw)] overflow-clip";
-    }
-    return "h-[calc(100dvh-65px)] w-[calc(100dvw-58px)] overflow-clip";
-  };
-
-  // NOTE: The double styling seems somehow needed, otherwise it overflows on
-  // mobile. x6 may also apply some styles on top.
-  return (
-    <div class={style()}>
-      <div ref={ref} class={cn(style(), props.class)} />
-    </div>
-  );
+  return <div ref={ref} class={cn(props.class, "overflow-clip")} />;
 }

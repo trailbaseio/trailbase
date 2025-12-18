@@ -1,18 +1,17 @@
-import { For, Match, Show, Switch, createMemo } from "solid-js";
+import { For, Match, Show, Switch, createMemo, createSignal } from "solid-js";
 import { useNavigate, useParams, type Navigator } from "@solidjs/router";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
-import type { DialogTriggerProps } from "@kobalte/core/dialog";
 
 import { TablePane } from "@/components/tables/TablePane";
 import { Button } from "@/components/ui/button";
-import { SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { SheetContent } from "@/components/ui/sheet";
 import {
-  TbTablePlus,
-  TbTable,
+  TbEye,
   TbLock,
   TbLockOpen,
-  TbEye,
+  TbTable,
+  TbTablePlus,
   TbWand,
 } from "solid-icons/tb";
 
@@ -41,7 +40,6 @@ import { createTableSchemaQuery } from "@/lib/api/table";
 import {
   hiddenTable,
   tableType,
-  compareQualifiedNames,
   prettyFormatQualifiedName,
   equalQualifiedNames,
 } from "@/lib/schema";
@@ -60,9 +58,10 @@ function pickInitiallySelectedTable(
     return undefined;
   }
 
-  if (qualifiedTableName) {
+  const candidate = qualifiedTableName ?? $explorerSettings.get().prevSelected;
+  if (candidate) {
     for (const table of tables) {
-      if (qualifiedTableName === prettyFormatQualifiedName(table.name)) {
+      if (candidate === prettyFormatQualifiedName(table.name)) {
         return table;
       }
     }
@@ -80,7 +79,9 @@ function tableCompare(a: Table | View, b: Table | View): number {
   const bHidden = hiddenTable(b);
 
   if (aHidden == bHidden) {
-    return compareQualifiedNames(a.name, b.name);
+    return prettyFormatQualifiedName(a.name).localeCompare(
+      prettyFormatQualifiedName(b.name),
+    );
   }
   // Sort hidden tables to the back.
   return aHidden ? 1 : -1;
@@ -91,9 +92,11 @@ function TablePickerSidebar(props: {
   allTables: Table[];
   selectedTable: Table | View | undefined;
   schemaRefetch: () => Promise<void>;
+  openCreateTableDialog: () => void;
 }) {
   const { setOpenMobile } = useSidebar();
-  const showHidden = useStore($showHiddenTables);
+  const settings = useStore($explorerSettings);
+  const showHidden = () => settings().showHidden ?? false;
   const selectedTable = () => props.selectedTable;
   const navigate = useNavigate();
 
@@ -103,42 +106,17 @@ function TablePickerSidebar(props: {
         <SidebarMenu>
           {/* Add table & show hidden tables buttons */}
           <div class="flex w-full justify-between gap-2">
-            <SafeSheet>
-              {(sheet) => {
-                return (
-                  <>
-                    <SheetContent class={sheetMaxWidth}>
-                      <CreateAlterTableForm
-                        schemaRefetch={props.schemaRefetch}
-                        allTables={props.allTables}
-                        setSelected={(tableName: QualifiedName) => {
-                          const table = props.tablesAndViews.find((t) =>
-                            equalQualifiedNames(t.name, tableName),
-                          );
-                          if (table) {
-                            navigateToTable(navigate, table);
-                          }
-                        }}
-                        {...sheet}
-                      />
-                    </SheetContent>
-
-                    <SheetTrigger
-                      as={(props: DialogTriggerProps) => (
-                        <Button
-                          class="min-w-[100px] grow gap-2"
-                          variant="secondary"
-                          {...props}
-                        >
-                          <TbTablePlus />
-                          Add Table
-                        </Button>
-                      )}
-                    />
-                  </>
-                );
+            <Button
+              class="min-w-[100px] grow gap-2"
+              variant="secondary"
+              onClick={() => {
+                setOpenMobile(false);
+                props.openCreateTableDialog();
               }}
-            </SafeSheet>
+            >
+              <TbTablePlus />
+              Add Table
+            </Button>
 
             <Tooltip>
               <TooltipTrigger as="div">
@@ -146,13 +124,23 @@ function TablePickerSidebar(props: {
                   size="icon"
                   variant="secondary"
                   onClick={() => {
-                    const show = !showHidden();
-                    const current = selectedTable();
-                    if (!show && current && hiddenTable(current)) {
+                    const nextShowHidden = !(settings().showHidden ?? false);
+                    const currentHidden = () => {
+                      const current = selectedTable();
+                      if (current !== undefined) {
+                        return hiddenTable(current);
+                      }
+                      return false;
+                    };
+
+                    if (!nextShowHidden && currentHidden()) {
                       navigateToTable(navigate, undefined);
                     }
-                    console.debug("Show hidden tables:", show);
-                    $showHiddenTables.set(show);
+
+                    $explorerSettings.set({
+                      ...$explorerSettings.get(),
+                      showHidden: nextShowHidden,
+                    });
                   }}
                 >
                   <Show when={showHidden()} fallback={<TbLock />}>
@@ -221,12 +209,15 @@ function TablePickerSidebar(props: {
 }
 
 function navigateToTable(navigate: Navigator, table: Table | View | undefined) {
-  if (table === undefined) {
-    navigate("/table/");
-    return;
-  }
+  const name =
+    table !== undefined ? prettyFormatQualifiedName(table.name) : undefined;
 
-  const path = "/table/" + prettyFormatQualifiedName(table.name);
+  $explorerSettings.set({
+    ...$explorerSettings.get(),
+    prevSelected: name,
+  });
+
+  const path = `/table/${name ?? ""}`;
   console.debug(`navigating to: ${path}`);
   navigate(path);
 }
@@ -235,8 +226,11 @@ function TableSplitView(props: {
   schemas: ListSchemasResponse;
   schemaRefetch: () => Promise<void>;
 }) {
+  const navigate = useNavigate();
   const isMobile = createIsMobile();
-  const showHidden = useStore($showHiddenTables);
+  const settings = useStore($explorerSettings);
+  const showHidden = () => settings().showHidden ?? false;
+  const [createTableDialog, setCreateTableDialog] = createSignal(false);
   const filteredTablesAndViews = createMemo(() => {
     const all = [...props.schemas.tables, ...props.schemas.views];
 
@@ -256,58 +250,86 @@ function TableSplitView(props: {
   });
 
   return (
-    <SidebarProvider>
-      <Sidebar
-        class="absolute"
-        variant="sidebar"
-        side="left"
-        collapsible="offcanvas"
-      >
-        <SidebarContent>
-          {/* <SidebarHeader /> */}
-
-          <SidebarGroup>
-            <TablePickerSidebar
-              tablesAndViews={filteredTablesAndViews()}
-              allTables={props.schemas.tables}
-              selectedTable={selectedTable()}
-              schemaRefetch={props.schemaRefetch}
-            />
-          </SidebarGroup>
-
-          {/* <SidebarFooter /> */}
-        </SidebarContent>
-
-        <SidebarRail />
-      </Sidebar>
-
-      <SidebarInset class="min-w-0">
-        <Show
-          when={selectedTable() !== undefined}
-          fallback={<div class="p-4">No table selected</div>}
-        >
-          <Switch>
-            <Match when={isMobile()}>
-              <TablePane
-                selectedTable={selectedTable()!}
-                schemas={props.schemas}
+    <SafeSheet
+      id="add_table_dialog"
+      open={[createTableDialog, setCreateTableDialog]}
+    >
+      {(sheet) => {
+        return (
+          <>
+            <SheetContent class="sm:max-w-[520px]">
+              <CreateAlterTableForm
                 schemaRefetch={props.schemaRefetch}
+                allTables={props.schemas.tables}
+                setSelected={(tableName: QualifiedName) => {
+                  const table = filteredTablesAndViews().find((t) =>
+                    equalQualifiedNames(t.name, tableName),
+                  );
+                  if (table) {
+                    navigateToTable(navigate, table);
+                  }
+                }}
+                {...sheet}
               />
-            </Match>
+            </SheetContent>
 
-            <Match when={!isMobile()}>
-              <div class="h-dvh overflow-y-auto">
-                <TablePane
-                  selectedTable={selectedTable()!}
-                  schemas={props.schemas}
-                  schemaRefetch={props.schemaRefetch}
-                />
-              </div>
-            </Match>
-          </Switch>
-        </Show>
-      </SidebarInset>
-    </SidebarProvider>
+            <SidebarProvider>
+              <Sidebar
+                class="absolute"
+                variant="sidebar"
+                side="left"
+                collapsible="offcanvas"
+              >
+                <SidebarContent>
+                  {/* <SidebarHeader /> */}
+
+                  <SidebarGroup>
+                    <TablePickerSidebar
+                      tablesAndViews={filteredTablesAndViews()}
+                      allTables={props.schemas.tables}
+                      selectedTable={selectedTable()}
+                      schemaRefetch={props.schemaRefetch}
+                      openCreateTableDialog={() => setCreateTableDialog(true)}
+                    />
+                  </SidebarGroup>
+
+                  {/* <SidebarFooter /> */}
+                </SidebarContent>
+
+                <SidebarRail />
+              </Sidebar>
+
+              <SidebarInset class="min-w-0">
+                <Show
+                  when={selectedTable() !== undefined}
+                  fallback={<div class="p-4">No table selected</div>}
+                >
+                  <Switch>
+                    <Match when={isMobile()}>
+                      <TablePane
+                        selectedTable={selectedTable()!}
+                        schemas={props.schemas}
+                        schemaRefetch={props.schemaRefetch}
+                      />
+                    </Match>
+
+                    <Match when={!isMobile()}>
+                      <div class="h-dvh overflow-y-auto">
+                        <TablePane
+                          selectedTable={selectedTable()!}
+                          schemas={props.schemas}
+                          schemaRefetch={props.schemaRefetch}
+                        />
+                      </div>
+                    </Match>
+                  </Switch>
+                </Show>
+              </SidebarInset>
+            </SidebarProvider>
+          </>
+        );
+      }}
+    </SafeSheet>
   );
 }
 
@@ -334,8 +356,16 @@ export function TablePage() {
   );
 }
 
-const sheetMaxWidth = "sm:max-w-[520px]";
-const $showHiddenTables = persistentAtom<boolean>("show_hidden_tables", false, {
-  encode: JSON.stringify,
-  decode: JSON.parse,
-});
+type Settings = {
+  prevSelected?: string;
+  showHidden?: boolean;
+};
+
+const $explorerSettings = persistentAtom<Settings>(
+  "explorer_settings",
+  {},
+  {
+    encode: JSON.stringify,
+    decode: JSON.parse,
+  },
+);

@@ -4,17 +4,16 @@ use prost_reflect::{
   DynamicMessage, ExtensionDescriptor, FieldDescriptor, Kind, MapKey, ReflectMessage, Value,
 };
 use proto::{EmailTemplate, OAuthProviderId, SmtpEncryption};
-use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
+use std::fs;
 use std::str::FromStr;
 use thiserror::Error;
-use tokio::fs;
-use trailbase_schema::sqlite::{Table, View};
 use validator::{ValidateEmail, ValidateUrl};
 
 use crate::DESCRIPTOR_POOL;
 use crate::auth::oauth::providers::oauth_provider_registry;
+use crate::connection::ConnectionManager;
 use crate::data_dir::DataDir;
 use crate::records::validate_record_api_config;
 
@@ -378,10 +377,10 @@ pub(crate) fn redact_secrets(
   return Ok((stripped, secrets));
 }
 
-async fn load_vault_textproto_or_default(data_dir: &DataDir) -> Result<proto::Vault, ConfigError> {
+fn load_vault_textproto_or_default(data_dir: &DataDir) -> Result<proto::Vault, ConfigError> {
   let vault_path = data_dir.secrets_path().join(VAULT_FILENAME);
 
-  let vault = match fs::read_to_string(&vault_path).await {
+  let vault = match fs::read_to_string(&vault_path) {
     Ok(contents) => proto::Vault::from_text(&contents)?,
     Err(err) => {
       if cfg!(not(test)) {
@@ -396,6 +395,16 @@ async fn load_vault_textproto_or_default(data_dir: &DataDir) -> Result<proto::Va
   return Ok(vault);
 }
 
+pub(crate) fn maybe_load_config_textproto_unverified(
+  data_dir: &DataDir,
+) -> Result<Option<proto::Config>, ConfigError> {
+  return match fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)) {
+    Ok(contents) => Ok(Some(proto::Config::from_text(&contents)?)),
+    Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+    Err(err) => Err(err.into()),
+  };
+}
+
 // TODO: Initialization order is currently borked and worked-around by rebuilding
 // ConnectionMetadata. Specifically, building SchemaMatadataCache, which contains JSON metadata,
 // requires custom JSON schemas to be built from the config and globally registered. However,
@@ -404,19 +413,18 @@ async fn load_vault_textproto_or_default(data_dir: &DataDir) -> Result<proto::Va
 //
 // Right now this leads to a warning log on first load when SchemaMatadataCache is first built
 // but custom schemas are not yet registered :/.
-pub async fn load_or_init_config_textproto<T: Borrow<Table>, V: Borrow<View>>(
+pub async fn load_or_init_config_textproto(
   data_dir: &DataDir,
-  tables: &[T],
-  views: &[V],
+  connection_manager: &ConnectionManager,
 ) -> Result<proto::Config, ConfigError> {
   let merged_config = {
-    let config = match fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)).await {
+    let config = match fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)) {
       Ok(contents) => proto::Config::from_text(&contents)?,
       Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
         warn!("`config.textproto` not found, initializing new default.");
 
         let config = proto::Config::new_with_custom_defaults();
-        write_config_and_vault_textproto(data_dir, tables, views, &config).await?;
+        write_config_and_vault_textproto(data_dir, connection_manager, &config)?;
         config
       }
       Err(err) => {
@@ -424,11 +432,11 @@ pub async fn load_or_init_config_textproto<T: Borrow<Table>, V: Borrow<View>>(
       }
     };
 
-    let vault = load_vault_textproto_or_default(data_dir).await?;
+    let vault = load_vault_textproto_or_default(data_dir)?;
     merge_vault_and_env(config, vault)?
   };
 
-  validate_config(tables, views, &merged_config)?;
+  validate_config(connection_manager, &merged_config)?;
 
   return Ok(merged_config);
 }
@@ -444,13 +452,12 @@ fn split_config(config: &proto::Config) -> Result<(proto::Config, proto::Vault),
   return Ok((stripped_config, new_vault));
 }
 
-pub async fn write_config_and_vault_textproto<T: Borrow<Table>, V: Borrow<View>>(
+pub fn write_config_and_vault_textproto(
   data_dir: &DataDir,
-  tables: &[T],
-  views: &[V],
+  connection_manager: &ConnectionManager,
   config: &proto::Config,
 ) -> Result<(), ConfigError> {
-  validate_config(tables, views, config)?;
+  validate_config(connection_manager, config)?;
 
   let (stripped_config, vault) = split_config(config)?;
 
@@ -462,8 +469,8 @@ pub async fn write_config_and_vault_textproto<T: Borrow<Table>, V: Borrow<View>>
   let config_path = data_dir.config_path().join(CONFIG_FILENAME);
   let vault_path = data_dir.secrets_path().join(VAULT_FILENAME);
   debug!("Writing config files: {config_path:?}, {vault_path:?}");
-  fs::write(&config_path, stripped_config.to_text()?.as_bytes()).await?;
-  fs::write(&vault_path, vault.to_text()?.as_bytes()).await?;
+  fs::write(&config_path, stripped_config.to_text()?.as_bytes())?;
+  fs::write(&vault_path, vault.to_text()?.as_bytes())?;
   return Ok(());
 }
 
@@ -486,9 +493,8 @@ fn validate_application_name(name: &str) -> Result<(), ConfigError> {
   Ok(())
 }
 
-pub fn validate_config<T: Borrow<Table>, V: Borrow<View>>(
-  tables: &[T],
-  views: &[V],
+pub fn validate_config(
+  connection_manager: &ConnectionManager,
   config: &proto::Config,
 ) -> Result<(), ConfigError> {
   // Check server settings.
@@ -504,13 +510,38 @@ pub fn validate_config<T: Borrow<Table>, V: Borrow<View>>(
     None => None,
   };
 
+  let mut db_names = HashSet::<String>::new();
+  for db in &config.databases {
+    let Some(ref name) = db.name else {
+      return ierr("Missing database name");
+    };
+
+    if !db_names.insert(name.clone()) {
+      return ierr(format!("Database '{name}' linked more than once"));
+    }
+
+    match name.as_str() {
+      "main" | "logs" | "" => {
+        return ierr(format!("Invalid database name: {name}"));
+      }
+      name
+        if !name
+          .chars()
+          .all(|x| x.is_ascii_alphanumeric() || x == '_' || x == '-') =>
+      {
+        return ierr(format!("Invalid database name: {name}"));
+      }
+      _ => {}
+    }
+  }
+
   // Check RecordApis.
   //
   // Note: it is valid to declare multiple api (e.g. with different acls) over the same
   // table, however it's not valid to have conflicting api names.
   let mut api_names = HashSet::<String>::new();
   for api in &config.record_apis {
-    let api_name = validate_record_api_config(tables, views, api)?;
+    let api_name = validate_record_api_config(connection_manager, api, &config.databases)?;
 
     if !api_names.insert(api_name.clone()) {
       return ierr(format!(
@@ -771,10 +802,9 @@ mod test {
 
   async fn test_default_config_is_valid() {
     let state = test_state(None).await.unwrap();
-    let metadata = state.connection_metadata();
 
     let config = Config::new_with_custom_defaults();
-    validate_config(&metadata.tables(), &metadata.views(), &config).unwrap();
+    validate_config(&state.connection_manager(), &config).unwrap();
   }
 
   fn test_config_merging() {

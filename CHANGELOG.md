@@ -1,3 +1,160 @@
+## v0.22.4
+
+- New CLI command `trail user add <email> <pw>` to create verified users from the command-line.
+- Add an optional "admin" boolean property to JWTs.
+  - Update the Kotlin client to parse JWT more loosely and publish v0.2.0.
+  - Kotlin users will need to update their clients before updating to v0.22.4.
+- Early support of logical column pinning to visually highlight columns in wide tables.
+- Admin UI's login screen now explicit rejects non-admin users. This is a quality-of-life and **not** a security change. Access to admin APIs has always been protected. This just avoids showing a defunct UI to non-admin users.
+- Auth registration endpoint now accepts JSON-encoded requests (like the other auth endpoints too).
+- Show warning dialogs in admin UI when deleting or updating RecordAPIs.
+- Update Rust and JavaScript dependencies.
+
+## v0.22.3
+
+- Downgrade vite-tsconfig-paths to fix Windows release builds (missing in v0.22.2).
+- Simplify table explorer's pagination state management.
+
+## v0.22.2
+
+- Add a simple UI (in admin settings) to link/unlink additional databases.
+- Fix user account pagination.
+- Fix `RecordApiConfig` construction from admin UI for non-main DBs.
+- More conservative pre-update hook cleanup.
+- Disallow config changes in demo mode.
+- Update Rust and JavaScript dependencies.
+
+## v0.22.1
+
+- Improve "realtime" change subscriptions:
+  - Introduce a unique connection identity for more robust subscription management.
+  - Use layered locks to reduce congestion and thus improve performance.
+  - Explicitly recycle connections whenever config changes trigger RecordApi rebuilds. Otherwise, cycling connections can lead to dropped subscriptions with more than 256 DBs.
+- No longer do a linear seek to look up APIs optimizing for large N, especially now with multi-DB.
+- Update dependencies.
+
+## v0.22.0
+
+- Multi-DB support 🎉: record APIs can be backed by `TABLE`/`VIEW`s in independent DBs. This can help with physical isolation and offer a path when encountering locking bottlenecks.
+  - This change includes:
+    - Config-driven DB life-cycle management, i.e. creation, migrations, ... .
+    - Generalized connection management.
+    - Per-DB file-upload/life-cycle management.
+    - Multi-DB subscription "realtime" management.
+    - End-to-end tests.
+  - Limitations:
+    - SQLite does not allow for `FOREIGN KEY`s and `TRIGGER`s to cross DB boundaries. However `JOIN`s, etc. are perfectly capable of crossing DB boundaries.
+    - The implemented management of independent connections allows for an arbitrary number of DBs despite SQLite's limit of 125 DBs per connection. However, `VIEW`s executed within the context of a connection are still subject to this limit.
+  - Documentation is TBD :hide:, see `<repo>/client/testfixture/config.textproto` for an example.
+    - DBs are mapped to `<traildepot>/data/<name>.db` and `<traildepot>/migrations/<name>/`.
+  - This change doesn't introduce a notion of multi-tenancy, e.g.: create and route per-tenant DBs based on schema templates.
+  - This was a big change, please reach out for any issues or feedback. 🙏
+- Changed Record API's default behavior to run batches w/o transactions unless requested.
+- Improved errors for file-handling record APIs.
+- Update Rust (latest stable: 1.92) and dependencies.
+
+## v0.21.11
+
+- Pre-built binary releases:
+  - Release aarch64 (arm64) static binaries for Linux (#184) and update install script.
+  - Stop releasing Linux glibc binaries. Using them is a gamble depending on your system: best-case it won't work at all, worst-case you end up with hard to debug issues. Even "static" glibc builds aren't static, e.g. when looking up hostnames.
+  - There are valid, e.g. performance, reasons to use glibc builds, however it's safer to build from source or for a controlled container environment.
+- Remove left-over pseudo error handling to stop swallowing errors in a few places in the admin UI, e.g. when deleting tables.
+- Update Rust and JavaScript dependencies.
+
+## v0.21.10
+
+- Fix table renames in admin UI.
+- Include database schema name when sorting tables in admin UI explorer.
+- Minor layout tweaks for very narrow screens.
+- Entirely disallow schema alterations/drops in demo mode.
+- Update Rust dependencies.
+
+## v0.21.9
+
+- Use fully-qualified TABLE/VIEW/INDEX/TRIGGER names throughout admin UI in preparation for multi-DB.
+- Fix column type update when setting a foreign key constraint. We forgot to additionally set affinity type and type name after re-modelling the type representation. #183 @tingletech 🙏
+- Update Rust and JavaScript dependencies.
+
+## v0.21.8
+
+- Make visual ERD schema browser in admin UI usable on mobile. The @antv/x6 latest update fixed panning. By adding zoom buttons (in the absence of pinch), you can now navigate on mobile.
+- Use a separate/fresh SQLite connection for script executions from the admin UI. This prevents any modification of the main connection that's used internally, e.g. dropping attached databases in a multi-DB world.
+- Fix default-value form field validation in Create/Alter table form. Previously, it would prevent SQLite functions for some column types. #182 thanks @tingletech.
+- Fix visual overflow in SQL script editor for longer scripts.
+- Update Rust and JavaScript dependencies.
+
+## v0.21.7
+
+- Move more migration-file-loading from refinery into TB in preparation for multi-DB migrations. At the moment this is a noop.
+- Use SQLites's `STRICT` for new migration tables.
+- Fix docker alias for Mac.
+- Update Rust dependencies, major versions.
+
+## v0.21.6
+
+- Maintenance release to explicitly drop the deprecated V8 integration from the repo.
+  - It has been a little over 6 weeks since v0.19, which removed V8 from the trail binary.
+  - I wasn't sure how long to keep the code around as an optional feature. However, the latest wasmtime release pins serde to a version that is incompatible with the latest (somewhat stale) deno/V8/SWC dependencies. In other words, updating wasmtime would break the V8 build :/. The state of the dependency chain had been one of the driving factors to move away. While it feels validating, it's a little sad to finally send it into the sunset.
+- Update Rust dependencies.
+
+## v0.21.5
+
+- Add "excluded columns" to Admin UI's record API form.
+- Add early CLI commands for listing installed components as well as updating them to match the binary release.
+- PoC: open-telemetry integration behind a compile-time feature flag. There's still a few integration challenges around how to make metrics available to WASM components.
+
+## v0.21.4
+
+- Fix filter button in admin UI.
+- Fix compilation of trailbase library with "wasm" feature disabled.
+- Update Rust & JavaScript dependencies.
+
+## v0.21.3
+
+- Admin UI polish:
+  - Add dirty state to navbar for prompting a confirmation dialog to prevent accidental loss, e.g. when navigating away from a script editor with pending changes.
+  - Enable `col = NULL` and `col != NULL` filter queries from table explorer.
+  - Remember previsously selected TABLE/VIEW on table explorer page.
+- Minor: always log uncaught errors from user-provided WASM components.
+- Update dependencies.
+
+## v0.21.2
+
+- Remove unnecessary and harmful assertions on "invariants", which may be temporarily violated while streaming in rows during schema alterations.
+- Make release builds less chatty about uncaught errors in custom user WASM endpoints.
+- Minor admin UI tweak: lower z-height of map to avoid rendering on top of dialogs and tooltips.
+- Update Rust dependencies.
+
+## v0.21.1
+
+- Very minor release, mostly just improving the error message when encountering ABI incompatible WASM components.
+  - This is a bit of a sticky issue, especially if you're using Docker and externally mounting a traildepot path. The docker image packages the matching auth-UI component, however an external mount can shadow it with a stale version. In this case, you've a few options:
+    - either download the latest auth UI from https://github.com/trailbaseio/trailbase/releases and manually replace the file,
+    - or shell into your container `docker run -it --entrypoint /bin/sh <id>` and use the CLI: `cd /app && ./trail components add trailbase/auth_ui`.
+- Layout tweaks in admin UI's auth settings.
+- Update Rust and JavaScript dependencies.
+
+## v0.21.0
+
+- Extend WASM component/plugin system: enable custom SQLite extension functions from WASM components.
+  - This is unfortunately an ABI breaking change. Interface definitions weren't versioned before and going to versioned itself is breaking :/ - my bad 🙏.
+  - The APIs remained stable, so it should be enough to rebuild your components against the latest WASM runtimes and update the auth component if installed (`trail components add trailbase/auth_ui`).
+  - We would like to further extend the component model in the future, e.g. to support middleware, which we're in a much better place for now.
+- Just for visibility, a lot of admin UI work - especially mobile - went in since the last major release. Maybe worth checking out in case you're interested:
+  - A scrollable top nav and collapsible sidebar for better UX on mobile.
+  - Configurable OIDC provider.
+  - Fixed and simplified CREATE/ALTER table UI.
+  - And countless small tweaks. Thanks for all the feedback, especially to BlueBurst on Discord 🙏.
+- Updated dependencies.
+
+## v0.20.14
+
+- Allow configuring OIDC provider using admin UI.
+- Show associated OAuth providers on accounts page.
+- Fix SQL editor's save button and simplify state.
+- A few more layout and behavior tweaks.
+
 ## v0.20.13
 
 - Admin UI SQL editor improvements
@@ -127,7 +284,7 @@
 
 ## v0.19.0
 
-- First WASM-only relese dropping support for the V8 runtime (technically, custom binary builds can still enable it as a stop-gap but complete removal will follow)
+- First WASM-only release dropping support for the V8 runtime (technically, custom binary builds can still enable it as a stop-gap but complete removal will follow)
   - The default Linux release is now build with MUSL rather than GLibc and thus truly static and portable.
 - Drop support for index-based file reads via `api/records/v1/{api}/{record_id}/files/{column_name}/{uniq_file_name}` in favor of unique filenames following the convention: `{original_stem}_{rand#10}.{suffix}`. This is a breaking change.
   - Before, index-based access for read-after-write access patterns could lead to stale cache reads, which is avoided using unique identifiers.

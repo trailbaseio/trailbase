@@ -106,10 +106,11 @@ pub(crate) fn insert_migration_query(migration: &Migration, migration_table_name
 
 pub(crate) const ASSERT_MIGRATIONS_TABLE_QUERY: &str =
   "CREATE TABLE IF NOT EXISTS %MIGRATION_TABLE_NAME%(
-             version INT4 PRIMARY KEY,
-             name VARCHAR(255),
-             applied_on VARCHAR(255),
-             checksum VARCHAR(255));";
+             version INT PRIMARY KEY,
+             name TEXT,
+             applied_on TEXT,
+             checksum TEXT
+   ) STRICT;";
 
 pub(crate) const GET_APPLIED_MIGRATIONS_QUERY: &str = "SELECT version, name, applied_on, checksum \
     FROM %MIGRATION_TABLE_NAME% ORDER BY version ASC;";

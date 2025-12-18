@@ -1,12 +1,11 @@
-use std::borrow::Borrow;
-
 use itertools::Itertools;
 use trailbase_schema::QualifiedName;
-use trailbase_schema::metadata::TableOrView;
+use trailbase_schema::metadata::TableOrViewMetadata;
 use trailbase_schema::parse::parse_into_statement;
-use trailbase_schema::sqlite::{ColumnOption, Table, View};
+use trailbase_schema::sqlite::ColumnOption;
 
 use crate::config::{ConfigError, proto};
+use crate::connection::{ConnectionEntry, ConnectionManager};
 
 fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
   if name.is_empty() {
@@ -22,10 +21,10 @@ fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
   Ok(())
 }
 
-pub(crate) fn validate_record_api_config<T: Borrow<Table>, V: Borrow<View>>(
-  tables: &[T],
-  views: &[V],
+pub(crate) fn validate_record_api_config(
+  connection_manager: &ConnectionManager,
   api_config: &proto::RecordApiConfig,
+  databases: &[proto::DatabaseConfig],
 ) -> Result<String, ConfigError> {
   let Some(ref api_name) = api_config.name else {
     return Err(invalid("RecordApi config misses name."));
@@ -36,35 +35,61 @@ pub(crate) fn validate_record_api_config<T: Borrow<Table>, V: Borrow<View>>(
     return Err(invalid("RecordApi config misses table name."));
   };
 
-  let metadata: TableOrView = {
-    let table_name = QualifiedName::parse(table_name)?;
-
-    if let Some(table) = tables.iter().find(|t| (*t).borrow().name == table_name) {
-      if table.borrow().temporary {
-        return Err(invalid("Record APIs must not reference TEMPORARY tables"));
-      }
-
-      TableOrView::Table(table.borrow())
-    } else if let Some(view) = views.iter().find(|v| (*v).borrow().name == table_name) {
-      if view.borrow().temporary {
-        return Err(invalid("Record APIs must not reference TEMPORARY views"));
-      }
-
-      TableOrView::View(view.borrow())
-    } else {
+  for db in &api_config.attached_databases {
+    if !databases.iter().any(|d| db == d.name()) {
       return Err(invalid(format!(
-        "Missing table or view for API: {api_name}"
+        "RecordApi {api_name} references unknown db: {db}"
       )));
     }
+  }
+
+  for (kind, rule) in [
+    (AccessKind::Create, api_config.create_access_rule.as_ref()),
+    (AccessKind::Read, api_config.read_access_rule.as_ref()),
+    (AccessKind::Update, api_config.update_access_rule.as_ref()),
+    (AccessKind::Delete, api_config.delete_access_rule.as_ref()),
+    (AccessKind::Schema, api_config.schema_access_rule.as_ref()),
+  ] {
+    if let Some(rule) = rule {
+      validate_rule(kind, rule).map_err(invalid)?;
+    }
+  }
+
+  // FIXME: should respect databases.
+  let table_name = QualifiedName::parse(table_name)?;
+  let ConnectionEntry { metadata, .. } =
+    connection_manager
+      .get_entry_for_qn(&table_name)
+      .map_err(|err| {
+        return invalid(format!("Missing table or view for API: {err}"));
+      })?;
+
+  let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
+    return Err(invalid(format!(
+      "Missing table or view for API: {api_name}"
+    )));
   };
 
-  let Some((pk_index, _)) = metadata.record_pk_column(tables) else {
+  match table_or_view {
+    TableOrViewMetadata::Table(table) => {
+      if table.schema.temporary {
+        return Err(invalid("Record APIs must not reference TEMPORARY tables"));
+      }
+    }
+    TableOrViewMetadata::View(view) => {
+      if view.schema.temporary {
+        return Err(invalid("Record APIs must not reference TEMPORARY views"));
+      }
+    }
+  }
+
+  let Some((pk_index, _)) = table_or_view.record_pk_column() else {
     return Err(invalid(format!(
       "Table for api '{api_name}' is missing valid integer/UUID primary key column."
     )));
   };
 
-  let Some(columns) = metadata.columns() else {
+  let Some(columns) = table_or_view.columns() else {
     return Err(invalid(format!(
       "View for api '{api_name}' is not a \"simple\" view, i.e unable to infer types for strong type-safety"
     )));
@@ -128,18 +153,13 @@ pub(crate) fn validate_record_api_config<T: Borrow<Table>, V: Borrow<View>>(
     }
 
     let fq_foreign_table_name = QualifiedName::parse(foreign_table_name)?;
-    let Some(foreign_table) = tables
-      .iter()
-      .find(|t| (*t).borrow().name == fq_foreign_table_name)
-    else {
+    let Some(foreign_table) = metadata.get_table(&fq_foreign_table_name) else {
       return Err(invalid(format!(
         "{api_name} reference missing table: {foreign_table_name}"
       )));
     };
 
-    let Some((_idx, foreign_pk_column)) =
-      TableOrView::Table(foreign_table.borrow()).record_pk_column(tables)
-    else {
+    let Some((_idx, foreign_pk_column)) = foreign_table.record_pk_column() else {
       return Err(invalid(format!(
         "{api_name} references pk-less table: {foreign_table_name}"
       )));
@@ -160,19 +180,6 @@ pub(crate) fn validate_record_api_config<T: Borrow<Table>, V: Borrow<View>>(
         )));
       }
     };
-  }
-
-  let rules = [
-    (AccessKind::Create, api_config.create_access_rule.as_ref()),
-    (AccessKind::Read, api_config.read_access_rule.as_ref()),
-    (AccessKind::Update, api_config.update_access_rule.as_ref()),
-    (AccessKind::Delete, api_config.delete_access_rule.as_ref()),
-    (AccessKind::Schema, api_config.schema_access_rule.as_ref()),
-  ];
-  for (kind, rule) in rules {
-    if let Some(rule) = rule {
-      validate_rule(kind, rule).map_err(invalid)?;
-    }
   }
 
   return Ok(api_name.to_owned());

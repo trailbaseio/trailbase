@@ -3,7 +3,6 @@ use trailbase_schema::sqlite::Column;
 use trailbase_schema::{FileUpload, FileUploads, QualifiedNameEscaped};
 use trailbase_sqlite::Value;
 
-use crate::AppState;
 use crate::records::error::RecordError;
 use crate::records::expand::ExpandedTable;
 use crate::schema_metadata::{JsonColumnMetadata, TableMetadata};
@@ -69,7 +68,7 @@ pub(crate) async fn run_expanded_select_query<'a>(
 }
 
 pub(crate) async fn run_get_file_query(
-  state: &AppState,
+  conn: &trailbase_sqlite::Connection,
   table_name: &QualifiedNameEscaped,
   file_column: &Column,
   json_metadata: &JsonColumnMetadata,
@@ -80,8 +79,7 @@ pub(crate) async fn run_get_file_query(
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
       let column_name = &file_column.name;
 
-      let Some(row) = state
-        .conn()
+      let Some(row) = conn
         .read_query_row(
           format!(r#"SELECT "{column_name}" FROM {table_name} WHERE "{pk_column}" = $1"#),
           [pk_value],
@@ -104,7 +102,7 @@ pub(crate) async fn run_get_file_query(
 }
 
 pub(crate) async fn run_get_files_query(
-  state: &AppState,
+  conn: &trailbase_sqlite::Connection,
   table_name: &QualifiedNameEscaped,
   file_column: &Column,
   json_metadata: &JsonColumnMetadata,
@@ -115,8 +113,7 @@ pub(crate) async fn run_get_files_query(
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
       let column_name = &file_column.name;
 
-      let Some(row) = state
-        .conn()
+      let Some(row) = conn
         .read_query_row(
           format!(r#"SELECT "{column_name}" FROM {table_name} WHERE "{pk_column}" = $1"#),
           [pk_value],
@@ -137,7 +134,7 @@ pub(crate) async fn run_get_files_query(
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
       return Ok(FileUploads(vec![
         run_get_file_query(
-          state,
+          conn,
           table_name,
           file_column,
           json_metadata,

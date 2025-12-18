@@ -115,7 +115,8 @@ pub async fn create_record_handler(
       }
     }
 
-    let mut lazy_params = LazyParams::for_insert(&api, record, files);
+    let mut lazy_params =
+      LazyParams::for_insert(&api, state.json_schema_registry().clone(), record, files);
 
     // NOTE: We're currently serializing the async checks, we could parallelize them however it's
     // unclear if this would be much faster.
@@ -142,7 +143,8 @@ pub async fn create_record_handler(
     }
     1 => {
       let record_id = run_insert_query(
-        &state,
+        api.conn(),
+        state.objectstore(),
         api.table_name(),
         api.insert_conflict_resolution_strategy(),
         &pk_column.name,
@@ -169,7 +171,7 @@ pub async fn create_record_handler(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-      run_queries(&state, queries)
+      run_queries(api.conn(), state.objectstore(), queries)
         .await
         .map_err(|err| RecordError::Internal(err.into()))?
         .into_iter()

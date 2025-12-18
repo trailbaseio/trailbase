@@ -5,7 +5,7 @@ use trailbase_sqlite::Connection;
 
 #[tokio::main]
 async fn main() {
-  let conn = Connection::new(|| connect_sqlite(None), None).expect("in memory connection");
+  let conn = Connection::new(|| connect_sqlite(None, None), None).expect("in memory connection");
 
   let uuid: Option<String> = conn
     .read_query_value("SELECT (uuid_text(uuid_v7()))", ())

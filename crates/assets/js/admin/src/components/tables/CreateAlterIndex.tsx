@@ -16,6 +16,7 @@ import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { showToast } from "@/components/ui/toast";
 
 import { alterIndex, createIndex } from "@/lib/api/table";
+import { prettyFormatQualifiedName } from "@/lib/schema";
 import {
   buildTextFormField,
   buildBoolFormField,
@@ -85,7 +86,7 @@ export function CreateAlterIndexForm(props: {
       }
     } catch (err) {
       showToast({
-        title: "Uncaught Error",
+        title: `${isCreateIndex() ? "Creation" : "Alteration"} Error`,
         description: `${err}`,
         variant: "error",
       });
@@ -94,16 +95,17 @@ export function CreateAlterIndexForm(props: {
 
   const form = createForm(() => {
     const columns: ColumnOrder[] = [newDefaultColumn(0)];
+    const unqualifiedName = props.table.name.name;
 
     return {
       defaultValues:
         props.schema ??
         ({
           name: {
-            name: `_${props.table.name.name}__${columns[0].column_name}_index`,
+            name: `_${unqualifiedName}__${columns[0].column_name}_index`,
             database_schema: props.table.name.database_schema,
           },
-          table_name: props.table.name.name,
+          table_name: prettyFormatQualifiedName(props.table.name),
           columns,
           unique: false,
           predicate: null,
@@ -227,11 +229,7 @@ export function CreateAlterIndexForm(props: {
                         <Button
                           disabled={!state().canSubmit}
                           variant="outline"
-                          onClick={() => {
-                            onSubmit(form.state.values, true).catch(
-                              console.error,
-                            );
-                          }}
+                          onClick={() => onSubmit(form.state.values, true)}
                           {...props}
                         >
                           {state().isSubmitting ? "..." : "Dry Run"}

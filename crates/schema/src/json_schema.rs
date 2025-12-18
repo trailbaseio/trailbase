@@ -252,7 +252,9 @@ fn column_data_type_to_json_type(data_type: ColumnDataType) -> Value {
 
 #[cfg(test)]
 mod tests {
+  use parking_lot::RwLock;
   use serde_json::json;
+  use std::sync::Arc;
 
   use crate::FileUpload;
   use crate::sqlite::{ColumnOption, Table, lookup_and_parse_table_schema};
@@ -261,9 +263,10 @@ mod tests {
 
   #[test]
   fn test_parse_table_schema() {
-    crate::registry::try_init_builtin_schemas();
-
-    let conn = trailbase_extension::connect_sqlite(None).unwrap();
+    let registry = Arc::new(RwLock::new(
+      crate::registry::build_json_schema_registry(vec![]).unwrap(),
+    ));
+    let conn = trailbase_extension::connect_sqlite(None, Some(registry.clone())).unwrap();
 
     let col0_schema = json!({
       "type": "object",
@@ -294,7 +297,7 @@ mod tests {
       )
       .unwrap();
 
-    let (table, schema) = get_and_build_table_schema(&conn, "test_table");
+    let (table, schema) = get_and_build_table_schema(&conn, &registry.read(), "test_table");
 
     let col = table.columns.first().unwrap();
     let check_expr = col
@@ -399,9 +402,10 @@ mod tests {
 
   #[test]
   fn test_file_uploads_schema() {
-    crate::registry::try_init_builtin_schemas();
-
-    let conn = trailbase_extension::connect_sqlite(None).unwrap();
+    let registry = Arc::new(RwLock::new(
+      crate::registry::build_json_schema_registry(vec![]).unwrap(),
+    ));
+    let conn = trailbase_extension::connect_sqlite(None, Some(registry.clone())).unwrap();
 
     conn
       .execute(
@@ -414,18 +418,18 @@ mod tests {
       )
       .unwrap();
 
-    let (_table, schema) = get_and_build_table_schema(&conn, "test_table");
+    let (_table, schema) = get_and_build_table_schema(&conn, &registry.read(), "test_table");
 
     assert!(schema.is_valid(&json!({})));
   }
 
   fn get_and_build_table_schema(
     conn: &rusqlite::Connection,
+    registry: &JsonSchemaRegistry,
     table_name: &str,
   ) -> (Table, Validator) {
     let table = lookup_and_parse_table_schema(conn, table_name).unwrap();
 
-    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
     let table_metadata = TableMetadata::new(&registry, table.clone(), &[table.clone()]).unwrap();
     let (schema, _) = build_json_schema(
       &registry,

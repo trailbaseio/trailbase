@@ -1,0 +1,41 @@
+package trailbase:database@0.1.0;
+
+interface sqlite {
+  // WARNING: Evolving a variant currently breaks the ABI:
+  //   https://github.com/WebAssembly/component-model/issues/454
+  variant tx-error {
+    other(string)
+  }
+
+  variant value {
+    null,
+    text(string),
+    blob(list<u8>),
+    integer(s64),
+    real(f64),
+  }
+
+  // NOTE: Ideally, we'd use these but they can currently block guests, w/o a
+  // better non-blocking event loop.
+  // @since(version = 0.1.0)
+  // execute: func(query: string, params: list<value>) -> result<u64, tx-error>;
+  // @since(version = 0.1.0)
+  // query: func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
+
+  // However, transactions have to be sync.
+  @since(version = 0.1.0)
+  tx-begin: func() -> result<_, tx-error>;
+  @since(version = 0.1.0)
+  tx-commit: func() -> result<_, tx-error>;
+  @since(version = 0.1.0)
+  tx-rollback: func() -> result<_, tx-error>;
+
+  @since(version = 0.1.0)
+  tx-execute: func(query: string, params: list<value>) -> result<u64, tx-error>;
+  @since(version = 0.1.0)
+  tx-query: func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
+}
+
+world interfaces {
+  import sqlite;
+}

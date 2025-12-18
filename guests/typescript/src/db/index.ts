@@ -6,7 +6,7 @@ import {
   txRollback,
   txExecute,
   txQuery,
-} from "trailbase:runtime/host-endpoint";
+} from "trailbase:database/sqlite@0.1.0";
 
 import type { SqliteRequest } from "@common/SqliteRequest";
 import type { Value } from "./value";
@@ -19,7 +19,7 @@ import {
   fromWitValue,
 } from "./value";
 
-export type { Value } from "trailbase:runtime/host-endpoint";
+export type { Value } from "trailbase:database/sqlite@0.1.0";
 
 export class Transaction {
   constructor() {

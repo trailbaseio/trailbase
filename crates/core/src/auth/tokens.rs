@@ -171,7 +171,13 @@ pub(crate) async fn mint_new_tokens(
   }
 
   let user_id = db_user.uuid();
-  let claims = TokenClaims::new(verified, user_id, db_user.email.clone(), expires_in);
+  let claims = TokenClaims::new(
+    verified,
+    user_id,
+    db_user.email.clone(),
+    db_user.admin,
+    expires_in,
+  );
 
   // Unlike JWT auth tokens, refresh tokens are opaque.
   let refresh_token = generate_random_string(REFRESH_TOKEN_LENGTH);
@@ -240,6 +246,7 @@ pub(crate) async fn reauth_with_refresh_token(
     db_user.verified,
     db_user.uuid(),
     db_user.email,
+    db_user.admin,
     auth_token_ttl,
   ));
 }

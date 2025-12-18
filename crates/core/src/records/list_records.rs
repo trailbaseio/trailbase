@@ -192,7 +192,7 @@ pub async fn list_records_handler(
     },
   );
 
-  let metadata = state.connection_metadata();
+  let metadata = api.connection_metadata();
   let expanded_tables = match query_expand {
     Some(ref expand) => {
       let Some(config_expand) = api.expand() else {
@@ -230,7 +230,7 @@ pub async fn list_records_handler(
   .map_err(|err| RecordError::Internal(err.into()))?;
 
   // Execute the query.
-  let rows = state.conn().read_query_rows(query, params).await?;
+  let rows = api.conn().read_query_rows(query, params).await?;
   let Some(last_row) = rows.last() else {
     // Query result is empty:
     return Ok(Json(ListResponse {
@@ -385,6 +385,7 @@ mod tests {
   use crate::auth::user::User;
   use crate::auth::util::login_with_password;
   use crate::config::proto::PermissionFlag;
+  use crate::connection::ConnectionEntry;
   use crate::records::RecordError;
   use crate::records::test_utils::*;
   use crate::util::id_to_b64;
@@ -452,31 +453,41 @@ mod tests {
   #[tokio::test]
   async fn test_list_records_template_with_expansions() {
     let state = test_state(None).await.unwrap();
-    let conn = state.conn();
 
-    conn
-      .execute(
-        r#"CREATE TABLE "other" (
+    {
+      let ConnectionEntry {
+        connection: conn, ..
+      } = state.connection_manager().main_entry();
+
+      conn
+        .execute(
+          r#"CREATE TABLE "other" (
               "index" INTEGER PRIMARY KEY
             ) STRICT"#,
-        (),
-      )
-      .await
-      .unwrap();
+          (),
+        )
+        .await
+        .unwrap();
 
-    conn
-      .execute(
-        r#"CREATE TABLE "table" (
+      conn
+        .execute(
+          r#"CREATE TABLE "table" (
               tid     INTEGER PRIMARY KEY,
               "drop"  TEXT,
               "index" INTEGER REFERENCES "other"("index")
             ) STRICT"#,
-        (),
-      )
-      .await
-      .unwrap();
+          (),
+        )
+        .await
+        .unwrap();
 
-    state.rebuild_connection_metadata().await.unwrap();
+      state.rebuild_connection_metadata().await.unwrap();
+    }
+
+    let ConnectionEntry {
+      connection: conn,
+      metadata: connection_metadata,
+    } = state.connection_manager().main_entry();
 
     add_record_api_config(
       &state,
@@ -490,7 +501,6 @@ mod tests {
     .await
     .unwrap();
 
-    let connection_metadata = state.connection_metadata();
     let api = state.lookup_record_api("api").unwrap();
 
     let expanded_tables = expand_tables(&api, &connection_metadata, &["index"]).unwrap();

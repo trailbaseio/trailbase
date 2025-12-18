@@ -1,13 +1,14 @@
 import { Switch, Match, createMemo } from "solid-js";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { prettyFormatQualifiedName } from "@/lib/schema";
+import { Graph, NodeMetadata, EdgeMetadata } from "@antv/x6";
+import { PortMetadata } from "@antv/x6/lib/model/port";
+import { TbPlus, TbMinus } from "solid-icons/tb";
 
+import { Button } from "@/components/ui/button";
 import { Header } from "@/components/Header";
 import {
   ErdGraph,
-  NodeMetadata,
-  EdgeMetadata,
-  PortMetadata,
   ER_NODE_NAME,
   NODE_WIDTH,
   LINE_HEIGHT,
@@ -23,6 +24,7 @@ import {
   getColumns,
   ForeignKey,
 } from "@/lib/schema";
+import { createIsMobile } from "@/lib/signals";
 
 import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
@@ -154,6 +156,8 @@ function buildErNode(
 }
 
 function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
+  const isMobile = createIsMobile();
+
   const nodesAndEdges = createMemo(() => {
     const nodes: NodeMetadata[] = [];
     const edges: EdgeMetadata[] = [];
@@ -172,14 +176,55 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
     return { nodes, edges };
   });
 
-  {
-    /*
-    <ErdGraph nodes={nodesAndEdges().nodes} edges={nodesAndEdges().edges} />
-    */
-  }
+  const style = () => {
+    if (isMobile()) {
+      // Header (65px) + Navbar (48px) = 113px
+      return "h-[calc(100dvh-113px)] w-[calc(100dvw)]";
+    }
+    return "h-[calc(100dvh-65px)] w-[calc(100dvw-58px)]";
+  };
+
+  let graph: Graph | undefined;
 
   return (
-    <ErdGraph nodes={nodesAndEdges().nodes} edges={nodesAndEdges().edges} />
+    <div class={style()}>
+      {/* UI overlay */}
+      <div class="absolute right-0 z-10">
+        <div class="m-2 flex flex-col gap-2">
+          <Button
+            size="icon"
+            variant="outline"
+            class="bg-card"
+            onClick={() => {
+              if (graph !== undefined) {
+                graph.zoomTo(graph.zoom() * 2);
+              }
+            }}
+          >
+            <TbPlus />
+          </Button>
+
+          <Button
+            size="icon"
+            variant="outline"
+            class="bg-card"
+            onClick={() => {
+              if (graph !== undefined) {
+                graph.zoomTo(graph.zoom() / 2);
+              }
+            }}
+          >
+            <TbMinus />
+          </Button>
+        </div>
+      </div>
+
+      <ErdGraph
+        nodes={nodesAndEdges().nodes}
+        edges={nodesAndEdges().edges}
+        onMount={(g) => (graph = g)}
+      />
+    </div>
   );
 }
 
@@ -188,7 +233,7 @@ export function ErdPage() {
 
   return (
     <div class="flex h-full flex-col">
-      <Header title="Schema" />
+      <Header title="Schema" class="h-[65px]" />
 
       <Switch>
         <Match when={schemaFetch.isError}>

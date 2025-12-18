@@ -329,14 +329,16 @@ function JobSettingsImpl(props: {
                                   const id = proxy().job?.id;
                                   if (id) {
                                     (async () => {
-                                      const result = await runJob({ id });
-                                      console.info(
-                                        "execution result: ",
-                                        result.error,
-                                      );
-
-                                      props.refetchJobs();
-                                    })().catch(console.error);
+                                      try {
+                                        const result = await runJob({ id });
+                                        console.info(
+                                          "execution result: ",
+                                          result.error,
+                                        );
+                                      } finally {
+                                        props.refetchJobs();
+                                      }
+                                    })();
                                   }
                                 }}
                               >

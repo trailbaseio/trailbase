@@ -1,6 +1,5 @@
 use jsonschema::Validator;
-use mini_moka::sync::Cache;
-use parking_lot::RwLock;
+use quick_cache::sync::Cache;
 use rusqlite::Error;
 use rusqlite::functions::Context;
 use std::collections::HashMap;
@@ -41,16 +40,20 @@ impl Schema {
   }
 }
 
-#[derive(Default)]
+// #[derive(Default)]
 pub struct JsonSchemaRegistry {
   schemas: HashMap<String, Schema>,
 }
 
 impl JsonSchemaRegistry {
-  fn from_schemas(schemas: Vec<(String, Schema)>) -> Self {
+  pub fn from_schemas(schemas: Vec<(String, Schema)>) -> Self {
     return Self {
       schemas: schemas.into_iter().collect(),
     };
+  }
+
+  pub fn swap(&mut self, other: JsonSchemaRegistry) {
+    self.schemas = other.schemas;
   }
 
   pub fn names(&self) -> Vec<String> {
@@ -66,35 +69,10 @@ impl JsonSchemaRegistry {
   }
 }
 
-static SCHEMA_REGISTRY: LazyLock<RwLock<Arc<JsonSchemaRegistry>>> =
-  LazyLock::new(|| RwLock::new(Arc::new(JsonSchemaRegistry::default())));
-
-pub fn set_schemas(schemas: Vec<(String, Schema)>, override_non_empty: bool) {
-  let mut lock = SCHEMA_REGISTRY.write();
-
-  if lock.schemas.is_empty() || override_non_empty {
-    *lock = Arc::new(JsonSchemaRegistry::from_schemas(schemas));
-  }
-}
-
-pub fn set_schema_for_test(name: &str, entry: Option<Schema>) {
-  let mut lock = SCHEMA_REGISTRY.write();
-  let mut schemas: HashMap<_, _> = lock.schemas.clone();
-
-  if let Some(entry) = entry {
-    schemas.insert(name.to_string(), entry);
-  } else {
-    schemas.remove(name);
-  }
-
-  *lock = Arc::new(JsonSchemaRegistry { schemas });
-}
-
-pub fn json_schema_registry_snapshot() -> Arc<JsonSchemaRegistry> {
-  return (*SCHEMA_REGISTRY.read()).clone();
-}
-
-pub(super) fn jsonschema_by_name(context: &Context) -> Result<bool, Error> {
+pub(super) fn jsonschema_by_name_impl(
+  context: &Context,
+  registry: &JsonSchemaRegistry,
+) -> Result<bool, Error> {
   let schema_name = context.get_raw(0).as_str()?;
 
   // Get and parse the JSON contents. If it's invalid JSON to start with, there's not much
@@ -107,8 +85,7 @@ pub(super) fn jsonschema_by_name(context: &Context) -> Result<bool, Error> {
     .map_err(|err| Error::UserFunctionError(format!("Invalid JSON: {contents} => {err}").into()))?;
 
   // Then get/build the schema validator for the given pattern.
-  let lock = SCHEMA_REGISTRY.read();
-  let Some(entry) = lock.schemas.get(schema_name) else {
+  let Some(entry) = registry.schemas.get(schema_name) else {
     return Err(Error::UserFunctionError(
       format!("Schema {schema_name} not found").into(),
     ));
@@ -127,7 +104,10 @@ pub(super) fn jsonschema_by_name(context: &Context) -> Result<bool, Error> {
   return Ok(true);
 }
 
-pub(super) fn jsonschema_by_name_with_extra_args(context: &Context) -> Result<bool, Error> {
+pub(super) fn jsonschema_by_name_with_extra_args_impl(
+  context: &Context,
+  registry: &JsonSchemaRegistry,
+) -> Result<bool, Error> {
   let schema_name = context.get_raw(0).as_str()?;
   let extra_args = context.get_raw(2).as_str()?;
 
@@ -140,8 +120,7 @@ pub(super) fn jsonschema_by_name_with_extra_args(context: &Context) -> Result<bo
     .map_err(|err| Error::UserFunctionError(format!("Invalid JSON: {contents} => {err}").into()))?;
 
   // Then get/build the schema validator for the given pattern.
-  let lock = SCHEMA_REGISTRY.read();
-  let Some(entry) = lock.schemas.get(schema_name) else {
+  let Some(entry) = registry.schemas.get(schema_name) else {
     return Err(Error::UserFunctionError(
       format!("Schema {schema_name} not found").into(),
     ));
@@ -197,11 +176,13 @@ pub(crate) fn jsonschema_matches(context: &Context) -> Result<bool, Error> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  use parking_lot::RwLock;
   use rusqlite::params;
 
   #[test]
   fn test_explicit_jsonschema() {
-    let conn = crate::connect_sqlite(None).unwrap();
+    let conn = crate::connect_sqlite(None, None).unwrap();
 
     let text0_schema = r#"
         {
@@ -249,8 +230,6 @@ mod tests {
 
   #[test]
   fn test_registerd_jsonschema() {
-    let conn = crate::connect_sqlite(None).unwrap();
-
     let text0_schema = r#"
         {
           "type": "object",
@@ -261,6 +240,18 @@ mod tests {
           "required": ["name"]
         }
     "#;
+
+    let json_schema_registry = Arc::new(RwLock::new(JsonSchemaRegistry::from_schemas(vec![(
+      "name0".to_string(),
+      Schema::from(
+        serde_json::from_str(text0_schema).unwrap(),
+        Some(Arc::new(starts_with)),
+        false,
+      )
+      .unwrap(),
+    )])));
+
+    let conn = crate::connect_sqlite(None, Some(json_schema_registry)).unwrap();
 
     fn starts_with(v: &serde_json::Value, param: Option<&str>) -> bool {
       if let Some(param) = param {
@@ -274,18 +265,6 @@ mod tests {
       }
       return false;
     }
-
-    set_schema_for_test(
-      "name0",
-      Some(
-        Schema::from(
-          serde_json::from_str(text0_schema).unwrap(),
-          Some(Arc::new(starts_with)),
-          false,
-        )
-        .unwrap(),
-      ),
-    );
 
     let create_table = format!(
       r#"

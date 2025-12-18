@@ -16,11 +16,15 @@ export type ExecutionResult = {
   error?: ExecutionError;
 };
 
-export async function executeSql(sql: string): Promise<ExecutionResult> {
+export async function executeSql(
+  sql: string,
+  attachedDbs: string[] | null,
+): Promise<ExecutionResult> {
   const response = await adminFetch("/query", {
     method: "POST",
     body: JSON.stringify({
       query: sql,
+      attached_databases: attachedDbs,
     } as QueryRequest),
     throwOnError: false,
   });

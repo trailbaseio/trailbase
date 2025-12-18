@@ -509,15 +509,31 @@ impl QualifiedName {
     }
 
     if let Some((db, name)) = name.split_once('.') {
+      let name = unquote_string(name);
+      if name.is_empty() {
+        return Err(SchemaError::Precondition("Invalid empty name".into()));
+      }
+
+      let database_schema = unquote_string(db);
+      if database_schema.is_empty() {
+        return Err(SchemaError::Precondition("Invalid empty db".into()));
+      }
+
       return Ok(Self {
-        name: unquote_string(name),
-        database_schema: Some(unquote_string(db)),
+        name,
+        database_schema: Some(database_schema),
+      });
+    } else {
+      let name = unquote_string(name);
+      if name.is_empty() {
+        return Err(SchemaError::Precondition("Invalid empty name".into()));
+      }
+
+      return Ok(Self {
+        name,
+        database_schema: None,
       });
     }
-    return Ok(Self {
-      name: unquote_string(name),
-      database_schema: None,
-    });
   }
 
   pub fn escaped_string(&self) -> String {
@@ -539,9 +555,13 @@ impl QualifiedName {
 
 impl PartialEq for QualifiedName {
   fn eq(&self, other: &Self) -> bool {
-    return self.name == other.name
-      && self.database_schema.as_deref().unwrap_or("main")
-        == other.database_schema.as_deref().unwrap_or("main");
+    if self.database_schema.as_deref().unwrap_or("main")
+      != other.database_schema.as_deref().unwrap_or("main")
+    {
+      return false;
+    }
+
+    return self.name == other.name;
   }
 }
 
@@ -1708,7 +1728,7 @@ mod tests {
 
     {
       // First Make sure the query is actually valid, as opposed to "only" parsable.
-      let conn = trailbase_extension::connect_sqlite(None).unwrap();
+      let conn = trailbase_extension::connect_sqlite(None, None).unwrap();
       conn.execute(&statement, ()).unwrap();
     }
 
@@ -1718,7 +1738,7 @@ mod tests {
     let sql = table1.create_table_statement();
     {
       // Same as above, make sure the constructed query is valid as opposed to "only" parsable.
-      let conn = trailbase_extension::connect_sqlite(None).unwrap();
+      let conn = trailbase_extension::connect_sqlite(None, None).unwrap();
       conn.execute(&sql, ()).unwrap();
     }
 

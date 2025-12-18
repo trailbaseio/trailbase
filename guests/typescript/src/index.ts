@@ -1,8 +1,15 @@
 import { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.3";
 import type {
-  InitResult,
-  InitArguments,
-} from "trailbase:runtime/init-endpoint";
+  Arguments,
+  HttpHandlers,
+  JobHandlers,
+  SqliteFunctions,
+} from "trailbase:component/init-endpoint@0.1.0";
+import type {
+  Arguments as SqliteArguments,
+  Error as SqliteError,
+  dispatchScalarFunction,
+} from "trailbase:component/sqlite-function-endpoint@0.1.0";
 import type { HttpHandlerInterface } from "./http";
 import type { JobHandlerInterface } from "./job";
 import { buildIncomingHttpHandler } from "./http/incoming";
@@ -10,7 +17,6 @@ import { buildIncomingHttpHandler } from "./http/incoming";
 export { addPeriodicCallback } from "./timer";
 
 export * from "./util";
-export type { InitResult } from "trailbase:runtime/init-endpoint";
 
 export interface Config {
   incomingHandler: {
@@ -20,7 +26,12 @@ export interface Config {
     ) => Promise<void>;
   };
   initEndpoint: {
-    init: (args: InitArguments) => InitResult;
+    initHttpHandlers: (args: Arguments) => HttpHandlers;
+    initJobHandlers: (args: Arguments) => JobHandlers;
+    initSqliteFunctions: (args: Arguments) => SqliteFunctions;
+  };
+  sqliteFunctionEndpoint: {
+    dispatchScalarFunction: typeof dispatchScalarFunction;
   };
 }
 
@@ -38,18 +49,40 @@ export function defineConfig(opts: {
       handle: buildIncomingHttpHandler(opts),
     },
     initEndpoint: {
-      init: function (args: InitArguments): InitResult {
+      initHttpHandlers: function (args: Arguments): HttpHandlers {
         opts.init?.({
           version: args.version,
         });
 
         return {
-          httpHandlers: (opts.httpHandlers ?? []).map((h) => [
-            h.method,
-            h.path,
-          ]),
-          jobHandlers: (opts.jobHandlers ?? []).map((h) => [h.name, h.spec]),
+          handlers: (opts.httpHandlers ?? []).map((h) => [h.method, h.path]),
         };
+      },
+      initJobHandlers: function (args: Arguments): JobHandlers {
+        opts.init?.({
+          version: args.version,
+        });
+
+        return {
+          handlers: (opts.jobHandlers ?? []).map((h) => [h.name, h.spec]),
+        };
+      },
+      initSqliteFunctions: function (args: Arguments): SqliteFunctions {
+        opts.init?.({
+          version: args.version,
+        });
+
+        return {
+          scalarFunctions: [],
+        };
+      },
+    },
+    sqliteFunctionEndpoint: {
+      dispatchScalarFunction: function (_args: SqliteArguments) {
+        throw {
+          tag: "other",
+          val: "missing sqlite function",
+        } as SqliteError;
       },
     },
   };

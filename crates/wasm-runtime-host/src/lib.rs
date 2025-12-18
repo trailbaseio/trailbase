@@ -2,6 +2,7 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
+pub mod functions;
 mod sqlite;
 
 use bytes::Bytes;
@@ -9,30 +10,30 @@ use core::future::Future;
 use futures_util::future::BoxFuture;
 use http_body_util::combinators::BoxBody;
 use parking_lot::Mutex;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
-use trailbase::runtime::host_endpoint::{TxError, Value};
 use trailbase_sqlite::{Params, Rows};
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Result, Store};
-use wasmtime_wasi::{DirPerms, FilePerms, WasiCtxView};
-use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
+use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 use wasmtime_wasi_http::bindings::http::types::ErrorCode;
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 use wasmtime_wasi_io::IoView;
 
-use crate::exports::trailbase::runtime::init_endpoint::{InitArguments, InitResult};
+use self::trailbase::database::sqlite::{TxError, Value};
+use exports::trailbase::component::init_endpoint::Arguments;
+use functions::ABI_MISMATCH_WARNING;
 
+pub use crate::exports::trailbase::component::init_endpoint::HttpMethodType;
 pub use trailbase_wasi_keyvalue::Store as KvStore;
 
 static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 
 // Documentation: https://docs.wasmtime.dev/api/wasmtime/component/macro.bindgen.html
 wasmtime::component::bindgen!({
-    world: "trailbase:runtime/trailbase",
+    world: "trailbase:component/interfaces",
     path: [
         // Order-sensitive: will import *.wit from the folder.
         "wit/deps-0.2.6/random",
@@ -44,7 +45,8 @@ wasmtime::component::bindgen!({
         "wit/deps-0.2.6/http",
         "wit/keyvalue-0.2.0-draft",
         // Ours:
-        "wit/trailbase.wit",
+        "wit/trailbase/database",
+        "wit/trailbase/component",
     ],
     // NOTE: This doesn't seem to work even though it should be fixed:
     //   https://github.com/bytecodealliance/wasmtime/issues/10677
@@ -58,13 +60,23 @@ wasmtime::component::bindgen!({
     // Interactions with `ResourceTable` can possibly trap so enable the ability
     // to return traps from generated functions.
     imports: {
-        "trailbase:runtime/host-endpoint/tx-commit": trappable,
-        "trailbase:runtime/host-endpoint/tx-rollback": trappable,
-        "trailbase:runtime/host-endpoint/tx-execute": trappable,
-        "trailbase:runtime/host-endpoint/tx-query": trappable,
+        "trailbase:database/sqlite.tx-commit": trappable,
+        "trailbase:database/sqlite.tx-rollback": trappable,
+        "trailbase:database/sqlite.tx-execute": trappable,
+        "trailbase:database/sqlite.tx-query": trappable,
         default: async | trappable,
     },
     exports: {
+        // WARN: We would really like synchronous functions to be wrapped synchronously, e.g. to
+        // call a sqlite extension function synchronously. However, right now if you runtime-enable
+        // async `config.async_support(true)`, then all guest-exported functions must be called
+        // asynchronously. Right now, one would need to generate two sets of bindings (sync & async)
+        // and initialize to separate engines to call functions differently :/. It's unclear if
+        // WASIp3 will fix that, i.e. generate bindings based on async in the WIT...
+        // "trailbase:component/init-endpoint/init-http-handlers": trappable,
+        //
+        // NOTE: This compile-time setting *must* be set, if runtime option
+        // `config.async_support(true)` will be set :/.
         default: async,
     },
 });
@@ -83,8 +95,8 @@ pub enum Error {
   Other(String),
 }
 
-pub enum Message {
-  Run(Box<dyn (FnOnce(Arc<RuntimeInstance>) -> BoxFuture<'static, ()>) + Send>),
+enum Message {
+  Run(Box<dyn (FnOnce(Arc<AsyncRunner>) -> BoxFuture<'static, ()>) + Send>),
 }
 
 pub enum ExecutorMessage {
@@ -172,50 +184,50 @@ impl WasiHttpView for State {
   }
 }
 
-impl trailbase::runtime::host_endpoint::Host for State {
-  fn execute(
-    &mut self,
-    query: String,
-    params: Vec<Value>,
-  ) -> impl Future<Output = wasmtime::Result<Result<u64, TxError>>> + Send {
-    let conn = self.shared.conn.clone();
-    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-
-    return async move {
-      Ok(
-        conn
-          .execute(query, params)
-          .await
-          .map_err(|err| TxError::Other(err.to_string()))
-          .map(|v| v as u64),
-      )
-    };
-  }
-
-  fn query(
-    &mut self,
-    query: String,
-    params: Vec<Value>,
-  ) -> impl Future<Output = wasmtime::Result<Result<Vec<Vec<Value>>, TxError>>> + Send {
-    let conn = self.shared.conn.clone();
-    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-
-    return async move {
-      let rows = conn
-        .write_query_rows(query, params)
-        .await
-        .map_err(|err| TxError::Other(err.to_string()))?;
-
-      let values: Vec<_> = rows
-        .into_iter()
-        .map(|trailbase_sqlite::Row(row, _col)| {
-          return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
-        })
-        .collect();
-
-      Ok(Ok(values))
-    };
-  }
+impl self::trailbase::database::sqlite::Host for State {
+  // fn execute(
+  //   &mut self,
+  //   query: String,
+  //   params: Vec<Value>,
+  // ) -> impl Future<Output = wasmtime::Result<Result<u64, TxError>>> + Send {
+  //   let conn = self.shared.conn.clone();
+  //   let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
+  //
+  //   return async move {
+  //     Ok(
+  //       conn
+  //         .execute(query, params)
+  //         .await
+  //         .map_err(|err| TxError::Other(err.to_string()))
+  //         .map(|v| v as u64),
+  //     )
+  //   };
+  // }
+  //
+  // fn query(
+  //   &mut self,
+  //   query: String,
+  //   params: Vec<Value>,
+  // ) -> impl Future<Output = wasmtime::Result<Result<Vec<Vec<Value>>, TxError>>> + Send {
+  //   let conn = self.shared.conn.clone();
+  //   let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
+  //
+  //   return async move {
+  //     let rows = conn
+  //       .write_query_rows(query, params)
+  //       .await
+  //       .map_err(|err| TxError::Other(err.to_string()))?;
+  //
+  //     let values: Vec<_> = rows
+  //       .into_iter()
+  //       .map(|trailbase_sqlite::Row(row, _col)| {
+  //         return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
+  //       })
+  //       .collect();
+  //
+  //     Ok(Ok(values))
+  //   };
+  // }
 
   fn tx_begin(&mut self) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + Send {
     async fn begin(
@@ -411,7 +423,7 @@ impl SharedExecutor {
 
 pub struct Runtime {
   /// Path to original .wasm component file.
-  pub component_path: std::path::PathBuf,
+  component_path: std::path::PathBuf,
 
   shared_sender: kanal::AsyncSender<Message>,
 
@@ -423,10 +435,13 @@ pub struct Runtime {
 fn build_config(cache: Option<wasmtime::Cache>, use_winch: bool) -> Config {
   let mut config = Config::new();
 
-  // Execution settings.
-  config.async_support(true);
+  // Execution settings:
   config.epoch_interruption(false);
   config.memory_reservation(64 * 1024 * 1024 /* bytes */);
+  // NOTE: This is where we enable async execution. Ironically, this runtime setting requires
+  // compile-time setting to make all guest-exported bindings async... *all*. With this enabled
+  // calling syncronous bindings will panic.
+  config.async_support(true);
   // config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
 
   // Compilation settings.
@@ -477,12 +492,15 @@ impl Runtime {
         .wasm_binary_or_text_file(&wasm_source_file)?
         .compile_component()?;
 
-      // NOTE: According to docs, this should not do anything.
+      // NOTE: According to docs, this should not do anything (it seems like a reasonable thing to
+      // call explicitly).
       component.initialize_copy_on_write_image()?;
 
-      if let Ok(elapsed) = SystemTime::now().duration_since(start) {
-        log::info!("Loaded component {wasm_source_file:?} in: {elapsed:?}.");
-      }
+      log::info!(
+        "Loaded component {wasm_source_file:?} in: {elapsed:?}.",
+        elapsed = SystemTime::now().duration_since(start).unwrap_or_default()
+      );
+
       component
     };
 
@@ -501,7 +519,7 @@ impl Runtime {
       })?;
 
       // Host interfaces.
-      trailbase::runtime::host_endpoint::add_to_linker::<_, HasSelf<State>>(&mut linker, |s| s)?;
+      self::trailbase::database::sqlite::add_to_linker::<_, HasSelf<State>>(&mut linker, |s| s)?;
 
       linker
     };
@@ -509,34 +527,24 @@ impl Runtime {
     let (shared_sender, shared_receiver) = kanal::unbounded_async::<Message>();
 
     {
-      let engine = engine.clone();
-      let component = component.clone();
-      let linker = linker.clone();
-
-      let conn = conn.clone();
-      let kv_store = kv_store.clone();
-      let fs_root_path = opts.fs_root_path.clone();
-
-      let shared_state = Arc::new(SharedState {
-        conn,
-        kv_store,
-        fs_root_path,
-      });
-
-      let instance = RuntimeInstance {
-        engine,
-        component,
-        linker,
-        shared: shared_state,
+      let runner = AsyncRunner {
+        engine: engine.clone(),
+        component: component.clone(),
+        linker: linker.clone(),
+        shared: Arc::new(SharedState {
+          conn: conn.clone(),
+          kv_store: kv_store.clone(),
+          fs_root_path: opts.fs_root_path.clone(),
+          component_path: wasm_source_file.clone(),
+        }),
       };
 
-      let wasm_source_file = wasm_source_file.clone();
       executor
         .shared_sender
         .as_sync()
         .send(ExecutorMessage::Run(Box::new(move || {
           return Box::pin(async move {
-            async_event_loop(wasm_source_file, instance, shared_receiver).await;
+            async_event_loop(runner, shared_receiver).await;
           });
         })))
         .expect("startup");
@@ -549,9 +557,13 @@ impl Runtime {
     });
   }
 
+  pub fn component_path(&self) -> &std::path::PathBuf {
+    return &self.component_path;
+  }
+
   pub async fn call<O, F, Fut>(&self, f: F) -> Result<O, Error>
   where
-    F: (FnOnce(Arc<RuntimeInstance>) -> Fut) + Send + 'static,
+    F: (FnOnce(Arc<AsyncRunner>) -> Fut) + Send + 'static,
     Fut: Future<Output = O> + Send,
     O: Send + 'static,
   {
@@ -559,14 +571,12 @@ impl Runtime {
 
     self
       .shared_sender
-      .send(Message::Run(Box::new(
-        move |runtime: Arc<RuntimeInstance>| {
-          let x = Box::pin(async move { f(runtime).await });
-          Box::pin(async move {
-            let _ = sender.send(x.await);
-          })
-        },
-      )))
+      .send(Message::Run(Box::new(move |runtime: Arc<AsyncRunner>| {
+        let x = Box::pin(async move { f(runtime).await });
+        Box::pin(async move {
+          let _ = sender.send(x.await);
+        })
+      })))
       .await
       .map_err(|_| Error::ChannelClosed)?;
 
@@ -574,25 +584,23 @@ impl Runtime {
   }
 }
 
-async fn async_event_loop(
-  component_path: PathBuf,
-  instance: RuntimeInstance,
-  shared_recv: kanal::AsyncReceiver<Message>,
-) {
-  let instance = Arc::new(instance);
+async fn async_event_loop(runner: AsyncRunner, shared_recv: kanal::AsyncReceiver<Message>) {
+  let runner = Arc::new(runner);
 
   let local_in_flight = Arc::new(AtomicUsize::new(0));
 
   loop {
+    #[cfg(debug_assertions)]
     log::debug!(
-      "WASM runtime ({component_path:?}) waiting for new messages. In flight: {}, {}",
+      "WASM runtime ({path:?}) waiting for new messages. In flight: {}, {}",
       local_in_flight.load(Ordering::Relaxed),
-      IN_FLIGHT.load(Ordering::Relaxed)
+      IN_FLIGHT.load(Ordering::Relaxed),
+      path = runner.shared.component_path,
     );
 
     match shared_recv.recv().await {
       Ok(Message::Run(f)) => {
-        let instance = instance.clone();
+        let runner = runner.clone();
 
         let local_in_flight = local_in_flight.clone();
         local_in_flight.fetch_add(1, Ordering::Relaxed);
@@ -600,7 +608,7 @@ async fn async_event_loop(
         IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
 
         tokio::spawn(async move {
-          f(instance).await;
+          f(runner).await;
 
           IN_FLIGHT.fetch_sub(1, Ordering::Relaxed);
           local_in_flight.fetch_sub(1, Ordering::Relaxed);
@@ -621,9 +629,12 @@ pub struct SharedState {
   pub conn: trailbase_sqlite::Connection,
   pub kv_store: KvStore,
   pub fs_root_path: Option<std::path::PathBuf>,
+  pub component_path: std::path::PathBuf,
 }
 
-pub struct RuntimeInstance {
+// Maybe rename to ~"runner". It's the "thing" to create new WASM "stores" and to call into APIs
+// (e.g. init, incoming http, ...).
+pub struct AsyncRunner {
   engine: Engine,
   component: Component,
   linker: Linker<State>,
@@ -635,7 +646,15 @@ pub struct InitArgs {
   pub version: Option<String>,
 }
 
-impl RuntimeInstance {
+pub struct InitResult {
+  /// Registered http handlers (method, path)[].
+  pub http_handlers: Vec<(HttpMethodType, String)>,
+
+  /// Registered jobs (name, spec)[].
+  pub job_handlers: Vec<(String, String)>,
+}
+
+impl AsyncRunner {
   fn new_store(&self) -> Result<Store<State>, Error> {
     let mut wasi_ctx = WasiCtxBuilder::new();
     wasi_ctx.inherit_stdio();
@@ -667,34 +686,44 @@ impl RuntimeInstance {
     ));
   }
 
-  pub async fn call_init(&self, args: InitArgs) -> Result<InitResult, Error> {
+  async fn new_bindings(&self) -> Result<(Store<State>, Interfaces), Error> {
     let mut store = self.new_store()?;
 
-    let bindings = Trailbase::instantiate_async(&mut store, &self.component, &self.linker)
+    let bindings = Interfaces::instantiate_async(&mut store, &self.component, &self.linker)
       .await
       .map_err(|err| {
         log::error!(
-          "Failed to instantiate WIT component: '{err}'.\n This may happen if the server and \
-           component are ABI incompatible. Make sure to run compatible versions, e.g. update your \
-           server to run more recent components or rebuild your component against a more recent, \
-           matching runtime."
+          "Failed to instantiate WIT component {path:?}: '{err}'.\n{ABI_MISMATCH_WARNING}",
+          path = self.shared.component_path
         );
         return err;
       })?;
 
-    return Ok(
-      bindings
-        .trailbase_runtime_init_endpoint()
-        .call_init(
-          &mut store,
-          &InitArguments {
-            version: args.version,
-          },
-        )
-        .await?,
-    );
+    return Ok((store, bindings));
   }
 
+  // Call WASM components `init` implementation.
+  pub async fn initialize(&self, args: InitArgs) -> Result<InitResult, Error> {
+    let (mut store, bindings) = self.new_bindings().await?;
+    let api = bindings.trailbase_component_init_endpoint();
+
+    let args = Arguments {
+      version: args.version,
+    };
+
+    return Ok(InitResult {
+      http_handlers: api
+        .call_init_http_handlers(&mut store, &args)
+        .await?
+        .handlers,
+      job_handlers: api
+        .call_init_job_handlers(&mut store, &args)
+        .await?
+        .handlers,
+    });
+  }
+
+  // Call http handlers exported by WASM component (incoming from the perspective of the component).
   pub async fn call_incoming_http_handler(
     &self,
     request: hyper::Request<BoxBody<Bytes, hyper::Error>>,
@@ -760,8 +789,40 @@ impl RuntimeInstance {
   }
 }
 
+pub fn load_wasm_components<T, E: std::error::Error>(
+  components_path: std::path::PathBuf,
+  f: impl Fn(std::path::PathBuf) -> Result<T, E>,
+) -> Result<Vec<T>, E> {
+  let Ok(dir) = std::fs::read_dir(&components_path) else {
+    return Ok(vec![]);
+  };
+
+  return dir
+    .into_iter()
+    .flat_map(|entry| {
+      let Ok(entry) = entry else {
+        return None;
+      };
+
+      let Ok(metadata) = entry.metadata() else {
+        return None;
+      };
+
+      if !metadata.is_file() {
+        return None;
+      }
+
+      let path = entry.path();
+      if path.extension()? == "wasm" {
+        return Some(f(path));
+      }
+      return None;
+    })
+    .collect::<Result<Vec<T>, E>>();
+}
+
 #[allow(unused)]
-fn bytes_to_respone(
+fn bytes_to_response(
   bytes: Vec<u8>,
 ) -> Result<wasmtime_wasi_http::types::HostFutureIncomingResponse, ErrorCode> {
   let resp = http::Response::builder()
@@ -805,17 +866,16 @@ mod tests {
   use super::*;
 
   use http::{Response, StatusCode};
-  use http_body_util::combinators::BoxBody;
+  use http_body_util::{BodyExt, combinators::BoxBody};
   use trailbase_wasm_common::{HttpContext, HttpContextKind};
 
   const WASM_COMPONENT_PATH: &str = "../../client/testfixture/wasm/wasm_guest_testfixture.wasm";
 
-  #[tokio::test]
-  async fn test_init() {
+  fn init_runtime(conn: trailbase_sqlite::Connection) -> Runtime {
     let executor = SharedExecutor::new(Some(2));
-    let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
     let kv_store = KvStore::new();
-    let runtime = Runtime::new(
+
+    return Runtime::new(
       executor,
       WASM_COMPONENT_PATH.into(),
       conn.clone(),
@@ -825,13 +885,34 @@ mod tests {
       },
     )
     .unwrap();
+  }
+
+  fn init_sqlite_function_runtime(conn: &rusqlite::Connection) -> functions::SqliteFunctionRuntime {
+    let runtime = functions::SqliteFunctionRuntime::new(
+      WASM_COMPONENT_PATH.into(),
+      RuntimeOptions {
+        ..Default::default()
+      },
+    )
+    .unwrap();
+
+    let functions = runtime
+      .initialize_sqlite_functions(InitArgs { version: None })
+      .unwrap();
+
+    functions::setup_connection(conn, &runtime, &functions).unwrap();
+
+    return runtime;
+  }
+
+  #[tokio::test]
+  async fn test_init() {
+    let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
+    let runtime = init_runtime(conn.clone());
 
     runtime
-      .call(async |instance| {
-        instance
-          .call_init(InitArgs { version: None })
-          .await
-          .unwrap();
+      .call(async |runner| {
+        runner.initialize(InitArgs { version: None }).await.unwrap();
       })
       .await
       .unwrap();
@@ -858,21 +939,8 @@ mod tests {
 
   #[tokio::test]
   async fn test_transaction() {
-    let executor = SharedExecutor::new(Some(2));
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
-    let kv_store = KvStore::new();
-    let runtime = Arc::new(
-      Runtime::new(
-        executor,
-        WASM_COMPONENT_PATH.into(),
-        conn.clone(),
-        kv_store,
-        RuntimeOptions {
-          ..Default::default()
-        },
-      )
-      .unwrap(),
-    );
+    let runtime = Arc::new(init_runtime(conn.clone()));
 
     let futures: Vec<_> = (0..256)
       .map(|_| {
@@ -893,6 +961,24 @@ mod tests {
     }
   }
 
+  #[tokio::test]
+  async fn test_custom_sqlite_function() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    let _sqlite_function_runtime = init_sqlite_function_runtime(&conn);
+
+    let conn = trailbase_sqlite::Connection::from_connection_test_only(conn);
+    let runtime = init_runtime(conn.clone());
+
+    let response = send_http_request(&runtime, "http://localhost:4000/custom_fun", "/custom_fun")
+      .await
+      .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK, "{response:?}");
+
+    let body: Bytes = response.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(body.to_vec(), b"5\n");
+  }
+
   async fn send_http_request(
     runtime: &Runtime,
     uri: &str,
@@ -908,7 +994,7 @@ mod tests {
     let uri = uri.to_string();
     let registered_path = registered_path.to_string();
     return runtime
-      .call(async |instance| {
+      .call(async |runner| {
         let context = HttpContext {
           kind: HttpContextKind::Http,
           registered_path,
@@ -922,7 +1008,7 @@ mod tests {
           .body(sqlite::bytes_to_body(Bytes::from_static(b"")))
           .unwrap();
 
-        return instance.call_incoming_http_handler(request).await;
+        return runner.call_incoming_http_handler(request).await;
       })
       .await
       .unwrap();

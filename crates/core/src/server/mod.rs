@@ -40,7 +40,7 @@ pub use init::{InitArgs, InitError, init_app_state};
 /// A set of options to configure serving behaviors. Changing any of these options
 /// requires a server restart, which makes them a natural fit for being exposed as command line
 /// arguments.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ServerOptions {
   /// Optional path to static assets that will be served at the HTTP root.
   pub data_dir: DataDir,
@@ -84,7 +84,7 @@ pub struct ServerOptions {
   /// TLS certificate path.
   pub tls_cert: Option<CertificateDer<'static>>,
   /// TLS key path.
-  pub tls_key: Option<PrivateKeyDer<'static>>,
+  pub tls_key: Option<Arc<PrivateKeyDer<'static>>>,
 }
 
 pub struct Server {
@@ -141,6 +141,37 @@ impl Server {
     })
     .await?;
 
+    Self::build_tracing(&state, opts.log_responses).init();
+
+    if new_data_dir {
+      on_first_init(state.clone())
+        .await
+        .map_err(|err| InitError::CustomInit(err.to_string()))?;
+    }
+
+    let mut custom_routers: Vec<Router<AppState>> = vec![];
+
+    for rt in state.wasm_runtimes() {
+      if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt.clone())
+        .await
+        .map_err(|err| InitError::ScriptError(err.to_string()))?
+      {
+        custom_routers.push(wasm_router);
+      }
+    }
+
+    Ok(Self {
+      state: state.clone(),
+      main_router: Self::build_main_router(&state, &opts, custom_routers).await,
+      admin_router: Self::build_independent_admin_router(&state, &opts),
+      tls: Self::load_tls(&opts),
+    })
+  }
+
+  fn build_tracing(
+    state: &AppState,
+    log_responses: bool,
+  ) -> impl tracing_subscriber::layer::SubscriberExt {
     // Initialize tracing subscribers/layers.
     //
     // A few notes in case initialization below panics. The `log` and `tracing` crates/systems are
@@ -161,52 +192,35 @@ impl Server {
     // `SqliteLogLayer`.
     //
     // Response log events are emitted at the INFO level, see `logging.rs`
+    #[cfg(not(feature = "otel"))]
+    let subscriber = tracing_subscriber::Registry::default();
+
+    #[cfg(feature = "otel")]
+    let subscriber = {
+      let (subscriber, otel_guard) =
+        init_tracing_opentelemetry::tracing_subscriber_ext::regiter_otel_layers(
+          tracing_subscriber::Registry::default(),
+        )
+        .expect("startup");
+
+      // TODO: We have to keep this alive. Let's find something better than a singleton.
+      use std::sync::OnceLock;
+      static SINGLETON: OnceLock<init_tracing_opentelemetry::Guard> = OnceLock::new();
+      SINGLETON.get_or_init(move || init_tracing_opentelemetry::Guard::global(Some(otel_guard)));
+
+      subscriber
+    };
+
     let filter_layer = filter::Targets::new()
       .with_default(filter::LevelFilter::OFF)
       .with_target(crate::logging::EVENT_TARGET, crate::logging::LEVEL);
 
-    tracing_subscriber::Registry::default()
+    return subscriber
       .with(filter_layer)
       .with(logging::SqliteLogLayer::new(
-        &state,
-        /* log-to-stdout= */ opts.log_responses,
-      ))
-      .init();
-
-    if new_data_dir {
-      on_first_init(state.clone())
-        .await
-        .map_err(|err| InitError::CustomInit(err.to_string()))?;
-    }
-
-    let mut custom_routers: Vec<Router<AppState>> = vec![];
-
-    #[cfg(feature = "v8")]
-    if let Some(js_router) = crate::js::runtime::load_routes_and_jobs_from_js_modules(
-      &state,
-      state.data_dir().root().join("scripts"),
-    )
-    .await
-    .map_err(|err| InitError::ScriptError(err.to_string()))?
-    {
-      custom_routers.push(js_router);
-    }
-
-    for rt in state.wasm_runtimes() {
-      if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt.clone())
-        .await
-        .map_err(|err| InitError::ScriptError(err.to_string()))?
-      {
-        custom_routers.push(wasm_router);
-      }
-    }
-
-    Ok(Self {
-      state: state.clone(),
-      main_router: Self::build_main_router(&state, &opts, custom_routers).await,
-      admin_router: Self::build_independent_admin_router(&state, &opts),
-      tls: Self::load_tls(&opts),
-    })
+        state,
+        /* log-to-stdout= */ log_responses,
+      ));
   }
 
   pub async fn serve(self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -235,9 +249,13 @@ impl Server {
           // Re-apply migrations. This needs to happen before reloading the config, which is
           // consistent with the startup order. Otherwise, we may validate a configuration
           // against a stale database schema.
+          //
+          // TODO: Right now we're only re-applying main migrations.
           let user_migrations_path = state.data_dir().migrations_path();
           match state
-            .conn()
+            .connection_manager()
+            .main_entry()
+            .connection
             .call(|conn: &mut rusqlite::Connection| {
               return crate::migrations::apply_main_migrations(conn, Some(user_migrations_path))
                 .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
@@ -260,13 +278,11 @@ impl Server {
           if let Err(err) = state.rebuild_connection_metadata().await {
             error!("Failed to invalidate schema cache: {err}");
           }
-          let metadata = state.connection_metadata();
 
           // Reload config:
           match crate::config::load_or_init_config_textproto(
             state.data_dir(),
-            &metadata.tables(),
-            &metadata.views(),
+            &state.connection_manager(),
           )
           .await
           {
@@ -331,6 +347,7 @@ impl Server {
           assert_admin_api_access,
         )),
       )
+      // NOTE: We cannot ACL-lock the UI assets. We need to be able to sign into the SPA.
       .nest_service(
         "/_/admin",
         AssetService::<trailbase_assets::AdminAssets>::with_parameters(
@@ -409,11 +426,16 @@ impl Server {
     );
   }
 
-  fn wrap_with_default_layers(
+  pub fn wrap_with_default_layers(
     state: &AppState,
     opts: &ServerOptions,
     router: Router<AppState>,
   ) -> Router<()> {
+    #[cfg(feature = "otel")]
+    let router = router
+      .layer(axum_tracing_opentelemetry::middleware::OtelInResponseLayer)
+      .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default());
+
     return router
       .layer(CookieManagerLayer::new())
       .layer(build_cors(opts))
@@ -612,11 +634,6 @@ async fn start_listen(
           std::process::exit(1);
         }
       };
-
-      #[cfg(not(feature = "v8"))]
-      tokio_rustls::rustls::crypto::ring::default_provider()
-        .install_default()
-        .expect("Failed to install TLS provider");
 
       let server_config = ServerConfig::builder()
         .with_no_client_auth()

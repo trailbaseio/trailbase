@@ -9,7 +9,6 @@ members = [
   "crates/client",
   "crates/core",
   "crates/extension",
-  "crates/js-runtime",
   "crates/qs",
   "crates/refinery",
   "crates/schema",
@@ -75,7 +74,7 @@ opt-level = 1
 [workspace.dependencies]
 askama = { version = "0.14.0", default-features = false, features = ["derive", "std", "config"] }
 axum = { version = "^0.8.1", features = ["multipart"] }
-base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+base64 = { version = "0.22.1", default-features = false, features = ["alloc", "std"] }
 env_logger = { version = "^0.11.8", default-features = false, features = ["auto-color", "humantime"] }
 libsqlite3-sys = { version = "0.35.0", default-features = false, features = ["bundled", "preupdate_hook"] }
 minijinja = { version = "2.1.2", default-features = false }
@@ -95,7 +94,6 @@ trailbase-assets = { path = "crates/assets", version = "0.2.0" }
 trailbase-build = { path = "crates/build", version = "0.1.1" }
 trailbase-client = { path = "crates/client", version = "0.5.0" }
 trailbase-extension = { path = "crates/extension", version = "0.3.0" }
-trailbase-js = { path = "crates/js-runtime", version = "0.2.0" }
 trailbase-qs = { path = "crates/qs", version = "0.1.0" }
 trailbase-refinery = { path = "crates/refinery", version = "0.1.0" }
 trailbase-schema = { path = "crates/schema", version = "0.1.0" }
@@ -103,12 +101,12 @@ trailbase-sqlean = { path = "crates/sqlean", version = "0.0.3" }
 trailbase-sqlite = { path = "crates/sqlite", version = "0.3.0" }
 trailbase-sqlvalue = { path = "crates/sqlvalue", version = "0.1.0" }
 trailbase-wasi-keyvalue = { path = "crates/wasi-keyvalue", version = "0.1.0" }
-trailbase-wasm = { path = "crates/wasm-runtime-guest", version = "0.4.0" }
+trailbase-wasm = { path = "crates/wasm-runtime-guest", version = "0.5.0" }
 trailbase-wasm-common = { path = "crates/wasm-runtime-common", version = "0.2.0" }
 trailbase-wasm-runtime-host = { path = "crates/wasm-runtime-host", version = "0.1.0" }
 ts-rs = { version = "11", features = ["uuid-impl", "serde-json-impl", "indexmap-impl"] }
 uuid = { version = "1", default-features = false, features = ["std", "v4", "v7", "serde"] }
-wasmtime = { version = "38.0.1", features = ["winch"] }
-wasmtime-wasi = { version = "38.0.1", default-features = false, features = [] }
-wasmtime-wasi-http = "38.0.1"
-wasmtime-wasi-io = "38.0.1"
+wasmtime = { version = "39.0.0", features = ["winch"] }
+wasmtime-wasi = { version = "39.0.0", default-features = false, features = [] }
+wasmtime-wasi-http = "39.0.0"
+wasmtime-wasi-io = "39.0.0"

@@ -9,10 +9,9 @@ can figure out how any feature will fit into the overall picture to minimize
 friction.
 For context, some of the larger items on our Roadmap are:
 
-- Many SQLite databases to enable sharding or even siloed multi-tenancy.
-  (catch: joins but no foreign-key support across databases).
-- Auth: more customizable settings, more customizable UI, and multi-factor.
-  Also, service-accounts to auth other backends as opposed to end-users.
+- Multi-tenancy - multi-DB is already supported, however we might want support
+  creation of and routing to per-tenant DBs based on schema templates.
+- Multi-factor internal user auth and service-accounts for better backend auth.
 - Point-in-time-recovery via generational backups, CoW checkpoints or SQLite
   sessions.
 - A message queue system to deal with slow tasks or bursty workloads.

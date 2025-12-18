@@ -162,7 +162,7 @@ export default defineConfig({
   ],
   vite: {
     plugins: [
-      // @ts-expect-error: https://github.com/withastro/astro/issues/14030
+      // @ts-ignore
       tailwindcss(),
     ],
   },

@@ -32,7 +32,7 @@ mod tests {
 
   #[test]
   fn test_is_email() {
-    let conn = crate::connect_sqlite(None).unwrap();
+    let conn = crate::connect_sqlite(None, None).unwrap();
     let create_table = r#"
         CREATE TABLE test (
           email                  TEXT CHECK(is_email(email))
@@ -57,7 +57,7 @@ mod tests {
 
   #[test]
   fn test_is_json() {
-    let conn = crate::connect_sqlite(None).unwrap();
+    let conn = crate::connect_sqlite(None, None).unwrap();
     let create_table = r#"
         CREATE TABLE test (
           json                   TEXT CHECK(is_json(json))

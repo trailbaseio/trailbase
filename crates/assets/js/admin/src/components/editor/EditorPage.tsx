@@ -7,9 +7,8 @@ import {
   createEffect,
   createSignal,
   onCleanup,
-  type Accessor,
-  type Signal,
 } from "solid-js";
+import type { Accessor, Signal } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { createWritableMemo } from "@solid-primitives/memo";
 import type { ColumnDef } from "@tanstack/solid-table";
@@ -25,7 +24,6 @@ import { sql, SQLConfig, SQLNamespace, SQLite } from "@codemirror/lang-sql";
 
 import { IconButton } from "@/components/IconButton";
 import { Header } from "@/components/Header";
-import { Separator } from "@/components/ui/separator";
 import { Callout } from "@/components/ui/callout";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +34,14 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import {
   useSidebar,
   Sidebar,
@@ -58,15 +64,18 @@ import {
 } from "@/components/ui/tooltip";
 import { showToast } from "@/components/ui/toast";
 import { DataTable } from "@/components/Table";
+import { useNavbar, DirtyDialog } from "@/components/Navbar";
 
 import type { QueryResponse } from "@bindings/QueryResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { SqlValue } from "@bindings/SqlValue";
 
+import { createConfigQuery } from "@/lib/api/config";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { executeSql, type ExecutionResult } from "@/lib/api/execute";
 import { isNotNull } from "@/lib/schema";
 import { sqlValueToString } from "@/lib/value";
+import { prettyFormatQualifiedName } from "@/lib/schema";
 import { createIsMobile } from "@/lib/signals";
 import type { ArrayRecord } from "@/lib/record";
 
@@ -76,7 +85,7 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   } = {};
 
   for (const table of schemas.tables) {
-    const tableName = table.name.name;
+    const tableName = prettyFormatQualifiedName(table.name);
     schema[tableName] = {
       self: { label: tableName, type: "keyword" },
       children: table.columns.map((c) => c.name),
@@ -84,7 +93,7 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   }
 
   for (const view of schemas.views) {
-    const viewName = view.name.name;
+    const viewName = prettyFormatQualifiedName(view.name);
     schema[viewName] = {
       self: { label: viewName, type: "keyword" },
       children: view.column_mapping?.columns.map((c) => c.column.name) ?? [],
@@ -94,51 +103,14 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   return schema;
 }
 
-function ConfirmSwitchDialog(props: {
-  back: () => void;
-  confirm: () => void;
-  saveScript: () => void;
-  message?: string;
-}) {
-  return (
-    <DialogContent>
-      <DialogTitle>Confirmation</DialogTitle>
-
-      <p>{props.message ?? "Are you sure?"}</p>
-
-      <DialogFooter>
-        <div class="flex w-full justify-between">
-          <Button variant="outline" onClick={props.back}>
-            Back
-          </Button>
-
-          <div class="flex gap-4">
-            <Button variant="destructive" onClick={props.confirm}>
-              Discard
-            </Button>
-
-            <Button
-              variant="default"
-              onClick={() => {
-                props.saveScript();
-                props.confirm();
-              }}
-            >
-              Save
-            </Button>
-          </div>
-        </div>
-      </DialogFooter>
-    </DialogContent>
-  );
-}
-
 function ResultView(props: {
   script: Script;
   response: ExecutionResult | undefined;
 }) {
   const isCached = () => props.response === undefined;
   const response = () => props.response ?? props.script.result;
+
+  const [columnPinningState, setColumnPinningState] = createSignal({});
 
   function columnDefs(data: QueryResponse): ColumnDef<ArrayRecord, SqlValue>[] {
     return (data.columns ?? []).map((col, idx) => {
@@ -189,11 +161,9 @@ function ResultView(props: {
             {/* TODO: Enable pagination */}
             <DataTable
               columns={() => columnDefs(response()!.data!)}
-              data={() => response()!.data!.rows as ArrayRecord[]}
-              pagination={{
-                pageIndex: 0,
-                pageSize: 50,
-              }}
+              data={() => response()!.data!.rows}
+              columnPinning={columnPinningState}
+              onColumnPinningChange={setColumnPinningState}
             />
           </div>
         </ErrorBoundary>
@@ -226,7 +196,14 @@ function EditorSidebar(props: {
     <div class="p-2">
       <SidebarGroupContent>
         <SidebarMenu>
-          <Button class="flex gap-2" variant="secondary" onClick={addNewScript}>
+          <Button
+            class="flex gap-2"
+            variant="secondary"
+            onClick={() => {
+              setOpenMobile(false);
+              addNewScript();
+            }}
+          >
             <TbPencilPlus /> New
           </Button>
 
@@ -259,7 +236,10 @@ function EditorSidebar(props: {
                         <IconButton
                           class="hover:bg-border"
                           tooltip="Delete this script"
-                          onClick={() => props.deleteScriptByIdx(i())}
+                          onClick={(e) => {
+                            props.deleteScriptByIdx(i());
+                            e.stopPropagation();
+                          }}
                         >
                           <TbTrash />
                         </IconButton>
@@ -315,11 +295,16 @@ function HelpDialog() {
 
 function RenameDialog(props: { selected: number; script: Script }) {
   const [open, setOpen] = createSignal(false);
-  const [name, setName] = createWritableMemo(() => props.script.name);
+
+  let ref: HTMLInputElement | undefined;
 
   return (
-    <Dialog id="rename" open={open()} onOpenChange={setOpen}>
-      <DialogTrigger>
+    <Dialog id="script-rename-dialog" open={open()} onOpenChange={setOpen}>
+      <DialogTrigger
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+      >
         <IconButton tooltip="Rename script" class="hover:bg-border">
           <TbEdit />
         </IconButton>
@@ -336,21 +321,23 @@ function RenameDialog(props: { selected: number; script: Script }) {
           onSubmit={(e: SubmitEvent) => {
             e.preventDefault();
 
-            updateExistingScript(props.selected, {
-              ...props.script,
-              name: name(),
-            });
-            setOpen(false);
+            const name = ref?.value;
+            if (name !== undefined) {
+              updateExistingScript(props.selected, {
+                ...props.script,
+                name,
+              });
+              setOpen(false);
+            }
           }}
         >
           <TextField>
             <TextFieldInput
-              required
-              value={name()}
+              ref={ref}
+              required={true}
+              pattern=".+"
+              value={props.script.name}
               type="text"
-              onChange={(e: Event) => {
-                setName((e.target as HTMLInputElement).value);
-              }}
             />
           </TextField>
 
@@ -383,30 +370,47 @@ function EditorPanel(props: {
   const [selected, setSelected] = props.selected;
 
   const uiState = useStore($uiState);
+  const config = createConfigQuery();
 
   const isMobile = createIsMobile();
 
-  // Will only be set when the user explicitly triggers "execute";
+  const databases = () =>
+    config.data?.config?.databases
+      .map((db) => db.name)
+      .filter((n) => n !== undefined);
+
+  const [attachedDbs, setAttachedDbs] = createSignal<string[]>(
+    databases()?.slice(0, 124) ?? [],
+  );
   const [queryString, setQueryString] = createWritableMemo<string | null>(
     () => {
-      // Rebuild whenever we switch selected scripts.
-      const _unused = selected();
-
-      return null;
+      // Reset queryString to null whenever we switch scripts. If we read query
+      // string from the editor contents, useQuery would eagerly run the query.
+      // Instead we don't want to run new scripts right away, null short-circuits the fetch.
+      return selected() ? null : null;
     },
   );
 
   const executionResult = useQuery(() => {
-    const query = queryString();
-    const queryKey = query ?? props.script.contents;
     return {
-      queryKey: ["query", queryKey, selected()],
-      queryFn: async () => {
+      // Consider initial data fresh enough.
+      staleTime: 1000 * 7400,
+      initialData: props.script.result,
+      // Just keying on query isn't enough, since multiple tabs/scripts may
+      // have the same contents.
+      queryKey: [
+        { index: selected(), query: queryString(), attachedDbs: attachedDbs() },
+      ],
+      queryFn: async ({ queryKey }) => {
+        const [{ query, attachedDbs }] = queryKey;
         if (query === null) {
           return null;
         }
 
-        const response = await executeSql(query);
+        const response = await executeSql(
+          query,
+          attachedDbs.length > 0 ? attachedDbs : null,
+        );
         const error = response.error;
         if (error) {
           showToast({
@@ -427,16 +431,72 @@ function EditorPanel(props: {
     };
   });
 
+  let ref: HTMLDivElement | undefined;
+  let editor: EditorView | undefined;
+
+  onCleanup(() => editor?.destroy());
+  createEffect(() => {
+    const newEditorState = (contents: string) => {
+      const customKeymap = keymap.of([
+        {
+          key: "Ctrl-Enter",
+          run: () => {
+            execute();
+            return true;
+          },
+          preventDefault: true,
+        },
+        {
+          key: "Ctrl-s",
+          run: () => {
+            saveScript();
+            return true;
+          },
+          preventDefault: true,
+        },
+      ]);
+
+      return EditorState.create({
+        doc: contents,
+        extensions: [
+          myTheme,
+          customKeymap,
+          lineNumbers(),
+          // Let's you define your own custom CSS style for the line number gutter.
+          // gutter({ class: "cm-mygutter" }),
+          sql({
+            dialect: SQLite,
+            upperCaseKeywords: true,
+            schema: buildSchema(props.schemas),
+          } as SQLConfig),
+          autocompletion(),
+          EditorView.updateListener.of((v) => {
+            if (!v.changes.empty) {
+              setDirty(true);
+            }
+          }),
+          // NOTE: minimal setup provides a bunch of default extensions such as
+          // keymaps, undo history, default syntax highlighting ... .
+          // NOTE: should be last.
+          minimalSetup,
+        ],
+      });
+    };
+
+    // Every time the script contents change, recreate the editor state.
+    editor?.destroy();
+    editor = new EditorView({
+      parent: ref!,
+      state: newEditorState(props.script.contents),
+    });
+    editor.focus();
+  });
+
   const execute = () => {
-    const text = editor?.state.doc.toString();
-    if (text) {
-      // We need to distinguish new query vs same query to make sure we're not caching.
-      if (queryString() === text) {
-        executionResult.refetch();
-      } else {
-        setQueryString(text);
-        executionResult.refetch();
-      }
+    const query = editor?.state.doc.toString();
+    if (query !== undefined) {
+      setQueryString(query);
+      executionResult.refetch();
     }
   };
 
@@ -448,70 +508,8 @@ function EditorPanel(props: {
       });
     }
     setDirty(false);
+    showToast({ title: "saved" });
   };
-
-  let ref: HTMLDivElement | undefined;
-  let editor: EditorView | undefined;
-
-  const customKeymap = keymap.of([
-    {
-      key: "Ctrl-Enter",
-      run: () => {
-        execute();
-        return true;
-      },
-      preventDefault: true,
-    },
-    {
-      key: "Ctrl-s",
-      run: () => {
-        saveScript();
-        showToast({ title: "saved" });
-        return true;
-      },
-      preventDefault: true,
-    },
-  ]);
-
-  const newEditorState = (contents: string) => {
-    return EditorState.create({
-      doc: contents,
-      extensions: [
-        myTheme,
-        customKeymap,
-        lineNumbers(),
-        // Let's you define your own custom CSS style for the line number gutter.
-        // gutter({ class: "cm-mygutter" }),
-        sql({
-          dialect: SQLite,
-          upperCaseKeywords: true,
-          schema: buildSchema(props.schemas),
-        } as SQLConfig),
-        autocompletion(),
-        EditorView.updateListener.of((v) => {
-          if (!v.changes.empty) {
-            setDirty(true);
-          }
-        }),
-        // NOTE: minimal setup provides a bunch of default extensions such as
-        // keymaps, undo history, default syntax highlighting ... .
-        // NOTE: should be last.
-        minimalSetup,
-      ],
-    });
-  };
-
-  onCleanup(() => editor?.destroy());
-
-  createEffect(() => {
-    // Every time the script contents change, recreate the editor state.
-    editor?.destroy();
-    editor = new EditorView({
-      state: newEditorState(props.script.contents),
-      parent: ref!,
-    });
-    editor.focus();
-  });
 
   return (
     <Dialog
@@ -524,9 +522,9 @@ function EditorPanel(props: {
       }}
       modal={true}
     >
-      <ConfirmSwitchDialog
+      <DirtyDialog
         back={() => setDirtyDialog()}
-        confirm={() => {
+        proceed={() => {
           const state = dirtyDialog();
           if (state) {
             setDirtyDialog();
@@ -535,15 +533,46 @@ function EditorPanel(props: {
             setDirty(false);
           }
         }}
-        saveScript={saveScript}
-        message="Proceeding will discard any pending changes in the current buffer. Proceed with caution."
+        save={saveScript}
       />
 
       <Header
         title="Editor"
         leading={<SidebarTrigger />}
         titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
-        right={<HelpDialog />}
+        right={
+          <div class="flex items-center">
+            <Select<string>
+              multiple={true}
+              options={[...(databases() ?? [])]}
+              value={attachedDbs()}
+              itemComponent={(props) => (
+                <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+              )}
+              onChange={(value: string[]) => setAttachedDbs(value)}
+            >
+              <div class="flex items-center gap-2">
+                Attached
+                <SelectTrigger>
+                  <SelectValue class="max-w-[50%] min-w-[32px] text-ellipsis">
+                    {(state) => {
+                      const selected = state.selectedOptions();
+                      if (selected.length === 0) {
+                        // FIXME: state callback never gets called when empty.
+                        return "none";
+                      }
+                      return selected.join(", ");
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+              </div>
+
+              <SelectContent />
+            </Select>
+
+            <HelpDialog />
+          </div>
+        }
       />
 
       <div class="mx-4 my-2 flex flex-col gap-2">
@@ -566,12 +595,12 @@ function EditorPanel(props: {
         )}
 
         {/* Editor */}
-        <div class="max-h-[40dvh] min-h-[6rem] shrink" ref={ref} />
+        <div class="min-h-[6rem] shrink" ref={ref} />
 
         <div class="flex items-center justify-between">
           <Tooltip>
             <TooltipTrigger as="div">
-              <Button variant="secondary" onClick={() => {}}>
+              <Button variant="secondary" onClick={() => saveScript()}>
                 <Show when={!isMobile()} fallback="Save">
                   Save (Ctrl+S)
                 </Show>
@@ -601,12 +630,10 @@ function EditorPanel(props: {
 
       <Separator />
 
-      <div class="flex flex-col">
-        <ResultView
-          script={props.script}
-          response={executionResult.data ?? undefined}
-        />
-      </div>
+      <ResultView
+        script={props.script}
+        response={executionResult.data ?? undefined}
+      />
     </Dialog>
   );
 }
@@ -615,9 +642,14 @@ export function EditorPage() {
   // FIXME: Note that the state isn't persistent enough. E.g. resizing to
   // mobile rebuild EditorPage and reset the dirty state.
   const scripts = useStore($scripts);
+  const isMobile = createIsMobile();
   const [selected, setSelected] = createSignal<number>(0);
   const [dirty, setDirty] = createSignal<boolean>(false);
-  const isMobile = createIsMobile();
+
+  const navbar = useNavbar();
+  createEffect(() => {
+    navbar.setDirty(dirty());
+  });
 
   const [dirtyDialog, setDirtyDialog] = createSignal<
     DirtyDialogState | undefined
@@ -651,7 +683,7 @@ export function EditorPage() {
   };
 
   return (
-    <SidebarProvider>
+    <SidebarProvider class="min-h-0">
       <Sidebar
         class="absolute"
         variant="sidebar"
@@ -675,7 +707,7 @@ export function EditorPage() {
         <SidebarRail />
       </Sidebar>
 
-      <SidebarInset class="min-w-0">
+      <SidebarInset class="min-h-0 min-w-0">
         <Switch fallback={"Loading..."}>
           <Match when={schemaFetch.isError}>
             <span>Schema fetch error: {JSON.stringify(schemaFetch.error)}</span>

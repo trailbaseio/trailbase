@@ -22,47 +22,48 @@ pub struct AlterIndexResponse {
   pub sql: String,
 }
 
-// NOTE: sqlite has very limited alter table support, thus we're always recreating the table and
-// moving data over, see https://sqlite.org/lang_altertable.html.
-
 pub async fn alter_index_handler(
   State(state): State<AppState>,
   Json(request): Json<AlterIndexRequest>,
 ) -> Result<Json<AlterIndexResponse>, Error> {
-  if state.demo_mode() && request.source_schema.name.name.starts_with("_") {
+  if state.demo_mode() {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
 
   let dry_run = request.dry_run.unwrap_or(false);
-  let source_schema = request.source_schema;
-  let source_index_name = source_schema.name.clone();
-  let target_schema = request.target_schema;
-  let filename = source_index_name.migration_filename("alter_index");
 
-  debug!("Alter index:\nsource: {source_schema:?}\ntarget: {target_schema:?}",);
+  debug!(
+    "Alter index:\nsource: {:?}\ntarget: {:?}",
+    request.source_schema, request.target_schema
+  );
 
-  if source_schema == target_schema {
+  if request.source_schema == request.target_schema {
     return Ok(Json(AlterIndexResponse {
       sql: "".to_string(),
     }));
   }
 
-  let tx_log = state
-    .conn()
+  let (db, target_index_schema) = {
+    let mut schema = request.target_schema.clone();
+    (schema.name.database_schema.take(), schema)
+  };
+
+  let (conn, migration_path) = super::get_conn_and_migration_path(&state, db)?;
+
+  let create_index_query = target_index_schema.create_index_statement();
+  let unqualified_source_index_name = request.source_schema.name.name.clone();
+
+  let tx_log = conn
     .call(move |conn| {
       let mut tx = TransactionRecorder::new(conn)?;
 
       // Drop old index
       tx.execute(
-        &format!(
-          "DROP INDEX {source_index_name}",
-          source_index_name = source_index_name.escaped_string()
-        ),
+        &format!("DROP INDEX \"{unqualified_source_index_name}\""),
         (),
       )?;
 
       // Create new index
-      let create_index_query = target_schema.create_index_statement();
       tx.execute(&create_index_query, ())?;
 
       return tx
@@ -71,15 +72,14 @@ pub async fn alter_index_handler(
     })
     .await?;
 
-  if !dry_run {
-    // Take transaction log, write a migration file and apply.
-    if let Some(ref log) = tx_log {
-      let migration_path = state.data_dir().migrations_path();
-      let report = log
-        .apply_as_migration(state.conn(), migration_path, &filename)
-        .await?;
-      debug!("Migration report: {report:?}");
-    }
+  // Take transaction log, write a migration file and apply.
+  if !dry_run && let Some(ref log) = tx_log {
+    let filename = target_index_schema.name.migration_filename("alter_index");
+
+    let report = log
+      .apply_as_migration(&conn, migration_path, &filename)
+      .await?;
+    debug!("Migration report: {report:?}");
   }
 
   return Ok(Json(AlterIndexResponse {

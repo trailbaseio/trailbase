@@ -1,16 +1,18 @@
 import { Match, Switch, createMemo, createSignal, JSX } from "solid-js";
+import { createWritableMemo } from "@solid-primitives/memo";
 import { TbRefresh, TbTable, TbTrash } from "solid-icons/tb";
-import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { useSearchParams } from "@solidjs/router";
+import { useQuery, useQueryClient } from "@tanstack/solid-query";
+import type { QueryObserverResult } from "@tanstack/solid-query";
 import { urlSafeBase64Decode } from "trailbase";
 import type {
-  ColumnDef,
-  PaginationState,
   CellContext,
+  ColumnDef,
+  ColumnPinningState,
+  PaginationState,
+  Row,
 } from "@tanstack/solid-table";
-import { createWritableMemo } from "@solid-primitives/memo";
 import { createColumnHelper } from "@tanstack/solid-table";
-import type { Row } from "@tanstack/solid-table";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 
 import { Header } from "@/components/Header";
@@ -26,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { showToast } from "@/components/ui/toast";
 
 import {
   SchemaDialog,
@@ -60,6 +63,7 @@ import { createConfigQuery, invalidateConfig } from "@/lib/api/config";
 import type { Record, ArrayRecord } from "@/lib/record";
 import { hashSqlValue } from "@/lib/value";
 import { urlSafeBase64ToUuid, toHex } from "@/lib/utils";
+import { equalQualifiedNames } from "@/lib/schema";
 import { dropTable, dropIndex } from "@/lib/api/table";
 import { deleteRows, fetchRows } from "@/lib/api/row";
 import {
@@ -248,8 +252,7 @@ function TableHeaderRightHandButtons(props: {
 
   const queryClient = useQueryClient();
   const config = createConfigQuery();
-  const hasRecordApi = () =>
-    hasRecordApis(config?.data?.config, table().name.name);
+  const hasRecordApi = () => hasRecordApis(config?.data?.config, table().name);
 
   return (
     <div class="flex items-center justify-end gap-2">
@@ -257,17 +260,19 @@ function TableHeaderRightHandButtons(props: {
       {!hidden() && (
         <DestructiveActionButton
           size="sm"
-          action={() =>
-            (async () => {
-              await dropTable({
-                name: table().name.name,
-                dry_run: null,
-              });
-
-              invalidateConfig(queryClient);
-              await props.schemaRefetch();
-            })().catch(console.error)
-          }
+          action={() => {
+            return (async () => {
+              try {
+                await dropTable({
+                  name: prettyFormatQualifiedName(table().name),
+                  dry_run: null,
+                });
+              } finally {
+                invalidateConfig(queryClient);
+                await props.schemaRefetch();
+              }
+            })();
+          }}
           msg="Deleting a table will irreversibly delete all the data contained. Are you sure you'd like to continue?"
         >
           <div class="flex items-center gap-2">
@@ -369,9 +374,8 @@ function TableHeaderLeftButtons(props: {
 }) {
   const type = () => tableType(props.table);
   const config = createConfigQuery();
-  const tableName = () => props.table.name.name;
   const apis = createMemo(() =>
-    getRecordApis(config?.data?.config, tableName()),
+    getRecordApis(config?.data?.config, props.table.name),
   );
 
   return (
@@ -381,7 +385,10 @@ function TableHeaderLeftButtons(props: {
       </IconButton>
 
       {apis().length > 0 && (
-        <SchemaDialog tableName={tableName()} apis={apis()} />
+        <SchemaDialog
+          tableName={prettyFormatQualifiedName(props.table.name)}
+          apis={apis()}
+        />
       )}
 
       {import.meta.env.DEV && type() === "table" && (
@@ -418,7 +425,7 @@ function TableHeader(props: {
     <Header
       leading={<SidebarTrigger />}
       title={headerTitle()}
-      titleSelect={props.table.name.name}
+      titleSelect={prettyFormatQualifiedName(props.table.name)}
       left={
         <TableHeaderLeftButtons
           table={props.table}
@@ -501,6 +508,7 @@ function buildColumnDefs(
     const header = `${col.name} [${typeName}] ${fkSuffix}`;
 
     return {
+      id: col.name,
       header,
       cell: (context) =>
         renderCell(
@@ -523,6 +531,7 @@ function ArrayRecordTable(props: {
   state: TableState;
   pagination: SimpleSignal<PaginationState>;
   filter: SimpleSignal<string | undefined>;
+  columnPinningState: SimpleSignal<ColumnPinningState>;
   rowsRefetch: () => void;
 }) {
   const [blobEncoding, setBlobEncoding] = createSignal<BlobEncoding>("mixed");
@@ -580,7 +589,7 @@ function ArrayRecordTable(props: {
                     props.filter[1](value);
                   }
                 }}
-                placeholder={`Filter Query, e.g. '(col0 > 5 && col0 < 20) || col1 = "val"'`}
+                placeholder={`Filter Query, e.g. '(col0 > 5 || col0 = 0) || col1 ~ "%like"'`}
               />
 
               <div class="overflow-x-auto pt-4">
@@ -588,19 +597,12 @@ function ArrayRecordTable(props: {
                   // NOTE: The formatting is done via the columnsDefs.
                   columns={columnDefs}
                   data={() => props.state.response.rows}
+                  columnPinning={props.columnPinningState[0]}
+                  onColumnPinningChange={props.columnPinningState[1]}
                   rowCount={Number(totalRowCount())}
                   pagination={props.pagination[0]()}
-                  onPaginationChange={(
-                    p:
-                      | PaginationState
-                      | ((old: PaginationState) => PaginationState),
-                  ) => {
-                    if (typeof p === "function") {
-                      const state = p(props.pagination[0]());
-                      props.pagination[1](state);
-                    } else {
-                      props.pagination[1](p);
-                    }
+                  onPaginationChange={(s: PaginationState) => {
+                    props.pagination[1](s);
                   }}
                   onRowClick={
                     mutable()
@@ -638,7 +640,7 @@ function ArrayRecordTable(props: {
         }}
       />
 
-      <div class="my-2 flex justify-between gap-2">
+      <div class="my-2 flex flex-wrap justify-between gap-2">
         {mutable() && (
           <div class="flex gap-2">
             {/* Insert Rows */}
@@ -676,13 +678,24 @@ function ArrayRecordTable(props: {
                   return;
                 }
 
-                setSelectedRows(new Map<string, SqlValue>());
-                deleteRows(table().name.name, {
-                  primary_key_column: columns()[pkColumnIndex()].name,
-                  values: ids,
-                })
-                  .finally(rowsRefetch)
-                  .catch(console.error);
+                (async () => {
+                  try {
+                    await deleteRows(prettyFormatQualifiedName(table().name), {
+                      primary_key_column: columns()[pkColumnIndex()].name,
+                      values: ids,
+                    });
+
+                    setSelectedRows(new Map<string, SqlValue>());
+                  } catch (err) {
+                    showToast({
+                      title: "Deletion Error",
+                      description: `${err}`,
+                      variant: "error",
+                    });
+                  } finally {
+                    rowsRefetch();
+                  }
+                })();
               }}
             >
               Delete rows
@@ -729,19 +742,28 @@ export function TablePane(props: {
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<string>());
 
   const table = () => props.selectedTable;
-  const indexes = () =>
-    props.schemas.indexes.filter((idx) => {
-      const tbl = table();
-      return (
-        (idx.name.database_schema ?? "main") ==
-          (tbl.name.database_schema ?? "main") &&
-        idx.table_name === tbl.name.name
-      );
-    });
-  const triggers = () =>
-    props.schemas.triggers.filter(
-      (trig) => trig.table_name === table().name.name,
+  const indexes = createMemo(() => {
+    return props.schemas.indexes.filter((idx) =>
+      equalQualifiedNames(
+        {
+          name: idx.table_name,
+          database_schema: idx.name.database_schema,
+        },
+        table().name,
+      ),
     );
+  });
+  const triggers = createMemo(() => {
+    return props.schemas.triggers.filter((trig) =>
+      equalQualifiedNames(
+        {
+          name: trig.table_name,
+          database_schema: trig.name.database_schema,
+        },
+        table().name,
+      ),
+    );
+  });
 
   // Derived table() props.
   const type = () => tableType(table());
@@ -750,18 +772,13 @@ export function TablePane(props: {
   const [searchParams, setSearchParams] = useSearchParams<{
     filter?: string;
     pageSize?: string;
+    pageIndex?: string;
   }>();
 
-  // Reset when table or search params change
-  const reset = () => {
-    return [props.selectedTable, searchParams.pageSize, searchParams.filter];
-  };
-  const [pageIndex, setPageIndex] = createWritableMemo<number>(() => {
-    reset();
-    return 0;
-  });
   const [cursors, setCursors] = createWritableMemo<string[]>(() => {
-    reset();
+    // Reset cursor whenever table or search params change.
+    const _ = [props.selectedTable, searchParams.pageSize, searchParams.filter];
+    console.debug("resetting cursor");
     return [];
   });
 
@@ -772,14 +789,22 @@ export function TablePane(props: {
       filter,
     });
   };
+
   const pagination = (): PaginationState => {
     return {
       pageSize: safeParseInt(searchParams.pageSize) ?? 20,
-      pageIndex: pageIndex(),
+      pageIndex: safeParseInt(searchParams.pageIndex) ?? 0,
     };
   };
+  const setPagination = (s: PaginationState) => {
+    setSearchParams({
+      ...searchParams,
+      pageSize: s.pageSize,
+      pageIndex: s.pageIndex,
+    });
+  };
 
-  const state = useQuery(() => ({
+  const state: QueryObserverResult<TableState> = useQuery(() => ({
     queryKey: [
       "tableData",
       prettyFormatQualifiedName(props.selectedTable.name),
@@ -811,10 +836,10 @@ export function TablePane(props: {
         return state;
       } catch (err) {
         // Reset.
-        setPageIndex(0);
         setSearchParams({
           filter: undefined,
           pageSize: undefined,
+          pageIndex: undefined,
         });
 
         throw err;
@@ -835,25 +860,7 @@ export function TablePane(props: {
     rowsRefetch();
   };
 
-  const setPagination = (s: PaginationState) => {
-    const current = pagination();
-    if (current.pageSize !== s.pageSize) {
-      setSearchParams({
-        ...searchParams,
-        pageSize: s.pageSize,
-      });
-      return;
-    }
-
-    if (current.pageIndex != s.pageIndex) {
-      setPageIndex(s.pageIndex);
-    }
-  };
-
-  const Fallback = () => {
-    // TODO: Return a shimmery table to reduce visual jank.
-    return <>Loading...</>;
-  };
+  const [columnPinningState, setColumnPinningState] = createSignal({});
 
   return (
     <>
@@ -867,7 +874,7 @@ export function TablePane(props: {
       />
 
       <div class="flex flex-col gap-8 p-4">
-        <Switch fallback={Fallback()}>
+        <Switch>
           <Match when={state.isError}>
             <div class="my-2 flex flex-col gap-4">
               Failed to fetch rows: {`${state.error}`}
@@ -877,11 +884,14 @@ export function TablePane(props: {
             </div>
           </Match>
 
+          <Match when={state.isLoading}>Loading...</Match>
+
           <Match when={state.data}>
             <ArrayRecordTable
               state={state.data!}
               pagination={[pagination, setPagination]}
               filter={[filter, setFilter]}
+              columnPinningState={[columnPinningState, setColumnPinningState]}
               rowsRefetch={rowsRefetch}
             />
           </Match>
@@ -928,12 +938,16 @@ export function TablePane(props: {
                             ? undefined
                             : (rows: Row<TableIndex>[], value: boolean) => {
                                 const newSelection = new Set(selectedIndexes());
+
                                 for (const row of rows) {
-                                  const name = row.original.name.name;
+                                  const qualifiedName =
+                                    prettyFormatQualifiedName(
+                                      row.original.name,
+                                    );
                                   if (value) {
-                                    newSelection.add(name);
+                                    newSelection.add(qualifiedName);
                                   } else {
-                                    newSelection.delete(name);
+                                    newSelection.delete(qualifiedName);
                                   }
                                 }
                                 setSelectedIndexes(newSelection);
@@ -981,16 +995,23 @@ export function TablePane(props: {
                       return;
                     }
 
-                    const deleteIndexes = async () => {
-                      for (const name of names) {
-                        await dropIndex({ name, dry_run: null });
+                    (async () => {
+                      try {
+                        for (const name of names) {
+                          await dropIndex({ name, dry_run: null });
+                        }
+
+                        setSelectedIndexes(new Set<string>());
+                      } catch (err) {
+                        showToast({
+                          title: "Deletion Error",
+                          description: `${err}`,
+                          variant: "error",
+                        });
+                      } finally {
+                        props.schemaRefetch();
                       }
-
-                      setSelectedIndexes(new Set<string>());
-                      props.schemaRefetch();
-                    };
-
-                    deleteIndexes().catch(console.error);
+                    })();
                   }}
                 >
                   Delete indexes
@@ -1052,7 +1073,10 @@ const indexColumns = [
 
 const triggerColumnHelper = createColumnHelper<TableTrigger>();
 const triggerColumns = [
-  triggerColumnHelper.accessor("name", {}),
+  triggerColumnHelper.accessor("name", {
+    header: "name",
+    cell: (props) => <p class="max-w-[20dvw]">{props.getValue().name}</p>,
+  }),
   triggerColumnHelper.accessor("sql", {
     header: "statement",
     cell: (props) => <pre class="text-xs">{props.getValue()}</pre>,

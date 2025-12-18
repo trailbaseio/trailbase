@@ -410,8 +410,9 @@ export function unescapeLiteralBlob(value: string): string | undefined {
 }
 
 export function prettyFormatQualifiedName(name: QualifiedName): string {
-  if (name.database_schema) {
-    return `${name.database_schema}.${name.name}`;
+  const db = name.database_schema;
+  if (db && db !== "main") {
+    return `${db}.${name.name}`;
   }
   return name.name;
 }
@@ -420,23 +421,10 @@ export function equalQualifiedNames(
   a: QualifiedName,
   b: QualifiedName,
 ): boolean {
-  if (a.name === b.name) {
-    return (a.database_schema ?? "main") === (b.database_schema ?? "main");
-  }
-  return false;
-}
-
-export function compareQualifiedNames(
-  a: QualifiedName,
-  b: QualifiedName,
-): number {
-  const cmp = a.name.localeCompare(b.name);
-  if (cmp === 0) {
-    return (a.database_schema ?? "main").localeCompare(
-      b.database_schema ?? "main",
-    );
-  }
-  return cmp;
+  return (
+    a.name === b.name &&
+    (a.database_schema ?? "main") === (b.database_schema ?? "main")
+  );
 }
 
 // WARNING: these needs to be kept in sync with ColumnDataType. TS cannot go

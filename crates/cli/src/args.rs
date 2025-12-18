@@ -64,6 +64,8 @@ pub enum SubCommands {
   Migration {
     /// Optional suffix used for the generated migration file: U<timetamp>__<suffix>.sql.
     suffix: Option<String>,
+    /// Optional database name
+    db: Option<String>,
   },
   /// Manage admin users (list, demote, promote).
   Admin {
@@ -197,6 +199,13 @@ pub enum UserSubCommands {
     /// New email address to set for user.
     new_email: String,
   },
+  /// Adds a new and verified user.
+  Add {
+    /// Email address of the new user.
+    email: String,
+    /// Password - not checked against policies.
+    password: String,
+  },
   /// Delete a user.
   Delete {
     /// User in question, either email or UUID.
@@ -271,6 +280,10 @@ pub enum ComponentSubCommands {
   },
   /// Remove/delete WASM component.
   Remove { reference: String },
-  /// List first-party components.
+  /// List available first-party components.
   List,
+  /// List installed components.
+  Installed,
+  /// Update all installed first-party components.
+  Update,
 }

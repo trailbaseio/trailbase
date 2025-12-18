@@ -30,12 +30,16 @@ pub async fn create_table_handler(
     ));
   }
   let dry_run = request.dry_run.unwrap_or(false);
-  let filename = request.schema.name.migration_filename("create_table");
+  let (db, table_schema) = {
+    let mut schema = request.schema.clone();
+    (schema.name.database_schema.take(), schema)
+  };
 
-  // This contains the create table statement and may also contain indexes and triggers.
-  let create_table_query = request.schema.create_table_statement();
+  let (conn, migration_path) = super::get_conn_and_migration_path(&state, db)?;
 
-  let conn = state.conn();
+  // This builds the `CREATE TABLE` SQL statement.
+  let create_table_query = table_schema.create_table_statement();
+
   let tx_log = conn
     .call(move |conn| {
       let mut tx = TransactionRecorder::new(conn)?;
@@ -48,14 +52,12 @@ pub async fn create_table_handler(
     })
     .await?;
 
-  if !dry_run {
-    // Take transaction log, write a migration file and apply.
-    if let Some(ref log) = tx_log {
-      let migration_path = state.data_dir().migrations_path();
-      let _report = log
-        .apply_as_migration(conn, migration_path, &filename)
-        .await?;
-    }
+  // Take transaction log, write a migration file and apply.
+  if !dry_run && let Some(ref log) = tx_log {
+    let filename = table_schema.name.migration_filename("create_table");
+    let _report = log
+      .apply_as_migration(&conn, migration_path, &filename)
+      .await?;
 
     state.rebuild_connection_metadata().await?;
   }

@@ -13,13 +13,12 @@ name = "trail"
 
 [features]
 default = []
-# Conditionally enable "v8" feature of dep:trailbase.
-v8 = ["trailbase/v8"]
 swagger = ["dep:utoipa-swagger-ui"]
 vendor-ssl = ["dep:openssl"]
 
 [dependencies]
 axum = { version = "^0.8.1", features=["multipart"] }
+bytes = "1.11.0"
 chrono = "^0.4.38"
 clap = { version = "^4.4.11", features=["derive", "env"] }
 env_logger = { workspace = true }
@@ -36,10 +35,12 @@ trailbase = { workspace = true }
 trailbase-build = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-sqlite = { workspace = true }
+trailbase-wasm-runtime-host = { workspace = true }
 url = "2.5.4"
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9.0.0", features = ["axum"], optional = true }
 uuid = { workspace = true }
+wit-component = "0.243.0"
 zip = { version = "6.0.0", default-features = false, features = ["deflate"] }
 
 [build-dependencies]

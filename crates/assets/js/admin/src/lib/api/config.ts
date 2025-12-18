@@ -5,9 +5,14 @@ import { GetConfigResponse, UpdateConfigRequest } from "@proto/config_api";
 import { adminFetch } from "@/lib/fetch";
 import { showToast } from "@/components/ui/toast";
 
+type UpdateOptions = {
+  throw?: boolean;
+};
+
 export async function setConfig(
   queryClient: QueryClient,
   config: Config,
+  opts?: UpdateOptions,
 ): Promise<void> {
   const data = queryClient.getQueryData<GetConfigResponse>(key);
   const hash = data?.hash;
@@ -21,7 +26,7 @@ export async function setConfig(
     hash,
   };
   console.debug("Updating config:", request);
-  await updateConfig(request);
+  await updateConfig(request, opts);
 
   // Trigger refetch after updating config.
   invalidateConfig(queryClient);
@@ -58,7 +63,10 @@ async function getConfig(): Promise<GetConfigResponse> {
   return GetConfigResponse.decode(array);
 }
 
-async function updateConfig(request: UpdateConfigRequest): Promise<void> {
+async function updateConfig(
+  request: UpdateConfigRequest,
+  opts?: UpdateOptions,
+): Promise<void> {
   try {
     await adminFetch("/config", {
       method: "POST",
@@ -75,7 +83,9 @@ async function updateConfig(request: UpdateConfigRequest): Promise<void> {
       variant: "error",
     });
 
-    throw err;
+    if (!(opts?.throw ?? true)) {
+      throw err;
+    }
   }
 }
 

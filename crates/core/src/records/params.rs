@@ -1,7 +1,8 @@
-use log::*;
+use parking_lot::RwLock;
 use std::collections::HashSet;
 use std::sync::Arc;
 use trailbase_schema::json::flat_json_to_value;
+use trailbase_schema::registry::JsonSchemaRegistry;
 use trailbase_schema::sqlite::{Column, ColumnDataType};
 use trailbase_schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{NamedParams, Value};
@@ -150,6 +151,7 @@ impl Params {
   /// files.
   pub fn for_insert<S: SchemaAccessor>(
     accessor: &S,
+    json_schema_registry: &JsonSchemaRegistry,
     row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Result<Self, ParamsError> {
@@ -167,7 +169,8 @@ impl Params {
         continue;
       };
 
-      let (param, json_files) = extract_params_and_files_from_json(col, json_meta, value)?;
+      let (param, json_files) =
+        extract_params_and_files_from_json(json_schema_registry, col, json_meta, value)?;
       if let Some(json_files) = json_files {
         // Note: files provided as a multipart form upload are handled below. They need more
         // special handling to establish the field.name to column mapping.
@@ -229,6 +232,7 @@ impl Params {
 
   pub fn for_update<S: SchemaAccessor>(
     accessor: &S,
+    json_schema_registry: &JsonSchemaRegistry,
     row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
     pk_column_name: String,
@@ -248,7 +252,8 @@ impl Params {
         continue;
       };
 
-      let (param, json_files) = extract_params_and_files_from_json(col, json_meta, value)?;
+      let (param, json_files) =
+        extract_params_and_files_from_json(json_schema_registry, col, json_meta, value)?;
       if let Some(json_files) = json_files {
         // Note: files provided as a multipart form upload are handled below. They need more
         // special handling to establish the field.name to column mapping.
@@ -351,16 +356,23 @@ pub enum LazyParams<'a> {
 impl<'a> LazyParams<'a> {
   pub fn for_insert<S: SchemaAccessor + Sync>(
     accessor: &'a S,
+    json_schema_registry: Arc<RwLock<JsonSchemaRegistry>>,
     json_row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Self {
     return LazyParams::LazyInsert(Some(Box::new(move || {
-      return Params::for_insert(accessor, json_row, multipart_files);
+      return Params::for_insert(
+        accessor,
+        &json_schema_registry.read(),
+        json_row,
+        multipart_files,
+      );
     })));
   }
 
   pub fn for_update<S: SchemaAccessor + Sync>(
     accessor: &'a S,
+    json_schema_registry: Arc<RwLock<JsonSchemaRegistry>>,
     json_row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
     primary_key_column: String,
@@ -369,6 +381,7 @@ impl<'a> LazyParams<'a> {
     return LazyParams::LazyUpdate(Some(Box::new(move || {
       return Params::for_update(
         accessor,
+        &json_schema_registry.read(),
         json_row,
         multipart_files,
         primary_key_column,
@@ -476,6 +489,7 @@ fn extract_files_from_multipart<S: SchemaAccessor>(
 }
 
 fn extract_params_and_files_from_json(
+  json_schema_registry: &JsonSchemaRegistry,
   col: &Column,
   json_metadata: Option<&JsonColumnMetadata>,
   value: serde_json::Value,
@@ -528,7 +542,6 @@ fn extract_params_and_files_from_json(
   // NOTE: We're doing early validation here for JSON inputs. This leads to redudant double
   // validation down the line. We could also *not* do it and leave it to the SQLite `jsonschema`
   // extension function, however this may help to reduce SQLite congestion for invalid inputs.
-  let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
   return match value {
     serde_json::Value::String(s) => {
       // WARN: It's completely unclear if we should allow passing JSON objects as string in a
@@ -538,11 +551,11 @@ fn extract_params_and_files_from_json(
       let json_value: serde_json::Value = serde_json::from_str(&s)
         .map_err(|err| ParamsError::NestedObject(format!("invalid json: {err}")))?;
 
-      json_metadata.validate(&registry, &json_value)?;
+      json_metadata.validate(json_schema_registry, &json_value)?;
       Ok((Value::Text(s), None))
     }
     value => {
-      json_metadata.validate(&registry, &value)?;
+      json_metadata.validate(json_schema_registry, &value)?;
       Ok((Value::Text(value.to_string()), None))
     }
   };
@@ -581,18 +594,11 @@ mod tests {
 
     const SCHEMA_NAME: &str = "test.TestSchema";
 
-    trailbase_extension::jsonschema::set_schema_for_test(
-      SCHEMA_NAME,
-      Some(
-        trailbase_extension::jsonschema::Schema::from(
-          serde_json::to_value(&schema_for!(TestSchema)).unwrap(),
-          None,
-          false,
-        )
-        .unwrap(),
-      ),
-    );
-    let registry = trailbase_extension::jsonschema::json_schema_registry_snapshot();
+    let registry = trailbase_schema::registry::build_json_schema_registry(vec![(
+      SCHEMA_NAME.to_string(),
+      serde_json::to_value(&schema_for!(TestSchema)).unwrap(),
+    )])
+    .unwrap();
 
     const ID_COL: &str = "myid";
     const ID_COL_PLACEHOLDER: &str = ":myid";
@@ -676,7 +682,13 @@ mod tests {
       });
 
       assert_params(
-        &Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None).unwrap(),
+        &Params::for_insert(
+          &metadata,
+          &registry,
+          json_row_from_value(value).unwrap(),
+          None,
+        )
+        .unwrap(),
       );
     }
 
@@ -691,7 +703,13 @@ mod tests {
       });
 
       assert_params(
-        &Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None).unwrap(),
+        &Params::for_insert(
+          &metadata,
+          &registry,
+          json_row_from_value(value).unwrap(),
+          None,
+        )
+        .unwrap(),
       );
 
       // Make sure we're strictly parsing, e.g. not converting strings to numbers.
@@ -704,7 +722,13 @@ mod tests {
       });
 
       assert!(
-        Params::for_insert(&metadata, json_row_from_value(value.clone()).unwrap(), None).is_err()
+        Params::for_insert(
+          &metadata,
+          &registry,
+          json_row_from_value(value.clone()).unwrap(),
+          None
+        )
+        .is_err()
       );
     }
 
@@ -719,7 +743,15 @@ mod tests {
         "real": 3,
       });
 
-      assert!(Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None).is_err());
+      assert!(
+        Params::for_insert(
+          &metadata,
+          &registry,
+          json_row_from_value(value).unwrap(),
+          None
+        )
+        .is_err()
+      );
 
       // Test that nested JSON object can be passed.
       let value = json!({
@@ -733,8 +765,13 @@ mod tests {
         "real": 3,
       });
 
-      let params =
-        Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None).unwrap();
+      let params = Params::for_insert(
+        &metadata,
+        &registry,
+        json_row_from_value(value).unwrap(),
+        None,
+      )
+      .unwrap();
       assert_params(&params);
     }
 
@@ -747,7 +784,15 @@ mod tests {
         "real": 3,
       });
 
-      assert!(Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None).is_err());
+      assert!(
+        Params::for_insert(
+          &metadata,
+          &registry,
+          json_row_from_value(value).unwrap(),
+          None
+        )
+        .is_err()
+      );
 
       // Test that nested JSON array can be passed.
       let nested_json_blob: Vec<u8> = vec![65, 66, 67, 68];
@@ -764,8 +809,13 @@ mod tests {
         "real": 3,
       });
 
-      let params =
-        Params::for_insert(&metadata, json_row_from_value(value).unwrap(), None).unwrap();
+      let params = Params::for_insert(
+        &metadata,
+        &registry,
+        json_row_from_value(value).unwrap(),
+        None,
+      )
+      .unwrap();
 
       assert_params(&params);
 

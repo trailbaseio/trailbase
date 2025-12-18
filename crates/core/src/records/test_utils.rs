@@ -22,6 +22,7 @@ mod tests {
     config.record_apis.push(RecordApiConfig {
       name: Some(api_name.to_string()),
       table_name: Some(table_name.to_string()),
+      attached_databases: vec![],
 
       acl_world: acls.world.into_iter().map(|f| f as i32).collect(),
       acl_authenticated: acls.authenticated.into_iter().map(|f| f as i32).collect(),

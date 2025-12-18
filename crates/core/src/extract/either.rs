@@ -3,7 +3,6 @@ use axum::extract::{Form, FromRequest, Request, rejection::*};
 use axum::http::StatusCode;
 use axum::http::header::CONTENT_TYPE;
 use axum::response::{IntoResponse, Response};
-use log::*;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use thiserror::Error;

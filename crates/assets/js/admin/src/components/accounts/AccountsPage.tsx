@@ -1,5 +1,4 @@
 import { createSignal, Match, Show, Switch, Suspense } from "solid-js";
-import { createWritableMemo } from "@solid-primitives/memo";
 import type { Setter } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import { TbRefresh, TbCrown, TbEdit, TbTrash } from "solid-icons/tb";
@@ -37,6 +36,7 @@ import {
   buildSecretFormField,
 } from "@/components/FormFields";
 import { SafeSheet, SheetContainer } from "@/components/SafeSheet";
+import { assets } from "@/components/settings/AuthSettings";
 
 import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
 import { copyToClipboard } from "@/lib/utils";
@@ -75,10 +75,30 @@ function buildColumns(
       header: "verified",
       accessorKey: "verified",
     },
+    {
+      header: "OAuth",
+      cell: (ctx) => {
+        const providerId = ctx.row.original.provider_id;
+        const oauthAsset =
+          providerId > 0n ? assets.get(Number(providerId)) : undefined;
+
+        return (
+          <Switch>
+            <Match when={oauthAsset !== undefined}>
+              <div class="flex justify-center">
+                <img class="size-[20px]" src={oauthAsset!} />
+              </div>
+            </Match>
+
+            <Match when={providerId > 0n}>{`${providerId}`}</Match>
+          </Switch>
+        );
+      },
+    },
     columnHelper.accessor("id", {
       header: "admin",
       cell: (ctx) => (
-        <div class="ml-[10px]">
+        <div class="flex justify-center">
           {ctx.row.original.admin ? <TbCrown size={18} /> : null}
         </div>
       ),
@@ -140,11 +160,15 @@ function DeleteUserButton(props: {
             <Button
               variant="destructive"
               onClick={() => {
-                setDialogOpen(false);
+                (async () => {
+                  try {
+                    await deleteUser({ id: props.userId });
+                  } finally {
+                    props.userRefetch();
+                  }
+                })();
 
-                deleteUser({ id: props.userId })
-                  .then(props.userRefetch)
-                  .catch(console.error);
+                setDialogOpen(false);
               }}
             >
               Delete
@@ -178,12 +202,12 @@ function EditSheetContent(props: {
       verified: props.user.verified,
     } as UpdateUserRequest,
     onSubmit: async ({ value }) => {
-      updateUser(value)
-        // eslint-disable-next-line solid/reactivity
-        .then(() => props.close())
-        .catch(console.error);
-
-      props.refetch();
+      try {
+        await updateUser(value);
+        props.close();
+      } finally {
+        props.refetch();
+      }
     },
   }));
 
@@ -258,32 +282,21 @@ export function AccountsPage() {
   const [searchParams, setSearchParams] = useSearchParams<{
     filter?: string;
     pageSize?: string;
+    pageIndex?: string;
   }>();
-  // Reset when search params change
-  const reset = () => {
-    return [searchParams.pageSize, searchParams.filter];
-  };
-  const [pageIndex, setPageIndex] = createWritableMemo<number>(() => {
-    reset();
-    return 0;
-  });
-  const [cursors, setCursors] = createWritableMemo<string[]>(() => {
-    reset();
-    return [];
-  });
-
   const pagination = (): PaginationState => {
     return {
       pageSize: safeParseInt(searchParams.pageSize) ?? 20,
-      pageIndex: pageIndex(),
+      pageIndex: safeParseInt(searchParams.pageIndex) ?? 0,
     };
   };
 
   const setFilter = (filter: string | undefined) => {
-    setPageIndex(0);
     setSearchParams({
       ...searchParams,
       filter,
+      // Reset
+      pageIndex: "0",
     });
   };
 
@@ -298,18 +311,12 @@ export function AccountsPage() {
     ],
     queryFn: async () => {
       const p = pagination();
-      const c = cursors();
 
       const response = await fetchUsers(
         searchParams.filter,
-        pagination().pageSize,
-        c[p.pageIndex - 1],
+        p.pageSize,
+        p.pageIndex,
       );
-
-      const cursor = response.cursor;
-      if (cursor && p.pageIndex >= c.length) {
-        setCursors([...c, cursor]);
-      }
 
       return response;
     },
@@ -366,34 +373,12 @@ export function AccountsPage() {
                   data={() => users.data!.users}
                   rowCount={Number(users.data!.total_row_count ?? -1)}
                   pagination={pagination()}
-                  onPaginationChange={(
-                    p:
-                      | PaginationState
-                      | ((old: PaginationState) => PaginationState),
-                  ) => {
-                    function setPagination({
-                      pageSize,
-                      pageIndex,
-                    }: PaginationState) {
-                      const current = pagination();
-                      if (current.pageSize !== pageSize) {
-                        setSearchParams({
-                          ...searchParams,
-                          pageSize,
-                        });
-                        return;
-                      }
-
-                      if (current.pageIndex != pageIndex) {
-                        setPageIndex(pageIndex);
-                      }
-                    }
-
-                    if (typeof p === "function") {
-                      setPagination(p(pagination()));
-                    } else {
-                      setPagination(p);
-                    }
+                  onPaginationChange={(s: PaginationState) => {
+                    setSearchParams({
+                      ...searchParams,
+                      pageIndex: s.pageIndex,
+                      pageSize: s.pageSize,
+                    });
                   }}
                 />
               </div>

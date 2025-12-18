@@ -1,4 +1,3 @@
-use log::*;
 use std::borrow::Cow;
 use thiserror::Error;
 use trailbase_qs::ValueOrComposite;

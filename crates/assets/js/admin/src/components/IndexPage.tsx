@@ -18,7 +18,7 @@ import { Card, CardContent, CardTitle } from "@/components/ui/card";
 
 function ColorPalette() {
   return (
-    <div class="my-4 grid w-[400px] grid-cols-2 text-sm">
+    <div class="my-4 grid max-w-[400px] grid-cols-2 text-sm">
       <div class="bg-background">Background</div>
       <div class="bg-foreground text-white">Foreground</div>
 
@@ -142,7 +142,7 @@ async function fetchDashboardData(): Promise<Data> {
       (SELECT COUNT(*) AS num_views FROM sqlite_master WHERE type = 'view'),
       (SELECT COUNT(*) AS num_users FROM _user);`;
 
-  const response = await executeSql(sql);
+  const response = await executeSql(sql, null);
   const error = response.error;
   if (error) {
     throw Error(JSON.stringify(error));
@@ -168,10 +168,10 @@ export function IndexPage() {
   }));
 
   return (
-    <div class="h-full">
+    <div>
       <Header title="TrailBase" />
 
-      <div class="prose m-4 flex grow flex-col gap-4">
+      <div class="prose flex grow flex-col gap-4 p-4">
         {dashboardFetch.data && (
           <div class="flex shrink gap-4">
             <FactCard

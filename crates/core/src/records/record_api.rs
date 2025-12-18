@@ -1,15 +1,16 @@
 use askama::Template;
 use log::*;
+use parking_lot::RwLock;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use trailbase_schema::metadata::{
-  JsonColumnMetadata, TableMetadata, ViewMetadata, find_file_column_indexes,
+  ConnectionMetadata, JsonColumnMetadata, TableMetadata, ViewMetadata, find_file_column_indexes,
   find_user_id_foreign_key_columns,
 };
 use trailbase_schema::sqlite::Column;
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
-use trailbase_sqlite::{NamedParams, Params as _, Value};
+use trailbase_sqlite::{Connection, NamedParams, Params as _, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
@@ -26,6 +27,7 @@ struct RecordApiSchema {
   /// Schema metadata
   qualified_name: QualifiedName,
   table_name: QualifiedNameEscaped,
+  attached_databases: Vec<String>,
 
   is_table: bool,
   record_pk_column: (usize, Column),
@@ -43,10 +45,7 @@ type DeferredAclCheck = dyn (FnOnce(&rusqlite::Connection) -> Result<(), RecordE
 
 impl RecordApiSchema {
   fn from_table(table_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
-    assert_eq!(
-      config.table_name.as_ref(),
-      Some(&table_metadata.name().name)
-    );
+    assert_name(config, table_metadata.name());
 
     let Some((pk_index, pk_column)) = table_metadata.record_pk_column() else {
       return Err("RecordApi requires integer/UUIDv7 primary key column".into());
@@ -82,6 +81,7 @@ impl RecordApiSchema {
     return Ok(Self {
       qualified_name: table_metadata.schema.name.clone(),
       table_name: QualifiedNameEscaped::new(&table_metadata.schema.name),
+      attached_databases: config.attached_databases.clone(),
       is_table: true,
       record_pk_column,
       columns,
@@ -93,8 +93,8 @@ impl RecordApiSchema {
     });
   }
 
-  pub fn from_view(view_metadata: &ViewMetadata, config: &RecordApiConfig) -> Result<Self, String> {
-    assert_eq!(config.table_name.as_ref(), Some(&view_metadata.name().name));
+  fn from_view(view_metadata: &ViewMetadata, config: &RecordApiConfig) -> Result<Self, String> {
+    assert_name(config, view_metadata.name());
 
     let Some((pk_index, pk_column)) = view_metadata.record_pk_column() else {
       return Err(format!(
@@ -125,6 +125,7 @@ impl RecordApiSchema {
     return Ok(Self {
       qualified_name: view_metadata.schema.name.clone(),
       table_name: QualifiedNameEscaped::new(&view_metadata.schema.name),
+      attached_databases: config.attached_databases.clone(),
       is_table: false,
       record_pk_column,
       columns,
@@ -139,7 +140,8 @@ impl RecordApiSchema {
 
 struct RecordApiState {
   /// Database connection for access checks.
-  conn: trailbase_sqlite::Connection,
+  conn: Arc<trailbase_sqlite::Connection>,
+  metadata: RwLock<Arc<ConnectionMetadata>>,
 
   /// Schema metadata
   schema: RecordApiSchema,
@@ -184,39 +186,41 @@ impl RecordApiState {
 }
 
 impl RecordApi {
-  pub fn from_table(
-    conn: trailbase_sqlite::Connection,
+  pub(crate) fn from_table(
+    conn: Arc<Connection>,
+    metadata: Arc<ConnectionMetadata>,
     table_metadata: &TableMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
-    assert_eq!(
-      config.table_name.as_ref(),
-      Some(&table_metadata.name().name)
-    );
+    assert_name(&config, table_metadata.name());
 
     return Self::from_impl(
       conn,
+      metadata,
       RecordApiSchema::from_table(table_metadata, &config)?,
       config,
     );
   }
 
-  pub fn from_view(
-    conn: trailbase_sqlite::Connection,
+  pub(crate) fn from_view(
+    conn: Arc<Connection>,
+    metadata: Arc<ConnectionMetadata>,
     view_metadata: &ViewMetadata,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
-    assert_eq!(config.table_name.as_ref(), Some(&view_metadata.name().name));
+    assert_name(&config, view_metadata.name());
 
     return Self::from_impl(
       conn,
+      metadata,
       RecordApiSchema::from_view(view_metadata, &config)?,
       config,
     );
   }
 
   fn from_impl(
-    conn: trailbase_sqlite::Connection,
+    conn: Arc<Connection>,
+    metadata: Arc<ConnectionMetadata>,
     schema: RecordApiSchema,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
@@ -287,6 +291,8 @@ impl RecordApi {
     return Ok(RecordApi {
       state: Arc::new(RecordApiState {
         conn,
+        metadata: RwLock::new(metadata),
+
         schema,
 
         // proto::RecordApiConfig properties below:
@@ -350,6 +356,29 @@ impl RecordApi {
   #[inline]
   pub fn table_name(&self) -> &QualifiedNameEscaped {
     return &self.state.schema.table_name;
+  }
+
+  pub fn attached_databases(&self) -> &[String] {
+    return &self.state.schema.attached_databases;
+  }
+
+  pub fn conn(&self) -> &Arc<trailbase_sqlite::Connection> {
+    return &self.state.conn;
+  }
+
+  pub fn connection_metadata(&self) -> Arc<ConnectionMetadata> {
+    return self.state.metadata.read().clone();
+  }
+
+  pub(crate) fn rebuild_connection_metadata(
+    &self,
+    json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+  ) {
+    if let Ok(metadata) =
+      crate::connection::build_metadata(&self.state.conn.write_lock(), json_schema_registry)
+    {
+      *self.state.metadata.write() = Arc::new(metadata);
+    }
   }
 
   #[inline]
@@ -837,6 +866,21 @@ fn filter_columns(
   }
 
   return (columns_vec, json_column_metadata_vec);
+}
+
+#[inline]
+fn assert_name(config: &RecordApiConfig, name: &QualifiedName) {
+  // TODO: Should this be disabled in prod?
+  if let Some(ref db) = name.database_schema
+    && db != "main"
+  {
+    assert_eq!(
+      config.table_name.as_deref().unwrap_or_default(),
+      format!("{db}.{}", name.name)
+    );
+  } else {
+    assert_eq!(config.table_name.as_deref().unwrap_or_default(), &name.name);
+  }
 }
 
 #[cfg(test)]

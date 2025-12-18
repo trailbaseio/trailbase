@@ -21,8 +21,8 @@ export function buildListSearchParams({
       const filterParams = parseFilter(filter);
       console.debug(`Filter search params: ${filterParams}`);
 
-      for (const [filter, value] of filterParams) {
-        params.set(filter, value);
+      for (const [key, value] of filterParams) {
+        params.set(key, value);
       }
     } catch (err) {
       showToast({
@@ -55,17 +55,32 @@ export function parseFilter(expr: string): [string, string][] {
   const filters: [string, string][] = [];
   function traverseExpr(path: string, child: Expr | ExprGroup | ExprGroup[]) {
     if (child instanceof Expr) {
+      const leftLiteral = child.Left?.Literal ?? "";
       const signOp = child.Op;
-      if (signOp !== undefined) {
-        filters.push([
-          `${path}[${child.Left?.Literal}][${formatOp(signOp)}]`,
-          child.Right?.Literal?.toString() ?? "",
-        ]);
+      const rightLiteral = child.Right?.Literal ?? "";
+
+      if (rightLiteral === "NULL") {
+        // Special case NULL.
+        switch (signOp) {
+          case undefined:
+          case SignOp.Eq:
+            filters.push([`${path}[${leftLiteral}][$is]`, "NULL"]);
+            break;
+          case SignOp.Neq:
+            filters.push([`${path}[${leftLiteral}][$is]`, "!NULL"]);
+            break;
+          default:
+            throw Error(`Not supported op: ${signOp}`);
+        }
       } else {
-        filters.push([
-          `${path}[${child.Left?.Literal}]`,
-          child.Right?.Literal?.toString() ?? "",
-        ]);
+        if (signOp !== undefined) {
+          filters.push([
+            `${path}[${leftLiteral}][${formatOp(signOp)}]`,
+            `${rightLiteral}`,
+          ]);
+        } else {
+          filters.push([`${path}[${leftLiteral}]`, `${rightLiteral}`]);
+        }
       }
     } else if (child instanceof ExprGroup) {
       traverseExpr(path, child.Item);
@@ -122,6 +137,6 @@ function formatOp(op: SignOp): string {
     case SignOp.AnyLte:
     case SignOp.AnyGt:
     case SignOp.AnyGte:
-      throw Error("Not supported");
+      throw Error(`Not supported op: ${op}`);
   }
 }

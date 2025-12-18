@@ -332,6 +332,8 @@ We simply need to expose the `counter` table through a world-readable record
 API (using the admin UI or config file):
 
 ```proto
+# file: traildepot/config.textproto
+# schema-file: <repo>/crates/core/proto/config.proto
 record_apis: [
   # ...
   {

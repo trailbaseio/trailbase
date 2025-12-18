@@ -28,12 +28,8 @@ impl Guest for Endpoints {
         .await
         .map_err(internal)?;
 
-        let Value::Integer(count) = rows[0][0] else {
-          panic!("expected integer");
-        };
-
         return Ok(Json(serde_json::json!({
-            "count": count,
+            "count": get_count(rows.first())?,
         })));
       }),
       routing::get("/", async |_req| -> Result<String, HttpError> {
@@ -42,9 +38,7 @@ impl Guest for Endpoints {
           .await
           .map_err(internal)?;
 
-        let Value::Integer(count) = rows[0][0] else {
-          panic!("expected integer");
-        };
+        let count = get_count(rows.first())?;
 
         // Call the JS render function using embedded QuickJS.
         let result = render(count).await?;
@@ -68,6 +62,18 @@ impl Guest for Endpoints {
       }),
     ];
   }
+}
+
+fn get_count(row: Option<&Vec<Value>>) -> Result<i64, HttpError> {
+  let Some(value) = row.and_then(|r| r.first()) else {
+    return Err(internal("count was deleted - very funny :)"));
+  };
+
+  let Value::Integer(count) = value else {
+    return Err(internal("value is not an int"));
+  };
+
+  return Ok(*count);
 }
 
 fn read_cached_file(path: &str) -> Result<Vec<u8>, HttpError> {

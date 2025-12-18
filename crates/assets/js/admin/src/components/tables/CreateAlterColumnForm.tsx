@@ -31,12 +31,14 @@ import {
   SelectOneOf,
   buildTextFormField,
   floatPattern,
+  intPattern,
   gapStyle,
 } from "@/components/FormFields";
 import type { FormApiT, AnyFieldApi } from "@/components/FormFields";
 
 import {
   columnDataTypes,
+  equalQualifiedNames,
   getCheckValue,
   getDefaultValue,
   getForeignKey,
@@ -87,23 +89,30 @@ function columnTypeField(
     // Note: use createMemo to avoid rebuilds for any state change.
     const value = createMemo(() => field().state.value);
 
+    // Effect that updates the data type when a foreign key is being selected.
     createEffect(() => {
       const foreignKey = fk();
 
       if (foreignKey) {
-        const v = value();
+        const targetTable = {
+          name: foreignKey,
+          database_schema: form.state.values.name.database_schema,
+        };
 
         for (const table of allTables) {
-          const tableName = table.name.name;
-          if (tableName === foreignKey) {
-            const type = table.columns[0].data_type;
-            console.debug(foreignKey, tableName, type, v);
-            if (v === type) {
-              break;
-            }
+          if (equalQualifiedNames(table.name, targetTable)) {
+            const targetType = table.columns[0].data_type;
+            if (value() !== targetType) {
+              field().setValue(targetType);
 
-            field().setValue(type);
-            break;
+              patchColumn(form, colIndex, (col: Column): Column => {
+                return {
+                  ...col,
+                  ...typeNameAndAffinityType(targetType),
+                };
+              });
+            }
+            return;
           }
         }
       }
@@ -123,38 +132,10 @@ function columnTypeField(
           // artifact of us reusing the parsed structure. Fix up the relevant
           // field (and affinity type just for consistency).
           patchColumn(form, colIndex, (col: Column): Column => {
-            switch (v) {
-              case "Any":
-                return {
-                  ...col,
-                  type_name: "ANY",
-                  affinity_type: "Blob",
-                };
-              case "Blob":
-                return {
-                  ...col,
-                  type_name: "BLOB",
-                  affinity_type: "Blob",
-                };
-              case "Text":
-                return {
-                  ...col,
-                  type_name: "TEXT",
-                  affinity_type: "Text",
-                };
-              case "Integer":
-                return {
-                  ...col,
-                  type_name: "INTEGER",
-                  affinity_type: "Integer",
-                };
-              case "Real":
-                return {
-                  ...col,
-                  type_name: "REAL",
-                  affinity_type: "Real",
-                };
-            }
+            return {
+              ...col,
+              ...typeNameAndAffinityType(v),
+            };
           });
         }}
         handleBlur={field().handleBlur}
@@ -271,18 +252,22 @@ function ColumnOptionDefaultField(props: {
     </HoverCard>
   );
 
-  const validationPattern = () => {
+  const defaultFieldValidationPattern = () => {
+    const functionPattern = "[(].*[)]";
+    const blobPattern = "X'.*'";
+    const textPattern = "'.*'";
+
     switch (props.column.data_type) {
       case "Any":
-        return undefined;
+        return `^\\s*(${functionPattern}|${blobPattern}|${textPattern}|${intPattern}|${floatPattern}})\\s*$`;
       case "Blob":
-        return "^X'.*'$";
+        return `^\\s*(${functionPattern}|${blobPattern})\\s*$`;
       case "Text":
-        return "^'.*'$";
+        return `^\\s*(${functionPattern}|${textPattern})\\s*$`;
       case "Integer":
-        return undefined;
+        return `^\\s*(${functionPattern}|${intPattern})\\s*$`;
       case "Real":
-        return floatPattern;
+        return `^\\s*(${functionPattern}|${floatPattern})\\s*$`;
     }
   };
 
@@ -305,10 +290,11 @@ function ColumnOptionDefaultField(props: {
           </TextFieldLabel>
         </L>
 
+        {/* `type` needs to be "text" to allow for functions, e.g.: (unixepoch()) */}
         <TextFieldInput
           disabled={props.disabled}
-          type={props.column.data_type === "Integer" ? "number" : "text"}
-          pattern={validationPattern()}
+          type="text"
+          pattern={defaultFieldValidationPattern()}
           value={getDefaultValue(props.value) ?? ""}
           onChange={(e: Event) => {
             const value: string | undefined = (
@@ -316,7 +302,10 @@ function ColumnOptionDefaultField(props: {
             ).value;
 
             props.onChange(
-              setDefaultValue(props.value, value === "" ? undefined : value),
+              setDefaultValue(
+                props.value,
+                value === "" ? undefined : value.trim(),
+              ),
             );
           }}
         />
@@ -331,10 +320,23 @@ function ColumnOptionFkSelect(props: {
   allTables: Table[];
   disabled: boolean;
   setFk: Setter<undefined | string>;
+  databaseSchema: string | null;
 }) {
   const fkTableOptions = createMemo((): string[] => [
     "None",
-    ...props.allTables.map((schema) => schema.name.name),
+    ...props.allTables
+      .filter((schema) => {
+        if (schema.temporary || schema.virtual_table) {
+          return false;
+        }
+
+        const db = schema.name.database_schema;
+        if (props.databaseSchema === null) {
+          return !db || db === "main";
+        }
+        return db === props.databaseSchema;
+      })
+      .map((schema) => schema.name.name),
   ]);
   const fkValue = (): string =>
     getForeignKey(props.value)?.foreign_table ?? "None";
@@ -356,29 +358,30 @@ function ColumnOptionFkSelect(props: {
           if (!table || table === "None") {
             props.setFk(undefined);
             props.onChange(setForeignKey(props.value, undefined));
-          } else {
-            const schema = props.allTables.find(
-              (schema) => schema.name.name == table,
-            )!;
-            const column =
-              schema.columns.find(
-                (col) => getUnique(col.options)?.is_primary ?? false,
-              ) ?? schema.columns[0];
-
-            props.setFk(table);
-
-            let newColumnOptions = [...props.value];
-            newColumnOptions = setForeignKey(props.value, {
-              foreign_table: table,
-              referred_columns: [column.name],
-              on_delete: null,
-              on_update: null,
-            });
-            newColumnOptions = setCheckValue(newColumnOptions, undefined);
-            newColumnOptions = setDefaultValue(newColumnOptions, undefined);
-
-            props.onChange(newColumnOptions);
+            return;
           }
+
+          const schema = props.allTables.find(
+            (schema) => schema.name.name == table,
+          )!;
+          const referredColumn =
+            schema.columns.find(
+              (col) => getUnique(col.options)?.is_primary ?? false,
+            ) ?? schema.columns[0];
+
+          props.setFk(table);
+
+          let newColumnOptions = [...props.value];
+          newColumnOptions = setForeignKey(props.value, {
+            foreign_table: table,
+            referred_columns: [referredColumn.name],
+            on_delete: null,
+            on_update: null,
+          });
+          newColumnOptions = setCheckValue(newColumnOptions, undefined);
+          newColumnOptions = setDefaultValue(newColumnOptions, undefined);
+
+          props.onChange(newColumnOptions);
         }}
         itemComponent={(props) => (
           <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
@@ -404,6 +407,7 @@ function ColumnOptionsFields(props: {
   pk: boolean;
   fk: string | undefined;
   setFk: Setter<string | undefined>;
+  databaseSchema: string | null;
 }) {
   // Column options: (not|null), (default), (unique), (fk), (check), (comment), (onupdate).
   return (
@@ -485,6 +489,9 @@ export function ColumnSubForm(props: {
   const disabled = () => props.disabled;
   const [name, setName] = createWritableMemo(() => props.column.name);
   const [expanded, setExpanded] = createSignal(true);
+  const databaseSchema = createMemo(() =>
+    props.form.useStore((state) => state.values.name.database_schema)(),
+  );
 
   const [fk, setFk] = createSignal<string | undefined>();
 
@@ -602,6 +609,7 @@ export function ColumnSubForm(props: {
                       pk={false}
                       fk={fk()}
                       setFk={setFk}
+                      databaseSchema={databaseSchema()}
                     />
                   );
                 }}
@@ -624,6 +632,9 @@ export function PrimaryKeyColumnSubForm(props: {
   const disabled = () => props.disabled;
   const [name, setName] = createWritableMemo(() => props.column.name);
   const [expanded, setExpanded] = createSignal(false);
+  const databaseSchema = createMemo(() =>
+    props.form.useStore((state) => state.values.name.database_schema)(),
+  );
 
   const [fk, setFk] = createSignal<string | undefined>();
 
@@ -736,6 +747,7 @@ export function PrimaryKeyColumnSubForm(props: {
                       pk={true}
                       fk={fk()}
                       setFk={setFk}
+                      databaseSchema={databaseSchema()}
                     />
                   );
                 }}
@@ -763,6 +775,38 @@ function patchColumn(
   columns[colIndex] = patch(column);
 
   form.setFieldValue("columns", columns);
+}
+
+function typeNameAndAffinityType(
+  dataType: ColumnDataType,
+): Pick<Column, "affinity_type" | "type_name"> {
+  switch (dataType) {
+    case "Any":
+      return {
+        type_name: "ANY",
+        affinity_type: "Blob",
+      };
+    case "Blob":
+      return {
+        type_name: "BLOB",
+        affinity_type: "Blob",
+      };
+    case "Text":
+      return {
+        type_name: "TEXT",
+        affinity_type: "Text",
+      };
+    case "Integer":
+      return {
+        type_name: "INTEGER",
+        affinity_type: "Integer",
+      };
+    case "Real":
+      return {
+        type_name: "REAL",
+        affinity_type: "Real",
+      };
+  }
 }
 
 export const primaryKeyPresets: [string, (colName: string) => Column][] = [

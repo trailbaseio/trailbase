@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Index, Match, Show, Switch } from "solid-js";
+import { createSignal, Index, Match, Show, Switch } from "solid-js";
 import type { Accessor } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient } from "@tanstack/solid-query";
@@ -15,11 +15,10 @@ import {
 } from "@/components/ui/dialog";
 import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 
-import { createTable, alterTable } from "@/lib/api/table";
-import { generateRandomName } from "@/lib/name";
 import {
   buildBoolFormField,
   buildTextFormField,
+  SelectOneOf,
 } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
 import {
@@ -28,20 +27,17 @@ import {
   newDefaultColumn,
   primaryKeyPresets,
 } from "@/components/tables/CreateAlterColumnForm";
+
+import { createTable, alterTable } from "@/lib/api/table";
+import { generateRandomName } from "@/lib/name";
+import { createConfigQuery } from "@/lib/api/config";
 import { invalidateConfig } from "@/lib/api/config";
 
 import type { Column } from "@bindings/Column";
 import type { Table } from "@bindings/Table";
 import type { AlterTableOperation } from "@bindings/AlterTableOperation";
 import type { QualifiedName } from "@bindings/QualifiedName";
-
-function columnsEqual(a: Column, b: Column): boolean {
-  return (
-    a.name === b.name &&
-    a.data_type === b.data_type &&
-    JSON.stringify(a.options) === JSON.stringify(b.options)
-  );
-}
+import { equalQualifiedNames, prettyFormatQualifiedName } from "@/lib/schema";
 
 export function CreateAlterTableForm(props: {
   close: () => void;
@@ -52,103 +48,86 @@ export function CreateAlterTableForm(props: {
   schema?: Table;
 }) {
   const queryClient = useQueryClient();
-  const [sql, setSql] = createSignal<string | undefined>();
+  const [dryRunDialog, setDryRunDialog] = createSignal<string | undefined>();
 
-  const copyOriginal = (): Table | undefined =>
-    props.schema ? JSON.parse(JSON.stringify(props.schema)) : undefined;
+  const isCreateTable = () => props.schema === undefined;
 
-  const original = createMemo<Table | undefined>(() => copyOriginal());
-  const isCreateTable = () => original() === undefined;
+  const config = createConfigQuery();
+  const dbSchemas = (): string[] => [
+    "main",
+    ...(config.data?.config?.databases
+      .map((db) => db.name)
+      .filter((n) => n !== undefined) ?? []),
+  ];
 
-  // Columns are treated as append only. Instead of removing it and inducing animation junk and other stuff when
-  // shifting offset, we simply don't render columns that were marked as deleted.
+  // Columns are treated as append only. Instead of removing actually removing a
+  // column and inducing animation junk and other complications we simply don't
+  // render columns that were marked as deleted.
   const [deletedColumns, setDeletedColumn] = createSignal<number[]>([]);
   const isDeleted = (i: number): boolean =>
-    deletedColumns().find((idx) => idx === i) !== undefined;
+    deletedColumns().findIndex((idx) => idx === i) !== -1;
 
   const onSubmit = async (value: Table, dryRun: boolean) => {
-    /* eslint-disable solid/reactivity */
-    console.debug("Table schema:", value);
-
     // Assert that the type representations match up.
-    for (const column of value.columns) {
-      if (column.data_type.toUpperCase() != column.type_name) {
-        throw new Error(
-          `Got ${column.type_name}, expected, ${column.data_type}`,
-        );
+    for (const c of value.columns) {
+      if (c.data_type.toUpperCase() != c.type_name) {
+        throw new Error(`Got ${c.type_name}, expected, ${c.data_type}`);
       }
     }
 
     try {
-      const o = original();
-      if (o !== undefined) {
+      const original = props.schema;
+      if (original !== undefined) {
         // Alter table
 
-        // Build operations. Remember columns are append-only.
-        const operations: AlterTableOperation[] = [];
-        value.columns.forEach((column, i) => {
-          if (i < o.columns.length) {
-            // Pre-existing column.
-            const originalName = o.columns[i].name;
-            if (isDeleted(i)) {
-              operations.push({ DropColumn: { name: originalName } });
-              return;
-            }
-
-            if (!columnsEqual(o.columns[i], column)) {
-              operations.push({
-                AlterColumn: {
-                  name: originalName,
-                  column: column,
-                },
-              });
-              return;
-            }
-          } else {
-            // Newly added columns.
-            if (!isDeleted(i)) {
-              operations.push({ AddColumn: { column: column } });
-            }
-          }
-        });
-
         const response = await alterTable({
-          source_schema: o,
-          operations,
+          source_schema: original,
+          operations: buildAlterTableOperations(
+            original,
+            value,
+            deletedColumns(),
+          ),
           dry_run: dryRun,
         });
         console.debug(`AlterTableResponse [dry: ${dryRun}]:`, response);
 
         if (dryRun) {
-          setSql(response.sql);
+          // Opens dialog.
+          setDryRunDialog(response.sql);
+          return;
         }
       } else {
         // Create table
+
+        // Remove ephemeral/deleted columns, i.e. columns that were briefly added but then removed again.
         value.columns = value.columns.filter((_, i) => !isDeleted(i));
 
         const response = await createTable({ schema: value, dry_run: dryRun });
         console.debug(`CreateTableResponse [dry: ${dryRun}]:`, response);
 
         if (dryRun) {
-          setSql(response.sql);
+          // Opens dialog.
+          setDryRunDialog(response.sql);
+          return;
         }
       }
 
-      if (!dryRun) {
-        // Trigger config reload
-        invalidateConfig(queryClient);
+      console.assert(!dryRun, "unexpected dry run");
 
-        // Reload schemas.
-        props.schemaRefetch().then(() => {
-          props.setSelected(value.name);
-        });
+      // Trigger config reload
+      invalidateConfig(queryClient);
 
-        // Close dialog/sheet.
-        props.close();
-      }
+      // Reload schemas and switch to new/altered table.
+      // eslint-disable-next-line solid/reactivity
+      props.schemaRefetch().then(() => {
+        props.setSelected(value.name);
+      });
+
+      // Close dialog/sheet.
+      props.close();
     } catch (err) {
       showToast({
-        title: "Uncaught Error",
+        title: `${isCreateTable() ? "Creation" : "Alteration"} Error`,
         description: `${err}`,
         variant: "error",
       });
@@ -157,30 +136,7 @@ export function CreateAlterTableForm(props: {
 
   const form = createForm(() => ({
     onSubmit: async ({ value }) => await onSubmit(value, /*dryRun=*/ false),
-    defaultValues:
-      copyOriginal() ??
-      ({
-        name: {
-          name: generateRandomName({
-            taken: props.allTables.map((t) => t.name.name),
-          }),
-          database_schema: null,
-        },
-        strict: true,
-        indexes: [],
-        columns: [
-          {
-            ...primaryKeyPresets[0][1]("id"),
-          },
-          newDefaultColumn(1),
-        ] satisfies Column[],
-        // Table constraints: https://www.sqlite.org/syntax/table-constraint.html
-        unique: [],
-        foreign_keys: [],
-        checks: [],
-        virtual_table: false,
-        temporary: false,
-      } as Table),
+    defaultValues: copySchema(props.schema) ?? defaultSchema(props.allTables),
   }));
 
   form.useStore((state) => {
@@ -207,6 +163,26 @@ export function CreateAlterTableForm(props: {
         tabindex={0}
       >
         <div class="mt-4 flex flex-col items-start gap-4 pr-4">
+          <Show when={isCreateTable() && dbSchemas().length > 1}>
+            <form.Field name="name.database_schema">
+              {(field) => (
+                <SelectOneOf<string>
+                  value={field().state.value ?? "main"}
+                  label={() => <TextLabel text="Database" />}
+                  options={dbSchemas()}
+                  onChange={(schema: string) => {
+                    if (schema === "main") {
+                      field().handleChange(null);
+                    } else {
+                      field().handleChange(schema);
+                    }
+                  }}
+                  handleBlur={() => field().handleBlur()}
+                />
+              )}
+            </form.Field>
+          </Show>
+
           <form.Field
             name="name.name"
             validators={{
@@ -296,10 +272,10 @@ export function CreateAlterTableForm(props: {
               return (
                 <div class="flex items-center gap-4">
                   <Dialog
-                    open={sql() !== undefined}
+                    open={dryRunDialog() !== undefined}
                     onOpenChange={(open: boolean) => {
                       if (!open) {
-                        setSql(undefined);
+                        setDryRunDialog(undefined);
                       }
                     }}
                   >
@@ -308,11 +284,9 @@ export function CreateAlterTableForm(props: {
                         class="w-[92px]"
                         disabled={!state().canSubmit}
                         variant="outline"
-                        onClick={() => {
-                          onSubmit(form.state.values, /*dryRun=*/ true).catch(
-                            console.error,
-                          );
-                        }}
+                        onClick={() =>
+                          onSubmit(form.state.values, /*dryRun=*/ true)
+                        }
                         {...props}
                       >
                         {state().isSubmitting ? "..." : "Dry Run"}
@@ -325,7 +299,9 @@ export function CreateAlterTableForm(props: {
                       </DialogHeader>
 
                       <div class="max-h-[70vh] w-full overflow-auto">
-                        <pre>{sql() === "" ? "<EMPTY>" : sql()}</pre>
+                        <pre>
+                          {dryRunDialog() === "" ? "<EMPTY>" : dryRunDialog()}
+                        </pre>
                       </div>
 
                       <DialogFooter />
@@ -349,6 +325,95 @@ export function CreateAlterTableForm(props: {
       </form>
     </SheetContainer>
   );
+}
+
+function defaultSchema(allTables: Table[]): Table {
+  return {
+    name: {
+      name: generateRandomName({
+        taken: allTables.map((t) => t.name.name),
+      }),
+      // Use "main" db by default.
+      database_schema: null,
+    },
+    strict: true,
+    columns: [
+      {
+        ...primaryKeyPresets[0][1]("id"),
+      },
+      newDefaultColumn(1),
+    ],
+    // Table constraints: https://www.sqlite.org/syntax/table-constraint.html
+    unique: [],
+    foreign_keys: [],
+    checks: [],
+    virtual_table: false,
+    temporary: false,
+  };
+}
+
+function copySchema(schema: Table | undefined): Table | undefined {
+  return schema ? JSON.parse(JSON.stringify(schema)) : undefined;
+}
+
+function columnsEqual(a: Column, b: Column): boolean {
+  return (
+    a.name === b.name &&
+    a.data_type === b.data_type &&
+    JSON.stringify(a.options) === JSON.stringify(b.options)
+  );
+}
+
+/// Builds alter table operations. Remember columns are append-only, i.e. there's a 1:1 mapping by index for pre-existing columns.
+function buildAlterTableOperations(
+  original: Table,
+  target: Table,
+  deletedColumns: number[],
+): AlterTableOperation[] {
+  const isDeleted = (i: number): boolean =>
+    deletedColumns.findIndex((idx) => idx === i) !== -1;
+
+  const operations: AlterTableOperation[] = [];
+  if (!equalQualifiedNames(original.name, target.name)) {
+    operations.push({
+      RenameTableTo: {
+        name: prettyFormatQualifiedName(target.name),
+      },
+    });
+  }
+
+  target.columns.forEach((column, i) => {
+    if (i < original.columns.length) {
+      // Pre-existing column.
+      const originalName = original.columns[i].name;
+      if (isDeleted(i)) {
+        operations.push({ DropColumn: { name: originalName } });
+        return;
+      }
+
+      if (!columnsEqual(original.columns[i], column)) {
+        operations.push({
+          AlterColumn: {
+            name: originalName,
+            column: column,
+          },
+        });
+        return;
+      }
+
+      // Otherwise they're equal and there's nothing to do.
+    } else {
+      // Newly added columns.
+      if (isDeleted(i)) {
+        // New column has already been deleted, e.g. a user added and removed it.
+        return;
+      }
+
+      operations.push({ AddColumn: { column: column } });
+    }
+  });
+
+  return operations;
 }
 
 function TextLabel(props: { text: string }) {

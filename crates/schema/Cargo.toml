@@ -13,7 +13,7 @@ base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 fallible-iterator = "0.3.0"
 infer = "0.19.0"
 itertools = "0.14.0"
-jsonschema = { version = "0.33.0", default-features = false }
+jsonschema = { version = "0.37.1", default-features = false }
 lazy_static = "1.5.0"
 log = { version = "^0.4.21", default-features = false }
 parking_lot = { workspace = true }
@@ -25,7 +25,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sqlite3-parser = "0.15.0"
 thiserror = "2.0.12"
-tokio = { workspace = true }
 trailbase-extension = { workspace = true }
 ts-rs = { workspace = true }
 uuid = { workspace = true }
@@ -33,4 +32,5 @@ uuid = { workspace = true }
 [dev-dependencies]
 anyhow = "1.0.97"
 indoc = "2.0.6"
+tokio = { workspace = true }
 trailbase-sqlite = { workspace = true }

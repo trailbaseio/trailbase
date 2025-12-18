@@ -1,6 +1,6 @@
 [package]
 name = "trailbase-wasm"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 license = "OSL-3.0"
 description = "WASM runtime for the TrailBase framework"
@@ -23,5 +23,5 @@ thiserror = "2.0.14"
 trailbase-sqlvalue = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 url = "2.5.7"
-wit-bindgen = "0.47.0"
+wit-bindgen = "0.49.0"
 wstd = "=0.5.6"

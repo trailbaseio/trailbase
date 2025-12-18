@@ -669,7 +669,7 @@ mod tests {
     );
 
     let tables = [table.clone()];
-    let registry = JsonSchemaRegistry::default();
+    let registry = JsonSchemaRegistry::from_schemas(vec![]);
     let metadata = TableMetadata::new(&registry, table, &tables).unwrap();
 
     assert_eq!("table0", metadata.name().name);
@@ -721,7 +721,7 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_with_subquery() {
-    let registry = JsonSchemaRegistry::default();
+    let registry = JsonSchemaRegistry::from_schemas(vec![]);
 
     let table_a = parse_create_table(
       "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
@@ -796,7 +796,7 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_with_joins() {
-    let registry = JsonSchemaRegistry::default();
+    let registry = JsonSchemaRegistry::from_schemas(vec![]);
 
     let table_a = parse_create_table(
       "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
@@ -863,7 +863,7 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_with_group_by() {
-    let registry = JsonSchemaRegistry::default();
+    let registry = JsonSchemaRegistry::from_schemas(vec![]);
 
     let table_a = parse_create_table(
       "CREATE TABLE a (id INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '') STRICT",
@@ -909,7 +909,7 @@ mod tests {
 
   #[test]
   fn test_parse_create_view_from_issue_99() {
-    let registry = JsonSchemaRegistry::default();
+    let registry = JsonSchemaRegistry::from_schemas(vec![]);
 
     let authors_table = parse_create_table(
       "
