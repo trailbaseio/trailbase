@@ -19,6 +19,8 @@ build:
 #   signing.password=<key_password>
 #   signing.secretKeyRingFile=</absolute/path/to/key.gpg>
 #
+# Version specifier lives in `lib/build.gradle.kts`.
+#
 # NOTE: Only publishes, requires subsequent manual release on maven central.
 publish:
 	gradle publishToMavenCentral
@@ -32,4 +34,8 @@ format:
 list:
 	gradle tasks
 
-.PHONY: test build publish release format list
+clean:
+	rm -rf lib/build/
+
+
+.PHONY: test build publish release format list clean

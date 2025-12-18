@@ -1,3 +1,15 @@
+## v0.22.4
+
+- New CLI command `trail user add <email> <pw>` to create verified users from the command-line.
+- Add an optional "admin" boolean property to JWTs.
+  - Update the Kotlin client to parse JWT more loosely and publish v0.2.0.
+  - Kotlin users will need to update their clients before updating to v0.22.4.
+- Early support of logical column pinning to visually highlight columns in wide tables.
+- Admin UI's login screen now explicit rejects non-admin users. This is a quality-of-life and **not** a security change. Access to admin APIs has always been protected. This just avoids showing a defunct UI to non-admin users.
+- Auth registration endpoint now accepts JSON-encoded requests (like the other auth endpoints too).
+- Show warning dialogs in admin UI when deleting or updating RecordAPIs.
+- Update Rust and JavaScript dependencies.
+
 ## v0.22.3
 
 - Downgrade vite-tsconfig-paths to fix Windows release builds (missing in v0.22.2).
