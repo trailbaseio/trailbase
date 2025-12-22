@@ -55,6 +55,7 @@ mod wasm {
     }
   }
 
+  #[derive(Clone)]
   pub struct SqliteFunctionRuntime;
 
   pub struct WasmRuntimeResult {
@@ -77,7 +78,7 @@ mod wasm {
 
   pub fn build_sync_wasm_runtimes_for_components(
     _components_path: PathBuf,
-    _fs_root_path: Option<PathBuf>,
+    _fs_root_path: Option<&std::path::Path>,
     _dev: bool,
   ) -> Result<Vec<SqliteFunctionRuntime>, AnyError> {
     return Ok(vec![]);
