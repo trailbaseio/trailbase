@@ -6,7 +6,7 @@ DISTDIR := ${APPDIR}/dist
 ADDRESS := 127.0.0.1:4000
 
 run: guest
-	${TRAILBIN} --data-dir=${TRAILDEPOT} run --address=${ADDRESS}
+	${TRAILBIN} --data-dir=${TRAILDEPOT} run --address=${ADDRESS} --dev
 
 guest: ${TRAILDEPOT}/wasm/component.wasm
 

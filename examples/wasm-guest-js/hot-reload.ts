@@ -61,6 +61,9 @@ async function startTrailBaseAndHotRestart(opts: {
       stderr: "inherit",
       killSignal: "SIGKILL",
       signal: signal,
+      env: {
+        RUST_BACKTRACE: "1",
+      }
     },
   );
 

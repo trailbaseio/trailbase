@@ -330,13 +330,28 @@ fn init_main_db_impl(
   let migrations_path = data_dir.map(|d| d.migrations_path());
 
   #[cfg(feature = "wasm")]
-  let sqlite_functions: Vec<_> = runtimes
+  let sqlite_functions: Vec<(
+    SqliteFunctionRuntime,
+    trailbase_wasm_runtime_host::functions::SqliteFunctions,
+  )> = runtimes
     .into_iter()
-    .map(|rt| -> Result<_, trailbase_wasm_runtime_host::Error> {
-      let functions =
-        rt.initialize_sqlite_functions(trailbase_wasm_runtime_host::InitArgs { version: None })?;
-      return Ok((rt, functions));
-    })
+    .filter_map(
+      |rt| -> Option<Result<_, trailbase_wasm_runtime_host::Error>> {
+        let functions = match rt
+          .initialize_sqlite_functions(trailbase_wasm_runtime_host::InitArgs { version: None })
+        {
+          Ok(functions) => functions,
+          Err(err) => {
+            return Some(Err(err));
+          }
+        };
+
+        if !functions.scalar_functions.is_empty() {
+          return Some(Ok((rt, functions)));
+        }
+        return None;
+      },
+    )
     .collect::<Result<Vec<_>, _>>()
     .map_err(|err| return ConnectionError::Other(err.to_string()))?;
 
