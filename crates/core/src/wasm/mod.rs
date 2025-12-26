@@ -1,7 +1,7 @@
 use axum::Router;
 use axum::extract::{RawPathParams, Request};
 use bytes::Bytes;
-use http_body_util::{BodyExt, combinators::BoxBody};
+use http_body_util::{BodyExt, combinators::UnsyncBoxBody};
 use hyper::StatusCode;
 use log::*;
 use std::path::{Path, PathBuf};
@@ -219,7 +219,7 @@ pub(crate) async fn install_routes_and_jobs(
 
               let request = hyper::Request::from_parts(
                 parts,
-                BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!())),
+                UnsyncBoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!())),
               );
 
               // Call WASM.
@@ -284,8 +284,8 @@ fn axum_method(method: trailbase_wasm_runtime_host::HttpMethodType) -> axum::rou
   };
 }
 
-fn empty() -> BoxBody<Bytes, hyper::Error> {
-  return BoxBody::new(http_body_util::Empty::new().map_err(|_| unreachable!()));
+fn empty() -> UnsyncBoxBody<Bytes, hyper::Error> {
+  return UnsyncBoxBody::new(http_body_util::Empty::new().map_err(|_| unreachable!()));
 }
 
 fn to_header_value(

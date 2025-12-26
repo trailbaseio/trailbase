@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use http_body_util::{BodyExt, combinators::BoxBody};
+use http_body_util::{BodyExt, combinators::UnsyncBoxBody};
 use rusqlite::Transaction;
 use self_cell::{MutBorrow, self_cell};
 use tokio::time::Duration;
@@ -126,8 +126,8 @@ pub fn convert_values(row: &trailbase_sqlite::Row) -> Result<Vec<SqlValue>, Stri
 }
 
 #[inline]
-pub fn bytes_to_body<E>(bytes: Bytes) -> BoxBody<Bytes, E> {
-  BoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!()))
+pub fn bytes_to_body<E>(bytes: Bytes) -> UnsyncBoxBody<Bytes, E> {
+  UnsyncBoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!()))
 }
 
 #[inline]

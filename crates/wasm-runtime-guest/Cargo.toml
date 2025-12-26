@@ -23,5 +23,5 @@ thiserror = "2.0.14"
 trailbase-sqlvalue = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 url = "2.5.7"
-wit-bindgen = "0.49.0"
+wit-bindgen = "0.50.0"
 wstd = "=0.5.6"

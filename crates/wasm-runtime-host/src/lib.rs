@@ -8,7 +8,7 @@ mod sqlite;
 use bytes::Bytes;
 use core::future::Future;
 use futures_util::future::BoxFuture;
-use http_body_util::combinators::BoxBody;
+use http_body_util::combinators::UnsyncBoxBody;
 use parking_lot::Mutex;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -726,7 +726,7 @@ impl AsyncRunner {
   // Call http handlers exported by WASM component (incoming from the perspective of the component).
   pub async fn call_incoming_http_handler(
     &self,
-    request: hyper::Request<BoxBody<Bytes, hyper::Error>>,
+    request: hyper::Request<UnsyncBoxBody<Bytes, hyper::Error>>,
   ) -> Result<hyper::Response<wasmtime_wasi_http::body::HyperOutgoingBody>, Error> {
     let mut store = self.new_store()?;
 
@@ -866,7 +866,7 @@ mod tests {
   use super::*;
 
   use http::{Response, StatusCode};
-  use http_body_util::{BodyExt, combinators::BoxBody};
+  use http_body_util::{BodyExt, combinators::UnsyncBoxBody};
   use trailbase_wasm_common::{HttpContext, HttpContextKind};
 
   const WASM_COMPONENT_PATH: &str = "../../client/testfixture/wasm/wasm_guest_testfixture.wasm";
@@ -983,7 +983,7 @@ mod tests {
     runtime: &Runtime,
     uri: &str,
     registered_path: &str,
-  ) -> Result<Response<BoxBody<Bytes, ErrorCode>>, Error> {
+  ) -> Result<Response<UnsyncBoxBody<Bytes, ErrorCode>>, Error> {
     fn to_header_value(context: &HttpContext) -> hyper::http::HeaderValue {
       return hyper::http::HeaderValue::from_bytes(
         &serde_json::to_vec(&context).unwrap_or_default(),
