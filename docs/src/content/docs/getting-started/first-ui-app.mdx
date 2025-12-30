@@ -187,6 +187,19 @@ as well as custom API by running:
 $ trail run --public-dir dist
 ```
 
+<Aside type="tip" title="SPA Routing">
+If your web app uses client-side routing (e.g., React, Vue, TanStack router),
+you can enable an SPA serving mode avoiding 404s when users navigate to non-root paths:
+
+```bash
+$ trail run --public-dir dist --spa
+```
+
+With `--spa` enabled a request for path`/user/profile` will fall back to `/index.html`.
+However requests for files, i.e. paths with a file extension like `/favicon.ico`,
+will continue to return 404s.
+</Aside>
+
 You can now check out your fully self-contained app under
 [http://localhost:4000/](http://localhost:4000/) or browse the coffee data and
 access logs in the [admin dashboard](http://localhost:4000/_/admin).

@@ -100,6 +100,12 @@ pub struct ServerArgs {
   #[arg(long, env)]
   pub public_dir: Option<String>,
 
+  /// Enable SPA fallback: serve index.html for routes (paths without file extensions).
+  /// File requests (e.g., /favicon.ico) will still return 404 if not found.
+  /// Use with --public-dir.
+  #[arg(long, env, default_value_t = false)]
+  pub spa: bool,
+
   /// Optional path to sandboxed FS root for WASM runtime.
   #[arg(long, env)]
   pub runtime_root_fs: Option<String>,
