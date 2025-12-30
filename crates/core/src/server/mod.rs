@@ -467,20 +467,36 @@ impl Server {
               }
               let contents = tokio::fs::read(file_path).await.ok()?;
               let mime = match file_path.extension().and_then(|e| e.to_str()) {
+                // Text
                 Some("html") => "text/html; charset=utf-8",
                 Some("css") => "text/css; charset=utf-8",
-                Some("js") => "application/javascript; charset=utf-8",
-                Some("json") => "application/json",
+                Some("js") | Some("mjs") => "application/javascript; charset=utf-8",
+                Some("json") | Some("map") => "application/json",
+                Some("txt") => "text/plain; charset=utf-8",
+                Some("xml") => "application/xml",
+                // Images
                 Some("png") => "image/png",
                 Some("jpg") | Some("jpeg") => "image/jpeg",
                 Some("gif") => "image/gif",
                 Some("svg") => "image/svg+xml",
                 Some("ico") => "image/x-icon",
+                Some("webp") => "image/webp",
+                Some("avif") => "image/avif",
+                // Video
+                Some("mp4") => "video/mp4",
+                Some("webm") => "video/webm",
+                // Audio
+                Some("mp3") => "audio/mpeg",
+                Some("wav") => "audio/wav",
+                Some("ogg") => "audio/ogg",
+                // Fonts
                 Some("woff") => "font/woff",
                 Some("woff2") => "font/woff2",
                 Some("ttf") => "font/ttf",
                 Some("eot") => "application/vnd.ms-fontobject",
+                // Other
                 Some("wasm") => "application/wasm",
+                Some("pdf") => "application/pdf",
                 _ => "application/octet-stream",
               };
               Some(
