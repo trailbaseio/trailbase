@@ -89,7 +89,7 @@ async fn async_main() -> Result<(), BoxError> {
         address: cmd.address,
         admin_address: cmd.admin_address,
         public_dir: cmd.public_dir.map(|p| p.into()),
-        public_dir_spa: cmd.public_dir_spa,
+        public_dir_spa: cmd.spa,
         runtime_root_fs: cmd.runtime_root_fs.map(|p| p.into()),
         geoip_db_path: cmd.geoip_db_path.map(|p| p.into()),
         log_responses: cmd.dev || cmd.stderr_logging,
