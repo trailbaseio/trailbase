@@ -187,6 +187,20 @@ as well as custom API by running:
 $ trail run --public-dir dist
 ```
 
+<Aside type="tip" title="SPA Routing">
+If your web app uses client-side routing (e.g., React Router, Vue Router, TanStack Router),
+enable SPA fallback mode to avoid 404 errors when users refresh the page on routes like `/user/profile`:
+
+```bash
+$ trail run --public-dir dist --public-dir-spa
+```
+
+With `--public-dir-spa` enabled:
+- **Route requests** (paths without file extensions like `/about`, `/user/profile`) → serve `index.html`
+- **File requests** (paths with extensions like `/favicon.ico`, `/assets/style.css`) → serve the file or return 404
+
+</Aside>
+
 You can now check out your fully self-contained app under
 [http://localhost:4000/](http://localhost:4000/) or browse the coffee data and
 access logs in the [admin dashboard](http://localhost:4000/_/admin).
