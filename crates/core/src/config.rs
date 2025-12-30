@@ -417,7 +417,7 @@ pub async fn load_or_init_config_textproto(
   data_dir: &DataDir,
   connection_manager: &ConnectionManager,
 ) -> Result<proto::Config, ConfigError> {
-  let merged_config = {
+  let mut merged_config = {
     let config = match fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)) {
       Ok(contents) => proto::Config::from_text(&contents)?,
       Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -436,9 +436,51 @@ pub async fn load_or_init_config_textproto(
     merge_vault_and_env(config, vault)?
   };
 
+  let extra_record_apis = load_record_apis_from_config_apis_folder(data_dir)?;
+
+  if !extra_record_apis.is_empty() {
+    merged_config.record_apis.extend(extra_record_apis);
+  }
+
   validate_config(connection_manager, &merged_config)?;
 
   return Ok(merged_config);
+}
+
+fn load_record_apis_from_config_apis_folder(
+  data_dir: &DataDir,
+) -> Result<Vec<proto::RecordApiConfig>, ConfigError> {
+  let apis_dir = data_dir.apis_path();
+  if !apis_dir.exists() {
+    return Ok(vec![]);
+  }
+
+  let mut files = vec![];
+  for entry in fs::read_dir(&apis_dir)? {
+    let entry = entry?;
+    let file_type = entry.file_type()?;
+    if !file_type.is_file() {
+      continue;
+    }
+
+    let path = entry.path();
+    if path.extension().is_some_and(|ext| ext == "textproto") {
+      files.push(path);
+    }
+  }
+
+  files.sort();
+
+  let mut record_apis = Vec::<proto::RecordApiConfig>::new();
+  for path in files {
+    let contents = fs::read_to_string(&path)?;
+    let config = proto::Config::from_text(&contents).map_err(|err| {
+      ConfigError::Invalid(format!("Failed to parse api config file {path:?}: {err}"))
+    })?;
+    record_apis.extend(config.record_apis);
+  }
+
+  Ok(record_apis)
 }
 
 fn split_config(config: &proto::Config) -> Result<(proto::Config, proto::Vault), ConfigError> {
@@ -798,6 +840,7 @@ mod test {
     test_config_stripping();
     test_config_merging_from_env_and_vault();
     test_strip_and_merge();
+    test_load_record_apis_from_config_apis_folder();
   }
 
   async fn test_default_config_is_valid() {
@@ -966,6 +1009,40 @@ mod test {
     let merged = merge_vault_and_env(stripped, vault).unwrap();
 
     assert_eq!(config, merged);
+  }
+
+  fn test_load_record_apis_from_config_apis_folder() {
+    let temp_dir = temp_dir::TempDir::new().unwrap();
+    let data_dir = DataDir(temp_dir.path().to_path_buf());
+
+    // Missing folder -> empty
+    assert!(
+      load_record_apis_from_config_apis_folder(&data_dir)
+        .unwrap()
+        .is_empty()
+    );
+
+    let apis_dir = data_dir.apis_path();
+    std::fs::create_dir_all(&apis_dir).unwrap();
+
+    // Create two files out-of-order, verify stable ordering by filename.
+    std::fs::write(
+      apis_dir.join("b.textproto"),
+      r#"record_apis { name: \"b\" table_name: \"t_b\" }\n"#,
+    )
+    .unwrap();
+    std::fs::write(
+      apis_dir.join("a.textproto"),
+      r#"record_apis { name: \"a\" table_name: \"t_a\" }\n"#,
+    )
+    .unwrap();
+    // Should be ignored.
+    std::fs::write(apis_dir.join("ignore.txt"), "record_apis {}\n").unwrap();
+
+    let apis = load_record_apis_from_config_apis_folder(&data_dir).unwrap();
+    assert_eq!(apis.len(), 2);
+    assert_eq!(apis[0].name.as_deref(), Some("a"));
+    assert_eq!(apis[1].name.as_deref(), Some("b"));
   }
 }
 

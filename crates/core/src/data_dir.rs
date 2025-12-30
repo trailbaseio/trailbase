@@ -39,6 +39,10 @@ impl DataDir {
     return self.0.clone();
   }
 
+  pub fn apis_path(&self) -> PathBuf {
+    return self.config_path().join("apis/");
+  }
+
   pub fn secrets_path(&self) -> PathBuf {
     return self.0.join("secrets/");
   }
@@ -63,6 +67,7 @@ impl DataDir {
     let directories = [
       self.data_path(),
       self.config_path(),
+      self.apis_path(),
       self.backup_path(),
       self.migrations_path().join("main"),
       self.uploads_path(),
