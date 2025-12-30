@@ -182,6 +182,59 @@ impl Query {
     let qs = serde_qs::Config::new(9, false);
     return qs.deserialize_bytes::<Query>(query.as_bytes());
   }
+
+  /// Produce a query-string representation of this `Query`.
+  pub fn stringify(&self) -> String {
+    let mut pairs: Vec<(String, String)> = Vec::new();
+
+    if let Some(limit) = self.limit {
+      pairs.push(("limit".to_string(), limit.to_string()));
+    }
+
+    if let Some(ref cursor) = self.cursor {
+      pairs.push(("cursor".to_string(), crate::filter::encode_val(cursor)));
+    }
+
+    if let Some(offset) = self.offset {
+      pairs.push(("offset".to_string(), offset.to_string()));
+    }
+
+    if let Some(count) = self.count {
+      pairs.push((
+        "count".to_string(),
+        (if count { "true" } else { "false" }).to_string(),
+      ));
+    }
+
+    if let Some(ref expand) = self.expand {
+      let s = expand.columns.join(",");
+      pairs.push(("expand".to_string(), crate::filter::encode_val(&s)));
+    }
+
+    if let Some(ref order) = self.order {
+      let s = order
+        .columns
+        .iter()
+        .map(|(c, p)| match p {
+          crate::query::OrderPrecedent::Descending => format!("-{}", c),
+          crate::query::OrderPrecedent::Ascending => format!("{}", c),
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+
+      pairs.push(("order".to_string(), crate::filter::encode_val(&s)));
+    }
+
+    if let Some(ref filter) = self.filter {
+      pairs.extend(filter.into_qs_impl("filter"));
+    }
+
+    return pairs
+      .into_iter()
+      .map(|(k, v)| format!("{}={}", crate::filter::encode_key(&k), v))
+      .collect::<Vec<_>>()
+      .join("&");
+  }
 }
 
 #[derive(Clone, Default, Debug, PartialEq, Deserialize)]
@@ -196,6 +249,14 @@ impl FilterQuery {
     // NOTE: We rely on non-strict mode to parse `filter[col0]=a&b%filter[col1]=c`.
     let qs = serde_qs::Config::new(9, false);
     return qs.deserialize_bytes::<FilterQuery>(query.as_bytes());
+  }
+
+  /// Produce query string for only the filter part.
+  pub fn stringify(&self) -> String {
+    if let Some(ref filter) = self.filter {
+      return filter.into_qs();
+    }
+    return "".to_string();
   }
 }
 
@@ -282,6 +343,67 @@ mod tests {
       }
     );
     assert!(Query::parse("offset=-1").is_err());
+  }
+
+  #[test]
+  fn test_query_stringify_basic() {
+    let q = Query {
+      limit: Some(10),
+      cursor: Some("-5".to_string()),
+      offset: Some(2),
+      count: Some(true),
+      expand: Some(Expand {
+        columns: vec!["a".to_string(), "b".to_string()],
+      }),
+      order: Some(Order {
+        columns: vec![
+          ("a".to_string(), OrderPrecedent::Ascending),
+          ("b".to_string(), OrderPrecedent::Descending),
+        ],
+      }),
+      filter: None,
+    };
+
+    let s = q.stringify();
+    // Order of params isn't strictly specified; check presence of important fragments.
+    assert!(s.contains("limit=10"));
+    assert!(s.contains("cursor=-5"));
+    assert!(s.contains("offset=2"));
+    assert!(s.contains("count=true"));
+    assert!(s.contains("expand=a%2Cb") || s.contains("expand=a,b"));
+    assert!(s.contains("order=a%2C-b") || s.contains("order=a,-b"));
+  }
+
+  #[test]
+  fn test_filter_stringify_simple_and_composite() {
+    use crate::column_rel_value::{ColumnOpValue, CompareOp};
+
+    let f1 = ValueOrComposite::Value(ColumnOpValue {
+      column: "col0".to_string(),
+      op: CompareOp::Equal,
+      value: crate::value::Value::String("val0".to_string()),
+    });
+
+    assert_eq!(f1.into_qs(), "filter%5Bcol0%5D=val0");
+
+    let f2 = ValueOrComposite::Composite(
+      Combiner::And,
+      vec![
+        f1.clone(),
+        ValueOrComposite::Value(ColumnOpValue {
+          column: "col1".to_string(),
+          op: CompareOp::Equal,
+          value: crate::value::Value::String("val1".to_string()),
+        }),
+      ],
+    );
+
+    let s = f2.into_qs();
+    // Two key/value pairs; ordering of pairs is deterministic by our implementation
+    assert_eq!(
+      s,
+      "filter%5B%24and%5D%5B0%5D%5Bcol0%5D=val0&filter%5B%24and%5D%5B1%5D%5Bcol1%5D=val1"
+    );
   }
 
   #[test]
