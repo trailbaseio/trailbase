@@ -439,6 +439,18 @@ pub async fn load_or_init_config_textproto(
   let extra_record_apis = load_record_apis_from_config_apis_folder(data_dir)?;
 
   if !extra_record_apis.is_empty() {
+    let existing_names: HashSet<&str> = merged_config
+      .record_apis
+      .iter()
+      .filter_map(|api| api.name.as_deref())
+      .collect();
+
+    // Only add new apis that don't config.textproto already define.
+    let extra_record_apis = extra_record_apis
+      .into_iter()
+      .filter(|api| api.name.as_deref().is_none_or(|name| !existing_names.contains(name)))
+      .collect::<Vec<_>>();
+
     merged_config.record_apis.extend(extra_record_apis);
   }
 
