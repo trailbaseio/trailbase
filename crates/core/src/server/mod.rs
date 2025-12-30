@@ -434,69 +434,118 @@ impl Server {
           .into();
         let public_dir_clone = public_dir.clone();
 
-        // SPA fallback handler: serve files if they exist, otherwise serve index.html for routes
+        // SPA fallback handler: Vite-style HTML resolution with production 404 behavior
+        // - /about → about.html if exists, otherwise index.html (SPA)
+        // - /docs/ → docs/index.html if exists, otherwise index.html (SPA)
+        // - /style.css → serve if exists, otherwise 404
         let spa_fallback = move |req: Request<Body>| {
           let index_html = index_html.clone();
           let public_dir = public_dir_clone.clone();
           async move {
             let path = req.uri().path();
             let path_without_leading_slash = path.trim_start_matches('/');
-            let file_path = public_dir.join(path_without_leading_slash);
 
-            // Check if file exists
-            if tokio::fs::try_exists(&file_path).await.unwrap_or(false)
-              && tokio::fs::metadata(&file_path)
+            // Helper: Check if path has a file extension (dot after last slash)
+            fn has_file_extension(path: &str) -> bool {
+              path
+                .rsplit('/')
+                .next()
+                .is_some_and(|segment| segment.contains('.'))
+            }
+
+            // Helper: Try to serve a file if it exists
+            async fn try_serve_file(file_path: &std::path::Path) -> Option<Response<Body>> {
+              if !tokio::fs::try_exists(file_path).await.unwrap_or(false) {
+                return None;
+              }
+              if !tokio::fs::metadata(file_path)
                 .await
                 .map(|m| m.is_file())
                 .unwrap_or(false)
-            {
-              // File exists, read and serve it
-              if let Ok(contents) = tokio::fs::read(&file_path).await {
-                let mime = match file_path.extension().and_then(|e| e.to_str()) {
-                  Some("html") => "text/html; charset=utf-8",
-                  Some("css") => "text/css; charset=utf-8",
-                  Some("js") => "application/javascript; charset=utf-8",
-                  Some("json") => "application/json",
-                  Some("png") => "image/png",
-                  Some("jpg") | Some("jpeg") => "image/jpeg",
-                  Some("gif") => "image/gif",
-                  Some("svg") => "image/svg+xml",
-                  Some("ico") => "image/x-icon",
-                  Some("woff") => "font/woff",
-                  Some("woff2") => "font/woff2",
-                  Some("ttf") => "font/ttf",
-                  Some("eot") => "application/vnd.ms-fontobject",
-                  Some("wasm") => "application/wasm",
-                  _ => "application/octet-stream",
-                };
-                return Response::builder()
+              {
+                return None;
+              }
+              let contents = tokio::fs::read(file_path).await.ok()?;
+              let mime = match file_path.extension().and_then(|e| e.to_str()) {
+                Some("html") => "text/html; charset=utf-8",
+                Some("css") => "text/css; charset=utf-8",
+                Some("js") => "application/javascript; charset=utf-8",
+                Some("json") => "application/json",
+                Some("png") => "image/png",
+                Some("jpg") | Some("jpeg") => "image/jpeg",
+                Some("gif") => "image/gif",
+                Some("svg") => "image/svg+xml",
+                Some("ico") => "image/x-icon",
+                Some("woff") => "font/woff",
+                Some("woff2") => "font/woff2",
+                Some("ttf") => "font/ttf",
+                Some("eot") => "application/vnd.ms-fontobject",
+                Some("wasm") => "application/wasm",
+                _ => "application/octet-stream",
+              };
+              Some(
+                Response::builder()
                   .status(StatusCode::OK)
                   .header(axum::http::header::CONTENT_TYPE, mime)
                   .body(Body::from(contents))
-                  .unwrap();
-              }
+                  .unwrap(),
+              )
             }
 
-            // File doesn't exist: check if it's a file request (has extension)
-            let is_file_request = path
-              .rsplit('/')
-              .next()
-              .is_some_and(|segment| segment.contains('.'));
-
-            if is_file_request {
-              // File request: return 404
+            let not_found = || {
               Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(Body::from("Not found"))
                 .unwrap()
-            } else {
-              // Route request: serve index.html
+            };
+
+            let serve_index = || {
               Response::builder()
                 .status(StatusCode::OK)
                 .header(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")
-                .body(Body::from(index_html))
+                .body(Body::from(index_html.clone()))
                 .unwrap()
+            };
+
+            // 1. Path ends with .html → serve that file or 404
+            if path.ends_with(".html") {
+              let file_path = public_dir.join(path_without_leading_slash);
+              if let Some(response) = try_serve_file(&file_path).await {
+                return response;
+              }
+              return not_found();
             }
+
+            // 2. Path ends with / → try {path}index.html
+            if path.ends_with('/') {
+              let file_path = public_dir.join(path_without_leading_slash).join("index.html");
+              if let Some(response) = try_serve_file(&file_path).await {
+                return response;
+              }
+              // Directory without index.html → SPA fallback
+              return serve_index();
+            }
+
+            // 3. Other paths
+            // First, try to serve the file directly
+            let file_path = public_dir.join(path_without_leading_slash);
+            if let Some(response) = try_serve_file(&file_path).await {
+              return response;
+            }
+
+            // File doesn't exist: check if it looks like a static asset request
+            if has_file_extension(path) {
+              return not_found();
+            }
+
+            // Try .html suffix (Vite-style): /about → about.html
+            let html_path = public_dir.join(format!("{}.html", path_without_leading_slash));
+            if let Some(response) = try_serve_file(&html_path).await {
+              return response;
+            }
+
+            // SPA fallback: serve index.html for client-side routing
+            serve_index()
           }
         };
 

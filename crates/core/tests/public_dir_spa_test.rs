@@ -20,6 +20,7 @@ async fn test_spa_fallback() {
 
   // Create test files in public_dir
   let index_html_content = "<!DOCTYPE html><html><body>SPA Index</body></html>";
+  let about_html_content = "<!DOCTYPE html><html><body>About Page</body></html>";
   let css_content = "body { color: red; }";
 
   // Create index.html
@@ -27,12 +28,26 @@ async fn test_spa_fallback() {
   let mut index_file = std::fs::File::create(&index_path).unwrap();
   index_file.write_all(index_html_content.as_bytes()).unwrap();
 
+  // Create about.html (for Vite-style .html resolution test)
+  let about_path = public_dir.path().join("about.html");
+  let mut about_file = std::fs::File::create(&about_path).unwrap();
+  about_file.write_all(about_html_content.as_bytes()).unwrap();
+
   // Create assets directory and style.css
   let assets_dir = public_dir.path().join("assets");
   std::fs::create_dir(&assets_dir).unwrap();
   let css_path = assets_dir.join("style.css");
   let mut css_file = std::fs::File::create(&css_path).unwrap();
   css_file.write_all(css_content.as_bytes()).unwrap();
+
+  // Create docs directory with index.html (for directory index test)
+  let docs_dir = public_dir.path().join("docs");
+  std::fs::create_dir(&docs_dir).unwrap();
+  let docs_index_path = docs_dir.join("index.html");
+  let mut docs_index_file = std::fs::File::create(&docs_index_path).unwrap();
+  docs_index_file
+    .write_all("<!DOCTYPE html><html><body>Docs Index</body></html>".as_bytes())
+    .unwrap();
 
   // Test SPA mode enabled - non-existent routes return index.html
   let options = ServerOptions {
@@ -75,10 +90,40 @@ async fn test_spa_fallback() {
     "Expected SPA index content for /user/profile"
   );
 
-  // Another non-existent route should return index.html
+  // Vite-style .html resolution: /about should serve about.html (not index.html)
   let response = server.get("/about").await;
   assert_eq!(response.status_code(), StatusCode::OK);
+  assert!(
+    response.text().contains("About Page"),
+    "Expected about.html content for /about, got: {}",
+    response.text()
+  );
+
+  // Non-existent route without matching .html should return index.html
+  let response = server.get("/contact").await;
+  assert_eq!(response.status_code(), StatusCode::OK);
   assert!(response.text().contains("SPA Index"));
+
+  // Directory with trailing slash should serve its index.html
+  let response = server.get("/docs/").await;
+  assert_eq!(response.status_code(), StatusCode::OK);
+  assert!(
+    response.text().contains("Docs Index"),
+    "Expected docs/index.html content for /docs/, got: {}",
+    response.text()
+  );
+
+  // Route with dot in path segment (not extension) should return index.html
+  let response = server.get("/user.name/profile").await;
+  assert_eq!(
+    response.status_code(),
+    StatusCode::OK,
+    "Expected OK for route /user.name/profile with dot in path"
+  );
+  assert!(
+    response.text().contains("SPA Index"),
+    "Expected SPA index for /user.name/profile"
+  );
 
   // Deep nested route should return index.html
   let response = server.get("/app/dashboard/settings").await;
@@ -101,6 +146,23 @@ async fn test_spa_fallback() {
   // Non-existent JS file should return 404
   let response = server.get("/bundle.js").await;
   assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+
+  // Non-existent .html file should return 404 (not SPA fallback)
+  let response = server.get("/missing.html").await;
+  assert_eq!(
+    response.status_code(),
+    StatusCode::NOT_FOUND,
+    "Expected 404 for non-existent /missing.html"
+  );
+
+  // Directory without trailing slash should try .html first, then SPA fallback
+  // /docs (no trailing slash) - docs.html doesn't exist, so SPA fallback
+  let response = server.get("/docs").await;
+  assert_eq!(response.status_code(), StatusCode::OK);
+  assert!(
+    response.text().contains("SPA Index"),
+    "Expected SPA index for /docs without trailing slash"
+  );
 }
 
 #[test]
