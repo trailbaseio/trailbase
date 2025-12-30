@@ -47,6 +47,21 @@ impl CompareOp {
       Self::Equal => "=",
     };
   }
+
+  #[inline]
+  pub fn as_qs(&self) -> &'static str {
+    return match self {
+      Self::Equal => "$eq",
+      Self::NotEqual => "$ne",
+      Self::GreaterThanEqual => "$gte",
+      Self::GreaterThan => "$gt",
+      Self::LessThanEqual => "$lte",
+      Self::LessThan => "$lt",
+      Self::Is => "$is",
+      Self::Like => "$like",
+      Self::Regexp => "$re",
+    };
+  }
 }
 
 /// Type to support query of shape: `[column][op]=value`.
@@ -92,6 +107,25 @@ impl ColumnOpValue {
         })
       }
     };
+  }
+
+  /// Return a (key, value) pair suitable for query-string serialization (not percent-encoded).
+  pub fn into_qs(&self, prefix: &str) -> (String, String) {
+    let key = if matches!(self.op, CompareOp::Equal) {
+      format!("{}[{}]", prefix, self.column)
+    } else {
+      format!("{}[{}][{}]", prefix, self.column, self.op.as_qs())
+    };
+
+    let value = match (&self.op, &self.value) {
+      (CompareOp::Is, Value::String(s)) if s == "NOT NULL" => "!NULL".to_string(),
+      (CompareOp::Is, Value::String(s)) if s == "NULL" => "NULL".to_string(),
+      (_, Value::String(s)) => s.clone(),
+      (_, Value::Integer(i)) => i.to_string(),
+      (_, Value::Double(d)) => d.to_string(),
+    };
+
+    (key, value)
   }
 }
 
