@@ -57,6 +57,9 @@ pub struct ServerOptions {
   /// Optional path to static assets that will be served at the HTTP root.
   pub public_dir: Option<PathBuf>,
 
+  /// Enable SPA fallback mode for public_dir.
+  pub public_dir_spa: bool,
+
   /// Optional path to sandboxed FS root for WASM runtime.
   pub runtime_root_fs: Option<PathBuf>,
 
@@ -162,7 +165,7 @@ impl Server {
 
     Ok(Self {
       state: state.clone(),
-      main_router: Self::build_main_router(&state, &opts, custom_routers).await,
+      main_router: Self::build_main_router(&state, &opts, custom_routers).await?,
       admin_router: Self::build_independent_admin_router(&state, &opts),
       tls: Self::load_tls(&opts),
     })
@@ -389,7 +392,7 @@ impl Server {
     state: &AppState,
     opts: &ServerOptions,
     custom_routers: Vec<Router<AppState>>,
-  ) -> (String, Router<()>) {
+  ) -> Result<(String, Router<()>), InitError> {
     let enable_transactions =
       state.access_config(|conn| conn.server.enable_record_transactions.unwrap_or(false));
 
@@ -412,18 +415,105 @@ impl Server {
         panic!("--public_dir={public_dir:?} path does not exist.")
       }
 
-      async fn handle_404() -> (StatusCode, &'static str) {
-        (StatusCode::NOT_FOUND, "Not found")
-      }
+      router = if opts.public_dir_spa {
+        let index_path = public_dir.join("index.html");
+        if !tokio::fs::try_exists(&index_path).await.unwrap_or(false) {
+          return Err(InitError::IO(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("--public-dir-spa is enabled but index.html is missing at {index_path:?}"),
+          )));
+        }
+        let index_html: Bytes = tokio::fs::read(&index_path)
+          .await
+          .map_err(|err| {
+            InitError::IO(std::io::Error::new(
+              err.kind(),
+              format!("Failed to read index.html at {index_path:?}: {err}"),
+            ))
+          })?
+          .into();
+        let public_dir_clone = public_dir.clone();
 
-      router = router
-        .fallback_service(ServeDir::new(public_dir).not_found_service(handle_404.into_service()));
+        // SPA fallback handler: serve files if they exist, otherwise serve index.html for routes
+        let spa_fallback = move |req: Request<Body>| {
+          let index_html = index_html.clone();
+          let public_dir = public_dir_clone.clone();
+          async move {
+            let path = req.uri().path();
+            let path_without_leading_slash = path.trim_start_matches('/');
+            let file_path = public_dir.join(path_without_leading_slash);
+
+            // Check if file exists
+            if tokio::fs::try_exists(&file_path).await.unwrap_or(false)
+              && tokio::fs::metadata(&file_path)
+                .await
+                .map(|m| m.is_file())
+                .unwrap_or(false)
+            {
+              // File exists, read and serve it
+              if let Ok(contents) = tokio::fs::read(&file_path).await {
+                let mime = match file_path.extension().and_then(|e| e.to_str()) {
+                  Some("html") => "text/html; charset=utf-8",
+                  Some("css") => "text/css; charset=utf-8",
+                  Some("js") => "application/javascript; charset=utf-8",
+                  Some("json") => "application/json",
+                  Some("png") => "image/png",
+                  Some("jpg") | Some("jpeg") => "image/jpeg",
+                  Some("gif") => "image/gif",
+                  Some("svg") => "image/svg+xml",
+                  Some("ico") => "image/x-icon",
+                  Some("woff") => "font/woff",
+                  Some("woff2") => "font/woff2",
+                  Some("ttf") => "font/ttf",
+                  Some("eot") => "application/vnd.ms-fontobject",
+                  Some("wasm") => "application/wasm",
+                  _ => "application/octet-stream",
+                };
+                return Response::builder()
+                  .status(StatusCode::OK)
+                  .header(axum::http::header::CONTENT_TYPE, mime)
+                  .body(Body::from(contents))
+                  .unwrap();
+              }
+            }
+
+            // File doesn't exist: check if it's a file request (has extension)
+            let is_file_request = path
+              .rsplit('/')
+              .next()
+              .is_some_and(|segment| segment.contains('.'));
+
+            if is_file_request {
+              // File request: return 404
+              Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from("Not found"))
+                .unwrap()
+            } else {
+              // Route request: serve index.html
+              Response::builder()
+                .status(StatusCode::OK)
+                .header(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")
+                .body(Body::from(index_html))
+                .unwrap()
+            }
+          }
+        };
+
+        router.fallback(spa_fallback)
+      } else {
+        async fn handle_404() -> (StatusCode, &'static str) {
+          (StatusCode::NOT_FOUND, "Not found")
+        }
+        let serve_dir = ServeDir::new(public_dir);
+        router.fallback_service(serve_dir.not_found_service(handle_404.into_service()))
+      };
     }
 
-    return (
+    return Ok((
       opts.address.clone(),
       Self::wrap_with_default_layers(state, opts, router),
-    );
+    ));
   }
 
   pub fn wrap_with_default_layers(
