@@ -1,7 +1,9 @@
 use serde::de::DeserializeOwned;
 use serde_json;
-use wstd::http::{Client, IntoBody, Request};
+use wstd::http::{Client, IntoBody};
 use wstd::io::empty;
+
+pub use http::{Request, Uri};
 
 fn to_err<E: std::fmt::Display>(e: E) -> wstd::http::Error {
   wstd::http::Error::from(wstd::http::error::WasiHttpErrorCode::InternalError(Some(
@@ -23,7 +25,7 @@ pub async fn fetch<B: wstd::http::Body>(request: Request<B>) -> Result<Vec<u8>, 
   return response.into_body().bytes().await;
 }
 
-pub async fn get(uri: impl Into<http::Uri>) -> Result<Vec<u8>, wstd::http::Error> {
+pub async fn get(uri: impl Into<Uri>) -> Result<Vec<u8>, wstd::http::Error> {
   return fetch(
     Request::builder()
       .uri(uri.into())
@@ -33,10 +35,7 @@ pub async fn get(uri: impl Into<http::Uri>) -> Result<Vec<u8>, wstd::http::Error
   .await;
 }
 
-pub async fn post<B: IntoBody>(
-  uri: impl Into<http::Uri>,
-  body: B,
-) -> Result<Vec<u8>, wstd::http::Error> {
+pub async fn post<B: IntoBody>(uri: impl Into<Uri>, body: B) -> Result<Vec<u8>, wstd::http::Error> {
   return fetch(
     Request::builder()
       .method(http::Method::POST)
