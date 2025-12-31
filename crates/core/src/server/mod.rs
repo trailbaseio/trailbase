@@ -22,7 +22,8 @@ use tokio_rustls::{
   rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
 };
 use tower_cookies::CookieManagerLayer;
-use tower_http::{cors, limit::RequestBodyLimitLayer, services::ServeDir, trace::TraceLayer};
+use tower_http::services::{ServeDir, ServeFile};
+use tower_http::{cors, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing_subscriber::{filter, prelude::*};
 use trailbase_assets::AssetService;
 
@@ -415,163 +416,16 @@ impl Server {
         panic!("--public_dir={public_dir:?} path does not exist.")
       }
 
-      router = if opts.public_dir_spa {
-        let index_path = public_dir.join("index.html");
-        if !tokio::fs::try_exists(&index_path).await.unwrap_or(false) {
-          return Err(InitError::IO(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("--public-dir-spa is enabled but index.html is missing at {index_path:?}"),
-          )));
-        }
-        let index_html: Bytes = tokio::fs::read(&index_path)
-          .await
-          .map_err(|err| {
-            InitError::IO(std::io::Error::new(
-              err.kind(),
-              format!("Failed to read index.html at {index_path:?}: {err}"),
-            ))
-          })?
-          .into();
-        let public_dir_clone = public_dir.clone();
-
-        // SPA fallback handler: Vite-style HTML resolution with production 404 behavior
-        // - /about → about.html if exists, otherwise index.html (SPA)
-        // - /docs/ → docs/index.html if exists, otherwise index.html (SPA)
-        // - /style.css → serve if exists, otherwise 404
-        let spa_fallback = move |req: Request<Body>| {
-          let index_html = index_html.clone();
-          let public_dir = public_dir_clone.clone();
-          async move {
-            let path = req.uri().path();
-            let path_without_leading_slash = path.trim_start_matches('/');
-
-            // Helper: Check if path has a file extension (dot after last slash)
-            fn has_file_extension(path: &str) -> bool {
-              path
-                .rsplit('/')
-                .next()
-                .is_some_and(|segment| segment.contains('.'))
-            }
-
-            // Helper: Try to serve a file if it exists
-            async fn try_serve_file(file_path: &std::path::Path) -> Option<Response<Body>> {
-              if !tokio::fs::try_exists(file_path).await.unwrap_or(false) {
-                return None;
-              }
-              if !tokio::fs::metadata(file_path)
-                .await
-                .map(|m| m.is_file())
-                .unwrap_or(false)
-              {
-                return None;
-              }
-              let contents = tokio::fs::read(file_path).await.ok()?;
-              let mime = match file_path.extension().and_then(|e| e.to_str()) {
-                // Text
-                Some("html") => "text/html; charset=utf-8",
-                Some("css") => "text/css; charset=utf-8",
-                Some("js") | Some("mjs") => "application/javascript; charset=utf-8",
-                Some("json") | Some("map") => "application/json",
-                Some("txt") => "text/plain; charset=utf-8",
-                Some("xml") => "application/xml",
-                // Images
-                Some("png") => "image/png",
-                Some("jpg") | Some("jpeg") => "image/jpeg",
-                Some("gif") => "image/gif",
-                Some("svg") => "image/svg+xml",
-                Some("ico") => "image/x-icon",
-                Some("webp") => "image/webp",
-                Some("avif") => "image/avif",
-                // Video
-                Some("mp4") => "video/mp4",
-                Some("webm") => "video/webm",
-                // Audio
-                Some("mp3") => "audio/mpeg",
-                Some("wav") => "audio/wav",
-                Some("ogg") => "audio/ogg",
-                // Fonts
-                Some("woff") => "font/woff",
-                Some("woff2") => "font/woff2",
-                Some("ttf") => "font/ttf",
-                Some("eot") => "application/vnd.ms-fontobject",
-                // Other
-                Some("wasm") => "application/wasm",
-                Some("pdf") => "application/pdf",
-                _ => "application/octet-stream",
-              };
-              Some(
-                Response::builder()
-                  .status(StatusCode::OK)
-                  .header(axum::http::header::CONTENT_TYPE, mime)
-                  .body(Body::from(contents))
-                  .unwrap(),
-              )
-            }
-
-            let not_found = || {
-              Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("Not found"))
-                .unwrap()
-            };
-
-            let serve_index = || {
-              Response::builder()
-                .status(StatusCode::OK)
-                .header(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")
-                .body(Body::from(index_html.clone()))
-                .unwrap()
-            };
-
-            // 1. Path ends with .html → serve that file or 404
-            if path.ends_with(".html") {
-              let file_path = public_dir.join(path_without_leading_slash);
-              if let Some(response) = try_serve_file(&file_path).await {
-                return response;
-              }
-              return not_found();
-            }
-
-            // 2. Path ends with / → try {path}index.html
-            if path.ends_with('/') {
-              let file_path = public_dir.join(path_without_leading_slash).join("index.html");
-              if let Some(response) = try_serve_file(&file_path).await {
-                return response;
-              }
-              // Directory without index.html → SPA fallback
-              return serve_index();
-            }
-
-            // 3. Other paths
-            // First, try to serve the file directly
-            let file_path = public_dir.join(path_without_leading_slash);
-            if let Some(response) = try_serve_file(&file_path).await {
-              return response;
-            }
-
-            // File doesn't exist: check if it looks like a static asset request
-            if has_file_extension(path) {
-              return not_found();
-            }
-
-            // Try .html suffix (Vite-style): /about → about.html
-            let html_path = public_dir.join(format!("{}.html", path_without_leading_slash));
-            if let Some(response) = try_serve_file(&html_path).await {
-              return response;
-            }
-
-            // SPA fallback: serve index.html for client-side routing
-            serve_index()
-          }
-        };
-
-        router.fallback(spa_fallback)
+      let spa_fallback = public_dir.join("index.html");
+      router = if opts.public_dir_spa && tokio::fs::try_exists(&spa_fallback).await.unwrap_or(false)
+      {
+        router.fallback_service(ServeDir::new(public_dir).fallback(ServeFile::new(spa_fallback)))
       } else {
         async fn handle_404() -> (StatusCode, &'static str) {
           (StatusCode::NOT_FOUND, "Not found")
         }
-        let serve_dir = ServeDir::new(public_dir);
-        router.fallback_service(serve_dir.not_found_service(handle_404.into_service()))
+        router
+          .fallback_service(ServeDir::new(public_dir).not_found_service(handle_404.into_service()))
       };
     }
 

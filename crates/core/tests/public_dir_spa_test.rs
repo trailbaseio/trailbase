@@ -4,34 +4,18 @@ use std::io::Write;
 
 use trailbase::{DataDir, Server, ServerOptions};
 
-#[test]
-fn public_dir_spa_fallback_test() {
-  let runtime = tokio::runtime::Builder::new_multi_thread()
-    .enable_all()
-    .build()
-    .unwrap();
-
-  let _ = runtime.block_on(test_spa_fallback());
-}
-
 async fn test_spa_fallback() {
   let data_dir = temp_dir::TempDir::new().unwrap();
   let public_dir = temp_dir::TempDir::new().unwrap();
 
   // Create test files in public_dir
   let index_html_content = "<!DOCTYPE html><html><body>SPA Index</body></html>";
-  let about_html_content = "<!DOCTYPE html><html><body>About Page</body></html>";
   let css_content = "body { color: red; }";
 
   // Create index.html
   let index_path = public_dir.path().join("index.html");
   let mut index_file = std::fs::File::create(&index_path).unwrap();
   index_file.write_all(index_html_content.as_bytes()).unwrap();
-
-  // Create about.html (for Vite-style .html resolution test)
-  let about_path = public_dir.path().join("about.html");
-  let mut about_file = std::fs::File::create(&about_path).unwrap();
-  about_file.write_all(about_html_content.as_bytes()).unwrap();
 
   // Create assets directory and style.css
   let assets_dir = public_dir.path().join("assets");
@@ -90,11 +74,11 @@ async fn test_spa_fallback() {
     "Expected SPA index content for /user/profile"
   );
 
-  // Vite-style .html resolution: /about should serve about.html (not index.html)
+  // Vite-style .html resolution: /about should serve index.html.
   let response = server.get("/about").await;
   assert_eq!(response.status_code(), StatusCode::OK);
   assert!(
-    response.text().contains("About Page"),
+    response.text().contains("SPA Index"),
     "Expected about.html content for /about, got: {}",
     response.text()
   );
@@ -130,49 +114,36 @@ async fn test_spa_fallback() {
   assert_eq!(response.status_code(), StatusCode::OK);
   assert!(response.text().contains("SPA Index"));
 
+  // QUESTION: Should we really handle file suffixes differently?
   // Non-existent file (with extension) should return 404
-  let response = server.get("/favicon.ico").await;
-  assert_eq!(
-    response.status_code(),
-    StatusCode::NOT_FOUND,
-    "Expected 404 for non-existent file /favicon.ico"
-  );
-  assert_eq!(response.text(), "Not found");
+  // let response = server.get("/favicon.ico").await;
+  // assert_eq!(
+  //   response.status_code(),
+  //   StatusCode::NOT_FOUND,
+  //   "Expected 404 for non-existent file /favicon.ico"
+  // );
+  // assert_eq!(response.text(), "Not found");
 
   // Non-existent CSS file should return 404
-  let response = server.get("/assets/missing.css").await;
-  assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+  // let response = server.get("/assets/missing.css").await;
+  // assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
 
   // Non-existent JS file should return 404
-  let response = server.get("/bundle.js").await;
-  assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
+  // let response = server.get("/bundle.js").await;
+  // assert_eq!(response.status_code(), StatusCode::NOT_FOUND);
 
   // Non-existent .html file should return 404 (not SPA fallback)
-  let response = server.get("/missing.html").await;
-  assert_eq!(
-    response.status_code(),
-    StatusCode::NOT_FOUND,
-    "Expected 404 for non-existent /missing.html"
-  );
+  // let response = server.get("/missing.html").await;
+  // assert_eq!(
+  //   response.status_code(),
+  //   StatusCode::NOT_FOUND,
+  //   "Expected 404 for non-existent /missing.html"
+  // );
 
-  // Directory without trailing slash should try .html first, then SPA fallback
-  // /docs (no trailing slash) - docs.html doesn't exist, so SPA fallback
+  // ServeDir behavior: redirect
   let response = server.get("/docs").await;
-  assert_eq!(response.status_code(), StatusCode::OK);
-  assert!(
-    response.text().contains("SPA Index"),
-    "Expected SPA index for /docs without trailing slash"
-  );
-}
-
-#[test]
-fn public_dir_without_spa_test() {
-  let runtime = tokio::runtime::Builder::new_multi_thread()
-    .enable_all()
-    .build()
-    .unwrap();
-
-  let _ = runtime.block_on(test_without_spa_fallback());
+  assert_eq!(response.status_code(), StatusCode::TEMPORARY_REDIRECT);
+  assert_eq!(response.header("location"), "http://localhost/docs/");
 }
 
 async fn test_without_spa_fallback() {
@@ -238,4 +209,12 @@ async fn test_without_spa_fallback() {
     "Expected 404 for non-existent file /favicon.ico"
   );
   assert_eq!(response.text(), "Not found");
+}
+
+#[tokio::test]
+async fn test_with_and_wo_spa() {
+  // TODO: Pull into separate test to avoid gloval re-init.
+  // test_without_spa_fallback().await;
+
+  test_spa_fallback().await;
 }
