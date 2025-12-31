@@ -1,73 +1,48 @@
-use http::StatusCode;
 use serde::de::DeserializeOwned;
-use wstd::http::{Client, IntoBody, Request};
 use serde_json;
+use wstd::http::{Client, IntoBody, Request};
+use wstd::io::empty;
 
-use crate::http::HttpError;
-
-#[derive(Default, Clone, Debug)]
-pub struct FetchOptions {
-  /// HTTP method, e.g. "GET"/"POST". Default: "GET" when None.
-  pub method: Option<String>,
-  /// Simple list of headers. Kept as owned strings for simplicity and safety.
-  pub headers: Option<Vec<(String, String)>>,
-  /// Optional body bytes. `None` means no body (empty body).
-  pub body: Option<Vec<u8>>,
+fn to_err<E: std::fmt::Display>(e: E) -> wstd::http::Error {
+  wstd::http::Error::from(wstd::http::error::WasiHttpErrorCode::InternalError(Some(
+    e.to_string(),
+  )))
 }
 
-/// JS-like fetch: `fetch(url, options)`
-/// Note: to get raw bytes (Vec<u8>) use `fetch_bytes` or the convenience `get`.
-pub async fn fetch<T: DeserializeOwned>(
-  uri: impl ToString,
-  opts: FetchOptions,
-) -> Result<T, HttpError> {
-  let bytes = fetch_bytes(uri, opts).await?;
-
-  let parsed: T = serde_json::from_slice(&bytes)
-    .map_err(|err| HttpError::message(StatusCode::BAD_REQUEST, err))?;
-
-  Ok(parsed)
+pub async fn fetch_json<T: DeserializeOwned, B: wstd::http::Body>(
+  request: Request<B>,
+) -> Result<T, wstd::http::Error> {
+  let bytes = fetch(request).await?;
+  let result = serde_json::from_slice(&bytes).map_err(to_err)?;
+  Ok(result)
 }
 
-/// Fetch raw bytes without attempting JSON deserialization.
-pub async fn fetch_bytes(uri: impl ToString, opts: FetchOptions) -> Result<Vec<u8>, HttpError> {
-  let method = opts.method.as_deref().unwrap_or("GET");
-
-  let mut builder = Request::builder().uri(uri.to_string()).method(method);
-
-  if let Some(headers) = opts.headers.as_ref() {
-    for (k, v) in headers.iter() {
-      builder = builder.header(k.as_str(), v.as_str());
-    }
-  }
-
-  let body_bytes = opts.body.unwrap_or_default();
-
-  let request = builder
-    .body(body_bytes.into_body())
-    .map_err(|err| HttpError::message(StatusCode::BAD_REQUEST, err))?;
-
+pub async fn fetch<B: wstd::http::Body>(request: Request<B>) -> Result<Vec<u8>, wstd::http::Error> {
   let client = Client::new();
-
-  let (parts, mut body) = client
-    .send(request)
-    .await
-    .map_err(|err| HttpError::message(StatusCode::BAD_REQUEST, err))?
-    .into_parts();
-
-  let bytes = body
-    .bytes()
-    .await
-    .map_err(|err| HttpError::message(StatusCode::BAD_REQUEST, err))?;
-
-  if parts.status != StatusCode::OK {
-    let text = String::from_utf8_lossy(&bytes).to_string();
-    return Err(HttpError::message(parts.status, text));
-  }
-
-  Ok(bytes.to_vec())
+  let response = client.send(request).await?;
+  return response.into_body().bytes().await;
 }
 
-pub async fn get(uri: impl Into<http::Uri>) -> Result<Vec<u8>, HttpError> {
-  return fetch_bytes(uri.into(), FetchOptions::default()).await;
+pub async fn get(uri: impl Into<http::Uri>) -> Result<Vec<u8>, wstd::http::Error> {
+  return fetch(
+    Request::builder()
+      .uri(uri.into())
+      .body(empty())
+      .expect("static"),
+  )
+  .await;
+}
+
+pub async fn post<B: IntoBody>(
+  uri: impl Into<http::Uri>,
+  body: B,
+) -> Result<Vec<u8>, wstd::http::Error> {
+  return fetch(
+    Request::builder()
+      .method(http::Method::POST)
+      .uri(uri.into())
+      .body(body.into_body())
+      .expect("static"),
+  )
+  .await;
 }
