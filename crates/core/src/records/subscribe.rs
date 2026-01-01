@@ -408,9 +408,9 @@ impl PerConnectionState {
 impl Drop for PerConnectionState {
   fn drop(&mut self) {
     if let Some(first) = self.record_apis.read().values().nth(0) {
-      first
-        .conn()
-        .call_and_forget(|conn| conn.preupdate_hook(NO_HOOK));
+      first.conn().call_and_forget(|conn| {
+        conn.preupdate_hook(NO_HOOK);
+      });
     }
   }
 }

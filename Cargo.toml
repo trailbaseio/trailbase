@@ -76,15 +76,16 @@ askama = { version = "0.15.1", default-features = false, features = ["derive", "
 axum = { version = "^0.8.1", features = ["multipart"] }
 base64 = { version = "0.22.1", default-features = false, features = ["alloc", "std"] }
 env_logger = { version = "^0.11.8", default-features = false, features = ["auto-color", "humantime"] }
-libsqlite3-sys = { version = "0.35.0", default-features = false, features = ["bundled", "preupdate_hook"] }
+libsqlite3-sys = { version = "0.36.0", default-features = false, features = ["bundled", "preupdate_hook"] }
 minijinja = { version = "2.1.2", default-features = false }
 parking_lot = { version = "0.12.3", default-features = false, features = ["send_guard", "arc_lock"] }
 rand = { version = "^0.9.0" }
 reqwest = { version = "0.12.8", default-features = false, features = ["rustls-tls", "json"] }
-rusqlite = { version = "0.37.0", default-features = false, features = ["bundled", "column_decltype", "functions", "backup", "preupdate_hook"] }
+rusqlite = { version = "0.38.0", default-features = false, features = ["bundled", "cache", "column_decltype", "functions", "backup", "preupdate_hook"] }
 rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = { version = "^1.0.117" }
+serde_rusqlite = { path = "vendor/serde_rusqlite" }
 sqlite-vec = { path = "vendor/sqlite-vec/bindings/rust", default-features = false }
 tokio = { version = "^1.38.0", default-features = false, features = ["macros", "net", "rt-multi-thread", "fs", "signal", "time", "sync"] }
 tracing = { version = "0.1.40", default-features = false }

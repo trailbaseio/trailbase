@@ -4,3 +4,6 @@
 [submodule "vendor/sqlite-vec"]
 	path = vendor/sqlite-vec
 	url = https://github.com/ignatz/sqlite-vec.git
+[submodule "vendor/serde_rusqlite"]
+	path = vendor/serde_rusqlite
+	url = https://github.com/ignatz/serde_rusqlite.git

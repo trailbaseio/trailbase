@@ -20,7 +20,7 @@ log = { version = "^0.4.21", default-features = false }
 parking_lot = { workspace = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }
-serde_rusqlite = "0.40"
+serde_rusqlite = { workspace = true }
 thiserror = "2.0.12"
 tokio = { workspace = true }
 
