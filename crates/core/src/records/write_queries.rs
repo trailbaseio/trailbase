@@ -1,11 +1,11 @@
 use askama::Template;
+use object_store::ObjectStore;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
 use trailbase_schema::QualifiedNameEscaped;
 use trailbase_sqlite::{Connection, NamedParams, Params as _, Value};
 
-use crate::app_state::ObjectStore;
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
@@ -163,7 +163,7 @@ impl WriteQuery {
 
 pub(crate) async fn run_queries(
   conn: &Connection,
-  objectstore: &Arc<ObjectStore>,
+  objectstore: &Arc<dyn ObjectStore>,
   queries: Vec<(
     WriteQuery,
     Option<(QualifiedNameEscaped, FileMetadataContents)>,
@@ -233,7 +233,7 @@ pub(crate) async fn run_queries(
 
 pub(crate) async fn run_insert_query(
   conn: &Connection,
-  objectstore: &Arc<ObjectStore>,
+  objectstore: &Arc<dyn ObjectStore>,
   table_name: &QualifiedNameEscaped,
   conflict_resolution: Option<ConflictResolutionStrategy>,
   return_column_name: &str,
@@ -273,7 +273,7 @@ pub(crate) async fn run_insert_query(
 
 pub(crate) async fn run_update_query(
   conn: &Connection,
-  objectstore: &Arc<ObjectStore>,
+  objectstore: &Arc<dyn ObjectStore>,
   table_name: &QualifiedNameEscaped,
   params: Params,
 ) -> Result<(), RecordError> {
@@ -306,7 +306,7 @@ pub(crate) async fn run_update_query(
 
 pub(crate) async fn run_delete_query(
   conn: &Connection,
-  objectstore: &Arc<ObjectStore>,
+  objectstore: &Arc<dyn ObjectStore>,
   table_name: &QualifiedNameEscaped,
   pk_column: &str,
   pk_value: Value,

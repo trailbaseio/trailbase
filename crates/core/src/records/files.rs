@@ -3,13 +3,14 @@ use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use itertools::Itertools;
 use log::*;
+use object_store::{ObjectStore, ObjectStoreExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
 use trailbase_schema::{FileUpload, FileUploads, QualifiedNameEscaped};
 use trailbase_sqlite::params;
 
-use crate::app_state::{AppState, ObjectStore};
+use crate::app_state::AppState;
 use crate::records::params::FileMetadataContents;
 
 #[derive(Debug, Error)]
@@ -28,8 +29,8 @@ pub(crate) async fn read_file_into_response(
   state: &AppState,
   file_upload: FileUpload,
 ) -> Result<Response, FileError> {
-  let store = state.objectstore();
-  let result = store
+  let result = state
+    .objectstore()
     .get(&object_store::path::Path::from(
       file_upload.objectstore_id(),
     ))
@@ -78,7 +79,7 @@ pub(crate) struct FileDeletionsDb {
 /// QUESTION: Should we delete eagerly at all? We could just do this periodically.
 pub(crate) async fn delete_files_marked_for_deletion(
   conn: &trailbase_sqlite::Connection,
-  store: &Arc<ObjectStore>,
+  store: &Arc<dyn ObjectStore>,
   table_name: &QualifiedNameEscaped,
   rowids: &[i64],
 ) -> Result<(), FileError> {
@@ -124,7 +125,7 @@ pub(crate) async fn delete_files_marked_for_deletion(
 
 pub(crate) async fn delete_pending_files_impl(
   conn: &trailbase_sqlite::Connection,
-  store: &Arc<ObjectStore>,
+  store: &Arc<dyn ObjectStore>,
   pending_deletions: Vec<FileDeletionsDb>,
   database_schema: &str,
 ) -> Result<(), FileError> {
@@ -206,7 +207,7 @@ pub(crate) struct FileManager {
 
 impl FileManager {
   pub(crate) async fn write(
-    store: &Arc<ObjectStore>,
+    store: &Arc<dyn ObjectStore>,
     files: FileMetadataContents,
   ) -> Result<Self, object_store::Error> {
     let mut written_files = Vec::<FileUpload>::with_capacity(files.len());

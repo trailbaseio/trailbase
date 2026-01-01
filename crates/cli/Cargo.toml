@@ -41,7 +41,7 @@ utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9.0.0", features = ["axum"], optional = true }
 uuid = { workspace = true }
 wit-component = "0.243.0"
-zip = { version = "6.0.0", default-features = false, features = ["deflate"] }
+zip = { version = "7.0.0", default-features = false, features = ["deflate"] }
 
 [build-dependencies]
 trailbase-build = { workspace = true }

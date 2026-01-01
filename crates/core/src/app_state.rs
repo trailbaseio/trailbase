@@ -1,4 +1,5 @@
 use log::*;
+use object_store::ObjectStore;
 use reactivate::Reactive;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -21,8 +22,6 @@ use crate::records::RecordApi;
 use crate::records::subscribe::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
 use crate::wasm::Runtime;
-
-pub(crate) type ObjectStore = dyn object_store::ObjectStore + Send + Sync;
 
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.
@@ -51,7 +50,7 @@ struct InternalState {
 
   record_apis: Reactive<HashMap<String, RecordApi>>,
   subscription_manager: SubscriptionManager,
-  object_store: Arc<ObjectStore>,
+  object_store: Arc<dyn ObjectStore>,
 
   /// Actual WASM runtimes.
   wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
@@ -75,7 +74,7 @@ pub(crate) struct AppStateArgs {
   pub logs_conn: trailbase_sqlite::Connection,
   pub connection_manager: ConnectionManager,
   pub jwt: JwtHelper,
-  pub object_store: Box<ObjectStore>,
+  pub object_store: Box<dyn ObjectStore>,
   pub runtime_threads: Option<usize>,
 }
 
@@ -112,7 +111,7 @@ impl AppState {
     );
 
     let main_conn = args.connection_manager.main_entry().connection;
-    let object_store: Arc<ObjectStore> = args.object_store.into();
+    let object_store: Arc<dyn ObjectStore> = args.object_store.into();
     let jobs_input = (
       args.data_dir.clone(),
       args.connection_manager.clone(),
@@ -272,7 +271,7 @@ impl AppState {
     return Ok(());
   }
 
-  pub(crate) fn objectstore(&self) -> &Arc<ObjectStore> {
+  pub(crate) fn objectstore(&self) -> &Arc<dyn ObjectStore> {
     return &self.state.object_store;
   }
 
@@ -707,7 +706,7 @@ fn build_record_api(
 pub(crate) fn build_objectstore(
   data_dir: &DataDir,
   config: Option<&S3StorageConfig>,
-) -> Result<Box<ObjectStore>, object_store::Error> {
+) -> Result<Box<dyn ObjectStore>, object_store::Error> {
   if let Some(config) = config {
     let mut builder = object_store::aws::AmazonS3Builder::from_env();
 

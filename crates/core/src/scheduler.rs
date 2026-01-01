@@ -2,6 +2,7 @@ use chrono::{DateTime, Duration, Utc};
 use cron::Schedule;
 use futures_util::future::BoxFuture;
 use log::*;
+use object_store::ObjectStore;
 use parking_lot::Mutex;
 use std::collections::{HashMap, hash_map::Entry};
 use std::future::Future;
@@ -13,7 +14,6 @@ use std::sync::{
 use trailbase_sqlite::{Connection, params};
 
 use crate::DataDir;
-use crate::app_state::ObjectStore;
 use crate::config::proto::{Config, SystemJob, SystemJobId};
 use crate::connection::ConnectionManager;
 use crate::constants::{DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT, SESSION_TABLE};
@@ -244,7 +244,7 @@ fn build_job(
   config: &Config,
   connection_manager: &ConnectionManager,
   logs_conn: &Connection,
-  object_store: Arc<ObjectStore>,
+  object_store: Arc<dyn ObjectStore>,
 ) -> DefaultSystemJob {
   return match id {
     SystemJobId::Undefined => DefaultSystemJob {
@@ -441,7 +441,7 @@ fn build_job(
 
 async fn delete_pending_files_job(
   conn: &Connection,
-  object_store: &Arc<ObjectStore>,
+  object_store: &Arc<dyn ObjectStore>,
   database_schema: &str,
 ) -> Result<(), FileError> {
   // TODO: Update job to delete files for all DBs.
@@ -469,7 +469,7 @@ pub fn build_job_registry_from_config(
   data_dir: &DataDir,
   connection_manager: &ConnectionManager,
   logs_conn: &Connection,
-  object_store: Arc<ObjectStore>,
+  object_store: Arc<dyn ObjectStore>,
 ) -> Result<JobRegistry, CallbackError> {
   let job_ids = [
     SystemJobId::Backup,

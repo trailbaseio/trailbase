@@ -260,6 +260,7 @@ fn prefix_filter(col_name: &str) -> bool {
 
 #[cfg(test)]
 mod test {
+  use object_store::{ObjectStore, ObjectStoreExt};
   use std::io::Read;
   use std::sync::Arc;
 
@@ -647,7 +648,7 @@ mod test {
   }
 
   async fn read_objectstore_file(
-    store: &Arc<ObjectStore>,
+    store: &Arc<dyn ObjectStore>,
     path: &object_store::path::Path,
   ) -> Vec<u8> {
     let contents = store.get(&path).await.unwrap();

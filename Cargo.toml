@@ -72,7 +72,7 @@ strip = "debuginfo" # ("symbols", "debuginfo", "none")
 opt-level = 1
 
 [workspace.dependencies]
-askama = { version = "0.14.0", default-features = false, features = ["derive", "std", "config"] }
+askama = { version = "0.15.1", default-features = false, features = ["derive", "std", "config"] }
 axum = { version = "^0.8.1", features = ["multipart"] }
 base64 = { version = "0.22.1", default-features = false, features = ["alloc", "std"] }
 env_logger = { version = "^0.11.8", default-features = false, features = ["auto-color", "humantime"] }
