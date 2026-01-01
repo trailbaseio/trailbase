@@ -10,10 +10,12 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{RequestExt, Router};
 use bytes::Bytes;
+use http_body_util::BodyExt;
+use http_body_util::combinators::UnsyncBoxBody;
 use log::*;
 use std::borrow::Cow;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tokio::signal;
 use tokio::task::JoinSet;
 use tokio_rustls::{
@@ -21,8 +23,9 @@ use tokio_rustls::{
   rustls::ServerConfig,
   rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
 };
+use tower::Service;
 use tower_cookies::CookieManagerLayer;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::services::fs::{ServeDir, ServeFile};
 use tower_http::{cors, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing_subscriber::{filter, prelude::*};
 use trailbase_assets::AssetService;
@@ -416,14 +419,41 @@ impl Server {
         panic!("--public_dir={public_dir:?} path does not exist.")
       }
 
-      let spa_fallback = public_dir.join("index.html");
-      router = if opts.public_dir_spa && tokio::fs::try_exists(&spa_fallback).await.unwrap_or(false)
-      {
-        router.fallback_service(ServeDir::new(public_dir).fallback(ServeFile::new(spa_fallback)))
-      } else {
-        async fn handle_404() -> (StatusCode, &'static str) {
-          (StatusCode::NOT_FOUND, "Not found")
+      const NOT_FOUND: &[u8] = b"Not found";
+      async fn handle_404() -> (StatusCode, &'static [u8]) {
+        (StatusCode::NOT_FOUND, NOT_FOUND)
+      }
+
+      router = if opts.public_dir_spa {
+        let spa_fallback = public_dir.join("index.html");
+        if tokio::fs::try_exists(&spa_fallback).await.unwrap_or(false) {
+          let mut index_file = ServeFile::new(spa_fallback);
+          let fallback = async move |req: Request| {
+            static SUFFIX_RE: LazyLock<regex::Regex> =
+              LazyLock::new(|| regex::Regex::new(r"[.]\w+$").expect("const"));
+
+            // Return NOT_FOUND when the requested path ends in a suffix. Not sure if this is ideal
+            // but we definitely don't want to return an "index.html" on a favicon request.
+            if SUFFIX_RE.is_match(req.uri().path()) {
+              return Ok(
+                Response::builder()
+                  .status(StatusCode::NOT_FOUND)
+                  .body(axum::body::Body::from(NOT_FOUND).boxed_unsync())
+                  .expect("infallible"),
+              );
+            }
+
+            return index_file.call(req).await.map(|response| {
+              response.map(|body| UnsyncBoxBody::new(body.map_err(axum::Error::new)))
+            });
+          };
+
+          router.fallback_service(ServeDir::new(public_dir).fallback(fallback.into_service()))
+        } else {
+          warn!("--spa specified but index.html not found");
+          router.fallback_service(ServeDir::new(public_dir).fallback(handle_404.into_service()))
         }
+      } else {
         router
           .fallback_service(ServeDir::new(public_dir).not_found_service(handle_404.into_service()))
       };
