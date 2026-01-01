@@ -19,53 +19,6 @@ pub enum Combiner {
   Or,
 }
 
-// --- Serialization helpers -------------------------------------------------
-
-pub(crate) fn encode_key(input: &str) -> String {
-  let mut out = String::with_capacity(input.len());
-  for b in input.as_bytes() {
-    let c = *b as char;
-    // unreserved: ALPHA / DIGIT / - . _ ~
-    if (c >= 'a' && c <= 'z')
-      || (c >= 'A' && c <= 'Z')
-      || (c >= '0' && c <= '9')
-      || c == '-'
-      || c == '.'
-      || c == '_'
-      || c == '~'
-    {
-      out.push(c);
-    } else {
-      // percent-encode everything else (including '[' and ']')
-      out.push_str(&format!("%{:02X}", b));
-    }
-  }
-  return out;
-}
-
-pub(crate) fn encode_val(input: &str) -> String {
-  let mut out = String::with_capacity(input.len());
-  for b in input.as_bytes() {
-    let c = *b as char;
-    if c == ' ' {
-      out.push('+');
-    } else if (c >= 'a' && c <= 'z')
-      || (c >= 'A' && c <= 'Z')
-      || (c >= '0' && c <= '9')
-      || c == '-'
-      || c == '.'
-      || c == '_'
-      || c == '~'
-      || c == ','
-    {
-      out.push(c);
-    } else {
-      out.push_str(&format!("%{:02X}", b));
-    }
-  }
-  return out;
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValueOrComposite {
   Value(ColumnOpValue),
@@ -121,7 +74,7 @@ impl ValueOrComposite {
     match self {
       ValueOrComposite::Value(colop) => {
         let (key, value) = colop.into_qs(prefix);
-        return vec![(encode_key(&key), encode_val(&value))];
+        return vec![(key, value)];
       }
       ValueOrComposite::Composite(combiner, vec) => {
         let comb = match combiner {

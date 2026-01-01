@@ -192,7 +192,7 @@ impl Query {
     }
 
     if let Some(ref cursor) = self.cursor {
-      pairs.push(("cursor".to_string(), crate::filter::encode_val(cursor)));
+      pairs.push(("cursor".to_string(), cursor.clone()));
     }
 
     if let Some(offset) = self.offset {
@@ -208,7 +208,7 @@ impl Query {
 
     if let Some(ref expand) = self.expand {
       let s = expand.columns.join(",");
-      pairs.push(("expand".to_string(), crate::filter::encode_val(&s)));
+      pairs.push(("expand".to_string(), s));
     }
 
     if let Some(ref order) = self.order {
@@ -222,7 +222,7 @@ impl Query {
         .collect::<Vec<_>>()
         .join(",");
 
-      pairs.push(("order".to_string(), crate::filter::encode_val(&s)));
+      pairs.push(("order".to_string(), s));
     }
 
     if let Some(ref filter) = self.filter {
@@ -231,7 +231,7 @@ impl Query {
 
     return pairs
       .into_iter()
-      .map(|(k, v)| format!("{}={}", crate::filter::encode_key(&k), v))
+      .map(|(k, v)| format!("{}={}", k, v))
       .collect::<Vec<_>>()
       .join("&");
   }
@@ -384,7 +384,7 @@ mod tests {
       value: crate::value::Value::String("val0".to_string()),
     });
 
-    assert_eq!(f1.into_qs(), "filter%5Bcol0%5D=val0");
+    assert_eq!(f1.into_qs(), "filter[col0]=val0");
 
     let f2 = ValueOrComposite::Composite(
       Combiner::And,
@@ -402,7 +402,7 @@ mod tests {
     // Two key/value pairs; ordering of pairs is deterministic by our implementation
     assert_eq!(
       s,
-      "filter%5B%24and%5D%5B0%5D%5Bcol0%5D=val0&filter%5B%24and%5D%5B1%5D%5Bcol1%5D=val1"
+      "filter[$and][0][col0]=val0&filter[$and][1][col1]=val1"
     );
   }
 
