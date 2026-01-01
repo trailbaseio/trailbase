@@ -421,7 +421,7 @@ struct LogFieldStorage {
   version: HttpVersion,
 
   // Response fields/properties
-  status: u64,
+  status: i64,
   latency_ms: f64,
   length: i64,
 
@@ -452,7 +452,7 @@ struct JsonLog {
   client_ip: Option<String>,
 
   // HTTP response status code.
-  status: u64,
+  status: i64,
   // latency in milliseconds with fractional microseconds.
   latency_ms: f64,
 }
@@ -490,6 +490,7 @@ impl tracing::field::Visit for LogVisitor<'_> {
   fn record_i64(&mut self, field: &Field, int: i64) {
     match field.name() {
       "length" => self.0.length = int,
+      "status" => self.0.status = int,
       name => {
         self.0.fields.insert(name.into(), int.into());
       }
@@ -498,7 +499,7 @@ impl tracing::field::Visit for LogVisitor<'_> {
 
   fn record_u64(&mut self, field: &Field, uint: u64) {
     match field.name() {
-      "status" => self.0.status = uint,
+      "status" => self.0.status = uint as i64,
       name => {
         self.0.fields.insert(name.into(), uint.into());
       }

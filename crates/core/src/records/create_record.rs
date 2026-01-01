@@ -423,7 +423,7 @@ mod test {
 
     {
       // Bulk inserts are rolled back in a transaction is second insert fails.
-      let count_before: usize = state
+      let count_before: i64 = state
         .conn()
         .read_query_row_f("SELECT COUNT(*) FROM message", (), |row| row.get(0))
         .await
@@ -449,12 +449,13 @@ mod test {
       .await;
       assert!(response.is_err(), "{response:?}");
 
-      let count_after: usize = state
+      let count_after: i64 = state
         .conn()
         .read_query_row_f("SELECT COUNT(*) FROM message", (), |row| row.get(0))
         .await
         .unwrap()
         .unwrap();
+
       assert_eq!(count_before, count_after);
     }
 

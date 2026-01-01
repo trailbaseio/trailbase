@@ -213,7 +213,7 @@ impl PerConnectionState {
           lock.remove(&id.table_name);
 
           if lock.is_empty() {
-            conn.preupdate_hook(NO_HOOK);
+            conn.preupdate_hook(NO_HOOK).expect("owned conn");
           }
         }
       });
@@ -224,59 +224,63 @@ impl PerConnectionState {
     let conn = api.conn().clone();
     let state = self.clone();
 
-    api.conn().write_lock().preupdate_hook(Some(
-      move |action: Action, db: &str, table_name: &str, case: &PreUpdateCase| {
-        let action: RecordAction = match action {
-          Action::SQLITE_UPDATE | Action::SQLITE_INSERT | Action::SQLITE_DELETE => action.into(),
-          a => {
-            error!("Unknown action: {a:?}");
-            return;
-          }
-        };
+    api
+      .conn()
+      .write_lock()
+      .preupdate_hook(Some(
+        move |action: Action, db: &str, table_name: &str, case: &PreUpdateCase| {
+          let action: RecordAction = match action {
+            Action::SQLITE_UPDATE | Action::SQLITE_INSERT | Action::SQLITE_DELETE => action.into(),
+            a => {
+              error!("Unknown action: {a:?}");
+              return;
+            }
+          };
 
-        let Some(rowid) = extract_row_id(case) else {
-          error!("Failed to extract row id");
-          return;
-        };
-
-        let qualified_table_name = QualifiedName {
-          name: table_name.to_string(),
-          database_schema: Some(db.to_string()),
-        };
-
-        // If there are no matching subscriptions, skip.
-        {
-          let lock = state.subscriptions.read();
-          let Some(subscriptions) = lock.get(&qualified_table_name).map(|r| r.read()) else {
+          let Some(rowid) = extract_row_id(case) else {
+            error!("Failed to extract row id");
             return;
           };
 
-          if subscriptions.table.is_empty() && !subscriptions.record.contains_key(&rowid) {
-            return;
+          let qualified_table_name = QualifiedName {
+            name: table_name.to_string(),
+            database_schema: Some(db.to_string()),
+          };
+
+          // If there are no matching subscriptions, skip.
+          {
+            let lock = state.subscriptions.read();
+            let Some(subscriptions) = lock.get(&qualified_table_name).map(|r| r.read()) else {
+              return;
+            };
+
+            if subscriptions.table.is_empty() && !subscriptions.record.contains_key(&rowid) {
+              return;
+            }
           }
-        }
 
-        let Some(record_values) = extract_record_values(case) else {
-          error!("Failed to extract values");
-          return;
-        };
+          let Some(record_values) = extract_record_values(case) else {
+            error!("Failed to extract values");
+            return;
+          };
 
-        let s = ContinuationState {
-          state: state.clone(),
-          table_name: qualified_table_name,
-          action,
-          rowid,
-          record_values,
-        };
+          let s = ContinuationState {
+            state: state.clone(),
+            table_name: qualified_table_name,
+            action,
+            rowid,
+            record_values,
+          };
 
-        // TODO: Optimization: in cases where there's only table-level access restrictions, we
-        // could avoid the continuation and even dispatch the subscription handling to a
-        // different thread entirely to take more work off the SQLite thread.
-        conn.call_and_forget(move |conn| {
-          hook_continuation(conn, s);
-        });
-      },
-    ));
+          // TODO: Optimization: in cases where there's only table-level access restrictions, we
+          // could avoid the continuation and even dispatch the subscription handling to a
+          // different thread entirely to take more work off the SQLite thread.
+          conn.call_and_forget(move |conn| {
+            hook_continuation(conn, s);
+          });
+        },
+      ))
+      .expect("owned conn");
   }
 
   async fn add_record_subscription(
@@ -408,9 +412,9 @@ impl PerConnectionState {
 impl Drop for PerConnectionState {
   fn drop(&mut self) {
     if let Some(first) = self.record_apis.read().values().nth(0) {
-      first
-        .conn()
-        .call_and_forget(|conn| conn.preupdate_hook(NO_HOOK));
+      first.conn().call_and_forget(|conn| {
+        conn.preupdate_hook(NO_HOOK).expect("owned conn");
+      });
     }
   }
 }
@@ -643,7 +647,7 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
     let mut subscriptions = state.subscriptions.write();
     subscriptions.remove(&table_name);
     if subscriptions.is_empty() {
-      conn.preupdate_hook(NO_HOOK);
+      conn.preupdate_hook(NO_HOOK).expect("owned conn");
     }
 
     return;
@@ -753,7 +757,7 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
       if lock.get(&table_name).is_some_and(|e| e.read().is_empty()) {
         lock.remove(&table_name);
         if lock.is_empty() {
-          conn.preupdate_hook(NO_HOOK);
+          conn.preupdate_hook(NO_HOOK).expect("owned conn");
         }
       }
     });
