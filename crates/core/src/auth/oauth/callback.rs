@@ -8,7 +8,6 @@ use serde::Deserialize;
 use tower_cookies::Cookies;
 use trailbase_sqlite::{named_params, params};
 use utoipa::IntoParams;
-use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::AuthError;
@@ -19,7 +18,7 @@ use crate::auth::oauth::providers::OAuthProviderType;
 use crate::auth::oauth::state::{OAuthState, ResponseType};
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
-use crate::auth::util::{get_user_by_id, new_cookie, remove_cookie, validate_redirect};
+use crate::auth::util::{new_cookie, remove_cookie, validate_redirect};
 use crate::config::proto::OAuthProviderId;
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, USER_TABLE, VERIFICATION_CODE_LENGTH,
@@ -256,45 +255,43 @@ async fn get_or_create_user(
     .map_err(|err| AuthError::FailedDependency(err.into()))?;
 
   // Call provider's USER_INFO endpoint with the tokens acquired above.
-  let oauth_user = provider.get_user(&token_response).await.and_then(|user| {
-    if !user.verified {
-      return Err(AuthError::BadRequest("External OAuth user unverified"));
-    }
-    return Ok(user);
-  })?;
+  let oauth_user = provider.get_user(&token_response).await?;
+  if !oauth_user.verified {
+    return Err(AuthError::BadRequest("External OAuth user unverified"));
+  }
 
-  let existing_user = user_by_provider_id(
+  // Look-up user in local DB to decide whether to create a new one.
+  if let Some(existing_user) = user_by_provider_id(
     state.user_conn(),
     oauth_user.provider_id,
-    &oauth_user.provider_user_id,
+    oauth_user.provider_user_id.clone(),
   )
-  .await
-  .ok();
-
-  return match existing_user {
-    Some(existing_user) => Ok(existing_user),
-    None => {
-      // NOTE: We could combine the INSERT + SELECT.
-      let id = create_user_for_external_provider(state.user_conn(), &oauth_user).await?;
-      let db_user = get_user_by_id(state.user_conn(), &id).await?;
-
-      // We should have only ever created the local user, if the external user was verified.
-      assert!(db_user.verified);
-      if !db_user.verified {
-        return Err(AuthError::Internal(
-          "OAuth users are expected to be verified".into(),
-        ));
-      }
-
-      Ok(db_user)
-    }
+  .await?
+  {
+    // If user already exists in the local DB, simply return it.
+    //
+    // TODO: We should propably update the local user if got out of sync, e.g. email changed with
+    // external provider.
+    return Ok(existing_user);
   };
+
+  // Otherwise, create a new user and return that.
+  let db_user = create_user_for_external_provider(state.user_conn(), &oauth_user).await?;
+
+  // This should never happen. We only ever create a new local user here for verified users above.
+  if !db_user.verified {
+    return Err(AuthError::Internal(
+      "OAuth users are expected to be verified".into(),
+    ));
+  }
+
+  return Ok(db_user);
 }
 
 async fn create_user_for_external_provider(
   conn: &trailbase_sqlite::Connection,
   user: &OAuthUser,
-) -> Result<Uuid, AuthError> {
+) -> Result<DbUser, AuthError> {
   if !user.verified {
     return Err(AuthError::Unauthorized);
   }
@@ -306,12 +303,12 @@ async fn create_user_for_external_provider(
           provider_id, provider_user_id, verified, email, provider_avatar_url
         ) VALUES (
           :provider_id, :provider_user_id, :verified, :email, :avatar
-        ) RETURNING id
+        ) RETURNING *
       "#
     );
   }
 
-  let id: Uuid = conn
+  let db_user: DbUser = conn
     .write_query_value(
       &*QUERY,
       named_params! {
@@ -325,24 +322,22 @@ async fn create_user_for_external_provider(
     .await?
     .ok_or_else(|| AuthError::Internal("query should return".into()))?;
 
-  return Ok(id);
+  return Ok(db_user);
 }
 
 async fn user_by_provider_id(
   conn: &trailbase_sqlite::Connection,
   provider_id: OAuthProviderId,
-  provider_user_id: &str,
-) -> Result<DbUser, AuthError> {
+  provider_user_id: String,
+) -> Result<Option<DbUser>, AuthError> {
   lazy_static! {
     static ref QUERY: String =
       format!("SELECT * FROM '{USER_TABLE}' WHERE provider_id = $1 AND provider_user_id = $2");
   };
 
-  return conn
-    .read_query_value::<DbUser>(
-      &*QUERY,
-      params!(provider_id as i64, provider_user_id.to_string()),
-    )
-    .await?
-    .ok_or_else(|| AuthError::NotFound);
+  return Ok(
+    conn
+      .read_query_value::<DbUser>(&*QUERY, params!(provider_id as i64, provider_user_id))
+      .await?,
+  );
 }
