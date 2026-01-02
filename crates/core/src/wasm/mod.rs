@@ -31,7 +31,12 @@ pub(crate) fn build_sync_wasm_runtimes_for_components(
         path,
         RuntimeOptions {
           fs_root_path: fs_root_path.map(|p| p.to_owned()),
-          use_winch,
+          // https://github.com/trailbaseio/trailbase/issues/206
+          use_winch: if cfg!(target_os = "macos") {
+            false
+          } else {
+            use_winch
+          },
         },
       );
     })?;
@@ -58,7 +63,12 @@ pub(crate) fn build_wasm_runtimes_for_components(
         shared_kv_store.clone(),
         RuntimeOptions {
           fs_root_path: fs_root_path.clone(),
-          use_winch,
+          // https://github.com/trailbaseio/trailbase/issues/206
+          use_winch: if cfg!(target_os = "macos") {
+            false
+          } else {
+            use_winch
+          },
         },
       );
     })?;
