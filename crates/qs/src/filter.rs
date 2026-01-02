@@ -69,6 +69,40 @@ impl ValueOrComposite {
       }
     };
   }
+
+  pub(crate) fn into_qs_impl(&self, prefix: &str) -> Vec<(String, String)> {
+    match self {
+      ValueOrComposite::Value(colop) => {
+        let (key, value) = colop.into_qs(prefix);
+        return vec![(key, value)];
+      }
+      ValueOrComposite::Composite(combiner, vec) => {
+        let comb = match combiner {
+          Combiner::And => "$and",
+          Combiner::Or => "$or",
+        };
+
+        let mut out_vec = Vec::new();
+        for (i, child) in vec.iter().enumerate() {
+          // prefix[$and][0] ...
+          let child_prefix = format!("{}[{}][{}]", prefix, comb, i);
+          out_vec.extend(child.into_qs_impl(&child_prefix));
+        }
+
+        return out_vec;
+      }
+    }
+  }
+
+  /// Return a query-string fragment for this filter (no leading '&').
+  pub fn into_qs(&self) -> String {
+    let pairs = self.into_qs_impl("filter");
+    return pairs
+      .into_iter()
+      .map(|(k, v)| format!("{}={}", k, v))
+      .collect::<Vec<_>>()
+      .join("&");
+  }
 }
 
 fn serde_value_to_value_or_composite<'de, D>(
