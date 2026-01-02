@@ -1,3 +1,4 @@
+use itertools::Itertools;
 /// Custom deserializers for urlencoded filters.
 ///
 /// Supported examples:
@@ -7,10 +8,9 @@
 /// filters[column][eq]=value
 /// filters[and][0][column0][eq]=value0&filters[and][1][column1][eq]=value1
 /// filters[and][0][or][0][column0]=value0&[and][0][or][1][column1]=value1
-use rusqlite::types::Value as SqlValue;
 use std::collections::BTreeMap;
 
-use crate::column_rel_value::{ColumnOpValue, serde_value_to_single_column_rel_value};
+use crate::column_rel_value::{ColumnOpValue, CompareOp, serde_value_to_single_column_rel_value};
 use crate::value::Value;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -26,82 +26,127 @@ pub enum ValueOrComposite {
 }
 
 impl ValueOrComposite {
-  pub fn into_sql<E>(
+  /// Returns SQL query, and a list of (param_name, param_value).
+  pub fn into_sql<V, E>(
     self,
     column_prefix: Option<&str>,
-    convert: &dyn Fn(&str, Value) -> Result<SqlValue, E>,
-  ) -> Result<(String, Vec<(String, SqlValue)>), E> {
-    let mut index: usize = 0;
-    return self.into_sql_impl(column_prefix, convert, &mut index);
-  }
+    convert: &dyn Fn(&str, Value) -> Result<V, E>,
+  ) -> Result<(String, Vec<(String, V)>), E> {
+    fn render_value<V, E>(
+      column_op_value: ColumnOpValue,
+      column_prefix: Option<&str>,
+      convert: &dyn Fn(&str, Value) -> Result<V, E>,
+      index: &mut usize,
+    ) -> Result<(String, Option<(String, V)>), E> {
+      let v = column_op_value.value;
+      let c = column_op_value.column;
 
-  fn into_sql_impl<E>(
-    self,
-    column_prefix: Option<&str>,
-    convert: &dyn Fn(&str, Value) -> Result<SqlValue, E>,
-    index: &mut usize,
-  ) -> Result<(String, Vec<(String, SqlValue)>), E> {
-    match self {
-      Self::Value(v) => {
-        return Ok(match v.into_sql(column_prefix, convert, index)? {
-          (sql, Some(param)) => (sql, vec![param]),
-          (sql, None) => (sql, vec![]),
-        });
-      }
-      Self::Composite(combiner, vec) => {
-        let mut fragments = Vec::<String>::with_capacity(vec.len());
-        let mut params = Vec::<(String, SqlValue)>::with_capacity(vec.len());
+      return match column_op_value.op {
+        CompareOp::Is => {
+          debug_assert!(matches!(v, Value::String(_)), "{v:?}");
 
-        for value_or_composite in vec {
-          let (f, p) = value_or_composite.into_sql_impl::<E>(column_prefix, convert, index)?;
-          fragments.push(f);
-          params.extend(p);
+          Ok(match column_prefix {
+            Some(p) => (format!(r#"{p}."{c}" IS {v}"#), None),
+            None => (format!(r#""{c}" IS {v}"#), None),
+          })
         }
+        op => {
+          let param = param_name(*index);
+          *index += 1;
 
-        let fragment = format!(
-          "({})",
-          fragments.join(match combiner {
-            Combiner::And => " AND ",
-            Combiner::Or => " OR ",
-          }),
-        );
-        return Ok((fragment, params));
-      }
-    };
-  }
-
-  pub(crate) fn into_qs_impl(&self, prefix: &str) -> Vec<(String, String)> {
-    match self {
-      ValueOrComposite::Value(colop) => {
-        let (key, value) = colop.into_qs(prefix);
-        return vec![(key, value)];
-      }
-      ValueOrComposite::Composite(combiner, vec) => {
-        let comb = match combiner {
-          Combiner::And => "$and",
-          Combiner::Or => "$or",
-        };
-
-        let mut out_vec = Vec::new();
-        for (i, child) in vec.iter().enumerate() {
-          // prefix[$and][0] ...
-          let child_prefix = format!("{}[{}][{}]", prefix, comb, i);
-          out_vec.extend(child.into_qs_impl(&child_prefix));
+          Ok(match column_prefix {
+            Some(p) => (
+              format!(r#"{p}."{c}" {o} {param}"#, o = op.as_sql()),
+              Some((param, convert(&c, v)?)),
+            ),
+            None => (
+              format!(r#""{c}" {o} {param}"#, o = op.as_sql()),
+              Some((param, convert(&c, v)?)),
+            ),
+          })
         }
-
-        return out_vec;
-      }
+      };
     }
+
+    fn recurse<V, E>(
+      v: ValueOrComposite,
+      column_prefix: Option<&str>,
+      convert: &dyn Fn(&str, Value) -> Result<V, E>,
+      index: &mut usize,
+    ) -> Result<(String, Vec<(String, V)>), E> {
+      match v {
+        ValueOrComposite::Value(v) => {
+          return Ok(match render_value(v, column_prefix, convert, index)? {
+            (sql, Some(param)) => (sql, vec![param]),
+            (sql, None) => (sql, vec![]),
+          });
+        }
+        ValueOrComposite::Composite(combiner, vec) => {
+          let mut fragments = Vec::<String>::with_capacity(vec.len());
+          let mut params = Vec::<(String, V)>::with_capacity(vec.len());
+
+          for value_or_composite in vec {
+            let (f, p) = recurse(value_or_composite, column_prefix, convert, index)?;
+            fragments.push(f);
+            params.extend(p);
+          }
+
+          let fragment = format!(
+            "({})",
+            fragments.join(match combiner {
+              Combiner::And => " AND ",
+              Combiner::Or => " OR ",
+            }),
+          );
+          return Ok((fragment, params));
+        }
+      };
+    }
+
+    let mut index: usize = 0;
+    return recurse(self, column_prefix, convert, &mut index);
   }
 
   /// Return a query-string fragment for this filter (no leading '&').
-  pub fn into_qs(&self) -> String {
-    let pairs = self.into_qs_impl("filter");
-    return pairs
-      .into_iter()
-      .map(|(k, v)| format!("{}={}", k, v))
-      .collect::<Vec<_>>()
-      .join("&");
+  pub fn to_query(&self) -> String {
+    /// Return a (key, value) pair suitable for query-string serialization (not percent-encoded).
+    fn render_value(prefix: &str, v: &ColumnOpValue) -> String {
+      let value: std::borrow::Cow<str> = match (&v.op, &v.value) {
+        (CompareOp::Is, Value::String(s)) if s == "NOT NULL" => "!NULL".into(),
+        (CompareOp::Is, Value::String(s)) if s == "NULL" => "NULL".into(),
+        (_, Value::String(s)) => s.into(),
+        (_, Value::Integer(i)) => i.to_string().into(),
+        (_, Value::Double(d)) => d.to_string().into(),
+      };
+
+      let column = &v.column;
+      return if matches!(v.op, CompareOp::Equal) {
+        format!("{prefix}[{column}]={value}")
+      } else {
+        format!("{prefix}[{column}][{}]={value}", v.op.as_query())
+      };
+    }
+
+    fn recurse(v: &ValueOrComposite, prefix: &str) -> Vec<String> {
+      return match v {
+        ValueOrComposite::Value(v) => vec![render_value(prefix, v)],
+        ValueOrComposite::Composite(combiner, vec) => {
+          let comb = match combiner {
+            Combiner::And => "$and",
+            Combiner::Or => "$or",
+          };
+
+          vec
+            .iter()
+            .enumerate()
+            .map(|(i, el)| recurse(el, &format!("{}[{}][{}]", prefix, comb, i)))
+            .flatten()
+            .collect()
+        }
+      };
+    }
+
+    return recurse(self, "filter").into_iter().join("&");
   }
 }
 
@@ -212,20 +257,24 @@ impl<'de> serde::de::Deserialize<'de> for ValueOrComposite {
   }
 }
 
+#[inline]
+fn param_name(index: usize) -> String {
+  let mut s = String::with_capacity(10);
+  s.push_str(":__p");
+  s.push_str(&index.to_string());
+  return s;
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
 
-  use serde::Deserialize;
+  use rusqlite::types::Value as SqlValue;
   use serde_qs::Config;
 
   use crate::column_rel_value::{ColumnOpValue, CompareOp};
+  use crate::query::FilterQuery as Query;
   use crate::value::Value;
-
-  #[derive(Clone, Debug, Default, Deserialize)]
-  struct Query {
-    filter: Option<ValueOrComposite>,
-  }
 
   #[test]
   fn test_filter_parsing() {
@@ -234,9 +283,10 @@ mod tests {
     let m_empty: Query = qs.deserialize_str("").unwrap();
     assert_eq!(m_empty.filter, None);
 
-    let m0: Query = qs.deserialize_str("filter[$and][0][col0]=val0").unwrap();
+    let q0 = "filter[$and][0][col0]=val0";
+    let f0 = qs.deserialize_str::<Query>(q0).unwrap().filter.unwrap();
     assert_eq!(
-      m0.filter.unwrap(),
+      f0,
       ValueOrComposite::Composite(
         Combiner::And,
         vec![ValueOrComposite::Value(ColumnOpValue {
@@ -246,12 +296,12 @@ mod tests {
         })]
       ),
     );
+    assert_eq!(q0, f0.to_query());
 
-    let m1: Query = qs
-      .deserialize_str("filter[$and][0][col0]=val0&filter[$and][1][col1]=val1")
-      .unwrap();
+    let q1 = "filter[$and][0][col0]=val0&filter[$and][1][col1]=val1";
+    let f1 = qs.deserialize_str::<Query>(q1).unwrap().filter.unwrap();
     assert_eq!(
-      m1.filter.unwrap(),
+      f1,
       ValueOrComposite::Composite(
         Combiner::And,
         vec![
@@ -268,25 +318,30 @@ mod tests {
         ]
       )
     );
+    assert_eq!(q1, f1.to_query());
 
-    let m3: Query = qs.deserialize_str("filter[col0][$is]=!NULL").unwrap();
+    let q3 = "filter[col0][$is]=!NULL";
+    let f3 = qs.deserialize_str::<Query>(q3).unwrap().filter.unwrap();
     assert_eq!(
-      m3.filter.unwrap(),
+      f3,
       ValueOrComposite::Value(ColumnOpValue {
         column: "col0".to_string(),
         op: CompareOp::Is,
         value: Value::String("NOT NULL".to_string()),
       })
     );
+    assert_eq!(q3, f3.to_query());
 
+    // Combiners with only one element each.
     let m = qs.deserialize_str::<Query>("filter[$and][0][col0]=val0&filter[$or][1][col1]=val1");
     assert!(m.is_ok(), "M: {m:?}");
 
-    let m2: Query = qs
-      .deserialize_str("filter[col0]=val0&filter[col1]=val1")
-      .unwrap();
+    // test implicit $and.
+    let q2 = "filter[col0]=val0&filter[col1]=val1";
+    let f2 = qs.deserialize_str::<Query>(q2).unwrap().filter.unwrap();
+
     assert_eq!(
-      m2.filter.unwrap(),
+      f2,
       ValueOrComposite::Composite(
         Combiner::And,
         vec![
@@ -303,6 +358,16 @@ mod tests {
         ]
       )
     );
+
+    let q2_explicit = "filter[$and][0][col0]=val0&filter[$and][1][col1]=val1";
+    let f2_explicit = qs
+      .deserialize_str::<Query>(q2_explicit)
+      .unwrap()
+      .filter
+      .unwrap();
+
+    assert_eq!(f2_explicit, f2);
+    assert_eq!(q2_explicit, f2.to_query());
   }
 
   #[test]
@@ -320,6 +385,7 @@ mod tests {
         Value::Double(d) => SqlValue::Real(d),
       });
     };
+
     let sql0 = v0
       .clone()
       .into_sql(/* column_prefix= */ None, &convert)

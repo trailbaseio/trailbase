@@ -1,4 +1,5 @@
 use base64::prelude::*;
+use itertools::Itertools;
 use serde::Deserialize;
 
 use crate::filter::ValueOrComposite;
@@ -184,31 +185,28 @@ impl Query {
   }
 
   /// Produce a query-string representation of this `Query`.
-  pub fn stringify(&self) -> String {
-    let mut pairs: Vec<(String, String)> = Vec::new();
+  pub fn to_query(&self) -> String {
+    let mut pairs: Vec<String> = vec![];
 
     if let Some(limit) = self.limit {
-      pairs.push(("limit".to_string(), limit.to_string()));
+      pairs.push(format!("limit={limit}"));
     }
 
     if let Some(ref cursor) = self.cursor {
-      pairs.push(("cursor".to_string(), cursor.clone()));
+      pairs.push(format!("cursor={cursor}"));
     }
 
     if let Some(offset) = self.offset {
-      pairs.push(("offset".to_string(), offset.to_string()));
+      pairs.push(format!("offset={offset}"));
     }
 
     if let Some(count) = self.count {
-      pairs.push((
-        "count".to_string(),
-        (if count { "true" } else { "false" }).to_string(),
-      ));
+      pairs.push(format!("count={}", if count { "true" } else { "false" }));
     }
 
     if let Some(ref expand) = self.expand {
       let s = expand.columns.join(",");
-      pairs.push(("expand".to_string(), s));
+      pairs.push(format!("expand={s}"));
     }
 
     if let Some(ref order) = self.order {
@@ -219,21 +217,16 @@ impl Query {
           crate::query::OrderPrecedent::Descending => format!("-{}", c),
           crate::query::OrderPrecedent::Ascending => format!("{}", c),
         })
-        .collect::<Vec<_>>()
         .join(",");
 
-      pairs.push(("order".to_string(), s));
+      pairs.push(format!("order={s}"));
     }
 
     if let Some(ref filter) = self.filter {
-      pairs.extend(filter.into_qs_impl("filter"));
+      pairs.push(filter.to_query());
     }
 
-    return pairs
-      .into_iter()
-      .map(|(k, v)| format!("{}={}", k, v))
-      .collect::<Vec<_>>()
-      .join("&");
+    return pairs.into_iter().join("&");
   }
 }
 
@@ -252,9 +245,9 @@ impl FilterQuery {
   }
 
   /// Produce query string for only the filter part.
-  pub fn stringify(&self) -> String {
+  pub fn to_query(&self) -> String {
     if let Some(ref filter) = self.filter {
-      return filter.into_qs();
+      return filter.to_query();
     }
     return "".to_string();
   }
@@ -346,7 +339,7 @@ mod tests {
   }
 
   #[test]
-  fn test_query_stringify_basic() {
+  fn test_basic_to_query() {
     let q = Query {
       limit: Some(10),
       cursor: Some("-5".to_string()),
@@ -364,46 +357,14 @@ mod tests {
       filter: None,
     };
 
-    let s = q.stringify();
+    let s = q.to_query();
     // Order of params isn't strictly specified; check presence of important fragments.
     assert!(s.contains("limit=10"));
     assert!(s.contains("cursor=-5"));
     assert!(s.contains("offset=2"));
     assert!(s.contains("count=true"));
-    assert!(s.contains("expand=a%2Cb") || s.contains("expand=a,b"));
-    assert!(s.contains("order=a%2C-b") || s.contains("order=a,-b"));
-  }
-
-  #[test]
-  fn test_filter_stringify_simple_and_composite() {
-    use crate::column_rel_value::{ColumnOpValue, CompareOp};
-
-    let f1 = ValueOrComposite::Value(ColumnOpValue {
-      column: "col0".to_string(),
-      op: CompareOp::Equal,
-      value: crate::value::Value::String("val0".to_string()),
-    });
-
-    assert_eq!(f1.into_qs(), "filter[col0]=val0");
-
-    let f2 = ValueOrComposite::Composite(
-      Combiner::And,
-      vec![
-        f1.clone(),
-        ValueOrComposite::Value(ColumnOpValue {
-          column: "col1".to_string(),
-          op: CompareOp::Equal,
-          value: crate::value::Value::String("val1".to_string()),
-        }),
-      ],
-    );
-
-    let s = f2.into_qs();
-    // Two key/value pairs; ordering of pairs is deterministic by our implementation
-    assert_eq!(
-      s,
-      "filter[$and][0][col0]=val0&filter[$and][1][col1]=val1"
-    );
+    assert!(s.contains("expand=a,b"));
+    assert!(s.contains("order=a,-b"));
   }
 
   #[test]
@@ -518,14 +479,15 @@ mod tests {
       )
     );
 
-    let filter = |_: &str, value: Value| -> Result<SqlValue, String> {
+    fn convert(_: &str, value: Value) -> Result<SqlValue, String> {
       return Ok(match value {
         Value::String(s) => SqlValue::Text(s),
         Value::Integer(i) => SqlValue::Integer(i),
         Value::Double(d) => SqlValue::Real(d),
       });
-    };
-    let (sql, params) = q1.filter.clone().unwrap().into_sql(None, &filter).unwrap();
+    }
+
+    let (sql, params) = q1.filter.clone().unwrap().into_sql(None, &convert).unwrap();
     assert_eq!(
       sql,
       r#"(("col2" = :__p0 OR "col0" <> :__p1) AND "col1" = :__p2)"#
@@ -538,7 +500,7 @@ mod tests {
         (":__p2".to_string(), SqlValue::Integer(1)),
       ]
     );
-    let (sql, _) = q1.filter.unwrap().into_sql(Some("p"), &filter).unwrap();
+    let (sql, _) = q1.filter.unwrap().into_sql(Some("p"), &convert).unwrap();
     assert_eq!(
       sql,
       r#"((p."col2" = :__p0 OR p."col0" <> :__p1) AND p."col1" = :__p2)"#

@@ -1,5 +1,4 @@
 use base64::prelude::*;
-use rusqlite::types::Value as SqlValue;
 use serde::de::{Deserializer, Error};
 
 use crate::value::Value;
@@ -49,7 +48,7 @@ impl CompareOp {
   }
 
   #[inline]
-  pub fn as_qs(&self) -> &'static str {
+  pub fn as_query(&self) -> &'static str {
     return match self {
       Self::Equal => "$eq",
       Self::NotEqual => "$ne",
@@ -70,63 +69,6 @@ pub struct ColumnOpValue {
   pub column: String,
   pub op: CompareOp,
   pub value: Value,
-}
-
-impl ColumnOpValue {
-  pub fn into_sql<E>(
-    self,
-    column_prefix: Option<&str>,
-    convert: &dyn Fn(&str, Value) -> Result<SqlValue, E>,
-    index: &mut usize,
-  ) -> Result<(String, Option<(String, SqlValue)>), E> {
-    let v = self.value;
-    let c = self.column;
-
-    return match self.op {
-      CompareOp::Is => {
-        assert!(matches!(v, Value::String(_)), "{v:?}");
-
-        Ok(match column_prefix {
-          Some(p) => (format!(r#"{p}."{c}" IS {v}"#), None),
-          None => (format!(r#""{c}" IS {v}"#), None),
-        })
-      }
-      _ => {
-        let param = param_name(*index);
-        *index += 1;
-
-        Ok(match column_prefix {
-          Some(p) => (
-            format!(r#"{p}."{c}" {o} {param}"#, o = self.op.as_sql()),
-            Some((param, convert(&c, v)?)),
-          ),
-          None => (
-            format!(r#""{c}" {o} {param}"#, o = self.op.as_sql()),
-            Some((param, convert(&c, v)?)),
-          ),
-        })
-      }
-    };
-  }
-
-  /// Return a (key, value) pair suitable for query-string serialization (not percent-encoded).
-  pub fn into_qs(&self, prefix: &str) -> (String, String) {
-    let key = if matches!(self.op, CompareOp::Equal) {
-      format!("{}[{}]", prefix, self.column)
-    } else {
-      format!("{}[{}][{}]", prefix, self.column, self.op.as_qs())
-    };
-
-    let value = match (&self.op, &self.value) {
-      (CompareOp::Is, Value::String(s)) if s == "NOT NULL" => "!NULL".to_string(),
-      (CompareOp::Is, Value::String(s)) if s == "NULL" => "NULL".to_string(),
-      (_, Value::String(s)) => s.clone(),
-      (_, Value::Integer(i)) => i.to_string(),
-      (_, Value::Double(d)) => d.to_string(),
-    };
-
-    (key, value)
-  }
 }
 
 fn parse_value<'de, D>(op: CompareOp, value: serde_value::Value) -> Result<Value, D::Error>
@@ -209,14 +151,6 @@ where
       &"[column_name]=value or [column_name][$op]=value",
     )),
   };
-}
-
-#[inline]
-fn param_name(index: usize) -> String {
-  let mut s = String::with_capacity(10);
-  s.push_str(":__p");
-  s.push_str(&index.to_string());
-  return s;
 }
 
 const OP_ERR: &str = "one of [$eq, $ne, $lt, ...]";
