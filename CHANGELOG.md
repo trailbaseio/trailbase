@@ -1,3 +1,10 @@
+## v0.22.5
+
+- New "--spa" command-line option for serving SPAs from `--public-dir`. Any path that doesn't look like a file/asset request, i.e. doesn't have a file extension, will fall back to `<public_dir>/index.html` to let a client-side router take over. Otherwise, navigating to non-root paths would serve 404. Thanks @takumi3488.
+- Improve error handling and cleanup OAuth callback handling.
+- Internal: build queries at build-time rather than relying on lazy-statics whenvever possible.
+- Update dependencies.
+
 ## v0.22.4
 
 - New CLI command `trail user add <email> <pw>` to create verified users from the command-line.
