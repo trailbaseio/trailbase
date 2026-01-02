@@ -16,7 +16,7 @@
     "@astrojs/rss": "^4.0.14",
     "@astrojs/starlight": "^0.37.1",
     "@astrojs/starlight-tailwind": "^4.0.2",
-    "@iconify-json/tabler": "^1.2.24",
+    "@iconify-json/tabler": "^1.2.26",
     "@tailwindcss/vite": "^4.1.18",
     "astro": "^5.16.6",
     "astro-icon": "^1.1.5",
@@ -41,10 +41,10 @@
     "eslint-plugin-astro": "^1.5.0",
     "eslint-plugin-better-tailwindcss": "^3.8.0",
     "eslint-plugin-solid": "^0.14.5",
-    "globals": "^16.5.0",
+    "globals": "^17.0.0",
     "prettier": "^3.7.4",
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
-    "typescript-eslint": "^8.50.0"
+    "typescript-eslint": "^8.51.0"
   }
 }

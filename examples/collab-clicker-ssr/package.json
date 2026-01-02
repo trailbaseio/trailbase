@@ -23,11 +23,11 @@
     "compression": "^1.8.1",
     "eslint": "^9.39.2",
     "express": "^5.2.1",
-    "globals": "^16.5.0",
+    "globals": "^17.0.0",
     "prettier": "^3.7.4",
     "sirv": "^3.0.2",
     "tailwindcss": "^4.1.18",
-    "typescript-eslint": "^8.50.0",
+    "typescript-eslint": "^8.51.0",
     "vite": "^7.3.0",
     "vite-plugin-solid": "^2.11.10"
   }
