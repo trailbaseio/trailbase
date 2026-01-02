@@ -738,18 +738,18 @@ struct SubscriptionRecordReadTemplate<'a> {
 ///
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
 fn build_read_delete_schema_query(
-  table_name: &QualifiedNameEscaped,
+  qualified_table_name: &QualifiedNameEscaped,
   pk_column_name: &str,
   access_rule: &str,
 ) -> Arc<str> {
-  return indoc::formatdoc!(
-    r#"
-      SELECT
-        CAST(({access_rule}) AS INTEGER)
-      FROM
-        (SELECT :__user_id AS id) AS _USER_,
-        (SELECT * FROM {table_name} WHERE "{pk_column_name}" = :__record_id) AS _ROW_
-    "#,
+  return format!(
+    "\
+      SELECT \
+        CAST(({access_rule}) AS INTEGER) \
+      FROM \
+        (SELECT :__user_id AS id) AS _USER_, \
+        (SELECT * FROM {qualified_table_name} WHERE \"{pk_column_name}\" = :__record_id) AS _ROW_ \
+    ",
   )
   .into();
 }

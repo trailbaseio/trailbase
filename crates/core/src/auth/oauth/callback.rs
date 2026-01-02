@@ -2,7 +2,7 @@ use axum::{
   extract::{Path, Query, State},
   response::Redirect,
 };
-use lazy_static::lazy_static;
+use const_format::formatcp;
 use oauth2::{AuthorizationCode, PkceCodeVerifier};
 use serde::Deserialize;
 use tower_cookies::Cookies;
@@ -189,25 +189,22 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
   // For the auth_code flow we generate a random code.
   let authorization_code = generate_random_string(VERIFICATION_CODE_LENGTH);
 
-  lazy_static! {
-    pub static ref QUERY: String = format!(
-      r#"
-        UPDATE
-          '{USER_TABLE}'
-        SET
-          authorization_code = :authorization_code,
-          authorization_code_sent_at = UNIXEPOCH(),
-          pkce_code_challenge = :pkce_code_challenge
-        WHERE
-          id = :user_id
-      "#
-    );
-  }
+  const QUERY: &str = formatcp!(
+    "\
+      UPDATE '{USER_TABLE}' \
+      SET \
+        authorization_code = :authorization_code, \
+        authorization_code_sent_at = UNIXEPOCH(), \
+        pkce_code_challenge = :pkce_code_challenge \
+      WHERE \
+        id = :user_id \
+    "
+  );
 
   let rows_affected = state
     .user_conn()
     .execute(
-      &*QUERY,
+      QUERY,
       named_params! {
         ":authorization_code": authorization_code.clone(),
         ":pkce_code_challenge": user_pkce_code_challenge,
@@ -296,21 +293,19 @@ async fn create_user_for_external_provider(
     return Err(AuthError::Unauthorized);
   }
 
-  lazy_static! {
-    static ref QUERY: String = format!(
-      r#"
-        INSERT INTO {USER_TABLE} (
-          provider_id, provider_user_id, verified, email, provider_avatar_url
-        ) VALUES (
-          :provider_id, :provider_user_id, :verified, :email, :avatar
-        ) RETURNING *
-      "#
-    );
-  }
+  const QUERY: &str = formatcp!(
+    "\
+      INSERT INTO '{USER_TABLE}' ( \
+        provider_id, provider_user_id, verified, email, provider_avatar_url \
+      ) VALUES ( \
+        :provider_id, :provider_user_id, :verified, :email, :avatar \
+      ) RETURNING * \
+    "
+  );
 
   let db_user: DbUser = conn
     .write_query_value(
-      &*QUERY,
+      QUERY,
       named_params! {
           ":provider_id": user.provider_id as i64,
           ":provider_user_id": user.provider_user_id.clone(),
@@ -330,14 +325,12 @@ async fn user_by_provider_id(
   provider_id: OAuthProviderId,
   provider_user_id: String,
 ) -> Result<Option<DbUser>, AuthError> {
-  lazy_static! {
-    static ref QUERY: String =
-      format!("SELECT * FROM '{USER_TABLE}' WHERE provider_id = $1 AND provider_user_id = $2");
-  };
+  const QUERY: &str =
+    formatcp!("SELECT * FROM '{USER_TABLE}' WHERE provider_id = $1 AND provider_user_id = $2");
 
   return Ok(
     conn
-      .read_query_value::<DbUser>(&*QUERY, params!(provider_id as i64, provider_user_id))
+      .read_query_value::<DbUser>(QUERY, params!(provider_id as i64, provider_user_id))
       .await?,
   );
 }

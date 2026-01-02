@@ -3,6 +3,7 @@ use axum::{
   extract::{RawQuery, State},
 };
 use chrono::{DateTime, Duration, Utc};
+use const_format::formatcp;
 use lazy_static::lazy_static;
 use log::*;
 use serde::{Deserialize, Serialize};
@@ -408,21 +409,19 @@ async fn fetch_aggregate_stats(
   if args.geoip_db_type == Some(DatabaseType::GeoLite2Country)
     || args.geoip_db_type == Some(DatabaseType::GeoLite2City)
   {
-    lazy_static! {
-      static ref CC_QUERY: String = format!(
-        r#"
-          SELECT
-            country_code,
-            SUM(cnt) as count
-          FROM
-            (SELECT client_ip, COUNT(*) AS cnt, geoip_country(client_ip) as country_code FROM {LOGS_TABLE_NAME} GROUP BY client_ip)
-          GROUP BY
-            country_code
-        "#
-      );
-    }
+    const CC_QUERY: &str = formatcp!(
+      "\
+        SELECT \
+          country_code, \
+          SUM(cnt) as count \
+        FROM \
+          (SELECT client_ip, COUNT(*) AS cnt, geoip_country(client_ip) as country_code FROM '{LOGS_TABLE_NAME}' GROUP BY client_ip) \
+        GROUP BY \
+          country_code \
+      "
+    );
 
-    let rows = conn.read_query_rows(CC_QUERY.as_str(), ()).await?;
+    let rows = conn.read_query_rows(CC_QUERY, ()).await?;
 
     let mut country_codes = HashMap::<String, usize>::new();
     for row in rows.iter() {

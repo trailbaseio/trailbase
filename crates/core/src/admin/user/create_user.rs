@@ -1,5 +1,5 @@
 use axum::{Json, extract::State};
-use lazy_static::lazy_static;
+use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 use trailbase_sqlite::named_params;
 use ts_rs::TS;
@@ -54,22 +54,20 @@ pub async fn create_user_handler(
     Some(generate_random_string(VERIFICATION_CODE_LENGTH))
   };
 
-  lazy_static! {
-    static ref INSERT_USER_QUERY: String = indoc::formatdoc!(
-      r#"
-        INSERT INTO '{USER_TABLE}'
-          (email, password_hash, verified, admin, email_verification_code)
-        VALUES
-          (:email, :password_hash, :verified, :admin ,:email_verification_code)
-        RETURNING *
-     "#,
-    );
-  }
+  const INSERT_USER_QUERY: &str = formatcp!(
+    "\
+      INSERT INTO '{USER_TABLE}' \
+        (email, password_hash, verified, admin, email_verification_code) \
+      VALUES \
+        (:email, :password_hash, :verified, :admin ,:email_verification_code) \
+      RETURNING * \
+    ",
+  );
 
   let Some(user) = state
     .user_conn()
     .write_query_value::<DbUser>(
-      &*INSERT_USER_QUERY,
+      INSERT_USER_QUERY,
       named_params! {
         ":email": normalized_email,
         ":password_hash": hashed_password,

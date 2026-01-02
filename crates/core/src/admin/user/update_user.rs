@@ -4,7 +4,7 @@ use axum::{
   http::StatusCode,
   response::{IntoResponse, Response},
 };
-use lazy_static::lazy_static;
+use const_format::formatcp;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -47,15 +47,11 @@ pub async fn update_user_handler(
 
   // TODO: Rather than using a transaction below we could build combined update queries:
   //   UPDATE <table> SET x = :x, y = :y WHERE id = :id.
-  fn update_query(property: &str) -> String {
-    format!("UPDATE '{USER_TABLE}' SET {property} = $1 WHERE id = $2")
-  }
-
-  lazy_static! {
-    static ref UPDATE_EMAIL_QUERY: String = update_query("email");
-    static ref UPDATE_PW_HASH_QUERY: String = update_query("password_hash");
-    static ref UPDATE_VERIFIED_QUERY: String = update_query("verified");
-  }
+  const UPDATE_EMAIL_QUERY: &str = formatcp!("UPDATE '{USER_TABLE}' SET email = $1 WHERE id = $2");
+  const UPDATE_PW_HASH_QUERY: &str =
+    formatcp!("UPDATE '{USER_TABLE}' SET password_hash = $1 WHERE id = $2");
+  const UPDATE_VERIFIED_QUERY: &str =
+    formatcp!("UPDATE '{USER_TABLE}' SET verified = $1 WHERE id = $2");
 
   let email = request.email.clone();
   let verified = request.verified;
@@ -66,13 +62,13 @@ pub async fn update_user_handler(
 
       let user_id_bytes: [u8; 16] = request.id.into_bytes();
       if let Some(email) = email {
-        tx.execute(&UPDATE_EMAIL_QUERY, params![email, user_id_bytes])?;
+        tx.execute(UPDATE_EMAIL_QUERY, params![email, user_id_bytes])?;
       }
       if let Some(password_hash) = hashed_password {
-        tx.execute(&UPDATE_PW_HASH_QUERY, params!(password_hash, user_id_bytes))?;
+        tx.execute(UPDATE_PW_HASH_QUERY, params!(password_hash, user_id_bytes))?;
       }
       if let Some(verified) = verified {
-        tx.execute(&UPDATE_VERIFIED_QUERY, params!(verified, user_id_bytes))?;
+        tx.execute(UPDATE_VERIFIED_QUERY, params!(verified, user_id_bytes))?;
       }
 
       tx.commit()?;

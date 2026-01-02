@@ -5,10 +5,10 @@ use axum::{
 };
 use base64::prelude::*;
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::convert::TryInto;
+use std::sync::LazyLock;
 use trailbase_qs::{OrderPrecedent, Query};
 use trailbase_schema::QualifiedNameEscaped;
 use trailbase_schema::sqlite::ColumnDataType;
@@ -368,9 +368,8 @@ fn decrypt_cursor(key: &KeyType, api_name: &str, encoded: &str) -> Result<i64, R
     .map_err(|_| RecordError::BadRequest("Bad cursor"));
 }
 
-lazy_static! {
-  static ref EPHEMERAL_CURSOR_KEY: KeyType = generate_random_key();
-}
+// Ephemeral key for encrypting cursors, i.e. cursors cannot be re-used across TB restarts.
+static EPHEMERAL_CURSOR_KEY: LazyLock<KeyType> = LazyLock::new(generate_random_key);
 
 #[cfg(test)]
 mod tests {

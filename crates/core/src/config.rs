@@ -12,7 +12,7 @@ use thiserror::Error;
 use validator::{ValidateEmail, ValidateUrl};
 
 use crate::DESCRIPTOR_POOL;
-use crate::auth::oauth::providers::oauth_provider_registry;
+use crate::auth::oauth::providers::oauth_providers_static_registry;
 use crate::connection::ConnectionManager;
 use crate::data_dir::DataDir;
 use crate::records::validate_record_api_config;
@@ -567,7 +567,7 @@ pub fn validate_config(
       return ierr(format!("Invalid id for provider: {name}"));
     }
 
-    let Some(factory) = oauth_provider_registry
+    let Some(factory) = oauth_providers_static_registry()
       .iter()
       .find(|factory| factory.id == provider_id)
     else {

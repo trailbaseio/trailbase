@@ -3,7 +3,7 @@ use axum::{
   response::{IntoResponse, Redirect, Response},
 };
 use chrono::Duration;
-use lazy_static::lazy_static;
+use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 use tower_cookies::Cookies;
 use trailbase_sqlite::named_params;
@@ -199,25 +199,23 @@ async fn login_with_authorization_code_flow_and_pkce(
   // We generate a random code for the auth_code flow.
   let authorization_code = generate_random_string(VERIFICATION_CODE_LENGTH);
 
-  lazy_static! {
-    static ref QUERY: String = indoc::formatdoc!(
-      r#"
-        UPDATE
-          "{USER_TABLE}"
-        SET
-          authorization_code = :authorization_code,
-          authorization_code_sent_at = UNIXEPOCH(),
-          pkce_code_challenge = :pkce_code_challenge
-        WHERE
-          email = :email
-      "#
-    );
-  }
+  const QUERY: &str = formatcp!(
+    "\
+      UPDATE \
+        '{USER_TABLE}' \
+      SET \
+        authorization_code = :authorization_code, \
+        authorization_code_sent_at = UNIXEPOCH(), \
+        pkce_code_challenge = :pkce_code_challenge \
+      WHERE \
+        email = :email \
+    "
+  );
 
   let rows_affected = state
     .user_conn()
     .execute(
-      &*QUERY,
+      QUERY,
       named_params! {
         ":authorization_code": authorization_code.clone(),
         ":pkce_code_challenge": pkce_code_challenge,

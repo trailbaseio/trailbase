@@ -40,6 +40,7 @@ base64 = { workspace = true }
 bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
 client-ip = "0.1.1"
+const_format = "0.2.35"
 cron = "0.15.0"
 ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
@@ -49,7 +50,6 @@ http-body-util = "0.1.3"
 hyper = "1.6.0"
 hyper-util = "0.1.7"
 indexmap = "2.11.4"
-indoc = "2.0.5"
 init-tracing-opentelemetry = { version = "0.34.0", features = ["tracing_subscriber_ext", "metrics"], optional = true }
 itertools = "0.14.0"
 jsonschema = { version = "0.38.1", default-features = false }
@@ -115,9 +115,10 @@ anyhow = "^1.0.86"
 axum-test = "18.1.0"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 env_logger = { workspace = true }
-trailbase-extension = { workspace = true }
+indoc = "2.0.5"
 quoted_printable = "0.5.1"
+rcgen = "0.14.1"
 schemars = "1.0.0"
 temp-dir = "0.1.13"
 tower = { version = "0.5.0", features = ["util"] }
-rcgen = "0.14.1"
+trailbase-extension = { workspace = true }

@@ -1,6 +1,6 @@
-use argon2::{Argon2, PasswordHash};
-use lazy_static::lazy_static;
+use argon2::PasswordHash;
 use mini_moka::sync::Cache;
+use std::sync::LazyLock;
 
 use crate::auth::AuthError;
 use crate::auth::user::DbUser;
@@ -77,13 +77,13 @@ impl Default for FailedAttempt {
   }
 }
 
-lazy_static! {
-  static ref ARGON2: Argon2<'static> = Argon2::default();
-  static ref ATTEMPTS: Cache<String, FailedAttempt> = Cache::builder()
+// Track login attempts for absuse prevention.
+static ATTEMPTS: LazyLock<Cache<String, FailedAttempt>> = LazyLock::new(|| {
+  Cache::builder()
     .time_to_live(std::time::Duration::from_secs(5 * 60))
     .max_capacity(1024)
-    .build();
-}
+    .build()
+});
 
 pub fn hash_password(password: &str) -> Result<String, AuthError> {
   return trailbase_extension::password::hash_password(password).map_err(|err| {

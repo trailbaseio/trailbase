@@ -3,7 +3,7 @@ use axum::{
   http::StatusCode,
   response::{IntoResponse, Redirect, Response},
 };
-use lazy_static::lazy_static;
+use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_sqlite::params;
 use utoipa::{IntoParams, ToSchema};
@@ -52,24 +52,21 @@ pub async fn request_email_verification_handler(
   }
 
   let email_verification_code = generate_random_string(VERIFICATION_CODE_LENGTH);
-  lazy_static! {
-    pub static ref UPDATE_VERIFICATION_CODE_QUERY: String = format!(
-      r#"
-        UPDATE
-          '{USER_TABLE}'
-        SET
-          email_verification_code = $1,
-          email_verification_code_sent_at = UNIXEPOCH()
-        WHERE
-          id = $2
-      "#
-    );
-  }
+  const UPDATE_VERIFICATION_CODE_QUERY: &str = formatcp!(
+    "\
+      UPDATE '{USER_TABLE}' \
+      SET \
+        email_verification_code = $1, \
+        email_verification_code_sent_at = UNIXEPOCH() \
+      WHERE \
+        id = $2 \
+    "
+  );
 
   let rows_affected = state
     .user_conn()
     .execute(
-      &*UPDATE_VERIFICATION_CODE_QUERY,
+      UPDATE_VERIFICATION_CODE_QUERY,
       params!(email_verification_code.clone(), user.id),
     )
     .await?;
@@ -113,23 +110,21 @@ pub async fn verify_email_handler(
 ) -> Result<Redirect, AuthError> {
   validate_redirect(&state, redirect_uri.as_deref())?;
 
-  lazy_static! {
-    static ref UPDATE_CODE_QUERY: String = format!(
-      r#"
-        UPDATE '{USER_TABLE}'
-        SET
-          verified = TRUE,
-          email_verification_code = NULL,
-          email_verification_code_sent_at = NULL
-        WHERE
-          email_verification_code = $1 AND email_verification_code_sent_at > (UNIXEPOCH() - {TTL_SEC})
-      "#
-    );
-  }
+  const UPDATE_CODE_QUERY: &str = formatcp!(
+    "\
+      UPDATE '{USER_TABLE}' \
+      SET \
+        verified = TRUE, \
+        email_verification_code = NULL, \
+        email_verification_code_sent_at = NULL \
+      WHERE \
+        email_verification_code = $1 AND email_verification_code_sent_at > (UNIXEPOCH() - {TTL_SEC}) \
+    "
+  );
 
   let rows_affected = state
     .user_conn()
-    .execute(&*UPDATE_CODE_QUERY, params!(email_verification_code))
+    .execute(UPDATE_CODE_QUERY, params!(email_verification_code))
     .await?;
 
   return match rows_affected {

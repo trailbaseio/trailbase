@@ -2,6 +2,7 @@ use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Extensions, HeaderMap, HeaderValue, Request, header};
 use axum::response::Response;
+use const_format::formatcp;
 use serde::Serialize;
 use serde_json::json;
 use std::time::Duration;
@@ -326,16 +327,16 @@ impl SqliteLogLayer {
     conn: &rusqlite::Connection,
     logs: Vec<Box<LogFieldStorage>>,
   ) -> Result<(), rusqlite::Error> {
-    lazy_static::lazy_static! {
-      static ref QUERY: String = indoc::formatdoc! {"
-        INSERT INTO
-          _logs (created, status, method, url, latency, client_ip, referer, user_agent, user_id)
-        VALUES
-          ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      "};
-    }
+    const QUERY: &str = formatcp!(
+      "\
+        INSERT INTO \
+          _logs (created, status, method, url, latency, client_ip, referer, user_agent, user_id) \
+        VALUES \
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
+      "
+    );
 
-    let mut stmt = conn.prepare_cached(&QUERY)?;
+    let mut stmt = conn.prepare_cached(QUERY)?;
 
     for log in logs {
       #[cfg(test)]

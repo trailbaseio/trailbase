@@ -771,16 +771,29 @@ fn build_auth_config(config: &Config) -> AuthConfig {
     .oauth_providers
     .iter()
     .filter_map(|(key, config)| {
-      let entry = crate::auth::oauth::providers::oauth_provider_registry
+      let entry = crate::auth::oauth::providers::oauth_providers_static_registry()
         .iter()
         .find(|registered| config.provider_id == Some(registered.id as i32))?;
 
       let provider = (entry.factory)(key, config).ok()?;
       let name = provider.name();
+
+      // NOTE: Could instead be a provider trait property.
+      fn oauth_provider_name_to_img(name: &str) -> &'static str {
+        return match name {
+          "discord" => "discord.svg",
+          "facebook" => "facebook.svg",
+          "gitlab" => "gitlab.svg",
+          "google" => "google.svg",
+          "microsoft" => "microsoft.svg",
+          _ => "oidc.svg",
+        };
+      }
+
       return Some(OAuthProvider {
         name: name.to_string(),
         display_name: provider.display_name().to_string(),
-        img_name: crate::auth::util::oauth_provider_name_to_img(name),
+        img_name: oauth_provider_name_to_img(name).to_string(),
       });
     })
     .collect();

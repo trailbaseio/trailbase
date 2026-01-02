@@ -148,16 +148,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
         )
         .await?;
 
-      info!(
-        "{}",
-        indoc::formatdoc!(
-          r#"
-          Created new admin user:
-              email: '{email}'
-              password: '{password}'
-        "#
-        )
-      );
+      info!("Created new admin user:\n\temail: '{email}'\n\tpassword: '{password}'");
     }
   }
 

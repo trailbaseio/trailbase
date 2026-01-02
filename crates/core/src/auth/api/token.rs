@@ -1,5 +1,5 @@
 use axum::extract::{Json, State};
-use lazy_static::lazy_static;
+use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 use trailbase_sqlite::params;
 use ts_rs::TS;
@@ -56,28 +56,25 @@ pub(crate) async fn auth_code_to_token_handler(
     .as_ref()
     .map(|verifier| derive_pkce_code_challenge(verifier));
 
-  lazy_static! {
-    static ref UPDATE_QUERY: String = format!(
-      r#"
-      UPDATE
-        '{USER_TABLE}'
-      SET
-        authorization_code = NULL,
-        authorization_code_sent_at = NULL,
-        pkce_code_challenge = NULL
-      WHERE
-        authorization_code = $1
-          AND authorization_code_sent_at > (UNIXEPOCH() - {TTL_SEC})
-          AND pkce_code_challenge = $2
-      RETURNING *
-    "#
-    );
-  }
+  const UPDATE_QUERY: &str = formatcp!(
+    "\
+      UPDATE '{USER_TABLE}' \
+      SET \
+        authorization_code = NULL, \
+        authorization_code_sent_at = NULL, \
+        pkce_code_challenge = NULL \
+      WHERE \
+        authorization_code = $1 \
+          AND authorization_code_sent_at > (UNIXEPOCH() - {TTL_SEC}) \
+          AND pkce_code_challenge = $2 \
+      RETURNING * \
+    "
+  );
 
   let Some(db_user) = state
     .user_conn()
     .write_query_value::<DbUser>(
-      &*UPDATE_QUERY,
+      UPDATE_QUERY,
       params!(authorization_code, pkce_code_challenge),
     )
     .await?

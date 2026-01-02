@@ -3,7 +3,7 @@ use axum::{
   http::StatusCode,
   response::{IntoResponse, Redirect, Response},
 };
-use lazy_static::lazy_static;
+use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_sqlite::{named_params, params};
 use ts_rs::TS;
@@ -80,30 +80,27 @@ pub async fn change_email_request_handler(
   }
 
   let email_verification_code = generate_random_string(VERIFICATION_CODE_LENGTH);
-  lazy_static! {
-    pub static ref QUERY: String = format!(
-      r#"
-        UPDATE
-          '{USER_TABLE}'
-        SET
-          pending_email = :new_email,
-          email_verification_code = :email_verification_code,
-          email_verification_code_sent_at = UNIXEPOCH()
-        WHERE
-          id = :user_id AND (
-            CASE :old_email
-              WHEN NULL THEN TRUE
-              ELSE email = :old_email
-            END
-          )
-      "#
-    );
-  }
+  const QUERY: &str = formatcp!(
+    "\
+      UPDATE '{USER_TABLE}' \
+      SET \
+        pending_email = :new_email, \
+        email_verification_code = :email_verification_code, \
+        email_verification_code_sent_at = UNIXEPOCH() \
+      WHERE \
+        id = :user_id AND ( \
+          CASE :old_email \
+            WHEN NULL THEN TRUE \
+            ELSE email = :old_email \
+          END \
+        ) \
+    "
+  );
 
   let rows_affected = state
     .user_conn()
     .execute(
-      &*QUERY,
+      QUERY,
       named_params! {
         ":new_email": request.new_email,
         ":old_email": request.old_email,
@@ -160,28 +157,25 @@ pub async fn change_email_confirm_handler(
     return Err(AuthError::BadRequest("Invalid code"));
   }
 
-  lazy_static! {
-    pub static ref QUERY: String = format!(
-      r#"
-        UPDATE
-          '{USER_TABLE}'
-        SET
-          email = pending_email,
-          verified = TRUE,
-          pending_email = NULL,
-          email_verification_code = NULL,
-          email_verification_code_sent_at = NULL
-        WHERE
-          email_verification_code = $1
-            AND email_verification_code_sent_at > (UNIXEPOCH() - {TTL_SEC})
-            AND pending_email IS NOT NULL
-      "#
-    );
-  }
+  const QUERY: &str = formatcp!(
+    "\
+      UPDATE '{USER_TABLE}' \
+      SET \
+        email = pending_email, \
+        verified = TRUE, \
+        pending_email = NULL, \
+        email_verification_code = NULL, \
+        email_verification_code_sent_at = NULL \
+      WHERE \
+        email_verification_code = $1 \
+          AND email_verification_code_sent_at > (UNIXEPOCH() - {TTL_SEC}) \
+          AND pending_email IS NOT NULL \
+    "
+  );
 
   let rows_affected = state
     .user_conn()
-    .execute(&*QUERY, params!(email_verification_code))
+    .execute(QUERY, params!(email_verification_code))
     .await?;
 
   return match rows_affected {

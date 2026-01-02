@@ -1,6 +1,6 @@
 use axum::extract::State;
 use axum::response::{IntoResponse, Redirect, Response};
-use lazy_static::lazy_static;
+use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_sqlite::named_params;
 use utoipa::ToSchema;
@@ -69,22 +69,20 @@ pub async fn register_user_handler(
   let email_verification_code = generate_random_string(VERIFICATION_CODE_LENGTH);
   let hashed_password = hash_password(&request.password)?;
 
-  lazy_static! {
-    static ref INSERT_USER_QUERY: String = indoc::formatdoc!(
-      r#"
-        INSERT INTO "{USER_TABLE}"
-          (email, password_hash, email_verification_code, email_verification_code_sent_at)
-        VALUES
-          (:email, :password_hash, :email_verification_code, UNIXEPOCH())
-        RETURNING *
-      "#
-    );
-  }
+  const INSERT_USER_QUERY: &str = formatcp!(
+    " \
+      INSERT INTO '{USER_TABLE}' \
+        (email, password_hash, email_verification_code, email_verification_code_sent_at) \
+      VALUES \
+        (:email, :password_hash, :email_verification_code, UNIXEPOCH()) \
+      RETURNING * \
+    "
+  );
 
   let Some(user) = state
     .user_conn()
     .write_query_value::<DbUser>(
-      &*INSERT_USER_QUERY,
+      INSERT_USER_QUERY,
       named_params! {
         ":email": normalized_email.clone(),
         ":password_hash": hashed_password,

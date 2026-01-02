@@ -3,7 +3,7 @@ use axum::{
   http::{header, request::Parts},
 };
 use chrono::Duration;
-use lazy_static::lazy_static;
+use const_format::formatcp;
 use tower_cookies::Cookies;
 use trailbase_sqlite::{Connection, params};
 
@@ -181,14 +181,12 @@ pub(crate) async fn mint_new_tokens(
 
   // Unlike JWT auth tokens, refresh tokens are opaque.
   let refresh_token = generate_random_string(REFRESH_TOKEN_LENGTH);
-  lazy_static! {
-    static ref QUERY: String =
-      format!("INSERT INTO '{SESSION_TABLE}' (user, refresh_token) VALUES ($1, $2)");
-  }
+  const QUERY: &str =
+    formatcp!("INSERT INTO '{SESSION_TABLE}' (user, refresh_token) VALUES ($1, $2)");
 
   user_conn
     .execute(
-      &*QUERY,
+      QUERY,
       params!(user_id.into_bytes().to_vec(), refresh_token.clone(),),
     )
     .await?;
@@ -205,23 +203,21 @@ pub(crate) async fn reauth_with_refresh_token(
   refresh_token_ttl: Duration,
   auth_token_ttl: Duration,
 ) -> Result<TokenClaims, AuthError> {
-  lazy_static! {
-    static ref QUERY: String = format!(
-      r#"
-        SELECT user.*
-        FROM
-          {SESSION_TABLE} AS s
-          INNER JOIN {USER_TABLE} AS user ON s.user = user.id
-        WHERE
-          s.refresh_token = $1 AND s.updated > (UNIXEPOCH() - $2) AND user.verified
-      "#
-    );
-  }
+  const QUERY: &str = formatcp!(
+    "\
+      SELECT user.* \
+      FROM \
+        '{SESSION_TABLE}' AS s \
+        INNER JOIN '{USER_TABLE}' AS user ON s.user = user.id \
+      WHERE \
+        s.refresh_token = $1 AND s.updated > (UNIXEPOCH() - $2) AND user.verified \
+    "
+  );
 
   let Some(db_user) = state
     .user_conn()
     .read_query_value::<DbUser>(
-      &*QUERY,
+      QUERY,
       params!(refresh_token, refresh_token_ttl.num_seconds()),
     )
     .await?

@@ -9,8 +9,8 @@ mod oidc;
 #[cfg(test)]
 pub(crate) mod test;
 
-use lazy_static::lazy_static;
 use std::collections::hash_map::HashMap;
+use std::sync::LazyLock;
 use thiserror::Error;
 
 use crate::auth::oauth::OAuthProvider;
@@ -33,21 +33,25 @@ pub(crate) struct OAuthProviderFactory {
   pub factory: Box<OAuthFactoryType>,
 }
 
-lazy_static! {
-  pub(crate) static ref oauth_provider_registry: Vec<OAuthProviderFactory> = vec![
-    #[cfg(test)]
-    test::TestOAuthProvider::factory(),
-    // NOTE: In the future we might want to have more than one OIDC factory.
-    oidc::OidcProvider::factory(0),
+pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderFactory] {
+  const N: usize = if cfg!(test) { 8 } else { 7 };
+  static REGISTRY: LazyLock<[OAuthProviderFactory; N]> = LazyLock::new(|| {
+    [
+      #[cfg(test)]
+      test::TestOAuthProvider::factory(),
+      // NOTE: In the future we might want to have more than one OIDC factory.
+      oidc::OidcProvider::factory(0),
+      // "Social" OAuth providers.
+      apple::AppleOAuthProvider::factory(),
+      discord::DiscordOAuthProvider::factory(),
+      gitlab::GitlabOAuthProvider::factory(),
+      google::GoogleOAuthProvider::factory(),
+      facebook::FacebookOAuthProvider::factory(),
+      microsoft::MicrosoftOAuthProvider::factory(),
+    ]
+  });
 
-    // "Social" OAuth providers.
-    apple::AppleOAuthProvider::factory(),
-    discord::DiscordOAuthProvider::factory(),
-    gitlab::GitlabOAuthProvider::factory(),
-    google::GoogleOAuthProvider::factory(),
-    facebook::FacebookOAuthProvider::factory(),
-    microsoft::MicrosoftOAuthProvider::factory(),
-  ];
+  return REGISTRY.as_slice();
 }
 
 pub(crate) fn build_oauth_providers_from_config(
@@ -57,7 +61,7 @@ pub(crate) fn build_oauth_providers_from_config(
     .oauth_providers
     .iter()
     .map(|(key, config)| {
-      let entry = oauth_provider_registry
+      let entry = oauth_providers_static_registry()
         .iter()
         .find(|registered| config.provider_id == Some(registered.id as i32));
 

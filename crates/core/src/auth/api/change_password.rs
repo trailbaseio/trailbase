@@ -2,7 +2,7 @@ use axum::{
   extract::{Query, State},
   response::Redirect,
 };
-use lazy_static::lazy_static;
+use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_sqlite::named_params;
 use ts_rs::TS;
@@ -71,23 +71,18 @@ pub async fn change_password_handler(
   let old_password_hash = db_user.password_hash;
   let new_password_hash = hash_password(&request.new_password)?;
 
-  lazy_static! {
-    pub static ref QUERY: String = format!(
-      r#"
-        UPDATE
-          '{USER_TABLE}'
-        SET
-          password_hash = :new_password_hash
-        WHERE
-          id = :user_id AND password_hash = :old_password_hash
-      "#
-    );
-  }
+  const QUERY: &str = formatcp!(
+    "\
+      UPDATE '{USER_TABLE}' \
+      SET password_hash = :new_password_hash \
+      WHERE id = :user_id AND password_hash = :old_password_hash \
+    "
+  );
 
   let rows_affected = state
     .user_conn()
     .execute(
-      &*QUERY,
+      QUERY,
       named_params! {
         ":user_id": user.uuid.into_bytes().to_vec(),
         ":new_password_hash": new_password_hash,

@@ -2,7 +2,7 @@ use axum::{
   extract::State,
   response::{IntoResponse, Redirect, Response},
 };
-use lazy_static::lazy_static;
+use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_sqlite::params;
 use ts_rs::TS;
@@ -63,24 +63,21 @@ pub async fn reset_password_request_handler(
   }
 
   let password_reset_code = generate_random_string(20);
-  lazy_static! {
-    static ref UPDATE_CODE_QUERY: String = format!(
-      r#"
-          UPDATE
-            '{USER_TABLE}'
-          SET
-            password_reset_code = $1,
-            password_reset_code_sent_at = UNIXEPOCH()
-          WHERE
-            id = $2
-        "#
-    );
-  }
+  const UPDATE_CODE_QUERY: &str = formatcp!(
+    "\
+      UPDATE '{USER_TABLE}' \
+      SET \
+        password_reset_code = $1, \
+        password_reset_code_sent_at = UNIXEPOCH() \
+      WHERE \
+        id = $2 \
+    "
+  );
 
   let rows_affected = state
     .user_conn()
     .execute(
-      &*UPDATE_CODE_QUERY,
+      UPDATE_CODE_QUERY,
       params!(password_reset_code.clone(), user.id),
     )
     .await?;
@@ -144,24 +141,22 @@ pub async fn reset_password_update_handler(
   )?;
 
   let hashed_password = hash_password(&request.password)?;
-  lazy_static! {
-    static ref UPDATE_PASSWORD_QUERY: String = format!(
-      r#"
-        UPDATE '{USER_TABLE}'
-        SET
-          password_hash = $1,
-          password_reset_code = NULL,
-          password_reset_code_sent_at = NULL
-        WHERE
-          password_reset_code = $2 AND password_reset_code_sent_at > (UNIXEPOCH() - {TTL_SEC})
-      "#
-    );
-  }
+  const UPDATE_PASSWORD_QUERY: &str = formatcp!(
+    "\
+      UPDATE '{USER_TABLE}' \
+      SET \
+        password_hash = $1, \
+        password_reset_code = NULL, \
+        password_reset_code_sent_at = NULL \
+      WHERE \
+        password_reset_code = $2 AND password_reset_code_sent_at > (UNIXEPOCH() - {TTL_SEC}) \
+    "
+  );
 
   let rows_affected = state
     .user_conn()
     .execute(
-      &*UPDATE_PASSWORD_QUERY,
+      UPDATE_PASSWORD_QUERY,
       params!(hashed_password, request.password_reset_code),
     )
     .await?;

@@ -3,7 +3,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
-use crate::auth::oauth::providers::oauth_provider_registry;
+use crate::auth::oauth::providers::oauth_providers_static_registry;
 
 #[derive(Debug, Serialize, ts_rs::TS)]
 pub struct OAuthProviderEntry {
@@ -22,7 +22,7 @@ pub struct OAuthProviderResponse {
 /// which only lists configured providers.
 pub async fn available_oauth_providers_handler() -> Result<Json<OAuthProviderResponse>, Error> {
   return Ok(Json(OAuthProviderResponse {
-    providers: oauth_provider_registry
+    providers: oauth_providers_static_registry()
       .iter()
       .map(|factory| OAuthProviderEntry {
         id: factory.id as i32,

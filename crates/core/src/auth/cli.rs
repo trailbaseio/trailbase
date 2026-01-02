@@ -1,5 +1,5 @@
 use base64::prelude::*;
-use lazy_static::lazy_static;
+use const_format::formatcp;
 use trailbase_sqlite::{Connection, params};
 use uuid::Uuid;
 
@@ -44,16 +44,11 @@ pub async fn change_password(
 
   let hashed_password = hash_password(password)?;
 
-  lazy_static! {
-    static ref UPDATE_PASSWORD_QUERY: String =
-      format!("UPDATE '{USER_TABLE}' SET password_hash = $1 WHERE id = $2 RETURNING id");
-  }
+  const UPDATE_PASSWORD_QUERY: &str =
+    formatcp!("UPDATE '{USER_TABLE}' SET password_hash = $1 WHERE id = $2 RETURNING id");
 
   return user_conn
-    .write_query_value(
-      &*UPDATE_PASSWORD_QUERY,
-      params!(hashed_password, db_user.id),
-    )
+    .write_query_value(UPDATE_PASSWORD_QUERY, params!(hashed_password, db_user.id))
     .await?
     .ok_or(AuthError::NotFound);
 }
@@ -66,13 +61,11 @@ pub async fn change_email(
   let normalized_email = validate_and_normalize_email_address(new_email)?;
   let db_user = user.lookup_user(user_conn).await?;
 
-  lazy_static! {
-    static ref UPDATE_EMAIL_QUERY: String =
-      format!("UPDATE '{USER_TABLE}' SET email = $1 WHERE id = $2 RETURNING id");
-  }
+  const UPDATE_EMAIL_QUERY: &str =
+    formatcp!("UPDATE '{USER_TABLE}' SET email = $1 WHERE id = $2 RETURNING id");
 
   return user_conn
-    .write_query_value(&*UPDATE_EMAIL_QUERY, params!(normalized_email, db_user.id))
+    .write_query_value(UPDATE_EMAIL_QUERY, params!(normalized_email, db_user.id))
     .await?
     .ok_or(AuthError::NotFound);
 }
@@ -82,11 +75,9 @@ pub async fn add_user(
   email: &str,
   password: &str,
 ) -> Result<Uuid, AuthError> {
-  lazy_static! {
-    static ref ADD_USER_QUERY: String = format!(
-      r#"INSERT INTO "{USER_TABLE}" (email, password_hash, verified) VALUES (?1, ?2, ?3) RETURNING *"#
-    );
-  }
+  const ADD_USER_QUERY: &str = formatcp!(
+    "INSERT INTO '{USER_TABLE}' (email, password_hash, verified) VALUES (?1, ?2, ?3) RETURNING *"
+  );
 
   let normalized_email = validate_and_normalize_email_address(email)?;
   if password.is_empty() {
@@ -96,7 +87,7 @@ pub async fn add_user(
 
   let user: DbUser = user_conn
     .write_query_value(
-      &*ADD_USER_QUERY,
+      ADD_USER_QUERY,
       params!(normalized_email, hashed_password, true),
     )
     .await?
@@ -111,13 +102,9 @@ pub async fn delete_user(
 ) -> Result<(), AuthError> {
   let db_user = user.lookup_user(user_conn).await?;
 
-  lazy_static! {
-    static ref DELETE_QUERY: String = format!(r#"DELETE FROM "{USER_TABLE}" WHERE id = $1"#);
-  }
+  const DELETE_QUERY: &str = formatcp!("DELETE FROM '{USER_TABLE}' WHERE id = $1");
 
-  let rows_affected = user_conn
-    .execute(&*DELETE_QUERY, params!(db_user.id))
-    .await?;
+  let rows_affected = user_conn.execute(DELETE_QUERY, params!(db_user.id)).await?;
   if rows_affected > 0 {
     return Ok(());
   }
@@ -132,13 +119,11 @@ pub async fn set_verified(
 ) -> Result<Uuid, AuthError> {
   let db_user = user.lookup_user(user_conn).await?;
 
-  lazy_static! {
-    static ref SET_VERIFIED_QUERY: String =
-      format!("UPDATE '{USER_TABLE}' SET verified = $1 WHERE id = $2 RETURNING id");
-  }
+  const SET_VERIFIED_QUERY: &str =
+    formatcp!("UPDATE '{USER_TABLE}' SET verified = $1 WHERE id = $2 RETURNING id");
 
   return user_conn
-    .write_query_value(&*SET_VERIFIED_QUERY, params!(verified, db_user.id))
+    .write_query_value(SET_VERIFIED_QUERY, params!(verified, db_user.id))
     .await?
     .ok_or(AuthError::NotFound);
 }
@@ -179,12 +164,11 @@ pub async fn promote_user_to_admin(
 ) -> Result<Uuid, AuthError> {
   let db_user = user.lookup_user(user_conn).await?;
 
-  lazy_static! {
-    static ref PROMOTE_ADMIN_QUERY: String =
-      format!("UPDATE {USER_TABLE} SET admin = TRUE WHERE id = $1 RETURNING id");
-  }
+  const PROMOTE_ADMIN_QUERY: &str =
+    formatcp!("UPDATE '{USER_TABLE}' SET admin = TRUE WHERE id = $1 RETURNING id");
+
   return user_conn
-    .write_query_value(&*PROMOTE_ADMIN_QUERY, params!(db_user.id))
+    .write_query_value(PROMOTE_ADMIN_QUERY, params!(db_user.id))
     .await?
     .ok_or(AuthError::NotFound);
 }
@@ -195,12 +179,11 @@ pub async fn demote_admin_to_user(
 ) -> Result<Uuid, AuthError> {
   let db_user = user.lookup_user(user_conn).await?;
 
-  lazy_static! {
-    static ref DEMOTE_ADMIN_QUERY: String =
-      format!("UPDATE {USER_TABLE} SET admin = FALSE WHERE id = $1 RETURNING id");
-  }
+  const DEMOTE_ADMIN_QUERY: &str =
+    formatcp!("UPDATE '{USER_TABLE}' SET admin = FALSE WHERE id = $1 RETURNING id");
+
   return user_conn
-    .write_query_value(&*DEMOTE_ADMIN_QUERY, params!(db_user.id))
+    .write_query_value(DEMOTE_ADMIN_QUERY, params!(db_user.id))
     .await?
     .ok_or(AuthError::NotFound);
 }

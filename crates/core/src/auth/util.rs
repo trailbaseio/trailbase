@@ -1,7 +1,9 @@
 use base64::prelude::*;
 use chrono::Duration;
-use lazy_static::lazy_static;
+use const_format::formatcp;
+use regex::Regex;
 use sha2::{Digest, Sha256};
+use std::sync::LazyLock;
 use tower_cookies::{
   Cookie, Cookies,
   cookie::{self, SameSite},
@@ -21,9 +23,8 @@ use crate::constants::{
 /// NOTE: We're not currently using this, see argument on `validate_and_normalize_email_address`.
 #[allow(unused)]
 fn strip_plus_email_addressing(email_address: &str) -> String {
-  lazy_static! {
-    static ref PLUS_PATTERN: regex::Regex = regex::Regex::new("[+].*?@").expect("covered by tests");
-  };
+  static PLUS_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new("[+].*?@").expect("covered by tests"));
   return PLUS_PATTERN.replace(email_address, "@").to_string();
 }
 
@@ -194,11 +195,9 @@ pub async fn get_user_by_email(
   user_conn: &trailbase_sqlite::Connection,
   email: &str,
 ) -> Result<DbUser, AuthError> {
-  lazy_static! {
-    static ref QUERY: String = format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#);
-  };
+  const QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#);
   let db_user = user_conn
-    .read_query_value::<DbUser>(&*QUERY, params!(email.to_string()))
+    .read_query_value::<DbUser>(QUERY, params!(email.to_string()))
     .await
     .map_err(|_err| AuthError::NotFound)?;
 
@@ -213,11 +212,9 @@ pub async fn get_user_by_id(
   user_conn: &trailbase_sqlite::Connection,
   id: &uuid::Uuid,
 ) -> Result<DbUser, AuthError> {
-  lazy_static! {
-    static ref QUERY: String = format!(r#"SELECT * FROM "{USER_TABLE}" WHERE id = $1"#);
-  };
+  const QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE id = $1"#);
   let db_user = user_conn
-    .read_query_value::<DbUser>(&*QUERY, params!(id.into_bytes()))
+    .read_query_value::<DbUser>(QUERY, params!(id.into_bytes()))
     .await
     .map_err(|_err| AuthError::NotFound)?;
 
@@ -225,25 +222,20 @@ pub async fn get_user_by_id(
 }
 
 pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, AuthError> {
-  lazy_static! {
-    static ref QUERY: String =
-      format!(r#"SELECT EXISTS(SELECT 1 FROM "{USER_TABLE}" WHERE email = $1)"#);
-  };
+  const QUERY: &str = formatcp!(r#"SELECT EXISTS(SELECT 1 FROM "{USER_TABLE}" WHERE email = $1)"#);
   return state
     .user_conn()
-    .read_query_row_f(&*QUERY, params!(email.to_string()), |row| row.get(0))
+    .read_query_row_f(QUERY, params!(email.to_string()), |row| row.get(0))
     .await?
     .ok_or_else(|| AuthError::Internal("query should return".into()));
 }
 
 pub(crate) async fn is_admin(state: &AppState, user_id: &uuid::Uuid) -> bool {
-  lazy_static! {
-    static ref QUERY: String = format!(r#"SELECT admin FROM "{USER_TABLE}" WHERE id = $1"#);
-  };
+  const QUERY: &str = formatcp!(r#"SELECT admin FROM "{USER_TABLE}" WHERE id = $1"#);
 
   let Ok(Some(row)) = state
     .user_conn()
-    .read_query_row_f(&*QUERY, params!(user_id.as_bytes().to_vec()), |row| {
+    .read_query_row_f(QUERY, params!(user_id.as_bytes().to_vec()), |row| {
       row.get(0)
     })
     .await
@@ -258,14 +250,12 @@ pub(crate) async fn delete_all_sessions_for_user(
   user_conn: &Connection,
   user_id: uuid::Uuid,
 ) -> Result<usize, AuthError> {
-  lazy_static! {
-    static ref QUERY: String = format!(r#"DELETE FROM "{SESSION_TABLE}" WHERE user = $1"#);
-  };
+  const QUERY: &str = formatcp!(r#"DELETE FROM "{SESSION_TABLE}" WHERE user = $1"#);
 
   return Ok(
     user_conn
       .execute(
-        &*QUERY,
+        QUERY,
         [trailbase_sqlite::Value::Blob(user_id.into_bytes().to_vec())],
       )
       .await?,
@@ -276,14 +266,12 @@ pub(crate) async fn delete_session(
   state: &AppState,
   refresh_token: String,
 ) -> Result<usize, AuthError> {
-  lazy_static! {
-    static ref QUERY: String = format!(r#"DELETE FROM "{SESSION_TABLE}" WHERE refresh_token = $1"#);
-  };
+  const QUERY: &str = formatcp!(r#"DELETE FROM "{SESSION_TABLE}" WHERE refresh_token = $1"#);
 
   return Ok(
     state
       .user_conn()
-      .execute(&*QUERY, params!(refresh_token))
+      .execute(QUERY, params!(refresh_token))
       .await?,
   );
 }
@@ -296,15 +284,6 @@ pub(crate) fn derive_pkce_code_challenge(pkce_code_verifier: &str) -> String {
   sha.update(pkce_code_verifier);
   // NOTE: This is NO_PAD as per the spec.
   return BASE64_URL_SAFE_NO_PAD.encode(sha.finalize());
-}
-
-pub(crate) fn oauth_provider_name_to_img(name: &str) -> String {
-  return match name {
-    "discord" | "facebook" | "gitlab" | "google" | "microsoft" => {
-      format!("{name}.svg")
-    }
-    _ => "oidc.svg".to_string(),
-  };
 }
 
 #[cfg(test)]

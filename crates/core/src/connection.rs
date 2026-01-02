@@ -497,24 +497,24 @@ fn setup_file_deletion_triggers_sync(
       let col = &metadata.schema.columns[*idx];
       let column_name = &col.name;
 
-      conn.execute_batch(&indoc::formatdoc!(
-          r#"
-          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger";
-          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__update_trigger" AFTER UPDATE ON {table_name}
-            WHEN OLD."{column_name}" IS NOT NULL AND OLD."{column_name}" != NEW."{column_name}"
-            BEGIN
-              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
-                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
-            END;
-
-          DROP TRIGGER IF EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger";
-          CREATE TRIGGER IF NOT EXISTS "{db}"."__{unqualified_name}__{column_name}__delete_trigger" AFTER DELETE ON {table_name}
-            WHEN OLD."{column_name}" IS NOT NULL
-            BEGIN
-              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
-                ('{table_name}', OLD._rowid_, '{column_name}', OLD."{column_name}");
-            END;
-          "#,
+      conn.execute_batch(&format!(
+          "\
+          DROP TRIGGER IF EXISTS '{db}'.'__{unqualified_name}__{column_name}__update_trigger'; \
+          CREATE TRIGGER IF NOT EXISTS '{db}'.'__{unqualified_name}__{column_name}__update_trigger' AFTER UPDATE ON {table_name} \
+            WHEN OLD.\"{column_name}\" IS NOT NULL AND OLD.\"{column_name}\" != NEW.\"{column_name}\" \
+            BEGIN \
+              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD.\"{column_name}\"); \
+            END; \
+          \
+          DROP TRIGGER IF EXISTS '{db}'.'__{unqualified_name}__{column_name}__delete_trigger'; \
+          CREATE TRIGGER IF NOT EXISTS '{db}'.'__{unqualified_name}__{column_name}__delete_trigger' AFTER DELETE ON {table_name} \
+            WHEN OLD.\"{column_name}\" IS NOT NULL \
+            BEGIN \
+              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD.\"{column_name}\"); \
+            END; \
+          ",
           table_name = table_name.escaped_string(),
         ))?;
     }

@@ -1,6 +1,7 @@
 use axum::extract::{Path, State};
 use axum::response::Response;
-use lazy_static::lazy_static;
+use const_format::formatcp;
+use std::sync::LazyLock;
 use trailbase_schema::{FileUploadInput, QualifiedName};
 
 use crate::app_state::AppState;
@@ -135,24 +136,20 @@ pub async fn delete_avatar_handler(
   State(state): State<AppState>,
   user: User,
 ) -> Result<(), AuthError> {
-  lazy_static! {
-    static ref SQL: String = format!("DELETE FROM {AVATAR_TABLE} WHERE user = ?1");
-  }
+  const QUERY: &str = formatcp!("DELETE FROM '{AVATAR_TABLE}' WHERE user = ?1");
 
   let main_conn = state.connection_manager().main_entry().connection;
   main_conn
-    .execute(&*SQL, [rusqlite::types::Value::Blob(user.uuid.into())])
+    .execute(QUERY, [rusqlite::types::Value::Blob(user.uuid.into())])
     .await?;
 
   return Ok(());
 }
 
-lazy_static! {
-  static ref AVATAR_TABLE_NAME: QualifiedName = QualifiedName {
-    name: AVATAR_TABLE.to_string(),
-    database_schema: None,
-  };
-}
+static AVATAR_TABLE_NAME: LazyLock<QualifiedName> = LazyLock::new(|| QualifiedName {
+  name: AVATAR_TABLE.to_string(),
+  database_schema: None,
+});
 
 #[cfg(test)]
 mod tests {
@@ -226,13 +223,11 @@ mod tests {
 
     let user_x_token = login_with_password(&state, email, password).await.unwrap();
 
-    lazy_static! {
-      static ref QUERY: String = format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#);
-    };
+    const QUERY: &str = formatcp!("SELECT * FROM '{USER_TABLE}' WHERE email = $1");
 
     let db_user = state
       .user_conn()
-      .read_query_value::<DbUser>(&*QUERY, (email,))
+      .read_query_value::<DbUser>(QUERY, (email,))
       .await
       .unwrap()
       .unwrap();
