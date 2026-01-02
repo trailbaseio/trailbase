@@ -1,8 +1,14 @@
+## v0.22.6
+
+- Stop using baseline WASM compiler "winch" in dev-mode on MacOS. Previously loading WASM components on MacOS with `--dev` would cause a panic related to nested tokio runtimes. This increases initial-load & hot-reload times, thus isn't ideal for DevEx but better than crashing. This will require further investigation: https://github.com/trailbaseio/trailbase/issues/206.
+- Upon request: add re-serialization of list queries to trailbase-qs.
+- Update Rust and JavaScript dependencies.
+
 ## v0.22.5
 
 - New "--spa" command-line option for serving SPAs from `--public-dir`. Any path that doesn't look like a file/asset request, i.e. doesn't have a file extension, will fall back to `<public_dir>/index.html` to let a client-side router take over. Otherwise, navigating to non-root paths would serve 404. Thanks @takumi3488.
 - Improve error handling and cleanup OAuth callback handling.
-- Internal: build queries at build-time rather than relying on lazy-statics whenvever possible.
+- Internal: build queries at build-time rather than relying on lazy-statics whenever possible.
 - Update dependencies.
 
 ## v0.22.4
