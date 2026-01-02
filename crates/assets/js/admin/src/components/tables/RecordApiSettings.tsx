@@ -1255,7 +1255,7 @@ function DiscardCreateButtons(props: {
       </Button>
 
       <Button type="submit" disabled={!props.canSubmit} variant="default">
-        Crate
+        Create
       </Button>
     </>
   );
