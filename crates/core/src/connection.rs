@@ -323,7 +323,7 @@ fn init_main_db_impl(
   data_dir: Option<&DataDir>,
   json_registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
   attach: Vec<AttachedDatabase>,
-  runtimes: Vec<SqliteFunctionRuntime>,
+  #[cfg_attr(not(feature = "wasm"), expect(unused))] runtimes: Vec<SqliteFunctionRuntime>,
   main_migrations: bool,
 ) -> Result<(Connection, bool), ConnectionError> {
   let main_path = data_dir.map(|d| d.main_db_path());
