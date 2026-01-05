@@ -6,7 +6,7 @@ license = "OSL-3.0"
 description = "SQLite extension used by TrailBase"
 homepage = "https://trailbase.io"
 repository = "https://github.com/trailbaseio/trailbase"
-readme = "../README.md"
+readme = "../../README.md"
 
 [lib]
 crate-type=["cdylib", "rlib"]

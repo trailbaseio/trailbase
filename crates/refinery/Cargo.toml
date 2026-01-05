@@ -6,7 +6,7 @@ description = "Fork of Refinery's refinery-core/macro crates"
 license = "OSL-3.0"
 repository = "https://github.com/trailbaseio/trailbase"
 edition = "2024"
-readme = "../README.md"
+readme = "../../README.md"
 
 [dependencies]
 async-trait = "0.1"
