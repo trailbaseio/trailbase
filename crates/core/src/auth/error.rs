@@ -1,7 +1,6 @@
 use axum::body::Body;
 use axum::http::{StatusCode, header::CONTENT_TYPE};
 use axum::response::{IntoResponse, Response};
-use log::*;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -32,13 +31,7 @@ impl From<trailbase_sqlite::Error> for AuthError {
   fn from(err: trailbase_sqlite::Error) -> Self {
     return match err {
       trailbase_sqlite::Error::Rusqlite(err) => match err {
-        rusqlite::Error::QueryReturnedNoRows => {
-          #[cfg(debug_assertions)]
-          info!("SQLite returned empty rows error");
-
-          Self::NotFound
-        }
-
+        rusqlite::Error::QueryReturnedNoRows => Self::NotFound,
         rusqlite::Error::SqliteFailure(err, _msg) => {
           match err.extended_code {
             // List of error codes: https://www.sqlite.org/rescode.html

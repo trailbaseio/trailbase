@@ -10,6 +10,7 @@ use core::future::Future;
 use futures_util::future::BoxFuture;
 use http_body_util::combinators::UnsyncBoxBody;
 use parking_lot::Mutex;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
@@ -423,7 +424,7 @@ impl SharedExecutor {
 
 pub struct Runtime {
   /// Path to original .wasm component file.
-  component_path: std::path::PathBuf,
+  component_path: PathBuf,
 
   shared_sender: kanal::AsyncSender<Message>,
 
@@ -461,7 +462,7 @@ fn build_config(cache: Option<wasmtime::Cache>, use_winch: bool) -> Config {
 #[derive(Clone, Default, Debug)]
 pub struct RuntimeOptions {
   /// Optional file-system sandbox root for r/o file access.
-  pub fs_root_path: Option<std::path::PathBuf>,
+  pub fs_root_path: Option<PathBuf>,
 
   /// Whether to use the non-optimizing baseline compiler.
   pub use_winch: bool,
@@ -470,7 +471,7 @@ pub struct RuntimeOptions {
 impl Runtime {
   pub fn new(
     executor: Arc<SharedExecutor>,
-    wasm_source_file: std::path::PathBuf,
+    wasm_source_file: PathBuf,
     conn: trailbase_sqlite::Connection,
     kv_store: KvStore,
     opts: RuntimeOptions,
@@ -557,7 +558,7 @@ impl Runtime {
     });
   }
 
-  pub fn component_path(&self) -> &std::path::PathBuf {
+  pub fn component_path(&self) -> &PathBuf {
     return &self.component_path;
   }
 
@@ -628,8 +629,8 @@ async fn async_event_loop(runner: AsyncRunner, shared_recv: kanal::AsyncReceiver
 pub struct SharedState {
   pub conn: trailbase_sqlite::Connection,
   pub kv_store: KvStore,
-  pub fs_root_path: Option<std::path::PathBuf>,
-  pub component_path: std::path::PathBuf,
+  pub fs_root_path: Option<PathBuf>,
+  pub component_path: PathBuf,
 }
 
 // Maybe rename to ~"runner". It's the "thing" to create new WASM "stores" and to call into APIs
@@ -789,12 +790,9 @@ impl AsyncRunner {
   }
 }
 
-pub fn load_wasm_components<T, E: std::error::Error>(
-  components_path: std::path::PathBuf,
-  f: impl Fn(std::path::PathBuf) -> Result<T, E>,
-) -> Result<Vec<T>, E> {
-  let Ok(dir) = std::fs::read_dir(&components_path) else {
-    return Ok(vec![]);
+pub fn find_wasm_components(components_path: impl AsRef<std::path::Path>) -> Vec<PathBuf> {
+  let Ok(dir) = std::fs::read_dir(components_path.as_ref()) else {
+    return vec![];
   };
 
   return dir
@@ -814,11 +812,11 @@ pub fn load_wasm_components<T, E: std::error::Error>(
 
       let path = entry.path();
       if path.extension()? == "wasm" {
-        return Some(f(path));
+        return Some(path);
       }
       return None;
     })
-    .collect::<Result<Vec<T>, E>>();
+    .collect();
 }
 
 #[allow(unused)]

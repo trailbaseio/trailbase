@@ -1,7 +1,6 @@
 use axum::body::Body;
 use axum::http::{StatusCode, header::CONTENT_TYPE};
 use axum::response::{IntoResponse, Response};
-use log::*;
 use thiserror::Error;
 
 /// Publicly visible errors of record APIs.
@@ -31,7 +30,7 @@ impl From<trailbase_sqlite::Error> for RecordError {
       trailbase_sqlite::Error::Rusqlite(err) => match err {
         rusqlite::Error::QueryReturnedNoRows => {
           #[cfg(debug_assertions)]
-          info!("SQLite returned empty rows error");
+          log::info!("SQLite returned empty rows error");
 
           Self::RecordNotFound
         }

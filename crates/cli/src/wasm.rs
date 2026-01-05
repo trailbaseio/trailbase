@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Seek};
 use trailbase::DataDir;
+use trailbase_wasm_runtime_host::find_wasm_components;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -139,13 +140,12 @@ pub struct Component {
 pub fn list_installed_wasm_components(data_dir: &DataDir) -> Result<Vec<Component>, BoxError> {
   let components_path = data_dir.root().join("wasm");
 
-  let components: Vec<(Vec<u8>, std::path::PathBuf)> =
-    trailbase_wasm_runtime_host::load_wasm_components(
-      components_path,
-      |path: std::path::PathBuf| -> std::io::Result<(Vec<u8>, std::path::PathBuf)> {
-        return Ok((std::fs::read(&path)?, path));
-      },
-    )?;
+  let components: Vec<(Vec<u8>, std::path::PathBuf)> = find_wasm_components(components_path)
+    .into_iter()
+    .map(|path| -> std::io::Result<(Vec<u8>, std::path::PathBuf)> {
+      return Ok((std::fs::read(&path)?, path));
+    })
+    .collect::<Result<Vec<_>, _>>()?;
 
   return components
     .into_iter()

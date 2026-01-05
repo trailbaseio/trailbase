@@ -9,7 +9,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
-use trailbase_wasm_runtime_host::{InitArgs, RuntimeOptions, SharedExecutor, load_wasm_components};
+use trailbase_wasm_runtime_host::{InitArgs, RuntimeOptions, SharedExecutor, find_wasm_components};
 
 use crate::User;
 use crate::util::urlencode;
@@ -25,8 +25,11 @@ pub(crate) fn build_sync_wasm_runtimes_for_components(
   fs_root_path: Option<&Path>,
   use_winch: bool,
 ) -> Result<Vec<SqliteFunctionRuntime>, AnyError> {
-  let sync_runtimes: Vec<SqliteFunctionRuntime> =
-    load_wasm_components(components_path, |path: std::path::PathBuf| {
+  let components = find_wasm_components(&components_path);
+
+  let sync_runtimes: Vec<SqliteFunctionRuntime> = components
+    .into_iter()
+    .map(|path| {
       return SqliteFunctionRuntime::new(
         path,
         RuntimeOptions {
@@ -39,7 +42,8 @@ pub(crate) fn build_sync_wasm_runtimes_for_components(
           },
         },
       );
-    })?;
+    })
+    .collect::<Result<Vec<_>, _>>()?;
 
   return Ok(sync_runtimes);
 }
@@ -52,10 +56,17 @@ pub(crate) fn build_wasm_runtimes_for_components(
   fs_root_path: Option<PathBuf>,
   use_winch: bool,
 ) -> Result<Vec<Runtime>, AnyError> {
+  let components = find_wasm_components(&components_path);
+  if components.is_empty() {
+    debug!("No WASM component found in {components_path:?}");
+    return Ok(vec![]);
+  }
+
   let executor = SharedExecutor::new(n_threads);
 
-  let runtimes: Vec<Runtime> =
-    load_wasm_components(components_path.clone(), |path: std::path::PathBuf| {
+  let runtimes: Vec<Runtime> = components
+    .into_iter()
+    .map(|path| {
       return Runtime::new(
         executor.clone(),
         path,
@@ -71,11 +82,8 @@ pub(crate) fn build_wasm_runtimes_for_components(
           },
         },
       );
-    })?;
-
-  if runtimes.is_empty() {
-    debug!("No WASM component found in {components_path:?}");
-  }
+    })
+    .collect::<Result<Vec<_>, _>>()?;
 
   return Ok(runtimes);
 }
