@@ -215,7 +215,7 @@ impl Query {
         .iter()
         .map(|(c, p)| match p {
           crate::query::OrderPrecedent::Descending => format!("-{}", c),
-          crate::query::OrderPrecedent::Ascending => format!("{}", c),
+          crate::query::OrderPrecedent::Ascending => c.to_string(),
         })
         .join(",");
 

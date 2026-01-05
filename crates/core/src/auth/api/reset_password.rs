@@ -58,7 +58,7 @@ pub async fn reset_password_request_handler(
 
     let age: chrono::Duration = chrono::Utc::now() - timestamp;
     if age < chrono::Duration::seconds(RATE_LIMIT_SEC) {
-      return Err(AuthError::BadRequest("Password reset sent already"));
+      return Err(AuthError::TooManyRequests);
     }
   }
 

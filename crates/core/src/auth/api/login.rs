@@ -282,7 +282,7 @@ pub async fn check_credentials(
     return AuthError::Unauthorized;
   })?;
 
-  // Validate password.
+  // Validates password and rate limits attempts.
   check_user_password(&db_user, password, state.demo_mode())?;
 
   return Ok(());
@@ -301,7 +301,7 @@ pub(crate) async fn login_with_password(
     return AuthError::Unauthorized;
   })?;
 
-  // Validate password.
+  // Validates password and rate limits attempts.
   check_user_password(&db_user, password, state.demo_mode())?;
 
   let user_id = db_user.uuid();

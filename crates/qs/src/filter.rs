@@ -139,8 +139,7 @@ impl ValueOrComposite {
           vec
             .iter()
             .enumerate()
-            .map(|(i, el)| recurse(el, &format!("{}[{}][{}]", prefix, comb, i)))
-            .flatten()
+            .flat_map(|(i, el)| recurse(el, &format!("{}[{}][{}]", prefix, comb, i)))
             .collect()
         }
       };

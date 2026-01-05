@@ -43,6 +43,8 @@ being left w/o a valid one.
 You may want to consider using a reverse proxy, e.g. [nginx](https://nginx.org)
 or [caddy](https://caddyserver.com/) with first-class *Let's encrypt*
 integration[^1].
+Make sure the proxy sets the `X-Forwarded-For` header to ensure logging and
+ip-based rate limiting work correctly.
 
 When using a reverse proxy and realtime subscriptions, some extra setup may be
 needed, e.g.

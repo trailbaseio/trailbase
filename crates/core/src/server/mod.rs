@@ -14,6 +14,7 @@ use http_body_util::BodyExt;
 use http_body_util::combinators::UnsyncBoxBody;
 use log::*;
 use std::borrow::Cow;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 use tokio::signal;
@@ -25,6 +26,8 @@ use tokio_rustls::{
 };
 use tower::Service;
 use tower_cookies::CookieManagerLayer;
+use tower_governor::GovernorLayer;
+use tower_governor::governor::GovernorConfigBuilder;
 use tower_http::services::fs::{ServeDir, ServeFile};
 use tower_http::{cors, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing_subscriber::{filter, prelude::*};
@@ -167,10 +170,65 @@ impl Server {
       }
     }
 
+    // Install an Ip-based rate limiter on auth APIs to avoid abuse.
+    //
+    // NOTE: If you run into rate-limits and are running behind a reverse proxy, please set the
+    // "x-forwarded-for" header correctly to ensure ip-based rate limitting and request logging
+    // works correctly.
+    // TODO: we should probably also allow user-configured rate limits on record APIs.
+    let install_auth_rate_limiter = {
+      let governor_conf = Arc::new(
+        GovernorConfigBuilder::default()
+          // Quota.
+          .burst_size(if cfg!(debug_assertions) { 50 } else { 5 })
+          // Replenish one after 2 seconds.
+          .per_second(2)
+          .key_extractor(crate::extract::ip::RealIpKeyExtractor)
+          // Set rate limiting headers on reply
+          .use_headers()
+          // Only block POST method for abuse prevention (e.g. sign-up, ...), e.g. allow unlimited
+          // GET auth status.
+          .methods(vec![axum::http::Method::POST])
+          .finish()
+          .expect("startup"),
+      );
+
+      // Periodically clean up governor.
+      let governor_limiter = governor_conf.limiter().clone();
+      tokio::spawn(async move {
+        let interval = tokio::time::Duration::from_secs(60);
+        loop {
+          tokio::time::sleep(interval).await;
+          log::trace!("rate limiting storage size: {}", governor_limiter.len());
+          governor_limiter.retain_recent();
+        }
+      });
+
+      move |router: Router<crate::AppState>| router.layer(GovernorLayer::new(governor_conf.clone()))
+    };
+
     Ok(Self {
       state: state.clone(),
-      main_router: Self::build_main_router(&state, &opts, custom_routers).await?,
-      admin_router: Self::build_independent_admin_router(&state, &opts),
+      main_router: Self::build_main_router(
+        &state,
+        &opts,
+        if opts.dev {
+          None
+        } else {
+          Some(&install_auth_rate_limiter)
+        },
+        custom_routers,
+      )
+      .await?,
+      admin_router: Self::build_independent_admin_router(
+        &state,
+        &opts,
+        if opts.dev {
+          None
+        } else {
+          Some(&install_auth_rate_limiter)
+        },
+      ),
       tls: Self::load_tls(&opts),
     })
   }
@@ -376,6 +434,7 @@ impl Server {
   fn build_independent_admin_router(
     state: &AppState,
     opts: &ServerOptions,
+    install_auth_rate_limiter: Option<&impl Fn(Router<AppState>) -> Router<AppState>>,
   ) -> Option<(String, Router<()>)> {
     let address = opts.admin_address.as_ref()?;
     if !has_indepenedent_admin_router(opts) {
@@ -383,7 +442,11 @@ impl Server {
     }
 
     let router = Router::new()
-      .merge(auth::admin_auth_router())
+      .merge(
+        install_auth_rate_limiter.map_or_else(auth::admin_auth_router, |inst| {
+          inst(auth::admin_auth_router())
+        }),
+      )
       .merge(Self::build_admin_router(state));
 
     return Some((
@@ -395,6 +458,7 @@ impl Server {
   async fn build_main_router(
     state: &AppState,
     opts: &ServerOptions,
+    install_auth_rate_limiter: Option<&impl Fn(Router<AppState>) -> Router<AppState>>,
     custom_routers: Vec<Router<AppState>>,
   ) -> Result<(String, Router<()>), InitError> {
     let enable_transactions =
@@ -403,7 +467,7 @@ impl Server {
     let mut router = Router::new()
       // Public, stable and versioned APIs.
       .merge(records::router(enable_transactions))
-      .merge(auth::router())
+      .merge(install_auth_rate_limiter.map_or_else(auth::router, |inst| inst(auth::router())))
       .route("/api/healthcheck", get(healthcheck_handler));
 
     if !has_indepenedent_admin_router(opts) {
@@ -684,9 +748,12 @@ async fn start_listen(
         acceptor: TlsAcceptor::from(Arc::new(server_config)),
       };
 
-      if let Err(err) = serve::serve(listener, router.clone())
-        .with_graceful_shutdown(shutdown_signal())
-        .await
+      if let Err(err) = serve::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+      )
+      .with_graceful_shutdown(shutdown_signal())
+      .await
       {
         error!("Failed to start server: {err}");
         std::process::exit(1);
@@ -701,9 +768,12 @@ async fn start_listen(
         }
       };
 
-      if let Err(err) = serve::serve(listener, router.clone())
-        .with_graceful_shutdown(shutdown_signal())
-        .await
+      if let Err(err) = serve::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+      )
+      .with_graceful_shutdown(shutdown_signal())
+      .await
       {
         error!("Failed to start server: {err}");
         std::process::exit(1);

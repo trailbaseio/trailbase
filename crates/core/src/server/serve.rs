@@ -119,6 +119,12 @@ impl Listener for TlsListener {
   }
 }
 
+impl axum::extract::connect_info::Connected<IncomingStream<'_, TlsListener>> for SocketAddr {
+  fn connect_info(stream: IncomingStream<'_, TlsListener>) -> Self {
+    *stream.remote_addr()
+  }
+}
+
 /// Serve the service with the supplied listener.
 ///
 /// This method of running a service is intentionally simple and doesn't support any configuration.

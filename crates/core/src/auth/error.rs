@@ -20,6 +20,8 @@ pub enum AuthError {
   OAuthProviderNotFound,
   #[error("Bad request: {0}")]
   BadRequest(&'static str),
+  #[error("Too many requests")]
+  TooManyRequests,
   #[error("Failed dependency: {0}")]
   FailedDependency(Box<dyn std::error::Error + Send + Sync>),
   #[error("Internal: {0}")]
@@ -71,6 +73,7 @@ impl IntoResponse for AuthError {
       Self::NotFound => (StatusCode::NOT_FOUND, None),
       Self::OAuthProviderNotFound => (StatusCode::METHOD_NOT_ALLOWED, None),
       Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, Some(msg.to_string())),
+      Self::TooManyRequests => (StatusCode::TOO_MANY_REQUESTS, None),
       Self::FailedDependency(err) if cfg!(debug_assertions) => {
         (StatusCode::FAILED_DEPENDENCY, Some(err.to_string()))
       }

@@ -1,6 +1,5 @@
 use axum::body::Body;
-use axum::extract::ConnectInfo;
-use axum::http::{Extensions, HeaderMap, HeaderValue, Request, header};
+use axum::http::{Request, header};
 use axum::response::Response;
 use const_format::formatcp;
 use serde::Serialize;
@@ -14,6 +13,7 @@ use tracing_subscriber::layer::{Context, Layer};
 use uuid::Uuid;
 
 use crate::AppState;
+use crate::extract::ip::extract_ip;
 use crate::util::get_header;
 
 // NOTE: Tracing is quite sweet but also utterly decoupled. There are several moving parts.
@@ -157,30 +157,8 @@ const EVENT_NAME: &str = "http_event";
 pub(crate) const EVENT_TARGET: &str = "http_target";
 pub(crate) const LEVEL: Level = Level::INFO;
 
-fn extract_ip(
-  headers: &HeaderMap<HeaderValue>,
-  extensions: &Extensions,
-) -> Option<std::net::IpAddr> {
-  // NOTE: This code is mimicking axum_client_ip's pre v1 `InsecureClientIp::from`:
-  if let Ok(ip) = client_ip::rightmost_x_forwarded_for(headers)
-    .or_else(|_| client_ip::x_real_ip(headers))
-    .or_else(|_| client_ip::fly_client_ip(headers))
-    .or_else(|_| client_ip::true_client_ip(headers))
-    .or_else(|_| client_ip::cf_connecting_ip(headers))
-    .or_else(|_| client_ip::cloudfront_viewer_address(headers))
-  {
-    return Some(ip);
-  }
-
-  return extensions
-    .get::<ConnectInfo<std::net::SocketAddr>>()
-    .map(|ConnectInfo(addr)| addr.ip());
-}
-
 pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
   let headers = request.headers();
-
-  let client_ip = extract_ip(headers, request.extensions()).map(|ip| ip.to_string());
 
   // NOTE: "%" means print using fmt::Display, and "?" means fmt::Debug.
   return tracing::span!(
@@ -191,7 +169,7 @@ pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
       uri = %request.uri(),
       version = ?request.version(),
       host = get_header(headers, "host"),
-      client_ip,
+      client_ip = extract_ip(request).map(|ip| ip.to_string()),
       user_agent = get_header(headers, "user-agent"),
       referer = get_header(headers, "referer"),
       // Reserve placeholders that may be recorded later.

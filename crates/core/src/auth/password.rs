@@ -105,7 +105,7 @@ pub fn check_user_password(
   let attempts = ATTEMPTS.get(&db_user.email);
 
   if !is_demo && attempts.as_ref().map(|a| a.tries).unwrap_or(0) >= LOGIN_RATE_LIMIT {
-    return Err(AuthError::Unauthorized);
+    return Err(AuthError::TooManyRequests);
   }
 
   let parsed_hash = PasswordHash::new(&db_user.password_hash)

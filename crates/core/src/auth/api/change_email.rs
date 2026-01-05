@@ -75,7 +75,7 @@ pub async fn change_email_request_handler(
     const RATE_LIMIT_SEC: i64 = 10;
     let age: chrono::Duration = chrono::Utc::now() - timestamp;
     if age < chrono::Duration::seconds(RATE_LIMIT_SEC) {
-      return Err(AuthError::BadRequest("verification sent already"));
+      return Err(AuthError::TooManyRequests);
     }
   }
 
