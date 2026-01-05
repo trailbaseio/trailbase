@@ -1,3 +1,11 @@
+## v0.22.7
+
+- Add IP-based rate limiting to all auth POST endpoints to further reduce abuse surface like sign-up bombing (sign-ins were already limited).
+  - The ip-based nature means that, if you're using a reverse-proxy you should set the `X-Forwarded-For` header. This was already true to get correct log entries.
+- Do not instantiate parts of the WASM runtime when no WASM component is found. This reduces the memory footprint for instances that don't use WASM.
+- Update SQLite from v3.50.2 -> v3.51.1 (i.e. rusqlite v0.38).
+- Update Rust dependencies.
+
 ## v0.22.6
 
 - Stop using baseline WASM compiler "winch" in dev-mode on MacOS. Previously loading WASM components on MacOS with `--dev` would cause a panic related to nested tokio runtimes. This increases initial-load & hot-reload times, thus isn't ideal for DevEx but better than crashing. This will require further investigation: https://github.com/trailbaseio/trailbase/issues/206.
