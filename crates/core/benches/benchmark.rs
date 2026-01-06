@@ -112,7 +112,8 @@ async fn setup_app() -> Result<Setup, anyhow::Error> {
   })
   .await?;
 
-  let conn = app.state.conn();
+  let main_conn = app.state.connection_manager().main_entry();
+  let conn = &main_conn.connection;
 
   create_chat_message_app_tables(conn).await?;
   app.state.rebuild_connection_metadata().await?;
