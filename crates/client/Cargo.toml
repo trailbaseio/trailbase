@@ -16,7 +16,7 @@ eventsource-stream = { version = "0.2.3", features = [] }
 futures-lite = "2.6.1"
 jsonwebtoken = { version = "10.2.0", default-features = false, features = ["rust_crypto"] }
 parking_lot = { workspace = true }
-reqwest = { version = "0.12.8", features = ["stream"] }
+reqwest = { version = "0.12.8", default-features = false, features = ["stream", "rustls-tls"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "2.0.12"
@@ -26,6 +26,6 @@ url = "2.5.4"
 [dev-dependencies]
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 lazy_static = "1.4.0"
-reqwest = { version = "0.12.8", features = ["stream", "multipart", "json"] }
+reqwest = { version = "0.12.8", features = ["stream", "multipart", "json", "rustls-tls"] }
 temp-dir = "0.1.13"
 tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }
