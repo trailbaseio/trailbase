@@ -316,6 +316,7 @@ pub fn setup_connection(
       }
     };
 
+    // Registers the WASM function with the SQLite connection.
     conn.create_scalar_function(
       function.name.as_str(),
       function.num_args as i32,
@@ -333,6 +334,8 @@ pub fn setup_connection(
           })
           .collect::<Result<Vec<_>, _>>()?;
 
+        // This is where the actual dispatch happens in a stateless manner, i.e. subsequent
+        // executions don't share state.
         let value = rt
           .dispatch_scalar_function(function_name.clone(), args)
           .map_err(|err| {

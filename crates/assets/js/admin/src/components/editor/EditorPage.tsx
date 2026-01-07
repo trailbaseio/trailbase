@@ -84,7 +84,7 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
     [name: string]: SQLNamespace;
   } = {};
 
-  for (const table of schemas.tables) {
+  for (const [table, _] of schemas.tables) {
     const tableName = prettyFormatQualifiedName(table.name);
     schema[tableName] = {
       self: { label: tableName, type: "keyword" },
@@ -92,7 +92,7 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
     } satisfies SQLNamespace;
   }
 
-  for (const view of schemas.views) {
+  for (const [view, _] of schemas.views) {
     const viewName = prettyFormatQualifiedName(view.name);
     schema[viewName] = {
       self: { label: viewName, type: "keyword" },

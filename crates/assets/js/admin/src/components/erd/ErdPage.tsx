@@ -162,7 +162,10 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
     const nodes: NodeMetadata[] = [];
     const edges: EdgeMetadata[] = [];
 
-    const allTablesAndViews = [...props.schema.tables, ...props.schema.views];
+    const allTablesAndViews = [
+      ...props.schema.tables.map(([t, _]) => t),
+      ...props.schema.views.map(([v, _]) => v),
+    ];
     for (const tableOrView of allTablesAndViews) {
       if (hiddenTable(tableOrView) && !isUserTable(tableOrView.name)) {
         continue;

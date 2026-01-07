@@ -51,9 +51,9 @@ import type { View } from "@bindings/View";
 import { QualifiedName } from "@bindings/QualifiedName";
 
 function pickInitiallySelectedTable(
-  tables: (Table | View)[],
+  tables: ([Table, string] | [View, string])[],
   qualifiedTableName: string | undefined,
-): Table | View | undefined {
+): [Table, string] | [View, string] | undefined {
   if (tables.length === 0) {
     return undefined;
   }
@@ -61,7 +61,7 @@ function pickInitiallySelectedTable(
   const candidate = qualifiedTableName ?? $explorerSettings.get().prevSelected;
   if (candidate) {
     for (const table of tables) {
-      if (candidate === prettyFormatQualifiedName(table.name)) {
+      if (candidate === prettyFormatQualifiedName(table[0].name)) {
         return table;
       }
     }
@@ -69,18 +69,21 @@ function pickInitiallySelectedTable(
 
   const first = tables[0];
   console.debug(
-    `Table '${qualifiedTableName}' not found. Fallback: ${prettyFormatQualifiedName(first.name)}`,
+    `Table '${qualifiedTableName}' not found. Fallback: ${prettyFormatQualifiedName(first[0].name)}`,
   );
   return first;
 }
 
-function tableCompare(a: Table | View, b: Table | View): number {
-  const aHidden = hiddenTable(a);
-  const bHidden = hiddenTable(b);
+function tableCompare(
+  a: [Table, string] | [View, string],
+  b: [Table, string] | [View, string],
+): number {
+  const aHidden = hiddenTable(a[0]);
+  const bHidden = hiddenTable(b[0]);
 
   if (aHidden == bHidden) {
-    return prettyFormatQualifiedName(a.name).localeCompare(
-      prettyFormatQualifiedName(b.name),
+    return prettyFormatQualifiedName(a[0].name).localeCompare(
+      prettyFormatQualifiedName(b[0].name),
     );
   }
   // Sort hidden tables to the back.
@@ -231,6 +234,8 @@ function TableSplitView(props: {
   const settings = useStore($explorerSettings);
   const showHidden = () => settings().showHidden ?? false;
   const [createTableDialog, setCreateTableDialog] = createSignal(false);
+
+  const allTables = createMemo(() => props.schemas.tables.map(([t, _]) => t));
   const filteredTablesAndViews = createMemo(() => {
     const all = [...props.schemas.tables, ...props.schemas.views];
 
@@ -238,15 +243,15 @@ function TableSplitView(props: {
     if (show) {
       return all.sort(tableCompare);
     }
-    return all.filter((t) => !hiddenTable(t)).sort(tableCompare);
+    return all.filter(([t, _]) => !hiddenTable(t)).sort(tableCompare);
   });
 
   const params = useParams<{ table: string }>();
   const selectedTable = createMemo(() => {
-    const allTables = filteredTablesAndViews();
+    const filteredTables = filteredTablesAndViews();
     // useParams returns undefined as a string.
     const table = params.table === "undefined" ? undefined : params.table;
-    return pickInitiallySelectedTable(allTables, table);
+    return pickInitiallySelectedTable(filteredTables, table);
   });
 
   return (
@@ -260,13 +265,13 @@ function TableSplitView(props: {
             <SheetContent class="sm:max-w-[520px]">
               <CreateAlterTableForm
                 schemaRefetch={props.schemaRefetch}
-                allTables={props.schemas.tables}
+                allTables={allTables()}
                 setSelected={(tableName: QualifiedName) => {
-                  const table = filteredTablesAndViews().find((t) =>
+                  const table = filteredTablesAndViews().find(([t, _]) =>
                     equalQualifiedNames(t.name, tableName),
                   );
                   if (table) {
-                    navigateToTable(navigate, table);
+                    navigateToTable(navigate, table[0]);
                   }
                 }}
                 {...sheet}
@@ -285,9 +290,11 @@ function TableSplitView(props: {
 
                   <SidebarGroup>
                     <TablePickerSidebar
-                      tablesAndViews={filteredTablesAndViews()}
-                      allTables={props.schemas.tables}
-                      selectedTable={selectedTable()}
+                      tablesAndViews={filteredTablesAndViews().map(
+                        ([t, _]) => t,
+                      )}
+                      allTables={allTables()}
+                      selectedTable={selectedTable()?.[0]}
                       schemaRefetch={props.schemaRefetch}
                       openCreateTableDialog={() => setCreateTableDialog(true)}
                     />

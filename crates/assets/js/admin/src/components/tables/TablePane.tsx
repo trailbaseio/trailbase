@@ -1,4 +1,4 @@
-import { Match, Switch, createMemo, createSignal, JSX } from "solid-js";
+import { Match, Show, Switch, createMemo, createSignal, JSX } from "solid-js";
 import { createWritableMemo } from "@solid-primitives/memo";
 import { TbRefresh, TbTable, TbTrash } from "solid-icons/tb";
 import { useSearchParams } from "@solidjs/router";
@@ -18,6 +18,11 @@ import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { Label } from "@/components/ui/label";
 import { SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -367,12 +372,8 @@ function TableHeaderRightHandButtons(props: {
 
 function TableHeaderLeftButtons(props: {
   table: Table | View;
-  indexes: TableIndex[];
-  triggers: TableTrigger[];
-  allTables: Table[];
   rowsRefetch: () => void;
 }) {
-  const type = () => tableType(props.table);
   const config = createConfigQuery();
   const apis = createMemo(() =>
     getRecordApis(config?.data?.config, props.table.name),
@@ -384,34 +385,31 @@ function TableHeaderLeftButtons(props: {
         <TbRefresh />
       </IconButton>
 
-      {apis().length > 0 && (
+      {/* QUESTION: Should this go into the API dialog instead? */}
+      <Show when={apis().length > 0}>
         <SchemaDialog
           tableName={prettyFormatQualifiedName(props.table.name)}
           apis={apis()}
         />
-      )}
-
-      {import.meta.env.DEV && type() === "table" && (
-        <DebugSchemaDialogButton
-          table={props.table as Table}
-          indexes={props.indexes}
-          triggers={props.triggers}
-        />
-      )}
+      </Show>
     </>
   );
 }
 
 function TableHeader(props: {
-  table: Table | View;
-  indexes: TableIndex[];
-  triggers: TableTrigger[];
-  allTables: Table[];
+  table: [Table, string] | [View, string];
+  indexes: [TableIndex, string][];
+  triggers: [TableTrigger, string][];
+  allTables: [Table, string][];
   schemaRefetch: () => Promise<void>;
   rowsRefetch: () => void;
 }) {
+  const allTables = createMemo(() => props.allTables.map(([t, _]) => t));
+  const table = () => props.table[0];
+  const type = () => tableType(table());
+
   const headerTitle = () => {
-    switch (tableType(props.table)) {
+    switch (type()) {
       case "view":
         return "View";
       case "virtualTable":
@@ -425,20 +423,39 @@ function TableHeader(props: {
     <Header
       leading={<SidebarTrigger />}
       title={headerTitle()}
-      titleSelect={prettyFormatQualifiedName(props.table.name)}
+      titleSelect={
+        <HoverCard>
+          <HoverCardTrigger>
+            {prettyFormatQualifiedName(table().name)}
+          </HoverCardTrigger>
+
+          <HoverCardContent class="w-[80dvw]">
+            <span class="overflow-auto font-mono text-sm whitespace-pre-wrap">
+              {props.table[1]}
+            </span>
+          </HoverCardContent>
+        </HoverCard>
+      }
       left={
-        <TableHeaderLeftButtons
-          table={props.table}
-          indexes={props.indexes}
-          triggers={props.triggers}
-          allTables={props.allTables}
-          rowsRefetch={props.rowsRefetch}
-        />
+        <div class="flex items-center">
+          <TableHeaderLeftButtons
+            table={table()}
+            rowsRefetch={props.rowsRefetch}
+          />
+
+          <Show when={import.meta.env.DEV && type() === "table"}>
+            <DebugSchemaDialogButton
+              table={table() as Table}
+              indexes={props.indexes.map(([index, _]) => index)}
+              triggers={props.triggers.map(([trig, _]) => trig)}
+            />
+          </Show>
+        </div>
       }
       right={
         <TableHeaderRightHandButtons
-          table={props.table}
-          allTables={props.allTables}
+          table={table()}
+          allTables={allTables()}
           schemaRefetch={props.schemaRefetch}
         />
       }
@@ -734,27 +751,27 @@ function ArrayRecordTable(props: {
 }
 
 export function TablePane(props: {
-  selectedTable: Table | View;
+  selectedTable: [Table, string] | [View, string];
   schemas: ListSchemasResponse;
   schemaRefetch: () => Promise<void>;
 }) {
   const [editIndex, setEditIndex] = createSignal<TableIndex | undefined>();
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<string>());
 
-  const table = () => props.selectedTable;
+  const table = () => props.selectedTable[0];
   const indexes = createMemo(() => {
-    return props.schemas.indexes.filter((idx) =>
+    return props.schemas.indexes.filter(([index, _]) =>
       equalQualifiedNames(
         {
-          name: idx.table_name,
-          database_schema: idx.name.database_schema,
+          name: index.table_name,
+          database_schema: index.name.database_schema,
         },
         table().name,
       ),
     );
   });
   const triggers = createMemo(() => {
-    return props.schemas.triggers.filter((trig) =>
+    return props.schemas.triggers.filter(([trig, _]) =>
       equalQualifiedNames(
         {
           name: trig.table_name,
@@ -807,7 +824,7 @@ export function TablePane(props: {
   const state: QueryObserverResult<TableState> = useQuery(() => ({
     queryKey: [
       "tableData",
-      prettyFormatQualifiedName(props.selectedTable.name),
+      prettyFormatQualifiedName(props.selectedTable[0].name),
       searchParams.filter,
       pagination().pageIndex,
       pagination().pageSize,
@@ -821,7 +838,7 @@ export function TablePane(props: {
 
       try {
         const state = await buildTableState(
-          props.selectedTable,
+          props.selectedTable[0],
           searchParams.filter ?? null,
           p.pageSize,
           p.pageIndex,
@@ -865,7 +882,7 @@ export function TablePane(props: {
   return (
     <>
       <TableHeader
-        table={table()}
+        table={props.selectedTable}
         indexes={indexes()}
         triggers={triggers()}
         allTables={props.schemas.tables}
@@ -925,7 +942,7 @@ export function TablePane(props: {
                     <div class="space-y-2.5 overflow-x-auto">
                       <DataTable
                         columns={() => indexColumns}
-                        data={indexes}
+                        data={() => indexes().map(([index, _]) => index)}
                         onRowClick={
                           hidden()
                             ? undefined
@@ -1037,7 +1054,15 @@ export function TablePane(props: {
             </p>
 
             <div class="mt-4">
-              <DataTable columns={() => triggerColumns} data={triggers} />
+              <DataTable
+                columns={() => triggerColumns}
+                data={() =>
+                  triggers().map(([trig, sql]) => ({
+                    ...trig,
+                    sql,
+                  }))
+                }
+              />
             </div>
           </div>
         )}
@@ -1071,7 +1096,11 @@ const indexColumns = [
   },
 ] as ColumnDef<TableIndex>[];
 
-const triggerColumnHelper = createColumnHelper<TableTrigger>();
+type TableTriggerAndSql = TableTrigger & {
+  sql: string;
+};
+
+const triggerColumnHelper = createColumnHelper<TableTriggerAndSql>();
 const triggerColumns = [
   triggerColumnHelper.accessor("name", {
     header: "name",
@@ -1079,6 +1108,6 @@ const triggerColumns = [
   }),
   triggerColumnHelper.accessor("sql", {
     header: "statement",
-    cell: (props) => <pre class="text-xs">{props.getValue()}</pre>,
+    cell: (props) => <p class="max-w-[20dvw]">{props.getValue()}</p>,
   }),
-] as ColumnDef<TableTrigger>[];
+] as ColumnDef<TableTriggerAndSql>[];

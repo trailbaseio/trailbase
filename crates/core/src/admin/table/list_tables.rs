@@ -15,27 +15,28 @@ use crate::constants::SQLITE_SCHEMA_TABLE;
 pub struct TableTrigger {
   pub name: QualifiedName,
   pub table_name: String,
-  pub sql: String,
 }
 
 #[derive(Clone, Default, Debug, Serialize, TS)]
 #[ts(export)]
 pub struct ListSchemasResponse {
-  pub tables: Vec<Table>,
-  pub indexes: Vec<TableIndex>,
-  pub triggers: Vec<TableTrigger>,
-  pub views: Vec<View>,
+  pub tables: Vec<(Table, String)>,
+  pub indexes: Vec<(TableIndex, String)>,
+  pub triggers: Vec<(TableTrigger, String)>,
+  pub views: Vec<(View, String)>,
 }
 
 pub async fn list_tables_handler(
   State(state): State<AppState>,
 ) -> Result<Json<ListSchemasResponse>, Error> {
   #[derive(Debug, Deserialize)]
-  pub struct SqliteSchema {
+  struct SqliteSchema {
     pub r#type: String,
     pub name: String,
     pub tbl_name: String,
+    /// Create TABLE/VIEW/... query.
     pub sql: Option<String>,
+    /// Connections schema name, e.g. "main", "other"
     pub db_schema: String,
   }
 
@@ -58,22 +59,22 @@ pub async fn list_tables_handler(
     .build(true, Some(&db_names.into_iter().take(124).collect()))?;
   let databases = conn.list_databases().await?;
 
-  let mut schemas: Vec<SqliteSchema> = vec![];
-  for db in databases {
-    // NOTE: the "ORDER BY" is a bit sneaky, it ensures that we parse all "table"s before we parse
-    // "view"s.
-    let rows = conn
+  let schemas = {
+    let mut schemas: Vec<SqliteSchema> = vec![];
+    for db in databases {
+      // NOTE: the "ORDER BY" is a bit sneaky, it ensures that we parse all "table"s before we parse
+      // "view"s.
+      let schema = &db.name;
+      let rows = conn
       .read_query_values::<SqliteSchema>(
-        format!(
-          "SELECT type, name, tbl_name, sql, ?1 AS db_schema FROM {}.{SQLITE_SCHEMA_TABLE} ORDER BY type",
-          db.name
-        ),
-        trailbase_sqlite::params!(db.name),
+        format!("SELECT type, name, tbl_name, sql, '{schema}' AS db_schema FROM '{schema}'.'{SQLITE_SCHEMA_TABLE}' ORDER BY type"), ()
       )
       .await?;
 
-    schemas.extend(rows);
-  }
+      schemas.extend(rows);
+    }
+    schemas
+  };
 
   let mut response = ListSchemasResponse::default();
 
@@ -98,11 +99,14 @@ pub async fn list_tables_handler(
         if let Some(create_table_statement) =
           parse_into_statement(&sql).map_err(|err| Error::Internal(err.into()))?
         {
-          response.tables.push({
-            let mut table: Table = create_table_statement.try_into()?;
-            table.name.database_schema = db_schema();
-            table
-          });
+          response.tables.push((
+            {
+              let mut table: Table = create_table_statement.try_into()?;
+              table.name.database_schema = db_schema();
+              table
+            },
+            sql,
+          ));
         }
       }
       "index" => {
@@ -118,9 +122,14 @@ pub async fn list_tables_handler(
         if let Some(create_index_statement) =
           parse_into_statement(&sql).map_err(|err| Error::Internal(err.into()))?
         {
-          let mut index: TableIndex = create_index_statement.try_into()?;
-          index.name.database_schema = db_schema();
-          response.indexes.push(index);
+          response.indexes.push((
+            {
+              let mut index: TableIndex = create_index_statement.try_into()?;
+              index.name.database_schema = db_schema();
+              index
+            },
+            sql,
+          ));
         }
       }
       "view" => {
@@ -136,7 +145,7 @@ pub async fn list_tables_handler(
           let tables: Vec<_> = response
             .tables
             .iter()
-            .filter_map(|table| {
+            .filter_map(|(table, _)| {
               if table.name.database_schema.as_deref().unwrap_or("main") == schema.db_schema {
                 return Some(table.clone());
               }
@@ -144,9 +153,14 @@ pub async fn list_tables_handler(
             })
             .collect();
 
-          let mut view = View::from(create_view_statement, &tables)?;
-          view.name.database_schema = db_schema();
-          response.views.push(view);
+          response.views.push((
+            {
+              let mut view = View::from(create_view_statement, &tables)?;
+              view.name.database_schema = db_schema();
+              view
+            },
+            sql,
+          ));
         }
       }
       "trigger" => {
@@ -156,14 +170,16 @@ pub async fn list_tables_handler(
         };
 
         // TODO: Turn this into structured data now that we use sqlite3_parser.
-        response.triggers.push(TableTrigger {
-          name: QualifiedName {
-            name: schema.name,
-            database_schema: db_schema(),
+        response.triggers.push((
+          TableTrigger {
+            name: QualifiedName {
+              name: schema.name,
+              database_schema: db_schema(),
+            },
+            table_name: schema.tbl_name,
           },
-          table_name: schema.tbl_name,
           sql,
-        });
+        ));
       }
       x => warn!("Unknown schema type: {name} : {x}"),
     }

@@ -1,9 +1,10 @@
 use log::*;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use quick_cache::sync::GuardResult;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::metadata::ConnectionMetadata;
@@ -61,11 +62,12 @@ pub struct ConnectionEntry {
 }
 
 struct ConnectionManagerState {
+  // Properties retained for initializing new connections.
   data_dir: DataDir,
   json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
   sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
 
-  // Cache of existing Sqlite connections:
+  // Properties for caching connections:
   main: RwLock<ConnectionEntry>,
   connections: quick_cache::sync::Cache<ConnectionKey, ConnectionEntry>,
 }
@@ -355,11 +357,11 @@ fn init_main_db_impl(
     .collect::<Result<Vec<_>, _>>()
     .map_err(|err| return ConnectionError::Other(err.to_string()))?;
 
-  let new_db = Arc::new(Mutex::new(false));
+  let mut new_db = AtomicBool::new(false);
   let conn = {
-    let new_db = new_db.clone();
     let migrations_path = migrations_path.clone();
     let json_registry = json_registry.clone();
+    let new_db = &mut new_db;
 
     trailbase_sqlite::Connection::new(
       move || -> Result<_, ConnectionError> {
@@ -367,7 +369,10 @@ fn init_main_db_impl(
           trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())?;
 
         if main_migrations {
-          *(new_db.lock()) |= apply_main_migrations(&mut conn, migrations_path.as_ref())?;
+          new_db.fetch_or(
+            apply_main_migrations(&mut conn, migrations_path.as_ref())?,
+            Ordering::SeqCst,
+          );
         }
 
         #[cfg(feature = "wasm")]
@@ -409,7 +414,7 @@ fn init_main_db_impl(
   // conn.pragma_update(None, "mmap_size", 268435456)?;
   // conn.pragma_update(None, "cache_size", -32768)?; // 32MB
 
-  return Ok((conn, *new_db.lock()));
+  return Ok((conn, new_db.load(Ordering::SeqCst)));
 }
 
 pub(super) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {

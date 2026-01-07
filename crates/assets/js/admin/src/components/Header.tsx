@@ -3,7 +3,7 @@ import { Separator } from "@/components/ui/separator";
 
 export function Header(props: {
   title: string;
-  titleSelect?: string;
+  titleSelect?: JSX.Element;
   left?: JSX.Element;
   right?: JSX.Element;
   leading?: JSX.Element;
@@ -20,7 +20,6 @@ export function Header(props: {
           </div>
         </Show>
 
-        {/* left */}
         <div class="flex min-h-[40px] flex-nowrap items-center gap-2">
           <h2 class="text-accent-600 m-0">
             <Show when={props.titleSelect} fallback={props.title}>
@@ -30,13 +29,14 @@ export function Header(props: {
             </Show>
           </h2>
 
-          {props.left}
+          {/* left */}
+          <Show when={props.left !== undefined}>{props.left}</Show>
         </div>
 
         {/* right */}
-        {props.right && (
+        <Show when={props.right !== undefined}>
           <div class="flex max-h-[40px] grow justify-end">{props.right}</div>
-        )}
+        </Show>
       </header>
 
       <Separator />
