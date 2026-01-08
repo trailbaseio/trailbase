@@ -42,6 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SchemaCard } from "@/components/tables/SchemaDownload";
 import { SheetFooter } from "@/components/ui/sheet";
 import { SheetContainer } from "@/components/SafeSheet";
 import { showToast } from "@/components/ui/toast";
@@ -800,9 +801,10 @@ function IndividualRecordApiSettingsForm(props: {
         }}
       >
         <Tabs defaultValue="account" class="w-full">
-          <TabsList class="grid w-full grid-cols-3">
+          <TabsList class="grid w-full grid-cols-4">
             <TabsTrigger value="settings">Settings</TabsTrigger>
             <TabsTrigger value="access">Access</TabsTrigger>
+            <TabsTrigger value="schema">Schema</TabsTrigger>
             <TabsTrigger value="examples">Examples</TabsTrigger>
           </TabsList>
 
@@ -1133,7 +1135,9 @@ function IndividualRecordApiSettingsForm(props: {
                   for more information. Example:
                 </p>
 
-                <pre class="pl-2 font-mono text-sm">{exampleRule}</pre>
+                <span class="pl-2 font-mono text-sm whitespace-pre-wrap">
+                  {exampleRule}
+                </span>
 
                 <For
                   each={type() === "view" ? viewAccessRules : tableAccessRules}
@@ -1160,6 +1164,10 @@ function IndividualRecordApiSettingsForm(props: {
             </Card>
 
             <SubmitDisableButtons />
+          </TabsContent>
+
+          <TabsContent value="schema" class="flex flex-col gap-2">
+            <SchemaCard api={props.api} />
           </TabsContent>
 
           <TabsContent value="examples">

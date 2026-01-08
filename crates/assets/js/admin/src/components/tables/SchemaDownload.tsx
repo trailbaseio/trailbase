@@ -1,7 +1,6 @@
-import { createMemo, createSignal, Switch, Match, Show } from "solid-js";
+import { createSignal, Switch, Match, Show } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
-import { createWritableMemo } from "@solid-primitives/memo";
-import { TbDownload, TbColumns, TbColumnsOff } from "solid-icons/tb";
+import { TbDownload, TbColumnsOff } from "solid-icons/tb";
 
 import { adminFetch } from "@/lib/fetch";
 import { showSaveFileDialog, stringToReadableStream } from "@/lib/utils";
@@ -11,6 +10,8 @@ import type { Table } from "@bindings/Table";
 import type { TableIndex } from "@bindings/TableIndex";
 import type { TableTrigger } from "@bindings/TableTrigger";
 
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardTitle, CardHeader } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -27,16 +28,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const modes = ["Insert", "Select", "Update"] as const;
+const modes = ["Create", "Read", "Update"] as const;
 type Mode = (typeof modes)[number];
+
+function mapMode(mode: Mode): string {
+  switch (mode) {
+    case "Create":
+      return "Insert";
+    case "Read":
+      return "Select";
+    case "Update":
+      return "Update";
+  }
+}
 
 function SchemaDownloadButton(props: {
   apiName: string;
   mode: Mode;
-  schema: object;
+  schema: string;
 }) {
   return (
-    <IconButton
+    <Button
+      variant="outline"
       onClick={() => {
         showSaveFileDialog({
           contents: async () =>
@@ -45,109 +58,74 @@ function SchemaDownloadButton(props: {
         });
       }}
     >
+      Download
       <TbDownload />
-    </IconButton>
+    </Button>
   );
 }
 
-export function SchemaDialog(props: {
-  tableName: string;
-  apis: RecordApiConfig[];
-}) {
-  const [mode, setMode] = createSignal<Mode>("Select");
-  const apiNames = createMemo(() => props.apis.map((api) => api.name));
-  const [apiName, setApiName] = createWritableMemo(() => apiNames()[0] ?? "");
+export function SchemaCard(props: { api: RecordApiConfig }) {
+  const [mode, setMode] = createSignal<Mode>("Create");
+  const apiName = () => props.api.name ?? "??";
 
   const schema = useQuery(() => ({
     queryKey: ["schema", mode(), apiName()],
     queryFn: async () => {
       console.debug(`Fetching ${apiName()}: ${mode()}`);
       const response = await adminFetch(
-        `/schema/${apiName()}/schema.json?mode=${mode()}`,
+        `/schema/${apiName()}/schema.json?mode=${mapMode(mode())}`,
       );
       return await response.json();
     },
   }));
 
   return (
-    <Dialog id="schema">
-      <DialogTrigger>
-        <IconButton tooltip={`JSON Schemas of "${props.tableName}"`}>
-          <TbColumns />
-        </IconButton>
-      </DialogTrigger>
+    <Card>
+      <CardHeader>
+        <CardTitle>JSON Schema</CardTitle>
+      </CardHeader>
 
-      <DialogContent class="min-w-[80dvw]">
-        <DialogHeader>
-          <div class="mr-4 flex items-center justify-between">
-            <DialogTitle>JSON Schema "{apiName()}"</DialogTitle>
+      <CardContent class="flex flex-col gap-4">
+        <div class="flex w-full items-center justify-between gap-2">
+          <Select
+            value={mode()}
+            onChange={setMode}
+            options={[...modes]}
+            placeholder="Mode"
+            itemComponent={(props) => (
+              <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+            )}
+          >
+            <SelectTrigger aria-label="Mode" class="w-[180px]">
+              <SelectValue>
+                {(state) => `${state.selectedOption()}`}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent />
+          </Select>
 
-            <div class="flex items-center gap-2">
-              <Show when={schema.isSuccess}>
-                <SchemaDownloadButton
-                  apiName={apiName()}
-                  schema={schema.data}
-                  mode={mode()}
-                />
-              </Show>
-
-              {/* NOTE: This is for tables with multiple APIs */}
-              <Show when={apiNames().length > 1}>
-                <Select
-                  value={apiName()}
-                  onChange={setApiName}
-                  options={[...apiNames()]}
-                  placeholder="API"
-                  itemComponent={(props) => (
-                    <SelectItem item={props.item}>
-                      {props.item.rawValue}
-                    </SelectItem>
-                  )}
-                >
-                  <SelectTrigger aria-label="Apis" class="w-[180px]">
-                    <SelectValue>
-                      {(state) => `API: ${state.selectedOption()}`}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent />
-                </Select>
-              </Show>
-
-              <Select
-                value={mode()}
-                onChange={setMode}
-                options={[...modes]}
-                placeholder="Mode"
-                itemComponent={(props) => (
-                  <SelectItem item={props.item}>
-                    {props.item.rawValue}
-                  </SelectItem>
-                )}
-              >
-                <SelectTrigger aria-label="Mode" class="w-[180px]">
-                  <SelectValue>
-                    {(state) => `Mode: ${state.selectedOption()}`}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent />
-              </Select>
-            </div>
-          </div>
-        </DialogHeader>
-
-        <div class="h-[80dvh] overflow-auto">
-          <Switch>
-            <Match when={schema.error}>{`Error: ${schema.error}`}</Match>
-
-            <Match when={schema.isLoading}>Loading...</Match>
-
-            <Match when={schema.data}>
-              <pre>{JSON.stringify(schema.data!, null, "  ")}</pre>
-            </Match>
-          </Switch>
+          <Show when={schema.isSuccess}>
+            <SchemaDownloadButton
+              apiName={apiName()}
+              schema={schema.data}
+              mode={mode()}
+            />
+          </Show>
         </div>
-      </DialogContent>
-    </Dialog>
+
+        <Switch>
+          <Match when={schema.isError}>{`Error: ${schema.error}`}</Match>
+
+          <Match when={schema.isLoading}>Loading...</Match>
+
+          <Match when={schema.isSuccess}>
+            <span class="overflow-x-scroll font-mono text-sm whitespace-pre-wrap">
+              {JSON.stringify(schema.data, null, "  ")}
+            </span>
+          </Match>
+        </Switch>
+      </CardContent>
+    </Card>
   );
 }
 

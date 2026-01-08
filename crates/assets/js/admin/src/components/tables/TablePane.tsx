@@ -35,10 +35,7 @@ import {
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { showToast } from "@/components/ui/toast";
 
-import {
-  SchemaDialog,
-  DebugSchemaDialogButton,
-} from "@/components/tables/SchemaDownload";
+import { DebugSchemaDialogButton } from "@/components/tables/SchemaDownload";
 import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
 import { CreateAlterIndexForm } from "@/components/tables/CreateAlterIndex";
 import { DataTable, safeParseInt } from "@/components/Table";
@@ -49,7 +46,6 @@ import { InsertUpdateRowForm } from "@/components/tables/InsertUpdateRow";
 import {
   RecordApiSettingsForm,
   hasRecordApis,
-  getRecordApis,
 } from "@/components/tables/RecordApiSettings";
 import { SafeSheet } from "@/components/SafeSheet";
 import {
@@ -370,32 +366,6 @@ function TableHeaderRightHandButtons(props: {
   );
 }
 
-function TableHeaderLeftButtons(props: {
-  table: Table | View;
-  rowsRefetch: () => void;
-}) {
-  const config = createConfigQuery();
-  const apis = createMemo(() =>
-    getRecordApis(config?.data?.config, props.table.name),
-  );
-
-  return (
-    <>
-      <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
-        <TbRefresh />
-      </IconButton>
-
-      {/* QUESTION: Should this go into the API dialog instead? */}
-      <Show when={apis().length > 0}>
-        <SchemaDialog
-          tableName={prettyFormatQualifiedName(props.table.name)}
-          apis={apis()}
-        />
-      </Show>
-    </>
-  );
-}
-
 function TableHeader(props: {
   table: [Table, string] | [View, string];
   indexes: [TableIndex, string][];
@@ -438,10 +408,9 @@ function TableHeader(props: {
       }
       left={
         <div class="flex items-center">
-          <TableHeaderLeftButtons
-            table={table()}
-            rowsRefetch={props.rowsRefetch}
-          />
+          <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
+            <TbRefresh />
+          </IconButton>
 
           <Show when={import.meta.env.DEV && type() === "table"}>
             <DebugSchemaDialogButton
