@@ -1,9 +1,12 @@
 use async_channel::WeakReceiver;
+use axum::extract::ws::{WebSocket, WebSocketUpgrade};
 use axum::{
   extract::{Path, RawQuery, State},
+  response::Response,
   response::sse::{Event, KeepAlive, Sse},
 };
-use futures_util::Stream;
+use futures_util::stream::StreamExt;
+use futures_util::{SinkExt, Stream, TryStreamExt};
 use log::*;
 use parking_lot::RwLock;
 use pin_project_lite::pin_project;
@@ -818,6 +821,85 @@ pub async fn add_subscription_sse_handler(
       .await?;
 
     return Ok(Sse::new(receiver).keep_alive(KeepAlive::default()));
+  }
+}
+
+async fn handle_socket(socket: WebSocket, state: AppState) {
+  use futures_util::stream::StreamExt;
+
+  let (mut sender, _receiver) = socket.split();
+}
+
+pub async fn add_subscription_ws_handler(
+  State(state): State<AppState>,
+  ws: WebSocketUpgrade,
+  Path((api_name, record)): Path<(String, String)>,
+  RawQuery(raw_url_query): RawQuery,
+  user: Option<User>,
+) -> Result<Response, RecordError> {
+  let Some(api) = state.lookup_record_api(&api_name) else {
+    return Err(RecordError::ApiNotFound);
+  };
+
+  if !api.enable_subscriptions() {
+    return Err(RecordError::Forbidden);
+  }
+
+  let FilterQuery { filter } = raw_url_query
+    .as_ref()
+    .map_or_else(
+      || Ok(FilterQuery::default()),
+      |query| FilterQuery::parse(query),
+    )
+    .map_err(|_err| {
+      return RecordError::BadRequest("Invalid query");
+    })?;
+
+  if record == "*" {
+    api.check_table_level_access(Permission::Read, user.as_ref())?;
+
+    let receiver = state
+      .subscription_manager()
+      .add_table_subscription(api, user, filter)
+      .await?;
+
+    // return Ok(Sse::new(receiver).keep_alive(KeepAlive::default()));
+    return Ok(ws.on_upgrade(async |socket| {
+      let (mut sender, _receiver) = socket.split();
+
+      // FIXME: This is a silly PoC, we need to change the underlaying channel to not send
+      // Events.
+      if let Ok(Some(event)) = std::pin::pin!(receiver).try_next().await {
+        let x = format!("{event:?}");
+        let _ = sender
+          .send(axum::extract::ws::Message::Text(x.into()))
+          .await;
+      }
+    }));
+  } else {
+    let record_id = api.primary_key_to_value(record)?;
+    api
+      .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
+      .await?;
+
+    let receiver = state
+      .subscription_manager()
+      .add_record_subscription(api, record_id, user)
+      .await?;
+
+    // return Ok(Sse::new(receiver).keep_alive(KeepAlive::default()));
+    return Ok(ws.on_upgrade(async |socket| {
+      let (mut sender, _receiver) = socket.split();
+
+      // FIXME: This is a silly PoC, we need to change the underlaying channel to not send
+      // Events.
+      if let Ok(Some(event)) = std::pin::pin!(receiver).try_next().await {
+        let x = format!("{event:?}");
+        let _ = sender
+          .send(axum::extract::ws::Message::Text(x.into()))
+          .await;
+      }
+    }));
   }
 }
 
