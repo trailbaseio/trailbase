@@ -60,7 +60,7 @@ lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-ru
 log = { version = "^0.4.21", default-features = false }
 mini-moka = "0.10.3"
 minijinja = { workspace = true }
-oauth2 = { version = "5.0.0-alpha.4", default-features = false, features = ["reqwest", "rustls-tls"] }
+oauth2 = { version = "5.0.0-alpha.4", default-features = false, features = ["rustls-tls"] }
 object_store = { version = "0.13.0", default-features = false, features = ["aws", "fs"] }
 parking_lot = { workspace = true }
 pin-project-lite = "0.2.16"

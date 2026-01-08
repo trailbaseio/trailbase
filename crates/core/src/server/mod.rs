@@ -19,11 +19,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 use tokio::signal;
 use tokio::task::JoinSet;
-use tokio_rustls::{
-  TlsAcceptor,
-  rustls::ServerConfig,
-  rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
-};
+use tokio_rustls::TlsAcceptor;
+use tokio_rustls::rustls::ServerConfig;
+use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use tower::Service;
 use tower_cookies::CookieManagerLayer;
 use tower_governor::GovernorLayer;
@@ -728,58 +726,46 @@ async fn start_listen(
   router: Router<()>,
   tls: Option<(CertificateDer<'static>, PrivateKeyDer<'static>)>,
 ) {
-  match tls {
-    Some((cert, key)) => {
-      let tcp_listener = match tokio::net::TcpListener::bind(addr).await {
-        Ok(listener) => listener,
-        Err(err) => {
-          error!("Failed to listen on: {addr}: {err}");
-          std::process::exit(1);
-        }
-      };
-
-      let server_config = ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(vec![cert], key)
-        .expect("Failed to build server config");
-
-      let listener = serve::TlsListener {
-        listener: tcp_listener,
-        acceptor: TlsAcceptor::from(Arc::new(server_config)),
-      };
-
-      if let Err(err) = serve::serve(
-        listener,
-        router.into_make_service_with_connect_info::<SocketAddr>(),
-      )
-      .with_graceful_shutdown(shutdown_signal())
-      .await
-      {
-        error!("Failed to start server: {err}");
-        std::process::exit(1);
-      }
-    }
-    _ => {
-      let listener = match tokio::net::TcpListener::bind(addr).await {
-        Ok(listener) => listener,
-        Err(err) => {
-          error!("Failed to listen on: {addr}: {err}");
-          std::process::exit(1);
-        }
-      };
-
-      if let Err(err) = serve::serve(
-        listener,
-        router.into_make_service_with_connect_info::<SocketAddr>(),
-      )
-      .with_graceful_shutdown(shutdown_signal())
-      .await
-      {
-        error!("Failed to start server: {err}");
-        std::process::exit(1);
-      }
+  let tcp_listener = match tokio::net::TcpListener::bind(addr).await {
+    Ok(listener) => listener,
+    Err(err) => {
+      error!("Failed to listen on: {addr}: {err}");
+      std::process::exit(1);
     }
   };
+
+  if let Err(err) = match tls {
+    Some((cert, key)) => {
+      serve::serve(
+        serve::TlsListener {
+          listener: tcp_listener,
+          acceptor: TlsAcceptor::from(Arc::new({
+            tokio_rustls::rustls::crypto::aws_lc_rs::default_provider()
+              .install_default()
+              .expect("Failed to install rustls crypto");
+            ServerConfig::builder()
+              .with_no_client_auth()
+              .with_single_cert(vec![cert], key)
+              .expect("Failed to build server config")
+          })),
+        },
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+      )
+      .with_graceful_shutdown(shutdown_signal())
+      .await
+    }
+    _ => {
+      serve::serve(
+        tcp_listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+      )
+      .with_graceful_shutdown(shutdown_signal())
+      .await
+    }
+  } {
+    error!("Failed to start server: {err}");
+    std::process::exit(1);
+  }
 }
 
 fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
