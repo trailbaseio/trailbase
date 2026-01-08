@@ -1,6 +1,6 @@
 import { Match, Show, Switch, createMemo, createSignal, JSX } from "solid-js";
 import { createWritableMemo } from "@solid-primitives/memo";
-import { TbRefresh, TbTable, TbTrash } from "solid-icons/tb";
+import { TbRefresh, TbTable, TbTrash, TbColumns } from "solid-icons/tb";
 import { useSearchParams } from "@solidjs/router";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import type { QueryObserverResult } from "@tanstack/solid-query";
@@ -19,10 +19,12 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -393,28 +395,34 @@ function TableHeader(props: {
     <Header
       leading={<SidebarTrigger />}
       title={headerTitle()}
-      titleSelect={
-        <HoverCard>
-          <HoverCardTrigger>
-            {prettyFormatQualifiedName(table().name)}
-          </HoverCardTrigger>
-
-          <HoverCardContent class="w-[80dvw]">
-            <span class="overflow-auto font-mono text-sm whitespace-pre-wrap">
-              {props.table[1]}
-            </span>
-          </HoverCardContent>
-        </HoverCard>
-      }
+      titleSelect={prettyFormatQualifiedName(table().name)}
       left={
         <div class="flex items-center">
           <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
             <TbRefresh />
           </IconButton>
 
-          <Show when={import.meta.env.DEV && type() === "table"}>
+          <Dialog id="sql-schema">
+            <DialogTrigger>
+              <IconButton tooltip="SQL Schema">
+                <TbColumns />
+              </IconButton>
+            </DialogTrigger>
+
+            <DialogContent class="max-w-[80dvw]">
+              <DialogHeader>
+                <DialogTitle>SQL Schema</DialogTitle>
+              </DialogHeader>
+
+              <span class="font-mono text-sm whitespace-pre-wrap">
+                {props.table[1]}
+              </span>
+            </DialogContent>
+          </Dialog>
+
+          <Show when={import.meta.env.DEV}>
             <DebugSchemaDialogButton
-              table={table() as Table}
+              table={table()}
               indexes={props.indexes.map(([index, _]) => index)}
               triggers={props.triggers.map(([trig, _]) => trig)}
             />

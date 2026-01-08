@@ -9,6 +9,7 @@ import { RecordApiConfig } from "@proto/config";
 import type { Table } from "@bindings/Table";
 import type { TableIndex } from "@bindings/TableIndex";
 import type { TableTrigger } from "@bindings/TableTrigger";
+import type { View } from "@bindings/View";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle, CardHeader } from "@/components/ui/card";
@@ -130,38 +131,32 @@ export function SchemaCard(props: { api: RecordApiConfig }) {
 }
 
 export function DebugSchemaDialogButton(props: {
-  table: Table;
+  table: Table | View;
   indexes: TableIndex[];
   triggers: TableTrigger[];
 }) {
-  const columns = () => props.table.columns;
   const indexes = () => props.indexes;
   const triggers = () => props.triggers;
-  const fks = () => props.table.foreign_keys;
 
   return (
     <Dialog id="schema">
       <DialogTrigger>
-        <IconButton>
+        <IconButton tooltip="[DEV only]">
           <TbColumnsOff />
         </IconButton>
       </DialogTrigger>
 
-      <DialogContent class="min-w-[80dvw]">
+      <DialogContent class="max-w-[80dvw]">
         <DialogHeader>
           <DialogTitle>[Debug] Schema</DialogTitle>
         </DialogHeader>
 
         <div class="max-h-[80dvh] overflow-auto">
           <div class="mx-2 flex flex-col gap-2">
-            <h3>Columns</h3>
-            <pre class="w-[70vw] overflow-x-hidden text-xs">
-              {JSON.stringify(columns(), null, 2)}
-            </pre>
+            <h3>Schema</h3>
 
-            <h3>Foreign Keys</h3>
             <pre class="w-[70vw] overflow-x-hidden text-xs">
-              {JSON.stringify(fks(), null, 2)}
+              {JSON.stringify(props.table, null, 2)}
             </pre>
 
             <h3>Indexes</h3>
