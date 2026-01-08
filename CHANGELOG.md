@@ -1,3 +1,9 @@
+## v0.22.8
+
+- Expose SQL `CREATE (TABLE|VIEW)` statements in admin UI's explorer.
+- Move API's JSON schemas in to explorer's API dialog.
+- Update Rust dependencies including `reqwest`, which changes default `rustls` crypto provider from `ring` to `aws_lc`.
+
 ## v0.22.7
 
 - Add IP-based rate limiting to all auth POST endpoints to further reduce abuse surface like sign-up bombing (sign-ins were already limited).
