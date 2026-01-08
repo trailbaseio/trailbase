@@ -106,6 +106,58 @@ fn async_insert_benchmark<C: AsyncConnection + 'static>(
   });
 }
 
+pub fn connect(path: &PathBuf) -> Result<rusqlite::Connection, rusqlite::Error> {
+  #[cfg(feature = "graft")]
+  {
+    use std::sync::LazyLock;
+
+    static INIT_GRAFT: LazyLock<()> = LazyLock::new(|| {
+      let test_dir = PathBuf::from("./graft");
+      // register graft
+      let config = graft::setup::GraftConfig {
+        data_dir: test_dir.join("0"),
+        remote: graft::remote::RemoteConfig::Memory,
+        autosync: None,
+      };
+      graft_sqlite::register_static("graft", false, config).unwrap();
+    });
+    let _foo = *INIT_GRAFT;
+  }
+
+  use rusqlite::OpenFlags;
+  let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
+    | OpenFlags::SQLITE_OPEN_CREATE
+    | OpenFlags::SQLITE_OPEN_NO_MUTEX
+    | OpenFlags::SQLITE_OPEN_URI;
+
+  let conn = rusqlite::Connection::open_with_flags(
+    if cfg!(feature = "graft") {
+      PathBuf::from(format!("file:{}?vfs=graft", path.to_string_lossy()))
+    } else {
+      path.clone()
+    },
+    flags,
+  )?;
+
+  // graft recommends only setting journal_mode=MEMORY
+  // see: https://graft.rs/docs/sqlite/compatibility/
+  if cfg!(feature = "graft") {
+    conn.pragma_update(None, "journal_mode", "MEMORY")?;
+  } else {
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "journal_size_limit", 200000000)?;
+  }
+
+  // Sync the file system less often.
+  conn.pragma_update(None, "synchronous", "NORMAL")?;
+  conn.pragma_update(None, "busy_timeout", 10000)?;
+  conn.pragma_update(None, "temp_store", "MEMORY")?;
+  conn.pragma_update(None, "trusted_schema", "OFF")?;
+  conn.pragma_update(None, "cache_size", -16000)?;
+
+  return Ok(conn);
+}
+
 fn insert_benchmark_group(c: &mut Criterion) {
   try_init_logger();
 
@@ -118,17 +170,14 @@ fn insert_benchmark_group(c: &mut Criterion) {
 
   group.bench_function("trailbase-sqlite (1 thread)", |b| {
     async_insert_benchmark(b, async |fname| {
-      return Ok(Connection::new(
-        || rusqlite::Connection::open(&fname),
-        None,
-      )?);
+      return Ok(Connection::new(|| connect(&fname), None)?);
     })
   });
 
   group.bench_function("trailbase-sqlite (2 threads)", |b| {
     async_insert_benchmark(b, async |fname| {
       return Ok(Connection::new(
-        || rusqlite::Connection::open(&fname),
+        || connect(&fname),
         Some(Options {
           n_read_threads: 2,
           ..Default::default()
@@ -140,7 +189,7 @@ fn insert_benchmark_group(c: &mut Criterion) {
   group.bench_function("trailbase-sqlite (4 threads)", |b| {
     async_insert_benchmark(b, async |fname| {
       return Ok(Connection::new(
-        || rusqlite::Connection::open(&fname),
+        || connect(&fname),
         Some(Options {
           n_read_threads: 4,
           ..Default::default()
@@ -152,7 +201,7 @@ fn insert_benchmark_group(c: &mut Criterion) {
   group.bench_function("trailbase-sqlite (8 threads)", |b| {
     async_insert_benchmark(b, async |fname| {
       return Ok(Connection::new(
-        || rusqlite::Connection::open(&fname),
+        || connect(&fname),
         Some(Options {
           n_read_threads: 8,
           ..Default::default()
@@ -163,9 +212,7 @@ fn insert_benchmark_group(c: &mut Criterion) {
 
   group.bench_function("locked-rusqlite", |b| {
     async_insert_benchmark(b, async |fname| {
-      Ok(SharedRusqlite(Mutex::new(rusqlite::Connection::open(
-        &fname,
-      )?)))
+      Ok(SharedRusqlite(Mutex::new(connect(&fname)?)))
     })
   });
 
@@ -176,7 +223,7 @@ fn insert_benchmark_group(c: &mut Criterion) {
       debug!("New ThreadLocalRusqlite: {id}");
 
       Ok(ThreadLocalRusqlite(
-        Box::new(move || rusqlite::Connection::open(&fname).unwrap()),
+        Box::new(move || connect(&fname).unwrap()),
         id,
       ))
     })
@@ -197,7 +244,7 @@ fn async_read_benchmark<C: AsyncConnection + 'static>(
   // Setup
   const N: i64 = 20000;
   {
-    let conn = rusqlite::Connection::open(setup.fname).unwrap();
+    let conn = connect(&setup.fname).unwrap();
     conn
       .execute(
         "CREATE TABLE 'read_table' (id INTEGER PRIMARY KEY NOT NULL) STRICT",
@@ -253,17 +300,14 @@ fn read_benchmark_group(c: &mut Criterion) {
 
   group.bench_function("trailbase-sqlite (1 thread)", |b| {
     async_read_benchmark(b, async |fname| {
-      return Ok(Connection::new(
-        || rusqlite::Connection::open(&fname),
-        None,
-      )?);
+      return Ok(Connection::new(|| connect(&fname), None)?);
     })
   });
 
   group.bench_function("trailbase-sqlite (2 threads)", |b| {
     async_read_benchmark(b, async |fname| {
       return Ok(Connection::new(
-        || rusqlite::Connection::open(&fname),
+        || connect(&fname),
         Some(Options {
           n_read_threads: 2,
           ..Default::default()
@@ -275,7 +319,7 @@ fn read_benchmark_group(c: &mut Criterion) {
   group.bench_function("trailbase-sqlite (4 threads)", |b| {
     async_read_benchmark(b, async |fname| {
       return Ok(Connection::new(
-        || rusqlite::Connection::open(&fname),
+        || connect(&fname),
         Some(Options {
           n_read_threads: 4,
           ..Default::default()
@@ -287,7 +331,7 @@ fn read_benchmark_group(c: &mut Criterion) {
   group.bench_function("trailbase-sqlite (8 threads)", |b| {
     async_read_benchmark(b, async |fname| {
       return Ok(Connection::new(
-        || rusqlite::Connection::open(&fname),
+        || connect(&fname),
         Some(Options {
           n_read_threads: 8,
           ..Default::default()
@@ -298,9 +342,7 @@ fn read_benchmark_group(c: &mut Criterion) {
 
   group.bench_function("locked-rusqlite", |b| {
     async_read_benchmark(b, async |fname| {
-      Ok(SharedRusqlite(Mutex::new(rusqlite::Connection::open(
-        &fname,
-      )?)))
+      Ok(SharedRusqlite(Mutex::new(connect(&fname)?)))
     })
   });
 
@@ -311,7 +353,7 @@ fn read_benchmark_group(c: &mut Criterion) {
       debug!("New ThreadLocalRusqlite: {id}");
 
       Ok(ThreadLocalRusqlite(
-        Box::new(move || rusqlite::Connection::open(&fname).unwrap()),
+        Box::new(move || connect(&fname).unwrap()),
         id,
       ))
     })
@@ -355,7 +397,7 @@ fn async_mixed_benchmark<C: AsyncConnection + 'static>(
     let setup = AsyncBenchmarkSetup::<C>::setup(builder.clone()).await.unwrap();
 
     {
-      let conn = rusqlite::Connection::open(&setup.fname).unwrap();
+      let conn = connect(&setup.fname).unwrap();
       conn
         .execute_batch(
           r#"
@@ -426,17 +468,14 @@ fn mixed_benchmark_group(c: &mut Criterion) {
 
   group.bench_function("trailbase-sqlite (1 thread)", |b| {
     async_mixed_benchmark(b, async |fname| {
-      return Ok(Connection::new(
-        || rusqlite::Connection::open(&fname),
-        None,
-      )?);
+      return Ok(Connection::new(|| connect(&fname), None)?);
     });
   });
 
   group.bench_function("trailbase-sqlite (2 threads)", |b| {
     async_mixed_benchmark(b, async |fname| {
       return Ok(Connection::new(
-        || rusqlite::Connection::open(&fname),
+        || connect(&fname),
         Some(Options {
           n_read_threads: 2,
           ..Default::default()
@@ -448,7 +487,7 @@ fn mixed_benchmark_group(c: &mut Criterion) {
   group.bench_function("trailbase-sqlite (4 threads)", |b| {
     async_mixed_benchmark(b, async |fname| {
       return Ok(Connection::new(
-        || rusqlite::Connection::open(&fname),
+        || connect(&fname),
         Some(Options {
           n_read_threads: 4,
           ..Default::default()
@@ -460,7 +499,7 @@ fn mixed_benchmark_group(c: &mut Criterion) {
   group.bench_function("trailbase-sqlite (8 threads)", |b| {
     async_mixed_benchmark(b, async |fname| {
       return Ok(Connection::new(
-        || rusqlite::Connection::open(&fname),
+        || connect(&fname),
         Some(Options {
           n_read_threads: 8,
           ..Default::default()
@@ -471,9 +510,7 @@ fn mixed_benchmark_group(c: &mut Criterion) {
 
   group.bench_function("locked-rusqlite", |b| {
     async_mixed_benchmark(b, async |fname| {
-      Ok(SharedRusqlite(Mutex::new(rusqlite::Connection::open(
-        &fname,
-      )?)))
+      Ok(SharedRusqlite(Mutex::new(connect(&fname)?)))
     });
   });
 
@@ -485,7 +522,7 @@ fn mixed_benchmark_group(c: &mut Criterion) {
         debug!("New ThreadLocalRusqlite: {id}");
 
         Ok(ThreadLocalRusqlite(
-          Box::new(move || rusqlite::Connection::open(&fname).unwrap()),
+          Box::new(move || connect(&fname).unwrap()),
           id,
         ))
       });

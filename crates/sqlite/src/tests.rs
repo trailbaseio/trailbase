@@ -468,39 +468,42 @@ async fn test_hooks() {
   let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<String>();
   let c = conn.clone();
 
-  conn.write_lock().preupdate_hook(Some(
-    move |action: rusqlite::hooks::Action, _db: &str, table_name: &str, case: &PreUpdateCase| {
-      let row_id = extract_row_id(case).unwrap();
-      let state = State {
-        action,
-        table_name: table_name.to_string(),
-        row_id,
-      };
-
-      let sender = sender.clone();
-      c.call_and_forget(move |conn| {
-        match state.action {
-          rusqlite::hooks::Action::SQLITE_INSERT => {
-            let text = conn
-              .query_row(
-                &format!(
-                  r#"SELECT text FROM "{}" WHERE _rowid_ = $1"#,
-                  state.table_name
-                ),
-                [state.row_id],
-                |row| row.get::<_, String>(0),
-              )
-              .unwrap();
-
-            sender.send(text).unwrap();
-          }
-          _ => {
-            panic!("unexpected action: {:?}", state.action);
-          }
+  conn
+    .write_lock()
+    .preupdate_hook(Some(
+      move |action: rusqlite::hooks::Action, _db: &str, table_name: &str, case: &PreUpdateCase| {
+        let row_id = extract_row_id(case).unwrap();
+        let state = State {
+          action,
+          table_name: table_name.to_string(),
+          row_id,
         };
-      });
-    },
-  ));
+
+        let sender = sender.clone();
+        c.call_and_forget(move |conn| {
+          match state.action {
+            rusqlite::hooks::Action::SQLITE_INSERT => {
+              let text = conn
+                .query_row(
+                  &format!(
+                    r#"SELECT text FROM "{}" WHERE _rowid_ = $1"#,
+                    state.table_name
+                  ),
+                  [state.row_id],
+                  |row| row.get::<_, String>(0),
+                )
+                .unwrap();
+
+              sender.send(text).unwrap();
+            }
+            _ => {
+              panic!("unexpected action: {:?}", state.action);
+            }
+          };
+        });
+      },
+    ))
+    .unwrap();
 
   conn
     .execute("INSERT INTO test (id, text) VALUES (5, 'foo')", ())

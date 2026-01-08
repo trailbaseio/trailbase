@@ -14,6 +14,10 @@ name = "benchmark"
 path = "benches/benchmark.rs"
 harness = false
 
+[features]
+default = []
+graft = []
+
 [dependencies]
 kanal = "0.1.1"
 log = { version = "^0.4.21", default-features = false }
@@ -28,6 +32,8 @@ tokio = { workspace = true }
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 env_logger = { workspace = true }
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+graft = { version = "0.2.1" }
+graft-sqlite = { version = "0.2.1", features = ["register-static"] }
 log = "0.4.27"
 rand = { workspace = true }
 tempfile = "3.19.1"

@@ -441,18 +441,54 @@ pub(super) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, Con
 pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
   path: Option<PathBuf>,
 ) -> Result<rusqlite::Connection, rusqlite::Error> {
+  #[cfg(feature = "graft")]
+  {
+    use std::sync::LazyLock;
+
+    static INIT_GRAFT: LazyLock<()> = LazyLock::new(|| {
+      let test_dir = PathBuf::from("./graft");
+      // register graft
+      let config = graft::setup::GraftConfig {
+        data_dir: test_dir.join("0"),
+        remote: graft::remote::RemoteConfig::Memory,
+        autosync: None,
+      };
+      graft_sqlite::register_static("graft", false, config).unwrap();
+    });
+    let _foo = *INIT_GRAFT;
+  }
+
   let conn = if let Some(p) = path {
     use rusqlite::OpenFlags;
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
       | OpenFlags::SQLITE_OPEN_CREATE
-      | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+      | OpenFlags::SQLITE_OPEN_NO_MUTEX
+      | OpenFlags::SQLITE_OPEN_URI;
 
-    rusqlite::Connection::open_with_flags(p, flags)?
+    rusqlite::Connection::open_with_flags(
+      if cfg!(feature = "graft") {
+        PathBuf::from(format!("file:{}?vfs=graft", p.to_string_lossy()))
+      } else {
+        p
+      },
+      flags,
+    )?
   } else {
     rusqlite::Connection::open_in_memory()?
   };
 
-  trailbase_extension::apply_default_pragmas(&conn)?;
+  if cfg!(feature = "graft") {
+    // graft recommends only setting journal_mode=MEMORY
+    // see: https://graft.rs/docs/sqlite/compatibility/
+    conn.pragma_update(None, "journal_mode", "MEMORY")?;
+
+    conn.pragma_update(None, "busy_timeout", 10000)?;
+    conn.pragma_update(None, "temp_store", "MEMORY")?;
+    conn.pragma_update(None, "trusted_schema", "OFF")?;
+    conn.pragma_update(None, "cache_size", -16000)?;
+  } else {
+    trailbase_extension::apply_default_pragmas(&conn)?;
+  }
 
   // Initial optimize.
   conn.pragma_update(None, "optimize", "0x10002")?;
