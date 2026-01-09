@@ -171,37 +171,41 @@ pub(crate) async fn install_routes_and_jobs(
       async move |params: RawPathParams, user: Option<User>, req: Request| -> Response {
         // Construct WASI request form hyper/axum request.
         let (mut parts, body) = req.into_parts();
-        let request = hyper::Request::from_parts(
-          {
-            let Ok(header_value) = to_header_value(&HttpContext {
-              kind: HttpContextKind::Http,
-              registered_path,
-              path_params: params
-                .iter()
-                .map(|(name, value)| (name.to_string(), value.to_string()))
-                .collect(),
-              user: user.map(|u| HttpContextUser {
-                id: u.id,
-                email: u.email,
-                csrf_token: u.csrf_token,
-              }),
-            }) else {
-              return Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body("header encoding failed".into())
-                .unwrap_or_default();
-            };
 
-            parts.headers.insert("__context", header_value);
-            parts
-          },
+        let Ok(header_value) = to_header_value(&HttpContext {
+          kind: HttpContextKind::Http,
+          registered_path,
+          path_params: params
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect(),
+          user: user.map(|u| HttpContextUser {
+            id: u.id,
+            email: u.email,
+            csrf_token: u.csrf_token,
+          }),
+        }) else {
+          return Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body("header encoding failed".into())
+            .unwrap_or_default();
+        };
+
+        parts.headers.insert("__context", header_value);
+
+        let request = hyper::Request::from_parts(
+          parts,
           UnsyncBoxBody::new(
+            // NOTE: Ideally we'd stream the request body, however there's no way for us to re-map
+            // axum::Error to hyper::Error. All hyper::Error's constructors are private. This is
+            // likely an oversight in wasi_http.
             http_body_util::Full::new({
               let Ok(body) = body.collect().await else {
                 return internal("request buffering failed");
               };
               body.to_bytes()
             })
+            // Remapping Body impl's error type from infallible to hyper::Error.
             .map_err(|_| unreachable!()),
           ),
         );
@@ -216,13 +220,11 @@ pub(crate) async fn install_routes_and_jobs(
           Ok(response) => {
             // Construct hyper/axum response from WASI response.
             let (parts, body) = response.into_parts();
-            Response::from_parts(parts, {
-              // TODO: allow streaming responses, i.e. plumb WASI stream into hyper stream.
-              let Ok(body) = body.collect().await else {
-                return internal("response");
-              };
-              body.to_bytes().into()
-            })
+
+            Response::from_parts(
+              parts,
+              axum::body::Body::from_stream(body.into_data_stream()),
+            )
           }
           Err(err) => {
             debug!("`call_incoming_http_handler` returned: {err}");
