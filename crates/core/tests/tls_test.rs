@@ -32,7 +32,6 @@ fn test_https_serving() {
       public_dir: None,
       dev: false,
       cors_allowed_origins: vec![],
-      runtime_threads: None,
       tls_key: Some(Arc::new(tls_key)),
       tls_cert: Some(cert.der().clone()),
       ..Default::default()

@@ -26,7 +26,6 @@ async fn test_without_spa_fallback() {
     public_dir_spa: false,
     dev: false,
     cors_allowed_origins: vec![],
-    runtime_threads: None,
     ..Default::default()
   };
 

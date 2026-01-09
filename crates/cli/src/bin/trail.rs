@@ -7,7 +7,6 @@ use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
 use itertools::Itertools;
 use serde::Deserialize;
-use std::rc::Rc;
 use tokio::{fs, io::AsyncWriteExt};
 use trailbase::api::{self, Email, InitArgs, JsonSchemaMode, init_app_state};
 use trailbase::{DataDir, Server, ServerOptions, constants::USER_TABLE};
@@ -18,8 +17,8 @@ use trailbase_cli::wasm::{
 use utoipa::OpenApi;
 
 use trailbase_cli::{
-  AdminSubCommands, ComponentReference, ComponentSubCommands, DefaultCommandLineArgs,
-  OpenApiSubCommands, SubCommands, UserSubCommands,
+  AdminSubCommands, CommandLineArgs, ComponentReference, ComponentSubCommands, OpenApiSubCommands,
+  SubCommands, UserSubCommands,
 };
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -50,42 +49,17 @@ impl DbUser {
   }
 }
 
-async fn async_main() -> Result<(), BoxError> {
-  let args = DefaultCommandLineArgs::parse();
-
-  if args.version {
-    let version = trailbase_build::get_version_info!();
-    let tag = version.git_version_tag.as_deref().unwrap_or("?");
-    let date = version
-      .git_commit_date
-      .as_deref()
-      .unwrap_or_default()
-      .trim();
-
-    println!("trail {tag} ({date})");
-
-    if let Ok(conn) = trailbase_sqlite::Connection::open_in_memory() {
-      let sqlite_version: String = conn
-        .read_query_value("SELECT sqlite_version();", ())
-        .await
-        .unwrap_or_default()
-        .unwrap_or_default();
-
-      println!("sqlite: {sqlite_version}");
-    }
-
-    return Ok(());
-  }
-
-  let data_dir = DataDir(args.data_dir.clone());
-
-  match args.cmd {
-    Some(SubCommands::Run(cmd)) => {
-      init_logger(cmd.dev);
-
+async fn async_main(
+  cmd: SubCommands,
+  data_dir: DataDir,
+  public_url: Option<url::Url>,
+  wasm_tokio_runtime: Option<tokio::runtime::Handle>,
+) -> Result<(), BoxError> {
+  match cmd {
+    SubCommands::Run(cmd) => {
       let app = Server::init(ServerOptions {
         data_dir,
-        public_url: args.public_url,
+        public_url,
         address: cmd.address,
         admin_address: cmd.admin_address,
         public_dir: cmd.public_dir.map(|p| p.into()),
@@ -96,7 +70,7 @@ async fn async_main() -> Result<(), BoxError> {
         dev: cmd.dev,
         demo: cmd.demo,
         cors_allowed_origins: cmd.cors_allowed_origins,
-        runtime_threads: cmd.runtime_threads,
+        wasm_tokio_runtime,
         tls_key: None,
         tls_cert: None,
       })
@@ -104,34 +78,28 @@ async fn async_main() -> Result<(), BoxError> {
 
       app.serve().await?;
     }
-    Some(SubCommands::OpenApi { cmd }) => {
-      init_logger(false);
-
-      match cmd {
-        Some(OpenApiSubCommands::Print) | None => {
-          let json = trailbase::openapi::Doc::openapi().to_pretty_json()?;
-          println!("{json}");
-        }
-        #[cfg(feature = "swagger")]
-        Some(OpenApiSubCommands::Run { address }) => {
-          let router = axum::Router::new().merge(
-            utoipa_swagger_ui::SwaggerUi::new("/docs")
-              .url("/api/openapi.json", trailbase::openapi::Doc::openapi()),
-          );
-
-          let listener = tokio::net::TcpListener::bind(addr.clone()).await.unwrap();
-          log::info!("docs @ http://{addr}/docs 🚀");
-
-          axum::serve(listener, router).await.unwrap();
-        }
+    SubCommands::OpenApi { cmd } => match cmd {
+      Some(OpenApiSubCommands::Print) | None => {
+        let json = trailbase::openapi::Doc::openapi().to_pretty_json()?;
+        println!("{json}");
       }
-    }
-    Some(SubCommands::Schema(cmd)) => {
-      init_logger(false);
+      #[cfg(feature = "swagger")]
+      Some(OpenApiSubCommands::Run { address }) => {
+        let router = axum::Router::new().merge(
+          utoipa_swagger_ui::SwaggerUi::new("/docs")
+            .url("/api/openapi.json", trailbase::openapi::Doc::openapi()),
+        );
 
+        let listener = tokio::net::TcpListener::bind(addr.clone()).await.unwrap();
+        log::info!("docs @ http://{addr}/docs 🚀");
+
+        axum::serve(listener, router).await.unwrap();
+      }
+    },
+    SubCommands::Schema(cmd) => {
       let (_new_db, state) = init_app_state(InitArgs {
-        data_dir: DataDir(args.data_dir),
-        public_url: args.public_url,
+        data_dir,
+        public_url,
         ..Default::default()
       })
       .await?;
@@ -147,9 +115,7 @@ async fn async_main() -> Result<(), BoxError> {
 
       println!("{}", serde_json::to_string_pretty(&json_schema)?);
     }
-    Some(SubCommands::Migration { suffix, db }) => {
-      init_logger(false);
-
+    SubCommands::Migration { suffix, db } => {
       let filename = api::new_unique_migration_filename(suffix.as_deref().unwrap_or("update"));
       let dir = data_dir
         .migrations_path()
@@ -167,9 +133,7 @@ async fn async_main() -> Result<(), BoxError> {
 
       println!("Created empty migration file: {path:?}");
     }
-    Some(SubCommands::Admin { cmd }) => {
-      init_logger(false);
-
+    SubCommands::Admin { cmd } => {
       let (conn, _) = api::init_main_db(Some(&data_dir), None, vec![], vec![])?;
 
       match cmd {
@@ -199,16 +163,13 @@ async fn async_main() -> Result<(), BoxError> {
           println!("Promoted user to admin for '{id}'");
         }
         None => {
-          DefaultCommandLineArgs::command()
+          CommandLineArgs::command()
             .find_subcommand_mut("admin")
             .map(|cmd| cmd.print_help());
         }
       };
     }
-    Some(SubCommands::User { cmd }) => {
-      init_logger(false);
-
-      let data_dir = DataDir(args.data_dir);
+    SubCommands::User { cmd } => {
       let (conn, _) = api::init_main_db(Some(&data_dir), None, vec![], vec![])?;
 
       match cmd {
@@ -242,18 +203,16 @@ async fn async_main() -> Result<(), BoxError> {
           println!("Bearer {auth_token}");
         }
         None => {
-          DefaultCommandLineArgs::command()
+          CommandLineArgs::command()
             .find_subcommand_mut("user")
             .map(|cmd| cmd.print_help());
         }
       };
     }
-    Some(SubCommands::Email(cmd)) => {
-      init_logger(false);
-
+    SubCommands::Email(cmd) => {
       let (_new_db, state) = init_app_state(InitArgs {
-        data_dir: DataDir(args.data_dir),
-        public_url: args.public_url,
+        data_dir,
+        public_url,
         ..Default::default()
       })
       .await?;
@@ -271,9 +230,7 @@ async fn async_main() -> Result<(), BoxError> {
         }
       };
     }
-    Some(SubCommands::Components { cmd }) => {
-      init_logger(false);
-
+    SubCommands::Components { cmd } => {
       match cmd {
         Some(ComponentSubCommands::Add { reference }) => {
           let paths = match ComponentReference::try_from(reference.as_str())? {
@@ -373,14 +330,11 @@ async fn async_main() -> Result<(), BoxError> {
           }
         }
         _ => {
-          DefaultCommandLineArgs::command()
+          CommandLineArgs::command()
             .find_subcommand_mut("component")
             .map(|cmd| cmd.print_help());
         }
       };
-    }
-    None => {
-      let _ = DefaultCommandLineArgs::command().print_help();
     }
   }
 
@@ -395,10 +349,69 @@ fn to_user_reference(user: String) -> api::cli::UserReference {
 }
 
 fn main() -> Result<(), BoxError> {
-  let runtime = Rc::new(
-    tokio::runtime::Builder::new_multi_thread()
-      .enable_all()
-      .build()?,
-  );
-  return runtime.block_on(async_main());
+  let args = CommandLineArgs::parse();
+
+  init_logger(if let Some(SubCommands::Run(ref cmd)) = args.cmd {
+    cmd.dev
+  } else {
+    false
+  });
+
+  if args.version {
+    let version = trailbase_build::get_version_info!();
+    let tag = version.git_version_tag.as_deref().unwrap_or("?");
+    let date = version
+      .git_commit_date
+      .as_deref()
+      .unwrap_or_default()
+      .trim();
+
+    println!("trail {tag} ({date})");
+    println!("sqlite: {}", rusqlite::version());
+
+    return Ok(());
+  }
+
+  let Some(cmd) = args.cmd else {
+    let _ = CommandLineArgs::command().print_help();
+    return Ok(());
+  };
+
+  let wasm_tokio_runtime = if let SubCommands::Run(ref cmd) = cmd {
+    let num_threads: usize = cmd
+      .runtime_threads
+      .unwrap_or_else(|| std::thread::available_parallelism().map_or(0, |n| n.into()));
+
+    if num_threads > 0 {
+      log::info!("Created dedicated WASM runtime with {num_threads} threads");
+      Some(
+        tokio::runtime::Builder::new_multi_thread()
+          .thread_name("WASM")
+          .worker_threads(num_threads)
+          .enable_all()
+          .build()?,
+      )
+    } else {
+      None
+    }
+  } else {
+    None
+  };
+
+  let main_runtime = tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .build()?;
+
+  main_runtime.block_on(async_main(
+    cmd,
+    DataDir(args.data_dir.clone()),
+    args.public_url,
+    wasm_tokio_runtime.as_ref().map(|rt| rt.handle().clone()),
+  ))?;
+
+  if let Some(wasm_tokio_runtime) = wasm_tokio_runtime {
+    wasm_tokio_runtime.shutdown_timeout(tokio::time::Duration::from_secs(10));
+  }
+
+  return Ok(());
 }

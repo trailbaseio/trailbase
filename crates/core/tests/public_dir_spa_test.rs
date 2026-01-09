@@ -43,7 +43,6 @@ async fn test_spa_fallback() {
     public_dir_spa: true,
     dev: false,
     cors_allowed_origins: vec![],
-    runtime_threads: None,
     ..Default::default()
   };
 

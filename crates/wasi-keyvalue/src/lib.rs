@@ -58,9 +58,7 @@ pub struct Store {
 impl Store {
   /// New shared storage for WASI KV implementation.
   pub fn new() -> Self {
-    return Store {
-      store: Arc::new(RwLock::new(HashMap::new())),
-    };
+    return Store::default();
   }
 
   /// Insert new value. Returns not-None if value with key already existed.

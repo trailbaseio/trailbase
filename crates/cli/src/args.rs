@@ -29,7 +29,7 @@ impl From<JsonSchemaModeArg> for JsonSchemaMode {
 /// server restart, it should probably be a CLI option and a config option otherwise.
 #[derive(Parser, Debug, Clone, Default)]
 #[command(version, about, long_about = None, disable_version_flag = true)]
-pub struct DefaultCommandLineArgs {
+pub struct CommandLineArgs {
   /// Directory for runtime files including the database. Will be created by TrailBase if dir
   /// doesn't exist.
   #[arg(long, env, default_value = DataDir::DEFAULT)]

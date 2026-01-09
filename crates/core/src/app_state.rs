@@ -55,7 +55,7 @@ struct InternalState {
   /// Actual WASM runtimes.
   wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
   /// WASM runtime builders needed to rebuild above runtimes, e.g. when hot-reloading.
-  build_wasm_runtimes: Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>,
+  wasm_runtimes_builder: crate::wasm::WasmRuntimeBuilder,
 
   #[cfg(test)]
   #[allow(unused)]
@@ -75,7 +75,7 @@ pub(crate) struct AppStateArgs {
   pub connection_manager: ConnectionManager,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore>,
-  pub runtime_threads: Option<usize>,
+  pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
 }
 
 #[derive(Clone)]
@@ -119,33 +119,34 @@ impl AppState {
       object_store.clone(),
     );
 
-    let crate::wasm::WasmRuntimeResult {
-      shared_kv_store,
-      build_wasm_runtime,
-    } = crate::wasm::build_wasm_runtime(
+    let shared_kv_store = crate::wasm::KvStore::new();
+    // Assign right away.
+    {
+      config.with_value(|c| {
+        shared_kv_store.set(
+          AUTH_CONFIG_KEY.to_string(),
+          serde_json::to_vec(&build_auth_config(c)).expect("startup"),
+        );
+      });
+
+      // Register an observer for continuous updates.
+      let shared_kv_store = shared_kv_store.clone();
+      config.add_observer(move |c| {
+        if let Ok(v) = serde_json::to_vec(&build_auth_config(c)) {
+          shared_kv_store.set(AUTH_CONFIG_KEY.to_string(), v);
+        }
+      });
+    }
+
+    let wasm_runtimes_builder = crate::wasm::wasm_runtimes_builder(
       args.data_dir.clone(),
       (*main_conn).clone(),
+      args.wasm_tokio_runtime,
       args.runtime_root_fs.clone(),
-      args.runtime_threads,
+      Some(shared_kv_store),
       args.dev,
     )
     .expect("startup");
-
-    // Assign right away.
-    config.with_value(|c| {
-      shared_kv_store.set(
-        AUTH_CONFIG_KEY.to_string(),
-        serde_json::to_vec(&build_auth_config(c)).expect("startup"),
-      );
-    });
-
-    // Register an observer for continuous updates.
-    let shared_kv_store = shared_kv_store.clone();
-    config.add_observer(move |c| {
-      if let Ok(v) = serde_json::to_vec(&build_auth_config(c)) {
-        shared_kv_store.set(AUTH_CONFIG_KEY.to_string(), v);
-      }
-    });
 
     AppState {
       state: Arc::new(InternalState {
@@ -181,12 +182,12 @@ impl AppState {
         record_apis: record_apis.clone(),
         subscription_manager: SubscriptionManager::new(record_apis),
         object_store,
-        wasm_runtimes: build_wasm_runtime()
+        wasm_runtimes: wasm_runtimes_builder()
           .expect("startup")
           .into_iter()
           .map(|rt| Arc::new(RwLock::new(rt)))
           .collect(),
-        build_wasm_runtimes: build_wasm_runtime,
+        wasm_runtimes_builder,
         #[cfg(test)]
         test_cleanup: vec![],
       }),
@@ -372,7 +373,7 @@ impl AppState {
   }
 
   pub(crate) async fn reload_wasm_runtimes(&self) -> Result<(), crate::wasm::AnyError> {
-    let mut new_runtimes = (self.state.build_wasm_runtimes)()?;
+    let mut new_runtimes = (self.state.wasm_runtimes_builder)()?;
     if new_runtimes.is_empty() {
       return Ok(());
     }
@@ -570,7 +571,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       subscription_manager: SubscriptionManager::new(record_apis),
       object_store,
       wasm_runtimes: vec![],
-      build_wasm_runtimes: Box::new(|| Ok(vec![])),
+      wasm_runtimes_builder: Box::new(|| Ok(vec![])),
       test_cleanup: vec![Box::new(temp_dir)],
     }),
   });

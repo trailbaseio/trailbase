@@ -9,7 +9,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
-use trailbase_wasm_runtime_host::{InitArgs, RuntimeOptions, SharedExecutor, find_wasm_components};
+use trailbase_wasm_runtime_host::{InitArgs, RuntimeOptions, find_wasm_components};
 
 use crate::User;
 use crate::util::urlencode;
@@ -48,75 +48,50 @@ pub(crate) fn build_sync_wasm_runtimes_for_components(
   return Ok(sync_runtimes);
 }
 
-pub(crate) fn build_wasm_runtimes_for_components(
-  n_threads: Option<usize>,
-  conn: trailbase_sqlite::Connection,
-  shared_kv_store: KvStore,
-  components_path: PathBuf,
-  fs_root_path: Option<PathBuf>,
-  use_winch: bool,
-) -> Result<Vec<Runtime>, AnyError> {
-  let components = find_wasm_components(&components_path);
-  if components.is_empty() {
-    debug!("No WASM component found in {components_path:?}");
-    return Ok(vec![]);
-  }
+pub(crate) type WasmRuntimeBuilder =
+  Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>;
 
-  let executor = SharedExecutor::new(n_threads);
-
-  let runtimes: Vec<Runtime> = components
-    .into_iter()
-    .map(|path| {
-      return Runtime::new(
-        executor.clone(),
-        path,
-        conn.clone(),
-        shared_kv_store.clone(),
-        RuntimeOptions {
-          fs_root_path: fs_root_path.clone(),
-          // https://github.com/trailbaseio/trailbase/issues/206
-          use_winch: if cfg!(target_os = "macos") {
-            false
-          } else {
-            use_winch
-          },
-        },
-      );
-    })
-    .collect::<Result<Vec<_>, _>>()?;
-
-  return Ok(runtimes);
-}
-
-pub struct WasmRuntimeResult {
-  pub shared_kv_store: KvStore,
-  pub build_wasm_runtime:
-    Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>,
-}
-
-pub fn build_wasm_runtime(
+pub(crate) fn wasm_runtimes_builder(
   data_dir: DataDir,
   conn: trailbase_sqlite::Connection,
+  rt: Option<tokio::runtime::Handle>,
   runtime_root_fs: Option<std::path::PathBuf>,
-  runtime_threads: Option<usize>,
+  shared_kv_store: Option<KvStore>,
   dev: bool,
-) -> Result<WasmRuntimeResult, AnyError> {
-  let wasm_dir = data_dir.root().join("wasm");
-  let shared_kv_store = KvStore::new();
+) -> Result<WasmRuntimeBuilder, AnyError> {
+  let components_path = data_dir.root().join("wasm");
+  let shared_kv_store = shared_kv_store.unwrap_or_default();
 
-  return Ok(WasmRuntimeResult {
-    shared_kv_store: shared_kv_store.clone(),
-    build_wasm_runtime: Box::new(move || {
-      return crate::wasm::build_wasm_runtimes_for_components(
-        runtime_threads,
-        conn.clone(),
-        shared_kv_store.clone(),
-        wasm_dir.clone(),
-        runtime_root_fs.clone(),
-        dev,
-      );
-    }),
-  });
+  return Ok(Box::new(move || {
+    let components = find_wasm_components(&components_path);
+    if components.is_empty() {
+      debug!("No WASM component found in {components_path:?}");
+      return Ok(vec![]);
+    }
+
+    let runtimes: Vec<Runtime> = components
+      .into_iter()
+      .map(|path| {
+        return Runtime::spawn(
+          rt.clone(),
+          path,
+          conn.clone(),
+          shared_kv_store.clone(),
+          RuntimeOptions {
+            fs_root_path: runtime_root_fs.clone(),
+            // https://github.com/trailbaseio/trailbase/issues/206
+            use_winch: if cfg!(target_os = "macos") {
+              false
+            } else {
+              dev
+            },
+          },
+        );
+      })
+      .collect::<Result<Vec<_>, _>>()?;
+
+    return Ok(runtimes);
+  }));
 }
 
 pub(crate) async fn install_routes_and_jobs(
@@ -130,8 +105,8 @@ pub(crate) async fn install_routes_and_jobs(
   let init_result = runtime
     .read()
     .await
-    .call(async move |runner| {
-      return runner.initialize(InitArgs { version }).await;
+    .call(async move |context| {
+      return context.initialize(InitArgs { version }).await;
     })
     .await??;
 
@@ -148,33 +123,30 @@ pub(crate) async fn install_routes_and_jobs(
         let runtime = runtime.clone();
 
         return async move {
+          let uri = hyper::http::Uri::from_str(&format!("http://__job/?name={}", urlencode(&name)))
+            .map_err(|err| WasmError::Other(format!("Job URI: {err}")))?;
+
+          let request = hyper::Request::builder()
+            // NOTE: We cannot use a custom-scheme, since the wasi http
+            // implementation rejects everything but http and https.
+            .uri(uri)
+            .header(
+              "__context",
+              to_header_value(&HttpContext {
+                kind: HttpContextKind::Job,
+                registered_path: name,
+                path_params: vec![],
+                user: None,
+              })?,
+            )
+            .body(empty())
+            .map_err(|err| WasmError::Other(err.to_string()))?;
+
           runtime
             .read()
             .await
-            .call(async move |runner| -> Result<(), WasmError> {
-              let uri =
-                hyper::http::Uri::from_str(&format!("http://__job/?name={}", urlencode(&name)))
-                  .map_err(|err| WasmError::Other(format!("Job URI: {err}")))?;
-
-              let request = hyper::Request::builder()
-                // NOTE: We cannot use a custom-scheme, since the wasi http
-                // implementation rejects everything but http and https.
-                .uri(uri)
-                .header(
-                  "__context",
-                  to_header_value(&HttpContext {
-                    kind: HttpContextKind::Job,
-                    registered_path: name,
-                    path_params: vec![],
-                    user: None,
-                  })?,
-                )
-                .body(empty())
-                .map_err(|err| WasmError::Other(err.to_string()))?;
-
-              runner.call_incoming_http_handler(request).await?;
-
-              return Ok(());
+            .call(async move |context| {
+              return context.call_incoming_http_handler(request).await;
             })
             .await??;
 
@@ -196,90 +168,80 @@ pub(crate) async fn install_routes_and_jobs(
 
     let runtime = runtime.clone();
     let registered_path = path.clone();
-    let log_message = format!("Uncaught wasm error {method:?}:{path}");
 
-    router = router.route(
-      &path,
-      axum::routing::on(
-        axum_method(method),
-        |params: RawPathParams, user: Option<User>, req: Request| async move {
-          use axum::response::Response;
+    use axum::response::Response;
 
-          let result = runtime
-            .read()
-            .await
-            .call(async move |runner| -> Result<Response, WasmError> {
-              let (mut parts, body) = req.into_parts();
-              let bytes = body
-                .collect()
-                .await
-                .map_err(|_err| WasmError::ChannelClosed)?
-                .to_bytes();
-
-              let path_params = params
+    let handler =
+      async move |params: RawPathParams, user: Option<User>, req: Request| -> Response {
+        // Construct WASI request form hyper/axum request.
+        let (mut parts, body) = req.into_parts();
+        let request = hyper::Request::from_parts(
+          {
+            let Ok(header_value) = to_header_value(&HttpContext {
+              kind: HttpContextKind::Http,
+              registered_path,
+              path_params: params
                 .iter()
                 .map(|(name, value)| (name.to_string(), value.to_string()))
-                .collect();
+                .collect(),
+              user: user.map(|u| HttpContextUser {
+                id: u.id,
+                email: u.email,
+                csrf_token: u.csrf_token,
+              }),
+            }) else {
+              return Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body("header encoding failed".into())
+                .unwrap_or_default();
+            };
 
-              parts.headers.insert(
-                "__context",
-                to_header_value(&HttpContext {
-                  kind: HttpContextKind::Http,
-                  registered_path,
-                  path_params,
-                  user: user.map(|u| HttpContextUser {
-                    id: u.id,
-                    email: u.email,
-                    csrf_token: u.csrf_token,
-                  }),
-                })?,
-              );
-
-              let request = hyper::Request::from_parts(
-                parts,
-                UnsyncBoxBody::new(http_body_util::Full::new(bytes).map_err(|_| unreachable!())),
-              );
-
-              // Call WASM.
-              let (parts, body) = runner
-                .call_incoming_http_handler(request)
-                .await?
-                .into_parts();
-
-              return Ok(Response::from_parts(
-                parts,
-                body
-                  .collect()
-                  .await
-                  .map_err(|_err| WasmError::ChannelClosed)?
-                  .to_bytes()
-                  .into(),
-              ));
+            parts.headers.insert("__context", header_value);
+            parts
+          },
+          UnsyncBoxBody::new(
+            http_body_util::Full::new({
+              let Ok(body) = body.collect().await else {
+                return internal("request buffering failed");
+              };
+              body.to_bytes()
             })
-            .await;
+            .map_err(|_| unreachable!()),
+          ),
+        );
 
-          return match result {
-            Ok(Ok(r)) => r,
-            Ok(Err(err)) => {
-              debug!("{log_message}: {err}");
+        // Call WASM.
+        return match runtime
+          .read()
+          .await
+          .call(async move |context| {
+            return context.call_incoming_http_handler(request).await;
+          })
+          .await
+        {
+          Ok(Ok(response)) => {
+            // Construct hyper/axum response from WASI response.
+            let (parts, body) = response.into_parts();
+            Response::from_parts(parts, {
+              // TODO: allow streaming responses, i.e. plumb WASI stream into hyper stream.
+              let Ok(body) = body.collect().await else {
+                return internal("response");
+              };
+              body.to_bytes().into()
+            })
+          }
+          Ok(Err(err)) => {
+            debug!("`call_incoming_http_handler` returned: {err}");
+            return internal("call");
+          }
+          Err(err) => {
+            warn!("Broken WASM setup: {err}");
+            return internal("setup");
+          }
+        };
+      };
 
-              return Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body("failure".into())
-                .unwrap_or_default();
-            }
-            Err(err) => {
-              error!("Broken setup: {err}");
-
-              return Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body("failure".into())
-                .unwrap_or_default();
-            }
-          };
-        },
-      ),
-    );
+    router = router.route(&path, axum::routing::on(axum_method(method), handler));
   }
 
   return Ok(Some(router));
@@ -304,6 +266,13 @@ fn axum_method(method: trailbase_wasm_runtime_host::HttpMethodType) -> axum::rou
 
 fn empty() -> UnsyncBoxBody<Bytes, hyper::Error> {
   return UnsyncBoxBody::new(http_body_util::Empty::new().map_err(|_| unreachable!()));
+}
+
+fn internal(msg: &'static str) -> axum::response::Response {
+  return axum::response::Response::builder()
+    .status(StatusCode::INTERNAL_SERVER_ERROR)
+    .body(msg.into())
+    .unwrap_or_default();
 }
 
 fn to_header_value(

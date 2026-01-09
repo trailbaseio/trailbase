@@ -38,10 +38,14 @@ mod wasm {
 
   pub(crate) type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
-  #[derive(Clone)]
+  #[derive(Clone, Default)]
   pub(crate) struct KvStore;
 
   impl KvStore {
+    pub(crate) fn new() -> Self {
+      return Self::default();
+    }
+
     pub(crate) fn set(&self, _key: String, _value: Vec<u8>) -> Option<Vec<u8>> {
       return None;
     }
@@ -55,29 +59,26 @@ mod wasm {
     }
   }
 
+  #[derive(Clone)]
   pub struct SqliteFunctionRuntime;
 
-  pub struct WasmRuntimeResult {
-    pub shared_kv_store: KvStore,
-    pub build_wasm_runtime: Box<dyn Fn() -> Result<Vec<Runtime>, AnyError> + Send + Sync>,
-  }
+  pub(crate) type WasmRuntimeBuilder =
+    Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>;
 
-  pub fn build_wasm_runtime(
+  pub(crate) fn wasm_runtimes_builder(
     _data_dir: DataDir,
     _conn: trailbase_sqlite::Connection,
+    _rt: Option<tokio::runtime::Handle>,
     _runtime_root_fs: Option<std::path::PathBuf>,
-    _runtime_threads: Option<usize>,
+    _shared_kv_store: Option<KvStore>,
     _dev: bool,
-  ) -> Result<WasmRuntimeResult, AnyError> {
-    return Ok(WasmRuntimeResult {
-      shared_kv_store: KvStore,
-      build_wasm_runtime: Box::new(|| Ok(vec![])),
-    });
+  ) -> Result<WasmRuntimeBuilder, AnyError> {
+    return Ok(Box::new(|| Ok(vec![])));
   }
 
-  pub fn build_sync_wasm_runtimes_for_components(
+  pub(crate) fn build_sync_wasm_runtimes_for_components(
     _components_path: PathBuf,
-    _fs_root_path: Option<PathBuf>,
+    _fs_root_path: Option<&std::path::Path>,
     _dev: bool,
   ) -> Result<Vec<SqliteFunctionRuntime>, AnyError> {
     return Ok(vec![]);

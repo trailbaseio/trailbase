@@ -41,7 +41,6 @@ async fn test_record_apis() {
     public_dir: None,
     dev: false,
     cors_allowed_origins: vec![],
-    runtime_threads: None,
     ..Default::default()
   };
 

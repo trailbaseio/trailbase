@@ -52,7 +52,7 @@ pub struct InitArgs {
   pub address: String,
   pub dev: bool,
   pub demo: bool,
-  pub runtime_threads: Option<usize>,
+  pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
 }
 
 pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitError> {
@@ -114,7 +114,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     connection_manager,
     jwt,
     object_store,
-    runtime_threads: args.runtime_threads,
+    wasm_tokio_runtime: args.wasm_tokio_runtime,
   });
 
   if new_db {

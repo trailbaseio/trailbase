@@ -28,6 +28,7 @@ mimalloc = { version = "^0.1.41", default-features = false }
 minijinja = { workspace = true }
 openssl = { version = "0.10.73", features = ["vendored"], optional = true }
 reqwest = { workspace = true }
+rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

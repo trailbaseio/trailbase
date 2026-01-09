@@ -85,9 +85,8 @@ pub struct ServerOptions {
   /// Limit the set of allowed origins the HTTP server will answer to.
   pub cors_allowed_origins: Vec<String>,
 
-  /// Number of dedicated runtime threads. If set to None, default of num available cores will be
-  /// used.
-  pub runtime_threads: Option<usize>,
+  /// Optional dedicated Tokio runtime to execute async WASM code on.
+  pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
 
   /// TLS certificate path.
   pub tls_cert: Option<CertificateDer<'static>>,
@@ -145,7 +144,7 @@ impl Server {
       address: opts.address.clone(),
       dev: opts.dev,
       demo: opts.demo,
-      runtime_threads: opts.runtime_threads,
+      wasm_tokio_runtime: opts.wasm_tokio_runtime.clone(),
     })
     .await?;
 

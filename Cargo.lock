@@ -6162,6 +6162,7 @@ dependencies = [
  "minijinja",
  "openssl",
  "reqwest 0.13.1",
+ "rusqlite",
  "serde",
  "serde_json",
  "tokio",
