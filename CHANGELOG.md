@@ -1,3 +1,9 @@
+## v0.22.9
+
+- Allow streaming of HTTP respones from WASM.
+- Internal: major overhaul of WASM integration, remove indirection and scaffolds from previous execution model.
+- Update Rust dependencies.
+
 ## v0.22.8
 
 - Expose SQL `CREATE (TABLE|VIEW)` statements in admin UI's explorer.
