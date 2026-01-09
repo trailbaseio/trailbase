@@ -6422,7 +6422,6 @@ dependencies = [
  "http",
  "http-body-util",
  "hyper",
- "kanal",
  "log",
  "parking_lot",
  "rusqlite",

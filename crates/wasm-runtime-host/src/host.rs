@@ -69,6 +69,8 @@ pub struct SharedState {
   pub conn: trailbase_sqlite::Connection,
   pub kv_store: trailbase_wasi_keyvalue::Store,
   pub fs_root_path: Option<PathBuf>,
+
+  /// Path to original .wasm component file.
   pub component_path: PathBuf,
 }
 

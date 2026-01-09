@@ -105,10 +105,8 @@ pub(crate) async fn install_routes_and_jobs(
   let init_result = runtime
     .read()
     .await
-    .call(async move |context| {
-      return context.initialize(InitArgs { version }).await;
-    })
-    .await??;
+    .initialize(InitArgs { version })
+    .await?;
 
   for (name, spec) in init_result.job_handlers {
     let schedule = cron::Schedule::from_str(&spec)?;
@@ -145,10 +143,8 @@ pub(crate) async fn install_routes_and_jobs(
           runtime
             .read()
             .await
-            .call(async move |context| {
-              return context.call_incoming_http_handler(request).await;
-            })
-            .await??;
+            .call_incoming_http_handler(request)
+            .await?;
 
           Ok::<_, AnyError>(())
         };
@@ -214,12 +210,10 @@ pub(crate) async fn install_routes_and_jobs(
         return match runtime
           .read()
           .await
-          .call(async move |context| {
-            return context.call_incoming_http_handler(request).await;
-          })
+          .call_incoming_http_handler(request)
           .await
         {
-          Ok(Ok(response)) => {
+          Ok(response) => {
             // Construct hyper/axum response from WASI response.
             let (parts, body) = response.into_parts();
             Response::from_parts(parts, {
@@ -230,13 +224,9 @@ pub(crate) async fn install_routes_and_jobs(
               body.to_bytes().into()
             })
           }
-          Ok(Err(err)) => {
+          Err(err) => {
             debug!("`call_incoming_http_handler` returned: {err}");
             return internal("call");
-          }
-          Err(err) => {
-            warn!("Broken WASM setup: {err}");
-            return internal("setup");
           }
         };
       };

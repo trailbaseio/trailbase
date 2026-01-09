@@ -8,7 +8,6 @@ mod sqlite;
 
 use bytes::Bytes;
 use core::future::Future;
-use futures_util::future::BoxFuture;
 use http_body_util::combinators::UnsyncBoxBody;
 use parking_lot::Mutex;
 use std::path::PathBuf;
@@ -45,10 +44,6 @@ pub enum Error {
   Other(String),
 }
 
-enum Message {
-  Run(Box<dyn (FnOnce(Arc<Context>) -> BoxFuture<'static, ()>) + Send>),
-}
-
 #[derive(Clone, Default, Debug)]
 pub struct RuntimeOptions {
   /// Optional file-system sandbox root for r/o file access.
@@ -60,17 +55,9 @@ pub struct RuntimeOptions {
 
 pub struct Runtime {
   /// Path to original .wasm component file.
-  component_path: PathBuf,
-
-  // Event loop:
-  shared_sender: kanal::AsyncSender<Message>,
-  event_loop_handle: tokio::task::JoinHandle<()>,
-}
-
-impl Drop for Runtime {
-  fn drop(&mut self) {
-    self.event_loop_handle.abort();
-  }
+  rt_handle: tokio::runtime::Handle,
+  local_in_flight: AtomicUsize,
+  context: Arc<Context>,
 }
 
 impl Runtime {
@@ -130,106 +117,76 @@ impl Runtime {
       linker
     };
 
-    let (shared_sender, shared_receiver) = kanal::unbounded_async::<Message>();
+    let rt_handle = rt.unwrap_or_else(|| {
+      log::debug!("Re-using Tokio runtime from context");
+      tokio::runtime::Handle::current()
+    });
 
-    let event_loop_handle = {
-      let runner = Context {
-        engine: engine.clone(),
-        component: component.clone(),
-        linker: linker.clone(),
-        shared: Arc::new(SharedState {
-          conn: conn.clone(),
-          kv_store: kv_store.clone(),
-          fs_root_path: opts.fs_root_path.clone(),
-          component_path: wasm_source_file.clone(),
-        }),
-      };
-
-      let handle = rt.unwrap_or_else(|| {
-        log::debug!("Re-using Tokio runtime from context");
-        tokio::runtime::Handle::current()
-      });
-
-      handle.spawn(async move {
-        async_event_loop(runner, shared_receiver).await;
-        log::debug!("WASM async event loop shut donw");
-      })
-    };
+    let context = Arc::new(Context {
+      engine: engine.clone(),
+      component: component.clone(),
+      linker: linker.clone(),
+      shared: Arc::new(SharedState {
+        conn: conn.clone(),
+        kv_store: kv_store.clone(),
+        fs_root_path: opts.fs_root_path.clone(),
+        component_path: wasm_source_file,
+      }),
+    });
 
     return Ok(Self {
-      component_path: wasm_source_file,
-      shared_sender,
-      event_loop_handle,
+      rt_handle,
+      local_in_flight: AtomicUsize::new(0),
+      context,
     });
   }
 
   pub fn component_path(&self) -> &PathBuf {
-    return &self.component_path;
+    return &self.context.shared.component_path;
   }
 
-  pub async fn call<O, F, Fut>(&self, f: F) -> Result<O, Error>
+  /// Call WASM component's `init` implementation.
+  pub async fn initialize(&self, args: InitArgs) -> Result<InitResult, Error> {
+    let context = self.context.clone();
+    return self
+      .call(async move { context.initialize(args).await })
+      .await?;
+  }
+
+  /// Call http handlers exported by WASM component ("incoming" from the perspective of the
+  /// component).
+  pub async fn call_incoming_http_handler(
+    &self,
+    request: hyper::Request<UnsyncBoxBody<Bytes, hyper::Error>>,
+  ) -> Result<hyper::Response<wasmtime_wasi_http::body::HyperOutgoingBody>, Error> {
+    let context = self.context.clone();
+    return self
+      .call(async move { context.call_incoming_http_handler(request).await })
+      .await?;
+  }
+
+  async fn call<F>(&self, f: F) -> Result<F::Output, Error>
   where
-    F: (FnOnce(Arc<Context>) -> Fut) + Send + 'static,
-    Fut: Future<Output = O> + Send,
-    O: Send + 'static,
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
   {
-    let (sender, receiver) = tokio::sync::oneshot::channel::<O>();
-
-    self
-      .shared_sender
-      .send(Message::Run(Box::new(move |runtime: Arc<Context>| {
-        let x = Box::pin(async move { f(runtime).await });
-        Box::pin(async move {
-          let _ = sender.send(x.await);
-        })
-      })))
-      .await
-      .map_err(|_| Error::ChannelClosed)?;
-
-    return receiver.await.map_err(|_| Error::ChannelClosed);
-  }
-}
-
-// TODO: We used to run on dedicated threads, since we're running on tokio now, we may as well rely
-// on Tokio's event loop instead and remove this.
-async fn async_event_loop(context: Context, shared_recv: kanal::AsyncReceiver<Message>) {
-  let context = Arc::new(context);
-
-  let local_in_flight = Arc::new(AtomicUsize::new(0));
-
-  loop {
     #[cfg(debug_assertions)]
     log::debug!(
       "WASM runtime ({path:?}) waiting for new messages. In flight: {}, {}",
-      local_in_flight.load(Ordering::Relaxed),
+      self.local_in_flight.load(Ordering::Relaxed),
       IN_FLIGHT.load(Ordering::Relaxed),
-      path = context.shared.component_path,
+      path = self.context.shared.component_path,
     );
 
-    match shared_recv.recv().await {
-      Ok(Message::Run(f)) => {
-        let context = context.clone();
+    self.local_in_flight.fetch_add(1, Ordering::Relaxed);
+    IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
 
-        let local_in_flight = local_in_flight.clone();
-        local_in_flight.fetch_add(1, Ordering::Relaxed);
+    let result = self.rt_handle.spawn(f).await;
 
-        IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
+    IN_FLIGHT.fetch_sub(1, Ordering::Relaxed);
+    self.local_in_flight.fetch_sub(1, Ordering::Relaxed);
 
-        tokio::spawn(async move {
-          f(context).await;
-
-          IN_FLIGHT.fetch_sub(1, Ordering::Relaxed);
-          local_in_flight.fetch_sub(1, Ordering::Relaxed);
-        });
-
-        // Yield before listening for more messages to give the runtime a chance to run.
-        // tokio::task::yield_now().await;
-      }
-      Err(_) => {
-        // Channel closed
-        return;
-      }
-    };
+    return result.map_err(|_err| Error::ChannelClosed);
   }
 }
 
@@ -245,7 +202,7 @@ pub struct InitResult {
   pub job_handlers: Vec<(String, String)>,
 }
 
-pub struct Context {
+struct Context {
   engine: Engine,
   component: Component,
   linker: Linker<State>,
@@ -302,8 +259,7 @@ impl Context {
     return Ok((store, bindings));
   }
 
-  // Call WASM components `init` implementation.
-  pub async fn initialize(&self, args: InitArgs) -> Result<InitResult, Error> {
+  async fn initialize(&self, args: InitArgs) -> Result<InitResult, Error> {
     let (mut store, bindings) = self.new_bindings().await?;
     let api = bindings.trailbase_component_init_endpoint();
 
@@ -323,8 +279,7 @@ impl Context {
     });
   }
 
-  // Call http handlers exported by WASM component (incoming from the perspective of the component).
-  pub async fn call_incoming_http_handler(
+  async fn call_incoming_http_handler(
     &self,
     request: hyper::Request<UnsyncBoxBody<Bytes, hyper::Error>>,
   ) -> Result<hyper::Response<wasmtime_wasi_http::body::HyperOutgoingBody>, Error> {
@@ -510,9 +465,7 @@ mod tests {
     let runtime = spawn_runtime(conn.clone());
 
     runtime
-      .call(async |runner| {
-        runner.initialize(InitArgs { version: None }).await.unwrap();
-      })
+      .initialize(InitArgs { version: None })
       .await
       .unwrap();
 
@@ -592,24 +545,19 @@ mod tests {
 
     let uri = uri.to_string();
     let registered_path = registered_path.to_string();
-    return runtime
-      .call(async |runner| {
-        let context = HttpContext {
-          kind: HttpContextKind::Http,
-          registered_path,
-          path_params: vec![],
-          user: None,
-        };
+    let context = HttpContext {
+      kind: HttpContextKind::Http,
+      registered_path,
+      path_params: vec![],
+      user: None,
+    };
 
-        let request = hyper::Request::builder()
-          .uri(uri)
-          .header("__context", to_header_value(&context))
-          .body(sqlite::bytes_to_body(Bytes::from_static(b"")))
-          .unwrap();
-
-        return runner.call_incoming_http_handler(request).await;
-      })
-      .await
+    let request = hyper::Request::builder()
+      .uri(uri)
+      .header("__context", to_header_value(&context))
+      .body(sqlite::bytes_to_body(Bytes::from_static(b"")))
       .unwrap();
+
+    return runtime.call_incoming_http_handler(request).await;
   }
 }
