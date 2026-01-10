@@ -6,8 +6,7 @@ WITH
       (SELECT :__user_id AS id) AS _USER_,
       {{ table_name }} as _ROW_
     WHERE
-      ({{ read_access_clause }})
-      AND ({{ filter_clause }})
+      ({{ read_access_clause }}) AND ({{ filter_clause }})
   )
 {% endif -%}
 
@@ -30,8 +29,7 @@ FROM
     LEFT JOIN "{{ expanded.foreign_table_name }}" AS F{{ loop.index0 }} ON _ROW_."{{ expanded.local_column_name }}" = F{{ loop.index0 }}."{{ expanded.foreign_column_name }}"
 {%- endfor %}
 WHERE
-  ({{ read_access_clause }})
-  AND ({{ filter_clause }})
+  ({{ read_access_clause }}) AND ({{ filter_clause }})
 {%- if let Some(cursor_clause) = cursor_clause -%}
   AND ({{ cursor_clause }})
 {%- endif %}

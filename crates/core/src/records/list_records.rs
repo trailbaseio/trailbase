@@ -91,10 +91,6 @@ pub async fn list_records_handler(
       return RecordError::BadRequest("Invalid query");
     })?;
 
-  // NOTE: We're using the read access rule to filter accessible rows as opposed to blocking access
-  // early as we do for READs.
-  let read_access_clause: &str = api.read_access_rule().unwrap_or("TRUE");
-
   // Where clause contains column filters and cursor depending on what's present.
   // NOTE: This will also drop any filters for unknown columns, thus avoiding SQL injections.
   let WhereClause {
@@ -103,13 +99,16 @@ pub async fn list_records_handler(
   } = build_filter_where_clause("_ROW_", api.columns(), filter_params)
     .map_err(|_err| RecordError::BadRequest("Invalid filter params"))?;
 
+  let limit: usize =
+    limit_or_default(limit, api.listing_hard_limit()).map_err(RecordError::BadRequest)?;
+
   // User properties
   params.extend_from_slice(&[
     (
       Cow::Borrowed(":__limit"),
-      Value::Integer(
-        limit_or_default(limit, api.listing_hard_limit()).map_err(RecordError::BadRequest)? as i64,
-      ),
+      // NOTE: We want to query at least one record, otherwise limit=0 isn't very meaningful. It
+      // may be used to query the total count.
+      Value::Integer(limit.max(1) as i64),
     ),
     (
       Cow::Borrowed(":__user_id"),
@@ -171,16 +170,6 @@ pub async fn list_records_handler(
     None
   };
 
-  fn fmt_order(col: &str, order: OrderPrecedent) -> String {
-    return format!(
-      r#"_ROW_."{col}" {}"#,
-      match order {
-        OrderPrecedent::Descending => "DESC",
-        OrderPrecedent::Ascending => "ASC",
-      }
-    );
-  }
-
   let order_clause = order.map_or_else(
     || fmt_order(&pk_column.name, OrderPrecedent::Descending),
     |order| {
@@ -194,7 +183,7 @@ pub async fn list_records_handler(
 
   let metadata = api.connection_metadata();
   let expanded_tables = match query_expand {
-    Some(ref expand) => {
+    Some(expand) => {
       let Some(config_expand) = api.expand() else {
         return Err(RecordError::BadRequest("Invalid expansion"));
       };
@@ -211,26 +200,36 @@ pub async fn list_records_handler(
     None => vec![],
   };
 
-  // NOTE: The template relies on load-bearing underscores for "_rowid_" and "_total_count_" to
-  // have them be stripped later on by `rows_to_json`.
-  let column_names: Vec<_> = api.columns().iter().map(|c| c.name.as_str()).collect();
-  let query = ListRecordQueryTemplate {
-    table_name,
-    column_names: &column_names,
-    read_access_clause,
-    filter_clause: &filter_clause,
-    cursor_clause: cursor_clause.as_deref(),
-    order_clause: &order_clause,
-    expanded_tables: &expanded_tables,
-    count: count.unwrap_or(false),
-    offset: offset.is_some(),
-    is_table,
-  }
-  .render()
-  .map_err(|err| RecordError::Internal(err.into()))?;
-
   // Execute the query.
-  let rows = api.conn().read_query_rows(query, params).await?;
+  let rows = api
+    .conn()
+    .read_query_rows(
+      // NOTE: The template relies on load-bearing underscores for "_rowid_" and "_total_count_" to
+      // have them be stripped later on by `rows_to_json`.
+      ListRecordQueryTemplate {
+        table_name,
+        column_names: &api
+          .columns()
+          .iter()
+          .map(|c| c.name.as_str())
+          .collect::<Vec<_>>(),
+        // NOTE: We're using the read access rule to filter accessible rows as opposed to blocking
+        // access early as we do for READs.
+        read_access_clause: api.read_access_rule().unwrap_or("TRUE"),
+        filter_clause: &filter_clause,
+        cursor_clause: cursor_clause.as_deref(),
+        order_clause: &order_clause,
+        expanded_tables: &expanded_tables,
+        count: count.unwrap_or(false),
+        offset: offset.is_some(),
+        is_table,
+      }
+      .render()
+      .map_err(|err| RecordError::Internal(err.into()))?,
+      params,
+    )
+    .await?;
+
   let Some(last_row) = rows.last() else {
     // Query result is empty:
     return Ok(Json(ListResponse {
@@ -240,29 +239,12 @@ pub async fn list_records_handler(
     }));
   };
 
-  let cursor: Option<String> = if is_table {
-    // The SQL query template returns thw row id as the last column.
-    let rowid_index = last_row.len() - 1;
-    if let Value::Integer(i) = last_row[rowid_index] {
-      Some(encrypt_cursor(&EPHEMERAL_CURSOR_KEY, &api_name, i)?)
-    } else {
-      unreachable!("This should have been an integer");
-    }
-  } else {
-    None
-  };
-
   let total_count = if count == Some(true) {
-    // Total count is in the final column.
-    let first_row = &rows[0];
-    let count_index = if is_table {
-      first_row.len() - 2
-    } else {
-      first_row.len() - 1
-    };
+    // Total count is in the final column for VIEWS and the penultimate for TABLES.
+    let count_index = last_row.len() - if is_table { 2 } else { 1 };
     assert_eq!(rows.column_name(count_index), Some("_total_count_"));
 
-    let value = &first_row[count_index];
+    let value = &last_row[count_index];
     let Value::Integer(count) = value else {
       return Err(RecordError::Internal(
         format!("expected count, got {value:?}").into(),
@@ -270,6 +252,28 @@ pub async fn list_records_handler(
     };
 
     Some(*count as usize)
+  } else {
+    None
+  };
+
+  // For ?limit=0 we still query one record to get the total count.
+  if limit == 0 {
+    return Ok(Json(ListResponse {
+      cursor: None,
+      total_count,
+      records: vec![],
+    }));
+  }
+
+  let cursor: Option<String> = if is_table {
+    // The SQL query template returns thw row id as the last column.
+    let value = &last_row[last_row.len() - 1];
+    let Value::Integer(rowid) = value else {
+      return Err(RecordError::Internal(
+        format!("expected integer cursor, got {value:?}").into(),
+      ));
+    };
+    Some(encrypt_cursor(&EPHEMERAL_CURSOR_KEY, &api_name, *rowid)?)
   } else {
     None
   };
@@ -336,6 +340,16 @@ pub async fn list_records_handler(
     total_count,
     records,
   }));
+}
+
+fn fmt_order(col: &str, order: OrderPrecedent) -> String {
+  return format!(
+    r#"_ROW_."{col}" {}"#,
+    match order {
+      OrderPrecedent::Descending => "DESC",
+      OrderPrecedent::Ascending => "ASC",
+    }
+  );
 }
 
 #[inline]
@@ -767,6 +781,18 @@ mod tests {
           .collect::<Vec<_>>()
           .as_slice(),
       );
+
+      // Edge case for limit=0. It's a convenient way to just get the total count of records.
+      let resp = list_records(
+        &state,
+        Some(&user_x_token.auth_token),
+        Some("count=TRUE&limit=0".to_string()),
+      )
+      .await
+      .unwrap();
+
+      assert_eq!(resp.records.len(), 0);
+      assert_eq!(resp.total_count, Some(2));
 
       // Let's paginate
       let resp0 = list_records(
