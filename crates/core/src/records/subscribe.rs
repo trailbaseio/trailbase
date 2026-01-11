@@ -1,7 +1,7 @@
 use async_channel::WeakReceiver;
 use axum::{
   extract::{Path, RawQuery, State},
-  response::sse::{Event, KeepAlive, Sse},
+  response::sse::{Event as SseEvent, KeepAlive, Sse},
 };
 use futures_util::Stream;
 use log::*;
@@ -34,7 +34,7 @@ use crate::schema_metadata::ConnectionMetadata;
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
 
-type SseEvent = Result<axum::response::sse::Event, axum::Error>;
+type SseEventResult = Result<SseEvent, axum::Error>;
 
 /// Composite id uniquely identifying a subscription.
 ///
@@ -49,7 +49,7 @@ struct SubscriptionId {
 /// RAII type for automatically cleaning up subscriptions when the receiving side gets dropped,
 /// e.g. client disconnects.
 struct AutoCleanupEventStreamState {
-  receiver: WeakReceiver<Event>,
+  receiver: WeakReceiver<SseEvent>,
   state: Arc<PerConnectionState>,
   id: SubscriptionId,
 }
@@ -81,12 +81,12 @@ pin_project! {
     state: AutoCleanupEventStreamState,
 
     #[pin]
-    receiver: async_channel::Receiver<Event>,
+    receiver: async_channel::Receiver<SseEvent>,
   }
 }
 
 impl Stream for AutoCleanupEventStream {
-  type Item = Result<Event, axum::Error>;
+  type Item = SseEventResult;
 
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let mut this = self.project();
@@ -134,7 +134,7 @@ pub struct Subscription {
   /// User associated with subscriber.
   user: Option<User>,
   /// Channel for sending events to the SSE handler.
-  sender: async_channel::Sender<Event>,
+  sender: async_channel::Sender<SseEvent>,
   /// Filter
   filter: Filter,
 }
@@ -163,7 +163,7 @@ struct PerConnectionState {
 
   /// Map from table name to row id to list of subscriptions.
   ///
-  /// NOTE: Use llayered locking to allow cleaning up per-table subscriptions w/o having to
+  /// NOTE: Use layered locking to allow cleaning up per-table subscriptions w/o having to
   /// exclusively lock the entire map.
   subscriptions: RwLock<HashMap</* table_name= */ QualifiedName, RwLock<Subscriptions>>>,
 }
@@ -198,7 +198,7 @@ impl PerConnectionState {
         });
       }
 
-      subscriptions.table.is_empty() && subscriptions.record.is_empty()
+      subscriptions.is_empty()
     };
 
     if remove_subscription_entry_for_table {
@@ -306,7 +306,7 @@ impl PerConnectionState {
       return Err(RecordError::RecordNotFound);
     };
 
-    let (sender, receiver) = async_channel::bounded::<Event>(16);
+    let (sender, receiver) = async_channel::bounded::<SseEvent>(16);
 
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let install_hook: bool = {
@@ -336,7 +336,7 @@ impl PerConnectionState {
 
     // Send an immediate comment to flush SSE headers and establish the connection
     let _ = sender
-      .send(Event::default().comment("subscription established"))
+      .send(SseEvent::default().comment("subscription established"))
       .await;
 
     return Ok(AutoCleanupEventStream {
@@ -367,7 +367,7 @@ impl PerConnectionState {
       Filter::Passthrough
     };
 
-    let (sender, receiver) = async_channel::bounded::<Event>(16);
+    let (sender, receiver) = async_channel::bounded::<SseEvent>(16);
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let install_hook: bool = {
       let mut lock = self.subscriptions.write();
@@ -391,7 +391,7 @@ impl PerConnectionState {
 
     // Send an immediate comment to flush SSE headers and establish the connection
     let _ = sender
-      .send(Event::default().comment("subscription established"))
+      .send(SseEvent::default().comment("subscription established"))
       .await;
 
     return Ok(AutoCleanupEventStream {
@@ -576,7 +576,7 @@ fn broker_subscriptions(
   subs: &[Subscription],
   record_subscriptions: bool,
   record: &indexmap::IndexMap<&str, rusqlite::types::Value>,
-  event: &Event,
+  event: &SseEvent,
 ) -> Vec<usize> {
   let mut dead_subscriptions: Vec<usize> = vec![];
   for (idx, sub) in subs.iter().enumerate() {
@@ -596,7 +596,7 @@ fn broker_subscriptions(
       if record_subscriptions {
         // This can happen if the record api configuration has changed since originally
         // subscribed. In this case we just send and error and cancel the subscription.
-        if let Ok(ev) = Event::default().json_data(DbEvent::Error("Access denied".into())) {
+        if let Ok(ev) = SseEvent::default().json_data(DbEvent::Error("Access denied".into())) {
           let _ = sub.sender.try_send(ev);
         }
 
@@ -612,6 +612,7 @@ fn broker_subscriptions(
       continue;
     }
 
+    // Cloning the event.
     if let Err(err) = sub.sender.try_send(event.clone()) {
       match err {
         async_channel::TrySendError::Full(ev) => {
@@ -680,7 +681,7 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
       RecordAction::Update => DbEvent::Update(Some(json_value)),
     };
 
-    let Ok(event) = Event::default().json_data(db_event) else {
+    let Ok(event) = SseEvent::default().json_data(db_event) else {
       return;
     };
 
@@ -741,13 +742,11 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
     }
 
     // Table subscription cleanup.
-    {
-      for idx in dead_table_subscriptions.iter().rev() {
-        subscriptions.table.swap_remove(*idx);
-      }
+    for idx in dead_table_subscriptions.iter().rev() {
+      subscriptions.table.swap_remove(*idx);
     }
 
-    subscriptions.table.is_empty() && subscriptions.table.is_empty()
+    subscriptions.is_empty()
   };
 
   if remove_subscription_entry_for_table {
@@ -778,7 +777,7 @@ pub async fn add_subscription_sse_handler(
   Path((api_name, record)): Path<(String, String)>,
   user: Option<User>,
   RawQuery(raw_url_query): RawQuery,
-) -> Result<Sse<impl Stream<Item = SseEvent>>, RecordError> {
+) -> Result<Sse<impl Stream<Item = SseEventResult>>, RecordError> {
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
@@ -797,28 +796,31 @@ pub async fn add_subscription_sse_handler(
       return RecordError::BadRequest("Invalid query");
     })?;
 
-  if record == "*" {
-    api.check_table_level_access(Permission::Read, user.as_ref())?;
+  return match record.as_str() {
+    "*" => {
+      api.check_table_level_access(Permission::Read, user.as_ref())?;
 
-    let receiver = state
-      .subscription_manager()
-      .add_table_subscription(api, user, filter)
-      .await?;
+      let receiver = state
+        .subscription_manager()
+        .add_table_subscription(api, user, filter)
+        .await?;
 
-    return Ok(Sse::new(receiver).keep_alive(KeepAlive::default()));
-  } else {
-    let record_id = api.primary_key_to_value(record)?;
-    api
-      .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
-      .await?;
+      Ok(Sse::new(receiver).keep_alive(KeepAlive::default()))
+    }
+    _ => {
+      let record_id = api.primary_key_to_value(record)?;
+      api
+        .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
+        .await?;
 
-    let receiver = state
-      .subscription_manager()
-      .add_record_subscription(api, record_id, user)
-      .await?;
+      let receiver = state
+        .subscription_manager()
+        .add_record_subscription(api, record_id, user)
+        .await?;
 
-    return Ok(Sse::new(receiver).keep_alive(KeepAlive::default()));
-  }
+      Ok(Sse::new(receiver).keep_alive(KeepAlive::default()))
+    }
+  };
 }
 
 #[cfg(test)]
@@ -839,9 +841,9 @@ mod tests {
   use crate::records::test_utils::add_record_api_config;
   use crate::util::uuid_to_b64;
 
-  async fn decode_db_event(event: Event) -> Option<DbEvent> {
-    let (sender, receiver) = async_channel::unbounded::<Event>();
-    let sse = Sse::new(receiver.map(|ev| -> Result<Event, axum::Error> { Ok(ev) }));
+  async fn decode_db_event(event: SseEvent) -> Option<DbEvent> {
+    let (sender, receiver) = async_channel::unbounded::<SseEvent>();
+    let sse = Sse::new(receiver.map(|ev| -> Result<SseEvent, axum::Error> { Ok(ev) }));
 
     sender.send(event.clone()).await.unwrap();
     sender.close();
@@ -868,7 +870,7 @@ mod tests {
       "b": "text",
     });
     let db_event = DbEvent::Delete(Some(json));
-    let event = Event::default().json_data(db_event.clone()).unwrap();
+    let event = SseEvent::default().json_data(db_event.clone()).unwrap();
 
     assert_eq!(decode_db_event(event).await.unwrap(), db_event);
   }
