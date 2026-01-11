@@ -1,3 +1,9 @@
+## v0.22.10
+
+- Fix list record edge case: `?limit=0&count=true` to yield a potentially incorrect `total_count` of 0. #207
+- Fix overly eager de-registration of record subscriptions.
+- Update Rust and JavaScript dependencies.
+
 ## v0.22.9
 
 - Allow streaming of HTTP respones from WASM.
