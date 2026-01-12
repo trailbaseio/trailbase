@@ -196,9 +196,9 @@ export function IndexPage() {
             <CardTitle>Welcome to TrailBase 🚀</CardTitle>
 
             <p>
-              Your open-source, sub-millisecond, single-executable FireBase
-              alternative with type-safe APIs, notifications, builtin JS/TS
-              runtime, auth &amp; admin UI built on SQLite, Rust &amp; V8.
+              Your open, sub-millisecond, single-executable FireBase alternative
+              with type-safe APIs, notifications, builtin WebAssembly runtime,
+              auth &amp; admin UI built on SQLite, Rust &amp; Wasmtime.
             </p>
 
             <p>
