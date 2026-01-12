@@ -1,9 +1,8 @@
 use async_channel::WeakReceiver;
-use axum::{
-  extract::{Path, RawQuery, State},
-  response::sse::{Event as SseEvent, KeepAlive, Sse},
-};
-use futures_util::Stream;
+use axum::extract::{Path, RawQuery, State};
+use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
+use axum::response::{IntoResponse, Response};
+use futures_util::{Stream, StreamExt};
 use log::*;
 use parking_lot::RwLock;
 use pin_project_lite::pin_project;
@@ -12,10 +11,8 @@ use rusqlite::hooks::{Action, PreUpdateCase};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, hash_map::Entry};
 use std::pin::Pin;
-use std::sync::{
-  Arc,
-  atomic::{AtomicI64, Ordering},
-};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::task::{Context, Poll};
 use trailbase_qs::FilterQuery;
 use trailbase_schema::QualifiedName;
@@ -32,10 +29,6 @@ use crate::records::record_api::SubscriptionAclParams;
 use crate::records::{Permission, RecordError};
 use crate::schema_metadata::ConnectionMetadata;
 
-static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
-
-type SseEventResult = Result<SseEvent, axum::Error>;
-
 /// Composite id uniquely identifying a subscription.
 ///
 /// If row_id is Some, this is considered to reference a subscription to a specific record.
@@ -49,7 +42,7 @@ struct SubscriptionId {
 /// RAII type for automatically cleaning up subscriptions when the receiving side gets dropped,
 /// e.g. client disconnects.
 struct AutoCleanupEventStreamState {
-  receiver: WeakReceiver<SseEvent>,
+  receiver: WeakReceiver<Event>,
   state: Arc<PerConnectionState>,
   id: SubscriptionId,
 }
@@ -81,17 +74,17 @@ pin_project! {
     state: AutoCleanupEventStreamState,
 
     #[pin]
-    receiver: async_channel::Receiver<SseEvent>,
+    receiver: async_channel::Receiver<Event>,
   }
 }
 
 impl Stream for AutoCleanupEventStream {
-  type Item = SseEventResult;
+  type Item = Event;
 
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let mut this = self.project();
     let res = futures_util::ready!(this.receiver.as_mut().poll_next(cx));
-    Poll::Ready(res.map(Ok))
+    Poll::Ready(res)
   }
 
   fn size_hint(&self) -> (usize, Option<usize>) {
@@ -106,23 +99,17 @@ pub enum RecordAction {
   Update,
 }
 
-impl From<Action> for RecordAction {
-  fn from(value: Action) -> Self {
-    return match value {
-      Action::SQLITE_DELETE => RecordAction::Delete,
-      Action::SQLITE_INSERT => RecordAction::Insert,
-      Action::SQLITE_UPDATE => RecordAction::Update,
-      _ => unreachable!("{value:?}"),
-    };
-  }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DbEvent {
   Update(Option<serde_json::Value>),
   Insert(Option<serde_json::Value>),
   Delete(Option<serde_json::Value>),
   Error(String),
+}
+
+#[derive(Clone, Debug)]
+pub enum Event {
+  Sse(SseEvent),
 }
 
 pub struct Subscription {
@@ -134,7 +121,7 @@ pub struct Subscription {
   /// User associated with subscriber.
   user: Option<User>,
   /// Channel for sending events to the SSE handler.
-  sender: async_channel::Sender<SseEvent>,
+  sender: async_channel::Sender<Event>,
   /// Filter
   filter: Filter,
 }
@@ -202,15 +189,12 @@ impl PerConnectionState {
     };
 
     if remove_subscription_entry_for_table {
+      let table_name = &id.table_name;
       // NOTE: Only write lock across all tables when necessary.
       read_lock.with_upgraded(|lock| {
         // Check again to avoid races:
-        if lock
-          .get(&id.table_name)
-          .is_some_and(|e| e.read().is_empty())
-        {
-          // Check again.
-          lock.remove(&id.table_name);
+        if lock.get(table_name).is_some_and(|e| e.read().is_empty()) {
+          lock.remove(table_name);
 
           if lock.is_empty() {
             conn.preupdate_hook(NO_HOOK).expect("owned conn");
@@ -229,16 +213,18 @@ impl PerConnectionState {
       .write_lock()
       .preupdate_hook(Some(
         move |action: Action, db: &str, table_name: &str, case: &PreUpdateCase| {
-          let action: RecordAction = match action {
-            Action::SQLITE_UPDATE | Action::SQLITE_INSERT | Action::SQLITE_DELETE => action.into(),
+          let action = match action {
+            Action::SQLITE_UPDATE => RecordAction::Update,
+            Action::SQLITE_INSERT => RecordAction::Insert,
+            Action::SQLITE_DELETE => RecordAction::Delete,
             a => {
-              error!("Unknown action: {a:?}");
+              warn!("Skipping unknown action: {a:?}");
               return;
             }
           };
 
           let Some(rowid) = extract_row_id(case) else {
-            error!("Failed to extract row id");
+            warn!("Failed to extract row id");
             return;
           };
 
@@ -306,7 +292,7 @@ impl PerConnectionState {
       return Err(RecordError::RecordNotFound);
     };
 
-    let (sender, receiver) = async_channel::bounded::<SseEvent>(16);
+    let (sender, receiver) = async_channel::bounded::<Event>(16);
 
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let install_hook: bool = {
@@ -336,7 +322,9 @@ impl PerConnectionState {
 
     // Send an immediate comment to flush SSE headers and establish the connection
     let _ = sender
-      .send(SseEvent::default().comment("subscription established"))
+      .send(Event::Sse(
+        SseEvent::default().comment("subscription established"),
+      ))
       .await;
 
     return Ok(AutoCleanupEventStream {
@@ -367,7 +355,7 @@ impl PerConnectionState {
       Filter::Passthrough
     };
 
-    let (sender, receiver) = async_channel::bounded::<SseEvent>(16);
+    let (sender, receiver) = async_channel::bounded::<Event>(16);
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let install_hook: bool = {
       let mut lock = self.subscriptions.write();
@@ -391,7 +379,9 @@ impl PerConnectionState {
 
     // Send an immediate comment to flush SSE headers and establish the connection
     let _ = sender
-      .send(SseEvent::default().comment("subscription established"))
+      .send(Event::Sse(
+        SseEvent::default().comment("subscription established"),
+      ))
       .await;
 
     return Ok(AutoCleanupEventStream {
@@ -576,10 +566,17 @@ fn broker_subscriptions(
   subs: &[Subscription],
   record_subscriptions: bool,
   record: &indexmap::IndexMap<&str, rusqlite::types::Value>,
-  event: &SseEvent,
+  event: &Event,
 ) -> Vec<usize> {
   let mut dead_subscriptions: Vec<usize> = vec![];
   for (idx, sub) in subs.iter().enumerate() {
+    // Skip events for records that are being filtered out anyway.
+    if let Filter::Record(ref filter) = sub.filter
+      && !apply_filter_recursively_to_record(filter, record)
+    {
+      continue;
+    }
+
     let Some(api) = s.lookup_record_api(&sub.record_api_name) else {
       dead_subscriptions.push(idx);
       sub.sender.close();
@@ -593,11 +590,14 @@ fn broker_subscriptions(
         user: sub.user.as_ref(),
       },
     ) {
+      // NOTE: that access failures for table subscriptions for specific records are simply ignored,
+      // i.e. those events will just not be send. Other records in the table may pass the
+      // check. For record subscriptions, however, missing access is a death sentence.
       if record_subscriptions {
         // This can happen if the record api configuration has changed since originally
         // subscribed. In this case we just send and error and cancel the subscription.
         if let Ok(ev) = SseEvent::default().json_data(DbEvent::Error("Access denied".into())) {
-          let _ = sub.sender.try_send(ev);
+          let _ = sub.sender.try_send(Event::Sse(ev));
         }
 
         dead_subscriptions.push(idx);
@@ -606,17 +606,12 @@ fn broker_subscriptions(
       continue;
     }
 
-    if let Filter::Record(ref filter) = sub.filter
-      && !apply_filter_recursively_to_record(filter, record)
-    {
-      continue;
-    }
-
-    // Cloning the event.
+    // Cloning the event. It's important that we use a try_send here to not block other
+    // subscriptions if a subscriber is slow and their channel fills up.
     if let Err(err) = sub.sender.try_send(event.clone()) {
       match err {
         async_channel::TrySendError::Full(ev) => {
-          warn!("Channel full, dropping event: {ev:?}");
+          info!("Channel full, dropping event: {ev:?}");
         }
         async_channel::TrySendError::Closed(_ev) => {
           dead_subscriptions.push(idx);
@@ -629,7 +624,7 @@ fn broker_subscriptions(
   return dead_subscriptions;
 }
 
-/// Continuation of the pre-update hook being scheduled on the executor.
+/// Continuation of the pre-update hook being scheduled on the Sqlite executor.
 fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
   let ContinuationState {
     state,
@@ -667,10 +662,9 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
       record
         .iter()
         .filter_map(|(name, value)| {
-          if let Ok(v) = value_to_flat_json(value) {
-            return Some(((*name).to_string(), v));
-          };
-          return None;
+          return value_to_flat_json(value)
+            .ok()
+            .map(|v| (name.to_string(), v));
         })
         .collect(),
     );
@@ -685,7 +679,7 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
       return;
     };
 
-    event
+    Event::Sse(event)
   };
 
   let mut read_lock = state.subscriptions.upgradable_read();
@@ -714,7 +708,7 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
     .as_ref()
     .is_some_and(|dead| !dead.is_empty() || action == RecordAction::Delete);
 
-  // .Clean up if necessary
+  // Clean up, only if necessary.
   if dead_table_subscriptions.is_empty() && !cleanup_record_subscriptions {
     return;
   }
@@ -755,6 +749,7 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
       // Check again to avoid races:
       if lock.get(&table_name).is_some_and(|e| e.read().is_empty()) {
         lock.remove(&table_name);
+
         if lock.is_empty() {
           conn.preupdate_hook(NO_HOOK).expect("owned conn");
         }
@@ -777,7 +772,7 @@ pub async fn add_subscription_sse_handler(
   Path((api_name, record)): Path<(String, String)>,
   user: Option<User>,
   RawQuery(raw_url_query): RawQuery,
-) -> Result<Sse<impl Stream<Item = SseEventResult>>, RecordError> {
+) -> Result<Response, RecordError> {
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
@@ -805,7 +800,13 @@ pub async fn add_subscription_sse_handler(
         .add_table_subscription(api, user, filter)
         .await?;
 
-      Ok(Sse::new(receiver).keep_alive(KeepAlive::default()))
+      Ok(
+        Sse::new(receiver.map(|ev| match ev {
+          Event::Sse(ev) => Ok::<_, axum::Error>(ev),
+        }))
+        .keep_alive(KeepAlive::default())
+        .into_response(),
+      )
     }
     _ => {
       let record_id = api.primary_key_to_value(record)?;
@@ -818,10 +819,20 @@ pub async fn add_subscription_sse_handler(
         .add_record_subscription(api, record_id, user)
         .await?;
 
-      Ok(Sse::new(receiver).keep_alive(KeepAlive::default()))
+      Ok(
+        Sse::new(receiver.map(|ev| match ev {
+          Event::Sse(ev) => Ok::<_, axum::Error>(ev),
+        }))
+        .keep_alive(KeepAlive::default())
+        .into_response(),
+      )
     }
   };
 }
+
+static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
+
+const NO_HOOK: Option<fn(Action, &str, &str, &PreUpdateCase)> = None;
 
 #[cfg(test)]
 mod tests {
@@ -841,7 +852,13 @@ mod tests {
   use crate::records::test_utils::add_record_api_config;
   use crate::util::uuid_to_b64;
 
-  async fn decode_db_event(event: SseEvent) -> Option<DbEvent> {
+  async fn decode_db_event(event: Event) -> Option<DbEvent> {
+    return match event {
+      Event::Sse(ev) => decode_sse_db_event(ev).await,
+    };
+  }
+
+  async fn decode_sse_db_event(event: SseEvent) -> Option<DbEvent> {
     let (sender, receiver) = async_channel::unbounded::<SseEvent>();
     let sse = Sse::new(receiver.map(|ev| -> Result<SseEvent, axum::Error> { Ok(ev) }));
 
@@ -870,7 +887,7 @@ mod tests {
       "b": "text",
     });
     let db_event = DbEvent::Delete(Some(json));
-    let event = SseEvent::default().json_data(db_event.clone()).unwrap();
+    let event = Event::Sse(SseEvent::default().json_data(db_event.clone()).unwrap());
 
     assert_eq!(decode_db_event(event).await.unwrap(), db_event);
   }
@@ -1522,5 +1539,3 @@ mod tests {
     assert_eq!(0, manager.num_table_subscriptions());
   }
 }
-
-const NO_HOOK: Option<fn(Action, &str, &str, &PreUpdateCase)> = None;
