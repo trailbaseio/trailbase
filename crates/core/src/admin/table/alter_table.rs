@@ -206,9 +206,10 @@ fn build_ephemeral_target_schema(
   source_schema: &Table,
   operations: Vec<AlterTableOperation>,
 ) -> Result<TargetSchema, Error> {
-  // QUESTION: Should we respect operation order or sort them, e.g. drops, then alters, then
-  // additions? The should be correct by construction :shrug:
-  let mut needs_rename: Option<QualifiedName> = Some(source_schema.name.clone());
+  // If the table isn't renamed we need to create a new table with an ephemal and name an
+  // subsequently rename.
+  let mut table_renamed = false;
+  let mut schema = source_schema.clone();
   let mut column_mapping = HashMap::<String, String>::from_iter(
     source_schema
       .columns
@@ -216,48 +217,13 @@ fn build_ephemeral_target_schema(
       .map(|c| (c.name.clone(), c.name.clone())),
   );
 
-  let mut schema = {
-    let mut schema = source_schema.clone();
-    schema.name = QualifiedName {
-      name: format!("__alter_table_{}", source_schema.name.name),
-      database_schema: source_schema.name.database_schema.clone(),
-    };
-    schema
-  };
-
   for operation in operations {
     match operation {
       AlterTableOperation::RenameTableTo { name } => {
-        needs_rename = None;
-        schema.name = QualifiedName {
-          name,
-          database_schema: source_schema.name.database_schema.clone(),
-        };
-      }
-      AlterTableOperation::DropColumn { name } => {
-        schema.columns.retain(|c| c.name != name);
-        if column_mapping.remove(&name).is_none() {
-          return Err(Error::BadRequest(format!("Column '{name}' missing").into()));
+        if name != source_schema.name.name {
+          table_renamed = true;
+          schema.name.name = name
         }
-      }
-      AlterTableOperation::AlterColumn { name, column } => {
-        let Some(pos) = schema.columns.iter().position(|c| c.name == name) else {
-          return Err(Error::BadRequest(format!("Column '{name}' missing").into()));
-        };
-
-        if name != column.name {
-          // Column rename.
-          if column_mapping.contains_key(&column.name) {
-            return Err(Error::BadRequest(
-              format!("Column '{}' already exists", column.name).into(),
-            ));
-          }
-
-          let res = column_mapping.insert(name.clone(), column.name.clone());
-          assert_eq!(res, Some(name));
-        }
-
-        schema.columns[pos] = column;
       }
       AlterTableOperation::AddColumn { column } => {
         if column_mapping.contains_key(&column.name) {
@@ -267,12 +233,55 @@ fn build_ephemeral_target_schema(
         }
         schema.columns.push(column);
       }
+      AlterTableOperation::DropColumn { name } => {
+        schema.columns.retain(|c| c.name != name);
+        if column_mapping.remove(&name).is_none() {
+          return Err(Error::BadRequest(format!("Column '{name}' missing").into()));
+        }
+      }
+      AlterTableOperation::AlterColumn {
+        name: source_name,
+        column,
+      } => {
+        let Some(pos) = schema.columns.iter().position(|c| c.name == source_name) else {
+          return Err(Error::BadRequest(
+            format!("Column '{source_name}' missing").into(),
+          ));
+        };
+
+        let target_name = &column.name;
+        if source_name != *target_name {
+          // Column rename.
+          if column_mapping.contains_key(target_name) {
+            return Err(Error::BadRequest(
+              format!("Column '{target_name}' already exists").into(),
+            ));
+          }
+
+          column_mapping.insert(source_name.clone(), target_name.clone());
+        }
+
+        // Update the column definition.
+        schema.columns[pos] = column;
+      }
     }
   }
 
+  if table_renamed {
+    return Ok(TargetSchema {
+      ephemeral_table_schema: schema,
+      ephemeral_table_rename: None,
+      column_mapping,
+    });
+  }
+
+  // If the table has not been renamed, the new table first needs an ephemeral name before being
+  // renamed to the original name.
+  schema.name.name = format!("__alter_table_{}", source_schema.name.name);
+
   return Ok(TargetSchema {
     ephemeral_table_schema: schema,
-    ephemeral_table_rename: needs_rename,
+    ephemeral_table_rename: Some(source_schema.name.clone()),
     column_mapping,
   });
 }
