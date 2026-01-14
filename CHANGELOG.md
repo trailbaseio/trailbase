@@ -1,3 +1,11 @@
+## v0.22.11
+
+- Allow re-ordering of columns in Create/Alter table admin UI.
+- Optimization for filtered realtime subscriptions: enforce filter before access check.
+- Admin UI: filter foreign key options based on column type.
+- Minor: remove stale mentions of V8 in admin UI.
+- Update dependencies.
+
 ## v0.22.10
 
 - Fix list record edge case: `?limit=0&count=true` to yield a potentially incorrect `total_count` of 0. #207
