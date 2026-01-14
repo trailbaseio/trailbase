@@ -1,7 +1,13 @@
-import { createEffect, createMemo, createSignal, For } from "solid-js";
-import type { Accessor, JSX, Setter } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import type { JSX } from "solid-js";
 import { Collapsible } from "@kobalte/core/collapsible";
-import { TbChevronDown, TbTrash, TbInfoCircle } from "solid-icons/tb";
+import {
+  TbChevronDown,
+  TbTrash,
+  TbInfoCircle,
+  TbArrowUp,
+  TbArrowDown,
+} from "solid-icons/tb";
 import { createWritableMemo } from "@solid-primitives/memo";
 
 import { Badge, ButtonBadge } from "@/components/ui/badge";
@@ -82,10 +88,12 @@ function columnTypeField(
   form: FormApiT<Table>,
   colIndex: number,
   disabled: boolean,
-  fk: Accessor<string | undefined>,
   allTables: Table[],
 ) {
   return (field: () => AnyFieldApi) => {
+    const fk = () =>
+      getForeignKey(form.getFieldValue(`columns[${colIndex}].options`));
+
     // Note: use createMemo to avoid rebuilds for any state change.
     const value = createMemo(() => field().state.value);
 
@@ -95,7 +103,7 @@ function columnTypeField(
 
       if (foreignKey) {
         const targetTable = {
-          name: foreignKey,
+          name: foreignKey.foreign_table,
           database_schema: form.state.values.name.database_schema,
         };
 
@@ -105,12 +113,7 @@ function columnTypeField(
             if (value() !== targetType) {
               field().setValue(targetType);
 
-              patchColumn(form, colIndex, (col: Column): Column => {
-                return {
-                  ...col,
-                  ...typeNameAndAffinityType(targetType),
-                };
-              });
+              patchColumn(form, colIndex, typeNameAndAffinityType(targetType));
             }
             return;
           }
@@ -131,12 +134,7 @@ function columnTypeField(
           // rendering the query from the schema structure. This is an
           // artifact of us reusing the parsed structure. Fix up the relevant
           // field (and affinity type just for consistency).
-          patchColumn(form, colIndex, (col: Column): Column => {
-            return {
-              ...col,
-              ...typeNameAndAffinityType(v),
-            };
-          });
+          patchColumn(form, colIndex, typeNameAndAffinityType(v));
         }}
         handleBlur={field().handleBlur}
       />
@@ -145,7 +143,7 @@ function columnTypeField(
 }
 
 function ColumnOptionCheckField(props: {
-  column: Column;
+  columnName: string;
   value: ColumnOption[];
   onChange: (v: ColumnOption[]) => void;
   disabled: boolean;
@@ -167,10 +165,10 @@ function ColumnOptionCheckField(props: {
 
             <p class="text-sm">
               Can be any boolean expression constant like{" "}
-              <span class="font-mono font-bold">{`${props.column.name} < 42 `}</span>
+              <span class="font-mono font-bold">{`${props.columnName} < 42 `}</span>
               including SQL function calls like{" "}
               <span class="font-mono font-bold">
-                is_email({props.column.name})
+                is_email({props.columnName})
               </span>
               .
             </p>
@@ -218,7 +216,7 @@ function ColumnOptionCheckField(props: {
 }
 
 function ColumnOptionDefaultField(props: {
-  column: Column;
+  data_type: ColumnDataType;
   value: ColumnOption[];
   onChange: (v: ColumnOption[]) => void;
   disabled: boolean;
@@ -257,7 +255,7 @@ function ColumnOptionDefaultField(props: {
     const blobPattern = "X'.*'";
     const textPattern = "'.*'";
 
-    switch (props.column.data_type) {
+    switch (props.data_type) {
       case "Any":
         return `^\\s*(${functionPattern}|${blobPattern}|${textPattern}|${intPattern}|${floatPattern}})\\s*$`;
       case "Blob":
@@ -319,7 +317,6 @@ function ColumnOptionFkSelect(props: {
   onChange: (v: ColumnOption[]) => void;
   allTables: Table[];
   disabled: boolean;
-  setFk: Setter<undefined | string>;
   databaseSchema: string | null;
 }) {
   const fkTableOptions = createMemo((): string[] => [
@@ -356,7 +353,6 @@ function ColumnOptionFkSelect(props: {
         options={fkTableOptions()}
         onChange={(table: string | null) => {
           if (!table || table === "None") {
-            props.setFk(undefined);
             props.onChange(setForeignKey(props.value, undefined));
             return;
           }
@@ -368,8 +364,6 @@ function ColumnOptionFkSelect(props: {
             schema.columns.find(
               (col) => getUnique(col.options)?.is_primary ?? false,
             ) ?? schema.columns[0];
-
-          props.setFk(table);
 
           let newColumnOptions = [...props.value];
           newColumnOptions = setForeignKey(props.value, {
@@ -399,17 +393,18 @@ function ColumnOptionFkSelect(props: {
 }
 
 function ColumnOptionsFields(props: {
-  column: Column;
   value: ColumnOption[];
   onChange: (v: ColumnOption[]) => void;
   allTables: Table[];
   disabled: boolean;
   pk: boolean;
-  fk: string | undefined;
-  setFk: Setter<string | undefined>;
+  columnName: string;
+  data_type: ColumnDataType;
   databaseSchema: string | null;
 }) {
-  // Column options: (not|null), (default), (unique), (fk), (check), (comment), (onupdate).
+  const fk = () => getForeignKey(props.value);
+
+  // SQLite column options: (not|null), (default), (unique), (fk), (check), (comment), (on-update trigger).
   return (
     <>
       {/* FOREIGN KEY constraint */}
@@ -417,18 +412,18 @@ function ColumnOptionsFields(props: {
 
       {/* DEFAULT constraint */}
       <ColumnOptionDefaultField
-        column={props.column}
+        data_type={props.data_type}
         value={props.value}
         onChange={props.onChange}
-        disabled={props.disabled || props.fk !== undefined}
+        disabled={props.disabled || fk() !== undefined}
       />
 
       {/* CHECK constraint */}
       <ColumnOptionCheckField
-        column={props.column}
+        columnName={props.columnName}
         value={props.value}
         onChange={props.onChange}
-        disabled={props.disabled || props.fk !== undefined}
+        disabled={props.disabled || fk() !== undefined}
       />
 
       {/* NOT NULL constraint */}
@@ -481,35 +476,48 @@ function ColumnOptionsFields(props: {
 export function ColumnSubForm(props: {
   form: FormApiT<Table>;
   colIndex: number;
-  column: Column;
   allTables: Table[];
   disabled: boolean;
   onDelete: () => void;
+  moveUp?: () => void;
+  moveDown?: () => void;
 }): JSX.Element {
-  const disabled = () => props.disabled;
-  const [name, setName] = createWritableMemo(() => props.column.name);
+  const [name, setName] = createWritableMemo(() =>
+    props.form.getFieldValue(`columns[${props.colIndex}].name`),
+  );
+  const dataType = () =>
+    props.form.getFieldValue(`columns[${props.colIndex}].data_type`);
+
   const [expanded, setExpanded] = createSignal(true);
+
   const databaseSchema = createMemo(() =>
     props.form.useStore((state) => state.values.name.database_schema)(),
   );
-
-  const [fk, setFk] = createSignal<string | undefined>();
 
   const Header = () => (
     <div class="flex items-center justify-between">
       <h3 class="truncate">{name()}</h3>
 
       <div class="flex items-center gap-2">
-        {
-          // Delete column button.
-          !disabled() && (
-            <div class="flex justify-end">
-              <IconButton onClick={props.onDelete}>
-                <TbTrash />
-              </IconButton>
-            </div>
-          )
-        }
+        <Show when={props.moveUp}>
+          <IconButton onClick={props.moveUp}>
+            <TbArrowUp />
+          </IconButton>
+        </Show>
+
+        <Show when={props.moveDown}>
+          <IconButton onClick={props.moveDown}>
+            <TbArrowDown />
+          </IconButton>
+        </Show>
+
+        {/* Delete column button. */}
+        <Show when={!props.disabled}>
+          <IconButton onClick={props.onDelete}>
+            <TbTrash />
+          </IconButton>
+        </Show>
+
         <TbChevronDown
           size={20}
           style={{
@@ -555,8 +563,13 @@ export function ColumnSubForm(props: {
                         class="p-1 active:scale-90"
                         type="button"
                         onClick={() => {
-                          patchColumn(props.form, props.colIndex, (col) =>
-                            preset(col.name),
+                          patchColumn(
+                            props.form,
+                            props.colIndex,
+                            preset(
+                              props.form.state.values.columns[props.colIndex]
+                                .name,
+                            ),
                           );
                         }}
                       >
@@ -570,17 +583,19 @@ export function ColumnSubForm(props: {
               {/* Column name field */}
               <props.form.Field
                 name={`columns[${props.colIndex}].name`}
-                defaultValue={name()}
                 validators={{
                   onChange: ({ value }: { value: string | undefined }) => {
-                    setName(value ?? "<missing>");
                     return value ? undefined : "Column name missing";
                   },
                 }}
               >
                 {buildTextFormField({
                   label: () => <L>Name</L>,
-                  disabled: disabled(),
+                  disabled: props.disabled,
+                  onInput: (e) => {
+                    const value: string = (e.target as HTMLInputElement).value;
+                    setName(value === "" ? "<empty>" : value);
+                  },
                 })}
               </props.form.Field>
 
@@ -589,8 +604,7 @@ export function ColumnSubForm(props: {
                 {columnTypeField(
                   props.form,
                   props.colIndex,
-                  disabled(),
-                  fk,
+                  props.disabled,
                   props.allTables,
                 )}
               </props.form.Field>
@@ -601,14 +615,13 @@ export function ColumnSubForm(props: {
                 children={(field) => {
                   return (
                     <ColumnOptionsFields
-                      column={props.column}
+                      columnName={name()}
+                      data_type={dataType()}
                       value={field().state.value}
                       onChange={field().handleChange}
                       allTables={props.allTables}
-                      disabled={disabled()}
+                      disabled={props.disabled}
                       pk={false}
-                      fk={fk()}
-                      setFk={setFk}
                       databaseSchema={databaseSchema()}
                     />
                   );
@@ -625,18 +638,21 @@ export function ColumnSubForm(props: {
 export function PrimaryKeyColumnSubForm(props: {
   form: FormApiT<Table>;
   colIndex: number;
-  column: Column;
   allTables: Table[];
   disabled: boolean;
 }): JSX.Element {
-  const disabled = () => props.disabled;
-  const [name, setName] = createWritableMemo(() => props.column.name);
+  const [name, setName] = createWritableMemo(() =>
+    props.form.getFieldValue(`columns[${props.colIndex}].name`),
+  );
+  const dataType = () =>
+    props.form.getFieldValue(`columns[${props.colIndex}].data_type`);
+
+  // NOTE: createSignal state gets discarded when reordering columns, we should probably inject a signal instead.
   const [expanded, setExpanded] = createSignal(false);
+
   const databaseSchema = createMemo(() =>
     props.form.useStore((state) => state.values.name.database_schema)(),
   );
-
-  const [fk, setFk] = createSignal<string | undefined>();
 
   const Header = () => (
     <div class="flex items-center justify-between">
@@ -677,7 +693,7 @@ export function PrimaryKeyColumnSubForm(props: {
           <CardContent>
             <div class="flex flex-col gap-2 py-1">
               {/* Column presets */}
-              {!disabled() && (
+              <Show when={!props.disabled}>
                 <div
                   class={cn("grid items-center", gapStyle)}
                   style={{ "grid-template-columns": "auto 1fr" }}
@@ -691,8 +707,13 @@ export function PrimaryKeyColumnSubForm(props: {
                           class="p-1 active:scale-90"
                           type="button"
                           onClick={() => {
-                            patchColumn(props.form, props.colIndex, (col) =>
-                              preset(col.name),
+                            patchColumn(
+                              props.form,
+                              props.colIndex,
+                              preset(
+                                props.form.state.values.columns[props.colIndex]
+                                  .name,
+                              ),
                             );
                           }}
                         >
@@ -702,22 +723,24 @@ export function PrimaryKeyColumnSubForm(props: {
                     </For>
                   </div>
                 </div>
-              )}
+              </Show>
 
               {/* Column name field */}
               <props.form.Field
                 name={`columns[${props.colIndex}].name`}
-                defaultValue={name()}
                 validators={{
                   onChange: ({ value }: { value: string | undefined }) => {
-                    setName(value ?? "<missing>");
                     return value ? undefined : "Column name missing";
                   },
                 }}
               >
                 {buildTextFormField({
                   label: () => <L>Name</L>,
-                  disabled: disabled(),
+                  disabled: props.disabled,
+                  onInput: (e) => {
+                    const value: string = (e.target as HTMLInputElement).value;
+                    setName(value === "" ? "<empty>" : value);
+                  },
                 })}
               </props.form.Field>
 
@@ -728,7 +751,6 @@ export function PrimaryKeyColumnSubForm(props: {
                   props.form,
                   props.colIndex,
                   /*disabled=*/ true,
-                  fk,
                   props.allTables,
                 )}
               />
@@ -739,14 +761,13 @@ export function PrimaryKeyColumnSubForm(props: {
                 children={(field) => {
                   return (
                     <ColumnOptionsFields
-                      column={props.column}
+                      columnName={name()}
+                      data_type={dataType()}
                       value={field().state.value}
                       onChange={field().handleChange}
                       allTables={props.allTables}
                       disabled={true}
                       pk={true}
-                      fk={fk()}
-                      setFk={setFk}
                       databaseSchema={databaseSchema()}
                     />
                   );
@@ -767,14 +788,11 @@ function L(props: { children: JSX.Element }) {
 function patchColumn(
   form: FormApiT<Table>,
   colIndex: number,
-  patch: (col: Column) => Column,
+  update: Partial<Column>,
 ) {
-  const columns = [...form.state.values.columns];
-
-  const column = columns[colIndex];
-  columns[colIndex] = patch(column);
-
-  form.setFieldValue("columns", columns);
+  const col = form.state.values.columns[colIndex];
+  Object.assign(col, update);
+  form.setFieldValue(`columns[${colIndex}]`, col);
 }
 
 function typeNameAndAffinityType(

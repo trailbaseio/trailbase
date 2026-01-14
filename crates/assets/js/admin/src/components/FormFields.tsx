@@ -49,6 +49,8 @@ type TextFieldOptions = {
 
   // Optional placeholder string for absent values, e.g. "NULL". Optional only option.
   placeholder?: string;
+
+  onInput?: (e: Event) => void;
 };
 
 export function buildTextFormField(opts: TextFieldOptions) {
@@ -71,10 +73,11 @@ export function buildTextFormField(opts: TextFieldOptions) {
             onBlur={field().handleBlur}
             autocomplete={opts.autocomplete}
             autocorrect={opts.type === "password" ? "off" : undefined}
-            onInput={(e: Event) => {
+            onChange={(e: Event) => {
               const value: string = (e.target as HTMLInputElement).value;
               field().handleChange(value as string);
             }}
+            onInput={opts.onInput}
             data-testid="input"
           />
 
@@ -106,10 +109,11 @@ export function buildOptionalTextFormField(opts: TextFieldOptions) {
             onBlur={field().handleBlur}
             autocomplete={opts.autocomplete}
             autocorrect={opts.type === "password" ? "off" : undefined}
-            onInput={(e: Event) => {
+            onChange={(e: Event) => {
               const value = (e.target as HTMLInputElement).value;
               field().handleChange(value || undefined);
             }}
+            onInput={opts.onInput}
             data-testid="input"
           />
 
@@ -141,9 +145,10 @@ export function buildSecretFormField(opts: Omit<TextFieldOptions, "type">) {
               onBlur={field().handleBlur}
               autocomplete={opts.autocomplete ?? "off"}
               autocorrect="off"
-              onInput={(e: Event) => {
+              onChange={(e: Event) => {
                 field().handleChange((e.target as HTMLInputElement).value);
               }}
+              onInput={opts.onInput}
             />
 
             <IconButton
@@ -188,11 +193,12 @@ export function buildOptionalSecretFormField(
               onBlur={field().handleBlur}
               autocomplete={opts.autocomplete ?? "off"}
               autocorrect="off"
-              onInput={(e: Event) => {
+              onChange={(e: Event) => {
                 field().handleChange(
                   (e.target as HTMLInputElement).value || undefined,
                 );
               }}
+              onInput={opts.onInput}
             />
 
             <IconButton
@@ -234,10 +240,11 @@ export function buildOptionalTextAreaFormField(
             disabled={opts?.disabled ?? false}
             value={field().state.value}
             onBlur={field().handleBlur}
-            onInput={(e: Event) => {
+            onChange={(e: Event) => {
               const value = (e.target as HTMLInputElement).value;
               field().handleChange(value || undefined);
             }}
+            onInput={opts.onInput}
           />
 
           <GridFieldInfo field={field()} />
@@ -282,7 +289,7 @@ export function buildOptionalNumberFormField(
             value={field().state.value?.toString() ?? ""}
             placeholder={opts.placeholder}
             onBlur={field().handleBlur}
-            onInput={(e: Event) => {
+            onChange={(e: Event) => {
               const value = (e.target as HTMLInputElement).value;
               const parsed = isInt ? tryParseInt(value) : tryParseFloat(value);
               field().handleChange(parsed);
@@ -317,7 +324,7 @@ export function buildOptionalIntegerFormField(opts: NumberFieldOptions) {
             value={field().state.value?.toString() ?? ""}
             placeholder={opts.placeholder}
             onBlur={field().handleBlur}
-            onInput={(e: Event) => {
+            onChange={(e: Event) => {
               const value = (e.target as HTMLInputElement).value;
               field().handleChange(tryParseBigInt(value));
             }}
@@ -351,7 +358,7 @@ export function buildOptionalFloatFormField(opts: NumberFieldOptions) {
             value={field().state.value?.toString() ?? ""}
             placeholder={opts.placeholder}
             onBlur={field().handleBlur}
-            onInput={(e: Event) => {
+            onChange={(e: Event) => {
               const value = (e.target as HTMLInputElement).value;
               field().handleChange(tryParseFloat(value));
             }}

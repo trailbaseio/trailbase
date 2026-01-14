@@ -16,6 +16,7 @@ pub enum AlterTableOperation {
   AddColumn { column: Column },
   DropColumn { name: String },
   AlterColumn { name: String, column: Column },
+  ChangeColumnOrder { names: Vec<String> },
 }
 
 /// Request for altering `TABLE` schema.
@@ -217,6 +218,8 @@ fn build_ephemeral_target_schema(
       .map(|c| (c.name.clone(), c.name.clone())),
   );
 
+  let mut column_order: Option<Vec<String>> = None;
+
   for operation in operations {
     match operation {
       AlterTableOperation::RenameTableTo { name } => {
@@ -264,7 +267,37 @@ fn build_ephemeral_target_schema(
         // Update the column definition.
         schema.columns[pos] = column;
       }
+      AlterTableOperation::ChangeColumnOrder { names } => {
+        column_order = Some(names);
+      }
     }
+  }
+
+  if let Some(column_order) = column_order {
+    // Make sure every column has a final position to avoid ambiguity.
+    for col in &schema.columns {
+      let name = &col.name;
+      if !column_order.iter().any(|n| n == name) {
+        return Err(Error::BadRequest(
+          format!("Missing position for: {name}").into(),
+        ));
+      }
+    }
+
+    // Reorder columns in target schema.
+    schema.columns = column_order
+      .into_iter()
+      .map(|name| {
+        return schema
+          .columns
+          .iter()
+          .find(|c| c.name == name)
+          .cloned()
+          .ok_or_else(|| {
+            return Error::BadRequest(format!("Missing col for: {name}").into());
+          });
+      })
+      .collect::<Result<Vec<_>, _>>()?;
   }
 
   if table_renamed {

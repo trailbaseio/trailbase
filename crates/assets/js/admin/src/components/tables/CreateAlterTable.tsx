@@ -1,5 +1,4 @@
-import { createSignal, Index, Match, Show, Switch } from "solid-js";
-import type { Accessor } from "solid-js";
+import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient } from "@tanstack/solid-query";
 
@@ -38,6 +37,7 @@ import type { Table } from "@bindings/Table";
 import type { AlterTableOperation } from "@bindings/AlterTableOperation";
 import type { QualifiedName } from "@bindings/QualifiedName";
 import { equalQualifiedNames, prettyFormatQualifiedName } from "@/lib/schema";
+import { createWritableMemo } from "@solid-primitives/memo";
 
 export function CreateAlterTableForm(props: {
   close: () => void;
@@ -60,17 +60,25 @@ export function CreateAlterTableForm(props: {
       .filter((n) => n !== undefined) ?? []),
   ];
 
+  const defaultValues = createMemo(() => {
+    return copySchema(props.schema) ?? defaultSchema(props.allTables);
+  });
   // Columns are treated as append only. Instead of removing actually removing a
   // column and inducing animation junk and other complications we simply don't
   // render columns that were marked as deleted.
-  const [deletedColumns, setDeletedColumn] = createSignal<number[]>([]);
-  const isDeleted = (i: number): boolean =>
-    deletedColumns().findIndex((idx) => idx === i) !== -1;
+  // const [deletedColumns, setDeletedColumns] = createSignal<Set<Column>>(new Set());
+  const [order, setOrder] = createWritableMemo(() => {
+    return defaultValues().columns.map((_, i) => i);
+  });
+  const markDeleted = (origIndex: number, pos: number) => {
+    form.setFieldValue(`columns[${origIndex}]`, DELETED_COLUMN_MARKER);
+    setOrder((old) => old.toSpliced(pos, 1));
+  };
 
   const onSubmit = async (value: Table, dryRun: boolean) => {
     // Assert that the type representations match up.
     for (const c of value.columns) {
-      if (c.data_type.toUpperCase() != c.type_name) {
+      if (c.data_type.toUpperCase() != c.type_name.toUpperCase()) {
         throw new Error(`Got ${c.type_name}, expected, ${c.data_type}`);
       }
     }
@@ -79,14 +87,9 @@ export function CreateAlterTableForm(props: {
       const original = props.schema;
       if (original !== undefined) {
         // Alter table
-
         const response = await alterTable({
           source_schema: original,
-          operations: buildAlterTableOperations(
-            original,
-            value,
-            deletedColumns(),
-          ),
+          operations: buildAlterTableOperations(original, value, order()),
           dry_run: dryRun,
         });
         console.debug(`AlterTableResponse [dry: ${dryRun}]:`, response);
@@ -100,7 +103,7 @@ export function CreateAlterTableForm(props: {
         // Create table
 
         // Remove ephemeral/deleted columns, i.e. columns that were briefly added but then removed again.
-        value.columns = value.columns.filter((_, i) => !isDeleted(i));
+        // value.columns = value.columns.filter((c) => !isDeleted(c));
 
         const response = await createTable({ schema: value, dry_run: dryRun });
         console.debug(`CreateTableResponse [dry: ${dryRun}]:`, response);
@@ -136,7 +139,7 @@ export function CreateAlterTableForm(props: {
 
   const form = createForm(() => ({
     onSubmit: async ({ value }) => await onSubmit(value, /*dryRun=*/ false),
-    defaultValues: copySchema(props.schema) ?? defaultSchema(props.allTables),
+    defaultValues: defaultValues(),
   }));
 
   form.useStore((state) => {
@@ -207,57 +210,95 @@ export function CreateAlterTableForm(props: {
 
           {/* columns */}
           <form.Field name="columns">
-            {(field) => (
-              <div class="flex w-full flex-col gap-2 pb-2">
-                <Index each={field().state.value}>
-                  {(c: Accessor<Column>, i: number) => (
-                    <Show when={!isDeleted(i)}>
-                      <Switch>
-                        <Match when={i === 0}>
-                          <PrimaryKeyColumnSubForm
-                            form={form}
-                            colIndex={i}
-                            column={c()}
-                            allTables={props.allTables}
-                            disabled={!isCreateTable()}
-                          />
-                        </Match>
+            {(field) => {
+              const columns = createMemo(() =>
+                filterAndOrderColumns(order(), field().state.value),
+              );
+              return (
+                <div class="flex w-full flex-col gap-2 pb-2">
+                  {/* Needs for be a "For" as opposed to an "Index" because order and length may change */}
+                  <For each={columns()}>
+                    {(el: [Column, number], i: () => number) => {
+                      const [_column, origIndex] = el;
 
-                        <Match when={i !== 0}>
-                          <ColumnSubForm
-                            form={form}
-                            colIndex={i}
-                            column={c()}
-                            allTables={props.allTables}
-                            disabled={false}
-                            onDelete={() =>
-                              setDeletedColumn([i, ...deletedColumns()])
-                            }
-                          />
-                        </Match>
-                      </Switch>
-                    </Show>
-                  )}
-                </Index>
+                      /* eslint-disable solid/reactivity */
+                      const isFirst = () => i() <= 1;
+                      const moveUp = isFirst()
+                        ? undefined
+                        : () => {
+                            setOrder((old) => {
+                              const index = i();
+                              const next = [...old];
+                              const tmp = next[index];
+                              next[index] = next[index - 1];
+                              next[index - 1] = tmp;
+                              return next;
+                            });
+                            props.markDirty();
+                          };
 
-                <div>
-                  <Button
-                    onClick={() => {
-                      const columns = field().state.value;
-                      field().pushValue(
-                        newDefaultColumn(
-                          columns.length,
-                          columns.map((c) => c.name),
-                        ),
+                      const isLast = () => i() >= columns().length - 1;
+                      const moveDown = isLast()
+                        ? undefined
+                        : () => {
+                            setOrder((old) => {
+                              const index = i();
+                              const next = [...old];
+                              const tmp = next[index];
+                              next[index] = next[index + 1];
+                              next[index + 1] = tmp;
+                              return next;
+                            });
+                            props.markDirty();
+                          };
+
+                      return (
+                        <Switch>
+                          <Match when={i() === 0}>
+                            <PrimaryKeyColumnSubForm
+                              form={form}
+                              colIndex={origIndex}
+                              allTables={props.allTables}
+                              disabled={!isCreateTable()}
+                            />
+                          </Match>
+
+                          <Match when={i() > 0}>
+                            <ColumnSubForm
+                              form={form}
+                              colIndex={origIndex}
+                              allTables={props.allTables}
+                              disabled={false}
+                              onDelete={() => markDeleted(origIndex, i())}
+                              moveUp={moveUp}
+                              moveDown={moveDown}
+                            />
+                          </Match>
+                        </Switch>
                       );
                     }}
-                    variant="default"
-                  >
-                    Add Column
-                  </Button>
+                  </For>
+
+                  <div>
+                    <Button
+                      onClick={() => {
+                        const columns = field().state.value;
+                        field().pushValue(
+                          newDefaultColumn(
+                            columns.length,
+                            columns.map((c) => c.name),
+                          ),
+                        );
+                        setOrder((old) => [...old, old.length]);
+                      }}
+                      variant="default"
+                    >
+                      Add Column
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            }}
           </form.Field>
         </div>
 
@@ -368,11 +409,8 @@ function columnsEqual(a: Column, b: Column): boolean {
 function buildAlterTableOperations(
   original: Table,
   target: Table,
-  deletedColumns: number[],
+  order: number[],
 ): AlterTableOperation[] {
-  const isDeleted = (i: number): boolean =>
-    deletedColumns.findIndex((idx) => idx === i) !== -1;
-
   const operations: AlterTableOperation[] = [];
   if (!equalQualifiedNames(original.name, target.name)) {
     operations.push({
@@ -386,7 +424,7 @@ function buildAlterTableOperations(
     if (i < original.columns.length) {
       // Pre-existing column.
       const originalName = original.columns[i].name;
-      if (isDeleted(i)) {
+      if (isDeleted(column)) {
         operations.push({ DropColumn: { name: originalName } });
         return;
       }
@@ -404,7 +442,7 @@ function buildAlterTableOperations(
       // Otherwise they're equal and there's nothing to do.
     } else {
       // Newly added columns.
-      if (isDeleted(i)) {
+      if (isDeleted(column)) {
         // New column has already been deleted, e.g. a user added and removed it.
         return;
       }
@@ -413,9 +451,41 @@ function buildAlterTableOperations(
     }
   });
 
+  const columsReordered = order.reduce((acc: boolean, curr, index): boolean => {
+    if (index == 0) return false;
+    const prev = order[index - 1];
+    return acc || curr < prev;
+  }, false);
+
+  if (columsReordered) {
+    const orderedColumnNames = filterAndOrderColumns(order, target.columns).map(
+      ([col, _]) => col.name,
+    );
+    operations.push({ ChangeColumnOrder: { names: orderedColumnNames } });
+  }
+
   return operations;
 }
 
 function TextLabel(props: { text: string }) {
   return <div class="w-[100px]">{props.text}</div>;
 }
+
+function isDeleted(c: Column) {
+  return c === DELETED_COLUMN_MARKER;
+}
+
+const filterAndOrderColumns = (
+  order: number[],
+  columns: Column[],
+): [Column, number][] => {
+  return order.map((i) => [columns[i], i]);
+};
+
+const DELETED_COLUMN_MARKER: Column = {
+  name: "<deleted>",
+  type_name: "ANY",
+  data_type: "Any",
+  affinity_type: "Blob",
+  options: [],
+};
