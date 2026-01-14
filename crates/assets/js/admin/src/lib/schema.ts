@@ -182,9 +182,11 @@ export function isPrimaryKeyColumn(column: Column): boolean {
   return getUnique(column.options)?.is_primary ?? false;
 }
 
-export function findPrimaryKeyColumnIndex(columns: Column[]): number {
+export function findPrimaryKeyColumnIndex(
+  columns: Column[],
+): number | undefined {
   const candidate = columns.findIndex(isPrimaryKeyColumn);
-  return candidate >= 0 ? candidate : 0;
+  return candidate >= 0 ? candidate : undefined;
 }
 
 export function isUUIDv7Column(column: Column): boolean {

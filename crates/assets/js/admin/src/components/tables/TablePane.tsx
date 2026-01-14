@@ -541,7 +541,9 @@ function ArrayRecordTable(props: {
   const columns = (): Column[] => props.state.response.columns;
   const totalRowCount = () => props.state.response.total_row_count;
 
-  const pkColumnIndex = createMemo(() => findPrimaryKeyColumnIndex(columns()));
+  const pkColumnIndex = createMemo(
+    () => findPrimaryKeyColumnIndex(columns()) ?? 0,
+  );
   const columnDefs = createMemo(() =>
     buildColumnDefs(
       table().name,

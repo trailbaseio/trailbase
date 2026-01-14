@@ -30,7 +30,7 @@ export async function insertRow(table: Table, row: Record) {
 export async function updateRow(table: Table, row: Record) {
   const tableName: string = prettyFormatQualifiedName(table.name);
   const primaryKeyColumIndex = findPrimaryKeyColumnIndex(table.columns);
-  if (primaryKeyColumIndex < 0) {
+  if (primaryKeyColumIndex === undefined) {
     throw Error("No primary key column found.");
   }
   const pkColName = table.columns[primaryKeyColumIndex].name;

@@ -45,6 +45,7 @@ import type { FormApiT, AnyFieldApi } from "@/components/FormFields";
 import {
   columnDataTypes,
   equalQualifiedNames,
+  findPrimaryKeyColumnIndex,
   getCheckValue,
   getDefaultValue,
   getForeignKey,
@@ -312,11 +313,12 @@ function ColumnOptionDefaultField(props: {
   );
 }
 
-function ColumnOptionFkSelect(props: {
+function ColumnOptionForeignKeySelect(props: {
   value: ColumnOption[];
   onChange: (v: ColumnOption[]) => void;
   allTables: Table[];
   disabled: boolean;
+  data_type: ColumnDataType;
   databaseSchema: string | null;
 }) {
   const fkTableOptions = createMemo((): string[] => [
@@ -327,11 +329,22 @@ function ColumnOptionFkSelect(props: {
           return false;
         }
 
-        const db = schema.name.database_schema;
-        if (props.databaseSchema === null) {
-          return !db || db === "main";
+        const db = schema.name.database_schema ?? "main";
+        if ((props.databaseSchema ?? "main") !== db) {
+          return false;
         }
-        return db === props.databaseSchema;
+
+        // TODO: We're filtering here for tables with an appropriate PK column
+        // type. It would probably be a better UX, if we instead showed all tables
+        // and changed the column type instead.
+        const pkIndex = findPrimaryKeyColumnIndex(schema.columns);
+        if (pkIndex !== undefined) {
+          const pkColumn = schema.columns[pkIndex];
+          return pkColumn.data_type === props.data_type;
+        }
+
+        // When there's no PK we fall back to _rowid_.
+        return props.data_type === "Integer";
       })
       .map((schema) => schema.name.name),
   ]);
@@ -360,15 +373,14 @@ function ColumnOptionFkSelect(props: {
           const schema = props.allTables.find(
             (schema) => schema.name.name == table,
           )!;
-          const referredColumn =
-            schema.columns.find(
-              (col) => getUnique(col.options)?.is_primary ?? false,
-            ) ?? schema.columns[0];
+          const pkIndex = findPrimaryKeyColumnIndex(schema.columns);
+          const referredColumns =
+            pkIndex !== undefined ? [schema.columns[pkIndex].name] : [];
 
           let newColumnOptions = [...props.value];
           newColumnOptions = setForeignKey(props.value, {
             foreign_table: table,
-            referred_columns: [referredColumn.name],
+            referred_columns: referredColumns,
             on_delete: null,
             on_update: null,
           });
@@ -408,7 +420,7 @@ function ColumnOptionsFields(props: {
   return (
     <>
       {/* FOREIGN KEY constraint */}
-      {!props.pk && <ColumnOptionFkSelect {...props} />}
+      {!props.pk && <ColumnOptionForeignKeySelect {...props} />}
 
       {/* DEFAULT constraint */}
       <ColumnOptionDefaultField
@@ -498,7 +510,7 @@ export function ColumnSubForm(props: {
     <div class="flex items-center justify-between">
       <h3 class="truncate">{name()}</h3>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center">
         <Show when={props.moveUp}>
           <IconButton onClick={props.moveUp}>
             <TbArrowUp />
@@ -520,6 +532,7 @@ export function ColumnSubForm(props: {
 
         <TbChevronDown
           size={20}
+          class="ml-2"
           style={{
             "justify-self": "center",
             "align-self": "center",
@@ -658,11 +671,12 @@ export function PrimaryKeyColumnSubForm(props: {
     <div class="flex items-center justify-between">
       <h3 class="truncate">{name()}</h3>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center">
         <Badge class="p-1">Primary Key</Badge>
 
         <TbChevronDown
           size={20}
+          class="ml-2"
           style={{
             "justify-self": "center",
             "align-self": "center",
