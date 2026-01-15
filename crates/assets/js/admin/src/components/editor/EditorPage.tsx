@@ -114,11 +114,21 @@ function ResultView(props: {
   return (
     <Switch>
       <Match when={response()?.error}>
-        <div class="p-4">Error: {response()?.error?.message}</div>
+        <div class="flex flex-col gap-2 p-4">
+          <div class="flex justify-end text-sm">
+            <ExecutionTime timestamp={response()?.timestamp} />
+          </div>
+          Error: {response()?.error?.message}
+        </div>
       </Match>
 
       <Match when={response()?.data === undefined}>
-        <div class="p-4">No Data</div>
+        <div class="flex flex-col gap-2 p-4">
+          <div class="flex justify-end text-sm">
+            <ExecutionTime timestamp={response()?.timestamp} />
+          </div>
+          No data
+        </div>
       </Match>
 
       <Match when={response()?.data !== undefined}>
@@ -194,9 +204,7 @@ function ResultViewImpl(props: {
 function ExecutionTime(props: { timestamp: number | undefined }) {
   const time = () => new Date(props.timestamp ?? 0);
 
-  return (
-    <div class="text-sm">{`Executed: ${time().toLocaleTimeString()}`}</div>
-  );
+  return <div class="text-sm">{`Executed: ${time().toLocaleString()}`}</div>;
 }
 
 function EditorSidebar(props: {
