@@ -7,6 +7,7 @@ import {
   createSignal,
   onCleanup,
   onMount,
+  createMemo,
 } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import { createWritableMemo } from "@solid-primitives/memo";
@@ -39,7 +40,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { DataTable, safeParseInt } from "@/components/Table";
+import { Table, buildTable, safeParseInt } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 
 import { getLogs } from "@/lib/api/logs";
@@ -203,8 +204,25 @@ export function LogsPage() {
 
   const [showMap, setShowMap] = createSignal(true);
   const [showGeoipDialog, setShowGeoipDialog] = createSignal(false);
-
   const [columnPinningState, setColumnPinningState] = createSignal({});
+
+  const logsTable = createMemo(() => {
+    return buildTable({
+      columns,
+      data: logsFetch.data?.entries ?? [],
+      columnPinning: columnPinningState,
+      onColumnPinningChange: setColumnPinningState,
+      rowCount: Number(logsFetch.data?.total_row_count ?? -1),
+      pagination: pagination(),
+      onPaginationChange: (s: PaginationState) => {
+        setSearchParams({
+          ...searchParams,
+          pageIndex: s.pageIndex,
+          pageSize: s.pageSize,
+        });
+      },
+    });
+  });
 
   return (
     <div class="h-full">
@@ -293,21 +311,7 @@ export function LogsPage() {
               placeholder={`Filter Query, e.g. '(latency > 2 || status >= 400) && method = "GET"'`}
             />
 
-            <DataTable
-              columns={() => columns}
-              data={() => logsFetch.data!.entries}
-              columnPinning={columnPinningState}
-              onColumnPinningChange={setColumnPinningState}
-              rowCount={Number(logsFetch.data!.total_row_count ?? -1)}
-              pagination={pagination()}
-              onPaginationChange={(s: PaginationState) => {
-                setSearchParams({
-                  ...searchParams,
-                  pageIndex: s.pageIndex,
-                  pageSize: s.pageSize,
-                });
-              }}
-            />
+            <Table table={logsTable()} showPaginationControls={true} />
           </Match>
         </Switch>
       </div>

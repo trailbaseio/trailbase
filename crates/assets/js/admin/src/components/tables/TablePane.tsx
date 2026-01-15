@@ -37,10 +37,14 @@ import {
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { showToast } from "@/components/ui/toast";
 
-import { DebugSchemaDialogButton } from "@/components/tables/SchemaDownload";
+import { DebugDialogButton } from "@/components/tables/SchemaDownload";
 import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
 import { CreateAlterIndexForm } from "@/components/tables/CreateAlterIndex";
-import { DataTable, safeParseInt } from "@/components/Table";
+import {
+  Table as TableComponent,
+  buildTable,
+  safeParseInt,
+} from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 import { DestructiveActionButton } from "@/components/DestructiveActionButton";
 import { IconButton } from "@/components/IconButton";
@@ -246,16 +250,17 @@ function TableHeaderRightHandButtons(props: {
   allTables: Table[];
   schemaRefetch: () => Promise<void>;
 }) {
-  const table = () => props.table;
-  const hidden = () => hiddenTable(table());
-  const type = () => tableType(table());
+  const selectedSchema = () => props.table;
+  const hidden = () => hiddenTable(selectedSchema());
+  const type = () => tableType(selectedSchema());
   const satisfiesRecordApi = createMemo(() =>
     tableOrViewSatisfiesRecordApiRequirements(props.table, props.allTables),
   );
 
   const queryClient = useQueryClient();
   const config = createConfigQuery();
-  const hasRecordApi = () => hasRecordApis(config?.data?.config, table().name);
+  const hasRecordApi = () =>
+    hasRecordApis(config?.data?.config, selectedSchema().name);
 
   return (
     <div class="flex items-center justify-end gap-2">
@@ -267,7 +272,7 @@ function TableHeaderRightHandButtons(props: {
             return (async () => {
               try {
                 await dropTable({
-                  name: prettyFormatQualifiedName(table().name),
+                  name: prettyFormatQualifiedName(selectedSchema().name),
                   dry_run: null,
                 });
               } finally {
@@ -370,15 +375,13 @@ function TableHeaderRightHandButtons(props: {
 
 function TableHeader(props: {
   table: [Table, string] | [View, string];
-  indexes: [TableIndex, string][];
-  triggers: [TableTrigger, string][];
   allTables: [Table, string][];
   schemaRefetch: () => Promise<void>;
   rowsRefetch: () => void;
 }) {
   const allTables = createMemo(() => props.allTables.map(([t, _]) => t));
-  const table = () => props.table[0];
-  const type = () => tableType(table());
+  const selectedSchema = () => props.table[0];
+  const type = () => tableType(selectedSchema());
 
   const headerTitle = () => {
     switch (type()) {
@@ -395,7 +398,7 @@ function TableHeader(props: {
     <Header
       leading={<SidebarTrigger />}
       title={headerTitle()}
-      titleSelect={prettyFormatQualifiedName(table().name)}
+      titleSelect={prettyFormatQualifiedName(selectedSchema().name)}
       left={
         <div class="flex items-center">
           <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
@@ -419,19 +422,11 @@ function TableHeader(props: {
               </span>
             </DialogContent>
           </Dialog>
-
-          <Show when={import.meta.env.DEV}>
-            <DebugSchemaDialogButton
-              table={table()}
-              indexes={props.indexes.map(([index, _]) => index)}
-              triggers={props.triggers.map(([trig, _]) => trig)}
-            />
-          </Show>
         </div>
       }
       right={
         <TableHeaderRightHandButtons
-          table={table()}
+          table={selectedSchema()}
           allTables={allTables()}
           schemaRefetch={props.schemaRefetch}
         />
@@ -534,8 +529,10 @@ function ArrayRecordTable(props: {
     new Map<string, SqlValue>(),
   );
 
-  const table = () => props.state.selected;
-  const mutable = () => tableType(table()) === "table" && !hiddenTable(table());
+  const selectedSchema = () => props.state.selected;
+  const mutable = () =>
+    tableType(selectedSchema()) === "table" && !hiddenTable(selectedSchema());
+  const data = () => props.state.response.rows;
 
   const rowsRefetch = () => props.rowsRefetch();
   const columns = (): Column[] => props.state.response.columns;
@@ -544,17 +541,49 @@ function ArrayRecordTable(props: {
   const pkColumnIndex = createMemo(
     () => findPrimaryKeyColumnIndex(columns()) ?? 0,
   );
-  const columnDefs = createMemo(() =>
-    buildColumnDefs(
-      table().name,
+
+  const table = createMemo(() => {
+    const columns = buildColumnDefs(
+      selectedSchema().name,
       pkColumnIndex(),
       props.state.response.columns,
       blobEncoding(),
-    ),
-  );
+    );
+
+    return buildTable({
+      // NOTE: The cell rendering is constrolled via the columnsDefs.
+      columns,
+      data: data(),
+      columnPinning: props.columnPinningState[0],
+      onColumnPinningChange: props.columnPinningState[1],
+      rowCount: Number(totalRowCount()),
+      pagination: props.pagination[0](),
+      onPaginationChange: (s: PaginationState) => {
+        props.pagination[1](s);
+      },
+      onRowSelection: mutable()
+        ? // eslint-disable-next-line solid/reactivity
+          (rows: Row<ArrayRecord>[], value: boolean) => {
+            const newSelection = new Map<string, SqlValue>(selectedRows());
+
+            for (const row of rows) {
+              const pkValue: SqlValue = row.original[pkColumnIndex()];
+              const key = hashSqlValue(pkValue);
+
+              if (value) {
+                newSelection.set(key, pkValue);
+              } else {
+                newSelection.delete(key);
+              }
+            }
+            setSelectedRows(newSelection);
+          }
+        : undefined,
+    });
+  });
 
   return (
-    <div>
+    <div id="data">
       <SafeSheet
         open={[
           () => editRow() !== undefined,
@@ -569,7 +598,7 @@ function ArrayRecordTable(props: {
             <>
               <SheetContent class={sheetMaxWidth}>
                 <InsertUpdateRowForm
-                  schema={table() as Table}
+                  schema={selectedSchema() as Table}
                   rowsRefetch={rowsRefetch}
                   row={editRow()}
                   {...sheet}
@@ -589,43 +618,13 @@ function ArrayRecordTable(props: {
               />
 
               <div class="overflow-x-auto pt-4">
-                <DataTable
-                  // NOTE: The formatting is done via the columnsDefs.
-                  columns={columnDefs}
-                  data={() => props.state.response.rows}
-                  columnPinning={props.columnPinningState[0]}
-                  onColumnPinningChange={props.columnPinningState[1]}
-                  rowCount={Number(totalRowCount())}
-                  pagination={props.pagination[0]()}
-                  onPaginationChange={(s: PaginationState) => {
-                    props.pagination[1](s);
-                  }}
+                <TableComponent
+                  table={table()}
+                  showPaginationControls={true}
                   onRowClick={
                     mutable()
                       ? (_idx: number, row: ArrayRecord) => {
                           setEditRow(rowDataToRow(columns(), row));
-                        }
-                      : undefined
-                  }
-                  onRowSelection={
-                    mutable()
-                      ? (rows: Row<ArrayRecord>[], value: boolean) => {
-                          const newSelection = new Map<string, SqlValue>(
-                            selectedRows(),
-                          );
-
-                          for (const row of rows) {
-                            const pkValue: SqlValue =
-                              row.original[pkColumnIndex()];
-                            const key = hashSqlValue(pkValue);
-
-                            if (value) {
-                              newSelection.set(key, pkValue);
-                            } else {
-                              newSelection.delete(key);
-                            }
-                          }
-                          setSelectedRows(newSelection);
                         }
                       : undefined
                   }
@@ -646,7 +645,7 @@ function ArrayRecordTable(props: {
                   <>
                     <SheetContent class={sheetMaxWidth}>
                       <InsertUpdateRowForm
-                        schema={table() as Table}
+                        schema={selectedSchema() as Table}
                         rowsRefetch={rowsRefetch}
                         {...sheet}
                       />
@@ -676,10 +675,13 @@ function ArrayRecordTable(props: {
 
                 (async () => {
                   try {
-                    await deleteRows(prettyFormatQualifiedName(table().name), {
-                      primary_key_column: columns()[pkColumnIndex()].name,
-                      values: ids,
-                    });
+                    await deleteRows(
+                      prettyFormatQualifiedName(selectedSchema().name),
+                      {
+                        primary_key_column: columns()[pkColumnIndex()].name,
+                        values: ids,
+                      },
+                    );
 
                     setSelectedRows(new Map<string, SqlValue>());
                   } catch (err) {
@@ -723,7 +725,212 @@ function ArrayRecordTable(props: {
 
             <SelectContent />
           </Select>
+
+          <Show when={import.meta.env.DEV}>
+            <DebugDialogButton title="Schema" data={data()} />
+          </Show>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function IndexTable(props: {
+  table: Table;
+  schemas: ListSchemasResponse;
+  schemaRefetch: () => Promise<void>;
+  hidden: boolean;
+}) {
+  const [editIndex, setEditIndex] = createSignal<TableIndex | undefined>();
+  const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<string>());
+
+  const indexes = createMemo(() => {
+    return props.schemas.indexes.filter(([index, _]) =>
+      equalQualifiedNames(props.table.name, {
+        name: index.table_name,
+        database_schema: index.name.database_schema,
+      }),
+    );
+  });
+
+  const indexesTable = createMemo(() => {
+    return buildTable({
+      columns: indexColumns,
+      data: indexes().map(([index, _]) => index),
+      onRowSelection: props.hidden
+        ? undefined
+        : // eslint-disable-next-line solid/reactivity
+          (rows: Row<TableIndex>[], value: boolean) => {
+            const newSelection = new Set(selectedIndexes());
+
+            for (const row of rows) {
+              const qualifiedName = prettyFormatQualifiedName(
+                row.original.name,
+              );
+              if (value) {
+                newSelection.add(qualifiedName);
+              } else {
+                newSelection.delete(qualifiedName);
+              }
+            }
+            setSelectedIndexes(newSelection);
+          },
+    });
+  });
+
+  return (
+    <div id="indexes">
+      <h2>
+        Indexes
+        <Show when={import.meta.env.DEV}>
+          <DebugDialogButton title="Indexes" data={indexes()} />
+        </Show>
+      </h2>
+
+      <SafeSheet
+        open={[
+          () => editIndex() !== undefined,
+          (isOpen: boolean | ((value: boolean) => boolean)) => {
+            if (!isOpen) {
+              setEditIndex(undefined);
+            }
+          },
+        ]}
+      >
+        {(sheet) => {
+          return (
+            <>
+              <SheetContent class={sheetMaxWidth}>
+                <CreateAlterIndexForm
+                  schema={editIndex()}
+                  table={props.table}
+                  schemaRefetch={props.schemaRefetch}
+                  {...sheet}
+                />
+              </SheetContent>
+
+              <div class="space-y-2.5 overflow-x-auto">
+                <TableComponent
+                  table={indexesTable()}
+                  showPaginationControls={false}
+                  onRowClick={
+                    props.hidden
+                      ? undefined
+                      : (_idx: number, index: TableIndex) => {
+                          setEditIndex(index);
+                        }
+                  }
+                />
+              </div>
+            </>
+          );
+        }}
+      </SafeSheet>
+
+      <Show when={!props.hidden}>
+        <div class="mt-2 flex gap-2">
+          <SafeSheet>
+            {(sheet) => {
+              return (
+                <>
+                  <SheetContent class={sheetMaxWidth}>
+                    <CreateAlterIndexForm
+                      schemaRefetch={props.schemaRefetch}
+                      table={props.table}
+                      {...sheet}
+                    />
+                  </SheetContent>
+
+                  <SheetTrigger
+                    as={(props: DialogTriggerProps) => (
+                      <Button variant="default" {...props}>
+                        Add Index
+                      </Button>
+                    )}
+                  />
+                </>
+              );
+            }}
+          </SafeSheet>
+
+          <Button
+            variant="destructive"
+            disabled={selectedIndexes().size == 0}
+            onClick={() => {
+              const names = Array.from(selectedIndexes());
+              if (names.length == 0) {
+                return;
+              }
+
+              (async () => {
+                try {
+                  for (const name of names) {
+                    await dropIndex({ name, dry_run: null });
+                  }
+
+                  setSelectedIndexes(new Set<string>());
+                } catch (err) {
+                  showToast({
+                    title: "Deletion Error",
+                    description: `${err}`,
+                    variant: "error",
+                  });
+                } finally {
+                  props.schemaRefetch();
+                }
+              })();
+            }}
+          >
+            Delete indexes
+          </Button>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
+  const triggers = createMemo(() => {
+    return props.schemas.triggers.filter(([trig, _]) =>
+      equalQualifiedNames(props.table.name, {
+        name: trig.table_name,
+        database_schema: trig.name.database_schema,
+      }),
+    );
+  });
+
+  const triggersTable = createMemo(() => {
+    return buildTable({
+      columns: triggerColumns,
+      data: triggers().map(([trig, sql]) => ({
+        ...trig,
+        sql,
+      })),
+    });
+  });
+
+  return (
+    <div id="triggers">
+      <h2>
+        Triggers
+        <Show when={import.meta.env.DEV}>
+          <DebugDialogButton title="Triggers" data={triggers()} />
+        </Show>
+      </h2>
+
+      <p class="text-sm">
+        The admin dashboard currently does not support modifying triggers.
+        Please use the editor to{" "}
+        <a href="https://www.sqlite.org/lang_createtrigger.html">create</a> new
+        triggers or <a href="https://sqlite.org/lang_droptrigger.html">drop</a>{" "}
+        existing ones.
+      </p>
+
+      <div class="mt-4">
+        <TableComponent
+          table={triggersTable()}
+          showPaginationControls={false}
+        />
       </div>
     </div>
   );
@@ -734,36 +941,9 @@ export function TablePane(props: {
   schemas: ListSchemasResponse;
   schemaRefetch: () => Promise<void>;
 }) {
-  const [editIndex, setEditIndex] = createSignal<TableIndex | undefined>();
-  const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<string>());
-
-  const table = () => props.selectedTable[0];
-  const indexes = createMemo(() => {
-    return props.schemas.indexes.filter(([index, _]) =>
-      equalQualifiedNames(
-        {
-          name: index.table_name,
-          database_schema: index.name.database_schema,
-        },
-        table().name,
-      ),
-    );
-  });
-  const triggers = createMemo(() => {
-    return props.schemas.triggers.filter(([trig, _]) =>
-      equalQualifiedNames(
-        {
-          name: trig.table_name,
-          database_schema: trig.name.database_schema,
-        },
-        table().name,
-      ),
-    );
-  });
-
-  // Derived table() props.
-  const type = () => tableType(table());
-  const hidden = () => hiddenTable(table());
+  const selectedSchema = () => props.selectedTable[0];
+  const type = () => tableType(selectedSchema());
+  const hidden = () => hiddenTable(selectedSchema());
 
   const [searchParams, setSearchParams] = useSearchParams<{
     filter?: string;
@@ -862,8 +1042,6 @@ export function TablePane(props: {
     <>
       <TableHeader
         table={props.selectedTable}
-        indexes={indexes()}
-        triggers={triggers()}
         allTables={props.schemas.tables}
         schemaRefetch={schemaRefetch}
         rowsRefetch={rowsRefetch}
@@ -893,158 +1071,21 @@ export function TablePane(props: {
           </Match>
         </Switch>
 
-        {type() === "table" && (
-          <div id="indexes">
-            <h2>Indexes</h2>
+        <Show when={type() === "table"}>
+          <IndexTable
+            table={selectedSchema() as Table}
+            schemas={props.schemas}
+            schemaRefetch={props.schemaRefetch}
+            hidden={hidden()}
+          />
+        </Show>
 
-            <SafeSheet
-              open={[
-                () => editIndex() !== undefined,
-                (isOpen: boolean | ((value: boolean) => boolean)) => {
-                  if (!isOpen) {
-                    setEditIndex(undefined);
-                  }
-                },
-              ]}
-              children={(sheet) => {
-                return (
-                  <>
-                    <SheetContent class={sheetMaxWidth}>
-                      <CreateAlterIndexForm
-                        schema={editIndex()}
-                        table={table() as Table}
-                        schemaRefetch={props.schemaRefetch}
-                        {...sheet}
-                      />
-                    </SheetContent>
-
-                    <div class="space-y-2.5 overflow-x-auto">
-                      <DataTable
-                        columns={() => indexColumns}
-                        data={() => indexes().map(([index, _]) => index)}
-                        onRowClick={
-                          hidden()
-                            ? undefined
-                            : (_idx: number, index: TableIndex) => {
-                                setEditIndex(index);
-                              }
-                        }
-                        onRowSelection={
-                          hidden()
-                            ? undefined
-                            : (rows: Row<TableIndex>[], value: boolean) => {
-                                const newSelection = new Set(selectedIndexes());
-
-                                for (const row of rows) {
-                                  const qualifiedName =
-                                    prettyFormatQualifiedName(
-                                      row.original.name,
-                                    );
-                                  if (value) {
-                                    newSelection.add(qualifiedName);
-                                  } else {
-                                    newSelection.delete(qualifiedName);
-                                  }
-                                }
-                                setSelectedIndexes(newSelection);
-                              }
-                        }
-                      />
-                    </div>
-                  </>
-                );
-              }}
-            />
-
-            {!hidden() && (
-              <div class="mt-2 flex gap-2">
-                <SafeSheet
-                  children={(sheet) => {
-                    return (
-                      <>
-                        <SheetContent class={sheetMaxWidth}>
-                          <CreateAlterIndexForm
-                            schemaRefetch={props.schemaRefetch}
-                            table={table() as Table}
-                            {...sheet}
-                          />
-                        </SheetContent>
-
-                        <SheetTrigger
-                          as={(props: DialogTriggerProps) => (
-                            <Button variant="default" {...props}>
-                              Add Index
-                            </Button>
-                          )}
-                        />
-                      </>
-                    );
-                  }}
-                />
-
-                <Button
-                  variant="destructive"
-                  disabled={selectedIndexes().size == 0}
-                  onClick={() => {
-                    const names = Array.from(selectedIndexes());
-                    if (names.length == 0) {
-                      return;
-                    }
-
-                    (async () => {
-                      try {
-                        for (const name of names) {
-                          await dropIndex({ name, dry_run: null });
-                        }
-
-                        setSelectedIndexes(new Set<string>());
-                      } catch (err) {
-                        showToast({
-                          title: "Deletion Error",
-                          description: `${err}`,
-                          variant: "error",
-                        });
-                      } finally {
-                        props.schemaRefetch();
-                      }
-                    })();
-                  }}
-                >
-                  Delete indexes
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {type() === "table" && (
-          <div id="triggers">
-            <h2>Triggers</h2>
-
-            <p class="text-sm">
-              The admin dashboard currently does not support modifying triggers.
-              Please use the editor to{" "}
-              <a href="https://www.sqlite.org/lang_createtrigger.html">
-                create
-              </a>{" "}
-              new triggers or{" "}
-              <a href="https://sqlite.org/lang_droptrigger.html">drop</a>{" "}
-              existing ones.
-            </p>
-
-            <div class="mt-4">
-              <DataTable
-                columns={() => triggerColumns}
-                data={() =>
-                  triggers().map(([trig, sql]) => ({
-                    ...trig,
-                    sql,
-                  }))
-                }
-              />
-            </div>
-          </div>
-        )}
+        <Show when={type() === "table"}>
+          <TriggerTable
+            table={selectedSchema() as Table}
+            schemas={props.schemas}
+          />
+        </Show>
       </div>
     </>
   );

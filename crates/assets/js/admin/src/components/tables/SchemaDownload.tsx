@@ -1,15 +1,11 @@
 import { createSignal, Switch, Match, Show } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
-import { TbDownload, TbColumnsOff } from "solid-icons/tb";
+import { TbDownload, TbBug } from "solid-icons/tb";
 
 import { adminFetch } from "@/lib/fetch";
 import { showSaveFileDialog, stringToReadableStream } from "@/lib/utils";
 
 import { RecordApiConfig } from "@proto/config";
-import type { Table } from "@bindings/Table";
-import type { TableIndex } from "@bindings/TableIndex";
-import type { TableTrigger } from "@bindings/TableTrigger";
-import type { View } from "@bindings/View";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle, CardHeader } from "@/components/ui/card";
@@ -130,43 +126,26 @@ export function SchemaCard(props: { api: RecordApiConfig }) {
   );
 }
 
-export function DebugSchemaDialogButton(props: {
-  table: Table | View;
-  indexes: TableIndex[];
-  triggers: TableTrigger[];
-}) {
-  const indexes = () => props.indexes;
-  const triggers = () => props.triggers;
-
+export function DebugDialogButton(props: { title: string; data: object }) {
   return (
     <Dialog id="schema">
       <DialogTrigger>
         <IconButton tooltip="[DEV only]">
-          <TbColumnsOff />
+          <TbBug />
         </IconButton>
       </DialogTrigger>
 
       <DialogContent class="max-w-[80dvw]">
         <DialogHeader>
-          <DialogTitle>[Debug] Schema</DialogTitle>
+          <DialogTitle>[Debug] {props.title}</DialogTitle>
         </DialogHeader>
 
         <div class="max-h-[80dvh] overflow-auto">
           <div class="mx-2 flex flex-col gap-2">
-            <h3>Schema</h3>
+            <h3>{props.title}</h3>
 
             <pre class="w-[70vw] overflow-x-hidden text-xs">
-              {JSON.stringify(props.table, null, 2)}
-            </pre>
-
-            <h3>Indexes</h3>
-            <pre class="w-[70vw] overflow-x-hidden text-xs">
-              {JSON.stringify(indexes(), null, 2)}
-            </pre>
-
-            <h3>Triggers</h3>
-            <pre class="w-[70vw] overflow-x-hidden text-xs">
-              {JSON.stringify(triggers(), null, 2)}
+              {JSON.stringify(props.data, null, 2)}
             </pre>
           </div>
         </div>

@@ -1,4 +1,11 @@
-import { createSignal, Match, Show, Switch, Suspense } from "solid-js";
+import {
+  createMemo,
+  createSignal,
+  Match,
+  Show,
+  Switch,
+  Suspense,
+} from "solid-js";
 import type { Setter } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import { TbRefresh, TbCrown, TbEdit, TbTrash } from "solid-icons/tb";
@@ -26,7 +33,7 @@ import {
 } from "@/components/ui/sheet";
 
 import { Header } from "@/components/Header";
-import { DataTable, safeParseInt } from "@/components/Table";
+import { Table, buildTable, safeParseInt } from "@/components/Table";
 import { IconButton } from "@/components/IconButton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -330,7 +337,21 @@ export function AccountsPage() {
 
   const [editUser, setEditUser] = createSignal<UserJson | undefined>();
 
-  const columns = () => buildColumns(setEditUser, refetch);
+  const accountsTable = createMemo(() => {
+    return buildTable({
+      columns: buildColumns(setEditUser, refetch),
+      data: users.data?.users ?? [],
+      rowCount: Number(users.data?.total_row_count ?? -1),
+      pagination: pagination(),
+      onPaginationChange: (s: PaginationState) => {
+        setSearchParams({
+          ...searchParams,
+          pageIndex: s.pageIndex,
+          pageSize: s.pageSize,
+        });
+      },
+    });
+  });
 
   return (
     <div class="h-full">
@@ -368,18 +389,10 @@ export function AccountsPage() {
 
             <Match when={users.data}>
               <div class="w-full space-y-2.5">
-                <DataTable
-                  columns={columns}
-                  data={() => users.data!.users}
-                  rowCount={Number(users.data!.total_row_count ?? -1)}
-                  pagination={pagination()}
-                  onPaginationChange={(s: PaginationState) => {
-                    setSearchParams({
-                      ...searchParams,
-                      pageIndex: s.pageIndex,
-                      pageSize: s.pageSize,
-                    });
-                  }}
+                <Table
+                  table={accountsTable()}
+                  showPaginationControls={true}
+                  onRowClick={undefined}
                 />
               </div>
 

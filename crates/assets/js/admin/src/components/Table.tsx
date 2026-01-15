@@ -1,12 +1,4 @@
-import {
-  For,
-  Match,
-  Switch,
-  createEffect,
-  createMemo,
-  createSignal,
-  splitProps,
-} from "solid-js";
+import { For, Match, Show, Switch } from "solid-js";
 import type { Accessor } from "solid-js";
 import {
   flexRender,
@@ -19,7 +11,6 @@ import type {
   ColumnPinningState,
   PaginationState,
   Row,
-  RowSelectionState,
   Table as TableType,
 } from "@tanstack/solid-table";
 import { TbPin, TbPinFilled } from "solid-icons/tb";
@@ -33,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
+  Table as ShadcnTable,
   TableBody,
   TableCell,
   TableHead,
@@ -57,37 +48,27 @@ export function safeParseInt(v: string | undefined): number | undefined {
   return undefined;
 }
 
-type Props<TData, TValue> = {
-  columns: Accessor<ColumnDef<TData, TValue>[]>;
-  data: Accessor<TData[] | undefined>;
+type TableOptions<TData, TValue> = {
+  data: TData[] | undefined;
+  columns: ColumnDef<TData, TValue>[];
 
   rowCount?: number;
   pagination?: PaginationState;
   onPaginationChange?: (state: PaginationState) => void;
 
   onRowSelection?: (rows: Row<TData>[], value: boolean) => void;
-  onRowClick?: (idx: number, row: TData) => void;
 
   columnPinning?: Accessor<ColumnPinningState>;
   onColumnPinningChange?: (state: ColumnPinningState) => void;
 };
 
-// TODO: This entire implementation is incredibly messy. We should probably just
-// receive a `createSolidTable` result, i.e. use TableImpl below. This would allow
-// users direct access to the table state.
-export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
-  const [local] = splitProps(props, ["columns", "data"]);
-  const [rowSelection, setRowSelection] = createSignal<RowSelectionState>({});
-  createEffect(() => {
-    // NOTE: because we use our own state for row selection, reset it when data changes.
-    const _ = local.data();
-    setRowSelection({});
-  });
+export function buildTable<TData, TValue>(opts: TableOptions<TData, TValue>) {
+  console.debug("buildTable: ", opts);
 
-  const buildColumns = () => {
-    const onRowSelection = props.onRowSelection;
+  function buildColumns() {
+    const onRowSelection = opts.onRowSelection;
     if (!onRowSelection) {
-      return local.columns();
+      return opts.columns;
     }
 
     const helper = createColumnHelper<TData>();
@@ -131,122 +112,110 @@ export function DataTable<TData, TValue>(props: Props<TData, TValue>) {
         ),
       }),
       // Custom/Domain-provided columns
-      ...local.columns(),
+      ...opts.columns,
     ];
-  };
+  }
 
-  const table = createMemo(() => {
-    console.debug("table data rebuild");
-
-    const columns = buildColumns();
-    const enableColumnPinning =
-      props.columnPinning !== undefined && columns.length > 2;
-
-    const buildColumnPinningState = (): ColumnPinningState => {
-      const state = {
-        ...props.columnPinning?.(),
-      };
-      if (state.left?.[0] !== "__select__") {
-        state.left = ["__select__", ...(state.left ?? [])];
-      }
-      return state;
+  function buildColumnPinningState(): ColumnPinningState {
+    const state = {
+      ...opts.columnPinning?.(),
     };
+    if (state.left?.[0] !== "__select__") {
+      state.left = ["__select__", ...(state.left ?? [])];
+    }
+    return state;
+  }
 
-    const t = createSolidTable({
-      data: local.data() || [],
-      state: {
-        pagination:
-          props.pagination !== undefined
-            ? {
-                pageIndex: props.pagination.pageIndex ?? 0,
-                pageSize: props.pagination.pageSize ?? 20,
-              }
-            : undefined,
-        rowSelection: rowSelection(),
-        columnPinning: buildColumnPinningState(),
-      },
-      columns,
-      getCoreRowModel: getCoreRowModel(),
+  const columns = buildColumns();
+  const enableColumnPinning =
+    opts.columnPinning !== undefined && columns.length > 2;
 
-      // NOTE: requires setting up the header cells with resize handles.
-      // enableColumnResizing: true,
-      // columnResizeMode: 'onChange',
-
-      // pagination:
-      manualPagination: true,
-      onPaginationChange:
-        props.onPaginationChange !== undefined
-          ? (updater) => {
-              const newState =
-                typeof updater === "function"
-                  ? updater(t.getState().pagination)
-                  : updater;
-
-              props.onPaginationChange!(newState);
+  const t = createSolidTable({
+    data: opts.data ?? [],
+    state: {
+      pagination:
+        opts.pagination !== undefined
+          ? {
+              pageIndex: opts.pagination.pageIndex ?? 0,
+              pageSize: opts.pagination.pageSize ?? 20,
             }
           : undefined,
-      // If set to true, pagination will be reset to the first page when page-altering state changes
-      // eg. data is updated, filters change, grouping changes, etc.
-      //
-      // NOTE: In our current setup this causes infinite reload cycles when paginating.
-      autoResetPageIndex: false,
-      rowCount: props.rowCount,
+      // rowSelection: rowSelection(),
+      columnPinning: buildColumnPinningState(),
+    },
+    columns,
+    getCoreRowModel: getCoreRowModel(),
 
-      // Just means, the input data is already filtered.
-      manualFiltering: true,
+    // NOTE: requires setting up the header cells with resize handles.
+    // enableColumnResizing: true,
+    // columnResizeMode: 'onChange',
 
-      enableRowSelection: true,
-      enableMultiRowSelection: props.onRowSelection ? true : false,
-      onRowSelectionChange: setRowSelection,
+    // pagination:
+    manualPagination: true,
+    onPaginationChange:
+      opts.onPaginationChange !== undefined
+        ? (updater) => {
+            const newState =
+              typeof updater === "function"
+                ? updater(t.getState().pagination)
+                : updater;
 
-      enableColumnPinning,
-      onColumnPinningChange:
-        props.onColumnPinningChange !== undefined
-          ? (updater) => {
-              const newState =
-                typeof updater === "function"
-                  ? updater(t.getState().columnPinning)
-                  : updater;
+            opts.onPaginationChange!(newState);
+          }
+        : undefined,
+    // If set to true, pagination will be reset to the first page when page-altering state changes
+    // eg. data is updated, filters change, grouping changes, etc.
+    //
+    // NOTE: In our current setup this causes infinite reload cycles when paginating.
+    autoResetPageIndex: false,
+    rowCount: opts.rowCount,
 
-              props.onColumnPinningChange!(newState);
-            }
-          : undefined,
-    });
+    // Just means, the input data is already filtered.
+    manualFiltering: true,
 
-    return t;
+    enableRowSelection: true,
+    enableMultiRowSelection: opts.onRowSelection ? true : false,
+    // onRowSelectionChange: setRowSelection,
+
+    enableColumnPinning,
+    onColumnPinningChange:
+      opts.onColumnPinningChange !== undefined
+        ? (updater) => {
+            const newState =
+              typeof updater === "function"
+                ? updater(t.getState().columnPinning)
+                : updater;
+
+            opts.onColumnPinningChange!(newState);
+          }
+        : undefined,
   });
 
-  return (
-    <TableImpl
-      table={table()}
-      onRowClick={props.onRowClick}
-      paginationEnabled={props.pagination !== undefined}
-    />
-  );
+  return t;
 }
 
-function TableImpl<TData>(props: {
+export function Table<TData>(props: {
   table: TableType<TData>;
   onRowClick?: (idx: number, row: TData) => void;
-  paginationEnabled: boolean;
+  showPaginationControls: boolean;
 }) {
-  const paginationEnabled = () => props.paginationEnabled;
+  const paginationEnabled = () => props.showPaginationControls;
   const paginationState = () => props.table.getState().pagination;
   const columns = () => props.table.options.columns;
   const numRows = () => props.table.getRowModel().rows?.length ?? 0;
   const showPin = () => props.table.options.enableColumnPinning;
 
   return (
-    <>
-      {paginationEnabled() && (
+    <div>
+      <Show when={paginationEnabled()}>
         <PaginationControl
           table={props.table}
           rowCount={props.table.options.rowCount}
         />
-      )}
+      </Show>
 
       <div class="rounded-md border">
-        <Table>
+        <ShadcnTable>
           <TableHeader>
             <For each={props.table.getHeaderGroups()}>
               {(headerGroup) => (
@@ -383,15 +352,9 @@ function TableImpl<TData>(props: {
               </Match>
             </Switch>
           </TableBody>
-        </Table>
+        </ShadcnTable>
       </div>
-
-      {/*
-        {paginationEnabled() && (
-          <PaginationControl table={table} rowCount={props.rowCount} />
-        )}
-      */}
-    </>
+    </div>
   );
 }
 

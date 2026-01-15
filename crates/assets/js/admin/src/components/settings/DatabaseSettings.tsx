@@ -1,4 +1,4 @@
-import { createSignal, Switch, Match } from "solid-js";
+import { createSignal, Switch, Match, createMemo } from "solid-js";
 import { useQueryClient } from "@tanstack/solid-query";
 import type { Row, ColumnDef } from "@tanstack/solid-table";
 
@@ -11,7 +11,7 @@ import {
   CardFooter,
   CardHeader,
 } from "@/components/ui/card";
-import { DataTable } from "@/components/Table";
+import { Table, buildTable } from "@/components/Table";
 import {
   Dialog,
   DialogContent,
@@ -69,6 +69,31 @@ function DatabaseSettingsForm(props: {
 
     await setConfig(queryClient, newConfig, { throw: false });
   };
+
+  const dbTable = createMemo(() => {
+    return buildTable({
+      columns: buildColumns(),
+      data: props.config.databases,
+      rowCount: props.config.databases.length,
+      onRowSelection: (rows: Row<DatabaseConfig>[], value: boolean) => {
+        const newSelection = new Set<string>(selectedRows());
+
+        for (const row of rows) {
+          const key = row.original.name;
+          if (!key) {
+            continue;
+          }
+
+          if (value) {
+            newSelection.add(key);
+          } else {
+            newSelection.delete(key);
+          }
+        }
+        setSelectedRows(newSelection);
+      },
+    });
+  });
 
   let ref: HTMLInputElement | undefined;
 
@@ -159,31 +184,7 @@ function DatabaseSettingsForm(props: {
               </p>
 
               <div class="max-h-[500px] overflow-auto">
-                <DataTable
-                  columns={buildColumns}
-                  data={() => props.config.databases}
-                  rowCount={props.config.databases.length}
-                  onRowSelection={(
-                    rows: Row<DatabaseConfig>[],
-                    value: boolean,
-                  ) => {
-                    const newSelection = new Set<string>(selectedRows());
-
-                    for (const row of rows) {
-                      const key = row.original.name;
-                      if (!key) {
-                        continue;
-                      }
-
-                      if (value) {
-                        newSelection.add(key);
-                      } else {
-                        newSelection.delete(key);
-                      }
-                    }
-                    setSelectedRows(newSelection);
-                  }}
-                />
+                <Table table={dbTable()} showPaginationControls={false} />
               </div>
             </CardContent>
 

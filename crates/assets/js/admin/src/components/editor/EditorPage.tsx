@@ -4,6 +4,7 @@ import {
   Match,
   Show,
   Switch,
+  createMemo,
   createEffect,
   createSignal,
   onCleanup,
@@ -63,7 +64,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { showToast } from "@/components/ui/toast";
-import { DataTable } from "@/components/Table";
+import { Table, buildTable } from "@/components/Table";
 import { useNavbar, DirtyDialog } from "@/components/Navbar";
 
 import type { QueryResponse } from "@bindings/QueryResponse";
@@ -110,6 +111,32 @@ function ResultView(props: {
   const isCached = () => props.response === undefined;
   const response = () => props.response ?? props.script.result;
 
+  return (
+    <Switch>
+      <Match when={response()?.error}>
+        <div class="p-4">Error: {response()?.error?.message}</div>
+      </Match>
+
+      <Match when={response()?.data === undefined}>
+        <div class="p-4">No Data</div>
+      </Match>
+
+      <Match when={response()?.data !== undefined}>
+        <ResultViewImpl
+          data={response()!.data!}
+          timestamp={response()?.timestamp}
+          isCached={isCached()}
+        />
+      </Match>
+    </Switch>
+  );
+}
+
+function ResultViewImpl(props: {
+  data: QueryResponse;
+  isCached: boolean;
+  timestamp?: number;
+}) {
   const [columnPinningState, setColumnPinningState] = createSignal({});
 
   function columnDefs(data: QueryResponse): ColumnDef<ArrayRecord, SqlValue>[] {
@@ -126,49 +153,41 @@ function ResultView(props: {
     });
   }
 
+  const dataTable = createMemo(() => {
+    // TODO: Enable pagination
+    return buildTable({
+      columns: columnDefs(props.data),
+      data: props.data.rows,
+      columnPinning: columnPinningState,
+      onColumnPinningChange: setColumnPinningState,
+    });
+  });
+
   return (
-    <Switch>
-      <Match when={response()?.error}>
-        <div class="p-4">Error: {response()?.error?.message}</div>
-      </Match>
+    <ErrorBoundary
+      fallback={(err, _reset) => {
+        return (
+          <div class="m-4 flex flex-col gap-4">
+            <p>Failed to render query result: {`${err}`}</p>
 
-      <Match when={response()?.data === undefined}>
-        <div class="p-4">No Data</div>
-      </Match>
-
-      <Match when={response()?.data !== undefined}>
-        <ErrorBoundary
-          fallback={(err, _reset) => {
-            return (
-              <div class="m-4 flex flex-col gap-4">
-                <p>Failed to render query result: {`${err}`}</p>
-
-                {isCached() && (
-                  <p>
-                    The view is trying to show cached data. Maybe the schema has
-                    changed. Try to re-execute the query.
-                  </p>
-                )}
-              </div>
-            );
-          }}
-        >
-          <div class="flex flex-col gap-2 p-4">
-            <div class="flex justify-end text-sm">
-              <ExecutionTime timestamp={response()?.timestamp} />
-            </div>
-
-            {/* TODO: Enable pagination */}
-            <DataTable
-              columns={() => columnDefs(response()!.data!)}
-              data={() => response()!.data!.rows}
-              columnPinning={columnPinningState}
-              onColumnPinningChange={setColumnPinningState}
-            />
+            <Show when={props.isCached}>
+              <p>
+                The view is trying to show cached data. Maybe the schema has
+                changed. Try to re-execute the query.
+              </p>
+            </Show>
           </div>
-        </ErrorBoundary>
-      </Match>
-    </Switch>
+        );
+      }}
+    >
+      <div class="flex flex-col gap-2 p-4">
+        <div class="flex justify-end text-sm">
+          <ExecutionTime timestamp={props.timestamp} />
+        </div>
+
+        <Table table={dataTable()} showPaginationControls={false} />
+      </div>
+    </ErrorBoundary>
   );
 }
 
