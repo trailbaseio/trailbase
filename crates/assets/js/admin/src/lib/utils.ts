@@ -28,6 +28,17 @@ export function tryParseInt(value: string): number | undefined {
   return isNaN(n) ? undefined : n;
 }
 
+export function safeParseInt(value: string | undefined): number | undefined {
+  if (value !== undefined) {
+    try {
+      return tryParseInt(value);
+    } catch (err) {
+      console.warn(err);
+    }
+  }
+  return undefined;
+}
+
 export function tryParseBigInt(value: string): bigint | undefined {
   if (value === "") {
     return undefined;

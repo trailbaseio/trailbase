@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/sheet";
 
 import { Header } from "@/components/Header";
-import { Table, buildTable, safeParseInt } from "@/components/Table";
+import { Table, buildTable } from "@/components/Table";
 import { IconButton } from "@/components/IconButton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -46,7 +46,7 @@ import { SafeSheet, SheetContainer } from "@/components/SafeSheet";
 import { assets } from "@/components/settings/AuthSettings";
 
 import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
-import { copyToClipboard } from "@/lib/utils";
+import { copyToClipboard, safeParseInt } from "@/lib/utils";
 
 import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
 import type { UserJson } from "@bindings/UserJson";

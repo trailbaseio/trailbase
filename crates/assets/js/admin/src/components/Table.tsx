@@ -34,20 +34,6 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { createIsMobile } from "@/lib/signals";
 
-export function safeParseInt(v: string | undefined): number | undefined {
-  if (v !== undefined) {
-    try {
-      const num = parseInt(v);
-      if (!isNaN(num)) {
-        return num;
-      }
-    } catch (err) {
-      console.warn(err);
-    }
-  }
-  return undefined;
-}
-
 type TableOptions<TData, TValue> = {
   data: TData[] | undefined;
   columns: ColumnDef<TData, TValue>[];

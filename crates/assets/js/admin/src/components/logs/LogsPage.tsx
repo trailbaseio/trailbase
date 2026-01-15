@@ -40,11 +40,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Table, buildTable, safeParseInt } from "@/components/Table";
+import { Table, buildTable } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 
 import { getLogs } from "@/lib/api/logs";
-import { copyToClipboard } from "@/lib/utils";
+import { copyToClipboard, safeParseInt } from "@/lib/utils";
 
 import countriesGeoJSON from "@/assets/countries-110m.json";
 

@@ -40,11 +40,7 @@ import { showToast } from "@/components/ui/toast";
 import { DebugDialogButton } from "@/components/tables/SchemaDownload";
 import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
 import { CreateAlterIndexForm } from "@/components/tables/CreateAlterIndex";
-import {
-  Table as TableComponent,
-  buildTable,
-  safeParseInt,
-} from "@/components/Table";
+import { Table as TableComponent, buildTable } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 import { DestructiveActionButton } from "@/components/DestructiveActionButton";
 import { IconButton } from "@/components/IconButton";
@@ -69,7 +65,7 @@ import {
 import { createConfigQuery, invalidateConfig } from "@/lib/api/config";
 import type { Record, ArrayRecord } from "@/lib/record";
 import { hashSqlValue } from "@/lib/value";
-import { urlSafeBase64ToUuid, toHex } from "@/lib/utils";
+import { urlSafeBase64ToUuid, toHex, safeParseInt } from "@/lib/utils";
 import { equalQualifiedNames } from "@/lib/schema";
 import { dropTable, dropIndex } from "@/lib/api/table";
 import { deleteRows, fetchRows } from "@/lib/api/row";
