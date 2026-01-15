@@ -46,6 +46,7 @@ import {
   columnDataTypes,
   equalQualifiedNames,
   findPrimaryKeyColumnIndex,
+  ForeignKey,
   getCheckValue,
   getDefaultValue,
   getForeignKey,
@@ -316,11 +317,16 @@ function ColumnOptionDefaultField(props: {
 function ColumnOptionForeignKeySelect(props: {
   value: ColumnOption[];
   onChange: (v: ColumnOption[]) => void;
+  form: FormApiT<Table>;
+  colIndex: number;
   allTables: Table[];
   disabled: boolean;
   data_type: ColumnDataType;
   databaseSchema: string | null;
 }) {
+  const fkValue = (): string =>
+    getForeignKey(props.value)?.foreign_table ?? "None";
+
   const fkTableOptions = createMemo((): string[] => [
     "None",
     ...props.allTables
@@ -329,27 +335,14 @@ function ColumnOptionForeignKeySelect(props: {
           return false;
         }
 
-        const db = schema.name.database_schema ?? "main";
-        if ((props.databaseSchema ?? "main") !== db) {
-          return false;
-        }
-
-        // TODO: We're filtering here for tables with an appropriate PK column
-        // type. It would probably be a better UX, if we instead showed all tables
-        // and changed the column type instead.
-        const pkIndex = findPrimaryKeyColumnIndex(schema.columns);
-        if (pkIndex !== undefined) {
-          const pkColumn = schema.columns[pkIndex];
-          return pkColumn.data_type === props.data_type;
-        }
-
-        // When there's no PK we fall back to _rowid_.
-        return props.data_type === "Integer";
+        // Foreign keys don't work across different databases.
+        return (
+          (props.databaseSchema ?? "main") ===
+          (schema.name.database_schema ?? "main")
+        );
       })
       .map((schema) => schema.name.name),
   ]);
-  const fkValue = (): string =>
-    getForeignKey(props.value)?.foreign_table ?? "None";
 
   return (
     <div
@@ -370,24 +363,41 @@ function ColumnOptionForeignKeySelect(props: {
             return;
           }
 
-          const schema = props.allTables.find(
-            (schema) => schema.name.name == table,
-          )!;
-          const pkIndex = findPrimaryKeyColumnIndex(schema.columns);
-          const referredColumns =
-            pkIndex !== undefined ? [schema.columns[pkIndex].name] : [];
+          // Find the schema of the target table
+          const referredTable = props.allTables.find(
+            (t) =>
+              (t.name.database_schema ?? "main") ===
+                (props.databaseSchema ?? "main") && t.name.name === table,
+          );
+          if (referredTable === undefined) {
+            throw new Error(`Failed to find table '${table}' for fk`);
+          }
 
-          let newColumnOptions = [...props.value];
-          newColumnOptions = setForeignKey(props.value, {
-            foreign_table: table,
-            referred_columns: referredColumns,
-            on_delete: null,
-            on_update: null,
-          });
-          newColumnOptions = setCheckValue(newColumnOptions, undefined);
-          newColumnOptions = setDefaultValue(newColumnOptions, undefined);
+          const pkIndex = findPrimaryKeyColumnIndex(referredTable.columns);
+          const referredColumn =
+            pkIndex !== undefined ? referredTable.columns[pkIndex] : undefined;
 
-          props.onChange(newColumnOptions);
+          // Updates the column's options in the form.
+          props.onChange(
+            patchColumnOptionsWithForeignKey(props.value, {
+              foreign_table: referredTable.name.name,
+              referred_columns:
+                referredColumn !== undefined ? [referredColumn.name] : [],
+              on_delete: null,
+              on_update: null,
+            }),
+          );
+
+          // If the data types don't match, we should also change the column's data type to match.
+          // We fall back to Integer _rowid_, if no explicit PK column is found.
+          const referredDataType = referredColumn?.data_type ?? "Integer";
+          if (referredDataType !== props.data_type) {
+            patchColumn(
+              props.form,
+              props.colIndex,
+              typeNameAndAffinityType(referredDataType),
+            );
+          }
         }}
         itemComponent={(props) => (
           <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
@@ -404,27 +414,55 @@ function ColumnOptionForeignKeySelect(props: {
   );
 }
 
+function patchColumnOptionsWithForeignKey(
+  options: ColumnOption[],
+  fk: ForeignKey,
+): ColumnOption[] {
+  let newColumnOptions = setForeignKey([...options], fk);
+
+  // Unset other options.
+  newColumnOptions = setCheckValue(newColumnOptions, undefined);
+  newColumnOptions = setDefaultValue(newColumnOptions, undefined);
+
+  return newColumnOptions;
+}
+
 function ColumnOptionsFields(props: {
   value: ColumnOption[];
   onChange: (v: ColumnOption[]) => void;
+  form: FormApiT<Table>;
+  colIndex: number;
   allTables: Table[];
   disabled: boolean;
   pk: boolean;
-  columnName: string;
-  data_type: ColumnDataType;
   databaseSchema: string | null;
+  // NOTE: We need to inject the name, since it's managed separately by the parent rather than the form.
+  columnName: string;
 }) {
   const fk = () => getForeignKey(props.value);
+  const dataType = () =>
+    props.form.getFieldValue(`columns[${props.colIndex}].data_type`);
 
   // SQLite column options: (not|null), (default), (unique), (fk), (check), (comment), (on-update trigger).
   return (
     <>
       {/* FOREIGN KEY constraint */}
-      {!props.pk && <ColumnOptionForeignKeySelect {...props} />}
+      <Show when={!props.pk}>
+        <ColumnOptionForeignKeySelect
+          value={props.value}
+          onChange={props.onChange}
+          form={props.form}
+          colIndex={props.colIndex}
+          allTables={props.allTables}
+          disabled={props.disabled}
+          data_type={dataType()}
+          databaseSchema={props.databaseSchema}
+        />
+      </Show>
 
       {/* DEFAULT constraint */}
       <ColumnOptionDefaultField
-        data_type={props.data_type}
+        data_type={dataType()}
         value={props.value}
         onChange={props.onChange}
         disabled={props.disabled || fk() !== undefined}
@@ -455,7 +493,7 @@ function ColumnOptionsFields(props: {
       </button>
 
       {/* UNIQUE (pk) constraint */}
-      {!props.pk && (
+      <Show when={!props.pk}>
         <button
           class={customCheckBoxStyle}
           type="button"
@@ -480,7 +518,7 @@ function ColumnOptionsFields(props: {
             checked={getUnique(props.value) !== undefined}
           />
         </button>
-      )}
+      </Show>
     </>
   );
 }
@@ -491,15 +529,14 @@ export function ColumnSubForm(props: {
   allTables: Table[];
   disabled: boolean;
   onDelete: () => void;
-  moveUp?: () => void;
-  moveDown?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }): JSX.Element {
   const [name, setName] = createWritableMemo(() =>
     props.form.getFieldValue(`columns[${props.colIndex}].name`),
   );
-  const dataType = () =>
-    props.form.getFieldValue(`columns[${props.colIndex}].data_type`);
 
+  // NOTE: createSignal state gets discarded when reordering columns, we should probably inject a signal instead.
   const [expanded, setExpanded] = createSignal(true);
 
   const databaseSchema = createMemo(() =>
@@ -511,14 +548,14 @@ export function ColumnSubForm(props: {
       <h3 class="truncate">{name()}</h3>
 
       <div class="flex items-center">
-        <Show when={props.moveUp}>
-          <IconButton onClick={props.moveUp}>
+        <Show when={props.onMoveUp}>
+          <IconButton onClick={props.onMoveUp}>
             <TbArrowUp />
           </IconButton>
         </Show>
 
-        <Show when={props.moveDown}>
-          <IconButton onClick={props.moveDown}>
+        <Show when={props.onMoveDown}>
+          <IconButton onClick={props.onMoveDown}>
             <TbArrowDown />
           </IconButton>
         </Show>
@@ -625,20 +662,19 @@ export function ColumnSubForm(props: {
               {/* Column options: pk, not null, ... */}
               <props.form.Field
                 name={`columns[${props.colIndex}].options`}
-                children={(field) => {
-                  return (
-                    <ColumnOptionsFields
-                      columnName={name()}
-                      data_type={dataType()}
-                      value={field().state.value}
-                      onChange={field().handleChange}
-                      allTables={props.allTables}
-                      disabled={props.disabled}
-                      pk={false}
-                      databaseSchema={databaseSchema()}
-                    />
-                  );
-                }}
+                children={(field) => (
+                  <ColumnOptionsFields
+                    value={field().state.value}
+                    onChange={field().handleChange}
+                    form={props.form}
+                    colIndex={props.colIndex}
+                    allTables={props.allTables}
+                    disabled={props.disabled}
+                    pk={false}
+                    databaseSchema={databaseSchema()}
+                    columnName={name()}
+                  />
+                )}
               />
             </div>
           </CardContent>
@@ -657,8 +693,6 @@ export function PrimaryKeyColumnSubForm(props: {
   const [name, setName] = createWritableMemo(() =>
     props.form.getFieldValue(`columns[${props.colIndex}].name`),
   );
-  const dataType = () =>
-    props.form.getFieldValue(`columns[${props.colIndex}].data_type`);
 
   // NOTE: createSignal state gets discarded when reordering columns, we should probably inject a signal instead.
   const [expanded, setExpanded] = createSignal(false);
@@ -772,20 +806,19 @@ export function PrimaryKeyColumnSubForm(props: {
               {/* Column options: pk, not null, ... */}
               <props.form.Field
                 name={`columns[${props.colIndex}].options`}
-                children={(field) => {
-                  return (
-                    <ColumnOptionsFields
-                      columnName={name()}
-                      data_type={dataType()}
-                      value={field().state.value}
-                      onChange={field().handleChange}
-                      allTables={props.allTables}
-                      disabled={true}
-                      pk={true}
-                      databaseSchema={databaseSchema()}
-                    />
-                  );
-                }}
+                children={(field) => (
+                  <ColumnOptionsFields
+                    value={field().state.value}
+                    onChange={field().handleChange}
+                    form={props.form}
+                    colIndex={props.colIndex}
+                    allTables={props.allTables}
+                    disabled={true}
+                    pk={true}
+                    databaseSchema={databaseSchema()}
+                    columnName={name()}
+                  />
+                )}
               />
             </div>
           </CardContent>
@@ -811,30 +844,35 @@ function patchColumn(
 
 function typeNameAndAffinityType(
   dataType: ColumnDataType,
-): Pick<Column, "affinity_type" | "type_name"> {
+): Pick<Column, "affinity_type" | "type_name" | "data_type"> {
   switch (dataType) {
     case "Any":
       return {
+        data_type: dataType,
         type_name: "ANY",
         affinity_type: "Blob",
       };
     case "Blob":
       return {
+        data_type: dataType,
         type_name: "BLOB",
         affinity_type: "Blob",
       };
     case "Text":
       return {
+        data_type: dataType,
         type_name: "TEXT",
         affinity_type: "Text",
       };
     case "Integer":
       return {
+        data_type: dataType,
         type_name: "INTEGER",
         affinity_type: "Integer",
       };
     case "Real":
       return {
+        data_type: dataType,
         type_name: "REAL",
         affinity_type: "Real",
       };
@@ -847,9 +885,7 @@ export const primaryKeyPresets: [string, (colName: string) => Column][] = [
     (colName: string) => {
       return {
         name: colName,
-        type_name: "INTEGER",
-        data_type: "Integer",
-        affinity_type: "Integer",
+        ...typeNameAndAffinityType("Integer"),
         options: [
           { Unique: { is_primary: true, conflict_clause: null } },
           "NotNull",
@@ -862,9 +898,7 @@ export const primaryKeyPresets: [string, (colName: string) => Column][] = [
     (colName: string) => {
       return {
         name: colName,
-        type_name: "BLOB",
-        data_type: "Blob",
-        affinity_type: "Blob",
+        ...typeNameAndAffinityType("Blob"),
         options: [
           { Unique: { is_primary: true, conflict_clause: null } },
           { Check: `is_uuid(${colName})` },
@@ -879,9 +913,7 @@ export const primaryKeyPresets: [string, (colName: string) => Column][] = [
     (colName: string) => {
       return {
         name: colName,
-        type_name: "BLOB",
-        data_type: "Blob",
-        affinity_type: "Blob",
+        ...typeNameAndAffinityType("Blob"),
         options: [
           { Unique: { is_primary: true, conflict_clause: null } },
           { Check: `is_uuid_v7(${colName})` },
@@ -899,9 +931,7 @@ const presets: [string, (colName: string) => Column][] = [
     (colName: string) => {
       return {
         name: colName,
-        type_name: "TEXT",
-        data_type: "Text",
-        affinity_type: "Text",
+        ...typeNameAndAffinityType("Text"),
         options: ["NotNull"],
       };
     },
@@ -911,9 +941,7 @@ const presets: [string, (colName: string) => Column][] = [
     (colName: string) => {
       return {
         name: colName,
-        type_name: "BLOB",
-        data_type: "Blob",
-        affinity_type: "Blob",
+        ...typeNameAndAffinityType("Blob"),
         options: [
           { Check: `is_uuid(${colName})` },
           { Default: "(uuid_v4())" },
@@ -927,9 +955,7 @@ const presets: [string, (colName: string) => Column][] = [
     (colName: string) => {
       return {
         name: colName,
-        type_name: "BLOB",
-        data_type: "Blob",
-        affinity_type: "Blob",
+        ...typeNameAndAffinityType("Blob"),
         options: [
           { Check: `is_uuid_v7(${colName})` },
           { Default: "(uuid_v7())" },
@@ -943,9 +969,7 @@ const presets: [string, (colName: string) => Column][] = [
     (colName: string) => {
       return {
         name: colName,
-        type_name: "TEXT",
-        data_type: "Text",
-        affinity_type: "Text",
+        ...typeNameAndAffinityType("Text"),
         options: [
           { Check: `is_json(${colName})` },
           { Default: "'{}'" },
@@ -959,9 +983,7 @@ const presets: [string, (colName: string) => Column][] = [
     (colName: string) => {
       return {
         name: colName,
-        type_name: "TEXT",
-        data_type: "Text",
-        affinity_type: "Text",
+        ...typeNameAndAffinityType("Text"),
         options: [
           {
             Check: `jsonschema('std.FileUpload', ${colName})`,
@@ -975,9 +997,7 @@ const presets: [string, (colName: string) => Column][] = [
     (colName: string) => {
       return {
         name: colName,
-        type_name: "TEXT",
-        data_type: "Text",
-        affinity_type: "Text",
+        ...typeNameAndAffinityType("Text"),
         options: [
           {
             Check: `jsonschema('std.FileUploads', ${colName})`,

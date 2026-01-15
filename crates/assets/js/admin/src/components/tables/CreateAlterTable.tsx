@@ -61,7 +61,9 @@ export function CreateAlterTableForm(props: {
   ];
 
   const defaultValues = createMemo(() => {
-    return copySchema(props.schema) ?? defaultSchema(props.allTables);
+    return props.schema !== undefined
+      ? deepCopySchema(props.schema)
+      : defaultSchema(props.allTables);
   });
   // Columns are treated as append only. Instead of removing actually removing a
   // column and inducing animation junk and other complications we simply don't
@@ -70,10 +72,6 @@ export function CreateAlterTableForm(props: {
   const [order, setOrder] = createWritableMemo(() => {
     return defaultValues().columns.map((_, i) => i);
   });
-  const markDeleted = (origIndex: number, pos: number) => {
-    form.setFieldValue(`columns[${origIndex}]`, DELETED_COLUMN_MARKER);
-    setOrder((old) => old.toSpliced(pos, 1));
-  };
 
   const onSubmit = async (value: Table, dryRun: boolean) => {
     // Assert that the type representations match up.
@@ -214,6 +212,7 @@ export function CreateAlterTableForm(props: {
               const columns = createMemo(() =>
                 filterAndOrderColumns(order(), field().state.value),
               );
+
               return (
                 <div class="flex w-full flex-col gap-2 pb-2">
                   {/* Needs for be a "For" as opposed to an "Index" because order and length may change */}
@@ -223,7 +222,7 @@ export function CreateAlterTableForm(props: {
 
                       /* eslint-disable solid/reactivity */
                       const isFirst = () => i() <= 1;
-                      const moveUp = isFirst()
+                      const onMoveUp = isFirst()
                         ? undefined
                         : () => {
                             setOrder((old) => {
@@ -238,7 +237,7 @@ export function CreateAlterTableForm(props: {
                           };
 
                       const isLast = () => i() >= columns().length - 1;
-                      const moveDown = isLast()
+                      const onMoveDown = isLast()
                         ? undefined
                         : () => {
                             setOrder((old) => {
@@ -251,6 +250,14 @@ export function CreateAlterTableForm(props: {
                             });
                             props.markDirty();
                           };
+
+                      const onDelete = () => {
+                        form.setFieldValue(
+                          `columns[${origIndex}]`,
+                          DELETED_COLUMN_MARKER,
+                        );
+                        setOrder((old) => old.toSpliced(i(), 1));
+                      };
 
                       return (
                         <Switch>
@@ -269,9 +276,9 @@ export function CreateAlterTableForm(props: {
                               colIndex={origIndex}
                               allTables={props.allTables}
                               disabled={false}
-                              onDelete={() => markDeleted(origIndex, i())}
-                              moveUp={moveUp}
-                              moveDown={moveDown}
+                              onDelete={onDelete}
+                              onMoveUp={onMoveUp}
+                              onMoveDown={onMoveDown}
                             />
                           </Match>
                         </Switch>
@@ -393,15 +400,16 @@ function defaultSchema(allTables: Table[]): Table {
   };
 }
 
-function copySchema(schema: Table | undefined): Table | undefined {
-  return schema ? JSON.parse(JSON.stringify(schema)) : undefined;
+function deepCopySchema(schema: Table): Table {
+  return JSON.parse(JSON.stringify(schema));
 }
 
 function columnsEqual(a: Column, b: Column): boolean {
   return (
     a.name === b.name &&
     a.data_type === b.data_type &&
-    JSON.stringify(a.options) === JSON.stringify(b.options)
+    JSON.stringify(a.options.toSorted()) ===
+      JSON.stringify(b.options.toSorted())
   );
 }
 
