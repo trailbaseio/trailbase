@@ -349,13 +349,13 @@ function TableHeaderRow<TData>(props: {
           {/* Sorting arrow */}
           <Switch>
             <Match when={props.header.column.getIsSorted() === "asc"}>
-              <div class="absolute right-0 bottom-0 z-[10]">
+              <div class="absolute right-0 bottom-0 z-10">
                 <TbCaretUp size={20} />
               </div>
             </Match>
 
             <Match when={props.header.column.getIsSorted() === "desc"}>
-              <div class="absolute right-0 bottom-0 z-[10]">
+              <div class="absolute right-0 bottom-0 z-10">
                 <TbCaretDown size={20} />
               </div>
             </Match>
@@ -363,7 +363,7 @@ function TableHeaderRow<TData>(props: {
 
           {/* Pin Button */}
           <Show when={props.enabledColumnPinning}>
-            <div class="absolute top-1 right-1 z-[10]">
+            <div class="absolute top-1 right-1 z-10">
               <Button
                 class="size-4 bg-transparent"
                 size="icon"
@@ -466,7 +466,7 @@ function PaginationControl<TData>(props: {
           <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
         )}
       >
-        <SelectTrigger class="h-8 w-[4.5rem]">
+        <SelectTrigger class="h-8 w-18">
           <SelectValue<string>>{(state) => state.selectedOption()}</SelectValue>
         </SelectTrigger>
         <SelectContent />

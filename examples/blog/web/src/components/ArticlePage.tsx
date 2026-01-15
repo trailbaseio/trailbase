@@ -17,7 +17,7 @@ function ArticlePageImpl(props: { article: Article }) {
           {props.article.title}
         </h1>
 
-        <p class="mx-auto mb-7 flex max-w-screen-lg flex-row flex-wrap items-center gap-5 font-pacamara-space">
+        <p class="mx-auto mb-7 flex max-w-5xl flex-row flex-wrap items-center gap-5 font-pacamara-space">
           <Tag tag={props.article.tag} />
           <PublishDate date={props.article.created} />
           <span class="mb-1">

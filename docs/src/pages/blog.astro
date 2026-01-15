@@ -32,7 +32,7 @@ const posts = blogPosts ?? (await getPosts());
 ---
 
 <Base title="Updates">
-  <section class="container mx-auto mb-10 max-w-screen-lg px-7 py-4">
+  <section class="container mx-auto mb-10 max-w-5xl px-7 py-4">
     {
       posts.map((post, index: number) => {
         return (
@@ -44,7 +44,7 @@ const posts = blogPosts ?? (await getPosts());
               <div
                 class:list={[
                   "my-10",
-                  "h-[1px]",
+                  "h-px",
                   "w-full",
                   "overflow-hidden",
                   "group-last:hidden",

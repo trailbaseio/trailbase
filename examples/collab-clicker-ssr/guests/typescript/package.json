@@ -16,8 +16,8 @@
   },
   "devDependencies": {
     "@bytecodealliance/jco": "^1.15.4",
-    "@types/node": "^25.0.6",
-    "prettier": "^3.7.4",
+    "@types/node": "^25.0.9",
+    "prettier": "^3.8.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vitest": "^3.2.4"

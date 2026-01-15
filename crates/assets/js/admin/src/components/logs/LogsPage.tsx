@@ -421,7 +421,7 @@ const Legend = L.Control.extend({
   onAdd: (_map: L.Map) => {
     const grades = [1, 20, 50, 100, 200, 500, 1000];
     return (
-      <div class="flex flex-col rounded bg-white/70 p-1">
+      <div class="flex flex-col rounded-sm bg-white/70 p-1">
         <For each={grades}>
           {(grade: number, index: () => number) => {
             const label = () => {
@@ -475,7 +475,9 @@ function WorldMap(props: { country_codes: { [key in string]?: number } }) {
     // control that shows state info on hover
     const CustomControl = L.Control.extend({
       onAdd: (_map: L.Map) => {
-        return <div class="rounded bg-white/70 p-2">Hover over a country</div>;
+        return (
+          <div class="rounded-sm bg-white/70 p-2">Hover over a country</div>
+        );
       },
       update: function (props?: Props) {
         /* eslint-disable solid/reactivity */
@@ -538,7 +540,7 @@ function WorldMap(props: { country_codes: { [key in string]?: number } }) {
 
   return (
     <div
-      class="z-[0] h-[280px] w-full rounded"
+      class="z-0 h-[280px] w-full rounded-sm"
       style={{ "background-color": "transparent" }}
       ref={ref}
     />

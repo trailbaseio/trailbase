@@ -42,10 +42,10 @@
     "http-status": "^2.1.0",
     "jsdom": "^27.4.0",
     "oauth2-mock-server": "^8.2.0",
-    "prettier": "^3.7.4",
+    "prettier": "^3.8.0",
     "tinybench": "^6.0.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.52.0",
+    "typescript-eslint": "^8.53.0",
     "vite-node": "^5.2.0",
     "vitest": "^3.2.4"
   },

@@ -66,7 +66,7 @@ function EmailTemplate(props: {
   const Parameter = (props: { label: string }) => (
     <>
       {" "}
-      <span class="rounded bg-gray-200 font-mono text-nowrap">
+      <span class="rounded-sm bg-gray-200 font-mono text-nowrap">
         {`{{ ${props.label} }}`}
       </span>{" "}
     </>

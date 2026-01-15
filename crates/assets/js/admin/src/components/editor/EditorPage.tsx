@@ -605,7 +605,7 @@ function EditorPanel(props: {
       <div class="mx-4 my-2 flex flex-col gap-2">
         {(uiState().showMigrationWarning ?? true) && (
           <Callout
-            class="flex items-center text-sm hover:opacity-[80%]"
+            class="flex items-center text-sm hover:opacity-80"
             onClick={() => {
               $uiState.set({
                 ...uiState(),
@@ -622,7 +622,7 @@ function EditorPanel(props: {
         )}
 
         {/* Editor */}
-        <div class="min-h-[6rem] shrink" ref={ref} />
+        <div class="min-h-24 shrink" ref={ref} />
 
         <div class="flex items-center justify-between">
           <Tooltip>

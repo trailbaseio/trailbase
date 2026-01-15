@@ -24,12 +24,16 @@ export default [
       "better-tailwindcss/enforce-consistent-line-wrapping": "off",
       // Order is different from what prettier enforces.
       "better-tailwindcss/enforce-consistent-class-order": "off",
-      "better-tailwindcss/no-unregistered-classes": [
+      "better-tailwindcss/no-unknown-classes": [
         "error",
         {
           ignore: ["hide-scrollbars", "collapsible.*"],
         },
       ],
+      // TODO: recently introduced, should look into solutions, e.g. ignore components/ui.
+      "better-tailwindcss/enforce-canonical-classes": "warn",
+      "better-tailwindcss/enforce-consistent-variable-syntax": "warn",
+      "better-tailwindcss/enforce-shorthand-classes": "warn",
     },
     settings: {
       "better-tailwindcss": {

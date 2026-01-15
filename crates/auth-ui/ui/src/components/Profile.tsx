@@ -115,9 +115,12 @@ function Avatar(props: { client: Client; user: User }) {
       />
 
       <div class="relative">
-        <button class="rounded bg-white p-2" onClick={() => fileRef!.click()}>
+        <button
+          class="rounded-sm bg-white p-2"
+          onClick={() => fileRef!.click()}
+        >
           <object
-            class="rounded"
+            class="rounded-sm"
             type="image/jpeg"
             data={avatarUrl(props.user)}
             width={60}

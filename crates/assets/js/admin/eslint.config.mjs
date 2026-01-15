@@ -22,7 +22,7 @@ export default [
       "better-tailwindcss/enforce-consistent-line-wrapping": "off",
       // Order is different from what prettier enforces.
       "better-tailwindcss/enforce-consistent-class-order": "off",
-      "better-tailwindcss/no-unregistered-classes": [
+      "better-tailwindcss/no-unknown-classes": [
         "error",
         {
           ignore: [
@@ -37,6 +37,12 @@ export default [
           ],
         },
       ],
+      // TODO: recently introduced. Should look for solutions, e.g. ignore components/ui.
+      "better-tailwindcss/enforce-canonical-classes": "warn",
+      "better-tailwindcss/enforce-consistent-variable-syntax": "warn",
+      "better-tailwindcss/enforce-shorthand-classes": "warn",
+      "better-tailwindcss/no-deprecated-classes": "warn",
+      "better-tailwindcss/enforce-consistent-important-position": "warn",
     },
     settings: {
       "better-tailwindcss": {

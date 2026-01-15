@@ -15,7 +15,7 @@
   "dependencies": {
     "@nanostores/persistent": "^1.2.0",
     "@nanostores/solid": "^1.1.1",
-    "astro": "^5.16.8",
+    "astro": "^5.16.9",
     "astro-icon": "^1.1.5",
     "nanostores": "^1.1.0",
     "solid-icons": "^1.1.0",
@@ -31,14 +31,14 @@
     "@types/dateformat": "^5.0.3",
     "eslint": "^9.39.2",
     "eslint-plugin-astro": "^1.5.0",
-    "eslint-plugin-better-tailwindcss": "^3.8.0",
+    "eslint-plugin-better-tailwindcss": "^4.0.1",
     "eslint-plugin-solid": "^0.14.5",
     "globals": "^17.0.0",
-    "prettier": "^3.7.4",
+    "prettier": "^3.8.0",
     "prettier-plugin-astro": "^0.14.1",
     "quicktype": "^23.2.6",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.1.18",
-    "typescript-eslint": "^8.52.0"
+    "typescript-eslint": "^8.53.0"
   }
 }
