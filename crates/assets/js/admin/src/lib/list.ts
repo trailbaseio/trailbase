@@ -1,3 +1,4 @@
+import type { SortingState } from "@tanstack/solid-table";
 import { parse, ExprGroup, Expr, JoinOp, SignOp } from "@/lib/fexpr";
 import { showToast } from "@/components/ui/toast";
 
@@ -6,13 +7,28 @@ export type ListArgs = {
   pageSize: number;
   pageIndex?: number;
   cursor: string | undefined | null;
+  order?: string;
 };
+
+export function formatSortingAsOrder(sorting: SortingState) {
+  switch (sorting.length) {
+    case 0:
+      return undefined;
+    case 1: {
+      const s = sorting[0];
+      return `${s.desc ? "-" : "+"}${s.id}`;
+    }
+    default:
+      throw new Error("multi-sort not supported");
+  }
+}
 
 export function buildListSearchParams({
   filter,
   pageSize,
   pageIndex,
   cursor,
+  order,
 }: ListArgs): URLSearchParams {
   const params = new URLSearchParams();
 
@@ -41,6 +57,10 @@ export function buildListSearchParams({
     if (pageIndex) {
       params.set("offset", `${pageIndex * pageSize}`);
     }
+  }
+
+  if (order) {
+    params.set("order", order);
   }
 
   return params;

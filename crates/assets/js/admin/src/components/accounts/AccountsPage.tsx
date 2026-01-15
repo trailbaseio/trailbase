@@ -13,7 +13,11 @@ import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { createForm } from "@tanstack/solid-form";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { createColumnHelper } from "@tanstack/solid-table";
-import type { ColumnDef, PaginationState } from "@tanstack/solid-table";
+import type {
+  ColumnDef,
+  PaginationState,
+  SortingState,
+} from "@tanstack/solid-table";
 
 import {
   Dialog,
@@ -47,6 +51,7 @@ import { assets } from "@/components/settings/AuthSettings";
 
 import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
+import { formatSortingAsOrder } from "@/lib/list";
 
 import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
 import type { UserJson } from "@bindings/UserJson";
@@ -84,6 +89,7 @@ function buildColumns(
     },
     {
       header: "OAuth",
+      enableSorting: false,
       cell: (ctx) => {
         const providerId = ctx.row.original.provider_id;
         const oauthAsset =
@@ -104,6 +110,7 @@ function buildColumns(
     },
     columnHelper.accessor("id", {
       header: "admin",
+      enableSorting: false,
       cell: (ctx) => (
         <div class="flex justify-center">
           {ctx.row.original.admin ? <TbCrown size={18} /> : null}
@@ -112,6 +119,7 @@ function buildColumns(
     }) as ColumnDef<UserJson>,
     columnHelper.display({
       header: "actions",
+      enableSorting: false,
       cell: (ctx) => {
         return (
           <Show when={!ctx.row.original.admin}>
@@ -307,6 +315,8 @@ export function AccountsPage() {
     });
   };
 
+  const [sorting, setSorting] = createSignal<SortingState>([]);
+
   // NOTE: admin user endpoint doesn't support offset, we have to cursor through
   // and cannot just jump to page N.
   const users = useQuery(() => ({
@@ -315,14 +325,17 @@ export function AccountsPage() {
       searchParams.filter,
       pagination().pageSize,
       pagination().pageIndex,
+      sorting(),
     ],
     queryFn: async () => {
       const p = pagination();
+      const s = sorting();
 
       const response = await fetchUsers(
         searchParams.filter,
         p.pageSize,
         p.pageIndex,
+        formatSortingAsOrder(s),
       );
 
       return response;
@@ -338,19 +351,28 @@ export function AccountsPage() {
   const [editUser, setEditUser] = createSignal<UserJson | undefined>();
 
   const accountsTable = createMemo(() => {
-    return buildTable({
-      columns: buildColumns(setEditUser, refetch),
-      data: users.data?.users ?? [],
-      rowCount: Number(users.data?.total_row_count ?? -1),
-      pagination: pagination(),
-      onPaginationChange: (s: PaginationState) => {
-        setSearchParams({
-          ...searchParams,
-          pageIndex: s.pageIndex,
-          pageSize: s.pageSize,
-        });
+    return buildTable(
+      {
+        columns: buildColumns(setEditUser, refetch),
+        data: users.data?.users ?? [],
+        rowCount: Number(users.data?.total_row_count ?? -1),
+        pagination: pagination(),
+        onPaginationChange: (s: PaginationState) => {
+          setSearchParams({
+            ...searchParams,
+            pageIndex: s.pageIndex,
+            pageSize: s.pageSize,
+          });
+        },
       },
-    });
+      {
+        manualSorting: true,
+        state: {
+          sorting: sorting(),
+        },
+        onSortingChange: setSorting,
+      },
+    );
   });
 
   return (
@@ -389,11 +411,7 @@ export function AccountsPage() {
 
             <Match when={users.data}>
               <div class="w-full space-y-2.5">
-                <Table
-                  table={accountsTable()}
-                  showPaginationControls={true}
-                  onRowClick={undefined}
-                />
+                <Table table={accountsTable()} onRowClick={undefined} />
               </div>
 
               <SafeSheet

@@ -11,8 +11,11 @@ import {
 } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import { createWritableMemo } from "@solid-primitives/memo";
-import { createColumnHelper } from "@tanstack/solid-table";
-import type { ColumnDef, PaginationState } from "@tanstack/solid-table";
+import type {
+  ColumnDef,
+  PaginationState,
+  SortingState,
+} from "@tanstack/solid-table";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { Chart } from "chart.js/auto";
 import type {
@@ -43,20 +46,20 @@ import {
 import { Table, buildTable } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 
-import { getLogs } from "@/lib/api/logs";
+import { fetchLogs } from "@/lib/api/logs";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
+import { formatSortingAsOrder } from "@/lib/list";
 
 import countriesGeoJSON from "@/assets/countries-110m.json";
 
 import type { LogJson } from "@bindings/LogJson";
 import type { Stats } from "@bindings/Stats";
 
-const columnHelper = createColumnHelper<LogJson>();
-
 const columns: ColumnDef<LogJson>[] = [
   // NOTE: ISO string contains milliseconds.
-  columnHelper.display({
+  {
     header: "Created",
+    accessorKey: "created",
     cell: (ctx) => {
       const secondsSinceEpoch = ctx.row.original.created;
       const timestamp = new Date(secondsSinceEpoch * 1000);
@@ -82,17 +85,21 @@ const columns: ColumnDef<LogJson>[] = [
         </div>
       );
     },
-  }),
+  },
   { accessorKey: "status" },
   { accessorKey: "method" },
   { accessorKey: "url" },
   {
+    // Used for sorting.
+    id: "latency",
     header: "Latency (ms)",
+    // Used for accessing the request (there's a rename from latency in DB to latency_ms in response)
     accessorKey: "latency_ms",
   },
   { accessorKey: "client_ip" },
   {
     header: "GeoIP",
+    enableSorting: false,
     cell: (ctx) => {
       const city = ctx.row.original.client_geoip_city;
       if (city) {
@@ -168,6 +175,8 @@ export function LogsPage() {
     });
   };
 
+  const [sorting, setSorting] = createSignal<SortingState>([]);
+
   // NOTE: admin user endpoint doesn't support offset, we have to cursor through
   // and cannot just jump to page N.
   const logsFetch = useQuery(() => ({
@@ -176,15 +185,18 @@ export function LogsPage() {
       searchParams.filter,
       pagination().pageSize,
       pagination().pageIndex,
+      sorting(),
     ],
     queryFn: async () => {
       const p = pagination();
       const c = cursors();
+      const s = sorting();
 
-      const response = await getLogs(
+      const response = await fetchLogs(
         p.pageSize,
         searchParams.filter,
         c[p.pageIndex - 1],
+        formatSortingAsOrder(s),
       );
 
       const cursor = response.cursor;
@@ -207,21 +219,30 @@ export function LogsPage() {
   const [columnPinningState, setColumnPinningState] = createSignal({});
 
   const logsTable = createMemo(() => {
-    return buildTable({
-      columns,
-      data: logsFetch.data?.entries ?? [],
-      columnPinning: columnPinningState,
-      onColumnPinningChange: setColumnPinningState,
-      rowCount: Number(logsFetch.data?.total_row_count ?? -1),
-      pagination: pagination(),
-      onPaginationChange: (s: PaginationState) => {
-        setSearchParams({
-          ...searchParams,
-          pageIndex: s.pageIndex,
-          pageSize: s.pageSize,
-        });
+    return buildTable(
+      {
+        columns,
+        data: logsFetch.data?.entries ?? [],
+        columnPinning: columnPinningState,
+        onColumnPinningChange: setColumnPinningState,
+        rowCount: Number(logsFetch.data?.total_row_count ?? -1),
+        pagination: pagination(),
+        onPaginationChange: (s: PaginationState) => {
+          setSearchParams({
+            ...searchParams,
+            pageIndex: s.pageIndex,
+            pageSize: s.pageSize,
+          });
+        },
       },
-    });
+      {
+        manualSorting: true,
+        state: {
+          sorting: sorting(),
+        },
+        onSortingChange: setSorting,
+      },
+    );
   });
 
   return (
@@ -311,7 +332,7 @@ export function LogsPage() {
               placeholder={`Filter Query, e.g. '(latency > 2 || status >= 400) && method = "GET"'`}
             />
 
-            <Table table={logsTable()} showPaginationControls={true} />
+            <Table table={logsTable()} />
           </Match>
         </Switch>
       </div>

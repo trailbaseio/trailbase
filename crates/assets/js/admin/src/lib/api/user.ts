@@ -31,6 +31,7 @@ export async function fetchUsers(
   filter: string | undefined,
   pageSize: number,
   pageIndex: number,
+  order?: string,
 ): Promise<ListUsersResponse> {
   const params = buildListSearchParams({
     filter,
@@ -38,6 +39,7 @@ export async function fetchUsers(
     pageIndex,
     // Users use UUIDv4 and cannot be cursored on `id`.
     cursor: undefined,
+    order,
   });
 
   const response = await adminFetch(`/user?${params}`);

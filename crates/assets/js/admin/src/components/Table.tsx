@@ -9,11 +9,15 @@ import {
 import type {
   ColumnDef,
   ColumnPinningState,
+  Header,
   PaginationState,
   Row,
-  Table as TableType,
+  Table as SolidTable,
+  TableOptions as SolidTableOptions,
+  SortingState,
+  Updater,
 } from "@tanstack/solid-table";
-import { TbPin, TbPinFilled } from "solid-icons/tb";
+import { TbPin, TbPinFilled, TbCaretDown, TbCaretUp } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -48,7 +52,10 @@ type TableOptions<TData, TValue> = {
   onColumnPinningChange?: (state: ColumnPinningState) => void;
 };
 
-export function buildTable<TData, TValue>(opts: TableOptions<TData, TValue>) {
+export function buildTable<TData, TValue>(
+  opts: TableOptions<TData, TValue>,
+  overrides?: Partial<SolidTableOptions<TData>>,
+) {
   console.debug("buildTable: ", opts);
 
   function buildColumns() {
@@ -112,9 +119,8 @@ export function buildTable<TData, TValue>(opts: TableOptions<TData, TValue>) {
     return state;
   }
 
-  const columns = buildColumns();
   const enableColumnPinning =
-    opts.columnPinning !== undefined && columns.length > 2;
+    opts.columnPinning !== undefined && opts.columns.length > 1;
 
   const t = createSolidTable({
     data: opts.data ?? [],
@@ -128,8 +134,10 @@ export function buildTable<TData, TValue>(opts: TableOptions<TData, TValue>) {
           : undefined,
       // rowSelection: rowSelection(),
       columnPinning: buildColumnPinningState(),
+
+      ...(overrides?.state ?? {}),
     },
-    columns,
+    columns: buildColumns(),
     getCoreRowModel: getCoreRowModel(),
 
     // NOTE: requires setting up the header cells with resize handles.
@@ -137,7 +145,7 @@ export function buildTable<TData, TValue>(opts: TableOptions<TData, TValue>) {
     // columnResizeMode: 'onChange',
 
     // pagination:
-    manualPagination: true,
+    manualPagination: opts.onPaginationChange !== undefined,
     onPaginationChange:
       opts.onPaginationChange !== undefined
         ? (updater) => {
@@ -175,21 +183,28 @@ export function buildTable<TData, TValue>(opts: TableOptions<TData, TValue>) {
             opts.onColumnPinningChange!(newState);
           }
         : undefined,
+
+    ...omit(overrides ?? {}, "state"),
   });
 
   return t;
 }
 
+function omit<T, K extends keyof T>(object: T, key: K): Omit<T, K> {
+  const { [key]: _deletedKey, ...otherKeys } = object;
+  return otherKeys;
+}
+
 export function Table<TData>(props: {
-  table: TableType<TData>;
+  table: SolidTable<TData>;
   onRowClick?: (idx: number, row: TData) => void;
-  showPaginationControls: boolean;
 }) {
-  const paginationEnabled = () => props.showPaginationControls;
+  const paginationEnabled = () => props.table.options.manualPagination ?? false;
   const paginationState = () => props.table.getState().pagination;
   const columns = () => props.table.options.columns;
   const numRows = () => props.table.getRowModel().rows?.length ?? 0;
-  const showPin = () => props.table.options.enableColumnPinning;
+  const enableSorting = () =>
+    props.table.options.manualSorting || props.table.options.enableSorting;
 
   return (
     <div>
@@ -207,61 +222,17 @@ export function Table<TData>(props: {
               {(headerGroup) => (
                 <TableRow>
                   <For each={headerGroup.headers}>
-                    {(header) => {
-                      const togglePin = () => {
-                        if (header.column.getIsPinned()) {
-                          header.column.pin(false);
-                        } else {
-                          header.column.pin("left");
+                    {(header) => (
+                      <TableHeaderRow
+                        header={header}
+                        enabledColumnPinning={
+                          props.table.options.enableColumnPinning ?? false
                         }
-                      };
-
-                      const HeadContents = () =>
-                        header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext(),
-                            );
-
-                      if (header.column.columnDef.id === "__select__") {
-                        return (
-                          <TableHead class={selectStyle}>
-                            <HeadContents />
-                          </TableHead>
-                        );
-                      }
-
-                      if (!showPin()) {
-                        return (
-                          <TableHead class="relative pr-5 pl-4">
-                            <HeadContents />
-                          </TableHead>
-                        );
-                      }
-
-                      return (
-                        <TableHead class="relative pr-5 pl-4">
-                          <HeadContents />
-
-                          {/* Pin Button */}
-                          <div class="absolute top-1 right-1 z-[10]">
-                            <Button
-                              class="size-4 bg-transparent"
-                              size="icon"
-                              variant="ghost"
-                              onClick={togglePin}
-                            >
-                              {header.column.getIsPinned() ? (
-                                <TbPinFilled />
-                              ) : (
-                                <TbPin />
-                              )}
-                            </Button>
-                          </div>
-                        </TableHead>
-                      );
-                    }}
+                        updateSorting={
+                          enableSorting() ? props.table.setSorting : undefined
+                        }
+                      />
+                    )}
                   </For>
                 </TableRow>
               )}
@@ -272,52 +243,9 @@ export function Table<TData>(props: {
             <Switch>
               <Match when={numRows() > 0}>
                 <For each={props.table.getRowModel().rows}>
-                  {(row) => {
-                    const onClick = () => {
-                      // Don't trigger on text selection.
-                      const selection = window.getSelection();
-                      if (selection?.toString()) {
-                        return;
-                      }
-
-                      const handler = props.onRowClick;
-                      if (!handler) {
-                        return;
-                      }
-                      handler(row.index, row.original);
-                    };
-
-                    return (
-                      <TableRow
-                        data-state={row.getIsSelected() && "selected"}
-                        onClick={onClick}
-                      >
-                        <For each={row.getVisibleCells()}>
-                          {(cell) => {
-                            const CellContents = () =>
-                              flexRender(
-                                cell.column.columnDef.cell,
-                                cell.getContext(),
-                              );
-
-                            if (cell.column.id == "__select__") {
-                              return (
-                                <TableCell class={selectStyle}>
-                                  <CellContents />
-                                </TableCell>
-                              );
-                            }
-
-                            return (
-                              <TableCell class="max-h-[80px] overflow-x-hidden overflow-y-auto break-words">
-                                <CellContents />
-                              </TableCell>
-                            );
-                          }}
-                        </For>
-                      </TableRow>
-                    );
-                  }}
+                  {(row) => (
+                    <TableDataRow row={row} onRowClick={props.onRowClick} />
+                  )}
                 </For>
               </Match>
 
@@ -344,8 +272,171 @@ export function Table<TData>(props: {
   );
 }
 
+function TableHeaderRow<TData>(props: {
+  header: Header<TData, unknown>;
+  enabledColumnPinning: boolean;
+  updateSorting?: (updater: Updater<SortingState>) => void;
+}) {
+  const toggleSorting = () => {
+    console.log(props.header.id, props.header.column.getCanSort());
+    {
+      /* eslint-disable solid/reactivity */
+    }
+    if (
+      props.updateSorting === undefined ||
+      !props.header.column.getCanSort()
+    ) {
+      return undefined;
+    }
+
+    return () => {
+      props.updateSorting?.((old) => {
+        const id = props.header.id;
+        if (old.length === 0 || old[0].id !== id) {
+          return [
+            {
+              id: props.header.id,
+              desc: true,
+            },
+          ];
+        }
+
+        console.assert(old[0].id === id);
+
+        switch (old[0].desc) {
+          case true:
+            return [
+              {
+                id: props.header.id,
+                desc: false,
+              },
+            ];
+          case false:
+            return [];
+        }
+      });
+    };
+  };
+
+  function HeadContents() {
+    return (
+      <Show when={!props.header.isPlaceholder}>
+        {flexRender(
+          props.header.column.columnDef.header,
+          props.header.getContext(),
+        )}
+      </Show>
+    );
+  }
+
+  return (
+    <Switch>
+      {/* Simple render for initial checkbox column. */}
+      <Match when={props.header.column.columnDef.id === "__select__"}>
+        <TableHead class={selectStyle}>
+          <HeadContents />
+        </TableHead>
+      </Match>
+
+      <Match when={true}>
+        <TableHead class="relative pr-5 pl-4" onClick={toggleSorting()}>
+          <HeadContents />
+
+          {/* Sorting arrow */}
+          <Switch>
+            <Match when={props.header.column.getIsSorted() === "asc"}>
+              <div class="absolute right-0 bottom-0 z-[10]">
+                <TbCaretUp size={20} />
+              </div>
+            </Match>
+
+            <Match when={props.header.column.getIsSorted() === "desc"}>
+              <div class="absolute right-0 bottom-0 z-[10]">
+                <TbCaretDown size={20} />
+              </div>
+            </Match>
+          </Switch>
+
+          {/* Pin Button */}
+          <Show when={props.enabledColumnPinning}>
+            <div class="absolute top-1 right-1 z-[10]">
+              <Button
+                class="size-4 bg-transparent"
+                size="icon"
+                variant="ghost"
+                onClick={(ev) => {
+                  ev.stopPropagation();
+
+                  if (props.header.column.getIsPinned()) {
+                    props.header.column.pin(false);
+                  } else {
+                    props.header.column.pin("left");
+                  }
+                }}
+              >
+                {props.header.column.getIsPinned() ? (
+                  <TbPinFilled />
+                ) : (
+                  <TbPin />
+                )}
+              </Button>
+            </div>
+          </Show>
+        </TableHead>
+      </Match>
+    </Switch>
+  );
+}
+
+function TableDataRow<TData>(props: {
+  row: Row<TData>;
+  onRowClick?: (idx: number, row: TData) => void;
+}) {
+  const onClick = () => {
+    // Don't trigger on text selection.
+    const selection = window.getSelection();
+    if (selection?.toString()) {
+      return;
+    }
+
+    const handler = props.onRowClick;
+    if (!handler) {
+      return;
+    }
+    handler(props.row.index, props.row.original);
+  };
+
+  return (
+    <TableRow
+      data-state={props.row.getIsSelected() && "selected"}
+      onClick={onClick}
+    >
+      <For each={props.row.getVisibleCells()}>
+        {(cell) => {
+          const CellContents = () =>
+            flexRender(cell.column.columnDef.cell, cell.getContext());
+
+          if (cell.column.id == "__select__") {
+            return (
+              <TableCell class={selectStyle}>
+                <CellContents />
+              </TableCell>
+            );
+          }
+
+          return (
+            <TableCell class="max-h-[80px] max-w-[50dvw] overflow-x-hidden overflow-y-auto break-words">
+              <CellContents />
+            </TableCell>
+          );
+        }}
+      </For>
+    </TableRow>
+  );
+}
+
 function PaginationControl<TData>(props: {
-  table: TableType<TData>;
+  table: SolidTable<TData>;
   rowCount?: number;
 }) {
   const table = () => props.table;

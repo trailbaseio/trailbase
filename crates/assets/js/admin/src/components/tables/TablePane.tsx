@@ -1,19 +1,21 @@
 import { Match, Show, Switch, createMemo, createSignal, JSX } from "solid-js";
+import type { Signal } from "solid-js";
 import { createWritableMemo } from "@solid-primitives/memo";
 import { TbRefresh, TbTable, TbTrash, TbColumns } from "solid-icons/tb";
 import { useSearchParams } from "@solidjs/router";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import type { QueryObserverResult } from "@tanstack/solid-query";
-import { urlSafeBase64Decode } from "trailbase";
 import type {
   CellContext,
   ColumnDef,
   ColumnPinningState,
   PaginationState,
   Row,
+  SortingState,
 } from "@tanstack/solid-table";
 import { createColumnHelper } from "@tanstack/solid-table";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
+import { urlSafeBase64Decode } from "trailbase";
 
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -69,6 +71,7 @@ import { urlSafeBase64ToUuid, toHex, safeParseInt } from "@/lib/utils";
 import { equalQualifiedNames } from "@/lib/schema";
 import { dropTable, dropIndex } from "@/lib/api/table";
 import { deleteRows, fetchRows } from "@/lib/api/row";
+import { formatSortingAsOrder } from "@/lib/list";
 import {
   findPrimaryKeyColumnIndex,
   getForeignKey,
@@ -442,6 +445,7 @@ async function buildTableState(
   pageSize: number,
   pageIndex: number,
   cursor: string | null,
+  sorting: SortingState,
 ): Promise<TableState> {
   const response = await fetchRows(
     selected.name,
@@ -449,6 +453,7 @@ async function buildTableState(
     pageSize,
     pageIndex,
     cursor,
+    formatSortingAsOrder(sorting),
   );
 
   return {
@@ -495,6 +500,8 @@ function buildColumnDefs(
     return {
       id: col.name,
       header,
+      enableSorting: true,
+      sortingFn: "alphanumeric",
       cell: (context) =>
         renderCell(
           context,
@@ -516,7 +523,8 @@ function ArrayRecordTable(props: {
   state: TableState;
   pagination: SimpleSignal<PaginationState>;
   filter: SimpleSignal<string | undefined>;
-  columnPinningState: SimpleSignal<ColumnPinningState>;
+  columnPinningState: Signal<ColumnPinningState>;
+  sorting: Signal<SortingState>;
   rowsRefetch: () => void;
 }) {
   const [blobEncoding, setBlobEncoding] = createSignal<BlobEncoding>("mixed");
@@ -546,36 +554,45 @@ function ArrayRecordTable(props: {
       blobEncoding(),
     );
 
-    return buildTable({
-      // NOTE: The cell rendering is constrolled via the columnsDefs.
-      columns,
-      data: data(),
-      columnPinning: props.columnPinningState[0],
-      onColumnPinningChange: props.columnPinningState[1],
-      rowCount: Number(totalRowCount()),
-      pagination: props.pagination[0](),
-      onPaginationChange: (s: PaginationState) => {
-        props.pagination[1](s);
-      },
-      onRowSelection: mutable()
-        ? // eslint-disable-next-line solid/reactivity
-          (rows: Row<ArrayRecord>[], value: boolean) => {
-            const newSelection = new Map<string, SqlValue>(selectedRows());
+    return buildTable(
+      {
+        // NOTE: The cell rendering is constrolled via the columnsDefs.
+        columns,
+        data: data(),
+        columnPinning: props.columnPinningState[0],
+        onColumnPinningChange: props.columnPinningState[1],
+        rowCount: Number(totalRowCount()),
+        pagination: props.pagination[0](),
+        onPaginationChange: (s: PaginationState) => {
+          props.pagination[1](s);
+        },
+        onRowSelection: mutable()
+          ? // eslint-disable-next-line solid/reactivity
+            (rows: Row<ArrayRecord>[], value: boolean) => {
+              const newSelection = new Map<string, SqlValue>(selectedRows());
 
-            for (const row of rows) {
-              const pkValue: SqlValue = row.original[pkColumnIndex()];
-              const key = hashSqlValue(pkValue);
+              for (const row of rows) {
+                const pkValue: SqlValue = row.original[pkColumnIndex()];
+                const key = hashSqlValue(pkValue);
 
-              if (value) {
-                newSelection.set(key, pkValue);
-              } else {
-                newSelection.delete(key);
+                if (value) {
+                  newSelection.set(key, pkValue);
+                } else {
+                  newSelection.delete(key);
+                }
               }
+              setSelectedRows(newSelection);
             }
-            setSelectedRows(newSelection);
-          }
-        : undefined,
-    });
+          : undefined,
+      },
+      {
+        manualSorting: true,
+        state: {
+          sorting: props.sorting[0](),
+        },
+        onSortingChange: props.sorting[1],
+      },
+    );
   });
 
   return (
@@ -616,7 +633,6 @@ function ArrayRecordTable(props: {
               <div class="overflow-x-auto pt-4">
                 <TableComponent
                   table={table()}
-                  showPaginationControls={true}
                   onRowClick={
                     mutable()
                       ? (_idx: number, row: ArrayRecord) => {
@@ -808,7 +824,6 @@ function IndexTable(props: {
               <div class="space-y-2.5 overflow-x-auto">
                 <TableComponent
                   table={indexesTable()}
-                  showPaginationControls={false}
                   onRowClick={
                     props.hidden
                       ? undefined
@@ -923,10 +938,7 @@ function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
       </p>
 
       <div class="mt-4">
-        <TableComponent
-          table={triggersTable()}
-          showPaginationControls={false}
-        />
+        <TableComponent table={triggersTable()} />
       </div>
     </div>
   );
@@ -976,6 +988,8 @@ export function TablePane(props: {
     });
   };
 
+  const [sorting, setSorting] = createSignal<SortingState>([]);
+
   const state: QueryObserverResult<TableState> = useQuery(() => ({
     queryKey: [
       "tableData",
@@ -983,12 +997,15 @@ export function TablePane(props: {
       searchParams.filter,
       pagination().pageIndex,
       pagination().pageSize,
+      sorting(),
     ],
     queryFn: async ({ queryKey }) => {
       const p = pagination();
       const c = cursors();
+      const s = sorting();
+
       console.debug(
-        `Fetching data for key: ${queryKey}, index: ${p.pageIndex}, cursors: ${c}`,
+        `Fetching data with key: ${queryKey}, index: ${p.pageIndex}, cursors: ${c}, sorting: ${s}`,
       );
 
       try {
@@ -998,6 +1015,7 @@ export function TablePane(props: {
           p.pageSize,
           p.pageIndex,
           c[p.pageIndex - 1],
+          s,
         );
 
         const cursor = state.response.cursor;
@@ -1062,6 +1080,7 @@ export function TablePane(props: {
               pagination={[pagination, setPagination]}
               filter={[filter, setFilter]}
               columnPinningState={[columnPinningState, setColumnPinningState]}
+              sorting={[sorting, setSorting]}
               rowsRefetch={rowsRefetch}
             />
           </Match>

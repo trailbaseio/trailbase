@@ -93,12 +93,14 @@ export async function fetchRows(
   pageSize: number,
   pageIndex: number,
   cursor: string | null,
+  order?: string,
 ): Promise<ListRowsResponse> {
   const params = buildListSearchParams({
     filter,
     pageSize,
     pageIndex,
     cursor,
+    order,
   });
 
   const path = `/table/${prettyFormatQualifiedName(tableName)}/rows?${params}`;
