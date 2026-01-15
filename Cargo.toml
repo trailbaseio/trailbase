@@ -76,6 +76,8 @@ askama = { version = "0.15.1", default-features = false, features = ["derive", "
 axum = { version = "^0.8.1", features = ["multipart"] }
 base64 = { version = "0.22.1", default-features = false, features = ["alloc", "std"] }
 env_logger = { version = "^0.11.8", default-features = false, features = ["auto-color", "humantime"] }
+graft = { git = "https://github.com/orbitinghail/graft", branch = "main" }
+graft-sqlite = { git = "https://github.com/orbitinghail/graft", branch = "main", features = ["register-static"] }
 libsqlite3-sys = { version = "0.36.0", default-features = false, features = ["bundled", "preupdate_hook"] }
 minijinja = { version = "2.1.2", default-features = false }
 parking_lot = { version = "0.12.3", default-features = false, features = ["send_guard", "arc_lock"] }

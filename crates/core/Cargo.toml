@@ -47,8 +47,8 @@ ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
 form_urlencoded = "1.2.1"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
-graft = { version = "0.2.1", optional = true }
-graft-sqlite = { version = "0.2.1", features = ["register-static"], optional = true }
+graft = { workspace = true, optional = true }
+graft-sqlite = { workspace = true, optional = true }
 http-body-util = "0.1.3"
 hyper = "1.6.0"
 hyper-util = "0.1.7"
