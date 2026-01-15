@@ -1,4 +1,12 @@
-import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js";
+import {
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  Show,
+  Signal,
+  Switch,
+} from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient } from "@tanstack/solid-query";
 
@@ -51,6 +59,7 @@ export function CreateAlterTableForm(props: {
   const [dryRunDialog, setDryRunDialog] = createSignal<string | undefined>();
 
   const isCreateTable = () => props.schema === undefined;
+  const cardExpandedState = new Map<number, Signal<boolean>>();
 
   const config = createConfigQuery();
   const dbSchemas = (): string[] => [
@@ -267,6 +276,11 @@ export function CreateAlterTableForm(props: {
                               colIndex={origIndex}
                               allTables={props.allTables}
                               disabled={!isCreateTable()}
+                              cardExpansion={getOrInsert(
+                                cardExpandedState,
+                                origIndex,
+                                () => createSignal(true),
+                              )}
                             />
                           </Match>
 
@@ -276,6 +290,11 @@ export function CreateAlterTableForm(props: {
                               colIndex={origIndex}
                               allTables={props.allTables}
                               disabled={false}
+                              cardExpansion={getOrInsert(
+                                cardExpandedState,
+                                origIndex,
+                                () => createSignal(true),
+                              )}
                               onDelete={onDelete}
                               onMoveUp={onMoveUp}
                               onMoveDown={onMoveDown}
@@ -481,6 +500,17 @@ function TextLabel(props: { text: string }) {
 
 function isDeleted(c: Column) {
   return c === DELETED_COLUMN_MARKER;
+}
+
+// JS' built-in `getOrInsert` not yet widely available: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/getOrInsert
+function getOrInsert<K, V>(map: Map<K, V>, key: K, defaultValue: () => V): V {
+  const v = map.get(key);
+  if (v !== undefined) {
+    return v;
+  }
+  const newV = defaultValue();
+  map.set(key, newV);
+  return newV;
 }
 
 const filterAndOrderColumns = (

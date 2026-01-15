@@ -1,5 +1,5 @@
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
-import type { JSX } from "solid-js";
+import { createEffect, createMemo, For, Show } from "solid-js";
+import type { JSX, Signal } from "solid-js";
 import { Collapsible } from "@kobalte/core/collapsible";
 import {
   TbChevronDown,
@@ -528,20 +528,27 @@ export function ColumnSubForm(props: {
   colIndex: number;
   allTables: Table[];
   disabled: boolean;
+  cardExpansion: Signal<boolean>;
   onDelete: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
 }): JSX.Element {
+  // eslint-disable-next-line solid/reactivity
+  const [expanded, setExpanded] = props.cardExpansion;
   const [name, setName] = createWritableMemo(() =>
     props.form.getFieldValue(`columns[${props.colIndex}].name`),
   );
 
-  // NOTE: createSignal state gets discarded when reordering columns, we should probably inject a signal instead.
-  const [expanded, setExpanded] = createSignal(true);
-
   const databaseSchema = createMemo(() =>
     props.form.useStore((state) => state.values.name.database_schema)(),
   );
+
+  const stopPropagation = (f?: () => void) => {
+    return (ev: MouseEvent) => {
+      ev.stopPropagation();
+      f?.();
+    };
+  };
 
   const Header = () => (
     <div class="flex items-center justify-between">
@@ -549,20 +556,29 @@ export function ColumnSubForm(props: {
 
       <div class="flex items-center">
         <Show when={props.onMoveUp}>
-          <IconButton onClick={props.onMoveUp}>
+          <IconButton
+            onClick={stopPropagation(props.onMoveUp)}
+            tooltip="Re-order column up"
+          >
             <TbArrowUp />
           </IconButton>
         </Show>
 
         <Show when={props.onMoveDown}>
-          <IconButton onClick={props.onMoveDown}>
+          <IconButton
+            onClick={stopPropagation(props.onMoveDown)}
+            tooltip="Re-order column down"
+          >
             <TbArrowDown />
           </IconButton>
         </Show>
 
         {/* Delete column button. */}
         <Show when={!props.disabled}>
-          <IconButton onClick={props.onDelete}>
+          <IconButton
+            onClick={stopPropagation(props.onDelete)}
+            tooltip="Delete column"
+          >
             <TbTrash />
           </IconButton>
         </Show>
@@ -689,13 +705,13 @@ export function PrimaryKeyColumnSubForm(props: {
   colIndex: number;
   allTables: Table[];
   disabled: boolean;
+  cardExpansion: Signal<boolean>;
 }): JSX.Element {
+  // eslint-disable-next-line solid/reactivity
+  const [expanded, setExpanded] = props.cardExpansion;
   const [name, setName] = createWritableMemo(() =>
     props.form.getFieldValue(`columns[${props.colIndex}].name`),
   );
-
-  // NOTE: createSignal state gets discarded when reordering columns, we should probably inject a signal instead.
-  const [expanded, setExpanded] = createSignal(false);
 
   const databaseSchema = createMemo(() =>
     props.form.useStore((state) => state.values.name.database_schema)(),
