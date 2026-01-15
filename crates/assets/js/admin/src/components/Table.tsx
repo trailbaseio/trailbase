@@ -140,7 +140,14 @@ export function buildTable<TData, TValue>(
     columns: buildColumns(),
     getCoreRowModel: getCoreRowModel(),
 
-    // NOTE: requires setting up the header cells with resize handles.
+    // Column default sizing
+    defaultColumn: {
+      // We consider "-1" as use flex.
+      size: -1,
+      minSize: -1,
+      maxSize: window.innerWidth / 2,
+    },
+    // TODO: Allow dynamic resizing.
     // enableColumnResizing: true,
     // columnResizeMode: 'onChange',
 
@@ -278,10 +285,7 @@ function TableHeaderRow<TData>(props: {
   updateSorting?: (updater: Updater<SortingState>) => void;
 }) {
   const toggleSorting = () => {
-    console.log(props.header.id, props.header.column.getCanSort());
-    {
-      /* eslint-disable solid/reactivity */
-    }
+    /* eslint-disable solid/reactivity */
     if (
       props.updateSorting === undefined ||
       !props.header.column.getCanSort()
@@ -413,21 +417,29 @@ function TableDataRow<TData>(props: {
     >
       <For each={props.row.getVisibleCells()}>
         {(cell) => {
-          const CellContents = () =>
-            flexRender(cell.column.columnDef.cell, cell.getContext());
-
-          if (cell.column.id == "__select__") {
-            return (
-              <TableCell class={selectStyle}>
-                <CellContents />
-              </TableCell>
-            );
-          }
+          const size = cell.column.getSize();
+          const width = size > 0 ? `${size}px` : undefined;
+          const style =
+            cell.column.id == "__select__"
+              ? selectStyle
+              : "max-h-[80px] max-w-[50dvw] overflow-x-hidden overflow-y-auto break-words";
 
           return (
-            <TableCell class="max-h-[80px] max-w-[50dvw] overflow-x-hidden overflow-y-auto break-words">
-              <CellContents />
-            </TableCell>
+            <Switch>
+              <Match when={width !== undefined}>
+                <TableCell>
+                  <div class={style} style={{ width }}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </div>
+                </TableCell>
+              </Match>
+
+              <Match when={width === undefined}>
+                <TableCell class={style}>
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </TableCell>
+              </Match>
+            </Switch>
           );
         }}
       </For>

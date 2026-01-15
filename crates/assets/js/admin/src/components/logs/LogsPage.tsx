@@ -60,6 +60,7 @@ const columns: ColumnDef<LogJson>[] = [
   {
     header: "Created",
     accessorKey: "created",
+    size: 120,
     cell: (ctx) => {
       const secondsSinceEpoch = ctx.row.original.created;
       const timestamp = new Date(secondsSinceEpoch * 1000);
@@ -67,9 +68,7 @@ const columns: ColumnDef<LogJson>[] = [
         <div class="flex items-center">
           <Tooltip>
             <TooltipTrigger as="div">
-              <div class="w-[128px]">
-                {timestamp.toISOString().replace(/T/, " ")}
-              </div>
+              {timestamp.toISOString().replace(/T/, " ")}
             </TooltipTrigger>
 
             <TooltipContent>
@@ -86,17 +85,31 @@ const columns: ColumnDef<LogJson>[] = [
       );
     },
   },
-  { accessorKey: "status" },
-  { accessorKey: "method" },
-  { accessorKey: "url" },
+  {
+    accessorKey: "status",
+    size: 60,
+  },
+  {
+    accessorKey: "method",
+    size: 80,
+  },
+  {
+    accessorKey: "url",
+    size: 340,
+  },
   {
     // Used for sorting.
     id: "latency",
-    header: "Latency (ms)",
+    header: "latency (ms)",
     // Used for accessing the request (there's a rename from latency in DB to latency_ms in response)
     accessorKey: "latency_ms",
+    size: 80,
+    cell: (ctx) => ctx.row.original.latency_ms.toFixed(6),
   },
-  { accessorKey: "client_ip" },
+  {
+    accessorKey: "client_ip",
+    size: 120,
+  },
   {
     header: "GeoIP",
     enableSorting: false,
@@ -107,10 +120,15 @@ const columns: ColumnDef<LogJson>[] = [
       }
       return ctx.row.original.client_geoip_cc;
     },
+    size: -1,
   },
-  { accessorKey: "referer" },
+  {
+    accessorKey: "referer",
+    size: 200,
+  },
   {
     accessorKey: "user_agent",
+    size: 200,
     cell: (ctx) => {
       return (
         <div class="flex items-center">
@@ -129,6 +147,7 @@ const columns: ColumnDef<LogJson>[] = [
   },
   {
     accessorKey: "user_id",
+    size: 300,
     cell: (ctx) => {
       const userId = () => ctx.row.original.user_id;
       return (

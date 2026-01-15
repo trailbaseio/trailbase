@@ -65,8 +65,8 @@ function buildColumns(
   // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
   return [
     {
-      header: "id",
       accessorKey: "id",
+      size: 300,
       cell: (ctx) => {
         const userId = ctx.row.original.id;
         return (
@@ -80,11 +80,10 @@ function buildColumns(
       },
     },
     {
-      header: "email",
       accessorKey: "email",
+      size: 240,
     },
     {
-      header: "verified",
       accessorKey: "verified",
     },
     {
@@ -108,15 +107,14 @@ function buildColumns(
         );
       },
     },
-    columnHelper.accessor("id", {
-      header: "admin",
-      enableSorting: false,
+    {
+      accessorKey: "admin",
       cell: (ctx) => (
         <div class="flex justify-center">
           {ctx.row.original.admin ? <TbCrown size={18} /> : null}
         </div>
       ),
-    }) as ColumnDef<UserJson>,
+    },
     columnHelper.display({
       header: "actions",
       enableSorting: false,
