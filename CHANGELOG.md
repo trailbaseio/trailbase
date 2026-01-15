@@ -1,3 +1,13 @@
+## v0.22.12
+
+- Enable sorting of columns in table explorer, logs and accounts page 🎉.
+- Update column's data type when picking a foreign key table in create/alter table form.
+- Reduce table jank by setting fixed sizes for well-known columns.
+- Fix stability (e.g. during re-ordering) of column card's accordion collapse state.
+- Add execution timestamp to any SQL editor's execution result, including errors.
+- Cleanup: split table state from table UI.
+- Update Rust and JavaScript dependencies.
+
 ## v0.22.11
 
 - Allow re-ordering of columns in Create/Alter table admin UI.
