@@ -27,6 +27,8 @@ harness = false
 default = ["wasm"]
 wasm = ["dep:trailbase-wasm-runtime-host"]
 otel = ["dep:axum-tracing-opentelemetry", "dep:init-tracing-opentelemetry"]
+# Enable axum's "ws" feature: https://doc.rust-lang.org/cargo/reference/features.html#dependency-features
+ws = ["axum/ws"]
 
 [dependencies]
 aes-gcm-siv = "0.11.1"

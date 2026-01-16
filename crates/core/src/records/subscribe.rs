@@ -1,4 +1,4 @@
-use async_channel::WeakReceiver;
+use async_channel::{TrySendError, WeakReceiver};
 use axum::extract::{Path, RawQuery, State};
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
@@ -11,8 +11,8 @@ use rusqlite::hooks::{Action, PreUpdateCase};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, hash_map::Entry};
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{Arc, LazyLock};
 use std::task::{Context, Poll};
 use trailbase_qs::FilterQuery;
 use trailbase_schema::QualifiedName;
@@ -99,6 +99,39 @@ pub enum RecordAction {
   Update,
 }
 
+#[cfg(not(feature = "ws"))]
+#[derive(Clone, Debug)]
+pub enum Event {
+  Sse(SseEvent),
+}
+
+#[cfg(feature = "ws")]
+#[derive(Clone, Debug)]
+pub enum Event {
+  Sse(SseEvent),
+  Json(String),
+}
+
+impl Event {
+  #[inline]
+  fn into_sse_event(self) -> Result<SseEvent, axum::Error> {
+    return match self {
+      Self::Sse(ev) => Ok(ev),
+      #[cfg(feature = "ws")]
+      Self::Json(s) => Ok(SseEvent::default().data(&s)),
+    };
+  }
+
+  #[cfg(feature = "ws")]
+  #[inline]
+  fn into_ws_event(self) -> Result<axum::extract::ws::Message, &'static str> {
+    return match self {
+      Self::Sse(_ev) => Err("Got SSE event in WS mode"),
+      Self::Json(s) => Ok(axum::extract::ws::Message::Text(s.into())),
+    };
+  }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DbEvent {
   Update(Option<serde_json::Value>),
@@ -107,9 +140,20 @@ pub enum DbEvent {
   Error(String),
 }
 
-#[derive(Clone, Debug)]
-pub enum Event {
-  Sse(SseEvent),
+impl DbEvent {
+  #[cfg(not(feature = "ws"))]
+  #[inline]
+  fn into_event(self) -> Result<Event, axum::Error> {
+    return Ok(Event::Sse(SseEvent::default().json_data(self)?));
+  }
+
+  #[cfg(feature = "ws")]
+  #[inline]
+  fn into_event(self) -> Result<Event, axum::Error> {
+    return Ok(Event::Json(
+      serde_json::to_string(&self).map_err(|err| axum::Error::new(err))?,
+    ));
+  }
 }
 
 pub struct Subscription {
@@ -321,11 +365,13 @@ impl PerConnectionState {
     }
 
     // Send an immediate comment to flush SSE headers and establish the connection
-    let _ = sender
-      .send(Event::Sse(
-        SseEvent::default().comment("subscription established"),
-      ))
-      .await;
+    if sender
+      .send(Event::Sse(ESTABLISHED_EVENT.clone()))
+      .await
+      .is_err()
+    {
+      return Err(RecordError::BadRequest("channel already closed"));
+    }
 
     return Ok(AutoCleanupEventStream {
       state: AutoCleanupEventStreamState {
@@ -378,11 +424,13 @@ impl PerConnectionState {
     }
 
     // Send an immediate comment to flush SSE headers and establish the connection
-    let _ = sender
-      .send(Event::Sse(
-        SseEvent::default().comment("subscription established"),
-      ))
-      .await;
+    if sender
+      .send(Event::Sse(ESTABLISHED_EVENT.clone()))
+      .await
+      .is_err()
+    {
+      return Err(RecordError::BadRequest("channel already closed"));
+    }
 
     return Ok(AutoCleanupEventStream {
       state: AutoCleanupEventStreamState {
@@ -596,12 +644,14 @@ fn broker_subscriptions(
       if record_subscriptions {
         // This can happen if the record api configuration has changed since originally
         // subscribed. In this case we just send and error and cancel the subscription.
-        if let Ok(ev) = SseEvent::default().json_data(DbEvent::Error("Access denied".into())) {
-          let _ = sub.sender.try_send(Event::Sse(ev));
-        }
+        match sub.sender.try_send(Event::Sse(ACCESS_DENIED_EVENT.clone())) {
+          Ok(_) | Err(TrySendError::Full(_)) => {
+            sub.sender.close();
+          }
+          Err(TrySendError::Closed(_)) => {}
+        };
 
         dead_subscriptions.push(idx);
-        sub.sender.close();
       }
       continue;
     }
@@ -611,7 +661,7 @@ fn broker_subscriptions(
     if let Err(err) = sub.sender.try_send(event.clone()) {
       match err {
         async_channel::TrySendError::Full(ev) => {
-          info!("Channel full, dropping event: {ev:?}");
+          debug!("Channel full, dropping event: {ev:?}");
         }
         async_channel::TrySendError::Closed(_ev) => {
           dead_subscriptions.push(idx);
@@ -657,7 +707,7 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
     .collect();
 
   // Build a JSON-encoded SQLite event (insert, update, delete).
-  let event = {
+  let event: Event = {
     let json_value = serde_json::Value::Object(
       record
         .iter()
@@ -675,11 +725,11 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
       RecordAction::Update => DbEvent::Update(Some(json_value)),
     };
 
-    let Ok(event) = SseEvent::default().json_data(db_event) else {
+    let Ok(event) = db_event.into_event() else {
       return;
     };
 
-    Event::Sse(event)
+    event
   };
 
   let mut read_lock = state.subscriptions.upgradable_read();
@@ -801,11 +851,9 @@ pub async fn add_subscription_sse_handler(
         .await?;
 
       Ok(
-        Sse::new(receiver.map(|ev| match ev {
-          Event::Sse(ev) => Ok::<_, axum::Error>(ev),
-        }))
-        .keep_alive(KeepAlive::default())
-        .into_response(),
+        Sse::new(receiver.map(|ev| ev.into_sse_event()))
+          .keep_alive(KeepAlive::default())
+          .into_response(),
       )
     }
     _ => {
@@ -820,17 +868,118 @@ pub async fn add_subscription_sse_handler(
         .await?;
 
       Ok(
-        Sse::new(receiver.map(|ev| match ev {
-          Event::Sse(ev) => Ok::<_, axum::Error>(ev),
-        }))
-        .keep_alive(KeepAlive::default())
-        .into_response(),
+        Sse::new(receiver.map(|ev| ev.into_sse_event()))
+          .keep_alive(KeepAlive::default())
+          .into_response(),
       )
     }
   };
 }
 
+#[cfg(feature = "ws")]
+pub async fn add_subscription_ws_handler(
+  State(state): State<AppState>,
+  ws: axum::extract::ws::WebSocketUpgrade,
+  Path((api_name, record)): Path<(String, String)>,
+  RawQuery(raw_url_query): RawQuery,
+  user: Option<User>,
+) -> Result<Response, RecordError> {
+  use axum::extract::ws::WebSocket;
+  use futures_util::SinkExt;
+
+  let Some(api) = state.lookup_record_api(&api_name) else {
+    return Err(RecordError::ApiNotFound);
+  };
+
+  if !api.enable_subscriptions() {
+    return Err(RecordError::Forbidden);
+  }
+
+  let FilterQuery { filter } = raw_url_query
+    .as_ref()
+    .map_or_else(
+      || Ok(FilterQuery::default()),
+      |query| FilterQuery::parse(query),
+    )
+    .map_err(|_err| {
+      return RecordError::BadRequest("Invalid query");
+    })?;
+
+  return match record.as_str() {
+    "*" => {
+      api.check_table_level_access(Permission::Read, user.as_ref())?;
+
+      let receiver = state
+        .subscription_manager()
+        .add_table_subscription(api, user, filter)
+        .await?;
+
+      Ok(ws.on_upgrade(async |socket: WebSocket| {
+        let (mut sender, _) = socket.split();
+
+        let mut pinned_receiver = std::pin::pin!(receiver);
+        while let Some(ev) = pinned_receiver.next().await {
+          match ev.into_ws_event() {
+            Ok(msg) => {
+              if let Err(axum_err) = sender.send(msg).await {
+                debug!("{axum_err}");
+                let _ = sender.close();
+                return;
+              }
+            }
+            Err(err) => {
+              warn!("{err}");
+              let _ = sender.close();
+              return;
+            }
+          };
+        }
+      }))
+    }
+    _ => {
+      let record_id = api.primary_key_to_value(record)?;
+      api
+        .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
+        .await?;
+
+      let receiver = state
+        .subscription_manager()
+        .add_record_subscription(api, record_id, user)
+        .await?;
+
+      Ok(ws.on_upgrade(async |socket: WebSocket| {
+        let (mut sender, _) = socket.split();
+
+        let mut pinned_receiver = std::pin::pin!(receiver);
+        while let Some(ev) = pinned_receiver.next().await {
+          match ev.into_ws_event() {
+            Ok(msg) => {
+              if let Err(axum_err) = sender.send(msg).await {
+                debug!("{axum_err}");
+                let _ = sender.close();
+                return;
+              }
+            }
+            Err(err) => {
+              warn!("{err}");
+              let _ = sender.close();
+              return;
+            }
+          };
+        }
+      }))
+    }
+  };
+}
+
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
+static ACCESS_DENIED_EVENT: LazyLock<SseEvent> = LazyLock::new(|| {
+  SseEvent::default()
+    .json_data(DbEvent::Error("Access denied".into()))
+    .expect("static")
+});
+static ESTABLISHED_EVENT: LazyLock<SseEvent> =
+  LazyLock::new(|| SseEvent::default().comment("subscription established"));
 
 const NO_HOOK: Option<fn(Action, &str, &str, &PreUpdateCase)> = None;
 
@@ -852,9 +1001,11 @@ mod tests {
   use crate::records::test_utils::add_record_api_config;
   use crate::util::uuid_to_b64;
 
-  async fn decode_db_event(event: Event) -> Option<DbEvent> {
-    return match event {
+  async fn decode_db_event(ev: Event) -> Option<DbEvent> {
+    return match ev {
       Event::Sse(ev) => decode_sse_db_event(ev).await,
+      #[cfg(feature = "ws")]
+      Event::Json(s) => serde_json::from_str(&s).ok(),
     };
   }
 
@@ -890,6 +1041,12 @@ mod tests {
     let event = Event::Sse(SseEvent::default().json_data(db_event.clone()).unwrap());
 
     assert_eq!(decode_db_event(event).await.unwrap(), db_event);
+  }
+
+  #[tokio::test]
+  async fn static_sse_event_test() {
+    let _x: SseEvent = (*ACCESS_DENIED_EVENT).clone();
+    let _y: SseEvent = (*ESTABLISHED_EVENT).clone();
   }
 
   async fn setup_world_readable() -> AppState {
