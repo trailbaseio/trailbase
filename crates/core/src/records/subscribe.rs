@@ -318,7 +318,7 @@ impl PerConnectionState {
     api: RecordApi,
     record: trailbase_sqlite::Value,
     user: Option<User>,
-  ) -> Result<AutoCleanupEventStream, RecordError> {
+  ) -> Result<(async_channel::Sender<Event>, AutoCleanupEventStream), RecordError> {
     let table_name = api.table_name();
     let qualified_table_name = api.qualified_name().clone();
 
@@ -364,27 +364,21 @@ impl PerConnectionState {
       self.add_hook(api);
     }
 
-    // Send an immediate comment to flush SSE headers and establish the connection
-    if sender
-      .send(Event::Sse(ESTABLISHED_EVENT.clone()))
-      .await
-      .is_err()
-    {
-      return Err(RecordError::BadRequest("channel already closed"));
-    }
-
-    return Ok(AutoCleanupEventStream {
-      state: AutoCleanupEventStreamState {
-        receiver: receiver.downgrade(),
-        state: self,
-        id: SubscriptionId {
-          table_name: qualified_table_name,
-          row_id: Some(row_id),
-          sub_id: subscription_id,
+    return Ok((
+      sender,
+      AutoCleanupEventStream {
+        state: AutoCleanupEventStreamState {
+          receiver: receiver.downgrade(),
+          state: self,
+          id: SubscriptionId {
+            table_name: qualified_table_name,
+            row_id: Some(row_id),
+            sub_id: subscription_id,
+          },
         },
+        receiver,
       },
-      receiver,
-    });
+    ));
   }
 
   async fn add_table_subscription(
@@ -392,7 +386,7 @@ impl PerConnectionState {
     api: RecordApi,
     user: Option<User>,
     filter: Option<trailbase_qs::ValueOrComposite>,
-  ) -> Result<AutoCleanupEventStream, RecordError> {
+  ) -> Result<(async_channel::Sender<Event>, AutoCleanupEventStream), RecordError> {
     let table_name = api.qualified_name().clone();
 
     let filter = if let Some(filter) = filter {
@@ -423,27 +417,21 @@ impl PerConnectionState {
       self.add_hook(api);
     }
 
-    // Send an immediate comment to flush SSE headers and establish the connection
-    if sender
-      .send(Event::Sse(ESTABLISHED_EVENT.clone()))
-      .await
-      .is_err()
-    {
-      return Err(RecordError::BadRequest("channel already closed"));
-    }
-
-    return Ok(AutoCleanupEventStream {
-      state: AutoCleanupEventStreamState {
-        receiver: receiver.downgrade(),
-        state: self,
-        id: SubscriptionId {
-          table_name,
-          row_id: None,
-          sub_id: subscription_id,
+    return Ok((
+      sender,
+      AutoCleanupEventStream {
+        state: AutoCleanupEventStreamState {
+          receiver: receiver.downgrade(),
+          state: self,
+          id: SubscriptionId {
+            table_name,
+            row_id: None,
+            sub_id: subscription_id,
+          },
         },
+        receiver,
       },
-      receiver,
-    });
+    ));
   }
 }
 
@@ -537,28 +525,42 @@ impl SubscriptionManager {
     return Self { state };
   }
 
-  async fn add_table_subscription(
+  async fn add_sse_table_subscription(
     &self,
     api: RecordApi,
     user: Option<User>,
     filter: Option<trailbase_qs::ValueOrComposite>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
-    return self
+    let (sender, receiver) = self
       .get_per_connection_state(&api)
       .add_table_subscription(api, user, filter)
-      .await;
+      .await?;
+
+    // Send an immediate comment to flush SSE headers and establish the connection
+    if sender.send(ESTABLISHED_EVENT.clone()).await.is_err() {
+      return Err(RecordError::BadRequest("channel already closed"));
+    }
+
+    return Ok(receiver);
   }
 
-  async fn add_record_subscription(
+  async fn add_sse_record_subscription(
     &self,
     api: RecordApi,
     record: trailbase_sqlite::Value,
     user: Option<User>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
-    return self
+    let (sender, receiver) = self
       .get_per_connection_state(&api)
       .add_record_subscription(api, record, user)
-      .await;
+      .await?;
+
+    // Send an immediate comment to flush SSE headers and establish the connection
+    if sender.send(ESTABLISHED_EVENT.clone()).await.is_err() {
+      return Err(RecordError::BadRequest("channel already closed"));
+    }
+
+    return Ok(receiver);
   }
 
   fn get_per_connection_state(&self, api: &RecordApi) -> Arc<PerConnectionState> {
@@ -644,7 +646,7 @@ fn broker_subscriptions(
       if record_subscriptions {
         // This can happen if the record api configuration has changed since originally
         // subscribed. In this case we just send and error and cancel the subscription.
-        match sub.sender.try_send(Event::Sse(ACCESS_DENIED_EVENT.clone())) {
+        match sub.sender.try_send(ACCESS_DENIED_EVENT.clone()) {
           Ok(_) | Err(TrySendError::Full(_)) => {
             sub.sender.close();
           }
@@ -847,7 +849,7 @@ pub async fn add_subscription_sse_handler(
 
       let receiver = state
         .subscription_manager()
-        .add_table_subscription(api, user, filter)
+        .add_sse_table_subscription(api, user, filter)
         .await?;
 
       Ok(
@@ -864,7 +866,7 @@ pub async fn add_subscription_sse_handler(
 
       let receiver = state
         .subscription_manager()
-        .add_record_subscription(api, record_id, user)
+        .add_sse_record_subscription(api, record_id, user)
         .await?;
 
       Ok(
@@ -905,36 +907,37 @@ pub async fn add_subscription_ws_handler(
       return RecordError::BadRequest("Invalid query");
     })?;
 
+  async fn on_upgrade(socket: WebSocket, receiver: AutoCleanupEventStream) {
+    let (mut sender, _) = socket.split();
+
+    let mut pinned_receiver = std::pin::pin!(receiver);
+    while let Some(ev) = pinned_receiver.next().await {
+      match ev.into_ws_event() {
+        Ok(msg) => {
+          if let Err(axum_err) = sender.send(msg).await {
+            debug!("{axum_err}");
+            let _ = sender.close();
+            return;
+          }
+        }
+        Err(err) => {
+          debug_assert!(false, "into_ws_event failed: {err}");
+        }
+      };
+    }
+  }
+
   return match record.as_str() {
     "*" => {
       api.check_table_level_access(Permission::Read, user.as_ref())?;
 
-      let receiver = state
+      let (_sender, receiver) = state
         .subscription_manager()
+        .get_per_connection_state(&api)
         .add_table_subscription(api, user, filter)
         .await?;
 
-      Ok(ws.on_upgrade(async |socket: WebSocket| {
-        let (mut sender, _) = socket.split();
-
-        let mut pinned_receiver = std::pin::pin!(receiver);
-        while let Some(ev) = pinned_receiver.next().await {
-          match ev.into_ws_event() {
-            Ok(msg) => {
-              if let Err(axum_err) = sender.send(msg).await {
-                debug!("{axum_err}");
-                let _ = sender.close();
-                return;
-              }
-            }
-            Err(err) => {
-              warn!("{err}");
-              let _ = sender.close();
-              return;
-            }
-          };
-        }
-      }))
+      Ok(ws.on_upgrade(async |socket| on_upgrade(socket, receiver).await))
     }
     _ => {
       let record_id = api.primary_key_to_value(record)?;
@@ -942,44 +945,33 @@ pub async fn add_subscription_ws_handler(
         .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
         .await?;
 
-      let receiver = state
+      let (_sender, receiver) = state
         .subscription_manager()
+        .get_per_connection_state(&api)
         .add_record_subscription(api, record_id, user)
         .await?;
 
-      Ok(ws.on_upgrade(async |socket: WebSocket| {
-        let (mut sender, _) = socket.split();
-
-        let mut pinned_receiver = std::pin::pin!(receiver);
-        while let Some(ev) = pinned_receiver.next().await {
-          match ev.into_ws_event() {
-            Ok(msg) => {
-              if let Err(axum_err) = sender.send(msg).await {
-                debug!("{axum_err}");
-                let _ = sender.close();
-                return;
-              }
-            }
-            Err(err) => {
-              warn!("{err}");
-              let _ = sender.close();
-              return;
-            }
-          };
-        }
-      }))
+      Ok(ws.on_upgrade(async |socket| on_upgrade(socket, receiver).await))
     }
   };
 }
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
-static ACCESS_DENIED_EVENT: LazyLock<SseEvent> = LazyLock::new(|| {
-  SseEvent::default()
-    .json_data(DbEvent::Error("Access denied".into()))
-    .expect("static")
+static ACCESS_DENIED_EVENT: LazyLock<Event> = LazyLock::new(|| {
+  #[cfg(not(feature = "ws"))]
+  return Event::Sse(
+    SseEvent::default()
+      .json_data(DbEvent::Error("Access denied".into()))
+      .expect("static"),
+  );
+
+  #[cfg(feature = "ws")]
+  return Event::Json(
+    serde_json::to_string(&DbEvent::Error("Access denied".into())).expect("static"),
+  );
 });
-static ESTABLISHED_EVENT: LazyLock<SseEvent> =
-  LazyLock::new(|| SseEvent::default().comment("subscription established"));
+static ESTABLISHED_EVENT: LazyLock<Event> =
+  LazyLock::new(|| Event::Sse(SseEvent::default().comment("subscription established")));
 
 const NO_HOOK: Option<fn(Action, &str, &str, &PreUpdateCase)> = None;
 
@@ -1045,8 +1037,8 @@ mod tests {
 
   #[tokio::test]
   async fn static_sse_event_test() {
-    let _x: SseEvent = (*ACCESS_DENIED_EVENT).clone();
-    let _y: SseEvent = (*ESTABLISHED_EVENT).clone();
+    let _x: Event = (*ACCESS_DENIED_EVENT).clone();
+    let _y: Event = (*ESTABLISHED_EVENT).clone();
   }
 
   async fn setup_world_readable() -> AppState {
@@ -1102,7 +1094,7 @@ mod tests {
     let manager = state.subscription_manager();
     let api = state.lookup_record_api("api_name").unwrap();
     let stream = manager
-      .add_record_subscription(api, trailbase_sqlite::Value::Integer(0), None)
+      .add_sse_record_subscription(api, trailbase_sqlite::Value::Integer(0), None)
       .await
       .unwrap();
 
@@ -1189,7 +1181,7 @@ mod tests {
 
     {
       let stream = manager
-        .add_table_subscription(api, None, None)
+        .add_sse_table_subscription(api, None, None)
         .await
         .unwrap();
 
@@ -1464,7 +1456,7 @@ mod tests {
     // Assert events for table subscriptions are selective on ACLs.
     {
       let user_x_subscription = manager
-        .add_table_subscription(
+        .add_sse_table_subscription(
           api.clone(),
           User::from_auth_token(&state, &user_x_token.auth_token),
           None,
@@ -1480,7 +1472,7 @@ mod tests {
       );
 
       let user_y_subscription = manager
-        .add_table_subscription(
+        .add_sse_table_subscription(
           api.clone(),
           User::from_auth_token(&state, &user_y_token.auth_token),
           None,
@@ -1573,7 +1565,7 @@ mod tests {
     let manager = state.subscription_manager();
     let api = state.lookup_record_api("api_name").unwrap();
     let stream = manager
-      .add_record_subscription(api, trailbase_sqlite::Value::Integer(record_id), user_x)
+      .add_sse_record_subscription(api, trailbase_sqlite::Value::Integer(record_id), user_x)
       .await
       .unwrap();
 
@@ -1646,7 +1638,7 @@ mod tests {
         FilterQuery::parse("filter[$and][0][id][$gt]=5&filter[$and][1][id][$lt]=100").unwrap();
 
       let stream = manager
-        .add_table_subscription(api, None, Some(filter.filter.unwrap()))
+        .add_sse_table_subscription(api, None, Some(filter.filter.unwrap()))
         .await
         .unwrap();
 

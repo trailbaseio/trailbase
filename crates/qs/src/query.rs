@@ -336,6 +336,15 @@ mod tests {
       }
     );
     assert!(Query::parse("offset=-1").is_err());
+
+    // Make sure, unknown query paramms are simply ignored.
+    assert_eq!(
+      Query::parse("count=FALSE&unknown=2").unwrap(),
+      Query {
+        count: Some(false),
+        ..Default::default()
+      }
+    );
   }
 
   #[test]
