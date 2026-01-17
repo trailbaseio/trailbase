@@ -15,6 +15,7 @@ name = "trail"
 default = []
 swagger = ["dep:utoipa-swagger-ui"]
 vendor-ssl = ["dep:openssl"]
+ws = ["trailbase/ws"]
 
 [dependencies]
 axum = { version = "^0.8.1", features=["multipart"] }
