@@ -1,6 +1,5 @@
 use base64::prelude::*;
 use futures_lite::StreamExt;
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use temp_dir::TempDir;
@@ -9,49 +8,61 @@ use trailbase_client::{
 };
 
 struct Server {
-  child: std::process::Child,
+  child: Option<std::process::Child>,
 }
 
 impl Drop for Server {
   fn drop(&mut self) {
-    self.child.kill().unwrap();
+    if let Some(mut child) = std::mem::take(&mut self.child) {
+      child.kill().unwrap();
+    }
   }
 }
 
-const PORT: u16 = 4057;
-lazy_static! {
-  static ref SITE: String = format!("http://127.0.0.1:{PORT}");
+fn port() -> u16 {
+  const DEFAULT_PORT: u16 = 4057;
+  if let Ok(port) = std::env::var("PORT") {
+    return port.parse().unwrap_or(DEFAULT_PORT);
+  }
+  return DEFAULT_PORT;
+}
+
+fn site() -> String {
+  return format!("http://127.0.0.1:{}", port());
 }
 
 fn start_server() -> Result<Option<Server>, std::io::Error> {
-  if PORT == 4000 {
+  let child = if port() == 4000 {
     // Use an externally bootstrapped server.
-    return Ok(None);
-  }
+    None
+  } else {
+    let cwd = std::env::current_dir()?;
+    assert!(cwd.ends_with("client"));
 
-  let cwd = std::env::current_dir()?;
-  assert!(cwd.ends_with("client"));
+    let command_cwd = cwd.parent().unwrap().parent().unwrap();
+    let depot_path = "client/testfixture";
 
-  let command_cwd = cwd.parent().unwrap().parent().unwrap();
-  let depot_path = "client/testfixture";
+    let _output = std::process::Command::new("cargo")
+      .args(&["build"])
+      .current_dir(&command_cwd)
+      .output()?;
 
-  let _output = std::process::Command::new("cargo")
-    .args(&["build"])
-    .current_dir(&command_cwd)
-    .output()?;
+    let args = [
+      "run".to_string(),
+      "--".to_string(),
+      format!("--data-dir={depot_path}"),
+      "run".to_string(),
+      format!("--address=127.0.0.1:{}", port()),
+      "--runtime-threads=2".to_string(),
+    ];
 
-  let args = [
-    "run".to_string(),
-    "--".to_string(),
-    format!("--data-dir={depot_path}"),
-    "run".to_string(),
-    format!("--address=127.0.0.1:{PORT}"),
-    "--runtime-threads=2".to_string(),
-  ];
-  let child = std::process::Command::new("cargo")
-    .args(&args)
-    .current_dir(&command_cwd)
-    .spawn()?;
+    Some(
+      std::process::Command::new("cargo")
+        .args(&args)
+        .current_dir(&command_cwd)
+        .spawn()?,
+    )
+  };
 
   // Wait for server to become healthy.
   let runtime = tokio::runtime::Builder::new_current_thread()
@@ -61,7 +72,7 @@ fn start_server() -> Result<Option<Server>, std::io::Error> {
 
   runtime.block_on(async {
     let client = reqwest::Client::new();
-    let url = format!("{site}/api/healthcheck", site = *SITE);
+    let url = format!("{site}/api/healthcheck", site = site());
 
     for _ in 0..100 {
       let response = client.get(&url).send().await;
@@ -69,6 +80,7 @@ fn start_server() -> Result<Option<Server>, std::io::Error> {
       if let Ok(response) = response {
         if let Ok(body) = response.text().await {
           if body.to_uppercase() == "OK" {
+            println!("Server found healthy @{}", site());
             return;
           }
         }
@@ -129,7 +141,7 @@ struct Comment {
 }
 
 async fn connect() -> Client {
-  let client = Client::new(&SITE, None).unwrap();
+  let client = Client::new(&site(), None).unwrap();
   let _ = client.login("admin@localhost", "secret").await.unwrap();
   return client;
 }
@@ -421,7 +433,7 @@ async fn subscription_test() {
   api.delete(&id).await.unwrap();
 
   {
-    let record_events = record_stream.collect::<Vec<_>>().await;
+    let record_events = record_stream.take(2).collect::<Vec<_>>().await;
     match &record_events[0] {
       DbEvent::Update(Some(serde_json::Value::Object(obj))) => {
         assert_eq!(obj["text_not_null"], updated_message);
@@ -551,11 +563,11 @@ async fn file_upload_json_base64_test() {
   for single_file_url in [
     format!(
       "{site}/api/records/v1/file_upload_table/{record_id}/file/single_file",
-      site = *SITE
+      site = site()
     ),
     format!(
       "{site}/api/records/v1/file_upload_table/{record_id}/files/single_file/{single_file_fname}",
-      site = *SITE
+      site = site()
     ),
   ] {
     let single_file_response = http_client.get(&single_file_url).send().await.unwrap();
@@ -571,7 +583,7 @@ async fn file_upload_json_base64_test() {
   let multi_file_1_response = http_client
     .get(&format!(
       "{site}/api/records/v1/file_upload_table/{record_id}/files/multiple_files/{filename}",
-      site = *SITE,
+      site = site(),
       filename = multiple_files[0].filename.as_ref().unwrap()
     ))
     .send()
@@ -583,7 +595,7 @@ async fn file_upload_json_base64_test() {
   let multi_file_2_response = http_client
     .get(&format!(
       "{site}/api/records/v1/file_upload_table/{record_id}/files/multiple_files/{filename}",
-      site = *SITE,
+      site = site(),
       filename = multiple_files[1].filename.as_ref().unwrap(),
     ))
     .send()
@@ -626,7 +638,7 @@ async fn file_upload_multipart_form_test() {
   let response: RecordIdResponse = http_client
     .post(&format!(
       "{site}/api/records/v1/file_upload_table",
-      site = *SITE
+      site = site()
     ))
     .multipart(form)
     .send()
@@ -641,7 +653,7 @@ async fn file_upload_multipart_form_test() {
   let single_file_response = http_client
     .get(&format!(
       "{site}/api/records/v1/file_upload_table/{record_id}/file/single_file",
-      site = *SITE
+      site = site()
     ))
     .send()
     .await
