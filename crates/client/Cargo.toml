@@ -11,12 +11,17 @@ exclude = [
   "tests",
 ]
 
+[features]
+default = []
+ws = ["dep:reqwest-websocket"]
+
 [dependencies]
 eventsource-stream = { version = "0.2.3", features = [] }
 futures-lite = "2.6.1"
 jsonwebtoken = { version = "10.2.0", default-features = false, features = ["rust_crypto"] }
 parking_lot = { workspace = true }
 reqwest = { version = "0.13.1", features = ["stream"] }
+reqwest-websocket = { version = "0.6.0", features = ["json"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "2.0.12"

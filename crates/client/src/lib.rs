@@ -42,6 +42,10 @@ pub enum Error {
   // NOTE: This error is leaky but comprehensively unpacking reqwest is unsustainable.
   #[error("Reqwest: {0}")]
   OtherReqwest(reqwest::Error),
+
+  #[cfg(feature = "ws")]
+  #[error("WebSocket: {0}")]
+  WebSocket(#[from] reqwest_websocket::Error),
 }
 
 impl From<reqwest::Error> for Error {
@@ -189,7 +193,7 @@ struct ThinClient {
 }
 
 impl ThinClient {
-  async fn fetch<T: Serialize>(
+  async fn fetch_impl<T: Serialize>(
     &self,
     path: &str,
     headers: HeaderMap,
@@ -219,6 +223,41 @@ impl ThinClient {
     };
 
     return Ok(self.client.execute(request).await?);
+  }
+
+  #[cfg(feature = "ws")]
+  async fn upgrade_ws_impl<T: Serialize>(
+    &self,
+    path: &str,
+    headers: HeaderMap,
+    method: Method,
+    body: Option<&T>,
+    query_params: Option<&[(Cow<'static, str>, Cow<'static, str>)]>,
+  ) -> Result<reqwest_websocket::UpgradeResponse, Error> {
+    use reqwest_websocket::Upgrade;
+
+    assert!(path.starts_with("/"));
+
+    let mut url = self.url.clone();
+    url.set_path(path);
+
+    if let Some(query_params) = query_params {
+      let mut params = url.query_pairs_mut();
+      for (key, value) in query_params {
+        params.append_pair(key, value);
+      }
+    }
+
+    let request = {
+      let mut builder = self.client.request(method, url).headers(headers);
+      if let Some(ref body) = body {
+        let json = serde_json::to_string(body).map_err(Error::RecordSerialization)?;
+        builder = builder.body(json);
+      }
+      builder.upgrade()
+    };
+
+    return Ok(request.send().await?);
   }
 }
 
@@ -556,14 +595,53 @@ impl RecordApi {
         .bytes_stream()
         .eventsource()
         .filter_map(|event_or| {
-          if let Ok(event) = event_or
-            && let Ok(db_event) = serde_json::from_str::<DbEvent>(&event.data)
-          {
-            return Some(db_event);
+          // QUESTION: Should we instead return a `Stream<Item = Result<DbEvent, _>>` to allow for
+          // better error handling here.
+          if let Ok(event) = event_or {
+            return serde_json::from_str::<DbEvent>(&event.data).ok();
           }
           return None;
         }),
     );
+  }
+
+  #[cfg(feature = "ws")]
+  pub async fn subscribe_ws<'a, T: RecordId<'a>>(
+    &self,
+    id: T,
+  ) -> Result<impl Stream<Item = DbEvent> + use<T>, Error> {
+    let response = self
+      .client
+      .upgrade_ws(
+        &format!(
+          "/{RECORD_API}/{name}/subscribe/{id}",
+          name = self.name,
+          id = id.serialized_id()
+        ),
+        Method::GET,
+        None::<&()>,
+        Some(&[("ws".into(), "true".into())]),
+      )
+      .await?;
+
+    let websocket = response.into_websocket().await?;
+
+    return Ok(websocket.filter_map(|message| {
+      use reqwest_websocket::Message;
+
+      return match message {
+        Ok(Message::Text(msg)) => serde_json::from_str::<DbEvent>(&msg)
+          .map_err(|err| {
+            warn!("json error: {err}");
+            return err;
+          })
+          .ok(),
+        msg => {
+          warn!("unexpected msg: {msg:?}");
+          None
+        }
+      };
+    }));
   }
 }
 
@@ -617,10 +695,33 @@ impl ClientState {
     return Ok(
       self
         .client
-        .fetch(path, headers, method, body, query_params)
+        .fetch_impl(path, headers, method, body, query_params)
         .await?
         .error_for_status()?,
     );
+  }
+
+  #[cfg(feature = "ws")]
+  #[inline]
+  async fn upgrade_ws<T: Serialize>(
+    &self,
+    path: &str,
+    method: Method,
+    body: Option<&T>,
+    query_params: Option<&[(Cow<'static, str>, Cow<'static, str>)]>,
+  ) -> Result<reqwest_websocket::UpgradeResponse, Error> {
+    let (mut headers, refresh_token) = self.extract_headers_and_refresh_token_if_exp();
+    if let Some(refresh_token) = refresh_token {
+      let new_tokens = ClientState::refresh_tokens(&self.client, headers, refresh_token).await?;
+
+      headers = new_tokens.headers.clone();
+      *self.tokens.write() = new_tokens;
+    }
+
+    return self
+      .client
+      .upgrade_ws_impl(path, headers, method, body, query_params)
+      .await;
   }
 
   #[inline]
@@ -659,7 +760,7 @@ impl ClientState {
     }
 
     let response = client
-      .fetch(
+      .fetch_impl(
         &format!("/{AUTH_API}/refresh"),
         headers,
         Method::POST,

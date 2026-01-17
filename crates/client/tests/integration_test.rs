@@ -49,6 +49,10 @@ fn start_server() -> Result<Option<Server>, std::io::Error> {
 
     let args = [
       "run".to_string(),
+      #[cfg(feature = "ws")]
+      {
+        "--features=ws".to_string()
+      },
       "--".to_string(),
       format!("--data-dir={depot_path}"),
       "run".to_string(),
@@ -471,6 +475,69 @@ async fn subscription_test() {
   }
 }
 
+#[cfg(feature = "ws")]
+async fn subscription_ws_test() {
+  let client = connect().await;
+  let api = client.records("simple_strict_table");
+
+  let table_stream = api.subscribe_ws("*").await.unwrap();
+
+  let now = now();
+  let create_message = format!("rust client realtime test 0: =?&{now}");
+  let id = api
+    .create(json!({"text_not_null": create_message}))
+    .await
+    .unwrap();
+
+  let record_stream = api.subscribe_ws(&id).await.unwrap();
+
+  let updated_message = format!("rust client updated realtime test 0: =?&{now}");
+  api
+    .update(&id, json!({"text_not_null": updated_message}))
+    .await
+    .unwrap();
+
+  api.delete(&id).await.unwrap();
+
+  {
+    let record_events = record_stream.take(2).collect::<Vec<_>>().await;
+    match &record_events[0] {
+      DbEvent::Update(Some(serde_json::Value::Object(obj))) => {
+        assert_eq!(obj["text_not_null"], updated_message);
+      }
+      msg => panic!("Unexpected event: {msg:?}"),
+    };
+    match &record_events[1] {
+      DbEvent::Delete(Some(serde_json::Value::Object(obj))) => {
+        assert_eq!(obj["text_not_null"], updated_message);
+      }
+      msg => panic!("Unexpected event: {msg:?}"),
+    };
+  }
+
+  {
+    let table_events = table_stream.take(3).collect::<Vec<_>>().await;
+    match &table_events[0] {
+      DbEvent::Insert(Some(serde_json::Value::Object(obj))) => {
+        assert_eq!(obj["text_not_null"], create_message);
+      }
+      msg => panic!("Unexpected event: {msg:?}"),
+    };
+    match &table_events[1] {
+      DbEvent::Update(Some(serde_json::Value::Object(obj))) => {
+        assert_eq!(obj["text_not_null"], updated_message);
+      }
+      msg => panic!("Unexpected event: {msg:?}"),
+    };
+    match &table_events[2] {
+      DbEvent::Delete(Some(serde_json::Value::Object(obj))) => {
+        assert_eq!(obj["text_not_null"], updated_message);
+      }
+      msg => panic!("Unexpected event: {msg:?}"),
+    };
+  }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct FileUpload {
   /// The file's UUID, should be stripped.
@@ -689,6 +756,12 @@ fn integration_test() {
 
   runtime.block_on(subscription_test());
   println!("Ran subscription tests");
+
+  #[cfg(feature = "ws")]
+  {
+    runtime.block_on(subscription_ws_test());
+    println!("Ran subscription websocket tests");
+  }
 
   runtime.block_on(file_upload_json_base64_test());
   println!("Ran file upload JSON base64 tests");
