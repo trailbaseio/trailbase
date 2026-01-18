@@ -78,6 +78,7 @@ rust-embed = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_path_to_error = "0.1.16"
+serde_qs = { workspace = true }
 serde_urlencoded = "0.7.1"
 sha2 = "0.10.8"
 sqlformat = "0.5.0"
@@ -87,9 +88,9 @@ tokio = { workspace = true }
 tokio-rustls = { version = "0.26.1", default-features = false }
 tower = "0.5.0"
 tower-cookies = "0.11.0"
-tower_governor = { version = "0.8.0", default-features = false, features = ["axum"] }
 tower-http = { version = "^0.6.0", default-features = false, features = ["cors", "trace", "fs", "limit"] }
 tower-service = { version = "0.3.3", default-features = false }
+tower_governor = { version = "0.8.0", default-features = false, features = ["axum"] }
 tracing = { workspace = true }
 tracing-opentelemetry-instrumentation-sdk = "0.32.0"
 tracing-subscriber = { workspace = true }

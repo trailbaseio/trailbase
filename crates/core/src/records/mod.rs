@@ -86,12 +86,6 @@ pub(crate) fn router(enable_transactions: bool) -> Router<AppState> {
       get(subscribe::add_subscription_sse_handler),
     );
 
-  #[cfg(feature = "ws")]
-  let router = router.route(
-    &format!("/{RECORD_API_PATH}/{{name}}/subscribe_ws/{{record}}"),
-    get(subscribe::add_subscription_ws_handler),
-  );
-
   if enable_transactions {
     return router.route(
       &format!("/{TRANSACTION_API_PATH}/execute"),
