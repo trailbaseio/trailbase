@@ -1,3 +1,11 @@
+## v0.22.13
+
+- Support realtime change subscriptions via WebSockets behind the "ws" cargo build feature.
+  - When built with the feature and the `?ws=true` parameter is passed a `ws://` protocol upgrade is attempted.
+  - The Rust client on the `ws_client` branch supports WebSocket-based subscriptions. We cannot currently mainline it, due to a stale crate dependency.
+- Internal: improve Rust client's test setup.
+- Update dependencies.
+
 ## v0.22.12
 
 - Enable sorting of columns in table explorer, logs and accounts page 🎉.
