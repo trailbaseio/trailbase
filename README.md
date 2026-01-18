@@ -7,9 +7,7 @@
 </p>
 
 <p align="center">
-  An open, <a href="https://trailbase.io/reference/benchmarks/">blazingly fast</a>,
-  single-executable Firebase alternative with type-safe REST & realtime APIs, built-in WebAssembly
-  runtime, SSR, auth and admin UI built on Rust, SQLite & Wasmtime.
+  An open, <a href="https://trailbase.io/reference/benchmarks/">sub-millisecond</a>, single-executable Firebase alternative with type-safe REST APIs, realtime subscriptions, built-in WebAssembly runtime, SSR, auth and admin UI built on Rust, SQLite & Wasmtime.
 <p>
 
 <p align="center">
@@ -50,9 +48,7 @@
 <p align="center">
   <strong>
     Try the
-    <a href="https://demo.trailbase.io/_/admin?loginMessage=E-mail:%20admin@localhost%20%E2%80%A2%20Password:%20secret" target="_blank">
-      demo
-    </a> online
+    <a href="https://demo.trailbase.io/_/admin?loginMessage=E-mail:%20admin@localhost%20%E2%80%A2%20Password:%20secret" target="_blank">demo</a> online
   </strong>
   <br/>Email: <em>admin@localhost</em>
   <br/>password: <em>secret</em>
