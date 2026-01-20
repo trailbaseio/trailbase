@@ -75,6 +75,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     args.runtime_root_fs.as_deref(),
     args.dev,
   )
+  .await
   .map_err(|err| InitError::ScriptError(err.to_string()))?;
 
   let (connection_manager, new_db) = ConnectionManager::new(

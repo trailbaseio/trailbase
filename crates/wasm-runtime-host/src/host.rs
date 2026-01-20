@@ -5,7 +5,7 @@ use std::sync::Arc;
 use trailbase_sqlite::{Params, Rows};
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::Result;
-use wasmtime::component::ResourceTable;
+use wasmtime::component::{HasData, ResourceTable};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 use wasmtime_wasi_io::IoView;
@@ -39,23 +39,9 @@ wasmtime::component::bindgen!({
     // Interactions with `ResourceTable` can possibly trap so enable the ability
     // to return traps from generated functions.
     imports: {
-        "trailbase:database/sqlite.tx-commit": trappable,
-        "trailbase:database/sqlite.tx-rollback": trappable,
-        "trailbase:database/sqlite.tx-execute": trappable,
-        "trailbase:database/sqlite.tx-query": trappable,
-        default: async | trappable,
+        "trailbase:database/sqlite.tx-begin": async,
     },
     exports: {
-        // WARN: We would really like synchronous functions to be wrapped synchronously, e.g. to
-        // call a sqlite extension function synchronously. However, right now if you runtime-enable
-        // async `config.async_support(true)`, then all guest-exported functions must be called
-        // asynchronously. Right now, one would need to generate two sets of bindings (sync & async)
-        // and initialize to separate engines to call functions differently :/. It's unclear if
-        // WASIp3 will fix that, i.e. generate bindings based on async in the WIT...
-        // "trailbase:component/init-endpoint/init-http-handlers": trappable,
-        //
-        // NOTE: This compile-time setting *must* be set, if runtime option
-        // `config.async_support(true)` will be set :/.
         default: async,
     },
 });
@@ -65,23 +51,22 @@ use self::trailbase::database::sqlite::{TxError, Value};
 /// NOTE: This is needed due to State needing to be Send.
 unsafe impl Send for crate::sqlite::OwnedTx {}
 
+/// Shared state, which can be shared across multiple runtime instances.
 pub struct SharedState {
-  pub conn: trailbase_sqlite::Connection,
+  pub conn: Option<trailbase_sqlite::Connection>,
   pub kv_store: trailbase_wasi_keyvalue::Store,
   pub fs_root_path: Option<PathBuf>,
-
-  /// Path to original .wasm component file.
-  pub component_path: PathBuf,
 }
 
-pub(crate) struct State {
-  pub resource_table: ResourceTable,
-  pub wasi_ctx: WasiCtx,
-  pub http: WasiHttpCtx,
-  pub kv: WasiKeyValueCtx,
+/// State for one runtime instance.
+pub struct State {
+  pub(crate) resource_table: ResourceTable,
+  pub(crate) wasi_ctx: WasiCtx,
+  pub(crate) http: WasiHttpCtx,
+  pub(crate) kv: WasiKeyValueCtx,
 
-  pub shared: Arc<SharedState>,
-  pub tx: Arc<Mutex<Option<crate::sqlite::OwnedTx>>>,
+  pub(crate) shared: Arc<SharedState>,
+  pub(crate) tx: Arc<Mutex<Option<crate::sqlite::OwnedTx>>>,
 }
 
 impl Drop for State {
@@ -133,7 +118,12 @@ impl WasiHttpView for State {
 
     return match request.uri().host() {
       Some("__sqlite") => {
-        let conn = self.shared.conn.clone();
+        let conn = self.shared.conn.clone().ok_or_else(|| {
+          debug_assert!(false, "missing SQLite connection");
+          wasmtime_wasi_http::bindings::http::types::ErrorCode::InternalError(Some(
+            "missing SQLite connection".to_string(),
+          ))
+        })?;
         Ok(
           wasmtime_wasi_http::types::HostFutureIncomingResponse::pending(
             wasmtime_wasi::runtime::spawn(async move {
@@ -151,53 +141,12 @@ impl WasiHttpView for State {
     };
   }
 }
+impl HasData for State {
+  type Data<'a> = &'a mut State;
+}
 
 impl self::trailbase::database::sqlite::Host for State {
-  // fn execute(
-  //   &mut self,
-  //   query: String,
-  //   params: Vec<Value>,
-  // ) -> impl Future<Output = wasmtime::Result<Result<u64, TxError>>> + Send {
-  //   let conn = self.shared.conn.clone();
-  //   let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-  //
-  //   return async move {
-  //     Ok(
-  //       conn
-  //         .execute(query, params)
-  //         .await
-  //         .map_err(|err| TxError::Other(err.to_string()))
-  //         .map(|v| v as u64),
-  //     )
-  //   };
-  // }
-  //
-  // fn query(
-  //   &mut self,
-  //   query: String,
-  //   params: Vec<Value>,
-  // ) -> impl Future<Output = wasmtime::Result<Result<Vec<Vec<Value>>, TxError>>> + Send {
-  //   let conn = self.shared.conn.clone();
-  //   let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-  //
-  //   return async move {
-  //     let rows = conn
-  //       .write_query_rows(query, params)
-  //       .await
-  //       .map_err(|err| TxError::Other(err.to_string()))?;
-  //
-  //     let values: Vec<_> = rows
-  //       .into_iter()
-  //       .map(|trailbase_sqlite::Row(row, _col)| {
-  //         return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
-  //       })
-  //       .collect();
-  //
-  //     Ok(Ok(values))
-  //   };
-  // }
-
-  fn tx_begin(&mut self) -> impl Future<Output = wasmtime::Result<Result<(), TxError>>> + Send {
+  fn tx_begin(&mut self) -> impl Future<Output = Result<(), TxError>> + Send {
     async fn begin(
       conn: trailbase_sqlite::Connection,
       tx: &Mutex<Option<crate::sqlite::OwnedTx>>,
@@ -214,10 +163,15 @@ impl self::trailbase::database::sqlite::Host for State {
     }
 
     let tx = self.tx.clone();
-    return async move { Ok(begin(self.shared.conn.clone(), &tx).await) };
+    return async move {
+      let Some(conn) = self.shared.conn.clone() else {
+        return Err(TxError::Other("missing conn".into()));
+      };
+      begin(conn, &tx).await
+    };
   }
 
-  fn tx_commit(&mut self) -> wasmtime::Result<Result<(), TxError>> {
+  fn tx_commit(&mut self) -> Result<(), TxError> {
     fn commit(tx: &Mutex<Option<crate::sqlite::OwnedTx>>) -> Result<(), TxError> {
       let Some(tx) = tx.lock().take() else {
         return Err(TxError::Other("no pending tx".to_string()));
@@ -232,10 +186,10 @@ impl self::trailbase::database::sqlite::Host for State {
       return Ok(());
     }
 
-    return Ok(commit(&self.tx));
+    return commit(&self.tx);
   }
 
-  fn tx_rollback(&mut self) -> wasmtime::Result<Result<(), TxError>> {
+  fn tx_rollback(&mut self) -> Result<(), TxError> {
     fn rollback(tx: &Mutex<Option<crate::sqlite::OwnedTx>>) -> Result<(), TxError> {
       let Some(tx) = tx.lock().take() else {
         return Err(TxError::Other("no pending tx".to_string()));
@@ -250,14 +204,10 @@ impl self::trailbase::database::sqlite::Host for State {
       return Ok(());
     }
 
-    return Ok(rollback(&self.tx));
+    return rollback(&self.tx);
   }
 
-  fn tx_execute(
-    &mut self,
-    query: String,
-    params: Vec<Value>,
-  ) -> wasmtime::Result<Result<u64, TxError>> {
+  fn tx_execute(&mut self, query: String, params: Vec<Value>) -> Result<u64, TxError> {
     fn execute(
       tx: &Mutex<Option<crate::sqlite::OwnedTx>>,
       query: String,
@@ -285,14 +235,10 @@ impl self::trailbase::database::sqlite::Host for State {
       );
     }
 
-    return Ok(execute(&self.tx, query, params));
+    return execute(&self.tx, query, params);
   }
 
-  fn tx_query(
-    &mut self,
-    query: String,
-    params: Vec<Value>,
-  ) -> wasmtime::Result<Result<Vec<Vec<Value>>, TxError>> {
+  fn tx_query(&mut self, query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>, TxError> {
     fn query_fn(
       tx: &Mutex<Option<crate::sqlite::OwnedTx>>,
       query: String,
@@ -326,7 +272,7 @@ impl self::trailbase::database::sqlite::Host for State {
       return Ok(values);
     }
 
-    return Ok(query_fn(&self.tx, query, params));
+    return query_fn(&self.tx, query, params);
   }
 }
 

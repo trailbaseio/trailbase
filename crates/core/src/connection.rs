@@ -12,7 +12,7 @@ use trailbase_schema::sqlite::{Table, View};
 
 use crate::data_dir::DataDir;
 use crate::migrations::{apply_base_migrations, apply_logs_migrations, apply_main_migrations};
-use crate::wasm::SqliteFunctionRuntime;
+use crate::wasm::{SqliteFunctions, SqliteStore};
 
 pub use trailbase_sqlite::Connection;
 
@@ -65,7 +65,7 @@ struct ConnectionManagerState {
   // Properties retained for initializing new connections.
   data_dir: DataDir,
   json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-  sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
+  sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
 
   // Properties for caching connections:
   main: RwLock<ConnectionEntry>,
@@ -85,7 +85,7 @@ impl ConnectionManager {
   pub(crate) fn new(
     data_dir: DataDir,
     json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-    sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
+    sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
   ) -> Result<(Self, bool), ConnectionError> {
     let (main_conn, new_db) = init_main_db_impl(
       Some(&data_dir),
@@ -118,7 +118,7 @@ impl ConnectionManager {
   pub(crate) fn new_for_test(
     data_dir: DataDir,
     json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-    sqlite_function_runtimes: Vec<SqliteFunctionRuntime>,
+    sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
   ) -> Self {
     let (main_conn, new_db) = init_main_db_impl(
       None,
@@ -311,7 +311,7 @@ pub fn init_main_db(
   data_dir: Option<&DataDir>,
   json_registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
   attached_databases: Vec<AttachedDatabase>,
-  runtimes: Vec<SqliteFunctionRuntime>,
+  runtimes: Vec<(SqliteStore, SqliteFunctions)>,
 ) -> Result<(Connection, bool), ConnectionError> {
   // SQLite supports only up to 125 DBs per connection: https://sqlite.org/limits.html.
   if attached_databases.len() > 124 {
@@ -325,37 +325,11 @@ fn init_main_db_impl(
   data_dir: Option<&DataDir>,
   json_registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
   attach: Vec<AttachedDatabase>,
-  runtimes: Vec<SqliteFunctionRuntime>,
+  runtimes: Vec<(SqliteStore, SqliteFunctions)>,
   main_migrations: bool,
 ) -> Result<(Connection, bool), ConnectionError> {
   let main_path = data_dir.map(|d| d.main_db_path());
   let migrations_path = data_dir.map(|d| d.migrations_path());
-
-  #[cfg(feature = "wasm")]
-  let sqlite_functions: Vec<(
-    SqliteFunctionRuntime,
-    trailbase_wasm_runtime_host::functions::SqliteFunctions,
-  )> = runtimes
-    .into_iter()
-    .filter_map(
-      |rt| -> Option<Result<_, trailbase_wasm_runtime_host::Error>> {
-        let functions = match rt
-          .initialize_sqlite_functions(trailbase_wasm_runtime_host::InitArgs { version: None })
-        {
-          Ok(functions) => functions,
-          Err(err) => {
-            return Some(Err(err));
-          }
-        };
-
-        if !functions.scalar_functions.is_empty() {
-          return Some(Ok((rt, functions)));
-        }
-        return None;
-      },
-    )
-    .collect::<Result<Vec<_>, _>>()
-    .map_err(|err| return ConnectionError::Other(err.to_string()))?;
 
   let mut new_db = AtomicBool::new(false);
   let conn = {
@@ -376,8 +350,8 @@ fn init_main_db_impl(
         }
 
         #[cfg(feature = "wasm")]
-        for (rt, functions) in &sqlite_functions {
-          trailbase_wasm_runtime_host::functions::setup_connection(&conn, rt, functions)
+        for (store, functions) in &runtimes {
+          trailbase_wasm_runtime_host::functions::setup_connection(&conn, store.clone(), functions)
             .expect("startup");
         }
 

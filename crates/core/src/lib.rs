@@ -59,9 +59,6 @@ mod wasm {
     }
   }
 
-  #[derive(Clone)]
-  pub struct SqliteFunctionRuntime;
-
   pub(crate) type WasmRuntimeBuilder =
     Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>;
 
@@ -76,11 +73,17 @@ mod wasm {
     return Ok(Box::new(|| Ok(vec![])));
   }
 
-  pub(crate) fn build_sync_wasm_runtimes_for_components(
+  #[derive(Clone)]
+  pub struct SqliteFunctions;
+
+  #[derive(Clone)]
+  pub struct SqliteStore;
+
+  pub(crate) async fn build_sync_wasm_runtimes_for_components(
     _components_path: PathBuf,
     _fs_root_path: Option<&std::path::Path>,
     _dev: bool,
-  ) -> Result<Vec<SqliteFunctionRuntime>, AnyError> {
+  ) -> Result<Vec<(Arc<parking_lot::Mutex<SqliteStore>>, SqliteFunctions)>, AnyError> {
     return Ok(vec![]);
   }
 

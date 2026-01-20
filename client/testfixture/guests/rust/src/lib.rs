@@ -2,13 +2,14 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
+use std::sync::atomic::{AtomicI64, Ordering};
 use trailbase_wasm::db::{Transaction, Value, execute, query};
 use trailbase_wasm::fetch::{Uri, get};
 use trailbase_wasm::fs::read_file;
 use trailbase_wasm::http::{HttpError, HttpRoute, Json, StatusCode, routing};
 use trailbase_wasm::job::Job;
 use trailbase_wasm::time::{Duration, SystemTime, Timer};
-use trailbase_wasm::{Guest, SqliteFunction, export};
+use trailbase_wasm::{Guest, SqliteFunction, export, sqlite::SqliteFunctionFlags};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
@@ -120,15 +121,24 @@ impl Guest for Endpoints {
         let n: usize = req.query_param("n").map_or(40, |p| p.parse().unwrap());
         return format!("{}\n", fibonacci(n));
       }),
-      routing::get("/custom_fun", async |_req| {
-        let Value::Integer(i) = &query("SELECT custom_fun(?1)", vec![Value::Integer(5)])
+      routing::get("/sqlite_echo", async |_req| {
+        let Value::Integer(i) = &query("SELECT custom_echo(?1)", vec![Value::Integer(5)])
           .await
           .map_err(internal)?[0][0]
         else {
-          panic!("Expected echo");
+          panic!("Expected Integer");
         };
         assert_eq!(5, *i);
 
+        return Ok(format!("{i}\n"));
+      }),
+      routing::get("/sqlite_stateful", async |_req| {
+        let Value::Integer(i) = &query("SELECT custom_stateful()", vec![])
+          .await
+          .map_err(internal)?[0][0]
+        else {
+          panic!("Expected Integer");
+        };
         return Ok(format!("{i}\n"));
       }),
       routing::get("/panic", async |_req| {
@@ -147,13 +157,27 @@ impl Guest for Endpoints {
   }
 
   fn sqlite_scalar_functions() -> Vec<SqliteFunction> {
-    return vec![SqliteFunction::new::<1>(
-      "custom_fun".to_string(),
-      |args: [trailbase_wasm::sqlite::Value; _]| {
-        return Ok(args[0].clone());
-      },
-      &[],
-    )];
+    return vec![
+      SqliteFunction::new::<1>(
+        "custom_echo".to_string(),
+        |args: [trailbase_wasm::sqlite::Value; _]| {
+          return Ok(args[0].clone());
+        },
+        &[
+          SqliteFunctionFlags::Deterministic,
+          SqliteFunctionFlags::Innocuous,
+        ],
+      ),
+      SqliteFunction::new::<0>(
+        "custom_stateful".to_string(),
+        |_args: [trailbase_wasm::sqlite::Value; _]| {
+          static COUNT: AtomicI64 = AtomicI64::new(0);
+          let curr = COUNT.fetch_add(1, Ordering::SeqCst);
+          return Ok(trailbase_wasm::sqlite::Value::Integer(curr));
+        },
+        &[],
+      ),
+    ];
   }
 }
 

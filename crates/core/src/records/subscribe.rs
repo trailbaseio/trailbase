@@ -21,7 +21,7 @@ use trailbase_sqlite::connection::{extract_record_values, extract_row_id};
 use ts_rs::TS;
 
 use crate::app_state::{AppState, derive_unchecked};
-use crate::auth::{TokenClaims, User};
+use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::filter::{
   Filter, apply_filter_recursively_to_record, qs_filter_to_record_filter,
@@ -924,6 +924,7 @@ pub async fn subscribe_sse(
   };
 }
 
+#[allow(unused)]
 #[derive(Clone, Debug, Deserialize, TS)]
 #[ts(export)]
 enum WsProtocol {
@@ -1026,7 +1027,8 @@ pub async fn subscribe_ws(
         match msg {
           WsProtocol::Init { auth_token } => {
             if let Some(auth_token) = auth_token {
-              let Ok(claims) = TokenClaims::from_auth_token(state.jwt(), &auth_token) else {
+              let Ok(claims) = crate::auth::TokenClaims::from_auth_token(state.jwt(), &auth_token)
+              else {
                 abort(&mut ws_sender, Code::Policy, "unauthorized").await;
                 return None;
               };

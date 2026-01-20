@@ -4,7 +4,7 @@ import { createVitest } from "vitest/node";
 import { cwd } from "node:process";
 import { existsSync } from "node:fs";
 import type { ChildProcess } from "node:child_process";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import spawn from "nano-spawn";
 
 import { ADDRESS, PORT, USE_WS } from "./constants";
@@ -87,7 +87,7 @@ const { subprocess } = await initTrailBase();
     include: ["tests/integration/*"],
     exclude: [
       "tests/integration/auth_integration.test.ts",
-      "tests/integration/v8_integration.test.ts",
+      "tests/integration/wasm_integration.test.ts",
     ],
   });
 
@@ -101,7 +101,7 @@ const { subprocess } = await initTrailBase();
     environment: "node",
     include: [
       "tests/integration/auth_integration.test.ts",
-      "tests/integration/v8_integration.test.ts",
+      "tests/integration/wasm_integration.test.ts",
     ],
   });
 

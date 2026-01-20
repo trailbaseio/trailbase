@@ -15,35 +15,52 @@ use crate::User;
 use crate::util::urlencode;
 use crate::{AppState, DataDir};
 
-pub(crate) use trailbase_wasm_runtime_host::functions::SqliteFunctionRuntime;
-pub(crate) use trailbase_wasm_runtime_host::{KvStore, Runtime};
+pub(crate) use trailbase_wasm_runtime_host::functions::{SqliteFunctions, SqliteStore};
+pub(crate) use trailbase_wasm_runtime_host::{HttpStore, KvStore, Runtime, SharedState};
 
 pub(crate) type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
-pub(crate) fn build_sync_wasm_runtimes_for_components(
+pub(crate) async fn build_sync_wasm_runtimes_for_components(
   components_path: PathBuf,
   fs_root_path: Option<&Path>,
   use_winch: bool,
-) -> Result<Vec<SqliteFunctionRuntime>, AnyError> {
+) -> Result<Vec<(SqliteStore, SqliteFunctions)>, AnyError> {
   let components = find_wasm_components(&components_path);
+  let shared_state = Arc::new(SharedState {
+    conn: None,
+    kv_store: KvStore::new(),
+    fs_root_path: None,
+  });
 
-  let sync_runtimes: Vec<SqliteFunctionRuntime> = components
-    .into_iter()
-    .map(|path| {
-      return SqliteFunctionRuntime::new(
-        path,
-        RuntimeOptions {
-          fs_root_path: fs_root_path.map(|p| p.to_owned()),
-          // https://github.com/trailbaseio/trailbase/issues/206
-          use_winch: if cfg!(target_os = "macos") {
-            false
-          } else {
-            use_winch
-          },
+  let mut sync_runtimes: Vec<(SqliteStore, SqliteFunctions)> = vec![];
+
+  for path in components {
+    let rt = Runtime::init(
+      path,
+      shared_state.clone(),
+      RuntimeOptions {
+        fs_root_path: fs_root_path.map(|p| p.to_owned()),
+        // https://github.com/trailbaseio/trailbase/issues/206
+        use_winch: if cfg!(target_os = "macos") {
+          false
+        } else {
+          use_winch
         },
-      );
-    })
-    .collect::<Result<Vec<_>, _>>()?;
+        tokio_runtime: None,
+      },
+    )?;
+
+    // Create shared state. In the future we might want to instantiate multiple to avoid cross
+    // SQLite-connection/thread synchronization.
+    let store = SqliteStore::new(&rt).await?;
+    let functions = store
+      .initialize_sqlite_functions(trailbase_wasm_runtime_host::InitArgs { version: None })
+      .await?;
+
+    if !functions.scalar_functions.is_empty() {
+      sync_runtimes.push((store, functions));
+    }
+  }
 
   return Ok(sync_runtimes);
 }
@@ -60,7 +77,12 @@ pub(crate) fn wasm_runtimes_builder(
   dev: bool,
 ) -> Result<WasmRuntimeBuilder, AnyError> {
   let components_path = data_dir.root().join("wasm");
-  let shared_kv_store = shared_kv_store.unwrap_or_default();
+
+  let shared_state = Arc::new(SharedState {
+    conn: Some(conn),
+    kv_store: shared_kv_store.unwrap_or_default(),
+    fs_root_path: runtime_root_fs.clone(),
+  });
 
   return Ok(Box::new(move || {
     let components = find_wasm_components(&components_path);
@@ -72,11 +94,9 @@ pub(crate) fn wasm_runtimes_builder(
     let runtimes: Vec<Runtime> = components
       .into_iter()
       .map(|path| {
-        return Runtime::spawn(
-          rt.clone(),
+        return Runtime::init(
           path,
-          conn.clone(),
-          shared_kv_store.clone(),
+          shared_state.clone(),
           RuntimeOptions {
             fs_root_path: runtime_root_fs.clone(),
             // https://github.com/trailbaseio/trailbase/issues/206
@@ -85,6 +105,7 @@ pub(crate) fn wasm_runtimes_builder(
             } else {
               dev
             },
+            tokio_runtime: rt.clone(),
           },
         );
       })
@@ -100,17 +121,18 @@ pub(crate) async fn install_routes_and_jobs(
 ) -> Result<Option<Router<AppState>>, AnyError> {
   use trailbase_wasm_runtime_host::Error as WasmError;
 
-  let version = state.version().git_version_tag.clone();
-
-  let init_result = runtime
-    .read()
-    .await
-    .initialize(InitArgs { version })
-    .await?;
+  let init_result = {
+    let store = HttpStore::new(&*runtime.read().await).await?;
+    store
+      .initialize(InitArgs {
+        version: state.version().git_version_tag.clone(),
+      })
+      .await?
+  };
 
   for (name, spec) in init_result.job_handlers {
     let schedule = cron::Schedule::from_str(&spec)?;
-    let runtime = runtime.clone();
+    let store = HttpStore::new(&*runtime.read().await).await?;
 
     let Some(job) = state.jobs().new_job(
       None,
@@ -118,7 +140,7 @@ pub(crate) async fn install_routes_and_jobs(
       schedule,
       crate::scheduler::build_callback(move || {
         let name = name.clone();
-        let runtime = runtime.clone();
+        let store = store.clone();
 
         return async move {
           let uri = hyper::http::Uri::from_str(&format!("http://__job/?name={}", urlencode(&name)))
@@ -140,11 +162,7 @@ pub(crate) async fn install_routes_and_jobs(
             .body(empty())
             .map_err(|err| WasmError::Other(err.to_string()))?;
 
-          runtime
-            .read()
-            .await
-            .call_incoming_http_handler(request)
-            .await?;
+          store.call_incoming_http_handler(request).await?;
 
           Ok::<_, AnyError>(())
         };
@@ -162,7 +180,8 @@ pub(crate) async fn install_routes_and_jobs(
   for (method, path) in init_result.http_handlers {
     debug!("Installing WASM route: {method:?}: {path}");
 
-    let runtime = runtime.clone();
+    // let runtime = runtime.clone();
+    let store = HttpStore::new(&*runtime.read().await).await?;
     let registered_path = path.clone();
 
     use axum::response::Response;
@@ -211,12 +230,7 @@ pub(crate) async fn install_routes_and_jobs(
         );
 
         // Call WASM.
-        return match runtime
-          .read()
-          .await
-          .call_incoming_http_handler(request)
-          .await
-        {
+        return match store.call_incoming_http_handler(request).await {
           Ok(response) => {
             // Construct hyper/axum response from WASI response.
             let (parts, body) = response.into_parts();
