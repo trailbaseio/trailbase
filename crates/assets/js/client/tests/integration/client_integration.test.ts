@@ -7,12 +7,12 @@ import {
   initClient,
   urlSafeBase64Encode,
 } from "../../src/index";
-import type { Client, Event } from "../../src/index";
+import type { Client, Event, RecordApiImpl } from "../../src/index";
 import { status } from "http-status";
 import { v7 as uuidv7, parse as uuidParse } from "uuid";
-import { ADDRESS } from "../constants";
+import { ADDRESS, USE_WS } from "../constants";
 
-const { base64Encode } = exportedForTesting!;
+const { base64Encode, subscribeWs } = exportedForTesting!;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -483,6 +483,41 @@ test("Subscribe to entire table", async () => {
   expect(events[1]["Update"]["text_not_null"]).equals(updatedMessage);
   expect(events[2]["Delete"]["text_not_null"]).equals(updatedMessage);
 });
+
+if (USE_WS) {
+  test("Subscribe to entire table via WebSocket", async () => {
+    const client = await connect();
+    const api = client.records<NewSimpleStrict>("simple_strict_table");
+
+    const eventStream = await subscribeWs(api as RecordApiImpl, "*");
+
+    const now = new Date().getTime();
+    const createMessage = `ts client ws realtime test 0: =?&${now}`;
+    const id = (await api.create({
+      text_not_null: createMessage,
+    })) as string;
+
+    const updatedMessage = `ts client ws updated realtime test 0: ${now}`;
+    const updatedValue: Partial<SimpleStrict> = {
+      text_not_null: updatedMessage,
+    };
+    await api.update(id, updatedValue);
+    await api.delete(id);
+
+    const events: Event[] = [];
+    for await (const event of eventStream) {
+      events.push(event);
+      if (events.length === 3) {
+        break;
+      }
+    }
+
+    expect(events).toHaveLength(3);
+    expect(events[0]["Insert"]["text_not_null"]).equals(createMessage);
+    expect(events[1]["Update"]["text_not_null"]).equals(updatedMessage);
+    expect(events[2]["Delete"]["text_not_null"]).equals(updatedMessage);
+  });
+}
 
 test("Subscribe to table with record filters", async () => {
   const client = await connect();

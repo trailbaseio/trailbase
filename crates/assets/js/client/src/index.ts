@@ -8,6 +8,7 @@ import type { LoginStatusResponse } from "@bindings/LoginStatusResponse";
 import type { LogoutRequest } from "@bindings/LogoutRequest";
 import type { RefreshRequest } from "@bindings/RefreshRequest";
 import type { RefreshResponse } from "@bindings/RefreshResponse";
+import type { WsProtocol } from "@bindings/WsProtocol";
 
 export type User = {
   id: string;
@@ -521,6 +522,70 @@ export class RecordApiImpl<
 
     return body.pipeThrough(transformStream);
   }
+
+  async subscribeWs(
+    id: RecordId,
+    opts?: SubscribeOpts,
+  ): Promise<ReadableStream<Event>> {
+    const params = new URLSearchParams();
+    params.append("ws", "true");
+
+    const filters = opts?.filters ?? [];
+    if (filters.length > 0) {
+      for (const filter of filters) {
+        addFiltersToParams(params, "filter", filter);
+      }
+    }
+
+    return new Promise<ReadableStream<Event>>((resolve, reject) => {
+      const host = this.client.base?.host ?? "";
+      const protocol = this.client.base?.protocol === "https" ? "wss" : "ws";
+      const url = `${protocol}://${host}${recordApiBasePath}/${this.name}/subscribe/${id}?${params}`;
+
+      const socket = new WebSocket(url);
+
+      const timeout = setTimeout(() => {
+        reject("WS connection timeout");
+      }, 5000);
+
+      const readable = new ReadableStream({
+        start: (controller) => {
+          socket.addEventListener("open", (_openEvent) => {
+            // Initialize connection and authenticate.
+            socket.send(
+              JSON.stringify({
+                Init: {
+                  auth_token: this.client.tokens()?.auth_token ?? null,
+                },
+              } as WsProtocol),
+            );
+
+            clearTimeout(timeout);
+            resolve(readable);
+          });
+
+          socket.addEventListener("close", () => {
+            controller.close();
+          });
+
+          socket.addEventListener("error", (err) => {
+            controller.error(err);
+          });
+
+          // Listen for messages
+          socket.addEventListener("message", (event) => {
+            if (typeof event.data !== "string") {
+              new Error("expected JSON string");
+            }
+            controller.enqueue(JSON.parse(event.data));
+          });
+        },
+        cancel: () => {
+          socket.close();
+        },
+      });
+    });
+  }
 }
 
 class ThinClient {
@@ -629,7 +694,8 @@ class ClientImpl implements Client {
   }
 
   public get base(): URL | undefined {
-    return this._client.base;
+    const b = this._client.base;
+    return b !== undefined ? new URL(b) : undefined;
   }
 
   /// Low-level access to tokens (auth, refresh, csrf) useful for persisting them.
@@ -958,6 +1024,7 @@ export const exportedForTesting = isDev
   ? {
       base64Decode,
       base64Encode,
+      subscribeWs: (api: RecordApiImpl, id: RecordId) => api.subscribeWs(id),
     }
   : undefined;
 

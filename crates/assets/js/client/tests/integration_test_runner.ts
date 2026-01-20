@@ -2,14 +2,16 @@
 
 import { createVitest } from "vitest/node";
 import { cwd } from "node:process";
-import { join } from "node:path";
-import { execa, type Subprocess } from "execa";
+import { existsSync } from "node:fs";
+import type { ChildProcess } from "node:child_process";
+import { join, resolve } from "node:path";
+import spawn from "nano-spawn";
 
-import { ADDRESS, PORT } from "./constants";
+import { ADDRESS, PORT, USE_WS } from "./constants";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function initTrailBase(): Promise<{ subprocess: Subprocess | null }> {
+async function initTrailBase(): Promise<{ subprocess: ChildProcess | null }> {
   if (PORT === 4000) {
     // Rely on externally bootstrapped instance.
     return { subprocess: null };
@@ -20,31 +22,42 @@ async function initTrailBase(): Promise<{ subprocess: Subprocess | null }> {
     throw Error(`Unexpected CWD: ${pwd}`);
   }
 
-  const root = join(pwd, "..", "..", "..", "..");
-
-  const build = await execa({ cwd: root })`cargo build`;
-  if (build.failed) {
-    console.error("STDOUT:", build.stdout);
-    console.error("STDERR:", build.stderr);
-    throw Error("cargo build failed");
+  const root = resolve(__dirname, "../../../../..");
+  if (!existsSync(`${root}/Cargo.lock`)) {
+    throw new Error(root);
   }
 
-  const subprocess = execa({
+  const features = USE_WS ? ["--features=ws"] : [];
+  await spawn("cargo", ["build", ...features], { cwd: root });
+
+  const args = [
+    "run",
+    ...features,
+    "--",
+    "--data-dir=client/testfixture",
+    `--public-url=http://${ADDRESS}`,
+    "run",
+    `--address=${ADDRESS}`,
+    "--runtime-threads=1",
+  ];
+
+  const subprocess = spawn("cargo", args, {
     cwd: root,
     stdout: process.stdout,
     stderr: process.stdout,
-  })`cargo run -- --data-dir client/testfixture --public-url http://${ADDRESS} run -a ${ADDRESS} --runtime-threads 1`;
+  });
 
   // NOTE: debug builds of trail loading JS-WASM can take a long time.
   for (let i = 0; i < 300; ++i) {
-    if ((subprocess.exitCode ?? 0) > 0) {
+    const child = await subprocess.nodeChildProcess;
+    if ((child.exitCode ?? 0) > 0) {
       break;
     }
 
     try {
       const response = await fetch(`http://${ADDRESS}/api/healthcheck`);
       if (response.ok) {
-        return { subprocess };
+        return { subprocess: child };
       }
 
       console.log(await response.text());
@@ -55,10 +68,10 @@ async function initTrailBase(): Promise<{ subprocess: Subprocess | null }> {
     await sleep(500);
   }
 
-  subprocess.kill();
+  const child = await subprocess.nodeChildProcess;
+  child.kill();
 
   const result = await subprocess;
-  console.error("EXIT:", result.exitCode);
   console.error("STDOUT:", result.stdout);
   console.error("STDERR:", result.stderr);
 
