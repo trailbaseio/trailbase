@@ -17,7 +17,7 @@ use crate::constants::{
   SESSION_TABLE, USER_TABLE,
 };
 use crate::rand::generate_random_string;
-use crate::util::{get_header, get_header_owned};
+use crate::util::get_header;
 
 #[derive(Clone)]
 pub(crate) struct Tokens {
@@ -59,97 +59,109 @@ pub(crate) async fn extract_tokens_from_request_parts(
   state: &AppState,
   parts: &Parts,
 ) -> Result<Tokens, AuthError> {
-  if let Ok(tokens) = extract_tokens_from_headers(state, &parts.headers) {
-    return Ok(tokens);
+  // Headers take priority over cookies.
+  //
+  // NOTE: We don't "auto-refresh" stale auth tokens in the header case, since we don't have the
+  // means to propagate the new token back (unlike for cookies). The responsibility sits with the
+  // client to refresh tokens in time.
+  if let Some(tokens) = extract_tokens_from_headers(&parts.headers) {
+    let claims = TokenClaims::from_auth_token(state.jwt(), tokens.auth_token)
+      .map_err(|_| AuthError::Unauthorized)?;
+
+    return Ok(Tokens {
+      auth_token_claims: claims,
+      refresh_token: tokens.refresh_token.map(|r| r.to_owned()),
+    });
   }
 
+  // Fall back to cookies.
   let Some(cookies) = parts.extensions.get::<Cookies>() else {
+    debug_assert!(false);
     // This like means the tower_cookies::CookieManagerLayer isn't installed.
     return Err(AuthError::Internal("cookie error".into()));
   };
 
-  return extract_tokens_from_cookies_and_maybe_refresh(state, cookies).await;
-}
+  if let Some(tokens) = extract_tokens_from_cookies(cookies) {
+    // If an auth-token is present, first try that before falling back to "auto-refresh".
+    if let Some(auth_token) = &tokens.auth_token
+      && let Ok(claims) =
+        TokenClaims::from_auth_token(state.jwt(), auth_token).map_err(|_| AuthError::Unauthorized)
+    {
+      return Ok(Tokens {
+        auth_token_claims: claims,
+        refresh_token: tokens.refresh_token.map(|r| r.to_owned()),
+      });
+    }
 
-#[inline]
-pub(crate) fn extract_token_claims_from_headers(
-  state: &AppState,
-  headers: &header::HeaderMap,
-) -> Result<TokenClaims, AuthError> {
-  let Some(auth_token_str) =
-    get_header(headers, header::AUTHORIZATION).and_then(|v| v.strip_prefix("Bearer "))
-  else {
-    return Err(AuthError::Unauthorized);
-  };
+    // Unlike in the header case, we can "auto-refresh" a stale auth token, since we have a
+    // back-channel to propagate the new token. Also for "dumb" clients, we need to do this, since
+    // they may not be able to take on the refresh responsibility.
+    if let Some(refresh_token) = tokens.refresh_token {
+      let (claims, ttl) = reauth_with_refresh_token(state, refresh_token.clone()).await?;
 
-  return state
-    .jwt()
-    .decode(auth_token_str)
-    .map_err(|_err| AuthError::Unauthorized);
-}
+      let new_auth_token = state.jwt().encode(&claims).map_err(|err| {
+        debug_assert!(false);
+        // Freshly minted token should decode just fine. Otherwise something is wrong.
+        return AuthError::Internal(err.into());
+      })?;
 
-#[inline]
-fn extract_tokens_from_headers(
-  state: &AppState,
-  headers: &header::HeaderMap,
-) -> Result<Tokens, AuthError> {
-  return Ok(Tokens {
-    auth_token_claims: extract_token_claims_from_headers(state, headers)?,
-    refresh_token: get_header_owned(headers, HEADER_REFRESH_TOKEN),
-  });
-}
+      cookies.add(new_cookie(
+        COOKIE_AUTH_TOKEN,
+        new_auth_token,
+        ttl,
+        state.dev_mode(),
+      ));
 
-async fn extract_tokens_from_cookies_and_maybe_refresh(
-  state: &AppState,
-  cookies: &Cookies,
-) -> Result<Tokens, AuthError> {
-  let auth_token = cookies.get(COOKIE_AUTH_TOKEN);
-
-  let refresh_token = cookies
-    .get(COOKIE_REFRESH_TOKEN)
-    .map(|cookie| cookie.value().to_string());
-
-  if let Some(ref auth_token) = auth_token
-    && let Ok(claims) = state.jwt().decode(auth_token.value())
-  {
-    return Ok(Tokens {
-      auth_token_claims: claims,
-      refresh_token,
-    });
-  }
-
-  if let Some(refresh_token) = refresh_token {
-    // Try to auto-refresh in the cookie-case only (otherwise we don't have a back channel. If were
-    // to rely on a client lib to pick it from the response headers we might as well give the
-    // client the responsibility to explicitly refresh).
-    let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
-    let claims = reauth_with_refresh_token(
-      state,
-      refresh_token.clone(),
-      refresh_token_ttl,
-      auth_token_ttl,
-    )
-    .await?;
-
-    let new_token = state
-      .jwt()
-      .encode(&claims)
-      .map_err(|err| AuthError::Internal(err.into()))?;
-
-    cookies.add(new_cookie(
-      COOKIE_AUTH_TOKEN,
-      new_token,
-      auth_token_ttl,
-      state.dev_mode(),
-    ));
-
-    return Ok(Tokens {
-      auth_token_claims: claims,
-      refresh_token: Some(refresh_token),
-    });
+      return Ok(Tokens {
+        auth_token_claims: claims,
+        refresh_token: Some(refresh_token),
+      });
+    }
   }
 
   return Err(AuthError::Unauthorized);
+}
+
+struct HeaderTokens<'a> {
+  auth_token: &'a str,
+  refresh_token: Option<&'a str>,
+}
+
+#[inline]
+fn extract_tokens_from_headers<'a>(headers: &'a header::HeaderMap) -> Option<HeaderTokens<'a>> {
+  let auth_token =
+    get_header(headers, header::AUTHORIZATION).and_then(|v| v.strip_prefix("Bearer "))?;
+  let refresh_token = get_header(headers, HEADER_REFRESH_TOKEN);
+
+  return Some(HeaderTokens {
+    auth_token,
+    refresh_token,
+  });
+}
+
+struct CookieTokens {
+  auth_token: Option<String>,
+  refresh_token: Option<String>,
+}
+
+#[inline]
+fn extract_tokens_from_cookies(cookies: &Cookies) -> Option<CookieTokens> {
+  let auth_token = cookies
+    .get(COOKIE_AUTH_TOKEN)
+    .as_ref()
+    .map(|c| c.value().to_owned());
+  let refresh_token = cookies
+    .get(COOKIE_REFRESH_TOKEN)
+    .as_ref()
+    .map(|c| c.value().to_owned());
+
+  return match (auth_token, refresh_token) {
+    (None, None) => None,
+    (auth_token, refresh_token) => Some(CookieTokens {
+      auth_token,
+      refresh_token,
+    }),
+  };
 }
 
 /// Only difference to Tokens above, refresh token presence is guaranteed.
@@ -200,9 +212,9 @@ pub(crate) async fn mint_new_tokens(
 pub(crate) async fn reauth_with_refresh_token(
   state: &AppState,
   refresh_token: String,
-  refresh_token_ttl: Duration,
-  auth_token_ttl: Duration,
-) -> Result<TokenClaims, AuthError> {
+) -> Result<(TokenClaims, chrono::Duration), AuthError> {
+  let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
+
   const QUERY: &str = formatcp!(
     "\
       SELECT user.* \
@@ -238,11 +250,14 @@ pub(crate) async fn reauth_with_refresh_token(
     "unverified user, should have been caught by above query"
   );
 
-  return Ok(TokenClaims::new(
-    db_user.verified,
-    db_user.uuid(),
-    db_user.email,
-    db_user.admin,
+  return Ok((
+    TokenClaims::new(
+      db_user.verified,
+      db_user.uuid(),
+      db_user.email,
+      db_user.admin,
+      auth_token_ttl,
+    ),
     auth_token_ttl,
   ));
 }

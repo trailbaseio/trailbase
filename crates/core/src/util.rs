@@ -46,19 +46,6 @@ pub(crate) fn get_header(headers: &HeaderMap, header_name: impl AsHeaderName) ->
   return None;
 }
 
-#[inline]
-pub(crate) fn get_header_owned(
-  headers: &HeaderMap,
-  header_name: impl AsHeaderName,
-) -> Option<String> {
-  if let Some(header) = headers.get(header_name)
-    && let Ok(str) = header.to_str()
-  {
-    return Some(str.to_string());
-  }
-  return None;
-}
-
 pub fn cow_to_string(cow: Cow<'static, [u8]>) -> String {
   match cow {
     Cow::Borrowed(x) => String::from_utf8_lossy(x).to_string(),

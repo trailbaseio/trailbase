@@ -45,14 +45,7 @@ pub(crate) async fn login_status_handler(
   // time (exp). But rather than just re-encoding it, we refresh it. This ensures that the
   // session is still alive.
   if let Some(refresh_token) = refresh_token {
-    let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
-    let claims = reauth_with_refresh_token(
-      &state,
-      refresh_token.clone(),
-      refresh_token_ttl,
-      auth_token_ttl,
-    )
-    .await?;
+    let (claims, _ttl) = reauth_with_refresh_token(&state, refresh_token.clone()).await?;
 
     let auth_token = state
       .jwt()

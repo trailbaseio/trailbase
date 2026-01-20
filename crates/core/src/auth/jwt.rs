@@ -69,6 +69,10 @@ impl TokenClaims {
       admin,
     };
   }
+
+  pub fn from_auth_token(jwt: &JwtHelper, auth_token: &str) -> Result<Self, JwtError> {
+    return jwt.decode(auth_token);
+  }
 }
 
 pub struct JwtHelper {

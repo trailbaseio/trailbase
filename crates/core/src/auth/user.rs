@@ -117,7 +117,10 @@ impl User {
 
   #[cfg(test)]
   pub(crate) fn from_auth_token(state: &AppState, auth_token: &str) -> Option<Self> {
-    Some(Self::from_token_claims(state.jwt().decode(auth_token).unwrap()).unwrap())
+    Some(
+      Self::from_token_claims(TokenClaims::from_auth_token(state.jwt(), auth_token).unwrap())
+        .unwrap(),
+    )
   }
 
   #[cfg(test)]
@@ -139,10 +142,11 @@ where
   type Rejection = AuthError;
 
   async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-    let state = AppState::from_ref(state);
-    let tokens = extract_tokens_from_request_parts(&state, parts).await?;
-
-    let user = User::from_token_claims(tokens.auth_token_claims)?;
+    let user = User::from_token_claims(
+      extract_tokens_from_request_parts(&AppState::from_ref(state), parts)
+        .await?
+        .auth_token_claims,
+    )?;
 
     tracing::Span::current().record("user_id", user.uuid.to_u128_le());
 
@@ -161,9 +165,7 @@ where
     parts: &mut Parts,
     state: &S,
   ) -> Result<Option<Self>, Self::Rejection> {
-    let state = AppState::from_ref(state);
-
-    if let Ok(tokens) = extract_tokens_from_request_parts(&state, parts).await {
+    if let Ok(tokens) = extract_tokens_from_request_parts(&AppState::from_ref(state), parts).await {
       let user = User::from_token_claims(tokens.auth_token_claims)?;
 
       tracing::Span::current().record("user_id", user.uuid.to_u128_le());
@@ -200,10 +202,7 @@ mod tests {
       .await
       .unwrap();
     assert_eq!(tokens.id, user_id);
-    state
-      .jwt()
-      .decode::<TokenClaims>(&tokens.auth_token)
-      .unwrap();
+    TokenClaims::from_auth_token(state.jwt(), &tokens.auth_token).unwrap();
 
     // Extract user from a request that only has a refresh token cookie but no auth token.
     // NOTE: non-cookie creds are not auto-refreshed.

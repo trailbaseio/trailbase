@@ -36,15 +36,7 @@ pub(crate) async fn refresh_handler(
   State(state): State<AppState>,
   Json(request): Json<RefreshRequest>,
 ) -> Result<Json<RefreshResponse>, AuthError> {
-  let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
-
-  let claims = reauth_with_refresh_token(
-    &state,
-    request.refresh_token,
-    refresh_token_ttl,
-    auth_token_ttl,
-  )
-  .await?;
+  let (claims, _ttl) = reauth_with_refresh_token(&state, request.refresh_token).await?;
 
   let auth_token = state
     .jwt()
