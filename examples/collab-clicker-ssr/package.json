@@ -27,7 +27,7 @@
     "prettier": "^3.8.0",
     "sirv": "^3.0.2",
     "tailwindcss": "^4.1.18",
-    "typescript-eslint": "^8.53.0",
+    "typescript-eslint": "^8.53.1",
     "vite": "^7.3.1",
     "vite-plugin-solid": "^2.11.10"
   }

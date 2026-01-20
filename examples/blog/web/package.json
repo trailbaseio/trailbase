@@ -15,7 +15,7 @@
   "dependencies": {
     "@nanostores/persistent": "^1.2.0",
     "@nanostores/solid": "^1.1.1",
-    "astro": "^5.16.9",
+    "astro": "^5.16.11",
     "astro-icon": "^1.1.5",
     "nanostores": "^1.1.0",
     "solid-icons": "^1.1.0",
@@ -39,6 +39,6 @@
     "quicktype": "^23.2.6",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.1.18",
-    "typescript-eslint": "^8.53.0"
+    "typescript-eslint": "^8.53.1"
   }
 }

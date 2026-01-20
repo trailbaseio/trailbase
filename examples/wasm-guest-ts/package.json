@@ -23,7 +23,7 @@
     "nano-spawn": "^2.0.0",
     "prettier": "^3.8.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.53.0",
+    "typescript-eslint": "^8.53.1",
     "vite": "^7.3.1",
     "vitest": "^3.2.4"
   }
