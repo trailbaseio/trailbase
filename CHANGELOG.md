@@ -1,3 +1,14 @@
+## v0.23.0
+
+- WASM component model:
+  - Merge Host implementations for HTTP/Job handlers and custom SQLite extension functions
+  - Extend state life-cycle for SQLite extension functions to allow for statefulness and avoid overhead of repeat initialization.
+  - Use `async | store | task_exit` exports and `Store::run_concurrent` in preparation for `component-model-async`, which will enable much richer async host-backed plugin APIs.
+- Enable "late" authentication for WebSocket subscriptions to support clients (e.g. Browsers) that don't allow setting the headers of the HTTP UPGRADE request.
+  - Add early, yet private support for WASM to JS/TS client and tests. We still cannot upstream the WebSocket support for the Rust client due to stale `reqwest-websocket` dependency.
+- Update Rust toolchain to latest stable: 1.93.
+- Update dependencies.
+
 ## v0.22.13
 
 - Support realtime change subscriptions via WebSockets behind the "ws" cargo build feature.
