@@ -426,12 +426,14 @@ fn build_config(cache: Option<wasmtime::Cache>, use_winch: bool) -> Config {
   // calling synchronous bindings will panic.
   config.async_support(true);
   config.wasm_component_model(true);
+  config.wasm_component_model_async(true);
   // config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
 
   // Compilation settings.
   config.cache(cache);
 
-  if use_winch {
+  // FIXME: ASYNC component model doesn't currently support winch;
+  if false && use_winch {
     config.strategy(wasmtime::Strategy::Winch);
   } else {
     config.strategy(wasmtime::Strategy::Cranelift);

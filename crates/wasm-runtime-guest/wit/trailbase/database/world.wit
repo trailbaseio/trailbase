@@ -1,4 +1,4 @@
-package trailbase:database@0.1.0;
+package trailbase:database@0.1.1;
 
 interface sqlite {
   // WARNING: Evolving a variant currently breaks the ABI:
@@ -15,12 +15,10 @@ interface sqlite {
     real(f64),
   }
 
-  // NOTE: Ideally, we'd use these but they can currently block guests, w/o a
-  // better non-blocking event loop.
-  // @since(version = 0.1.0)
-  // execute: func(query: string, params: list<value>) -> result<u64, tx-error>;
-  // @since(version = 0.1.0)
-  // query: func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
+  @since(version = 0.1.1)
+  execute: async func(query: string, params: list<value>) -> result<u64, tx-error>;
+  @since(version = 0.1.1)
+  query: async func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
 
   // However, transactions have to be sync.
   @since(version = 0.1.0)

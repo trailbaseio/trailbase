@@ -25,7 +25,7 @@ world interfaces {
 
   // TrailBase's interfaces:
   @since(version = 0.1.0)
-  include trailbase:database/interfaces@0.1.0;
+  include trailbase:database/interfaces@0.1.1;
 
   @since(version = 0.1.0)
   export init-endpoint;
@@ -38,7 +38,7 @@ world interfaces {
 world init {
   // TrailBase's interfaces:
   @since(version = 0.1.0)
-  include trailbase:database/interfaces@0.1.0;
+  include trailbase:database/interfaces@0.1.1;
 
   @since(version = 0.1.0)
   export init-endpoint;
