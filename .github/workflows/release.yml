@@ -43,7 +43,7 @@ jobs:
   #         pnpm install
   #     - uses: actions-rs/toolchain@v1
   #       with:
-  #         toolchain: 1.92.0
+  #         toolchain: 1.93.0
   #         target: x86_64-unknown-linux-gnu
   #         default: true
   #     - name: Rust Build
@@ -80,7 +80,7 @@ jobs:
           pnpm install
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.92.0
+          toolchain: 1.93.0
           target: x86_64-unknown-linux-musl
           default: true
       - name: Rust Build
@@ -116,7 +116,7 @@ jobs:
           pnpm install
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.92.0
+          toolchain: 1.93.0
           target: aarch64-unknown-linux-musl
           default: true
       - name: Rust Build
@@ -152,7 +152,7 @@ jobs:
           pnpm install
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.92.0
+          toolchain: 1.93.0
           target: wasm32-wasip2
           default: true
       - name: Rust Build
@@ -187,7 +187,7 @@ jobs:
           pnpm install
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.92.0
+          toolchain: 1.93.0
           target: aarch64-apple-darwin
           default: true
       - name: Rust Build
@@ -221,7 +221,7 @@ jobs:
           pnpm install
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.92.0
+          toolchain: 1.93.0
           target: x86_64-apple-darwin
           default: true
       - name: Rust Build
@@ -249,7 +249,7 @@ jobs:
           apps: nodejs pnpm protobuf zip
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.92.0
+          toolchain: 1.93.0
           target: x86_64-pc-windows-msvc
           default: true
       - name: Rust Build
