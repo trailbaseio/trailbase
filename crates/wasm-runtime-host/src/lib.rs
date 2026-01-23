@@ -269,21 +269,24 @@ impl HttpStore {
         version: args.version,
       };
 
-      let mut lock = state.store.lock().await;
+      let mut store = state.store.lock().await;
+      store
+        .run_concurrent(async |accessor| -> Result<InitResult, Error> {
+          let (http, task_exit) = api.call_init_http_handlers(accessor, args.clone()).await?;
+          task_exit.block(accessor).await;
 
-      Ok(InitResult {
-        http_handlers: api
-          .call_init_http_handlers(&mut *lock, &args)
-          .await?
-          .handlers,
-        job_handlers: api
-          .call_init_job_handlers(&mut *lock, &args)
-          .await?
-          .handlers,
-      })
+          let (job, task_exit) = api.call_init_job_handlers(accessor, args).await?;
+          task_exit.block(accessor).await;
+
+          return Ok(InitResult {
+            http_handlers: http.handlers,
+            job_handlers: job.handlers,
+          });
+        })
+        .await?
     })
     .await
-    .expect("FIXME");
+    .map_err(|join_err| Error::Other(join_err.to_string()))?;
   }
 
   pub async fn call_incoming_http_handler(
@@ -297,8 +300,9 @@ impl HttpStore {
         Result<hyper::Response<wasmtime_wasi_http::body::HyperOutgoingBody>, ErrorCode>,
       >();
 
-      // NOTE: wstd streams out responses in chunks of 2kB. Only once everything has been streamed,
-      // `call_handle` will complete. This is also when the streaming response body completes.
+      // NOTE: wstd streams out responses in chunks of 2kB. Only once everything has been
+      // streamed, `call_handle` will complete. This is also when the streaming response
+      // body completes.
       //
       // We cannot use `wasmtime_wasi::runtime::spawn` here, which aborts the call when the handle
       // gets dropped, since we're not awaiting the response stream here. We'd either have to
@@ -347,7 +351,7 @@ impl HttpStore {
       }
     })
     .await
-    .expect("FIXME");
+    .map_err(|join_err| Error::Other(join_err.to_string()))?;
   }
 
   fn call<F>(

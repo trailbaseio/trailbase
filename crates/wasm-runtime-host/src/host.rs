@@ -42,7 +42,7 @@ wasmtime::component::bindgen!({
         "trailbase:database/sqlite.tx-begin": async,
     },
     exports: {
-        default: async,
+        default: async | store | task_exit,
     },
 });
 

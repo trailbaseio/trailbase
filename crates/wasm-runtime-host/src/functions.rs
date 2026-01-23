@@ -48,10 +48,17 @@ impl SqliteStore {
       version: args.version,
     };
 
+    let mut store = self.state.store.lock().await;
+    let functions = store
+      .run_concurrent(async |accessor| -> Result<_, Error> {
+        let (functions, task_exit) = api.call_init_sqlite_functions(accessor, args).await?;
+        task_exit.block(accessor).await;
+        return Ok(functions);
+      })
+      .await??;
+
     return Ok(SqliteFunctions {
-      scalar_functions: api
-        .call_init_sqlite_functions(&mut *self.state.store.lock().await, &args)
-        .await?
+      scalar_functions: functions
         .scalar_functions
         .into_iter()
         .map(|f| {
@@ -89,12 +96,18 @@ impl SqliteStore {
       arguments: args,
     };
 
-    return api
-      .call_dispatch_scalar_function(&mut *self.state.store.lock().await, &args)
-      .await?
-      .map_err(|err| {
-        return Error::Other(err.to_string());
-      });
+    let mut store = self.state.store.lock().await;
+    let result = store
+      .run_concurrent(async |accessor| -> Result<_, Error> {
+        let (result, task_exit) = api.call_dispatch_scalar_function(accessor, args).await?;
+        task_exit.block(accessor).await;
+        return Ok(result);
+      })
+      .await??;
+
+    return result.map_err(|err| {
+      return Error::Other(err.to_string());
+    });
   }
 }
 
