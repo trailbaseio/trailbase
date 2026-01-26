@@ -65,6 +65,11 @@ mavenPublishing {
         url = "https://trailbase.io"
         licenses {
             license {
+                name = "Apache-2.0"
+                url = "https://opensource.org/license/apache-2-0"
+                distribution = "https://opensource.org/license/apache-2-0"
+            }
+            license {
                 name = "OSL-3.0"
                 url = "https://opensource.org/license/osl-3-0"
                 distribution = "https://opensource.org/license/osl-3-0"

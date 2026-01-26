@@ -43,7 +43,7 @@
 
 ## v0.22.9
 
-- Allow streaming of HTTP respones from WASM.
+- Allow streaming of HTTP responses from WASM.
 - Internal: major overhaul of WASM integration, remove indirection and scaffolds from previous execution model.
 - Update Rust dependencies.
 

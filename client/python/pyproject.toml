@@ -5,7 +5,7 @@ description = "TrailBase client for Python"
 authors = ["TrailBase <contact@trailbase.io>"]
 repository = "https://github.com/trailbaseio/trailbase"
 homepage = "https://trailbase.io"
-license = "OSL-3.0"
+license = "Apache-2.0 OR OSL-3.0"
 readme = "README.md"
 requires-poetry = ">=2.0"
 

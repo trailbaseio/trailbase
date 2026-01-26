@@ -5,7 +5,7 @@
     <Version>0.5.0</Version>
     <Authors>TrailBase authors</Authors>
     <PackageReadmeFile>./README.md</PackageReadmeFile>
-    <PackageLicenseExpression>OSL-3.0</PackageLicenseExpression>
+    <PackageLicenseExpression>Apache-2.0 OR OSL-3.0</PackageLicenseExpression>
     <PackageProjectUrl>https://trailbase.io</PackageProjectUrl>
     <RepositoryUrl>https://github.com/trailbaseio/trailbase</RepositoryUrl>
 
